@@ -80,19 +80,21 @@ local function findContextMenuAncestor(node)
 end
 
 --- Build the items list based on context.
---- Combines built-in items (Copy, Select All) with custom items from ContextMenu ancestors.
+--- Combines built-in items (Copy) with custom items from ContextMenu ancestors.
+--- Always produces at least one item so the menu is never empty.
 local function buildItems(hitNode, textNode, root)
   local items = {}
-  local hasSelection = TextSelection and TextSelection.get() and TextSelection.get().text
+  local sel = TextSelection and TextSelection.get()
+  local hasSelection = sel and sel.text
 
-  -- Built-in: Copy (only when text is selected)
-  if hasSelection then
-    items[#items + 1] = { label = "Copy", action = "__copy", disabled = false }
+  -- Built-in: Copy — always shown on text nodes, disabled when no selection
+  if textNode or hasSelection then
+    items[#items + 1] = {
+      label = "Copy",
+      action = "__copy",
+      disabled = not hasSelection,
+    }
   end
-
-  -- Built-in: Select All (when on a text node)
-  -- TODO: implement select-all for text nodes when textselection supports it
-  -- For now, only show Copy since Select All requires more textselection work
 
   -- Custom items from nearest ContextMenu ancestor
   local cmNode = nil
