@@ -31,6 +31,7 @@ local inspectorEnabled = true                 -- can be disabled via config.insp
 local animate  = nil   -- animate.lua module (Lua-side transitions/animations)
 local images   = nil   -- images.lua module (image cache)
 local videos   = nil   -- videos.lua module (video cache + FFmpeg transcoding)
+local videoplayer = nil                       -- videoplayer.lua (Lua-native video controls)
 local focus    = require("lua.focus")         -- focus manager for Lua-owned inputs
 local texteditor = nil                        -- texteditor.lua (loaded on demand)
 local codeblock  = nil                        -- codeblock.lua (loaded on demand)
@@ -330,6 +331,9 @@ function ReactLove.init(config)
     codeblock = require("lua.codeblock")
     codeblock.init({ measure = measure })
 
+    videoplayer = require("lua.videoplayer")
+    videoplayer.init({ measure = measure, videos = videos })
+
     textselection = require("lua.textselection")
     textselection.init({ measure = measure, events = events })
 
@@ -377,6 +381,9 @@ function ReactLove.init(config)
 
     codeblock = require("lua.codeblock")
     codeblock.init({ measure = measure })
+
+    videoplayer = require("lua.videoplayer")
+    videoplayer.init({ measure = measure, videos = videos })
 
     textselection = require("lua.textselection")
     textselection.init({ measure = measure, events = events })
@@ -535,6 +542,11 @@ function ReactLove.update(dt)
       texteditor.update(canvasFocusedNode, dt)
     end
     if codeblock then codeblock.update(dt) end
+
+    -- Update VideoPlayer controls (auto-hide timer, canvas mode)
+    if videoplayer and tree then
+      videoplayer.update(dt, tree.getNodes())
+    end
 
     if inspectorEnabled then inspector.update(dt) end
     if inspectorEnabled then console.update(dt) end
@@ -894,6 +906,11 @@ function ReactLove.update(dt)
   end
   if codeblock then codeblock.update(dt) end
 
+  -- Update VideoPlayer controls (auto-hide timer)
+  if videoplayer and tree then
+    videoplayer.update(dt, tree.getNodes())
+  end
+
   if inspectorEnabled then inspector.update(dt) end
   if inspectorEnabled then console.update(dt) end
   if screenshot then screenshot.update() end
@@ -1178,6 +1195,11 @@ function ReactLove.mousepressed(x, y, button)
         local cx, cy = events.screenToContent(hit, x, y)
         codeblock.handleMousePressed(hit, cx, cy, button)
       end
+    elseif hit.type == "VideoPlayer" then
+      -- Clicked a VideoPlayer: handle internally in Lua
+      if videoplayer then
+        videoplayer.handleMousePressed(hit, x, y, button)
+      end
     else
       -- Normal node: standard drag + click handling
       events.startDrag(hit.id, x, y)
@@ -1232,6 +1254,19 @@ function ReactLove.mousereleased(x, y, button)
   local focusedNode = focus.get()
   if focusedNode and focusedNode.type == "TextEditor" then
     texteditor.handleMouseReleased(focusedNode)
+  end
+
+  -- VideoPlayer seek/volume drag release (check all VideoPlayer nodes since
+  -- the mouse may have moved outside the node during a drag)
+  if videoplayer and tree then
+    local nodes = tree.getNodes()
+    if nodes then
+      for _, node in pairs(nodes) do
+        if node.type == "VideoPlayer" and node._vp then
+          videoplayer.handleMouseReleased(node, x, y, button)
+        end
+      end
+    end
   end
 
   local root = tree.getTree()
@@ -1311,6 +1346,18 @@ function ReactLove.mousemoved(x, y)
   if focusedNode and focusedNode.type == "TextEditor" then
     if texteditor.handleMouseMoved(focusedNode, x, y) then
       return  -- TextEditor consumed the mouse move
+    end
+  end
+
+  -- VideoPlayer: update hover target and handle seek/volume drag
+  if videoplayer and tree then
+    local nodes = tree.getNodes()
+    if nodes then
+      for _, node in pairs(nodes) do
+        if node.type == "VideoPlayer" and node._vp then
+          videoplayer.handleMouseMoved(node, x, y)
+        end
+      end
     end
   end
 
@@ -1409,6 +1456,16 @@ function ReactLove.keypressed(key, scancode, isrepeat)
       -- (falls through to pushEvent below)
     else
       return  -- consumed by TextEditor
+    end
+  end
+
+  -- Route to hovered VideoPlayer (keyboard shortcuts: space, arrows, m, f, l)
+  if videoplayer and events then
+    local hoveredNode = events.getHoveredNode()
+    if hoveredNode and hoveredNode.type == "VideoPlayer" then
+      if videoplayer.handleKeyPressed(hoveredNode, key) then
+        return  -- consumed by VideoPlayer
+      end
     end
   end
 

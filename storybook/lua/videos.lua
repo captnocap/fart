@@ -445,6 +445,25 @@ function Videos.getDimensions(src)
   return nil, nil
 end
 
+--- Get the current playback time in seconds.
+function Videos.getCurrentTime(src)
+  local entry = videoCache[src]
+  if entry and entry.handle then
+    return getMpvDouble(entry.handle, "time-pos")
+  end
+  return nil
+end
+
+--- Get whether the video is currently paused.
+function Videos.getPaused(src)
+  local entry = videoCache[src]
+  if entry and entry.handle then
+    local val = getMpvString(entry.handle, "pause")
+    return val == "yes"
+  end
+  return true
+end
+
 -- ============================================================================
 -- Eager mpv backend — handle + render context created once at love.load time
 -- ============================================================================
@@ -573,7 +592,7 @@ function Videos.syncWithTree(nodes)
   local activeSrcs = {}   -- src -> true
   local activeNodes = {}  -- nodeId -> src
   for id, node in pairs(nodes) do
-    if node.type == "Video" and node.props and node.props.src and node.props.src ~= "" then
+    if (node.type == "Video" or node.type == "VideoPlayer") and node.props and node.props.src and node.props.src ~= "" then
       activeSrcs[node.props.src] = true
       activeNodes[id] = node.props.src
     end
