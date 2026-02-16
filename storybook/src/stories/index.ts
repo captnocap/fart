@@ -60,6 +60,7 @@ import { VideoStory } from './VideoStory';
 import { FileDropStory } from './FileDropStory';
 import { FontShowcaseStory } from './FontShowcase';
 import { SpellCheckStory } from './SpellCheckStory';
+import { LlmsTxtReader } from './LlmsTxtReader';
 
 export const stories: StoryDef[] = [
   // Primitives
@@ -133,6 +134,7 @@ export const stories: StoryDef[] = [
 
   // Stress Test
   { id: 'overflow-stress', title: 'Overflow Stress', category: 'Stress Test', component: OverflowStressStory },
+  { id: 'llms-txt-reader', title: 'llms.txt Reader', category: 'Stress Test', component: LlmsTxtReader },
 
   // Networking
   { id: 'fetch', title: 'Fetch', category: 'Networking', component: FetchStory },
