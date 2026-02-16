@@ -660,8 +660,10 @@ function TextInput.draw(node, effectiveOpacity)
   setColorWithOpacity(bgColor, effectiveOpacity)
   love.graphics.rectangle("fill", c.x, c.y, c.w, c.h, borderRadius, borderRadius)
 
-  -- Scissor clip to bounds
-  love.graphics.setScissor(c.x, c.y, c.w, c.h)
+  -- Scissor clip to bounds (transform-aware for scroll containers)
+  local sx, sy = love.graphics.transformPoint(c.x, c.y)
+  local sx2, sy2 = love.graphics.transformPoint(c.x + c.w, c.y + c.h)
+  love.graphics.setScissor(sx, sy, sx2 - sx, sy2 - sy)
 
   local textAreaX = c.x + padding
   local textAreaY = c.y + paddingTop
