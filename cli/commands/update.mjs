@@ -88,5 +88,27 @@ export async function updateCommand(args) {
     }
   }
 
+  // Update data/ (dictionary, etc.)
+  const runtimeData = join(CLI_ROOT, 'runtime', 'data');
+  if (existsSync(runtimeData)) {
+    const destData = join(cwd, 'data');
+    if (existsSync(destData)) {
+      rmSync(destData, { recursive: true });
+    }
+    cpSync(runtimeData, destData, { recursive: true });
+    console.log('  Updated data/');
+
+    // Also copy into love/ subdirectory if it exists
+    const loveDir = join(cwd, 'love');
+    if (existsSync(loveDir) && existsSync(join(loveDir, 'main.lua'))) {
+      const loveData = join(loveDir, 'data');
+      if (existsSync(loveData)) {
+        rmSync(loveData, { recursive: true });
+      }
+      cpSync(runtimeData, loveData, { recursive: true });
+      console.log('  Updated love/data/');
+    }
+  }
+
   console.log('\n  Done! Runtime files are up to date.\n');
 }

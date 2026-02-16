@@ -59,6 +59,7 @@ import { WebSocketStory } from './WebSocketStory';
 import { VideoStory } from './VideoStory';
 import { FileDropStory } from './FileDropStory';
 import { FontShowcaseStory } from './FontShowcase';
+import { SpellCheckStory } from './SpellCheckStory';
 
 export const stories: StoryDef[] = [
   // Primitives
@@ -100,6 +101,7 @@ export const stories: StoryDef[] = [
 
   // Input
   { id: 'text-editor', title: 'TextEditor', category: 'Input', component: TextEditorStory },
+  { id: 'spell-check', title: 'Spell Check', category: 'Input', component: SpellCheckStory },
 
   // Forms
   { id: 'checkbox', title: 'Checkbox', category: 'Forms', component: CheckboxStory },

@@ -443,6 +443,13 @@ async function buildDistLove(cwd, projectName, opts = {}) {
     cpSync(fontsDir, join(stagingDir, 'fonts'), { recursive: true });
   }
 
+  // Copy data into staging if available (dictionary, etc.)
+  const dataDirs = [join(cwd, 'data'), join(cwd, 'love', 'data')];
+  const dataDir = dataDirs.find(p => existsSync(p));
+  if (dataDir) {
+    cpSync(dataDir, join(stagingDir, 'data'), { recursive: true });
+  }
+
   // Inspector is now enabled by default in dist builds
   // (Previously disabled unless --debug was passed, but this was annoying for dev)
   // To disable: add `inspector = false` to ReactLove.init() in your main.lua

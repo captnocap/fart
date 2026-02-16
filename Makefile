@@ -270,6 +270,11 @@ cli-setup: setup
 		cp -r fonts/* cli/runtime/fonts/; \
 		echo "  Bundled fonts ($$(du -sh fonts | cut -f1))"; \
 	fi
+	@if [ -d data ]; then \
+		mkdir -p cli/runtime/data; \
+		cp -r data/* cli/runtime/data/; \
+		echo "  Bundled data ($$(du -sh data | cut -f1))"; \
+	fi
 	@echo "=== CLI runtime ready. Run: cd cli && npm link ==="
 
 # ── Clean ───────────────────────────────────────────────

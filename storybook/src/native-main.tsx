@@ -71,7 +71,7 @@ function StorybookPanel() {
       }}>
         {/* Header */}
         <Box style={{ paddingTop: 14, paddingLeft: 12, paddingRight: 12, paddingBottom: 5 }}>
-          <Text style={{ color: '#475569', fontSize: 10, fontWeight: 'bold' }}>REACT-LOVE</Text>
+          <Text style={{ color: '#475569', fontSize: 10, fontWeight: 'bold' }}>iLoveReact</Text>
         </Box>
         <Box style={{ height: 1, backgroundColor: '#1e293b' }} />
 
