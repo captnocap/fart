@@ -10,7 +10,7 @@ difficulty: beginner
 === OVERVIEW ===
 BarChart renders a vertical bar chart from an array of data points. Each bar's height is proportional to its value relative to the maximum value in the dataset. Bars can have individual colors or share a default color.
 
-The component renders entirely with Box and Text primitives, so it works on all targets. An optional label row appears below the bars, and values can be shown above each bar.
+The component renders entirely with Box and Text primitives, so it works on all targets. An optional label row appears below the bars, and values can be shown above each bar. When barWidth is omitted, bars auto-size to fill the parent container evenly.
 
 === API / SYNTAX ===
 Import: import { BarChart } from '@ilovereact/core';
@@ -44,7 +44,7 @@ Props:
 |------------|-----------------|------------|--------------------------------------------|
 | data       | BarChartBar[]   | (required) | Array of bar data points                   |
 | height     | number          | 120        | Chart area height in pixels                |
-| barWidth   | number          | 20         | Width of each bar in pixels                |
+| barWidth   | number          | undefined  | Width of each bar (omit for auto-sizing)   |
 | gap        | number          | 8          | Gap between bars in pixels                 |
 | showLabels | boolean         | true       | Show label text below each bar             |
 | showValues | boolean         | false      | Show value text above each bar             |
@@ -52,7 +52,7 @@ Props:
 | style      | Style           | -          | Outer container style overrides            |
 
 === EXAMPLES ===
-Example 1: Basic bar chart
+Example 1: Basic bar chart with auto-sizing
 ---
 ```tsx
 <BarChart
@@ -67,7 +67,7 @@ Example 1: Basic bar chart
 ---
 Platforms: All
 
-Example 2: Custom colors per bar with values
+Example 2: Custom colors per bar with values displayed
 ---
 ```tsx
 <BarChart
@@ -77,14 +77,13 @@ Example 2: Custom colors per bar with values
     { label: 'Disk', value: 89, color: '#f59e0b' },
   ]}
   height={80}
-  barWidth={24}
   showValues
 />
 ```
 ---
 Platforms: All
 
-Example 3: Wide bars with no labels
+Example 3: Fixed-width bars with no labels
 ---
 ```tsx
 <BarChart
@@ -99,10 +98,29 @@ Example 3: Wide bars with no labels
 ---
 Platforms: All
 
+Example 4: Values-only display (no labels)
+---
+```tsx
+<BarChart
+  data={[
+    { label: 'A', value: 120 },
+    { label: 'B', value: 95 },
+    { label: 'C', value: 143 },
+  ]}
+  showLabels={false}
+  showValues
+  height={100}
+/>
+```
+---
+Platforms: All
+
 === PLATFORM NOTES ===
 - BarChart uses Box and Text primitives exclusively. No canvas, SVG, or target-specific drawing APIs.
-- The chart width is computed automatically: `data.length * barWidth + (data.length - 1) * gap`.
-- Each bar height is calculated as `Math.max(1, Math.round((bar.value / maxValue) * height))`, ensuring every bar is at least 1px tall.
+- When `barWidth` is omitted, the chart fills its parent width and distributes bars evenly with `flexGrow: 1`.
+- When `barWidth` is specified, the chart width is computed as: `data.length * barWidth + (data.length - 1) * gap`.
+- Each bar height is calculated as `Math.max(1, Math.round((bar.value / maxValue) * barAreaHeight))`, ensuring every bar is at least 1px tall.
+- When `showValues` is true, 14px of vertical space is reserved above bars for value labels.
 - Label text is `fontSize: 9`, `color: '#64748b'`. Value text is `fontSize: 9`, `color: '#94a3b8'`.
 - Bars use `borderRadius: 3` for slightly rounded tops.
 - When `data` is empty, an empty Box with the specified `height` is rendered.
@@ -113,6 +131,7 @@ Platforms: All
 - If `maxValue` is 0 (all values are 0), bars are normalized against 1, so they appear as minimum height (1px).
 - Per-bar `color` overrides the component-level `color` prop for that specific bar.
 - BarChart does not handle negative values. All values should be non-negative.
+- When using `showValues`, ensure adequate `height` to accommodate both bars and value labels (reserve 14px for values).
 
 === SEE ALSO ===
 - Sparkline

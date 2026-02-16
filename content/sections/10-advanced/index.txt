@@ -3,16 +3,17 @@ title: Advanced Topics
 description: Hub page for advanced iLoveReact documentation
 category: Advanced
 platforms: love2d, web, terminal, cc, nvim, hs, awesome
-keywords: advanced, lua runtime, events, performance, debugging, custom targets, networking, http, websocket, tor
-related: lua-runtime, event-handling, performance, debugging, custom-targets, networking, tor, rendering
+keywords: advanced, lua runtime, events, performance, debugging, custom targets, networking, http, websocket, tor, focus, lua-owned
+related: lua-runtime, event-handling, performance, debugging, custom-targets, networking, tor, rendering, focus-management, lua-owned-interaction
 difficulty: advanced
 
 === OVERVIEW ===
 This section covers the internals of iLoveReact for developers who need to understand
 what happens beneath the component API. Topics include the complete Lua runtime module
-inventory, networking (HTTP, WebSockets, proxies), Tor integration, the event dispatch
-system, performance optimization strategies, debugging tools, and how to create new
-render targets.
+inventory, focus management and controller navigation, the Lua-owned interaction pattern
+for zero-bridge-traffic primitives, networking (HTTP, WebSockets, proxies), Tor integration,
+the event dispatch system, performance optimization strategies, debugging tools, rendering
+internals, and how to create new render targets.
 
 These topics assume familiarity with the rendering pipeline (see 02-architecture/) and
 the component API (see 05-components/).
@@ -21,19 +22,23 @@ the component API (see 05-components/).
 Example 1: Section Contents
 ---
 10-advanced/
-  lua-runtime.txt    - All 27 Lua modules and their roles
-  networking.txt     - HTTP requests, WebSockets, proxies, JSON
-  tor.txt            - Tor integration, hidden services, anonymity
-  rendering.txt      - CodeBlock, TextSelection, syntax highlighting
-  event-handling.txt - Event system, bubbling, dispatch
-  performance.txt    - Optimization tips
-  debugging.txt      - F12 inspector, console, error overlay
-  custom-targets.txt - Building your own render target
+  lua-runtime.txt          - All 27 Lua modules and their roles
+  focus-management.txt     - Tab/gamepad navigation, spatial scanning, FocusGroup
+  lua-owned-interaction.txt - Zero bridge traffic pattern for complex primitives
+  networking.txt           - HTTP requests, WebSockets, proxies, JSON
+  tor.txt                  - Tor integration, hidden services, anonymity
+  rendering.txt            - CodeBlock, TextSelection, syntax highlighting
+  event-handling.txt       - Event system, bubbling, dispatch
+  performance.txt          - Optimization tips
+  debugging.txt            - F12 inspector, console, error overlay
+  custom-targets.txt       - Building your own render target
 ---
 Platforms: All
 
 === SEE ALSO ===
 - lua-runtime.txt - Start here for Lua internals
+- focus-management.txt - Controller navigation and focus system
+- lua-owned-interaction.txt - Zero-bridge-traffic primitive pattern
 - networking.txt - HTTP, WebSocket, and networking features
 - tor.txt - Tor integration for privacy and hidden services
 - rendering.txt - CodeBlock and TextSelection components

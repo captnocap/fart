@@ -93,6 +93,13 @@ Love2D:
 Web:
   Same rendering as Love2D — Pressable maps to interactive div elements.
 
+=== CRITICAL RULES ===
+- Every item entry must have a unique `id` — this is the value passed to `onSelect`.
+- Disabled items render with reduced opacity and do not trigger `onSelect`.
+- Dividers are purely visual — they have no id and produce no events.
+- All Text inside Toolbar items must have explicit `fontSize` (the component handles this internally).
+- Toolbar auto-sizes to fit its items. To constrain width, wrap in a Box or set `style.width`.
+
 === SEE ALSO ===
 - Tabs -- Tab navigation for switching views
 - NavPanel -- Sidebar navigation with grouped sections

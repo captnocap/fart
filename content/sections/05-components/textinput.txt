@@ -1,16 +1,16 @@
 === METADATA ===
 title: TextInput
-description: Editable single-line or multiline text field with cursor, placeholder, and secure entry support.
+description: Editable single-line or multiline text field with cursor, selection, clipboard, and secure entry support.
 category: Components
 platforms: love2d, web, terminal, cc, nvim, hs, awesome
-keywords: text input, input, field, form, editable, cursor, password, text
+keywords: text input, input, field, form, editable, cursor, password, text, clipboard, selection
 related: TextEditor, Pressable
 difficulty: beginner
 
 === OVERVIEW ===
-TextInput is an editable text field that handles keyboard input, cursor positioning, and text manipulation. It supports single-line and multiline modes, placeholder text, secure entry (password masking), and both controlled and uncontrolled value management.
+TextInput is an editable text field that handles keyboard input, cursor positioning, selection, and text manipulation. It supports single-line and multiline modes, placeholder text, secure entry (password masking), clipboard operations, and both controlled and uncontrolled value management.
 
-In web mode, TextInput renders a native HTML `<input>` or `<textarea>`. In native mode (Love2D), it renders a custom implementation using Box and Text primitives with a blinking cursor, handling keystrokes via `onKeyDown` and `onTextInput` events from the Love2D bridge.
+In web mode, TextInput renders a native HTML `<input>` or `<textarea>` with standard browser behavior. In native mode (Love2D), it renders a Lua-owned custom implementation where ALL editing state (text, cursor position, selection, clipboard) lives entirely in Lua. Only boundary events (focus, blur, submit, changeText) cross the JS bridge — there is zero bridge traffic per keystroke.
 
 === API / SYNTAX ===
 Import: import { TextInput } from '@ilovereact/core';
@@ -31,7 +31,7 @@ Props (from TextInputProps in types.ts):
 |------------------|----------------------------|-------------|----------------------------------------------------|
 | value            | string                     | -           | Controlled text value                              |
 | defaultValue     | string                     | -           | Initial value in uncontrolled mode                 |
-| onChangeText     | (text: string) => void     | -           | Called when text changes                           |
+| onChangeText     | (text: string) => void     | -           | Called when text changes (blur/submit in native)   |
 | onSubmit         | (text: string) => void     | -           | Called on Enter (single-line) or submit action     |
 | onFocus          | () => void                 | -           | Called when the input gains focus                  |
 | onBlur           | () => void                 | -           | Called when the input loses focus                  |
@@ -41,6 +41,7 @@ Props (from TextInputProps in types.ts):
 | multiline        | boolean                    | false       | Enables multiline mode (textarea)                  |
 | editable         | boolean                    | true        | Whether text can be edited                         |
 | secureTextEntry  | boolean                    | false       | Masks text with bullet characters                  |
+| keyboardType     | string                     | 'default'   | Hint for on-screen keyboard (numeric, email, etc.) |
 | style            | Style                      | -           | Container style overrides                          |
 | textStyle        | Style                      | -           | Text content style (fontSize, color, etc.)         |
 | autoFocus        | boolean                    | false       | Automatically focus on mount                       |
@@ -94,19 +95,39 @@ Example 3: Multiline with max length
 Platforms: All
 
 === PLATFORM NOTES ===
-- Web: Renders `<input>` for single-line, `<textarea>` for multiline. Uses native browser focus, cursor, and selection behavior. `placeholderColor` is applied via a scoped `::placeholder` CSS rule. `cursorColor` maps to the CSS `caretColor` property.
-- Native (Love2D): Renders a Box container with Text children. The cursor is a 2px-wide colored Box that blinks at 530ms intervals. Keyboard events (`onKeyDown`, `onTextInput`) drive all editing. Supports backspace, delete, left/right arrows, home, end, return, escape, and tab keys. Escape and tab blur the input. Return triggers `onSubmit` in single-line mode or inserts a newline in multiline mode.
-- Native default styling: dark background (`#1a1a1a`), 1px border (`#666666` unfocused, `cursorColor` or `#4A90D9` focused), `borderRadius: 4`, `padding: 4`.
-- In native mode, clicking the input focuses it and places the cursor at the end of the text.
+- Web: Renders `<input>` for single-line, `<textarea>` for multiline. Uses native browser focus, cursor, selection, and clipboard behavior. `placeholderColor` is applied via a scoped `::placeholder` CSS rule. `cursorColor` maps to the CSS `caretColor` property. All keyboard interactions and text changes are handled by the browser.
+
+- Native (Love2D): Implements a Lua-owned text input pattern where ALL editing state lives in Lua (`lua/textinput.lua`). The Lua side manages:
+  - Text content, cursor position, selection range
+  - Keyboard input (arrows, home, end, backspace, delete, return)
+  - Mouse interactions (click to position cursor, drag to select)
+  - Clipboard operations (Ctrl+C/X/V)
+  - Cursor blink animation (530ms intervals)
+  - Horizontal scroll for single-line mode
+  - Visual rendering (text, cursor, selection highlight)
+
+- Native bridge efficiency: JS side only receives boundary events via named handlers (`onTextInputFocus`, `onTextInputBlur`, `onTextInputSubmit`). No per-keystroke bridge traffic. The `onChangeText` callback is invoked only on blur or submit with the final text value.
+
+- Native keyboard support: Backspace, Delete, Left/Right arrows, Home, End, Return, Escape, Tab keys. Shift+arrows for selection. Ctrl+A (select all), Ctrl+C (copy), Ctrl+X (cut), Ctrl+V (paste). Escape and Tab blur the input. Return triggers `onSubmit` in single-line mode or inserts a newline in multiline mode.
+
+- Native default styling: dark background (`#1a1a1a`), 1px border (`#666666` unfocused, `cursorColor` or `#4A90D9` focused), `borderRadius: 4`, `padding: 4`. The cursor is a 2px-wide colored Box that blinks at 530ms intervals.
+
+- Native controlled value: When the `value` prop changes from JS, Lua syncs the internal state and clamps the cursor position to the new text length. Selection is cleared on external value changes.
+
+- Native mouse interactions: Clicking the input focuses it and positions the cursor at the click location. Dragging creates a text selection. Double-click (future enhancement) can select words.
 
 === CRITICAL RULES ===
 - TextInput needs explicit `width` in its style. Without it, the container will collapse.
-- In native mode, the cursor position is maintained internally. External `value` changes will clamp the cursor to the new text length.
+- In native mode, cursor position and selection are maintained entirely in Lua. External `value` changes will clamp the cursor to the new text length and clear any active selection.
 - The `onSubmit` callback fires on Enter in single-line mode. In multiline mode, Enter inserts a newline instead.
+- In native mode, `onChangeText` is invoked only on blur or submit (boundary events), not per keystroke. For real-time text updates, consider using TextEditor or implement a custom bridge event.
 - When `editable` is false, the text is displayed but keystroke events are ignored.
-- `secureTextEntry` replaces each character with a bullet character (U+2022) in the display.
+- `secureTextEntry` replaces each character with a bullet character (U+2022) in the display. The actual text is preserved in the internal state.
+- Native mode requires explicit `fontSize` in `textStyle` or `style` for proper font rendering and cursor positioning. The linter enforces this for Text components; apply the same rule for TextInput.
+- Selection highlighting in native mode uses a semi-transparent blue overlay (`rgba(74, 144, 217, 0.3)`). The selection range is tracked as byte offsets in the UTF-8 encoded text.
 
 === SEE ALSO ===
 - TextEditor
 - Box
 - Text
+- Pressable

@@ -51,6 +51,12 @@ Props:
 | onDragStart     | (event: LoveEvent) => void      | undefined | Drag gesture began                   |
 | onDrag          | (event: LoveEvent) => void      | undefined | Drag gesture moved                   |
 | onDragEnd       | (event: LoveEvent) => void      | undefined | Drag gesture ended                   |
+| onFileDrop      | (event: LoveEvent) => void      | undefined | File dropped on the box              |
+| onDirectoryDrop | (event: LoveEvent) => void      | undefined | Directory dropped on the box         |
+| onFileDragEnter | (event: LoveEvent) => void      | undefined | File drag enters the box             |
+| onFileDragLeave | (event: LoveEvent) => void      | undefined | File drag leaves the box             |
+| onFocus         | (event: LoveEvent) => void      | undefined | Box gained focus                     |
+| onBlur          | (event: LoveEvent) => void      | undefined | Box lost focus                       |
 | children        | ReactNode                       | undefined | Child elements                       |
 
 The `style` prop accepts the full Style type, which includes flexbox properties (flexDirection, justifyContent, alignItems, flexGrow, flexShrink, flexBasis, flexWrap, gap), sizing (width, height, minWidth, minHeight, maxWidth, maxHeight, aspectRatio), spacing (padding*, margin*), visual (backgroundColor, borderRadius, borderWidth, borderColor, opacity, overflow, boxShadow), positioning (position, top/right/bottom/left, zIndex), gradients, transforms, transitions, and animations.

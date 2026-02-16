@@ -1,0 +1,199 @@
+=== METADATA ===
+title: useHotkey
+description: Register global keyboard shortcuts that work even over focused elements
+category: Hooks
+platforms: love2d, web, terminal, nvim, cc, hs, awesome
+keywords: keyboard, shortcut, hotkey, keybinding, accessibility, undo, save
+related: useLoveEvent, TextInput
+difficulty: intermediate
+
+=== OVERVIEW ===
+`useHotkey` registers a global keyboard shortcut that fires a callback when the specified key combination is pressed. Unlike normal `onKeyDown` handlers, hotkeys work even when text inputs or other focusable elements are active. This is essential for implementing editor-style shortcuts (Ctrl+Z, Ctrl+S), modal dismissals (Escape), or global navigation (F-keys).
+
+=== API / SYNTAX ===
+```tsx
+import { useHotkey } from '@ilovereact/core';
+
+useHotkey(combo, handler, options);
+```
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `combo` | `string` | Yes | Key combination string (e.g., `'ctrl+z'`, `'shift+escape'`, `'f12'`) |
+| `handler` | `(event: LoveEvent) => void` | Yes | Callback function invoked when the hotkey is pressed |
+| `options` | `{ enabled?: boolean }` | No | Optional config. Set `enabled: false` to temporarily disable the hotkey. |
+
+**Combo String Format:**
+- Modifiers: `ctrl`, `control`, `shift`, `alt`, `meta`, `cmd`, `gui`
+- Separate with `+` (e.g., `'ctrl+shift+s'`)
+- Case-insensitive
+- Key names match Love2D's key constants (e.g., `'escape'`, `'return'`, `'space'`, `'f1'`, `'a'`)
+
+**Return Value:**
+`void` — This hook has no return value. It registers the hotkey as a side effect.
+
+=== EXAMPLES ===
+
+Example 1: Undo/Redo Shortcuts
+---
+```tsx
+import { useHotkey } from '@ilovereact/core';
+import { Box, Text } from '@ilovereact/core';
+
+function Editor() {
+  const [history, setHistory] = React.useState<string[]>(['']);
+  const [index, setIndex] = React.useState(0);
+
+  const undo = () => {
+    if (index > 0) setIndex(index - 1);
+  };
+
+  const redo = () => {
+    if (index < history.length - 1) setIndex(index + 1);
+  };
+
+  useHotkey('ctrl+z', undo);
+  useHotkey('ctrl+shift+z', redo);
+  useHotkey('ctrl+y', redo); // Alternative redo binding
+
+  return (
+    <Box width="100%" height="100%" padding={20}>
+      <Text fontSize={24}>Editor</Text>
+      <Text fontSize={14}>Current: {history[index]}</Text>
+      <Text fontSize={12}>Ctrl+Z: Undo | Ctrl+Shift+Z: Redo</Text>
+    </Box>
+  );
+}
+```
+---
+Platforms: love2d, web, terminal, nvim, cc, hs, awesome
+
+Example 2: Conditional Hotkeys (Modal Escape)
+---
+```tsx
+import { useHotkey } from '@ilovereact/core';
+import { Box, Text, Modal } from '@ilovereact/core';
+
+function App() {
+  const [modalOpen, setModalOpen] = React.useState(false);
+
+  // Escape closes modal only when it's open
+  useHotkey('escape', () => setModalOpen(false), { enabled: modalOpen });
+
+  return (
+    <Box width="100%" height="100%">
+      <Text fontSize={24}>Press F1 to open modal</Text>
+      <Modal visible={modalOpen} onClose={() => setModalOpen(false)}>
+        <Box padding={20} backgroundColor="#333333">
+          <Text fontSize={18}>Modal Content</Text>
+          <Text fontSize={14}>Press Escape to close</Text>
+        </Box>
+      </Modal>
+    </Box>
+  );
+}
+```
+---
+Platforms: love2d, web, terminal, nvim, cc, hs, awesome
+
+Example 3: Save Shortcut with Confirmation Feedback
+---
+```tsx
+import { useHotkey } from '@ilovereact/core';
+import { Box, Text } from '@ilovereact/core';
+
+function Document() {
+  const [saved, setSaved] = React.useState(false);
+
+  const save = () => {
+    // Trigger save logic (RPC, fetch, etc.)
+    console.log('Saving document...');
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
+
+  useHotkey('ctrl+s', save);
+
+  return (
+    <Box width="100%" height="100%" padding={20}>
+      <Text fontSize={24}>Document Editor</Text>
+      <Text fontSize={14}>Press Ctrl+S to save</Text>
+      {saved && (
+        <Box marginTop={10} padding={10} backgroundColor="#00ff00">
+          <Text fontSize={14}>Saved!</Text>
+        </Box>
+      )}
+    </Box>
+  );
+}
+```
+---
+Platforms: love2d, web, terminal, nvim, cc, hs, awesome
+
+Example 4: Function Key Shortcuts
+---
+```tsx
+import { useHotkey } from '@ilovereact/core';
+import { Box, Text } from '@ilovereact/core';
+
+function DevTools() {
+  const [panelVisible, setPanelVisible] = React.useState(false);
+
+  useHotkey('f12', () => setPanelVisible(!panelVisible));
+  useHotkey('f5', () => window.location.reload()); // Web only
+
+  return (
+    <Box width="100%" height="100%">
+      <Text fontSize={18}>F12: Toggle Dev Panel</Text>
+      {panelVisible && (
+        <Box padding={20} backgroundColor="#222222">
+          <Text fontSize={14}>Developer Tools Panel</Text>
+        </Box>
+      )}
+    </Box>
+  );
+}
+```
+---
+Platforms: love2d, web, terminal, nvim, cc, hs, awesome
+
+=== PLATFORM NOTES ===
+
+**Love2D:**
+- Hotkeys subscribe to the `'keydown'` bridge event via `useBridge().subscribe()`
+- Key names match Love2D's key constants (see `love.keyboard.isDown` docs)
+- Modifiers are read from the event payload: `ctrl`, `shift`, `alt`, `meta`
+
+**Web:**
+- Hotkeys work globally within the React application scope
+- Browser shortcuts (Ctrl+T, Ctrl+W) cannot be overridden for security reasons
+- Some combos (F11 fullscreen) may trigger browser actions before React handlers fire
+
+**Terminal/Grid Targets:**
+- Modifier support varies by terminal emulator
+- Some terminals intercept common shortcuts (Ctrl+C, Ctrl+Z) before they reach the app
+- Test hotkeys in your target environment to verify behavior
+
+**TextInput Interaction:**
+- Hotkeys fire even when a `<TextInput>` is focused
+- If a hotkey conflicts with normal text editing (e.g., Ctrl+A for select-all), you may want to conditionally disable it when the input is active
+- The iLoveReact TextInput component handles Ctrl+Z/Ctrl+Y internally for undo/redo — avoid registering the same combos globally unless you want to override default behavior
+
+=== CRITICAL RULES ===
+
+- **Combo strings are case-insensitive** — `'Ctrl+Z'` and `'ctrl+z'` are equivalent
+- **Handler ref is stable** — the hook uses `useRef` internally so you can pass inline arrow functions without causing re-subscriptions
+- **Enable/disable via `options.enabled`** — set `enabled: false` to temporarily deactivate a hotkey without unmounting the component. Useful for modals, dialogs, or context-specific shortcuts.
+- **Multiple components can register the same hotkey** — if two `useHotkey` calls use the same combo, both handlers will fire. To avoid conflicts, coordinate hotkey registration or conditionally enable them.
+- **Cleanup is automatic** — when the component unmounts, the hotkey unsubscribes. No manual cleanup needed.
+- **Does not prevent default behavior** — the handler fires after the keydown event. To prevent default actions (e.g., browser shortcuts), you'd need to intercept at the platform level (not currently supported in iLoveReact).
+- **Key names must match platform constants** — use `'return'` instead of `'enter'`, `'escape'` instead of `'esc'`. Consult Love2D or target-specific docs for exact key names.
+
+=== SEE ALSO ===
+
+- **useLoveEvent** — low-level event subscription for `'keydown'`, `'keyup'`, `'mousemoved'`, etc.
+- **TextInput** — text editing component with built-in Ctrl+Z/Ctrl+Y undo/redo
+- **useClipboard** — clipboard access, often used with Ctrl+C/Ctrl+V hotkeys
+- **Pressable** — component for click/tap/enter key interaction

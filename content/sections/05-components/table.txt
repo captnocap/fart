@@ -12,6 +12,8 @@ Table renders a structured data grid with a header row and data rows. Each colum
 
 Table supports striped row backgrounds, borderless mode, and per-section style overrides for the header, rows, and cells. It uses Box and Text primitives internally, so it works identically on both web and native targets.
 
+Auto-sizing: Table automatically sizes to fit its content when all columns have explicit widths. When at least one column lacks an explicit width, the table uses `width: '100%'` and distributes remaining space via flexGrow. For content-based sizing, specify fixed widths for all columns and omit the outer `style.width` prop.
+
 === API / SYNTAX ===
 Import: import { Table } from '@ilovereact/core';
 
@@ -142,12 +144,33 @@ Example 3: Borderless table
 ---
 Platforms: All
 
+Example 4: Auto-sized table (content-based width)
+---
+```tsx
+<Table
+  columns={[
+    { key: 'name', title: 'Name', width: 120 },
+    { key: 'role', title: 'Role', width: 100 },
+    { key: 'status', title: 'Status', width: 80, align: 'center' },
+  ]}
+  data={[
+    { name: 'Alice', role: 'Engineer', status: 'Active' },
+    { name: 'Bob', role: 'Designer', status: 'Away' },
+  ]}
+  striped
+/>
+```
+---
+Description: When all columns have explicit widths and no outer width is set, the table sizes to fit its content. The table container uses `alignSelf: 'flex-start'` to avoid stretching.
+Platforms: All
+
 === PLATFORM NOTES ===
 - Table uses Box and Text primitives, so it renders identically on web and native targets.
 - Default colors: header background `#1e293b`, header text `#e2e8f0`, row background `#0f172a`, alternate row `#1e293b`, cell text `#cbd5e1`, border color `#334155`.
 - Header text is `fontSize: 11`, `fontWeight: 'bold'`. Cell text is `fontSize: 11` with `numberOfLines: 1` (truncation).
 - Columns without an explicit `width` use `flexGrow: 1, flexShrink: 1` to fill available space. Columns with a fixed `width` use `flexGrow: 0, flexShrink: 0`.
 - Column alignment maps: `'left'` -> `alignItems: 'start'`, `'center'` -> `alignItems: 'center'`, `'right'` -> `alignItems: 'end'`.
+- Auto-sizing behavior: If all columns have explicit widths, rows omit `width: '100%'` and the outer container uses `alignSelf: 'flex-start'`, causing the table to size to fit content. If any column lacks an explicit width, rows use `width: '100%'` and flexible columns distribute remaining space.
 
 === CRITICAL RULES ===
 - The `columns` and `data` props are both required. An empty `data` array renders only the header row.
@@ -155,6 +178,7 @@ Platforms: All
 - When using `render`, the custom renderer receives the raw cell value, the full row object, and the row index. It must return a ReactNode. The default renderer wraps the value in a Text element with `numberOfLines: 1`.
 - Without `rowKey`, rows are keyed by their array index. For data that changes order, provide a stable `rowKey` (either a string property name or a function).
 - Table does NOT scroll. For scrollable tables, wrap Table in a ScrollView or use FlatList with custom rendering.
+- For auto-sizing, all columns must have explicit widths and the outer `style` must not include a `width` property. If any column lacks a width, the table defaults to `width: '100%'` behavior.
 
 === SEE ALSO ===
 - FlatList

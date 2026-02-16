@@ -1,0 +1,213 @@
+=== METADATA ===
+title: useFetch
+description: Fetch data from a URL or local file path with loading and error state management.
+category: Hooks
+platforms: love2d, web, terminal, cc, nvim, hs, awesome
+keywords: useFetch, hook, fetch, http, data, loading, error, async, request, json, api
+related: usewebsocket.txt, useloverpc.txt
+difficulty: beginner
+
+=== OVERVIEW ===
+useFetch fetches data from a URL or local file path with built-in loading and error state
+management. It works across all targets by using the global fetch() API, which is polyfilled
+in Love2D to route HTTP requests through LuaSocket and local file reads through love.filesystem.
+
+The hook automatically triggers a fetch when the URL changes, handles cancellation on unmount,
+and parses responses as JSON. It returns three properties: data (parsed JSON), loading (boolean),
+and error (Error object or null).
+
+=== API / SYNTAX ===
+```tsx
+import { useFetch } from '@ilovereact/core';
+```
+
+Signature:
+  function useFetch<T = any>(
+    url: string | null,
+    options?: RequestInit
+  ): { data: T | null; error: Error | null; loading: boolean }
+
+Parameters:
+  url: string | null
+    The URL to fetch (HTTP/HTTPS) or local file path (relative to Love2D's save directory
+    or game directory). Pass null to disable fetching and reset state.
+
+  options?: RequestInit (optional)
+    Standard fetch options (method, headers, body, etc.). Supported options depend on the
+    target's fetch implementation.
+
+Returns:
+  Object with three properties:
+    data: T | null
+      Parsed JSON response data. Typed as T (generic type parameter). Null if loading,
+      not yet fetched, or if an error occurred.
+
+    error: Error | null
+      Error object if the fetch failed (network error, HTTP error status, or JSON parse
+      failure). Null if loading or if the fetch succeeded.
+
+    loading: boolean
+      True while the fetch is in progress. False once completed (success or failure) or
+      if url is null.
+
+=== EXAMPLES ===
+Example 1: Fetch JSON from an API
+---
+import { useFetch, Box, Text } from '@ilovereact/core';
+
+interface User {
+  id: number;
+  name: string;
+  email: string;
+}
+
+function UserList() {
+  const { data, loading, error } = useFetch<User[]>('https://api.example.com/users');
+
+  if (loading) {
+    return (
+      <Box style={{ padding: 20 }}>
+        <Text style={{ fontSize: 16, color: '#a6adc8' }}>Loading users...</Text>
+      </Box>
+    );
+  }
+
+  if (error) {
+    return (
+      <Box style={{ padding: 20 }}>
+        <Text style={{ fontSize: 16, color: '#f38ba8' }}>Error: {error.message}</Text>
+      </Box>
+    );
+  }
+
+  return (
+    <Box style={{ padding: 20 }}>
+      {data?.map((user) => (
+        <Text key={user.id} style={{ fontSize: 14, color: '#cdd6f4', marginBottom: 5 }}>
+          {user.name} ({user.email})
+        </Text>
+      ))}
+    </Box>
+  );
+}
+---
+Platforms: all
+
+Example 2: Load local config file
+---
+import { useFetch, Box, Text } from '@ilovereact/core';
+
+interface Config {
+  theme: string;
+  maxPlayers: number;
+  soundEnabled: boolean;
+}
+
+function ConfigDisplay() {
+  const { data, loading, error } = useFetch<Config>('data/config.json');
+
+  if (loading) return <Text style={{ fontSize: 14, color: '#a6adc8' }}>Loading config...</Text>;
+  if (error) return <Text style={{ fontSize: 14, color: '#f38ba8' }}>Failed to load config</Text>;
+
+  return (
+    <Box>
+      <Text style={{ fontSize: 16, color: '#cdd6f4' }}>Theme: {data?.theme}</Text>
+      <Text style={{ fontSize: 16, color: '#cdd6f4' }}>Max Players: {data?.maxPlayers}</Text>
+      <Text style={{ fontSize: 16, color: '#cdd6f4' }}>Sound: {data?.soundEnabled ? 'On' : 'Off'}</Text>
+    </Box>
+  );
+}
+---
+Platforms: All
+
+Example 3: Conditional fetching with null URL
+---
+import { useState } from 'react';
+import { useFetch, Box, Text, Pressable } from '@ilovereact/core';
+
+function ConditionalFetch() {
+  const [userId, setUserId] = useState<number | null>(null);
+  const url = userId ? `https://api.example.com/users/${userId}` : null;
+  const { data, loading, error } = useFetch<{ name: string; email: string }>(url);
+
+  return (
+    <Box style={{ padding: 20 }}>
+      <Pressable onPress={() => setUserId(1)}>
+        <Box style={{ padding: 10, backgroundColor: '#89b4fa' }}>
+          <Text style={{ fontSize: 14, color: '#1e1e2e' }}>Load User 1</Text>
+        </Box>
+      </Pressable>
+
+      {loading && <Text style={{ fontSize: 14, color: '#a6adc8', marginTop: 10 }}>Loading...</Text>}
+      {error && <Text style={{ fontSize: 14, color: '#f38ba8', marginTop: 10 }}>Error: {error.message}</Text>}
+      {data && (
+        <Box style={{ marginTop: 10 }}>
+          <Text style={{ fontSize: 14, color: '#cdd6f4' }}>Name: {data.name}</Text>
+          <Text style={{ fontSize: 14, color: '#cdd6f4' }}>Email: {data.email}</Text>
+        </Box>
+      )}
+    </Box>
+  );
+}
+---
+Platforms: all
+
+Example 4: POST request with options
+---
+import { useFetch, Box, Text } from '@ilovereact/core';
+
+function CreateUser() {
+  const { data, loading, error } = useFetch<{ id: number; name: string }>(
+    'https://api.example.com/users',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Alice', email: 'alice@example.com' }),
+    }
+  );
+
+  if (loading) return <Text style={{ fontSize: 14, color: '#a6adc8' }}>Creating user...</Text>;
+  if (error) return <Text style={{ fontSize: 14, color: '#f38ba8' }}>Failed to create user</Text>;
+
+  return (
+    <Box>
+      <Text style={{ fontSize: 16, color: '#a6e3a1' }}>User created!</Text>
+      <Text style={{ fontSize: 14, color: '#cdd6f4' }}>ID: {data?.id}</Text>
+      <Text style={{ fontSize: 14, color: '#cdd6f4' }}>Name: {data?.name}</Text>
+    </Box>
+  );
+}
+---
+Platforms: all
+
+=== PLATFORM NOTES ===
+The fetch() API is implemented differently per target:
+
+- Love2D: Uses the fetch() polyfill which routes HTTP requests to LuaSocket (http.request)
+  and local file paths to love.filesystem.read. Local paths are resolved relative to the
+  save directory or game directory. Only GET requests are fully supported for HTTP.
+
+- Web: Uses the browser's native fetch() API. Supports all standard fetch features (CORS,
+  credentials, streaming, etc.).
+
+- Grid targets (terminal, cc, nvim, hs, awesome): Use Node.js's native fetch() (Node 18+)
+  or a polyfill. HTTP/HTTPS requests work as expected. Local file paths are resolved
+  relative to the working directory.
+
+The hook always attempts to parse responses as JSON (calls res.json()). For non-JSON responses,
+consider using the fetch() API directly instead of this hook.
+
+=== CRITICAL RULES ===
+- The hook automatically triggers a fetch when the url parameter changes
+- Pass null as the url to disable fetching and reset state to initial values
+- The hook expects JSON responses -- non-JSON responses will cause a parse error
+- Fetch requests are cancelled automatically on component unmount or when url changes
+- HTTP error status codes (4xx, 5xx) are treated as errors (throws "HTTP {status}")
+- For Love2D, local file paths are relative to save directory or game directory
+- Network requests require internet access -- offline environments will fail
+- POST/PUT/DELETE requests may not be fully supported in Love2D's fetch polyfill
+
+=== SEE ALSO ===
+- usewebsocket.txt -- Persistent bidirectional connection for real-time data
+- useloverpc.txt -- Call Lua functions from React with async/await
+- useloveevent.txt -- Subscribe to custom bridge events

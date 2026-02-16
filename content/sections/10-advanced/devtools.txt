@@ -1,0 +1,183 @@
+=== METADATA ===
+title: DevTools
+description: Chrome-style unified developer panel with Elements (tree inspector) and Console (interactive eval) tabs for debugging and live editing
+category: Advanced
+platforms: love2d
+keywords: devtools, inspector, console, debug, f12, eval, tree, elements, live-editing, hover-highlight, search
+related: text-scale, event-handling, layout-engine
+difficulty: intermediate
+
+=== OVERVIEW ===
+DevTools is a unified Chrome-style bottom panel that combines the Elements tab (visual tree inspector with hover highlights and live style editing) and the Console tab (interactive JavaScript and Lua eval with autocomplete, watches, and macros). Toggle it with F12. Canvas overlays (hover highlight, selected outline, tooltip, performance bar) always render on the main canvas regardless of which tab is active. Implemented in lua/devtools.lua, lua/inspector.lua, and lua/console.lua.
+
+=== API / SYNTAX ===
+Keyboard Shortcuts:
+  F12          Toggle DevTools open/closed
+  `            Switch to Console tab (opens DevTools if closed)
+  Tab          Toggle tree panel sidebar (Elements tab only)
+  Escape       Close DevTools (or clear selection first in Elements tab)
+
+Elements Tab:
+  - Tree inspector shows React component hierarchy with expand/collapse
+  - Hover over canvas to see box model overlay (margin orange, padding green, content blue)
+  - Click to select node and view details in sidebar
+  - Search nodes by type, text content, or style properties
+  - Live style editing via inspector detail panel
+
+Console Tab:
+  Commands:
+    <expr>                    Evaluate JavaScript expression (default mode)
+    :lua <code>              Evaluate Lua code
+    :tree                    Print instance tree
+    :nodes                   List all nodes with IDs
+    :perf                    Show performance metrics
+    :find <query>            Search nodes by type/text/style
+    :watch <expr>            Add watch expression (re-eval every frame)
+    :watch                   List all watches
+    :unwatch <index>         Remove watch expression
+    :macro <name> start      Start recording macro
+    :macro <name> end        Stop recording macro
+    :macro <name>            Replay macro
+    :macros                  List all macros
+    :style <id> <prop> <val> Set style property on node by ID
+    :template <name>         Insert boilerplate template
+    :help                    Show all commands
+
+  Input Controls:
+    Enter        Execute command
+    Tab          Autocomplete (commands, globals, node IDs)
+    Up/Down      History navigation
+    Ctrl+L       Clear output
+    Ctrl+W       Delete word backward
+    Ctrl+U       Clear input line
+
+Configuration:
+  -- In main.lua or init.lua:
+  local devtools = require("lua.devtools")
+  local inspector = require("lua.inspector")
+  local console = require("lua.console")
+
+  devtools.init({
+    inspector = inspector,
+    console = console,
+    tree = tree,
+    pushEvent = pushEvent
+  })
+
+  -- In love.keypressed:
+  if devtools.keypressed(key) then return end
+
+  -- In love.mousepressed:
+  if devtools.mousepressed(x, y, btn) then return end
+
+  -- In love.mousemoved:
+  devtools.mousemoved(x, y)
+
+  -- In love.wheelmoved:
+  if devtools.wheelmoved(x, y) then return end
+
+  -- In love.textinput:
+  if devtools.textinput(text) then return end
+
+  -- In love.draw (after paint):
+  devtools.draw(root)
+
+=== EXAMPLES ===
+Example 1: Toggle DevTools and Inspect Layout
+---
+1. Press F12 to open DevTools
+2. Elements tab shows component tree on left, detail panel on right
+3. Hover over canvas to see box model overlay on nodes
+4. Click node to select and view computed styles/props in detail panel
+5. Press Tab to toggle tree panel visibility
+6. Press Escape to clear selection, Escape again to close DevTools
+---
+Platforms: Love2D
+
+Example 2: Interactive Console Eval
+---
+1. Press ` (backtick) to open DevTools to Console tab
+2. Type JavaScript expressions to evaluate:
+   > 2 + 2
+   4
+   > $0
+   (current selected node from Elements tab)
+3. Use :lua prefix for Lua eval:
+   > :lua love.graphics.getWidth()
+   1920
+4. Use built-in commands:
+   > :tree
+   (prints instance tree)
+   > :perf
+   FPS: 60 | Layout: 1.2ms | Paint: 0.8ms | Nodes: 42
+---
+Platforms: Love2D
+
+Example 3: Live Style Editing
+---
+1. Open DevTools (F12), switch to Console tab (`)
+2. Find node ID using :nodes command or Elements tree
+3. Edit style properties live:
+   > :style header-123 backgroundColor #ff0000
+   (header background turns red immediately)
+   > :style header-123 padding 20
+   (header padding increases, layout reflows)
+4. Changes persist until hot reload
+---
+Platforms: Love2D
+
+Example 4: Watch Expressions
+---
+1. Open Console tab (`)
+2. Add watch expressions to monitor live:
+   > :watch love.timer.getFPS()
+   > :watch $0.computed.x
+   > :watch
+   Watch 1: love.timer.getFPS() = 60.2
+   Watch 2: $0.computed.x = 145.5
+3. Watches re-evaluate every frame and display in status bar
+4. Remove watches:
+   > :unwatch 1
+---
+Platforms: Love2D
+
+Example 5: Macros for Repetitive Tasks
+---
+1. Open Console (`), start macro recording:
+   > :macro reset-layout start
+2. Execute commands to record:
+   > :style root-1 width 100%
+   > :style root-1 height 100%
+   > :lua tree.markDirty()
+3. Stop recording:
+   > :macro reset-layout end
+4. Replay macro later:
+   > :macro reset-layout
+   (all three commands execute)
+5. List macros:
+   > :macros
+---
+Platforms: Love2D
+
+=== CRITICAL RULES ===
+- DevTools consumes input events when open — always call devtools.keypressed(), devtools.mousepressed(), etc. BEFORE app input handlers and return early if they return true
+- DevTools panel reduces viewport height when open — use devtools.getViewportHeight() instead of love.graphics.getHeight() for layout calculation
+- Inspector overlays render with love.graphics calls OUTSIDE the React tree — never try to select or style overlay elements as React components
+- Console eval runs in isolated context — use :lua for Love2D API access, default JS mode for React tree manipulation
+- Console autocomplete triggers on Tab — if Tab is bound to app navigation, DevTools must be checked first
+- Hover highlights use deep hit test — ANY node under cursor highlights, not just nodes with event handlers
+- Selected node persists across DevTools close/reopen — press Escape to clear selection before closing
+- Tree panel scroll state is preserved when toggling visibility — collapsed nodes stay collapsed
+- Performance metrics (FPS, layout time, paint time) update every frame in status bar when DevTools is open
+- Console output is capped at 500 lines — older lines are discarded to prevent memory growth
+- Watch expressions evaluate every frame — avoid expensive computations in watches
+- Macro recording captures all commands except :macro start/end/list — recursive macro definitions are not supported
+- Live style edits via :style bypass React reconciler — changes do NOT trigger re-render, only re-layout if dimensional properties change
+- DevTools panel height is 40% of screen height (min 200px) — cannot be resized (yet)
+- Tree panel and detail panel widths are fixed (280px and 300px) — cannot be resized (yet)
+
+=== SEE ALSO ===
+- Global Text Scale — Ctrl+/- to zoom text globally, works independently of DevTools
+- Event Handling — DevTools uses same hit-test and event dispatch pipeline as app
+- Layout Engine — Inspector visualizes layout.lua computed geometry
+- Error Overlay — Similar rendering approach (raw Love2D calls, zero React tree impact)

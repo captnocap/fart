@@ -1,0 +1,221 @@
+=== METADATA ===
+title: usePeerServer
+description: Host a WebSocket server for peer-to-peer connections between devices
+category: Hooks
+platforms: Love2D
+keywords: websocket, p2p, server, multiplayer, networking, broadcast
+related: useWebSocket, useLove, useLoveRPC
+difficulty: intermediate
+
+=== OVERVIEW ===
+`usePeerServer` hosts a WebSocket server on a specified port, allowing other devices to connect as peers. It tracks connected clients, broadcasts messages to all peers, sends targeted messages to individual clients, and receives incoming messages. This hook is essential for building multiplayer games, collaborative tools, or any application requiring device-to-device communication.
+
+=== API / SYNTAX ===
+```tsx
+import { usePeerServer } from '@ilovereact/core';
+
+const server = usePeerServer(port);
+```
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `port` | `number \| null` | Yes | Port number to listen on. Pass `null` to disable the server. |
+
+**Return Value:**
+
+Returns an object with the following properties:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `ready` | `boolean` | `true` when the server is listening and ready to accept connections |
+| `peers` | `number[]` | Array of connected client IDs |
+| `broadcast` | `(data: string) => void` | Send a message to all connected peers |
+| `send` | `(clientId: number, data: string) => void` | Send a message to a specific peer |
+| `lastMessage` | `PeerMessage \| null` | Most recently received message: `{ clientId: number, data: string }` |
+| `error` | `string \| null` | Error message if server initialization or operation failed |
+
+=== EXAMPLES ===
+
+Example 1: Basic P2P Chat Server
+---
+```tsx
+import { Box, Text } from '@ilovereact/core';
+import { usePeerServer } from '@ilovereact/core';
+
+function ChatServer() {
+  const server = usePeerServer(8080);
+  const [messages, setMessages] = React.useState<string[]>([]);
+
+  React.useEffect(() => {
+    if (server.lastMessage) {
+      const msg = `Peer ${server.lastMessage.clientId}: ${server.lastMessage.data}`;
+      setMessages(prev => [...prev, msg]);
+      // Echo to all peers
+      server.broadcast(msg);
+    }
+  }, [server.lastMessage]);
+
+  return (
+    <Box width="100%" height="100%" padding={20}>
+      <Text fontSize={24}>Chat Server</Text>
+      <Text fontSize={16}>
+        Status: {server.ready ? 'Ready' : 'Starting...'}
+      </Text>
+      <Text fontSize={16}>
+        Connected peers: {server.peers.length}
+      </Text>
+      <Box marginTop={20}>
+        {messages.map((msg, i) => (
+          <Text key={i} fontSize={14}>{msg}</Text>
+        ))}
+      </Box>
+    </Box>
+  );
+}
+```
+---
+Platforms: Love2D
+
+Example 2: Multiplayer Game Lobby
+---
+```tsx
+import { Box, Text, Pressable } from '@ilovereact/core';
+import { usePeerServer } from '@ilovereact/core';
+
+function GameLobby() {
+  const server = usePeerServer(9050);
+  const [players, setPlayers] = React.useState<Map<number, string>>(new Map());
+
+  // Handle player join messages
+  React.useEffect(() => {
+    if (server.lastMessage) {
+      const { clientId, data } = server.lastMessage;
+      try {
+        const msg = JSON.parse(data);
+        if (msg.type === 'join') {
+          setPlayers(prev => new Map(prev).set(clientId, msg.name));
+          // Notify all peers of updated player list
+          server.broadcast(JSON.stringify({
+            type: 'players',
+            players: Array.from(players.entries())
+          }));
+        }
+      } catch (e) {
+        console.error('Invalid message:', e);
+      }
+    }
+  }, [server.lastMessage]);
+
+  // Handle disconnections
+  React.useEffect(() => {
+    setPlayers(prev => {
+      const next = new Map(prev);
+      for (const id of prev.keys()) {
+        if (!server.peers.includes(id)) {
+          next.delete(id);
+        }
+      }
+      return next;
+    });
+  }, [server.peers]);
+
+  const startGame = () => {
+    server.broadcast(JSON.stringify({ type: 'game:start' }));
+  };
+
+  return (
+    <Box width="100%" height="100%" padding={20}>
+      <Text fontSize={24}>Game Lobby</Text>
+      <Text fontSize={16}>Server: {server.ready ? 'Running on port 9050' : 'Starting...'}</Text>
+      <Box marginTop={20}>
+        <Text fontSize={18}>Players ({players.size}):</Text>
+        {Array.from(players.entries()).map(([id, name]) => (
+          <Text key={id} fontSize={14}>• {name}</Text>
+        ))}
+      </Box>
+      {players.size >= 2 && (
+        <Pressable onPress={startGame}>
+          <Box padding={10} backgroundColor="#00ff00">
+            <Text fontSize={16}>Start Game</Text>
+          </Box>
+        </Pressable>
+      )}
+    </Box>
+  );
+}
+```
+---
+Platforms: Love2D
+
+Example 3: Selective Message Routing
+---
+```tsx
+import { usePeerServer } from '@ilovereact/core';
+
+function PrivateMessageServer() {
+  const server = usePeerServer(8080);
+
+  React.useEffect(() => {
+    if (server.lastMessage) {
+      const { clientId, data } = server.lastMessage;
+      try {
+        const msg = JSON.parse(data);
+
+        // Route private messages
+        if (msg.type === 'private' && msg.to) {
+          server.send(msg.to, JSON.stringify({
+            type: 'private',
+            from: clientId,
+            message: msg.message
+          }));
+        }
+
+        // Broadcast public messages
+        if (msg.type === 'public') {
+          server.broadcast(JSON.stringify({
+            from: clientId,
+            message: msg.message
+          }));
+        }
+      } catch (e) {
+        // Invalid JSON, ignore
+      }
+    }
+  }, [server.lastMessage]);
+
+  return null; // Headless server
+}
+```
+---
+Platforms: Love2D
+
+=== PLATFORM NOTES ===
+
+**Love2D Only:**
+- This hook only works in Love2D, which has the lua-websocket library integrated via the QuickJS bridge
+- The underlying implementation uses `globalThis.__wsListen`, `__wsBroadcast`, `__wsSendToClient`, and `__wsStopServer` FFI functions
+- Web, terminal, and grid targets do not support hosting WebSocket servers (they can only be WebSocket clients via `useWebSocket`)
+
+**Network Considerations:**
+- The server binds to `0.0.0.0` by default, accepting connections from any network interface
+- Peers must know the host IP address and port to connect
+- Consider firewall rules when deploying — the port must be open for incoming connections
+- For local testing, peers can connect to `ws://localhost:<port>`
+
+=== CRITICAL RULES ===
+
+- **Pass `null` to disable the server** — setting `port` to `null` shuts down the server and disconnects all peers. This is useful for toggling server state based on app logic.
+- **Client IDs are auto-assigned** — when a peer connects, the server generates a unique numeric ID. Use these IDs to send targeted messages via `server.send(clientId, data)`.
+- **Messages are strings only** — `usePeerServer` sends and receives strings. For structured data, use JSON: `server.broadcast(JSON.stringify(payload))` and `JSON.parse(server.lastMessage.data)`.
+- **React to `server.lastMessage` in `useEffect`** — process incoming messages in an effect with `server.lastMessage` as a dependency to avoid missing messages.
+- **Track peer lifecycle via `server.peers`** — the `peers` array updates reactively when clients connect or disconnect. Use this to detect disconnections and clean up player state.
+- **Server cleanup is automatic** — when the component unmounts or `port` changes, the server shuts down and all connections close. No manual cleanup needed.
+- **Error handling is passive** — if server initialization fails (e.g., port already in use), `server.error` will contain the error message and `server.ready` will remain `false`. Check both before broadcasting.
+
+=== SEE ALSO ===
+
+- **useWebSocket** — client-side WebSocket hook for connecting to a `usePeerServer` instance or external WebSocket server
+- **useLoveRPC** — call Lua methods and await results, useful for server-side game logic paired with peer messaging
+- **useLoveEvent** — subscribe to custom Lua events, can be combined with peer messages to trigger server-side behaviors

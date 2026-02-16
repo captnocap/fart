@@ -1,0 +1,154 @@
+=== METADATA ===
+title: useWindowDimensions
+description: Get the current viewport width and height with reactive updates on window resize.
+category: Hooks
+platforms: love2d, web, terminal, cc, nvim, hs, awesome
+keywords: useWindowDimensions, hook, viewport, dimensions, width, height, resize, responsive, window
+related: useloveevent.txt, uselove.txt
+difficulty: beginner
+
+=== OVERVIEW ===
+useWindowDimensions returns an object containing the current viewport width and height. The
+values update reactively whenever the window is resized, allowing components to respond to
+layout changes dynamically.
+
+The hook subscribes to the 'viewport' bridge event and updates state whenever new dimensions
+are received from the Lua runtime. Initial dimensions may be {width: 0, height: 0} until the
+first viewport event is dispatched.
+
+=== API / SYNTAX ===
+```tsx
+import { useWindowDimensions } from '@ilovereact/core';
+```
+
+Signature:
+  function useWindowDimensions(): { width: number; height: number }
+
+Parameters:
+  (none)
+
+Returns:
+  Object with two properties:
+    width: number
+      Current viewport width in pixels (or character columns for grid targets)
+    height: number
+      Current viewport height in pixels (or character rows for grid targets)
+
+=== EXAMPLES ===
+Example 1: Responsive layout
+---
+import { useWindowDimensions, Box, Text } from '@ilovereact/core';
+
+function ResponsiveLayout() {
+  const { width, height } = useWindowDimensions();
+  const isWide = width > 800;
+  const isTall = height > 600;
+
+  return (
+    <Box style={{
+      width: '100%',
+      height: '100%',
+      flexDirection: isWide ? 'row' : 'column',
+      backgroundColor: '#1e1e2e'
+    }}>
+      <Box style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <Text style={{ fontSize: 20, color: '#cdd6f4' }}>
+          {width} x {height}
+        </Text>
+      </Box>
+      <Box style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <Text style={{ fontSize: 16, color: '#a6adc8' }}>
+          Layout: {isWide ? 'Wide' : 'Narrow'}
+        </Text>
+      </Box>
+    </Box>
+  );
+}
+---
+Platforms: All
+
+Example 2: Conditional rendering based on viewport size
+---
+import { useWindowDimensions, Box, Text } from '@ilovereact/core';
+
+function AdaptiveUI() {
+  const { width } = useWindowDimensions();
+  const showSidebar = width >= 1024;
+  const showMobileNav = width < 768;
+
+  return (
+    <Box style={{ width: '100%', height: '100%', flexDirection: 'row' }}>
+      {showSidebar && (
+        <Box style={{ width: 200, backgroundColor: '#313244' }}>
+          <Text style={{ fontSize: 16, color: '#cdd6f4', padding: 10 }}>Sidebar</Text>
+        </Box>
+      )}
+      <Box style={{ flex: 1 }}>
+        {showMobileNav && (
+          <Box style={{ height: 50, backgroundColor: '#45475a' }}>
+            <Text style={{ fontSize: 14, color: '#cdd6f4', padding: 10 }}>Mobile Nav</Text>
+          </Box>
+        )}
+        <Box style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <Text style={{ fontSize: 18, color: '#cdd6f4' }}>Content</Text>
+        </Box>
+      </Box>
+    </Box>
+  );
+}
+---
+Platforms: All
+
+Example 3: Calculate aspect ratio
+---
+import { useWindowDimensions, Box, Text } from '@ilovereact/core';
+
+function AspectRatioDisplay() {
+  const { width, height } = useWindowDimensions();
+  const aspectRatio = height > 0 ? (width / height).toFixed(2) : '0.00';
+  const orientation = width > height ? 'Landscape' : 'Portrait';
+
+  return (
+    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
+      <Text style={{ fontSize: 24, color: '#cdd6f4' }}>
+        {width} x {height}
+      </Text>
+      <Text style={{ fontSize: 18, color: '#a6adc8', marginTop: 10 }}>
+        Aspect Ratio: {aspectRatio}
+      </Text>
+      <Text style={{ fontSize: 16, color: '#89b4fa', marginTop: 5 }}>
+        {orientation}
+      </Text>
+    </Box>
+  );
+}
+---
+Platforms: All
+
+=== PLATFORM NOTES ===
+The meaning of "dimensions" varies by target:
+
+- Love2D: Pixel dimensions of the Love2D window (set in conf.lua or via love.window.setMode)
+- Web: Pixel dimensions of the canvas element
+- Terminal: Character columns and rows of the terminal viewport
+- ComputerCraft: Character columns and rows of the monitor/terminal
+- Neovim: Character columns and rows of the floating window
+- Hammerspoon: Pixel dimensions of the canvas
+- AwesomeWM: Pixel dimensions of the widget area
+
+For grid-based targets (terminal, cc, nvim), layout calculations are performed in character
+units, not pixels. The dimensions update when the terminal window is resized or when the user
+changes font size.
+
+=== CRITICAL RULES ===
+- Initial dimensions may be {width: 0, height: 0} until the first viewport event fires
+- Check for zero dimensions before dividing (e.g., calculating aspect ratio)
+- Must be used inside a BridgeProvider context
+- Updates are reactive -- components re-render automatically on resize
+- For Love2D, dimensions are set in conf.lua via t.window.width and t.window.height
+- Grid targets measure in character units, not pixels
+
+=== SEE ALSO ===
+- useloveevent.txt -- Subscribe to custom viewport-related events
+- uselove.txt -- General-purpose bridge event subscription
+- Box primitive -- Use percentage widths/heights relative to these dimensions
