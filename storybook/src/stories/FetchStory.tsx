@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { Box, Text, Pressable, useFetch } from '../../../../packages/shared/src';
+import { Box, Text, Pressable, useFetch } from '../../../packages/shared/src';
 
 // Simple display for a fetch result
 function ResultBox({ label, loading, error, data }: {

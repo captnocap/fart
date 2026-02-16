@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
-import { Box, Text, TextEditor } from '../../../../packages/shared/src';
-import { Video } from '../../../../packages/shared/src/Video';
-import { VideoPlayer } from '../../../../packages/shared/src/VideoPlayer';
+import { Box, Text, TextEditor } from '../../../packages/shared/src';
+import { Video } from '../../../packages/shared/src/Video';
+import { VideoPlayer } from '../../../packages/shared/src/VideoPlayer';
 
 function Card({ children, label }: { children: React.ReactNode; label: string }) {
   return (

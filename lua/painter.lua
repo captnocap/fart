@@ -804,6 +804,11 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
       if not textDecorationLine then textDecorationLine = ps.textDecorationLine end
     end
 
+    -- Apply text scale (respects per-subtree textScale override)
+    local ts = Measure.resolveTextScale(node)
+    fontSize = math.floor(fontSize * ts)
+    if lineHeight then lineHeight = math.floor(lineHeight * ts) end
+
     local font, isBold = getFont(fontSize, fontFamily, fontWeight)
     love.graphics.setFont(font)
 
@@ -811,6 +816,15 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
     local text = node.text or (node.props and node.props.children) or ""
     if type(text) == "table" then text = table.concat(text) end
     text = tostring(text)
+
+    -- DEBUG: log non-ASCII text and font info
+    if fontFamily and #text > 0 then
+      local firstByte = text:byte(1)
+      if firstByte and firstByte > 127 then
+        io.write("[painter] non-ASCII text: bytes=" .. #text .. " font=" .. tostring(fontFamily) .. " hasGlyphs=" .. tostring(font:hasGlyphs(text)) .. " first3bytes=" .. string.format("%02x %02x %02x", text:byte(1) or 0, text:byte(2) or 0, text:byte(3) or 0) .. "\n")
+        io.flush()
+      end
+    end
 
     local align = s.textAlign or "left"
     local hasCustomLineHeight = lineHeight and lineHeight ~= font:getHeight()
@@ -1175,24 +1189,21 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
   if not isHidden and (node.type == "View" or node.type == "box")
      and Videos and node.props and node.props.hoverVideo then
     local hvSrc = node.props.hoverVideo
-    if hvSrc ~= "" then
+    if hvSrc ~= "" and Videos.getStatus(hvSrc) == "ready" then
       local mx, my = love.mouse.getPosition()
       local isHovered = mx >= c.x and mx < c.x + c.w and my >= c.y and my < c.y + c.h
-      if isHovered then
-        Videos.setPaused(hvSrc, false)
-        Videos.setLoop(hvSrc, true)
-        Videos.setMuted(hvSrc, true)
-        Videos.setVolume(hvSrc, 0)
-        local hvCanvas = Videos.get(hvSrc)
-        if hvCanvas then
-          local fit = node.props.hoverVideoFit or "cover"
-          drawVideoFrame(hvCanvas, hvSrc, c, fit, borderRadius, stencilDepth, effectiveOpacity)
-        end
-      else
-        -- Pause when not hovered to save resources
-        if Videos.getStatus(hvSrc) == "ready" then
-          Videos.setPaused(hvSrc, true)
-        end
+
+      -- Play on hover, freeze (pause) when not — frozen frame stays visible
+      Videos.setPaused(hvSrc, not isHovered)
+      Videos.setLoop(hvSrc, true)
+      Videos.setMuted(hvSrc, true)
+      Videos.setVolume(hvSrc, 0)
+
+      -- Always draw the frame (frozen first-frame when not hovered, playing when hovered)
+      local hvCanvas = Videos.get(hvSrc)
+      if hvCanvas then
+        local fit = node.props.hoverVideoFit or "cover"
+        drawVideoFrame(hvCanvas, hvSrc, c, fit, borderRadius, stencilDepth, effectiveOpacity)
       end
     end
   end

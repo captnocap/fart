@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Box, Text, Toolbar } from '../../../../packages/shared/src';
-import type { ToolbarEntry } from '../../../../packages/shared/src';
+import { Box, Text, Toolbar } from '../../../packages/shared/src';
+import type { ToolbarEntry } from '../../../packages/shared/src';
 
 const BASIC_ITEMS: ToolbarEntry[] = [
   { type: 'item', id: 'new', label: 'New' },

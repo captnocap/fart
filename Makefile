@@ -258,6 +258,11 @@ cli-setup: setup
 	cp -r packages/router cli/runtime/ilovereact/router
 	cp -r packages/storage cli/runtime/ilovereact/storage
 	cp -r packages/components cli/runtime/ilovereact/components
+	@if [ -d fonts ]; then \
+		mkdir -p cli/runtime/fonts; \
+		cp -r fonts/* cli/runtime/fonts/; \
+		echo "  Bundled fonts ($$(du -sh fonts | cut -f1))"; \
+	fi
 	@echo "=== CLI runtime ready. Run: cd cli && npm link ==="
 
 # ── Clean ───────────────────────────────────────────────

@@ -1,5 +1,5 @@
 import type { ComponentType } from 'react';
-import { stories as addonStories } from '../../../../packages/components/src/stories';
+import { stories as addonStories } from '../../../packages/components/src/stories';
 
 export interface StoryDef {
   id: string;
@@ -58,6 +58,7 @@ import { FetchStory } from './FetchStory';
 import { WebSocketStory } from './WebSocketStory';
 import { VideoStory } from './VideoStory';
 import { FileDropStory } from './FileDropStory';
+import { FontShowcaseStory } from './FontShowcase';
 
 export const stories: StoryDef[] = [
   // Primitives
@@ -68,6 +69,7 @@ export const stories: StoryDef[] = [
   { id: 'image-basic', title: 'Image', category: 'Primitives', component: ImageBasicStory },
   { id: 'video', title: 'Video', category: 'Primitives', component: VideoStory },
   { id: 'file-drop', title: 'File Drop', category: 'Primitives', component: FileDropStory },
+  { id: 'font-showcase', title: 'Font Packs', category: 'Primitives', component: FontShowcaseStory },
 
   // Layout
   { id: 'auto-size-basic', title: 'Auto-Sizing', category: 'Layout', component: AutoSizeBasic },

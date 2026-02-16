@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Text, Divider, Spacer } from '../../../../packages/shared/src';
+import { Box, Text, Divider, Spacer } from '../../../packages/shared/src';
 
 /* ── heart pixel grid (13 wide x 10 tall) ──────────────────── */
 

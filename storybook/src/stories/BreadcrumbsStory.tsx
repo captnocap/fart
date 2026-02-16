@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Box, Text, Breadcrumbs } from '../../../../packages/shared/src';
-import type { BreadcrumbItem } from '../../../../packages/shared/src';
+import { Box, Text, Breadcrumbs } from '../../../packages/shared/src';
+import type { BreadcrumbItem } from '../../../packages/shared/src';
 
 const SHORT_PATH: BreadcrumbItem[] = [
   { id: 'home', label: 'Home' },

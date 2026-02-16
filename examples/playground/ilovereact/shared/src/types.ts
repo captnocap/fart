@@ -226,6 +226,12 @@ export interface BoxProps {
   hidden?: boolean;
   z?: number;
 
+  // Video backgrounds
+  backgroundVideo?: string;
+  backgroundVideoFit?: 'fill' | 'contain' | 'cover';
+  hoverVideo?: string;
+  hoverVideoFit?: 'fill' | 'contain' | 'cover';
+
   focusable?: boolean;
   focusGroup?: boolean;
   focusGroupController?: number;
@@ -364,6 +370,8 @@ export interface TextInputProps {
   multiline?: boolean;
   editable?: boolean;
   secureTextEntry?: boolean;
+  /** Hint for on-screen keyboard layout. Default: 'default'. */
+  keyboardType?: 'default' | 'numeric' | 'email' | 'phone-pad' | 'url';
   style?: Style;
   textStyle?: Style;
   autoFocus?: boolean;

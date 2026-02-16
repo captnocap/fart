@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
-import { Box, Text } from '../../../../packages/shared/src';
-import { VideoPlayer } from '../../../../packages/shared/src/VideoPlayer';
-import type { LoveEvent } from '../../../../packages/shared/src/types';
+import { Box, Text } from '../../../packages/shared/src';
+import { VideoPlayer } from '../../../packages/shared/src/VideoPlayer';
+import type { LoveEvent } from '../../../packages/shared/src/types';
 
 export function FileDropStory() {
   const [videoSrc, setVideoSrc] = useState<string | null>(null);

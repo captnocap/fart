@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Text, Divider } from '../../../../packages/shared/src';
+import { Box, Text, Divider } from '../../../packages/shared/src';
 
 /* ── Sun pixel grid (11 wide x 11 tall) ───────────────────── */
 

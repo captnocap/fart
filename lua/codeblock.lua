@@ -119,7 +119,7 @@ end
 function CodeBlock.measure(node)
   local props = node.props or {}
   local code = props.code or ""
-  local fontSize = props.fontSize or 10
+  local fontSize = Measure.scaleFontSize(props.fontSize or 10, node)
   local s = node.style or {}
   local padding = s.padding or 10
 
@@ -217,7 +217,7 @@ end
 function CodeBlock.render(node, c, effectiveOpacity)
   local props = node.props or {}
   local code = props.code or ""
-  local fontSize = props.fontSize or 10
+  local fontSize = Measure.scaleFontSize(props.fontSize or 10, node)
   local s = node.style or {}
   local padding = s.padding or 10
 

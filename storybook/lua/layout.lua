@@ -221,10 +221,12 @@ local function measureTextNode(node, availW)
   local text = resolveTextContent(node)
   if not text then return nil, nil end
 
-  local fontSize = resolveFontSize(node)
+  local ts = Measure.resolveTextScale(node)
+  local fontSize = math.floor(resolveFontSize(node) * ts)
   local fontFamily = resolveFontFamily(node)
   local fontWeight = resolveFontWeight(node)
   local lineHeight = resolveLineHeight(node)
+  if lineHeight then lineHeight = math.floor(lineHeight * ts) end
   local letterSpacing = resolveLetterSpacing(node)
   local numberOfLines = resolveNumberOfLines(node)
 
@@ -297,10 +299,12 @@ local function estimateIntrinsicMain(node, isRow, pw, ph)
   if isTextNode then
     local text = resolveTextContent(node)
     if text and text ~= "" then
-      local fontSize = resolveFontSize(node)
+      local ts = Measure.resolveTextScale(node)
+      local fontSize = math.floor(resolveFontSize(node) * ts)
       local fontFamily = resolveFontFamily(node)
       local fontWeight = resolveFontWeight(node)
       local lineHeight = resolveLineHeight(node)
+      if lineHeight then lineHeight = math.floor(lineHeight * ts) end
       local letterSpacing = resolveLetterSpacing(node)
       local numberOfLines = resolveNumberOfLines(node)
 

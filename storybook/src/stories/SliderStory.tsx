@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Box, Text, Slider } from '../../../../packages/shared/src';
+import { Box, Text, Slider } from '../../../packages/shared/src';
 
 export function SliderStory() {
   const [value1, setValue1] = useState(0.5);

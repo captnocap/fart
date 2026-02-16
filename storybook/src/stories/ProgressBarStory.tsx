@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Text, ProgressBar, Pressable } from '../../../../packages/shared/src';
+import { Box, Text, ProgressBar, Pressable } from '../../../packages/shared/src';
 
 export function ProgressBarStory() {
   const [animValue, setAnimValue] = useState(0.3);

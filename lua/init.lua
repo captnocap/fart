@@ -25,6 +25,7 @@ local measure  = nil   -- measure.lua module (text measurement + font cache)
 local errors     = require("lua.errors")      -- error overlay (always loaded, self-contained)
 local inspector  = require("lua.inspector")   -- debug inspector (F12 toggle, self-contained)
 local console    = require("lua.console")     -- interactive eval console (` toggle, self-contained)
+local devtools   = require("lua.devtools")    -- unified bottom panel with tabs (Elements + Console)
 local screenshot = nil                        -- screenshot.lua (loaded on demand)
 local inspectorEnabled = true                 -- can be disabled via config.inspector = false
 
@@ -37,6 +38,7 @@ local texteditor = nil                        -- texteditor.lua (loaded on deman
 local codeblock  = nil                        -- codeblock.lua (loaded on demand)
 local textselection = nil                    -- textselection.lua (text highlight + copy)
 local contextmenu = nil                      -- contextmenu.lua (right-click context menu)
+local osk      = nil                          -- osk.lua (on-screen keyboard for gamepad)
 local http     = nil                          -- http.lua (async HTTP + local file fetch)
 local network  = nil                          -- network.lua (WebSocket connections)
 local tor      = nil                          -- tor.lua (Tor subprocess, loaded if config.tor)
@@ -285,6 +287,10 @@ function ReactLove.init(config)
   config = config or {}
   basePath = resolveBasePath()
 
+  -- Enable key repeat so held keys fire keypressed repeatedly
+  -- (needed for text scale Ctrl+=/-, TextEditor backspace/arrows, etc.)
+  love.keyboard.setKeyRepeat(true)
+
   -- Inspector/console can be disabled for production builds
   inspectorEnabled = config.inspector ~= false
 
@@ -338,7 +344,10 @@ function ReactLove.init(config)
     textselection.init({ measure = measure, events = events })
 
     contextmenu = require("lua.contextmenu")
-    contextmenu.init({ measure = measure, events = events, textselection = textselection })
+    contextmenu.init({ measure = measure, events = events, textselection = textselection, inspector = inspector, devtools = devtools })
+
+    osk = require("lua.osk")
+    osk.init({ measure = measure })
 
     focus.init(tree, pushEvent)
 
@@ -389,7 +398,10 @@ function ReactLove.init(config)
     textselection.init({ measure = measure, events = events })
 
     contextmenu = require("lua.contextmenu")
-    contextmenu.init({ measure = measure, events = events, textselection = textselection })
+    contextmenu.init({ measure = measure, events = events, textselection = textselection, inspector = inspector, devtools = devtools })
+
+    osk = require("lua.osk")
+    osk.init({ measure = measure })
 
     focus.init(tree, pushEvent)
 
@@ -477,10 +489,11 @@ function ReactLove.init(config)
     end
   end
 
-  -- Wire up console + inspector (only in rendering modes with inspector enabled)
+  -- Wire up console + inspector + devtools (only in rendering modes with inspector enabled)
   if isRendering() and inspectorEnabled then
     console.init({ bridge = bridge, tree = tree, inspector = inspector })
     inspector.setConsole(console)
+    devtools.init({ inspector = inspector, console = console, tree = tree })
   end
 
   -- Screenshot mode (env var trigger, works in native and canvas modes)
@@ -530,7 +543,8 @@ function ReactLove.update(dt)
       local root = tree.getTree()
       if root then
         if inspectorEnabled and inspector.isEnabled() then inspector.beginLayout() end
-        layout.layout(root)
+        local vh = inspectorEnabled and devtools.getViewportHeight() or nil
+        layout.layout(root, nil, nil, nil, vh)
         if inspectorEnabled and inspector.isEnabled() then inspector.endLayout() end
       end
       tree.clearDirty()
@@ -847,7 +861,8 @@ function ReactLove.update(dt)
     local root = tree.getTree()
     if root then
       if inspectorEnabled and inspector.isEnabled() then inspector.beginLayout() end
-      layout.layout(root)
+      local vh = inspectorEnabled and devtools.getViewportHeight() or nil
+      layout.layout(root, nil, nil, nil, vh)
       if inspectorEnabled and inspector.isEnabled() then inspector.endLayout() end
     end
     tree.clearDirty()
@@ -860,6 +875,9 @@ function ReactLove.update(dt)
   end
   focus.updateStick(dt)
   focus.updateRings(dt)
+
+  -- On-screen keyboard update (stick repeat timer)
+  if osk then osk.update(dt) end
 
   -- Update focusStyle overlays when focus changes
   do
@@ -979,11 +997,20 @@ function ReactLove.draw()
     painter.drawControllerToast(controllerToast.text, controllerToast.timer, controllerToast.fadeStart)
   end
 
-  -- Inspector overlay (after paint, before errors)
-  if inspectorEnabled then inspector.draw(root) end
+  -- On-screen keyboard (after toast, before overlays)
+  if osk and osk.isOpen() then
+    osk.draw()
+  end
+
+  -- DevTools panel (inspector overlays + bottom panel with tabs)
+  if inspectorEnabled then devtools.draw(root) end
 
   -- Context menu overlay (after inspector, before errors)
   if contextmenu and contextmenu.isOpen() then
+    if not ReactLove._loggedContextDraw then
+      ReactLove._loggedContextDraw = true
+      io.write("[init:draw] contextmenu.isOpen()=true, calling contextmenu.draw()\n"); io.flush()
+    end
     contextmenu.draw()
   end
 
@@ -1142,7 +1169,7 @@ end
 function ReactLove.mousepressed(x, y, button)
   -- Error overlay gets first crack at mouse events
   if errors.mousepressed(x, y, button) then return end
-  if inspectorEnabled and inspector.mousepressed(x, y, button) then return end
+  if inspectorEnabled and devtools.mousepressed(x, y, button) then return end
 
   if not isRendering() then return end
 
@@ -1166,8 +1193,10 @@ function ReactLove.mousepressed(x, y, button)
 
   -- Right-click: open context menu instead of normal click handling
   if button == 2 and contextmenu then
-    io.write("[init] right-click button=2, calling contextmenu.open\n"); io.flush()
-    contextmenu.open(x, y, root, pushEvent)
+    io.write("[init] right-click button=2 at " .. x .. "," .. y .. ", calling contextmenu.open\n"); io.flush()
+    local opened = contextmenu.open(x, y, root, pushEvent)
+    io.write("[init] contextmenu.open returned " .. tostring(opened) .. " isOpen=" .. tostring(contextmenu.isOpen()) .. "\n"); io.flush()
+    ReactLove._loggedContextDraw = nil  -- reset draw log so we see it again
     return
   end
 
@@ -1319,7 +1348,7 @@ end
 --- Tracks pointer enter/leave and dispatches hover events.
 --- Also updates drag state if a drag is active.
 function ReactLove.mousemoved(x, y)
-  if inspectorEnabled then inspector.mousemoved(x, y) end
+  if inspectorEnabled then devtools.mousemoved(x, y) end
   if scrollbarMouseMoved(x, y) then return end
   if not isRendering() then return end
 
@@ -1431,7 +1460,7 @@ end
 --- Call from love.keypressed(key, scancode, isrepeat).
 --- Routes keydown to focused node when in focus mode, broadcasts otherwise.
 function ReactLove.keypressed(key, scancode, isrepeat)
-  if inspectorEnabled and inspector.keypressed(key) then return end
+  if inspectorEnabled and devtools.keypressed(key) then return end
   if not isRendering() then return end
 
   -- Context menu keyboard handling
@@ -1444,6 +1473,28 @@ function ReactLove.keypressed(key, scancode, isrepeat)
   if textselection and key == "c" and (love.keyboard.isDown("lctrl", "rctrl", "lgui", "rgui")) then
     if textselection.copyToClipboard() then
       return  -- Consumed
+    end
+  end
+
+  -- Ctrl+= / Ctrl+- / Ctrl+0: global text scale
+  if measure and love.keyboard.isDown("lctrl", "rctrl", "lgui", "rgui") then
+    local scaled = false
+    if key == "=" or key == "kp+" then
+      measure.setTextScale(measure.getTextScale() + 0.1)
+      scaled = true
+    elseif key == "-" or key == "kp-" then
+      measure.setTextScale(measure.getTextScale() - 0.1)
+      scaled = true
+    elseif key == "0" or key == "kp0" then
+      measure.setTextScale(1.0)
+      scaled = true
+    end
+    if scaled then
+      if tree then tree.markDirty() end
+      local pct = math.floor(measure.getTextScale() * 100 + 0.5)
+      controllerToast.timer = 1.5
+      controllerToast.text = "Text " .. pct .. "%"
+      return
     end
   end
 
@@ -1545,7 +1596,7 @@ end
 --- Routes text input to focused node when in focus mode, broadcasts otherwise.
 function ReactLove.textinput(text)
   -- Inspector/console captures text input when active
-  if inspectorEnabled and inspector.textinput(text) then return end
+  if inspectorEnabled and devtools.textinput(text) then return end
   if not isRendering() then return end
 
   -- Route to focused TextEditor if any
@@ -1570,7 +1621,7 @@ end
 --- directly in Lua for immediate visual response AND send the event to JS.
 --- The scroll speed multiplier converts Love2D wheel units to pixels.
 function ReactLove.wheelmoved(x, y)
-  if inspectorEnabled and inspector.wheelmoved(x, y) then return end
+  if inspectorEnabled and devtools.wheelmoved(x, y) then return end
   if not isRendering() then return end
 
   local root = tree.getTree()
@@ -1684,6 +1735,12 @@ function ReactLove.gamepadpressed(joystick, button)
   local joystickId = joystick:getID()
   focus.setControllerMode()
 
+  -- On-screen keyboard intercepts ALL input while open
+  if osk and osk.isOpen() then
+    osk.handleGamepadPressed(button, joystickId)
+    return
+  end
+
   -- D-pad → spatial navigation (routed to correct FocusGroup)
   if button == "dpup" then focus.navigate("up", joystickId); return end
   if button == "dpdown" then focus.navigate("down", joystickId); return end
@@ -1709,6 +1766,11 @@ function ReactLove.gamepadpressed(joystick, button)
         }
       })
       if events then events.setPressedNode(node) end
+
+      -- Auto-open OSK for TextInput nodes
+      if osk and (node.type == "TextInput" or node.type == "text-input") then
+        osk.open(node, joystickId, pushEvent)
+      end
     end
     return
   end
@@ -1771,6 +1833,12 @@ function ReactLove.gamepadaxis(joystick, axis, value)
 
   local joystickId = joystick:getID()
   focus.setControllerMode()
+
+  -- On-screen keyboard intercepts stick input while open
+  if osk and osk.isOpen() then
+    osk.handleGamepadAxis(axis, value, joystickId)
+    return
+  end
 
   -- Left stick → focus navigation (handled in update via Focus.updateStick)
   if axis == "leftx" or axis == "lefty" then

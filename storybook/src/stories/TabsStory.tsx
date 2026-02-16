@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Box, Text, Tabs } from '../../../../packages/shared/src';
-import type { Tab } from '../../../../packages/shared/src';
+import { Box, Text, Tabs } from '../../../packages/shared/src';
+import type { Tab } from '../../../packages/shared/src';
 
 const BASIC_TABS: Tab[] = [
   { id: 'overview', label: 'Overview' },

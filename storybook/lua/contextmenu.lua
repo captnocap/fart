@@ -19,12 +19,16 @@ local ContextMenu = {}
 local Measure       = nil
 local Events        = nil
 local TextSelection = nil
+local Inspector     = nil
+local DevToolsRef   = nil
 
 function ContextMenu.init(config)
   config = config or {}
   Measure       = config.measure
   Events        = config.events
   TextSelection = config.textselection
+  Inspector     = config.inspector
+  DevToolsRef   = config.devtools
 end
 
 -- ============================================================================
@@ -87,14 +91,12 @@ local function buildItems(hitNode, textNode, root)
   local sel = TextSelection and TextSelection.get()
   local hasSelection = sel and sel.text
 
-  -- Built-in: Copy — always shown on text nodes, disabled when no selection
-  if textNode or hasSelection then
-    items[#items + 1] = {
-      label = "Copy",
-      action = "__copy",
-      disabled = not hasSelection,
-    }
-  end
+  -- Built-in: Copy — always present, disabled when no selection
+  items[#items + 1] = {
+    label = "Copy",
+    action = "__copy",
+    disabled = not hasSelection,
+  }
 
   -- Custom items from nearest ContextMenu ancestor
   local cmNode = nil
@@ -105,6 +107,7 @@ local function buildItems(hitNode, textNode, root)
     cmNode = findContextMenuAncestor(textNode)
   end
 
+  -- Custom items from nearest ContextMenu ancestor
   if cmNode and cmNode.props and cmNode.props.items then
     local customItems = cmNode.props.items
     -- Add separator before custom items if we have built-in items
@@ -119,6 +122,16 @@ local function buildItems(hitNode, textNode, root)
         separator = item.separator or false,
       }
     end
+  end
+
+  -- Built-in: Inspect — opens inspector on the right-clicked node
+  if Inspector then
+    items[#items + 1] = { separator = true }
+    items[#items + 1] = {
+      label = "Inspect",
+      action = "__inspect",
+      disabled = false,
+    }
   end
 
   return items, cmNode
@@ -216,7 +229,10 @@ function ContextMenu.open(x, y, root, pushEventFn)
   io.write("[contextmenu] items=" .. #items .. " cmNode=" .. tostring(cmNode and cmNode.type) .. "\n"); io.flush()
 
   -- If no items at all, don't open
-  if #items == 0 then return false end
+  if #items == 0 then
+    io.write("[contextmenu] BAILING: items=0 — no text node and no ContextMenu ancestor. hitNode=" .. tostring(hitNode) .. " textNode=" .. tostring(textNode) .. "\n"); io.flush()
+    return false
+  end
 
   -- Calculate menu dimensions and clamp to viewport
   local font = getFont()
@@ -238,6 +254,8 @@ function ContextMenu.open(x, y, root, pushEventFn)
     selectedText = selectedText,
     pushEvent = pushEventFn,
   }
+
+  io.write("[contextmenu] state SET — menu at " .. mx .. "," .. my .. " size=" .. menuW .. "x" .. menuH .. " items=" .. #items .. "\n"); io.flush()
 
   -- Fire open boundary event
   if cmNode and pushEventFn then
@@ -296,6 +314,16 @@ local function selectItem(index)
     if TextSelection then
       TextSelection.copyToClipboard()
     end
+  elseif action == "__inspect" then
+    -- Prefer the most specific node: textNode > hitNode
+    local target = state.textNode or state.hitNode
+    if DevToolsRef then
+      -- Open devtools to Elements tab with node selected
+      DevToolsRef.inspectNode(target)
+    elseif Inspector then
+      -- Fallback: direct inspector call
+      Inspector.inspectNode(target)
+    end
   end
 
   -- Fire select boundary event (for both built-in and custom actions)
@@ -320,7 +348,9 @@ end
 function ContextMenu.handleMousePressed(x, y, button)
   if not state then return false end
 
+  io.write("[contextmenu] handleMousePressed at " .. x .. "," .. y .. " button=" .. button .. "\n"); io.flush()
   local index = itemIndexAt(x, y)
+  io.write("[contextmenu] itemIndexAt=" .. index .. "\n"); io.flush()
   if index > 0 then
     selectItem(index)
     return true
@@ -400,6 +430,11 @@ end
 --- Draw the context menu overlay.
 function ContextMenu.draw()
   if not state then return end
+
+  if not state._loggedDraw then
+    state._loggedDraw = true
+    io.write("[contextmenu] draw() called — pos=" .. state.x .. "," .. state.y .. " items=" .. #state.items .. "\n"); io.flush()
+  end
 
   local font = getFont()
   local menuW, menuH = calcMenuSize(state.items, font)

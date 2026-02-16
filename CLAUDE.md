@@ -1,7 +1,7 @@
 # CLAUDE.md
 
 This is React stripped of browser magic and rendered as raw geometry.
-
+In this framework, love is not a place just for making games.  
 If you didn't say how wide it is, it's zero.
 If you said grow, it grows exactly.
 If you nested flex containers, you own the consequences.

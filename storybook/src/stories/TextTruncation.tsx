@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Text } from '../../../../packages/shared/src';
+import { Box, Text } from '../../../packages/shared/src';
 
 const LONG_TEXT = 'The quick brown fox jumps over the lazy dog. This sentence is deliberately long to test how text truncation works across both renderers.';
 

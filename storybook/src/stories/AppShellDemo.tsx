@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Box, Text, NavPanel, Tabs, Breadcrumbs, Toolbar, Divider } from '../../../../packages/shared/src';
-import type { NavSection, Tab, BreadcrumbItem, ToolbarEntry } from '../../../../packages/shared/src';
+import { Box, Text, NavPanel, Tabs, Breadcrumbs, Toolbar, Divider } from '../../../packages/shared/src';
+import type { NavSection, Tab, BreadcrumbItem, ToolbarEntry } from '../../../packages/shared/src';
 
 /* ── Data ─────────────────────────────────────────────────── */
 

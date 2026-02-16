@@ -17,10 +17,84 @@
 local Measure = {}
 
 -- ============================================================================
+-- Global text scale
+-- ============================================================================
+
+local textScale = 1.0
+local TEXT_SCALE_MIN = 0.5
+local TEXT_SCALE_MAX = 3.0
+
+--- Set the global text scale multiplier. Clamps to [0.5, 3.0].
+--- Clears the measurement cache so all text is re-measured at the new scale.
+function Measure.setTextScale(scale)
+  textScale = math.max(TEXT_SCALE_MIN, math.min(TEXT_SCALE_MAX, scale or 1.0))
+  Measure.clearCache()
+end
+
+--- Return the current global text scale multiplier.
+function Measure.getTextScale()
+  return textScale
+end
+
+--- Resolve the effective text scale for a node.
+--- Walks up the ancestor chain looking for a `textScale` style override.
+--- If found, returns that value. Otherwise returns the global textScale.
+function Measure.resolveTextScale(node)
+  local current = node
+  while current do
+    local s = current.style or current.props
+    if s and s.textScale then
+      return s.textScale
+    end
+    current = current.parent
+  end
+  return textScale
+end
+
+--- Apply the resolved text scale to a fontSize value for a given node.
+--- Convenience helper: math.floor(fontSize * resolveTextScale(node))
+function Measure.scaleFontSize(fontSize, node)
+  return math.floor(fontSize * Measure.resolveTextScale(node))
+end
+
+-- ============================================================================
 -- Shared font cache
 -- ============================================================================
 
 local fontCache = {}
+
+-- ============================================================================
+-- Default font detection
+-- ============================================================================
+
+-- Auto-detect bundled Noto Sans fonts. If fonts/base/ exists in the project,
+-- use NotoSans as the default font instead of Love2D's built-in Vera Sans.
+-- This gives full Latin/Cyrillic/Greek coverage with zero user config.
+local defaultFontRegular = nil
+local defaultFontBold    = nil
+
+local function detectDefaultFonts()
+  if defaultFontRegular ~= nil then return end  -- already detected
+
+  -- Check for fonts/base/ directory (project-local)
+  local paths = {
+    "fonts/base/NotoSans-Regular.ttf",
+    "fonts/base/NotoSans-Bold.ttf",
+  }
+
+  local info = love.filesystem.getInfo(paths[1])
+  if info then
+    defaultFontRegular = paths[1]
+    local boldInfo = love.filesystem.getInfo(paths[2])
+    if boldInfo then
+      defaultFontBold = paths[2]
+    end
+  else
+    -- No bundled fonts — use Love2D built-in (ASCII only)
+    defaultFontRegular = false
+    defaultFontBold = false
+  end
+end
 
 --- Return a Love2D Font for the given size and optional font family,
 --- creating one if needed.
@@ -30,6 +104,7 @@ local fontCache = {}
 --- @param fontFamily string|nil  Path to a .ttf/.otf font file, or nil for default
 --- @return love.Font
 function Measure.getFont(size, fontFamily, fontWeight)
+  detectDefaultFonts()
   size = math.floor(size or 14)
   local isBold = fontWeight == "bold" or (type(fontWeight) == "number" and fontWeight >= 700)
   local key
@@ -51,7 +126,24 @@ function Measure.getFont(size, fontFamily, fontWeight)
         fontCache[key] = love.graphics.newFont(size)
       end
     else
-      fontCache[key] = love.graphics.newFont(size)
+      -- Use bundled Noto Sans if available, otherwise Love2D built-in
+      local path = nil
+      if isBold and defaultFontBold then
+        path = defaultFontBold
+      elseif defaultFontRegular then
+        path = defaultFontRegular
+      end
+
+      if path then
+        local ok, font = pcall(love.graphics.newFont, path, size)
+        if ok and font then
+          fontCache[key] = font
+        else
+          fontCache[key] = love.graphics.newFont(size)
+        end
+      else
+        fontCache[key] = love.graphics.newFont(size)
+      end
     end
   end
   return fontCache[key], isBold

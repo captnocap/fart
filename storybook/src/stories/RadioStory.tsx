@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Box, Text } from '../../../../packages/shared/src';
-import { RadioGroup, Radio } from '../../../../packages/shared/src/Radio';
+import { Box, Text } from '../../../packages/shared/src';
+import { RadioGroup, Radio } from '../../../packages/shared/src/Radio';
 
 export function RadioStory() {
   const [fruit, setFruit] = useState('apple');

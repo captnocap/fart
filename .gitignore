@@ -13,6 +13,11 @@ cli/runtime/
 examples/*/ilovereact/
 examples/*/lua/
 examples/*/lib/
+examples/*/fonts/
+
+# Font binaries (managed by CLI, not committed — too large)
+fonts/
+cli/runtime/fonts/
 
 # QuickJS build artifacts
 libquickjs/

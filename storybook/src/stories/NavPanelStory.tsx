@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Box, Text, NavPanel } from '../../../../packages/shared/src';
-import type { NavSection } from '../../../../packages/shared/src';
+import { Box, Text, NavPanel } from '../../../packages/shared/src';
+import type { NavSection } from '../../../packages/shared/src';
 
 const SECTIONS: NavSection[] = [
   {

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Box, Text, TextEditor } from '../../../../packages/shared/src';
+import { Box, Text, TextEditor } from '../../../packages/shared/src';
 
 const SAMPLE_CODE = `function greet(name)
   print("Hello, " .. name .. "!")

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Text, Pressable } from '../../../../packages/shared/src';
+import { Box, Text, Pressable } from '../../../packages/shared/src';
 import { MetadataBadges } from './MetadataBadges';
 import { CodeBlock } from './CodeBlock';
 import { ExampleCard } from './ExampleCard';

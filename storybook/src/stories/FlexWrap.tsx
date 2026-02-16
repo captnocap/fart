@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Text } from '../../../../packages/shared/src';
+import { Box, Text } from '../../../packages/shared/src';
 
 const COLORS = [
   '#ef4444', '#f97316', '#eab308', '#22c55e', '#14b8a6',

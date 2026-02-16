@@ -31,11 +31,13 @@ local inspectorEnabled = true                 -- can be disabled via config.insp
 local animate  = nil   -- animate.lua module (Lua-side transitions/animations)
 local images   = nil   -- images.lua module (image cache)
 local videos   = nil   -- videos.lua module (video cache + FFmpeg transcoding)
+local videoplayer = nil                       -- videoplayer.lua (Lua-native video controls)
 local focus    = require("lua.focus")         -- focus manager for Lua-owned inputs
 local texteditor = nil                        -- texteditor.lua (loaded on demand)
 local codeblock  = nil                        -- codeblock.lua (loaded on demand)
 local textselection = nil                    -- textselection.lua (text highlight + copy)
 local contextmenu = nil                      -- contextmenu.lua (right-click context menu)
+local osk      = nil                          -- osk.lua (on-screen keyboard for gamepad)
 local http     = nil                          -- http.lua (async HTTP + local file fetch)
 local network  = nil                          -- network.lua (WebSocket connections)
 local tor      = nil                          -- tor.lua (Tor subprocess, loaded if config.tor)
@@ -330,11 +332,17 @@ function ReactLove.init(config)
     codeblock = require("lua.codeblock")
     codeblock.init({ measure = measure })
 
+    videoplayer = require("lua.videoplayer")
+    videoplayer.init({ measure = measure, videos = videos })
+
     textselection = require("lua.textselection")
     textselection.init({ measure = measure, events = events })
 
     contextmenu = require("lua.contextmenu")
-    contextmenu.init({ measure = measure, events = events, textselection = textselection })
+    contextmenu.init({ measure = measure, events = events, textselection = textselection, inspector = inspector })
+
+    osk = require("lua.osk")
+    osk.init({ measure = measure })
 
     focus.init(tree, pushEvent)
 
@@ -378,11 +386,17 @@ function ReactLove.init(config)
     codeblock = require("lua.codeblock")
     codeblock.init({ measure = measure })
 
+    videoplayer = require("lua.videoplayer")
+    videoplayer.init({ measure = measure, videos = videos })
+
     textselection = require("lua.textselection")
     textselection.init({ measure = measure, events = events })
 
     contextmenu = require("lua.contextmenu")
-    contextmenu.init({ measure = measure, events = events, textselection = textselection })
+    contextmenu.init({ measure = measure, events = events, textselection = textselection, inspector = inspector })
+
+    osk = require("lua.osk")
+    osk.init({ measure = measure })
 
     focus.init(tree, pushEvent)
 
@@ -535,6 +549,11 @@ function ReactLove.update(dt)
       texteditor.update(canvasFocusedNode, dt)
     end
     if codeblock then codeblock.update(dt) end
+
+    -- Update VideoPlayer controls (auto-hide timer, canvas mode)
+    if videoplayer and tree then
+      videoplayer.update(dt, tree.getNodes())
+    end
 
     if inspectorEnabled then inspector.update(dt) end
     if inspectorEnabled then console.update(dt) end
@@ -849,6 +868,9 @@ function ReactLove.update(dt)
   focus.updateStick(dt)
   focus.updateRings(dt)
 
+  -- On-screen keyboard update (stick repeat timer)
+  if osk then osk.update(dt) end
+
   -- Update focusStyle overlays when focus changes
   do
     local currentFocusedIds = {}
@@ -894,6 +916,11 @@ function ReactLove.update(dt)
   end
   if codeblock then codeblock.update(dt) end
 
+  -- Update VideoPlayer controls (auto-hide timer)
+  if videoplayer and tree then
+    videoplayer.update(dt, tree.getNodes())
+  end
+
   if inspectorEnabled then inspector.update(dt) end
   if inspectorEnabled then console.update(dt) end
   if screenshot then screenshot.update() end
@@ -903,6 +930,11 @@ end
 --- Paints the retained UI tree (native and canvas modes).
 function ReactLove.draw()
   if not isRendering() then return end
+
+  -- Belt-and-suspenders: ensure UNPACK_ALIGNMENT=1 before any text rendering.
+  -- mpv can dirty this during mpv_render_context_create or render calls.
+  -- Love2D needs alignment=1 for single-byte glyph atlas uploads.
+  if videos then videos.ensurePixelStore() end
 
   local root = tree.getTree()
   if root then
@@ -934,6 +966,14 @@ function ReactLove.draw()
         context = "painter.paint",
       })
     end
+
+    -- Fullscreen VideoPlayer: redraw on top of everything so no UI bleeds through
+    if videoplayer then
+      local fsNode = videoplayer.getFullscreenNode()
+      if fsNode then
+        videoplayer.draw(fsNode, 1.0)
+      end
+    end
   end
 
   -- Focus rings (after paint, before overlays) — animated, one per group
@@ -949,11 +989,20 @@ function ReactLove.draw()
     painter.drawControllerToast(controllerToast.text, controllerToast.timer, controllerToast.fadeStart)
   end
 
+  -- On-screen keyboard (after toast, before overlays)
+  if osk and osk.isOpen() then
+    osk.draw()
+  end
+
   -- Inspector overlay (after paint, before errors)
   if inspectorEnabled then inspector.draw(root) end
 
   -- Context menu overlay (after inspector, before errors)
   if contextmenu and contextmenu.isOpen() then
+    if not ReactLove._loggedContextDraw then
+      ReactLove._loggedContextDraw = true
+      io.write("[init:draw] contextmenu.isOpen()=true, calling contextmenu.draw()\n"); io.flush()
+    end
     contextmenu.draw()
   end
 
@@ -1119,6 +1168,15 @@ function ReactLove.mousepressed(x, y, button)
   local root = tree.getTree()
   if not root then return end
 
+  -- Fullscreen VideoPlayer gets ALL mouse input (bypass normal hit-test)
+  if videoplayer then
+    local fsNode = videoplayer.getFullscreenNode()
+    if fsNode and button == 1 then
+      videoplayer.handleMousePressed(fsNode, x, y, button)
+      return
+    end
+  end
+
   -- Context menu: consume clicks when open (close on outside click, select on item)
   if contextmenu and contextmenu.isOpen() then
     contextmenu.handleMousePressed(x, y, button)
@@ -1127,8 +1185,10 @@ function ReactLove.mousepressed(x, y, button)
 
   -- Right-click: open context menu instead of normal click handling
   if button == 2 and contextmenu then
-    io.write("[init] right-click button=2, calling contextmenu.open\n"); io.flush()
-    contextmenu.open(x, y, root, pushEvent)
+    io.write("[init] right-click button=2 at " .. x .. "," .. y .. ", calling contextmenu.open\n"); io.flush()
+    local opened = contextmenu.open(x, y, root, pushEvent)
+    io.write("[init] contextmenu.open returned " .. tostring(opened) .. " isOpen=" .. tostring(contextmenu.isOpen()) .. "\n"); io.flush()
+    ReactLove._loggedContextDraw = nil  -- reset draw log so we see it again
     return
   end
 
@@ -1177,6 +1237,11 @@ function ReactLove.mousepressed(x, y, button)
       if codeblock and codeblock.handleMousePressed then
         local cx, cy = events.screenToContent(hit, x, y)
         codeblock.handleMousePressed(hit, cx, cy, button)
+      end
+    elseif hit.type == "VideoPlayer" then
+      -- Clicked a VideoPlayer: handle internally in Lua
+      if videoplayer then
+        videoplayer.handleMousePressed(hit, x, y, button)
       end
     else
       -- Normal node: standard drag + click handling
@@ -1232,6 +1297,19 @@ function ReactLove.mousereleased(x, y, button)
   local focusedNode = focus.get()
   if focusedNode and focusedNode.type == "TextEditor" then
     texteditor.handleMouseReleased(focusedNode)
+  end
+
+  -- VideoPlayer seek/volume drag release (check all VideoPlayer nodes since
+  -- the mouse may have moved outside the node during a drag)
+  if videoplayer and tree then
+    local nodes = tree.getNodes()
+    if nodes then
+      for _, node in pairs(nodes) do
+        if node.type == "VideoPlayer" and node._vp then
+          videoplayer.handleMouseReleased(node, x, y, button)
+        end
+      end
+    end
   end
 
   local root = tree.getTree()
@@ -1311,6 +1389,18 @@ function ReactLove.mousemoved(x, y)
   if focusedNode and focusedNode.type == "TextEditor" then
     if texteditor.handleMouseMoved(focusedNode, x, y) then
       return  -- TextEditor consumed the mouse move
+    end
+  end
+
+  -- VideoPlayer: update hover target and handle seek/volume drag
+  if videoplayer and tree then
+    local nodes = tree.getNodes()
+    if nodes then
+      for _, node in pairs(nodes) do
+        if node.type == "VideoPlayer" and node._vp then
+          videoplayer.handleMouseMoved(node, x, y)
+        end
+      end
     end
   end
 
@@ -1409,6 +1499,23 @@ function ReactLove.keypressed(key, scancode, isrepeat)
       -- (falls through to pushEvent below)
     else
       return  -- consumed by TextEditor
+    end
+  end
+
+  -- Route to fullscreen or hovered VideoPlayer (keyboard: space, arrows, m, f, l)
+  if videoplayer then
+    local fsNode = videoplayer.getFullscreenNode()
+    if fsNode then
+      if videoplayer.handleKeyPressed(fsNode, key) then
+        return  -- consumed by fullscreen VideoPlayer
+      end
+    elseif events then
+      local hoveredNode = events.getHoveredNode()
+      if hoveredNode and hoveredNode.type == "VideoPlayer" then
+        if videoplayer.handleKeyPressed(hoveredNode, key) then
+          return  -- consumed by VideoPlayer
+        end
+      end
     end
   end
 
@@ -1598,6 +1705,12 @@ function ReactLove.gamepadpressed(joystick, button)
   local joystickId = joystick:getID()
   focus.setControllerMode()
 
+  -- On-screen keyboard intercepts ALL input while open
+  if osk and osk.isOpen() then
+    osk.handleGamepadPressed(button, joystickId)
+    return
+  end
+
   -- D-pad → spatial navigation (routed to correct FocusGroup)
   if button == "dpup" then focus.navigate("up", joystickId); return end
   if button == "dpdown" then focus.navigate("down", joystickId); return end
@@ -1623,6 +1736,11 @@ function ReactLove.gamepadpressed(joystick, button)
         }
       })
       if events then events.setPressedNode(node) end
+
+      -- Auto-open OSK for TextInput nodes
+      if osk and (node.type == "TextInput" or node.type == "text-input") then
+        osk.open(node, joystickId, pushEvent)
+      end
     end
     return
   end
@@ -1685,6 +1803,12 @@ function ReactLove.gamepadaxis(joystick, axis, value)
 
   local joystickId = joystick:getID()
   focus.setControllerMode()
+
+  -- On-screen keyboard intercepts stick input while open
+  if osk and osk.isOpen() then
+    osk.handleGamepadAxis(axis, value, joystickId)
+    return
+  end
 
   -- Left stick → focus navigation (handled in update via Focus.updateStick)
   if axis == "leftx" or axis == "lefty" then

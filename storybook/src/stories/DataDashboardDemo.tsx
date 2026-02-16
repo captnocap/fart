@@ -1,6 +1,6 @@
 import React from 'react';
-import { Box, Text, Table, BarChart, ProgressBar, Sparkline, Divider, Badge } from '../../../../packages/shared/src';
-import type { TableColumn } from '../../../../packages/shared/src';
+import { Box, Text, Table, BarChart, ProgressBar, Sparkline, Divider, Badge } from '../../../packages/shared/src';
+import type { TableColumn } from '../../../packages/shared/src';
 
 /* ── Data ─────────────────────────────────────────────────── */
 

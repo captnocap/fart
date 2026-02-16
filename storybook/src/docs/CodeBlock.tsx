@@ -1,5 +1,5 @@
 import React from 'react';
-import { CodeBlock as CodeBlockPrimitive } from '../../../../packages/shared/src';
+import { CodeBlock as CodeBlockPrimitive } from '../../../packages/shared/src';
 import { useDocsFontScale } from './DocsFontScale';
 
 export function CodeBlock({ code }: { code: string }) {

@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { Box, Text, Pressable, useWebSocket, usePeerServer, useLoveEvent, useLoveRPC } from '../../../../packages/shared/src';
+import { Box, Text, Pressable, useWebSocket, usePeerServer, useLoveEvent, useLoveRPC } from '../../../packages/shared/src';
 
 function StatusDot({ status }: { status: string }) {
   const color = status === 'open' || status === 'ready' ? '#22c55e'

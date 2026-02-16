@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Box, Text, Switch } from '../../../../packages/shared/src';
+import { Box, Text, Switch } from '../../../packages/shared/src';
 
 export function SwitchStory() {
   const [on1, setOn1] = useState(false);

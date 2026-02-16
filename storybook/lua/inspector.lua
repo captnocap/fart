@@ -57,6 +57,9 @@ local state = {
   collapsed  = {},
   -- Cached tree node positions for click detection
   treeNodePositions = {},  -- array of { node, y, lineH }
+  -- Region bounds (set by drawTreeInRegion/drawDetailInRegion, used for input routing)
+  treeRegion = nil,   -- {x, y, w, h}
+  detailRegion = nil,  -- {x, y, w, h}
 }
 
 -- ============================================================================
@@ -260,6 +263,44 @@ function Inspector.markDirty()
   state.nodeCountDirty = true
 end
 
+--- Open the inspector and select a specific node (used by context menu "Inspect").
+--- Enables the inspector if not already active, opens the tree panel,
+--- and focuses on the given node.
+function Inspector.inspectNode(node)
+  if not node then return end
+  state.enabled = true
+  state.treePanel = true
+  state.selectedNode = node
+  state.detailScrollY = 0
+  state.scrollToSelected = true
+end
+
+--- Return the currently selected node (used by devtools to decide whether to show detail panel).
+function Inspector.getSelectedNode()
+  return state.selectedNode
+end
+
+--- Clear the selected node (used by devtools Escape handling).
+function Inspector.clearSelection()
+  state.selectedNode = nil
+  state.detailScrollY = 0
+end
+
+--- Enable inspector overlays (called by devtools when panel opens).
+function Inspector.enable()
+  state.enabled = true
+end
+
+--- Disable inspector and clear all state (called by devtools when panel closes).
+function Inspector.disable()
+  state.enabled = false
+  state.hoveredNode = nil
+  state.selectedNode = nil
+  state.treePanel = false
+  state.treeRegion = nil
+  state.detailRegion = nil
+end
+
 --- Return performance data (used by console :perf command)
 function Inspector.getPerfData()
   return {
@@ -353,54 +394,47 @@ function Inspector.textinput(text)
 end
 
 --- Handle mouse press. Returns true if consumed.
+--- Uses stored region bounds (set by drawTreeInRegion/drawDetailInRegion) for hit detection.
 function Inspector.mousepressed(x, y, button)
   if not state.enabled then return false end
 
-  -- Console gets priority
-  if console and console.isVisible() then
-    -- Check if click is in console area
-    local screenH = love.graphics.getHeight()
-    local consoleH = math.max(200, math.floor(screenH * 0.4))
-    local consoleY = screenH - consoleH
-    if y >= consoleY then
-      return true  -- consumed by console
-    end
-  end
-
-  -- Detail panel click (right side)
-  if state.selectedNode then
-    local screenW = love.graphics.getWidth()
-    if x > screenW - DETAIL_WIDTH then
+  -- Detail panel click (uses stored region from drawDetailInRegion)
+  if state.selectedNode and state.detailRegion then
+    local dr = state.detailRegion
+    if x >= dr.x and x < dr.x + dr.w and y >= dr.y and y < dr.y + dr.h then
       return true  -- consumed by detail panel
     end
   end
 
-  -- Tree panel click: select node or toggle collapse
-  if state.treePanel and x < TREE_WIDTH then
-    -- Find which node was clicked using cached positions
-    for _, entry in ipairs(state.treeNodePositions) do
-      if y >= entry.y and y < entry.y + entry.lineH then
-        -- Check if click is on the collapse indicator (the ">" / "v" zone)
-        local hasChildren = entry.node.children and #entry.node.children > 0
-        local collapseX = 8 + (entry.depth or 0) * 12 - 10
-        if hasChildren and x >= collapseX - 4 and x <= collapseX + 12 then
-          -- Toggle collapse
-          local nid = entry.node.id
-          state.collapsed[nid] = not state.collapsed[nid]
-        else
-          -- Select / deselect node
-          if state.selectedNode == entry.node then
-            state.selectedNode = nil
-            state.detailScrollY = 0
+  -- Tree panel click (uses stored region from drawTreeInRegion)
+  if state.treeRegion then
+    local tr = state.treeRegion
+    if x >= tr.x and x < tr.x + tr.w and y >= tr.y and y < tr.y + tr.h then
+      -- Find which node was clicked using cached positions
+      for _, entry in ipairs(state.treeNodePositions) do
+        if y >= entry.y and y < entry.y + entry.lineH then
+          -- Check if click is on the collapse indicator (the ">" / "v" zone)
+          local hasChildren = entry.node.children and #entry.node.children > 0
+          local collapseX = tr.x + 8 + (entry.depth or 0) * 12 - 10
+          if hasChildren and x >= collapseX - 4 and x <= collapseX + 12 then
+            -- Toggle collapse
+            local nid = entry.node.id
+            state.collapsed[nid] = not state.collapsed[nid]
           else
-            state.selectedNode = entry.node
-            state.detailScrollY = 0
+            -- Select / deselect node
+            if state.selectedNode == entry.node then
+              state.selectedNode = nil
+              state.detailScrollY = 0
+            else
+              state.selectedNode = entry.node
+              state.detailScrollY = 0
+            end
           end
+          return true
         end
-        return true
       end
+      return true  -- consumed by tree panel even if no node hit
     end
-    return true  -- consumed by tree panel even if no node hit
   end
 
   -- Clicking in viewport: select hovered node
@@ -426,28 +460,30 @@ function Inspector.mousemoved(x, y)
 end
 
 --- Handle mouse wheel (scroll tree panel or detail panel).
+--- Uses stored region bounds for hit detection.
 function Inspector.wheelmoved(x, y)
   if not state.enabled then return false end
 
-  -- Console scroll
-  if console and console.isVisible() then
-    return console.wheelmoved(x, y)
-  end
-
-  -- Detail panel scroll
-  if state.selectedNode then
-    local screenW = love.graphics.getWidth()
-    if state.mouseX > screenW - DETAIL_WIDTH then
+  -- Detail panel scroll (uses stored region)
+  if state.selectedNode and state.detailRegion then
+    local dr = state.detailRegion
+    if state.mouseX >= dr.x and state.mouseX < dr.x + dr.w
+       and state.mouseY >= dr.y and state.mouseY < dr.y + dr.h then
       state.detailScrollY = state.detailScrollY - y * 20
       if state.detailScrollY < 0 then state.detailScrollY = 0 end
       return true
     end
   end
 
-  if state.treePanel and state.mouseX < TREE_WIDTH then
-    state.treeScrollY = state.treeScrollY - y * 20
-    if state.treeScrollY < 0 then state.treeScrollY = 0 end
-    return true
+  -- Tree panel scroll (uses stored region)
+  if state.treeRegion then
+    local tr = state.treeRegion
+    if state.mouseX >= tr.x and state.mouseX < tr.x + tr.w
+       and state.mouseY >= tr.y and state.mouseY < tr.y + tr.h then
+      state.treeScrollY = state.treeScrollY - y * 20
+      if state.treeScrollY < 0 then state.treeScrollY = 0 end
+      return true
+    end
   end
 
   return false
@@ -466,7 +502,10 @@ end
 -- Public API: Draw
 -- ============================================================================
 
-function Inspector.draw(root)
+--- Draw canvas overlays: hover highlight, selected outline, tooltip, perf bar.
+--- These render on the main canvas above the content, not inside the devtools panel.
+--- Called by devtools.draw() regardless of active tab.
+function Inspector.drawOverlays(root)
   if not state.enabled then return end
   if not root then return end
 
@@ -489,40 +528,10 @@ function Inspector.draw(root)
     love.graphics.origin()
     love.graphics.setScissor()
 
-    -- 1. Draw hover overlay (show selected node highlight if one is locked)
     drawHoverOverlay()
-
-    -- 2. Draw selected node highlight
     drawSelectedOverlay()
-
-    -- 3. Draw tooltip (only when no node is selected, to reduce clutter)
-    if not state.selectedNode then
-      drawTooltip()
-    end
-
-    -- 4. Draw tree panel
-    if state.treePanel then
-      drawTreePanel(root)
-
-      -- Override hoveredNode when mouse is over tree panel rows
-      if state.mouseX < TREE_WIDTH then
-        state.hoveredNode = nil
-        for _, entry in ipairs(state.treeNodePositions) do
-          if state.mouseY >= entry.y and state.mouseY < entry.y + entry.lineH then
-            state.hoveredNode = entry.node
-            break
-          end
-        end
-      end
-    end
-
-    -- 5. Draw detail panel (when node is selected)
-    if state.selectedNode then
-      drawDetailPanel()
-    end
-
-    -- 6. Draw performance bar (always on top)
-    drawPerfBar()
+    drawTooltip()
+    -- Note: perf bar is now drawn by devtools.lua as a bottom status bar
 
     -- Restore graphics state
     love.graphics.pop()
@@ -530,12 +539,43 @@ function Inspector.draw(root)
 
   if not ok then
     pcall(function()
-      io.write("[inspector] Draw error: " .. tostring(drawErr) .. "\n")
+      io.write("[inspector] Overlay draw error: " .. tostring(drawErr) .. "\n")
       io.flush()
     end)
   end
+end
 
-  -- Draw console on top of inspector (but before errors)
+--- Draw the tree panel inside a region {x, y, w, h}.
+--- Called by devtools when Elements tab is active.
+function Inspector.drawTreeInRegion(root, region)
+  if not state.enabled or not root then return end
+  state.treeRegion = region
+  drawTreePanel(root, region.x, region.y, region.w, region.h)
+
+  -- Override hoveredNode when mouse is over tree region
+  if state.mouseX >= region.x and state.mouseX < region.x + region.w
+     and state.mouseY >= region.y and state.mouseY < region.y + region.h then
+    state.hoveredNode = nil
+    for _, entry in ipairs(state.treeNodePositions) do
+      if state.mouseY >= entry.y and state.mouseY < entry.y + entry.lineH then
+        state.hoveredNode = entry.node
+        break
+      end
+    end
+  end
+end
+
+--- Draw the detail panel inside a region {x, y, w, h}.
+--- Called by devtools when Elements tab is active and a node is selected.
+function Inspector.drawDetailInRegion(region)
+  if not state.enabled or not state.selectedNode then return end
+  state.detailRegion = region
+  drawDetailPanel(region.x, region.y, region.w, region.h)
+end
+
+--- Backward-compatible draw: overlays + console (for standalone use without devtools).
+function Inspector.draw(root)
+  Inspector.drawOverlays(root)
   if console then
     console.draw()
   end
@@ -764,8 +804,7 @@ end
 -- Drawing: Tree panel sidebar
 -- ============================================================================
 
-function drawTreePanel(root)
-  local screenH = love.graphics.getHeight()
+function drawTreePanel(root, rx, ry, rw, rh)
   local font = getFont()
   local lineH = font:getHeight() + 4
   local pad = 8
@@ -775,24 +814,19 @@ function drawTreePanel(root)
 
   -- Background
   love.graphics.setColor(TREE_BG)
-  love.graphics.rectangle("fill", 0, 0, TREE_WIDTH, screenH)
+  love.graphics.rectangle("fill", rx, ry, rw, rh)
 
-  -- Border
+  -- Right border
   love.graphics.setColor(TOOLTIP_BORDER)
-  love.graphics.rectangle("fill", TREE_WIDTH - 1, 0, 1, screenH)
+  love.graphics.rectangle("fill", rx + rw - 1, ry, 1, rh)
 
-  -- Title
+  -- Scissor to region
+  love.graphics.setScissor(rx, ry, rw, rh)
   love.graphics.setFont(font)
-  love.graphics.setColor(TOOLTIP_ACCENT)
-  love.graphics.print("Node Tree (F12 off / Tab close)", pad, pad)
-
-  -- Scissor to tree area
-  local treeY = pad + lineH + 4
-  love.graphics.setScissor(0, treeY, TREE_WIDTH, screenH - treeY)
 
   -- Walk tree and draw lines
-  local drawY = treeY - state.treeScrollY
-  drawTreeNode(root, 0, drawY, font, lineH, pad, treeY, screenH)
+  local drawY = ry - state.treeScrollY
+  drawTreeNode(root, 0, drawY, font, lineH, pad, ry, ry + rh, rx, rw)
 
   -- Auto-scroll to selected node (after positions are cached)
   if state.scrollToSelected and state.selectedNode then
@@ -800,9 +834,9 @@ function drawTreePanel(root)
       if entry.node == state.selectedNode then
         -- entry.y is the drawn position (includes current scroll offset)
         -- Convert to absolute position in the tree content
-        local absY = entry.y + state.treeScrollY - treeY
-        local visibleH = screenH - treeY
-        if entry.y < treeY or entry.y + lineH > screenH then
+        local absY = entry.y + state.treeScrollY - ry
+        local visibleH = rh
+        if entry.y < ry or entry.y + lineH > ry + rh then
           -- Node is outside visible area — scroll to center it
           state.treeScrollY = math.max(0, absY - visibleH / 2)
         end
@@ -816,7 +850,8 @@ function drawTreePanel(root)
 end
 
 -- Recursive tree node drawing — returns the next Y position
-function drawTreeNode(node, depth, y, font, lineH, pad, clipTop, clipBottom)
+-- rx, rw: region x and width (for highlight rectangles and indent calculation)
+function drawTreeNode(node, depth, y, font, lineH, pad, clipTop, clipBottom, rx, rw)
   if not node then return y end
 
   local visible = y + lineH > clipTop and y < clipBottom
@@ -834,15 +869,14 @@ function drawTreeNode(node, depth, y, font, lineH, pad, clipTop, clipBottom)
     -- Highlight selected node
     if node == state.selectedNode then
       love.graphics.setColor(TREE_SELECT)
-      love.graphics.rectangle("fill", 0, y, TREE_WIDTH, lineH)
+      love.graphics.rectangle("fill", rx, y, rw, lineH)
     elseif node == state.hoveredNode then
       love.graphics.setColor(TREE_HOVER)
-      love.graphics.rectangle("fill", 0, y, TREE_WIDTH, lineH)
+      love.graphics.rectangle("fill", rx, y, rw, lineH)
     end
 
-    -- Indentation
-    local indent = pad + depth * 12
-    local maxTextW = TREE_WIDTH - indent - pad
+    -- Indentation (relative to region x)
+    local indent = rx + pad + depth * 12
 
     -- Build label: <ComponentName> or type (w x h)
     local label
@@ -880,7 +914,7 @@ function drawTreeNode(node, depth, y, font, lineH, pad, clipTop, clipBottom)
   -- Draw children (unless collapsed)
   if not state.collapsed[node.id] then
     for _, child in ipairs(node.children or {}) do
-      y = drawTreeNode(child, depth + 1, y, font, lineH, pad, clipTop, clipBottom)
+      y = drawTreeNode(child, depth + 1, y, font, lineH, pad, clipTop, clipBottom, rx, rw)
     end
   end
 
@@ -891,31 +925,28 @@ end
 -- Drawing: Detail panel (right side, shows full props/style of selected node)
 -- ============================================================================
 
-function drawDetailPanel()
+function drawDetailPanel(rx, ry, rw, rh)
   local node = state.selectedNode
   if not node then return end
 
-  local screenW = love.graphics.getWidth()
-  local screenH = love.graphics.getHeight()
-  local panelX = screenW - DETAIL_WIDTH
   local font = getFont()
   local lineH = font:getHeight() + 2
   local pad = 10
 
   -- Background
   love.graphics.setColor(DETAIL_BG)
-  love.graphics.rectangle("fill", panelX, 0, DETAIL_WIDTH, screenH)
+  love.graphics.rectangle("fill", rx, ry, rw, rh)
 
-  -- Border
+  -- Left border
   love.graphics.setColor(TOOLTIP_BORDER)
-  love.graphics.rectangle("fill", panelX, 0, 1, screenH)
+  love.graphics.rectangle("fill", rx, ry, 1, rh)
 
-  -- Scissor to panel
-  love.graphics.setScissor(panelX, 0, DETAIL_WIDTH, screenH)
+  -- Scissor to region
+  love.graphics.setScissor(rx, ry, rw, rh)
   love.graphics.setFont(font)
 
-  local x = panelX + pad
-  local y = pad - state.detailScrollY
+  local x = rx + pad
+  local y = ry + pad - state.detailScrollY
 
   -- Header with component name
   local header
@@ -1065,16 +1096,6 @@ function drawPerfBar()
   local barH = lineH + pad * 2
   local barX = screenW - totalW - pad
   local barY = pad
-
-  -- Offset if tree panel is visible
-  if state.treePanel then
-    barX = math.max(TREE_WIDTH + pad, barX)
-  end
-
-  -- Offset if detail panel is visible
-  if state.selectedNode then
-    barX = math.min(barX, screenW - DETAIL_WIDTH - totalW - pad)
-  end
 
   -- Background
   love.graphics.setColor(PERF_BG)

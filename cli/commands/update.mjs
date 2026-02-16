@@ -66,5 +66,16 @@ export async function updateCommand(args) {
     console.log('  Updated ilovereact/');
   }
 
+  // Update fonts/ (font packs)
+  const runtimeFonts = join(CLI_ROOT, 'runtime', 'fonts');
+  if (existsSync(runtimeFonts)) {
+    const destFonts = join(cwd, 'fonts');
+    if (existsSync(destFonts)) {
+      rmSync(destFonts, { recursive: true });
+    }
+    cpSync(runtimeFonts, destFonts, { recursive: true });
+    console.log('  Updated fonts/');
+  }
+
   console.log('\n  Done! Runtime files are up to date.\n');
 }

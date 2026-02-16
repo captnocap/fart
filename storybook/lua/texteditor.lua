@@ -93,7 +93,7 @@ end
 local function getFont(node)
   if not Measure then return love.graphics.getFont() end
   local s = node.style or {}
-  local fontSize = s.fontSize or 14
+  local fontSize = Measure.scaleFontSize(s.fontSize or 14, node)
   local fontFamily = s.fontFamily or nil
   local fontWeight = s.fontWeight or nil
   return Measure.getFont(fontSize, fontFamily, fontWeight)

@@ -60,15 +60,31 @@ local colors = {
 -- Init
 -- ============================================================================
 
+local fullscreenNode = nil  -- currently fullscreen VideoPlayer node (or nil)
+
 function VideoPlayer.init(config)
   config = config or {}
   Measure = config.measure
   Videos = config.videos
 end
 
+--- Return the currently fullscreen VideoPlayer node, or nil.
+function VideoPlayer.getFullscreenNode()
+  return fullscreenNode
+end
+
 -- ============================================================================
 -- State management
 -- ============================================================================
+
+--- Get effective bounds (fullscreen overrides layout computed dimensions).
+local function getBounds(node, state)
+  if state and state.isFullscreen then
+    local winW, winH = love.graphics.getDimensions()
+    return { x = 0, y = 0, w = winW, h = winH }
+  end
+  return node.computed
+end
 
 --- Get or create per-node video player state.
 local function getState(node)
@@ -109,6 +125,82 @@ local function formatTime(seconds)
     return mins .. ":0" .. secs
   end
   return mins .. ":" .. secs
+end
+
+-- ============================================================================
+-- Bitmap digit renderer (GL-state-proof — no font textures)
+-- ============================================================================
+
+-- 5x7 pixel bitmaps for digits, colon, slash, dash, space
+-- Each glyph is 5 columns × 7 rows, stored as 7 strings of "01010" etc.
+local glyphs = {
+  ["0"] = { "01110", "10001", "10011", "10101", "11001", "10001", "01110" },
+  ["1"] = { "00100", "01100", "00100", "00100", "00100", "00100", "01110" },
+  ["2"] = { "01110", "10001", "00001", "00110", "01000", "10000", "11111" },
+  ["3"] = { "01110", "10001", "00001", "00110", "00001", "10001", "01110" },
+  ["4"] = { "00010", "00110", "01010", "10010", "11111", "00010", "00010" },
+  ["5"] = { "11111", "10000", "11110", "00001", "00001", "10001", "01110" },
+  ["6"] = { "00110", "01000", "10000", "11110", "10001", "10001", "01110" },
+  ["7"] = { "11111", "00001", "00010", "00100", "01000", "01000", "01000" },
+  ["8"] = { "01110", "10001", "10001", "01110", "10001", "10001", "01110" },
+  ["9"] = { "01110", "10001", "10001", "01111", "00001", "00010", "01100" },
+  [":"] = { "00000", "00100", "00100", "00000", "00100", "00100", "00000" },
+  ["/"] = { "00001", "00010", "00010", "00100", "01000", "01000", "10000" },
+  ["-"] = { "00000", "00000", "00000", "11111", "00000", "00000", "00000" },
+  [" "] = { "00000", "00000", "00000", "00000", "00000", "00000", "00000" },
+}
+
+--- Draw a string using the bitmap font. Returns total width drawn.
+--- @param text string The text to draw (digits, ':', '/', '-', ' ')
+--- @param x number Left edge
+--- @param y number Top edge
+--- @param scale number Pixel size (1 = 1px per glyph pixel, 2 = 2px, etc.)
+--- @param r number Red 0-1
+--- @param g number Green 0-1
+--- @param b number Blue 0-1
+--- @param a number Alpha 0-1
+local function drawBitmapText(text, x, y, scale, r, g, b, a)
+  love.graphics.setColor(r, g, b, a)
+  local cx = x
+  local gap = scale  -- 1-pixel gap between characters at current scale
+  for i = 1, #text do
+    local ch = text:sub(i, i)
+    local glyph = glyphs[ch]
+    if glyph then
+      for row = 1, 7 do
+        local rowData = glyph[row]
+        for col = 1, 5 do
+          if rowData:sub(col, col) == "1" then
+            love.graphics.rectangle("fill",
+              cx + (col - 1) * scale,
+              y + (row - 1) * scale,
+              scale, scale)
+          end
+        end
+      end
+      cx = cx + 5 * scale + gap
+    else
+      -- Unknown char: skip space
+      cx = cx + 3 * scale + gap
+    end
+  end
+  return cx - x
+end
+
+--- Measure the pixel width of a bitmap text string.
+local function measureBitmapText(text, scale)
+  local gap = scale
+  local w = 0
+  for i = 1, #text do
+    local ch = text:sub(i, i)
+    if glyphs[ch] then
+      w = w + 5 * scale + gap
+    else
+      w = w + 3 * scale + gap
+    end
+  end
+  if w > 0 then w = w - gap end  -- remove trailing gap
+  return w
 end
 
 -- ============================================================================
@@ -225,10 +317,9 @@ end
 --- Determine which control element (if any) is at (mx, my) relative to the node.
 --- Returns "play", "seek", "mute", "volume", "loop", "fullscreen", "video", or nil.
 local function hitTestControls(node, mx, my)
-  local c = node.computed
-  if not c then return nil end
-
   local state = getState(node)
+  local c = getBounds(node, state)
+  if not c then return nil end
   if not state.showControls then
     -- Controls hidden: entire area is "video"
     if mx >= c.x and mx <= c.x + c.w and my >= c.y and my <= c.y + c.h then
@@ -311,14 +402,22 @@ function VideoPlayer.draw(node, effectiveOpacity)
   if not src then return end
 
   local state = getState(node)
+  c = getBounds(node, state)
+
   local status = Videos.getStatus(src)
-  local borderRadius = (node.style and node.style.borderRadius) or 0
+  local borderRadius = state.isFullscreen and 0 or ((node.style and node.style.borderRadius) or 0)
 
   -- Apply playback control from local state
   Videos.setPaused(src, isPaused(node))
   Videos.setMuted(src, state.muted)
   Videos.setVolume(src, state.volume)
   Videos.setLoop(src, node.props.loop)
+
+  -- Fullscreen: black background covering everything
+  if state.isFullscreen then
+    love.graphics.setColor(0, 0, 0, 1)
+    love.graphics.rectangle("fill", 0, 0, c.w, c.h)
+  end
 
   -- 1. Draw the video frame (or placeholder)
   if status == "ready" then
@@ -446,14 +545,14 @@ function VideoPlayer.draw(node, effectiveOpacity)
       { playColor[1], playColor[2], playColor[3], playColor[4] * effectiveOpacity })
   end
 
-  -- Time text
-  if Measure then
-    local font = Measure.getFont(11)
-    love.graphics.setFont(font)
+  -- Time text (bitmap rendered — immune to mpv GL state corruption)
+  do
     local timeStr = formatTime(currentTime) .. " / " .. formatTime(duration)
-    love.graphics.setColor(colors.timeText[1], colors.timeText[2], colors.timeText[3],
+    local bitmapScale = 2  -- 2px per glyph pixel → 10x14 character size
+    local textH = 7 * bitmapScale
+    drawBitmapText(timeStr, playX + BUTTON_SIZE + 8, rowCenterY - textH / 2, bitmapScale,
+      colors.timeText[1], colors.timeText[2], colors.timeText[3],
       colors.timeText[4] * effectiveOpacity)
-    love.graphics.print(timeStr, playX + BUTTON_SIZE + 8, rowCenterY - font:getHeight() / 2)
   end
 
   -- Right side controls (from right edge inward)
@@ -546,7 +645,8 @@ function VideoPlayer.handleMousePressed(node, mx, my, button)
   if button ~= 1 then return false end
   if not Videos then return false end
 
-  local c = node.computed
+  local state = getState(node)
+  local c = getBounds(node, state)
   if not c then return false end
 
   -- Check if click is inside the node
@@ -554,14 +654,21 @@ function VideoPlayer.handleMousePressed(node, mx, my, button)
     return false
   end
 
-  local state = getState(node)
   showControls(state)
 
   local target = hitTestControls(node, mx, my)
 
   if target == "play" or target == "video" then
-    -- Toggle play/pause
+    -- Toggle play/pause; restart from beginning if video ended
     local wasPaused = isPaused(node)
+    local src = node.props and node.props.src
+    if wasPaused and src then
+      local ct = Videos.getCurrentTime(src) or 0
+      local dur = Videos.getDuration(src) or 0
+      if dur > 0 and ct >= dur - 0.5 then
+        Videos.seek(src, 0)
+      end
+    end
     state.localPaused = not wasPaused
     return true
 
@@ -598,6 +705,7 @@ function VideoPlayer.handleMousePressed(node, mx, my, button)
   elseif target == "fullscreen" then
     state.isFullscreen = not state.isFullscreen
     love.window.setFullscreen(state.isFullscreen)
+    fullscreenNode = state.isFullscreen and node or nil
     return true
   end
 
@@ -607,10 +715,9 @@ end
 --- Handle mouse moved over a VideoPlayer node.
 --- Returns true if consumed.
 function VideoPlayer.handleMouseMoved(node, mx, my)
-  local c = node.computed
-  if not c then return false end
-
   local state = getState(node)
+  local c = getBounds(node, state)
+  if not c then return false end
 
   -- Check if mouse is inside the node
   local inside = mx >= c.x and mx <= c.x + c.w and my >= c.y and my <= c.y + c.h
@@ -680,8 +787,22 @@ function VideoPlayer.handleKeyPressed(node, key)
 
   showControls(state)
 
-  if key == "space" then
+  if key == "escape" and state.isFullscreen then
+    state.isFullscreen = false
+    love.window.setFullscreen(false)
+    fullscreenNode = nil
+    return true
+
+  elseif key == "space" then
     local wasPaused = isPaused(node)
+    local src2 = node.props and node.props.src
+    if wasPaused and src2 then
+      local ct = Videos.getCurrentTime(src2) or 0
+      local dur = Videos.getDuration(src2) or 0
+      if dur > 0 and ct >= dur - 0.5 then
+        Videos.seek(src2, 0)
+      end
+    end
     state.localPaused = not wasPaused
     return true
 
@@ -712,6 +833,7 @@ function VideoPlayer.handleKeyPressed(node, key)
   elseif key == "f" then
     state.isFullscreen = not state.isFullscreen
     love.window.setFullscreen(state.isFullscreen)
+    fullscreenNode = state.isFullscreen and node or nil
     return true
 
   elseif key == "l" then

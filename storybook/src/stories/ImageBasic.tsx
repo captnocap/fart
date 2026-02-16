@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Text, Image } from '../../../../packages/shared/src';
+import { Box, Text, Image } from '../../../packages/shared/src';
 
 // Use a simple data URI so no external assets are needed
 const PLACEHOLDER_SRC = 'data:image/svg+xml,' + encodeURIComponent(

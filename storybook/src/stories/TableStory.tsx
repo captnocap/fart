@@ -1,6 +1,6 @@
 import React from 'react';
-import { Box, Text, Table, Badge } from '../../../../packages/shared/src';
-import type { TableColumn } from '../../../../packages/shared/src';
+import { Box, Text, Table, Badge } from '../../../packages/shared/src';
+import type { TableColumn } from '../../../packages/shared/src';
 
 interface Employee {
   name: string;

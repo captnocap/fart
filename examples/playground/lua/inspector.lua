@@ -260,6 +260,18 @@ function Inspector.markDirty()
   state.nodeCountDirty = true
 end
 
+--- Open the inspector and select a specific node (used by context menu "Inspect").
+--- Enables the inspector if not already active, opens the tree panel,
+--- and focuses on the given node.
+function Inspector.inspectNode(node)
+  if not node then return end
+  state.enabled = true
+  state.treePanel = true
+  state.selectedNode = node
+  state.detailScrollY = 0
+  state.scrollToSelected = true
+end
+
 --- Return performance data (used by console :perf command)
 function Inspector.getPerfData()
   return {

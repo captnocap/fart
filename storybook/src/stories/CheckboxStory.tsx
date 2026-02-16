@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Box, Text } from '../../../../packages/shared/src';
-import { Checkbox } from '../../../../packages/shared/src/Checkbox';
+import { Box, Text } from '../../../packages/shared/src';
+import { Checkbox } from '../../../packages/shared/src/Checkbox';
 
 export function CheckboxStory() {
   const [checked1, setChecked1] = useState(false);

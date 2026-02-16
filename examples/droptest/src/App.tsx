@@ -5,6 +5,7 @@ import type { LoveEvent } from '@ilovereact/core';
 export function App() {
   const [bgVideo, setBgVideo] = useState<string | null>(null);
   const [fgVideo, setFgVideo] = useState<string | null>(null);
+  const [hoverVid, setHoverVid] = useState<string | null>(null);
 
   const handleBgDrop = useCallback((e: LoveEvent) => {
     if (e.filePath) setBgVideo(e.filePath);
@@ -12,6 +13,10 @@ export function App() {
 
   const handleFgDrop = useCallback((e: LoveEvent) => {
     if (e.filePath) setFgVideo(e.filePath);
+  }, []);
+
+  const handleHoverDrop = useCallback((e: LoveEvent) => {
+    if (e.filePath) setHoverVid(e.filePath);
   }, []);
 
   return (
@@ -71,6 +76,36 @@ export function App() {
             </Text>
           </Box>
         )}
+
+        {/* Hover video row — drop to set, hover to preview */}
+        <Box direction="row" gap={16} align="center">
+          {[0, 1, 2].map((i) => (
+            <Box
+              key={i}
+              onFileDrop={handleHoverDrop}
+              hoverVideo={hoverVid ?? undefined}
+              hoverVideoFit="cover"
+              style={{
+                width: 80,
+                height: 80,
+                borderRadius: 40,
+                backgroundColor: '#1e293b',
+                borderWidth: 2,
+                borderColor: hoverVid ? '#8b5cf6' : '#334155',
+                justifyContent: 'center',
+                alignItems: 'center',
+                overflow: 'hidden',
+              }}
+            >
+              <Text style={{ color: hoverVid ? '#a78bfa' : '#475569', fontSize: 11 }}>
+                {hoverVid ? 'Hover' : 'Drop'}
+              </Text>
+            </Box>
+          ))}
+          <Text style={{ color: '#64748b', fontSize: 11 }}>
+            {hoverVid ? 'Hover the circles' : 'Drop a video on a circle'}
+          </Text>
+        </Box>
       </Box>
     </Box>
   );

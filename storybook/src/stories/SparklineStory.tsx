@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Text, Sparkline } from '../../../../packages/shared/src';
+import { Box, Text, Sparkline } from '../../../packages/shared/src';
 
 const SAMPLE_DATA = [4, 7, 3, 8, 5, 9, 2, 6, 8, 3, 7, 5, 9, 4, 6, 8, 3, 7, 5, 10];
 const UPTREND = [2, 3, 2, 4, 5, 4, 6, 7, 6, 8, 9, 8, 10, 11, 10, 12, 13, 12, 14, 15];

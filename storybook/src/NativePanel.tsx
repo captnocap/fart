@@ -7,10 +7,10 @@
  */
 
 import React, { useEffect, useRef, useState, type ComponentType } from 'react';
-import { BridgeProvider, RendererProvider } from '../../../packages/shared/src/context';
-import { createRoot } from '../../../packages/native/src/NativeRenderer';
-import { CanvasBridge } from '../../../packages/web/src/CanvasBridge';
-import type { EmscriptenModule } from '../../../packages/web/src/WebBridge';
+import { BridgeProvider, RendererProvider } from '../../packages/shared/src/context';
+import { createRoot } from '../../packages/native/src/NativeRenderer';
+import { CanvasBridge } from '../../packages/web/src/CanvasBridge';
+import type { EmscriptenModule } from '../../packages/web/src/WebBridge';
 
 interface NativePanelProps {
   storyComponent: ComponentType;

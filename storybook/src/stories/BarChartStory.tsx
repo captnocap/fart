@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Text, BarChart } from '../../../../packages/shared/src';
+import { Box, Text, BarChart } from '../../../packages/shared/src';
 
 const REVENUE_DATA = [
   { label: 'Jan', value: 42 },

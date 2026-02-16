@@ -9,21 +9,26 @@
  */
 
 import React, { useState, useCallback } from 'react';
-import { NativeBridge } from '../../../packages/native/src/NativeBridge';
-import { createRoot } from '../../../packages/native/src/NativeRenderer';
-import { BridgeProvider, RendererProvider } from '../../../packages/shared/src/context';
-import { Box, Text, Pressable } from '../../../packages/shared/src';
+import { NativeBridge } from '../../packages/native/src/NativeBridge';
+import { createRoot } from '../../packages/native/src/NativeRenderer';
+import { BridgeProvider, RendererProvider } from '../../packages/shared/src/context';
+import { Box, Text, Pressable } from '../../packages/shared/src';
 import { stories, type StoryDef } from './stories';
 import { DocsViewer } from './docs/DocsViewer';
+import { PlaygroundPanel } from './playground/PlaygroundPanel';
 import contentData from './generated/content.json';
 
 // ── HMR state sync ───────────────────────────────────────
 
 let currentActiveIdx = 0;
-let currentMode: 'stories' | 'docs' = 'stories';
+let currentMode: 'stories' | 'docs' | 'playground' = 'stories';
 
 // Expose state getter for HMR — Lua calls this before teardown
-(globalThis as any).__getDevState = () => ({ activeIdx: currentActiveIdx, mode: currentMode });
+(globalThis as any).__getDevState = () => ({
+  activeIdx: currentActiveIdx,
+  mode: currentMode,
+  playgroundCode: (globalThis as any).__currentPlaygroundCode,
+});
 
 // ── Story browser (sidebar + viewer) ─────────────────────
 
@@ -134,9 +139,35 @@ function StorybookPanel() {
 
 // ── Top-level mode switcher ──────────────────────────────
 
+function TabButton({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={{
+        paddingLeft: 10,
+        paddingRight: 10,
+        paddingTop: 4,
+        paddingBottom: 4,
+        borderRadius: 4,
+        backgroundColor: active ? '#1e293b' : 'transparent',
+      }}
+    >
+      <Text style={{
+        color: active ? '#e2e8f0' : '#64748b',
+        fontSize: 10,
+        fontWeight: 'bold',
+      }}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+type Mode = 'stories' | 'docs' | 'playground';
+
 function Storybook() {
   const initialMode = (globalThis as any).__devState?.mode ?? 'stories';
-  const [mode, setMode] = useState<'stories' | 'docs'>(initialMode);
+  const [mode, setMode] = useState<Mode>(initialMode);
   currentMode = mode;
 
   return (
@@ -150,49 +181,16 @@ function Storybook() {
         padding: 4,
         gap: 2,
       }}>
-        <Pressable
-          onPress={() => setMode('stories')}
-          style={{
-            paddingLeft: 10,
-            paddingRight: 10,
-            paddingTop: 4,
-            paddingBottom: 4,
-            borderRadius: 4,
-            backgroundColor: mode === 'stories' ? '#1e293b' : 'transparent',
-          }}
-        >
-          <Text style={{
-            color: mode === 'stories' ? '#e2e8f0' : '#64748b',
-            fontSize: 10,
-            fontWeight: 'bold',
-          }}>
-            Stories
-          </Text>
-        </Pressable>
-        <Pressable
-          onPress={() => setMode('docs')}
-          style={{
-            paddingLeft: 10,
-            paddingRight: 10,
-            paddingTop: 4,
-            paddingBottom: 4,
-            borderRadius: 4,
-            backgroundColor: mode === 'docs' ? '#1e293b' : 'transparent',
-          }}
-        >
-          <Text style={{
-            color: mode === 'docs' ? '#e2e8f0' : '#64748b',
-            fontSize: 10,
-            fontWeight: 'bold',
-          }}>
-            Docs
-          </Text>
-        </Pressable>
+        <TabButton label="Stories" active={mode === 'stories'} onPress={() => setMode('stories')} />
+        <TabButton label="Docs" active={mode === 'docs'} onPress={() => setMode('docs')} />
+        <TabButton label="Playground" active={mode === 'playground'} onPress={() => setMode('playground')} />
       </Box>
 
       {/* Content */}
-      <Box style={{ flexGrow: 1 }}>
-        {mode === 'stories' ? <StorybookPanel /> : <DocsViewer content={contentData as any} />}
+      <Box style={{ flexGrow: 1, width: '100%' }}>
+        {mode === 'stories' && <StorybookPanel />}
+        {mode === 'docs' && <DocsViewer content={contentData as any} />}
+        {mode === 'playground' && <PlaygroundPanel />}
       </Box>
     </Box>
   );

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Box, Text } from '../../../../packages/shared/src';
-import { Select } from '../../../../packages/shared/src/Select';
+import { Box, Text } from '../../../packages/shared/src';
+import { Select } from '../../../packages/shared/src/Select';
 
 const FRUIT_OPTIONS = [
   { label: 'Apple', value: 'apple' },

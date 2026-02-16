@@ -1395,4 +1395,127 @@ function drawHighlight()
   love.graphics.pop()
 end
 
+-- ============================================================================
+-- Region-based drawing (used by devtools panel)
+-- ============================================================================
+
+--- Draw the console inside a region {x, y, w, h}.
+--- Skips the title bar (devtools tab bar replaces it).
+--- Called by devtools when Console tab is active.
+function Console.drawInRegion(region)
+  if not state.visible then
+    drawHighlight()
+    return
+  end
+
+  local ok, drawErr = pcall(function()
+    local rx, ry, rw, rh = region.x, region.y, region.w, region.h
+
+    local font = love.graphics.newFont(12)
+    local lineH = font:getHeight() + 2
+    local pad = 10
+    local inputH = lineH + pad * 2
+
+    -- Background (region is already inside the devtools panel, but fill for safety)
+    love.graphics.setColor(COLORS.bg)
+    love.graphics.rectangle("fill", rx, ry, rw, rh)
+
+    -- Watch bar (at top of region, above output)
+    local watchH = 0
+    if #state.watches > 0 then
+      watchH = #state.watches * lineH + 4
+      local watchY = ry
+      love.graphics.setColor(0.08, 0.06, 0.14, 0.8)
+      love.graphics.rectangle("fill", rx, watchY, rw, watchH)
+      love.graphics.setColor(COLORS.border)
+      love.graphics.rectangle("fill", rx, watchY + watchH - 1, rw, 1)
+
+      love.graphics.setFont(font)
+      for i, w in ipairs(state.watches) do
+        local wy = watchY + (i - 1) * lineH + 2
+        love.graphics.setColor(COLORS.watch)
+        love.graphics.print(string.format("[%d] %s = ", i, w.expr), rx + pad, wy)
+        local labelW = font:getWidth(string.format("[%d] %s = ", i, w.expr))
+        if w.lastResult:match("^Error:") or w.lastResult:match("^error:") then
+          love.graphics.setColor(COLORS.error)
+        else
+          love.graphics.setColor(COLORS.result)
+        end
+        love.graphics.print(w.lastResult, rx + pad + labelW, wy)
+      end
+    end
+
+    local outputY = ry + watchH
+    local outputH = rh - watchH - inputH
+
+    -- Output area (scissored)
+    love.graphics.setScissor(rx, outputY, rw, outputH)
+
+    local totalContentH = #state.output * lineH
+    local maxScroll = math.max(0, totalContentH - outputH)
+    if state.scrollY > maxScroll then state.scrollY = maxScroll end
+
+    local startY = outputY - state.scrollY
+    love.graphics.setFont(font)
+    for i, entry in ipairs(state.output) do
+      local y = startY + (i - 1) * lineH
+      if y + lineH > outputY and y < outputY + outputH then
+        love.graphics.setColor(entry.color)
+        love.graphics.print(entry.text, rx + pad, y)
+      end
+    end
+
+    love.graphics.setScissor()
+
+    -- Scroll indicator
+    if totalContentH > outputH and maxScroll > 0 then
+      local barH = math.max(20, outputH * (outputH / totalContentH))
+      local barY = outputY + (state.scrollY / maxScroll) * (outputH - barH)
+      love.graphics.setColor(COLORS.dim)
+      love.graphics.rectangle("fill", rx + rw - 4, barY, 3, barH, 1, 1)
+    end
+
+    -- Input area
+    local inputY = ry + rh - inputH
+    love.graphics.setColor(COLORS.inputBg)
+    love.graphics.rectangle("fill", rx, inputY, rw, inputH)
+
+    love.graphics.setColor(COLORS.border)
+    love.graphics.rectangle("fill", rx, inputY, rw, 1)
+
+    -- Prompt
+    love.graphics.setFont(font)
+    local promptStr = state.recording and "REC> " or "> "
+    love.graphics.setColor(state.recording and COLORS.macro or COLORS.prompt)
+    love.graphics.print(promptStr, rx + pad, inputY + pad)
+    local promptW = font:getWidth(promptStr)
+
+    -- Input text
+    love.graphics.setColor(COLORS.inputText)
+    love.graphics.print(state.input, rx + pad + promptW, inputY + pad)
+
+    -- Cursor
+    if math.floor(state.cursorBlink * 2) % 2 == 0 then
+      local cursorX = rx + pad + promptW + font:getWidth(state.input:sub(1, state.cursorPos))
+      love.graphics.setColor(COLORS.cursor)
+      love.graphics.rectangle("fill", cursorX, inputY + pad, 1.5, lineH)
+    end
+
+    -- Autocomplete popup
+    if state.acVisible and #state.acItems > 0 then
+      drawAutocomplete(font, lineH, rx + pad, promptW, inputY)
+    end
+
+    -- Draw highlight overlay
+    drawHighlight()
+  end)
+
+  if not ok then
+    pcall(function()
+      io.write("[console] drawInRegion error: " .. tostring(drawErr) .. "\n")
+      io.flush()
+    end)
+  end
+end
+
 return Console

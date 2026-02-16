@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Text } from '../../../../packages/shared/src';
+import { Box, Text } from '../../../packages/shared/src';
 
 function Chip({ label, color }: { label: string; color: string }) {
   return (

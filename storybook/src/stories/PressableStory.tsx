@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Box, Text, Pressable } from '../../../../packages/shared/src';
+import { Box, Text, Pressable } from '../../../packages/shared/src';
 
 export function PressableStory() {
   const [pressCount, setPressCount] = useState(0);

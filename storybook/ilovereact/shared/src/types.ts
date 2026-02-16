@@ -101,6 +101,9 @@ export interface Style {
   lineHeight?: number;
   letterSpacing?: number;
 
+  /** Override the global text scale for this subtree. Set to 1 to render at native size. */
+  textScale?: number;
+
   // Image
   objectFit?: 'fill' | 'contain' | 'cover' | 'none';
 
@@ -225,6 +228,12 @@ export interface BoxProps {
   scroll?: boolean;
   hidden?: boolean;
   z?: number;
+
+  // Video backgrounds
+  backgroundVideo?: string;
+  backgroundVideoFit?: 'fill' | 'contain' | 'cover';
+  hoverVideo?: string;
+  hoverVideoFit?: 'fill' | 'contain' | 'cover';
 
   focusable?: boolean;
   focusGroup?: boolean;
@@ -364,6 +373,8 @@ export interface TextInputProps {
   multiline?: boolean;
   editable?: boolean;
   secureTextEntry?: boolean;
+  /** Hint for on-screen keyboard layout. Default: 'default'. */
+  keyboardType?: 'default' | 'numeric' | 'email' | 'phone-pad' | 'url';
   style?: Style;
   textStyle?: Style;
   autoFocus?: boolean;

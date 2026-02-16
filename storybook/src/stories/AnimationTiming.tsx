@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Box, Text, Pressable, useSpring } from '../../../../packages/shared/src';
+import { Box, Text, Pressable, useSpring } from '../../../packages/shared/src';
 
 export function AnimationTimingStory() {
   const [expanded, setExpanded] = useState(false);
