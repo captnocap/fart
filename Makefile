@@ -128,11 +128,13 @@ dist-storybook: build-storybook-native setup
 	rm -rf $(DIST_BINARY)
 	rm -rf $(STAGING_DIR) $(PAYLOAD_DIR)
 	# ── Build the .love zip ──
-	mkdir -p $(STAGING_DIR)/lua
+	mkdir -p $(STAGING_DIR)/lua/audio/modules
 	cp $(STORYBOOK_LOVE)/bundle.js $(STAGING_DIR)/
 	cp packaging/storybook/main.lua $(STAGING_DIR)/
 	cp packaging/storybook/conf.lua $(STAGING_DIR)/
 	cp lua/*.lua $(STAGING_DIR)/lua/
+	cp lua/audio/*.lua $(STAGING_DIR)/lua/audio/
+	cp lua/audio/modules/*.lua $(STAGING_DIR)/lua/audio/modules/
 	cd $(STAGING_DIR) && zip -9 -r /tmp/ilovereact-demo.love .
 	# ── Assemble payload directory ──
 	# Don't fuse — ld-linux invocation breaks /proc/self/exe detection.
@@ -237,6 +239,9 @@ cli-setup: setup
 	rm -rf cli/runtime
 	mkdir -p cli/runtime/lua cli/runtime/lib cli/runtime/bin cli/runtime/ilovereact
 	cp lua/*.lua cli/runtime/lua/
+	mkdir -p cli/runtime/lua/audio/modules
+	cp lua/audio/*.lua cli/runtime/lua/audio/
+	cp lua/audio/modules/*.lua cli/runtime/lua/audio/modules/
 	cp $(QUICKJS_DIR)/libquickjs.so cli/runtime/lib/
 	@LIBMPV=$$(ldconfig -p | grep 'libmpv.so.2 ' | head -1 | sed 's/.*=> //'); \
 	if [ -n "$$LIBMPV" ]; then \
@@ -265,6 +270,7 @@ cli-setup: setup
 	cp -r packages/router cli/runtime/ilovereact/router
 	cp -r packages/storage cli/runtime/ilovereact/storage
 	cp -r packages/components cli/runtime/ilovereact/components
+	cp -r packages/audio cli/runtime/ilovereact/audio
 	@if [ -d fonts ]; then \
 		mkdir -p cli/runtime/fonts; \
 		cp -r fonts/* cli/runtime/fonts/; \
@@ -278,6 +284,9 @@ cli-setup: setup
 	@echo "=== CLI runtime ready. Run: cd cli && npm link ==="
 	@echo "=== Syncing storybook runtime ==="
 	cp lua/*.lua storybook/lua/
+	mkdir -p storybook/lua/audio/modules
+	cp lua/audio/*.lua storybook/lua/audio/
+	cp lua/audio/modules/*.lua storybook/lua/audio/modules/
 	cp -r packages/shared/* storybook/ilovereact/shared/
 	cp -r packages/native/* storybook/ilovereact/native/
 	@echo "=== Storybook runtime synced ==="

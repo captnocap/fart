@@ -193,6 +193,14 @@ export interface LoveEvent {
   axis?: string;
   axisValue?: number;
   joystickId?: number;
+  // MIDI events
+  midiNote?: number;
+  midiVelocity?: number;
+  midiOn?: boolean;
+  midiCC?: number;
+  midiValue?: number;
+  midiChannel?: number;
+  midiDevice?: string;
   // Drag events
   startX?: number;
   startY?: number;
@@ -258,6 +266,8 @@ export interface BoxProps {
   onGamepadPress?: (event: LoveEvent) => void;
   onGamepadRelease?: (event: LoveEvent) => void;
   onGamepadAxis?: (event: LoveEvent) => void;
+  onMidiNote?: (event: LoveEvent) => void;
+  onMidiCC?: (event: LoveEvent) => void;
   onDragStart?: (event: LoveEvent) => void;
   onDrag?: (event: LoveEvent) => void;
   onDragEnd?: (event: LoveEvent) => void;

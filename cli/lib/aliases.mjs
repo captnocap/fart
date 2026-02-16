@@ -19,6 +19,7 @@ export const ALIAS_MAP = {
   router: '@ilovereact/router',
   storage: '@ilovereact/storage',
   components: '@ilovereact/components',
+  audio: '@ilovereact/audio',
 };
 
 /**

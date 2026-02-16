@@ -106,6 +106,16 @@ export function initEventDispatching(bridge: Subscribable): void {
     broadcastToAll(event, 'onGamepadAxis');
   });
 
+  // ── MIDI events (global broadcast) ───────────────────────
+
+  bridge.subscribe('midi:note', (event: LoveEvent) => {
+    broadcastToAll(event, 'onMidiNote');
+  });
+
+  bridge.subscribe('midi:cc', (event: LoveEvent) => {
+    broadcastToAll(event, 'onMidiCC');
+  });
+
   // ── Drag events (bubbling) ──────────────────────────────
 
   bridge.subscribe('dragstart', (event: LoveEvent) => {

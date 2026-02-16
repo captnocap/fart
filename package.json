@@ -15,7 +15,8 @@
     "packages/terminal",
     "packages/components",
     "packages/router",
-    "packages/storage"
+    "packages/storage",
+    "packages/audio"
   ],
   "scripts": {
     "build:native": "esbuild --bundle --format=iife --global-name=ReactLove --target=es2020 --jsx=automatic --outfile=examples/native-hud/game/bundle.js examples/native-hud/src/main.tsx",

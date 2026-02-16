@@ -49,6 +49,7 @@ local docstore = nil                          -- docstore.lua (schema-free docum
 local spellcheck = nil                        -- spellcheck.lua (dictionary-based spell checker)
 local dragdrop = nil                          -- dragdrop.lua (X11 drag-hover detection)
 local lastDragHoverId = nil                   -- node ID of current drag-hover target
+local audioEngine = nil                       -- audio/engine.lua (modular audio framework)
 
 -- Controller connection toast (auto-dismiss notification)
 local controllerToast = {
@@ -648,6 +649,24 @@ function ReactLove.init(config)
     end
   end
 
+  -- Load audio engine (optional — graceful degradation if not available)
+  local aeOk, aeMod = pcall(require, "lua.audio.engine")
+  if aeOk and aeMod then
+    audioEngine = aeMod
+    -- Register all audio RPC handlers
+    for method, handler in pairs(audioEngine.getHandlers()) do
+      rpcHandlers[method] = handler
+    end
+    -- Override audio:init to inject the bridge reference automatically
+    rpcHandlers["audio:init"] = function(args)
+      args = args or {}
+      args.bridge = bridge
+      audioEngine.init(args)
+      return true
+    end
+    io.write("[react-love] Audio engine loaded\n"); io.flush()
+  end
+
   -- Wire up console + inspector + devtools (only in rendering modes with inspector enabled)
   if isRendering() and inspectorEnabled then
     console.init({ bridge = bridge, tree = tree, inspector = inspector })
@@ -676,6 +695,9 @@ function ReactLove.update(dt)
 
   if mode == "canvas" then
     -- Canvas mode: FS bridge + native rendering pipeline ----------------
+
+    -- Audio engine update (fill QueueableSource buffers — run early to avoid underruns)
+    if audioEngine then audioEngine.update(dt) end
 
     -- 1. Poll the standard bridge inbox for user/state commands
     bridge.poll()
@@ -733,6 +755,9 @@ function ReactLove.update(dt)
   end
 
   -- Native mode -----------------------------------------------------------
+
+  -- Audio engine update (fill QueueableSource buffers — run early to avoid underruns)
+  if audioEngine then audioEngine.update(dt) end
 
   -- HMR: poll bundle.js mtime every ~1 second for changes
   hmrFrameCounter = hmrFrameCounter + 1
