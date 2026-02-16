@@ -766,14 +766,15 @@ function drawTooltip()
   local tooltipW = maxW + pad * 2
   local tooltipH = #lines * lineH + pad * 2
 
-  -- Position: near cursor, flip at screen edges
+  -- Position: near cursor, flip at screen edges (respect devtools panel)
   local screenW = love.graphics.getWidth()
-  local screenH = love.graphics.getHeight()
+  local devtools = require("lua.devtools")
+  local bottomLimit = devtools.getViewportHeight()
   local tx = state.mouseX + 16
   local ty = state.mouseY + 16
 
   if tx + tooltipW > screenW - 8 then tx = state.mouseX - tooltipW - 8 end
-  if ty + tooltipH > screenH - 8 then ty = state.mouseY - tooltipH - 8 end
+  if ty + tooltipH > bottomLimit - 8 then ty = state.mouseY - tooltipH - 8 end
   if tx < 4 then tx = 4 end
   if ty < 4 then ty = 4 end
 

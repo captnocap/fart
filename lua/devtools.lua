@@ -102,6 +102,7 @@ function DevTools.init(config)
   inspector = config.inspector
   console   = config.console
   tree      = config.tree
+  state.pushEvent = config.pushEvent
 end
 
 function DevTools.isOpen()
@@ -115,6 +116,18 @@ function DevTools.getViewportHeight()
   local screenH = love.graphics.getHeight()
   local panelH = math.max(MIN_PANEL_H, math.floor(screenH * PANEL_RATIO))
   return screenH - panelH
+end
+
+--- Push a viewport event so React-side useWindowDimensions() stays in sync.
+local function pushViewportEvent()
+  if not state.pushEvent then return end
+  state.pushEvent({
+    type = "viewport",
+    payload = {
+      width = love.graphics.getWidth(),
+      height = DevTools.getViewportHeight(),
+    },
+  })
 end
 
 -- ============================================================================
@@ -134,6 +147,7 @@ function DevTools.keypressed(key)
     end
     -- Relayout: viewport height changed
     if tree then tree.markDirty() end
+    pushViewportEvent()
     return true
   end
 
@@ -147,7 +161,10 @@ function DevTools.keypressed(key)
     state.activeTab = "console"
     console.show()
     -- Relayout if we just opened
-    if not wasOpen and tree then tree.markDirty() end
+    if not wasOpen and tree then
+      tree.markDirty()
+      pushViewportEvent()
+    end
     return true
   end
 
@@ -164,6 +181,7 @@ function DevTools.keypressed(key)
     inspector.disable()
     console.hide()
     if tree then tree.markDirty() end
+    pushViewportEvent()
     return true
   end
 

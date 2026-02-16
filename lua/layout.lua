@@ -436,9 +436,11 @@ function Layout.layoutNode(node, px, py, pw, ph)
   -- Flex-adjusted width: if parent's flex algorithm (grow/shrink) assigned
   -- a different main-axis size, use it instead of explicitW so the child
   -- respects the flex distribution.
+  local parentAssignedW = false
   if node._flexW then
     w = node._flexW
     node._flexW = nil
+    parentAssignedW = true
   end
 
   -- Flex-stretch: if parent assigned a cross-axis dimension, use it
@@ -477,7 +479,7 @@ function Layout.layoutNode(node, px, py, pw, ph)
 
       local mw, mh = measureTextNode(node, constrainW)
       if mw and mh then
-        if not explicitW then
+        if not explicitW and not parentAssignedW then
           -- Node width = measured text width + padding
           w = mw + padL + padR
         end
@@ -982,6 +984,11 @@ function Layout.layoutNode(node, px, py, pw, ph)
         local explicitChildH = ru(cs.height, innerH)
         if explicitChildH and ch_final ~= explicitChildH then
           child._stretchH = ch_final
+        end
+        -- Column cross-axis: signal stretched width so text nodes
+        -- keep the parent-assigned width instead of shrinking to content.
+        if childAlign == "stretch" and not ru(cs.width, innerW) then
+          child._flexW = cw_final
         end
       end
 

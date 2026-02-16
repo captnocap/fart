@@ -645,7 +645,7 @@ function ReactLove.init(config)
   if isRendering() and inspectorEnabled then
     console.init({ bridge = bridge, tree = tree, inspector = inspector })
     inspector.setConsole(console)
-    devtools.init({ inspector = inspector, console = console, tree = tree })
+    devtools.init({ inspector = inspector, console = console, tree = tree, pushEvent = pushEvent })
   end
 
   -- Screenshot mode (env var trigger, works in native and canvas modes)
@@ -1612,6 +1612,14 @@ function ReactLove.keypressed(key, scancode, isrepeat)
     if textselection.copyToClipboard() then
       return  -- Consumed
     end
+  end
+
+  -- Ctrl+D: dump one frame of color debug info
+  if key == "d" and love.keyboard.isDown("lctrl", "rctrl", "lgui", "rgui") then
+    if painter and painter.debugNextFrame then
+      painter.debugNextFrame()
+    end
+    return
   end
 
   -- Ctrl+= / Ctrl+- / Ctrl+0: global text scale
