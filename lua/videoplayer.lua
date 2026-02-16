@@ -128,82 +128,6 @@ local function formatTime(seconds)
 end
 
 -- ============================================================================
--- Bitmap digit renderer (GL-state-proof — no font textures)
--- ============================================================================
-
--- 5x7 pixel bitmaps for digits, colon, slash, dash, space
--- Each glyph is 5 columns × 7 rows, stored as 7 strings of "01010" etc.
-local glyphs = {
-  ["0"] = { "01110", "10001", "10011", "10101", "11001", "10001", "01110" },
-  ["1"] = { "00100", "01100", "00100", "00100", "00100", "00100", "01110" },
-  ["2"] = { "01110", "10001", "00001", "00110", "01000", "10000", "11111" },
-  ["3"] = { "01110", "10001", "00001", "00110", "00001", "10001", "01110" },
-  ["4"] = { "00010", "00110", "01010", "10010", "11111", "00010", "00010" },
-  ["5"] = { "11111", "10000", "11110", "00001", "00001", "10001", "01110" },
-  ["6"] = { "00110", "01000", "10000", "11110", "10001", "10001", "01110" },
-  ["7"] = { "11111", "00001", "00010", "00100", "01000", "01000", "01000" },
-  ["8"] = { "01110", "10001", "10001", "01110", "10001", "10001", "01110" },
-  ["9"] = { "01110", "10001", "10001", "01111", "00001", "00010", "01100" },
-  [":"] = { "00000", "00100", "00100", "00000", "00100", "00100", "00000" },
-  ["/"] = { "00001", "00010", "00010", "00100", "01000", "01000", "10000" },
-  ["-"] = { "00000", "00000", "00000", "11111", "00000", "00000", "00000" },
-  [" "] = { "00000", "00000", "00000", "00000", "00000", "00000", "00000" },
-}
-
---- Draw a string using the bitmap font. Returns total width drawn.
---- @param text string The text to draw (digits, ':', '/', '-', ' ')
---- @param x number Left edge
---- @param y number Top edge
---- @param scale number Pixel size (1 = 1px per glyph pixel, 2 = 2px, etc.)
---- @param r number Red 0-1
---- @param g number Green 0-1
---- @param b number Blue 0-1
---- @param a number Alpha 0-1
-local function drawBitmapText(text, x, y, scale, r, g, b, a)
-  love.graphics.setColor(r, g, b, a)
-  local cx = x
-  local gap = scale  -- 1-pixel gap between characters at current scale
-  for i = 1, #text do
-    local ch = text:sub(i, i)
-    local glyph = glyphs[ch]
-    if glyph then
-      for row = 1, 7 do
-        local rowData = glyph[row]
-        for col = 1, 5 do
-          if rowData:sub(col, col) == "1" then
-            love.graphics.rectangle("fill",
-              cx + (col - 1) * scale,
-              y + (row - 1) * scale,
-              scale, scale)
-          end
-        end
-      end
-      cx = cx + 5 * scale + gap
-    else
-      -- Unknown char: skip space
-      cx = cx + 3 * scale + gap
-    end
-  end
-  return cx - x
-end
-
---- Measure the pixel width of a bitmap text string.
-local function measureBitmapText(text, scale)
-  local gap = scale
-  local w = 0
-  for i = 1, #text do
-    local ch = text:sub(i, i)
-    if glyphs[ch] then
-      w = w + 5 * scale + gap
-    else
-      w = w + 3 * scale + gap
-    end
-  end
-  if w > 0 then w = w - gap end  -- remove trailing gap
-  return w
-end
-
--- ============================================================================
 -- Drawing helpers
 -- ============================================================================
 
@@ -545,14 +469,16 @@ function VideoPlayer.draw(node, effectiveOpacity)
       { playColor[1], playColor[2], playColor[3], playColor[4] * effectiveOpacity })
   end
 
-  -- Time text (bitmap rendered — immune to mpv GL state corruption)
+  -- Time text
   do
     local timeStr = formatTime(currentTime) .. " / " .. formatTime(duration)
-    local bitmapScale = 2  -- 2px per glyph pixel → 10x14 character size
-    local textH = 7 * bitmapScale
-    drawBitmapText(timeStr, playX + BUTTON_SIZE + 8, rowCenterY - textH / 2, bitmapScale,
-      colors.timeText[1], colors.timeText[2], colors.timeText[3],
+    local fontSize = 12
+    local font = Measure.getFont(fontSize)
+    love.graphics.setFont(font)
+    love.graphics.setColor(colors.timeText[1], colors.timeText[2], colors.timeText[3],
       colors.timeText[4] * effectiveOpacity)
+    local textH = font:getHeight()
+    love.graphics.print(timeStr, playX + BUTTON_SIZE + 8, rowCenterY - textH / 2)
   end
 
   -- Right side controls (from right edge inward)

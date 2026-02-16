@@ -1,0 +1,3 @@
+Hello from Claude Desktop App!
+
+This file was written using the Write tool — same as CLI, just different UI.

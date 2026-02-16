@@ -78,6 +78,8 @@ function TextEditor.initState(node)
     blinkOn = true,
     isDragging = false,
     lastValue = initialText,  -- track for controlled value changes
+    dirty = false,            -- text changed since last change event
+    changeTimer = 0,          -- seconds since last edit (for idle detection)
   }
 end
 
@@ -138,6 +140,11 @@ end
 local function resetBlink(es)
   es.blinkTimer = 0
   es.blinkOn = true
+end
+
+local function markDirty(es)
+  es.dirty = true
+  es.changeTimer = 0
 end
 
 local function clearSelection(es)
@@ -288,6 +295,17 @@ function TextEditor.update(node, dt)
   if es.blinkTimer >= 0.53 then
     es.blinkTimer = es.blinkTimer - 0.53
     es.blinkOn = not es.blinkOn
+  end
+
+  -- Idle change detection: when dirty, wait for changeDelay then signal
+  if es.dirty then
+    es.changeTimer = es.changeTimer + dt
+    local delay = (node.props or {}).changeDelay or 3.0
+    if es.changeTimer >= delay then
+      es.dirty = false
+      es.changeTimer = 0
+      return "change"
+    end
   end
 end
 
@@ -542,6 +560,7 @@ function TextEditor.handleTextInput(node, text)
   local line = currentLine(es)
   es.lines[es.cursorLine] = line:sub(1, es.cursorCol) .. text .. line:sub(es.cursorCol + 1)
   es.cursorCol = es.cursorCol + #text
+  markDirty(es)
   resetBlink(es)
   ensureCursorVisible(node, es)
 end

@@ -20,6 +20,8 @@ export const ALIAS_MAP = {
   storage: '@ilovereact/storage',
   components: '@ilovereact/components',
   audio: '@ilovereact/audio',
+  server: '@ilovereact/server',
+  ai: '@ilovereact/ai',
 };
 
 /**

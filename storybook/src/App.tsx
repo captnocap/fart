@@ -59,13 +59,13 @@ export function App() {
         <button
           onClick={() => switchMode('stories')}
           style={{
-            padding: '4px 12px',
-            borderRadius: 4,
-            border: 'none',
+            padding: '5px 14px',
+            borderRadius: 5,
+            border: mode === 'stories' ? 'none' : '1px solid #1e293b',
             cursor: 'pointer',
             fontSize: 11,
             fontWeight: 600,
-            color: mode === 'stories' ? '#e2e8f0' : '#64748b',
+            color: mode === 'stories' ? '#e2e8f0' : '#94a3b8',
             backgroundColor: mode === 'stories' ? '#1e293b' : 'transparent',
           }}
         >
@@ -74,13 +74,13 @@ export function App() {
         <button
           onClick={() => switchMode('docs')}
           style={{
-            padding: '4px 12px',
-            borderRadius: 4,
-            border: 'none',
+            padding: '5px 14px',
+            borderRadius: 5,
+            border: mode === 'docs' ? 'none' : '1px solid #1e293b',
             cursor: 'pointer',
             fontSize: 11,
             fontWeight: 600,
-            color: mode === 'docs' ? '#e2e8f0' : '#64748b',
+            color: mode === 'docs' ? '#e2e8f0' : '#94a3b8',
             backgroundColor: mode === 'docs' ? '#1e293b' : 'transparent',
           }}
         >
@@ -163,54 +163,16 @@ export function App() {
               </span>
             </header>
 
-            {/* Split panels */}
-            <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
-              {/* Web panel */}
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', borderRight: '1px solid #1e293b', minWidth: 0 }}>
-                <div style={{
-                  padding: '4px 12px', fontSize: 9, fontWeight: 600,
-                  letterSpacing: '0.1em', color: '#334155',
-                  borderBottom: '1px solid #111827',
-                  backgroundColor: '#0a0a12',
-                }}>
-                  WEB (DOM)
-                </div>
-                <div style={{ flex: 1, overflow: 'auto', padding: 0 }}>
-                  {StoryComponent && (
-                    <BridgeProvider bridge={webBridge}>
-                      <RendererProvider mode="web">
-                        <StoryComponent key={activeId} />
-                      </RendererProvider>
-                    </BridgeProvider>
-                  )}
-                </div>
-              </div>
-
-              {/* Native panel */}
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-                <div style={{
-                  padding: '4px 12px', fontSize: 9, fontWeight: 600,
-                  letterSpacing: '0.1em', color: '#334155',
-                  borderBottom: '1px solid #111827',
-                  backgroundColor: '#0a0a12',
-                }}>
-                  NATIVE (Love2D)
-                </div>
-                <div style={{
-                  flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  color: '#1e293b', fontSize: 12,
-                }}>
-                  <div style={{ textAlign: 'center', maxWidth: 240 }}>
-                    <div style={{ fontSize: 32, marginBottom: 12, opacity: 0.3 }}>&#9654;</div>
-                    <div style={{ color: '#334155', lineHeight: 1.5 }}>
-                      Native panel requires Love2D WASM build.
-                      <br />
-                      <span style={{ fontSize: 10, color: '#1e293b' }}>
-                        See Phase 3 in the plan.
-                      </span>
-                    </div>
-                  </div>
-                </div>
+            {/* Story content */}
+            <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
+              <div style={{ maxWidth: 1100, margin: '0 auto', minHeight: '100%' }}>
+                {StoryComponent && (
+                  <BridgeProvider bridge={webBridge}>
+                    <RendererProvider mode="web">
+                      <StoryComponent key={activeId} />
+                    </RendererProvider>
+                  </BridgeProvider>
+                )}
               </div>
             </div>
           </main>

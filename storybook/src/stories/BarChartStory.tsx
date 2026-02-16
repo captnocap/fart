@@ -19,6 +19,11 @@ const COLORED_DATA = [
   { label: 'Solid', value: 28, color: '#4f88c6' },
 ];
 
+const DENSE_DATA = Array.from({ length: 120 }, (_, i) => ({
+  label: '',
+  value: Math.round(20 + Math.sin(i * 0.15) * 30 + Math.random() * 25),
+}));
+
 const Q1 = [
   { label: 'Jan', value: 42 },
   { label: 'Feb', value: 56 },
@@ -33,45 +38,102 @@ const Q2 = [
 
 export function BarChartStory() {
   return (
-    <Box style={{ gap: 20, padding: 16 }}>
+    <Box style={{ gap: 20, padding: 20 }}>
 
-      {/* Basic Bar Chart */}
-      <Box style={{ gap: 6 }}>
-        <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: 'bold' }}>Basic Bar Chart</Text>
-        <Text style={{ color: '#64748b', fontSize: 10 }}>Monthly revenue ($k)</Text>
-        <BarChart data={REVENUE_DATA} height={100} />
+      {/* Basic Bar Chart — fluid width, contained in card */}
+      <Box style={{
+        gap: 8,
+        backgroundColor: '#1e293b',
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: '#334155',
+        padding: 16,
+      }}>
+        <Text style={{ color: '#e2e8f0', fontSize: 13, fontWeight: 'bold' }}>Basic Bar Chart</Text>
+        <Text style={{ color: '#64748b', fontSize: 11 }}>Monthly revenue ($k) -- bars fill available width</Text>
+        <BarChart data={REVENUE_DATA} height={120} />
       </Box>
 
-      {/* Custom Colors */}
-      <Box style={{ gap: 6 }}>
-        <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: 'bold' }}>Custom Colors</Text>
-        <Text style={{ color: '#64748b', fontSize: 10 }}>Framework popularity</Text>
-        <BarChart data={COLORED_DATA} height={100} barWidth={24} gap={12} />
+      {/* Two cards side by side — both fluid */}
+      <Box style={{ flexDirection: 'row', gap: 12, width: '100%' }}>
+        {/* Custom Colors — fluid, fills card */}
+        <Box style={{
+          flexGrow: 1,
+          gap: 8,
+          backgroundColor: '#1e293b',
+          borderRadius: 8,
+          borderWidth: 1,
+          borderColor: '#334155',
+          padding: 16,
+        }}>
+          <Text style={{ color: '#e2e8f0', fontSize: 13, fontWeight: 'bold' }}>Custom Colors</Text>
+          <Text style={{ color: '#64748b', fontSize: 11 }}>Per-bar colors</Text>
+          <BarChart data={COLORED_DATA} height={120} gap={12} />
+        </Box>
+
+        {/* Compact — fluid, shorter bars */}
+        <Box style={{
+          flexGrow: 1,
+          alignSelf: 'start',
+          gap: 8,
+          backgroundColor: '#1e293b',
+          borderRadius: 8,
+          borderWidth: 1,
+          borderColor: '#334155',
+          padding: 16,
+        }}>
+          <Text style={{ color: '#e2e8f0', fontSize: 13, fontWeight: 'bold' }}>Compact</Text>
+          <Text style={{ color: '#64748b', fontSize: 11 }}>Reduced height</Text>
+          <BarChart data={REVENUE_DATA} height={60} gap={6} color="#06b6d4" />
+        </Box>
       </Box>
 
-      {/* With Values */}
-      <Box style={{ gap: 6 }}>
-        <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: 'bold' }}>With Values</Text>
-        <BarChart data={REVENUE_DATA} height={100} showValues color="#8b5cf6" />
+      {/* With Values — fluid width, contained in card */}
+      <Box style={{
+        gap: 8,
+        backgroundColor: '#1e293b',
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: '#334155',
+        padding: 16,
+      }}>
+        <Text style={{ color: '#e2e8f0', fontSize: 13, fontWeight: 'bold' }}>With Values</Text>
+        <Text style={{ color: '#64748b', fontSize: 11 }}>Value labels above each bar</Text>
+        <BarChart data={REVENUE_DATA} height={120} showValues color="#8b5cf6" />
       </Box>
 
-      {/* Compact */}
-      <Box style={{ gap: 6 }}>
-        <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: 'bold' }}>Compact</Text>
-        <BarChart data={REVENUE_DATA} height={48} barWidth={10} gap={4} color="#06b6d4" />
+      {/* Dense — 120 bars, no labels, looks like a waveform */}
+      <Box style={{
+        gap: 8,
+        backgroundColor: '#1e293b',
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: '#334155',
+        padding: 16,
+      }}>
+        <Text style={{ color: '#e2e8f0', fontSize: 13, fontWeight: 'bold' }}>Dense (120 bars)</Text>
+        <Text style={{ color: '#64748b', fontSize: 11 }}>Stress test -- no labels, 2px gap</Text>
+        <BarChart data={DENSE_DATA} height={100} gap={2} showLabels={false} color="#22c55e" />
       </Box>
 
-      {/* Side-by-Side */}
-      <Box style={{ gap: 6 }}>
-        <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: 'bold' }}>Side-by-Side Comparison</Text>
-        <Box style={{ flexDirection: 'row', gap: 24 }}>
-          <Box style={{ gap: 4 }}>
-            <Text style={{ color: '#64748b', fontSize: 10 }}>Q1 Revenue</Text>
-            <BarChart data={Q1} height={80} barWidth={24} gap={10} color="#3b82f6" />
+      {/* Side-by-Side Comparison */}
+      <Box style={{
+        gap: 8,
+        backgroundColor: '#1e293b',
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: '#334155',
+        padding: 16,
+      }}>
+        <Text style={{ color: '#e2e8f0', fontSize: 13, fontWeight: 'bold' }}>Side-by-Side Comparison</Text>
+        <Box style={{ flexDirection: 'row', gap: 24, width: '100%' }}>
+          <Box style={{ gap: 4, flexGrow: 1 }}>
+            <Text style={{ color: '#64748b', fontSize: 11 }}>Q1 Revenue</Text>
+            <BarChart data={Q1} height={100} gap={10} color="#3b82f6" showValues />
           </Box>
-          <Box style={{ gap: 4 }}>
-            <Text style={{ color: '#64748b', fontSize: 10 }}>Q2 Revenue</Text>
-            <BarChart data={Q2} height={80} barWidth={24} gap={10} color="#22c55e" />
+          <Box style={{ gap: 4, flexGrow: 1 }}>
+            <Text style={{ color: '#64748b', fontSize: 11 }}>Q2 Revenue</Text>
+            <BarChart data={Q2} height={100} gap={10} color="#22c55e" showValues />
           </Box>
         </Box>
       </Box>

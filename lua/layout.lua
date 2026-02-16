@@ -316,6 +316,17 @@ local function estimateIntrinsicMain(node, isRow, pw, ph)
     return padMain  -- Empty text
   end
 
+  -- 2b. TextInput nodes: intrinsic height from font metrics (opaque leaf, no children)
+  if node.type == "TextInput" then
+    if not isRow then
+      local ts = Measure.resolveTextScale(node)
+      local fontSize = math.floor((s.fontSize or 14) * ts)
+      local font = Measure.getFont(fontSize, s.fontFamily or nil, s.fontWeight or nil)
+      return font:getHeight() + padMain
+    end
+    return padMain  -- width: let parent provide
+  end
+
   -- 3. Container nodes: recursively estimate from children
   local children = node.children or {}
   if #children == 0 then
@@ -463,6 +474,7 @@ function Layout.layoutNode(node, px, py, pw, ph)
   -- wraps correctly inside the padding box.
   local isTextNode = (node.type == "Text" or node.type == "__TEXT__")
   local isCodeBlock = (node.type == "CodeBlock")
+  local isTextInput = (node.type == "TextInput")
 
   if isTextNode then
     if not explicitW or not explicitH then
@@ -501,6 +513,15 @@ function Layout.layoutNode(node, px, py, pw, ph)
       if measured then
         h = measured.height
       end
+    end
+  elseif isTextInput then
+    -- TextInput is a Lua-owned opaque leaf node (no children to auto-size from).
+    -- Intrinsic height = font line height + vertical padding.
+    if not explicitH then
+      local ts = Measure.resolveTextScale(node)
+      local fontSize = math.floor((s.fontSize or 14) * ts)
+      local font = Measure.getFont(fontSize, s.fontFamily or nil, s.fontWeight or nil)
+      h = font:getHeight() + padT + padB
     end
   end
 

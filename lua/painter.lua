@@ -1183,8 +1183,31 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
   end
 
   -- Paint children with propagated opacity and stencil depth
-  for _, child in ipairs(paintOrder) do
-    Painter.paintNode(child, effectiveOpacity, stencilDepth)
+  if isScroll and node.scrollState then
+    -- Viewport culling: skip children entirely outside the scroll viewport.
+    -- This is the transparent virtual scrolling optimization — developers just
+    -- use ScrollView with any number of children and offscreen subtrees are
+    -- automatically skipped, no FlatList or virtualization API needed.
+    local viewT = c.y + scrollY
+    local viewB = viewT + c.h
+    local viewL = c.x + scrollX
+    local viewR = viewL + c.w
+    for _, child in ipairs(paintOrder) do
+      local cc = child.computed
+      if cc then
+        -- Never cull children with transforms (visual pos may differ from computed)
+        local cs = child.style
+        if (cs and cs.transform)
+           or (cc.y + cc.h > viewT and cc.y < viewB
+               and cc.x + cc.w > viewL and cc.x < viewR) then
+          Painter.paintNode(child, effectiveOpacity, stencilDepth)
+        end
+      end
+    end
+  else
+    for _, child in ipairs(paintOrder) do
+      Painter.paintNode(child, effectiveOpacity, stencilDepth)
+    end
   end
 
   -- Restore scroll transform

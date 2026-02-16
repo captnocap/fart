@@ -10,6 +10,14 @@
                   fetch(url, { proxy: 'socks5://user:pass@host:port' })
     Environment:  HTTP_PROXY, HTTPS_PROXY, ALL_PROXY, NO_PROXY
 
+  Streaming support:
+    http.streamRequest(id, opts)  — same as request() but streams chunks
+    Poll returns mixed messages:
+      Regular:   { id, status, headers, body }
+      Chunk:     { id, type = "chunk", data = "..." }
+      Done:      { id, type = "done", status = N, headers = {} }
+      Error:     { id, type = "error", error = "..." }
+
   Usage (from init.lua):
     local http = require("lua.http")
     http.init()
@@ -17,10 +25,15 @@
     -- Start a request
     http.request(id, { url = "https://...", method = "GET", headers = {}, body = "", proxy = "" })
 
-    -- Poll each frame
+    -- Start a streaming request (SSE / chunked transfer)
+    http.streamRequest(id, { url = "https://...", method = "POST", headers = {}, body = "" })
+
+    -- Poll each frame (returns both regular responses and stream chunks)
     local responses = http.poll()
     for _, resp in ipairs(responses) do
-      -- resp = { id, status, headers, body, error }
+      -- resp = { id, status, headers, body, error }       (regular)
+      -- resp = { id, type = "chunk", data = "..." }       (stream chunk)
+      -- resp = { id, type = "done", status = N, headers }  (stream end)
     end
 ]]
 
@@ -162,22 +175,19 @@ while true do
     local body = req.body
     local proxy = resolveProxy(req.proxy, url)
 
-    local ok, result = pcall(function()
+    local stream = req.stream
+
+    -- Build proxy-aware request table (shared between regular and streaming)
+    local function buildRequest(sinkFn)
       local http = require("socket.http")
       local ltn12 = require("ltn12")
       local url_mod = require("socket.url")
 
-      -- Collect response body into a table
-      local responseBody = {}
-      local responseHeaders = {}
-      local responseStatus = 0
-
-      -- Build the request table
       local reqTable = {
         url = url,
         method = method,
         headers = headers,
-        sink = ltn12.sink.table(responseBody),
+        sink = sinkFn,
       }
 
       -- Add body for methods that support it
@@ -200,7 +210,6 @@ while true do
         local proxyPass = proxyParsed.password
 
         if proxyScheme == "socks5" or proxyScheme == "socks5h" or proxyScheme == "socks" then
-          -- SOCKS5: connect through proxy, then use the tunneled socket
           proxyPort = proxyPort or 1080
           local targetParsed = url_mod.parse(url)
           local targetHost = targetParsed.host or ""
@@ -209,39 +218,86 @@ while true do
           local sock, serr = socks5Connect(proxyHost, proxyPort, targetHost, targetPort, proxyUser, proxyPass)
           if not sock then error(serr) end
 
-          -- Use the tunneled socket for the HTTP request
           reqTable.create = function()
             return sock
           end
         else
-          -- HTTP/HTTPS proxy: LuaSocket handles this natively
           proxyPort = proxyPort or 8080
           reqTable.proxy = proxy
         end
       end
 
-      local _, status, respHeaders = http.request(reqTable)
-      responseStatus = status or 0
-      responseHeaders = respHeaders or {}
+      return reqTable, http
+    end
 
-      return {
-        id = id,
-        status = responseStatus,
-        headers = responseHeaders,
-        body = table.concat(responseBody),
-      }
-    end)
+    if stream then
+      -- ── Streaming mode ──────────────────────────────────────
+      -- Use a custom ltn12 sink that pushes each chunk to the
+      -- response channel as it arrives from the server.
+      local ok2, err2 = pcall(function()
+        local ltn12 = require("ltn12")
 
-    if ok then
-      responseChannel:push(result)
+        -- Custom sink: push each chunk immediately
+        local streamSink = function(chunk, sinkErr)
+          if sinkErr then
+            responseChannel:push({ id = id, type = "error", error = tostring(sinkErr) })
+            return nil, sinkErr
+          end
+          if chunk and #chunk > 0 then
+            responseChannel:push({ id = id, type = "chunk", data = chunk })
+          end
+          -- Return 1 to signal success (nil + empty string = end of data)
+          if chunk == nil or chunk == "" then return nil end
+          return 1
+        end
+
+        local reqTable, httpMod = buildRequest(streamSink)
+        local _, status, respHeaders = httpMod.request(reqTable)
+
+        -- Signal stream completion
+        responseChannel:push({
+          id = id,
+          type = "done",
+          status = status or 0,
+          headers = respHeaders or {},
+        })
+      end)
+
+      if not ok2 then
+        responseChannel:push({
+          id = id,
+          type = "error",
+          error = tostring(err2),
+        })
+      end
     else
-      responseChannel:push({
-        id = id,
-        status = 0,
-        headers = {},
-        body = "",
-        error = tostring(result),
-      })
+      -- ── Regular mode (buffered) ─────────────────────────────
+      local ok2, result = pcall(function()
+        local ltn12 = require("ltn12")
+        local responseBody = {}
+
+        local reqTable, httpMod = buildRequest(ltn12.sink.table(responseBody))
+        local _, status, respHeaders = httpMod.request(reqTable)
+
+        return {
+          id = id,
+          status = status or 0,
+          headers = respHeaders or {},
+          body = table.concat(responseBody),
+        }
+      end)
+
+      if ok2 then
+        responseChannel:push(result)
+      else
+        responseChannel:push({
+          id = id,
+          status = 0,
+          headers = {},
+          body = "",
+          error = tostring(result),
+        })
+      end
     end
   end
 end
@@ -311,6 +367,38 @@ function Http.request(id, opts)
   })
 
   return nil  -- async, will arrive via poll()
+end
+
+--- Start a streaming HTTP request. Chunks arrive via poll() with type="chunk".
+--- @param id string|number  Unique request ID
+--- @param opts table  { url, method?, headers?, body?, proxy? }
+function Http.streamRequest(id, opts)
+  local url = opts.url or ""
+
+  -- Streaming doesn't apply to local files — fall back to regular request
+  if not url:match("^https?://") then
+    return Http.request(id, opts)
+  end
+
+  if not initialized then
+    return {
+      id = id,
+      type = "error",
+      error = "HTTP module not initialized",
+    }
+  end
+
+  requestChannel:push({
+    id = id,
+    url = url,
+    method = opts.method or "POST",
+    headers = opts.headers or {},
+    body = opts.body or "",
+    proxy = opts.proxy or "",
+    stream = true,
+  })
+
+  return nil  -- async, chunks arrive via poll()
 end
 
 --- Poll for completed HTTP responses (non-blocking).

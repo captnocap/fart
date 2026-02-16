@@ -58,6 +58,31 @@ export class NativeBridge implements IBridge {
       }
     });
 
+    // Wire HTTP streaming events from Lua to the fetchStream() polyfill.
+    // Chunks arrive as plain payload objects (no JSON wrapping needed — they're small).
+    this.subscribe('http:stream:chunk', (payload: any) => {
+      if (payload && payload.id != null && globalThis.__handleHttpStreamChunk) {
+        globalThis.__handleHttpStreamChunk(payload.id, payload.data);
+      }
+    });
+    this.subscribe('http:stream:done', (payload: any) => {
+      if (payload && payload.id != null && globalThis.__handleHttpStreamDone) {
+        globalThis.__handleHttpStreamDone(payload.id, payload.status, payload.headers);
+      }
+    });
+    this.subscribe('http:stream:error', (payload: any) => {
+      if (payload && payload.id != null && globalThis.__handleHttpStreamError) {
+        globalThis.__handleHttpStreamError(payload.id, payload.error);
+      }
+    });
+
+    // Wire browse session responses from Lua to the browseRequest() polyfill
+    this.subscribe('browse:response', (payload: any) => {
+      if (payload && payload.id != null && globalThis.__handleBrowseResponse) {
+        globalThis.__handleBrowseResponse(payload);
+      }
+    });
+
     // Wire WebSocket events from Lua to the WebSocket polyfill
     const wsEventTypes = ['ws:open', 'ws:message', 'ws:error', 'ws:close'];
     for (const eventType of wsEventTypes) {

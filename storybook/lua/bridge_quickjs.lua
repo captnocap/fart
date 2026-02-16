@@ -539,9 +539,14 @@ function Bridge.new(libpath)
     // ---- fetch() polyfill ----
     // Routes HTTP URLs to Lua's love.thread + LuaSocket workers,
     // local file paths to love.filesystem.read(). Both resolve as Promises.
+    //
+    // ---- fetchStream() polyfill ----
+    // Same transport but streams response chunks via callbacks instead of
+    // buffering the full body. Used by @ilovereact/ai for SSE streaming.
     (function() {
       var _fetchId = 0;
-      var _fetchCallbacks = {};  // id -> { resolve, reject }
+      var _fetchCallbacks = {};   // id -> { resolve, reject }
+      var _streamCallbacks = {};  // id -> { onChunk, onDone, onError }
 
       // Called by Lua when an HTTP/file response arrives
       globalThis.__handleHttpResponse = function(id, response) {
@@ -580,6 +585,28 @@ function Bridge.new(libpath)
         cb.resolve(res);
       };
 
+      // Called by Lua when a streaming chunk arrives
+      globalThis.__handleHttpStreamChunk = function(id, data) {
+        var cb = _streamCallbacks[id];
+        if (cb && cb.onChunk) cb.onChunk(data);
+      };
+
+      // Called by Lua when a stream completes
+      globalThis.__handleHttpStreamDone = function(id, status, headers) {
+        var cb = _streamCallbacks[id];
+        if (!cb) return;
+        delete _streamCallbacks[id];
+        if (cb.onDone) cb.onDone(status, headers);
+      };
+
+      // Called by Lua when a stream errors
+      globalThis.__handleHttpStreamError = function(id, error) {
+        var cb = _streamCallbacks[id];
+        if (!cb) return;
+        delete _streamCallbacks[id];
+        if (cb.onError) cb.onError(error);
+      };
+
       globalThis.fetch = function(url, init) {
         init = init || {};
         var id = ++_fetchId;
@@ -609,6 +636,84 @@ function Bridge.new(libpath)
               headers: headers,
               body: init.body ? String(init.body) : '',
               proxy: init.proxy ? String(init.proxy) : '',
+            }
+          }]));
+        });
+      };
+
+      // Streaming fetch: sends chunks via callbacks instead of buffering.
+      // Returns the stream ID (can be used to identify or cancel the stream).
+      globalThis.fetchStream = function(url, init, onChunk, onDone, onError) {
+        init = init || {};
+        var id = ++_fetchId;
+        _streamCallbacks[id] = { onChunk: onChunk, onDone: onDone, onError: onError };
+
+        var headers = {};
+        if (init.headers) {
+          if (typeof init.headers.forEach === 'function') {
+            init.headers.forEach(function(v, k) { headers[k] = v; });
+          } else {
+            var keys = Object.keys(init.headers);
+            for (var i = 0; i < keys.length; i++) {
+              var k = keys[i];
+              headers[k] = init.headers[k];
+            }
+          }
+        }
+
+        __hostFlush(JSON.stringify([{
+          type: 'http:stream',
+          payload: {
+            id: id,
+            url: String(url),
+            method: (init.method || 'POST').toUpperCase(),
+            headers: headers,
+            body: init.body ? String(init.body) : '',
+            proxy: init.proxy ? String(init.proxy) : '',
+          }
+        }]));
+
+        return id;
+      };
+    })();
+
+    // ---- Browse session polyfill ----
+    // Sends commands to a running stealth browse session (Firefox) via TCP.
+    // Commands are routed through Lua's browse.lua worker thread.
+    // Returns a Promise that resolves with the command result.
+    (function() {
+      var _browseId = 0;
+      var _browseCallbacks = {};  // id -> { resolve, reject }
+
+      // Called by Lua when a browse response arrives
+      globalThis.__handleBrowseResponse = function(resp) {
+        var cb = _browseCallbacks[resp.id];
+        if (!cb) return;
+        delete _browseCallbacks[resp.id];
+        if (resp.error) {
+          cb.reject(new Error(resp.error));
+        } else {
+          cb.resolve(resp.result);
+        }
+      };
+
+      // Send a command to the browse session.
+      // cmd: { cmd: "navigate", url: "..." } etc.
+      // options: { host, port } (optional, defaults to 127.0.0.1:7331)
+      globalThis.browseRequest = function(cmd, options) {
+        options = options || {};
+        var id = ++_browseId;
+
+        return new Promise(function(resolve, reject) {
+          _browseCallbacks[id] = { resolve: resolve, reject: reject };
+
+          __hostFlush(JSON.stringify([{
+            type: 'browse:request',
+            payload: {
+              id: id,
+              cmd: cmd,
+              host: options.host || '127.0.0.1',
+              port: options.port || 7331,
             }
           }]));
         });

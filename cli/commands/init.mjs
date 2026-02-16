@@ -46,6 +46,24 @@ const OPTIONAL_PACKAGES = [
     importExample: "import { Card, Badge } from '@ilovereact/components';",
     default: true,
   },
+  {
+    name: '@ilovereact/server',
+    dir: 'server',
+    alias: '@ilovereact/server',
+    flag: '--server',
+    description: 'HTTP server (static files, API routes)',
+    importExample: "import { useServer, useStaticServer } from '@ilovereact/server';",
+    default: false,
+  },
+  {
+    name: '@ilovereact/ai',
+    dir: 'ai',
+    alias: '@ilovereact/ai',
+    flag: '--ai',
+    description: 'LLM hooks (streaming chat, tool calling, key storage)',
+    importExample: "import { useChat, useCompletion, AIProvider } from '@ilovereact/ai';",
+    default: false,
+  },
 ];
 
 // ── Interactive checkbox prompt ──────────────────────────

@@ -22,7 +22,7 @@ export interface BarChartProps {
 export function BarChart({
   data,
   height = 120,
-  barWidth = 20,
+  barWidth,
   gap = 8,
   showLabels = true,
   showValues = false,
@@ -34,15 +34,19 @@ export function BarChart({
   }
 
   const maxValue = Math.max(...data.map(d => d.value)) || 1;
-  const chartWidth = data.length * barWidth + (data.length - 1) * gap;
   const valueLabelSpace = showValues ? 14 : 0;
   const barAreaHeight = height - valueLabelSpace;
+
+  // When barWidth is given, compute a fixed chart width (legacy behavior).
+  // Otherwise, fill the parent and distribute bars evenly.
+  const fixed = barWidth != null;
+  const chartWidth = fixed ? data.length * barWidth + (data.length - 1) * gap : undefined;
 
   return (
     <Box style={{ width: chartWidth, ...style }}>
       {/* Chart area */}
       <Box style={{
-        width: chartWidth,
+        width: chartWidth ?? '100%',
         height,
         flexDirection: 'row',
         alignItems: 'flex-end',
@@ -53,7 +57,11 @@ export function BarChart({
           const barColor = bar.color ?? color;
 
           return (
-            <Box key={i} style={{ alignItems: 'center', gap: 2 }}>
+            <Box key={i} style={{
+              alignItems: 'center',
+              gap: 2,
+              flexGrow: fixed ? 0 : 1,
+            }}>
               {showValues && (
                 <Text style={{ color: '#94a3b8', fontSize: 9 }}>
                   {bar.value}
@@ -61,6 +69,7 @@ export function BarChart({
               )}
               <Box style={{
                 width: barWidth,
+                alignSelf: fixed ? undefined : 'stretch',
                 height: barHeight,
                 backgroundColor: barColor,
                 borderRadius: 3,
@@ -73,13 +82,17 @@ export function BarChart({
       {/* Labels row */}
       {showLabels && (
         <Box style={{
-          width: chartWidth,
+          width: chartWidth ?? '100%',
           flexDirection: 'row',
           gap,
           marginTop: 4,
         }}>
           {data.map((bar, i) => (
-            <Box key={i} style={{ width: barWidth, alignItems: 'center' }}>
+            <Box key={i} style={{
+              width: barWidth,
+              flexGrow: fixed ? 0 : 1,
+              alignItems: 'center',
+            }}>
               <Text style={{ color: '#64748b', fontSize: 9 }}>
                 {bar.label}
               </Text>

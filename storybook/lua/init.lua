@@ -50,6 +50,8 @@ local spellcheck = nil                        -- spellcheck.lua (dictionary-base
 local dragdrop = nil                          -- dragdrop.lua (X11 drag-hover detection)
 local lastDragHoverId = nil                   -- node ID of current drag-hover target
 local audioEngine = nil                       -- audio/engine.lua (modular audio framework)
+local httpserver = nil                        -- httpserver.lua (HTTP server for static files + API routes)
+local browse   = nil                          -- browse.lua (TCP client for stealth browse session)
 
 -- Controller connection toast (auto-dismiss notification)
 local controllerToast = {
@@ -667,6 +669,24 @@ function ReactLove.init(config)
     io.write("[react-love] Audio engine loaded\n"); io.flush()
   end
 
+  -- Load HTTP server (optional — graceful degradation if not available)
+  local hsOk, hsMod = pcall(require, "lua.httpserver")
+  if hsOk and hsMod then
+    httpserver = hsMod
+    for method, handler in pairs(httpserver.getHandlers()) do
+      rpcHandlers[method] = handler
+    end
+    io.write("[react-love] HTTP server loaded\n"); io.flush()
+  end
+
+  -- Load browse module (optional — stealth browser control via TCP)
+  local brOk, brMod = pcall(require, "lua.browse")
+  if brOk and brMod then
+    browse = brMod
+    browse.init()
+    io.write("[react-love] Browse module loaded\n"); io.flush()
+  end
+
   -- Wire up console + inspector + devtools (only in rendering modes with inspector enabled)
   if isRendering() and inspectorEnabled then
     console.init({ bridge = bridge, tree = tree, inspector = inspector })
@@ -816,7 +836,8 @@ function ReactLove.update(dt)
     for _, cmd in ipairs(commands) do
       if type(cmd) == "table" then
         local t = cmd.type
-        if t == "rpc:call" or t == "http:request" or t == "ws:connect" or t == "ws:send" or t == "ws:close"
+        if t == "rpc:call" or t == "http:request" or t == "http:stream" or t == "browse:request"
+           or t == "ws:connect" or t == "ws:send" or t == "ws:close"
            or t == "ws:listen" or t == "ws:broadcast" or t == "ws:peer:send" or t == "ws:server:stop" then
           hasSpecial = true
           break
@@ -871,6 +892,45 @@ function ReactLove.update(dt)
                   body = "",
                   error = "HTTP module not available",
                 }) },
+              })
+            end
+          end
+        elseif type(cmd) == "table" and cmd.type == "http:stream" then
+          -- HTTP streaming request: dispatch to http module in streaming mode
+          local payload = cmd.payload
+          if payload and payload.id and payload.url then
+            if http then
+              local immediate = http.streamRequest(payload.id, {
+                url = payload.url,
+                method = payload.method,
+                headers = payload.headers,
+                body = payload.body,
+                proxy = payload.proxy,
+              })
+              -- Local file reads return immediately (no streaming for local files)
+              if immediate then
+                pushEvent({
+                  type = "http:response",
+                  payload = { _json = json.encode(immediate) },
+                })
+              end
+            else
+              pushEvent({
+                type = "http:stream:error",
+                payload = { id = payload.id, error = "HTTP module not available" },
+              })
+            end
+          end
+        elseif type(cmd) == "table" and cmd.type == "browse:request" then
+          -- Browse session command: dispatch to browse TCP client
+          local payload = cmd.payload
+          if payload and payload.id and payload.cmd then
+            if browse then
+              browse.request(payload.id, payload.cmd, payload.host, payload.port)
+            else
+              pushEvent({
+                type = "browse:response",
+                payload = { id = payload.id, error = "Browse module not available" },
               })
             end
           end
@@ -934,13 +994,32 @@ function ReactLove.update(dt)
   -- 5. Poll for completed HTTP responses and deliver to JS
   -- Payload is JSON-encoded into a single string to avoid the QuickJS GC race
   -- that silently drops large string properties during recursive FFI traversal.
+  -- Streaming responses have a `type` field (chunk/done/error); regular responses don't.
   if http then
     local responses = http.poll()
     for _, resp in ipairs(responses) do
-      pushEvent({
-        type = "http:response",
-        payload = { _json = json.encode(resp) },
-      })
+      if resp.type == "chunk" then
+        pushEvent({
+          type = "http:stream:chunk",
+          payload = { id = resp.id, data = resp.data },
+        })
+      elseif resp.type == "done" then
+        pushEvent({
+          type = "http:stream:done",
+          payload = { id = resp.id, status = resp.status, headers = resp.headers },
+        })
+      elseif resp.type == "error" then
+        pushEvent({
+          type = "http:stream:error",
+          payload = { id = resp.id, error = resp.error },
+        })
+      else
+        -- Regular buffered response
+        pushEvent({
+          type = "http:response",
+          payload = { _json = json.encode(resp) },
+        })
+      end
     end
   end
 
@@ -957,7 +1036,28 @@ function ReactLove.update(dt)
     end
   end
 
-  -- 7. Poll for Tor hostname (async — Tor takes 5-30s to bootstrap)
+  -- 7. Poll HTTP servers and deliver incoming request events to JS
+  if httpserver then
+    local httpEvents = httpserver.pollAll()
+    for _, evt in ipairs(httpEvents) do
+      local evtType = evt.type
+      evt.type = nil
+      pushEvent({ type = evtType, payload = evt })
+    end
+  end
+
+  -- 8. Poll browse session for completed responses
+  if browse then
+    local browseResponses = browse.poll()
+    for _, resp in ipairs(browseResponses) do
+      pushEvent({
+        type = "browse:response",
+        payload = resp,
+      })
+    end
+  end
+
+  -- 9a. Poll for Tor hostname (async — Tor takes 5-30s to bootstrap)
   if tor and not torHostnameEmitted then
     local onion = tor.getHostname()
     if onion then
@@ -967,7 +1067,7 @@ function ReactLove.update(dt)
     end
   end
 
-  -- 8. Sync video lifecycle with tree, then render frames into Canvases
+  -- 8b. Sync video lifecycle with tree, then render frames into Canvases
   if videos then
     videos.syncWithTree(tree.getNodes())
     videos.renderAll()
@@ -2212,6 +2312,7 @@ function ReactLove.reload()
   bridge:destroy()
   if network then network.destroy() end
   if http then http.destroy() end
+  if browse then browse.destroy() end
   -- Note: Tor is NOT restarted on reload — it stays running across hot reloads
   torHostnameEmitted = false  -- Re-emit tor:ready to new JS context
   if images then images.clearCache() end
@@ -2231,11 +2332,16 @@ function ReactLove.reload()
   local BridgeQJS = require("lua.bridge_quickjs")
   bridge = BridgeQJS.new(initConfig.libpath)
 
-  -- 4. Re-init HTTP workers and network
+  -- 4. Re-init HTTP workers, network, and browse
   http = require("lua.http")
   http.init()
   network = require("lua.network")
   network.init()
+  local brOk2, brMod2 = pcall(require, "lua.browse")
+  if brOk2 and brMod2 then
+    browse = brMod2
+    browse.init()
+  end
 
   -- 5. Re-read bundle from disk
   local bundleJS = love.filesystem.read(initConfig.bundlePath)
@@ -2289,6 +2395,7 @@ function ReactLove.quit()
   if tor then tor.stop() end
   if network then network.destroy() end
   if http then http.destroy() end
+  if browse then browse.destroy() end
   if mode == "native" and bridge then
     bridge:destroy()
   end

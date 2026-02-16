@@ -271,6 +271,8 @@ cli-setup: setup
 	cp -r packages/storage cli/runtime/ilovereact/storage
 	cp -r packages/components cli/runtime/ilovereact/components
 	cp -r packages/audio cli/runtime/ilovereact/audio
+	cp -r packages/server cli/runtime/ilovereact/server
+	cp -r packages/ai cli/runtime/ilovereact/ai
 	@if [ -d fonts ]; then \
 		mkdir -p cli/runtime/fonts; \
 		cp -r fonts/* cli/runtime/fonts/; \
