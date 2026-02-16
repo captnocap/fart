@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Text } from '@ilovereact/core';
+import { Box, Text } from '../../../packages/shared/src';
 
 const LintTest: React.FC = () => {
   // Pixel art sun icon (8x8 grid)

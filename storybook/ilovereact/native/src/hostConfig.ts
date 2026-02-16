@@ -137,6 +137,7 @@ export function flushToHost(): void {
   }
 
   const coalesced = coalesceCommands(pendingCommands);
+
   try {
     // Send as JSON string to avoid QuickJS GC race during FFI object traversal.
     // Large strings (500+ chars) can be silently collected by GC during property

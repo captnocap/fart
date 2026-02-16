@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Text, ScrollView } from '@ilovereact/core';
+import { Box, Text, ScrollView } from '../../../packages/shared/src';
 
 const c = {
   bg: '#14141c',

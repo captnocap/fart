@@ -645,7 +645,7 @@ function ReactLove.init(config)
   if isRendering() and inspectorEnabled then
     console.init({ bridge = bridge, tree = tree, inspector = inspector })
     inspector.setConsole(console)
-    devtools.init({ inspector = inspector, console = console, tree = tree })
+    devtools.init({ inspector = inspector, console = console, tree = tree, pushEvent = pushEvent })
   end
 
   -- Screenshot mode (env var trigger, works in native and canvas modes)

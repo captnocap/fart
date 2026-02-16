@@ -782,6 +782,7 @@ function Bridge:_setupHostFunctions()
     if cstr ~= nil then
       local jsonStr = ffi.string(cstr)
       qjs.JS_FreeCString(ctx, cstr)
+
       local ok, commands = pcall(json.decode, jsonStr)
       if ok and type(commands) == "table" then
         for _, cmd in ipairs(commands) do

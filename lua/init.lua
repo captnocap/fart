@@ -1614,14 +1614,6 @@ function ReactLove.keypressed(key, scancode, isrepeat)
     end
   end
 
-  -- Ctrl+D: dump one frame of color debug info
-  if key == "d" and love.keyboard.isDown("lctrl", "rctrl", "lgui", "rgui") then
-    if painter and painter.debugNextFrame then
-      painter.debugNextFrame()
-    end
-    return
-  end
-
   -- Ctrl+= / Ctrl+- / Ctrl+0: global text scale
   if measure and love.keyboard.isDown("lctrl", "rctrl", "lgui", "rgui") then
     local scaled = false

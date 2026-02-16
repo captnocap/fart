@@ -73,7 +73,8 @@ function Painter.setColor(c)
       )
     end
   elseif type(c) == "table" then
-    love.graphics.setColor(c[1] or 0, c[2] or 0, c[3] or 0, c[4] or 1)
+    local r, g, b, a = c[1] or 0, c[2] or 0, c[3] or 0, c[4] or 1
+    love.graphics.setColor(r, g, b, a)
   end
 end
 
@@ -824,7 +825,12 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
     if type(text) == "table" then text = table.concat(text) end
     text = tostring(text)
 
-    local align = s.textAlign or "left"
+    -- Resolve textAlign (inherit from parent Text for __TEXT__ children)
+    local align = s.textAlign
+    if not align and node.type == "__TEXT__" and node.parent then
+      align = (node.parent.style or {}).textAlign
+    end
+    align = align or "left"
     local hasCustomLineHeight = lineHeight and lineHeight ~= font:getHeight()
     local hasLetterSpacing = letterSpacing and letterSpacing ~= 0
 

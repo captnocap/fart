@@ -1,4 +1,4 @@
-import { Box, Text } from '@ilovereact/core';
+import { Box, Text } from '../../../packages/shared/src';
 
 /**
  * Auto-Sizing Basic Test

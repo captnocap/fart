@@ -75,22 +75,6 @@ function Tree.applyCommands(commands)
 
     if op == "CREATE" then
       local props = cmd.props or {}
-      -- DEBUG: trace table colors on CREATE
-      local _style = props.style
-      if _style then
-        for _, _ck in ipairs({"backgroundColor", "color"}) do
-          if _style[_ck] and type(_style[_ck]) == "table" then
-            local _sv = _style[_ck]
-            local _dbg = string.format("[COLOR-DEBUG] tree CREATE: type=%s %s={", cmd.type or "?", _ck)
-            for i, val in ipairs(_sv) do
-              _dbg = _dbg .. string.format("%.4f", val)
-              if i < #_sv then _dbg = _dbg .. ", " end
-            end
-            _dbg = _dbg .. "} #=" .. tostring(#_sv)
-            io.write(_dbg .. "\n"); io.flush()
-          end
-        end
-      end
       nodes[cmd.id] = {
         id = cmd.id,
         type = cmd.type,
@@ -170,16 +154,6 @@ function Tree.applyCommands(commands)
 
               -- Apply the style diff
               for sk, sv in pairs(v) do
-                -- DEBUG: trace table color values arriving from bridge
-                if (sk == "backgroundColor" or sk == "color") and type(sv) == "table" then
-                  local _dbg = string.format("[COLOR-DEBUG] tree UPDATE: node=%s sk=%s sv={", tostring(node.type), sk)
-                  for i, val in ipairs(sv) do
-                    _dbg = _dbg .. string.format("%.4f", val)
-                    if i < #sv then _dbg = _dbg .. ", " end
-                  end
-                  _dbg = _dbg .. "} #sv=" .. tostring(#sv)
-                  io.write(_dbg .. "\n"); io.flush()
-                end
                 node.style[sk] = sv
                 node.props.style[sk] = sv
               end

@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, cpSync, rmSync, readFileSync, writeFileSync, rea
 import { join, basename, dirname, extname } from 'node:path';
 import { execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { runLint } from './lint.mjs';
+import { runLint, runBundleChecks } from './lint.mjs';
 import { updateCommand } from './update.mjs';
 import { TARGETS, TARGET_NAMES, esbuildArgs, esbuildDistArgs } from '../targets.mjs';
 import { getEsbuildAliases } from '../lib/aliases.mjs';
@@ -314,6 +314,13 @@ async function buildDevTarget(cwd, projectName, targetName) {
     entry,
   ].join(' '), { cwd, stdio: 'inherit' });
 
+  // Post-build bundle checks (duplicate contexts, etc.)
+  const bundleCheck = runBundleChecks(outfile);
+  if (bundleCheck.errors > 0) {
+    console.error(`\n  Build blocked: ${bundleCheck.errors} bundle error${bundleCheck.errors !== 1 ? 's' : ''} detected.\n`);
+    process.exit(1);
+  }
+
   const hint = targetName === 'love' ? '  Run: love .' : `  Output: ${target.output}`;
   console.log(`\n  Done! ${target.output} written.\n${hint}\n`);
 }
@@ -352,6 +359,14 @@ async function buildDistGrid(cwd, projectName, targetName) {
     ...getEsbuildAliases(cwd),
     entry,
   ].join(' '), { cwd, stdio: 'pipe' });
+
+  // Post-build bundle checks (duplicate contexts, etc.)
+  const bundleCheck = runBundleChecks(tmpFile);
+  if (bundleCheck.errors > 0) {
+    console.error(`\n  Build blocked: ${bundleCheck.errors} bundle error${bundleCheck.errors !== 1 ? 's' : ''} detected.\n`);
+    rmSync(tmpFile, { force: true });
+    process.exit(1);
+  }
 
   // Prepend shebang
   console.log('  [2/2] Writing executable...');
@@ -400,6 +415,14 @@ async function buildDistLove(cwd, projectName, opts = {}) {
     ...getEsbuildAliases(cwd),
     entry,
   ].join(' '), { cwd, stdio: 'pipe' });
+
+  // Post-build bundle checks (duplicate contexts, etc.)
+  const bundleCheck = runBundleChecks(bundlePath);
+  if (bundleCheck.errors > 0) {
+    console.error(`\n  Build blocked: ${bundleCheck.errors} bundle error${bundleCheck.errors !== 1 ? 's' : ''} detected.\n`);
+    rmSync(stagingDir, { recursive: true, force: true });
+    process.exit(1);
+  }
 
   // 2. Stage the .love contents
   console.log('  [2/6] Staging archive...');

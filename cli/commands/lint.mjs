@@ -18,6 +18,9 @@
  *   no-image-without-src        (error)   <Image> missing "src" prop
  *   no-pressable-without-onpress (warning) <Pressable> without onPress handler
  *   no-usecrud-without-schema   (error)   useCRUD() called without a schema argument
+ *
+ * Bundle checks (post-build, runs on compiled output):
+ *   no-duplicate-context         (error)   Multiple createContext("web") = duplicated shared module
  */
 
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
@@ -969,6 +972,72 @@ export async function runLint(cwd, options = {}) {
   }
 
   return { errors, warnings, diagnostics };
+}
+
+/**
+ * Post-build bundle checks.
+ *
+ * Scans the compiled bundle for structural problems that can't be caught
+ * by source-level linting (e.g. duplicate module instances from divergent
+ * import paths).
+ *
+ * Rules:
+ *   no-duplicate-context  (error)  Multiple createContext("web") calls indicate
+ *                                  duplicated shared module — components will read
+ *                                  the wrong React context and silently break.
+ */
+export function runBundleChecks(bundlePath, options = {}) {
+  if (!existsSync(bundlePath)) {
+    return { errors: 0, diagnostics: [] };
+  }
+
+  const source = readFileSync(bundlePath, 'utf-8');
+  const diagnostics = [];
+
+  // Count createContext("web") / createContext('web') occurrences.
+  // A healthy bundle has exactly one (from packages/shared/src/context.ts).
+  // Two or more means esbuild bundled separate copies of the shared package
+  // (e.g. @ilovereact/core resolved to a stale copy instead of packages/shared/src).
+  // esbuild emits `(0, import_react.createContext)("web")` — match both forms.
+  const contextPattern = /createContext\)\(["']web["']\)|createContext\(["']web["']\)/g;
+  const matches = [];
+  let m;
+  while ((m = contextPattern.exec(source)) !== null) {
+    matches.push(m.index);
+  }
+
+  if (matches.length > 1) {
+    // Find approximate line numbers for the matches
+    const locations = matches.map((idx) => {
+      const before = source.slice(0, idx);
+      return before.split('\n').length;
+    });
+
+    diagnostics.push({
+      rule: 'no-duplicate-context',
+      severity: 'error',
+      message: `Bundle contains ${matches.length} createContext("web") calls (lines: ${locations.join(', ')}) — this means the shared package was bundled multiple times from different import paths. All imports must resolve to the same physical file. Check for @ilovereact/core imports that should be relative paths to packages/shared/src.`,
+      file: bundlePath,
+      line: locations[0],
+      col: 1,
+    });
+  }
+
+  // Report
+  let errors = 0;
+  if (diagnostics.length > 0 && !options.silent) {
+    console.log('');
+    console.log(`  ${bold('Bundle checks:')} ${bundlePath}`);
+    for (const d of diagnostics) {
+      const sev = red('error');
+      const ruleName = dim(`[${d.rule}]`);
+      console.log(`    ${sev}  ${d.message}  ${ruleName}`);
+      errors++;
+    }
+    console.log('');
+  }
+
+  return { errors, diagnostics };
 }
 
 /**

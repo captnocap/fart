@@ -54,16 +54,6 @@ end
 
 --- Set the active Love2D drawing color.
 --- Accepts hex strings ("#ff00ff", "#ff00ff80") or number arrays ({r, g, b, a}).
--- DEBUG: trace table color handling (on demand via Ctrl+D)
-local _colorDebugRequested = false
-local _colorDebugActive = false  -- true during the one paint frame we debug
-
---- Request one frame of color debug output. Call from a keyboard shortcut.
-function Painter.debugNextFrame()
-  _colorDebugRequested = true
-  io.write("[COLOR-DEBUG] will dump next paint frame\n"); io.flush()
-end
-
 function Painter.setColor(c)
   if not c then return end
   if type(c) == "string" then
@@ -84,18 +74,7 @@ function Painter.setColor(c)
     end
   elseif type(c) == "table" then
     local r, g, b, a = c[1] or 0, c[2] or 0, c[3] or 0, c[4] or 1
-    if _colorDebugActive then
-      io.write(string.format("[COLOR-DEBUG] table color: {%.3f, %.3f, %.3f, %.3f} len=%d type(c[1])=%s\n",
-        r, g, b, a, #c, type(c[1])))
-      io.flush()
-    end
     love.graphics.setColor(r, g, b, a)
-  else
-    -- DEBUG: unexpected type
-    if _colorDebugActive then
-      io.write(string.format("[COLOR-DEBUG] UNEXPECTED color type: %s value: %s\n", type(c), tostring(c)))
-      io.flush()
-    end
   end
 end
 
@@ -614,20 +593,7 @@ end
 --- @param node table The node to paint
 --- @param inheritedOpacity number Accumulated opacity from parent chain (default 1)
 --- @param stencilDepth number Current stencil nesting depth (default 0)
--- DEBUG: node visit counter for debug frame
-local _debugNodeCount = 0
-local _debugNoComputedCount = 0
-
 function Painter.paintNode(node, inheritedOpacity, stencilDepth)
-  if _colorDebugActive then
-    if not node then
-      -- skip
-    elseif not node.computed then
-      _debugNoComputedCount = _debugNoComputedCount + 1
-    else
-      _debugNodeCount = _debugNodeCount + 1
-    end
-  end
   if not node or not node.computed then return end
 
   inheritedOpacity = inheritedOpacity or 1
@@ -635,22 +601,6 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
 
   local c = node.computed
   local s = node.style or {}
-
-  -- DEBUG: count backgroundColor types
-  if _colorDebugActive then
-    local bg = s.backgroundColor
-    if bg == nil then
-      _debugBgNil = (_debugBgNil or 0) + 1
-    elseif bg == "transparent" then
-      _debugBgTransparent = (_debugBgTransparent or 0) + 1
-    elseif type(bg) == "string" then
-      _debugBgString = (_debugBgString or 0) + 1
-    elseif type(bg) == "table" then
-      _debugBgTable = (_debugBgTable or 0) + 1
-    else
-      _debugBgOther = (_debugBgOther or 0) + 1
-    end
-  end
 
   -- display:none -- skip this node and all its children entirely
   if s.display == "none" then return end
@@ -738,21 +688,6 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
       end
     elseif s.backgroundColor and s.backgroundColor ~= "transparent" then
       -- Solid background fill
-      -- DEBUG: trace ALL bg colors during debug frame (type + value)
-      if _colorDebugActive then
-        local bgVal = s.backgroundColor
-        local bgType = type(bgVal)
-        if bgType == "table" then
-          io.write(string.format("[COLOR-DEBUG] bg: id=%s type=%s bg=TABLE{%.2f,%.2f,%.2f,%.2f} #=%d pos=(%.0f,%.0f) sz=(%.0f,%.0f)\n",
-            tostring(node.id), tostring(node.type), bgVal[1] or 0, bgVal[2] or 0, bgVal[3] or 0, bgVal[4] or 0, #bgVal, c.x, c.y, c.w, c.h))
-        else
-          local preview = tostring(bgVal)
-          if #preview > 30 then preview = preview:sub(1, 30) .. "..." end
-          io.write(string.format("[COLOR-DEBUG] bg: id=%s type=%s bg=%s(\"%s\") pos=(%.0f,%.0f) sz=(%.0f,%.0f)\n",
-            tostring(node.id), tostring(node.type), bgType, preview, c.x, c.y, c.w, c.h))
-        end
-        io.flush()
-      end
       Painter.setColor(s.backgroundColor)
       Painter.applyOpacity(effectiveOpacity)
       if isPerCorner then
@@ -1425,26 +1360,7 @@ end
 --- Paint the entire tree. Resets color to white after painting.
 function Painter.paint(node)
   if not node then return end
-  -- DEBUG: enable table-color tracing for one paint frame on demand (Ctrl+D)
-  if _colorDebugRequested then
-    _colorDebugActive = true
-    _colorDebugRequested = false
-    io.write("[COLOR-DEBUG] === START paint frame ===\n"); io.flush()
-  end
   Painter.paintNode(node)
-  if _colorDebugActive then
-    io.write(string.format("[COLOR-DEBUG] === END paint frame === visited=%d noComputed=%d bg_string=%d bg_table=%d bg_nil=%d bg_transparent=%d bg_other=%d\n",
-      _debugNodeCount, _debugNoComputedCount,
-      _debugBgString or 0, _debugBgTable or 0, _debugBgNil or 0, _debugBgTransparent or 0, _debugBgOther or 0)); io.flush()
-    _colorDebugActive = false
-    _debugNodeCount = 0
-    _debugNoComputedCount = 0
-    _debugBgString = 0
-    _debugBgTable = 0
-    _debugBgNil = 0
-    _debugBgTransparent = 0
-    _debugBgOther = 0
-  end
   love.graphics.setColor(1, 1, 1, 1)
 end
 
