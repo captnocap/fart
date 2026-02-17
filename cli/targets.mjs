@@ -15,7 +15,7 @@ export const TARGETS = {
   love: {
     format: 'iife',
     globalName: 'ReactLove',
-    external: ['react-dom', 'child_process'],
+    external: ['react-dom', 'child_process', '@noble/hashes/*'],
     entries: ['main-love.tsx', 'native-main.tsx', 'main.tsx'],
     output: 'love/bundle.js',
     kind: 'love',

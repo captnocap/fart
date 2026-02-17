@@ -55,7 +55,7 @@ function CoinGeckoDemo() {
         <Box style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#8DC647' }} />
         <Text style={{ fontSize: 13, color: BRIGHT, fontWeight: '700' }}>CoinGecko — Live (no API key)</Text>
       </Box>
-      <Text style={{ fontSize: 10, color: DIM }}>useCoinMarkets({'{'} perPage: 8 {'}'})</Text>
+      <Text style={{ fontSize: 10, color: DIM }}>{`useCoinMarkets({ perPage: 8 })`}</Text>
 
       {loading && <Text style={{ fontSize: 11, color: MUTED }}>Loading market data...</Text>}
       {error && <Text style={{ fontSize: 11, color: RED }}>{`Error: ${error.message}`}</Text>}
@@ -184,7 +184,7 @@ function CatalogCard({ entry }: { entry: APICatalogEntry }) {
       </Pressable>
       <Text style={{ fontSize: 8, color: DIM }}>{entry.auth}</Text>
       {expanded && entry.hooks.map((hook) => (
-        <Text key={hook} style={{ fontSize: 9, color: ACCENT }}>{hook}()</Text>
+        <Text key={hook} style={{ fontSize: 9, color: ACCENT }}>{`${hook}()`}</Text>
       ))}
       {!expanded && (
         <Text style={{ fontSize: 9, color: MUTED }}>{`${entry.hooks.length} hooks`}</Text>

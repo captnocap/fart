@@ -6,8 +6,11 @@
   tree → layout → painter.
 ]]
 
--- Add the project root to the require path so lua.* modules resolve
-package.path = package.path .. ";../../../?.lua;../../../?/init.lua"
+-- Add the monorepo root to the require path so lua.* modules resolve.
+-- From storybook/love/, two levels up is the repo root where lua/ lives.
+-- A symlink at storybook/love/lua → ../../lua also exists as a fallback
+-- for Love2D's own filesystem searcher.
+package.path = package.path .. ";../../?.lua;../../?/init.lua"
 
 local ReactLove = require("lua.init")
 

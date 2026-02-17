@@ -3,10 +3,49 @@
  *
  * Love2D/web: uses bridge RPC → Lua gathers from /proc, io.popen, os.getenv
  * Node.js (grid targets): falls back to os module + child_process
+ *
+ * Every returned section has .toSysLog(path) for structured file logging.
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useBridgeOptional } from './context';
+import type { IBridge } from './bridge';
+
+// ── Dynamic require (esbuild-safe) ──────────────────────────
+
+const _require: ((m: string) => any) | null = (() => {
+  try { return new Function('return require')() as (m: string) => any; }
+  catch { return null; }
+})();
+
+// ── SysLog helper ────────────────────────────────────────────
+
+function makeSysLogger(bridge: IBridge | null) {
+  return function sysLog(path: string, data: any) {
+    const line = JSON.stringify({ ...data, _ts: new Date().toISOString() });
+    if (bridge) {
+      bridge.rpc('sys:log', { path, data: line });
+    } else if (_require) {
+      try {
+        const fs = _require('fs');
+        fs.appendFileSync(path, line + '\n');
+      } catch { /* silent */ }
+    }
+  };
+}
+
+function withSysLog<T extends Record<string, any>>(
+  obj: T,
+  logger: (path: string, data: any) => void,
+): T & { toSysLog: (path: string) => void } {
+  const result = { ...obj } as any;
+  result.toSysLog = (path: string) => {
+    const clean = { ...obj };
+    delete (clean as any).toSysLog;
+    logger(path, clean);
+  };
+  return result;
+}
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -14,12 +53,14 @@ export interface MemoryInfo {
   used: number;
   total: number;
   unit: 'GiB' | 'MiB';
+  toSysLog: (path: string) => void;
 }
 
 export interface UptimeInfo {
   days: number;
   hours: number;
   minutes: number;
+  toSysLog: (path: string) => void;
 }
 
 export interface SystemInfo {
@@ -33,7 +74,10 @@ export interface SystemInfo {
   memory: MemoryInfo;
   uptime: UptimeInfo;
   loading: boolean;
+  toSysLog: (path: string) => void;
 }
+
+const NOOP_LOG = (_path: string) => {};
 
 const EMPTY: SystemInfo = {
   os: '',
@@ -43,14 +87,15 @@ const EMPTY: SystemInfo = {
   shell: '',
   cpu: '',
   arch: '',
-  memory: { used: 0, total: 0, unit: 'GiB' },
-  uptime: { days: 0, hours: 0, minutes: 0 },
+  memory: { used: 0, total: 0, unit: 'GiB', toSysLog: NOOP_LOG },
+  uptime: { days: 0, hours: 0, minutes: 0, toSysLog: NOOP_LOG },
   loading: true,
+  toSysLog: NOOP_LOG,
 };
 
 // ── Formatting helpers ───────────────────────────────────────
 
-export function formatUptime(u: UptimeInfo): string {
+export function formatUptime(u: { days: number; hours: number; minutes: number }): string {
   const parts: string[] = [];
   if (u.days > 0) parts.push(`${u.days} day${u.days !== 1 ? 's' : ''}`);
   if (u.hours > 0) parts.push(`${u.hours} hour${u.hours !== 1 ? 's' : ''}`);
@@ -65,20 +110,13 @@ export function formatBytes(bytes: number): string {
   return `${mib.toFixed(0)} MiB`;
 }
 
-export function formatMemory(m: MemoryInfo): string {
+export function formatMemory(m: { used: number; total: number; unit: string }): string {
   return `${m.used.toFixed(1)} ${m.unit} / ${m.total.toFixed(1)} ${m.unit}`;
 }
 
 // ── Node.js fallback (grid targets) ─────────────────────────
-// Dynamic require hidden from esbuild's static analysis so IIFE
-// bundles (Love2D/QuickJS) don't fail trying to resolve node built-ins.
 
-const _require: ((m: string) => any) | null = (() => {
-  try { return new Function('return require')() as (m: string) => any; }
-  catch { return null; }
-})();
-
-function getSystemInfoNode(): SystemInfo | null {
+function getSystemInfoNode(logger: (path: string, data: any) => void): SystemInfo | null {
   if (!_require) return null;
   try {
     const os = _require('os');
@@ -109,18 +147,28 @@ function getSystemInfoNode(): SystemInfo | null {
     } catch {}
 
     const shell = (process.env.SHELL || 'unknown').split('/').pop() || 'unknown';
+    const cpu = `${cpuModel} (${cpus.length} cores)`;
+    const arch = os.arch();
+    const kernel = os.release();
+    const hostname = os.hostname();
+    const user = os.userInfo().username;
+    const memory = { used: usedGiB, total: totalGiB, unit: 'GiB' as const };
+    const uptime = { days, hours, minutes };
 
     return {
       os: distro,
-      kernel: os.release(),
-      hostname: os.hostname(),
-      user: os.userInfo().username,
+      kernel,
+      hostname,
+      user,
       shell,
-      cpu: `${cpuModel} (${cpus.length} cores)`,
-      arch: os.arch(),
-      memory: { used: usedGiB, total: totalGiB, unit: 'GiB' },
-      uptime: { days, hours, minutes },
+      cpu,
+      arch,
+      memory: withSysLog(memory, logger),
+      uptime: withSysLog(uptime, logger),
       loading: false,
+      toSysLog: (path: string) => logger(path, {
+        os: distro, kernel, hostname, user, shell, cpu, arch, memory, uptime,
+      }),
     };
   } catch {
     return null;
@@ -131,20 +179,23 @@ function getSystemInfoNode(): SystemInfo | null {
 
 /**
  * Returns real system information (OS, CPU, memory, uptime, etc.).
+ * Every sub-object has .toSysLog(path) for structured file logging.
  *
  * @param refreshInterval - ms between re-polls for dynamic fields (memory, uptime).
  *   Defaults to 0 (no refresh — fetches once on mount).
  *
  * @example
- * const info = useSystemInfo(5000); // refresh every 5s
- * <Text fontSize={14}>{info.cpu}</Text>
- * <Text fontSize={14}>{formatMemory(info.memory)}</Text>
- * <Text fontSize={14}>{formatUptime(info.uptime)}</Text>
+ * const info = useSystemInfo(5000);
+ * info.cpu                               // "AMD Ryzen 9 7950X (32 cores)"
+ * info.memory.toSysLog('/tmp/mem.log')   // log memory snapshot
+ * info.toSysLog('/tmp/sys.log')          // log everything
  */
 export function useSystemInfo(refreshInterval: number = 0): SystemInfo {
   const bridge = useBridgeOptional();
   const [info, setInfo] = useState<SystemInfo>(EMPTY);
   const mountedRef = useRef(true);
+
+  const logger = useMemo(() => makeSysLogger(bridge), [bridge]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -154,14 +205,14 @@ export function useSystemInfo(refreshInterval: number = 0): SystemInfo {
   useEffect(() => {
     // No bridge — try Node.js direct gathering
     if (!bridge) {
-      const nodeInfo = getSystemInfoNode();
+      const nodeInfo = getSystemInfoNode(logger);
       if (nodeInfo) {
         setInfo(nodeInfo);
 
         if (refreshInterval > 0) {
           const id = setInterval(() => {
             if (!mountedRef.current) return;
-            const fresh = getSystemInfoNode();
+            const fresh = getSystemInfoNode(logger);
             if (fresh) setInfo(fresh);
           }, refreshInterval);
           return () => clearInterval(id);
@@ -174,13 +225,23 @@ export function useSystemInfo(refreshInterval: number = 0): SystemInfo {
     let cancelled = false;
 
     function fetch() {
-      bridge!.rpc<Omit<SystemInfo, 'loading'>>('sys:info').then((data) => {
+      bridge!.rpc<any>('sys:info').then((raw) => {
         if (!cancelled && mountedRef.current) {
-          setInfo({ ...data, loading: false });
+          setInfo({
+            os: raw.os,
+            kernel: raw.kernel,
+            hostname: raw.hostname,
+            user: raw.user,
+            shell: raw.shell,
+            cpu: raw.cpu,
+            arch: raw.arch,
+            memory: withSysLog(raw.memory, logger),
+            uptime: withSysLog(raw.uptime, logger),
+            loading: false,
+            toSysLog: (path: string) => logger(path, raw),
+          });
         }
-      }).catch(() => {
-        // RPC failed — leave loading state, don't crash
-      });
+      }).catch(() => {});
     }
 
     fetch();
@@ -191,7 +252,7 @@ export function useSystemInfo(refreshInterval: number = 0): SystemInfo {
     }
 
     return () => { cancelled = true; };
-  }, [bridge, refreshInterval]);
+  }, [bridge, refreshInterval, logger]);
 
   return info;
 }

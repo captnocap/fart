@@ -1,11 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  Box, Text, Pressable, Tabs, BarChart,
-  Sparkline, ProgressBar, Badge, useSpring,
+  Box, Text, Divider, Spacer,
+  BarChart, Sparkline, useSpring,
 } from '../../../packages/shared/src';
 
-/* ── Pixel art weather icons ──────────────────────────── */
-// '#' = primary fill, '.' = accent fill, ' ' = empty
+/* ── sun pixel grid (11 wide x 11 tall) ──────────────── */
 
 const SUN_LINES = [
   '  .  .  .  ',
@@ -21,372 +20,267 @@ const SUN_LINES = [
   '  .  .  .  ',
 ];
 
-const CLOUD_LINES = [
-  '    ###      ',
-  '  #######    ',
-  ' #########   ',
-  '############ ',
-  '#############',
-  ' ########### ',
+const SUN_GRID = SUN_LINES.map(line =>
+  [...line].map(ch => {
+    if (ch === '#') return 'core';
+    if (ch === '.') return 'ray';
+    return null;
+  })
+);
+
+const PX = 8;
+const SUN_W = 11;
+const SUN_H = 11;
+
+/* ── theme ────────────────────────────────────────────── */
+
+const BG     = '#0e0e18';
+const CARD   = '#12121f';
+const ACCENT = '#FFD93D';
+const WARM   = '#F59E0B';
+const HOT    = '#EF4444';
+const COOL   = '#06B6D4';
+const GREEN  = '#4ade80';
+const BLUE   = '#60a5fa';
+const BRIGHT = '#e0e0f0';
+const MID    = '#8888aa';
+const DIM    = '#444466';
+const BORDER = '#1a1a2e';
+
+const PALETTE = [
+  '#FFD93D', '#FFA726', '#EF4444', '#F59E0B',
+  '#06B6D4', '#60a5fa', '#12121f', '#1a1a2e',
 ];
 
-const RAIN_LINES = [
-  '    ###      ',
-  '  #######    ',
-  ' #########   ',
-  '############ ',
-  '#############',
-  ' ########### ',
-  '  .    .     ',
-  '   .    .  . ',
-  '  .    .     ',
-];
+/* ── tiny helpers (neofetch style) ────────────────────── */
 
-interface IconDef {
-  lines: string[];
-  chars: Record<string, { color: string; radius?: number }>;
-}
-
-const ICON_DEFS: Record<string, IconDef> = {
-  sun: {
-    lines: SUN_LINES,
-    chars: {
-      '.': { color: '#FFA726', radius: 3 },
-      '#': { color: '#FFD93D' },
-    },
-  },
-  cloud: {
-    lines: CLOUD_LINES,
-    chars: { '#': { color: '#90A4AE' } },
-  },
-  rain: {
-    lines: RAIN_LINES,
-    chars: {
-      '#': { color: '#78909C' },
-      '.': { color: '#60A5FA', radius: 2 },
-    },
-  },
-};
-
-function WeatherIcon({ type, px = 6 }: { type: string; px?: number }) {
-  const def = ICON_DEFS[type];
-  const width = Math.max(...def.lines.map(l => l.length));
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <Box style={{ width: width * px, height: def.lines.length * px }}>
-      {def.lines.map((line, r) => (
-        <Box key={r} style={{ flexDirection: 'row' }}>
-          {[...line.padEnd(width)].map((ch, c) => {
-            const d = def.chars[ch];
-            return (
-              <Box key={c} style={{
-                width: px,
-                height: px,
-                backgroundColor: d ? d.color : 'transparent',
-                borderRadius: d?.radius ?? (d ? 1 : 0),
-              }} />
-            );
-          })}
-        </Box>
-      ))}
+    <Box style={{ gap: 6 }}>
+      <Text style={{ color: ACCENT, fontSize: 11, fontWeight: '700' }}>{title}</Text>
+      {children}
     </Box>
   );
 }
 
-/* ── Colors ────────────────────────────────────────────── */
-
-const BG     = '#0b1120';
-const CARD   = '#111827';
-const BORDER = '#1e293b';
-const BRIGHT = '#e2e8f0';
-const DIM    = '#64748b';
-const MUTED  = '#475569';
-const ACCENT = '#60A5FA';
-const WARM   = '#F59E0B';
-const HOT    = '#EF4444';
-const COOL   = '#06B6D4';
-
-function tempColor(t: number): string {
-  if (t >= 80) return HOT;
-  if (t >= 70) return WARM;
-  if (t >= 60) return ACCENT;
-  if (t >= 50) return COOL;
-  return '#8B5CF6';
-}
-
-function formatHour(h: number): string {
-  if (h === 0) return '12a';
-  if (h < 12) return `${h}a`;
-  if (h === 12) return '12p';
-  return `${h - 12}p`;
-}
-
-/* ── City weather data ────────────────────────────────── */
-
-interface CityData {
-  name: string;
-  abbr: string;
-  temp: number;
-  feelsLike: number;
-  high: number;
-  low: number;
-  condition: string;
-  badge: 'success' | 'info' | 'warning' | 'error' | 'default';
-  icon: string;
-  humidity: number;
-  windSpeed: number;
-  uvIndex: number;
-  cloudCover: number;
-  sunrise: string;
-  sunset: string;
-  pressure: number;
-  dewPoint: number;
-  hourly: number[];
-  forecast: { label: string; value: number }[];
-}
-
-const CITIES: CityData[] = [
-  {
-    name: 'San Francisco', abbr: 'SF',
-    temp: 62, feelsLike: 59, high: 66, low: 54,
-    condition: 'Partly Cloudy', badge: 'info', icon: 'cloud',
-    humidity: 0.72, windSpeed: 14, uvIndex: 0.36, cloudCover: 0.65,
-    sunrise: '6:52 AM', sunset: '5:48 PM', pressure: 30.12, dewPoint: 52,
-    hourly: [58,57,56,55,56,58,60,62,64,65,66,64,63,62,61,60,59,58,57,56,55,55,54,55],
-    forecast: [
-      { label: 'Mon', value: 64 }, { label: 'Tue', value: 61 },
-      { label: 'Wed', value: 58 }, { label: 'Thu', value: 63 },
-      { label: 'Fri', value: 66 }, { label: 'Sat', value: 68 },
-      { label: 'Sun', value: 65 },
-    ],
-  },
-  {
-    name: 'Miami', abbr: 'MIA',
-    temp: 84, feelsLike: 89, high: 88, low: 76,
-    condition: 'Sunny', badge: 'warning', icon: 'sun',
-    humidity: 0.68, windSpeed: 8, uvIndex: 0.82, cloudCover: 0.12,
-    sunrise: '6:58 AM', sunset: '6:18 PM', pressure: 30.05, dewPoint: 72,
-    hourly: [78,77,76,76,77,79,81,83,85,87,88,87,86,85,84,83,82,81,80,79,78,78,77,77],
-    forecast: [
-      { label: 'Mon', value: 86 }, { label: 'Tue', value: 84 },
-      { label: 'Wed', value: 82 }, { label: 'Thu', value: 85 },
-      { label: 'Fri', value: 88 }, { label: 'Sat', value: 87 },
-      { label: 'Sun', value: 83 },
-    ],
-  },
-  {
-    name: 'Seattle', abbr: 'SEA',
-    temp: 48, feelsLike: 43, high: 52, low: 41,
-    condition: 'Rainy', badge: 'default', icon: 'rain',
-    humidity: 0.89, windSpeed: 18, uvIndex: 0.09, cloudCover: 0.92,
-    sunrise: '7:12 AM', sunset: '5:32 PM', pressure: 29.85, dewPoint: 45,
-    hourly: [44,43,43,42,42,43,44,46,48,49,50,51,52,51,50,49,48,47,46,45,44,43,43,42],
-    forecast: [
-      { label: 'Mon', value: 50 }, { label: 'Tue', value: 47 },
-      { label: 'Wed', value: 45 }, { label: 'Thu', value: 48 },
-      { label: 'Fri', value: 52 }, { label: 'Sat', value: 54 },
-      { label: 'Sun', value: 51 },
-    ],
-  },
-];
-
-/* ── Animated temperature ─────────────────────────────── */
-
-function AnimatedTemp({ value }: { value: number }) {
-  const animated = useSpring(value, { stiffness: 60, damping: 14 });
+function Bar({ value, max, width, color, height }: { value: number; max: number; width: number; color: string; height?: number }) {
+  const h = height || 6;
+  const pct = max > 0 ? Math.min(value / max, 1) : 0;
   return (
-    <Text style={{ color: tempColor(value), fontSize: 48, fontWeight: 'bold' }}>
-      {`${Math.round(animated)}F`}
-    </Text>
+    <Box style={{ width, height: h, backgroundColor: '#1e1e30', borderRadius: 2 }}>
+      <Box style={{ width: Math.round(width * pct), height: h, backgroundColor: color, borderRadius: 2 }} />
+    </Box>
   );
 }
 
-/* ── Main ─────────────────────────────────────────────── */
+function Label({ text, color }: { text: string; color?: string }) {
+  return <Text style={{ fontSize: 10, color: color || MID }}>{text}</Text>;
+}
 
-const TAB_ITEMS = [
-  { id: 'today', label: 'Today' },
-  { id: 'forecast', label: '7-Day Forecast' },
+function Val({ text, color }: { text: string; color?: string }) {
+  return <Text style={{ fontSize: 10, color: color || BRIGHT }}>{text}</Text>;
+}
+
+/* ── color helpers ────────────────────────────────────── */
+
+function tempColor(t: number): string {
+  if (t >= 85) return HOT;
+  if (t >= 72) return WARM;
+  if (t >= 60) return BLUE;
+  if (t >= 45) return COOL;
+  return '#a78bfa';
+}
+
+function drift(base: number, range: number): number {
+  return base + (Math.random() - 0.5) * range;
+}
+
+/* ── initial data ─────────────────────────────────────── */
+
+const HOURLY_BASE = [64, 63, 62, 62, 63, 65, 67, 70, 72, 74, 75, 76, 78, 77, 76, 75, 73, 71, 70, 68, 67, 66, 65, 64];
+
+const FORECAST_BASE = [
+  { label: 'Mon', value: 72 },
+  { label: 'Tue', value: 68 },
+  { label: 'Wed', value: 65 },
+  { label: 'Thu', value: 70 },
+  { label: 'Fri', value: 75 },
+  { label: 'Sat', value: 78 },
+  { label: 'Sun', value: 74 },
 ];
 
-export function WeatherDemoStory() {
-  const [cityIdx, setCityIdx] = useState(0);
-  const [activeTab, setActiveTab] = useState('today');
-  const city = CITIES[cityIdx];
+/* ── main ─────────────────────────────────────────────── */
 
-  const stats = [
-    { label: 'Humidity', value: city.humidity, display: `${Math.round(city.humidity * 100)}%`, color: COOL },
-    { label: 'Wind', value: Math.min(city.windSpeed / 40, 1), display: `${city.windSpeed} mph`, color: ACCENT },
-    { label: 'UV Index', value: city.uvIndex, display: `${Math.round(city.uvIndex * 11)}/11`, color: city.uvIndex > 0.5 ? HOT : WARM },
-    { label: 'Cloud Cover', value: city.cloudCover, display: `${Math.round(city.cloudCover * 100)}%`, color: '#90A4AE' },
-  ];
+export function WeatherDemoStory() {
+  const [w, setW] = useState({
+    temp: 72, feelsLike: 70, high: 78, low: 62,
+    humidity: 58, windSpeed: 12, windDir: 'NW',
+    pressure: 30.12, dewPoint: 52, uvIndex: 6,
+    cloudCover: 32, visibility: 10,
+  });
+  const [hourly, setHourly] = useState(HOURLY_BASE);
+  const [forecast, setForecast] = useState(FORECAST_BASE);
+  const [tick, setTick] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setTick(t => t + 1);
+      setW(prev => ({
+        ...prev,
+        temp: Math.round(drift(prev.temp, 2)),
+        feelsLike: Math.round(drift(prev.feelsLike, 2)),
+        humidity: Math.round(Math.max(20, Math.min(95, drift(prev.humidity, 4)))),
+        windSpeed: Math.round(Math.max(2, Math.min(30, drift(prev.windSpeed, 3)))),
+        pressure: +(Math.max(29.5, Math.min(30.5, drift(prev.pressure, 0.04)))).toFixed(2),
+        cloudCover: Math.round(Math.max(5, Math.min(95, drift(prev.cloudCover, 5)))),
+        uvIndex: Math.round(Math.max(1, Math.min(11, drift(prev.uvIndex, 1)))),
+      }));
+      setHourly(prev => prev.map(t => Math.round(drift(t, 1.5))));
+      setForecast(prev => prev.map(f => ({
+        ...f,
+        value: Math.round(drift(f.value, 2)),
+      })));
+    }, 3000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const animTemp = useSpring(w.temp, { stiffness: 80, damping: 18 });
+  const secondsAgo = tick * 3;
+  const timeLabel = secondsAgo === 0 ? 'just now' : `${secondsAgo}s ago`;
 
   return (
-    <Box style={{ width: '100%', height: '100%', backgroundColor: BG, padding: 14, gap: 10 }}>
+    <Box style={{ width: '100%', height: '100%', backgroundColor: BG, padding: 12, gap: 10 }}>
 
-      {/* ── Header: city selector + date ── */}
-      <Box style={{ flexDirection: 'row', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Box style={{ flexDirection: 'row', gap: 6 }}>
-          {CITIES.map((c, i) => (
-            <Pressable
-              key={c.name}
-              onPress={() => setCityIdx(i)}
-              style={(state) => ({
-                paddingLeft: 10, paddingRight: 10, paddingTop: 4, paddingBottom: 4,
-                borderRadius: 6,
-                backgroundColor: i === cityIdx ? '#334155' : state.hovered ? '#1e293b' : 'transparent',
-                borderWidth: 1,
-                borderColor: i === cityIdx ? ACCENT : 'transparent',
-              })}
-            >
-              <Text style={{
-                color: i === cityIdx ? BRIGHT : DIM,
-                fontSize: 11,
-                fontWeight: i === cityIdx ? 'bold' : 'normal',
-              }}>
-                {c.name}
-              </Text>
-            </Pressable>
-          ))}
-        </Box>
-        <Text style={{ color: MUTED, fontSize: 10 }}>Feb 16, 2026</Text>
-      </Box>
-
-      {/* ── Hero: icon + temperature + condition + sparkline ── */}
-      <Box style={{
-        flexDirection: 'row',
-        backgroundColor: CARD,
-        borderRadius: 12,
-        padding: 16,
-        borderWidth: 1,
-        borderColor: BORDER,
-        gap: 16,
-        alignItems: 'center',
-      }}>
-        <WeatherIcon type={city.icon} px={6} />
-
-        <Box style={{ flexGrow: 1, gap: 2 }}>
-          <AnimatedTemp value={city.temp} />
-          <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-            <Badge label={city.condition} variant={city.badge} />
-            <Text style={{ color: DIM, fontSize: 11 }}>
-              {`Feels like ${city.feelsLike}F`}
-            </Text>
-          </Box>
-          <Text style={{ color: MUTED, fontSize: 11 }}>
-            {`H:${city.high}F  L:${city.low}F`}
-          </Text>
-        </Box>
-
-        <Box style={{ gap: 4, alignItems: 'center' }}>
-          <Text style={{ color: DIM, fontSize: 9 }}>24h Trend</Text>
-          <Sparkline data={city.hourly} width={80} height={32} color={tempColor(city.temp)} />
-        </Box>
-      </Box>
-
-      {/* ── Stats row: 4 mini cards with ProgressBar ── */}
-      <Box style={{ flexDirection: 'row', width: '100%', gap: 8 }}>
-        {stats.map((s) => (
-          <Box key={s.label} style={{
-            flexGrow: 1,
-            backgroundColor: CARD,
-            borderRadius: 8,
-            padding: 10,
-            gap: 6,
-            borderWidth: 1,
-            borderColor: BORDER,
-          }}>
-            <Text style={{ color: DIM, fontSize: 9 }}>{s.label}</Text>
-            <Text style={{ color: BRIGHT, fontSize: 13, fontWeight: 'bold' }}>{s.display}</Text>
-            <ProgressBar value={s.value} color={s.color} height={4} animated />
-          </Box>
-        ))}
-      </Box>
-
-      {/* ── Tabbed content: Today / 7-Day Forecast ── */}
-      <Box style={{
-        flexGrow: 1,
-        backgroundColor: CARD,
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: BORDER,
-      }}>
-        <Box style={{ padding: 8 }}>
-          <Tabs tabs={TAB_ITEMS} activeId={activeTab} onSelect={setActiveTab} variant="pill" />
-        </Box>
-
-        {activeTab === 'today' ? (
-          <Box style={{ flexGrow: 1, padding: 14, gap: 8 }}>
-            <Text style={{ color: BRIGHT, fontSize: 13, fontWeight: 'bold' }}>
-              Hourly Temperature
-            </Text>
-            <BarChart
-              data={city.hourly.map((t, i) => ({
-                label: i % 3 === 0 ? formatHour(i) : '',
-                value: t,
-                color: tempColor(t),
-              }))}
-              height={80}
-              gap={1}
-              showLabels
-              interactive
-            />
-            <Box style={{ flexDirection: 'row', width: '100%', justifyContent: 'space-between' }}>
-              {[
-                { label: 'Now', temp: city.temp },
-                { label: 'Peak', temp: city.high },
-                { label: 'Low', temp: city.low },
-              ].map((item) => (
-                <Box key={item.label} style={{ flexDirection: 'row', gap: 4 }}>
-                  <Text style={{ color: DIM, fontSize: 10 }}>{`${item.label}:`}</Text>
-                  <Text style={{ color: tempColor(item.temp), fontSize: 10, fontWeight: 'bold' }}>
-                    {`${item.temp}F`}
-                  </Text>
-                </Box>
+      {/* ── header: sun + identity ── */}
+      <Box style={{ flexDirection: 'row', gap: 12, width: '100%' }}>
+        <Box style={{ width: SUN_W * PX, height: SUN_H * PX }}>
+          {SUN_GRID.map((row, r) => (
+            <Box key={r} style={{ flexDirection: 'row' }}>
+              {row.map((cell, c) => (
+                <Box key={c} style={{
+                  width: PX, height: PX,
+                  borderRadius: cell === 'core' ? 2 : cell === 'ray' ? 4 : 0,
+                  backgroundColor: cell === 'core' ? '#FFD93D' : cell === 'ray' ? '#FFA726' : 'transparent',
+                }} />
               ))}
             </Box>
+          ))}
+        </Box>
+
+        <Box style={{ gap: 3 }}>
+          <Text style={{ color: ACCENT, fontSize: 16, fontWeight: '700' }}>
+            {`${Math.round(animTemp)}F@sanfrancisco`}
+          </Text>
+          <Divider color={DIM} />
+          <Box style={{ flexDirection: 'row', gap: 8 }}>
+            <Label text="Sunny" color={BRIGHT} />
+            <Label text={`Feels like ${w.feelsLike}F`} />
           </Box>
-        ) : (
-          <Box style={{ flexGrow: 1, padding: 14, gap: 8 }}>
-            <Text style={{ color: BRIGHT, fontSize: 13, fontWeight: 'bold' }}>
-              Weekly Forecast
-            </Text>
-            <BarChart
-              data={city.forecast.map((f) => ({
-                label: f.label,
-                value: f.value,
-                color: tempColor(f.value),
-              }))}
-              height={110}
-              showLabels
-              showValues
-              interactive
-              color={ACCENT}
-            />
+          <Box style={{ flexDirection: 'row', gap: 8 }}>
+            <Label text={`Wind ${w.windSpeed}mph ${w.windDir}`} color={MID} />
+            <Label text={`Humidity ${w.humidity}%`} />
           </Box>
-        )}
+          <Box style={{ flexDirection: 'row', gap: 8 }}>
+            <Label text={`H:${w.high}F  L:${w.low}F`} color={GREEN} />
+            <Label text={`UV ${w.uvIndex}`} color={w.uvIndex > 5 ? WARM : GREEN} />
+          </Box>
+        </Box>
       </Box>
 
-      {/* ── Footer: sunrise, sunset, pressure, dew point ── */}
-      <Box style={{ flexDirection: 'row', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Box style={{ flexDirection: 'row', gap: 12 }}>
-          {[
-            { label: 'Sunrise', value: city.sunrise, color: WARM },
-            { label: 'Sunset', value: city.sunset, color: '#F97316' },
-            { label: 'Pressure', value: `${city.pressure} inHg`, color: DIM },
-            { label: 'Dew Point', value: `${city.dewPoint}F`, color: COOL },
-          ].map((item) => (
-            <Box key={item.label} style={{ flexDirection: 'row', gap: 3 }}>
-              <Text style={{ color: item.color, fontSize: 10, fontWeight: 'bold' }}>
-                {`${item.label}:`}
-              </Text>
-              <Text style={{ color: BRIGHT, fontSize: 10 }}>{item.value}</Text>
-            </Box>
+      {/* ── palette + live badge ── */}
+      <Box style={{ flexDirection: 'row', gap: 2, width: '100%', alignItems: 'center' }}>
+        <Box style={{ flexDirection: 'row', gap: 1 }}>
+          {PALETTE.map((color, i) => (
+            <Box key={i} style={{ width: 14, height: 10, backgroundColor: color, borderRadius: 1 }} />
           ))}
         </Box>
-        <Box style={{ flexDirection: 'row', gap: 2 }}>
-          {[COOL, ACCENT, '#3B82F6', WARM, HOT, '#22C55E', '#8B5CF6'].map((color, i) => (
-            <Box key={i} style={{ width: 16, height: 6, backgroundColor: color, borderRadius: 1 }} />
-          ))}
+        <Spacer size={8} />
+        <Box style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
+          <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: GREEN }} />
+          <Label text="live" color={GREEN} />
+          <Label text={`(${timeLabel})`} />
         </Box>
+      </Box>
+
+      {/* ── two cards side by side ── */}
+      <Box style={{ flexDirection: 'row', gap: 12, width: '100%' }}>
+
+        {/* left: conditions with bars */}
+        <Box style={{
+          width: 280,
+          backgroundColor: CARD, borderRadius: 8, padding: 10,
+          borderWidth: 1, borderColor: BORDER,
+        }}>
+          <Section title="CONDITIONS">
+            {[
+              { label: 'temp', val: `${w.temp}F`, raw: w.temp, max: 110, color: tempColor(w.temp) },
+              { label: 'high', val: `${w.high}F`, raw: w.high, max: 110, color: tempColor(w.high) },
+              { label: 'low', val: `${w.low}F`, raw: w.low, max: 110, color: tempColor(w.low) },
+              { label: 'feels', val: `${w.feelsLike}F`, raw: w.feelsLike, max: 110, color: tempColor(w.feelsLike) },
+              { label: 'wind', val: `${w.windSpeed}mph`, raw: w.windSpeed, max: 40, color: BLUE },
+              { label: 'humid', val: `${w.humidity}%`, raw: w.humidity, max: 100, color: COOL },
+            ].map((row) => (
+              <Box key={row.label} style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
+                <Box style={{ width: 36 }}><Label text={row.label} /></Box>
+                <Box style={{ width: 48 }}><Val text={row.val} /></Box>
+                <Bar value={row.raw} max={row.max} width={130} color={row.color} />
+              </Box>
+            ))}
+          </Section>
+        </Box>
+
+        {/* right: atmosphere + 24h sparkline */}
+        <Box style={{ flexGrow: 1, gap: 12 }}>
+          <Box style={{
+            backgroundColor: CARD, borderRadius: 8, padding: 10,
+            borderWidth: 1, borderColor: BORDER,
+          }}>
+            <Section title="ATMOSPHERE">
+              {[
+                { label: 'pressure', val: `${w.pressure} inHg` },
+                { label: 'dewpoint', val: `${w.dewPoint}F` },
+                { label: 'visibility', val: `${w.visibility} mi` },
+                { label: 'uv index', val: `${w.uvIndex}/11`, color: w.uvIndex > 5 ? WARM : GREEN },
+                { label: 'cloud', val: `${w.cloudCover}%` },
+                { label: 'sunrise', val: '6:42 AM', color: WARM },
+                { label: 'sunset', val: '5:48 PM', color: '#F97316' },
+              ].map((row) => (
+                <Box key={row.label} style={{ flexDirection: 'row', gap: 8 }}>
+                  <Box style={{ width: 60 }}><Label text={row.label} /></Box>
+                  <Val text={row.val} color={row.color} />
+                </Box>
+              ))}
+            </Section>
+          </Box>
+
+          <Box style={{
+            backgroundColor: CARD, borderRadius: 8, padding: 10,
+            borderWidth: 1, borderColor: BORDER, gap: 4,
+          }}>
+            <Text style={{ color: ACCENT, fontSize: 11, fontWeight: '700' }}>24H TREND</Text>
+            <Sparkline data={hourly} width={250} height={28} color={WARM} />
+          </Box>
+        </Box>
+      </Box>
+
+      {/* ── bottom: 7-day forecast ── */}
+      <Box style={{
+        flexGrow: 1,
+        backgroundColor: CARD, borderRadius: 8, padding: 10,
+        borderWidth: 1, borderColor: BORDER, gap: 6,
+      }}>
+        <Text style={{ color: ACCENT, fontSize: 11, fontWeight: '700' }}>7-DAY FORECAST</Text>
+        <BarChart
+          data={forecast.map((f) => ({
+            label: f.label,
+            value: f.value,
+            color: tempColor(f.value),
+          }))}
+          height={80}
+          showLabels
+          showValues
+          interactive
+        />
       </Box>
 
     </Box>

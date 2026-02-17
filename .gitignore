@@ -14,6 +14,16 @@ examples/*/ilovereact/
 examples/*/lua/
 examples/*/lib/
 examples/*/fonts/
+examples/*/bin/
+examples/*/data/
+
+# Storybook runtime copies (reads from source-of-truth directly)
+storybook/lua/
+storybook/ilovereact/
+storybook/lib/
+storybook/bin/
+storybook/data/
+storybook/love/data/
 
 # Font binaries (managed by CLI, not committed — too large)
 fonts/
@@ -23,7 +33,15 @@ cli/runtime/fonts/
 libquickjs/
 quickjs/
 *.so
+*.so.*
 *.dylib
+
+# Platform binaries (bundled by CLI at build time)
+bin/tor
+
+# Generated files
+src/generated/content.json
+screenshot_*.png
 
 # OS
 .DS_Store

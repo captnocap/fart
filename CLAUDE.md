@@ -79,7 +79,17 @@ These live at the **monorepo root** and get copied into projects via the CLI:
   ilovereact build dist:love  # rebuild
   ```
 - `ilovereact update` syncs `lua/`, `lib/`, and `ilovereact/` from the CLI runtime into the current project without touching `src/`. Use it to hydrate existing projects after framework changes.
+- `ilovereact update` is symlink-aware: if a destination (e.g. `lua/`) is a symlink, it skips the copy and prints a message. This protects the storybook's source-of-truth symlinks.
 - `ilovereact build dist:love` has a fallback: if no local `lua/` exists, it reads from `cli/runtime/lua/`. But `ilovereact dev` and `love .` require local copies, so always run `ilovereact update` for dev workflows.
+
+### The storybook reads from source directly (NEVER copy into it)
+
+The storybook is NOT a consumer project — it IS the framework. It reads from source-of-truth directly:
+- **TypeScript**: esbuild resolves `packages/*/src/` via relative imports and npm workspace symlinks. `storybook/ilovereact/` does not exist and must never be created.
+- **Lua**: `storybook/love/lua` is a symlink → `../../lua` (the monorepo root `lua/`). Never replace this symlink with a real directory.
+- **`make cli-setup` does NOT sync into the storybook.** Only `cli/runtime/` is populated.
+- **Do NOT run `ilovereact update` from the storybook directory.** The symlink guard will skip `lua/`, but there's no reason to run it.
+- **Do NOT create `storybook/lua/` or `storybook/ilovereact/` as real directories.** Both are gitignored. If they appear, something is wrong.
 
 ### Project-specific files (application code)
 
@@ -99,11 +109,12 @@ These are unique to each project and are NOT managed by the CLI:
 
 1. Edit/create files in `lua/` (the source of truth)
 2. Edit/create files in `packages/shared/src/` and `packages/native/src/` as needed
-3. `make cli-setup` — propagates to `cli/runtime/`
-4. For each example project that needs the feature:
+3. The storybook picks up both changes automatically (Lua via symlink, TS via esbuild). Rebuild the storybook bundle: `make build-storybook-native`
+4. `make cli-setup` — propagates to `cli/runtime/` for consumer projects
+5. For each example project that needs the feature:
    - `cd examples/<project> && ilovereact update` — syncs runtime files
    - `ilovereact build dist:love` — rebuilds
-5. For new projects: `ilovereact init <name>` — gets everything automatically
+6. For new projects: `ilovereact init <name>` — gets everything automatically
 
 ## Other Build Commands
 

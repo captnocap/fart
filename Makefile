@@ -288,14 +288,6 @@ cli-setup: setup
 		echo "  Bundled data ($$(du -sh data | cut -f1))"; \
 	fi
 	@echo "=== CLI runtime ready. Run: cd cli && npm link ==="
-	@echo "=== Syncing storybook runtime ==="
-	cp lua/*.lua storybook/lua/
-	mkdir -p storybook/lua/audio/modules
-	cp lua/audio/*.lua storybook/lua/audio/
-	cp lua/audio/modules/*.lua storybook/lua/audio/modules/
-	cp -r packages/shared/* storybook/ilovereact/shared/
-	cp -r packages/native/* storybook/ilovereact/native/
-	@echo "=== Storybook runtime synced ==="
 
 # ── Clean ───────────────────────────────────────────────
 

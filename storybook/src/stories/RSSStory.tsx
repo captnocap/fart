@@ -128,7 +128,7 @@ function AggregateView() {
       <Box style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
         <Box style={{ gap: 2 }}>
           <Text style={{ fontSize: 13, color: BRIGHT, fontWeight: '700' }}>Aggregated Feed</Text>
-          <Text style={{ fontSize: 9, color: DIM }}>useRSSAggregate([hn, lobsters, reddit], {'{'} limit: 20 {'}'})</Text>
+          <Text style={{ fontSize: 9, color: DIM }}>{`useRSSAggregate([hn, lobsters, reddit], { limit: 20 })`}</Text>
         </Box>
         <Pressable onPress={refetch}>
           <Box style={{ backgroundColor: CARD, paddingLeft: 6, paddingRight: 6, paddingTop: 3, paddingBottom: 3, borderRadius: 4, borderWidth: 1, borderColor: BORDER }}>
@@ -146,7 +146,7 @@ function AggregateView() {
             <Box key={f.url} style={{ flexDirection: 'row', gap: 3, alignItems: 'center' }}>
               <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: color }} />
               <Text style={{ fontSize: 9, color: MUTED }}>{name}</Text>
-              {f.feed && <Text style={{ fontSize: 8, color: DIM }}>({f.feed.items.length})</Text>}
+              {f.feed && <Text style={{ fontSize: 8, color: DIM }}>{`(${f.feed.items.length})`}</Text>}
             </Box>
           );
         })}

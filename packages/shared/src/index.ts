@@ -157,6 +157,29 @@ export {
   type UptimeInfo,
 } from './useSystemInfo';
 
+// System monitoring (htop/nvtop level)
+export {
+  useSystemMonitor,
+  formatRate,
+  formatTotalBytes,
+  type SystemMonitor,
+  type CpuInfo,
+  type CoreInfo,
+  type DetailedMemory,
+  type ProcessInfo,
+  type TaskCounts,
+  type GpuInfo,
+  type NetworkInterface,
+  type DiskDevice,
+} from './useSystemMonitor';
+
+// Port monitoring
+export {
+  usePorts,
+  type PortInfo,
+  type PortMonitor,
+} from './usePorts';
+
 // Debug tools
 export { useDebug, getDebugData, registerDebug } from './useDebug';
 export { DebugOverlay, DebugBox, useDebugOverlay } from './DebugOverlay';

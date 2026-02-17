@@ -1,9 +1,30 @@
-import { existsSync, cpSync, rmSync } from 'node:fs';
+import { existsSync, cpSync, rmSync, lstatSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const CLI_ROOT = join(__dirname, '..');
+
+/** Returns true if `p` exists and is a symlink. */
+function isSymlink(p) {
+  try { return lstatSync(p).isSymbolicLink(); } catch { return false; }
+}
+
+/**
+ * Sync a runtime directory into the project, unless the destination is a
+ * symlink (meaning the project reads from source-of-truth directly).
+ */
+function syncDir(src, dest, label) {
+  if (isSymlink(dest)) {
+    console.log(`  Skipped ${label} (symlink — reading from source directly)`);
+    return;
+  }
+  if (existsSync(dest)) {
+    rmSync(dest, { recursive: true });
+  }
+  cpSync(src, dest, { recursive: true });
+  console.log(`  Updated ${label}`);
+}
 
 export async function updateCommand(args) {
   const cwd = process.cwd();
@@ -28,85 +49,45 @@ export async function updateCommand(args) {
   console.log('\n  Updating iLoveReact runtime...\n');
 
   // Update lua/
-  const destLua = join(cwd, 'lua');
-  if (existsSync(destLua)) {
-    rmSync(destLua, { recursive: true });
-  }
-  cpSync(runtimeLua, destLua, { recursive: true });
-  console.log('  Updated lua/');
+  syncDir(runtimeLua, join(cwd, 'lua'), 'lua/');
 
   // Update lib/
   if (existsSync(runtimeLib)) {
-    const destLib = join(cwd, 'lib');
-    if (existsSync(destLib)) {
-      rmSync(destLib, { recursive: true });
-    }
-    cpSync(runtimeLib, destLib, { recursive: true });
-    console.log('  Updated lib/');
+    syncDir(runtimeLib, join(cwd, 'lib'), 'lib/');
   }
 
   // Update bin/ (tor binary)
   const runtimeBin = join(CLI_ROOT, 'runtime', 'bin');
   if (existsSync(runtimeBin)) {
-    const destBin = join(cwd, 'bin');
-    if (existsSync(destBin)) {
-      rmSync(destBin, { recursive: true });
-    }
-    cpSync(runtimeBin, destBin, { recursive: true });
-    console.log('  Updated bin/');
+    syncDir(runtimeBin, join(cwd, 'bin'), 'bin/');
   }
 
   // Update ilovereact/ (shared + native packages)
   if (existsSync(runtimePkgs)) {
-    const destPkgs = join(cwd, 'ilovereact');
-    if (existsSync(destPkgs)) {
-      rmSync(destPkgs, { recursive: true });
-    }
-    cpSync(runtimePkgs, destPkgs, { recursive: true });
-    console.log('  Updated ilovereact/');
+    syncDir(runtimePkgs, join(cwd, 'ilovereact'), 'ilovereact/');
   }
 
   // Update fonts/ (font packs)
   const runtimeFonts = join(CLI_ROOT, 'runtime', 'fonts');
   if (existsSync(runtimeFonts)) {
-    const destFonts = join(cwd, 'fonts');
-    if (existsSync(destFonts)) {
-      rmSync(destFonts, { recursive: true });
-    }
-    cpSync(runtimeFonts, destFonts, { recursive: true });
-    console.log('  Updated fonts/');
+    syncDir(runtimeFonts, join(cwd, 'fonts'), 'fonts/');
 
     // Also copy into love/ subdirectory if it exists (Love2D filesystem root)
     const loveDir = join(cwd, 'love');
     if (existsSync(loveDir) && existsSync(join(loveDir, 'main.lua'))) {
-      const loveFonts = join(loveDir, 'fonts');
-      if (existsSync(loveFonts)) {
-        rmSync(loveFonts, { recursive: true });
-      }
-      cpSync(runtimeFonts, loveFonts, { recursive: true });
-      console.log('  Updated love/fonts/');
+      syncDir(runtimeFonts, join(loveDir, 'fonts'), 'love/fonts/');
     }
   }
 
   // Update data/ (dictionary, etc.)
   const runtimeData = join(CLI_ROOT, 'runtime', 'data');
   if (existsSync(runtimeData)) {
-    const destData = join(cwd, 'data');
-    if (existsSync(destData)) {
-      rmSync(destData, { recursive: true });
-    }
-    cpSync(runtimeData, destData, { recursive: true });
-    console.log('  Updated data/');
+    syncDir(runtimeData, join(cwd, 'data'), 'data/');
 
     // Also copy into love/ subdirectory if it exists
     const loveDir = join(cwd, 'love');
     if (existsSync(loveDir) && existsSync(join(loveDir, 'main.lua'))) {
-      const loveData = join(loveDir, 'data');
-      if (existsSync(loveData)) {
-        rmSync(loveData, { recursive: true });
-      }
-      cpSync(runtimeData, loveData, { recursive: true });
-      console.log('  Updated love/data/');
+      syncDir(runtimeData, join(loveDir, 'data'), 'love/data/');
     }
   }
 
