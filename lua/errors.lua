@@ -27,6 +27,10 @@ local currentIndex = 0
 -- Whether overlay is visible
 local visible = false
 
+-- Copy button state
+local copyBtnRect = { x = 0, y = 0, w = 0, h = 0 }
+local copiedFlashUntil = 0
+
 -- Overlay height as fraction of screen
 local OVERLAY_HEIGHT_FRAC = 0.4
 local MIN_OVERLAY_HEIGHT = 200
@@ -85,6 +89,22 @@ function Errors._printToTerminal(entry)
     io.write("\n")
     io.flush()
   end)
+end
+
+--- Format an error entry as a plain-text string for clipboard.
+local function formatForClipboard(entry)
+  local parts = {}
+  parts[#parts + 1] = "ERROR"
+  if entry.context and entry.context ~= "" then
+    parts[#parts + 1] = "  --  " .. entry.context
+  end
+  parts[#parts + 1] = "\n"
+  local prefix = entry.source ~= "unknown" and (entry.source .. ": ") or ""
+  parts[#parts + 1] = prefix .. entry.message .. "\n"
+  if entry.stack and entry.stack ~= "" then
+    parts[#parts + 1] = "\n" .. entry.stack .. "\n"
+  end
+  return table.concat(parts)
 end
 
 --- Draw the error overlay on top of everything.
@@ -191,18 +211,44 @@ function Errors.draw()
       end
     end
 
-    -- Footer: error count + dismiss hint
+    -- Footer: error count + [COPY] button + dismiss hint
     love.graphics.setFont(stackFont)
+    local footerY = screenH - pad - stackFont:getHeight()
+
+    -- Error count (left)
     love.graphics.setColor(DIM_COLOR)
     local footer = ""
     if #buffer > 1 then
       footer = "[" .. currentIndex .. " of " .. #buffer .. " errors]"
     end
-    love.graphics.print(footer, x, screenH - pad - stackFont:getHeight())
+    love.graphics.print(footer, x, footerY)
 
+    -- Dismiss hint (right)
     local dismiss = "click to dismiss"
     local dismissW = stackFont:getWidth(dismiss)
-    love.graphics.print(dismiss, screenW - pad - dismissW, screenH - pad - stackFont:getHeight())
+    love.graphics.print(dismiss, screenW - pad - dismissW, footerY)
+
+    -- Copy button (center-ish, next to error count)
+    local isCopied = love.timer.getTime() < copiedFlashUntil
+    local copyLabel = isCopied and "Copied!" or "[ Copy ]"
+    local copyW = stackFont:getWidth(copyLabel) + 12
+    local copyH = stackFont:getHeight() + 4
+    local copyX = x + stackFont:getWidth(footer) + 16
+    local copyY = footerY - 2
+
+    -- Button background
+    love.graphics.setColor(isCopied and {0.2, 0.7, 0.3, 0.9} or {1, 1, 1, 0.15})
+    love.graphics.rectangle("fill", copyX, copyY, copyW, copyH, 3, 3)
+
+    -- Button text
+    love.graphics.setColor(isCopied and {1, 1, 1, 1} or TEXT_COLOR)
+    love.graphics.print(copyLabel, copyX + 6, copyY + 2)
+
+    -- Store hit rect for mousepressed
+    copyBtnRect.x = copyX
+    copyBtnRect.y = copyY
+    copyBtnRect.w = copyW
+    copyBtnRect.h = copyH
 
     -- Restore graphics state
     love.graphics.pop()
@@ -231,6 +277,17 @@ function Errors.mousepressed(x, y, button)
 
   -- Check if click is within the overlay
   if y >= overlayY then
+    -- Check copy button first
+    if x >= copyBtnRect.x and x <= copyBtnRect.x + copyBtnRect.w
+       and y >= copyBtnRect.y and y <= copyBtnRect.y + copyBtnRect.h then
+      local entry = buffer[currentIndex]
+      if entry then
+        love.system.setClipboardText(formatForClipboard(entry))
+        copiedFlashUntil = love.timer.getTime() + 1.5
+      end
+      return true  -- consumed
+    end
+
     -- Cycle through errors if there are multiple, or dismiss if on last one
     if currentIndex < #buffer then
       currentIndex = currentIndex + 1
