@@ -291,6 +291,9 @@ cli-setup: setup
 
 # ── Clean ───────────────────────────────────────────────
 
+clean-demos:
+	@./scripts/clean-dormant-demos.sh
+
 dist-clean:
 	rm -rf $(DIST_DIR)
 	rm -rf $${XDG_CACHE_HOME:-$$HOME/.cache}/ilovereact-demo
