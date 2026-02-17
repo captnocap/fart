@@ -274,6 +274,7 @@ cli-setup: setup
 	cp -r packages/server cli/runtime/ilovereact/server
 	cp -r packages/ai cli/runtime/ilovereact/ai
 	cp -r packages/apis cli/runtime/ilovereact/apis
+	cp -r packages/rss cli/runtime/ilovereact/rss
 	@if [ -d fonts ]; then \
 		mkdir -p cli/runtime/fonts; \
 		cp -r fonts/* cli/runtime/fonts/; \

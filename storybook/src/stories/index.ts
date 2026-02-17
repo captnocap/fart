@@ -65,6 +65,7 @@ import { AIChatDemoStory } from './AIChatDemo';
 import { AICanvasStory } from './AICanvasDemo';
 import { MCPDemoStory } from './MCPDemo';
 import { APIsStory } from './APIsStory';
+import { RSSStory } from './RSSStory';
 
 export const stories: StoryDef[] = [
   // Primitives
@@ -149,6 +150,7 @@ export const stories: StoryDef[] = [
   { id: 'fetch', title: 'Fetch', category: 'Networking', component: FetchStory },
   { id: 'websocket', title: 'WebSocket', category: 'Networking', component: WebSocketStory },
   { id: 'apis', title: 'REST APIs', category: 'Networking', component: APIsStory },
+  { id: 'rss', title: 'RSS Feeds', category: 'Networking', component: RSSStory },
 
   // Dev Tools
   { id: 'error-test', title: 'Error Test', category: 'Dev Tools', component: ErrorTestStory },
