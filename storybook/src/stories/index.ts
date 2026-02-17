@@ -67,6 +67,7 @@ import { MCPDemoStory } from './MCPDemo';
 import { APIsStory } from './APIsStory';
 import { RSSStory } from './RSSStory';
 import { WebhooksStory } from './WebhooksStory';
+import { CryptoStory } from './CryptoStory';
 
 export const stories: StoryDef[] = [
   // Primitives
@@ -153,6 +154,9 @@ export const stories: StoryDef[] = [
   { id: 'apis', title: 'REST APIs', category: 'Networking', component: APIsStory },
   { id: 'rss', title: 'RSS Feeds', category: 'Networking', component: RSSStory },
   { id: 'webhooks', title: 'Webhooks', category: 'Networking', component: WebhooksStory },
+
+  // Security
+  { id: 'crypto', title: 'Crypto', category: 'Security', component: CryptoStory },
 
   // Dev Tools
   { id: 'error-test', title: 'Error Test', category: 'Dev Tools', component: ErrorTestStory },

@@ -24,7 +24,7 @@ function HMACDemo() {
   return (
     <Box style={{ backgroundColor: CARD, borderRadius: 8, padding: 12, gap: 8, borderWidth: 1, borderColor: BORDER }}>
       <Text style={{ fontSize: 13, color: BRIGHT, fontWeight: '700' }}>HMAC-SHA256 Signing</Text>
-      <Text style={{ fontSize: 9, color: DIM }}>Pure JS implementation — works in QuickJS, Node, browser</Text>
+      <Text style={{ fontSize: 9, color: DIM }}>@noble/hashes — audited, works in QuickJS, Node, browser</Text>
 
       <Box style={{ gap: 4 }}>
         <Text style={{ fontSize: 10, color: MUTED }}>Secret:</Text>
@@ -127,7 +127,7 @@ function FeatureList() {
     { label: 'HMAC-SHA256', desc: 'GitHub/Stripe-compatible signature verification', color: ORANGE },
     { label: 'Retries', desc: 'Exponential backoff on 5xx errors', color: '#8b5cf6' },
     { label: 'Event Queue', desc: 'Newest-first queue with configurable max size', color: '#ec4899' },
-    { label: 'Pure JS', desc: 'SHA-256 + HMAC implemented from scratch — works in QuickJS', color: RED },
+    { label: '@noble/hashes', desc: 'Audited SHA-256 + HMAC via noble — works in QuickJS', color: RED },
   ];
 
   return (

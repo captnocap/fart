@@ -41,6 +41,10 @@
     "validate:docs": "npx tsx scripts/docs/build.ts validate"
   },
   "dependencies": {
+    "@noble/ciphers": "^2.1.1",
+    "@noble/curves": "^2.0.1",
+    "@noble/hashes": "^2.0.1",
+    "@scure/base": "^2.0.0",
     "@types/ws": "^8.18.1",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",

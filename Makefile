@@ -276,6 +276,7 @@ cli-setup: setup
 	cp -r packages/apis cli/runtime/ilovereact/apis
 	cp -r packages/rss cli/runtime/ilovereact/rss
 	cp -r packages/webhooks cli/runtime/ilovereact/webhooks
+	cp -r packages/crypto cli/runtime/ilovereact/crypto
 	@if [ -d fonts ]; then \
 		mkdir -p cli/runtime/fonts; \
 		cp -r fonts/* cli/runtime/fonts/; \

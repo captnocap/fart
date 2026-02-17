@@ -3,9 +3,9 @@
  * Delegates to @noble/hashes — audited, battle-tested.
  */
 
-import { sha256 } from '@noble/hashes/sha2.js';
-import { hmac } from '@noble/hashes/hmac.js';
-import { bytesToHex } from '@noble/hashes/utils.js';
+import { sha256 } from '@noble/hashes/sha256';
+import { hmac } from '@noble/hashes/hmac';
+import { bytesToHex } from '@noble/hashes/utils';
 
 /**
  * Compute HMAC-SHA256 and return hex string.
