@@ -26,7 +26,7 @@ export function Scene3DBasicStory() {
         <Mesh
           geometry="box"
           color="#89b4fa"
-          edgeColor="#cdd6f4"
+          edgeColor="#000000"
           edgeWidth={0.04}
           rotation={[spin * 0.7, spin, spin * 0.3]}
         />
@@ -39,7 +39,7 @@ export function Scene3DBasicStory() {
         <Mesh
           geometry="box"
           color="#a6e3a1"
-          edgeColor="#f9e2af"
+          edgeColor="#000000"
           edgeWidth={0.03}
           position={[-2.5, 0, 0]}
           scale={0.6}
@@ -57,7 +57,7 @@ export function Scene3DBasicStory() {
         }}
       >
         <Text style={{ fontSize: 11, color: '#6c7086' }}>
-          Blue cube with white edges + Pink sphere + Green cube with yellow edges
+          Blue cube + Green cube (black edges) + Pink sphere
         </Text>
       </Box>
     </Box>
