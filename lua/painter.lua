@@ -26,6 +26,7 @@
 local Measure = nil  -- Injected at init time via Painter.init()
 local Images = nil   -- Injected at init time via Painter.init()
 local Videos = nil   -- Injected at init time via Painter.init()
+local Scene3DModule = nil -- Injected at init time via Painter.init()
 local ZIndex = require("lua.zindex")
 local Color = require("lua.color")
 local TextEditorModule = nil  -- Lazy-loaded to avoid circular deps
@@ -47,6 +48,7 @@ function Painter.init(config)
   Measure = config.measure
   Images = config.images
   Videos = config.videos
+  Scene3DModule = config.scene3d
   getFont = Measure.getFont
 end
 
@@ -575,6 +577,10 @@ end
 --- @param stencilDepth number Current stencil nesting depth (default 0)
 function Painter.paintNode(node, inheritedOpacity, stencilDepth)
   if not node or not node.computed then return end
+
+  -- 3D child nodes (Mesh3D, Camera3D, Light3D, etc.) are rendered by scene3d.lua,
+  -- not by the 2D painter. Skip them entirely.
+  if Scene3DModule and Scene3DModule.is3DChildType(node.type) then return end
 
   inheritedOpacity = inheritedOpacity or 1
   stencilDepth = stencilDepth or 0
@@ -1143,6 +1149,16 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
     local c = node.computed
     if c and c.w > 0 and c.h > 0 then
       CodeBlockModule.render(node, c, effectiveOpacity)
+    end
+
+  elseif not isHidden and node.type == "Scene3D" then
+    -- 3D viewport: draw the pre-rendered Canvas from scene3d.lua
+    if Scene3DModule then
+      local canvas = Scene3DModule.get(node.id)
+      if canvas then
+        love.graphics.setColor(1, 1, 1, effectiveOpacity)
+        love.graphics.draw(canvas, c.x, c.y)
+      end
     end
   end
 

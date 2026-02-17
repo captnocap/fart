@@ -11,6 +11,7 @@
 local Images = nil    -- Injected at init time via Tree.init()
 local Videos = nil    -- Injected at init time via Tree.init()
 local Animate = nil   -- Injected at init time via Tree.init()
+local Scene3D = nil   -- Injected at init time via Tree.init()
 
 local Tree = {}
 
@@ -37,6 +38,11 @@ local function cleanup(id)
 
     -- Video cleanup is handled by Videos.syncWithTree() each frame
 
+    -- Clean up Scene3D resources (canvas, meshes)
+    if Scene3D and n.type == "Scene3D" then
+      Scene3D.cleanup(n.id)
+    end
+
     -- Clean up active transitions/animations
     if Animate then
       Animate.onNodeRemoved(id)
@@ -62,6 +68,7 @@ function Tree.init(config)
   Images = config.images
   Videos = config.videos
   Animate = config.animate
+  Scene3D = config.scene3d
   nodes = {}
   rootChildren = {}
   treeDirty = true

@@ -69,6 +69,13 @@ import { APIsStory } from './APIsStory';
 import { RSSStory } from './RSSStory';
 import { WebhooksStory } from './WebhooksStory';
 import { CryptoStory } from './CryptoStory';
+import { HorizontalBarChartStory } from './HorizontalBarChartStory';
+import { StackedBarChartStory } from './StackedBarChartStory';
+import { LineChartStory } from './LineChartStory';
+import { AreaChartStory } from './AreaChartStory';
+import { PieChartStory } from './PieChartStory';
+import { RadarChartStory } from './RadarChartStory';
+import { Scene3DBasicStory } from './Scene3DBasic';
 
 export const stories: StoryDef[] = [
   // Primitives
@@ -133,6 +140,12 @@ export const stories: StoryDef[] = [
   { id: 'bar-chart', title: 'Bar Chart', category: 'Data', component: BarChartStory },
   { id: 'progress-bar', title: 'Progress Bar', category: 'Data', component: ProgressBarStory },
   { id: 'sparkline', title: 'Sparkline', category: 'Data', component: SparklineStory },
+  { id: 'horizontal-bar-chart', title: 'Horizontal Bar', category: 'Data', component: HorizontalBarChartStory },
+  { id: 'stacked-bar-chart', title: 'Stacked Bar', category: 'Data', component: StackedBarChartStory },
+  { id: 'line-chart', title: 'Line Chart', category: 'Data', component: LineChartStory },
+  { id: 'area-chart', title: 'Area Chart', category: 'Data', component: AreaChartStory },
+  { id: 'pie-chart', title: 'Pie / Donut', category: 'Data', component: PieChartStory },
+  { id: 'radar-chart', title: 'Radar Chart', category: 'Data', component: RadarChartStory },
 
   // Demo
   { id: 'settings-demo', title: 'Settings Demo', category: 'Demo', component: SettingsDemoStory },
@@ -159,6 +172,9 @@ export const stories: StoryDef[] = [
 
   // Security
   { id: 'crypto', title: 'Crypto', category: 'Security', component: CryptoStory },
+
+  // 3D
+  { id: 'scene-3d-basic', title: '3D Scene', category: '3D', component: Scene3DBasicStory },
 
   // Dev Tools
   { id: 'error-test', title: 'Error Test', category: 'Dev Tools', component: ErrorTestStory },

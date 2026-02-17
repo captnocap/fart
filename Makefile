@@ -239,6 +239,8 @@ cli-setup: setup
 	rm -rf cli/runtime
 	mkdir -p cli/runtime/lua cli/runtime/lib cli/runtime/bin cli/runtime/ilovereact
 	cp lua/*.lua cli/runtime/lua/
+	mkdir -p cli/runtime/lua/g3d
+	cp lua/g3d/* cli/runtime/lua/g3d/
 	mkdir -p cli/runtime/lua/audio/modules
 	cp lua/audio/*.lua cli/runtime/lua/audio/
 	cp lua/audio/modules/*.lua cli/runtime/lua/audio/modules/

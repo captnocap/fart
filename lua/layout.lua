@@ -567,7 +567,10 @@ function Layout.layoutNode(node, px, py, pw, ph)
   -- ====================================================================
   -- Filter visible children and measure them
   -- ====================================================================
-  local allChildren = node.children or {}
+  -- Scene3D nodes are opaque leaf boxes in the 2D layout.
+  -- Their children (Mesh3D, Camera3D, etc.) use 3D coordinates,
+  -- not flex positioning, so we skip them entirely.
+  local allChildren = (node.type == "Scene3D") and {} or (node.children or {})
   local visibleIndices = {}  -- list of indices into allChildren for visible kids
   local childInfos = {}      -- keyed by index in allChildren
 

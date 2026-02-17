@@ -32,6 +32,7 @@ local inspectorEnabled = true                 -- can be disabled via config.insp
 local animate  = nil   -- animate.lua module (Lua-side transitions/animations)
 local images   = nil   -- images.lua module (image cache)
 local videos   = nil   -- videos.lua module (video cache + FFmpeg transcoding)
+local scene3d  = nil   -- scene3d.lua module (3D scene rendering via g3d)
 local videoplayer = nil                       -- videoplayer.lua (Lua-native video controls)
 local focus    = require("lua.focus")         -- focus manager for Lua-owned inputs
 local texteditor = nil                        -- texteditor.lua (loaded on demand)
@@ -324,9 +325,11 @@ function ReactLove.init(config)
     videos  = require("lua.videos")
     videos.initBackend()
     animate = require("lua.animate")
+    scene3d = require("lua.scene3d")
+    scene3d.init()
 
     tree    = require("lua.tree")
-    tree.init({ images = images, videos = videos, animate = animate })
+    tree.init({ images = images, videos = videos, animate = animate, scene3d = scene3d })
 
     animate.init({ tree = tree })
 
@@ -334,7 +337,7 @@ function ReactLove.init(config)
     layout.init({ measure = measure })
 
     painter = require("lua.painter")
-    painter.init({ measure = measure, images = images, videos = videos })
+    painter.init({ measure = measure, images = images, videos = videos, scene3d = scene3d })
 
     events  = require("lua.events")
     events.setTreeModule(tree)
@@ -388,9 +391,11 @@ function ReactLove.init(config)
     measure = require("lua.measure")
     images  = require("lua.images")
     animate = require("lua.animate")
+    scene3d = require("lua.scene3d")
+    scene3d.init()
 
     tree    = require("lua.tree")
-    tree.init({ images = images, videos = videos, animate = animate })
+    tree.init({ images = images, videos = videos, animate = animate, scene3d = scene3d })
 
     animate.init({ tree = tree })
 
@@ -398,7 +403,7 @@ function ReactLove.init(config)
     layout.init({ measure = measure })
 
     painter = require("lua.painter")
-    painter.init({ measure = measure, images = images, videos = videos })
+    painter.init({ measure = measure, images = images, videos = videos, scene3d = scene3d })
 
     events  = require("lua.events")
     events.setTreeModule(tree)
@@ -1091,6 +1096,12 @@ function ReactLove.update(dt)
   if videos then
     videos.syncWithTree(tree.getNodes())
     videos.renderAll()
+  end
+
+  -- 8c. Sync 3D scenes with tree, then render to off-screen Canvases
+  if scene3d then
+    scene3d.syncWithTree(tree.getNodes())
+    scene3d.renderAll()
   end
 
   -- 9. Poll video status and playback events, emit to JS
@@ -2348,7 +2359,7 @@ function ReactLove.reload()
   if images then images.clearCache() end
   if videos then videos.clearCache() end
   if animate then animate.clear() end
-  tree.init({ images = images, videos = videos, animate = animate })
+  tree.init({ images = images, videos = videos, animate = animate, scene3d = scene3d })
   if animate then animate.init({ tree = tree }) end
   events.clearHover()
   events.clearPressedNode()
