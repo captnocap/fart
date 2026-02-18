@@ -31,7 +31,9 @@
       "@ilovereact/webhooks": ["./packages/webhooks/src"],
       "@ilovereact/crypto": ["./packages/crypto/src"],
       "@ilovereact/media": ["./packages/media/src"],
-      "@ilovereact/3d": ["./packages/3d/src"]
+      "@ilovereact/3d": ["./packages/3d/src"],
+      "@ilovereact/game": ["./packages/game/src"],
+      "@ilovereact/theme": ["./packages/theme/src"]
     }
   }
 }

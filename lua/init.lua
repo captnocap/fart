@@ -39,6 +39,7 @@ local texteditor = nil                        -- texteditor.lua (loaded on deman
 local textinput  = nil                        -- textinput.lua (loaded on demand)
 local codeblock  = nil                        -- codeblock.lua (loaded on demand)
 local textselection = nil                    -- textselection.lua (text highlight + copy)
+local slider     = nil                        -- slider.lua (Lua-owned slider interaction)
 local contextmenu = nil                      -- contextmenu.lua (right-click context menu)
 local osk      = nil                          -- osk.lua (on-screen keyboard for gamepad)
 local http     = nil                          -- http.lua (async HTTP + local file fetch)
@@ -54,6 +55,11 @@ local audioEngine = nil                       -- audio/engine.lua (modular audio
 local httpserver = nil                        -- httpserver.lua (HTTP server for static files + API routes)
 local browse   = nil                          -- browse.lua (TCP client for stealth browse session)
 local sysmon   = nil                          -- sysmon.lua (system monitoring: CPU, memory, processes, GPU, etc.)
+
+-- Theme system
+local themes   = nil                          -- lua/themes/init.lua (theme registry)
+local currentThemeName = 'catppuccin-mocha'   -- active theme ID
+local currentTheme     = nil                  -- active theme table reference
 
 -- Controller connection toast (auto-dismiss notification)
 local controllerToast = {
@@ -354,6 +360,9 @@ function ReactLove.init(config)
     videoplayer = require("lua.videoplayer")
     videoplayer.init({ measure = measure, videos = videos })
 
+    slider = require("lua.slider")
+    slider.init({ measure = measure })
+
     textselection = require("lua.textselection")
     textselection.init({ measure = measure, events = events })
 
@@ -369,6 +378,13 @@ function ReactLove.init(config)
     spellcheck.init()
 
     focus.init(tree, pushEvent)
+
+    -- Load theme registry
+    local thOk, thMod = pcall(require, "lua.themes")
+    if thOk and type(thMod) == "table" then
+      themes = thMod
+      currentTheme = themes[currentThemeName]
+    end
 
     print("[react-love] Initialized in CANVAS mode (Module.FS bridge + native rendering)")
     -- Push initial viewport dimensions for canvas mode
@@ -419,6 +435,9 @@ function ReactLove.init(config)
 
     videoplayer = require("lua.videoplayer")
     videoplayer.init({ measure = measure, videos = videos })
+
+    slider = require("lua.slider")
+    slider.init({ measure = measure })
 
     textselection = require("lua.textselection")
     textselection.init({ measure = measure, events = events })
@@ -482,6 +501,13 @@ function ReactLove.init(config)
     -- Don't mount yet — that happens in the first update() call so the
     -- Love2D event loop is running and we can tick timers between frames.
     ReactLove._needsMount = true
+
+    -- Load theme registry
+    local thOk, thMod = pcall(require, "lua.themes")
+    if thOk and type(thMod) == "table" then
+      themes = thMod
+      currentTheme = themes[currentThemeName]
+    end
 
     print("[react-love] Initialized in NATIVE mode (QuickJS bridge)")
   end
@@ -881,7 +907,8 @@ function ReactLove.update(dt)
         local t = cmd.type
         if t == "rpc:call" or t == "http:request" or t == "http:stream" or t == "browse:request"
            or t == "ws:connect" or t == "ws:send" or t == "ws:close"
-           or t == "ws:listen" or t == "ws:broadcast" or t == "ws:peer:send" or t == "ws:server:stop" then
+           or t == "ws:listen" or t == "ws:broadcast" or t == "ws:peer:send" or t == "ws:server:stop"
+           or t == "theme:set" then
           hasSpecial = true
           break
         end
@@ -1019,6 +1046,16 @@ function ReactLove.update(dt)
           if payload and payload.serverId and network then
             network.stopServer(payload.serverId)
           end
+        elseif type(cmd) == "table" and cmd.type == "theme:set" then
+          -- Switch active theme
+          local payload = cmd.payload
+          local name = payload and payload.name
+          if name and themes and themes[name] then
+            currentThemeName = name
+            currentTheme = themes[name]
+            if tree then tree.markDirty() end
+            io.write("[react-love] Theme switched to: " .. name .. "\n"); io.flush()
+          end
         else
           treeCommands[#treeCommands + 1] = cmd
         end
@@ -1151,7 +1188,24 @@ function ReactLove.update(dt)
     end
   end
 
-  -- 10. Poll drag-hover state (X11 XDnD + SDL2 global mouse)
+  -- 10. Drain Lua-owned slider events
+  if slider then
+    local sliderEvents = slider.drainEvents()
+    if sliderEvents then
+      for _, evt in ipairs(sliderEvents) do
+        pushEvent({
+          type = evt.type,
+          payload = {
+            type = evt.type,
+            targetId = evt.nodeId,
+            value = evt.value,
+          },
+        })
+      end
+    end
+  end
+
+  -- 11. Poll drag-hover state (X11 XDnD + SDL2 global mouse)
   if dragdrop then
     dragdrop.poll()
     if dragdrop.isDragHovering() then
@@ -1610,6 +1664,11 @@ function ReactLove.mousepressed(x, y, button)
       if videoplayer then
         videoplayer.handleMousePressed(hit, x, y, button)
       end
+    elseif hit.type == "Slider" then
+      -- Clicked a Slider: handle drag interaction in Lua
+      if slider then
+        slider.handleMousePressed(hit, x, y, button)
+      end
     else
       -- Normal node: standard drag + click handling
       events.startDrag(hit.id, x, y)
@@ -1676,6 +1735,18 @@ function ReactLove.mousereleased(x, y, button)
       for _, node in pairs(nodes) do
         if node.type == "VideoPlayer" and node._vp then
           videoplayer.handleMouseReleased(node, x, y, button)
+        end
+      end
+    end
+  end
+
+  -- Slider drag release (check all Slider nodes — mouse may have left bounds)
+  if slider and tree then
+    local nodes = tree.getNodes()
+    if nodes then
+      for _, node in pairs(nodes) do
+        if node.type == "Slider" and node._slider then
+          slider.handleMouseReleased(node, x, y, button)
         end
       end
     end
@@ -1772,6 +1843,18 @@ function ReactLove.mousemoved(x, y)
       for _, node in pairs(nodes) do
         if node.type == "VideoPlayer" and node._vp then
           videoplayer.handleMouseMoved(node, x, y)
+        end
+      end
+    end
+  end
+
+  -- Slider: handle active drag (mouse may be outside the node)
+  if slider and tree then
+    local nodes = tree.getNodes()
+    if nodes then
+      for _, node in pairs(nodes) do
+        if node.type == "Slider" and node._slider and node._slider.isDragging then
+          slider.handleMouseMoved(node, x, y)
         end
       end
     end
@@ -2496,6 +2579,21 @@ end
 --- Returns a stub with .available = false if libsqlite3 not found.
 function ReactLove.getDocStore()
   return docstore
+end
+
+--- Return the current theme table (colors, etc.).
+function ReactLove.getTheme()
+  return currentTheme
+end
+
+--- Return the current theme name (e.g. "catppuccin-mocha").
+function ReactLove.getThemeName()
+  return currentThemeName
+end
+
+--- Return the full themes registry table.
+function ReactLove.getThemes()
+  return themes
 end
 
 --- Register an RPC handler for a given method name.

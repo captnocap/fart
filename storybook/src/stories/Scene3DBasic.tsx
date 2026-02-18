@@ -33,6 +33,8 @@ export function Scene3DBasicStory() {
         <Mesh
           geometry="sphere"
           color="#f5c2e7"
+          wireframe
+          edgeColor="#1e1e2e"
           position={[2.5, 0, 0]}
           rotation={[0, spin * 0.5, 0]}
         />

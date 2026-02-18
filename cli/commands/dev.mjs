@@ -30,7 +30,7 @@ export async function devCommand(args) {
   if (!existsSync(outdir)) mkdirSync(outdir, { recursive: true });
 
   const hints = {
-    love: 'Love2D will launch automatically and restart on rebuild.',
+    love: 'Love2D will launch once. HMR reloads in-place on rebuild.',
     terminal: 'The terminal app will auto-reload on save.',
     web: 'Serve dist/ with any HTTP server to see your app.',
   };
@@ -44,9 +44,33 @@ export async function devCommand(args) {
 
   let loveProcess = null;
   let isShuttingDown = false;
+  let loveHasLaunched = false;
 
   // Determine Love2D directory (some projects use love/ subdirectory)
   const loveDir = existsSync(join(cwd, 'love', 'main.lua')) ? 'love' : '.';
+
+  const launchLove = () => {
+    if (loveHasLaunched || isShuttingDown) return;
+    loveHasLaunched = true;
+    console.log('[ilr] Launching Love2D...');
+    loveProcess = spawn('love', [loveDir], { cwd, stdio: 'inherit' });
+    loveProcess.on('exit', (code) => {
+      loveProcess = null;
+      if (!isShuttingDown && code !== null && code !== 0) {
+        console.error(`\nLove2D exited with code ${code}`);
+      }
+    });
+  };
+
+  // Detect build completion from esbuild output (watch messages go to stderr)
+  const onEsbuildOutput = (data) => {
+    const output = data.toString();
+    if (targetName === 'love' && output.includes('build finished')) {
+      console.log('[ilr] Build complete.');
+      // Launch Love2D only on the first build — Lua HMR handles subsequent reloads
+      launchLove();
+    }
+  };
 
   // Spawn esbuild watch process
   const esbuild = spawn('npx', [
@@ -58,61 +82,14 @@ export async function devCommand(args) {
     entry,
   ], { cwd, stdio: 'pipe' });
 
-  // Forward esbuild output and detect build completion
   esbuild.stdout.on('data', (data) => {
     process.stdout.write(data);
-    const output = data.toString();
-
-    // Restart Love2D on successful build
-    if (targetName === 'love' && (output.includes('build finished') || output.match(/\d+ bytes/))) {
-      console.log('\n[ilr] Build complete, launching Love2D...');
-      if (loveProcess && !isShuttingDown) {
-        loveProcess.kill();
-        loveProcess = null;
-      }
-      if (!isShuttingDown) {
-        setTimeout(() => {
-          if (!isShuttingDown) {
-            console.log('[ilr] Starting Love2D process...');
-            loveProcess = spawn('love', [loveDir], { cwd, stdio: 'inherit' });
-            loveProcess.on('exit', (code) => {
-              if (!isShuttingDown && code !== null && code !== 0) {
-                console.error(`\nLove2D exited with code ${code}`);
-              }
-              loveProcess = null;
-            });
-          }
-        }, 100);
-      }
-    }
+    onEsbuildOutput(data);
   });
 
   esbuild.stderr.on('data', (data) => {
     process.stderr.write(data);
-    const output = data.toString();
-
-    // Also check stderr for build completion (esbuild watch messages go here)
-    if (targetName === 'love' && output.includes('build finished')) {
-      console.log('\n[ilr] Build complete, launching Love2D...');
-      if (loveProcess && !isShuttingDown) {
-        loveProcess.kill();
-        loveProcess = null;
-      }
-      if (!isShuttingDown) {
-        setTimeout(() => {
-          if (!isShuttingDown) {
-            console.log('[ilr] Starting Love2D process...');
-            loveProcess = spawn('love', [loveDir], { cwd, stdio: 'inherit' });
-            loveProcess.on('exit', (code) => {
-              if (!isShuttingDown && code !== null && code !== 0) {
-                console.error(`\nLove2D exited with code ${code}`);
-              }
-              loveProcess = null;
-            });
-          }
-        }, 100);
-      }
-    }
+    onEsbuildOutput(data);
   });
 
   // Cleanup handler

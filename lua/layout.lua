@@ -14,6 +14,7 @@
     - margin (all sides + per-side)
     - gap (applies between items on a line AND between lines when wrapping)
     - display: flex (default), none (skip node entirely)
+    - position: relative (default), absolute (out-of-flow, positioned via top/left/right/bottom)
     - minWidth / maxWidth / minHeight / maxHeight clamping
     - Intrinsic text measurement for Text/__TEXT__ nodes
     - Padding-aware text wrapping (inner width used as constraint)
@@ -337,7 +338,7 @@ local function estimateIntrinsicMain(node, isRow, pw, ph)
   local direction = s.flexDirection or "column"
   local containerIsRow = (direction == "row")
 
-  -- 4. Sum (main axis) or max (cross axis) children, skipping hidden nodes
+  -- 4. Sum (main axis) or max (cross axis) children, skipping hidden and absolute nodes
   local visibleCount = 0
 
   if (isRow and containerIsRow) or (not isRow and not containerIsRow) then
@@ -345,7 +346,7 @@ local function estimateIntrinsicMain(node, isRow, pw, ph)
     local sum = 0
     for _, child in ipairs(children) do
       local cs = child.style or {}
-      if cs.display ~= "none" then
+      if cs.display ~= "none" and cs.position ~= "absolute" then
         visibleCount = visibleCount + 1
 
         -- Account for child margins along measurement axis
@@ -370,7 +371,7 @@ local function estimateIntrinsicMain(node, isRow, pw, ph)
     local max = 0
     for _, child in ipairs(children) do
       local cs = child.style or {}
-      if cs.display ~= "none" then
+      if cs.display ~= "none" and cs.position ~= "absolute" then
         -- Account for child margins along measurement axis
         local cmar = ru(cs.margin, isRow and pw or ph) or 0
         local marStart = isRow and (ru(cs.marginLeft, pw) or cmar)
@@ -572,6 +573,7 @@ function Layout.layoutNode(node, px, py, pw, ph)
   -- not flex positioning, so we skip them entirely.
   local allChildren = (node.type == "Scene3D") and {} or (node.children or {})
   local visibleIndices = {}  -- list of indices into allChildren for visible kids
+  local absoluteIndices = {} -- list of indices for position:absolute children
   local childInfos = {}      -- keyed by index in allChildren
 
   for i, child in ipairs(allChildren) do
@@ -580,6 +582,9 @@ function Layout.layoutNode(node, px, py, pw, ph)
     -- display:none children are completely skipped from layout
     if cs.display == "none" then
       child.computed = { x = 0, y = 0, w = 0, h = 0 }
+    elseif cs.position == "absolute" then
+      -- Absolute children are removed from flex flow and positioned separately
+      absoluteIndices[#absoluteIndices + 1] = i
     else
       visibleIndices[#visibleIndices + 1] = i
 
@@ -1093,6 +1098,91 @@ function Layout.layoutNode(node, px, py, pw, ph)
   h = clampDim(h, minH, maxH)
 
   node.computed = { x = x, y = y, w = w, h = h }
+
+  -- ====================================================================
+  -- Absolute positioning: lay out position:absolute children
+  -- ====================================================================
+  -- These children are removed from flex flow and positioned relative to
+  -- the parent's padding box using top/left/right/bottom offsets.
+  -- They use intrinsic sizing (content-based) unless explicit dimensions
+  -- are provided, or both opposing offsets define the size.
+  for _, idx in ipairs(absoluteIndices) do
+    local child = allChildren[idx]
+    local cs = child.style or {}
+
+    -- Resolve explicit dimensions
+    local cw = ru(cs.width, w)
+    local ch = ru(cs.height, h)
+
+    -- Resolve offsets relative to parent dimensions
+    local offTop    = ru(cs.top, h)
+    local offBottom = ru(cs.bottom, h)
+    local offLeft   = ru(cs.left, w)
+    local offRight  = ru(cs.right, w)
+
+    -- Resolve margins
+    local cmar  = ru(cs.margin, w) or 0
+    local cmarL = ru(cs.marginLeft, w)  or cmar
+    local cmarR = ru(cs.marginRight, w) or cmar
+    local cmarT = ru(cs.marginTop, h)   or cmar
+    local cmarB = ru(cs.marginBottom, h) or cmar
+
+    -- Determine width: explicit > left+right derivation > intrinsic
+    if not cw then
+      if offLeft and offRight then
+        cw = w - padL - padR - offLeft - offRight - cmarL - cmarR
+        if cw < 0 then cw = 0 end
+      else
+        cw = estimateIntrinsicMain(child, true, w, h)
+      end
+    end
+
+    -- Determine height: explicit > top+bottom derivation > intrinsic
+    if not ch then
+      if offTop and offBottom then
+        ch = h - padT - padB - offTop - offBottom - cmarT - cmarB
+        if ch < 0 then ch = 0 end
+      else
+        ch = estimateIntrinsicMain(child, false, w, h)
+      end
+    end
+
+    -- Resolve min/max constraints
+    cw = clampDim(cw, ru(cs.minWidth, w), ru(cs.maxWidth, w))
+    ch = clampDim(ch, ru(cs.minHeight, h), ru(cs.maxHeight, h))
+
+    -- Horizontal positioning
+    local cx
+    if offLeft then
+      cx = x + padL + offLeft + cmarL
+    elseif offRight then
+      cx = x + w - padR - offRight - cmarR - cw
+    else
+      -- No horizontal offset: use alignSelf for cross-axis centering
+      local selfAlign = normalizeAlign(cs.alignSelf or align)
+      if selfAlign == "center" then
+        cx = x + (w - cw) / 2
+      elseif selfAlign == "end" then
+        cx = x + w - padR - cmarR - cw
+      else
+        cx = x + padL + cmarL
+      end
+    end
+
+    -- Vertical positioning
+    local cy
+    if offTop then
+      cy = y + padT + offTop + cmarT
+    elseif offBottom then
+      cy = y + h - padB - offBottom - cmarB - ch
+    else
+      -- No vertical offset: default to top of padding box
+      cy = y + padT + cmarT
+    end
+
+    child.computed = { x = cx, y = cy, w = cw, h = ch }
+    Layout.layoutNode(child, cx, cy, cw, ch)
+  end
 
   -- ====================================================================
   -- Scroll state: track content dimensions for scroll containers

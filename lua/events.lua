@@ -94,6 +94,7 @@ function Events.hitTest(node, mx, my)
   if node.type == "VideoPlayer" then return node end
   if node.type == "ContextMenu" then return node end
   if node.type == "Scene3D" then return node end
+  if node.type == "Slider" then return node end
   return nil
 end
 

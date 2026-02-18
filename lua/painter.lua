@@ -33,6 +33,7 @@ local TextEditorModule = nil  -- Lazy-loaded to avoid circular deps
 local TextInputModule = nil   -- Lazy-loaded to avoid circular deps
 local CodeBlockModule = nil   -- Lazy-loaded to avoid circular deps
 local VideoPlayerModule = nil -- Lazy-loaded to avoid circular deps
+local SliderModule = nil     -- Lazy-loaded to avoid circular deps
 local TextSelectionModule = nil  -- Lazy-loaded to avoid circular deps
 
 local Painter = {}
@@ -1160,6 +1161,12 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
         love.graphics.draw(canvas, c.x, c.y)
       end
     end
+
+  elseif not isHidden and node.type == "Slider" then
+    if not SliderModule then
+      SliderModule = require("lua.slider")
+    end
+    SliderModule.draw(node, effectiveOpacity)
   end
 
   -- Determine paint order: sort children by zIndex (stable, ascending)
