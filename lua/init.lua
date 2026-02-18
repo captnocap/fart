@@ -27,9 +27,11 @@ local inspector  = require("lua.inspector")   -- debug inspector (F12 toggle, se
 local console    = require("lua.console")     -- interactive eval console (` toggle, self-contained)
 local devtools   = require("lua.devtools")    -- unified bottom panel with tabs (Elements + Console)
 local settings   = require("lua.settings")    -- API key management overlay (F10 toggle)
+local themeMenu  = require("lua.theme_menu")  -- theme browser overlay (F9 toggle)
 local screenshot = nil                        -- screenshot.lua (loaded on demand)
 local inspectorEnabled = true                 -- can be disabled via config.inspector = false
 local settingsEnabled  = true                 -- can be disabled via config.settings = false
+local themeMenuEnabled = true                 -- can be disabled via config.themeMenu = false
 
 local animate  = nil   -- animate.lua module (Lua-side transitions/animations)
 local images   = nil   -- images.lua module (image cache)
@@ -370,6 +372,23 @@ function ReactLove.init(config)
     settings.init({ key = settingsKey })
   end
 
+  -- Theme menu overlay can be disabled or configured
+  themeMenuEnabled = config.themeMenu ~= false
+  if themeMenuEnabled then
+    themeMenu.init({
+      key = "f9",
+      onSwitch = function(name)
+        if themes and themes[name] then
+          currentThemeName = name
+          currentTheme = themes[name]
+          if painter then painter.setTheme(currentTheme) end
+          if tree then tree.markDirty() end
+          pushEvent({ type = "theme:switch", payload = { type = "theme:switch", name = name } })
+        end
+      end
+    })
+  end
+
   mode = detectMode(config)
   local ns = config.namespace or "default"
 
@@ -448,6 +467,10 @@ function ReactLove.init(config)
       themes = thMod
       currentTheme = themes[currentThemeName]
       if painter then painter.setTheme(currentTheme) end
+      if themeMenuEnabled then
+        themeMenu.setThemes(themes)
+        themeMenu.setCurrentTheme(currentThemeName, currentTheme)
+      end
     end
 
     print("[react-love] Initialized in CANVAS mode (Module.FS bridge + native rendering)")
@@ -577,6 +600,10 @@ function ReactLove.init(config)
       themes = thMod
       currentTheme = themes[currentThemeName]
       if painter then painter.setTheme(currentTheme) end
+      if themeMenuEnabled then
+        themeMenu.setThemes(themes)
+        themeMenu.setCurrentTheme(currentThemeName, currentTheme)
+      end
     end
 
     print("[react-love] Initialized in NATIVE mode (QuickJS bridge)")
@@ -1150,6 +1177,7 @@ function ReactLove.update(dt)
             currentTheme = themes[name]
             if painter then painter.setTheme(currentTheme) end
             if tree then tree.markDirty() end
+            if themeMenuEnabled then themeMenu.setCurrentTheme(name, themes[name]) end
             io.write("[react-love] Theme switched to: " .. name .. "\n"); io.flush()
           end
 
@@ -1455,6 +1483,10 @@ function ReactLove.draw()
   -- Love2D needs alignment=1 for single-byte glyph atlas uploads.
   if videos then videos.ensurePixelStore() end
 
+  -- Theme menu: capture app frame to canvas for live preview
+  local themeCapturing = themeMenuEnabled and themeMenu.isOpen()
+  if themeCapturing then themeMenu.beginCapture() end
+
   local root = tree.getTree()
   if root then
     if not ReactLove._loggedDraw then
@@ -1513,11 +1545,17 @@ function ReactLove.draw()
     osk.draw()
   end
 
+  -- Theme menu: end canvas capture (draws captured frame to screen at full size)
+  if themeCapturing then themeMenu.endCapture() end
+
   -- DevTools panel (inspector overlays + bottom panel with tabs)
   if inspectorEnabled then devtools.draw(root) end
 
   -- Settings overlay (after devtools, before context menu/errors)
   if settingsEnabled and settings.isOpen() then settings.draw() end
+
+  -- Theme menu overlay (after settings, before context menu/errors)
+  if themeMenuEnabled and themeMenu.isOpen() then themeMenu.draw() end
 
   -- Context menu overlay (after inspector, before errors)
   if contextmenu and contextmenu.isOpen() then
@@ -1704,6 +1742,7 @@ function ReactLove.mousepressed(x, y, button)
   -- Error overlay gets first crack at mouse events
   if errors.mousepressed(x, y, button) then return end
   if settingsEnabled and settings.mousepressed(x, y, button) then return end
+  if themeMenuEnabled and themeMenu.mousepressed(x, y, button) then return end
   if inspectorEnabled and devtools.mousepressed(x, y, button) then return end
 
   if not isRendering() then return end
@@ -1888,6 +1927,7 @@ end
 function ReactLove.mousereleased(x, y, button)
   if inspectorEnabled and devtools.mousereleased(x, y, button) then return end
   if settingsEnabled and settings.mousereleased(x, y, button) then return end
+  if themeMenuEnabled and themeMenu.mousereleased(x, y, button) then return end
   if scrollbarMouseReleased() then return end
   if not isRendering() then return end
 
@@ -1963,6 +2003,7 @@ end
 --- Also updates drag state if a drag is active.
 function ReactLove.mousemoved(x, y)
   if settingsEnabled then settings.mousemoved(x, y) end
+  if themeMenuEnabled then themeMenu.mousemoved(x, y) end
   if inspectorEnabled then devtools.mousemoved(x, y) end
   if scrollbarMouseMoved(x, y) then return end
   if not isRendering() then return end
@@ -2096,6 +2137,7 @@ end
 --- Routes keydown to focused node when in focus mode, broadcasts otherwise.
 function ReactLove.keypressed(key, scancode, isrepeat)
   if settingsEnabled and settings.keypressed(key) then return end
+  if themeMenuEnabled and themeMenu.keypressed(key) then return end
   if inspectorEnabled and devtools.keypressed(key) then return end
   if not isRendering() then return end
 
@@ -2287,6 +2329,8 @@ end
 function ReactLove.textinput(text)
   -- Settings overlay captures text input when active
   if settingsEnabled and settings.textinput(text) then return end
+  -- Theme menu captures text input when active
+  if themeMenuEnabled and themeMenu.textinput(text) then return end
   -- Inspector/console captures text input when active
   if inspectorEnabled and devtools.textinput(text) then return end
   if not isRendering() then return end
@@ -2317,6 +2361,7 @@ end
 --- The scroll speed multiplier converts Love2D wheel units to pixels.
 function ReactLove.wheelmoved(x, y)
   if settingsEnabled and settings.wheelmoved(x, y) then return end
+  if themeMenuEnabled and themeMenu.wheelmoved(x, y) then return end
   if inspectorEnabled and devtools.wheelmoved(x, y) then return end
   if not isRendering() then return end
 

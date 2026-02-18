@@ -35,6 +35,18 @@ export function ThemeProvider({
     }
   }, [bridge]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Listen for Lua-initiated theme switches (F9 theme menu).
+  // Uses setThemeIdState directly to avoid sending theme:set back to Lua (circular).
+  useEffect(() => {
+    if (!bridge) return;
+    const unsub = bridge.subscribe('theme:switch', (payload: { name: string }) => {
+      if (payload.name && themes[payload.name]) {
+        setThemeIdState(payload.name);
+      }
+    });
+    return unsub;
+  }, [bridge]);
+
   const resolved = themes[themeId] ?? themes[defaultThemeId];
 
   const value = useMemo<ThemeContextValue>(
