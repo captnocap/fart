@@ -66,6 +66,14 @@ export const TARGETS = {
     output: 'dist/app.js',
     kind: 'web',
   },
+  sdl2: {
+    format: 'iife',
+    globalName: 'ReactLove',
+    external: ['react-dom', 'child_process'],
+    entries: ['main-sdl2.tsx', 'main-love.tsx', 'native-main.tsx', 'main.tsx'],
+    output: 'sdl2/bundle.js',
+    kind: 'sdl2',
+  },
 };
 
 export const TARGET_NAMES = Object.keys(TARGETS);

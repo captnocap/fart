@@ -248,6 +248,12 @@ cli-setup: setup
 	cp lua/audio/*.lua cli/runtime/lua/audio/
 	cp lua/audio/modules/*.lua cli/runtime/lua/audio/modules/
 	cp $(QUICKJS_DIR)/libquickjs.so cli/runtime/lib/
+	@echo "  Compiling ft_helper.so (FreeType bridge for SDL2 target)..."
+	@gcc -shared -fPIC -O2 lua/sdl2_ft_helper.c \
+		-o cli/runtime/lib/ft_helper.so \
+		$$(pkg-config --cflags --libs freetype2) \
+		&& echo "  Bundled ft_helper.so" \
+		|| echo "  Warning: ft_helper.so build failed — SDL2 target text rendering unavailable"
 	@LIBMPV=$$(ldconfig -p | grep 'libmpv.so.2 ' | head -1 | sed 's/.*=> //'); \
 	if [ -n "$$LIBMPV" ]; then \
 		cp "$$LIBMPV" cli/runtime/lib/libmpv.so.2; \

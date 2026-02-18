@@ -134,6 +134,8 @@ export async function buildCommand(args) {
   if (isDist) {
     if (target.kind === 'love') {
       await buildDistLove(cwd, projectName, { debug: hasDebugFlag });
+    } else if (target.kind === 'sdl2') {
+      await buildDistSdl2(cwd, projectName, { debug: hasDebugFlag });
     } else if (target.kind === 'web') {
       // Web dist is just the ESM bundle (no shebang — not a Node.js executable)
       await buildDevTarget(cwd, projectName, targetName);
@@ -655,4 +657,197 @@ async function buildDistLove(cwd, projectName, opts = {}) {
   const size = (out.length / (1024 * 1024)).toFixed(1);
   console.log(`\n  Done! ${size} MB → dist/${projectName}`);
   console.log(`  Run:  ./dist/${projectName}\n`);
+}
+
+// ── ilovereact build dist:sdl2 ────────────────────────────
+//
+// Self-extracting binary: LuaJIT + SDL2 + FreeType + ft_helper.so +
+// libquickjs.so + lua runtime + JS bundle.
+// No Love2D, no X11/Wayland required. Launches via SDL2 kmsdrm or
+// whatever display backend SDL2 auto-detects on the target system.
+
+async function buildDistSdl2(cwd, projectName, opts = {}) {
+  const target = TARGETS.sdl2;
+  const entryCandidates = target.entries.map(e => `src/${e}`);
+  const entry = findEntry(cwd, ...entryCandidates);
+  const luaDir = findLuaRuntime(cwd);
+  const libquickjs = findLibQuickJS(cwd);
+
+  const distDir    = join(cwd, 'dist');
+  const outFile    = join(distDir, `${projectName}-sdl2`);
+  const stagingDir = join('/tmp', `ilovereact-sdl2-${projectName}`);
+  const payloadDir = join('/tmp', `ilovereact-sdl2-payload-${projectName}`);
+
+  console.log(`\n  Building dist:sdl2 for ${projectName}...\n`);
+
+  // 1. Lint gate
+  const { errors } = await runLint(cwd, { silent: false });
+  if (errors > 0) {
+    console.error(`\n  Build blocked: ${errors} lint error(s).\n`);
+    process.exit(1);
+  }
+
+  // 2. Bundle JS (IIFE — runs inside QuickJS, same as Love2D)
+  console.log('  [1/5] Bundling JS...');
+  rmSync(stagingDir, { recursive: true, force: true });
+  mkdirSync(join(stagingDir, 'lua'), { recursive: true });
+  mkdirSync(join(stagingDir, 'sdl2'), { recursive: true });
+  mkdirSync(join(stagingDir, 'lib'),  { recursive: true });
+
+  const bundlePath = join(stagingDir, 'sdl2', 'bundle.js');
+  execSync([
+    'npx', 'esbuild',
+    ...esbuildArgs(target),
+    `--outfile=${bundlePath}`,
+    ...getEsbuildAliases(cwd),
+    entry,
+  ].join(' '), { cwd, stdio: 'pipe' });
+
+  const bundleCheck = runBundleChecks(bundlePath);
+  if (bundleCheck.errors > 0) {
+    console.error(`\n  Build blocked: ${bundleCheck.errors} bundle error(s).\n`);
+    rmSync(stagingDir, { recursive: true, force: true });
+    process.exit(1);
+  }
+
+  // 3. Stage lua runtime + entry point
+  console.log('  [2/5] Staging Lua runtime...');
+  cpSync(luaDir, join(stagingDir, 'lua'), { recursive: true });
+
+  // Project entry point (sdl2_main.lua or generated stub)
+  const sdl2MainCandidates = [
+    join(cwd, 'sdl2_main.lua'),
+    join(cwd, 'main-sdl2.lua'),
+  ];
+  const sdl2Main = sdl2MainCandidates.find(p => existsSync(p));
+  if (sdl2Main) {
+    cpSync(sdl2Main, join(stagingDir, 'main.lua'));
+  } else {
+    // Generate a default launcher
+    const stub =
+      'require("lua.sdl2_init").run({\n' +
+      '  bundle = "sdl2/bundle.js",\n' +
+      `  title  = "${projectName}",\n` +
+      '})\n';
+    writeFileSync(join(stagingDir, 'main.lua'), stub);
+  }
+
+  // 4. Bundle shared libraries
+  console.log('  [3/5] Bundling SDL2 + FreeType + QuickJS...');
+  rmSync(payloadDir, { recursive: true, force: true });
+  mkdirSync(join(payloadDir, 'lib'), { recursive: true });
+
+  // Copy staging into payload
+  cpSync(stagingDir, payloadDir, { recursive: true });
+
+  // libquickjs.so
+  cpSync(libquickjs, join(payloadDir, 'lib', 'libquickjs.so'));
+
+  // ft_helper.so (compiled C bridge for FreeType)
+  const ftHelperCandidates = [
+    join(cwd, 'lib', 'ft_helper.so'),
+    join(CLI_ROOT, 'runtime', 'lib', 'ft_helper.so'),
+  ];
+  const ftHelper = ftHelperCandidates.find(p => existsSync(p));
+  if (!ftHelper) {
+    console.error('  ft_helper.so not found. Run: make cli-setup');
+    process.exit(1);
+  }
+  cpSync(ftHelper, join(payloadDir, 'lib', 'ft_helper.so'));
+
+  // Resolve SDL2 and its deps
+  const sdl2Lib = execSync('ldconfig -p | grep "libSDL2-2.0.so.0 " | grep x86-64 | awk \'{print $NF}\' | head -1',
+    { encoding: 'utf-8' }).trim();
+  if (!sdl2Lib) {
+    console.error('  libSDL2-2.0.so.0 not found. Install libsdl2.');
+    process.exit(1);
+  }
+  const bundleLibWithDeps = (libPath, destDir) => {
+    const soname = basename(libPath);
+    const dest   = join(destDir, soname);
+    if (!existsSync(dest)) {
+      try { cpSync(execSync(`readlink -f "${libPath}"`, { encoding: 'utf-8' }).trim(), dest); } catch {}
+    }
+    try {
+      const lddOut = execSync(`ldd "${libPath}"`, { encoding: 'utf-8' });
+      for (const line of lddOut.split('\n')) {
+        if (line.includes('linux-vdso')) continue;
+        const m = line.match(/^\s*(\S+)\s+=>\s+(\S+)/);
+        if (m) {
+          const [, name, path] = m;
+          const d = join(destDir, name);
+          if (!existsSync(d)) {
+            try { cpSync(execSync(`readlink -f "${path}"`, { encoding: 'utf-8' }).trim(), d); } catch {}
+          }
+        }
+      }
+    } catch {}
+  };
+  bundleLibWithDeps(sdl2Lib, join(payloadDir, 'lib'));
+
+  // FreeType
+  const freetypeLib = execSync('ldconfig -p | grep "libfreetype.so.6 " | grep x86-64 | awk \'{print $NF}\' | head -1',
+    { encoding: 'utf-8' }).trim();
+  if (freetypeLib) bundleLibWithDeps(freetypeLib, join(payloadDir, 'lib'));
+
+  // LuaJIT binary
+  const luajitBin = execSync('readlink -f $(which luajit)', { encoding: 'utf-8' }).trim();
+  cpSync(luajitBin, join(payloadDir, 'luajit.bin'));
+  bundleLibWithDeps(luajitBin, join(payloadDir, 'lib'));
+
+  // Bundle the dynamic linker
+  try {
+    const ld = execSync('readlink -f /lib64/ld-linux-x86-64.so.2', { encoding: 'utf-8' }).trim();
+    cpSync(ld, join(payloadDir, 'lib', 'ld-linux-x86-64.so.2'));
+  } catch {
+    console.error('  ld-linux not found. x86_64 Linux required for dist:sdl2.');
+    process.exit(1);
+  }
+
+  // 5. Launcher + pack
+  console.log('  [4/5] Creating launcher...');
+  const launcher =
+    '#!/bin/sh\n' +
+    'DIR="$(cd "$(dirname "$0")" && pwd)"\n' +
+    'export LD_PRELOAD=\n' +
+    'exec "$DIR/lib/ld-linux-x86-64.so.2" --inhibit-cache \\\n' +
+    '     --library-path "$DIR/lib" \\\n' +
+    '     "$DIR/luajit.bin" "$DIR/main.lua" "$@"\n';
+  writeFileSync(join(payloadDir, 'run'), launcher, { mode: 0o755 });
+
+  console.log('  [5/5] Packing self-extracting binary...');
+  mkdirSync(distDir, { recursive: true });
+
+  const tarball = join('/tmp', `${projectName}-sdl2-payload.tar.gz`);
+  execSync(`cd "${payloadDir}" && tar czf "${tarball}" .`, { stdio: 'pipe' });
+
+  const header =
+    '#!/bin/sh\n' +
+    'set -e\n' +
+    `APP_DIR=\${XDG_CACHE_HOME:-$HOME/.cache}/ilovereact-${projectName}-sdl2\n` +
+    'SIG=$(md5sum "$0" 2>/dev/null | cut -c1-8 || cksum "$0" | cut -d" " -f1)\n' +
+    'CACHE="$APP_DIR/$SIG"\n' +
+    'if [ ! -f "$CACHE/.ready" ]; then\n' +
+    '  rm -rf "$APP_DIR"\n' +
+    '  mkdir -p "$CACHE"\n' +
+    '  SKIP=$(awk \'/^__ARCHIVE__$/{print NR + 1; exit}\' "$0")\n' +
+    '  tail -n+"$SKIP" "$0" | tar xz -C "$CACHE"\n' +
+    '  touch "$CACHE/.ready"\n' +
+    'fi\n' +
+    'exec "$CACHE/run" "$@"\n' +
+    '__ARCHIVE__\n';
+
+  const headerBuf = Buffer.from(header);
+  const tarBuf    = readFileSync(tarball);
+  const out       = Buffer.concat([headerBuf, tarBuf]);
+  writeFileSync(outFile, out, { mode: 0o755 });
+
+  rmSync(stagingDir, { recursive: true, force: true });
+  rmSync(payloadDir, { recursive: true, force: true });
+  rmSync(tarball,    { force: true });
+
+  const sizeMb = (out.length / (1024 * 1024)).toFixed(1);
+  console.log(`\n  Done! ${sizeMb} MB → dist/${projectName}-sdl2`);
+  console.log(`  Run:  ./dist/${projectName}-sdl2`);
+  console.log(`  Note: Requires a display (X11, Wayland, or KMS/DRM).\n`);
 }
