@@ -83,6 +83,7 @@ import { GameRogueliteStory } from './GameRogueliteStory';
 import { GameTurnBasedStory } from './GameTurnBasedStory';
 import { AudioRackStory } from './AudioRackStory';
 import { ThemeStory } from './ThemeStory';
+import SettingsMenuStory from './SettingsMenuStory';
 
 export const stories: StoryDef[] = [
   // Primitives
@@ -197,6 +198,9 @@ export const stories: StoryDef[] = [
 
   // Theme
   { id: 'theme', title: 'Theme System', category: 'Theme', component: ThemeStory },
+
+  // Settings
+  { id: 'settings-menu', title: 'Settings Menu', category: 'Dev Tools', component: SettingsMenuStory },
 
   // Dev Tools
   { id: 'error-test', title: 'Error Test', category: 'Dev Tools', component: ErrorTestStory },
