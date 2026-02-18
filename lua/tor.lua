@@ -94,8 +94,34 @@ function Tor.start(opts)
     return false, "Could not find an open port for Tor SOCKS proxy (tried 9050-9150)"
   end
 
-  -- Create config directory on host filesystem
-  configDir = os.getenv("HOME") .. "/.cache/ilovereact-tor"
+  -- Build config dir namespaced by app identity.
+  -- If that dir is already owned by a live process (another running instance),
+  -- fall back to a port-suffixed dir so each instance gets its own .onion.
+  local appIdentity = (opts.identity or "default"):gsub("[^%w%-]", "_")
+  local baseDir = os.getenv("HOME") .. "/.cache/ilovereact-tor/" .. appIdentity
+
+  local function isProcessAlive(pid)
+    return os.execute("kill -0 " .. tostring(pid) .. " 2>/dev/null") == true
+  end
+
+  local function isDirOccupied(dir)
+    local pf = io.open(dir .. "/tor.pid", "r")
+    if not pf then return false end
+    local pid = pf:read("*l")
+    pf:close()
+    if not pid then return false end
+    pid = pid:match("^%s*(.-)%s*$")
+    return pid and isProcessAlive(pid)
+  end
+
+  if isDirOccupied(baseDir) then
+    -- Another live instance owns the canonical dir — use a port-suffixed one
+    configDir = baseDir .. "-" .. socksPort
+    io.write("[tor] Identity '" .. appIdentity .. "' is in use — starting new instance at " .. configDir .. "\n"); io.flush()
+  else
+    configDir = baseDir
+  end
+
   os.execute("mkdir -p " .. configDir)
 
   hsDir = configDir .. "/hs"
@@ -141,6 +167,7 @@ function Tor.start(opts)
   end
 
   io.write("[tor] Started Tor on SOCKS port " .. socksPort .. " (PID: " .. (torPid or "unknown") .. ")\n"); io.flush()
+  io.write("[tor] Config: " .. configDir .. "\n"); io.flush()
   io.write("[tor] Log: " .. logFile .. "\n"); io.flush()
 
   return true

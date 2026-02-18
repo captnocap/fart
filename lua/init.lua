@@ -178,6 +178,33 @@ local function emitScrollEvent(node)
   ))
 end
 
+--- Emit layout events for nodes that registered onLayout handlers.
+--- Only emits when computed geometry changes to avoid per-frame spam.
+local function emitLayoutEvents(root)
+  if not root or not events then return end
+  local stack = { root }
+  while #stack > 0 do
+    local node = table.remove(stack)
+    local c = node.computed
+    local p = node.props or {}
+    if c and p.__hasOnLayout then
+      local last = node.__layoutLast
+      if not last
+        or last.x ~= c.x
+        or last.y ~= c.y
+        or last.w ~= c.w
+        or last.h ~= c.h
+      then
+        node.__layoutLast = { x = c.x, y = c.y, w = c.w, h = c.h }
+        pushEvent(events.createLayoutEvent(node.id, c.x, c.y, c.w, c.h))
+      end
+    end
+    for _, child in ipairs(node.children or {}) do
+      stack[#stack + 1] = child
+    end
+  end
+end
+
 -- ============================================================================
 -- Gamepad helpers
 -- ============================================================================
@@ -507,7 +534,10 @@ function ReactLove.init(config)
       tor = require("lua.tor")
       torHostnameEmitted = false
       if config.tor.autoStart ~= false then
-        local ok, err = tor.start({ hsPort = config.tor.hsPort or 8080 })
+        local ok, err = tor.start({
+          hsPort = config.tor.hsPort or 8080,
+          identity = love.filesystem.getIdentity() or "default",
+        })
         if ok then
           io.write("[react-love] Tor hidden service starting...\n"); io.flush()
         else
@@ -564,6 +594,7 @@ function ReactLove.init(config)
 
   -- Register game module RPC handler (JS → Lua commands)
   rpcHandlers["game:command"] = function(args)
+    io.write("[rpc] game:command received: " .. tostring(args and args.command) .. " module=" .. tostring(args and args.module) .. "\n"); io.flush()
     if gamemod then return gamemod.handleCommand(args) end
   end
 
@@ -863,6 +894,7 @@ function ReactLove.update(dt)
         if inspectorEnabled and inspector.isEnabled() then inspector.beginLayout() end
         local vh = inspectorEnabled and devtools.getViewportHeight() or nil
         layout.layout(root, nil, nil, nil, vh)
+        emitLayoutEvents(root)
         if inspectorEnabled and inspector.isEnabled() then inspector.endLayout() end
       end
       tree.clearDirty()
@@ -1326,6 +1358,7 @@ function ReactLove.update(dt)
       if inspectorEnabled and inspector.isEnabled() then inspector.beginLayout() end
       local vh = inspectorEnabled and devtools.getViewportHeight() or nil
       layout.layout(root, nil, nil, nil, vh)
+      emitLayoutEvents(root)
       if inspectorEnabled and inspector.isEnabled() then inspector.endLayout() end
     end
     tree.clearDirty()
@@ -1526,9 +1559,13 @@ local function hitTestScrollbar(root, mx, my)
         if mx >= barX and mx <= c.x + viewW and my >= c.y and my <= c.y + viewH then
           local trackH = viewH
           local thumbH = math.max(20, (viewH / contentH) * trackH)
-          local maxScroll = contentH - viewH
+          local maxScroll = math.max(0, contentH - viewH)
           local scrollY = ss.scrollY or 0
-          local thumbY = c.y + (scrollY / maxScroll) * (trackH - thumbH)
+          local thumbTravel = math.max(1, trackH - thumbH)
+          local thumbY = c.y
+          if maxScroll > 0 then
+            thumbY = c.y + (scrollY / maxScroll) * thumbTravel
+          end
           best = { node = node, axis = "v", thumbY = thumbY, thumbH = thumbH,
                    trackSize = trackH, maxScroll = maxScroll, trackStart = c.y }
         end
@@ -1540,9 +1577,13 @@ local function hitTestScrollbar(root, mx, my)
         if mx >= c.x and mx <= c.x + viewW and my >= barY and my <= c.y + viewH then
           local trackW = viewW
           local thumbW = math.max(20, (viewW / contentW) * trackW)
-          local maxScroll = contentW - viewW
+          local maxScroll = math.max(0, contentW - viewW)
           local scrollX = ss.scrollX or 0
-          local thumbX = c.x + (scrollX / maxScroll) * (trackW - thumbW)
+          local thumbTravel = math.max(1, trackW - thumbW)
+          local thumbX = c.x
+          if maxScroll > 0 then
+            thumbX = c.x + (scrollX / maxScroll) * thumbTravel
+          end
           best = { node = node, axis = "h", thumbX = thumbX, thumbW = thumbW,
                    trackSize = trackW, maxScroll = maxScroll, trackStart = c.x }
         end
@@ -1613,9 +1654,15 @@ local function scrollbarMouseMoved(mx, my)
     local contentH = ss.contentH or viewH
     local trackH = viewH
     local thumbH = math.max(20, (viewH / contentH) * trackH)
-    local maxScroll = contentH - viewH
+    local maxScroll = math.max(0, contentH - viewH)
     local delta = my - d.startMouse
-    local scrollDelta = (delta / (trackH - thumbH)) * maxScroll
+    local thumbTravel = trackH - thumbH
+    if maxScroll <= 0 or thumbTravel <= 0 then
+      tree.setScroll(d.node.id, ss.scrollX or 0, ss.scrollY or 0)
+      emitScrollEvent(d.node)
+      return true
+    end
+    local scrollDelta = (delta / thumbTravel) * maxScroll
     local newScroll = d.startScroll + scrollDelta
     tree.setScroll(d.node.id, ss.scrollX or 0, newScroll)
     emitScrollEvent(d.node)
@@ -1624,9 +1671,15 @@ local function scrollbarMouseMoved(mx, my)
     local contentW = ss.contentW or viewW
     local trackW = viewW
     local thumbW = math.max(20, (viewW / contentW) * trackW)
-    local maxScroll = contentW - viewW
+    local maxScroll = math.max(0, contentW - viewW)
     local delta = mx - d.startMouse
-    local scrollDelta = (delta / (trackW - thumbW)) * maxScroll
+    local thumbTravel = trackW - thumbW
+    if maxScroll <= 0 or thumbTravel <= 0 then
+      tree.setScroll(d.node.id, ss.scrollX or 0, ss.scrollY or 0)
+      emitScrollEvent(d.node)
+      return true
+    end
+    local scrollDelta = (delta / thumbTravel) * maxScroll
     local newScroll = d.startScroll + scrollDelta
     tree.setScroll(d.node.id, newScroll, ss.scrollY or 0)
     emitScrollEvent(d.node)
@@ -1651,9 +1704,6 @@ function ReactLove.mousepressed(x, y, button)
   if inspectorEnabled and devtools.mousepressed(x, y, button) then return end
 
   if not isRendering() then return end
-
-  -- Route to game module (click-to-focus + game mouse handling)
-  if gamemod and gamemod.mousepressed(x, y, button) then return end
 
   local root = tree.getTree()
   if not root then return end
@@ -1683,6 +1733,38 @@ function ReactLove.mousepressed(x, y, button)
   if scrollbarMousePressed(root, x, y, button) then return end
 
   local hit = events.hitTest(root, x, y)
+
+  -- Diagnostic: show what React found vs what the game module would claim
+  if hit then
+    local c = hit.computed
+    local bx = c and math.floor(c.x) or "?"
+    local by = c and math.floor(c.y) or "?"
+    local bw = c and math.floor(c.w) or "?"
+    local bh = c and math.floor(c.h) or "?"
+    local handlers = hit.hasHandlers and "hasHandlers" or "noHandlers"
+    local hover = (hit.props and hit.props.hoverStyle) and "hasHover" or "noHover"
+    io.write("[click] React hitTest found: type=" .. tostring(hit.type)
+      .. " id=" .. tostring(hit.id)
+      .. " bounds=" .. bx .. "," .. by .. " " .. bw .. "x" .. bh
+      .. " " .. handlers .. " " .. hover .. "\n"); io.flush()
+  else
+    io.write("[click] React hitTest found: nil (nothing in React tree at " .. math.floor(x) .. "," .. math.floor(y) .. ")\n"); io.flush()
+  end
+
+  -- Route to game module if click is on a GameCanvas or missed React entirely
+  if gamemod then
+    local hitIsGame = hit and hit.type == "GameCanvas"
+    if not hit or hitIsGame then
+      io.write("[click] -> routing to game module (React had " .. (hitIsGame and "GameCanvas" or "nothing") .. ")\n"); io.flush()
+      gamemod.mousepressed(x, y, button)
+    else
+      io.write("[click] -> React claims this click (game module skipped)\n"); io.flush()
+    end
+  end
+
+  -- If the only thing we hit was the GameCanvas itself (no React child with handlers),
+  -- don't dispatch a click event to JS — Lua already handled it above.
+  if hit and hit.type == "GameCanvas" then hit = nil end
 
   -- Handle TextEditor/TextInput focus transitions
   local focusedNode = focus.get()
@@ -2249,8 +2331,9 @@ function ReactLove.wheelmoved(x, y)
     return  -- no bridge traffic
   end
 
-  -- Check if the hit node or any ancestor is a scroll container
-  local scrollContainer = events.findScrollContainer(hit, mx, my)
+  -- Find the nearest ancestor scroll container that can consume this wheel
+  -- delta. If a child is saturated, wheel input chains to its parent.
+  local scrollContainer = events.findScrollableContainer(hit, x, y)
   if scrollContainer and scrollContainer.scrollState then
     -- Update scroll position directly in Lua for immediate response
     local ss = scrollContainer.scrollState
