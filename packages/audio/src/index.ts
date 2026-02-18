@@ -1,7 +1,8 @@
 // @ilovereact/audio — Modular audio framework for iLoveReact
 //
 // Lua-side: lua/audio/ (engine, graph, modules, MIDI)
-// React-side: hooks for rack management, module control, MIDI
+// React-side: hooks for rack management, module control, MIDI,
+//             sampler, clock, sequencer, recording
 
 export type {
   PortType,
@@ -23,6 +24,23 @@ export type {
   UseModuleResult,
   UseRackResult,
   UseMIDIResult,
+  // Sampler
+  SampleSlot,
+  SamplerVoice,
+  SamplerState,
+  UseSamplerResult,
+  // Clock
+  ClockPosition,
+  ClockTickEvent,
+  UseClockResult,
+  // Sequencer
+  StepData,
+  SequencerState,
+  UseSequencerResult,
+  // Recording
+  AudioRecordingDevice,
+  RecordingState,
+  UseRecorderResult,
 } from './types';
 
 export {
@@ -33,4 +51,10 @@ export {
   useMIDINote,
   useMIDICC,
   useAudioInit,
+  // New hooks
+  useClock,
+  useClockEvent,
+  useSampler,
+  useRecorder,
+  useSequencer,
 } from './hooks';

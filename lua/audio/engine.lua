@@ -54,6 +54,16 @@ local midiLearnTarget = nil  -- { moduleId, param }
 -- MIDI CC mappings: { channel, cc } -> { moduleId, param }
 local midiMappings = {}
 
+-- Recording state
+local recordingDevice  = nil   -- Love2D RecordingDevice object
+local recordingState   = {     -- pushed to React via getState()
+  active   = false,
+  moduleId = nil,
+  slot     = nil,
+  device   = nil,
+  startTime = 0,
+}
+
 -- ============================================================================
 -- Module registry
 -- ============================================================================
@@ -71,6 +81,7 @@ local function loadBuiltinModules()
   local builtins = {
     "oscillator", "filter", "amplifier", "envelope",
     "lfo", "delay", "mixer", "polysynth",
+    "sampler", "clock", "sequencer",
   }
   for _, name in ipairs(builtins) do
     local ok, mod = pcall(require, "lua.audio.modules." .. name)
@@ -294,6 +305,16 @@ function Engine.getState()
     }
   end
 
+  -- Add recording info
+  state.recording = {
+    active   = recordingState.active,
+    moduleId = recordingState.moduleId,
+    slot     = recordingState.slot,
+    device   = recordingState.device,
+    duration = recordingState.active
+      and (love.timer.getTime() - recordingState.startTime) or 0,
+  }
+
   return state
 end
 
@@ -446,10 +467,29 @@ function Engine.update(dt)
       -- Process the graph for one buffer chunk
       graph:process(BUFFER_SIZE)
 
+      -- Drain module events (sequencer noteOn/noteOff, clock ticks, etc.)
+      local order = graph:getOrder()
+      for _, id in ipairs(order) do
+        local instance = graph:getModule(id)
+        if instance and instance._state.events then
+          for _, evt in ipairs(instance._state.events) do
+            if evt.type == "noteOn" then
+              Engine.noteOn(evt.target, evt.note, evt.velocity, true)
+            elseif evt.type == "noteOff" then
+              Engine.noteOn(evt.target, evt.note, 0, false)
+            end
+            -- Forward bridge events (clock ticks, etc.)
+            if evt.bridge and bridge then
+              bridge:pushEvent(evt.bridge)
+            end
+          end
+          instance._state.events = {}
+        end
+      end
+
       -- Find the output module (last audio output in the chain)
       -- Convention: module with type "output" or the last module with audio_out
       local outputBuf = nil
-      local order = graph:getOrder()
 
       -- Walk the order in reverse to find the final output
       for i = #order, 1, -1 do
@@ -499,6 +539,192 @@ function Engine.update(dt)
       })
     end
   end
+end
+
+-- ============================================================================
+-- Sample loading
+-- ============================================================================
+
+--- Load an audio file into a sampler module's slot.
+--- @param moduleId string Sampler module ID
+--- @param slot number Slot number (1-16)
+--- @param path string File path (relative to Love2D filesystem)
+--- @param mode? string "oneshot" or "loop" (default: "oneshot")
+function Engine.loadSample(moduleId, slot, path, mode)
+  if not graph then error("Audio engine not initialized") end
+  local instance = graph:getModule(moduleId)
+  if not instance then error("Module not found: " .. moduleId) end
+  if instance.type ~= "sampler" then error("Module is not a sampler: " .. moduleId) end
+
+  local ok, sd = pcall(love.sound.newSoundData, path)
+  if not ok then error("Failed to load sample: " .. tostring(sd)) end
+
+  instance._state.slots[slot] = {
+    soundData   = sd,
+    sampleCount = sd:getSampleCount(),
+    sampleRate  = sd:getSampleRate(),
+    name        = path:match("([^/]+)$") or path,
+    mode        = mode or "oneshot",
+  }
+
+  io.write("[audio] Loaded sample into " .. moduleId .. " slot " .. slot .. ": " .. path .. "\n")
+  io.flush()
+  return true
+end
+
+--- Clear a sampler slot.
+function Engine.clearSample(moduleId, slot)
+  if not graph then error("Audio engine not initialized") end
+  local instance = graph:getModule(moduleId)
+  if not instance then error("Module not found: " .. moduleId) end
+  if instance.type ~= "sampler" then error("Module is not a sampler: " .. moduleId) end
+
+  instance._state.slots[slot] = nil
+  io.write("[audio] Cleared sample slot " .. slot .. " on " .. moduleId .. "\n")
+  io.flush()
+  return true
+end
+
+-- ============================================================================
+-- Recording
+-- ============================================================================
+
+--- List available recording devices.
+function Engine.listRecordingDevices()
+  local ok, devices = pcall(love.audio.getRecordingDevices)
+  if not ok or not devices then return { devices = {} } end
+
+  local result = {}
+  for i, dev in ipairs(devices) do
+    result[#result + 1] = {
+      index = i,
+      name  = dev:getName(),
+    }
+  end
+  return { devices = result }
+end
+
+--- Start recording audio from a device into a sampler slot.
+--- @param moduleId string Target sampler module ID
+--- @param slot number Slot to record into (1-16)
+--- @param deviceIndex? number Recording device index (default: 1 = system default)
+function Engine.startRecording(moduleId, slot, deviceIndex)
+  if not graph then error("Audio engine not initialized") end
+  if recordingState.active then error("Already recording") end
+
+  local instance = graph:getModule(moduleId)
+  if not instance then error("Module not found: " .. moduleId) end
+  if instance.type ~= "sampler" then error("Module is not a sampler: " .. moduleId) end
+
+  local ok, devices = pcall(love.audio.getRecordingDevices)
+  if not ok or not devices or #devices == 0 then
+    error("No recording devices available")
+  end
+
+  local devIdx = deviceIndex or 1
+  local device = devices[devIdx]
+  if not device then error("Recording device not found: " .. devIdx) end
+
+  -- Start recording: 44100 Hz, 16-bit, mono, 30s buffer (max)
+  local bufferSize = SAMPLE_RATE * 30  -- 30 seconds
+  local startOk = device:start(SAMPLE_RATE, BIT_DEPTH, CHANNELS, bufferSize)
+  if not startOk then error("Failed to start recording on device: " .. device:getName()) end
+
+  recordingDevice = device
+  recordingState = {
+    active    = true,
+    moduleId  = moduleId,
+    slot      = slot,
+    device    = device:getName(),
+    startTime = love.timer.getTime(),
+  }
+
+  io.write("[audio] Recording started: " .. device:getName()
+    .. " → " .. moduleId .. " slot " .. slot .. "\n")
+  io.flush()
+  return true
+end
+
+--- Stop recording and store the captured audio in the target sampler slot.
+function Engine.stopRecording()
+  if not recordingState.active or not recordingDevice then
+    error("Not currently recording")
+  end
+
+  local sd = recordingDevice:getData()
+  recordingDevice:stop()
+
+  if sd and sd:getSampleCount() > 0 then
+    local instance = graph:getModule(recordingState.moduleId)
+    if instance and instance.type == "sampler" then
+      instance._state.slots[recordingState.slot] = {
+        soundData   = sd,
+        sampleCount = sd:getSampleCount(),
+        sampleRate  = sd:getSampleRate(),
+        name        = "recording",
+        mode        = "oneshot",
+      }
+      io.write("[audio] Recording saved: " .. sd:getSampleCount() .. " samples → "
+        .. recordingState.moduleId .. " slot " .. recordingState.slot .. "\n")
+      io.flush()
+    end
+  else
+    io.write("[audio] Recording stopped but no data captured\n")
+    io.flush()
+  end
+
+  recordingDevice = nil
+  recordingState = {
+    active   = false,
+    moduleId = nil,
+    slot     = nil,
+    device   = nil,
+    startTime = 0,
+  }
+  return true
+end
+
+-- ============================================================================
+-- Sequencer pattern editing
+-- ============================================================================
+
+--- Set a step in a sequencer's pattern.
+function Engine.setStep(moduleId, track, step, active, note, velocity)
+  if not graph then error("Audio engine not initialized") end
+  local instance = graph:getModule(moduleId)
+  if not instance then error("Module not found: " .. moduleId) end
+  if instance.type ~= "sequencer" then error("Module is not a sequencer: " .. moduleId) end
+
+  local pattern = instance._state.pattern
+  if not pattern[track] then pattern[track] = {} end
+  pattern[track][step] = {
+    active   = active,
+    note     = note or 36,
+    velocity = velocity or 100,
+  }
+  return true
+end
+
+--- Set which module a sequencer track triggers.
+function Engine.setTrackTarget(moduleId, track, target)
+  if not graph then error("Audio engine not initialized") end
+  local instance = graph:getModule(moduleId)
+  if not instance then error("Module not found: " .. moduleId) end
+  if instance.type ~= "sequencer" then error("Module is not a sequencer: " .. moduleId) end
+
+  instance._state.trackTargets[track] = target
+  return true
+end
+
+--- Clear all steps in a sequencer's pattern.
+function Engine.clearPattern(moduleId)
+  if not graph then error("Audio engine not initialized") end
+  local instance = graph:getModule(moduleId)
+  if not instance then error("Module not found: " .. moduleId) end
+  if instance.type ~= "sequencer" then error("Module is not a sequencer: " .. moduleId) end
+
+  instance._state.pattern = {}
+  return true
 end
 
 -- ============================================================================
@@ -569,6 +795,42 @@ function Engine.getHandlers()
     ["audio:shiftOctave"] = function(args)
       return Engine.setParam(args.moduleId, "octaveShift",
         (graph:getModule(args.moduleId).params.octaveShift or 0) + args.direction * 12)
+    end,
+
+    -- Sampler RPCs
+    ["audio:loadSample"] = function(args)
+      return Engine.loadSample(args.moduleId, args.slot, args.path, args.mode)
+    end,
+
+    ["audio:clearSample"] = function(args)
+      return Engine.clearSample(args.moduleId, args.slot)
+    end,
+
+    -- Recording RPCs
+    ["audio:listRecordingDevices"] = function()
+      return Engine.listRecordingDevices()
+    end,
+
+    ["audio:startRecording"] = function(args)
+      return Engine.startRecording(args.moduleId, args.slot, args.device)
+    end,
+
+    ["audio:stopRecording"] = function()
+      return Engine.stopRecording()
+    end,
+
+    -- Sequencer RPCs
+    ["audio:setStep"] = function(args)
+      return Engine.setStep(args.moduleId, args.track, args.step,
+        args.active, args.note, args.velocity)
+    end,
+
+    ["audio:setTrackTarget"] = function(args)
+      return Engine.setTrackTarget(args.moduleId, args.track, args.target)
+    end,
+
+    ["audio:clearPattern"] = function(args)
+      return Engine.clearPattern(args.moduleId)
     end,
   }
 end

@@ -56,6 +56,7 @@ function Module.define(def)
   modDef._process    = def.process
   modDef._onMidiNote = def.onMidiNote
   modDef._onMidiCC   = def.onMidiCC
+  modDef._getState   = def.getState
   modDef._init       = def.init
 
   return modDef
@@ -214,6 +215,16 @@ function Module.getState(instance)
       }
     end
     state.activeNotes = activeNotes
+  end
+
+  -- Allow modules to report custom state fields
+  if instance._def._getState then
+    local custom = instance._def._getState(instance)
+    if custom then
+      for k, v in pairs(custom) do
+        state[k] = v
+      end
+    end
   end
 
   return state

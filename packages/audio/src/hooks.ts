@@ -18,6 +18,17 @@ import type {
   UseModuleResult,
   UseRackResult,
   UseMIDIResult,
+  ClockPosition,
+  ClockTickEvent,
+  UseClockResult,
+  SampleSlot,
+  SamplerVoice,
+  UseSamplerResult,
+  AudioRecordingDevice,
+  RecordingState,
+  UseRecorderResult,
+  StepData,
+  UseSequencerResult,
 } from './types';
 
 // ============================================================================
@@ -272,4 +283,253 @@ export function useAudioInit(): boolean {
   }, [initRpc]);
 
   return ready;
+}
+
+// ============================================================================
+// useClock — BPM clock position and transport controls
+// ============================================================================
+
+/**
+ * Access a clock module's position and transport controls.
+ *
+ * @example
+ * const clock = useClock('clock1');
+ * clock.start();
+ * clock.setBpm(140);
+ * // clock.beat, clock.bar, clock.step, clock.phase
+ */
+export function useClock(moduleId: string): UseClockResult {
+  const [position, setPosition] = useState<ClockPosition>({
+    beat: 0, bar: 0, step: 0, phase: 0, running: false,
+  });
+  const [bpm, setBpmState] = useState(120);
+
+  const setParamRpc = useLoveRPC('audio:setParam');
+
+  useLoveEvent('audio:state', (rackState: RackState) => {
+    const mod = rackState.modules.find((m) => m.id === moduleId);
+    if (mod) {
+      if (mod.clock) {
+        setPosition(mod.clock);
+      }
+      if (mod.params.bpm !== undefined) {
+        setBpmState(mod.params.bpm);
+      }
+    }
+  });
+
+  const start = useCallback(
+    () => setParamRpc({ moduleId, param: 'running', value: true }),
+    [setParamRpc, moduleId]
+  );
+
+  const stop = useCallback(
+    () => setParamRpc({ moduleId, param: 'running', value: false }),
+    [setParamRpc, moduleId]
+  );
+
+  const setBpm = useCallback(
+    (value: number) => {
+      setBpmState(value);
+      return setParamRpc({ moduleId, param: 'bpm', value });
+    },
+    [setParamRpc, moduleId]
+  );
+
+  const setDivision = useCallback(
+    (value: string) => setParamRpc({ moduleId, param: 'division', value }),
+    [setParamRpc, moduleId]
+  );
+
+  const setSwing = useCallback(
+    (value: number) => setParamRpc({ moduleId, param: 'swing', value }),
+    [setParamRpc, moduleId]
+  );
+
+  return {
+    ...position,
+    bpm,
+    start,
+    stop,
+    setBpm,
+    setDivision,
+    setSwing,
+  };
+}
+
+// ============================================================================
+// useClockEvent — subscribe to clock tick events
+// ============================================================================
+
+/**
+ * Subscribe to clock tick events from the audio engine.
+ *
+ * @example
+ * useClockEvent((tick) => {
+ *   console.log('Beat:', tick.beat, 'Bar:', tick.bar, 'Step:', tick.step);
+ * });
+ */
+export function useClockEvent(handler: (event: ClockTickEvent) => void) {
+  const handlerRef = useRef(handler);
+  handlerRef.current = handler;
+
+  useLoveEvent('clock:tick', (payload: ClockTickEvent) => {
+    handlerRef.current(payload);
+  });
+}
+
+// ============================================================================
+// useSampler — sample slot management
+// ============================================================================
+
+/**
+ * Manage a sampler module's slots: load files, clear, trigger.
+ *
+ * @example
+ * const sampler = useSampler('sampler1');
+ * sampler.loadSample(1, 'samples/kick.wav');
+ * sampler.trigger(1, 127);
+ */
+export function useSampler(moduleId: string): UseSamplerResult {
+  const [slots, setSlots] = useState<Record<number, SampleSlot | null>>({});
+  const [voices, setVoices] = useState<SamplerVoice[]>([]);
+
+  const loadSampleRpc = useLoveRPC('audio:loadSample');
+  const clearSampleRpc = useLoveRPC('audio:clearSample');
+  const noteOnRpc = useLoveRPC('audio:noteOn');
+
+  useLoveEvent('audio:state', (rackState: RackState) => {
+    const mod = rackState.modules.find((m) => m.id === moduleId);
+    if (mod?.sampler) {
+      setSlots(mod.sampler.slots);
+      setVoices(mod.sampler.voices);
+    }
+  });
+
+  const loadSample = useCallback(
+    (slot: number, path: string, mode?: 'oneshot' | 'loop') =>
+      loadSampleRpc({ moduleId, slot, path, mode }),
+    [loadSampleRpc, moduleId]
+  );
+
+  const clearSample = useCallback(
+    (slot: number) => clearSampleRpc({ moduleId, slot }),
+    [clearSampleRpc, moduleId]
+  );
+
+  const trigger = useCallback(
+    (slot: number, velocity: number = 127) => {
+      // Slot 1 = MIDI note 36, slot 2 = 37, etc. (GM drum map)
+      const note = 35 + slot;
+      return noteOnRpc({ moduleId, note, velocity });
+    },
+    [noteOnRpc, moduleId]
+  );
+
+  return { slots, voices, loadSample, clearSample, trigger };
+}
+
+// ============================================================================
+// useRecorder — audio recording device management
+// ============================================================================
+
+/**
+ * Record audio from a microphone or input device into a sampler slot.
+ *
+ * @example
+ * const recorder = useRecorder();
+ * recorder.startRecording('sampler1', 1);  // record into slot 1
+ * // ... recording ...
+ * recorder.stopRecording();  // sample is now in the slot
+ */
+export function useRecorder(): UseRecorderResult {
+  const [devices, setDevices] = useState<AudioRecordingDevice[]>([]);
+  const [recording, setRecording] = useState<RecordingState>({
+    active: false, moduleId: null, slot: null, device: null, duration: 0,
+  });
+
+  const listDevicesRpc = useLoveRPC('audio:listRecordingDevices');
+  const startRpc = useLoveRPC('audio:startRecording');
+  const stopRpc = useLoveRPC('audio:stopRecording');
+
+  useLoveEvent('audio:state', (rackState: RackState) => {
+    if (rackState.recording) {
+      setRecording(rackState.recording);
+    }
+  });
+
+  const listDevices = useCallback(
+    async () => {
+      const result = await listDevicesRpc({});
+      if (result?.devices) {
+        setDevices(result.devices);
+      }
+      return result;
+    },
+    [listDevicesRpc]
+  );
+
+  const startRecording = useCallback(
+    (moduleId: string, slot: number, deviceIndex?: number) =>
+      startRpc({ moduleId, slot, device: deviceIndex }),
+    [startRpc]
+  );
+
+  const stopRecording = useCallback(
+    () => stopRpc({}),
+    [stopRpc]
+  );
+
+  return { devices, recording, listDevices, startRecording, stopRecording };
+}
+
+// ============================================================================
+// useSequencer — step sequencer pattern editing
+// ============================================================================
+
+/**
+ * Control a sequencer module's pattern and track assignments.
+ *
+ * @example
+ * const seq = useSequencer('seq1');
+ * seq.setTrackTarget(0, 'sampler1');  // track 0 triggers sampler1
+ * seq.setStep(0, 0, true, 36, 100);  // track 0, step 0: kick at velocity 100
+ * seq.setStep(0, 4, true, 36, 100);  // track 0, step 4: kick
+ */
+export function useSequencer(moduleId: string): UseSequencerResult {
+  const [pattern, setPattern] = useState<Record<string, Record<string, StepData>>>({});
+  const [currentStep, setCurrentStep] = useState(0);
+  const [trackTargets, setTrackTargets] = useState<Record<string, string>>({});
+
+  const setStepRpc = useLoveRPC('audio:setStep');
+  const setTargetRpc = useLoveRPC('audio:setTrackTarget');
+  const clearPatternRpc = useLoveRPC('audio:clearPattern');
+
+  useLoveEvent('audio:state', (rackState: RackState) => {
+    const mod = rackState.modules.find((m) => m.id === moduleId);
+    if (mod?.sequencer) {
+      setPattern(mod.sequencer.pattern);
+      setCurrentStep(mod.sequencer.currentStep);
+      setTrackTargets(mod.sequencer.trackTargets);
+    }
+  });
+
+  const setStep = useCallback(
+    (track: number, step: number, active: boolean, note?: number, velocity?: number) =>
+      setStepRpc({ moduleId, track, step, active, note, velocity }),
+    [setStepRpc, moduleId]
+  );
+
+  const setTrackTarget = useCallback(
+    (track: number, target: string) =>
+      setTargetRpc({ moduleId, track, target }),
+    [setTargetRpc, moduleId]
+  );
+
+  const clearPattern = useCallback(
+    () => clearPatternRpc({ moduleId }),
+    [clearPatternRpc, moduleId]
+  );
+
+  return { pattern, currentStep, trackTargets, setStep, setTrackTarget, clearPattern };
 }
