@@ -77,6 +77,11 @@ import { AreaChartStory } from './AreaChartStory';
 import { PieChartStory } from './PieChartStory';
 import { RadarChartStory } from './RadarChartStory';
 import { Scene3DBasicStory } from './Scene3DBasic';
+import { Scene3DPlanetStory } from './Scene3DPlanet';
+import { GamePlatformerStory } from './GamePlatformerStory';
+import { GameRogueliteStory } from './GameRogueliteStory';
+import { GameTurnBasedStory } from './GameTurnBasedStory';
+import { AudioRackStory } from './AudioRackStory';
 
 export const stories: StoryDef[] = [
   // Primitives
@@ -179,6 +184,15 @@ export const stories: StoryDef[] = [
 
   // 3D
   { id: 'scene-3d-basic', title: '3D Scene', category: '3D', component: Scene3DBasicStory },
+  { id: 'scene-3d-planet', title: 'Planet', category: '3D', component: Scene3DPlanetStory },
+
+  // Game Templates
+  { id: 'game-platformer', title: 'Platformer', category: 'Game Templates', component: GamePlatformerStory },
+  { id: 'game-roguelite', title: 'Roguelite Dungeon', category: 'Game Templates', component: GameRogueliteStory },
+  { id: 'game-turnbased', title: 'Turn-Based RPG', category: 'Game Templates', component: GameTurnBasedStory },
+
+  // Audio
+  { id: 'audio-rack', title: 'Audio Rack', category: 'Audio', component: AudioRackStory },
 
   // Dev Tools
   { id: 'error-test', title: 'Error Test', category: 'Dev Tools', component: ErrorTestStory },

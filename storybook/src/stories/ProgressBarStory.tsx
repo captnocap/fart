@@ -74,6 +74,16 @@ export function ProgressBarStory() {
         </Box>
       </Box>
 
+      {/* Interactive (hover for tooltip) */}
+      <Box style={{ gap: 6 }}>
+        <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: 'bold' }}>Interactive (hover for tooltip)</Text>
+        <Box style={{ gap: 8, width: 280 }}>
+          <ProgressBar value={0.72} interactive label="Storage" />
+          <ProgressBar value={0.45} interactive label="Memory" color="#f59e0b" />
+          <ProgressBar value={0.91} interactive label="CPU" color="#ef4444" />
+        </Box>
+      </Box>
+
       {/* Animated */}
       <Box style={{ gap: 6 }}>
         <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: 'bold' }}>Animated</Text>

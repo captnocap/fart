@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Box, Text } from './primitives';
+import { ChartTooltip } from './ChartTooltip';
 import type { Style, Color } from './types';
 import { useSpring } from './animation';
 
@@ -11,6 +12,7 @@ export interface ProgressBarProps {
   showLabel?: boolean;
   label?: string;
   animated?: boolean;
+  interactive?: boolean;
   style?: Style;
 }
 
@@ -26,26 +28,34 @@ export function ProgressBar({
   showLabel = false,
   label,
   animated = false,
+  interactive = false,
   style,
 }: ProgressBarProps) {
+  const [hovered, setHovered] = useState(false);
   const clamped = clamp01(value);
   const fillWidth = animated
     ? useSpring(clamped * 100, { stiffness: 120, damping: 20 })
     : clamped * 100;
 
-  const labelText = label ?? `${Math.round(clamped * 100)}%`;
+  const pct = Math.round(clamped * 100);
+  const labelText = label ?? `${pct}%`;
   const showText = showLabel && height >= 14;
 
   return (
-    <Box style={{
-      height,
-      backgroundColor: trackColor,
-      borderRadius: height / 2,
-      overflow: 'hidden',
-      ...style,
-    }}>
+    <Box
+      onPointerEnter={interactive ? () => setHovered(true) : undefined}
+      onPointerLeave={interactive ? () => setHovered(false) : undefined}
+      style={{
+        height,
+        backgroundColor: trackColor,
+        borderRadius: height / 2,
+        overflow: 'hidden',
+        position: interactive ? 'relative' : undefined,
+        ...style,
+      }}
+    >
       <Box style={{
-        width: `${typeof fillWidth === 'number' ? fillWidth : fillWidth}%`,
+        width: `${fillWidth}%`,
         height,
         backgroundColor: color,
         borderRadius: height / 2,
@@ -65,6 +75,11 @@ export function ProgressBar({
           </Text>
         </Box>
       )}
+      <ChartTooltip visible={interactive && hovered} anchor="top">
+        {label ? <ChartTooltip.Label>{label}</ChartTooltip.Label> : null}
+        <ChartTooltip.Value>{`${pct}%`}</ChartTooltip.Value>
+        <ChartTooltip.Detail>{`${clamped.toFixed(2)} / 1.00`}</ChartTooltip.Detail>
+      </ChartTooltip>
     </Box>
   );
 }

@@ -121,6 +121,13 @@ export { Table, type TableProps, type TableColumn } from './Table';
 export { BarChart, type BarChartProps, type BarChartBar } from './BarChart';
 export { ProgressBar, type ProgressBarProps } from './ProgressBar';
 export { Sparkline, type SparklineProps } from './Sparkline';
+export { ChartTooltip, type ChartTooltipProps } from './ChartTooltip';
+export { HorizontalBarChart, type HorizontalBarChartProps, type HorizontalBarChartBar } from './HorizontalBarChart';
+export { StackedBarChart, type StackedBarChartProps, type StackedBarChartSeries } from './StackedBarChart';
+export { LineChart, type LineChartProps, type LineChartPoint } from './LineChart';
+export { AreaChart, type AreaChartProps } from './AreaChart';
+export { PieChart, type PieChartProps, type PieChartSegment } from './PieChart';
+export { RadarChart, type RadarChartProps, type RadarChartAxis } from './RadarChart';
 
 // Animation
 export {

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Box, Text } from './primitives';
+import { ChartTooltip } from './ChartTooltip';
 import type { Style, Color } from './types';
 
 export interface BarChartBar {
@@ -88,43 +89,11 @@ export function BarChart({
                 opacity: interactive && anyHovered && !isHovered ? 0.35 : 1,
               }}
             >
-              {/* Tooltip — inspector-style floating bubble */}
-              {interactive && isHovered && (
-                <Box style={{
-                  position: 'absolute',
-                  bottom: '100%',
-                  left: 0,
-                  right: 0,
-                  alignItems: 'center',
-                  marginBottom: 4,
-                  zIndex: 10,
-                }}>
-                  <Box style={{
-                    backgroundColor: [0.03, 0.03, 0.05, 0.92],
-                    borderRadius: 4,
-                    paddingTop: 5,
-                    paddingBottom: 5,
-                    paddingLeft: 10,
-                    paddingRight: 10,
-                    borderWidth: 1,
-                    borderColor: '#40405a',
-                    alignItems: 'center',
-                    gap: 1,
-                  }}>
-                    {bar.label ? (
-                      <Text style={{ color: '#61a6fa', fontSize: 10, fontWeight: 'bold' }}>
-                        {bar.label}
-                      </Text>
-                    ) : null}
-                    <Text style={{ color: '#e1e4f0', fontSize: 12, fontWeight: 'bold' }}>
-                      {`${bar.value}`}
-                    </Text>
-                    <Text style={{ color: '#8892a6', fontSize: 9 }}>
-                      {`${pct}%`}
-                    </Text>
-                  </Box>
-                </Box>
-              )}
+              <ChartTooltip visible={interactive && isHovered} anchor="top">
+                {bar.label ? <ChartTooltip.Label>{bar.label}</ChartTooltip.Label> : null}
+                <ChartTooltip.Value>{`${bar.value}`}</ChartTooltip.Value>
+                <ChartTooltip.Detail>{`${pct}%`}</ChartTooltip.Detail>
+              </ChartTooltip>
               {showValues && (
                 <Text style={{ color: '#94a3b8', fontSize: 9 }}>
                   {bar.value}

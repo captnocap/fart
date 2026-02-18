@@ -80,6 +80,13 @@ export function SparklineStory() {
         </Box>
       </Box>
 
+      {/* Interactive */}
+      <Box style={{ gap: 6 }}>
+        <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: 'bold' }}>Interactive (hover for tooltip)</Text>
+        <Sparkline data={SAMPLE_DATA} width={200} height={48} interactive color="#22c55e" />
+        <Sparkline data={VOLATILE} width={200} height={48} interactive color="#ef4444" />
+      </Box>
+
     </Box>
   );
 }
