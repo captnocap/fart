@@ -41,6 +41,14 @@ local Painter = {}
 -- Set during Painter.init() from the injected measure module
 local getFont = nil
 
+-- Theme reference (set by init.lua via Painter.setTheme())
+local currentTheme = nil
+
+--- Update the active theme reference. Called by init.lua on theme switch.
+function Painter.setTheme(theme)
+  currentTheme = theme
+end
+
 --- Initialize the painter with target-specific dependencies.
 --- Must be called before any paint operations.
 --- @param config table  { measure = MeasureModule, images = ImagesModule }
@@ -881,7 +889,8 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
     if not textColor and node.type == "__TEXT__" and node.parent then
       textColor = (node.parent.style or {}).color
     end
-    Painter.setColor(textColor or { 1, 1, 1, 1 })
+    local defaultTextColor = (currentTheme and currentTheme.colors and currentTheme.colors.text) or { 1, 1, 1, 1 }
+    Painter.setColor(textColor or defaultTextColor)
     Painter.applyOpacity(effectiveOpacity)
 
     if not needsManualRendering then

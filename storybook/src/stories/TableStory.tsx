@@ -1,6 +1,7 @@
 import React from 'react';
 import { Box, Text, Table, Badge } from '../../../packages/shared/src';
 import type { TableColumn } from '../../../packages/shared/src';
+import { useThemeColors } from '../../../packages/theme/src';
 
 interface Employee {
   name: string;
@@ -64,30 +65,31 @@ const CUSTOM_COLUMNS: TableColumn<Employee>[] = [
 ];
 
 export function TableStory() {
+  const c = useThemeColors();
   return (
     <Box style={{ gap: 20, padding: 16 }}>
 
       {/* Basic Table */}
       <Box style={{ gap: 6 }}>
-        <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: 'bold' }}>Basic Table</Text>
+        <Text style={{ color: c.textSecondary, fontSize: 11, fontWeight: 'bold' }}>Basic Table</Text>
         <Table columns={BASIC_COLUMNS} data={EMPLOYEES} rowKey="name" />
       </Box>
 
       {/* Striped Rows */}
       <Box style={{ gap: 6 }}>
-        <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: 'bold' }}>Striped Rows</Text>
+        <Text style={{ color: c.textSecondary, fontSize: 11, fontWeight: 'bold' }}>Striped Rows</Text>
         <Table columns={BASIC_COLUMNS} data={EMPLOYEES} rowKey="name" striped />
       </Box>
 
       {/* Custom Cell Rendering */}
       <Box style={{ gap: 6 }}>
-        <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: 'bold' }}>Custom Cell Rendering</Text>
+        <Text style={{ color: c.textSecondary, fontSize: 11, fontWeight: 'bold' }}>Custom Cell Rendering</Text>
         <Table columns={CUSTOM_COLUMNS} data={EMPLOYEES} rowKey="name" />
       </Box>
 
       {/* Narrow Table (truncation) */}
       <Box style={{ gap: 6 }}>
-        <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: 'bold' }}>Narrow Table</Text>
+        <Text style={{ color: c.textSecondary, fontSize: 11, fontWeight: 'bold' }}>Narrow Table</Text>
         <Table
           columns={[
             { key: 'name', title: 'Name', width: 90 },
@@ -102,7 +104,7 @@ export function TableStory() {
 
       {/* Borderless */}
       <Box style={{ gap: 6 }}>
-        <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: 'bold' }}>Borderless</Text>
+        <Text style={{ color: c.textSecondary, fontSize: 11, fontWeight: 'bold' }}>Borderless</Text>
         <Table columns={BASIC_COLUMNS} data={EMPLOYEES.slice(0, 3)} rowKey="name" borderless striped />
       </Box>
 

@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Text } from '../../../packages/shared/src';
+import { useThemeColors } from '../../../packages/theme/src';
 import { Scene, Camera, Mesh } from '../../../packages/3d/src';
 
 export function Scene3DBasicStory() {
+  const c = useThemeColors();
   const [spin, setSpin] = useState(0);
 
   useEffect(() => {
@@ -14,10 +16,10 @@ export function Scene3DBasicStory() {
 
   return (
     <Box style={{ width: '100%', height: '100%', gap: 12, padding: 16 }}>
-      <Text style={{ fontSize: 18, color: '#cdd6f4', fontWeight: 'bold' }}>
+      <Text style={{ fontSize: 18, color: c.text, fontWeight: 'bold' }}>
         3D Scene
       </Text>
-      <Text style={{ fontSize: 12, color: '#6c7086' }}>
+      <Text style={{ fontSize: 12, color: c.textDim }}>
         Spinning cubes with edge borders + sphere, rendered via g3d
       </Text>
 
@@ -54,11 +56,11 @@ export function Scene3DBasicStory() {
           flexDirection: 'row',
           gap: 16,
           padding: 8,
-          backgroundColor: '#1e1e2e',
+          backgroundColor: c.bgElevated,
           borderRadius: 8,
         }}
       >
-        <Text style={{ fontSize: 11, color: '#6c7086' }}>
+        <Text style={{ fontSize: 11, color: c.textDim }}>
           Blue cube + Green cube (black edges) + Pink sphere
         </Text>
       </Box>

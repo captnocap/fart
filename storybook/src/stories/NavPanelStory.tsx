@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Box, Text, NavPanel } from '../../../packages/shared/src';
 import type { NavSection } from '../../../packages/shared/src';
+import { useThemeColors } from '../../../packages/theme/src';
 
 const SECTIONS: NavSection[] = [
   {
@@ -31,6 +32,7 @@ const SECTIONS: NavSection[] = [
 ];
 
 export function NavPanelStory() {
+  const c = useThemeColors();
   const [activeId, setActiveId] = useState('intro');
 
   return (
@@ -38,7 +40,7 @@ export function NavPanelStory() {
 
       {/* Basic NavPanel */}
       <Box style={{ gap: 6 }}>
-        <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: 'bold' }}>Basic NavPanel</Text>
+        <Text style={{ color: c.textSecondary, fontSize: 11, fontWeight: 'bold' }}>Basic NavPanel</Text>
         <NavPanel
           sections={SECTIONS}
           activeId="quickstart"
@@ -47,19 +49,19 @@ export function NavPanelStory() {
 
       {/* With Header */}
       <Box style={{ gap: 6 }}>
-        <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: 'bold' }}>With Header</Text>
+        <Text style={{ color: c.textSecondary, fontSize: 11, fontWeight: 'bold' }}>With Header</Text>
         <NavPanel
           sections={SECTIONS}
           activeId="forms"
           header={
-            <Text style={{ color: '#475569', fontSize: 10, fontWeight: 'bold' }}>MY APP</Text>
+            <Text style={{ color: c.textDim, fontSize: 10, fontWeight: 'bold' }}>MY APP</Text>
           }
         />
       </Box>
 
       {/* Custom Widths */}
       <Box style={{ gap: 6 }}>
-        <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: 'bold' }}>Custom Widths</Text>
+        <Text style={{ color: c.textSecondary, fontSize: 11, fontWeight: 'bold' }}>Custom Widths</Text>
         <Box style={{ flexDirection: 'row', gap: 12 }}>
           <NavPanel
             sections={[SECTIONS[0]]}
@@ -76,27 +78,27 @@ export function NavPanelStory() {
 
       {/* Interactive */}
       <Box style={{ gap: 6 }}>
-        <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: 'bold' }}>Interactive</Text>
+        <Text style={{ color: c.textSecondary, fontSize: 11, fontWeight: 'bold' }}>Interactive</Text>
         <Box style={{ flexDirection: 'row', gap: 12 }}>
           <NavPanel
             sections={SECTIONS}
             activeId={activeId}
             onSelect={setActiveId}
             header={
-              <Text style={{ color: '#475569', fontSize: 10, fontWeight: 'bold' }}>DOCS</Text>
+              <Text style={{ color: c.textDim, fontSize: 10, fontWeight: 'bold' }}>DOCS</Text>
             }
           />
           <Box style={{
             width: 200,
             height: 100,
-            backgroundColor: '#1e293b',
+            backgroundColor: c.bgElevated,
             borderRadius: 8,
             padding: 12,
             justifyContent: 'center',
             alignItems: 'center',
           }}>
-            <Text style={{ color: '#64748b', fontSize: 10 }}>Selected:</Text>
-            <Text style={{ color: '#e2e8f0', fontSize: 14, fontWeight: 'bold' }}>{activeId}</Text>
+            <Text style={{ color: c.textSecondary, fontSize: 10 }}>Selected:</Text>
+            <Text style={{ color: c.text, fontSize: 14, fontWeight: 'bold' }}>{activeId}</Text>
           </Box>
         </Box>
       </Box>

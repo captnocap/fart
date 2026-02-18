@@ -1,5 +1,6 @@
 import React from 'react';
 import { Box, Text, AreaChart } from '../../../packages/shared/src';
+import { useThemeColors } from '../../../packages/theme/src';
 
 const REVENUE = [
   { x: 'Jan', value: 12 },
@@ -17,18 +18,19 @@ const TEMPERATURE = Array.from({ length: 24 }, (_, i) => ({
 }));
 
 export function AreaChartStory() {
+  const c = useThemeColors();
   return (
     <Box style={{ gap: 20, padding: 16 }}>
 
       {/* Basic */}
       <Box style={{ gap: 6 }}>
-        <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: 'bold' }}>Basic Area Chart</Text>
+        <Text style={{ color: c.textSecondary, fontSize: 11, fontWeight: 'bold' }}>Basic Area Chart</Text>
         <AreaChart data={REVENUE} interactive color="#3b82f6" />
       </Box>
 
       {/* Temperature */}
       <Box style={{ gap: 6 }}>
-        <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: 'bold' }}>24h Temperature</Text>
+        <Text style={{ color: c.textSecondary, fontSize: 11, fontWeight: 'bold' }}>24h Temperature</Text>
         <AreaChart
           data={TEMPERATURE}
           width={320}
@@ -41,7 +43,7 @@ export function AreaChartStory() {
 
       {/* With Dots */}
       <Box style={{ gap: 6 }}>
-        <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: 'bold' }}>With Dots</Text>
+        <Text style={{ color: c.textSecondary, fontSize: 11, fontWeight: 'bold' }}>With Dots</Text>
         <AreaChart
           data={REVENUE}
           showDots
@@ -52,10 +54,10 @@ export function AreaChartStory() {
 
       {/* Comparison */}
       <Box style={{ gap: 6 }}>
-        <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: 'bold' }}>Side by Side</Text>
+        <Text style={{ color: c.textSecondary, fontSize: 11, fontWeight: 'bold' }}>Side by Side</Text>
         <Box style={{ flexDirection: 'row', gap: 16 }}>
           <Box style={{ gap: 4 }}>
-            <Text style={{ color: '#64748b', fontSize: 9 }}>Revenue</Text>
+            <Text style={{ color: c.textSecondary, fontSize: 9 }}>Revenue</Text>
             <AreaChart
               data={REVENUE}
               width={140}
@@ -65,7 +67,7 @@ export function AreaChartStory() {
             />
           </Box>
           <Box style={{ gap: 4 }}>
-            <Text style={{ color: '#64748b', fontSize: 9 }}>Expenses</Text>
+            <Text style={{ color: c.textSecondary, fontSize: 9 }}>Expenses</Text>
             <AreaChart
               data={REVENUE.map(p => ({ ...p, value: Math.round(p.value * 0.7) }))}
               width={140}

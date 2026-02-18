@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Box, Text, TextEditor } from '../../../packages/shared/src';
+import { useThemeColors } from '../../../packages/theme/src';
 
 const SAMPLE_CODE = `function greet(name)
   print("Hello, " .. name .. "!")
@@ -13,6 +14,7 @@ for i = 1, 10 do
 end`;
 
 export function TextEditorStory() {
+  const c = useThemeColors();
   const [lastBlurValue, setLastBlurValue] = useState('');
   const [lastSubmitValue, setLastSubmitValue] = useState('');
   const [focused, setFocused] = useState(false);
@@ -21,7 +23,7 @@ export function TextEditorStory() {
     <Box style={{ gap: 16, padding: 16 }}>
       {/* Main editor */}
       <Box style={{ gap: 4 }}>
-        <Text style={{ color: '#888', fontSize: 10 }}>
+        <Text style={{ color: c.textDim, fontSize: 10 }}>
           Document editor (click to focus, Esc to blur, Ctrl+Enter to submit)
         </Text>
         <TextEditor
@@ -36,14 +38,14 @@ export function TextEditorStory() {
           style={{ width: '100%', height: 200, borderRadius: 6 }}
           textStyle={{ fontSize: 13 }}
         />
-        <Text style={{ color: focused ? '#4A90D9' : '#555', fontSize: 11 }}>
+        <Text style={{ color: focused ? c.primary : c.textDim, fontSize: 11 }}>
           {focused ? 'Focused — editing in Lua (no bridge traffic)' : 'Unfocused — click to edit'}
         </Text>
       </Box>
 
       {/* Read-only editor */}
       <Box style={{ gap: 4 }}>
-        <Text style={{ color: '#888', fontSize: 10 }}>Read-only</Text>
+        <Text style={{ color: c.textDim, fontSize: 10 }}>Read-only</Text>
         <TextEditor
           initialValue="This editor is read-only.\nYou can select and copy, but not edit."
           readOnly
@@ -54,7 +56,7 @@ export function TextEditorStory() {
 
       {/* No line numbers */}
       <Box style={{ gap: 4 }}>
-        <Text style={{ color: '#888', fontSize: 10 }}>No line numbers</Text>
+        <Text style={{ color: c.textDim, fontSize: 10 }}>No line numbers</Text>
         <TextEditor
           initialValue="Line numbers hidden."
           lineNumbers={false}
@@ -66,16 +68,16 @@ export function TextEditorStory() {
       {/* Last blur/submit values */}
       {lastBlurValue !== '' && (
         <Box style={{ gap: 2 }}>
-          <Text style={{ color: '#888', fontSize: 10 }}>Last blur value (first 80 chars):</Text>
-          <Text style={{ color: '#a0a0b0', fontSize: 11 }}>
+          <Text style={{ color: c.textDim, fontSize: 10 }}>Last blur value (first 80 chars):</Text>
+          <Text style={{ color: c.textSecondary, fontSize: 11 }}>
             {`${lastBlurValue.slice(0, 80)}...`}
           </Text>
         </Box>
       )}
       {lastSubmitValue !== '' && (
         <Box style={{ gap: 2 }}>
-          <Text style={{ color: '#888', fontSize: 10 }}>Last submit value (first 80 chars):</Text>
-          <Text style={{ color: '#22c55e', fontSize: 11 }}>
+          <Text style={{ color: c.textDim, fontSize: 10 }}>Last submit value (first 80 chars):</Text>
+          <Text style={{ color: c.success, fontSize: 11 }}>
             {`${lastSubmitValue.slice(0, 80)}...`}
           </Text>
         </Box>

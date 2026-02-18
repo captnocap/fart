@@ -1,10 +1,12 @@
 import React from 'react';
 import { Box, Text } from '../../../packages/shared/src';
+import { useThemeColors } from '../../../packages/theme/src';
 
 export function ZIndexStory() {
+  const c = useThemeColors();
   return (
     <Box style={{ gap: 16, padding: 16 }}>
-      <Text style={{ color: '#888', fontSize: 10 }}>Overlapping boxes with zIndex</Text>
+      <Text style={{ color: c.textDim, fontSize: 10 }}>Overlapping boxes with zIndex</Text>
 
       <Box style={{ height: 120, position: 'relative' }}>
         <Box style={{
@@ -41,7 +43,7 @@ export function ZIndexStory() {
         </Box>
       </Box>
 
-      <Text style={{ color: '#666', fontSize: 10 }}>Blue (z:3) should be on top</Text>
+      <Text style={{ color: c.textDim, fontSize: 10 }}>Blue (z:3) should be on top</Text>
     </Box>
   );
 }

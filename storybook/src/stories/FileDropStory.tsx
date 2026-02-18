@@ -2,8 +2,10 @@ import React, { useState, useCallback } from 'react';
 import { Box, Text } from '../../../packages/shared/src';
 import { VideoPlayer } from '../../../packages/shared/src/VideoPlayer';
 import type { LoveEvent } from '../../../packages/shared/src/types';
+import { useThemeColors } from '../../../packages/theme/src';
 
 export function FileDropStory() {
+  const c = useThemeColors();
   const [videoSrc, setVideoSrc] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
   const [fileSize, setFileSize] = useState<number | null>(null);
@@ -28,8 +30,8 @@ export function FileDropStory() {
     <Box style={{ gap: 20, padding: 20 }}>
       {/* Header */}
       <Box style={{ gap: 4 }}>
-        <Text style={{ color: '#e2e8f0', fontSize: 16, fontWeight: 'bold' }}>File Drop</Text>
-        <Text style={{ color: '#64748b', fontSize: 11 }}>
+        <Text style={{ color: c.text, fontSize: 16, fontWeight: 'bold' }}>File Drop</Text>
+        <Text style={{ color: c.textDim, fontSize: 11 }}>
           Drag a video file onto the drop zone to start playback.
         </Text>
       </Box>
@@ -69,7 +71,7 @@ export function FileDropStory() {
                 paddingTop: 6,
                 paddingBottom: 6,
               }}>
-                <Text style={{ color: '#94a3b8', fontSize: 10 }} numberOfLines={1}>
+                <Text style={{ color: c.textSecondary, fontSize: 10 }} numberOfLines={1}>
                   {fileName}
                 </Text>
               </Box>
@@ -82,14 +84,14 @@ export function FileDropStory() {
                   paddingTop: 6,
                   paddingBottom: 6,
                 }}>
-                  <Text style={{ color: '#64748b', fontSize: 10 }}>
+                  <Text style={{ color: c.textDim, fontSize: 10 }}>
                     {formatSize(fileSize)}
                   </Text>
                 </Box>
               )}
             </Box>
             {/* Drop another hint */}
-            <Text style={{ color: '#334155', fontSize: 9 }}>
+            <Text style={{ color: c.textDim, fontSize: 9 }}>
               Drop another file to switch
             </Text>
           </Box>
@@ -98,21 +100,21 @@ export function FileDropStory() {
           <Box style={{
             width: 560,
             height: 315,
-            backgroundColor: dragHover ? '#111827' : '#0a0e17',
+            backgroundColor: dragHover ? c.bg : '#0a0e17',
             borderRadius: 8,
             borderWidth: 2,
-            borderColor: dragHover ? '#3b82f6' : [1, 1, 1, 0.08],
+            borderColor: dragHover ? c.primary : [1, 1, 1, 0.08],
             justifyContent: 'center',
             alignItems: 'center',
             gap: 12,
           }}>
-            <Text style={{ color: dragHover ? '#60a5fa' : '#475569', fontSize: 32 }}>
+            <Text style={{ color: dragHover ? c.info : c.textDim, fontSize: 32 }}>
               +
             </Text>
-            <Text style={{ color: dragHover ? '#93c5fd' : '#64748b', fontSize: 13 }}>
+            <Text style={{ color: dragHover ? c.info : c.textDim, fontSize: 13 }}>
               {dragHover ? 'Release to play' : 'Drop a video file here'}
             </Text>
-            <Text style={{ color: '#334155', fontSize: 10 }}>
+            <Text style={{ color: c.textDim, fontSize: 10 }}>
               MP4, MKV, WebM, AVI, MOV, OGV
             </Text>
           </Box>

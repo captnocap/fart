@@ -1,5 +1,6 @@
 import React from 'react';
 import { Box, Text, HorizontalBarChart } from '../../../packages/shared/src';
+import { useThemeColors } from '../../../packages/theme/src';
 
 const LANGUAGES = [
   { label: 'JavaScript', value: 65, color: '#f7df1e' },
@@ -19,24 +20,25 @@ const LEADERBOARD = [
 ];
 
 export function HorizontalBarChartStory() {
+  const c = useThemeColors();
   return (
     <Box style={{ gap: 20, padding: 16 }}>
 
       {/* Basic */}
       <Box style={{ gap: 6 }}>
-        <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: 'bold' }}>Basic</Text>
+        <Text style={{ color: c.textSecondary, fontSize: 11, fontWeight: 'bold' }}>Basic</Text>
         <HorizontalBarChart data={LANGUAGES} interactive />
       </Box>
 
       {/* With Values */}
       <Box style={{ gap: 6 }}>
-        <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: 'bold' }}>With Values</Text>
+        <Text style={{ color: c.textSecondary, fontSize: 11, fontWeight: 'bold' }}>With Values</Text>
         <HorizontalBarChart data={LANGUAGES} showValues interactive />
       </Box>
 
       {/* Leaderboard */}
       <Box style={{ gap: 6 }}>
-        <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: 'bold' }}>Leaderboard</Text>
+        <Text style={{ color: c.textSecondary, fontSize: 11, fontWeight: 'bold' }}>Leaderboard</Text>
         <HorizontalBarChart
           data={LEADERBOARD}
           showValues
@@ -49,7 +51,7 @@ export function HorizontalBarChartStory() {
 
       {/* No Labels */}
       <Box style={{ gap: 6 }}>
-        <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: 'bold' }}>Compact (no labels)</Text>
+        <Text style={{ color: c.textSecondary, fontSize: 11, fontWeight: 'bold' }}>Compact (no labels)</Text>
         <HorizontalBarChart
           data={LANGUAGES.slice(0, 4)}
           showLabels={false}

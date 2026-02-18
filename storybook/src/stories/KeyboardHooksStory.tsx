@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { Box, Text, Pressable, TextEditor, useHotkey, useClipboard } from '../../../packages/shared/src';
 import type { LoveEvent } from '../../../packages/shared/src/types';
+import { useThemeColors } from '../../../packages/theme/src';
 
 const SAMPLE_TEXT = 'Hello from useClipboard!';
 
 export function KeyboardHooksStory() {
+  const c = useThemeColors();
   const [lastHotkey, setLastHotkey] = useState('(none)');
   const [hotkeyCount, setHotkeyCount] = useState(0);
   const { copy, paste, copied } = useClipboard();
@@ -43,22 +45,22 @@ export function KeyboardHooksStory() {
 
       {/* 1. useHotkey */}
       <Box style={{ gap: 6 }}>
-        <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: 'bold' }}>useHotkey</Text>
-        <Text style={{ color: '#64748b', fontSize: 11 }}>
+        <Text style={{ color: c.textSecondary, fontSize: 11, fontWeight: 'bold' }}>useHotkey</Text>
+        <Text style={{ color: c.textDim, fontSize: 11 }}>
           Press Ctrl+Z, Ctrl+Shift+S, or Escape anywhere.
         </Text>
         <Box style={{
           padding: 12,
-          backgroundColor: '#1e293b',
+          backgroundColor: c.bgElevated,
           borderRadius: 8,
           borderWidth: 1,
-          borderColor: '#334155',
+          borderColor: c.border,
           gap: 6,
         }}>
-          <Text style={{ color: '#e2e8f0', fontSize: 13 }}>
+          <Text style={{ color: c.text, fontSize: 13 }}>
             {`Last hotkey: ${lastHotkey}`}
           </Text>
-          <Text style={{ color: '#e2e8f0', fontSize: 13 }}>
+          <Text style={{ color: c.text, fontSize: 13 }}>
             {`Total fires: ${hotkeyCount}`}
           </Text>
         </Box>
@@ -66,12 +68,12 @@ export function KeyboardHooksStory() {
 
       {/* 2. useClipboard */}
       <Box style={{ gap: 6 }}>
-        <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: 'bold' }}>useClipboard</Text>
+        <Text style={{ color: c.textSecondary, fontSize: 11, fontWeight: 'bold' }}>useClipboard</Text>
         <Box style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
           <Pressable
             onPress={() => copy(SAMPLE_TEXT)}
             style={({ pressed, hovered }) => ({
-              backgroundColor: pressed ? '#1d4ed8' : hovered ? '#2563eb' : '#3b82f6',
+              backgroundColor: pressed ? c.primaryPressed : hovered ? c.primaryHover : c.primary,
               paddingLeft: 16,
               paddingRight: 16,
               paddingTop: 8,
@@ -80,7 +82,7 @@ export function KeyboardHooksStory() {
               alignItems: 'center',
             })}
           >
-            <Text style={{ color: '#ffffff', fontSize: 13, fontWeight: '600' }}>
+            <Text style={{ color: '#fff', fontSize: 13, fontWeight: '600' }}>
               {copied ? 'Copied!' : 'Copy'}
             </Text>
           </Pressable>
@@ -91,7 +93,7 @@ export function KeyboardHooksStory() {
               setPastedText(text);
             }}
             style={({ pressed, hovered }) => ({
-              backgroundColor: pressed ? '#16a34a' : hovered ? '#22c55e' : '#15803d',
+              backgroundColor: pressed ? c.success : hovered ? c.success : c.success,
               paddingLeft: 16,
               paddingRight: 16,
               paddingTop: 8,
@@ -100,21 +102,21 @@ export function KeyboardHooksStory() {
               alignItems: 'center',
             })}
           >
-            <Text style={{ color: '#ffffff', fontSize: 13, fontWeight: '600' }}>Paste</Text>
+            <Text style={{ color: '#fff', fontSize: 13, fontWeight: '600' }}>Paste</Text>
           </Pressable>
         </Box>
         <Box style={{
           padding: 12,
-          backgroundColor: '#1e293b',
+          backgroundColor: c.bgElevated,
           borderRadius: 8,
           borderWidth: 1,
-          borderColor: '#334155',
+          borderColor: c.border,
           gap: 6,
         }}>
-          <Text style={{ color: '#64748b', fontSize: 11 }}>
+          <Text style={{ color: c.textDim, fontSize: 11 }}>
             {`Will copy: "${SAMPLE_TEXT}"`}
           </Text>
-          <Text style={{ color: '#e2e8f0', fontSize: 13 }}>
+          <Text style={{ color: c.text, fontSize: 13 }}>
             {pastedText ? `Pasted: "${pastedText}"` : 'Pasted: (nothing yet)'}
           </Text>
         </Box>
@@ -122,43 +124,43 @@ export function KeyboardHooksStory() {
 
       {/* 3. Modifier enrichment */}
       <Box style={{ gap: 6 }}>
-        <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: 'bold' }}>Modifier Enrichment</Text>
-        <Text style={{ color: '#64748b', fontSize: 11 }}>
+        <Text style={{ color: c.textSecondary, fontSize: 11, fontWeight: 'bold' }}>Modifier Enrichment</Text>
+        <Text style={{ color: c.textDim, fontSize: 11 }}>
           Press any key on the box below to see raw event data.
         </Text>
         <Box
           onKeyDown={handleKeyDown}
           style={{
             padding: 12,
-            backgroundColor: '#1e293b',
+            backgroundColor: c.bgElevated,
             borderRadius: 8,
             borderWidth: 1,
-            borderColor: lastKeyEvent ? '#3b82f6' : '#334155',
+            borderColor: lastKeyEvent ? c.primary : c.border,
             gap: 6,
           }}
         >
           {lastKeyEvent ? (
             <>
-              <Text style={{ color: '#e2e8f0', fontSize: 13 }}>
+              <Text style={{ color: c.text, fontSize: 13 }}>
                 {`key: "${lastKeyEvent.key}"`}
               </Text>
               <Box style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
-                <Text style={{ color: lastKeyEvent.ctrl ? '#22c55e' : '#475569', fontSize: 12 }}>
+                <Text style={{ color: lastKeyEvent.ctrl ? c.success : c.textDim, fontSize: 12 }}>
                   {`ctrl: ${lastKeyEvent.ctrl}`}
                 </Text>
-                <Text style={{ color: lastKeyEvent.shift ? '#22c55e' : '#475569', fontSize: 12 }}>
+                <Text style={{ color: lastKeyEvent.shift ? c.success : c.textDim, fontSize: 12 }}>
                   {`shift: ${lastKeyEvent.shift}`}
                 </Text>
-                <Text style={{ color: lastKeyEvent.alt ? '#22c55e' : '#475569', fontSize: 12 }}>
+                <Text style={{ color: lastKeyEvent.alt ? c.success : c.textDim, fontSize: 12 }}>
                   {`alt: ${lastKeyEvent.alt}`}
                 </Text>
-                <Text style={{ color: lastKeyEvent.meta ? '#22c55e' : '#475569', fontSize: 12 }}>
+                <Text style={{ color: lastKeyEvent.meta ? c.success : c.textDim, fontSize: 12 }}>
                   {`meta: ${lastKeyEvent.meta}`}
                 </Text>
               </Box>
             </>
           ) : (
-            <Text style={{ color: '#475569', fontSize: 13 }}>
+            <Text style={{ color: c.textDim, fontSize: 13 }}>
               Waiting for keypress...
             </Text>
           )}
@@ -167,8 +169,8 @@ export function KeyboardHooksStory() {
 
       {/* 4. TextEditor passthrough */}
       <Box style={{ gap: 6 }}>
-        <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: 'bold' }}>TextEditor Passthrough</Text>
-        <Text style={{ color: '#64748b', fontSize: 11 }}>
+        <Text style={{ color: c.textSecondary, fontSize: 11, fontWeight: 'bold' }}>TextEditor Passthrough</Text>
+        <Text style={{ color: c.textDim, fontSize: 11 }}>
           Focus the editor and press Ctrl+Z — the useHotkey counter above should still fire.
         </Text>
         <TextEditor

@@ -82,6 +82,7 @@ import { GamePlatformerStory } from './GamePlatformerStory';
 import { GameRogueliteStory } from './GameRogueliteStory';
 import { GameTurnBasedStory } from './GameTurnBasedStory';
 import { AudioRackStory } from './AudioRackStory';
+import { ThemeStory } from './ThemeStory';
 
 export const stories: StoryDef[] = [
   // Primitives
@@ -193,6 +194,9 @@ export const stories: StoryDef[] = [
 
   // Audio
   { id: 'audio-rack', title: 'Audio Rack', category: 'Audio', component: AudioRackStory },
+
+  // Theme
+  { id: 'theme', title: 'Theme System', category: 'Theme', component: ThemeStory },
 
   // Dev Tools
   { id: 'error-test', title: 'Error Test', category: 'Dev Tools', component: ErrorTestStory },

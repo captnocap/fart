@@ -10,20 +10,7 @@ import React, { useState, useCallback, useRef, useMemo } from 'react';
 import { Box, Text, ScrollView, Pressable, TextInput } from '../../../packages/shared/src';
 import { useChat, AIProvider } from '../../../packages/ai/src';
 import type { AIProviderType, AIConfig, ToolDefinition } from '../../../packages/ai/src';
-
-// ── Colors ──────────────────────────────────────────────
-
-const BG = '#080c16';
-const SURFACE = '#111827';
-const CARD_BG = '#1a2235';
-const CARD_BORDER = '#2a3548';
-const ACCENT = '#3b82f6';
-const TEXT_PRIMARY = '#e2e8f0';
-const TEXT_DIM = '#64748b';
-const TEXT_MUTED = '#94a3b8';
-const GREEN = '#22c55e';
-const AMBER = '#f59e0b';
-const RED = '#ef4444';
+import { useThemeColors } from '../../../packages/theme/src';
 
 // ── Canvas Node ─────────────────────────────────────────
 
@@ -46,22 +33,23 @@ function Children({ parentId, nodes, onAction }: {
 function RenderNode({ node, nodes, onAction }: {
   node: CanvasNode; nodes: CanvasNode[]; onAction: (a: string) => void;
 }) {
+  const c = useThemeColors();
   const p = node.props || {};
 
   switch (node.type) {
     case 'card':
       return (
         <Box style={{
-          backgroundColor: CARD_BG, borderRadius: 8, padding: 12,
-          borderWidth: 1, borderColor: CARD_BORDER, gap: 8, ...p.style,
+          backgroundColor: c.bgElevated, borderRadius: 8, padding: 12,
+          borderWidth: 1, borderColor: c.border, gap: 8, ...p.style,
         }}>
           {p.title && (
-            <Text style={{ fontSize: 14, fontWeight: 'bold', color: TEXT_PRIMARY }}>
+            <Text style={{ fontSize: 14, fontWeight: 'bold', color: c.text }}>
               {p.title}
             </Text>
           )}
           {p.subtitle && (
-            <Text style={{ fontSize: 11, color: TEXT_DIM }}>{p.subtitle}</Text>
+            <Text style={{ fontSize: 11, color: c.textDim }}>{p.subtitle}</Text>
           )}
           <Children parentId={node.id} nodes={nodes} onAction={onAction} />
         </Box>
@@ -86,7 +74,7 @@ function RenderNode({ node, nodes, onAction }: {
 
     case 'text':
       return (
-        <Text style={{ fontSize: 13, color: TEXT_PRIMARY, lineHeight: 20, ...p.style }}>
+        <Text style={{ fontSize: 13, color: c.text, lineHeight: 20, ...p.style }}>
           {p.content || ''}
         </Text>
       );
@@ -95,7 +83,7 @@ function RenderNode({ node, nodes, onAction }: {
       const sizes: Record<number, number> = { 1: 22, 2: 16, 3: 14 };
       const sz = sizes[p.level] || 16;
       return (
-        <Text style={{ fontSize: sz, fontWeight: 'bold', color: TEXT_PRIMARY, ...p.style }}>
+        <Text style={{ fontSize: sz, fontWeight: 'bold', color: c.text, ...p.style }}>
           {p.content || ''}
         </Text>
       );
@@ -104,10 +92,10 @@ function RenderNode({ node, nodes, onAction }: {
     case 'metric':
       return (
         <Box style={{ alignItems: 'center', padding: 4, ...p.style }}>
-          <Text style={{ fontSize: 28, fontWeight: 'bold', color: p.color || ACCENT }}>
+          <Text style={{ fontSize: 28, fontWeight: 'bold', color: p.color || c.primary }}>
             {p.value || '\u2014'}
           </Text>
-          <Text style={{ fontSize: 11, color: TEXT_DIM, marginTop: 2 }}>
+          <Text style={{ fontSize: 11, color: c.textDim, marginTop: 2 }}>
             {p.label || ''}
           </Text>
         </Box>
@@ -116,21 +104,21 @@ function RenderNode({ node, nodes, onAction }: {
     case 'bar-chart': {
       const data: { label: string; value: number }[] = p.data || [];
       const max = p.maxValue || Math.max(...data.map(d => d.value), 1);
-      const color = p.color || ACCENT;
+      const color = p.color || c.primary;
       return (
         <Box style={{ gap: 6, ...p.style }}>
           {data.map((d, i) => {
             const pct = Math.min(100, (d.value / max) * 100);
             return (
               <Box key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <Text style={{ fontSize: 10, color: TEXT_DIM, width: 70 }}>{d.label}</Text>
-                <Box style={{ flexGrow: 1, height: 18, backgroundColor: '#1e293b', borderRadius: 3 }}>
+                <Text style={{ fontSize: 10, color: c.textDim, width: 70 }}>{d.label}</Text>
+                <Box style={{ flexGrow: 1, height: 18, backgroundColor: c.bgElevated, borderRadius: 3 }}>
                   <Box style={{
                     height: 18, width: `${pct}%`,
                     backgroundColor: color, borderRadius: 3,
                   }} />
                 </Box>
-                <Text style={{ fontSize: 10, color: TEXT_MUTED, width: 36 }}>
+                <Text style={{ fontSize: 10, color: c.textSecondary, width: 36 }}>
                   {String(d.value)}
                 </Text>
               </Box>
@@ -142,16 +130,16 @@ function RenderNode({ node, nodes, onAction }: {
 
     case 'progress-bar': {
       const val = Math.min(100, Math.max(0, p.value || 0));
-      const color = p.color || ACCENT;
+      const color = p.color || c.primary;
       return (
         <Box style={{ gap: 4, ...p.style }}>
           {p.label && (
             <Box style={{ flexDirection: 'row', gap: 8 }}>
-              <Text style={{ fontSize: 10, color: TEXT_DIM, flexGrow: 1 }}>{p.label}</Text>
-              <Text style={{ fontSize: 10, color: TEXT_MUTED }}>{`${val}%`}</Text>
+              <Text style={{ fontSize: 10, color: c.textDim, flexGrow: 1 }}>{p.label}</Text>
+              <Text style={{ fontSize: 10, color: c.textSecondary }}>{`${val}%`}</Text>
             </Box>
           )}
-          <Box style={{ height: 8, backgroundColor: '#1e293b', borderRadius: 4 }}>
+          <Box style={{ height: 8, backgroundColor: c.bgElevated, borderRadius: 4 }}>
             <Box style={{
               height: 8, width: `${val}%`,
               backgroundColor: color, borderRadius: 4,
@@ -165,7 +153,7 @@ function RenderNode({ node, nodes, onAction }: {
       const data: number[] = p.data || [];
       const max = Math.max(...data, 1);
       const h = p.height || 40;
-      const color = p.color || ACCENT;
+      const color = p.color || c.primary;
       return (
         <Box style={{
           flexDirection: 'row', alignItems: 'flex-end',
@@ -187,7 +175,7 @@ function RenderNode({ node, nodes, onAction }: {
         <Pressable
           onPress={() => onAction(p.action || p.label || 'button')}
           style={{
-            backgroundColor: p.color || ACCENT,
+            backgroundColor: p.color || c.primary,
             paddingLeft: 14, paddingRight: 14,
             paddingTop: 8, paddingBottom: 8,
             borderRadius: 6, alignSelf: 'flex-start', ...p.style,
@@ -212,23 +200,23 @@ function RenderNode({ node, nodes, onAction }: {
       );
 
     case 'status': {
-      const dotColor = p.state === 'ok' ? GREEN : p.state === 'warning' ? AMBER : RED;
+      const dotColor = p.state === 'ok' ? c.success : p.state === 'warning' ? c.warning : c.error;
       return (
         <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8, ...p.style }}>
           <Box style={{
             width: 8, height: 8, borderRadius: 4, backgroundColor: dotColor,
           }} />
-          <Text style={{ fontSize: 12, color: TEXT_PRIMARY }}>{p.label || ''}</Text>
+          <Text style={{ fontSize: 12, color: c.text }}>{p.label || ''}</Text>
         </Box>
       );
     }
 
     case 'divider':
-      return <Box style={{ height: 1, backgroundColor: CARD_BORDER, ...p.style }} />;
+      return <Box style={{ height: 1, backgroundColor: c.border, ...p.style }} />;
 
     default:
       return (
-        <Text style={{ fontSize: 10, color: RED }}>{'Unknown: ' + node.type}</Text>
+        <Text style={{ fontSize: 10, color: c.error }}>{'Unknown: ' + node.type}</Text>
       );
   }
 }
@@ -275,14 +263,15 @@ BUILDING RULES:
 function Pill({ label, active, onPress }: {
   label: string; active: boolean; onPress: () => void;
 }) {
+  const c = useThemeColors();
   return (
     <Pressable onPress={onPress} style={{
-      backgroundColor: active ? ACCENT : SURFACE,
+      backgroundColor: active ? c.primary : SURFACE,
       paddingLeft: 10, paddingRight: 10,
       paddingTop: 4, paddingBottom: 4,
       borderRadius: 4,
     }}>
-      <Text style={{ fontSize: 11, color: active ? '#fff' : TEXT_MUTED }}>
+      <Text style={{ fontSize: 11, color: active ? '#fff' : c.textSecondary }}>
         {label}
       </Text>
     </Pressable>
@@ -292,6 +281,7 @@ function Pill({ label, active, onPress }: {
 // ── Main Story ──────────────────────────────────────────
 
 export function AICanvasStory() {
+  const c = useThemeColors();
   // Config
   const [provider, setProvider] = useState<AIProviderType>('openai');
   const [model, setModel] = useState('gpt-4');
@@ -435,9 +425,9 @@ export function AICanvasStory() {
 
   return (
     <AIProvider config={config}>
-      <Box style={{ width: '100%', height: '100%', backgroundColor: BG }}>
+      <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg }}>
         {/* ── Header ─────────────────────────────────── */}
-        <Box style={{ backgroundColor: SURFACE, borderBottomWidth: 1, borderColor: '#1e293b' }}>
+        <Box style={{ backgroundColor: c.bgElevated, borderBottomWidth: 1, borderColor: c.border }}>
           <Pressable
             onPress={() => setShowConfig(!showConfig)}
             style={{
@@ -449,14 +439,14 @@ export function AICanvasStory() {
             }}
           >
             <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-              <Text style={{ fontSize: 16, fontWeight: 'bold', color: TEXT_PRIMARY }}>
+              <Text style={{ fontSize: 16, fontWeight: 'bold', color: c.text }}>
                 AI Canvas
               </Text>
-              <Text style={{ fontSize: 10, color: TEXT_DIM }}>
+              <Text style={{ fontSize: 10, color: c.textDim }}>
                 {nodes.length > 0 ? nodes.length + ' components' : 'empty'}
               </Text>
             </Box>
-            <Text style={{ fontSize: 10, color: TEXT_DIM }}>
+            <Text style={{ fontSize: 10, color: c.textDim }}>
               {showConfig ? 'hide config' : 'config'}
             </Text>
           </Pressable>
@@ -480,7 +470,7 @@ export function AICanvasStory() {
                   onChangeText={setModel}
                   placeholder="Model..."
                   style={{
-                    fontSize: 11, color: TEXT_PRIMARY, backgroundColor: BG,
+                    fontSize: 11, color: c.text, backgroundColor: c.bg,
                     padding: 6, borderRadius: 4, width: 180, height: 28,
                   }}
                 />
@@ -489,7 +479,7 @@ export function AICanvasStory() {
                   onChangeText={setApiKey}
                   placeholder={provider === 'custom' ? 'No key needed' : 'API key...'}
                   style={{
-                    fontSize: 11, color: TEXT_PRIMARY, backgroundColor: BG,
+                    fontSize: 11, color: c.text, backgroundColor: c.bg,
                     padding: 6, borderRadius: 4, flexGrow: 1, height: 28,
                   }}
                 />
@@ -504,24 +494,24 @@ export function AICanvasStory() {
             <Box style={{
               justifyContent: 'center', alignItems: 'center', paddingTop: 100,
             }}>
-              <Text style={{ fontSize: 20, color: TEXT_DIM, fontWeight: 'bold' }}>
+              <Text style={{ fontSize: 20, color: c.textDim, fontWeight: 'bold' }}>
                 {isLoading ? 'Building...' : 'Empty Canvas'}
               </Text>
-              <Text style={{ fontSize: 13, color: TEXT_DIM, marginTop: 8 }}>
+              <Text style={{ fontSize: 13, color: c.textDim, marginTop: 8 }}>
                 {config.apiKey || config.provider === 'custom'
                   ? 'Describe what you want to see'
                   : 'Add an API key, then describe what to build'}
               </Text>
               {!isLoading && (
                 <Box style={{ marginTop: 24, gap: 8, alignItems: 'center' }}>
-                  <Text style={{ fontSize: 11, color: TEXT_MUTED }}>Try:</Text>
-                  <Text style={{ fontSize: 11, color: ACCENT }}>
+                  <Text style={{ fontSize: 11, color: c.textSecondary }}>Try:</Text>
+                  <Text style={{ fontSize: 11, color: c.primary }}>
                     "build a server monitoring dashboard"
                   </Text>
-                  <Text style={{ fontSize: 11, color: ACCENT }}>
+                  <Text style={{ fontSize: 11, color: c.primary }}>
                     "show me a project status board"
                   </Text>
-                  <Text style={{ fontSize: 11, color: ACCENT }}>
+                  <Text style={{ fontSize: 11, color: c.primary }}>
                     "create a sales metrics overview"
                   </Text>
                 </Box>
@@ -543,8 +533,8 @@ export function AICanvasStory() {
 
         {/* ── Status + Input ─────────────────────────── */}
         <Box style={{
-          backgroundColor: SURFACE,
-          borderTopWidth: 1, borderColor: '#1e293b',
+          backgroundColor: c.bgElevated,
+          borderTopWidth: 1, borderColor: c.border,
           padding: 12, gap: 8,
         }}>
           {/* Status line */}
@@ -555,7 +545,7 @@ export function AICanvasStory() {
             }}>
               <Text style={{
                 fontSize: 11, flexShrink: 1,
-                color: error ? RED : isStreaming ? ACCENT : GREEN,
+                color: error ? c.error : isStreaming ? c.primary : c.success,
               }}>
                 {error ? error.message : isStreaming ? 'Building...' : statusText}
               </Text>
@@ -567,7 +557,7 @@ export function AICanvasStory() {
                     paddingTop: 2, paddingBottom: 2,
                   }}
                 >
-                  <Text style={{ fontSize: 10, color: TEXT_DIM }}>Clear</Text>
+                  <Text style={{ fontSize: 10, color: c.textDim }}>Clear</Text>
                 </Pressable>
               )}
             </Box>
@@ -581,13 +571,13 @@ export function AICanvasStory() {
               onSubmitEditing={handleSend}
               placeholder="Describe what you want to build..."
               style={{
-                flexGrow: 1, fontSize: 13, color: TEXT_PRIMARY,
-                backgroundColor: BG, padding: 10, borderRadius: 6, height: 40,
+                flexGrow: 1, fontSize: 13, color: c.text,
+                backgroundColor: c.bg, padding: 10, borderRadius: 6, height: 40,
               }}
             />
             {isLoading ? (
               <Pressable onPress={stop} style={{
-                backgroundColor: RED,
+                backgroundColor: c.error,
                 paddingLeft: 16, paddingRight: 16,
                 borderRadius: 6, justifyContent: 'center',
               }}>
@@ -595,7 +585,7 @@ export function AICanvasStory() {
               </Pressable>
             ) : (
               <Pressable onPress={handleSend} style={{
-                backgroundColor: ACCENT,
+                backgroundColor: c.primary,
                 paddingLeft: 16, paddingRight: 16,
                 borderRadius: 6, justifyContent: 'center',
               }}>

@@ -1,19 +1,21 @@
 import React from 'react';
 import { Box, Text } from '../../../packages/shared/src';
+import { useThemeColors } from '../../../packages/theme/src';
 
 export function PaddingMarginStory() {
+  const c = useThemeColors();
   return (
     <Box style={{ gap: 16, padding: 16 }}>
       {/* Uniform padding */}
-      <Box style={{ backgroundColor: '#1e293b', padding: 4, borderRadius: 4, gap: 4 }}>
-        <Text style={{ color: '#888', fontSize: 10 }}>padding: 20</Text>
+      <Box style={{ backgroundColor: c.bgElevated, padding: 4, borderRadius: 4, gap: 4 }}>
+        <Text style={{ color: c.textDim, fontSize: 10 }}>padding: 20</Text>
         <Box style={{
-          backgroundColor: '#334155',
+          backgroundColor: c.surface,
           padding: 20,
           borderRadius: 4,
         }}>
           <Box style={{
-            backgroundColor: '#3b82f6',
+            backgroundColor: c.primary,
             height: 30,
             borderRadius: 3,
             justifyContent: 'center',
@@ -25,10 +27,10 @@ export function PaddingMarginStory() {
       </Box>
 
       {/* Per-side padding */}
-      <Box style={{ backgroundColor: '#1e293b', padding: 4, borderRadius: 4, gap: 4 }}>
-        <Text style={{ color: '#888', fontSize: 10 }}>paddingLeft: 40, paddingTop: 8</Text>
+      <Box style={{ backgroundColor: c.bgElevated, padding: 4, borderRadius: 4, gap: 4 }}>
+        <Text style={{ color: c.textDim, fontSize: 10 }}>paddingLeft: 40, paddingTop: 8</Text>
         <Box style={{
-          backgroundColor: '#334155',
+          backgroundColor: c.surface,
           paddingLeft: 40,
           paddingTop: 8,
           paddingRight: 8,
@@ -36,7 +38,7 @@ export function PaddingMarginStory() {
           borderRadius: 4,
         }}>
           <Box style={{
-            backgroundColor: '#22c55e',
+            backgroundColor: c.success,
             height: 30,
             borderRadius: 3,
             justifyContent: 'center',
@@ -48,10 +50,10 @@ export function PaddingMarginStory() {
       </Box>
 
       {/* Margin between siblings */}
-      <Box style={{ backgroundColor: '#1e293b', padding: 4, borderRadius: 4, gap: 4 }}>
-        <Text style={{ color: '#888', fontSize: 10 }}>margin between items</Text>
+      <Box style={{ backgroundColor: c.bgElevated, padding: 4, borderRadius: 4, gap: 4 }}>
+        <Text style={{ color: c.textDim, fontSize: 10 }}>margin between items</Text>
         <Box style={{
-          backgroundColor: '#334155',
+          backgroundColor: c.surface,
           padding: 8,
           borderRadius: 4,
           flexDirection: 'row',

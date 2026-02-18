@@ -1,7 +1,9 @@
 import React from 'react';
 import { Box, Text } from '../../../packages/shared/src';
+import { useThemeColors } from '../../../packages/theme/src';
 
 export function BoxBasicStory() {
+  const c = useThemeColors();
   return (
     <Box style={{ gap: 12, padding: 16 }}>
       {/* Simple colored box */}
@@ -29,7 +31,7 @@ export function BoxBasicStory() {
       {/* Box with border */}
       <Box style={{
         width: 120, height: 60,
-        backgroundColor: '#1a1a2e',
+        backgroundColor: c.bgElevated,
         borderWidth: 2,
         borderColor: '#e94560',
         borderRadius: 6,
@@ -42,7 +44,7 @@ export function BoxBasicStory() {
       {/* Box with no border radius (sharp corners) */}
       <Box style={{
         width: 120, height: 60,
-        backgroundColor: '#16213e',
+        backgroundColor: c.bgElevated,
         borderWidth: 1,
         borderColor: '#533483',
         justifyContent: 'center',

@@ -401,8 +401,9 @@ export function useSampler(moduleId: string): UseSamplerResult {
   useLoveEvent('audio:state', (rackState: RackState) => {
     const mod = rackState.modules.find((m) => m.id === moduleId);
     if (mod?.sampler) {
-      setSlots(mod.sampler.slots);
-      setVoices(mod.sampler.voices);
+      setSlots(mod.sampler.slots || {});
+      // Lua empty tables serialize as {} not [] — ensure array
+      setVoices(Array.isArray(mod.sampler.voices) ? mod.sampler.voices : []);
     }
   });
 
@@ -508,9 +509,9 @@ export function useSequencer(moduleId: string): UseSequencerResult {
   useLoveEvent('audio:state', (rackState: RackState) => {
     const mod = rackState.modules.find((m) => m.id === moduleId);
     if (mod?.sequencer) {
-      setPattern(mod.sequencer.pattern);
-      setCurrentStep(mod.sequencer.currentStep);
-      setTrackTargets(mod.sequencer.trackTargets);
+      setPattern(mod.sequencer.pattern || {});
+      setCurrentStep(mod.sequencer.currentStep || 0);
+      setTrackTargets(mod.sequencer.trackTargets || {});
     }
   });
 

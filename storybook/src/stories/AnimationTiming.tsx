@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { Box, Text, Pressable, useSpring } from '../../../packages/shared/src';
+import { useThemeColors } from '../../../packages/theme/src';
 
 export function AnimationTimingStory() {
+  const c = useThemeColors();
   const [expanded, setExpanded] = useState(false);
   const width = useSpring(expanded ? 260 : 80, { stiffness: 120, damping: 14 });
 
@@ -10,7 +12,7 @@ export function AnimationTimingStory() {
       <Pressable
         onPress={() => setExpanded(e => !e)}
         style={{
-          backgroundColor: '#3b82f6',
+          backgroundColor: c.primary,
           padding: 10,
           borderRadius: 6,
           alignItems: 'center',
@@ -25,7 +27,7 @@ export function AnimationTimingStory() {
       <Box style={{
         width,
         height: 50,
-        backgroundColor: '#8b5cf6',
+        backgroundColor: c.accent,
         borderRadius: 6,
         justifyContent: 'center',
         alignItems: 'center',
@@ -36,7 +38,7 @@ export function AnimationTimingStory() {
         </Text>
       </Box>
 
-      <Text style={{ color: '#666', fontSize: 10 }}>
+      <Text style={{ color: c.textDim, fontSize: 10 }}>
         Uses useSpring for physics-based animation
       </Text>
     </Box>

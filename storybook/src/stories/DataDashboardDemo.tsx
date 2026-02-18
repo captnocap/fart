@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Box, Text, Table, BarChart, ProgressBar, Sparkline, Divider, Badge, ScrollView, useSpring } from '../../../packages/shared/src';
 import type { TableColumn } from '../../../packages/shared/src';
+import { useThemeColors } from '../../../packages/theme/src';
 
 /* ── Helpers ──────────────────────────────────────────────── */
 
@@ -95,17 +96,15 @@ const PRODUCT_COLUMNS: TableColumn<Product>[] = [
   },
 ];
 
-/* ── Colors ────────────────────────────────────────────────── */
-
-const BG = '#0f172a';
-const CARD = '#1e293b';
-const BORDER = '#334155';
-const BRIGHT = '#e2e8f0';
-const DIM = '#64748b';
-
 /* ── Dashboard ─────────────────────────────────────────────── */
 
 export function DataDashboardDemoStory() {
+  const c = useThemeColors();
+  const BG = c.bg;
+  const CARD = c.bgElevated;
+  const BORDER = c.border;
+  const BRIGHT = c.text;
+  const DIM = c.textSecondary;
   const [tick, setTick] = useState(0);
   const [revenue, setRevenue] = useState(generateRevenue);
   const [products, setProducts] = useState(generateProducts);
@@ -194,7 +193,7 @@ export function DataDashboardDemoStory() {
         <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
           <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#22c55e' }} />
           <Text style={{ color: DIM, fontSize: 10 }}>Live</Text>
-          <Text style={{ color: '#475569', fontSize: 10 }}>{`(${timeLabel})`}</Text>
+          <Text style={{ color: c.textDim, fontSize: 10 }}>{`(${timeLabel})`}</Text>
         </Box>
       </Box>
 

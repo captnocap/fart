@@ -1,12 +1,14 @@
 import React from 'react';
 import { Box, Text } from '../../../packages/shared/src';
+import { useThemeColors } from '../../../packages/theme/src';
 
 export function TransformStory() {
+  const c = useThemeColors();
   return (
     <Box style={{ gap: 24, padding: 24 }}>
       {/* Rotation */}
       <Box style={{ flexDirection: 'row', gap: 16, alignItems: 'center' }}>
-        <Text style={{ color: '#888', fontSize: 10, width: 60 }}>rotate</Text>
+        <Text style={{ color: c.textDim, fontSize: 10, width: 60 }}>rotate</Text>
         {[0, 15, 45, 90].map(deg => (
           <Box key={deg} style={{
             width: 50, height: 50,
@@ -22,7 +24,7 @@ export function TransformStory() {
 
       {/* Scale */}
       <Box style={{ flexDirection: 'row', gap: 16, alignItems: 'center' }}>
-        <Text style={{ color: '#888', fontSize: 10, width: 60 }}>scale</Text>
+        <Text style={{ color: c.textDim, fontSize: 10, width: 60 }}>scale</Text>
         {[0.5, 0.75, 1.0, 1.25].map(s => (
           <Box key={s} style={{
             width: 50, height: 50,
@@ -38,7 +40,7 @@ export function TransformStory() {
 
       {/* Translate */}
       <Box style={{ flexDirection: 'row', gap: 16, alignItems: 'center' }}>
-        <Text style={{ color: '#888', fontSize: 10, width: 60 }}>translate</Text>
+        <Text style={{ color: c.textDim, fontSize: 10, width: 60 }}>translate</Text>
         <Box style={{
           width: 50, height: 50,
           backgroundColor: '#ef4444',
@@ -61,7 +63,7 @@ export function TransformStory() {
 
       {/* Combined */}
       <Box style={{ flexDirection: 'row', gap: 16, alignItems: 'center' }}>
-        <Text style={{ color: '#888', fontSize: 10, width: 60 }}>combined</Text>
+        <Text style={{ color: c.textDim, fontSize: 10, width: 60 }}>combined</Text>
         <Box style={{
           width: 50, height: 50,
           backgroundColor: '#8b5cf6',

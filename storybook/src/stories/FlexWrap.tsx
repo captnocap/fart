@@ -1,5 +1,6 @@
 import React from 'react';
 import { Box, Text } from '../../../packages/shared/src';
+import { useThemeColors } from '../../../packages/theme/src';
 
 const COLORS = [
   '#ef4444', '#f97316', '#eab308', '#22c55e', '#14b8a6',
@@ -7,11 +8,12 @@ const COLORS = [
 ];
 
 export function FlexWrapStory() {
+  const c = useThemeColors();
   return (
     <Box style={{ gap: 16, padding: 16 }}>
       {/* Wrap with gap */}
-      <Box style={{ backgroundColor: '#1e293b', padding: 8, borderRadius: 4, gap: 4 }}>
-        <Text style={{ color: '#888', fontSize: 10 }}>flexWrap + gap: 6</Text>
+      <Box style={{ backgroundColor: c.bgElevated, padding: 8, borderRadius: 4, gap: 4 }}>
+        <Text style={{ color: c.textDim, fontSize: 10 }}>flexWrap + gap: 6</Text>
         <Box style={{
           flexDirection: 'row',
           flexWrap: 'wrap',
@@ -32,8 +34,8 @@ export function FlexWrapStory() {
       </Box>
 
       {/* Wrap with flexGrow children */}
-      <Box style={{ backgroundColor: '#1e293b', padding: 8, borderRadius: 4, gap: 4 }}>
-        <Text style={{ color: '#888', fontSize: 10 }}>flexWrap + flexGrow</Text>
+      <Box style={{ backgroundColor: c.bgElevated, padding: 8, borderRadius: 4, gap: 4 }}>
+        <Text style={{ color: c.textDim, fontSize: 10 }}>flexWrap + flexGrow</Text>
         <Box style={{
           flexDirection: 'row',
           flexWrap: 'wrap',

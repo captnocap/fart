@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Box, Text, Slider } from '../../../packages/shared/src';
+import { useThemeColors } from '../../../packages/theme/src';
 import type { LoveEvent } from '../../../packages/shared/src';
 import { Scene, Camera, Mesh, DirectionalLight, AmbientLight } from '../../../packages/3d/src';
 import type { Vec3 } from '../../../packages/3d/src';
@@ -21,7 +22,7 @@ function LabeledSlider({
 }) {
   return (
     <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8, height: 24 }}>
-      <Text style={{ fontSize: 11, color: '#a6adc8', width: 90 }}>{label}</Text>
+      <Text style={{ fontSize: 11, color: c.textSecondary, width: 90 }}>{label}</Text>
       <Slider
         value={value}
         minimumValue={min}
@@ -35,7 +36,7 @@ function LabeledSlider({
         thumbSize={14}
         trackHeight={3}
       />
-      <Text style={{ fontSize: 10, color: '#6c7086', width: 36 }}>
+      <Text style={{ fontSize: 10, color: c.textDim, width: 36 }}>
         {value.toFixed(step && step < 0.1 ? 2 : 1)}
       </Text>
     </Box>
@@ -43,6 +44,7 @@ function LabeledSlider({
 }
 
 export function Scene3DPlanetStory() {
+  const c = useThemeColors();
   const [time, setTime] = useState(0);
 
   // Lighting controls
@@ -152,7 +154,7 @@ export function Scene3DPlanetStory() {
           gap: 4,
         }}
       >
-        <Text style={{ fontSize: 12, color: '#cdd6f4', fontWeight: 'bold', marginBottom: 4 }}>
+        <Text style={{ fontSize: 12, color: c.text, fontWeight: 'bold', marginBottom: 4 }}>
           Lighting
         </Text>
         <LabeledSlider label="Azimuth" value={lightAzimuth} min={-3.14} max={3.14} step={0.05} onChange={setLightAzimuth} />
@@ -161,12 +163,12 @@ export function Scene3DPlanetStory() {
         <LabeledSlider label="Ambient" value={ambientIntensity} min={0} max={1} step={0.02} onChange={setAmbientIntensity} />
         <LabeledSlider label="Specular" value={specularPower} min={1} max={128} step={1} onChange={setSpecularPower} />
 
-        <Text style={{ fontSize: 12, color: '#cdd6f4', fontWeight: 'bold', marginTop: 8, marginBottom: 4 }}>
+        <Text style={{ fontSize: 12, color: c.text, fontWeight: 'bold', marginTop: 8, marginBottom: 4 }}>
           Camera
         </Text>
         <LabeledSlider label="Zoom" value={zoom} min={1.5} max={10} step={0.1} onChange={setZoom} />
 
-        <Text style={{ fontSize: 12, color: '#cdd6f4', fontWeight: 'bold', marginTop: 8, marginBottom: 4 }}>
+        <Text style={{ fontSize: 12, color: c.text, fontWeight: 'bold', marginTop: 8, marginBottom: 4 }}>
           Atmosphere
         </Text>
         <LabeledSlider label="Fresnel" value={fresnelPower} min={0} max={8} step={0.1} onChange={setFresnelPower} />
@@ -184,7 +186,7 @@ export function Scene3DPlanetStory() {
           borderRadius: 6,
         }}
       >
-        <Text style={{ fontSize: 11, color: '#6c7086' }}>
+        <Text style={{ fontSize: 11, color: c.textDim }}>
           Blinn-Phong shading | seed: 42 | drag to rotate
         </Text>
       </Box>

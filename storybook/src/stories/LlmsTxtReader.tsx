@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Box, Text, ScrollView, Pressable } from '../../../packages/shared/src';
+import { useThemeColors } from '../../../packages/theme/src';
 
 const CHUNK_SIZE = 50; // lines per Text node
 
@@ -28,19 +29,21 @@ function useTextFile(path: string) {
 }
 
 function ModeButton({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
+  const c = useThemeColors();
   return (
     <Pressable onPress={onPress} style={{
-      backgroundColor: active ? '#3b82f6' : '#1e293b',
+      backgroundColor: active ? c.primary : c.bgElevated,
       paddingLeft: 12, paddingRight: 12,
       paddingTop: 5, paddingBottom: 5,
       borderRadius: 4,
     }}>
-      <Text style={{ fontSize: 11, color: active ? '#ffffff' : '#94a3b8' }}>{label}</Text>
+      <Text style={{ fontSize: 11, color: active ? '#ffffff' : c.textSecondary }}>{label}</Text>
     </Pressable>
   );
 }
 
 export function LlmsTxtReader() {
+  const c = useThemeColors();
   const { data: raw, loading, error } = useTextFile('data/llms.txt');
   const [mode, setMode] = useState<'single' | 'chunked'>('chunked');
 
@@ -60,16 +63,16 @@ export function LlmsTxtReader() {
 
   if (loading) {
     return (
-      <Box style={{ width: '100%', height: '100%', backgroundColor: '#0f172a', justifyContent: 'center', alignItems: 'center' }}>
-        <Text style={{ fontSize: 14, color: '#94a3b8' }}>Loading llms.txt...</Text>
+      <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg, justifyContent: 'center', alignItems: 'center' }}>
+        <Text style={{ fontSize: 14, color: c.textSecondary }}>Loading llms.txt...</Text>
       </Box>
     );
   }
 
   if (error || !raw) {
     return (
-      <Box style={{ width: '100%', height: '100%', backgroundColor: '#0f172a', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
-        <Text style={{ fontSize: 14, color: '#ef4444' }}>{`${error?.message || 'No data'}`}</Text>
+      <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+        <Text style={{ fontSize: 14, color: c.error }}>{`${error?.message || 'No data'}`}</Text>
       </Box>
     );
   }
@@ -78,7 +81,7 @@ export function LlmsTxtReader() {
   const sizeKB = Math.round(raw.length / 1024);
 
   return (
-    <Box style={{ width: '100%', height: '100%', backgroundColor: '#0f172a' }}>
+    <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg }}>
       {/* Header */}
       <Box style={{
         height: 40,
@@ -87,9 +90,9 @@ export function LlmsTxtReader() {
         paddingLeft: 12, paddingRight: 12,
         gap: 10,
         borderBottomWidth: 1,
-        borderColor: '#1e293b',
+        borderColor: c.border,
       }}>
-        <Text style={{ fontSize: 13, color: '#64748b' }}>
+        <Text style={{ fontSize: 13, color: c.textDim }}>
           {`llms.txt — ${lineCount} lines, ${sizeKB} KB`}
         </Text>
         <Box style={{ flexDirection: 'row', gap: 4 }}>
@@ -104,7 +107,7 @@ export function LlmsTxtReader() {
             onPress={() => setMode('chunked')}
           />
         </Box>
-        <Text style={{ fontSize: 9, color: '#475569' }}>
+        <Text style={{ fontSize: 9, color: c.textDim }}>
           {mode === 'single' ? 'brute force: 1 Text node, all content'
             : `${chunks.length} Text nodes, ${CHUNK_SIZE} lines each — paint culled`}
         </Text>
@@ -112,12 +115,12 @@ export function LlmsTxtReader() {
 
       {/* Content */}
       <ScrollView style={{ width: '100%', height: '100%' }}>
-        <Box style={{ padding: 12, backgroundColor: '#0f172a' }}>
+        <Box style={{ padding: 12, backgroundColor: c.bg }}>
           {mode === 'single' ? (
-            <Text style={{ fontSize: 9, color: '#cbd5e1' }}>{raw}</Text>
+            <Text style={{ fontSize: 9, color: c.text }}>{raw}</Text>
           ) : (
             chunks.map((chunk, i) => (
-              <Text key={i} style={{ fontSize: 9, color: '#cbd5e1' }}>{chunk}</Text>
+              <Text key={i} style={{ fontSize: 9, color: c.text }}>{chunk}</Text>
             ))
           )}
         </Box>

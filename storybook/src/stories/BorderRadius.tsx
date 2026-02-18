@@ -1,14 +1,16 @@
 import React from 'react';
 import { Box, Text } from '../../../packages/shared/src';
+import { useThemeColors } from '../../../packages/theme/src';
 
 export function BorderRadiusStory() {
+  const c = useThemeColors();
   return (
     <Box style={{ gap: 12, padding: 16 }}>
       <Box style={{ flexDirection: 'row', gap: 12, flexWrap: 'wrap' }}>
         {[0, 4, 8, 16, 32, 50].map(r => (
           <Box key={r} style={{
             width: 64, height: 64,
-            backgroundColor: '#3b82f6',
+            backgroundColor: c.primary,
             borderRadius: r,
             justifyContent: 'center', alignItems: 'center',
           }}>
@@ -22,13 +24,13 @@ export function BorderRadiusStory() {
         {[0, 8, 16, 32].map(r => (
           <Box key={r} style={{
             width: 64, height: 64,
-            backgroundColor: '#1e293b',
+            backgroundColor: c.bgElevated,
             borderRadius: r,
             borderWidth: 2,
-            borderColor: '#22c55e',
+            borderColor: c.success,
             justifyContent: 'center', alignItems: 'center',
           }}>
-            <Text style={{ color: '#22c55e', fontSize: 11 }}>{`${r}px`}</Text>
+            <Text style={{ color: c.success, fontSize: 11 }}>{`${r}px`}</Text>
           </Box>
         ))}
       </Box>
@@ -36,7 +38,7 @@ export function BorderRadiusStory() {
       {/* Full circle */}
       <Box style={{
         width: 80, height: 80,
-        backgroundColor: '#8b5cf6',
+        backgroundColor: c.accent,
         borderRadius: 40,
         justifyContent: 'center', alignItems: 'center',
       }}>

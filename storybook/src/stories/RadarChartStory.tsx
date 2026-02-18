@@ -1,5 +1,6 @@
 import React from 'react';
 import { Box, Text, RadarChart } from '../../../packages/shared/src';
+import { useThemeColors } from '../../../packages/theme/src';
 
 const SKILLS_AXES = [
   { label: 'Speed', max: 100 },
@@ -22,12 +23,13 @@ const PERF_AXES = [
 const PERF_DATA = [78, 65, 82, 55, 70, 88];
 
 export function RadarChartStory() {
+  const c = useThemeColors();
   return (
     <Box style={{ gap: 20, padding: 16 }}>
 
       {/* Basic */}
       <Box style={{ gap: 6 }}>
-        <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: 'bold' }}>Player Stats</Text>
+        <Text style={{ color: c.textSecondary, fontSize: 11, fontWeight: 'bold' }}>Player Stats</Text>
         <Box style={{ flexDirection: 'row', gap: 24, alignItems: 'center' }}>
           <Box style={{ gap: 4, alignItems: 'center' }}>
             <RadarChart
@@ -52,7 +54,7 @@ export function RadarChartStory() {
 
       {/* 6 axes */}
       <Box style={{ gap: 6 }}>
-        <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: 'bold' }}>System Performance</Text>
+        <Text style={{ color: c.textSecondary, fontSize: 11, fontWeight: 'bold' }}>System Performance</Text>
         <RadarChart
           axes={PERF_AXES}
           data={PERF_DATA}
@@ -64,7 +66,7 @@ export function RadarChartStory() {
 
       {/* Sizes */}
       <Box style={{ gap: 6 }}>
-        <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: 'bold' }}>Sizes</Text>
+        <Text style={{ color: c.textSecondary, fontSize: 11, fontWeight: 'bold' }}>Sizes</Text>
         <Box style={{ flexDirection: 'row', gap: 16, alignItems: 'flex-end' }}>
           <RadarChart axes={SKILLS_AXES} data={PLAYER_A} size={60} color="#f59e0b" />
           <RadarChart axes={SKILLS_AXES} data={PLAYER_A} size={90} color="#f59e0b" />

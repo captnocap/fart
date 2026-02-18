@@ -1,5 +1,6 @@
 import React from 'react';
 import { Box, Text, Image } from '../../../packages/shared/src';
+import { useThemeColors } from '../../../packages/theme/src';
 
 // Use a simple data URI so no external assets are needed
 const PLACEHOLDER_SRC = 'data:image/svg+xml,' + encodeURIComponent(
@@ -10,25 +11,26 @@ const PLACEHOLDER_SRC = 'data:image/svg+xml,' + encodeURIComponent(
 );
 
 export function ImageBasicStory() {
+  const c = useThemeColors();
   return (
     <Box style={{ gap: 12, padding: 16 }}>
       {/* Basic image */}
       <Box style={{ gap: 4 }}>
-        <Text style={{ color: '#888', fontSize: 10 }}>Default (fill)</Text>
+        <Text style={{ color: c.textDim, fontSize: 10 }}>Default (fill)</Text>
         <Image src={PLACEHOLDER_SRC} style={{ width: 200, height: 100 }} />
       </Box>
 
       {/* objectFit: contain */}
       <Box style={{ gap: 4 }}>
-        <Text style={{ color: '#888', fontSize: 10 }}>objectFit: contain</Text>
-        <Box style={{ width: 200, height: 100, backgroundColor: '#1e293b', borderRadius: 4 }}>
+        <Text style={{ color: c.textDim, fontSize: 10 }}>objectFit: contain</Text>
+        <Box style={{ width: 200, height: 100, backgroundColor: c.bgElevated, borderRadius: 4 }}>
           <Image src={PLACEHOLDER_SRC} style={{ width: 200, height: 100, objectFit: 'contain' }} />
         </Box>
       </Box>
 
       {/* objectFit: cover */}
       <Box style={{ gap: 4 }}>
-        <Text style={{ color: '#888', fontSize: 10 }}>objectFit: cover</Text>
+        <Text style={{ color: c.textDim, fontSize: 10 }}>objectFit: cover</Text>
         <Box style={{ width: 200, height: 80, borderRadius: 4, overflow: 'hidden' }}>
           <Image src={PLACEHOLDER_SRC} style={{ width: 200, height: 80, objectFit: 'cover' }} />
         </Box>
@@ -36,7 +38,7 @@ export function ImageBasicStory() {
 
       {/* Rounded image */}
       <Box style={{ gap: 4 }}>
-        <Text style={{ color: '#888', fontSize: 10 }}>With borderRadius</Text>
+        <Text style={{ color: c.textDim, fontSize: 10 }}>With borderRadius</Text>
         <Image src={PLACEHOLDER_SRC} style={{ width: 80, height: 80, borderRadius: 40 }} />
       </Box>
     </Box>

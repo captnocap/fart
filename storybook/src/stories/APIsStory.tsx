@@ -1,16 +1,7 @@
 import React, { useState } from 'react';
 import { Box, Text, Pressable, ScrollView } from '../../../packages/shared/src';
 import { useCoinMarkets, useNASAApod, useCoinPrice, type CoinMarket, type NASAAPOD } from '../../../packages/apis/src';
-
-const BG = '#0f172a';
-const CARD = '#1e293b';
-const BORDER = '#334155';
-const ACCENT = '#60a5fa';
-const GREEN = '#22c55e';
-const RED = '#ef4444';
-const DIM = '#64748b';
-const BRIGHT = '#e2e8f0';
-const MUTED = '#94a3b8';
+import { useThemeColors } from '../../../packages/theme/src';
 
 // ── API Catalog ────────────────────────────────────────
 
@@ -46,41 +37,42 @@ const CATALOG: APICatalogEntry[] = [
 // ── Live Demo: CoinGecko ───────────────────────────────
 
 function CoinGeckoDemo() {
+  const c = useThemeColors();
   const { data, loading, error } = useCoinMarkets({ perPage: 8 });
   const coins = (data ?? []) as CoinMarket[];
 
   return (
-    <Box style={{ backgroundColor: CARD, borderRadius: 8, padding: 12, gap: 8, borderWidth: 1, borderColor: BORDER }}>
+    <Box style={{ backgroundColor: c.bgElevated, borderRadius: 8, padding: 12, gap: 8, borderWidth: 1, borderColor: c.border }}>
       <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
         <Box style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#8DC647' }} />
-        <Text style={{ fontSize: 13, color: BRIGHT, fontWeight: '700' }}>CoinGecko — Live (no API key)</Text>
+        <Text style={{ fontSize: 13, color: c.text, fontWeight: '700' }}>CoinGecko — Live (no API key)</Text>
       </Box>
-      <Text style={{ fontSize: 10, color: DIM }}>{`useCoinMarkets({ perPage: 8 })`}</Text>
+      <Text style={{ fontSize: 10, color: c.textDim }}>{`useCoinMarkets({ perPage: 8 })`}</Text>
 
-      {loading && <Text style={{ fontSize: 11, color: MUTED }}>Loading market data...</Text>}
-      {error && <Text style={{ fontSize: 11, color: RED }}>{`Error: ${error.message}`}</Text>}
+      {loading && <Text style={{ fontSize: 11, color: c.textSecondary }}>Loading market data...</Text>}
+      {error && <Text style={{ fontSize: 11, color: c.error }}>{`Error: ${error.message}`}</Text>}
 
       {coins.length > 0 && (
         <Box style={{ gap: 4 }}>
           <Box style={{ flexDirection: 'row', width: '100%', gap: 4, paddingBottom: 4 }}>
-            <Box style={{ width: 24 }}><Text style={{ fontSize: 9, color: DIM }}>#</Text></Box>
-            <Box style={{ width: 80 }}><Text style={{ fontSize: 9, color: DIM }}>Coin</Text></Box>
-            <Box style={{ width: 80 }}><Text style={{ fontSize: 9, color: DIM }}>Price</Text></Box>
-            <Box style={{ width: 60 }}><Text style={{ fontSize: 9, color: DIM }}>24h</Text></Box>
-            <Box style={{ flexGrow: 1 }}><Text style={{ fontSize: 9, color: DIM }}>Market Cap</Text></Box>
+            <Box style={{ width: 24 }}><Text style={{ fontSize: 9, color: c.textDim }}>#</Text></Box>
+            <Box style={{ width: 80 }}><Text style={{ fontSize: 9, color: c.textDim }}>Coin</Text></Box>
+            <Box style={{ width: 80 }}><Text style={{ fontSize: 9, color: c.textDim }}>Price</Text></Box>
+            <Box style={{ width: 60 }}><Text style={{ fontSize: 9, color: c.textDim }}>24h</Text></Box>
+            <Box style={{ flexGrow: 1 }}><Text style={{ fontSize: 9, color: c.textDim }}>Market Cap</Text></Box>
           </Box>
           {coins.map((coin) => {
             const change = coin.price_change_percentage_24h ?? 0;
-            const changeColor = change >= 0 ? GREEN : RED;
+            const changeColor = change >= 0 ? c.success : c.error;
             const changeSign = change >= 0 ? '+' : '';
             return (
               <Box key={coin.id} style={{ flexDirection: 'row', width: '100%', gap: 4, alignItems: 'center' }}>
-                <Box style={{ width: 24 }}><Text style={{ fontSize: 10, color: DIM }}>{String(coin.market_cap_rank)}</Text></Box>
+                <Box style={{ width: 24 }}><Text style={{ fontSize: 10, color: c.textDim }}>{String(coin.market_cap_rank)}</Text></Box>
                 <Box style={{ width: 80 }}>
-                  <Text style={{ fontSize: 10, color: BRIGHT }}>{coin.symbol.toUpperCase()}</Text>
+                  <Text style={{ fontSize: 10, color: c.text }}>{coin.symbol.toUpperCase()}</Text>
                 </Box>
                 <Box style={{ width: 80 }}>
-                  <Text style={{ fontSize: 10, color: BRIGHT }}>
+                  <Text style={{ fontSize: 10, color: c.text }}>
                     {`$${coin.current_price >= 1 ? coin.current_price.toLocaleString('en-US', { maximumFractionDigits: 2 }) : coin.current_price.toFixed(4)}`}
                   </Text>
                 </Box>
@@ -90,7 +82,7 @@ function CoinGeckoDemo() {
                   </Text>
                 </Box>
                 <Box style={{ flexGrow: 1 }}>
-                  <Text style={{ fontSize: 10, color: MUTED }}>
+                  <Text style={{ fontSize: 10, color: c.textSecondary }}>
                     {`$${(coin.market_cap / 1e9).toFixed(1)}B`}
                   </Text>
                 </Box>
@@ -106,26 +98,27 @@ function CoinGeckoDemo() {
 // ── Live Demo: NASA APOD ───────────────────────────────
 
 function NASADemo() {
+  const c = useThemeColors();
   const { data, loading, error } = useNASAApod(null);
   const apod = data as NASAAPOD | null;
 
   return (
-    <Box style={{ backgroundColor: CARD, borderRadius: 8, padding: 12, gap: 8, borderWidth: 1, borderColor: BORDER }}>
+    <Box style={{ backgroundColor: c.bgElevated, borderRadius: 8, padding: 12, gap: 8, borderWidth: 1, borderColor: c.border }}>
       <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
         <Box style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#0B3D91' }} />
-        <Text style={{ fontSize: 13, color: BRIGHT, fontWeight: '700' }}>NASA APOD — Live (DEMO_KEY)</Text>
+        <Text style={{ fontSize: 13, color: c.text, fontWeight: '700' }}>NASA APOD — Live (DEMO_KEY)</Text>
       </Box>
-      <Text style={{ fontSize: 10, color: DIM }}>useNASAApod(null) // falls back to DEMO_KEY</Text>
+      <Text style={{ fontSize: 10, color: c.textDim }}>useNASAApod(null) // falls back to DEMO_KEY</Text>
 
-      {loading && <Text style={{ fontSize: 11, color: MUTED }}>Loading astronomy picture...</Text>}
-      {error && <Text style={{ fontSize: 11, color: RED }}>{`Error: ${error.message}`}</Text>}
+      {loading && <Text style={{ fontSize: 11, color: c.textSecondary }}>Loading astronomy picture...</Text>}
+      {error && <Text style={{ fontSize: 11, color: c.error }}>{`Error: ${error.message}`}</Text>}
 
       {apod && typeof apod === 'object' && 'title' in apod && (
         <Box style={{ gap: 4 }}>
-          <Text style={{ fontSize: 12, color: ACCENT, fontWeight: '700' }}>{apod.title}</Text>
-          <Text style={{ fontSize: 10, color: DIM }}>{apod.date}</Text>
-          <Text style={{ fontSize: 10, color: MUTED }} numberOfLines={3}>{apod.explanation}</Text>
-          {apod.copyright && <Text style={{ fontSize: 9, color: DIM }}>{`(c) ${apod.copyright}`}</Text>}
+          <Text style={{ fontSize: 12, color: c.info, fontWeight: '700' }}>{apod.title}</Text>
+          <Text style={{ fontSize: 10, color: c.textDim }}>{apod.date}</Text>
+          <Text style={{ fontSize: 10, color: c.textSecondary }} numberOfLines={3}>{apod.explanation}</Text>
+          {apod.copyright && <Text style={{ fontSize: 9, color: c.textDim }}>{`(c) ${apod.copyright}`}</Text>}
         </Box>
       )}
     </Box>
@@ -135,6 +128,7 @@ function NASADemo() {
 // ── Live Demo: Bitcoin Price ───────────────────────────
 
 function BitcoinDemo() {
+  const c = useThemeColors();
   const { data, loading, error, refetch } = useCoinPrice('bitcoin', { include24hChange: true });
 
   const btc = data as any;
@@ -142,28 +136,28 @@ function BitcoinDemo() {
   const change = btc?.bitcoin?.usd_24h_change;
 
   return (
-    <Box style={{ backgroundColor: CARD, borderRadius: 8, padding: 12, gap: 6, borderWidth: 1, borderColor: BORDER }}>
+    <Box style={{ backgroundColor: c.bgElevated, borderRadius: 8, padding: 12, gap: 6, borderWidth: 1, borderColor: c.border }}>
       <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
         <Box style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#F7931A' }} />
-        <Text style={{ fontSize: 13, color: BRIGHT, fontWeight: '700' }}>One-liner: Bitcoin Price</Text>
+        <Text style={{ fontSize: 13, color: c.text, fontWeight: '700' }}>One-liner: Bitcoin Price</Text>
       </Box>
-      <Text style={{ fontSize: 10, color: DIM }}>useCoinPrice('bitcoin')</Text>
-      {loading && <Text style={{ fontSize: 11, color: MUTED }}>Loading...</Text>}
-      {error && <Text style={{ fontSize: 11, color: RED }}>{`Error: ${error.message}`}</Text>}
+      <Text style={{ fontSize: 10, color: c.textDim }}>useCoinPrice('bitcoin')</Text>
+      {loading && <Text style={{ fontSize: 11, color: c.textSecondary }}>Loading...</Text>}
+      {error && <Text style={{ fontSize: 11, color: c.error }}>{`Error: ${error.message}`}</Text>}
       {price != null && (
         <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-          <Text style={{ fontSize: 20, color: BRIGHT, fontWeight: '700' }}>
+          <Text style={{ fontSize: 20, color: c.text, fontWeight: '700' }}>
             {`$${Number(price).toLocaleString('en-US', { maximumFractionDigits: 0 })}`}
           </Text>
           {change != null && (
-            <Text style={{ fontSize: 12, color: change >= 0 ? GREEN : RED }}>
+            <Text style={{ fontSize: 12, color: change >= 0 ? c.success : c.error }}>
               {`${change >= 0 ? '+' : ''}${Number(change).toFixed(2)}%`}
             </Text>
           )}
         </Box>
       )}
-      <Pressable onPress={refetch} style={{ alignSelf: 'flex-start', backgroundColor: '#334155', paddingLeft: 8, paddingRight: 8, paddingTop: 4, paddingBottom: 4, borderRadius: 4 }}>
-        <Text style={{ fontSize: 10, color: ACCENT }}>Refetch</Text>
+      <Pressable onPress={refetch} style={{ alignSelf: 'flex-start', backgroundColor: c.surface, paddingLeft: 8, paddingRight: 8, paddingTop: 4, paddingBottom: 4, borderRadius: 4 }}>
+        <Text style={{ fontSize: 10, color: c.info }}>Refetch</Text>
       </Pressable>
     </Box>
   );
@@ -172,22 +166,23 @@ function BitcoinDemo() {
 // ── API Catalog Grid ───────────────────────────────────
 
 function CatalogCard({ entry }: { entry: APICatalogEntry }) {
+  const c = useThemeColors();
   const [expanded, setExpanded] = useState(false);
 
   return (
-    <Box style={{ backgroundColor: CARD, borderRadius: 6, padding: 8, gap: 4, borderWidth: 1, borderColor: BORDER, width: 180 }}>
+    <Box style={{ backgroundColor: c.bgElevated, borderRadius: 6, padding: 8, gap: 4, borderWidth: 1, borderColor: c.border, width: 180 }}>
       <Pressable onPress={() => setExpanded(!expanded)}>
         <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
           <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: entry.color }} />
-          <Text style={{ fontSize: 11, color: BRIGHT, fontWeight: '700' }}>{entry.name}</Text>
+          <Text style={{ fontSize: 11, color: c.text, fontWeight: '700' }}>{entry.name}</Text>
         </Box>
       </Pressable>
-      <Text style={{ fontSize: 8, color: DIM }}>{entry.auth}</Text>
+      <Text style={{ fontSize: 8, color: c.textDim }}>{entry.auth}</Text>
       {expanded && entry.hooks.map((hook) => (
-        <Text key={hook} style={{ fontSize: 9, color: ACCENT }}>{`${hook}()`}</Text>
+        <Text key={hook} style={{ fontSize: 9, color: c.info }}>{`${hook}()`}</Text>
       ))}
       {!expanded && (
-        <Text style={{ fontSize: 9, color: MUTED }}>{`${entry.hooks.length} hooks`}</Text>
+        <Text style={{ fontSize: 9, color: c.textSecondary }}>{`${entry.hooks.length} hooks`}</Text>
       )}
     </Box>
   );
@@ -196,11 +191,12 @@ function CatalogCard({ entry }: { entry: APICatalogEntry }) {
 // ── Main Story ─────────────────────────────────────────
 
 export function APIsStory() {
+  const c = useThemeColors();
   return (
-    <Box style={{ width: '100%', height: '100%', backgroundColor: BG, padding: 16, gap: 12 }}>
+    <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg, padding: 16, gap: 12 }}>
       <Box style={{ gap: 2 }}>
-        <Text style={{ fontSize: 18, color: BRIGHT, fontWeight: '700' }}>@ilovereact/apis</Text>
-        <Text style={{ fontSize: 11, color: DIM }}>18 REST API integrations. One-liner hooks for everything.</Text>
+        <Text style={{ fontSize: 18, color: c.text, fontWeight: '700' }}>@ilovereact/apis</Text>
+        <Text style={{ fontSize: 11, color: c.textDim }}>18 REST API integrations. One-liner hooks for everything.</Text>
       </Box>
 
       <Box style={{ flexDirection: 'row', gap: 12, flexGrow: 1 }}>
@@ -214,7 +210,7 @@ export function APIsStory() {
         {/* Right column: catalog */}
         <ScrollView style={{ width: 200 }}>
           <Box style={{ gap: 6, paddingRight: 4 }}>
-            <Text style={{ fontSize: 11, color: DIM, fontWeight: '700' }}>API Catalog (tap to expand)</Text>
+            <Text style={{ fontSize: 11, color: c.textDim, fontWeight: '700' }}>API Catalog (tap to expand)</Text>
             {CATALOG.map((entry) => (
               <CatalogCard key={entry.name} entry={entry} />
             ))}

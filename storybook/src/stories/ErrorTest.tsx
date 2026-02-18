@@ -1,14 +1,16 @@
 import React, { useState } from 'react';
 import { Box, Text, Pressable } from '../../../packages/shared/src';
+import { useThemeColors } from '../../../packages/theme/src';
 
 function ErrorButton({ label, color, onPress }: { label: string; color: string; onPress: () => void }) {
+  const c = useThemeColors();
   return (
     <Pressable
       onPress={onPress}
       style={(state) => ({
-        backgroundColor: state.pressed ? '#1e293b' : state.hovered ? '#334155' : '#1e293b',
+        backgroundColor: state.pressed ? c.bgElevated : state.hovered ? c.surface : c.bgElevated,
         borderWidth: 2,
-        borderColor: state.hovered ? color : '#334155',
+        borderColor: state.hovered ? color : c.border,
         borderRadius: 8,
         paddingLeft: 16,
         paddingRight: 16,
@@ -28,14 +30,15 @@ function BombComponent() {
 }
 
 export function ErrorTestStory() {
+  const c = useThemeColors();
   const [triggerRenderError, setTriggerRenderError] = useState(false);
 
   return (
     <Box style={{ gap: 16, padding: 16 }}>
-      <Text style={{ color: '#e2e8f0', fontSize: 18, fontWeight: '700' }}>
+      <Text style={{ color: c.text, fontSize: 18, fontWeight: '700' }}>
         Error Reporting Test
       </Text>
-      <Text style={{ color: '#94a3b8', fontSize: 13 }}>
+      <Text style={{ color: c.textSecondary, fontSize: 13 }}>
         Click buttons below to trigger different error types. A red overlay should appear at the bottom of the screen with the error details.
       </Text>
 

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Box, Text, Toolbar } from '../../../packages/shared/src';
 import type { ToolbarEntry } from '../../../packages/shared/src';
+import { useThemeColors } from '../../../packages/theme/src';
 
 const BASIC_ITEMS: ToolbarEntry[] = [
   { type: 'item', id: 'new', label: 'New' },
@@ -32,6 +33,7 @@ const DISABLED_ITEMS: ToolbarEntry[] = [
 ];
 
 export function ToolbarStory() {
+  const c = useThemeColors();
   const [lastAction, setLastAction] = useState('(none)');
 
   return (
@@ -39,7 +41,7 @@ export function ToolbarStory() {
 
       {/* Basic Toolbar */}
       <Box style={{ gap: 6 }}>
-        <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: 'bold' }}>Basic Toolbar</Text>
+        <Text style={{ color: c.textSecondary, fontSize: 11, fontWeight: 'bold' }}>Basic Toolbar</Text>
         <Box style={{ width: 360 }}>
           <Toolbar items={BASIC_ITEMS} />
         </Box>
@@ -47,7 +49,7 @@ export function ToolbarStory() {
 
       {/* With Dividers */}
       <Box style={{ gap: 6 }}>
-        <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: 'bold' }}>With Dividers</Text>
+        <Text style={{ color: c.textSecondary, fontSize: 11, fontWeight: 'bold' }}>With Dividers</Text>
         <Box style={{ width: 420 }}>
           <Toolbar items={GROUPED_ITEMS} />
         </Box>
@@ -55,7 +57,7 @@ export function ToolbarStory() {
 
       {/* Disabled Items */}
       <Box style={{ gap: 6 }}>
-        <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: 'bold' }}>Disabled Items</Text>
+        <Text style={{ color: c.textSecondary, fontSize: 11, fontWeight: 'bold' }}>Disabled Items</Text>
         <Box style={{ width: 360 }}>
           <Toolbar items={DISABLED_ITEMS} />
         </Box>
@@ -63,19 +65,19 @@ export function ToolbarStory() {
 
       {/* Interactive */}
       <Box style={{ gap: 6 }}>
-        <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: 'bold' }}>Interactive</Text>
+        <Text style={{ color: c.textSecondary, fontSize: 11, fontWeight: 'bold' }}>Interactive</Text>
         <Box style={{ width: 420, gap: 8 }}>
           <Toolbar items={GROUPED_ITEMS} onSelect={setLastAction} />
           <Box style={{
-            backgroundColor: '#1e293b',
+            backgroundColor: c.bgElevated,
             borderRadius: 6,
             padding: 8,
             flexDirection: 'row',
             width: 420,
             gap: 6,
           }}>
-            <Text style={{ color: '#64748b', fontSize: 10 }}>Last action:</Text>
-            <Text style={{ color: '#e2e8f0', fontSize: 10, fontWeight: 'bold' }}>{lastAction}</Text>
+            <Text style={{ color: c.textSecondary, fontSize: 10 }}>Last action:</Text>
+            <Text style={{ color: c.text, fontSize: 10, fontWeight: 'bold' }}>{lastAction}</Text>
           </Box>
         </Box>
       </Box>

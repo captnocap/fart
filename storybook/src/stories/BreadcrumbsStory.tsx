@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Box, Text, Breadcrumbs } from '../../../packages/shared/src';
 import type { BreadcrumbItem } from '../../../packages/shared/src';
+import { useThemeColors } from '../../../packages/theme/src';
 
 const SHORT_PATH: BreadcrumbItem[] = [
   { id: 'home', label: 'Home' },
@@ -17,6 +18,7 @@ const DEEP_PATH: BreadcrumbItem[] = [
 ];
 
 export function BreadcrumbsStory() {
+  const c = useThemeColors();
   const [path, setPath] = useState(DEEP_PATH);
 
   const handleNavigate = (id: string) => {
@@ -33,30 +35,30 @@ export function BreadcrumbsStory() {
 
       {/* Basic Breadcrumbs */}
       <Box style={{ gap: 6 }}>
-        <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: 'bold' }}>Basic Breadcrumbs</Text>
+        <Text style={{ color: c.textSecondary, fontSize: 11, fontWeight: 'bold' }}>Basic Breadcrumbs</Text>
         <Breadcrumbs items={SHORT_PATH} />
       </Box>
 
       {/* Deep Path */}
       <Box style={{ gap: 6 }}>
-        <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: 'bold' }}>Deep Path</Text>
+        <Text style={{ color: c.textSecondary, fontSize: 11, fontWeight: 'bold' }}>Deep Path</Text>
         <Breadcrumbs items={DEEP_PATH} />
       </Box>
 
       {/* Custom Separators */}
       <Box style={{ gap: 6 }}>
-        <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: 'bold' }}>Custom Separators</Text>
+        <Text style={{ color: c.textSecondary, fontSize: 11, fontWeight: 'bold' }}>Custom Separators</Text>
         <Box style={{ gap: 8 }}>
           <Box style={{ gap: 2 }}>
-            <Text style={{ color: '#64748b', fontSize: 10 }}>Arrow</Text>
+            <Text style={{ color: c.textSecondary, fontSize: 10 }}>Arrow</Text>
             <Breadcrumbs items={SHORT_PATH} separator=">" />
           </Box>
           <Box style={{ gap: 2 }}>
-            <Text style={{ color: '#64748b', fontSize: 10 }}>Dot</Text>
+            <Text style={{ color: c.textSecondary, fontSize: 10 }}>Dot</Text>
             <Breadcrumbs items={SHORT_PATH} separator="." />
           </Box>
           <Box style={{ gap: 2 }}>
-            <Text style={{ color: '#64748b', fontSize: 10 }}>Dash</Text>
+            <Text style={{ color: c.textSecondary, fontSize: 10 }}>Dash</Text>
             <Breadcrumbs items={SHORT_PATH} separator="-" />
           </Box>
         </Box>
@@ -64,16 +66,16 @@ export function BreadcrumbsStory() {
 
       {/* Interactive */}
       <Box style={{ gap: 6 }}>
-        <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: 'bold' }}>Interactive (click to navigate back)</Text>
+        <Text style={{ color: c.textSecondary, fontSize: 11, fontWeight: 'bold' }}>Interactive (click to navigate back)</Text>
         <Breadcrumbs items={path} onSelect={handleNavigate} />
         {path.length < DEEP_PATH.length && (
           <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-            <Text style={{ color: '#64748b', fontSize: 10 }}>
+            <Text style={{ color: c.textSecondary, fontSize: 10 }}>
               {`Navigated to: ${path[path.length - 1].label}`}
             </Text>
             <Box
               style={{
-                backgroundColor: '#334155',
+                backgroundColor: c.surface,
                 borderRadius: 4,
                 paddingLeft: 8,
                 paddingRight: 8,
@@ -81,7 +83,7 @@ export function BreadcrumbsStory() {
                 paddingBottom: 3,
               }}
             >
-              <Text style={{ color: '#94a3b8', fontSize: 10 }} onPress={handleReset}>Reset</Text>
+              <Text style={{ color: c.textSecondary, fontSize: 10 }} onPress={handleReset}>Reset</Text>
             </Box>
           </Box>
         )}

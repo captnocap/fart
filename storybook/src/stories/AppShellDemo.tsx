@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Box, Text, NavPanel, Tabs, Breadcrumbs, Toolbar, Divider } from '../../../packages/shared/src';
+import { useThemeColors } from '../../../packages/theme/src';
 import type { NavSection, Tab, BreadcrumbItem, ToolbarEntry } from '../../../packages/shared/src';
 
 /* ── Data ─────────────────────────────────────────────────── */
@@ -58,15 +59,10 @@ const BREADCRUMB_MAP: Record<string, BreadcrumbItem[]> = {
 
 /* ── Colors ────────────────────────────────────────────────── */
 
-const BG = '#08080f';
-const CARD = '#1e293b';
-const BORDER = '#334155';
-const BRIGHT = '#e2e8f0';
-const DIM = '#64748b';
-
 /* ── Demo ──────────────────────────────────────────────────── */
 
 export function AppShellDemoStory() {
+  const c = useThemeColors();
   const [activePage, setActivePage] = useState('dashboard');
   const [activeTab, setActiveTab] = useState('overview');
   const [lastAction, setLastAction] = useState('(none)');
@@ -74,7 +70,7 @@ export function AppShellDemoStory() {
   const breadcrumbs = BREADCRUMB_MAP[activePage] ?? [{ id: 'home', label: 'Home' }];
 
   return (
-    <Box style={{ width: '100%', height: '100%', flexDirection: 'row', backgroundColor: BG }}>
+    <Box style={{ width: '100%', height: '100%', flexDirection: 'row', backgroundColor: c.bg }}>
 
       {/* Sidebar */}
       <NavPanel
@@ -85,7 +81,7 @@ export function AppShellDemoStory() {
           setActiveTab('overview');
         }}
         header={
-          <Text style={{ color: '#475569', fontSize: 10, fontWeight: 'bold' }}>ACME APP</Text>
+          <Text style={{ color: c.textDim, fontSize: 10, fontWeight: 'bold' }}>ACME APP</Text>
         }
       />
 
@@ -102,7 +98,7 @@ export function AppShellDemoStory() {
           <Breadcrumbs items={breadcrumbs} separator=">" />
         </Box>
 
-        <Divider color={BORDER} />
+        <Divider color={c.border} />
 
         {/* Tabs */}
         <Box style={{ paddingLeft: 8, paddingRight: 8, paddingTop: 4 }}>
@@ -112,35 +108,35 @@ export function AppShellDemoStory() {
         {/* Content */}
         <Box style={{ flexGrow: 1, padding: 16, gap: 12 }}>
           {/* Page title */}
-          <Text style={{ color: BRIGHT, fontSize: 16, fontWeight: 'bold' }}>
+          <Text style={{ color: c.text, fontSize: 16, fontWeight: 'bold' }}>
             {breadcrumbs[breadcrumbs.length - 1].label}
           </Text>
-          <Text style={{ color: DIM, fontSize: 11 }}>
+          <Text style={{ color: c.textDim, fontSize: 11 }}>
             {`Viewing: ${activeTab} tab`}
           </Text>
 
           {/* Content card */}
           <Box style={{
-            backgroundColor: CARD,
+            backgroundColor: c.bgElevated,
             borderRadius: 8,
             borderWidth: 1,
-            borderColor: BORDER,
+            borderColor: c.border,
             padding: 16,
             gap: 8,
             flexGrow: 1,
           }}>
-            <Text style={{ color: BRIGHT, fontSize: 12, fontWeight: 'bold' }}>
+            <Text style={{ color: c.text, fontSize: 12, fontWeight: 'bold' }}>
               {`${breadcrumbs[breadcrumbs.length - 1].label} - ${activeTab.charAt(0).toUpperCase() + activeTab.slice(1)}`}
             </Text>
-            <Box style={{ height: 1, backgroundColor: BORDER }} />
-            <Text style={{ color: DIM, fontSize: 11 }}>
+            <Box style={{ height: 1, backgroundColor: c.border }} />
+            <Text style={{ color: c.textDim, fontSize: 11 }}>
               This area would contain the page content. All four navigation components are working together:
             </Text>
             <Box style={{ gap: 4, paddingLeft: 8 }}>
-              <Text style={{ color: '#64748b', fontSize: 10 }}>- NavPanel controls the page</Text>
-              <Text style={{ color: '#64748b', fontSize: 10 }}>- Toolbar triggers actions</Text>
-              <Text style={{ color: '#64748b', fontSize: 10 }}>- Breadcrumbs show location</Text>
-              <Text style={{ color: '#64748b', fontSize: 10 }}>- Tabs switch content views</Text>
+              <Text style={{ color: c.textDim, fontSize: 10 }}>- NavPanel controls the page</Text>
+              <Text style={{ color: c.textDim, fontSize: 10 }}>- Toolbar triggers actions</Text>
+              <Text style={{ color: c.textDim, fontSize: 10 }}>- Breadcrumbs show location</Text>
+              <Text style={{ color: c.textDim, fontSize: 10 }}>- Tabs switch content views</Text>
             </Box>
             <Box style={{ flexGrow: 1 }} />
             <Box style={{
@@ -149,10 +145,10 @@ export function AppShellDemoStory() {
               justifyContent: 'space-between',
               alignItems: 'center',
             }}>
-              <Text style={{ color: '#334155', fontSize: 10 }}>
+              <Text style={{ color: c.textDim, fontSize: 10 }}>
                 {`Last toolbar action: ${lastAction}`}
               </Text>
-              <Text style={{ color: '#334155', fontSize: 10 }}>
+              <Text style={{ color: c.textDim, fontSize: 10 }}>
                 {`Page: ${activePage} | Tab: ${activeTab}`}
               </Text>
             </Box>

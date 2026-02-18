@@ -1,5 +1,6 @@
 import React from 'react';
 import { Box, Text, ScrollView } from '../../../packages/shared/src';
+import { useThemeColors } from '../../../packages/theme/src';
 
 const COLORS = [
   '#ef4444', '#f97316', '#eab308', '#22c55e', '#14b8a6',
@@ -8,12 +9,13 @@ const COLORS = [
 ];
 
 export function ScrollViewStory() {
+  const c = useThemeColors();
   return (
     <Box style={{ gap: 12, padding: 16 }}>
       {/* Vertical scroll */}
       <Box style={{ gap: 4 }}>
-        <Text style={{ color: '#888', fontSize: 10 }}>Vertical scroll (height: 150)</Text>
-        <ScrollView style={{ height: 150, backgroundColor: '#1e293b', borderRadius: 4, padding: 8 }}>
+        <Text style={{ color: c.textDim, fontSize: 10 }}>Vertical scroll (height: 150)</Text>
+        <ScrollView style={{ height: 150, backgroundColor: c.bgElevated, borderRadius: 4, padding: 8 }}>
           {COLORS.map((color, i) => (
             <Box key={i} style={{
               height: 32, marginBottom: 4,
@@ -30,10 +32,10 @@ export function ScrollViewStory() {
 
       {/* Horizontal scroll */}
       <Box style={{ gap: 4 }}>
-        <Text style={{ color: '#888', fontSize: 10 }}>Horizontal scroll</Text>
+        <Text style={{ color: c.textDim, fontSize: 10 }}>Horizontal scroll</Text>
         <ScrollView
           horizontal
-          style={{ height: 60, backgroundColor: '#1e293b', borderRadius: 4, padding: 8 }}
+          style={{ height: 60, backgroundColor: c.bgElevated, borderRadius: 4, padding: 8 }}
         >
           {COLORS.map((color, i) => (
             <Box key={i} style={{

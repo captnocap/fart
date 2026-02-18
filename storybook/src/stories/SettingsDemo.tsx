@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Box, Text, Pressable, TextInput, Slider, Switch } from '../../../packages/shared/src';
+import { useThemeColors } from '../../../packages/theme/src';
 import { Checkbox } from '../../../packages/shared/src/Checkbox';
 import { Radio, RadioGroup } from '../../../packages/shared/src/Radio';
 import { Select } from '../../../packages/shared/src/Select';
@@ -7,23 +8,26 @@ import { Select } from '../../../packages/shared/src/Select';
 // ── Helpers ──────────────────────────────────────────────
 
 function SectionHeader({ children }: { children: string }) {
+  const c = useThemeColors();
   return (
-    <Text style={{ color: '#e2e8f0', fontSize: 16, fontWeight: '700' }}>
+    <Text style={{ color: c.text, fontSize: 16, fontWeight: '700' }}>
       {children}
     </Text>
   );
 }
 
 function SettingRow({ label, children }: { label: string; children: React.ReactNode }) {
+  const c = useThemeColors();
   return (
     <Box style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-      <Text style={{ color: '#cbd5e1', fontSize: 14 }}>{label}</Text>
+      <Text style={{ color: c.text, fontSize: 14 }}>{label}</Text>
       {children}
     </Box>
   );
 }
 
 function KeybindRow({ action, keyName, last }: { action: string; keyName: string; last?: boolean }) {
+  const c = useThemeColors();
   return (
     <Box style={{
       flexDirection: 'row',
@@ -32,20 +36,20 @@ function KeybindRow({ action, keyName, last }: { action: string; keyName: string
       width: '100%',
       padding: 10,
       borderLeftWidth: 3,
-      borderLeftColor: '#3b82f6',
+      borderLeftColor: c.primary,
       borderBottomWidth: last ? 0 : 1,
-      borderBottomColor: '#1e293b',
+      borderBottomColor: c.border,
     }}>
-      <Text style={{ color: '#cbd5e1', fontSize: 14 }}>{action}</Text>
+      <Text style={{ color: c.text, fontSize: 14 }}>{action}</Text>
       <Box style={{
-        backgroundColor: '#334155',
+        backgroundColor: c.surface,
         paddingLeft: 10,
         paddingRight: 10,
         paddingTop: 4,
         paddingBottom: 4,
         borderRadius: 4,
       }}>
-        <Text style={{ color: '#94a3b8', fontSize: 12 }}>{keyName}</Text>
+        <Text style={{ color: c.textSecondary, fontSize: 12 }}>{keyName}</Text>
       </Box>
     </Box>
   );
@@ -54,6 +58,7 @@ function KeybindRow({ action, keyName, last }: { action: string; keyName: string
 // ── Main Demo ────────────────────────────────────────────
 
 export function SettingsDemoStory() {
+  const c = useThemeColors();
   // Profile
   const [playerName, setPlayerName] = useState('Commander Shepard');
 
@@ -82,7 +87,7 @@ export function SettingsDemoStory() {
 
         {/* ── Title ──────────────────────────────── */}
         <Text style={{
-          color: '#e2e8f0',
+          color: c.text,
           fontSize: 22,
           fontWeight: '700',
           textDecorationLine: 'underline',
@@ -124,15 +129,15 @@ export function SettingsDemoStory() {
                 onChangeText={setPlayerName}
                 style={{
                   fontSize: 16,
-                  color: '#e2e8f0',
+                  color: c.text,
                   borderWidth: 1,
-                  borderColor: '#334155',
+                  borderColor: c.border,
                   borderRadius: 6,
                   padding: 6,
-                  backgroundColor: '#0f172a',
+                  backgroundColor: c.bg,
                 }}
               />
-              <Text style={{ color: '#64748b', fontSize: 11 }}>Level 42 -- Vanguard Class</Text>
+              <Text style={{ color: c.textDim, fontSize: 11 }}>Level 42 -- Vanguard Class</Text>
             </Box>
           </Box>
         </Box>
@@ -140,7 +145,7 @@ export function SettingsDemoStory() {
         {/* ── Audio ──────────────────────────────── */}
         <Box style={{
           gap: 12,
-          backgroundColor: '#1e293b',
+          backgroundColor: c.bgElevated,
           borderRadius: 10,
           padding: 14,
         }}>
@@ -188,14 +193,14 @@ export function SettingsDemoStory() {
         {/* ── Display ────────────────────────────── */}
         <Box style={{
           gap: 12,
-          backgroundColor: '#1e293b',
+          backgroundColor: c.bgElevated,
           borderRadius: 10,
           padding: 14,
         }}>
           <SectionHeader>Display</SectionHeader>
 
           <Box style={{ gap: 8 }}>
-            <Text style={{ color: '#94a3b8', fontSize: 12 }}>Resolution</Text>
+            <Text style={{ color: c.textSecondary, fontSize: 12 }}>Resolution</Text>
             <Select
               value={resolution}
               onValueChange={setResolution}
@@ -209,7 +214,7 @@ export function SettingsDemoStory() {
           </Box>
 
           <Box style={{ gap: 8 }}>
-            <Text style={{ color: '#94a3b8', fontSize: 12 }}>Quality Preset</Text>
+            <Text style={{ color: c.textSecondary, fontSize: 12 }}>Quality Preset</Text>
             <Select
               value={quality}
               onValueChange={setQuality}
@@ -232,7 +237,7 @@ export function SettingsDemoStory() {
         {/* ── Difficulty ─────────────────────────── */}
         <Box style={{
           gap: 12,
-          backgroundColor: '#1e293b',
+          backgroundColor: c.bgElevated,
           borderRadius: 10,
           padding: 14,
         }}>
@@ -248,7 +253,7 @@ export function SettingsDemoStory() {
         {/* ── Gameplay ───────────────────────────── */}
         <Box style={{
           gap: 10,
-          backgroundColor: '#1e293b',
+          backgroundColor: c.bgElevated,
           borderRadius: 10,
           padding: 14,
         }}>
@@ -267,12 +272,12 @@ export function SettingsDemoStory() {
         {/* ── Keybinds (per-side borders) ─────────── */}
         <Box style={{
           gap: 8,
-          backgroundColor: '#1e293b',
+          backgroundColor: c.bgElevated,
           borderRadius: 10,
           padding: 14,
         }}>
           <SectionHeader>Keybinds</SectionHeader>
-          <Box style={{ borderRadius: 6, overflow: 'hidden', backgroundColor: '#0f172a' }}>
+          <Box style={{ borderRadius: 6, overflow: 'hidden', backgroundColor: c.bg }}>
             <KeybindRow action="Move" keyName="WASD" />
             <KeybindRow action="Jump" keyName="Space" />
             <KeybindRow action="Attack" keyName="LMB" />
@@ -355,7 +360,7 @@ export function SettingsDemoStory() {
               borderRadius: 8,
             })}
           >
-            <Text style={{ color: '#94a3b8', fontSize: 14 }}>Reset Defaults</Text>
+            <Text style={{ color: c.textSecondary, fontSize: 14 }}>Reset Defaults</Text>
           </Pressable>
 
           <Pressable
@@ -371,7 +376,7 @@ export function SettingsDemoStory() {
               borderRadius: 8,
             })}
           >
-            <Text style={{ color: '#64748b', fontSize: 14 }}>Back</Text>
+            <Text style={{ color: c.textDim, fontSize: 14 }}>Back</Text>
           </Pressable>
         </Box>
 

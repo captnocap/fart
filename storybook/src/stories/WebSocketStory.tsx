@@ -1,11 +1,13 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { Box, Text, Pressable, useWebSocket, usePeerServer, useLoveEvent, useLoveRPC } from '../../../packages/shared/src';
+import { useThemeColors } from '../../../packages/theme/src';
 
 function StatusDot({ status }: { status: string }) {
-  const color = status === 'open' || status === 'ready' ? '#22c55e'
-    : status === 'connecting' ? '#f59e0b'
-    : status === 'error' ? '#ef4444'
-    : '#64748b';
+  const c = useThemeColors();
+  const color = status === 'open' || status === 'ready' ? c.success
+    : status === 'connecting' ? c.warning
+    : status === 'error' ? c.error
+    : c.textDim;
   return (
     <Box style={{
       width: 10, height: 10, borderRadius: 5,
@@ -16,6 +18,7 @@ function StatusDot({ status }: { status: string }) {
 
 // ---- P2P Demo: Host a server + connect a client to it ----
 function P2PDemo() {
+  const c = useThemeColors();
   // Tor hidden service address
   const [onionAddr, setOnionAddr] = useState<string | null>(null);
   const getHostname = useLoveRPC<string>('tor:getHostname');
@@ -103,22 +106,22 @@ function P2PDemo() {
     <Box style={{ flexDirection: 'row', gap: 16, width: '100%' }}>
       {/* Server panel */}
       <Box style={{ flexGrow: 1, gap: 8 }}>
-        <Text style={{ fontSize: 14, color: '#f1f5f9' }}>Server (Host)</Text>
+        <Text style={{ fontSize: 14, color: c.text }}>Server (Host)</Text>
 
         <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
           <StatusDot status={server.ready ? 'ready' : 'closed'} />
-          <Text style={{ fontSize: 12, color: '#e2e8f0' }}>
+          <Text style={{ fontSize: 12, color: c.text }}>
             {server.ready ? `Listening on :8080` : 'Stopped'}
           </Text>
         </Box>
 
-        <Text style={{ fontSize: 11, color: '#94a3b8' }}>
+        <Text style={{ fontSize: 11, color: c.textSecondary }}>
           {`Peers: ${server.peers.length}`}
         </Text>
 
         <Box style={{ flexDirection: 'row', gap: 6 }}>
           <Pressable onPress={startServer} style={{
-            backgroundColor: serverPort ? '#334155' : '#3b82f6',
+            backgroundColor: serverPort ? c.surface : c.primary,
             paddingLeft: 12, paddingRight: 12,
             paddingTop: 5, paddingBottom: 5,
             borderRadius: 5,
@@ -127,7 +130,7 @@ function P2PDemo() {
           </Pressable>
 
           <Pressable onPress={stopServer} style={{
-            backgroundColor: serverPort ? '#ef4444' : '#334155',
+            backgroundColor: serverPort ? c.error : c.surface,
             paddingLeft: 12, paddingRight: 12,
             paddingTop: 5, paddingBottom: 5,
             borderRadius: 5,
@@ -136,7 +139,7 @@ function P2PDemo() {
           </Pressable>
 
           <Pressable onPress={serverBroadcast} style={{
-            backgroundColor: server.ready ? '#8b5cf6' : '#334155',
+            backgroundColor: server.ready ? c.accent : c.surface,
             paddingLeft: 12, paddingRight: 12,
             paddingTop: 5, paddingBottom: 5,
             borderRadius: 5,
@@ -146,36 +149,36 @@ function P2PDemo() {
         </Box>
 
         {server.error && (
-          <Text style={{ fontSize: 11, color: '#fca5a5' }}>{`Error: ${server.error}`}</Text>
+          <Text style={{ fontSize: 11, color: c.error }}>{`Error: ${server.error}`}</Text>
         )}
 
-        <Box style={{ backgroundColor: '#1e293b', borderRadius: 6, padding: 8, gap: 3 }}>
-          <Text style={{ fontSize: 10, color: '#64748b' }}>Server log:</Text>
+        <Box style={{ backgroundColor: c.bgElevated, borderRadius: 6, padding: 8, gap: 3 }}>
+          <Text style={{ fontSize: 10, color: c.textDim }}>Server log:</Text>
           {serverLog.length === 0 && (
-            <Text style={{ fontSize: 10, color: '#475569' }}>No messages yet</Text>
+            <Text style={{ fontSize: 10, color: c.textDim }}>No messages yet</Text>
           )}
           {serverLog.map((msg, i) => (
-            <Text key={i} style={{ fontSize: 10, color: '#a5b4fc' }}>{msg}</Text>
+            <Text key={i} style={{ fontSize: 10, color: c.accent }}>{msg}</Text>
           ))}
         </Box>
       </Box>
 
       {/* Client panel */}
       <Box style={{ flexGrow: 1, gap: 8 }}>
-        <Text style={{ fontSize: 14, color: '#f1f5f9' }}>Client (Joiner)</Text>
+        <Text style={{ fontSize: 14, color: c.text }}>Client (Joiner)</Text>
 
         <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
           <StatusDot status={client.status} />
-          <Text style={{ fontSize: 12, color: '#e2e8f0' }}>{`Status: ${client.status}`}</Text>
+          <Text style={{ fontSize: 12, color: c.text }}>{`Status: ${client.status}`}</Text>
         </Box>
 
-        <Text style={{ fontSize: 11, color: onionAddr ? '#22c55e' : '#94a3b8' }}>
+        <Text style={{ fontSize: 11, color: onionAddr ? c.success : c.textSecondary }}>
           {onionAddr ? `Tor ready: ${onionAddr.substring(0, 20)}...` : 'Waiting for Tor...'}
         </Text>
 
         <Box style={{ flexDirection: 'row', gap: 6 }}>
           <Pressable onPress={connectClient} style={{
-            backgroundColor: clientUrl && !clientUrl.includes('.onion') ? '#334155' : '#3b82f6',
+            backgroundColor: clientUrl && !clientUrl.includes('.onion') ? c.surface : c.primary,
             paddingLeft: 12, paddingRight: 12,
             paddingTop: 5, paddingBottom: 5,
             borderRadius: 5,
@@ -184,7 +187,7 @@ function P2PDemo() {
           </Pressable>
 
           <Pressable onPress={connectViaTor} style={{
-            backgroundColor: !onionAddr ? '#1e293b' : clientUrl && clientUrl.includes('.onion') ? '#334155' : '#8b5cf6',
+            backgroundColor: !onionAddr ? c.bgElevated : clientUrl && clientUrl.includes('.onion') ? c.surface : c.accent,
             paddingLeft: 12, paddingRight: 12,
             paddingTop: 5, paddingBottom: 5,
             borderRadius: 5,
@@ -193,7 +196,7 @@ function P2PDemo() {
           </Pressable>
 
           <Pressable onPress={disconnectClient} style={{
-            backgroundColor: clientUrl ? '#ef4444' : '#334155',
+            backgroundColor: clientUrl ? c.error : c.surface,
             paddingLeft: 12, paddingRight: 12,
             paddingTop: 5, paddingBottom: 5,
             borderRadius: 5,
@@ -202,7 +205,7 @@ function P2PDemo() {
           </Pressable>
 
           <Pressable onPress={clientSend} style={{
-            backgroundColor: client.status === 'open' ? '#10b981' : '#334155',
+            backgroundColor: client.status === 'open' ? c.success : c.surface,
             paddingLeft: 12, paddingRight: 12,
             paddingTop: 5, paddingBottom: 5,
             borderRadius: 5,
@@ -212,23 +215,23 @@ function P2PDemo() {
         </Box>
 
         {onionAddr && (
-          <Box style={{ backgroundColor: '#1e293b', borderRadius: 6, padding: 6 }}>
-            <Text style={{ fontSize: 9, color: '#64748b' }}>Onion address:</Text>
-            <Text style={{ fontSize: 10, color: '#a5b4fc' }}>{onionAddr}</Text>
+          <Box style={{ backgroundColor: c.bgElevated, borderRadius: 6, padding: 6 }}>
+            <Text style={{ fontSize: 9, color: c.textDim }}>Onion address:</Text>
+            <Text style={{ fontSize: 10, color: c.accent }}>{onionAddr}</Text>
           </Box>
         )}
 
         {client.error && (
-          <Text style={{ fontSize: 11, color: '#fca5a5' }}>{`Error: ${client.error}`}</Text>
+          <Text style={{ fontSize: 11, color: c.error }}>{`Error: ${client.error}`}</Text>
         )}
 
-        <Box style={{ backgroundColor: '#1e293b', borderRadius: 6, padding: 8, gap: 3 }}>
-          <Text style={{ fontSize: 10, color: '#64748b' }}>Client log:</Text>
+        <Box style={{ backgroundColor: c.bgElevated, borderRadius: 6, padding: 8, gap: 3 }}>
+          <Text style={{ fontSize: 10, color: c.textDim }}>Client log:</Text>
           {clientLog.length === 0 && (
-            <Text style={{ fontSize: 10, color: '#475569' }}>No messages yet</Text>
+            <Text style={{ fontSize: 10, color: c.textDim }}>No messages yet</Text>
           )}
           {clientLog.map((msg, i) => (
-            <Text key={i} style={{ fontSize: 10, color: '#a5b4fc' }}>{msg}</Text>
+            <Text key={i} style={{ fontSize: 10, color: c.accent }}>{msg}</Text>
           ))}
         </Box>
       </Box>
@@ -237,14 +240,15 @@ function P2PDemo() {
 }
 
 export function WebSocketStory() {
+  const c = useThemeColors();
   return (
     <Box style={{
       width: '100%', height: '100%',
       padding: 20, gap: 16,
-      backgroundColor: '#0f172a',
+      backgroundColor: c.bg,
     }}>
-      <Text style={{ fontSize: 18, color: '#f1f5f9' }}>WebSocket — P2P Server + Client</Text>
-      <Text style={{ fontSize: 12, color: '#64748b' }}>
+      <Text style={{ fontSize: 18, color: c.text }}>WebSocket — P2P Server + Client</Text>
+      <Text style={{ fontSize: 12, color: c.textDim }}>
         {`Start the server, then connect the client. Messages echo back through the server.`}
       </Text>
 

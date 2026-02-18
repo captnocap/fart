@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { Box, Text, Pressable, useSpring } from '../../../packages/shared/src';
+import { useThemeColors } from '../../../packages/theme/src';
 
 export function AnimationSpringStory() {
+  const c = useThemeColors();
   const [toggled, setToggled] = useState(false);
   const x = useSpring(toggled ? 160 : 0, { stiffness: 180, damping: 12 });
   const scale = useSpring(toggled ? 1.2 : 1.0, { stiffness: 200, damping: 10 });
@@ -11,7 +13,7 @@ export function AnimationSpringStory() {
       <Pressable
         onPress={() => setToggled(t => !t)}
         style={{
-          backgroundColor: '#22c55e',
+          backgroundColor: c.success,
           padding: 10,
           borderRadius: 6,
           alignItems: 'center',
@@ -35,12 +37,12 @@ export function AnimationSpringStory() {
       </Box>
 
       <Box style={{
-        padding: 8, backgroundColor: '#1e293b', borderRadius: 4, gap: 2,
+        padding: 8, backgroundColor: c.bgElevated, borderRadius: 4, gap: 2,
       }}>
-        <Text style={{ color: '#888', fontSize: 10 }}>
+        <Text style={{ color: c.textDim, fontSize: 10 }}>
           {`translateX: ${Math.round(x)}px`}
         </Text>
-        <Text style={{ color: '#888', fontSize: 10 }}>
+        <Text style={{ color: c.textDim, fontSize: 10 }}>
           {`scale: ${scale.toFixed(2)}`}
         </Text>
       </Box>

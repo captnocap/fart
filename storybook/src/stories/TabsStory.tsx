@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Box, Text, Tabs } from '../../../packages/shared/src';
 import type { Tab } from '../../../packages/shared/src';
+import { useThemeColors } from '../../../packages/theme/src';
 
 const BASIC_TABS: Tab[] = [
   { id: 'overview', label: 'Overview' },
@@ -27,6 +28,7 @@ const TAB_CONTENT: Record<string, string> = {
 };
 
 export function TabsStory() {
+  const c = useThemeColors();
   const [activeUnderline, setActiveUnderline] = useState('overview');
   const [activePill, setActivePill] = useState('overview');
   const [activeInteractive, setActiveInteractive] = useState('overview');
@@ -37,7 +39,7 @@ export function TabsStory() {
 
       {/* Underline Tabs */}
       <Box style={{ gap: 6 }}>
-        <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: 'bold' }}>Underline Tabs</Text>
+        <Text style={{ color: c.textSecondary, fontSize: 11, fontWeight: 'bold' }}>Underline Tabs</Text>
         <Box style={{ width: 360 }}>
           <Tabs tabs={BASIC_TABS} activeId={activeUnderline} onSelect={setActiveUnderline} />
         </Box>
@@ -45,7 +47,7 @@ export function TabsStory() {
 
       {/* Pill Tabs */}
       <Box style={{ gap: 6 }}>
-        <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: 'bold' }}>Pill Tabs</Text>
+        <Text style={{ color: c.textSecondary, fontSize: 11, fontWeight: 'bold' }}>Pill Tabs</Text>
         <Box style={{ width: 360 }}>
           <Tabs tabs={BASIC_TABS} activeId={activePill} onSelect={setActivePill} variant="pill" />
         </Box>
@@ -53,17 +55,17 @@ export function TabsStory() {
 
       {/* Interactive with Content */}
       <Box style={{ gap: 6 }}>
-        <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: 'bold' }}>Interactive</Text>
+        <Text style={{ color: c.textSecondary, fontSize: 11, fontWeight: 'bold' }}>Interactive</Text>
         <Box style={{ width: 360, gap: 0 }}>
           <Tabs tabs={BASIC_TABS} activeId={activeInteractive} onSelect={setActiveInteractive} />
           <Box style={{
             padding: 12,
-            backgroundColor: '#1e293b',
+            backgroundColor: c.bgElevated,
             borderRadius: 0,
             borderBottomLeftRadius: 6,
             borderBottomRightRadius: 6,
           }}>
-            <Text style={{ color: '#cbd5e1', fontSize: 11 }}>
+            <Text style={{ color: c.textSecondary, fontSize: 11 }}>
               {TAB_CONTENT[activeInteractive] ?? 'Select a tab'}
             </Text>
           </Box>
@@ -72,7 +74,7 @@ export function TabsStory() {
 
       {/* Many Tabs */}
       <Box style={{ gap: 6 }}>
-        <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: 'bold' }}>Many Tabs</Text>
+        <Text style={{ color: c.textSecondary, fontSize: 11, fontWeight: 'bold' }}>Many Tabs</Text>
         <Box style={{ width: 480 }}>
           <Tabs tabs={MANY_TABS} activeId={activeMany} onSelect={setActiveMany} variant="pill" />
         </Box>

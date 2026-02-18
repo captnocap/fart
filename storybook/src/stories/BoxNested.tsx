@@ -1,18 +1,20 @@
 import React from 'react';
 import { Box, Text } from '../../../packages/shared/src';
+import { useThemeColors } from '../../../packages/theme/src';
 
 export function BoxNestedStory() {
+  const c = useThemeColors();
   return (
     <Box style={{ gap: 12, padding: 16 }}>
       {/* Nested with padding */}
       <Box style={{
         padding: 16,
-        backgroundColor: '#1e293b',
+        backgroundColor: c.bgElevated,
         borderRadius: 8,
       }}>
         <Box style={{
           padding: 12,
-          backgroundColor: '#334155',
+          backgroundColor: c.surface,
           borderRadius: 6,
         }}>
           <Box style={{
@@ -21,7 +23,7 @@ export function BoxNestedStory() {
             borderRadius: 4,
             alignItems: 'center',
           }}>
-            <Text style={{ color: '#e2e8f0', fontSize: 12 }}>3 levels deep</Text>
+            <Text style={{ color: c.text, fontSize: 12 }}>3 levels deep</Text>
           </Box>
         </Box>
       </Box>
@@ -29,11 +31,11 @@ export function BoxNestedStory() {
       {/* Nested with mixed layout */}
       <Box style={{
         padding: 12,
-        backgroundColor: '#1a1a2e',
+        backgroundColor: c.bgElevated,
         borderRadius: 8,
         gap: 8,
       }}>
-        <Text style={{ color: '#888', fontSize: 11 }}>Parent (column)</Text>
+        <Text style={{ color: c.textDim, fontSize: 11 }}>Parent (column)</Text>
         <Box style={{ flexDirection: 'row', gap: 8, width: '100%', justifyContent: 'space-between' }}>
           <Box style={{
             flexGrow: 1, height: 40,

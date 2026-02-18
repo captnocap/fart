@@ -13,19 +13,9 @@ import React, { useState, useCallback, useMemo } from 'react';
 import { Box, Text, ScrollView, Pressable, TextInput } from '../../../packages/shared/src';
 import { useChat, AIProvider, useMCPServer, estimateToolTokens } from '../../../packages/ai/src';
 import type { AIConfig, AIProviderType, MCPServerConfig, MCPPermissionsConfig, MCPToolPermission } from '../../../packages/ai/src';
+import { useThemeColors } from '../../../packages/theme/src';
 
-// ── Colors ──────────────────────────────────────────────
-
-const BG = '#0f172a';
-const SURFACE = '#1e293b';
-const SURFACE2 = '#334155';
-const ACCENT = '#3b82f6';
-const TEXT_PRIMARY = '#e2e8f0';
-const TEXT_DIM = '#64748b';
-const TEXT_MUTED = '#94a3b8';
-const SUCCESS = '#22c55e';
-const ERROR_RED = '#ef4444';
-const WARN_YELLOW = '#eab308';
+// ── Demo-specific colors ────────────────────────────────
 const TOOL_BG = '#1c2a1c';
 
 // ── Transport config panel ──────────────────────────────
@@ -41,17 +31,18 @@ function TransportConfig({
   args: string; setArgs: (a: string) => void;
   url: string; setUrl: (u: string) => void;
 }) {
+  const c = useThemeColors();
   return (
     <Box style={{ gap: 8 }}>
-      <Text style={{ fontSize: 12, color: TEXT_PRIMARY, fontWeight: 'bold' }}>Transport</Text>
+      <Text style={{ fontSize: 12, color: c.text, fontWeight: 'bold' }}>Transport</Text>
       <Box style={{ flexDirection: 'row', gap: 6 }}>
         {(['stdio', 'sse', 'streamable-http'] as const).map(t => (
           <Pressable key={t} onPress={() => setTransport(t)} style={{
-            backgroundColor: transport === t ? ACCENT : SURFACE2,
+            backgroundColor: transport === t ? c.primary : c.surface,
             paddingLeft: 8, paddingRight: 8, paddingTop: 4, paddingBottom: 4,
             borderRadius: 4,
           }}>
-            <Text style={{ fontSize: 10, color: transport === t ? '#fff' : TEXT_MUTED }}>{t}</Text>
+            <Text style={{ fontSize: 10, color: transport === t ? '#fff' : c.textSecondary }}>{t}</Text>
           </Pressable>
         ))}
       </Box>
@@ -59,21 +50,21 @@ function TransportConfig({
       {transport === 'stdio' ? (
         <Box style={{ gap: 6 }}>
           <Box style={{ gap: 2 }}>
-            <Text style={{ fontSize: 10, color: TEXT_DIM }}>Command</Text>
+            <Text style={{ fontSize: 10, color: c.textDim }}>Command</Text>
             <TextInput value={command} onChangeText={setCommand} placeholder="npx"
-              style={{ fontSize: 11, color: TEXT_PRIMARY, backgroundColor: BG, padding: 6, borderRadius: 4, width: '100%', height: 28 }} />
+              style={{ fontSize: 11, color: c.text, backgroundColor: c.bg, padding: 6, borderRadius: 4, width: '100%', height: 28 }} />
           </Box>
           <Box style={{ gap: 2 }}>
-            <Text style={{ fontSize: 10, color: TEXT_DIM }}>Args (comma-separated)</Text>
+            <Text style={{ fontSize: 10, color: c.textDim }}>Args (comma-separated)</Text>
             <TextInput value={args} onChangeText={setArgs} placeholder="-y, @modelcontextprotocol/server-filesystem, /tmp"
-              style={{ fontSize: 11, color: TEXT_PRIMARY, backgroundColor: BG, padding: 6, borderRadius: 4, width: '100%', height: 28 }} />
+              style={{ fontSize: 11, color: c.text, backgroundColor: c.bg, padding: 6, borderRadius: 4, width: '100%', height: 28 }} />
           </Box>
         </Box>
       ) : (
         <Box style={{ gap: 2 }}>
-          <Text style={{ fontSize: 10, color: TEXT_DIM }}>URL</Text>
+          <Text style={{ fontSize: 10, color: c.textDim }}>URL</Text>
           <TextInput value={url} onChangeText={setUrl} placeholder="http://localhost:3001/mcp"
-            style={{ fontSize: 11, color: TEXT_PRIMARY, backgroundColor: BG, padding: 6, borderRadius: 4, width: '100%', height: 28 }} />
+            style={{ fontSize: 11, color: c.text, backgroundColor: c.bg, padding: 6, borderRadius: 4, width: '100%', height: 28 }} />
         </Box>
       )}
     </Box>
@@ -88,6 +79,7 @@ function ToolRow({ name, permission, onToggle, onToggleConfirm }: {
   onToggle: () => void;
   onToggleConfirm: () => void;
 }) {
+  const c = useThemeColors();
   return (
     <Box style={{
       flexDirection: 'row', alignItems: 'center', gap: 8,
@@ -97,7 +89,7 @@ function ToolRow({ name, permission, onToggle, onToggleConfirm }: {
       {/* Enable toggle */}
       <Pressable onPress={onToggle} style={{
         width: 16, height: 16, borderRadius: 3,
-        backgroundColor: permission.enabled ? SUCCESS : SURFACE2,
+        backgroundColor: permission.enabled ? c.success : c.surface,
         justifyContent: 'center', alignItems: 'center',
       }}>
         {permission.enabled && <Text style={{ fontSize: 10, color: '#fff' }}>x</Text>}
@@ -105,14 +97,14 @@ function ToolRow({ name, permission, onToggle, onToggleConfirm }: {
 
       {/* Tool info */}
       <Box style={{ flexGrow: 1 }}>
-        <Text style={{ fontSize: 11, color: permission.enabled ? TEXT_PRIMARY : TEXT_MUTED }}>{name}</Text>
+        <Text style={{ fontSize: 11, color: permission.enabled ? c.text : c.textSecondary }}>{name}</Text>
         {permission.description && (
-          <Text style={{ fontSize: 9, color: TEXT_DIM }}>{permission.description}</Text>
+          <Text style={{ fontSize: 9, color: c.textDim }}>{permission.description}</Text>
         )}
       </Box>
 
       {/* Token cost */}
-      <Text style={{ fontSize: 9, color: TEXT_DIM }}>
+      <Text style={{ fontSize: 9, color: c.textDim }}>
         {`~${permission.tokenEstimate || 0} tok`}
       </Text>
 
@@ -120,9 +112,9 @@ function ToolRow({ name, permission, onToggle, onToggleConfirm }: {
       <Pressable onPress={onToggleConfirm} style={{
         paddingLeft: 6, paddingRight: 6, paddingTop: 2, paddingBottom: 2,
         borderRadius: 3,
-        backgroundColor: permission.confirm ? WARN_YELLOW : SURFACE2,
+        backgroundColor: permission.confirm ? c.warning : c.surface,
       }}>
-        <Text style={{ fontSize: 9, color: permission.confirm ? '#000' : TEXT_DIM }}>
+        <Text style={{ fontSize: 9, color: permission.confirm ? '#000' : c.textDim }}>
           {permission.confirm ? 'confirm' : 'auto'}
         </Text>
       </Pressable>
@@ -133,26 +125,27 @@ function ToolRow({ name, permission, onToggle, onToggleConfirm }: {
 // ── Token budget display ────────────────────────────────
 
 function TokenBudget({ permissions }: { permissions: MCPPermissionsConfig }) {
+  const c = useThemeColors();
   const enabled = Object.entries(permissions.tools).filter(([, p]) => p.enabled);
   const totalTokens = enabled.reduce((sum, [, p]) => sum + (p.tokenEstimate || 0), 0);
   const pct = ((totalTokens / 128000) * 100).toFixed(1);
   const allTokens = permissions.tokenBudget?.totalIfAllEnabled || 0;
 
   return (
-    <Box style={{ padding: 8, backgroundColor: SURFACE2, borderRadius: 4, gap: 4 }}>
+    <Box style={{ padding: 8, backgroundColor: c.surface, borderRadius: 4, gap: 4 }}>
       <Box style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%' }}>
-        <Text style={{ fontSize: 10, color: TEXT_MUTED }}>
+        <Text style={{ fontSize: 10, color: c.textSecondary }}>
           {`${enabled.length} tool${enabled.length !== 1 ? 's' : ''} enabled`}
         </Text>
-        <Text style={{ fontSize: 10, color: totalTokens > 0 ? ACCENT : TEXT_DIM }}>
+        <Text style={{ fontSize: 10, color: totalTokens > 0 ? c.primary : c.textDim }}>
           {`~${totalTokens} tokens (${pct}%)`}
         </Text>
       </Box>
       {/* Budget bar */}
-      <Box style={{ width: '100%', height: 4, backgroundColor: BG, borderRadius: 2 }}>
+      <Box style={{ width: '100%', height: 4, backgroundColor: c.bg, borderRadius: 2 }}>
         <Box style={{
           width: `${Math.min((totalTokens / Math.max(allTokens, 1)) * 100, 100)}%`,
-          height: 4, backgroundColor: ACCENT, borderRadius: 2,
+          height: 4, backgroundColor: c.primary, borderRadius: 2,
         }} />
       </Box>
     </Box>
@@ -162,6 +155,7 @@ function TokenBudget({ permissions }: { permissions: MCPPermissionsConfig }) {
 // ── Main story ──────────────────────────────────────────
 
 export function MCPDemoStory() {
+  const c = useThemeColors();
   // Transport config
   const [transport, setTransport] = useState('stdio');
   const [command, setCommand] = useState('npx');
@@ -270,16 +264,16 @@ export function MCPDemoStory() {
 
   return (
     <AIProvider config={aiConfig}>
-      <Box style={{ width: '100%', height: '100%', backgroundColor: BG, padding: 16, gap: 12 }}>
+      <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg, padding: 16, gap: 12 }}>
         {/* Header */}
         <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-          <Text style={{ fontSize: 18, color: TEXT_PRIMARY, fontWeight: 'bold' }}>MCP Integration</Text>
-          <Text style={{ fontSize: 11, color: TEXT_DIM }}>@ilovereact/ai</Text>
+          <Text style={{ fontSize: 18, color: c.text, fontWeight: 'bold' }}>MCP Integration</Text>
+          <Text style={{ fontSize: 11, color: c.textDim }}>@ilovereact/ai</Text>
           <Box style={{
             paddingLeft: 6, paddingRight: 6, paddingTop: 2, paddingBottom: 2,
             borderRadius: 3,
-            backgroundColor: mcp.status === 'ready' ? SUCCESS
-              : mcp.status === 'error' ? ERROR_RED : WARN_YELLOW,
+            backgroundColor: mcp.status === 'ready' ? c.success
+              : mcp.status === 'error' ? c.error : c.warning,
           }}>
             <Text style={{ fontSize: 9, color: '#fff' }}>{connected ? mcp.status : 'disconnected'}</Text>
           </Box>
@@ -290,7 +284,7 @@ export function MCPDemoStory() {
           {/* Left: Config */}
           <Box style={{ width: 300, gap: 10 }}>
             {/* Server config */}
-            <Box style={{ padding: 10, backgroundColor: SURFACE, borderRadius: 8, gap: 8 }}>
+            <Box style={{ padding: 10, backgroundColor: c.bgElevated, borderRadius: 8, gap: 8 }}>
               <TransportConfig
                 transport={transport} setTransport={setTransport}
                 command={command} setCommand={setCommand}
@@ -299,13 +293,13 @@ export function MCPDemoStory() {
               />
 
               <Box style={{ gap: 2 }}>
-                <Text style={{ fontSize: 10, color: TEXT_DIM }}>Server Name</Text>
+                <Text style={{ fontSize: 10, color: c.textDim }}>Server Name</Text>
                 <TextInput value={serverName} onChangeText={setServerName} placeholder="my-server"
-                  style={{ fontSize: 11, color: TEXT_PRIMARY, backgroundColor: BG, padding: 6, borderRadius: 4, width: '100%', height: 28 }} />
+                  style={{ fontSize: 11, color: c.text, backgroundColor: c.bg, padding: 6, borderRadius: 4, width: '100%', height: 28 }} />
               </Box>
 
               <Pressable onPress={() => setConnected(!connected)} style={{
-                backgroundColor: connected ? ERROR_RED : SUCCESS,
+                backgroundColor: connected ? c.error : c.success,
                 padding: 8, borderRadius: 4, alignItems: 'center',
               }}>
                 <Text style={{ fontSize: 12, color: '#fff' }}>{connected ? 'Disconnect' : 'Connect'}</Text>
@@ -314,8 +308,8 @@ export function MCPDemoStory() {
 
             {/* Tool permissions */}
             {Object.keys(permissions.tools).length > 0 && (
-              <Box style={{ padding: 10, backgroundColor: SURFACE, borderRadius: 8, gap: 6 }}>
-                <Text style={{ fontSize: 12, color: TEXT_PRIMARY, fontWeight: 'bold' }}>Tool Permissions</Text>
+              <Box style={{ padding: 10, backgroundColor: c.bgElevated, borderRadius: 8, gap: 6 }}>
+                <Text style={{ fontSize: 12, color: c.text, fontWeight: 'bold' }}>Tool Permissions</Text>
                 <ScrollView style={{ maxHeight: 250 }}>
                   {Object.entries(permissions.tools).map(([name, perm]) => (
                     <ToolRow key={name} name={name} permission={perm}
@@ -328,30 +322,30 @@ export function MCPDemoStory() {
             )}
 
             {/* AI config */}
-            <Box style={{ padding: 10, backgroundColor: SURFACE, borderRadius: 8, gap: 6 }}>
-              <Text style={{ fontSize: 12, color: TEXT_PRIMARY, fontWeight: 'bold' }}>AI Config</Text>
+            <Box style={{ padding: 10, backgroundColor: c.bgElevated, borderRadius: 8, gap: 6 }}>
+              <Text style={{ fontSize: 12, color: c.text, fontWeight: 'bold' }}>AI Config</Text>
               <Box style={{ flexDirection: 'row', gap: 6 }}>
                 <Pressable onPress={() => { setProvider('openai'); setModel('gpt-4'); }} style={{
-                  backgroundColor: provider === 'openai' ? ACCENT : SURFACE2,
+                  backgroundColor: provider === 'openai' ? c.primary : c.surface,
                   paddingLeft: 8, paddingRight: 8, paddingTop: 4, paddingBottom: 4, borderRadius: 4,
                 }}>
-                  <Text style={{ fontSize: 10, color: provider === 'openai' ? '#fff' : TEXT_MUTED }}>OpenAI</Text>
+                  <Text style={{ fontSize: 10, color: provider === 'openai' ? '#fff' : c.textSecondary }}>OpenAI</Text>
                 </Pressable>
                 <Pressable onPress={() => { setProvider('anthropic'); setModel('claude-sonnet-4-5-20250929'); }} style={{
-                  backgroundColor: provider === 'anthropic' ? ACCENT : SURFACE2,
+                  backgroundColor: provider === 'anthropic' ? c.primary : c.surface,
                   paddingLeft: 8, paddingRight: 8, paddingTop: 4, paddingBottom: 4, borderRadius: 4,
                 }}>
-                  <Text style={{ fontSize: 10, color: provider === 'anthropic' ? '#fff' : TEXT_MUTED }}>Anthropic</Text>
+                  <Text style={{ fontSize: 10, color: provider === 'anthropic' ? '#fff' : c.textSecondary }}>Anthropic</Text>
                 </Pressable>
               </Box>
               <TextInput value={apiKey} onChangeText={setApiKey} placeholder="API Key..."
-                style={{ fontSize: 11, color: TEXT_PRIMARY, backgroundColor: BG, padding: 6, borderRadius: 4, width: '100%', height: 28 }} />
+                style={{ fontSize: 11, color: c.text, backgroundColor: c.bg, padding: 6, borderRadius: 4, width: '100%', height: 28 }} />
             </Box>
 
             {/* Code example */}
-            <Box style={{ padding: 10, backgroundColor: SURFACE, borderRadius: 8, gap: 4 }}>
-              <Text style={{ fontSize: 10, color: TEXT_DIM }}>Usage:</Text>
-              <Text style={{ fontSize: 9, color: TEXT_MUTED, lineHeight: 14 }}>
+            <Box style={{ padding: 10, backgroundColor: c.bgElevated, borderRadius: 8, gap: 4 }}>
+              <Text style={{ fontSize: 10, color: c.textDim }}>Usage:</Text>
+              <Text style={{ fontSize: 9, color: c.textSecondary, lineHeight: 14 }}>
                 {"import config from\n  '../mcp.tools.json';\n\nconst mcp = useMCPServer({\n  name: 'filesystem',\n  transport: 'stdio',\n  command: 'npx',\n  args: ['-y', '...'],\n  permissions:\n    config.filesystem,\n});\n\nuseChat({\n  tools: mcp.tools,\n});"}
               </Text>
             </Box>
@@ -359,17 +353,17 @@ export function MCPDemoStory() {
 
           {/* Right: Chat */}
           <Box style={{ flexGrow: 1, gap: 8 }}>
-            <ScrollView style={{ flexGrow: 1, backgroundColor: SURFACE, borderRadius: 8, padding: 10 }}>
+            <ScrollView style={{ flexGrow: 1, backgroundColor: c.bgElevated, borderRadius: 8, padding: 10 }}>
               {chat.messages.length === 0 && (
                 <Box style={{ padding: 20, alignItems: 'center' }}>
-                  <Text style={{ fontSize: 13, color: TEXT_DIM }}>
+                  <Text style={{ fontSize: 13, color: c.textDim }}>
                     {!connected ? 'Connect to an MCP server to get started'
                       : mcp.tools.length === 0 ? 'Enable some tools in the permissions panel'
                       : !apiKey ? 'Enter an API key to start chatting with MCP tools'
                       : 'Send a message to use MCP tools'}
                   </Text>
                   {mcp.tools.length > 0 && (
-                    <Text style={{ fontSize: 11, color: SUCCESS, marginTop: 8 }}>
+                    <Text style={{ fontSize: 11, color: c.success, marginTop: 8 }}>
                       {`${mcp.tools.length} MCP tool${mcp.tools.length !== 1 ? 's' : ''} active`}
                     </Text>
                   )}
@@ -379,17 +373,18 @@ export function MCPDemoStory() {
                 <Box key={i} style={{
                   backgroundColor: msg.role === 'user' ? '#1e3a5f'
                     : msg.role === 'tool' ? TOOL_BG : '#1a2332',
+                  // Demo-specific chat bubble colors kept hardcoded
                   padding: 8, borderRadius: 6, marginBottom: 4,
                 }}>
-                  <Text style={{ fontSize: 9, color: TEXT_DIM, marginBottom: 2 }}>
+                  <Text style={{ fontSize: 9, color: c.textDim, marginBottom: 2 }}>
                     {msg.role === 'user' ? 'You' : msg.role === 'tool' ? 'Tool Result' : 'Assistant'}
                   </Text>
-                  <Text style={{ fontSize: 12, color: TEXT_PRIMARY, lineHeight: 18 }}>
+                  <Text style={{ fontSize: 12, color: c.text, lineHeight: 18 }}>
                     {typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)}
                   </Text>
                   {msg.toolCalls && msg.toolCalls.length > 0 && (
-                    <Box style={{ marginTop: 4, padding: 4, backgroundColor: SURFACE2, borderRadius: 3 }}>
-                      <Text style={{ fontSize: 9, color: TEXT_MUTED }}>
+                    <Box style={{ marginTop: 4, padding: 4, backgroundColor: c.surface, borderRadius: 3 }}>
+                      <Text style={{ fontSize: 9, color: c.textSecondary }}>
                         {`Tool calls: ${msg.toolCalls.map(tc => tc.name).join(', ')}`}
                       </Text>
                     </Box>
@@ -397,28 +392,28 @@ export function MCPDemoStory() {
                 </Box>
               ))}
               {chat.isStreaming && (
-                <Text style={{ fontSize: 10, color: ACCENT, padding: 4 }}>Streaming...</Text>
+                <Text style={{ fontSize: 10, color: c.primary, padding: 4 }}>Streaming...</Text>
               )}
             </ScrollView>
 
             {chat.error && (
               <Box style={{ padding: 6, backgroundColor: '#2d1b1b', borderRadius: 4 }}>
-                <Text style={{ fontSize: 10, color: ERROR_RED }}>{chat.error.message}</Text>
+                <Text style={{ fontSize: 10, color: c.error }}>{chat.error.message}</Text>
               </Box>
             )}
 
             {mcp.error && (
               <Box style={{ padding: 6, backgroundColor: '#2d1b1b', borderRadius: 4 }}>
-                <Text style={{ fontSize: 10, color: ERROR_RED }}>{`MCP: ${mcp.error.message}`}</Text>
+                <Text style={{ fontSize: 10, color: c.error }}>{`MCP: ${mcp.error.message}`}</Text>
               </Box>
             )}
 
             <Box style={{ flexDirection: 'row', gap: 8 }}>
               <TextInput value={chatInput} onChangeText={setChatInput} onSubmitEditing={handleSend}
                 placeholder="Type a message..."
-                style={{ flexGrow: 1, fontSize: 12, color: TEXT_PRIMARY, backgroundColor: SURFACE, padding: 8, borderRadius: 6, height: 36 }} />
+                style={{ flexGrow: 1, fontSize: 12, color: c.text, backgroundColor: c.bgElevated, padding: 8, borderRadius: 6, height: 36 }} />
               <Pressable onPress={chat.isLoading ? chat.stop : handleSend} style={{
-                backgroundColor: chat.isLoading ? ERROR_RED : ACCENT,
+                backgroundColor: chat.isLoading ? c.error : c.primary,
                 paddingLeft: 14, paddingRight: 14, borderRadius: 6, justifyContent: 'center',
               }}>
                 <Text style={{ fontSize: 11, color: '#fff' }}>{chat.isLoading ? 'Stop' : 'Send'}</Text>

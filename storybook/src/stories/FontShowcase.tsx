@@ -1,5 +1,6 @@
 import React from 'react';
 import { Box, Text } from '../../../packages/shared/src';
+import { useThemeColors } from '../../../packages/theme/src';
 
 interface FontSampleProps {
   label: string;
@@ -10,29 +11,30 @@ interface FontSampleProps {
 }
 
 function FontSample({ label, packName, fontPath, sample, size }: FontSampleProps) {
+  const c = useThemeColors();
   return (
     <Box style={{
-      backgroundColor: '#1e293b',
+      backgroundColor: c.bgElevated,
       borderRadius: 8,
       padding: 12,
       gap: 6,
     }}>
       <Box style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%' }}>
-        <Text style={{ color: '#94a3b8', fontSize: 11 }}>
+        <Text style={{ color: c.textSecondary, fontSize: 11 }}>
           {label}
         </Text>
-        <Text style={{ color: '#475569', fontSize: 10 }}>
+        <Text style={{ color: c.textDim, fontSize: 10 }}>
           {`fonts/${packName}/${size ? ` (${size})` : ''}`}
         </Text>
       </Box>
       <Text style={{
-        color: '#e2e8f0',
+        color: c.text,
         fontSize: 18,
         fontFamily: fontPath,
       }}>
         {sample}
       </Text>
-      <Text style={{ color: '#64748b', fontSize: 10 }}>
+      <Text style={{ color: c.textSecondary, fontSize: 10 }}>
         {`fontFamily: "${fontPath}"`}
       </Text>
     </Box>
@@ -40,9 +42,10 @@ function FontSample({ label, packName, fontPath, sample, size }: FontSampleProps
 }
 
 function SectionHeader({ title }: { title: string }) {
+  const c = useThemeColors();
   return (
     <Box style={{ paddingTop: 8, paddingBottom: 2 }}>
-      <Text style={{ color: '#60a5fa', fontSize: 13, fontWeight: 'bold' }}>
+      <Text style={{ color: c.primary, fontSize: 13, fontWeight: 'bold' }}>
         {title}
       </Text>
     </Box>
@@ -50,12 +53,13 @@ function SectionHeader({ title }: { title: string }) {
 }
 
 export function FontShowcaseStory() {
+  const c = useThemeColors();
   return (
     <Box style={{ gap: 8, padding: 16, width: '100%', height: '100%', overflow: 'scroll' }}>
       <Text style={{ color: '#ffffff', fontSize: 20, fontWeight: 'bold' }}>
         Font Packs
       </Text>
-      <Text style={{ color: '#94a3b8', fontSize: 12 }}>
+      <Text style={{ color: c.textSecondary, fontSize: 12 }}>
         Bundled Noto Sans fonts. Drop any .ttf into fonts/ and reference with fontFamily.
       </Text>
 
@@ -262,25 +266,25 @@ export function FontShowcaseStory() {
       <SectionHeader title="Usage" />
 
       <Box style={{
-        backgroundColor: '#0f172a',
+        backgroundColor: c.bg,
         borderRadius: 8,
         padding: 12,
         gap: 4,
         borderWidth: 1,
-        borderColor: '#1e293b',
+        borderColor: c.bgElevated,
       }}>
-        <Text style={{ color: '#94a3b8', fontSize: 11 }}>
+        <Text style={{ color: c.textSecondary, fontSize: 11 }}>
           Base font auto-detected: if fonts/base/ exists, NotoSans becomes the
           default for all Text without explicit fontFamily. Covers Latin,
           Cyrillic, and Greek.
         </Text>
-        <Text style={{ color: '#94a3b8', fontSize: 11 }}>
+        <Text style={{ color: c.textSecondary, fontSize: 11 }}>
           {'\nFor other scripts, set fontFamily on Text style:'}
         </Text>
-        <Text style={{ color: '#e2e8f0', fontSize: 12 }}>
+        <Text style={{ color: c.text, fontSize: 12 }}>
           {'  fontFamily: "fonts/arabic/NotoSansArabic-Regular.ttf"'}
         </Text>
-        <Text style={{ color: '#94a3b8', fontSize: 11 }}>
+        <Text style={{ color: c.textSecondary, fontSize: 11 }}>
           {'\nAdd any .ttf to your project\'s fonts/ directory.\nLove2D loads any TrueType (.ttf) or OpenType (.otf) font.'}
         </Text>
       </Box>

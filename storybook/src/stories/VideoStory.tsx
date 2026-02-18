@@ -1,12 +1,14 @@
 import React, { useState, useRef } from 'react';
 import { Box, Text, TextEditor } from '../../../packages/shared/src';
+import { useThemeColors } from '../../../packages/theme/src';
 import { Video } from '../../../packages/shared/src/Video';
 import { VideoPlayer } from '../../../packages/shared/src/VideoPlayer';
 
 function Card({ children, label }: { children: React.ReactNode; label: string }) {
+  const c = useThemeColors();
   return (
     <Box style={{ gap: 8 }}>
-      <Text style={{ color: '#94a3b8', fontSize: 10, fontWeight: 'bold' }}>{label}</Text>
+      <Text style={{ color: c.textSecondary, fontSize: 10, fontWeight: 'bold' }}>{label}</Text>
       <Box style={{
         backgroundColor: '#0f1219',
         borderRadius: 8,
@@ -22,6 +24,7 @@ function Card({ children, label }: { children: React.ReactNode; label: string })
 }
 
 function StatusPill({ label, value }: { label: string; value: string }) {
+  const c = useThemeColors();
   return (
     <Box style={{
       flexDirection: 'row',
@@ -34,13 +37,14 @@ function StatusPill({ label, value }: { label: string; value: string }) {
       paddingTop: 4,
       paddingBottom: 4,
     }}>
-      <Text style={{ color: '#64748b', fontSize: 9 }}>{label}</Text>
-      <Text style={{ color: '#e2e8f0', fontSize: 9, fontWeight: 'bold' }}>{value}</Text>
+      <Text style={{ color: c.textDim, fontSize: 9 }}>{label}</Text>
+      <Text style={{ color: c.text, fontSize: 9, fontWeight: 'bold' }}>{value}</Text>
     </Box>
   );
 }
 
 export function VideoStory() {
+  const c = useThemeColors();
   const [status, setStatus] = useState('Idle');
   const [time, setTime] = useState('0:00');
 
@@ -48,8 +52,8 @@ export function VideoStory() {
     <Box style={{ gap: 20, padding: 20 }}>
       {/* Header */}
       <Box style={{ gap: 4 }}>
-        <Text style={{ color: '#e2e8f0', fontSize: 16, fontWeight: 'bold' }}>Video</Text>
-        <Text style={{ color: '#64748b', fontSize: 11 }}>
+        <Text style={{ color: c.text, fontSize: 16, fontWeight: 'bold' }}>Video</Text>
+        <Text style={{ color: c.textDim, fontSize: 11 }}>
           Any format in, Theora out. Local files and M3U8/HLS streams via FFmpeg.
         </Text>
       </Box>
@@ -90,15 +94,15 @@ export function VideoStory() {
             <Box style={{ flexDirection: 'row', gap: 10, alignItems: 'end', width: 248 }}>
               <Box style={{ gap: 4, alignItems: 'center', width: 90 }}>
                 <Video src="sample.ogv" w={90} h={50} style={{ borderRadius: 4 }} />
-                <Text style={{ color: '#475569', fontSize: 8 }}>90x50</Text>
+                <Text style={{ color: c.textDim, fontSize: 8 }}>90x50</Text>
               </Box>
               <Box style={{ gap: 4, alignItems: 'center', width: 60 }}>
                 <Video src="sample.ogv" w={60} h={60} style={{ borderRadius: 30 }} />
-                <Text style={{ color: '#475569', fontSize: 8 }}>Round</Text>
+                <Text style={{ color: c.textDim, fontSize: 8 }}>Round</Text>
               </Box>
               <Box style={{ gap: 4, alignItems: 'center', width: 50 }}>
                 <Video src="sample.ogv" w={50} h={70} style={{ borderRadius: 4 }} />
-                <Text style={{ color: '#475569', fontSize: 8 }}>Portrait</Text>
+                <Text style={{ color: c.textDim, fontSize: 8 }}>Portrait</Text>
               </Box>
             </Box>
           </Card>
@@ -115,7 +119,7 @@ export function VideoStory() {
                 h={140}
                 radius={6}
               />
-              <Text style={{ color: '#475569', fontSize: 9 }}>
+              <Text style={{ color: c.textDim, fontSize: 9 }}>
                 Built-in play/pause, seek bar, and time display
               </Text>
             </Box>
@@ -130,7 +134,7 @@ export function VideoStory() {
                 h={100}
                 style={{ borderRadius: 6 }}
               />
-              <Text style={{ color: '#475569', fontSize: 9 }}>
+              <Text style={{ color: c.textDim, fontSize: 9 }}>
                 Non-.ogv sources trigger async FFmpeg conversion
               </Text>
             </Box>
@@ -149,7 +153,7 @@ export function VideoStory() {
         borderWidth: 1,
         borderColor: [1, 1, 1, 0.04],
       }}>
-        <Text style={{ color: '#64748b', fontSize: 9 }}>
+        <Text style={{ color: c.textDim, fontSize: 9 }}>
           Supports local files (.ogv instant, others via FFmpeg) and HTTP URLs including M3U8/HLS
           streams. VOD streams are transcoded to Theora on the fly.
         </Text>
@@ -159,6 +163,7 @@ export function VideoStory() {
 }
 
 function StreamLoader() {
+  const c = useThemeColors();
   const [loadedUrl, setLoadedUrl] = useState<string | null>(null);
   const [streamStatus, setStreamStatus] = useState<string>('Paste a URL');
   const lastSubmit = useRef('');
@@ -186,9 +191,9 @@ function StreamLoader() {
               width: '100%',
               height: 32,
             }}
-            textStyle={{ fontSize: 10, color: '#e2e8f0' }}
+            textStyle={{ fontSize: 10, color: c.text }}
           />
-          <Text style={{ color: '#334155', fontSize: 8 }}>
+          <Text style={{ color: c.textDim, fontSize: 8 }}>
             Ctrl+V to paste, Ctrl+Enter to load
           </Text>
         </Box>
@@ -220,11 +225,11 @@ function StreamLoader() {
             alignItems: 'center',
             gap: 6,
           }}>
-            <Text style={{ color: '#334155', fontSize: 24 }}>&#9655;</Text>
-            <Text style={{ color: '#475569', fontSize: 10 }}>
+            <Text style={{ color: c.textDim, fontSize: 24 }}>&#9655;</Text>
+            <Text style={{ color: c.textDim, fontSize: 10 }}>
               Paste an M3U8 URL above and hit Load
             </Text>
-            <Text style={{ color: '#334155', fontSize: 8 }}>
+            <Text style={{ color: c.textDim, fontSize: 8 }}>
               FFmpeg downloads + transcodes the stream to Theora
             </Text>
           </Box>

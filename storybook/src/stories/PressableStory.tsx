@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { Box, Text, Pressable } from '../../../packages/shared/src';
+import { useThemeColors } from '../../../packages/theme/src';
 
 export function PressableStory() {
+  const c = useThemeColors();
   const [pressCount, setPressCount] = useState(0);
   const [lastAction, setLastAction] = useState('none');
 
@@ -10,15 +12,15 @@ export function PressableStory() {
 
       {/* Primary buttons */}
       <Box style={{ gap: 6 }}>
-        <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: 'bold' }}>Primary</Text>
+        <Text style={{ color: c.textSecondary, fontSize: 11, fontWeight: 'bold' }}>Primary</Text>
         <Box style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
           <Pressable
             onPress={() => {
-              setPressCount(c => c + 1);
+              setPressCount(c2 => c2 + 1);
               setLastAction('press');
             }}
             style={({ pressed, hovered }) => ({
-              backgroundColor: pressed ? '#1d4ed8' : hovered ? '#2563eb' : '#3b82f6',
+              backgroundColor: pressed ? c.primaryPressed : hovered ? c.primaryHover : c.primary,
               paddingLeft: 20,
               paddingRight: 20,
               paddingTop: 10,
@@ -37,7 +39,7 @@ export function PressableStory() {
           <Pressable
             onPress={() => setLastAction('success')}
             style={({ pressed, hovered }) => ({
-              backgroundColor: pressed ? '#16a34a' : hovered ? '#22c55e' : '#15803d',
+              backgroundColor: pressed ? '#16a34a' : hovered ? c.success : '#15803d',
               paddingLeft: 20,
               paddingRight: 20,
               paddingTop: 10,
@@ -52,7 +54,7 @@ export function PressableStory() {
           <Pressable
             onPress={() => setLastAction('danger')}
             style={({ pressed, hovered }) => ({
-              backgroundColor: pressed ? '#b91c1c' : hovered ? '#dc2626' : '#ef4444',
+              backgroundColor: pressed ? '#b91c1c' : hovered ? c.error : c.error,
               paddingLeft: 20,
               paddingRight: 20,
               paddingTop: 10,
@@ -68,14 +70,14 @@ export function PressableStory() {
 
       {/* Secondary / outlined buttons */}
       <Box style={{ gap: 6 }}>
-        <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: 'bold' }}>Secondary</Text>
+        <Text style={{ color: c.textSecondary, fontSize: 11, fontWeight: 'bold' }}>Secondary</Text>
         <Box style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
           <Pressable
             onPress={() => setLastAction('secondary')}
             style={({ pressed, hovered }) => ({
-              backgroundColor: pressed ? '#334155' : hovered ? '#1e293b' : 'transparent',
+              backgroundColor: pressed ? c.surface : hovered ? c.bgElevated : 'transparent',
               borderWidth: 1,
-              borderColor: hovered ? '#64748b' : '#334155',
+              borderColor: hovered ? c.textSecondary : c.border,
               paddingLeft: 20,
               paddingRight: 20,
               paddingTop: 10,
@@ -84,13 +86,13 @@ export function PressableStory() {
               alignItems: 'center',
             })}
           >
-            <Text style={{ color: '#e2e8f0', fontSize: 14 }}>Outlined</Text>
+            <Text style={{ color: c.text, fontSize: 14 }}>Outlined</Text>
           </Pressable>
 
           <Pressable
             onPress={() => setLastAction('ghost')}
             style={({ pressed, hovered }) => ({
-              backgroundColor: pressed ? '#1e293b' : hovered ? '#0f172a' : 'transparent',
+              backgroundColor: pressed ? c.bgElevated : hovered ? c.bg : 'transparent',
               paddingLeft: 20,
               paddingRight: 20,
               paddingTop: 10,
@@ -100,7 +102,7 @@ export function PressableStory() {
             })}
           >
             {({ hovered }) => (
-              <Text style={{ color: hovered ? '#e2e8f0' : '#94a3b8', fontSize: 14 }}>Ghost</Text>
+              <Text style={{ color: hovered ? c.text : c.textSecondary, fontSize: 14 }}>Ghost</Text>
             )}
           </Pressable>
         </Box>
@@ -108,13 +110,13 @@ export function PressableStory() {
 
       {/* Long press */}
       <Box style={{ gap: 6 }}>
-        <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: 'bold' }}>Long Press</Text>
+        <Text style={{ color: c.textSecondary, fontSize: 11, fontWeight: 'bold' }}>Long Press</Text>
         <Box style={{ flexDirection: 'row', gap: 10 }}>
           <Pressable
             onPress={() => setLastAction('short press')}
             onLongPress={() => setLastAction('LONG PRESS')}
             style={({ pressed, hovered }) => ({
-              backgroundColor: pressed ? '#7c3aed' : hovered ? '#8b5cf6' : '#6d28d9',
+              backgroundColor: pressed ? c.accent : hovered ? c.accent : '#6d28d9',
               paddingLeft: 20,
               paddingRight: 20,
               paddingTop: 10,
@@ -134,13 +136,13 @@ export function PressableStory() {
 
       {/* Disabled */}
       <Box style={{ gap: 6 }}>
-        <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: 'bold' }}>Disabled</Text>
+        <Text style={{ color: c.textSecondary, fontSize: 11, fontWeight: 'bold' }}>Disabled</Text>
         <Box style={{ flexDirection: 'row', gap: 10 }}>
           <Pressable
             disabled
             onPress={() => {}}
             style={{
-              backgroundColor: '#1e293b',
+              backgroundColor: c.bgElevated,
               paddingLeft: 20,
               paddingRight: 20,
               paddingTop: 10,
@@ -149,7 +151,7 @@ export function PressableStory() {
               alignItems: 'center',
             }}
           >
-            <Text style={{ color: '#475569', fontSize: 14 }}>Disabled</Text>
+            <Text style={{ color: c.textDim, fontSize: 14 }}>Disabled</Text>
           </Pressable>
         </Box>
       </Box>
@@ -157,17 +159,17 @@ export function PressableStory() {
       {/* Status */}
       <Box style={{
         padding: 12,
-        backgroundColor: '#1e293b',
+        backgroundColor: c.bgElevated,
         borderRadius: 8,
         borderWidth: 1,
-        borderColor: '#334155',
+        borderColor: c.border,
         gap: 6,
       }}>
-        <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: 'bold' }}>State</Text>
-        <Text style={{ color: '#e2e8f0', fontSize: 13 }}>
+        <Text style={{ color: c.textSecondary, fontSize: 11, fontWeight: 'bold' }}>State</Text>
+        <Text style={{ color: c.text, fontSize: 13 }}>
           {`Press count: ${pressCount}`}
         </Text>
-        <Text style={{ color: '#e2e8f0', fontSize: 13 }}>
+        <Text style={{ color: c.text, fontSize: 13 }}>
           {`Last action: ${lastAction}`}
         </Text>
       </Box>

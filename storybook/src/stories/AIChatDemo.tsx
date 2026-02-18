@@ -14,22 +14,12 @@ import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { Box, Text, ScrollView, Pressable, TextInput } from '../../../packages/shared/src';
 import { useChat, useAPIKeys, AIProvider, createBrowserTools } from '../../../packages/ai/src';
 import type { AIProviderType, AIConfig, ToolDefinition } from '../../../packages/ai/src';
+import { useThemeColors } from '../../../packages/theme/src';
 
-// ── Colors ──────────────────────────────────────────────
-
-const BG = '#0f172a';
-const SURFACE = '#1e293b';
-const SURFACE2 = '#334155';
-const ACCENT = '#3b82f6';
-const ACCENT_DIM = '#1d4ed8';
-const TEXT_PRIMARY = '#e2e8f0';
-const TEXT_DIM = '#64748b';
-const TEXT_MUTED = '#94a3b8';
+// ── Demo-specific colors (not theme-mapped) ─────────────
 const USER_BG = '#1e3a5f';
 const ASSISTANT_BG = '#1a2332';
 const TOOL_BG = '#1c2a1c';
-const ERROR_RED = '#ef4444';
-const SUCCESS_GREEN = '#22c55e';
 
 // ── Tool definitions ────────────────────────────────────
 
@@ -70,14 +60,15 @@ const timeTool: ToolDefinition = {
 function Pill({
   label, active, onPress,
 }: { label: string; active: boolean; onPress: () => void }) {
+  const c = useThemeColors();
   return (
     <Pressable onPress={onPress} style={{
-      backgroundColor: active ? ACCENT : SURFACE,
+      backgroundColor: active ? c.primary : c.bgElevated,
       paddingLeft: 10, paddingRight: 10,
       paddingTop: 4, paddingBottom: 4,
       borderRadius: 4,
     }}>
-      <Text style={{ fontSize: 11, color: active ? '#fff' : TEXT_MUTED }}>{label}</Text>
+      <Text style={{ fontSize: 11, color: active ? '#fff' : c.textSecondary }}>{label}</Text>
     </Pressable>
   );
 }
@@ -89,6 +80,7 @@ function MessageBubble({ role, content, toolCalls }: {
   content: string;
   toolCalls?: { name: string; arguments: string }[];
 }) {
+  const c = useThemeColors();
   const isUser = role === 'user';
   const isTool = role === 'tool';
 
@@ -101,15 +93,15 @@ function MessageBubble({ role, content, toolCalls }: {
       alignSelf: isUser ? 'flex-end' : 'flex-start',
       maxWidth: '85%',
     }}>
-      <Text style={{ fontSize: 9, color: TEXT_DIM, marginBottom: 3 }}>
+      <Text style={{ fontSize: 9, color: c.textDim, marginBottom: 3 }}>
         {isUser ? 'You' : isTool ? 'Tool Result' : 'Assistant'}
       </Text>
-      <Text style={{ fontSize: 13, color: TEXT_PRIMARY, lineHeight: 20 }}>
+      <Text style={{ fontSize: 13, color: c.text, lineHeight: 20 }}>
         {typeof content === 'string' ? content : JSON.stringify(content)}
       </Text>
       {toolCalls && toolCalls.length > 0 && (
-        <Box style={{ marginTop: 6, padding: 6, backgroundColor: SURFACE2, borderRadius: 4 }}>
-          <Text style={{ fontSize: 10, color: TEXT_MUTED }}>
+        <Box style={{ marginTop: 6, padding: 6, backgroundColor: c.surface, borderRadius: 4 }}>
+          <Text style={{ fontSize: 10, color: c.textSecondary }}>
             {'Tool calls: ' + toolCalls.map(tc => tc.name).join(', ')}
           </Text>
         </Box>
@@ -131,13 +123,14 @@ function ConfigPanel({
   toolsEnabled: boolean; setToolsEnabled: (v: boolean) => void;
   browseEnabled: boolean; setBrowseEnabled: (v: boolean) => void;
 }) {
+  const c = useThemeColors();
   return (
-    <Box style={{ padding: 12, backgroundColor: SURFACE, borderRadius: 8, gap: 10 }}>
-      <Text style={{ fontSize: 14, color: TEXT_PRIMARY, fontWeight: 'bold' }}>Configuration</Text>
+    <Box style={{ padding: 12, backgroundColor: c.bgElevated, borderRadius: 8, gap: 10 }}>
+      <Text style={{ fontSize: 14, color: c.text, fontWeight: 'bold' }}>Configuration</Text>
 
       {/* Provider selector */}
       <Box style={{ gap: 4 }}>
-        <Text style={{ fontSize: 10, color: TEXT_DIM }}>Provider</Text>
+        <Text style={{ fontSize: 10, color: c.textDim }}>Provider</Text>
         <Box style={{ flexDirection: 'row', gap: 6 }}>
           <Pill label="OpenAI" active={provider === 'openai'} onPress={() => {
             setProvider('openai');
@@ -156,15 +149,15 @@ function ConfigPanel({
 
       {/* API Key */}
       <Box style={{ gap: 4 }}>
-        <Text style={{ fontSize: 10, color: TEXT_DIM }}>API Key</Text>
+        <Text style={{ fontSize: 10, color: c.textDim }}>API Key</Text>
         <TextInput
           value={apiKey}
           onChangeText={setApiKey}
           placeholder={provider === 'custom' ? 'Not required for local' : 'Enter API key...'}
           style={{
             fontSize: 12,
-            color: TEXT_PRIMARY,
-            backgroundColor: BG,
+            color: c.text,
+            backgroundColor: c.bg,
             padding: 8,
             borderRadius: 4,
             width: '100%',
@@ -175,15 +168,15 @@ function ConfigPanel({
 
       {/* Model */}
       <Box style={{ gap: 4 }}>
-        <Text style={{ fontSize: 10, color: TEXT_DIM }}>Model</Text>
+        <Text style={{ fontSize: 10, color: c.textDim }}>Model</Text>
         <TextInput
           value={model}
           onChangeText={setModel}
           placeholder="Model name..."
           style={{
             fontSize: 12,
-            color: TEXT_PRIMARY,
-            backgroundColor: BG,
+            color: c.text,
+            backgroundColor: c.bg,
             padding: 8,
             borderRadius: 4,
             width: '100%',
@@ -198,12 +191,12 @@ function ConfigPanel({
       }}>
         <Box style={{
           width: 16, height: 16, borderRadius: 3,
-          backgroundColor: toolsEnabled ? ACCENT : SURFACE2,
+          backgroundColor: toolsEnabled ? ACCENT : c.surface,
           justifyContent: 'center', alignItems: 'center',
         }}>
           {toolsEnabled && <Text style={{ fontSize: 10, color: '#fff' }}>x</Text>}
         </Box>
-        <Text style={{ fontSize: 11, color: TEXT_MUTED }}>Enable tool calling (calculator, time)</Text>
+        <Text style={{ fontSize: 11, color: c.textSecondary }}>Enable tool calling (calculator, time)</Text>
       </Pressable>
 
       {/* Browse tools toggle */}
@@ -212,12 +205,12 @@ function ConfigPanel({
       }}>
         <Box style={{
           width: 16, height: 16, borderRadius: 3,
-          backgroundColor: browseEnabled ? '#22c55e' : SURFACE2,
+          backgroundColor: browseEnabled ? '#22c55e' : c.surface,
           justifyContent: 'center', alignItems: 'center',
         }}>
           {browseEnabled && <Text style={{ fontSize: 10, color: '#fff' }}>x</Text>}
         </Box>
-        <Text style={{ fontSize: 11, color: TEXT_MUTED }}>Enable browse tools (stealth browser)</Text>
+        <Text style={{ fontSize: 11, color: c.textSecondary }}>Enable browse tools (stealth browser)</Text>
       </Pressable>
     </Box>
   );
@@ -226,6 +219,7 @@ function ConfigPanel({
 // ── Chat view ───────────────────────────────────────────
 
 function ChatView({ config, toolsEnabled, browseEnabled }: { config: AIConfig; toolsEnabled: boolean; browseEnabled: boolean }) {
+  const c = useThemeColors();
   const builtinTools = toolsEnabled ? [calculatorTool, timeTool] : [];
   const browseTools = browseEnabled ? createBrowserTools() : [];
   const allTools = [...builtinTools, ...browseTools];
@@ -250,21 +244,21 @@ function ChatView({ config, toolsEnabled, browseEnabled }: { config: AIConfig; t
   return (
     <Box style={{ flexGrow: 1, gap: 8 }}>
       {/* Messages */}
-      <ScrollView style={{ flexGrow: 1, backgroundColor: BG, borderRadius: 8, padding: 10 }}>
+      <ScrollView style={{ flexGrow: 1, backgroundColor: c.bg, borderRadius: 8, padding: 10 }}>
         {messages.length === 0 && (
           <Box style={{ padding: 20, alignItems: 'center' }}>
-            <Text style={{ fontSize: 13, color: TEXT_DIM }}>
+            <Text style={{ fontSize: 13, color: c.textDim }}>
               {config.apiKey || config.provider === 'custom'
                 ? 'Send a message to start chatting'
                 : 'Enter an API key to get started'}
             </Text>
             {toolsEnabled && (
-              <Text style={{ fontSize: 11, color: TEXT_DIM, marginTop: 8 }}>
+              <Text style={{ fontSize: 11, color: c.textDim, marginTop: 8 }}>
                 {'Tools enabled: try "what is 234 * 567?" or "what time is it?"'}
               </Text>
             )}
             {browseEnabled && (
-              <Text style={{ fontSize: 11, color: '#22c55e', marginTop: 4 }}>
+              <Text style={{ fontSize: 11, color: c.success, marginTop: 4 }}>
                 {'Browse enabled: try "go to duckduckgo.com and search for React"'}
               </Text>
             )}
@@ -280,7 +274,7 @@ function ChatView({ config, toolsEnabled, browseEnabled }: { config: AIConfig; t
         ))}
         {isStreaming && (
           <Box style={{ padding: 4 }}>
-            <Text style={{ fontSize: 10, color: ACCENT }}>Streaming...</Text>
+            <Text style={{ fontSize: 10, color: c.primary }}>Streaming...</Text>
           </Box>
         )}
       </ScrollView>
@@ -288,7 +282,7 @@ function ChatView({ config, toolsEnabled, browseEnabled }: { config: AIConfig; t
       {/* Error display */}
       {error && (
         <Box style={{ padding: 8, backgroundColor: '#2d1b1b', borderRadius: 4 }}>
-          <Text style={{ fontSize: 11, color: ERROR_RED }}>{error.message}</Text>
+          <Text style={{ fontSize: 11, color: c.error }}>{error.message}</Text>
         </Box>
       )}
 
@@ -302,8 +296,8 @@ function ChatView({ config, toolsEnabled, browseEnabled }: { config: AIConfig; t
           style={{
             flexGrow: 1,
             fontSize: 13,
-            color: TEXT_PRIMARY,
-            backgroundColor: SURFACE,
+            color: c.text,
+            backgroundColor: c.bgElevated,
             padding: 10,
             borderRadius: 6,
             height: 40,
@@ -311,14 +305,14 @@ function ChatView({ config, toolsEnabled, browseEnabled }: { config: AIConfig; t
         />
         {isLoading ? (
           <Pressable onPress={stop} style={{
-            backgroundColor: ERROR_RED, paddingLeft: 16, paddingRight: 16,
+            backgroundColor: c.error, paddingLeft: 16, paddingRight: 16,
             borderRadius: 6, justifyContent: 'center',
           }}>
             <Text style={{ fontSize: 12, color: '#fff' }}>Stop</Text>
           </Pressable>
         ) : (
           <Pressable onPress={handleSend} style={{
-            backgroundColor: ACCENT, paddingLeft: 16, paddingRight: 16,
+            backgroundColor: c.primary, paddingLeft: 16, paddingRight: 16,
             borderRadius: 6, justifyContent: 'center',
           }}>
             <Text style={{ fontSize: 12, color: '#fff' }}>Send</Text>
@@ -332,6 +326,7 @@ function ChatView({ config, toolsEnabled, browseEnabled }: { config: AIConfig; t
 // ── Main story ──────────────────────────────────────────
 
 export function AIChatDemoStory() {
+  const c = useThemeColors();
   const [provider, setProvider] = useState<AIProviderType>('openai');
   const [model, setModel] = useState('gpt-4');
   const [apiKey, setApiKey] = useState('');
@@ -349,14 +344,14 @@ export function AIChatDemoStory() {
     <AIProvider config={config}>
       <Box style={{
         width: '100%', height: '100%',
-        backgroundColor: BG, padding: 16, gap: 12,
+        backgroundColor: c.bg, padding: 16, gap: 12,
       }}>
         {/* Header */}
         <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-          <Text style={{ fontSize: 18, color: TEXT_PRIMARY, fontWeight: 'bold' }}>
+          <Text style={{ fontSize: 18, color: c.text, fontWeight: 'bold' }}>
             AI Chat
           </Text>
-          <Text style={{ fontSize: 11, color: TEXT_DIM }}>@ilovereact/ai</Text>
+          <Text style={{ fontSize: 11, color: c.textDim }}>@ilovereact/ai</Text>
         </Box>
 
         {/* Two-column layout */}
@@ -372,17 +367,17 @@ export function AIChatDemoStory() {
             />
 
             {/* Usage examples */}
-            <Box style={{ marginTop: 12, padding: 10, backgroundColor: SURFACE, borderRadius: 8, gap: 6 }}>
-              <Text style={{ fontSize: 11, color: TEXT_DIM }}>Quick start:</Text>
-              <Text style={{ fontSize: 10, color: TEXT_MUTED, lineHeight: 16 }}>
+            <Box style={{ marginTop: 12, padding: 10, backgroundColor: c.bgElevated, borderRadius: 8, gap: 6 }}>
+              <Text style={{ fontSize: 11, color: c.textDim }}>Quick start:</Text>
+              <Text style={{ fontSize: 10, color: c.textSecondary, lineHeight: 16 }}>
                 {"const { messages, send } =\n  useChat({ model: 'gpt-4' });"}
               </Text>
-              <Text style={{ fontSize: 11, color: TEXT_DIM, marginTop: 6 }}>With tools:</Text>
-              <Text style={{ fontSize: 10, color: TEXT_MUTED, lineHeight: 16 }}>
+              <Text style={{ fontSize: 11, color: c.textDim, marginTop: 6 }}>With tools:</Text>
+              <Text style={{ fontSize: 10, color: c.textSecondary, lineHeight: 16 }}>
                 {"const { messages, send } =\n  useChat({\n    model: 'gpt-4',\n    tools: [myTool],\n  });"}
               </Text>
-              <Text style={{ fontSize: 11, color: TEXT_DIM, marginTop: 6 }}>With browse:</Text>
-              <Text style={{ fontSize: 10, color: TEXT_MUTED, lineHeight: 16 }}>
+              <Text style={{ fontSize: 11, color: c.textDim, marginTop: 6 }}>With browse:</Text>
+              <Text style={{ fontSize: 10, color: c.textSecondary, lineHeight: 16 }}>
                 {"import { createBrowserTools }\n  from '@ilovereact/ai';\nuseChat({\n  tools: createBrowserTools(),\n});"}
               </Text>
             </Box>

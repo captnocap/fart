@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Box, Text, Pressable, TextInput, useBridge } from '../../../packages/shared/src';
+import { useThemeColors } from '../../../packages/theme/src';
 
 function SpellCheckDemo() {
+  const c = useThemeColors();
   const bridge = useBridge();
   const [input, setInput] = useState('I hav a speling eror in this sentance');
   const [errors, setErrors] = useState<Array<{ word: string; start: number; stop: number }>>([]);
@@ -44,7 +46,7 @@ function SpellCheckDemo() {
   if (!available) {
     return (
       <Box style={{ padding: 20 }}>
-        <Text style={{ fontSize: 14, color: '#94a3b8' }}>
+        <Text style={{ fontSize: 14, color: c.textSecondary }}>
           {`Spell check not available — dictionary.db not found`}
         </Text>
       </Box>
@@ -52,21 +54,21 @@ function SpellCheckDemo() {
   }
 
   return (
-    <Box style={{ width: '100%', height: '100%', backgroundColor: '#0f172a', padding: 20, gap: 16 }}>
-      <Text style={{ fontSize: 18, color: '#f8fafc', fontWeight: 'bold' }}>Spell Check</Text>
-      <Text style={{ fontSize: 12, color: '#64748b' }}>
+    <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg, padding: 20, gap: 16 }}>
+      <Text style={{ fontSize: 18, color: c.text, fontWeight: 'bold' }}>Spell Check</Text>
+      <Text style={{ fontSize: 12, color: c.textDim }}>
         {`50,000 word English dictionary over SQLite. Edit the text below — misspelled words are flagged in real-time.`}
       </Text>
 
       {/* Input area */}
-      <Box style={{ backgroundColor: '#1e293b', borderRadius: 8, padding: 12 }}>
+      <Box style={{ backgroundColor: c.bgElevated, borderRadius: 8, padding: 12 }}>
         <TextInput
           value={input}
           onChangeText={setInput}
           multiline
           style={{
             fontSize: 15,
-            color: '#e2e8f0',
+            color: c.text,
             minHeight: 60,
           }}
         />
@@ -90,12 +92,12 @@ function SpellCheckDemo() {
       {/* Misspelled words with suggestions */}
       {errors.length > 0 && (
         <Box style={{ gap: 8 }}>
-          <Text style={{ fontSize: 13, color: '#94a3b8', fontWeight: 'bold' }}>Corrections</Text>
+          <Text style={{ fontSize: 13, color: c.textSecondary, fontWeight: 'bold' }}>Corrections</Text>
           {errors.map((err, i) => (
             <Box
               key={`${err.word}-${i}`}
               style={{
-                backgroundColor: '#1e293b',
+                backgroundColor: c.bgElevated,
                 borderRadius: 6,
                 padding: 10,
                 gap: 6,
@@ -111,7 +113,7 @@ function SpellCheckDemo() {
                   <Text style={{ fontSize: 14, color: '#f87171' }}>{err.word}</Text>
                 </Box>
                 {suggestions[err.word] && suggestions[err.word].length > 0 && (
-                  <Text style={{ fontSize: 11, color: '#475569' }}>Did you mean:</Text>
+                  <Text style={{ fontSize: 11, color: c.textDim }}>Did you mean:</Text>
                 )}
               </Box>
 
@@ -123,15 +125,15 @@ function SpellCheckDemo() {
                       key={sug}
                       onPress={() => applySuggestion(err.word, sug)}
                       style={{
-                        backgroundColor: '#334155',
+                        backgroundColor: c.surface,
                         borderRadius: 4,
                         paddingTop: 3, paddingBottom: 3,
                         paddingLeft: 10, paddingRight: 10,
                       }}
-                      hoverStyle={{ backgroundColor: '#475569' }}
-                      activeStyle={{ backgroundColor: '#3b82f6' }}
+                      hoverStyle={{ backgroundColor: c.textDim }}
+                      activeStyle={{ backgroundColor: c.primary }}
                     >
-                      <Text style={{ fontSize: 13, color: '#e2e8f0' }}>{sug}</Text>
+                      <Text style={{ fontSize: 13, color: c.text }}>{sug}</Text>
                     </Pressable>
                   ))}
                 </Box>
@@ -143,7 +145,7 @@ function SpellCheckDemo() {
 
       {/* Single word check */}
       <Box style={{ marginTop: 8, gap: 8 }}>
-        <Text style={{ fontSize: 13, color: '#94a3b8', fontWeight: 'bold' }}>Quick Check</Text>
+        <Text style={{ fontSize: 13, color: c.textSecondary, fontWeight: 'bold' }}>Quick Check</Text>
         <QuickCheck bridge={bridge} />
       </Box>
     </Box>
@@ -151,6 +153,7 @@ function SpellCheckDemo() {
 }
 
 function QuickCheck({ bridge }: { bridge: any }) {
+  const c = useThemeColors();
   const [word, setWord] = useState('');
   const [result, setResult] = useState<{ valid: boolean; suggestions: string[] } | null>(null);
 
@@ -175,12 +178,12 @@ function QuickCheck({ bridge }: { bridge: any }) {
 
   return (
     <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-start' }}>
-      <Box style={{ backgroundColor: '#1e293b', borderRadius: 6, padding: 8, width: 200 }}>
+      <Box style={{ backgroundColor: c.bgElevated, borderRadius: 6, padding: 8, width: 200 }}>
         <TextInput
           value={word}
           onChangeText={setWord}
           placeholder="Type a word..."
-          style={{ fontSize: 14, color: '#e2e8f0' }}
+          style={{ fontSize: 14, color: c.text }}
         />
       </Box>
       {result && (
@@ -191,7 +194,7 @@ function QuickCheck({ bridge }: { bridge: any }) {
             <Box style={{ gap: 2 }}>
               <Text style={{ fontSize: 13, color: '#f87171' }}>Not in dictionary</Text>
               {result.suggestions.length > 0 && (
-                <Text style={{ fontSize: 11, color: '#94a3b8' }}>
+                <Text style={{ fontSize: 11, color: c.textSecondary }}>
                   {`Suggestions: ${result.suggestions.join(', ')}`}
                 </Text>
               )}

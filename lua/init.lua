@@ -384,6 +384,7 @@ function ReactLove.init(config)
     if thOk and type(thMod) == "table" then
       themes = thMod
       currentTheme = themes[currentThemeName]
+      if painter then painter.setTheme(currentTheme) end
     end
 
     print("[react-love] Initialized in CANVAS mode (Module.FS bridge + native rendering)")
@@ -507,6 +508,7 @@ function ReactLove.init(config)
     if thOk and type(thMod) == "table" then
       themes = thMod
       currentTheme = themes[currentThemeName]
+      if painter then painter.setTheme(currentTheme) end
     end
 
     print("[react-love] Initialized in NATIVE mode (QuickJS bridge)")
@@ -1053,6 +1055,7 @@ function ReactLove.update(dt)
           if name and themes and themes[name] then
             currentThemeName = name
             currentTheme = themes[name]
+            if painter then painter.setTheme(currentTheme) end
             if tree then tree.markDirty() end
             io.write("[react-love] Theme switched to: " .. name .. "\n"); io.flush()
           end

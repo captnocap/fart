@@ -1,5 +1,6 @@
 import React from 'react';
 import { Box, Text, StackedBarChart } from '../../../packages/shared/src';
+import { useThemeColors } from '../../../packages/theme/src';
 
 const LABELS = ['Q1', 'Q2', 'Q3', 'Q4'];
 
@@ -17,12 +18,13 @@ const TRAFFIC_SERIES = [
 ];
 
 export function StackedBarChartStory() {
+  const c = useThemeColors();
   return (
     <Box style={{ gap: 20, padding: 16 }}>
 
       {/* Basic */}
       <Box style={{ gap: 6 }}>
-        <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: 'bold' }}>Quarterly Revenue</Text>
+        <Text style={{ color: c.textSecondary, fontSize: 11, fontWeight: 'bold' }}>Quarterly Revenue</Text>
         <StackedBarChart
           series={REVENUE_SERIES}
           labels={LABELS}
@@ -32,7 +34,7 @@ export function StackedBarChartStory() {
 
       {/* Weekly Traffic */}
       <Box style={{ gap: 6 }}>
-        <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: 'bold' }}>Weekly Traffic</Text>
+        <Text style={{ color: c.textSecondary, fontSize: 11, fontWeight: 'bold' }}>Weekly Traffic</Text>
         <StackedBarChart
           series={TRAFFIC_SERIES}
           labels={TRAFFIC_LABELS}
@@ -43,12 +45,12 @@ export function StackedBarChartStory() {
 
       {/* Legend */}
       <Box style={{ gap: 6 }}>
-        <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: 'bold' }}>Legend</Text>
+        <Text style={{ color: c.textSecondary, fontSize: 11, fontWeight: 'bold' }}>Legend</Text>
         <Box style={{ flexDirection: 'row', gap: 16, flexWrap: 'wrap' }}>
           {TRAFFIC_SERIES.map((s) => (
             <Box key={s.label} style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
               <Box style={{ width: 8, height: 8, borderRadius: 2, backgroundColor: s.color }} />
-              <Text style={{ color: '#94a3b8', fontSize: 10 }}>{s.label}</Text>
+              <Text style={{ color: c.textSecondary, fontSize: 10 }}>{s.label}</Text>
             </Box>
           ))}
         </Box>

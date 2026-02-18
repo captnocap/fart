@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { Box, Text } from '../../../packages/shared/src';
 import { Checkbox } from '../../../packages/shared/src/Checkbox';
+import { useThemeColors } from '../../../packages/theme/src';
 
 export function CheckboxStory() {
+  const c = useThemeColors();
   const [checked1, setChecked1] = useState(false);
   const [checked2, setChecked2] = useState(true);
   const [checked3, setChecked3] = useState(false);
@@ -11,7 +13,7 @@ export function CheckboxStory() {
     <Box style={{ gap: 16, padding: 16 }}>
       {/* Basic checkbox */}
       <Box style={{ gap: 8 }}>
-        <Text style={{ color: '#888', fontSize: 10 }}>Basic</Text>
+        <Text style={{ color: c.textDim, fontSize: 10 }}>Basic</Text>
         <Checkbox
           value={checked1}
           onValueChange={setChecked1}
@@ -26,12 +28,12 @@ export function CheckboxStory() {
 
       {/* Custom colors */}
       <Box style={{ gap: 8 }}>
-        <Text style={{ color: '#888', fontSize: 10 }}>Custom colors</Text>
+        <Text style={{ color: c.textDim, fontSize: 10 }}>Custom colors</Text>
         <Checkbox
           value={checked3}
           onValueChange={setChecked3}
           label="Green checkbox"
-          color="#22c55e"
+          color={c.success}
         />
         <Checkbox
           value={true}
@@ -42,7 +44,7 @@ export function CheckboxStory() {
 
       {/* Sizes */}
       <Box style={{ gap: 8 }}>
-        <Text style={{ color: '#888', fontSize: 10 }}>Sizes</Text>
+        <Text style={{ color: c.textDim, fontSize: 10 }}>Sizes</Text>
         <Checkbox value={true} size={14} label="Small (14px)" />
         <Checkbox value={true} size={20} label="Default (20px)" />
         <Checkbox value={true} size={28} label="Large (28px)" />
@@ -50,7 +52,7 @@ export function CheckboxStory() {
 
       {/* Disabled */}
       <Box style={{ gap: 8 }}>
-        <Text style={{ color: '#888', fontSize: 10 }}>Disabled</Text>
+        <Text style={{ color: c.textDim, fontSize: 10 }}>Disabled</Text>
         <Checkbox value={false} disabled label="Unchecked disabled" />
         <Checkbox value={true} disabled label="Checked disabled" />
       </Box>
