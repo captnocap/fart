@@ -2,6 +2,21 @@
 export { useAPI, useAPIMutation, bearer, qs } from './base';
 export type { APIResult, APIOptions } from './base';
 
+// ── Service Registry ──────────────────────────────────────
+export { builtinServices } from './registry';
+export type { ServiceDefinition, ServiceField, ServiceCategory } from './registry';
+// Individual service definitions for selective inclusion
+export {
+  spotify, tmdb, github, weather, homeassistant, lastfm, plex, jellyfin,
+  trakt, notion, todoist, ynab, google, hue, nasa, coingecko, steam, telegram,
+  openai, anthropic,
+} from './registry';
+
+// ── Settings Menu ─────────────────────────────────────────
+export { useSettingsRegistry, resetSettingsRegistry } from './settings';
+export { useServiceKey, useServiceKeys } from './useServiceKey';
+export type { ServiceKeyResult } from './useServiceKey';
+
 // ── Spotify ────────────────────────────────────────────
 export {
   useSpotifyNowPlaying,
