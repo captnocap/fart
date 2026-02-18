@@ -159,6 +159,25 @@ local function pushEvent(evt)
   end
 end
 
+--- Emit a synthetic scroll event after Lua updates a scroll container.
+--- This keeps JS-side ScrollView callbacks in sync with native scroll state.
+local function emitScrollEvent(node)
+  if not node or not node.scrollState or not events then return end
+  local c = node.computed or {}
+  local ss = node.scrollState
+  local bubblePath = events.buildBubblePath(node)
+  pushEvent(events.createScrollEvent(
+    node.id,
+    ss.scrollX or 0,
+    ss.scrollY or 0,
+    ss.contentW or c.w or 0,
+    ss.contentH or c.h or 0,
+    c.w or 0,
+    c.h or 0,
+    bubblePath
+  ))
+end
+
 -- ============================================================================
 -- Gamepad helpers
 -- ============================================================================
@@ -1557,6 +1576,7 @@ local function scrollbarMousePressed(root, mx, my, button)
       local ratio = (my - hit.trackStart) / hit.trackSize
       local newScroll = ratio * hit.maxScroll
       tree.setScroll(node.id, ss.scrollX or 0, newScroll)
+      emitScrollEvent(node)
       -- Start drag from new position
       local thumbH = math.max(20, (node.computed.h / (ss.contentH or 1)) * hit.trackSize)
       scrollbarDrag = { node = node, axis = "v", startMouse = my,
@@ -1570,6 +1590,7 @@ local function scrollbarMousePressed(root, mx, my, button)
       local ratio = (mx - hit.trackStart) / hit.trackSize
       local newScroll = ratio * hit.maxScroll
       tree.setScroll(node.id, newScroll, ss.scrollY or 0)
+      emitScrollEvent(node)
       scrollbarDrag = { node = node, axis = "h", startMouse = mx,
                         startScroll = newScroll }
     end
@@ -1597,6 +1618,7 @@ local function scrollbarMouseMoved(mx, my)
     local scrollDelta = (delta / (trackH - thumbH)) * maxScroll
     local newScroll = d.startScroll + scrollDelta
     tree.setScroll(d.node.id, ss.scrollX or 0, newScroll)
+    emitScrollEvent(d.node)
   else
     local viewW = c.w
     local contentW = ss.contentW or viewW
@@ -1607,6 +1629,7 @@ local function scrollbarMouseMoved(mx, my)
     local scrollDelta = (delta / (trackW - thumbW)) * maxScroll
     local newScroll = d.startScroll + scrollDelta
     tree.setScroll(d.node.id, newScroll, ss.scrollY or 0)
+    emitScrollEvent(d.node)
   end
   return true
 end
@@ -1778,6 +1801,7 @@ end
 --- Call from love.mousereleased(x, y, button).
 --- Ends any active drag operation and dispatches release event.
 function ReactLove.mousereleased(x, y, button)
+  if inspectorEnabled and devtools.mousereleased(x, y, button) then return end
   if settingsEnabled and settings.mousereleased(x, y, button) then return end
   if scrollbarMouseReleased() then return end
   if not isRendering() then return end
@@ -2235,6 +2259,7 @@ function ReactLove.wheelmoved(x, y)
     local newScrollY = (ss.scrollY or 0) - y * scrollSpeed
 
     tree.setScroll(scrollContainer.id, newScrollX, newScrollY)
+    emitScrollEvent(scrollContainer)
   end
 
   -- Always send the wheel event to JS regardless of scroll handling
@@ -2440,10 +2465,13 @@ function ReactLove.gamepadaxis(joystick, axis, value)
       local scrollNode = findScrollAncestor(node)
       if scrollNode and scrollNode.scrollState then
         local SCROLL_SPEED = 8
+        local ss = scrollNode.scrollState
         if axis == "rightx" and math.abs(value) > 0.3 then
-          scrollNode.scrollState.scrollX = (scrollNode.scrollState.scrollX or 0) + value * SCROLL_SPEED
+          tree.setScroll(scrollNode.id, (ss.scrollX or 0) + value * SCROLL_SPEED, ss.scrollY or 0)
+          emitScrollEvent(scrollNode)
         elseif axis == "righty" and math.abs(value) > 0.3 then
-          scrollNode.scrollState.scrollY = (scrollNode.scrollState.scrollY or 0) + value * SCROLL_SPEED
+          tree.setScroll(scrollNode.id, ss.scrollX or 0, (ss.scrollY or 0) + value * SCROLL_SPEED)
+          emitScrollEvent(scrollNode)
         end
       end
     end
@@ -2695,6 +2723,10 @@ function ReactLove.setScroll(nodeId, scrollX, scrollY)
   if not isRendering() then return end
   if not tree then return end
   tree.setScroll(nodeId, scrollX or 0, scrollY or 0)
+  local nodes = tree.getNodes and tree.getNodes() or nil
+  if nodes then
+    emitScrollEvent(nodes[nodeId])
+  end
 end
 
 return ReactLove

@@ -39,6 +39,9 @@ local tree      = nil
 local state = {
   open      = false,
   activeTab = "elements",  -- "elements" or "console"
+  -- Draggable divider between tree and detail panels
+  dividerRatio    = 0.5,   -- tree takes this fraction of width (0.0-1.0)
+  draggingDivider = false, -- currently dragging?
 }
 
 -- ============================================================================
@@ -49,6 +52,9 @@ local TAB_BAR_H    = 26
 local STATUS_BAR_H = 22
 local MIN_PANEL_H  = 200
 local PANEL_RATIO  = 0.4   -- 40% of screen height
+local DIVIDER_W    = 5     -- grab zone half-width (total 10px)
+local MIN_TREE_W   = 200
+local MIN_DETAIL_W = 200
 
 -- Colors (matching inspector/console dark theme)
 local BG_COLOR     = { 0.05, 0.05, 0.10, 0.92 }
@@ -60,6 +66,8 @@ local TAB_TEXT_ACT = { 0.88, 0.90, 0.94, 1 }
 local TAB_ACCENT   = { 0.38, 0.65, 0.98, 1 }
 local CLOSE_COLOR  = { 0.55, 0.58, 0.65, 1 }
 local CLOSE_HOVER  = { 0.95, 0.45, 0.45, 1 }
+local DIVIDER_COLOR = { 0.30, 0.30, 0.42, 1 }
+local DIVIDER_HOVER = { 0.38, 0.65, 0.98, 0.6 }
 local STATUS_BG    = { 0.06, 0.06, 0.11, 1 }
 local STATUS_TEXT  = { 0.55, 0.58, 0.65, 1 }
 local STATUS_GOOD  = { 0.30, 0.80, 0.40, 1 }
@@ -144,6 +152,8 @@ function DevTools.keypressed(key)
     else
       inspector.disable()
       console.hide()
+      state.draggingDivider = false
+      love.mouse.setCursor()
     end
     -- Relayout: viewport height changed
     if tree then tree.markDirty() end
@@ -180,6 +190,8 @@ function DevTools.keypressed(key)
     state.open = false
     inspector.disable()
     console.hide()
+    state.draggingDivider = false
+    love.mouse.setCursor()
     if tree then tree.markDirty() end
     pushViewportEvent()
     return true
@@ -254,6 +266,14 @@ function DevTools.mousepressed(x, y, button)
 
   -- Content area click: route to active tab
   if state.activeTab == "elements" then
+    -- Check if click is on the divider between tree and detail
+    if inspector.getSelectedNode() then
+      local treeW = math.floor(screenW * state.dividerRatio)
+      if math.abs(x - treeW) <= DIVIDER_W then
+        state.draggingDivider = true
+        return true
+      end
+    end
     -- Inspector handles tree/detail region clicks via stored regions
     return inspector.mousepressed(x, y, button)
   elseif state.activeTab == "console" then
@@ -266,8 +286,39 @@ end
 --- Handle mouse movement.
 function DevTools.mousemoved(x, y)
   if not inspector then return end
+
+  -- Divider dragging
+  if state.draggingDivider then
+    local screenW = love.graphics.getWidth()
+    local clamped = math.max(MIN_TREE_W, math.min(x, screenW - MIN_DETAIL_W))
+    state.dividerRatio = clamped / screenW
+    return
+  end
+
+  -- Resize cursor when hovering divider
+  if state.open and state.activeTab == "elements" and inspector.getSelectedNode() then
+    local screenW = love.graphics.getWidth()
+    local panelY = getPanelGeometry()
+    local treeW = math.floor(screenW * state.dividerRatio)
+    if y > panelY and math.abs(x - treeW) <= DIVIDER_W then
+      love.mouse.setCursor(love.mouse.getSystemCursor("sizewe"))
+    else
+      love.mouse.setCursor()
+    end
+  end
+
   -- Inspector always tracks mouse for hover overlays
   inspector.mousemoved(x, y)
+end
+
+--- Handle mouse release. Returns true if consumed.
+function DevTools.mousereleased(x, y, button)
+  if state.draggingDivider then
+    state.draggingDivider = false
+    love.mouse.setCursor()
+    return true
+  end
+  return false
 end
 
 --- Handle mouse wheel. Returns true if consumed.
@@ -424,13 +475,19 @@ function DevTools.draw(root)
 
   -- Content area
   if state.activeTab == "elements" then
-    -- Split: tree on left, detail on right (50/50, or tree-only if no selection)
+    -- Split: tree on left, detail on right (draggable divider)
     if inspector.getSelectedNode() then
-      local treeW = math.floor(screenW * 0.5)
+      local treeW = math.floor(screenW * state.dividerRatio)
       local detailX = treeW
       local detailW = screenW - treeW
       inspector.drawTreeInRegion(root, { x = 0, y = contentY, w = treeW, h = contentH })
       inspector.drawDetailInRegion({ x = detailX, y = contentY, w = detailW, h = contentH })
+
+      -- Draw divider line (highlight on hover or drag)
+      local mx = love.mouse.getX()
+      local isDividerHot = state.draggingDivider or math.abs(mx - treeW) <= DIVIDER_W
+      love.graphics.setColor(isDividerHot and DIVIDER_HOVER or DIVIDER_COLOR)
+      love.graphics.rectangle("fill", treeW - 1, contentY, 2, contentH)
     else
       -- No selection: tree takes full width
       inspector.drawTreeInRegion(root, { x = 0, y = contentY, w = screenW, h = contentH })
