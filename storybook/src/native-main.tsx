@@ -13,6 +13,7 @@ import { NativeBridge } from '../../packages/native/src/NativeBridge';
 import { createRoot } from '../../packages/native/src/NativeRenderer';
 import { BridgeProvider, RendererProvider } from '../../packages/shared/src/context';
 import { Box, Text, Pressable } from '../../packages/shared/src';
+import { ThemeProvider, useTheme, useThemeColors, themeNames } from '../../packages/theme/src';
 import { stories, type StoryDef } from './stories';
 import { DocsViewer } from './docs/DocsViewer';
 import { PlaygroundPanel } from './playground/PlaygroundPanel';
@@ -48,6 +49,7 @@ function StorybookPanel() {
   const groups = groupByCategory(stories);
   const active = stories[activeIdx];
   const StoryComp = active?.component;
+  const c = useThemeColors();
 
   const handleKeyDown = useCallback((e: any) => {
     const key = e.key || e.scancode;
@@ -63,23 +65,23 @@ function StorybookPanel() {
       {/* Sidebar */}
       <Box style={{
         width: 180,
-        backgroundColor: '#0c0c14',
+        backgroundColor: c.bgAlt,
         borderWidth: 1,
-        borderColor: '#1e293b',
+        borderColor: c.border,
         padding: 0,
         overflow: 'scroll',
       }}>
         {/* Header */}
         <Box style={{ paddingTop: 14, paddingLeft: 12, paddingRight: 12, paddingBottom: 5 }}>
-          <Text style={{ color: '#475569', fontSize: 10, fontWeight: 'bold' }}>iLoveReact</Text>
+          <Text style={{ color: c.textDim, fontSize: 10, fontWeight: 'bold' }}>iLoveReact</Text>
         </Box>
-        <Box style={{ height: 1, backgroundColor: '#1e293b' }} />
+        <Box style={{ height: 1, backgroundColor: c.border }} />
 
         {/* Story list */}
         {Array.from(groups.entries()).map(([category, list]) => (
           <Box key={category}>
             <Box style={{ paddingLeft: 12, paddingTop: 8, paddingBottom: 2 }}>
-              <Text style={{ color: '#334155', fontSize: 9 }}>{category.toUpperCase()}</Text>
+              <Text style={{ color: c.textDim, fontSize: 9 }}>{category.toUpperCase()}</Text>
             </Box>
             {list.map(s => {
               const idx = stories.indexOf(s);
@@ -93,11 +95,11 @@ function StorybookPanel() {
                     paddingRight: 8,
                     paddingTop: 4,
                     paddingBottom: 4,
-                    backgroundColor: isActive ? '#1e293b' : 'transparent',
+                    backgroundColor: isActive ? c.surface : 'transparent',
                   }}
                 >
                   <Text style={{
-                    color: isActive ? '#e2e8f0' : '#64748b',
+                    color: isActive ? c.text : c.textSecondary,
                     fontSize: 11,
                   }}>
                     {s.title}
@@ -110,7 +112,7 @@ function StorybookPanel() {
       </Box>
 
       {/* Content */}
-      <Box style={{ flexGrow: 1, backgroundColor: '#08080f', overflow: 'hidden' }}>
+      <Box style={{ flexGrow: 1, backgroundColor: c.bg, overflow: 'hidden' }}>
         {/* Header bar */}
         <Box style={{
           padding: 8,
@@ -120,16 +122,16 @@ function StorybookPanel() {
           alignItems: 'center',
           gap: 8,
         }}>
-          <Text style={{ color: '#e2e8f0', fontSize: 12, fontWeight: 'bold' }}>
+          <Text style={{ color: c.text, fontSize: 12, fontWeight: 'bold' }}>
             {active?.title}
           </Text>
-          <Text style={{ color: '#334155', fontSize: 9 }}>
+          <Text style={{ color: c.textDim, fontSize: 9 }}>
             {active?.category}
           </Text>
         </Box>
 
         {/* Story content */}
-        <Box style={{ flexGrow: 1, overflow: 'scroll' }}>
+        <Box style={{ flexGrow: 1, overflow: 'scroll', backgroundColor: c.bg }}>
           {StoryComp && <StoryComp key={active.id} />}
         </Box>
       </Box>
@@ -140,6 +142,7 @@ function StorybookPanel() {
 // ── Top-level mode switcher ──────────────────────────────
 
 function TabButton({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
+  const c = useThemeColors();
   return (
     <Pressable
       onPress={onPress}
@@ -149,16 +152,46 @@ function TabButton({ label, active, onPress }: { label: string; active: boolean;
         paddingTop: 4,
         paddingBottom: 4,
         borderRadius: 4,
-        backgroundColor: active ? '#1e293b' : 'transparent',
+        backgroundColor: active ? c.surface : 'transparent',
       }}
     >
       <Text style={{
-        color: active ? '#e2e8f0' : '#64748b',
+        color: active ? c.text : c.textSecondary,
         fontSize: 10,
         fontWeight: 'bold',
       }}>
         {label}
       </Text>
+    </Pressable>
+  );
+}
+
+function ThemeCycleButton() {
+  const { themeId, setTheme } = useTheme();
+  const c = useThemeColors();
+  const cycleTheme = useCallback(() => {
+    const idx = themeNames.indexOf(themeId);
+    const next = themeNames[(idx + 1) % themeNames.length];
+    setTheme(next);
+  }, [themeId, setTheme]);
+
+  // Truncate theme name to fit button
+  const label = themeId.length > 14 ? themeId.slice(0, 12) + '..' : themeId;
+
+  return (
+    <Pressable
+      onPress={cycleTheme}
+      style={{
+        paddingLeft: 8,
+        paddingRight: 8,
+        paddingTop: 4,
+        paddingBottom: 4,
+        borderRadius: 4,
+        borderWidth: 1,
+        borderColor: c.primary,
+      }}
+    >
+      <Text style={{ color: c.primary, fontSize: 9 }}>{label}</Text>
     </Pressable>
   );
 }
@@ -169,21 +202,26 @@ function Storybook() {
   const initialMode = (globalThis as any).__devState?.mode ?? 'stories';
   const [mode, setMode] = useState<Mode>(initialMode);
   currentMode = mode;
+  const c = useThemeColors();
 
   return (
     <Box style={{ width: '100%', height: '100%' }}>
       {/* Mode toggle bar */}
       <Box style={{
         flexDirection: 'row',
-        backgroundColor: '#0c0c14',
+        backgroundColor: c.bgAlt,
         borderWidth: 1,
-        borderColor: '#1e293b',
+        borderColor: c.border,
         padding: 4,
         gap: 2,
+        alignItems: 'center',
+        width: '100%',
       }}>
         <TabButton label="Stories" active={mode === 'stories'} onPress={() => setMode('stories')} />
         <TabButton label="Docs" active={mode === 'docs'} onPress={() => setMode('docs')} />
         <TabButton label="Playground" active={mode === 'playground'} onPress={() => setMode('playground')} />
+        <Box style={{ flexGrow: 1 }} />
+        <ThemeCycleButton />
       </Box>
 
       {/* Content */}
@@ -207,9 +245,11 @@ const root = createRoot();
 (globalThis as any).__mount = () => {
   root.render(
     <BridgeProvider bridge={bridge}>
-      <RendererProvider mode="native">
-        <Storybook />
-      </RendererProvider>
+      <ThemeProvider>
+        <RendererProvider mode="native">
+          <Storybook />
+        </RendererProvider>
+      </ThemeProvider>
     </BridgeProvider>
   );
   console.log('[react-love] Native storybook mounted (' + stories.length + ' stories)');
