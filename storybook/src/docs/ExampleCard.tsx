@@ -1,5 +1,6 @@
 import React from 'react';
 import { Box, Text } from '../../../packages/shared/src';
+import { useThemeColors } from '../../../packages/theme/src';
 import { CodeBlock } from './CodeBlock';
 import { useDocsFontScale } from './DocsFontScale';
 
@@ -23,10 +24,11 @@ interface ExampleCardProps {
 export function ExampleCard({ title, code, platforms }: ExampleCardProps) {
   const { scale } = useDocsFontScale();
   const s = (base: number) => Math.round(base * scale);
+  const c = useThemeColors();
 
   return (
     <Box style={{ marginBottom: 12 }}>
-      <Text style={{ color: '#cbd5e1', fontSize: s(10), lineHeight: s(16), fontWeight: 'bold', marginBottom: 4 }}>
+      <Text style={{ color: c.text, fontSize: s(10), lineHeight: s(16), fontWeight: 'bold', marginBottom: 4 }}>
         {title}
       </Text>
       <CodeBlock code={code} />
@@ -34,14 +36,14 @@ export function ExampleCard({ title, code, platforms }: ExampleCardProps) {
         <Box style={{ flexDirection: 'row', gap: 4, marginTop: 4 }}>
           {platforms.map(p => (
             <Box key={p} style={{
-              backgroundColor: (PLATFORM_COLORS[p] || '#64748b') + '22',
+              backgroundColor: (PLATFORM_COLORS[p] || c.textDim) + '22',
               borderRadius: 2,
               paddingLeft: 4,
               paddingRight: 4,
               paddingTop: 1,
               paddingBottom: 1,
             }}>
-              <Text style={{ color: PLATFORM_COLORS[p] || '#64748b', fontSize: s(8), lineHeight: s(12) }}>{p}</Text>
+              <Text style={{ color: PLATFORM_COLORS[p] || c.textDim, fontSize: s(8), lineHeight: s(12) }}>{p}</Text>
             </Box>
           ))}
         </Box>

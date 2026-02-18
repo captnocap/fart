@@ -7,6 +7,7 @@
 
 import React, { useMemo, useState, useEffect } from 'react';
 import { Box, Text, Pressable, useLoveRPC } from '../../../packages/shared/src';
+import { useThemeColors } from '../../../packages/theme/src';
 import { templates, type Template } from './templates';
 import { transformJSX } from './lib/jsx-transform';
 import { evalComponent } from './lib/eval-component';
@@ -51,7 +52,8 @@ function useTemplateComponent(code: string): React.ComponentType | null {
 }
 
 function TemplateCard({ template, onSelect }: { template: Template; onSelect: (t: Template) => void }) {
-  const color = CATEGORY_COLORS[template.category] || '#64748b';
+  const c = useThemeColors();
+  const color = CATEGORY_COLORS[template.category] || c.textDim;
   const Comp = useTemplateComponent(template.code);
 
   return (
@@ -59,10 +61,10 @@ function TemplateCard({ template, onSelect }: { template: Template; onSelect: (t
       onPress={() => onSelect(template)}
       style={(state) => ({
         width: CARD_WIDTH,
-        backgroundColor: state.hovered ? '#1e293b' : '#151520',
+        backgroundColor: state.hovered ? c.bgAlt : c.bg,
         borderRadius: 10,
         borderWidth: 1,
-        borderColor: state.hovered ? color : '#1e293b',
+        borderColor: state.hovered ? color : c.border,
         overflow: 'hidden',
       })}
     >
@@ -71,7 +73,7 @@ function TemplateCard({ template, onSelect }: { template: Template; onSelect: (t
         width: CARD_WIDTH,
         height: PREVIEW_HEIGHT,
         overflow: 'hidden',
-        backgroundColor: '#08080f',
+        backgroundColor: c.bgElevated,
       }}>
         {Comp && (
           <PreviewBoundary>
@@ -101,11 +103,11 @@ function TemplateCard({ template, onSelect }: { template: Template; onSelect: (t
           <Text style={{ color, fontSize: 9, fontWeight: 'bold' }}>{template.category.toUpperCase()}</Text>
         </Box>
 
-        <Text style={{ color: '#e2e8f0', fontSize: 13, fontWeight: 'bold' }}>
+        <Text style={{ color: c.text, fontSize: 13, fontWeight: 'bold' }}>
           {template.name}
         </Text>
 
-        <Text style={{ color: '#64748b', fontSize: 10 }}>
+        <Text style={{ color: c.textDim, fontSize: 10 }}>
           {template.description}
         </Text>
       </Box>
@@ -114,6 +116,7 @@ function TemplateCard({ template, onSelect }: { template: Template; onSelect: (t
 }
 
 export function TemplatePicker({ onSelect }: { onSelect: (t: Template) => void }) {
+  const c = useThemeColors();
   const storageGet = useLoveRPC('storage:get');
   const [lastSession, setLastSession] = useState<{ code: string; timestamp: number } | null>(null);
 
@@ -147,10 +150,10 @@ export function TemplatePicker({ onSelect }: { onSelect: (t: Template) => void }
     <Box style={{ width: '100%', height: '100%', padding: 24, gap: 20, overflow: 'scroll' }}>
       {/* Header */}
       <Box style={{ gap: 4 }}>
-        <Text style={{ color: '#e2e8f0', fontSize: 20, fontWeight: 'bold' }}>
+        <Text style={{ color: c.text, fontSize: 20, fontWeight: 'bold' }}>
           Choose a template
         </Text>
-        <Text style={{ color: '#64748b', fontSize: 12 }}>
+        <Text style={{ color: c.textDim, fontSize: 12 }}>
           Pick a starting point, then customize it in the editor
         </Text>
       </Box>

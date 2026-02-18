@@ -1,5 +1,6 @@
 import React from 'react';
 import { Box, Text, Pressable } from '../../../packages/shared/src';
+import { useThemeColors } from '../../../packages/theme/src';
 import { useDocsFontScale } from './DocsFontScale';
 
 /** Human-readable section titles */
@@ -27,6 +28,7 @@ interface DocsSidebarProps {
 }
 
 export function DocsSidebar({ sections, activeSectionId, activeFileKey, onSelect }: DocsSidebarProps) {
+  const c = useThemeColors();
   const { scale } = useDocsFontScale();
   const sectionIds = Object.keys(sections).sort();
 
@@ -35,15 +37,15 @@ export function DocsSidebar({ sections, activeSectionId, activeFileKey, onSelect
   return (
     <Box style={{
       width: '100%',
-      backgroundColor: '#0c0c14',
+      backgroundColor: c.bg,
       borderRightWidth: 1,
-      borderColor: '#1e293b',
+      borderColor: c.border,
     }}>
       {/* Header */}
       <Box style={{ paddingTop: 14, paddingLeft: 12, paddingRight: 12, paddingBottom: 5 }}>
-        <Text style={{ color: '#475569', fontSize: s(10), lineHeight: s(16), fontWeight: 'bold' }}>DOCUMENTATION</Text>
+        <Text style={{ color: c.textDim, fontSize: s(10), lineHeight: s(16), fontWeight: 'bold' }}>DOCUMENTATION</Text>
       </Box>
-      <Box style={{ height: 1, backgroundColor: '#1e293b' }} />
+      <Box style={{ height: 1, backgroundColor: c.border }} />
 
       {/* Section list */}
       {sectionIds.map(sectionId => {
@@ -56,7 +58,7 @@ export function DocsSidebar({ sections, activeSectionId, activeFileKey, onSelect
           <Box key={sectionId}>
             {/* Section header */}
             <Box style={{ paddingLeft: 12, paddingTop: 8, paddingBottom: 2 }}>
-              <Text style={{ color: '#334155', fontSize: s(9), lineHeight: s(14) }}>{sectionTitle.toUpperCase()}</Text>
+              <Text style={{ color: c.textDim, fontSize: s(9), lineHeight: s(14) }}>{sectionTitle.toUpperCase()}</Text>
             </Box>
 
             {/* File links */}
@@ -75,11 +77,11 @@ export function DocsSidebar({ sections, activeSectionId, activeFileKey, onSelect
                     paddingRight: 8,
                     paddingTop: 3,
                     paddingBottom: 3,
-                    backgroundColor: isActive ? '#1e293b' : 'transparent',
+                    backgroundColor: isActive ? c.surface : 'transparent',
                   }}
                 >
                   <Text style={{
-                    color: isActive ? '#e2e8f0' : '#64748b',
+                    color: isActive ? c.text : c.textSecondary,
                     fontSize: s(11),
                     lineHeight: s(16),
                   }}>

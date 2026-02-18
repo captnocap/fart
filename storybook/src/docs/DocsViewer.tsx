@@ -1,5 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { Box, Text, Pressable } from '../../../packages/shared/src';
+import { useThemeColors } from '../../../packages/theme/src';
 import { DocsSidebar } from './DocsSidebar';
 import { DocPage } from './DocPage';
 import { FontScaleProvider, useDocsFontScale } from './DocsFontScale';
@@ -14,6 +15,7 @@ interface DocsViewerProps {
 }
 
 function ZoomControls() {
+  const c = useThemeColors();
   const { scale, increase, decrease, reset } = useDocsFontScale();
   const pct = Math.round(scale * 100);
   return (
@@ -21,32 +23,33 @@ function ZoomControls() {
       flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
       gap: 2, width: 200,
       paddingTop: 6, paddingBottom: 6,
-      borderTopWidth: 1, borderTopColor: '#1e293b',
-      backgroundColor: '#0c0c14',
+      borderTopWidth: 1, borderTopColor: c.border,
+      backgroundColor: c.bg,
     }}>
       <Pressable onPress={decrease} style={{
         width: 22, height: 22, borderRadius: 4,
-        backgroundColor: '#1e293b', alignItems: 'center', justifyContent: 'center',
+        backgroundColor: c.border, alignItems: 'center', justifyContent: 'center',
       }}>
-        <Text style={{ color: '#94a3b8', fontSize: 13, lineHeight: 16 }}>{`-`}</Text>
+        <Text style={{ color: c.textSecondary, fontSize: 13, lineHeight: 16 }}>{`-`}</Text>
       </Pressable>
       <Pressable onPress={reset} style={{
         width: 36, height: 22, borderRadius: 4,
-        backgroundColor: '#1e293b', alignItems: 'center', justifyContent: 'center',
+        backgroundColor: c.border, alignItems: 'center', justifyContent: 'center',
       }}>
-        <Text style={{ color: '#64748b', fontSize: 9, lineHeight: 14 }}>{`${pct}%`}</Text>
+        <Text style={{ color: c.textDim, fontSize: 9, lineHeight: 14 }}>{`${pct}%`}</Text>
       </Pressable>
       <Pressable onPress={increase} style={{
         width: 22, height: 22, borderRadius: 4,
-        backgroundColor: '#1e293b', alignItems: 'center', justifyContent: 'center',
+        backgroundColor: c.border, alignItems: 'center', justifyContent: 'center',
       }}>
-        <Text style={{ color: '#94a3b8', fontSize: 13, lineHeight: 16 }}>{`+`}</Text>
+        <Text style={{ color: c.textSecondary, fontSize: 13, lineHeight: 16 }}>{`+`}</Text>
       </Pressable>
     </Box>
   );
 }
 
 function DocsViewerInner({ content }: DocsViewerProps) {
+  const c = useThemeColors();
   const [activeSectionId, setActiveSectionId] = useState('01-getting-started');
   const [activeFileKey, setActiveFileKey] = useState('index');
 
@@ -73,7 +76,7 @@ function DocsViewerInner({ content }: DocsViewerProps) {
       </Box>
 
       {/* Content area */}
-      <Box style={{ flexGrow: 1, backgroundColor: '#08080f', overflow: 'scroll' }}>
+      <Box style={{ flexGrow: 1, backgroundColor: c.bgElevated, overflow: 'scroll' }}>
         {activeContent ? (
           <DocPage content={activeContent} onNavigate={handleSelect} currentSectionId={activeSectionId} />
         ) : (

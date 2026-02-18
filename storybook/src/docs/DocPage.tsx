@@ -1,5 +1,6 @@
 import React from 'react';
 import { Box, Text, Pressable } from '../../../packages/shared/src';
+import { useThemeColors } from '../../../packages/theme/src';
 import { MetadataBadges } from './MetadataBadges';
 import { CodeBlock } from './CodeBlock';
 import { ExampleCard } from './ExampleCard';
@@ -28,10 +29,11 @@ interface ParsedContentLike {
 }
 
 function SectionHeader({ title, s }: { title: string; s: (n: number) => number }) {
+  const c = useThemeColors();
   return (
     <Box style={{ marginTop: 20, marginBottom: 8 }}>
-      <Box style={{ height: 1, backgroundColor: '#1e293b', marginBottom: 10 }} />
-      <Text style={{ color: '#64748b', fontSize: s(12) }}>
+      <Box style={{ height: 1, backgroundColor: c.border, marginBottom: 10 }} />
+      <Text style={{ color: c.textDim, fontSize: s(12) }}>
         {title}
       </Text>
     </Box>
@@ -39,8 +41,9 @@ function SectionHeader({ title, s }: { title: string; s: (n: number) => number }
 }
 
 function ContentText({ text, s }: { text: string; s: (n: number) => number }) {
+  const c = useThemeColors();
   return (
-    <Text style={{ color: '#94a3b8', fontSize: s(11) }}>
+    <Text style={{ color: c.textSecondary, fontSize: s(11) }}>
       {text}
     </Text>
   );
@@ -66,17 +69,18 @@ export function DocPage({ content, onNavigate, currentSectionId }: { content: Pa
   const { metadata, sections } = content;
   const { scale } = useDocsFontScale();
   const s = (base: number) => Math.round(base * scale);
+  const c = useThemeColors();
 
   return (
     <Box style={{ width: '100%', padding: 16, paddingBottom: 40 }}>
       {/* Title */}
-      <Text style={{ color: '#e2e8f0', fontSize: s(18), fontWeight: 'bold', marginBottom: 6 }}>
+      <Text style={{ color: c.text, fontSize: s(18), fontWeight: 'bold', marginBottom: 6 }}>
         {metadata.title}
       </Text>
 
       {/* Description */}
       {metadata.description ? (
-        <Text style={{ color: '#64748b', fontSize: s(11), marginBottom: 8 }}>
+        <Text style={{ color: c.textDim, fontSize: s(11), marginBottom: 8 }}>
           {metadata.description}
         </Text>
       ) : null}
@@ -128,7 +132,7 @@ export function DocPage({ content, onNavigate, currentSectionId }: { content: Pa
           <SectionHeader title="PLATFORM NOTES" s={s} />
           {Object.entries(sections.platformNotes).map(([platform, notes]) => (
             <Box key={platform} style={{ marginBottom: 8 }}>
-              <Text style={{ color: '#cbd5e1', fontSize: s(10), lineHeight: s(16), fontWeight: 'bold', marginBottom: 4 }}>
+              <Text style={{ color: c.text, fontSize: s(10), lineHeight: s(16), fontWeight: 'bold', marginBottom: 4 }}>
                 {platform}
               </Text>
               <ContentText text={notes} s={s} />
@@ -159,9 +163,9 @@ export function DocPage({ content, onNavigate, currentSectionId }: { content: Pa
           <SectionHeader title="CRITICAL RULES" s={s} />
           {sections.criticalRules.map((rule, i) => (
             <Box key={i} style={{ flexDirection: 'row', marginBottom: 4 }}>
-              <Text style={{ color: '#f59e0b', fontSize: s(10), lineHeight: s(16) }}>{`- `}</Text>
+              <Text style={{ color: c.warning, fontSize: s(10), lineHeight: s(16) }}>{`- `}</Text>
               <Box style={{ flexShrink: 1 }}>
-                <Text style={{ color: '#94a3b8', fontSize: s(10), lineHeight: s(16) }}>{rule}</Text>
+                <Text style={{ color: c.textSecondary, fontSize: s(10), lineHeight: s(16) }}>{rule}</Text>
               </Box>
             </Box>
           ))}
@@ -187,14 +191,14 @@ export function DocPage({ content, onNavigate, currentSectionId }: { content: Pa
               return (
                 <Pressable key={i} onPress={() => onNavigate(targetSection, parsed.fileKey)}
                   style={{ marginBottom: 4 }}>
-                  <Text style={{ color: '#3b82f6', fontSize: s(10), lineHeight: s(16) }}>
+                  <Text style={{ color: c.primary, fontSize: s(10), lineHeight: s(16) }}>
                     {`> ${parsed.label}`}
                   </Text>
                 </Pressable>
               );
             }
             return (
-              <Text key={i} style={{ color: '#3b82f6', fontSize: s(10), lineHeight: s(16), marginBottom: 4 }}>
+              <Text key={i} style={{ color: c.primary, fontSize: s(10), lineHeight: s(16), marginBottom: 4 }}>
                 {`> ${ref}`}
               </Text>
             );

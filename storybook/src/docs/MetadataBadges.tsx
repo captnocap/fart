@@ -1,5 +1,6 @@
 import React from 'react';
 import { Box, Text } from '../../../packages/shared/src';
+import { useThemeColors } from '../../../packages/theme/src';
 import { useDocsFontScale } from './DocsFontScale';
 
 const PLATFORM_COLORS: Record<string, string> = {
@@ -43,15 +44,16 @@ interface MetadataBadgesProps {
 }
 
 export function MetadataBadges({ category, difficulty, platforms }: MetadataBadgesProps) {
+  const c = useThemeColors();
   const { scale } = useDocsFontScale();
   const s = (base: number) => Math.round(base * scale);
 
   return (
     <Box style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
-      <Badge label={category} color="#94a3b8" s={s} />
-      <Badge label={difficulty} color={DIFFICULTY_COLORS[difficulty] || '#94a3b8'} s={s} />
+      <Badge label={category} color={c.textSecondary} s={s} />
+      <Badge label={difficulty} color={DIFFICULTY_COLORS[difficulty] || c.textSecondary} s={s} />
       {platforms.map(p => (
-        <Badge key={p} label={p} color={PLATFORM_COLORS[p] || '#64748b'} s={s} />
+        <Badge key={p} label={p} color={PLATFORM_COLORS[p] || c.textDim} s={s} />
       ))}
     </Box>
   );
