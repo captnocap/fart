@@ -94,6 +94,34 @@ local DETAIL_BG     = { 0.05, 0.05, 0.10, 0.92 }
 local TREE_WIDTH = 280
 local DETAIL_WIDTH = 300
 
+-- JSX tree view constants
+local INDENT_SIZE = 16
+
+local TYPE_TO_PRIMITIVE = {
+  View       = "Box",
+  Text       = "Text",
+  Image      = "Image",
+  Video      = "Video",
+  VideoPlayer= "VideoPlayer",
+  TextInput  = "TextInput",
+  TextEditor = "TextEditor",
+  CodeBlock  = "CodeBlock",
+}
+
+-- JSX syntax highlighting colors
+local JSX_TYPE      = { 0.50, 0.53, 0.60, 1 }    -- type prefix (dim)
+local JSX_BRACKET   = { 0.50, 0.52, 0.58, 1 }    -- < > brackets
+local JSX_COMP      = { 0.56, 0.68, 0.98, 1 }    -- component names (accent blue)
+local JSX_PRIM      = { 0.35, 0.78, 0.78, 1 }    -- primitive names (teal)
+local JSX_PROP_KEY  = { 0.90, 0.78, 0.35, 1 }    -- prop keys (yellow)
+local JSX_PROP_VAL  = { 0.50, 0.82, 0.50, 1 }    -- prop values (green)
+local JSX_TEXT_COL  = { 0.92, 0.72, 0.48, 1 }    -- text content (orange)
+local JSX_CLOSE_NAM = { 0.56, 0.68, 0.98, 0.50 } -- closing tag name (dim accent)
+local JSX_CLOSE_BRK = { 0.50, 0.52, 0.58, 0.50 } -- closing tag brackets (dim)
+local JSX_GUIDE     = { 0.25, 0.27, 0.35, 0.35 } -- guide lines (very dim)
+local JSX_DOTS      = { 0.55, 0.55, 0.60, 1 }    -- "..." collapsed indicator
+local JSX_DIMS      = { 0.50, 0.52, 0.58, 0.8 }  -- dimensions on anonymous nodes
+
 -- Cached fonts (created lazily on first draw, avoids allocation per frame)
 local fontSmall = nil   -- 11px, used by tooltip/tree/detail/perf
 local function getFont()
@@ -415,8 +443,9 @@ function Inspector.mousepressed(x, y, button)
         if y >= entry.y and y < entry.y + entry.lineH then
           -- Check if click is on the collapse indicator (the ">" / "v" zone)
           local hasChildren = entry.node.children and #entry.node.children > 0
-          local collapseX = tr.x + 8 + (entry.depth or 0) * 12 - 10
-          if hasChildren and x >= collapseX - 4 and x <= collapseX + 12 then
+          local isSingleText = hasChildren and #entry.node.children == 1 and entry.node.children[1].type == "__TEXT__"
+          local collapseX = tr.x + 8 + (entry.depth or 0) * INDENT_SIZE - 8
+          if hasChildren and not entry.isClosingTag and not isSingleText and x >= collapseX - 4 and x <= collapseX + 12 then
             -- Toggle collapse
             local nid = entry.node.id
             state.collapsed[nid] = not state.collapsed[nid]
@@ -550,9 +579,29 @@ end
 function Inspector.drawTreeInRegion(root, region)
   if not state.enabled or not root then return end
   state.treeRegion = region
+
+  -- Resolve hoveredNode from tree positions BEFORE drawing so the highlight
+  -- is correct on the same frame.  Uses previous frame's treeNodePositions
+  -- which share the same Y coordinates (fixed lineH, same tree structure).
+  -- Without this, drawOverlays' deepHitTest can clear hoveredNode to nil
+  -- (mouse is over the devtools panel, not the canvas) and the tree highlight
+  -- flickers on every frame during animations.
+  if state.mouseX >= region.x and state.mouseX < region.x + region.w
+     and state.mouseY >= region.y and state.mouseY < region.y + region.h then
+    state.hoveredNode = nil
+    for _, entry in ipairs(state.treeNodePositions) do
+      if state.mouseY >= entry.y and state.mouseY < entry.y + entry.lineH then
+        state.hoveredNode = entry.node
+        break
+      end
+    end
+  end
+
   drawTreePanel(root, region.x, region.y, region.w, region.h)
 
-  -- Override hoveredNode when mouse is over tree region
+  -- Refresh hoveredNode with current frame's treeNodePositions (just rebuilt
+  -- by drawTreePanel).  This keeps the canvas hover overlay (drawn by
+  -- drawOverlays on the next frame) pointing at the correct node.
   if state.mouseX >= region.x and state.mouseX < region.x + region.w
      and state.mouseY >= region.y and state.mouseY < region.y + region.h then
     state.hoveredNode = nil
@@ -850,15 +899,113 @@ function drawTreePanel(root, rx, ry, rw, rh)
   love.graphics.setScissor()
 end
 
--- Recursive tree node drawing — returns the next Y position
--- rx, rw: region x and width (for highlight rectangles and indent calculation)
+-- ============================================================================
+-- JSX tree view helpers
+-- ============================================================================
+
+--- Draw an array of {color, text} segments at position (x, y), returns ending x
+local function drawSegments(segs, x, y, font)
+  for _, seg in ipairs(segs) do
+    love.graphics.setColor(seg[1])
+    love.graphics.print(seg[2], x, y)
+    x = x + font:getWidth(seg[2])
+  end
+  return x
+end
+
+--- Get the display name for a node (component name or primitive name)
+local function getTagName(node)
+  return node.debugName or TYPE_TO_PRIMITIVE[node.type] or node.type or "?"
+end
+
+--- Get the color for a node's tag name
+local function getNameColor(node)
+  if node.debugName then return JSX_COMP end
+  return JSX_PRIM
+end
+
+--- Get the dimmed version of a name color (for closing tags)
+local function getDimNameColor(node)
+  local c = getNameColor(node)
+  return { c[1], c[2], c[3], (c[4] or 1) * 0.5 }
+end
+
+--- Get text content from a __TEXT__ node, truncated to ~40 chars
+local function getTextContent(node)
+  local text = node.text or (node.props and node.props.text) or ""
+  text = tostring(text)
+  if #text > 40 then
+    text = text:sub(1, 37) .. "..."
+  end
+  return text
+end
+
+--- Append inline prop segments to a segments array (max 3 props)
+local function appendPropSegments(segs, node)
+  local s = node.style or {}
+  local p = node.props or {}
+  local count = 0
+
+  local function addProp(key, val)
+    if count >= 3 then return end
+    segs[#segs + 1] = { JSX_BRACKET, " " }
+    segs[#segs + 1] = { JSX_PROP_KEY, key .. "=" }
+    segs[#segs + 1] = { JSX_PROP_VAL, val }
+    count = count + 1
+  end
+
+  if p.key then addProp("key", fmtVal(p.key)) end
+  if s.flexDirection == "row" then addProp("flex", '"row"') end
+  if s.width and s.height then
+    addProp("size", fmtVal(s.width) .. "x" .. fmtVal(s.height))
+  elseif s.width then
+    addProp("w", fmtVal(s.width))
+  elseif s.height then
+    addProp("h", fmtVal(s.height))
+  end
+  if p.src then
+    local src = tostring(p.src)
+    if #src > 20 then src = "..." .. src:sub(-17) end
+    addProp("src", '"' .. src .. '"')
+  end
+  if p.placeholder then addProp("placeholder", fmtVal(p.placeholder)) end
+end
+
+--- Check if a __TEXT__ node has empty content (hidden by default)
+local function isEmptyTextNode(node)
+  if node.type ~= "__TEXT__" then return false end
+  local text = node.text or ""
+  return text == ""
+end
+
+-- ============================================================================
+-- Recursive tree node drawing — JSX format with opening/closing tags
+-- Returns the next Y position
+-- ============================================================================
+
 function drawTreeNode(node, depth, y, font, lineH, pad, clipTop, clipBottom, rx, rw)
   if not node then return y end
 
-  local visible = y + lineH > clipTop and y < clipBottom
-  local c = node.computed
+  -- Skip empty text nodes (React sometimes inserts these)
+  if isEmptyTextNode(node) then return y end
 
-  -- Cache position for click detection (depth needed for collapse indicator hit zone)
+  local typeName = node.type or "?"
+  local isTextNode = (typeName == "__TEXT__")
+  local children = node.children or {}
+  local hasChildren = #children > 0
+  local isCollapsed = state.collapsed[node.id]
+  local tagName = getTagName(node)
+  local nameColor = getNameColor(node)
+
+  -- Single __TEXT__ child → inline display (e.g. Text:<Label>"Hello"</Label>)
+  local isSingleTextChild = (not isTextNode and hasChildren
+    and #children == 1 and children[1].type == "__TEXT__"
+    and (children[1].text or "") ~= "")
+
+  local visible = y + lineH > clipTop and y < clipBottom
+  local openingY = y
+
+  -- Cache position for click/hover detection
   state.treeNodePositions[#state.treeNodePositions + 1] = {
     node = node,
     y = y,
@@ -867,7 +1014,7 @@ function drawTreeNode(node, depth, y, font, lineH, pad, clipTop, clipBottom, rx,
   }
 
   if visible then
-    -- Highlight selected node
+    -- Highlight row
     if node == state.selectedNode then
       love.graphics.setColor(TREE_SELECT)
       love.graphics.rectangle("fill", rx, y, rw, lineH)
@@ -876,47 +1023,127 @@ function drawTreeNode(node, depth, y, font, lineH, pad, clipTop, clipBottom, rx,
       love.graphics.rectangle("fill", rx, y, rw, lineH)
     end
 
-    -- Indentation (relative to region x)
-    local indent = rx + pad + depth * 12
+    local indent = rx + pad + depth * INDENT_SIZE
 
-    -- Build label: <ComponentName> or type (w x h)
-    local label
-    if node.debugName then
-      label = "<" .. node.debugName .. ">"
-    else
-      label = node.type or "?"
-    end
-    if c then
-      label = label .. string.format("  %dx%d", math.floor(c.w), math.floor(c.h))
-    end
-
-    -- Collapse indicator
-    local hasChildren = node.children and #node.children > 0
-    if hasChildren then
-      local isCollapsed = state.collapsed[node.id]
+    -- Collapse indicator (only for expandable nodes, not single-text-child)
+    if hasChildren and not isSingleTextChild then
       love.graphics.setColor(TREE_DIM)
-      love.graphics.print(isCollapsed and ">" or "v", indent - 10, y + 1)
+      love.graphics.print(isCollapsed and ">" or "v", indent - 8, y + 1)
     end
 
-    -- Type name in accent if selected, normal otherwise
     love.graphics.setFont(font)
-    if node == state.selectedNode then
-      love.graphics.setColor(TOOLTIP_ACCENT)
-    elseif node == state.hoveredNode then
-      love.graphics.setColor(TOOLTIP_ACCENT)
+
+    if isTextNode then
+      -- Raw text node: __TEXT__:"content"
+      local text = getTextContent(node)
+      drawSegments({
+        { JSX_TYPE, "__TEXT__:" },
+        { JSX_TEXT_COL, '"' .. text .. '"' },
+      }, indent, y + 1, font)
+
+    elseif isSingleTextChild then
+      -- Inline text: Type:<Name>"content"</Name>
+      local text = getTextContent(children[1])
+      local dimName = getDimNameColor(node)
+      local segs = {
+        { JSX_TYPE, typeName .. ":" },
+        { JSX_BRACKET, "<" },
+        { nameColor, tagName },
+        { JSX_BRACKET, ">" },
+        { JSX_TEXT_COL, '"' .. text .. '"' },
+        { JSX_CLOSE_BRK, "</" },
+        { dimName, tagName },
+        { JSX_CLOSE_BRK, ">" },
+      }
+      drawSegments(segs, indent, y + 1, font)
+
+    elseif not hasChildren then
+      -- Self-closing: Type:<Name prop="val" />
+      local segs = {
+        { JSX_TYPE, typeName .. ":" },
+        { JSX_BRACKET, "<" },
+        { nameColor, tagName },
+      }
+      appendPropSegments(segs, node)
+      if not node.debugName and node.computed then
+        segs[#segs + 1] = { JSX_DIMS, " " .. math.floor(node.computed.w) .. "x" .. math.floor(node.computed.h) }
+      end
+      segs[#segs + 1] = { JSX_BRACKET, " />" }
+      drawSegments(segs, indent, y + 1, font)
+
+    elseif isCollapsed then
+      -- Collapsed: > Type:<Name> ...
+      local segs = {
+        { JSX_TYPE, typeName .. ":" },
+        { JSX_BRACKET, "<" },
+        { nameColor, tagName },
+      }
+      appendPropSegments(segs, node)
+      segs[#segs + 1] = { JSX_BRACKET, ">" }
+      segs[#segs + 1] = { JSX_DOTS, " ..." }
+      drawSegments(segs, indent, y + 1, font)
+
     else
-      love.graphics.setColor(TREE_TEXT)
+      -- Opening tag: Type:<Name prop="val">
+      local segs = {
+        { JSX_TYPE, typeName .. ":" },
+        { JSX_BRACKET, "<" },
+        { nameColor, tagName },
+      }
+      appendPropSegments(segs, node)
+      segs[#segs + 1] = { JSX_BRACKET, ">" }
+      drawSegments(segs, indent, y + 1, font)
     end
-    love.graphics.print(label, indent, y + 1)
   end
 
   y = y + lineH
 
-  -- Draw children (unless collapsed)
-  if not state.collapsed[node.id] then
-    for _, child in ipairs(node.children or {}) do
+  -- Draw children and closing tag (if expanded with multiple children)
+  if hasChildren and not isCollapsed and not isSingleTextChild then
+    for _, child in ipairs(children) do
       y = drawTreeNode(child, depth + 1, y, font, lineH, pad, clipTop, clipBottom, rx, rw)
     end
+
+    -- Guide line from opening tag to closing tag
+    local guideX = rx + pad + depth * INDENT_SIZE - 5
+    if openingY + lineH < clipBottom and y > clipTop then
+      love.graphics.setColor(JSX_GUIDE)
+      love.graphics.setLineWidth(1)
+      local gy1 = math.max(openingY + lineH, clipTop)
+      local gy2 = math.min(y, clipBottom)
+      love.graphics.line(guideX, gy1, guideX, gy2)
+    end
+
+    -- Cache closing tag position for click/hover
+    state.treeNodePositions[#state.treeNodePositions + 1] = {
+      node = node,
+      y = y,
+      lineH = lineH,
+      depth = depth,
+      isClosingTag = true,
+    }
+
+    -- Draw closing tag
+    local closingVisible = y + lineH > clipTop and y < clipBottom
+    if closingVisible then
+      if node == state.selectedNode then
+        love.graphics.setColor(TREE_SELECT)
+        love.graphics.rectangle("fill", rx, y, rw, lineH)
+      elseif node == state.hoveredNode then
+        love.graphics.setColor(TREE_HOVER)
+        love.graphics.rectangle("fill", rx, y, rw, lineH)
+      end
+
+      local indent = rx + pad + depth * INDENT_SIZE
+      local dimName = getDimNameColor(node)
+      drawSegments({
+        { JSX_CLOSE_BRK, "</" },
+        { dimName, tagName },
+        { JSX_CLOSE_BRK, ">" },
+      }, indent, y + 1, font)
+    end
+
+    y = y + lineH
   end
 
   return y
