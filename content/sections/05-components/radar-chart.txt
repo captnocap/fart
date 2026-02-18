@@ -1,0 +1,148 @@
+=== METADATA ===
+title: RadarChart
+description: Pixel-grid radar (spider) chart for comparing multi-axis performance profiles
+category: Components
+platforms: love2d, web, terminal, cc, nvim, hs, awesome
+keywords: chart, radar, spider, polar, axes, data, visualization, profile
+related: PieChart, BarChart, HorizontalBarChart, ChartTooltip
+difficulty: intermediate
+
+=== OVERVIEW ===
+RadarChart rasterizes a spider/radar chart into a 2x2-pixel cell grid. Each axis radiates from the center at equal angular intervals and data values are plotted along each axis, normalized either to a per-axis maximum or to the global maximum across all values. The region formed by connecting those points is filled with the chart color at 60% opacity. Concentric ring grid lines at 25%, 50%, 75%, and 100% are rendered in a separate grid color. When interactive mode is enabled, hovering the chart shows a tooltip listing each axis label, its raw value, and the normalized percentage.
+
+=== API / SYNTAX ===
+```tsx
+import { RadarChart } from '@ilovereact/core';
+```
+
+Data shape:
+```tsx
+interface RadarChartAxis {
+  label: string;  // Axis name shown in the hover tooltip
+  max?:  number;  // Per-axis maximum for normalization; defaults to global max across all data values
+}
+```
+
+Props:
+| Prop        | Type              | Default      | Description                                                                                   |
+|-------------|-------------------|--------------|-----------------------------------------------------------------------------------------------|
+| axes        | RadarChartAxis[]  | required     | Axis definitions; length must equal data.length                                               |
+| data        | number[]          | required     | One raw value per axis, in the same order as axes                                             |
+| size        | number            | 120          | Width and height of the chart square in pixels                                                |
+| color       | Color             | '#3b82f6'    | Fill color for the data polygon (rendered at 60% opacity)                                     |
+| gridColor   | Color             | '#1e293b'    | Color for concentric ring grid lines and axis spokes                                          |
+| interactive | boolean           | false        | Enable hover to show the per-axis value breakdown tooltip                                     |
+| style       | Style             | undefined    | Additional styles applied to the outer container Box                                          |
+
+=== EXAMPLES ===
+Example 1: Player stats profile
+---
+```tsx
+import { RadarChart } from '@ilovereact/core';
+
+const axes = [
+  { label: 'Speed',    max: 100 },
+  { label: 'Strength', max: 100 },
+  { label: 'Defense',  max: 100 },
+  { label: 'Magic',    max: 100 },
+  { label: 'Stamina',  max: 100 },
+];
+
+const stats = [78, 55, 62, 90, 70];
+
+export default function App() {
+  return (
+    <Box style={{ width: '100%', height: '100%', padding: 20 }}>
+      <RadarChart
+        axes={axes}
+        data={stats}
+        size={160}
+        color="#6366f1"
+      />
+    </Box>
+  );
+}
+```
+---
+Platforms: All
+
+Example 2: System health with per-axis maximums
+---
+```tsx
+import { RadarChart } from '@ilovereact/core';
+
+const axes = [
+  { label: 'CPU',     max: 100  },
+  { label: 'Memory',  max: 16   },
+  { label: 'Disk',    max: 500  },
+  { label: 'Network', max: 1000 },
+  { label: 'IOPS',    max: 50   },
+  { label: 'Load',    max: 8    },
+];
+
+const values = [72, 11.4, 380, 430, 34, 3.2];
+
+export default function App() {
+  return (
+    <Box style={{ width: '100%', height: '100%', padding: 20 }}>
+      <RadarChart
+        axes={axes}
+        data={values}
+        size={200}
+        color="#22c55e"
+        gridColor="#0f172a"
+      />
+    </Box>
+  );
+}
+```
+---
+Platforms: All
+
+Example 3: Interactive profile comparison widget
+---
+```tsx
+import { RadarChart } from '@ilovereact/core';
+
+const axes = [
+  { label: 'Quality',    max: 10 },
+  { label: 'Speed',      max: 10 },
+  { label: 'Cost',       max: 10 },
+  { label: 'Support',    max: 10 },
+  { label: 'Scalability',max: 10 },
+];
+
+const scores = [8, 6, 7, 9, 5];
+
+export default function App() {
+  return (
+    <Box style={{ width: '100%', height: '100%', padding: 20 }}>
+      <RadarChart
+        axes={axes}
+        data={scores}
+        size={180}
+        color="#f59e0b"
+        interactive
+      />
+    </Box>
+  );
+}
+```
+---
+Platforms: love2d, web
+
+=== CRITICAL RULES ===
+- `axes` and `data` must have the same length. Extra data values beyond the axis count are ignored; missing data values default to 0 for normalization purposes.
+- When a per-axis `max` is omitted, that axis is normalized against the global maximum of the entire `data` array. Mix explicit and implicit maxima with care — a single outlier value can compress all other axes.
+- The rendered polygon fill uses 60% opacity (hardcoded). The `color` prop controls the fill color only; the opacity is not configurable.
+- Grid ring lines are at 25%, 50%, 75%, and 100% of the radius. They cannot be configured or hidden via props.
+- The tooltip appears to the right of the chart (`left: '100%'`). Ensure the parent container has horizontal room, or the tooltip will be clipped.
+- Rasterization cost scales with `size`. Prefer sizes in the 80–200px range.
+- Axes are arranged clockwise starting from the top (12 o'clock position). The first axis in the `axes` array is always at the top.
+- Do not use Unicode symbols in axis `label` strings.
+
+=== SEE ALSO ===
+- PieChart — another pixel-rasterized chart for proportional data
+- BarChart — simpler vertical bars for comparing the same axes
+- HorizontalBarChart — horizontal orientation for the same kind of multi-value comparison
+- ChartTooltip — standalone tooltip primitive; RadarChart implements its own inline tooltip

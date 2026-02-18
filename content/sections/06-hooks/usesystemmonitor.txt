@@ -1,0 +1,289 @@
+=== METADATA ===
+title: useSystemMonitor
+description: Real-time htop/nvtop-level system monitoring — per-core CPU, processes, GPU, network, and disk I/O.
+category: Hooks
+platforms: love2d
+keywords: system monitor, cpu, gpu, memory, processes, network, disk, htop, nvtop, performance
+related: useSystemInfo, formatRate, formatTotalBytes
+difficulty: intermediate
+
+=== OVERVIEW ===
+useSystemMonitor provides comprehensive real-time system telemetry — per-core CPU usage, load averages, detailed memory breakdown (buffers, cached, swap), a sorted process list, GPU stats (NVIDIA and AMD), per-interface network rates, and per-device disk I/O rates. Data is refreshed on a configurable interval via the Love2D bridge RPC. Every sub-object exposes a .toSysLog(path) method for structured append-only JSON logging. Unlike useSystemInfo (which fetches static facts once), useSystemMonitor is designed for continuous live dashboards.
+
+=== API / SYNTAX ===
+```tsx
+import {
+  useSystemMonitor,
+  formatRate,
+  formatTotalBytes,
+} from '@ilovereact/core';
+```
+
+Hook signature:
+```tsx
+useSystemMonitor(interval?: number, opts?: { processLimit?: number }): SystemMonitor
+```
+
+Parameters:
+
+| Parameter          | Type   | Default | Description                                              |
+|--------------------|--------|---------|----------------------------------------------------------|
+| interval           | number | 1000    | ms between data refreshes.                               |
+| opts.processLimit  | number | 20      | Maximum number of processes to return in the list.       |
+
+Returns: SystemMonitor
+
+SystemMonitor shape:
+
+| Field     | Type              | Description                                              |
+|-----------|-------------------|----------------------------------------------------------|
+| cpu       | CpuInfo           | Aggregate and per-core CPU usage, load averages.         |
+| memory    | DetailedMemory    | Full memory breakdown in GiB including swap.             |
+| processes | ProcessInfo[]     | Top processes sorted by CPU usage.                       |
+| tasks     | TaskCounts        | Total, running, sleeping, stopped, zombie counts.        |
+| gpu       | GpuInfo[] or null | GPU stats if a supported GPU is present, else null.      |
+| network   | NetworkInterface[]| Per-interface byte totals and transfer rates.            |
+| disk      | DiskDevice[]      | Per-device read/write totals and rates.                  |
+| loading   | boolean           | true until the first fetch completes.                    |
+| toSysLog  | fn                | (path: string) => void — log full snapshot to file.      |
+
+CpuInfo:
+
+| Field    | Type                    | Description                              |
+|----------|-------------------------|------------------------------------------|
+| cores    | CoreInfo[]              | Per-core breakdown with toSysLog each.   |
+| total    | number                  | Aggregate CPU usage 0-100.               |
+| loadAvg  | [number, number, number]| 1-min, 5-min, 15-min load averages.      |
+| toSysLog | fn                      | Log this section.                        |
+
+CoreInfo:
+
+| Field   | Type   | Description                          |
+|---------|--------|--------------------------------------|
+| id      | number | Core index (0-based).                |
+| usage   | number | Total usage 0-100.                   |
+| user    | number | User-space usage 0-100.              |
+| system  | number | Kernel usage 0-100.                  |
+| iowait  | number | I/O wait 0-100.                      |
+
+DetailedMemory (all values in GiB):
+
+| Field     | Type              | Description              |
+|-----------|-------------------|--------------------------|
+| total     | number            | Total physical RAM.      |
+| used      | number            | Used (total - available).|
+| free      | number            | Unused RAM.              |
+| available | number            | Actually reclaimable.    |
+| buffers   | number            | Kernel buffers.          |
+| cached    | number            | Page cache.              |
+| swap      | { total, used }   | Swap totals in GiB.      |
+| unit      | 'GiB'             | Always GiB.              |
+
+ProcessInfo:
+
+| Field   | Type   | Description                        |
+|---------|--------|------------------------------------|
+| user    | string | Owning username.                   |
+| pid     | number | Process ID.                        |
+| cpu     | number | CPU usage % for this process.      |
+| mem     | number | Memory usage % for this process.   |
+| vsz     | number | Virtual size in KB.                |
+| rss     | number | Resident set size in KB.           |
+| tty     | string | Controlling terminal.              |
+| stat    | string | Process state string (e.g. "S").   |
+| command | string | Command name or path.              |
+
+GpuInfo:
+
+| Field       | Type             | Description                       |
+|-------------|------------------|-----------------------------------|
+| name        | string           | GPU model name.                   |
+| vendor      | 'nvidia' | 'amd' | GPU vendor.                    |
+| utilization | number           | GPU compute usage 0-100.          |
+| memUsed     | number           | Used VRAM.                        |
+| memTotal    | number           | Total VRAM.                       |
+| memUnit     | string           | Display unit for VRAM values.     |
+| temperature | number           | Degrees Celsius.                  |
+| power       | number           | Power draw in watts.              |
+
+NetworkInterface:
+
+| Field   | Type   | Description                  |
+|---------|--------|------------------------------|
+| name    | string | Interface name, e.g. "eth0". |
+| rxBytes | number | Total bytes received.        |
+| txBytes | number | Total bytes transmitted.     |
+| rxRate  | number | Current receive rate B/s.    |
+| txRate  | number | Current transmit rate B/s.   |
+
+DiskDevice:
+
+| Field     | Type   | Description                        |
+|-----------|--------|------------------------------------|
+| name      | string | Device name, e.g. "sda".          |
+| readRate  | number | Current read rate in B/s.          |
+| writeRate | number | Current write rate in B/s.         |
+| reads     | number | Cumulative read operations.        |
+| writes    | number | Cumulative write operations.       |
+
+Formatting utilities:
+```tsx
+formatRate(bytesPerSec: number): string
+// "12.3 MB/s", "512.0 KB/s", "800 B/s"
+
+formatTotalBytes(bytes: number): string
+// "4.2 GB", "512.0 MB", "1.0 KB"
+```
+
+=== EXAMPLES ===
+Example 1: CPU usage bar per core
+---
+```tsx
+import { useSystemMonitor } from '@ilovereact/core';
+
+function CpuPanel() {
+  const sys = useSystemMonitor(1000);
+
+  if (sys.loading) return <Text fontSize={13}>Loading...</Text>;
+
+  return (
+    <Box style={{ padding: 12, gap: 6, width: 300 }}>
+      <Text fontSize={15}>CPU — {sys.cpu.total.toFixed(1)}%</Text>
+      <Text fontSize={11} style={{ color: '#888' }}>
+        Load: {sys.cpu.loadAvg.map(v => v.toFixed(2)).join(' ')}
+      </Text>
+      {sys.cpu.cores.map(core => (
+        <Box key={core.id} style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+          <Text fontSize={11} style={{ width: 20 }}>C{core.id}</Text>
+          <Box style={{ flex: 1, height: 8, backgroundColor: '#333' }}>
+            <Box style={{
+              width: `${core.usage}%`,
+              height: 8,
+              backgroundColor: core.usage > 80 ? '#ff4444' : '#00cc88',
+            }} />
+          </Box>
+          <Text fontSize={11} style={{ width: 36 }}>{core.usage.toFixed(0)}%</Text>
+        </Box>
+      ))}
+    </Box>
+  );
+}
+```
+---
+Platforms: love2d
+
+Example 2: Process list sorted by CPU (top 10)
+---
+```tsx
+import { useSystemMonitor } from '@ilovereact/core';
+
+function ProcessList() {
+  const sys = useSystemMonitor(2000, { processLimit: 10 });
+
+  return (
+    <Box style={{ padding: 12, gap: 4 }}>
+      <Box style={{ flexDirection: 'row', gap: 16 }}>
+        <Text fontSize={11} style={{ width: 50, color: '#aaa' }}>PID</Text>
+        <Text fontSize={11} style={{ width: 40, color: '#aaa' }}>CPU%</Text>
+        <Text fontSize={11} style={{ width: 40, color: '#aaa' }}>MEM%</Text>
+        <Text fontSize={11} style={{ color: '#aaa' }}>COMMAND</Text>
+      </Box>
+      {sys.processes.map(p => (
+        <Box key={p.pid} style={{ flexDirection: 'row', gap: 16 }}>
+          <Text fontSize={11} style={{ width: 50 }}>{p.pid}</Text>
+          <Text fontSize={11} style={{ width: 40 }}>{p.cpu.toFixed(1)}</Text>
+          <Text fontSize={11} style={{ width: 40 }}>{p.mem.toFixed(1)}</Text>
+          <Text fontSize={11}>{p.command}</Text>
+        </Box>
+      ))}
+    </Box>
+  );
+}
+```
+---
+Platforms: love2d
+
+Example 3: GPU temperature and VRAM gauge
+---
+```tsx
+import { useSystemMonitor } from '@ilovereact/core';
+
+function GpuPanel() {
+  const sys = useSystemMonitor(1000);
+
+  if (!sys.gpu || sys.gpu.length === 0) {
+    return <Text fontSize={13}>No GPU detected</Text>;
+  }
+
+  const gpu = sys.gpu[0];
+  const vramPct = gpu.memTotal > 0
+    ? Math.round((gpu.memUsed / gpu.memTotal) * 100)
+    : 0;
+
+  return (
+    <Box style={{ padding: 12, gap: 6 }}>
+      <Text fontSize={14}>{gpu.name}</Text>
+      <Text fontSize={12}>Utilization: {gpu.utilization}%</Text>
+      <Text fontSize={12}>Temp: {gpu.temperature}C</Text>
+      <Text fontSize={12}>Power: {gpu.power}W</Text>
+      <Text fontSize={12}>VRAM: {gpu.memUsed}/{gpu.memTotal} {gpu.memUnit} ({vramPct}%)</Text>
+    </Box>
+  );
+}
+```
+---
+Platforms: love2d
+
+Example 4: Network I/O rates per interface
+---
+```tsx
+import { useSystemMonitor, formatRate } from '@ilovereact/core';
+
+function NetworkPanel() {
+  const sys = useSystemMonitor(1000);
+
+  return (
+    <Box style={{ padding: 12, gap: 6 }}>
+      <Text fontSize={14}>Network</Text>
+      {sys.network.map(iface => (
+        <Box key={iface.name} style={{ gap: 2 }}>
+          <Text fontSize={12} style={{ color: '#aaa' }}>{iface.name}</Text>
+          <Text fontSize={11}>Rx: {formatRate(iface.rxRate)}</Text>
+          <Text fontSize={11}>Tx: {formatRate(iface.txRate)}</Text>
+        </Box>
+      ))}
+    </Box>
+  );
+}
+```
+---
+Platforms: love2d
+
+Example 5: Log full monitor snapshot every 10 seconds
+---
+```tsx
+import { useEffect } from 'react';
+import { useSystemMonitor } from '@ilovereact/core';
+
+function TelemetryLogger() {
+  const sys = useSystemMonitor(10000);
+
+  useEffect(() => {
+    if (!sys.loading) {
+      sys.toSysLog('/tmp/monitor.log');
+      sys.cpu.toSysLog('/tmp/cpu.log');
+      sys.memory.toSysLog('/tmp/memory.log');
+      sys.network.forEach(n => n.toSysLog('/tmp/network.log'));
+    }
+  }, [sys]);
+
+  return null;
+}
+```
+---
+Platforms: love2d
+
+=== SEE ALSO ===
+- useSystemInfo — one-shot static system facts (OS, hostname, kernel, shell)
+- formatRate — format bytes-per-second into KB/s, MB/s, GB/s strings
+- formatTotalBytes — format total byte counts into human-readable strings

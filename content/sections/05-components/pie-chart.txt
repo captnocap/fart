@@ -1,0 +1,126 @@
+=== METADATA ===
+title: PieChart
+description: Pixel-grid pie and donut chart rendered entirely from Box primitives
+category: Components
+platforms: love2d, web, terminal, cc, nvim, hs, awesome
+keywords: chart, pie, donut, radial, segments, data, visualization
+related: RadarChart, BarChart, HorizontalBarChart, ChartTooltip
+difficulty: intermediate
+
+=== OVERVIEW ===
+PieChart rasterizes a pie chart into a 2x2-pixel cell grid using polar coordinate math, then renders each run of same-colored cells as a single Box. This approach requires no canvas or SVG — it works on any target that supports Box with backgroundColor. Setting innerRadius greater than zero hollows the center to produce a donut chart. When interactive mode is enabled, hovering the chart reveals a legend tooltip listing every segment's label, raw value, and percentage.
+
+=== API / SYNTAX ===
+```tsx
+import { PieChart } from '@ilovereact/core';
+```
+
+Data shape:
+```tsx
+interface PieChartSegment {
+  label: string;  // Segment name shown in the hover tooltip legend
+  value: number;  // Numeric value; proportions are computed from the total
+  color: Color;   // Fill color for this segment; required per segment
+}
+```
+
+Props:
+| Prop          | Type                   | Default    | Description                                                                     |
+|---------------|------------------------|------------|---------------------------------------------------------------------------------|
+| data          | PieChartSegment[]      | required   | Array of segments; values are proportional, not percentages                     |
+| size          | number                 | 120        | Width and height of the chart square in pixels                                  |
+| innerRadius   | number                 | 0          | Hollow center radius in pixels; 0 = solid pie, >0 = donut ring                 |
+| interactive   | boolean                | false      | Enable hover to show the full segment legend tooltip                            |
+| style         | Style                  | undefined  | Additional styles applied to the outer container Box                            |
+
+=== EXAMPLES ===
+Example 1: Basic pie chart
+---
+```tsx
+import { PieChart } from '@ilovereact/core';
+
+const marketShare = [
+  { label: 'Chrome',  value: 65, color: '#3b82f6' },
+  { label: 'Safari',  value: 19, color: '#22c55e' },
+  { label: 'Firefox', value: 9,  color: '#f59e0b' },
+  { label: 'Other',   value: 7,  color: '#64748b' },
+];
+
+export default function App() {
+  return (
+    <Box style={{ width: '100%', height: '100%', padding: 20 }}>
+      <PieChart data={marketShare} size={160} />
+    </Box>
+  );
+}
+```
+---
+Platforms: All
+
+Example 2: Donut chart with innerRadius
+---
+```tsx
+import { PieChart } from '@ilovereact/core';
+
+const storage = [
+  { label: 'Used',  value: 73, color: '#6366f1' },
+  { label: 'Free',  value: 27, color: '#1e293b' },
+];
+
+export default function App() {
+  return (
+    <Box style={{ width: '100%', height: '100%', padding: 20 }}>
+      <PieChart
+        data={storage}
+        size={140}
+        innerRadius={40}
+      />
+    </Box>
+  );
+}
+```
+---
+Platforms: All
+
+Example 3: Interactive pie with legend tooltip
+---
+```tsx
+import { PieChart } from '@ilovereact/core';
+
+const budget = [
+  { label: 'Engineering', value: 45, color: '#3b82f6' },
+  { label: 'Marketing',   value: 25, color: '#ec4899' },
+  { label: 'Operations',  value: 20, color: '#f59e0b' },
+  { label: 'HR',          value: 10, color: '#22c55e' },
+];
+
+export default function App() {
+  return (
+    <Box style={{ width: '100%', height: '100%', padding: 20 }}>
+      <PieChart
+        data={budget}
+        size={160}
+        innerRadius={50}
+        interactive
+      />
+    </Box>
+  );
+}
+```
+---
+Platforms: love2d, web
+
+=== CRITICAL RULES ===
+- The chart is rendered as a pixel grid at 2px cell resolution. `size` must be even for the grid to divide cleanly; odd values are floored internally via `Math.floor(size / cellSize)`.
+- All segment `color` values are required — there is no fallback color. Omitting `color` from a segment will render that segment transparently.
+- `innerRadius` is specified in the same pixel units as `size`, not as a fraction. A `size={120}` chart with `innerRadius={60}` produces a ring exactly half the radius.
+- The tooltip appears to the right of the chart (`left: '100%'`). Ensure the chart container has enough horizontal space for the tooltip or it will be clipped.
+- Rasterization cost scales with `size`. Very large values (>300) will produce a high Box count; prefer sizes in the 80–200px range.
+- Segments with a value of 0 are included in the legend but produce no visible arc — this is safe.
+- Do not use Unicode symbols in segment `label` strings.
+
+=== SEE ALSO ===
+- RadarChart — another pixel-rasterized chart for multi-axis comparisons
+- BarChart — vertical bars for the same categorical data
+- HorizontalBarChart — horizontal bars with proportional fills
+- ChartTooltip — standalone tooltip primitive; PieChart implements its own inline tooltip

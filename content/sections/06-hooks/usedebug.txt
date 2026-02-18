@@ -1,50 +1,63 @@
 === METADATA ===
 title: useDebug
-description: Register debug data from components for inspector console access
+description: Register live component data in a global registry accessible from the inspector console.
 category: Hooks
-platforms: all
-keywords: debugging, inspector, console, dev tools, live data, watch expressions
-related: Inspector (F12), Console, __debug global
-difficulty: Beginner
+platforms: love2d, web, terminal, cc, nvim, hs, awesome
+keywords: debugging, inspector, console, dev tools, live data, watch expressions, globalThis
+related: registerDebug, getDebugData
+difficulty: beginner
 
 === OVERVIEW ===
-Registers component data in a global registry (`globalThis.__debug`) that the inspector console can read and evaluate. Any data registered is accessible via JavaScript evaluation in the console or as watch expressions. Data is automatically updated on every render and cleaned up on unmount. Essential for debugging component state, props, and derived values in real-time without modifying render output.
+useDebug registers arbitrary component data under a named key on `globalThis.__debug`, making it available for live evaluation in the Love2D inspector console (F12) or any JavaScript REPL attached to the runtime. Data is written on every render so values are always current, and the entry is automatically removed when the component unmounts. This hook adds zero visible output — it is purely a debugging side-channel, not an overlay or HUD.
 
 === API / SYNTAX ===
-Import:
-```typescript
-import { useDebug } from '@ilovereact/core';
+```tsx
+import { useDebug, getDebugData, registerDebug } from '@ilovereact/core';
 ```
 
-Signature:
-```typescript
+Hook signature:
+```tsx
 useDebug(key: string, data: any): void
 ```
 
 Parameters:
-- `key` (string): Unique identifier for the debug entry, usually the component name. Must be unique across all active components.
-- `data` (any): Any serializable data to expose. Objects, arrays, primitives, functions all work. Updated on every render.
 
-Return value: void
+| Parameter | Type   | Description                                                           |
+|-----------|--------|-----------------------------------------------------------------------|
+| key       | string | Unique identifier for the debug entry. Usually the component name.    |
+| data      | any    | Any value to expose. Updated every render. Cleaned up on unmount.     |
+
+Returns: void
 
 Companion utilities:
-```typescript
-// Non-hook: read all debug data (for tooling)
+```tsx
+// Read all currently registered debug entries (non-hook, for tooling use).
 getDebugData(): Record<string, any>
 
-// Non-hook: imperatively register debug data outside React
-// Returns unregister function
+// Register debug data imperatively outside of React (e.g. in a game loop).
+// Returns an unregister function — call it when done.
 registerDebug(key: string, data: any): () => void
 ```
 
-=== EXAMPLES ===
-Example 1: Basic component state debugging
----
-function PlayerHUD({ player }) {
-  const [health, setHealth] = useState(100);
-  const [mana, setMana] = useState(50);
+Console access patterns:
+```
+> __debug                         // all registered entries
+> __debug['PlayerHUD']            // specific component
+> __debug['PlayerHUD'].health     // specific field
+:watch __debug['PlayerHUD'].fps   // live-updating watch expression
+```
 
-  useDebug('PlayerHUD', { health, mana, player });
+=== EXAMPLES ===
+Example 1: Basic component state inspection
+---
+```tsx
+import { useDebug } from '@ilovereact/core';
+
+function PlayerHUD({ player }: { player: Player }) {
+  const [health, setHealth] = useState(player.maxHealth);
+  const [mana, setMana]     = useState(player.maxMana);
+
+  useDebug('PlayerHUD', { health, mana, level: player.level });
 
   return (
     <Box>
@@ -54,129 +67,111 @@ function PlayerHUD({ player }) {
   );
 }
 
-// In inspector console (F12):
-// > __debug
-// { PlayerHUD: { health: 100, mana: 50, player: {...} } }
-// > __debug['PlayerHUD'].health
-// 100
+// Inspector console (F12):
+// > __debug['PlayerHUD']
+// { health: 85, mana: 40, level: 12 }
+```
 ---
 Platforms: All
 
-Example 2: Watch expressions for live monitoring
+Example 2: FPS and frame counter via watch expression
 ---
-function GameLoop({ deltaTime }) {
-  const fps = Math.round(1 / deltaTime);
-  const frameCount = useRef(0);
+```tsx
+import { useRef } from 'react';
+import { useDebug } from '@ilovereact/core';
 
-  useEffect(() => {
-    frameCount.current++;
-  });
+function GameLoop({ deltaTime }: { deltaTime: number }) {
+  const frameCount = useRef(0);
+  frameCount.current++;
+
+  const fps = deltaTime > 0 ? Math.round(1 / deltaTime) : 0;
 
   useDebug('GameLoop', { fps, frameCount: frameCount.current, deltaTime });
 
   return null;
 }
 
-// In inspector console:
+// Inspector console:
 // :watch __debug['GameLoop'].fps
 // :watch __debug['GameLoop'].frameCount
+```
 ---
 Platforms: All
 
-Example 3: Computed values and complex state
+Example 3: Multiple components sharing the debug registry
 ---
-function DataDashboard({ users, orders }) {
-  const stats = useMemo(() => ({
-    totalUsers: users.length,
-    activeUsers: users.filter(u => u.active).length,
-    totalRevenue: orders.reduce((sum, o) => sum + o.total, 0),
-    avgOrderValue: orders.length ?
-      orders.reduce((sum, o) => sum + o.total, 0) / orders.length : 0,
-  }), [users, orders]);
+```tsx
+import { useDebug } from '@ilovereact/core';
 
-  useDebug('Dashboard', { stats, userCount: users.length });
-
+function Inventory({ items }: { items: Item[] }) {
+  useDebug('Inventory', {
+    count: items.length,
+    totalWeight: items.reduce((s, i) => s + i.weight, 0),
+  });
   return <Box>...</Box>;
 }
 
-// In inspector console:
-// > __debug['Dashboard'].stats.totalRevenue
-// 15420.50
----
-Platforms: All
-
-Example 4: Multiple debug entries from different components
----
-function App() {
-  return (
-    <Box>
-      <PlayerHUD player={player} />
-      <Inventory items={items} />
-      <QuestLog quests={quests} />
-    </Box>
-  );
-}
-
-function PlayerHUD({ player }) {
-  useDebug('PlayerHUD', { health: player.health, level: player.level });
+function QuestLog({ quests }: { quests: Quest[] }) {
+  useDebug('QuestLog', {
+    active:    quests.filter(q => q.active).length,
+    completed: quests.filter(q => q.completed).length,
+  });
   return <Box>...</Box>;
 }
 
-function Inventory({ items }) {
-  useDebug('Inventory', { itemCount: items.length, totalWeight: items.reduce((s, i) => s + i.weight, 0) });
-  return <Box>...</Box>;
-}
-
-function QuestLog({ quests }) {
-  useDebug('QuestLog', { active: quests.filter(q => q.active), completed: quests.filter(q => q.completed) });
-  return <Box>...</Box>;
-}
-
-// In inspector console:
+// Inspector console:
 // > __debug
-// {
-//   PlayerHUD: { health: 85, level: 12 },
-//   Inventory: { itemCount: 23, totalWeight: 45.2 },
-//   QuestLog: { active: [...], completed: [...] }
-// }
+// { Inventory: { count: 23, totalWeight: 45.2 }, QuestLog: { active: 3, completed: 17 } }
+```
 ---
 Platforms: All
 
-Example 5: Imperative registration outside React
+Example 4: Imperative registration from a game service
 ---
-// Game service or event loop
-const gameState = {
-  running: true,
-  paused: false,
-  tickCount: 0,
-};
+```tsx
+import { registerDebug } from '@ilovereact/core';
 
+const gameState = { running: true, paused: false, tickCount: 0 };
+
+// Register once at startup; update the reference object in place each tick.
 const unregister = registerDebug('GameState', gameState);
 
 function tick() {
   gameState.tickCount++;
-  // Update reference — useDebug auto-updates, but imperative registration is static
-  globalThis.__debug['GameState'] = gameState;
+  // The object reference is already registered — mutations are visible immediately.
   requestAnimationFrame(tick);
 }
 
-// Later: cleanup
+tick();
+
+// On teardown:
 unregister();
+```
 ---
 Platforms: All
 
-=== CRITICAL RULES ===
-- Keys must be unique. Duplicate keys overwrite each other (last registration wins).
-- Data is updated on every render. Don't register expensive computations without memoization.
-- Data is NOT reactive in the console. Type the expression again to see updated values, or use `:watch` for auto-refresh.
-- Automatically unregisters on component unmount. No manual cleanup needed for hook usage.
-- Use `registerDebug` for non-React code (game loops, services, etc.). Remember to call the unregister function when done.
-- Inspector console evaluates in the QuickJS/V8 context. Standard JavaScript eval rules apply.
-- Do NOT register circular references or non-serializable objects (DOM nodes, class instances with methods) — they may crash the console or produce unhelpful output.
-- Registered data lives on `globalThis`, so it persists across hot reloads in dev mode. Clear manually if needed: `globalThis.__debug = {}`.
+Example 5: Read all debug data from tooling code
+---
+```tsx
+import { getDebugData } from '@ilovereact/core';
+
+function DebugSnapshot() {
+  const snapshot = getDebugData();
+  const keys = Object.keys(snapshot);
+
+  return (
+    <Box style={{ padding: 8, gap: 4 }}>
+      {keys.map(k => (
+        <Text key={k} fontSize={12}>{k}: {JSON.stringify(snapshot[k])}</Text>
+      ))}
+    </Box>
+  );
+}
+```
+---
+Platforms: All
 
 === SEE ALSO ===
-- Inspector: F12 to open, console tab for evaluation
-- Console commands: `:watch <expr>`, `:unwatch`, `:clear`
-- `getDebugData()`: Non-hook utility to read all debug data from tooling code
-- `registerDebug()`: Imperative registration for non-React code
+- getDebugData — non-hook read of the full debug registry
+- registerDebug — imperative registration for non-React code
+- Inspector (F12) — Love2D dev overlay with console and watch expressions

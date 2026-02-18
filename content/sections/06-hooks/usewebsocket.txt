@@ -1,281 +1,148 @@
 === METADATA ===
 title: useWebSocket
-description: Manage a persistent WebSocket connection with auto-reconnect and message handling.
+description: Open a persistent WebSocket client connection and expose send, lastMessage, and status state.
 category: Hooks
 platforms: love2d, web, terminal, cc, nvim, hs, awesome
-keywords: useWebSocket, hook, websocket, ws, real-time, connection, send, receive, status, error
-related: usefetch.txt, usepeersever.txt, useloverpc.txt
+keywords: websocket, ws, realtime, socket, network, streaming, live
+related: usePeerServer, useFetch, useLove
 difficulty: intermediate
 
 === OVERVIEW ===
-useWebSocket manages a persistent WebSocket connection with automatic lifecycle handling. The
-hook establishes a connection when the URL is provided, tracks connection status, receives
-incoming messages, and provides a send function for outgoing messages.
-
-The hook works across all targets by using the global WebSocket API, which is polyfilled in
-Love2D to route connections through lua-websocket via the bridge. Connection status is tracked
-reactively, and the WebSocket is automatically closed on component unmount.
+useWebSocket opens a WebSocket client connection to the given URL and keeps it alive for the lifetime of the component. It works across all iLoveReact targets: on Love2D the WebSocket global is polyfilled through the bridge using lua-websocket; on web and Node targets the platform's native WebSocket is used. The hook tracks the connection lifecycle through a typed status field and exposes the most recently received message string. Pass null as the URL to remain disconnected. The send function is a no-op when the socket is not in the open state, so it is always safe to call.
 
 === API / SYNTAX ===
 ```tsx
 import { useWebSocket } from '@ilovereact/core';
+import type { WebSocketStatus } from '@ilovereact/core';
 ```
 
-Signature:
-  function useWebSocket(
-    url: string | null
-  ): {
-    status: WebSocketStatus;
-    send: (data: string) => void;
-    lastMessage: string | null;
-    error: string | null;
-  }
-
-  type WebSocketStatus = 'connecting' | 'open' | 'closed' | 'error'
-
 Parameters:
-  url: string | null
-    The WebSocket URL to connect to (ws:// or wss://). Pass null to disable the connection
-    and reset state.
+| Param | Type           | Default  | Description |
+|-------|----------------|----------|-------------|
+| url   | string \| null | required | WebSocket server URL (e.g. "ws://localhost:9050"). Pass null to stay closed. |
 
 Returns:
-  Object with four properties:
-    status: WebSocketStatus
-      Current connection status. One of: 'connecting', 'open', 'closed', 'error'.
-
-    send: (data: string) => void
-      Function to send a message through the WebSocket. Only sends if status is 'open'.
-      Messages sent while not open are silently dropped.
-
-    lastMessage: string | null
-      The most recent message received from the WebSocket. Null if no messages have been
-      received yet. Updates reactively when new messages arrive.
-
-    error: string | null
-      Error message if the connection failed. Null if no error has occurred or if the
-      connection is successful.
+| Field       | Type            | Description |
+|-------------|-----------------|-------------|
+| status      | WebSocketStatus | Current connection state: "connecting", "open", "closed", or "error". |
+| send        | (data: string) => void | Send a string message. No-op if the connection is not in the "open" state. |
+| lastMessage | string \| null  | The most recently received message string, or null if nothing has arrived yet. |
+| error       | string \| null  | Human-readable error string if status is "error", otherwise null. |
 
 === EXAMPLES ===
-Example 1: Real-time chat client
+Example 1: Connect to a server and display live data
 ---
-import { useState } from 'react';
-import { useWebSocket, Box, Text, TextInput, Pressable } from '@ilovereact/core';
+```tsx
+import { useWebSocket, Box, Text } from '@ilovereact/core';
 
-function ChatClient() {
-  const { status, send, lastMessage, error } = useWebSocket('ws://localhost:9050');
-  const [input, setInput] = useState('');
+interface GameState {
+  score: number;
+  level: number;
+}
 
-  const handleSend = () => {
-    if (input.trim() && status === 'open') {
-      send(input);
-      setInput('');
-    }
-  };
+function LiveHUD() {
+  const { status, lastMessage } = useWebSocket('ws://localhost:9050');
+  const state: GameState | null = lastMessage ? JSON.parse(lastMessage) : null;
 
   return (
-    <Box style={{ width: '100%', height: '100%', padding: 20 }}>
-      <Text style={{ fontSize: 16, color: '#89b4fa', marginBottom: 10 }}>
-        Status: {status}
-      </Text>
-
-      {error && (
-        <Text style={{ fontSize: 14, color: '#f38ba8', marginBottom: 10 }}>
-          Error: {error}
-        </Text>
+    <Box flexDirection="column" gap={4} padding={12}>
+      <Text fontSize={12}>Status: {status}</Text>
+      {state && (
+        <>
+          <Text fontSize={16}>Score: {state.score}</Text>
+          <Text fontSize={14}>Level: {state.level}</Text>
+        </>
       )}
+    </Box>
+  );
+}
+```
+---
+Platforms: All
 
-      {lastMessage && (
-        <Box style={{ padding: 10, backgroundColor: '#313244', marginBottom: 10 }}>
-          <Text style={{ fontSize: 14, color: '#cdd6f4' }}>
-            Received: {lastMessage}
-          </Text>
-        </Box>
-      )}
+Example 2: Send commands to a server on button press
+---
+```tsx
+import { useWebSocket, Box, Text, Pressable } from '@ilovereact/core';
 
-      <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-        <TextInput
-          value={input}
-          onChangeText={setInput}
-          placeholder="Type a message..."
-          style={{ flex: 1, fontSize: 14, color: '#cdd6f4' }}
-        />
-        <Pressable onPress={handleSend}>
-          <Box style={{ padding: 10, backgroundColor: '#89b4fa' }}>
-            <Text style={{ fontSize: 14, color: '#1e1e2e' }}>Send</Text>
+function CommandPanel() {
+  const { status, send } = useWebSocket('ws://localhost:8080');
+
+  return (
+    <Box flexDirection="column" gap={8} padding={12}>
+      <Text fontSize={12}>Connection: {status}</Text>
+      <Box flexDirection="row" gap={8} width="100%">
+        <Pressable onPress={() => send(JSON.stringify({ cmd: 'start' }))}>
+          <Box backgroundColor="#2a7" padding={8}>
+            <Text fontSize={14}>Start</Text>
+          </Box>
+        </Pressable>
+        <Pressable onPress={() => send(JSON.stringify({ cmd: 'stop' }))}>
+          <Box backgroundColor="#a22" padding={8}>
+            <Text fontSize={14}>Stop</Text>
           </Box>
         </Pressable>
       </Box>
     </Box>
   );
 }
+```
 ---
-Platforms: all
+Platforms: All
 
-Example 2: Real-time data stream
+Example 3: Conditional connection — connect only when a toggle is on
 ---
-import { useState, useEffect } from 'react';
-import { useWebSocket, Box, Text } from '@ilovereact/core';
-
-interface DataPoint {
-  timestamp: number;
-  value: number;
-}
-
-function DataStream() {
-  const { status, lastMessage } = useWebSocket('ws://localhost:9050');
-  const [dataPoints, setDataPoints] = useState<DataPoint[]>([]);
-
-  useEffect(() => {
-    if (lastMessage) {
-      try {
-        const parsed = JSON.parse(lastMessage);
-        setDataPoints((prev) => [...prev.slice(-9), parsed]);
-      } catch (err) {
-        console.error('Failed to parse message:', err);
-      }
-    }
-  }, [lastMessage]);
-
-  return (
-    <Box style={{ padding: 20 }}>
-      <Text style={{ fontSize: 16, color: '#89b4fa', marginBottom: 10 }}>
-        Status: {status}
-      </Text>
-
-      <Box style={{ marginTop: 10 }}>
-        {dataPoints.map((point, i) => (
-          <Text key={i} style={{ fontSize: 14, color: '#cdd6f4', marginBottom: 3 }}>
-            {new Date(point.timestamp).toLocaleTimeString()}: {point.value}
-          </Text>
-        ))}
-      </Box>
-    </Box>
-  );
-}
----
-Platforms: all
-
-Example 3: Conditional connection with reconnect
----
+```tsx
 import { useState } from 'react';
 import { useWebSocket, Box, Text, Pressable } from '@ilovereact/core';
 
-function ConditionalWebSocket() {
-  const [enabled, setEnabled] = useState(false);
-  const url = enabled ? 'ws://localhost:9050' : null;
-  const { status, send, lastMessage, error } = useWebSocket(url);
+function ConditionalSocket() {
+  const [connected, setConnected] = useState(false);
+  const url = connected ? 'ws://localhost:9050' : null;
+  const { status, lastMessage } = useWebSocket(url);
 
   return (
-    <Box style={{ padding: 20 }}>
-      <Pressable onPress={() => setEnabled(!enabled)}>
-        <Box style={{ padding: 10, backgroundColor: enabled ? '#f38ba8' : '#a6e3a1' }}>
-          <Text style={{ fontSize: 14, color: '#1e1e2e' }}>
-            {enabled ? 'Disconnect' : 'Connect'}
-          </Text>
+    <Box flexDirection="column" gap={8} padding={12}>
+      <Pressable onPress={() => setConnected(c => !c)}>
+        <Box backgroundColor={connected ? '#a22' : '#2a7'} padding={8}>
+          <Text fontSize={14}>{connected ? 'Disconnect' : 'Connect'}</Text>
         </Box>
       </Pressable>
-
-      {enabled && (
-        <>
-          <Text style={{ fontSize: 14, color: '#89b4fa', marginTop: 10 }}>
-            Status: {status}
-          </Text>
-
-          {error && (
-            <Text style={{ fontSize: 14, color: '#f38ba8', marginTop: 5 }}>
-              Error: {error}
-            </Text>
-          )}
-
-          {status === 'open' && (
-            <Pressable onPress={() => send('ping')}>
-              <Box style={{ padding: 10, backgroundColor: '#89b4fa', marginTop: 10 }}>
-                <Text style={{ fontSize: 14, color: '#1e1e2e' }}>Send Ping</Text>
-              </Box>
-            </Pressable>
-          )}
-
-          {lastMessage && (
-            <Text style={{ fontSize: 14, color: '#cdd6f4', marginTop: 10 }}>
-              Last message: {lastMessage}
-            </Text>
-          )}
-        </>
-      )}
+      <Text fontSize={13}>Status: {status}</Text>
+      {lastMessage && <Text fontSize={13}>Last: {lastMessage}</Text>}
     </Box>
   );
 }
+```
 ---
-Platforms: all
+Platforms: All
 
-Example 4: Binary data handling
+Example 4: Display an error when the connection fails
 ---
+```tsx
 import { useWebSocket, Box, Text } from '@ilovereact/core';
 
-function BinaryDataStream() {
-  const { status, send, lastMessage } = useWebSocket('ws://localhost:9050');
-
-  const handleSendBinary = () => {
-    // Note: WebSocket.send() in this hook only accepts strings
-    // For binary data, use the native WebSocket API directly
-    const data = JSON.stringify({ type: 'binary', payload: [1, 2, 3, 4] });
-    send(data);
-  };
+function ReliableSocket() {
+  const { status, error, lastMessage } = useWebSocket('ws://localhost:9050');
 
   return (
-    <Box style={{ padding: 20 }}>
-      <Text style={{ fontSize: 16, color: '#89b4fa', marginBottom: 10 }}>
-        Status: {status}
-      </Text>
-
-      <Pressable onPress={handleSendBinary}>
-        <Box style={{ padding: 10, backgroundColor: '#89b4fa' }}>
-          <Text style={{ fontSize: 14, color: '#1e1e2e' }}>Send Binary as JSON</Text>
+    <Box flexDirection="column" gap={4} padding={12}>
+      {status === 'error' && (
+        <Box backgroundColor="#500" padding={8}>
+          <Text fontSize={13}>Connection error: {error}</Text>
         </Box>
-      </Pressable>
-
-      {lastMessage && (
-        <Box style={{ marginTop: 10, padding: 10, backgroundColor: '#313244' }}>
-          <Text style={{ fontSize: 14, color: '#cdd6f4' }}>
-            Received: {lastMessage}
-          </Text>
-        </Box>
+      )}
+      {status === 'open' && lastMessage && (
+        <Text fontSize={14}>{lastMessage}</Text>
       )}
     </Box>
   );
 }
+```
 ---
-Platforms: all
-
-=== PLATFORM NOTES ===
-The WebSocket API is implemented differently per target:
-
-- Love2D: Uses the WebSocket polyfill which routes connections through lua-websocket via
-  the bridge. Only text messages are supported (binary frames are not yet implemented).
-  The polyfill handles connection lifecycle, message queueing, and error reporting.
-
-- Web: Uses the browser's native WebSocket API. Supports both text and binary messages.
-  Connection lifecycle is managed by the browser.
-
-- Grid targets (terminal, cc, nvim, hs, awesome): Use Node.js's ws library. Supports both
-  text and binary messages. Connection lifecycle is managed by the Node.js runtime.
-
-The hook only supports sending string messages. For binary data, use the native WebSocket
-API directly or encode binary data as JSON/Base64 strings.
-
-=== CRITICAL RULES ===
-- The hook automatically establishes a connection when url is non-null
-- Pass null as the url to close the connection and reset state
-- The WebSocket is automatically closed on component unmount or when url changes
-- send() only sends messages when status is 'open' -- messages sent otherwise are dropped
-- Only text messages are supported by this hook (no binary frames)
-- lastMessage updates reactively on every incoming message (not queued -- only the most recent)
-- For Love2D, the WebSocket polyfill requires lua-websocket to be installed
-- Connection errors set status to 'error' and populate the error field
-- The hook does NOT automatically reconnect on disconnect -- implement reconnection logic manually if needed
+Platforms: All
 
 === SEE ALSO ===
-- usefetch.txt -- One-time HTTP requests with loading/error state
-- usepeersever.txt -- Host a WebSocket server for P2P connections
-- useloverpc.txt -- Call Lua functions from React with async/await
-- useloveevent.txt -- Subscribe to custom bridge events
+- usePeerServer
+- useFetch
+- useLove

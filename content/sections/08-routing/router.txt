@@ -1,0 +1,392 @@
+=== METADATA ===
+title: Router
+description: Client-side routing for iLoveReact apps across all targets
+category: Routing
+platforms: love2d, web, terminal, cc, nvim, hs, awesome
+keywords: routing, navigation, history, params, location, route, link
+related: useLocation, useParams, useNavigate
+difficulty: intermediate
+
+=== OVERVIEW ===
+@ilovereact/router provides client-side routing with no external dependencies.
+It works on every iLoveReact target by abstracting history management behind
+a HistoryAdapter interface: memory-based for native targets, browser-based for
+web. Route matching supports named parameters (:id), optional parameters
+(:id?), and wildcards (*), with highest-specificity-wins semantics when
+multiple routes match.
+
+Import: import { RouterProvider, Routes, Route, Link, Navigate, Outlet,
+         useRouter, useNavigate, useLocation, useParams, useRoute,
+         createMemoryHistory, createBrowserHistory } from '@ilovereact/router';
+
+=== API / SYNTAX ===
+
+---- createMemoryHistory(options?) ----------------------------------------
+
+Creates an in-memory history stack. Use this on all non-web targets (love2d,
+terminal, cc, nvim, hs, awesome).
+
+  createMemoryHistory(options?: MemoryHistoryOptions): HistoryAdapter
+
+  MemoryHistoryOptions:
+    initialEntries?: string[]   // Initial path stack. Default: ['/']
+    initialIndex?:  number      // Active index into initialEntries.
+                                // Default: last entry.
+
+  Returns: HistoryAdapter — pass to <RouterProvider history={...} />
+
+---- createBrowserHistory() -----------------------------------------------
+
+Creates a history adapter backed by the browser's History API. Web target only.
+Listens to popstate for back/forward button support.
+
+  createBrowserHistory(): HistoryAdapter
+
+---- RouterProvider --------------------------------------------------------
+
+Context provider. Wrap your entire app (or the routed subtree) with this once.
+All routing hooks and components require a RouterProvider ancestor.
+
+  <RouterProvider history={HistoryAdapter}>
+    {children}
+  </RouterProvider>
+
+  Props:
+    history   HistoryAdapter   Required. From createMemoryHistory() or
+                               createBrowserHistory().
+    children  ReactNode        Required.
+
+---- Routes ----------------------------------------------------------------
+
+Container that evaluates all child <Route> elements and renders the single
+best-matching one. "Best" means highest specificity score among all patterns
+that match the current pathname. Use this for exclusive routing.
+
+  <Routes>
+    {children}   // One or more <Route> elements
+  </Routes>
+
+---- Route -----------------------------------------------------------------
+
+Declares a route. Must be a direct child of <Routes>. Has no visible output
+on its own — Routes does the rendering.
+
+  <Route path={string} element={ReactNode} />
+
+  Props:
+    path     string      Route pattern. Supports:
+                           /users           — static segment
+                           /users/:id       — named parameter
+                           /users/:id?      — optional parameter
+                           /files/*         — wildcard (rest of path)
+                           *                — catch-all / 404 fallback
+    element  ReactNode   What to render when this route matches.
+
+  Specificity scoring (higher = matched first):
+    static segment   4 points
+    required param   3 points
+    optional param   2 points
+    wildcard         1 point
+
+---- Link ------------------------------------------------------------------
+
+Navigable wrapper. Calls navigate() on click. On web it renders as <a> so
+the browser gets hover state, right-click, and native link behaviors.
+
+  <Link to={string} replace? style? {...rest}>
+    {children}
+  </Link>
+
+  Props:
+    to        string     Required. Target path.
+    replace?  boolean    Replace current history entry instead of pushing.
+                         Default: false.
+    style?    object     Style object forwarded to the underlying element.
+    children  ReactNode  Required.
+
+---- Navigate (declarative redirect) ----------------------------------------
+
+When rendered, immediately navigates to `to`. Useful inside route elements for
+conditional redirects or deprecated-path forwarding.
+
+  <Navigate to={string} replace? />
+
+  Props:
+    to       string    Required. Target path.
+    replace? boolean   Use replace instead of push. Default: false.
+
+---- Outlet ----------------------------------------------------------------
+
+Renders nested route content. Place inside a parent route's element component
+to mark where child routes should appear. Backed by OutletContext.
+
+  <Outlet />
+
+  No props.
+
+---- useRouter() -----------------------------------------------------------
+
+Returns the full router state object. Prefer the focused hooks (useNavigate,
+useLocation, useParams) unless you need everything at once.
+
+  useRouter(): RouterState
+
+  RouterState:
+    location  Location                                    Current location.
+    params    Record<string, string>                      Matched route params.
+    navigate  (to: string, opts?: NavigateOptions) => void
+    back      () => void
+    forward   () => void
+
+  Throws if called outside a <RouterProvider>.
+
+---- useNavigate() ---------------------------------------------------------
+
+Returns the navigate function. The most common hook for imperative navigation.
+
+  useNavigate(): (to: string, options?: NavigateOptions) => void
+
+  NavigateOptions:
+    replace?  boolean   Replace history entry instead of pushing.
+
+  Throws if called outside a <RouterProvider>.
+
+---- useLocation() ---------------------------------------------------------
+
+Returns the current Location object. Re-renders the component whenever the
+location changes.
+
+  useLocation(): Location
+
+  Location:
+    pathname  string   The path portion (e.g. '/users/42').
+    search    string   Query string (e.g. '?tab=profile').
+    hash      string   Hash fragment (e.g. '#bio').
+
+  Throws if called outside a <RouterProvider>.
+
+---- useParams<T>() --------------------------------------------------------
+
+Returns the named URL parameters extracted from the matched route pattern.
+Only populated inside a route rendered by <Routes> — parameters are provided
+by RouteParamsContext.
+
+  useParams<T extends Record<string, string> = Record<string, string>>(): T
+
+  Returns: Object mapping parameter names to their decoded string values.
+           Empty object if no parameters matched or used outside <Routes>.
+
+  Example: route '/users/:id', pathname '/users/42' -> { id: '42' }
+
+---- useRoute(pattern) -----------------------------------------------------
+
+Imperatively match the current pathname against a pattern. Returns a tuple of
+[matched, params]. Useful for conditional rendering without <Routes>.
+
+  useRoute(pattern: string): [boolean, Record<string, string>]
+
+  Arguments:
+    pattern  string   Route pattern (same syntax as <Route path={...} />).
+
+  Returns:
+    [0]  boolean                 True if current pathname matches.
+    [1]  Record<string, string>  Extracted params if matched, {} otherwise.
+
+---- HistoryAdapter interface -----------------------------------------------
+
+Implement this to add custom history backends (e.g., hash-based routing).
+
+  interface HistoryAdapter {
+    readonly location: Location
+    push(path: string): void
+    replace(path: string): void
+    back(): void
+    forward(): void
+    subscribe(listener: (location: Location) => void): () => void
+  }
+
+---- Low-level matching utilities -------------------------------------------
+
+  matchRoute(pattern: string, pathname: string): RouteMatch
+    RouteMatch: { matched: boolean; params: Record<string, string>; path: string }
+
+  scorePattern(pattern: string): number
+    Returns specificity score. Higher = more specific.
+
+  findBestMatch(patterns: string[], pathname: string): RouteMatch | null
+    Returns the highest-scoring match among all patterns, or null.
+
+  parsePath(path: string): Location
+    Parses '/users/42?tab=info#bio' into { pathname, search, hash }.
+
+  locationToString(loc: Location): string
+    Reconstructs a full path string from a Location object.
+
+=== EXAMPLES ===
+
+---- Love2D / native target (memory history) --------------------------------
+
+import { RouterProvider, Routes, Route, Link, createMemoryHistory }
+  from '@ilovereact/router';
+import { Box, Text } from '@ilovereact/core';
+
+const history = createMemoryHistory({ initialEntries: ['/'] });
+
+function HomeScreen() {
+  return (
+    <Box style={{ flex: 1 }}>
+      <Text fontSize={24}>Home</Text>
+      <Link to="/settings">Go to Settings</Link>
+    </Box>
+  );
+}
+
+function SettingsScreen() {
+  return <Text fontSize={18}>Settings</Text>;
+}
+
+export function App() {
+  return (
+    <RouterProvider history={history}>
+      <Routes>
+        <Route path="/"         element={<HomeScreen />} />
+        <Route path="/settings" element={<SettingsScreen />} />
+        <Route path="*"         element={<Text fontSize={16}>404</Text>} />
+      </Routes>
+    </RouterProvider>
+  );
+}
+
+---- Web target (browser history) -------------------------------------------
+
+import { RouterProvider, Routes, Route, createBrowserHistory }
+  from '@ilovereact/router';
+
+const history = createBrowserHistory();
+
+export function App() {
+  return (
+    <RouterProvider history={history}>
+      <Routes>
+        <Route path="/"       element={<Home />} />
+        <Route path="/about"  element={<About />} />
+      </Routes>
+    </RouterProvider>
+  );
+}
+
+---- Named parameters -------------------------------------------------------
+
+import { useParams, useNavigate } from '@ilovereact/router';
+
+function UserPage() {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+
+  return (
+    <Box>
+      <Text fontSize={18}>User: {id}</Text>
+      <Pressable onPress={() => navigate('/users')}>
+        <Text fontSize={14}>Back to list</Text>
+      </Pressable>
+    </Box>
+  );
+}
+
+// Mount at: <Route path="/users/:id" element={<UserPage />} />
+
+---- Imperative navigation with replace -------------------------------------
+
+import { useNavigate } from '@ilovereact/router';
+
+function LoginPage() {
+  const navigate = useNavigate();
+
+  async function handleSubmit() {
+    await login();
+    // Replace so the user can't go back to the login screen
+    navigate('/dashboard', { replace: true });
+  }
+
+  return <Pressable onPress={handleSubmit}><Text fontSize={16}>Login</Text></Pressable>;
+}
+
+---- Reading current location -----------------------------------------------
+
+import { useLocation } from '@ilovereact/router';
+
+function NavBar() {
+  const location = useLocation();
+  const isHome = location.pathname === '/';
+
+  return (
+    <Box flexDirection="row" width="100%">
+      <Text fontSize={14} style={{ color: isHome ? '#fff' : '#888' }}>Home</Text>
+    </Box>
+  );
+}
+
+---- Conditional render with useRoute ---------------------------------------
+
+import { useRoute } from '@ilovereact/router';
+
+function AdminPanel() {
+  const [matched] = useRoute('/admin/*');
+  if (!matched) return null;
+  return <Text fontSize={16}>Admin content</Text>;
+}
+
+---- Declarative redirect ----------------------------------------------------
+
+import { Routes, Route, Navigate } from '@ilovereact/router';
+
+<Routes>
+  <Route path="/home"     element={<Home />} />
+  <Route path="/"         element={<Navigate to="/home" replace />} />
+  <Route path="/old-path" element={<Navigate to="/new-path" />} />
+</Routes>
+
+---- Specificity: static beats dynamic -------------------------------------
+
+// '/users/new' matches BOTH '/users/:id' (score 3) and '/users/new' (score 4).
+// Routes renders the more specific one: '/users/new'.
+
+<Routes>
+  <Route path="/users/:id"  element={<UserDetail />} />
+  <Route path="/users/new"  element={<NewUser />} />   // wins for /users/new
+  <Route path="*"           element={<NotFound />} />
+</Routes>
+
+---- Custom history adapter -------------------------------------------------
+
+import type { HistoryAdapter, Location } from '@ilovereact/router';
+
+// Hash-based history for environments without pushState support
+function createHashHistory(): HistoryAdapter {
+  const listeners = new Set<(loc: Location) => void>();
+
+  function getLocation(): Location {
+    const hash = window.location.hash.slice(1) || '/';
+    return { pathname: hash, search: '', hash: '' };
+  }
+
+  window.addEventListener('hashchange', () => {
+    const loc = getLocation();
+    for (const fn of listeners) fn(loc);
+  });
+
+  return {
+    get location() { return getLocation(); },
+    push(path)    { window.location.hash = path; },
+    replace(path) { window.location.replace('#' + path); },
+    back()        { window.history.back(); },
+    forward()     { window.history.forward(); },
+    subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); },
+  };
+}
+
+=== SEE ALSO ===
+useNavigate
+useLocation
+useParams
+useRoute
