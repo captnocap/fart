@@ -10,7 +10,7 @@ A `<ThemeProvider>` that works like dark/light mode switching but for entire vis
 
 - `packages/theme/` — new `@ilovereact/theme` package
 - `ThemeProvider` — React context, sends `theme:set` to Lua bridge on mount/switch
-- `useTheme()` — returns `{ themeId, setTheme, colors }`
+- `useTheme()` — returns `{ themeId, setTheme, colors, typography, spacing, radii }`
 - `useThemeColors()` — shorthand, returns just the semantic color tokens
 - `createTheme()` — factory with `extends` support for custom themes
 - `registerTheme()` — register custom themes at runtime
@@ -55,67 +55,78 @@ Lua: `lua/themes/` (one file per family + init.lua loader)
 
 - `native-main.tsx` wrapped in `<ThemeProvider>`
 - Storybook chrome (sidebar, tab bar, content area) uses `useThemeColors()`
-- Theme cycling button in tab bar (click to cycle through all 17 themes)
+- `ThemeSwitcher` component in tab bar (dropdown with grouped themes + color swatches)
 - `ThemeStory` — showcase story with color swatches, click-to-switch cards
+- `ThemeSwitcherStory` — demonstrates the ThemeSwitcher component
 
-### Phase 5: Story migration to theme tokens 🔄 (in progress)
+### Phase 5: Docs + playground migration to theme context ✅
 
-Migrating all 71 story files from hardcoded hex colors to `useThemeColors()` tokens.
-This ensures the storybook — which IS the framework reference — demonstrates proper theme usage.
+All 10 files in `storybook/src/docs/` and `storybook/src/playground/` migrated from hardcoded hex colors to `useThemeColors()` tokens. Switching themes in Stories then clicking Docs or Playground now feels consistent — same colors follow throughout.
 
-Semantic token mapping:
-- Container backgrounds → `c.bg`, `c.bgElevated`, `c.surface`
-- Text colors → `c.text`, `c.textSecondary`, `c.textDim`
-- Borders → `c.border`
-- Actions → `c.primary`, `c.accent`, `c.error`, `c.success`, `c.warning`, `c.info`
-- Decorative colors (chart data, rainbow arrays, brand-specific) stay hardcoded
+Files migrated:
+- DocsSidebar.tsx, DocsViewer.tsx, DocPage.tsx, CodeBlock.tsx, ExampleCard.tsx, MetadataBadges.tsx
+- PlaygroundPanel.tsx, StatusBar.tsx, Preview.tsx, TemplatePicker.tsx
+
+Intentional data colors (PLATFORM_COLORS, CATEGORY_COLORS, DIFFICULTY_COLORS) preserved as hardcoded.
+
+### Phase 6: Extended theme shape — typography, spacing, radii ✅
+
+Theme interface extended beyond colors:
+
+```typescript
+interface ThemeTypography {
+  fontSize: { xs: 8, sm: 10, md: 12, lg: 16, xl: 20, xxl: 28 };
+  fontWeight: { normal: 'normal', medium: '500', bold: 'bold' };
+  lineHeight: { tight: 1.2, normal: 1.5, relaxed: 1.8 };
+}
+interface ThemeSpacing { xs: 4, sm: 8, md: 12, lg: 16, xl: 24 }
+interface ThemeRadii { none: 0, sm: 4, md: 8, lg: 12, full: 9999 }
+```
+
+- `packages/theme/src/defaults.ts` — shared default values
+- `packages/theme/src/types.ts` — ThemeTypography, ThemeSpacing, ThemeRadii interfaces
+- All 8 theme family files updated with `typography: defaultTypography`, etc.
+- `useThemeTypography()`, `useThemeSpacing()`, `useThemeRadii()` hooks added
+- `createTheme()` deep-merges typography/spacing/radii with defaults
+- ThemeProvider context value includes all fields
+- Lua side: `lua/themes/defaults.lua` + `lua/themes/init.lua` merges defaults into each theme
+
+### Phase 7: ThemeSwitcher component ✅
+
+Drop-in `<ThemeSwitcher>` component in `@ilovereact/theme`:
+
+```tsx
+import { ThemeSwitcher } from '@ilovereact/theme';
+<ThemeSwitcher />  // shows current theme + color swatches, opens overlay panel
+```
+
+- Shows current theme name + 3 color swatches (bg, primary, accent)
+- Opens overlay panel with all themes grouped by family
+- Each option shows displayName + color preview
+- Uses `useTheme()` for read/write, `useThemeColors()` for its own styling
+- Replaced the old ThemeCycleButton in the storybook tab bar
+- Storybook story: `ThemeSwitcherStory.tsx`
+
+### Phase 8: Component-level token resolution (shorthand props) ✅
+
+Box and Text primitives auto-resolve theme token names in color fields:
+
+```tsx
+<Box bg="primary" />              // resolves to e.g. "#cba6f7"
+<Box bg="surface" />              // resolves to e.g. "#313244"
+<Text color="textSecondary" />    // resolves to e.g. "#a6adc8"
+```
+
+Architecture (avoids circular deps):
+- `ThemeColorsContext` in `packages/shared/src/context.ts` — holds flat `Record<string, string>` of token→color
+- `ThemeProvider` populates it with semantic tokens + palette entries
+- `resolveColor()` and `resolveStyleColors()` in `primitives.tsx`
+- Wired into Box (all 4 style objects) and Text
+- When no ThemeProvider present, `useThemeColorsOptional()` returns null → no-op, fully backward compatible
 
 ---
 
 ## What's NOT done yet
-
-### Theme shape: typography, spacing, radii, shadows
-
-The current `Theme` interface only has `colors`. The original plan included:
-
-```typescript
-typography: {
-  fontFamily?: string;
-  fontSize: { xs: number; sm: number; md: number; lg: number; xl: number; xxl: number };
-  fontWeight: { normal: string; medium: string; bold: string };
-  lineHeight: { tight: number; normal: number; relaxed: number };
-};
-spacing: { xs: number; sm: number; md: number; lg: number; xl: number };
-radii: { none: number; sm: number; md: number; lg: number; full: number };
-shadows: { sm: ShadowDef; md: ShadowDef; lg: ShadowDef };
-```
-
-These would let themes control sizing and shape, not just color. A "compact" theme could have tighter spacing. A "rounded" theme could have large radii everywhere.
-
-### Component-level theme integration (primitives read from theme)
-
-Box/Text shorthand props that resolve against theme context:
-
-```tsx
-// Token-based props that resolve against active theme
-<Box bg="primary" borderColor="border" p="md" radius="lg">
-  <Text color="text" size="md" weight="bold">Title</Text>
-</Box>
-```
-
-This means `bg="primary"` resolves to `theme.colors.primary` automatically. Currently stories call `useThemeColors()` and pass `c.primary` explicitly — the shorthand would be a DX improvement.
-
-### ThemeSwitcher component
-
-A drop-in component for any app:
-
-```tsx
-import { ThemeSwitcher } from '@ilovereact/theme';
-<ThemeSwitcher position="bottom-right" />  // floating pill
-<ThemeSwitcher inline />                    // settings row
-```
-
-Shows preview swatches, current theme highlighted, click to switch.
 
 ### Shaders (Love2D GLSL post-processing)
 
@@ -168,6 +179,14 @@ All color tokens animate over 300ms. Requires interpolating hex colors in Lua.
 <ThemeProvider theme="auto" light="catppuccin-latte" dark="catppuccin-mocha">
 ```
 
+### Shadows in theme shape
+
+```typescript
+shadows: { sm: ShadowDef; md: ShadowDef; lg: ShadowDef };
+```
+
+Currently omitted because Love2D doesn't support CSS-style box shadows natively. Would need shader-based implementation.
+
 ### Refactor `packages/shared/src/colors.ts`
 
 The static Catppuccin Mocha palette export still exists. Could be made dynamic (re-exports from active theme) or deprecated in favor of `useThemeColors()`.
@@ -176,14 +195,11 @@ The static Catppuccin Mocha palette export still exists. Could be made dynamic (
 
 ## Priority for remaining work
 
-1. **Finish story migration** — in progress, agents running
-2. **Typography/spacing/radii in theme shape** — expands what themes can control
-3. **Component-level shorthand props** — `bg="primary"` resolution
-4. **ThemeSwitcher component** — user-facing convenience
-5. **Animated transitions** — polish
-6. **Shaders** — Love2D wow factor
-7. **Sprite maps** — advanced theming
-8. **Reactive/auto themes** — convenience
+1. **Animated transitions** — polish, uses existing spring system
+2. **Shaders** — Love2D wow factor
+3. **Sprite maps** — advanced theming
+4. **Reactive/auto themes** — convenience
+5. **Shadows** — needs shader implementation first
 
 ---
 
