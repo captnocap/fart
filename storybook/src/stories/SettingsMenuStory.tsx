@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Box, Text, Pressable, ScrollView } from '../../../packages/shared/src';
 import {
   builtinServices,
+  useSettingsRegistry,
   useServiceKey,
   type ServiceDefinition,
   type ServiceCategory,
@@ -242,6 +243,9 @@ function UseServiceKeyDemo() {
 
 export default function SettingsMenuStory() {
   const c = useThemeColors();
+
+  // Register all built-in services with the Lua settings overlay
+  useSettingsRegistry();
 
   return (
     <ScrollView style={{
