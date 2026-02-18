@@ -43,38 +43,89 @@ local colors = {
 -- ============================================================================
 
 local syntaxColors = {
-  keyword     = Color.toTable("#c678dd"),
-  string      = Color.toTable("#98c379"),
-  number      = Color.toTable("#d19a66"),
-  comment     = Color.toTable("#5c6370"),
-  component   = Color.toTable("#61afef"),
-  tag         = Color.toTable("#e06c75"),
-  prop        = Color.toTable("#d19a66"),
-  identifier  = Color.toTable("#abb2bf"),
-  punctuation = Color.toTable("#636d83"),
-  text        = Color.toTable("#abb2bf"),
+  keyword     = Color.toTable("#cba6f7"),  -- mauve: if, return, const, etc.
+  string      = Color.toTable("#a6e3a1"),  -- green
+  number      = Color.toTable("#fab387"),  -- peach
+  constant    = Color.toTable("#fab387"),  -- peach: true, false, null, undefined
+  comment     = Color.toTable("#9399b2"),  -- overlay2
+  component   = Color.toTable("#89b4fa"),  -- blue: JSX <Component>
+  tag         = Color.toTable("#f38ba8"),  -- red: JSX <div>
+  prop        = Color.toTable("#89b4fa"),  -- blue: JSX attributes
+  funcCall    = Color.toTable("#89b4fa"),  -- blue: function/method calls
+  property    = Color.toTable("#94e2d5"),  -- teal: object keys, .property access
+  builtin     = Color.toTable("#f38ba8"),  -- red: Math, console, JSON, this, super
+  typeName    = Color.toTable("#f9e2af"),  -- yellow: type/interface names
+  operator    = Color.toTable("#94e2d5"),  -- teal: +, -, ===, &&, etc.
+  identifier  = Color.toTable("#cdd6f4"),  -- text
+  punctuation = Color.toTable("#9399b2"),  -- overlay2: {, }, (, ), ;
+  text        = Color.toTable("#cdd6f4"),  -- text
 }
 
 local KEYWORDS = {
   ["const"]=true, ["let"]=true, ["var"]=true, ["function"]=true,
   ["return"]=true, ["if"]=true, ["else"]=true, ["for"]=true,
   ["while"]=true, ["do"]=true, ["switch"]=true, ["case"]=true,
-  ["break"]=true, ["continue"]=true, ["new"]=true, ["this"]=true,
+  ["break"]=true, ["continue"]=true, ["new"]=true,
   ["class"]=true, ["extends"]=true, ["import"]=true, ["export"]=true,
-  ["from"]=true, ["default"]=true, ["true"]=true, ["false"]=true,
-  ["null"]=true, ["undefined"]=true, ["typeof"]=true, ["instanceof"]=true,
+  ["from"]=true, ["default"]=true, ["typeof"]=true, ["instanceof"]=true,
   ["in"]=true, ["of"]=true, ["try"]=true, ["catch"]=true,
   ["finally"]=true, ["throw"]=true, ["async"]=true, ["await"]=true,
-  ["yield"]=true,
+  ["yield"]=true, ["void"]=true, ["delete"]=true, ["with"]=true,
 }
 
+-- Constants: peach instead of keyword purple
+local CONSTANTS = {
+  ["true"]=true, ["false"]=true, ["null"]=true, ["undefined"]=true,
+  ["NaN"]=true, ["Infinity"]=true,
+}
+
+-- TypeScript-specific keywords
+local TS_KEYWORDS = {
+  ["interface"]=true, ["type"]=true, ["enum"]=true, ["namespace"]=true,
+  ["declare"]=true, ["abstract"]=true, ["implements"]=true,
+  ["readonly"]=true, ["keyof"]=true, ["infer"]=true, ["satisfies"]=true,
+  ["as"]=true, ["is"]=true, ["override"]=true, ["private"]=true,
+  ["protected"]=true, ["public"]=true, ["static"]=true, ["module"]=true,
+}
+
+-- Built-in globals: red
+local BUILTINS = {
+  ["Math"]=true, ["JSON"]=true, ["Object"]=true, ["Array"]=true,
+  ["String"]=true, ["Number"]=true, ["Boolean"]=true, ["Promise"]=true,
+  ["RegExp"]=true, ["Map"]=true, ["Set"]=true, ["Date"]=true,
+  ["Error"]=true, ["console"]=true, ["parseInt"]=true, ["parseFloat"]=true,
+  ["setTimeout"]=true, ["setInterval"]=true, ["clearTimeout"]=true,
+  ["clearInterval"]=true, ["require"]=true, ["globalThis"]=true,
+  ["window"]=true, ["document"]=true, ["Symbol"]=true, ["WeakMap"]=true,
+  ["WeakSet"]=true, ["Proxy"]=true, ["Reflect"]=true,
+  ["this"]=true, ["super"]=true,
+}
+
+-- Pure punctuation (structural, gets overlay2)
 local PUNCT_SET = {}
-for i = 1, #"{}()[];:,.=+->!&|?" do
-  PUNCT_SET[("{}()[];:,.=+->!&|?"):sub(i,i)] = true
+for i = 1, #"{}()[];:," do
+  PUNCT_SET[("{}()[];:,"):sub(i,i)] = true
 end
 
-local THREE_CHAR = { ["==="]=true, ["!=="]=true, ["..."]=true }
-local TWO_CHAR   = { ["=>"]=true, ["=="]=true, ["!="]=true, ["&&"]=true, ["||"]=true }
+-- Operators (gets teal)
+local OPERATOR_SET = {}
+for i = 1, #"=+-><!&|?*/%~^" do
+  OPERATOR_SET[("=+-><!&|?*/%~^"):sub(i,i)] = true
+end
+
+-- Dot is special: accessor (teal) when before identifier, punctuation otherwise
+-- Handled inline in the tokenizer
+
+local THREE_CHAR_OP = {
+  ["==="]=true, ["!=="]=true, ["**="]=true, [">>="]=true,
+  ["<<="]=true, ["??="]=true, [">>>"]= true,
+}
+local TWO_CHAR_OP = {
+  ["=>"]=true, ["=="]=true, ["!="]=true, ["&&"]=true, ["||"]=true,
+  ["??"]=true, ["?."]=true, [">="]=true, ["<="]=true, ["+="]=true,
+  ["-="]=true, ["*="]=true, ["/="]=true, ["%="]=true, ["++"]=true,
+  ["--"]=true, ["<<"]=true, [">>"]=true, ["**"]=true,
+}
 
 --- Tokenize a single line into {text, color} pairs.
 local function tokenizeLine(line)
@@ -191,10 +242,35 @@ local function tokenizeLine(line)
       while i <= len and line:sub(i,i):match("[a-zA-Z0-9_$]") do i = i + 1 end
       local word = line:sub(s, i - 1)
       local color
-      if inJSXTag and i <= len and line:sub(i, i) == '=' then
+
+      -- Peek past whitespace to find next meaningful char
+      local peek = i
+      while peek <= len and line:sub(peek, peek):match("%s") do peek = peek + 1 end
+      local nextChar = peek <= len and line:sub(peek, peek) or ""
+
+      -- Was the char before the word a dot? (property/method access)
+      local afterDot = s > 1 and line:sub(s-1, s-1) == '.'
+
+      if inJSXTag and nextChar == '=' then
         color = syntaxColors.prop
-      elseif KEYWORDS[word] then
+      elseif CONSTANTS[word] then
+        color = syntaxColors.constant
+      elseif BUILTINS[word] then
+        color = syntaxColors.builtin
+      elseif KEYWORDS[word] or TS_KEYWORDS[word] then
         color = syntaxColors.keyword
+      elseif afterDot and nextChar == '(' then
+        -- method call: obj.method(
+        color = syntaxColors.funcCall
+      elseif afterDot then
+        -- property access: obj.prop
+        color = syntaxColors.property
+      elseif nextChar == '(' then
+        -- function call: func(
+        color = syntaxColors.funcCall
+      elseif nextChar == ':' and not (peek + 1 <= len and line:sub(peek+1, peek+1) == ':') then
+        -- object key: { key: value } (but not :: for TS namespaces)
+        color = syntaxColors.property
       else
         color = syntaxColors.identifier
       end
@@ -210,20 +286,46 @@ local function tokenizeLine(line)
       goto continue
     end
 
-    -- Punctuation
-    if PUNCT_SET[ch] then
-      local three = line:sub(i, i + 2)
-      local two = line:sub(i, i + 1)
-      if #three == 3 and THREE_CHAR[three] then
-        tokens[#tokens+1] = { text = three, color = syntaxColors.punctuation }
+    -- Dot accessor
+    if ch == '.' then
+      -- Check for ... (spread) first
+      if line:sub(i, i+2) == '...' then
+        tokens[#tokens+1] = { text = '...', color = syntaxColors.operator }
         i = i + 3
-      elseif #two == 2 and TWO_CHAR[two] then
-        tokens[#tokens+1] = { text = two, color = syntaxColors.punctuation }
-        i = i + 2
       else
-        tokens[#tokens+1] = { text = ch, color = syntaxColors.punctuation }
+        -- Dot before identifier = accessor (teal), otherwise punctuation
+        local nextCh = i + 1 <= len and line:sub(i+1, i+1) or ""
+        if nextCh:match("[a-zA-Z_$]") then
+          tokens[#tokens+1] = { text = '.', color = syntaxColors.operator }
+        else
+          tokens[#tokens+1] = { text = '.', color = syntaxColors.punctuation }
+        end
         i = i + 1
       end
+      goto continue
+    end
+
+    -- Operators (teal)
+    if OPERATOR_SET[ch] then
+      local three = line:sub(i, i + 2)
+      local two = line:sub(i, i + 1)
+      if #three == 3 and THREE_CHAR_OP[three] then
+        tokens[#tokens+1] = { text = three, color = syntaxColors.operator }
+        i = i + 3
+      elseif #two == 2 and TWO_CHAR_OP[two] then
+        tokens[#tokens+1] = { text = two, color = syntaxColors.operator }
+        i = i + 2
+      else
+        tokens[#tokens+1] = { text = ch, color = syntaxColors.operator }
+        i = i + 1
+      end
+      goto continue
+    end
+
+    -- Punctuation (overlay2): {, }, (, ), [, ], ;, :, ,
+    if PUNCT_SET[ch] then
+      tokens[#tokens+1] = { text = ch, color = syntaxColors.punctuation }
+      i = i + 1
       goto continue
     end
 
