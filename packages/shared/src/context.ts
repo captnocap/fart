@@ -46,3 +46,19 @@ export function RendererProvider({
 export function useRendererMode(): RendererMode {
   return useContext(RendererContext);
 }
+
+// ── Theme color tokens context (populated by @ilovereact/theme) ───
+//
+// This context holds a flat Record<string, string> of semantic color tokens
+// (e.g. { primary: "#cba6f7", bg: "#1e1e2e", ... }). It lives in core so
+// that primitives can resolve token names without importing the theme package,
+// which would create a circular dependency.
+
+const ThemeColorsContext = createContext<Record<string, string> | null>(null);
+
+export { ThemeColorsContext };
+
+/** Returns the current theme color tokens, or null if no ThemeProvider is active. */
+export function useThemeColorsOptional(): Record<string, string> | null {
+  return useContext(ThemeColorsContext);
+}

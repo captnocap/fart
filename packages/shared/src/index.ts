@@ -28,6 +28,8 @@ export {
   useBridgeOptional,
   RendererProvider,
   useRendererMode,
+  ThemeColorsContext,
+  useThemeColorsOptional,
   type RendererMode,
 } from './context';
 

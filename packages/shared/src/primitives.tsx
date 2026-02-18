@@ -8,9 +8,55 @@
  */
 
 import React from 'react';
-import { useRendererMode } from './context';
+import { useRendererMode, useThemeColorsOptional } from './context';
 import { useScaledStyle } from './ScaleContext';
 import type { BoxProps, TextProps, ImageProps, FocusGroupProps, Style, Color } from './types';
+
+// ── Theme token resolution ──────────────────────────────
+//
+// Resolves a Color value that may be a theme token name (e.g. "primary", "bg")
+// into an actual color string. If tokens is null (no ThemeProvider), or the value
+// is already a concrete color (hex, rgb, rgba, transparent, or [r,g,b,a] tuple),
+// it passes through unchanged. Unknown token names also pass through, so
+// component-level defaults like "red" still work as CSS color names.
+
+function resolveColor(
+  value: Color | undefined,
+  tokens: Record<string, string> | null,
+): Color | undefined {
+  if (value === undefined || tokens === null) return value;
+  if (typeof value !== 'string') return value; // [r,g,b,a] tuple — already concrete
+  if (value.startsWith('#') || value.startsWith('rgb') || value === 'transparent') return value;
+  // Token name → resolve from theme, pass through if not found
+  return (value in tokens) ? tokens[value] : value;
+}
+
+/**
+ * Apply theme token resolution to color fields in a resolved Style object.
+ * Mutates nothing — returns a new Style if any field was resolved.
+ */
+function resolveStyleColors(
+  style: Style | undefined,
+  tokens: Record<string, string> | null,
+): Style | undefined {
+  if (!style || !tokens) return style;
+
+  const bg = resolveColor(style.backgroundColor, tokens);
+  const bc = resolveColor(style.borderColor, tokens);
+  const color = resolveColor(style.color, tokens);
+
+  // Only allocate a new object if something actually changed
+  if (bg === style.backgroundColor && bc === style.borderColor && color === style.color) {
+    return style;
+  }
+
+  return {
+    ...style,
+    ...(bg !== style.backgroundColor ? { backgroundColor: bg } : undefined),
+    ...(bc !== style.borderColor ? { borderColor: bc } : undefined),
+    ...(color !== style.color ? { color } : undefined),
+  };
+}
 
 // ── Web-mode style conversion ──────────────────────────
 
@@ -289,14 +335,16 @@ export function Box(props: BoxProps) {
     onDragStart, onDrag, onDragEnd,
     onFileDrop, onDirectoryDrop, onFileDragEnter, onFileDragLeave,
     onFocus, onBlur,
+    onLayout,
     children,
   } = props;
 
   const resolvedStyle = resolveBoxStyle(props);
-  const scaledStyle = useScaledStyle(resolvedStyle);
-  const scaledHoverStyle = useScaledStyle(hoverStyle);
-  const scaledActiveStyle = useScaledStyle(activeStyle);
-  const scaledFocusStyle = useScaledStyle(focusStyle);
+  const tokens = useThemeColorsOptional();
+  const scaledStyle = resolveStyleColors(useScaledStyle(resolvedStyle), tokens);
+  const scaledHoverStyle = resolveStyleColors(useScaledStyle(hoverStyle), tokens);
+  const scaledActiveStyle = resolveStyleColors(useScaledStyle(activeStyle), tokens);
+  const scaledFocusStyle = resolveStyleColors(useScaledStyle(focusStyle), tokens);
   const mode = useRendererMode();
 
   if (mode === 'web') {
@@ -424,6 +472,7 @@ export function Box(props: BoxProps) {
       onFileDragLeave,
       onFocus,
       onBlur,
+      onLayout,
     },
     children
   );
@@ -442,7 +491,8 @@ export function Col(props: BoxProps) {
 export function Text(props: TextProps) {
   const { lines, numberOfLines, onKeyDown, onKeyUp, onTextInput, children } = props;
   const resolvedStyle = resolveTextStyle(props);
-  const scaledStyle = useScaledStyle(resolvedStyle);
+  const tokens = useThemeColorsOptional();
+  const scaledStyle = resolveStyleColors(useScaledStyle(resolvedStyle), tokens);
   // lines shorthand takes precedence, falls back to numberOfLines
   const resolvedLines = lines ?? numberOfLines;
   const mode = useRendererMode();

@@ -1,5 +1,5 @@
 import React, { createContext, useState, useCallback, useEffect, useMemo } from 'react';
-import { useBridgeOptional } from '@ilovereact/core';
+import { useBridgeOptional, ThemeColorsContext } from '@ilovereact/core';
 import { themes, defaultThemeId } from './themes';
 import type { ThemeContextValue } from './types';
 
@@ -49,5 +49,25 @@ export function ThemeProvider({
     [themeId, setTheme, resolved],
   );
 
-  return React.createElement(ThemeContext.Provider, { value }, children);
+  // Build a flat Record<string, string> of all color tokens for primitive resolution.
+  // Includes top-level semantic tokens (bg, primary, etc.) and palette entries.
+  const colorTokens = useMemo<Record<string, string>>(() => {
+    const tokens: Record<string, string> = {};
+    const { palette, ...semantic } = resolved.colors;
+    for (const [k, v] of Object.entries(semantic)) {
+      tokens[k] = v as string;
+    }
+    if (palette) {
+      for (const [k, v] of Object.entries(palette)) {
+        tokens[k] = v;
+      }
+    }
+    return tokens;
+  }, [resolved.colors]);
+
+  return React.createElement(
+    ThemeContext.Provider,
+    { value },
+    React.createElement(ThemeColorsContext.Provider, { value: colorTokens }, children),
+  );
 }
