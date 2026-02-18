@@ -1,4 +1,5 @@
 import type { Theme } from '../types';
+import { defaultTypography, defaultSpacing, defaultRadii } from '../defaults';
 
 const draculaPalette: Record<string, string> = {
   background: '#282a36',
@@ -39,6 +40,9 @@ export const draculaThemes: Record<string, Theme> = {
       info: '#8be9fd',
       palette: { ...draculaPalette },
     },
+    typography: defaultTypography,
+    spacing: defaultSpacing,
+    radii: defaultRadii,
   },
   'dracula-soft': {
     name: 'dracula-soft',
@@ -64,5 +68,8 @@ export const draculaThemes: Record<string, Theme> = {
       info: '#8be9fd',
       palette: { ...draculaPalette },
     },
+    typography: defaultTypography,
+    spacing: defaultSpacing,
+    radii: defaultRadii,
   },
 };

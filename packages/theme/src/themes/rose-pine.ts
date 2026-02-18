@@ -1,4 +1,5 @@
 import type { Theme } from '../types';
+import { defaultTypography, defaultSpacing, defaultRadii } from '../defaults';
 
 const rosePinePalette: Record<string, string> = {
   base: '#191724',
@@ -61,6 +62,9 @@ export const rosePineThemes: Record<string, Theme> = {
       info: '#9ccfd8',
       palette: { ...rosePinePalette },
     },
+    typography: defaultTypography,
+    spacing: defaultSpacing,
+    radii: defaultRadii,
   },
   'rose-pine-dawn': {
     name: 'rose-pine-dawn',
@@ -86,5 +90,8 @@ export const rosePineThemes: Record<string, Theme> = {
       info: '#56949f',
       palette: { ...rosePineDawnPalette },
     },
+    typography: defaultTypography,
+    spacing: defaultSpacing,
+    radii: defaultRadii,
   },
 };

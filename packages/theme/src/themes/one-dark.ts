@@ -1,4 +1,5 @@
 import type { Theme } from '../types';
+import { defaultTypography, defaultSpacing, defaultRadii } from '../defaults';
 
 const oneDarkPalette: Record<string, string> = {
   mono1: '#abb2bf',
@@ -43,5 +44,8 @@ export const oneDarkThemes: Record<string, Theme> = {
       info: '#56b6c2',
       palette: { ...oneDarkPalette },
     },
+    typography: defaultTypography,
+    spacing: defaultSpacing,
+    radii: defaultRadii,
   },
 };

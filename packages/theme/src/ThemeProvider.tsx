@@ -38,7 +38,14 @@ export function ThemeProvider({
   const resolved = themes[themeId] ?? themes[defaultThemeId];
 
   const value = useMemo<ThemeContextValue>(
-    () => ({ themeId, setTheme, colors: resolved.colors }),
+    () => ({
+      themeId,
+      setTheme,
+      colors: resolved.colors,
+      typography: resolved.typography,
+      spacing: resolved.spacing,
+      radii: resolved.radii,
+    }),
     [themeId, setTheme, resolved],
   );
 

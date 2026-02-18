@@ -1,5 +1,6 @@
 export { ThemeProvider } from './ThemeProvider';
-export { useTheme, useThemeColors, themeNames } from './useTheme';
+export { useTheme, useThemeColors, useThemeTypography, useThemeSpacing, useThemeRadii, themeNames } from './useTheme';
 export { createTheme, registerTheme } from './createTheme';
 export { themes, defaultThemeId } from './themes';
-export type { Theme, ThemeColors, ThemeContextValue, CreateThemeOptions } from './types';
+export { defaultTypography, defaultSpacing, defaultRadii } from './defaults';
+export type { Theme, ThemeColors, ThemeTypography, ThemeSpacing, ThemeRadii, ThemeContextValue, CreateThemeOptions } from './types';

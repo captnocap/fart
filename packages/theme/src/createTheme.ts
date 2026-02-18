@@ -1,4 +1,5 @@
 import { themes } from './themes';
+import { defaultTypography, defaultSpacing, defaultRadii } from './defaults';
 import type { Theme, CreateThemeOptions } from './types';
 
 /**
@@ -43,6 +44,15 @@ export function createTheme(opts: CreateThemeOptions): Theme {
       ...opts.colors,
       palette,
     },
+    typography: {
+      ...(base?.typography ?? defaultTypography),
+      ...opts.typography,
+      fontSize: { ...(base?.typography?.fontSize ?? defaultTypography.fontSize), ...opts.typography?.fontSize },
+      fontWeight: { ...(base?.typography?.fontWeight ?? defaultTypography.fontWeight), ...opts.typography?.fontWeight },
+      lineHeight: { ...(base?.typography?.lineHeight ?? defaultTypography.lineHeight), ...opts.typography?.lineHeight },
+    },
+    spacing: { ...(base?.spacing ?? defaultSpacing), ...opts.spacing },
+    radii: { ...(base?.radii ?? defaultRadii), ...opts.radii },
   };
 }
 

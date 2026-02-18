@@ -1,4 +1,5 @@
 import type { Theme } from '../types';
+import { defaultTypography, defaultSpacing, defaultRadii } from '../defaults';
 
 const gruvboxDarkPalette: Record<string, string> = {
   bg0: '#282828',
@@ -67,6 +68,9 @@ export const gruvboxThemes: Record<string, Theme> = {
       info: '#83a598',
       palette: { ...gruvboxDarkPalette },
     },
+    typography: defaultTypography,
+    spacing: defaultSpacing,
+    radii: defaultRadii,
   },
   'gruvbox-light': {
     name: 'gruvbox-light',
@@ -92,5 +96,8 @@ export const gruvboxThemes: Record<string, Theme> = {
       info: '#076678',
       palette: { ...gruvboxLightPalette },
     },
+    typography: defaultTypography,
+    spacing: defaultSpacing,
+    radii: defaultRadii,
   },
 };

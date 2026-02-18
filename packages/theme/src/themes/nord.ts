@@ -1,4 +1,5 @@
 import type { Theme } from '../types';
+import { defaultTypography, defaultSpacing, defaultRadii } from '../defaults';
 
 const nordPalette: Record<string, string> = {
   nord0: '#2e3440',
@@ -44,6 +45,9 @@ export const nordThemes: Record<string, Theme> = {
       info: '#5e81ac',
       palette: { ...nordPalette },
     },
+    typography: defaultTypography,
+    spacing: defaultSpacing,
+    radii: defaultRadii,
   },
   'nord-light': {
     name: 'nord-light',
@@ -69,5 +73,8 @@ export const nordThemes: Record<string, Theme> = {
       info: '#5e81ac',
       palette: { ...nordPalette },
     },
+    typography: defaultTypography,
+    spacing: defaultSpacing,
+    radii: defaultRadii,
   },
 };

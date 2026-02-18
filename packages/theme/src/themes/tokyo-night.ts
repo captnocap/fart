@@ -1,4 +1,5 @@
 import type { Theme } from '../types';
+import { defaultTypography, defaultSpacing, defaultRadii } from '../defaults';
 
 const tokyoNightPalette: Record<string, string> = {
   bg: '#1a1b26',
@@ -57,6 +58,9 @@ export const tokyoNightThemes: Record<string, Theme> = {
       info: '#7dcfff',
       palette: { ...tokyoNightPalette },
     },
+    typography: defaultTypography,
+    spacing: defaultSpacing,
+    radii: defaultRadii,
   },
   'tokyo-night-storm': {
     name: 'tokyo-night-storm',
@@ -82,5 +86,8 @@ export const tokyoNightThemes: Record<string, Theme> = {
       info: '#7dcfff',
       palette: { ...tokyoNightPalette },
     },
+    typography: defaultTypography,
+    spacing: defaultSpacing,
+    radii: defaultRadii,
   },
 };
