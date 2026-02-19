@@ -392,11 +392,14 @@ function Emulator.filedropped(file, mx, my, pushEvent)
     if pushEvent then
       pushEvent({
         type = "capability",
-        targetId = hitId,
-        handler = "onROMLoaded",
-        filename = filename,
-        fileSize = #data,
-        filePath = path,
+        payload = {
+          type = "capability",
+          targetId = hitId,
+          handler = "onROMLoaded",
+          filename = filename,
+          fileSize = #data,
+          filePath = path,
+        },
       })
     end
     return true
