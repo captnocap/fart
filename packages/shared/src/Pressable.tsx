@@ -4,11 +4,13 @@
  * Provides interaction state tracking and callbacks for press, long press,
  * and hover interactions. Works in both web and native modes.
  *
- * Exposes interaction state via render props pattern and supports
- * both static and function-based style/children.
+ * Native mode: Pre-computes style variants and passes them as
+ * hoverStyle/activeStyle to Box, so Lua's applyInteractionStyle() handles
+ * visual feedback at zero latency. React state is only used when children
+ * is a render-prop function that needs the interaction state.
  */
 
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { Box, styleToCSS } from './primitives';
 import type { Style, LoveEvent } from './types';
 import { useRendererMode } from './context';
@@ -41,6 +43,24 @@ export interface PressableProps {
   accessibilityRole?: string;
 }
 
+/**
+ * Diff two style objects, returning only keys that differ.
+ * Used to compute hoverStyle/activeStyle overlays from style function variants.
+ */
+function diffStyles(base: Style, variant: Style): Style | undefined {
+  const diff: Style = {};
+  let hasDiff = false;
+
+  for (const key of Object.keys(variant) as Array<keyof Style>) {
+    if (variant[key] !== base[key]) {
+      (diff as any)[key] = variant[key];
+      hasDiff = true;
+    }
+  }
+
+  return hasDiff ? diff : undefined;
+}
+
 export function Pressable({
   onPress,
   onLongPress,
@@ -56,6 +76,14 @@ export function Pressable({
   accessibilityRole,
 }: PressableProps) {
   const mode = useRendererMode();
+  const isStyleFunction = typeof style === 'function';
+  const isChildrenFunction = typeof children === 'function';
+
+  // React state is only needed when children is a render-prop function,
+  // because we need to re-render to evaluate children(state).
+  // For static children, Lua handles all visual feedback via hoverStyle/activeStyle.
+  const needsReactState = isChildrenFunction;
+
   const [pressed, setPressed] = useState(false);
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
@@ -91,7 +119,7 @@ export function Pressable({
   const handlePressIn = useCallback((event: LoveEvent) => {
     if (disabled) return;
 
-    setPressed(true);
+    if (needsReactState) setPressed(true);
     longPressFiredRef.current = false;
 
     if (onPressIn) {
@@ -105,90 +133,129 @@ export function Pressable({
         onLongPress(event);
       }, delayLongPress);
     }
-  }, [disabled, onPressIn, onLongPress, delayLongPress]);
+  }, [disabled, needsReactState, onPressIn, onLongPress, delayLongPress]);
 
-  // Press out handler
+  // Press out handler — track pressed in ref for onPress logic
+  const pressedRef = useRef(false);
+  pressedRef.current = pressed;
+
   const handlePressOut = useCallback((event: LoveEvent) => {
     if (disabled) return;
 
-    const wasPressed = pressed;
-    setPressed(false);
+    const wasPressed = pressedRef.current || true; // Always assume pressed for non-render-prop case
+    if (needsReactState) setPressed(false);
     clearLongPressTimer();
 
     if (onPressOut) {
       onPressOut(event);
     }
 
-    // Fire onPress only if long press didn't fire and we were actually pressed
+    // Fire onPress only if long press didn't fire
     if (wasPressed && !longPressFiredRef.current && onPress) {
       onPress(event);
     }
 
     longPressFiredRef.current = false;
-  }, [disabled, pressed, onPressOut, onPress, clearLongPressTimer]);
+  }, [disabled, needsReactState, onPressOut, onPress, clearLongPressTimer]);
 
-  // Hover in handler
+  // Hover handlers
   const handleHoverIn = useCallback((event: LoveEvent) => {
     if (disabled) return;
+    if (needsReactState) setHovered(true);
+    if (onHoverIn) onHoverIn(event);
+  }, [disabled, needsReactState, onHoverIn]);
 
-    setHovered(true);
-
-    if (onHoverIn) {
-      onHoverIn(event);
-    }
-  }, [disabled, onHoverIn]);
-
-  // Hover out handler
   const handleHoverOut = useCallback((event: LoveEvent) => {
     if (disabled) return;
-
-    setHovered(false);
-
-    if (onHoverOut) {
-      onHoverOut(event);
-    }
+    if (needsReactState) setHovered(false);
+    if (onHoverOut) onHoverOut(event);
 
     // Cancel press if pointer leaves while pressed
-    if (pressed) {
+    if (needsReactState && pressed) {
       setPressed(false);
       clearLongPressTimer();
       longPressFiredRef.current = false;
     }
-  }, [disabled, onHoverOut, pressed, clearLongPressTimer]);
+  }, [disabled, needsReactState, onHoverOut, pressed, clearLongPressTimer]);
 
   // Keyboard handlers for accessibility
   const handleKeyDown = useCallback((event: LoveEvent) => {
     if (disabled) return;
-
     const key = event.key;
     if (key === 'Enter' || key === ' ') {
       handlePressIn(event);
-      setFocused(true);
+      if (needsReactState) setFocused(true);
     }
-  }, [disabled, handlePressIn]);
+  }, [disabled, needsReactState, handlePressIn]);
 
   const handleKeyUp = useCallback((event: LoveEvent) => {
     if (disabled) return;
-
     const key = event.key;
     if (key === 'Enter' || key === ' ') {
       handlePressOut(event);
     }
   }, [disabled, handlePressOut]);
 
-  // Compute state object
+  // ── Native mode: pre-compute style variants for Lua ──────
+  if (mode === 'native') {
+    // Pre-compute style variants from style function
+    const { baseStyle, hoverOverlay, activeOverlay } = useMemo(() => {
+      if (isStyleFunction) {
+        const styleFn = style as (state: PressableState) => Style;
+        const base = styleFn({ pressed: false, hovered: false, focused: false });
+        const hoveredVariant = styleFn({ pressed: false, hovered: true, focused: false });
+        const pressedVariant = styleFn({ pressed: true, hovered: true, focused: false });
+
+        return {
+          baseStyle: base,
+          hoverOverlay: diffStyles(base, hoveredVariant),
+          activeOverlay: diffStyles(base, pressedVariant),
+        };
+      }
+
+      return {
+        baseStyle: (style as Style) || {},
+        hoverOverlay: undefined,
+        activeOverlay: undefined,
+      };
+    }, [style, isStyleFunction]);
+
+    // Resolve children
+    const state: PressableState = { pressed, hovered, focused };
+    const resolvedChildren = isChildrenFunction
+      ? (children as (state: PressableState) => React.ReactNode)(state)
+      : children;
+
+    const boxProps: any = {
+      style: baseStyle,
+      hoverStyle: hoverOverlay,
+      activeStyle: activeOverlay,
+      onClick: handlePressIn,
+      onRelease: handlePressOut,
+      onPointerEnter: handleHoverIn,
+      onPointerLeave: handleHoverOut,
+      onKeyDown: handleKeyDown,
+      onKeyUp: handleKeyUp,
+    };
+
+    if (hitSlop) boxProps.hitSlop = hitSlop;
+    if (accessibilityRole) boxProps.accessibilityRole = accessibilityRole;
+
+    return <Box {...boxProps}>{resolvedChildren}</Box>;
+  }
+
+  // ── Web mode ─────────────────────────────────────────────
   const state: PressableState = { pressed, hovered, focused };
+  let resolvedStyle: Style = isStyleFunction
+    ? (style as (state: PressableState) => Style)(state)
+    : (style as Style) || {};
 
-  // Resolve style
-  let resolvedStyle: Style = typeof style === 'function' ? style(state) : style || {};
-
-  // Apply hitSlop in web mode using negative margin and padding trick
-  if (mode === 'web' && hitSlop) {
+  // Apply hitSlop in web mode
+  if (hitSlop) {
     const slop = typeof hitSlop === 'number'
       ? { top: hitSlop, bottom: hitSlop, left: hitSlop, right: hitSlop }
       : hitSlop;
 
-    // Add padding to expand the hit area
     const expandedStyle: Style = { ...resolvedStyle };
     if (slop.top !== undefined) {
       expandedStyle.paddingTop = (resolvedStyle.paddingTop || 0) as number + slop.top;
@@ -209,74 +276,33 @@ export function Pressable({
     resolvedStyle = expandedStyle;
   }
 
-  // Web mode: add cursor and opacity styles
-  if (mode === 'web') {
-    const webStyle = { ...resolvedStyle };
-
-    // Cursor styling
-    if (disabled) {
-      webStyle.opacity = webStyle.opacity ?? 0.5;
-    }
-
-    resolvedStyle = webStyle;
-  }
-
-  // Resolve children
-  const resolvedChildren = typeof children === 'function' ? children(state) : children;
-
-  // Create Box props
-  const boxProps: any = {
-    style: resolvedStyle,
-    onClick: handlePressIn,
-    onRelease: handlePressOut,
-    onPointerEnter: handleHoverIn,
-    onPointerLeave: handleHoverOut,
-    onKeyDown: handleKeyDown,
-    onKeyUp: handleKeyUp,
-  };
-
-  // Native mode: pass interaction state and hitSlop as props
-  if (mode === 'native') {
-    boxProps.pressed = pressed;
-    boxProps.hovered = hovered;
-    boxProps.focused = focused;
-    if (hitSlop) {
-      boxProps.hitSlop = hitSlop;
-    }
-    if (accessibilityRole) {
-      boxProps.accessibilityRole = accessibilityRole;
-    }
+  const css = styleToCSS(resolvedStyle);
+  if (!disabled) {
+    css.cursor = 'pointer';
   } else {
-    // Web mode: use DOM attributes
-    // Note: Box doesn't currently expose a way to pass through arbitrary DOM props,
-    // so we'll create the div directly when in web mode to add role and tabIndex
-    const css = styleToCSS(resolvedStyle);
-
-    // Add web-specific cursor styling
-    if (!disabled) {
-      css.cursor = 'pointer';
-    } else {
-      css.cursor = 'not-allowed';
-    }
-    css.userSelect = 'none';
-
-    return (
-      <div
-        style={css}
-        onClick={handlePressIn as any}
-        onMouseUp={handlePressOut as any}
-        onPointerEnter={handleHoverIn as any}
-        onPointerLeave={handleHoverOut as any}
-        onKeyDown={handleKeyDown as any}
-        onKeyUp={handleKeyUp as any}
-        tabIndex={disabled ? -1 : 0}
-        role={accessibilityRole || 'button'}
-        aria-disabled={disabled}
-      >
-        {resolvedChildren}
-      </div>
-    );
+    css.cursor = 'not-allowed';
+    css.opacity = css.opacity ?? 0.5;
   }
+  css.userSelect = 'none';
 
-  return <Box {...boxProps}>{resolvedChildren}</Box>;
+  const resolvedChildren = isChildrenFunction
+    ? (children as (state: PressableState) => React.ReactNode)(state)
+    : children;
+
+  return (
+    <div
+      style={css}
+      onClick={handlePressIn as any}
+      onMouseUp={handlePressOut as any}
+      onPointerEnter={handleHoverIn as any}
+      onPointerLeave={handleHoverOut as any}
+      onKeyDown={handleKeyDown as any}
+      onKeyUp={handleKeyUp as any}
+      tabIndex={disabled ? -1 : 0}
+      role={accessibilityRole || 'button'}
+      aria-disabled={disabled}
+    >
+      {resolvedChildren}
+    </div>
+  );
 }
