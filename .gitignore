@@ -82,3 +82,9 @@ coverage/
 # TypeScript
 *.tsbuildinfo
 
+treesb.md
+.gitignore
+storybook/src/stories/t.md
+.gitignore
+lua/tree.md
+storybook/t.md
