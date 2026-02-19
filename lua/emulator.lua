@@ -38,23 +38,35 @@ ffi.cdef[[
 ]]
 
 -- Load the agnes shared library from lua/emulator/
+-- Uses the same dlopen path resolution as bridge_quickjs.lua:
+-- ffi.load uses dlopen which resolves relative to process CWD, not Love2D's
+-- game directory. Resolve to absolute path using love.filesystem.getSource().
 local agnesLib = nil
 local function loadAgnes()
   if agnesLib then return agnesLib end
-  -- Try multiple paths (storybook symlink vs project copy)
-  local paths = {
-    "lua/emulator/libagnes.so",
-    "./lua/emulator/libagnes.so",
-  }
-  for _, path in ipairs(paths) do
-    local ok, lib = pcall(ffi.load, path)
-    if ok then
-      agnesLib = lib
-      io.write("[emulator] Loaded libagnes.so from " .. path .. "\n"); io.flush()
-      return agnesLib
+
+  local libpath = "lua/emulator/libagnes.so"
+
+  if love and love.filesystem then
+    local source = love.filesystem.getSource()
+    if source then
+      local isFused = love.filesystem.isFused and love.filesystem.isFused()
+      local isLoveFile = source:match("%.love$")
+      if isFused or isLoveFile then
+        source = source:match("(.+)/[^/]+$") or source
+      end
+      libpath = source .. "/" .. libpath
     end
   end
-  io.write("[emulator] ERROR: Could not load libagnes.so\n"); io.flush()
+
+  local ok, lib = pcall(ffi.load, libpath)
+  if ok then
+    agnesLib = lib
+    io.write("[emulator] Loaded libagnes.so from " .. libpath .. "\n"); io.flush()
+    return agnesLib
+  end
+
+  io.write("[emulator] ERROR: Could not load libagnes.so from " .. libpath .. "\n"); io.flush()
   return nil
 end
 
