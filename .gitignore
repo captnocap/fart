@@ -35,6 +35,7 @@ quickjs/
 *.so
 *.so.*
 *.dylib
+!lua/emulator/libagnes.so
 
 # Platform binaries (bundled by CLI at build time)
 bin/tor
