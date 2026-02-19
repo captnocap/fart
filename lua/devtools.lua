@@ -22,6 +22,8 @@
     Escape  -- Close devtools (or clear selection first in Elements tab)
 ]]
 
+local Log = require("lua.debug_log")
+
 local DevTools = {}
 
 -- ============================================================================
@@ -31,6 +33,7 @@ local DevTools = {}
 local inspector = nil
 local console   = nil
 local tree      = nil
+local bridge    = nil  -- for toggling JS-side channels
 
 -- ============================================================================
 -- State
@@ -77,6 +80,7 @@ local STATUS_WARN  = { 0.95, 0.75, 0.20, 1 }
 local TABS = {
   { id = "elements", label = "Elements" },
   { id = "console",  label = "Console" },
+  { id = "logs",     label = "Logs" },
 }
 
 -- Cached font (created lazily)
@@ -110,6 +114,7 @@ function DevTools.init(config)
   inspector = config.inspector
   console   = config.console
   tree      = config.tree
+  bridge    = config.bridge
   state.pushEvent = config.pushEvent
   -- Wire up the re-layout callback for inspector style editing
   if inspector and tree then
@@ -288,6 +293,9 @@ function DevTools.mousepressed(x, y, button)
     return inspector.mousepressed(x, y, button)
   elseif state.activeTab == "console" then
     return true  -- console content area consumes clicks
+  elseif state.activeTab == "logs" then
+    local region = { x = 0, y = contentY, w = screenW, h = contentH }
+    return logsMousepressed(x, y, button, region)
   end
 
   return true
@@ -315,6 +323,13 @@ function DevTools.mousemoved(x, y)
     else
       love.mouse.setCursor()
     end
+  end
+
+  -- Logs tab hover tracking
+  if state.open and state.activeTab == "logs" and logsRegion then
+    logsMousemoved(x, y, logsRegion)
+  else
+    logsHoverRow = nil
   end
 
   -- Inspector always tracks mouse for hover overlays
@@ -345,10 +360,255 @@ function DevTools.wheelmoved(x, y)
     return inspector.wheelmoved(x, y)
   elseif state.activeTab == "console" then
     return console.wheelmoved(x, y)
+  elseif state.activeTab == "logs" then
+    return logsWheelmoved(x, y)
   end
 
   return false
 end
+
+-- ============================================================================
+-- Logs tab: channel toggle grid
+-- ============================================================================
+
+-- Sorted channel list (built once, stable order)
+local sortedChannels = nil
+local function getSortedChannels()
+  if not sortedChannels then
+    sortedChannels = {}
+    for name in pairs(Log.CHANNELS) do
+      sortedChannels[#sortedChannels + 1] = name
+    end
+    table.sort(sortedChannels)
+  end
+  return sortedChannels
+end
+
+-- Layout constants for the logs tab
+local LOG_ROW_H     = 32
+local LOG_TOGGLE_W  = 40
+local LOG_PAD_X     = 16
+local LOG_PAD_Y     = 12
+local LOG_HEADER_H  = 36
+local LOG_BTN_H     = 28
+local LOG_BTN_PAD   = 6
+
+-- Colors for logs tab
+local LOG_ON_BG     = { 0.15, 0.30, 0.20, 1 }
+local LOG_ON_DOT    = { 0.30, 0.85, 0.40, 1 }
+local LOG_OFF_BG    = { 0.12, 0.12, 0.18, 1 }
+local LOG_OFF_DOT   = { 0.35, 0.35, 0.45, 1 }
+local LOG_NAME      = { 0.88, 0.90, 0.94, 1 }
+local LOG_DESC      = { 0.50, 0.52, 0.58, 1 }
+local LOG_HEADER_TXT = { 0.65, 0.68, 0.75, 1 }
+local LOG_BTN_BG    = { 0.12, 0.12, 0.18, 1 }
+local LOG_BTN_TEXT  = { 0.55, 0.58, 0.65, 1 }
+local LOG_BTN_HOVER = { 0.18, 0.22, 0.32, 1 }
+
+-- Track which button is hovered for visual feedback
+local logsHoverRow = nil  -- index into sortedChannels, or "all"/"none"
+local logsScrollY  = 0
+
+--- Toggle a channel (handles JS-side sync for recon/dispatch).
+local function toggleChannel(name)
+  Log.toggle(name)
+  local jsChannels = { recon = true, dispatch = true }
+  if jsChannels[name] and bridge then
+    pcall(function() bridge:eval("if(typeof __debugLog!=='undefined')__debugLog.toggle('" .. name .. "')") end)
+  end
+end
+
+--- Draw the logs tab content.
+local function drawLogsTab(region)
+  local font = getFont()
+  love.graphics.setFont(font)
+  love.graphics.setScissor(region.x, region.y, region.w, region.h)
+
+  local channels = getSortedChannels()
+  local fh = font:getHeight()
+  local x0 = region.x + LOG_PAD_X
+  local y0 = region.y + LOG_PAD_Y - logsScrollY
+
+  -- Header
+  love.graphics.setColor(LOG_HEADER_TXT)
+  love.graphics.print("Debug Log Channels", x0, y0 + math.floor((LOG_HEADER_H - fh) / 2))
+
+  -- All / None buttons (right-aligned in header)
+  local btnW = font:getWidth("All") + 16
+  local noneW = font:getWidth("None") + 16
+  local btnY = y0 + math.floor((LOG_HEADER_H - LOG_BTN_H) / 2)
+  local noneX = region.x + region.w - LOG_PAD_X - noneW
+  local allX = noneX - btnW - LOG_BTN_PAD
+
+  -- "All" button
+  love.graphics.setColor(logsHoverRow == "all" and LOG_BTN_HOVER or LOG_BTN_BG)
+  love.graphics.rectangle("fill", allX, btnY, btnW, LOG_BTN_H, 4, 4)
+  love.graphics.setColor(LOG_BTN_TEXT)
+  love.graphics.print("All", allX + 8, btnY + math.floor((LOG_BTN_H - fh) / 2))
+
+  -- "None" button
+  love.graphics.setColor(logsHoverRow == "none" and LOG_BTN_HOVER or LOG_BTN_BG)
+  love.graphics.rectangle("fill", noneX, btnY, noneW, LOG_BTN_H, 4, 4)
+  love.graphics.setColor(LOG_BTN_TEXT)
+  love.graphics.print("None", noneX + 8, btnY + math.floor((LOG_BTN_H - fh) / 2))
+
+  -- Channel rows
+  local rowY = y0 + LOG_HEADER_H
+
+  for i, name in ipairs(channels) do
+    local chDef = Log.CHANNELS[name]
+    local isOn = Log.isOn(name)
+    local isHovered = logsHoverRow == i
+
+    -- Row background (subtle highlight on hover)
+    if isHovered then
+      love.graphics.setColor(0.10, 0.12, 0.18, 1)
+      love.graphics.rectangle("fill", region.x, rowY, region.w, LOG_ROW_H)
+    end
+
+    -- Toggle pill
+    local pillX = x0
+    local pillY = rowY + math.floor((LOG_ROW_H - 18) / 2)
+    local pillW = LOG_TOGGLE_W
+    local pillH = 18
+    local pillR = 9
+
+    love.graphics.setColor(isOn and LOG_ON_BG or LOG_OFF_BG)
+    love.graphics.rectangle("fill", pillX, pillY, pillW, pillH, pillR, pillR)
+
+    -- Toggle dot
+    local dotR = 6
+    local dotX = isOn and (pillX + pillW - dotR - 4) or (pillX + dotR + 4)
+    local dotY = pillY + pillH / 2
+    love.graphics.setColor(isOn and LOG_ON_DOT or LOG_OFF_DOT)
+    love.graphics.circle("fill", dotX, dotY, dotR)
+
+    -- Channel name (use channel's own color when on)
+    local nameX = pillX + pillW + 12
+    love.graphics.setColor(isOn and chDef.color or LOG_NAME)
+    love.graphics.print(name, nameX, rowY + math.floor((LOG_ROW_H - fh) / 2))
+
+    -- Description
+    local descX = nameX + font:getWidth(name) + 16
+    love.graphics.setColor(LOG_DESC)
+    local desc = chDef.desc
+    -- Truncate if too long
+    local maxDescW = region.x + region.w - descX - LOG_PAD_X
+    if maxDescW > 0 then
+      while font:getWidth(desc) > maxDescW and #desc > 3 do
+        desc = desc:sub(1, -2)
+      end
+      love.graphics.print(desc, descX, rowY + math.floor((LOG_ROW_H - fh) / 2))
+    end
+
+    rowY = rowY + LOG_ROW_H
+  end
+
+  -- Hint at bottom
+  local hintY = rowY + 8
+  if hintY + fh < region.y + region.h + logsScrollY then
+    love.graphics.setColor(0.35, 0.38, 0.45, 1)
+    love.graphics.print("Tip: ILOVEREACT_DEBUG=tree,layout love love  (enable at startup)", x0, hintY)
+    love.graphics.print("Output goes to terminal AND console tab", x0, hintY + fh + 2)
+  end
+
+  love.graphics.setScissor()
+end
+
+--- Handle click on logs tab. Returns true if consumed.
+local function logsMousepressed(x, y, button, region)
+  if button ~= 1 then return false end
+  if x < region.x or x > region.x + region.w then return false end
+  if y < region.y or y > region.y + region.h then return false end
+
+  local font = getFont()
+  local fh = font:getHeight()
+  local x0 = region.x + LOG_PAD_X
+  local y0 = region.y + LOG_PAD_Y - logsScrollY
+  local channels = getSortedChannels()
+
+  -- Check All/None buttons
+  local btnW = font:getWidth("All") + 16
+  local noneW = font:getWidth("None") + 16
+  local btnY = y0 + math.floor((LOG_HEADER_H - LOG_BTN_H) / 2)
+  local noneX = region.x + region.w - LOG_PAD_X - noneW
+  local allX = noneX - btnW - LOG_BTN_PAD
+
+  if y >= btnY and y < btnY + LOG_BTN_H then
+    if x >= allX and x < allX + btnW then
+      Log.all(true)
+      if bridge then
+        pcall(function() bridge:eval("if(typeof __debugLog!=='undefined')__debugLog.all(true)") end)
+      end
+      return true
+    end
+    if x >= noneX and x < noneX + noneW then
+      Log.all(false)
+      if bridge then
+        pcall(function() bridge:eval("if(typeof __debugLog!=='undefined')__debugLog.all(false)") end)
+      end
+      return true
+    end
+  end
+
+  -- Check channel rows
+  local rowY = y0 + LOG_HEADER_H
+  for i, name in ipairs(channels) do
+    if y >= rowY and y < rowY + LOG_ROW_H then
+      toggleChannel(name)
+      return true
+    end
+    rowY = rowY + LOG_ROW_H
+  end
+
+  return true
+end
+
+--- Handle mouse movement on logs tab for hover effects.
+local function logsMousemoved(x, y, region)
+  logsHoverRow = nil
+  if not region then return end
+  if x < region.x or x > region.x + region.w then return end
+  if y < region.y or y > region.y + region.h then return end
+
+  local font = getFont()
+  local y0 = region.y + LOG_PAD_Y - logsScrollY
+  local channels = getSortedChannels()
+
+  -- Check All/None buttons
+  local btnW = font:getWidth("All") + 16
+  local noneW = font:getWidth("None") + 16
+  local btnY = y0 + math.floor((LOG_HEADER_H - LOG_BTN_H) / 2)
+  local noneX = region.x + region.w - LOG_PAD_X - noneW
+  local allX = noneX - btnW - LOG_BTN_PAD
+
+  if y >= btnY and y < btnY + LOG_BTN_H then
+    if x >= allX and x < allX + btnW then
+      logsHoverRow = "all"; return
+    end
+    if x >= noneX and x < noneX + noneW then
+      logsHoverRow = "none"; return
+    end
+  end
+
+  -- Check channel rows
+  local rowY = y0 + LOG_HEADER_H
+  for i, name in ipairs(channels) do
+    if y >= rowY and y < rowY + LOG_ROW_H then
+      logsHoverRow = i; return
+    end
+    rowY = rowY + LOG_ROW_H
+  end
+end
+
+--- Handle wheel scroll on logs tab.
+local function logsWheelmoved(x, y)
+  logsScrollY = math.max(0, logsScrollY - y * 20)
+  return true
+end
+
+-- Store current logs tab region for mousemoved (needs geometry from draw)
+local logsRegion = nil
 
 -- ============================================================================
 -- Drawing
@@ -462,6 +722,11 @@ end
 --- Main draw call. Renders overlays + panel (if open).
 --- Call this from love.draw() after painting the UI tree.
 function DevTools.draw(root)
+  -- Playground code/preview cross-link overlay (always available).
+  if inspector and inspector.drawPlaygroundLinkOverlay then
+    inspector.drawPlaygroundLinkOverlay(root)
+  end
+
   -- Always draw inspector overlays when enabled (hover, selected, tooltip, perf)
   if inspector and inspector.isEnabled() then
     inspector.drawOverlays(root)
@@ -505,6 +770,10 @@ function DevTools.draw(root)
 
   elseif state.activeTab == "console" then
     console.drawInRegion({ x = 0, y = contentY, w = screenW, h = contentH })
+
+  elseif state.activeTab == "logs" then
+    logsRegion = { x = 0, y = contentY, w = screenW, h = contentH }
+    drawLogsTab(logsRegion)
   end
 
   -- Status bar (bottom of panel)
