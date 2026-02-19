@@ -75,6 +75,7 @@ import { RSSStory } from './RSSStory';
 import { WebhooksStory } from './WebhooksStory';
 import { CryptoStory } from './CryptoStory';
 import { MediaStory } from './MediaStory';
+import EmulatorStory from './EmulatorStory';
 import { HorizontalBarChartStory } from './HorizontalBarChartStory';
 import { StackedBarChartStory } from './StackedBarChartStory';
 import { LineChartStory } from './LineChartStory';
@@ -201,6 +202,9 @@ export const stories: StoryDef[] = [
 
   // Media
   { id: 'media', title: 'Media Library', category: 'Media', component: MediaStory },
+
+  // Emulation
+  { id: 'emulator', title: 'NES Emulator', category: 'Emulation', component: EmulatorStory },
 
   // 3D
   { id: 'scene-3d-basic', title: '3D Scene', category: '3D', component: Scene3DBasicStory },
