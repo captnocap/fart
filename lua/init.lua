@@ -69,6 +69,8 @@ local capabilities = nil                      -- capabilities.lua (declarative c
 local httpserver = nil                        -- httpserver.lua (HTTP server for static files + API routes)
 local browse   = nil                          -- browse.lua (TCP client for stealth browse session)
 local sysmon   = nil                          -- sysmon.lua (system monitoring: CPU, memory, processes, GPU, etc.)
+local permit   = require("lua.permit")       -- permit.lua (capability enforcement: mint/check/freeze)
+local audit    = require("lua.audit")        -- audit.lua (structured audit logger for permit system)
 
 -- Theme system
 local themes   = nil                          -- lua/themes/init.lua (theme registry)
@@ -88,6 +90,23 @@ if not ok_json then ok_json, json = pcall(require, "lua.json") end
 if not ok_json then error("[react-love] JSON library required but not found") end
 
 local rpcHandlers = {}  -- RPC method -> handler function
+
+--- Wrap an RPC handler with a permit check.  When the permit system is
+--- enforcing and the category is denied, the call is blocked + audited
+--- and returns nil, "capability denied: <category>".
+--- @param category   string    permit category (e.g. "clipboard", "storage")
+--- @param handler    function  the original RPC handler
+--- @param details_fn function|nil  optional (args) -> table for audit details
+local function gated(category, handler, details_fn)
+  return function(args)
+    if not permit.check(category) then
+      local details = details_fn and details_fn(args) or {}
+      audit.log("blocked", category, details, { declared = permit.getDeclared() and permit.getDeclared()[category] })
+      return nil, "capability denied: " .. category
+    end
+    return handler(args)
+  end
+end
 
 -- Scrollbar drag state
 local scrollbarDrag = nil  -- { node, axis="v"|"h", startMouse, startScroll }
@@ -363,6 +382,12 @@ function ReactLove.init(config)
   config = config or {}
   basePath = resolveBasePath()
 
+  -- Mint capability permits from manifest (if provided).
+  -- Must happen before any module loading so gates are active.
+  if config.manifest and config.manifest.capabilities then
+    permit.mint(config.manifest.capabilities, audit)
+  end
+
   -- Enable key repeat so held keys fire keypressed repeatedly
   -- (needed for text scale Ctrl+=/-, TextEditor backspace/arrows, etc.)
   love.keyboard.setKeyRepeat(true)
@@ -492,8 +517,12 @@ function ReactLove.init(config)
     osk = require("lua.osk")
     osk.init({ measure = measure })
 
-    sqlite = require("lua.sqlite")
-    docstore = require("lua.docstore")
+    if permit.check("storage") then
+      sqlite = require("lua.sqlite")
+      docstore = require("lua.docstore")
+    else
+      io.write("[PERMIT] storage not declared — sqlite and docstore not loaded\n"); io.flush()
+    end
     spellcheck = require("lua.spellcheck")
     spellcheck.init()
 
@@ -599,23 +628,31 @@ function ReactLove.init(config)
     osk = require("lua.osk")
     osk.init({ measure = measure })
 
-    sqlite = require("lua.sqlite")
-    docstore = require("lua.docstore")
+    if permit.check("storage") then
+      sqlite = require("lua.sqlite")
+      docstore = require("lua.docstore")
+    else
+      io.write("[PERMIT] storage not declared — sqlite and docstore not loaded\n"); io.flush()
+    end
     spellcheck = require("lua.spellcheck")
     spellcheck.init()
 
     focus.init(tree, pushEvent)
 
-    -- Initialize async HTTP (love.thread + LuaSocket)
-    http = require("lua.http")
-    http.init()
+    -- Initialize async HTTP (love.thread + LuaSocket) — gated by network permit
+    if permit.check("network") then
+      http = require("lua.http")
+      http.init()
 
-    -- Initialize WebSocket network manager
-    network = require("lua.network")
-    network.init()
+      -- Initialize WebSocket network manager
+      network = require("lua.network")
+      network.init()
+    else
+      io.write("[PERMIT] network not declared — http and network modules not loaded\n"); io.flush()
+    end
 
-    -- Initialize Tor if enabled (opt-in via config.tor)
-    if config.tor then
+    -- Initialize Tor if enabled (opt-in via config.tor) — gated by process permit
+    if config.tor and permit.check("process", "tor") then
       tor = require("lua.tor")
       torHostnameEmitted = false
       if config.tor.autoStart ~= false then
@@ -675,12 +712,12 @@ function ReactLove.init(config)
     print("[react-love] Initialized in NATIVE mode (QuickJS bridge)")
   end
 
-  -- Load RPC handler modules (native and canvas modes)
-  if isRendering() then
+  -- Load RPC handler modules (native and canvas modes) — gated by storage permit
+  if isRendering() and permit.check("storage") then
     local sok, storage = pcall(require, "lua.storage")
     if sok then
       for method, handler in pairs(storage.getHandlers()) do
-        rpcHandlers[method] = handler
+        rpcHandlers[method] = gated("storage", handler)
       end
     end
   end
@@ -856,38 +893,40 @@ function ReactLove.init(config)
     end
   end
 
-  -- Register clipboard RPC handlers (available in all rendering modes)
+  -- Register clipboard RPC handlers — gated by clipboard permit
   if isRendering() then
-    rpcHandlers["clipboard:read"] = function()
+    rpcHandlers["clipboard:read"] = gated("clipboard", function()
       return love.system.getClipboardText()
-    end
-    rpcHandlers["clipboard:write"] = function(args)
+    end)
+    rpcHandlers["clipboard:write"] = gated("clipboard", function(args)
       love.system.setClipboardText(args.text)
       return true
+    end)
+  end
+
+  -- Load system monitoring module — gated by sysmon permit
+  if permit.check("sysmon") then
+    local smOk, smMod = pcall(require, "lua.sysmon")
+    if smOk then
+      sysmon = smMod
+      for method, handler in pairs(sysmon.getHandlers()) do
+        rpcHandlers[method] = gated("sysmon", handler)
+      end
     end
   end
 
-  -- Load system monitoring module (CPU, memory, processes, GPU, network, disk, ports)
-  local smOk, smMod = pcall(require, "lua.sysmon")
-  if smOk then
-    sysmon = smMod
-    for method, handler in pairs(sysmon.getHandlers()) do
-      rpcHandlers[method] = handler
-    end
-  end
-
-  -- Register Tor RPC handlers
+  -- Register Tor RPC handlers — already gated at module load (process permit)
   if tor then
-    rpcHandlers["tor:getHostname"] = function()
+    rpcHandlers["tor:getHostname"] = gated("process", function()
       local hostname = tor.getHostname()
-      return hostname  -- Only return first value (nil or string)
-    end
-    rpcHandlers["tor:getProxyPort"] = function()
+      return hostname
+    end)
+    rpcHandlers["tor:getProxyPort"] = gated("process", function()
       return tor.getProxyPort()
-    end
-    rpcHandlers["tor:getLocalPort"] = function()
+    end)
+    rpcHandlers["tor:getLocalPort"] = gated("process", function()
       return tor.getLocalPort()
-    end
+    end)
   end
 
   -- Load audio engine (optional — graceful degradation if not available)
@@ -919,22 +958,26 @@ function ReactLove.init(config)
     io.write("[react-love] Capabilities registry loaded\n"); io.flush()
   end
 
-  -- Load HTTP server (optional — graceful degradation if not available)
-  local hsOk, hsMod = pcall(require, "lua.httpserver")
-  if hsOk and hsMod then
-    httpserver = hsMod
-    for method, handler in pairs(httpserver.getHandlers()) do
-      rpcHandlers[method] = handler
+  -- Load HTTP server — gated by network permit (it binds a port)
+  if permit.check("network") then
+    local hsOk, hsMod = pcall(require, "lua.httpserver")
+    if hsOk and hsMod then
+      httpserver = hsMod
+      for method, handler in pairs(httpserver.getHandlers()) do
+        rpcHandlers[method] = gated("network", handler)
+      end
+      io.write("[react-love] HTTP server loaded\n"); io.flush()
     end
-    io.write("[react-love] HTTP server loaded\n"); io.flush()
   end
 
-  -- Load browse module (optional — stealth browser control via TCP)
-  local brOk, brMod = pcall(require, "lua.browse")
-  if brOk and brMod then
-    browse = brMod
-    browse.init()
-    io.write("[react-love] Browse module loaded\n"); io.flush()
+  -- Load browse module — gated by browse permit
+  if permit.check("browse") then
+    local brOk, brMod = pcall(require, "lua.browse")
+    if brOk and brMod then
+      browse = brMod
+      browse.init()
+      io.write("[react-love] Browse module loaded\n"); io.flush()
+    end
   end
 
   -- Load archive module (optional — requires libarchive)
@@ -968,11 +1011,19 @@ function ReactLove.init(config)
     io.write("[react-love] Map module loaded\n"); io.flush()
   end
 
+  -- Register permit + audit RPC handlers (always available for inspector queries)
+  for method, handler in pairs(permit.getHandlers()) do
+    rpcHandlers[method] = handler
+  end
+  for method, handler in pairs(audit.getHandlers()) do
+    rpcHandlers[method] = handler
+  end
+
   -- Wire up console + inspector + devtools (only in rendering modes with inspector enabled)
   if isRendering() and inspectorEnabled then
     console.init({ bridge = bridge, tree = tree, inspector = inspector })
     inspector.setConsole(console)
-    devtools.init({ inspector = inspector, console = console, tree = tree, pushEvent = pushEvent })
+    devtools.init({ inspector = inspector, console = console, tree = tree, bridge = bridge, pushEvent = pushEvent })
   end
 
   -- Screenshot mode (env var trigger, works in native and canvas modes)
@@ -1052,6 +1103,16 @@ function ReactLove.update(dt)
     elseif canvasFocusedNode and canvasFocusedNode.type == "TextInput" then
       textinput.update(canvasFocusedNode, dt)
     end
+
+    -- Sync playground editor hover -> preview overlay link
+    if inspectorEnabled and inspector and inspector.setPlaygroundLink then
+      if canvasFocusedNode and canvasFocusedNode.type == "TextEditor" and texteditor and texteditor.getHoverContext then
+        inspector.setPlaygroundLink(texteditor.getHoverContext(canvasFocusedNode))
+      else
+        inspector.setPlaygroundLink(nil)
+      end
+    end
+
     if codeblock then codeblock.update(dt) end
 
     -- Update VideoPlayer controls (auto-hide timer, canvas mode)
@@ -1700,6 +1761,16 @@ function ReactLove.update(dt)
   elseif focusedNode and focusedNode.type == "TextInput" then
     textinput.update(focusedNode, dt)
   end
+
+  -- Sync playground editor hover -> preview overlay link
+  if inspectorEnabled and inspector and inspector.setPlaygroundLink then
+    if focusedNode and focusedNode.type == "TextEditor" and texteditor and texteditor.getHoverContext then
+      inspector.setPlaygroundLink(texteditor.getHoverContext(focusedNode))
+    else
+      inspector.setPlaygroundLink(nil)
+    end
+  end
+
   if codeblock then codeblock.update(dt) end
 
   -- Update VideoPlayer controls (auto-hide timer)
