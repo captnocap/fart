@@ -124,8 +124,9 @@ dist-storybook: build-storybook-native setup
 	rm -rf $(DIST_BINARY)
 	rm -rf $(STAGING_DIR) $(PAYLOAD_DIR)
 	# ── Build the .love zip ──
-	mkdir -p $(STAGING_DIR)/lua/audio/modules $(STAGING_DIR)/lua/themes
-	cp $(STORYBOOK_LOVE)/bundle.js $(STAGING_DIR)/
+	# Bundle goes into love/ subdir — matches bundlePath = "love/bundle.js" in main.lua.
+	mkdir -p $(STAGING_DIR)/lua/audio/modules $(STAGING_DIR)/lua/themes $(STAGING_DIR)/love
+	cp $(STORYBOOK_LOVE)/bundle.js $(STAGING_DIR)/love/
 	cp packaging/storybook/main.lua $(STAGING_DIR)/
 	cp packaging/storybook/conf.lua $(STAGING_DIR)/
 	cp lua/*.lua $(STAGING_DIR)/lua/

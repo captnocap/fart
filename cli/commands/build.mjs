@@ -95,8 +95,9 @@ export async function buildCommand(args) {
   const skipUpdate = args.includes('--no-update');
   const rawTarget = args.filter(a => !a.startsWith('--'))[0]; // e.g. "dist:love", "terminal", or undefined
 
-  // Auto-update runtime files before building (love target only — grid/web don't need lua/)
-  if (!skipUpdate && (!rawTarget || rawTarget === 'love' || rawTarget === 'dist:love')) {
+  // Auto-update runtime files before building (love + sdl2 — both use lua/ runtime; grid/web don't)
+  const isLuaTarget = !rawTarget || ['love', 'dist:love', 'sdl2', 'dist:sdl2'].includes(rawTarget);
+  if (!skipUpdate && isLuaTarget) {
     await updateCommand([]);
   }
 
@@ -406,9 +407,14 @@ async function buildDistLove(cwd, projectName, opts = {}) {
 
   // 1. Bundle JS (IIFE for QuickJS)
   console.log('  [1/6] Bundling JS...');
-  const bundlePath = join(stagingDir, 'bundle.js');
+  // Bundle goes into love/ subdir — matching the dev build output path (love/bundle.js).
+  // This ensures a single main.lua with bundlePath = "love/bundle.js" works for both
+  // `love .` (dev) and the dist .love archive. Do NOT move this back to the root — that
+  // is what causes the recurring ping-pong with scaffolded projects.
+  const bundlePath = join(stagingDir, 'love', 'bundle.js');
   rmSync(stagingDir, { recursive: true, force: true });
-  mkdirSync(join(stagingDir, 'lua'), { recursive: true });
+  mkdirSync(join(stagingDir, 'lua'),  { recursive: true });
+  mkdirSync(join(stagingDir, 'love'), { recursive: true });
 
   execSync([
     'npx', 'esbuild',

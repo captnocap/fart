@@ -33,6 +33,7 @@ export async function devCommand(args) {
     love: 'Love2D will launch once. HMR reloads in-place on rebuild.',
     terminal: 'The terminal app will auto-reload on save.',
     web: 'Serve dist/ with any HTTP server to see your app.',
+    sdl2: 'Bundle → sdl2/bundle.js. Run: luajit sdl2/main.lua (or luajit storybook/sdl2/main.lua from repo root).',
   };
   const hint = hints[targetName] || `Output: ${target.output}`;
 
