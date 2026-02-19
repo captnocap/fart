@@ -24,6 +24,8 @@
     - lineHeight, letterSpacing, numberOfLines text properties
 ]]
 
+local Log = require("lua.debug_log")
+
 local Measure = nil  -- Injected at init time via Layout.init()
 local CodeBlockModule = nil  -- Lazy-loaded for CodeBlock measurement
 
@@ -36,8 +38,9 @@ local Layout = {}
 -- occupy proportional space when unsized, rather than collapsing to zero.
 -- Interactive elements (buttons, inputs, text) size from their content instead.
 -- When a surface has no explicit dimensions and no children to measure from,
--- it falls back to 1/4 of its parent's available space on the relevant axis.
--- This cascades naturally: window 800 → box 200 → nested box 50.
+-- it falls back to viewport_size / 4 (capped at the parent's available space).
+-- Applied in layoutNode after auto-height resolves — not in the estimation
+-- chain, which would propagate incorrect parent dimensions through recursion.
 
 local SURFACE_TYPES = {
   View     = true,
@@ -56,9 +59,6 @@ local function isSurface(node)
   return true
 end
 
--- Sentinel value used for auto-height containers where height is unknown.
--- Proportional fallback must not use this as a base dimension.
-local AUTO_SENTINEL = 9900
 
 --- Initialize the layout engine with target-specific dependencies.
 --- Must be called before any layout operations.
@@ -362,18 +362,7 @@ local function estimateIntrinsicMain(node, isRow, pw, ph)
   -- 3. Container nodes: recursively estimate from children
   local children = node.children or {}
   if #children == 0 then
-    -- Proportional fallback: empty surfaces get 1/4 of parent dimension
-    -- instead of collapsing to zero. Only when parent size is definite
-    -- (not the 9999 auto-height sentinel).
-    -- Skip nodes with flexGrow — they're actively flex-managed, and their
-    -- cross-axis size comes from alignItems:stretch, not proportional fallback.
-    if isSurface(node) and (s.flexGrow or 0) <= 0 then
-      local parentMain = isRow and (pw or 0) or (ph or 0)
-      if parentMain > 0 and parentMain < AUTO_SENTINEL then
-        return math.max(padMain, parentMain / 4)
-      end
-    end
-    return padMain  -- Empty container (non-surface, flex-managed, or indefinite parent)
+    return padMain  -- Empty container
   end
 
   local gap = ru(s.gap, isRow and pw or ph) or 0
@@ -439,12 +428,14 @@ end
 function Layout.layoutNode(node, px, py, pw, ph)
   if not node then return end
   local s = node.style or {}
+  Log.log("layout", "layoutNode id=%s type=%s debugName=%s avail=%sx%s", tostring(node.id), tostring(node.type), tostring(node.debugName or "-"), tostring(pw), tostring(ph))
 
   -- ==================================================================
   -- display:none -- skip this node entirely, give it zero-size computed rect.
   -- Its children are NOT laid out.
   -- ==================================================================
   if s.display == "none" then
+    Log.log("layout", "  skip display:none id=%s", tostring(node.id))
     node.computed = { x = px, y = py, w = 0, h = 0 }
     return
   end
@@ -543,6 +534,7 @@ function Layout.layoutNode(node, px, py, pw, ph)
       if constrainW < 0 then constrainW = 0 end
 
       local mw, mh = measureTextNode(node, constrainW)
+      Log.log("layout", "  measureText id=%s constraint=%s -> %sx%s text=%q", tostring(node.id), tostring(constrainW), tostring(mw), tostring(mh), tostring(resolveTextContent(node) or ""):sub(1, 40))
       if mw and mh then
         if not explicitW and not parentAssignedW then
           -- Node width = measured text width + padding
@@ -595,6 +587,8 @@ function Layout.layoutNode(node, px, py, pw, ph)
   if h then
     h = clampDim(h, minH, maxH)
   end
+
+  Log.log("layout", "  resolved id=%s w=%s h=%s explicitW=%s explicitH=%s", tostring(node.id), tostring(w), tostring(h or "auto"), tostring(explicitW), tostring(explicitH))
 
   -- Margin (all four sides)
   local mar  = ru(s.margin, pw) or 0
@@ -846,6 +840,8 @@ function Layout.layoutNode(node, px, py, pw, ph)
     local lineGaps = math.max(0, lineCount - 1) * gap
     local lineAvail = mainSize - lineTotalBasis - lineGaps - lineTotalMarginMain
 
+    Log.log("layout", "  flex line %d: %d items basis=%s gaps=%s avail=%s totalFlex=%s", lineIdx, lineCount, tostring(lineTotalBasis), tostring(lineGaps), tostring(lineAvail), tostring(lineTotalFlex))
+
     if lineAvail > 0 and lineTotalFlex > 0 then
       -- Positive free space: distribute to flex-grow items
       for _, idx in ipairs(line) do
@@ -1083,10 +1079,6 @@ function Layout.layoutNode(node, px, py, pw, ph)
           child._stretchH = ch_final
         elseif not isRow and ci.grow > 0 then
           child._stretchH = ch_final
-        elseif not isRow and isSurface(child) and ch_final > 0
-               and #(child.children or {}) == 0
-               and (cs.flexGrow or 0) <= 0 then
-          child._stretchH = ch_final
         end
       end
 
@@ -1152,22 +1144,23 @@ function Layout.layoutNode(node, px, py, pw, ph)
     end
   end
 
-  -- Proportional surface fallback (safety net):
-  -- Covers absolute-positioned surfaces and edge cases where _stretchH
-  -- was not signaled by the parent. If a surface node ended up with near-zero
-  -- height and the parent provided a definite height, accept the parent's
-  -- allocation. For flex children, ph is already the flex-distributed height
-  -- (which was computed from the proportional basis). For absolute children,
-  -- ph is the estimated height from estimateIntrinsicMain.
+  -- Proportional surface fallback:
+  -- Empty surface nodes (Box, Image, Video, Scene3D) that resolved to zero
+  -- height get a fallback of viewport_height / 4. Uses the known viewport
+  -- dimensions directly — not the parent chain, which propagates incorrectly
+  -- through the estimation recursion. The parent reads back child.computed.h
+  -- after layoutNode returns, so the cursor advances correctly.
   if not isScrollContainer and isSurface(node) and h < 1
      and (s.flexGrow or 0) <= 0
-     and (ph or 0) > 0 and (ph or 0) < AUTO_SENTINEL then
-    h = ph
+     and not explicitH then
+    local vH = Layout._viewportH or 600
+    h = math.min(vH / 4, ph or vH)
   end
 
   -- Final min/max height clamping for auto-height
   h = clampDim(h, minH, maxH)
 
+  Log.log("layout", "  final id=%s computed x=%d y=%d w=%d h=%d", tostring(node.id), x, y, w, h)
   node.computed = { x = x, y = y, w = w, h = h }
 
   -- ====================================================================
@@ -1251,6 +1244,7 @@ function Layout.layoutNode(node, px, py, pw, ph)
       cy = y + padT + cmarT
     end
 
+    Log.log("layout", "  absolute id=%s pos=(%d,%d) size=%dx%d", tostring(child.id), cx, cy, cw, ch)
     child.computed = { x = cx, y = cy, w = cw, h = ch }
     Layout.layoutNode(child, cx, cy, cw, ch)
   end
@@ -1310,6 +1304,14 @@ function Layout.layout(node, x, y, w, h)
   y = y or 0
   w = w or love.graphics.getWidth()
   h = h or love.graphics.getHeight()
+  Log.log("layout", "=== layout pass === viewport=%dx%d root.type=%s", w, h, tostring(node.type))
+
+  -- Store viewport dimensions for the proportional surface fallback.
+  -- Used by layoutNode to give empty surfaces a sensible default size
+  -- without relying on the estimation chain (which propagates the root's
+  -- dimensions to every depth, giving wrong results for nested nodes).
+  Layout._viewportW = w
+  Layout._viewportH = h
 
   -- Root auto-fill: if the root has no explicit dimensions, tell
   -- layoutNode to use the viewport size via the same signals that the
