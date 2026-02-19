@@ -1,0 +1,12 @@
+.{
+    .name = .ilovereact,
+    .version = "0.1.0",
+    .fingerprint = 0x7522645be1b0c7c2,
+    .paths = .{"."},
+    .dependencies = .{
+        .freetype = .{
+            .url = "https://download.savannah.gnu.org/releases/freetype/freetype-2.13.3.tar.gz",
+            .hash = "N-V-__8AAK-ZJgGK3AtcJ7nDUwlNM53dDwX6rHJ_YgEhdGqj",
+        },
+    },
+}

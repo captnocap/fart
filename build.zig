@@ -86,9 +86,14 @@ pub fn build(b: *std.Build) void {
     // ── ft_helper ─────────────────────────────────────────────────────────
     // Thin FreeType wrapper for LuaJIT FFI — glyph rasterization and text
     // measurement for the SDL2 rendering target.
-    // Requires freetype2 on the host. Cross-compilation to macOS/Windows
-    // needs a FreeType sysroot (future work — host-only for now).
+    //
+    // FreeType is compiled from source (fetched via build.zig.zon) so that
+    // ft_helper cross-compiles to any target without a system FreeType install.
     {
+        // FreeType 2.13.3 source fetched by zig fetch --save
+        const ft_src = b.dependency("freetype", .{});
+        const ft_root = ft_src.path(".");
+
         const mod = b.createModule(.{
             .target = target,
             .optimize = optimize,
@@ -100,18 +105,68 @@ pub fn build(b: *std.Build) void {
             .root_module = mod,
         });
 
+        // FreeType minimal build — only the modules ft_helper.c actually uses:
+        //   FT_Init_FreeType, FT_New_Face, FT_Set_Pixel_Sizes,
+        //   FT_Load_Char (FT_LOAD_RENDER / FT_LOAD_ADVANCE_ONLY), FT_Render_Glyph
+        // Custom ftmodule.h must come BEFORE FreeType's own include dir so the
+        // preprocessor finds our module list (only TTF/OTF drivers) first.
+        // See vendor/freetype-config/freetype/config/ftmodule.h.
+        lib.addIncludePath(b.path("vendor/freetype-config"));
+        lib.addIncludePath(ft_root.path(b, "include"));
+        // Stub hb.h: satisfies FreeType 2.13.3's unconditional #include <hb.h>
+        // in autofit/ft-hb.h. HarfBuzz is disabled (not defined in ftoption.h).
+        lib.addIncludePath(b.path("vendor/stubs"));
+        lib.addCSourceFiles(.{
+            .root = ft_root,
+            .files = &.{
+                // Base layer
+                "src/base/ftsystem.c",
+                "src/base/ftinit.c",
+                "src/base/ftdebug.c",
+                "src/base/ftbase.c",
+                "src/base/ftbitmap.c",
+                "src/base/ftglyph.c",
+                "src/base/ftmm.c",       // FT_Set_Named_Instance (variable fonts)
+                // Gzip support (many system fonts are gzip-compressed)
+                "src/gzip/ftgzip.c",
+                // Font drivers (TTF/OTF + PostScript)
+                "src/truetype/truetype.c",
+                "src/cff/cff.c",
+                "src/type1/type1.c",
+                "src/sfnt/sfnt.c",
+                // Rasterizers
+                "src/smooth/smooth.c",
+                "src/raster/raster.c",
+                // Hinting + PostScript support
+                "src/autofit/autofit.c",
+                "src/psaux/psaux.c",
+                "src/psnames/psnames.c",
+                "src/pshinter/pshinter.c",
+            },
+            .flags = &.{
+                "-O2",
+                // FT2_BUILD_LIBRARY: required when building FreeType from source
+                // (as opposed to using it as a consumer).
+                "-DFT2_BUILD_LIBRARY",
+                // Optional deps (PNG, Bzip2, Brotli, HarfBuzz) are all commented
+                // out in FreeType's default ftoption.h — do NOT define them at
+                // all. -DX=0 would *define* the macro, making #ifdef X true.
+            },
+        });
+
+        // ft_helper.c itself
+        lib.addIncludePath(ft_root.path(b, "include"));
         lib.addCSourceFile(.{
             .file = b.path("lua/sdl2_ft_helper.c"),
             .flags = &.{"-O2"},
         });
 
         lib.linkLibC();
-        lib.linkSystemLibrary("freetype2");
 
         const install = b.addInstallArtifact(lib, .{});
         b.getInstallStep().dependOn(&install.step);
 
-        const step = b.step("ft-helper", "Build ft_helper shared library (requires freetype2)");
+        const step = b.step("ft-helper", "Build ft_helper + FreeType from source (fully cross-compilable)");
         step.dependOn(&install.step);
         all_step.dependOn(&install.step);
     }

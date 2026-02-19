@@ -1,0 +1,122 @@
+/*
+ * CartridgeOS init.c — PID 1
+ * Static musl binary. Loads virtio-gpu module, then runs luajit as a child.
+ * Running luajit as a child (not exec'd) means a crash drops to shell
+ * instead of causing a kernel panic.
+ */
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <sys/mount.h>
+#include <sys/stat.h>
+#include <sys/wait.h>
+
+static void run_wait(char *const argv[]) {
+    pid_t pid = fork();
+    if (pid == 0) { execv(argv[0], argv); _exit(1); }
+    if (pid > 0)  waitpid(pid, NULL, 0);
+}
+
+int main(void) {
+    /* ── Filesystems ─────────────────────────────────────────────────────── */
+    mount("proc",     "/proc", "proc",     0, NULL);
+    mount("sysfs",    "/sys",  "sysfs",    0, NULL);
+    mount("devtmpfs", "/dev",  "devtmpfs", 0, NULL);
+
+    int pfd = open("/proc/sys/kernel/printk", O_WRONLY);
+    if (pfd >= 0) { write(pfd, "1\n", 2); close(pfd); }
+
+    int con = open("/dev/console", O_RDWR);
+    if (con >= 0) { dup2(con, 0); dup2(con, 1); dup2(con, 2); if (con > 2) close(con); }
+
+    /* ── Banner ──────────────────────────────────────────────────────────── */
+    puts("\n  CartridgeOS v0.1");
+    puts("  iLoveReact  --  no X11, no Wayland, no display server");
+
+    char ver[64] = "unknown";
+    FILE *vf = fopen("/proc/version", "r");
+    if (vf) {
+        char line[512]; char *tok;
+        if (fgets(line, sizeof(line), vf)) {
+            tok = strtok(line, " "); tok = strtok(NULL, " "); tok = strtok(NULL, " ");
+            if (tok) strncpy(ver, tok, sizeof(ver)-1);
+        }
+        fclose(vf);
+    }
+    printf("  kernel: %s\n\n", ver);
+
+    /* ── Load virtio-gpu module ───────────────────────────────────────────── */
+    puts("  Loading virtio-gpu driver...");
+    fflush(stdout);
+    char *modargs[] = { "/bin/busybox", "modprobe", "virtio-gpu", NULL };
+    run_wait(modargs);
+    usleep(1500000);  /* wait for DRM device enumeration */
+
+    if (access("/dev/dri/card0", F_OK) == 0)
+        puts("  DRM: /dev/dri/card0 ready");
+    else
+        puts("  WARNING: /dev/dri/card0 missing");
+    if (access("/dev/dri/renderD128", F_OK) == 0)
+        puts("  DRM: /dev/dri/renderD128 ready\n");
+    else
+        puts("  DRM: /dev/dri/renderD128 not found (EGL render node)\n");
+    fflush(stdout);
+
+    /* ── Environment ─────────────────────────────────────────────────────── */
+    setenv("SDL_VIDEODRIVER",    "kmsdrm",            1);
+    setenv("LD_LIBRARY_PATH",    "/app:/usr/lib:/lib", 1);
+    /* Alpine installs Mesa DRI drivers under xorg/modules/dri, not /usr/lib/dri.
+     * Without this Mesa's DRI loader cannot find the virtio_gpu / swrast drivers
+     * and crashes with a NULL deref inside gbm_create_device(). */
+    setenv("LIBGL_DRIVERS_PATH", "/usr/lib/xorg/modules/dri", 1);
+    setenv("LIBGL_DRIVERS_DIR",  "/usr/lib/xorg/modules/dri", 1);
+    /* GBM is the EGL platform SDL2's kmsdrm backend uses. */
+    setenv("EGL_PLATFORM",       "gbm",               1);
+    /* Stop Mesa probing the X11 EGL platform (crashes with no X display). */
+    setenv("MESA_EGL_NO_X11",    "1",                 1);
+    /* Lead 2: skip driver name detection, load virtio_gpu_dri.so directly. */
+    setenv("MESA_LOADER_DRIVER_OVERRIDE", "virtio_gpu", 1);
+    /* Mesa verbose output — helps identify the crash location */
+    setenv("LIBGL_DEBUG",        "verbose",           1);
+    setenv("EGL_LOG_LEVEL",      "debug",             1);
+
+    /* ── Launch luajit as child (not exec — so crash = shell, not panic) ─── */
+    puts("  Launching iLoveReact...\n");
+    fflush(stdout);
+
+    pid_t app = fork();
+    if (app == 0) {
+        /* child */
+        char *argv[] = { "/usr/bin/luajit", "/app/main.lua", NULL };
+        execv("/usr/bin/luajit", argv);
+        fprintf(stderr, "[init] execv luajit: %s\n", strerror(errno));
+        _exit(1);
+    }
+
+    if (app > 0) {
+        int status;
+        waitpid(app, &status, 0);
+        if (WIFEXITED(status))
+            printf("\n  [init] app exited (code %d)\n", WEXITSTATUS(status));
+        else if (WIFSIGNALED(status))
+            printf("\n  [init] app killed by signal %d\n", WTERMSIG(status));
+        else
+            printf("\n  [init] app stopped (raw status %d)\n", status);
+    } else {
+        fprintf(stderr, "[init] fork failed: %s\n", strerror(errno));
+    }
+
+    /* ── Fallback shell ──────────────────────────────────────────────────── */
+    puts("\n  [init] dropping to shell (Ctrl-D to reboot)\n");
+    fflush(stdout);
+    char *sh[] = { "/bin/sh", NULL };
+    execv("/bin/sh", sh);
+
+    /* Should never reach here — PID 1 must not exit */
+    while (1) sleep(1);
+    return 0;
+}
