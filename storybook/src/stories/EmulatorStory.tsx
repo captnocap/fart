@@ -5,8 +5,7 @@ import { useThemeColors } from '../../../packages/theme/src';
 /**
  * EmulatorStory — NES emulation demo
  *
- * Drop a .nes ROM file into the storybook's Love2D filesystem
- * (storybook/love/) and set the ROM_PATH below.
+ * Drag and drop a .nes ROM file onto the emulator to play.
  *
  * Controls:
  *   Arrow keys  → D-pad
@@ -16,11 +15,10 @@ import { useThemeColors } from '../../../packages/theme/src';
  *   Shift       → Select
  */
 
-const ROM_PATH = 'roms/game.nes';
-
 export default function EmulatorStory() {
   const c = useThemeColors();
   const [playing, setPlaying] = useState(true);
+  const [romName, setRomName] = useState<string | null>(null);
 
   return (
     <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg, padding: 16, gap: 12 }}>
@@ -28,7 +26,10 @@ export default function EmulatorStory() {
       <Box style={{ gap: 4 }}>
         <Text style={{ fontSize: 18, color: c.text, fontWeight: '700' }}>NES Emulator</Text>
         <Text style={{ fontSize: 11, color: c.textDim }}>
-          Agnes NES core — place a .nes ROM at {ROM_PATH}
+          {romName
+            ? `Playing: ${romName}`
+            : 'Drag and drop a .nes ROM file to play'
+          }
         </Text>
       </Box>
 
@@ -36,9 +37,9 @@ export default function EmulatorStory() {
       <Box style={{ flexGrow: 1, alignItems: 'center', justifyContent: 'center' }}>
         {/* // ilr-ignore-next-line */}
         <Emulator
-          src={ROM_PATH}
           playing={playing}
           style={{ width: 512, height: 480 }}
+          onROMLoaded={(e) => setRomName(e.filename)}
         />
       </Box>
 

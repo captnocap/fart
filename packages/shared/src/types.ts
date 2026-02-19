@@ -377,8 +377,8 @@ export interface VideoPlayerProps extends VideoProps {
 }
 
 export interface EmulatorProps {
-  /** ROM file path (relative to Love2D filesystem, e.g. "game.nes") */
-  src: string;
+  /** ROM file path (relative to Love2D filesystem, e.g. "game.nes"). Optional — can load via file drop instead. */
+  src?: string;
   /** Whether emulation is running (default: true) */
   playing?: boolean;
 
@@ -387,6 +387,10 @@ export interface EmulatorProps {
   h?: number | string;
 
   style?: Style;
+
+  /** Fired when a ROM is loaded (from src prop or file drop) */
+  onROMLoaded?: (event: { filename: string; fileSize: number; filePath: string }) => void;
+
   key?: string | number;
 }
 

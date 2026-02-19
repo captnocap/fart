@@ -3057,13 +3057,10 @@ function ReactLove.gamepadaxis(joystick, axis, value)
 end
 
 --- Call from love.filedropped(file).
---- Hit-tests at current mouse position and dispatches a filedrop event to JS.
+--- Lua modules get first crack at file drops. If no module consumes it,
+--- falls through to React via the bridge.
 function ReactLove.filedropped(file)
   if not isRendering() then return end
-  if not bridge then return end
-
-  local root = tree.getTree()
-  if not root then return end
 
   -- love.mouse.getPosition() is stale during OS file drags.
   -- Use SDL_GetGlobalMouseState via dragdrop module for the real position.
@@ -3074,6 +3071,17 @@ function ReactLove.filedropped(file)
   if not mx then
     mx, my = love.mouse.getPosition()
   end
+
+  -- Let Lua modules consume the drop before React sees it.
+  -- Emulator handles .nes files directly — no bridge round-trip needed.
+  if emumod and emumod.filedropped(file, mx, my, pushEvent) then
+    return  -- consumed by emulator
+  end
+
+  -- Fall through to React dispatch
+  if not bridge then return end
+  local root = tree.getTree()
+  if not root then return end
 
   local hit = events.hitTest(root, mx, my)
   if not hit then return end

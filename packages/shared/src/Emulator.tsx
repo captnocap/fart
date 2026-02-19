@@ -4,9 +4,13 @@
  * Renders a NES ROM via the Agnes emulator core into a Canvas at layout position.
  * Native only — returns null in web mode.
  *
+ * ROM loading: either via `src` prop (Love2D filesystem) or drag-and-drop
+ * a .nes file onto the component. Lua handles file drops directly — no
+ * bridge round-trip.
+ *
  * Usage:
  *   <Emulator src="zelda.nes" playing />
- *   <Emulator src="mario.nes" style={{ width: 512, height: 480 }} />
+ *   <Emulator style={{ width: 512, height: 480 }} onROMLoaded={e => console.log(e.filename)} />
  */
 
 import React from 'react';
@@ -30,16 +34,19 @@ function resolveEmulatorStyle(props: EmulatorProps): Style | undefined {
 }
 
 export function Emulator(props: EmulatorProps) {
-  const { src, playing = true } = props;
+  const { src, playing = true, onROMLoaded } = props;
   const resolvedStyle = resolveEmulatorStyle(props);
   const scaledStyle = useScaledStyle(resolvedStyle);
   const mode = useRendererMode();
 
   if (mode === 'web') return null;
 
-  return React.createElement('Emulator', {
+  const hostProps: any = {
     src,
     playing,
     style: scaledStyle,
-  });
+    onROMLoaded,
+  };
+
+  return React.createElement('Emulator', hostProps);
 }

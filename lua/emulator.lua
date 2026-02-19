@@ -88,10 +88,11 @@ local function buildInput()
   return input
 end
 
---- Load a ROM file into an agnes instance.
---- @param src string ROM path (relative to Love2D filesystem)
+--- Load ROM data into a fresh agnes instance.
+--- @param data string Raw ROM bytes
+--- @param label string Display name for logging
 --- @return agnes_t*|nil
-local function loadROM(src)
+local function loadROMData(data, label)
   local agnes = loadAgnes()
   if not agnes then return nil end
 
@@ -101,23 +102,45 @@ local function loadROM(src)
     return nil
   end
 
-  -- Read ROM file via Love2D filesystem
+  local romPtr = ffi.cast("void*", ffi.cast("const char*", data))
+  if not agnes.agnes_load_ines_data(emu, romPtr, #data) then
+    io.write("[emulator] Failed to parse iNES data: " .. tostring(label) .. "\n"); io.flush()
+    agnes.agnes_destroy(emu)
+    return nil
+  end
+
+  io.write("[emulator] Loaded ROM: " .. label .. " (" .. #data .. " bytes)\n"); io.flush()
+  return emu
+end
+
+--- Load a ROM from Love2D's virtual filesystem.
+--- @param src string ROM path (relative to Love2D filesystem)
+--- @return agnes_t*|nil
+local function loadROM(src)
   local ok, data = pcall(love.filesystem.read, "data", src)
   if not ok or not data then
     io.write("[emulator] Failed to read ROM: " .. tostring(src) .. " — " .. tostring(data) .. "\n"); io.flush()
-    agnes.agnes_destroy(emu)
     return nil
   end
+  return loadROMData(data, src)
+end
 
-  local romPtr = ffi.cast("void*", ffi.cast("const char*", data))
-  if not agnes.agnes_load_ines_data(emu, romPtr, #data) then
-    io.write("[emulator] Failed to parse iNES data: " .. tostring(src) .. "\n"); io.flush()
-    agnes.agnes_destroy(emu)
-    return nil
+--- Load a ROM from an OS filesystem path (e.g. from a file drop).
+--- @param path string Absolute OS path to .nes file
+--- @return agnes_t*|nil, string|nil data
+local function loadROMFromPath(path)
+  local f = io.open(path, "rb")
+  if not f then
+    io.write("[emulator] Failed to open file: " .. tostring(path) .. "\n"); io.flush()
+    return nil, nil
   end
-
-  io.write("[emulator] Loaded ROM: " .. src .. " (" .. #data .. " bytes)\n"); io.flush()
-  return emu
+  local data = f:read("*a")
+  f:close()
+  if not data or #data == 0 then
+    io.write("[emulator] Empty file: " .. tostring(path) .. "\n"); io.flush()
+    return nil, nil
+  end
+  return loadROMData(data, path), data
 end
 
 --- Called per-frame from init.lua. Discovers Emulator nodes, loads ROMs, manages canvases.
@@ -129,23 +152,24 @@ function Emulator.syncWithTree(nodes)
       local src = node.props and node.props.src
       local playing = node.props and node.props.playing ~= false  -- default: playing
 
-      if src and not instances[id] then
-        -- New emulator node: load ROM
-        local emu = loadROM(src)
-        if emu then
-          instances[id] = {
-            agnes = emu,
-            canvas = love.graphics.newCanvas(NES_W, NES_H),
-            imageData = love.image.newImageData(NES_W, NES_H),
-            image = nil,
-            src = src,
-            playing = playing,
-            bounds = nil,
-          }
-          instances[id].canvas:setFilter("nearest", "nearest")
-          if not focusedNodeId then focusedNodeId = id end
-          io.write("[emulator] Created instance for node " .. id .. "\n"); io.flush()
+      if not instances[id] then
+        -- New emulator node: create instance (ROM may come later via file drop)
+        local emu = nil
+        if src then
+          emu = loadROM(src)
         end
+        instances[id] = {
+          agnes = emu,
+          canvas = love.graphics.newCanvas(NES_W, NES_H),
+          imageData = love.image.newImageData(NES_W, NES_H),
+          image = nil,
+          src = src or nil,
+          playing = playing,
+          bounds = nil,
+        }
+        instances[id].canvas:setFilter("nearest", "nearest")
+        if not focusedNodeId then focusedNodeId = id end
+        io.write("[emulator] Created instance for node " .. id .. (emu and "" or " (awaiting ROM)") .. "\n"); io.flush()
       end
 
       local entry = instances[id]
@@ -263,6 +287,107 @@ function Emulator.mousepressed(x, y, button)
       focusedNodeId = nodeId
       return true
     end
+  end
+  return false
+end
+
+-- ============================================================================
+-- File drop — hot-load ROMs directly from OS filesystem
+-- ============================================================================
+
+--- Hot-swap a ROM into an existing emulator instance.
+--- Destroys the old agnes context and creates a fresh one.
+local function hotSwapROM(entry, data, label)
+  local agnes = loadAgnes()
+  if not agnes then return false end
+
+  -- Destroy old instance
+  if entry.agnes then
+    agnes.agnes_destroy(entry.agnes)
+    entry.agnes = nil
+  end
+
+  -- Load new ROM
+  entry.agnes = loadROMData(data, label)
+  if entry.agnes then
+    entry.src = label
+    entry.playing = true
+    entry.image = nil  -- force fresh Image on next render
+    io.write("[emulator] Hot-swapped ROM: " .. label .. "\n"); io.flush()
+    return true
+  end
+  return false
+end
+
+--- Called from init.lua's filedropped handler.
+--- Receives the raw love.DroppedFile + mouse position.
+--- Returns true if the emulator consumed the drop (suppresses React dispatch).
+--- @param file love.DroppedFile
+--- @param mx number Mouse X
+--- @param my number Mouse Y
+--- @param pushEvent function Event push function
+--- @return boolean consumed
+function Emulator.filedropped(file, mx, my, pushEvent)
+  -- Only care about .nes files
+  local path = file:getFilename()
+  if not path or not path:match("%.nes$") then return false end
+
+  -- Hit-test: did the file land on an Emulator node?
+  local hitId = nil
+  for nodeId, entry in pairs(instances) do
+    local b = entry.bounds
+    if b and mx >= b.x and mx < b.x + b.w and my >= b.y and my < b.y + b.h then
+      hitId = nodeId
+      break
+    end
+  end
+
+  -- If no emulator was hit but we have any instance, load into the focused one
+  if not hitId then
+    if focusedNodeId and instances[focusedNodeId] then
+      hitId = focusedNodeId
+    else
+      -- Pick the first instance
+      for nodeId, _ in pairs(instances) do
+        hitId = nodeId
+        break
+      end
+    end
+  end
+
+  if not hitId then return false end
+
+  -- Read file bytes from OS path
+  local f = io.open(path, "rb")
+  if not f then
+    io.write("[emulator] filedropped: failed to open " .. path .. "\n"); io.flush()
+    return false
+  end
+  local data = f:read("*a")
+  f:close()
+
+  if not data or #data == 0 then
+    io.write("[emulator] filedropped: empty file " .. path .. "\n"); io.flush()
+    return false
+  end
+
+  local entry = instances[hitId]
+  local filename = path:match("([^/\\]+)$") or path
+
+  if hotSwapROM(entry, data, filename) then
+    focusedNodeId = hitId
+    -- Notify React that a ROM was loaded
+    if pushEvent then
+      pushEvent({
+        type = "capability",
+        targetId = hitId,
+        handler = "onROMLoaded",
+        filename = filename,
+        fileSize = #data,
+        filePath = path,
+      })
+    end
+    return true
   end
   return false
 end
