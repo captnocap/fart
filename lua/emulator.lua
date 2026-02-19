@@ -273,12 +273,35 @@ end
 -- Input routing
 -- ============================================================================
 
+-- Keys that the NES emulator claims when it has focus + a loaded ROM.
+local NES_KEYS = {
+  up = true, down = true, left = true, right = true,
+  z = true, x = true, ["return"] = true, rshift = true, lshift = true,
+}
+
+--- Returns true if the key was consumed (prevents propagation to React).
 function Emulator.keypressed(key, scancode, isrepeat)
   keyState[key] = true
+  -- Consume NES-mapped keys when we have a focused, running instance
+  if NES_KEYS[key] and focusedNodeId then
+    local entry = instances[focusedNodeId]
+    if entry and entry.agnes then
+      return true  -- consumed
+    end
+  end
+  return false
 end
 
+--- Returns true if the key was consumed.
 function Emulator.keyreleased(key, scancode)
   keyState[key] = false
+  if NES_KEYS[key] and focusedNodeId then
+    local entry = instances[focusedNodeId]
+    if entry and entry.agnes then
+      return true
+    end
+  end
+  return false
 end
 
 function Emulator.mousepressed(x, y, button)

@@ -2126,9 +2126,18 @@ function ReactLove.mousepressed(x, y, button)
     end
   end
 
-  -- If the only thing we hit was the GameCanvas itself (no React child with handlers),
+  -- Route to emulator if click is on an Emulator node
+  if emumod then
+    local hitIsEmu = hit and hit.type == "Emulator"
+    if hitIsEmu then
+      emumod.mousepressed(x, y, button)
+    end
+  end
+
+  -- If the only thing we hit was the GameCanvas/Emulator itself (no React child with handlers),
   -- don't dispatch a click event to JS — Lua already handled it above.
   if hit and hit.type == "GameCanvas" then hit = nil end
+  if hit and hit.type == "Emulator" then hit = nil end
 
   -- Handle TextEditor/TextInput focus transitions
   local focusedNode = focus.get()
@@ -2725,7 +2734,9 @@ function ReactLove.keypressed(key, scancode, isrepeat)
 
   -- Route to focused GameCanvas (game input stays in Lua, zero latency)
   if gamemod then gamemod.keypressed(key, scancode, isrepeat) end
-  if emumod then emumod.keypressed(key, scancode, isrepeat) end
+  if emumod and emumod.keypressed(key, scancode, isrepeat) then
+    return  -- consumed by emulator (NES controller keys don't propagate to React)
+  end
 
   if not bridge then return end
   -- Route keyboard events to focused node when in focus mode
@@ -2743,7 +2754,9 @@ end
 function ReactLove.keyreleased(key, scancode)
   if not isRendering() then return end
   if gamemod then gamemod.keyreleased(key, scancode) end
-  if emumod then emumod.keyreleased(key, scancode) end
+  if emumod and emumod.keyreleased(key, scancode) then
+    return  -- consumed by emulator
+  end
 
   -- Suppress keyup when TextEditor or TextInput has focus
   local focusedNode = focus.get()
