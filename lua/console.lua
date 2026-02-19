@@ -38,6 +38,7 @@ local Console = {}
 local bridge    = nil   -- bridge_quickjs instance (for JS eval)
 local tree      = nil   -- tree.lua module (for :tree, :nodes)
 local inspector = nil   -- inspector.lua module (for :perf, isEnabled check)
+local Log       = require("lua.debug_log")
 
 -- ============================================================================
 -- State
@@ -329,6 +330,8 @@ local BUILTIN_COMMANDS = {
   { cmd = ":highlight ",desc = "Flash-highlight a node by ID" },
   { cmd = ":measure ",  desc = "Measure text with current fonts" },
   { cmd = ":env",       desc = "Show bridge/mode/runtime info" },
+  { cmd = ":log",        desc = "Show/toggle debug log channels" },
+  { cmd = ":log ",       desc = "Toggle channel: :log layout|tree|events|..." },
 }
 
 --- Build autocomplete candidates for current input
@@ -519,6 +522,14 @@ function builtins.help()
   pushOutput("  Templates", COLORS.accent)
   pushOutput("  :template <name>  Show a boilerplate template", COLORS.info)
   pushOutput("  :templates        List available templates", COLORS.info)
+  pushOutput("", COLORS.info)
+  pushOutput("  Debug logging", COLORS.accent)
+  pushOutput("  :log              Show all channels and their on/off state", COLORS.info)
+  pushOutput("  :log <channel>    Toggle a channel (layout, tree, events, paint, ...)", COLORS.info)
+  pushOutput("  :log <ch> on|off  Explicit on/off", COLORS.info)
+  pushOutput("  :log all          Enable all channels", COLORS.info)
+  pushOutput("  :log none         Disable all channels", COLORS.info)
+  pushOutput("  :log ch1 ch2      Toggle multiple channels at once", COLORS.info)
   pushOutput("", COLORS.info)
   pushOutput("  General", COLORS.accent)
   pushOutput("  :clear            Clear output", COLORS.info)
@@ -886,6 +897,96 @@ function builtins.templatesList()
   pushOutput("Use :template <name> to view code", COLORS.dim)
 end
 
+function builtins.log(args)
+  -- JS-side channels that need bridge eval to toggle
+  local jsChannels = { recon = true, dispatch = true }
+
+  if not args or args == "" then
+    -- Show all channels and their state
+    pushOutput("Debug log channels:", COLORS.accent)
+    pushOutput("", COLORS.info)
+    local names = {}
+    for name in pairs(Log.CHANNELS) do names[#names + 1] = name end
+    table.sort(names)
+    for _, name in ipairs(names) do
+      local on = Log.isOn(name)
+      local chDef = Log.CHANNELS[name]
+      local status = on and "ON" or "OFF"
+      local statusColor = on and COLORS.result or COLORS.dim
+      pushOutput(string.format("  %-10s %s  %s", name, status, chDef.desc), statusColor)
+    end
+    pushOutput("", COLORS.info)
+    pushOutput("Usage: :log <channel> | :log all | :log none | :log ch1 ch2", COLORS.dim)
+    pushOutput("Env var: ILOVEREACT_DEBUG=tree,layout love love", COLORS.dim)
+    return
+  end
+
+  if args == "all" then
+    Log.all(true)
+    -- Also enable JS-side channels
+    if bridge then
+      pcall(function() bridge:eval("if(typeof __debugLog!=='undefined')__debugLog.all(true)") end)
+    end
+    pushOutput("All channels enabled", COLORS.result)
+    return
+  end
+
+  if args == "none" then
+    Log.all(false)
+    -- Also disable JS-side channels
+    if bridge then
+      pcall(function() bridge:eval("if(typeof __debugLog!=='undefined')__debugLog.all(false)") end)
+    end
+    pushOutput("All channels disabled", COLORS.dim)
+    return
+  end
+
+  -- Parse: "channel", "channel on", "channel off", "ch1 ch2 ch3"
+  local parts = {}
+  for part in args:gmatch("%S+") do
+    parts[#parts + 1] = part
+  end
+
+  -- Check if last part is on/off directive
+  local directive = nil
+  if #parts >= 2 then
+    local last = parts[#parts]
+    if last == "on" or last == "off" then
+      directive = last
+      table.remove(parts)
+    end
+  end
+
+  for _, name in ipairs(parts) do
+    if Log.CHANNELS[name] then
+      if directive == "on" then
+        Log.on(name)
+      elseif directive == "off" then
+        Log.off(name)
+      else
+        Log.toggle(name)
+      end
+
+      -- Toggle JS-side channel if applicable
+      if jsChannels[name] and bridge then
+        if directive then
+          pcall(function() bridge:eval("if(typeof __debugLog!=='undefined')__debugLog." .. directive .. "('" .. name .. "')") end)
+        else
+          pcall(function() bridge:eval("if(typeof __debugLog!=='undefined')__debugLog.toggle('" .. name .. "')") end)
+        end
+      end
+
+      local on = Log.isOn(name)
+      local chDef = Log.CHANNELS[name]
+      local status = on and "ON" or "OFF"
+      local statusColor = on and COLORS.result or COLORS.dim
+      pushOutput(string.format("  %s: %s  (%s)", name, status, chDef.desc), statusColor)
+    else
+      pushOutput(string.format("  Unknown channel: %s", name), COLORS.error)
+    end
+  end
+end
+
 -- ============================================================================
 -- Command execution
 -- ============================================================================
@@ -929,6 +1030,8 @@ local function executeCommand(input)
   elseif trimmed:match("^:macros") then builtins.macrosList()
   elseif trimmed:match("^:template%s+(.+)") then pushCommand(trimmed, true); builtins.template(trimmed:match("^:template%s+(.+)"))
   elseif trimmed:match("^:templates") then builtins.templatesList()
+  elseif trimmed:match("^:log%s+(.+)") then pushCommand(trimmed, true); builtins.log(trimmed:match("^:log%s+(.+)"))
+  elseif trimmed:match("^:log$") then pushCommand(trimmed, true); builtins.log()
   elseif trimmed:match("^:lua%s+(.+)") then
     local code = trimmed:match("^:lua%s+(.+)")
     pushCommand(code, true); evalLua(code)
@@ -947,6 +1050,10 @@ function Console.init(config)
   bridge = config.bridge
   tree = config.tree
   inspector = config.inspector
+  -- Wire debug log output to console panel
+  Log.setConsoleOutput(function(text, color)
+    pushOutput(text, color)
+  end)
 end
 
 function Console.updateRefs(config)

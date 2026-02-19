@@ -27,10 +27,12 @@ local Measure = nil  -- Injected at init time via Painter.init()
 local Images = nil   -- Injected at init time via Painter.init()
 local Videos = nil   -- Injected at init time via Painter.init()
 local Scene3DModule = nil -- Injected at init time via Painter.init()
+local MapModule = nil     -- Injected at init time via Painter.init()
 local GameModule = nil    -- Injected at init time via Painter.init()
 local CapabilitiesModule = nil  -- Lazy-loaded on first use
 local ZIndex = require("lua.zindex")
 local Color = require("lua.color")
+local Log = require("lua.debug_log")
 local TextEditorModule = nil  -- Lazy-loaded to avoid circular deps
 local TextInputModule = nil   -- Lazy-loaded to avoid circular deps
 local CodeBlockModule = nil   -- Lazy-loaded to avoid circular deps
@@ -75,6 +77,7 @@ function Painter.init(config)
   Images = config.images
   Videos = config.videos
   Scene3DModule = config.scene3d
+  MapModule = config.map
   GameModule = config.game
   getFont = Measure.getFont
 end
@@ -694,6 +697,10 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
   -- not by the 2D painter. Skip them entirely.
   if Scene3DModule and Scene3DModule.is3DChildType(node.type) then return end
 
+  -- Map child nodes (MapTileLayer, MapMarker, etc.) are rendered by map.lua,
+  -- not by the 2D painter. Skip them entirely.
+  if MapModule and MapModule.isMapChildType(node.type) then return end
+
   inheritedOpacity = inheritedOpacity or 1
   stencilDepth = stencilDepth or 0
 
@@ -1278,6 +1285,16 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
       end
     end
 
+  elseif not isHidden and node.type == "Map2D" then
+    -- Map viewport: draw the pre-rendered Canvas from map.lua
+    if MapModule then
+      local canvas = MapModule.get(node.id)
+      if canvas then
+        love.graphics.setColor(1, 1, 1, effectiveOpacity)
+        love.graphics.draw(canvas, c.x, c.y)
+      end
+    end
+
   elseif not isHidden and node.type == "GameCanvas" then
     -- Game viewport: draw the pre-rendered Canvas from game.lua
     if GameModule then
@@ -1557,6 +1574,7 @@ end
 --- Paint the entire tree. Resets color to white after painting.
 function Painter.paint(node)
   if not node then return end
+  Log.log("paint", "paint pass root=%s children=%d", tostring(node.type), #(node.children or {}))
   Painter.paintNode(node)
   love.graphics.setColor(1, 1, 1, 1)
 end

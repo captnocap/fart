@@ -11,6 +11,7 @@
 ]]
 
 local ZIndex = require("lua.zindex")
+local Log = require("lua.debug_log")
 
 local Events = {}
 
@@ -80,7 +81,10 @@ function Events.hitTest(node, mx, my)
   end
 
   -- Return this node if it has JS event handlers
-  if node.hasHandlers then return node end
+  if node.hasHandlers then
+    Log.log("events", "hitTest (%d,%d) -> id=%s type=%s (hasHandlers)", mx, my, tostring(node.id), tostring(node.type))
+    return node
+  end
   -- Nodes with hoverStyle/activeStyle are hittable for Lua-side interaction
   if node.props and (node.props.hoverStyle or node.props.activeStyle) then return node end
   -- Also return scroll containers so wheel events can scroll them
@@ -94,6 +98,7 @@ function Events.hitTest(node, mx, my)
   if node.type == "VideoPlayer" then return node end
   if node.type == "ContextMenu" then return node end
   if node.type == "Scene3D" then return node end
+  if node.type == "Map2D" then return node end
   if node.type == "Slider" then return node end
   if node.type == "Fader" then return node end
   if node.type == "Knob" then return node end
@@ -175,6 +180,7 @@ function Events.buildBubblePath(node)
     end
     current = current.parent
   end
+  Log.log("events", "bubblePath from id=%s: [%s]", tostring(node.id), table.concat(path, ","))
   return path
 end
 
@@ -188,11 +194,13 @@ function Events.findScrollContainer(node, mx, my)
   while current do
     local s = current.style or {}
     if s.overflow == "scroll" and current.scrollState then
+      Log.log("events", "findScrollContainer from id=%s -> scroll id=%s", tostring(node.id), tostring(current.id))
       return current
     end
     current = current.parent
   end
 
+  Log.log("events", "findScrollContainer from id=%s -> nil", tostring(node.id))
   return nil
 end
 
@@ -471,6 +479,9 @@ function Events.updateHover(tree, mx, my)
   local eventsOut = {}
 
   if hit ~= hoveredNode then
+    Log.log("events", "hover change: %s -> %s at (%d,%d)",
+      hoveredNode and tostring(hoveredNode.id) or "nil",
+      hit and tostring(hit.id) or "nil", mx, my)
     if hoveredNode then
       eventsOut[#eventsOut + 1] = Events.createEvent(
         "pointerLeave", hoveredNode.id, mx, my, nil

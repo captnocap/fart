@@ -26,6 +26,7 @@
 
 local Animate = {}
 local Color = require("lua.color")
+local Log = require("lua.debug_log")
 
 -- ============================================================================
 -- State
@@ -311,6 +312,7 @@ function Animate.processStyleUpdate(node, oldValues, newValues)
             fromValue = existing.current
           end
 
+          Log.log("animate", "transition start id=%s prop=%s from=%s to=%s duration=%dms", tostring(node.id), propName, tostring(fromValue), tostring(newValue), config.duration or 300)
           node.transitionState[propName] = {
             from = fromValue,
             to = newValue,
@@ -351,6 +353,12 @@ function Animate.tick(dt)
   local now = love.timer.getTime()
   local toRemove = {}
   local needsLayout = false
+
+  local activeCount = 0
+  for _ in pairs(activeNodes) do activeCount = activeCount + 1 end
+  if activeCount > 0 then
+    Log.log("animate", "tick: %d active nodes", activeCount)
+  end
 
   for nodeId, node in pairs(activeNodes) do
     local allDone = true

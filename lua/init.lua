@@ -23,6 +23,7 @@ local painter  = nil   -- painter.lua module
 local events   = nil   -- events.lua module
 local measure  = nil   -- measure.lua module (text measurement + font cache)
 local errors     = require("lua.errors")      -- error overlay (always loaded, self-contained)
+local Log        = require("lua.debug_log")   -- channel-based debug logging (:log toggle)
 local inspector  = require("lua.inspector")   -- debug inspector (F12 toggle, self-contained)
 local console    = require("lua.console")     -- interactive eval console (` toggle, self-contained)
 local devtools   = require("lua.devtools")    -- unified bottom panel with tabs (Elements + Console)
@@ -37,6 +38,7 @@ local animate  = nil   -- animate.lua module (Lua-side transitions/animations)
 local images   = nil   -- images.lua module (image cache)
 local videos   = nil   -- videos.lua module (video cache + FFmpeg transcoding)
 local scene3d  = nil   -- scene3d.lua module (3D scene rendering via g3d)
+local mapmod   = nil   -- map.lua module (geo/tile map rendering)
 local gamemod  = nil   -- game.lua module (game canvas rendering + module system)
 local videoplayer = nil                       -- videoplayer.lua (Lua-native video controls)
 local focus    = require("lua.focus")         -- focus manager for Lua-owned inputs
@@ -161,6 +163,7 @@ end
 --- Push an event to the bridge (handles mode differences).
 --- In native mode bridge:pushEvent() is used; in canvas mode bridge.emit() is used.
 local function pushEvent(evt)
+  Log.log("bridge", "pushEvent type=%s target=%s", tostring(evt.type), tostring(evt.payload and evt.payload.targetId or "-"))
   if mode == "native" then
     bridge:pushEvent(evt)
   elseif mode == "canvas" then
@@ -428,6 +431,8 @@ function ReactLove.init(config)
     animate = require("lua.animate")
     scene3d = require("lua.scene3d")
     scene3d.init()
+    mapmod = require("lua.map")
+    mapmod.init()
     gamemod = require("lua.game")
     gamemod.init()
 
@@ -440,7 +445,7 @@ function ReactLove.init(config)
     layout.init({ measure = measure })
 
     painter = require("lua.painter")
-    painter.init({ measure = measure, images = images, videos = videos, scene3d = scene3d, game = gamemod })
+    painter.init({ measure = measure, images = images, videos = videos, scene3d = scene3d, map = mapmod, game = gamemod })
 
     events  = require("lua.events")
     events.setTreeModule(tree)
@@ -533,6 +538,8 @@ function ReactLove.init(config)
     animate = require("lua.animate")
     scene3d = require("lua.scene3d")
     scene3d.init()
+    mapmod = require("lua.map")
+    mapmod.init()
     gamemod = require("lua.game")
     gamemod.init()
 
@@ -545,7 +552,7 @@ function ReactLove.init(config)
     layout.init({ measure = measure })
 
     painter = require("lua.painter")
-    painter.init({ measure = measure, images = images, videos = videos, scene3d = scene3d, game = gamemod })
+    painter.init({ measure = measure, images = images, videos = videos, scene3d = scene3d, map = mapmod, game = gamemod })
 
     events  = require("lua.events")
     events.setTreeModule(tree)
@@ -977,6 +984,8 @@ function ReactLove.update(dt)
   if mode == "canvas" then
     -- Canvas mode: FS bridge + native rendering pipeline ----------------
 
+    Log.frame()
+
     -- Audio engine update (fill QueueableSource buffers — run early to avoid underruns)
     if audioEngine then audioEngine.update(dt) end
 
@@ -1048,6 +1057,8 @@ function ReactLove.update(dt)
 
   -- Native mode -----------------------------------------------------------
 
+  Log.frame()
+
   -- Audio engine update (fill QueueableSource buffers — run early to avoid underruns)
   if audioEngine then audioEngine.update(dt) end
 
@@ -1102,6 +1113,7 @@ function ReactLove.update(dt)
 
   -- 4. Drain mutation commands from JS and apply to retained tree
   local commands = bridge:drainCommands()
+  Log.log("bridge", "drainCommands: %d commands", #commands)
   if #commands > 0 then
     -- Filter out RPC calls and route them to registered handlers
     local treeCommands = commands
@@ -1386,6 +1398,12 @@ function ReactLove.update(dt)
     scene3d.renderAll()
   end
 
+  -- 8c2. Sync map viewports with tree, then render to off-screen Canvases
+  if mapmod then
+    mapmod.syncWithTree(tree.getNodes())
+    mapmod.renderAll()
+  end
+
   -- 8d. Sync game modules with tree, update game logic, render to off-screen Canvases
   if gamemod then
     gamemod.syncWithTree(tree.getNodes())
@@ -1546,6 +1564,19 @@ function ReactLove.update(dt)
     end
   end
 
+  -- 10h. Drain Lua-owned map events
+  if mapmod then
+    local mapEvents = mapmod.drainEvents()
+    if mapEvents then
+      for _, evt in ipairs(mapEvents) do
+        pushEvent({
+          type = evt.type,
+          payload = evt.payload,
+        })
+      end
+    end
+  end
+
   -- 11. Poll drag-hover state (X11 XDnD + SDL2 global mouse)
   if dragdrop then
     dragdrop.poll()
@@ -1578,6 +1609,7 @@ function ReactLove.update(dt)
 
   -- 11. Relayout if tree changed
   if tree.isDirty() then
+    Log.log("bridge", "tree dirty — triggering relayout")
     local root = tree.getTree()
     if root then
       if inspectorEnabled then inspector.beginLayout() end
@@ -2077,6 +2109,11 @@ function ReactLove.mousepressed(x, y, button)
       if videoplayer then
         videoplayer.handleMousePressed(hit, x, y, button)
       end
+    elseif hit.type == "Map2D" then
+      -- Clicked a Map: handle pan interaction in Lua
+      if mapmod then
+        mapmod.handleMousePressed(hit, x, y, button)
+      end
     elseif hit.type == "Slider" then
       -- Clicked a Slider: handle drag interaction in Lua
       if slider then
@@ -2175,6 +2212,18 @@ function ReactLove.mousereleased(x, y, button)
       for _, node in pairs(nodes) do
         if node.type == "VideoPlayer" and node._vp then
           videoplayer.handleMouseReleased(node, x, y, button)
+        end
+      end
+    end
+  end
+
+  -- Map pan release (check all Map2D nodes — mouse may have left bounds)
+  if mapmod and tree then
+    local nodes = tree.getNodes()
+    if nodes then
+      for _, node in pairs(nodes) do
+        if node.type == "Map2D" then
+          mapmod.handleMouseReleased(node, x, y, button)
         end
       end
     end
@@ -2310,6 +2359,18 @@ function ReactLove.mousemoved(x, y)
       for _, node in pairs(nodes) do
         if node.type == "VideoPlayer" and node._vp then
           videoplayer.handleMouseMoved(node, x, y)
+        end
+      end
+    end
+  end
+
+  -- Map: handle active pan drag (mouse may be outside the node)
+  if mapmod and tree then
+    local nodes = tree.getNodes()
+    if nodes then
+      for _, node in pairs(nodes) do
+        if node.type == "Map2D" then
+          mapmod.handleMouseMoved(node, x, y)
         end
       end
     end

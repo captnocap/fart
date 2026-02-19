@@ -12,6 +12,8 @@
     - Player-based ring colors (P1 blue, P2 red, P3 green, P4 yellow)
 ]]
 
+local Log = require("lua.debug_log")
+
 local Focus = {}
 
 -- ============================================================================
@@ -95,6 +97,7 @@ end
 --- Set focus to a node. Returns the previously focused node.
 function Focus.set(node)
   local prev = defaultGroup.focusedNode
+  Log.log("focus", "set id=%s type=%s (prev=%s)", tostring(node and node.id), tostring(node and node.type), tostring(prev and prev.id or "nil"))
   defaultGroup.focusedNode = node
   return prev
 end
@@ -102,6 +105,7 @@ end
 --- Clear focus. Returns the previously focused node.
 function Focus.clear()
   local prev = defaultGroup.focusedNode
+  Log.log("focus", "clear (prev=%s)", tostring(prev and prev.id or "nil"))
   defaultGroup.focusedNode = nil
   return prev
 end
@@ -455,6 +459,7 @@ end
 
 --- Spatial navigation within the correct group(s) for a controller.
 function Focus.navigate(direction, joystickId)
+  Log.log("focus", "navigate direction=%s joystick=%s", tostring(direction), tostring(joystickId or "default"))
   local groups
   if joystickId then
     groups = Focus.getGroupsForController(joystickId)
@@ -469,12 +474,16 @@ function Focus.navigate(direction, joystickId)
         group.focusedNode = group.focusableNodes[1]
         scrollIntoView(group.focusedNode)
         emitFocusChange(oldNode, group.focusedNode)
+        Log.log("focus", "  initial focus -> id=%s", tostring(group.focusedNode.id))
       else
         local best = spatialNavigate(group.focusedNode, group.focusableNodes, direction)
         if best then
           group.focusedNode = best
           scrollIntoView(best)
           emitFocusChange(oldNode, best)
+          Log.log("focus", "  navigated %s -> id=%s", direction, tostring(best.id))
+        else
+          Log.log("focus", "  navigate %s: no target found", direction)
         end
       end
     end

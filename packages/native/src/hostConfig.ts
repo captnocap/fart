@@ -8,6 +8,7 @@
 
 import type { HostConfig } from 'react-reconciler';
 import { reportError } from './errorReporter';
+import { debugLog } from './debugLog';
 
 // ── Types ────────────────────────────────────────────────
 
@@ -137,6 +138,7 @@ export function flushToHost(): void {
   }
 
   const coalesced = coalesceCommands(pendingCommands);
+  debugLog.log('recon', `flushToHost pending=${pendingCommands.length} coalesced=${coalesced.length}`);
 
   try {
     // Send as JSON string to avoid QuickJS GC race during FFI object traversal.
@@ -328,6 +330,7 @@ export const hostConfig: HostConfig<
     }
 
     const hasHandlers = Object.keys(handlers).length > 0;
+    debugLog.log('recon', `createInstance id=${id} type=${type} handlers=${hasHandlers}`);
 
     // Extract component debug info from fiber (dev tooling only)
     let debugName: string | undefined;
@@ -405,6 +408,7 @@ export const hostConfig: HostConfig<
   },
 
   removeChild(parent: Instance, child: Instance | TextInstance) {
+    debugLog.log('recon', `removeChild parent=${parent.id} child=${child.id}`);
     const idx = (parent.children as any[]).indexOf(child);
     if (idx !== -1) (parent.children as any[]).splice(idx, 1);
     emit({ op: 'REMOVE', parentId: parent.id, childId: child.id });
@@ -510,6 +514,7 @@ export const hostConfig: HostConfig<
     if (updatePayload && !(updatePayload as any).__handlersOnly) {
       const hasHandlers = Object.keys(handlers).length > 0;
       const payload = updatePayload as { diff: Record<string, any>; removeKeys: string[]; removeStyleKeys: string[] };
+      debugLog.log('recon', `commitUpdate id=${instance.id} type=${instance.type} diffKeys=[${Object.keys(payload.diff).join(',')}] removeStyle=[${payload.removeStyleKeys.join(',')}]`);
 
       const cmd: any = {
         op: 'UPDATE',

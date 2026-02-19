@@ -8,6 +8,8 @@
   The layout engine and painter operate on this tree.
 ]]
 
+local Log = require("lua.debug_log")
+
 local Images = nil    -- Injected at init time via Tree.init()
 local Videos = nil    -- Injected at init time via Tree.init()
 local Animate = nil   -- Injected at init time via Tree.init()
@@ -31,6 +33,7 @@ local treeDirty = true
 local function cleanup(id)
   local n = nodes[id]
   if n then
+    Log.log("tree", "cleanup id=%s type=%s children=%d", tostring(id), tostring(n.type), #n.children)
     -- Unload image if this is an Image node
     if Images and n.type == "Image" and n.props and n.props.src then
       Images.unload(n.props.src)
@@ -81,6 +84,7 @@ function Tree.applyCommands(commands)
     local op = cmd.op
 
     if op == "CREATE" then
+      Log.log("tree", "CREATE id=%s type=%s debugName=%s handlers=%s", tostring(cmd.id), tostring(cmd.type), tostring(cmd.debugName or "-"), tostring(cmd.hasHandlers or false))
       local props = cmd.props or {}
       nodes[cmd.id] = {
         id = cmd.id,
@@ -103,6 +107,7 @@ function Tree.applyCommands(commands)
       treeDirty = true
 
     elseif op == "CREATE_TEXT" then
+      Log.log("tree", "CREATE_TEXT id=%s text=%q", tostring(cmd.id), tostring(cmd.text):sub(1, 60))
       local textVal = cmd.text
       nodes[cmd.id] = {
         id = cmd.id,
@@ -119,6 +124,7 @@ function Tree.applyCommands(commands)
       local parent = nodes[cmd.parentId]
       local child = nodes[cmd.childId]
       if parent and child then
+        Log.log("tree", "APPEND child=%s(%s) -> parent=%s(%s)", tostring(cmd.childId), tostring(child.type), tostring(cmd.parentId), tostring(parent.type))
         child.parent = parent
         parent.children[#parent.children + 1] = child
         treeDirty = true
@@ -127,6 +133,7 @@ function Tree.applyCommands(commands)
     elseif op == "APPEND_TO_ROOT" then
       local child = nodes[cmd.childId]
       if child then
+        Log.log("tree", "APPEND_TO_ROOT child=%s(%s)", tostring(cmd.childId), tostring(child.type))
         rootChildren[#rootChildren + 1] = child
         treeDirty = true
       end
@@ -134,6 +141,9 @@ function Tree.applyCommands(commands)
     elseif op == "UPDATE" then
       local node = nodes[cmd.id]
       if node and cmd.props then
+        local changedKeys = {}
+        for k in pairs(cmd.props) do changedKeys[#changedKeys + 1] = k end
+        Log.log("tree", "UPDATE id=%s type=%s keys=[%s] removeStyle=[%s]", tostring(cmd.id), tostring(node.type), table.concat(changedKeys, ","), cmd.removeStyleKeys and table.concat(cmd.removeStyleKeys, ",") or "")
         -- Handle image src changes: unload old, load new
         if Images and node.type == "Image" and cmd.props.src and cmd.props.src ~= node.props.src then
           if node.props.src then Images.unload(node.props.src) end
@@ -206,11 +216,13 @@ function Tree.applyCommands(commands)
     elseif op == "UPDATE_TEXT" then
       local node = nodes[cmd.id]
       if node then
+        Log.log("tree", "UPDATE_TEXT id=%s text=%q", tostring(cmd.id), tostring(cmd.text):sub(1, 60))
         node.text = cmd.text
         treeDirty = true
       end
 
     elseif op == "REMOVE" then
+      Log.log("tree", "REMOVE child=%s from parent=%s", tostring(cmd.childId), tostring(cmd.parentId))
       local parent = nodes[cmd.parentId]
       if parent then
         for i, c in ipairs(parent.children) do
@@ -224,6 +236,7 @@ function Tree.applyCommands(commands)
       treeDirty = true
 
     elseif op == "REMOVE_FROM_ROOT" then
+      Log.log("tree", "REMOVE_FROM_ROOT child=%s", tostring(cmd.childId))
       for i, c in ipairs(rootChildren) do
         if c.id == cmd.childId then
           table.remove(rootChildren, i)
@@ -234,6 +247,7 @@ function Tree.applyCommands(commands)
       treeDirty = true
 
     elseif op == "INSERT_BEFORE" then
+      Log.log("tree", "INSERT_BEFORE child=%s before=%s parent=%s", tostring(cmd.childId), tostring(cmd.beforeId), tostring(cmd.parentId))
       local parent = nodes[cmd.parentId]
       local child = nodes[cmd.childId]
       if parent and child then
@@ -248,6 +262,7 @@ function Tree.applyCommands(commands)
       end
 
     elseif op == "INSERT_BEFORE_ROOT" then
+      Log.log("tree", "INSERT_BEFORE_ROOT child=%s before=%s", tostring(cmd.childId), tostring(cmd.beforeId))
       local child = nodes[cmd.childId]
       if child then
         for i, c in ipairs(rootChildren) do
@@ -301,6 +316,7 @@ end
 
 --- Force the tree to be marked dirty (e.g. on window resize).
 function Tree.markDirty()
+  Log.log("tree", "markDirty (external)")
   treeDirty = true
 end
 

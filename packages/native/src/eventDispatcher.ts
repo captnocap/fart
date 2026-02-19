@@ -14,6 +14,7 @@
 import type { LoveEvent } from '../../shared/src/types';
 import { handlerRegistry } from './hostConfig';
 import { reportError } from './errorReporter';
+import { debugLog } from './debugLog';
 
 /** Any object with a subscribe method (NativeBridge, CanvasBridge, etc.) */
 interface Subscribable {
@@ -332,6 +333,7 @@ export function initEventDispatching(bridge: Subscribable): void {
  */
 function dispatchWithBubbling(event: LoveEvent, handlerName: string): void {
   if (!event.targetId) return;
+  debugLog.log('dispatch', `bubble ${handlerName} target=${event.targetId} path=[${(event.bubblePath || []).join(',')}]`);
 
   let stopped = false;
   const enrichedEvent: LoveEvent = {
@@ -376,6 +378,7 @@ function dispatchWithBubbling(event: LoveEvent, handlerName: string): void {
  */
 function dispatchToTargetOnly(event: LoveEvent, handlerName: string): void {
   if (!event.targetId) return;
+  debugLog.log('dispatch', `direct ${handlerName} target=${event.targetId}`);
   const handlers = handlerRegistry.get(event.targetId);
   if (!handlers) return;
   const handler = handlers[handlerName];
