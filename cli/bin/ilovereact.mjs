@@ -7,6 +7,7 @@ import { buildCommand } from '../commands/build.mjs';
 import { lintCommand } from '../commands/lint.mjs';
 import { screenshotCommand } from '../commands/screenshot.mjs';
 import { updateCommand } from '../commands/update.mjs';
+import { manifestCommand } from '../commands/manifest.mjs';
 
 const [,, command, ...args] = argv;
 
@@ -23,6 +24,7 @@ const HELP = `
     ilr update                   Sync runtime files (lua/, lib/, ilovereact/)
     ilr lint                     Check src/ for layout mistakes
     ilr screenshot [--output]    Lint + build + headless screenshot
+    ilr manifest                 Generate or update manifest.json
     ilr help                     Show this help message
 
   Targets:
@@ -66,6 +68,9 @@ switch (command) {
     break;
   case 'screenshot':
     await screenshotCommand(args);
+    break;
+  case 'manifest':
+    await manifestCommand(args);
     break;
   case 'help':
   case '--help':

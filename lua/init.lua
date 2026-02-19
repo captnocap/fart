@@ -384,9 +384,26 @@ function ReactLove.init(config)
   config = config or {}
   basePath = resolveBasePath()
 
-  -- Mint capability permits from manifest (if provided).
+  -- Load cartridge manifest and mint capability permits.
   -- Must happen before any module loading so gates are active.
-  if config.manifest and config.manifest.capabilities then
+  -- Priority: manifest.json file > inline config.manifest > no enforcement
+  local manifest = manifestMod.load(basePath)
+  if manifest then
+    local mOk, mErrs = manifestMod.validate(manifest)
+    if mOk then
+      manifestMod._loaded = manifest
+      local mName, mVersion = manifestMod.getIdentity(manifest)
+      io.write("[MANIFEST] " .. mName .. " v" .. mVersion .. "\n"); io.flush()
+      permit.mint(manifestMod.getCapabilities(manifest), audit)
+    else
+      io.write("[MANIFEST] Validation errors (enforcement skipped):\n"); io.flush()
+      for _, e in ipairs(mErrs) do
+        io.write("[MANIFEST]   " .. e .. "\n"); io.flush()
+      end
+    end
+  elseif config.manifest and config.manifest.capabilities then
+    -- Backwards compat: inline manifest in config
+    manifestMod._loaded = config.manifest
     permit.mint(config.manifest.capabilities, audit)
   end
 
@@ -1017,11 +1034,14 @@ function ReactLove.init(config)
     io.write("[react-love] Map module loaded\n"); io.flush()
   end
 
-  -- Register permit + audit RPC handlers (always available for inspector queries)
+  -- Register permit + audit + manifest RPC handlers (always available for inspector queries)
   for method, handler in pairs(permit.getHandlers()) do
     rpcHandlers[method] = handler
   end
   for method, handler in pairs(audit.getHandlers()) do
+    rpcHandlers[method] = handler
+  end
+  for method, handler in pairs(manifestMod.getHandlers()) do
     rpcHandlers[method] = handler
   end
 

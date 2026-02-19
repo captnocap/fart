@@ -481,6 +481,13 @@ async function buildDistLove(cwd, projectName, opts = {}) {
     cpSync(dataDir, join(stagingDir, 'data'), { recursive: true });
   }
 
+  // Copy manifest.json into staging if it exists
+  const manifestPath = join(cwd, 'manifest.json');
+  if (existsSync(manifestPath)) {
+    cpSync(manifestPath, join(stagingDir, 'manifest.json'));
+    console.log('  Embedded manifest.json');
+  }
+
   // Inspector is now enabled by default in dist builds
   // (Previously disabled unless --debug was passed, but this was annoying for dev)
   // To disable: add `inspector = false` to ReactLove.init() in your main.lua
@@ -736,6 +743,13 @@ async function buildDistSdl2(cwd, projectName, opts = {}) {
       `  title  = "${projectName}",\n` +
       '})\n';
     writeFileSync(join(stagingDir, 'main.lua'), stub);
+  }
+
+  // Copy manifest.json into staging if it exists
+  const manifestPathSdl2 = join(cwd, 'manifest.json');
+  if (existsSync(manifestPathSdl2)) {
+    cpSync(manifestPathSdl2, join(stagingDir, 'manifest.json'));
+    console.log('  Embedded manifest.json');
   }
 
   // 4. Bundle shared libraries
