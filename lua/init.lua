@@ -40,6 +40,7 @@ local videos   = nil   -- videos.lua module (video cache + FFmpeg transcoding)
 local scene3d  = nil   -- scene3d.lua module (3D scene rendering via g3d)
 local mapmod   = nil   -- map.lua module (geo/tile map rendering)
 local gamemod  = nil   -- game.lua module (game canvas rendering + module system)
+local emumod   = nil   -- emulator.lua module (NES emulation via agnes)
 local videoplayer = nil                       -- videoplayer.lua (Lua-native video controls)
 local focus    = require("lua.focus")         -- focus manager for Lua-owned inputs
 local texteditor = nil                        -- texteditor.lua (loaded on demand)
@@ -460,6 +461,8 @@ function ReactLove.init(config)
     mapmod.init()
     gamemod = require("lua.game")
     gamemod.init()
+    emumod = require("lua.emulator")
+    emumod.init()
 
     tree    = require("lua.tree")
     tree.init({ images = images, videos = videos, animate = animate, scene3d = scene3d })
@@ -470,7 +473,7 @@ function ReactLove.init(config)
     layout.init({ measure = measure })
 
     painter = require("lua.painter")
-    painter.init({ measure = measure, images = images, videos = videos, scene3d = scene3d, map = mapmod, game = gamemod })
+    painter.init({ measure = measure, images = images, videos = videos, scene3d = scene3d, map = mapmod, game = gamemod, emulator = emumod })
 
     events  = require("lua.events")
     events.setTreeModule(tree)
@@ -571,6 +574,8 @@ function ReactLove.init(config)
     mapmod.init()
     gamemod = require("lua.game")
     gamemod.init()
+    emumod = require("lua.emulator")
+    emumod.init()
 
     tree    = require("lua.tree")
     tree.init({ images = images, videos = videos, animate = animate, scene3d = scene3d })
@@ -581,7 +586,7 @@ function ReactLove.init(config)
     layout.init({ measure = measure })
 
     painter = require("lua.painter")
-    painter.init({ measure = measure, images = images, videos = videos, scene3d = scene3d, map = mapmod, game = gamemod })
+    painter.init({ measure = measure, images = images, videos = videos, scene3d = scene3d, map = mapmod, game = gamemod, emulator = emumod })
 
     events  = require("lua.events")
     events.setTreeModule(tree)
@@ -1483,6 +1488,13 @@ function ReactLove.update(dt)
     gamemod.syncWithTree(tree.getNodes())
     gamemod.updateAll(dt, pushEvent)
     gamemod.renderAll()
+  end
+
+  -- 8d2. Sync emulator instances with tree, advance frames, render to off-screen Canvases
+  if emumod then
+    emumod.syncWithTree(tree.getNodes())
+    emumod.updateAll(dt, pushEvent)
+    emumod.renderAll()
   end
 
   -- 8e. Sync declarative capabilities (Audio, Timer, etc.) with tree
@@ -2713,6 +2725,7 @@ function ReactLove.keypressed(key, scancode, isrepeat)
 
   -- Route to focused GameCanvas (game input stays in Lua, zero latency)
   if gamemod then gamemod.keypressed(key, scancode, isrepeat) end
+  if emumod then emumod.keypressed(key, scancode, isrepeat) end
 
   if not bridge then return end
   -- Route keyboard events to focused node when in focus mode
@@ -2730,6 +2743,7 @@ end
 function ReactLove.keyreleased(key, scancode)
   if not isRendering() then return end
   if gamemod then gamemod.keyreleased(key, scancode) end
+  if emumod then emumod.keyreleased(key, scancode) end
 
   -- Suppress keyup when TextEditor or TextInput has focus
   local focusedNode = focus.get()

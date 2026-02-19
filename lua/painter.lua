@@ -29,6 +29,7 @@ local Videos = nil   -- Injected at init time via Painter.init()
 local Scene3DModule = nil -- Injected at init time via Painter.init()
 local MapModule = nil     -- Injected at init time via Painter.init()
 local GameModule = nil    -- Injected at init time via Painter.init()
+local EmulatorModule = nil -- Injected at init time via Painter.init()
 local CapabilitiesModule = nil  -- Lazy-loaded on first use
 local ZIndex = require("lua.zindex")
 local Color = require("lua.color")
@@ -79,6 +80,7 @@ function Painter.init(config)
   Scene3DModule = config.scene3d
   MapModule = config.map
   GameModule = config.game
+  EmulatorModule = config.emulator
   getFont = Measure.getFont
 end
 
@@ -1305,6 +1307,19 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
       end
     end
     -- Note: children (React UI overlay) are painted by the normal child recursion below
+
+  elseif not isHidden and node.type == "Emulator" then
+    -- NES emulator viewport: draw the pre-rendered Canvas from emulator.lua
+    if EmulatorModule then
+      local canvas = EmulatorModule.get(node.id)
+      if canvas then
+        -- Scale NES native resolution (256x240) to layout size
+        local scaleX = (c.w or 256) / 256
+        local scaleY = (c.h or 240) / 240
+        love.graphics.setColor(1, 1, 1, effectiveOpacity)
+        love.graphics.draw(canvas, c.x, c.y, 0, scaleX, scaleY)
+      end
+    end
 
   elseif not isHidden and node.type == "Slider" then
     if not SliderModule then

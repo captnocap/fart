@@ -48,6 +48,7 @@ local SURFACE_TYPES = {
   Video    = true,
   VideoPlayer = true,
   Scene3D  = true,
+  Emulator = true,
 }
 
 --- Check if a node is a visual surface (eligible for proportional fallback).
@@ -614,10 +615,10 @@ function Layout.layoutNode(node, px, py, pw, ph)
   -- ====================================================================
   -- Filter visible children and measure them
   -- ====================================================================
-  -- Scene3D nodes are opaque leaf boxes in the 2D layout.
-  -- Their children (Mesh3D, Camera3D, etc.) use 3D coordinates,
-  -- not flex positioning, so we skip them entirely.
-  local allChildren = (node.type == "Scene3D") and {} or (node.children or {})
+  -- Scene3D and Emulator nodes are opaque leaf boxes in the 2D layout.
+  -- Their children use non-flex coordinates, so we skip them entirely.
+  local isOpaqueLeaf = (node.type == "Scene3D" or node.type == "Emulator")
+  local allChildren = isOpaqueLeaf and {} or (node.children or {})
   local visibleIndices = {}  -- list of indices into allChildren for visible kids
   local absoluteIndices = {} -- list of indices for position:absolute children
   local childInfos = {}      -- keyed by index in allChildren
