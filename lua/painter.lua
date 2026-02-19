@@ -35,6 +35,8 @@ local TextInputModule = nil   -- Lazy-loaded to avoid circular deps
 local CodeBlockModule = nil   -- Lazy-loaded to avoid circular deps
 local VideoPlayerModule = nil -- Lazy-loaded to avoid circular deps
 local SliderModule = nil     -- Lazy-loaded to avoid circular deps
+local FaderModule = nil      -- Lazy-loaded to avoid circular deps
+local KnobModule = nil       -- Lazy-loaded to avoid circular deps
 local TextSelectionModule = nil  -- Lazy-loaded to avoid circular deps
 local ok_utf8, utf8lib = pcall(function() return utf8 end)
 if not ok_utf8 or not utf8lib then
@@ -1279,6 +1281,18 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
       SliderModule = require("lua.slider")
     end
     SliderModule.draw(node, effectiveOpacity)
+
+  elseif not isHidden and node.type == "Fader" then
+    if not FaderModule then
+      FaderModule = require("lua.fader")
+    end
+    FaderModule.draw(node, effectiveOpacity)
+
+  elseif not isHidden and node.type == "Knob" then
+    if not KnobModule then
+      KnobModule = require("lua.knob")
+    end
+    KnobModule.draw(node, effectiveOpacity)
   end
 
   -- Determine paint order: sort children by zIndex (stable, ascending)

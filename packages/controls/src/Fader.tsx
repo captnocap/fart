@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import type { Style, Color } from '@ilovereact/core';
-import { Box, Text } from '@ilovereact/core';
+import { Box } from '@ilovereact/core';
 import { useRendererMode } from '@ilovereact/core';
 import { useScaledStyle, useScale } from '@ilovereact/core';
 
@@ -196,84 +196,28 @@ export function Fader({
     );
   }
 
-  // ── Native mode ───────────────────────────────────────────
-  const dragStartValue = useRef(currentValue);
-
-  return (
-    <Box
-      style={{
-        alignItems: 'center',
-        gap: Math.round(4 * scale),
-        opacity: disabled ? 0.4 : 1,
-        ...scaledStyle,
-      }}
-      onDragStart={
-        disabled
-          ? undefined
-          : () => {
-              dragStartValue.current = currentValue;
-            }
-      }
-      onDrag={
-        disabled
-          ? undefined
-          : (e: any) => {
-              const sensitivity = (max - min) / scaledHeight;
-              handleValueChange(dragStartValue.current + -e.totalDeltaY * sensitivity);
-            }
-      }
-    >
-      <Box style={{ width: scaledWidth, height: scaledHeight }}>
-        {/* Track groove */}
-        <Box
-          style={{
-            position: 'absolute',
-            left: (scaledWidth - trackWidth) / 2,
-            top: 0,
-            width: trackWidth,
-            height: scaledHeight,
-            backgroundColor: trackColor as string,
-            borderRadius: trackWidth / 2,
-          }}
-        />
-        {/* Active track fill */}
-        <Box
-          style={{
-            position: 'absolute',
-            left: (scaledWidth - trackWidth) / 2,
-            bottom: 0,
-            width: trackWidth,
-            height: Math.round(normalized * scaledHeight),
-            backgroundColor: color as string,
-            borderRadius: trackWidth / 2,
-          }}
-        />
-        {/* Thumb */}
-        <Box
-          style={{
-            position: 'absolute',
-            left: 0,
-            top: thumbY,
-            width: thumbWidth,
-            height: thumbHeight,
-            backgroundColor: thumbColor as string,
-            borderRadius: Math.round(2 * scale),
-            borderWidth: 1,
-            borderColor: '#666',
-          }}
-        />
-      </Box>
-      {label && (
-        <Text
-          style={{
-            color: '#94a3b8',
-            fontSize: Math.round(10 * scale),
-            textAlign: 'center',
-          }}
-        >
-          {label}
-        </Text>
-      )}
-    </Box>
-  );
+  // ── Native mode: Lua-owned host element ──────────────────
+  // All drawing, drag state, and interaction handled in lua/fader.lua.
+  // React only receives onChange via buffered fader:change events.
+  return React.createElement('Fader', {
+    value: currentValue,
+    min,
+    max,
+    step,
+    height: scaledHeight,
+    width: scaledWidth,
+    color: color as string,
+    trackColor: trackColor as string,
+    thumbColor: thumbColor as string,
+    label,
+    disabled,
+    onChange: handleValueChange
+      ? (e: any) => handleValueChange(e.value)
+      : undefined,
+    style: {
+      width: scaledWidth,
+      height: scaledHeight + (label ? Math.round(18 * scale) : 0),
+      ...scaledStyle,
+    },
+  });
 }

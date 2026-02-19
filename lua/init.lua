@@ -45,6 +45,12 @@ local textinput  = nil                        -- textinput.lua (loaded on demand
 local codeblock  = nil                        -- codeblock.lua (loaded on demand)
 local textselection = nil                    -- textselection.lua (text highlight + copy)
 local slider     = nil                        -- slider.lua (Lua-owned slider interaction)
+local fader      = nil                        -- fader.lua (Lua-owned vertical fader)
+local knob       = nil                        -- knob.lua (Lua-owned rotary knob)
+local switch_mod = nil                        -- switch.lua (Lua-owned toggle switch)
+local checkbox   = nil                        -- checkbox.lua (Lua-owned checkbox)
+local radio      = nil                        -- radio.lua (Lua-owned radio buttons)
+local selectmod  = nil                        -- select.lua (Lua-owned dropdown select)
 local contextmenu = nil                      -- contextmenu.lua (right-click context menu)
 local osk      = nil                          -- osk.lua (on-screen keyboard for gamepad)
 local http     = nil                          -- http.lua (async HTTP + local file fetch)
@@ -453,6 +459,12 @@ function ReactLove.init(config)
     slider = require("lua.slider")
     slider.init({ measure = measure })
 
+    fader = require("lua.fader")
+    fader.init({ measure = measure })
+
+    knob = require("lua.knob")
+    knob.init({ measure = measure })
+
     textselection = require("lua.textselection")
     textselection.init({ measure = measure, events = events })
 
@@ -539,6 +551,12 @@ function ReactLove.init(config)
 
     slider = require("lua.slider")
     slider.init({ measure = measure })
+
+    fader = require("lua.fader")
+    fader.init({ measure = measure })
+
+    knob = require("lua.knob")
+    knob.init({ measure = measure })
 
     textselection = require("lua.textselection")
     textselection.init({ measure = measure, events = events })
@@ -1385,6 +1403,40 @@ function ReactLove.update(dt)
     end
   end
 
+  -- 10b. Drain Lua-owned fader events
+  if fader then
+    local faderEvents = fader.drainEvents()
+    if faderEvents then
+      for _, evt in ipairs(faderEvents) do
+        pushEvent({
+          type = evt.type,
+          payload = {
+            type = evt.type,
+            targetId = evt.nodeId,
+            value = evt.value,
+          },
+        })
+      end
+    end
+  end
+
+  -- 10c. Drain Lua-owned knob events
+  if knob then
+    local knobEvents = knob.drainEvents()
+    if knobEvents then
+      for _, evt in ipairs(knobEvents) do
+        pushEvent({
+          type = evt.type,
+          payload = {
+            type = evt.type,
+            targetId = evt.nodeId,
+            value = evt.value,
+          },
+        })
+      end
+    end
+  end
+
   -- 11. Poll drag-hover state (X11 XDnD + SDL2 global mouse)
   if dragdrop then
     dragdrop.poll()
@@ -1921,6 +1973,14 @@ function ReactLove.mousepressed(x, y, button)
       if slider then
         slider.handleMousePressed(hit, x, y, button)
       end
+    elseif hit.type == "Fader" then
+      if fader then
+        fader.handleMousePressed(hit, x, y, button)
+      end
+    elseif hit.type == "Knob" then
+      if knob then
+        knob.handleMousePressed(hit, x, y, button)
+      end
     else
       -- Normal node: standard drag + click handling
       events.startDrag(hit.id, x, y)
@@ -2002,6 +2062,30 @@ function ReactLove.mousereleased(x, y, button)
       for _, node in pairs(nodes) do
         if node.type == "Slider" and node._slider then
           slider.handleMouseReleased(node, x, y, button)
+        end
+      end
+    end
+  end
+
+  -- Fader drag release
+  if fader and tree then
+    local nodes = tree.getNodes()
+    if nodes then
+      for _, node in pairs(nodes) do
+        if node.type == "Fader" and node._fader then
+          fader.handleMouseReleased(node, x, y, button)
+        end
+      end
+    end
+  end
+
+  -- Knob drag release
+  if knob and tree then
+    local nodes = tree.getNodes()
+    if nodes then
+      for _, node in pairs(nodes) do
+        if node.type == "Knob" and node._knob then
+          knob.handleMouseReleased(node, x, y, button)
         end
       end
     end
@@ -2113,6 +2197,30 @@ function ReactLove.mousemoved(x, y)
       for _, node in pairs(nodes) do
         if node.type == "Slider" and node._slider and node._slider.isDragging then
           slider.handleMouseMoved(node, x, y)
+        end
+      end
+    end
+  end
+
+  -- Fader: handle active drag
+  if fader and tree then
+    local nodes = tree.getNodes()
+    if nodes then
+      for _, node in pairs(nodes) do
+        if node.type == "Fader" and node._fader and node._fader.isDragging then
+          fader.handleMouseMoved(node, x, y)
+        end
+      end
+    end
+  end
+
+  -- Knob: handle active drag
+  if knob and tree then
+    local nodes = tree.getNodes()
+    if nodes then
+      for _, node in pairs(nodes) do
+        if node.type == "Knob" and node._knob and node._knob.isDragging then
+          knob.handleMouseMoved(node, x, y)
         end
       end
     end

@@ -95,6 +95,12 @@ function Events.hitTest(node, mx, my)
   if node.type == "ContextMenu" then return node end
   if node.type == "Scene3D" then return node end
   if node.type == "Slider" then return node end
+  if node.type == "Fader" then return node end
+  if node.type == "Knob" then return node end
+  if node.type == "Switch" then return node end
+  if node.type == "Checkbox" then return node end
+  if node.type == "Radio" then return node end
+  if node.type == "Select" then return node end
   if node.type == "GameCanvas" then return node end
   return nil
 end

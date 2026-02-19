@@ -1,6 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import type { Style, Color } from '@ilovereact/core';
-import { Box, Text } from '@ilovereact/core';
 import { useRendererMode } from '@ilovereact/core';
 import { useScaledStyle, useScale } from '@ilovereact/core';
 
@@ -241,91 +240,26 @@ export function Knob({
     );
   }
 
-  // ── Native mode ───────────────────────────────────────────
-  const center = scaledSize / 2;
-
-  return (
-    <Box
-      style={{
-        alignItems: 'center',
-        gap: Math.round(4 * scale),
-        opacity: disabled ? 0.4 : 1,
-        ...scaledStyle,
-      }}
-      onDragStart={
-        disabled
-          ? undefined
-          : () => {
-              dragStartValue.current = currentValue;
-            }
-      }
-      onDrag={
-        disabled
-          ? undefined
-          : (e: any) => {
-              const sensitivity = (max - min) / (scaledSize * 2);
-              handleValueChange(dragStartValue.current + -e.totalDeltaY * sensitivity);
-            }
-      }
-    >
-      <Box style={{ width: scaledSize, height: scaledSize }}>
-        {/* Arc dots */}
-        {allDots.map((dot, i) => (
-          <Box
-            key={i}
-            style={{
-              position: 'absolute',
-              width: dotSize,
-              height: dotSize,
-              borderRadius: dotSize / 2,
-              backgroundColor: i < activeDotCount
-                ? (color as string)
-                : (trackColor as string),
-              left: center + dot.x - dotSize / 2,
-              top: center + dot.y - dotSize / 2,
-            }}
-          />
-        ))}
-        {/* Knob body */}
-        <Box
-          style={{
-            position: 'absolute',
-            width: scaledSize * 0.65,
-            height: scaledSize * 0.65,
-            borderRadius: scaledSize * 0.325,
-            backgroundColor: '#2a2a2a',
-            borderWidth: 1,
-            borderColor: '#444',
-            left: center - scaledSize * 0.325,
-            top: center - scaledSize * 0.325,
-          }}
-        />
-        {/* Indicator line */}
-        <Box
-          style={{
-            position: 'absolute',
-            width: indicatorWidth,
-            height: indicatorLen,
-            backgroundColor: color as string,
-            borderRadius: indicatorWidth / 2,
-            left: center - indicatorWidth / 2,
-            top: center - indicatorLen,
-            transformOrigin: `${indicatorWidth / 2}px ${indicatorLen}px`,
-            transform: `rotate(${angle}deg)`,
-          }}
-        />
-      </Box>
-      {label && (
-        <Text
-          style={{
-            color: '#94a3b8',
-            fontSize: Math.round(10 * scale),
-            textAlign: 'center',
-          }}
-        >
-          {label}
-        </Text>
-      )}
-    </Box>
-  );
+  // ── Native mode: Lua-owned host element ──────────────────
+  // All drawing, drag state, and interaction handled in lua/knob.lua.
+  // React only receives onChange via buffered knob:change events.
+  return React.createElement('Knob', {
+    value: currentValue,
+    min,
+    max,
+    step,
+    size: scaledSize,
+    color: color as string,
+    trackColor: trackColor as string,
+    label,
+    disabled,
+    onChange: handleValueChange
+      ? (e: any) => handleValueChange(e.value)
+      : undefined,
+    style: {
+      width: scaledSize,
+      height: scaledSize + (label ? Math.round(18 * scale) : 0),
+      ...scaledStyle,
+    },
+  });
 }

@@ -259,6 +259,58 @@ export function initEventDispatching(bridge: Subscribable): void {
   bridge.subscribe('slider:end', (event: LoveEvent) => {
     dispatchToTargetOnly(event, 'onSlidingEnd');
   });
+
+  // ── Fader events (Lua-owned, target-only) ─────────
+
+  bridge.subscribe('fader:change', (event: LoveEvent) => {
+    dispatchToTargetOnly(event, 'onChange');
+  });
+
+  bridge.subscribe('fader:start', (event: LoveEvent) => {
+    dispatchToTargetOnly(event, 'onSlidingStart');
+  });
+
+  bridge.subscribe('fader:end', (event: LoveEvent) => {
+    dispatchToTargetOnly(event, 'onSlidingEnd');
+  });
+
+  // ── Knob events (Lua-owned, target-only) ─────────
+
+  bridge.subscribe('knob:change', (event: LoveEvent) => {
+    dispatchToTargetOnly(event, 'onChange');
+  });
+
+  bridge.subscribe('knob:start', (event: LoveEvent) => {
+    dispatchToTargetOnly(event, 'onSlidingStart');
+  });
+
+  bridge.subscribe('knob:end', (event: LoveEvent) => {
+    dispatchToTargetOnly(event, 'onSlidingEnd');
+  });
+
+  // ── Switch events (Lua-owned, target-only) ─────────
+
+  bridge.subscribe('switch:change', (event: LoveEvent) => {
+    dispatchToTargetOnly(event, 'onValueChange');
+  });
+
+  // ── Checkbox events (Lua-owned, target-only) ─────────
+
+  bridge.subscribe('checkbox:change', (event: LoveEvent) => {
+    dispatchToTargetOnly(event, 'onValueChange');
+  });
+
+  // ── Radio events (Lua-owned, target-only) ─────────
+
+  bridge.subscribe('radio:change', (event: LoveEvent) => {
+    dispatchToTargetOnly(event, 'onValueChange');
+  });
+
+  // ── Select events (Lua-owned, target-only) ─────────
+
+  bridge.subscribe('select:change', (event: LoveEvent) => {
+    dispatchToTargetOnly(event, 'onValueChange');
+  });
 }
 
 /**
