@@ -465,6 +465,18 @@ function ReactLove.init(config)
     knob = require("lua.knob")
     knob.init({ measure = measure })
 
+    switch_mod = require("lua.switch")
+    switch_mod.init({ measure = measure })
+
+    checkbox = require("lua.checkbox")
+    checkbox.init({ measure = measure })
+
+    radio = require("lua.radio")
+    radio.init({ measure = measure })
+
+    selectmod = require("lua.select")
+    selectmod.init({ measure = measure })
+
     textselection = require("lua.textselection")
     textselection.init({ measure = measure, events = events })
 
@@ -557,6 +569,18 @@ function ReactLove.init(config)
 
     knob = require("lua.knob")
     knob.init({ measure = measure })
+
+    switch_mod = require("lua.switch")
+    switch_mod.init({ measure = measure })
+
+    checkbox = require("lua.checkbox")
+    checkbox.init({ measure = measure })
+
+    radio = require("lua.radio")
+    radio.init({ measure = measure })
+
+    selectmod = require("lua.select")
+    selectmod.init({ measure = measure })
 
     textselection = require("lua.textselection")
     textselection.init({ measure = measure, events = events })
@@ -1437,6 +1461,74 @@ function ReactLove.update(dt)
     end
   end
 
+  -- 10d. Drain Lua-owned switch events
+  if switch_mod then
+    local switchEvents = switch_mod.drainEvents()
+    if switchEvents then
+      for _, evt in ipairs(switchEvents) do
+        pushEvent({
+          type = evt.type,
+          payload = {
+            type = evt.type,
+            targetId = evt.nodeId,
+            value = evt.value,
+          },
+        })
+      end
+    end
+  end
+
+  -- 10e. Drain Lua-owned checkbox events
+  if checkbox then
+    local checkboxEvents = checkbox.drainEvents()
+    if checkboxEvents then
+      for _, evt in ipairs(checkboxEvents) do
+        pushEvent({
+          type = evt.type,
+          payload = {
+            type = evt.type,
+            targetId = evt.nodeId,
+            value = evt.value,
+          },
+        })
+      end
+    end
+  end
+
+  -- 10f. Drain Lua-owned radio events
+  if radio then
+    local radioEvents = radio.drainEvents()
+    if radioEvents then
+      for _, evt in ipairs(radioEvents) do
+        pushEvent({
+          type = evt.type,
+          payload = {
+            type = evt.type,
+            targetId = evt.nodeId,
+            value = evt.value,
+          },
+        })
+      end
+    end
+  end
+
+  -- 10g. Drain Lua-owned select events
+  if selectmod then
+    local selectEvents = selectmod.drainEvents()
+    if selectEvents then
+      for _, evt in ipairs(selectEvents) do
+        pushEvent({
+          type = evt.type,
+          payload = {
+            type = evt.type,
+            targetId = evt.nodeId,
+            value = evt.value,
+          },
+        })
+      end
+    end
+  end
+
   -- 11. Poll drag-hover state (X11 XDnD + SDL2 global mouse)
   if dragdrop then
     dragdrop.poll()
@@ -1981,6 +2073,22 @@ function ReactLove.mousepressed(x, y, button)
       if knob then
         knob.handleMousePressed(hit, x, y, button)
       end
+    elseif hit.type == "Switch" then
+      if switch_mod then
+        switch_mod.handleMousePressed(hit, x, y, button)
+      end
+    elseif hit.type == "Checkbox" then
+      if checkbox then
+        checkbox.handleMousePressed(hit, x, y, button)
+      end
+    elseif hit.type == "Radio" then
+      if radio then
+        radio.handleMousePressed(hit, x, y, button)
+      end
+    elseif hit.type == "Select" then
+      if selectmod then
+        selectmod.handleMousePressed(hit, x, y, button)
+      end
     else
       -- Normal node: standard drag + click handling
       events.startDrag(hit.id, x, y)
@@ -2221,6 +2329,18 @@ function ReactLove.mousemoved(x, y)
       for _, node in pairs(nodes) do
         if node.type == "Knob" and node._knob and node._knob.isDragging then
           knob.handleMouseMoved(node, x, y)
+        end
+      end
+    end
+  end
+
+  -- Select: handle hover tracking on open dropdown
+  if selectmod and tree then
+    local nodes = tree.getNodes()
+    if nodes then
+      for _, node in pairs(nodes) do
+        if node.type == "Select" and node._select and node._select.isOpen then
+          selectmod.handleMouseMoved(node, x, y)
         end
       end
     end

@@ -190,68 +190,25 @@ export function Select({
     );
   }
 
-  // ── Native mode (Love2D) ───────────────────────────────
-
-  return (
-    <Box style={{
-      position: 'relative',
-      opacity: disabled ? 0.5 : 1,
-    }}>
-      {/* Trigger */}
-      <Box
-        style={triggerStyle}
-        onClick={handleToggle}
-      >
-        <Text style={{
-          color: selectedOption ? '#e2e8f0' : '#64748b',
-          fontSize: 14,
-        }}>
-          {displayText}
-        </Text>
-        <Text style={{ color: '#64748b', fontSize: 10 }}>
-          {isOpen ? '^' : 'v'}
-        </Text>
-      </Box>
-
-      {/* Floating panel */}
-      {isOpen && (
-        <Box style={panelStyle}>
-          {options.map((opt, i) => {
-            const isSelected = opt.value === selectedValue;
-            return (
-              <Box
-                key={opt.value}
-                style={{
-                  padding: 8,
-                  paddingLeft: 12,
-                  paddingRight: 12,
-                  backgroundColor: isSelected ? 'rgba(97, 166, 250, 0.15)' : 'transparent',
-                  borderBottomWidth: i < options.length - 1 ? 1 : 0,
-                  borderColor: 'rgba(64, 64, 89, 0.4)',
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                }}
-                hoverStyle={{
-                  backgroundColor: isSelected ? 'rgba(97, 166, 250, 0.2)' : 'rgba(255, 255, 255, 0.06)',
-                }}
-                onClick={() => handleSelect(opt.value)}
-              >
-                <Text style={{
-                  color: isSelected ? '#61a6fa' : '#94a3b8',
-                  fontSize: 14,
-                  fontWeight: isSelected ? 'bold' : undefined,
-                }}>
-                  {opt.label}
-                </Text>
-                {isSelected && (
-                  <Text style={{ color: '#61a6fa', fontSize: 11 }}>*</Text>
-                )}
-              </Box>
-            );
-          })}
-        </Box>
-      )}
-    </Box>
-  );
+  // ── Native mode: Lua-owned host element ─────────────────
+  // All open/close, hover tracking, keyboard nav handled in lua/select.lua.
+  return React.createElement('Select', {
+    value: selectedValue,
+    options: JSON.stringify(options),
+    placeholder,
+    disabled,
+    color: typeof color === 'string' ? color : '#3b82f6',
+    onValueChange: (e: any) => {
+      const optionValue = e.value;
+      if (!isControlled) {
+        setInternalValue(optionValue);
+      }
+      onValueChange?.(optionValue);
+    },
+    style: {
+      minWidth: 160,
+      height: 36 + 4,  // trigger height + margin
+      ...style,
+    },
+  });
 }

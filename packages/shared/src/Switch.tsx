@@ -6,7 +6,6 @@
  */
 
 import React, { useState, useCallback } from 'react';
-import { Box } from './primitives';
 import type { Style, LoveEvent, Color } from './types';
 import { useRendererMode } from './context';
 
@@ -115,30 +114,23 @@ export function Switch({
     );
   }
 
-  // Native mode: flex-based layout (no position:absolute needed)
-  // Use justifyContent to push thumb left (OFF) or right (ON)
-  return (
-    <Box
-      style={{
-        width,
-        height,
-        borderRadius: height / 2,
-        backgroundColor: currentValue ? trackColor.true : trackColor.false,
-        opacity: disabled ? 0.5 : 1,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: currentValue ? 'end' : 'start',
-        padding: thumbPadding,
-        ...style,
-      }}
-      onClick={handleToggle}
-    >
-      <Box style={{
-        width: thumbDiameter,
-        height: thumbDiameter,
-        borderRadius: thumbDiameter / 2,
-        backgroundColor: thumbColor,
-      }} />
-    </Box>
-  );
+  // Native mode: Lua-owned host element
+  // All toggle state, thumb animation, and drawing handled in lua/switch.lua.
+  return React.createElement('Switch', {
+    value: currentValue,
+    disabled,
+    trackColorTrue: typeof trackColor.true === 'string' ? trackColor.true : '#81b0ff',
+    trackColorFalse: typeof trackColor.false === 'string' ? trackColor.false : '#767577',
+    thumbColor: typeof thumbColor === 'string' ? thumbColor : '#f4f3f4',
+    width,
+    height,
+    onValueChange: (e: any) => {
+      const newValue = e.value;
+      if (!isControlled) {
+        setInternalValue(newValue);
+      }
+      onValueChange?.(newValue);
+    },
+    style: { width, height, ...style },
+  });
 }

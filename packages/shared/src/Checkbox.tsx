@@ -6,7 +6,6 @@
  */
 
 import React, { useState, useCallback } from 'react';
-import { Box, Text } from './primitives';
 import type { Style, LoveEvent, Color } from './types';
 import { useRendererMode } from './context';
 
@@ -97,41 +96,28 @@ export function Checkbox({
     );
   }
 
-  // Native mode
-  return (
-    <Box
-      style={{
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-        opacity: disabled ? 0.5 : 1,
-        ...style,
-      }}
-      onClick={handleToggle}
-    >
-      <Box style={{
-        width: size,
-        height: size,
-        borderRadius: 4,
-        borderWidth,
-        borderColor: checked ? color : uncheckedColor,
-        backgroundColor: checked ? color : 'transparent',
-        justifyContent: 'center',
-        alignItems: 'center',
-        flexShrink: 0,
-      }}>
-        {checked && (
-          <Box style={{
-            width: Math.round(size * 0.4),
-            height: Math.round(size * 0.4),
-            borderRadius: 2,
-            backgroundColor: '#ffffff',
-          }} />
-        )}
-      </Box>
-      {label && (
-        <Text style={{ color: '#e2e8f0', fontSize: 14 }}>{label}</Text>
-      )}
-    </Box>
-  );
+  // Native mode: Lua-owned host element
+  // All toggle state and drawing handled in lua/checkbox.lua.
+  return React.createElement('Checkbox', {
+    value: checked,
+    disabled,
+    label,
+    size,
+    color: typeof color === 'string' ? color : '#3b82f6',
+    uncheckedColor: typeof uncheckedColor === 'string' ? uncheckedColor : '#6b7280',
+    onValueChange: (e: any) => {
+      const newValue = e.value;
+      if (!isControlled) {
+        setInternalValue(newValue);
+      }
+      onValueChange?.(newValue);
+    },
+    style: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      height: size,
+      width: label ? size + 8 + 100 : size,  // approximate width for label
+      ...style,
+    },
+  });
 }

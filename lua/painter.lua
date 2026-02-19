@@ -37,6 +37,10 @@ local VideoPlayerModule = nil -- Lazy-loaded to avoid circular deps
 local SliderModule = nil     -- Lazy-loaded to avoid circular deps
 local FaderModule = nil      -- Lazy-loaded to avoid circular deps
 local KnobModule = nil       -- Lazy-loaded to avoid circular deps
+local SwitchModule = nil     -- Lazy-loaded to avoid circular deps
+local CheckboxModule = nil   -- Lazy-loaded to avoid circular deps
+local RadioModule = nil      -- Lazy-loaded to avoid circular deps
+local SelectModule = nil     -- Lazy-loaded to avoid circular deps
 local TextSelectionModule = nil  -- Lazy-loaded to avoid circular deps
 local ok_utf8, utf8lib = pcall(function() return utf8 end)
 if not ok_utf8 or not utf8lib then
@@ -1293,6 +1297,30 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
       KnobModule = require("lua.knob")
     end
     KnobModule.draw(node, effectiveOpacity)
+
+  elseif not isHidden and node.type == "Switch" then
+    if not SwitchModule then
+      SwitchModule = require("lua.switch")
+    end
+    SwitchModule.draw(node, effectiveOpacity)
+
+  elseif not isHidden and node.type == "Checkbox" then
+    if not CheckboxModule then
+      CheckboxModule = require("lua.checkbox")
+    end
+    CheckboxModule.draw(node, effectiveOpacity)
+
+  elseif not isHidden and node.type == "Radio" then
+    if not RadioModule then
+      RadioModule = require("lua.radio")
+    end
+    RadioModule.draw(node, effectiveOpacity)
+
+  elseif not isHidden and node.type == "Select" then
+    if not SelectModule then
+      SelectModule = require("lua.select")
+    end
+    SelectModule.draw(node, effectiveOpacity)
   end
 
   -- Determine paint order: sort children by zIndex (stable, ascending)

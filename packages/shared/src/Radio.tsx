@@ -152,40 +152,28 @@ export function Radio({
     );
   }
 
-  // Native mode
-  return (
-    <Box
-      style={{
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-        opacity: isDisabled ? 0.5 : 1,
-        ...style,
-      }}
-      onClick={handlePress}
-    >
-      <Box style={{
-        width: size,
-        height: size,
-        borderRadius: size / 2,
-        borderWidth,
-        borderColor: isSelected ? color : uncheckedColor,
-        justifyContent: 'center',
-        alignItems: 'center',
-        flexShrink: 0,
-      }}>
-        {isSelected && (
-          <Box style={{
-            width: innerSize,
-            height: innerSize,
-            borderRadius: innerSize / 2,
-            backgroundColor: color,
-          }} />
-        )}
-      </Box>
-      {label && (
-        <Text style={{ color: '#e2e8f0', fontSize: 14 }}>{label}</Text>
-      )}
-    </Box>
-  );
+  // Native mode: Lua-owned host element
+  // Selection state and drawing handled in lua/radio.lua.
+  return React.createElement('Radio', {
+    value,
+    selectedValue: group?.selectedValue,
+    groupId: '__default',  // RadioGroup could provide a unique ID
+    disabled: isDisabled,
+    label,
+    size,
+    color: typeof color === 'string' ? color : '#3b82f6',
+    uncheckedColor: typeof uncheckedColor === 'string' ? uncheckedColor : '#6b7280',
+    onValueChange: (e: any) => {
+      if (!isDisabled && group) {
+        group.onChange(e.value);
+      }
+    },
+    style: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      height: size,
+      width: label ? size + 8 + 100 : size,
+      ...style,
+    },
+  });
 }
