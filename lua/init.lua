@@ -72,6 +72,7 @@ local browse   = nil                          -- browse.lua (TCP client for stea
 local sysmon   = nil                          -- sysmon.lua (system monitoring: CPU, memory, processes, GPU, etc.)
 local permit   = require("lua.permit")       -- permit.lua (capability enforcement: mint/check/freeze)
 local audit    = require("lua.audit")        -- audit.lua (structured audit logger for permit system)
+local manifestMod = require("lua.manifest")  -- manifest.lua (cartridge manifest loader + validator)
 
 -- Theme system
 local themes   = nil                          -- lua/themes/init.lua (theme registry)
@@ -512,7 +513,7 @@ function ReactLove.init(config)
     selectmod.init({ measure = measure })
 
     textselection = require("lua.textselection")
-    textselection.init({ measure = measure, events = events })
+    textselection.init({ measure = measure, events = events, tree = tree })
 
     contextmenu = require("lua.contextmenu")
     contextmenu.init({ measure = measure, events = events, textselection = textselection, inspector = inspector, devtools = devtools })
@@ -625,7 +626,7 @@ function ReactLove.init(config)
     selectmod.init({ measure = measure })
 
     textselection = require("lua.textselection")
-    textselection.init({ measure = measure, events = events })
+    textselection.init({ measure = measure, events = events, tree = tree })
 
     contextmenu = require("lua.contextmenu")
     contextmenu.init({ measure = measure, events = events, textselection = textselection, inspector = inspector, devtools = devtools })
@@ -2126,18 +2127,14 @@ function ReactLove.mousepressed(x, y, button)
     end
   end
 
-  -- Route to emulator if click is on an Emulator node
-  if emumod then
-    local hitIsEmu = hit and hit.type == "Emulator"
-    if hitIsEmu then
-      emumod.mousepressed(x, y, button)
-    end
+  -- Route clicks to emulator — it does its own bounds-based hit testing
+  if emumod and emumod.mousepressed(x, y, button) then
+    hit = nil  -- consumed by emulator, don't dispatch to JS
   end
 
-  -- If the only thing we hit was the GameCanvas/Emulator itself (no React child with handlers),
+  -- If the only thing we hit was the GameCanvas itself (no React child with handlers),
   -- don't dispatch a click event to JS — Lua already handled it above.
   if hit and hit.type == "GameCanvas" then hit = nil end
-  if hit and hit.type == "Emulator" then hit = nil end
 
   -- Handle TextEditor/TextInput focus transitions
   local focusedNode = focus.get()
@@ -2270,12 +2267,8 @@ function ReactLove.mousepressed(x, y, button)
 
     local textHit = events.textHitTest(root, x, y)
     if textHit then
-      local selNode = textHit
-      if textHit.type == "__TEXT__" and textHit.parent and textHit.parent.type == "Text" then
-        selNode = textHit.parent
-      end
-      if textselection.isSelectable(selNode) then
-        local line, col = textselection.screenToPos(selNode, x, y)
+      local selNode, line, col = textselection.screenToSelectionPos(root, x, y, textHit)
+      if selNode and textselection.isSelectable(selNode) then
         textSelectPending = { node = selNode, startX = x, startY = y, line = line, col = col }
       end
     end
@@ -2413,13 +2406,18 @@ function ReactLove.mousemoved(x, y)
     return
   end
 
+  local root = tree.getTree()
+  if not root then return end
+
   -- Text selection: check pending → promote on threshold, or update active drag
   if textselection then
     local sel = textselection.get()
     if sel and sel.isDragging then
       -- Active selection: update end position
-      local line, col = textselection.screenToPos(sel.node, x, y)
-      textselection.update(line, col)
+      local endNode, line, col = textselection.screenToSelectionPos(root, x, y, sel.endNode or sel.startNode or sel.node)
+      if endNode then
+        textselection.update(endNode, line, col)
+      end
       return  -- Consumed by text selection
     elseif textSelectPending then
       -- Pending: check if mouse moved past threshold
@@ -2438,8 +2436,10 @@ function ReactLove.mousemoved(x, y)
         textSelectPending = nil
 
         -- Update to current mouse position
-        local line, col = textselection.screenToPos(p.node, x, y)
-        textselection.update(line, col)
+        local endNode, line, col = textselection.screenToSelectionPos(root, x, y, p.node)
+        if endNode then
+          textselection.update(endNode, line, col)
+        end
         return  -- Consumed
       end
     end
@@ -2528,9 +2528,6 @@ function ReactLove.mousemoved(x, y)
       end
     end
   end
-
-  local root = tree.getTree()
-  if not root then return end
 
   -- Update drag if active
   if events.isDragging() then
