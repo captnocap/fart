@@ -1,8 +1,8 @@
 # CLAUDE.md
 
 This is React stripped of browser magic and rendered as raw geometry.
-In this framework, love is not a place just for making games.  
-If you didn't say how wide it is, it's zero.
+In this framework, love is not a place just for making games.
+If you didn't say how big it is, surfaces take a quarter of their parent.
 If you said grow, it grows exactly.
 If you nested flex containers, you own the consequences.
 If text wraps, it's because you gave it nowhere to go.
@@ -175,63 +175,92 @@ These are encoded in `cli/targets.mjs` — you should never need to specify them
 
 ## Critical Layout Rules
 
-These cause the most bugs:
+### How sizing works (know this before writing layouts)
 
-1. **Root containers** need `width: '100%', height: '100%'` — NOT `flexGrow: 1`
+The layout engine has three sizing tiers. They resolve in order — the first one that applies wins:
+
+1. **Explicit dimensions** — you set `width`, `height`, `flexGrow`, or `flexBasis`. This always takes priority.
+2. **Content auto-sizing** — containers with children auto-size from their content. Text nodes measure from font metrics. This is the default for any element with children.
+3. **Proportional surface fallback** — empty surface nodes (Box, Image, Video, Scene3D) with no explicit dimensions and no children fall back to **1/4 of their parent's available space**. This cascades: in an 800px window, an unsized Box is 200px; a nested unsized Box inside it is 50px. Interactive elements (Text, TextInput, Pressable, CodeBlock) and ScrollView are NOT surfaces — they size from content or require explicit dimensions.
+
+**What this means in practice:** Stop hardcoding pixel heights on panels, sidebars, and sections that contain children. Use `flexGrow: 1` on the element that should absorb remaining space, and let everything else auto-size. The only things that need explicit dimensions are the root container and opaque leaves (images, empty decorative boxes, scroll containers).
+
+### Rules that still cause bugs
+
+1. **Root containers** need `width: '100%', height: '100%'` — the proportional fallback doesn't apply at the root because the root IS the viewport
 2. **Every `<Text>` MUST have explicit `fontSize`** — the linter enforces this
-3. **No `flexGrow` without sibling sizing context** — needs a parent with known dimensions
-4. **Pre-compute grid dimensions** — don't rely on child content to infer container size
-5. **Keep flex trees shallow** — prefer `<Box flexDirection='row'>` over deep wrapper hierarchies
-6. **Fill the viewport** — native targets (Love2D, SDL2) are fixed canvases, not scrolling pages. Nothing reflows. Nothing has default height. What you don't size is zero.
-7. **Row Boxes NEED explicit width for `justifyContent` to work** — Box nodes have no intrinsic width (only Text nodes do via measurement). A `flexDirection: 'row'` Box without an explicit width won't respond to `justifyContent: 'center'` or other justify values. Always add `width: '100%'` (or a fixed width) to row Boxes that need horizontal content distribution.
-8. **Never put Unicode symbols in `<Text>`** — characters like `▶` `⏸` `█` `●` `✓` arrows, dingbats, geometric shapes, etc. won't render in Love2D's default font. Convert them to Box-based geometry: boolean grids with `backgroundColor` for block art (see NeofetchDemo heart), colored `<Box>` elements for shapes (play triangles, pause bars, checkmarks). The `usePixelArt` hook can convert Unicode art strings to Box grids automatically. The linter enforces this via `no-unicode-symbol-in-text`.
+3. **Use `flexGrow: 1` for space-filling elements** — in a column of header + content + footer, the content should have `flexGrow: 1` to absorb remaining space. Do NOT hardcode pixel heights to "fill" a known window size — that creates deadspace at different resolutions
+4. **Row Boxes NEED explicit width for `justifyContent` to work** — a `flexDirection: 'row'` Box without an explicit width won't respond to `justifyContent: 'center'`. Add `width: '100%'` (or a fixed width) to row Boxes that need horizontal content distribution
+5. **ScrollView needs explicit height** — scroll containers are excluded from the proportional fallback. They need `height` or `flexGrow` to define their viewport
+6. **Never put Unicode symbols in `<Text>`** — characters like `▶` `⏸` `█` `●` `✓` arrows, dingbats, geometric shapes, etc. won't render in Love2D's default font. Convert them to Box-based geometry: boolean grids with `backgroundColor` for block art (see NeofetchDemo heart), colored `<Box>` elements for shapes (play triangles, pause bars, checkmarks). The `usePixelArt` hook can convert Unicode art strings to Box grids automatically. The linter enforces this via `no-unicode-symbol-in-text`
 
-The static linter (`cli/commands/lint.mjs`) catches these as build-blocking errors. Escape hatch: `// ilr-ignore-next-line`.
+### Layout anti-patterns (DO NOT DO)
 
-## Auto-Sizing (Content-Based Layout)
+- **Hardcoding pixel heights to fit a known window size.** `<Scene style={{ height: 260 }}/>` in a 600px-tall parent leaves 340px of dead air. Use `flexGrow: 1` instead and let the element fill available space.
+- **Budgeting pixels manually.** Don't add up `48 + 260 + 80 + gaps` to hit a target height. Let flex do this — one element grows, the rest auto-size from content.
+- **Using fixed dimensions where auto-sizing works.** If a panel contains text and buttons, it knows its own size. Don't constrain it with a hardcoded height — let it shrink-wrap, and give a sibling `flexGrow: 1` to fill the gap.
 
-Containers automatically size to fit their content when dimensions are not specified:
+The static linter (`cli/commands/lint.mjs`) catches many of these as build-blocking errors. Escape hatch: `// ilr-ignore-next-line`.
 
-**How it works:**
-- Bottom-up measurement: deepest children measure first, dimensions propagate upward
-- Text nodes measure themselves using font metrics
-- Container nodes sum (main axis) or max (cross axis) their children
-- Padding, margins, and gaps are added at each level
+## Auto-Sizing and Proportional Fallback
 
-**Column containers** (default `flexDirection: "column"`):
-- Width: max of children's widths + padding
-- Height: sum of children's heights + gaps + padding
+The layout engine resolves dimensions through three tiers:
 
-**Row containers** (`flexDirection: "row"`):
-- Width: sum of children's widths + gaps + padding
-- Height: max of children's heights + padding
+### Tier 1: Content auto-sizing (containers with children)
 
-**Example** (no explicit sizing needed):
+Containers automatically size to fit their content. Text measures from font metrics. This is the most common case — don't override it with hardcoded dimensions.
+
 ```jsx
+// No explicit sizing needed — container wraps its content
 <Box>
   <Text fontSize={16}>Title</Text>
   <Text fontSize={14}>Subtitle</Text>
 </Box>
 ```
-Container auto-sizes to fit both text elements with proper stacking.
 
-**When to use explicit sizing:**
-- Root containers (use `width: '100%', height: '100%'` to fill viewport)
-- Containers with percentage-sized children (percentages need explicit parent)
-- Performance-critical layouts (10+ direct children)
-- When you need precise control over alignment/distribution
+- **Column**: height = sum of children + gaps + padding, width = max child width + padding
+- **Row**: width = sum of children + gaps + padding, height = max child height + padding
 
-**When to use auto-sizing:**
-- Cards, badges, buttons (size to content)
-- Text labels, headings, captions
-- Icon containers
-- Nested layout components
+### Tier 2: Proportional surface fallback (empty surfaces)
 
-**Limitations:**
+Empty surface nodes (Box, Image, Video, Scene3D) with no children and no explicit dimensions get **1/4 of their parent's available space** instead of zero. This cascades:
+
+```
+Window: 800×600
+  └─ Unsized Box → 200×150 (parent/4)
+       └─ Unsized Box → 50×37 (parent/4)
+```
+
+**Surfaces** (get fallback): Box, Image, Video, VideoPlayer, Scene3D
+**Not surfaces** (size from content or need explicit): Text, TextInput, Pressable, CodeBlock, ScrollView
+
+### Tier 3: `flexGrow` (fill remaining space)
+
+Use `flexGrow: 1` on the element that should absorb whatever space is left after siblings are measured:
+
+```jsx
+<Box style={{ width: '100%', height: '100%' }}>
+  <Header />                              {/* auto-sizes to content */}
+  <Box style={{ flexGrow: 1 }}>          {/* absorbs remaining space */}
+    <MainContent />
+  </Box>
+  <Footer />                              {/* auto-sizes to content */}
+</Box>
+```
+
+### When to use explicit sizing
+
+- Root containers (`width: '100%', height: '100%'` to fill viewport)
+- Containers with percentage-sized children (percentages need a known parent)
+- ScrollView (needs explicit height to define its scroll viewport)
+- When you want a specific pixel size that differs from auto or proportional
+
+### Limitations
+
 - Percentage-based children in auto-sized parents resolve to 0
 - `aspectRatio` requires at least one explicit dimension
-- ScrollView containers need explicit height for scrolling
-- Deep nesting (6+ levels) may impact performance (use explicit sizing at key levels)
+- ScrollView needs explicit height (excluded from proportional fallback)
+- The proportional fallback doesn't apply when the parent's size is indefinite (auto-sizing containers that haven't resolved yet)
 
 ## Adding Event Handlers to Primitives (IMPORTANT)
 
