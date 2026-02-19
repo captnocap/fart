@@ -19,32 +19,26 @@ node_modules:
 	npm install
 
 # ── QuickJS setup (native target only) ──────────────────
+# All C compilation is handled by build.zig (zig build).
+# build.zig references native/quickjs-shim/qjs_ffi_shim.c directly —
+# no manual copy into the quickjs/ source tree needed.
 
 setup: $(LIB_DIR)/libquickjs.so
 
 $(QUICKJS_DIR):
 	git clone https://github.com/quickjs-ng/quickjs.git $(QUICKJS_DIR)
 
-# Copy our shim into the QuickJS source tree before building.
-# The canonical copy lives in native/quickjs-shim/ (tracked in git).
-$(QUICKJS_DIR)/qjs_ffi_shim.c: native/quickjs-shim/qjs_ffi_shim.c $(QUICKJS_DIR)
-	cp native/quickjs-shim/qjs_ffi_shim.c $(QUICKJS_DIR)/qjs_ffi_shim.c
-
 $(LIB_DIR):
 	mkdir -p $(LIB_DIR)
 
-$(LIB_DIR)/libquickjs.so: $(QUICKJS_DIR) $(QUICKJS_DIR)/qjs_ffi_shim.c $(LIB_DIR)
-	cd $(QUICKJS_DIR) && \
-	$(CC) -shared -fPIC -O2 -D_GNU_SOURCE -DQUICKJS_NG_BUILD -I. \
-		-o libquickjs.so \
-		cutils.c dtoa.c libregexp.c libunicode.c quickjs.c quickjs-libc.c qjs_ffi_shim.c \
-		-lm -lpthread -ldl
-	cp $(QUICKJS_DIR)/libquickjs.so $(LIB_DIR)/
+$(LIB_DIR)/libquickjs.so: $(QUICKJS_DIR) $(LIB_DIR)
+	zig build libquickjs
+	cp zig-out/lib/libquickjs.so $(LIB_DIR)/
 
 # Copy libquickjs to storybook
 $(STORYBOOK_LIB)/libquickjs.so: $(LIB_DIR)/libquickjs.so
 	mkdir -p $(STORYBOOK_LIB)
-	cp $(LIB_DIR)/libquickjs.so $(STORYBOOK_LIB)/
+	cp zig-out/lib/libquickjs.so $(STORYBOOK_LIB)/
 
 # ── Build targets ───────────────────────────────────────
 
@@ -249,10 +243,8 @@ cli-setup: setup
 	cp lua/audio/modules/*.lua cli/runtime/lua/audio/modules/
 	cp $(QUICKJS_DIR)/libquickjs.so cli/runtime/lib/
 	@echo "  Compiling ft_helper.so (FreeType bridge for SDL2 target)..."
-	@zig cc -shared -fPIC -O2 lua/sdl2_ft_helper.c \
-		-o cli/runtime/lib/ft_helper.so \
-		$$(pkg-config --cflags --libs freetype2) \
-		-target x86_64-linux-gnu \
+	@zig build ft-helper \
+		&& cp zig-out/lib/libft_helper.so cli/runtime/lib/ft_helper.so \
 		&& echo "  Bundled ft_helper.so" \
 		|| echo "  Warning: ft_helper.so build failed — SDL2 target text rendering unavailable"
 	@LIBMPV=$$(ldconfig -p | grep 'libmpv.so.2 ' | head -1 | sed 's/.*=> //'); \
