@@ -376,6 +376,20 @@ export interface VideoPlayerProps extends VideoProps {
   controls?: boolean;
 }
 
+export interface EmulatorProps {
+  /** ROM file path (relative to Love2D filesystem, e.g. "game.nes") */
+  src: string;
+  /** Whether emulation is running (default: true) */
+  playing?: boolean;
+
+  // Shorthand props
+  w?: number | string;
+  h?: number | string;
+
+  style?: Style;
+  key?: string | number;
+}
+
 export interface ScrollEvent {
   scrollX: number;
   scrollY: number;

@@ -65,6 +65,9 @@ export { Box, Row, Col, Text, Image, FocusGroup, styleToCSS, colorToCSS } from '
 export { Video } from './Video';
 export { VideoPlayer } from './VideoPlayer';
 
+// Emulator
+export { Emulator } from './Emulator';
+
 // ScrollView
 export { ScrollView } from './ScrollView';
 
