@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Box, Text, Pressable } from '../../../packages/shared/src';
+import React, { useState, useCallback } from 'react';
+import { Box, Text, useBridge } from '../../../packages/shared/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { Game } from '../../../packages/game/src';
 
@@ -77,25 +77,33 @@ function RoundOverOverlay({ state }: { state: GameState }) {
   );
 }
 
-function ShopOverlay({ state }: { state: GameState }) {
+function ShopOverlay({ state, onBuy }: { state: GameState; onBuy: (name: string) => void }) {
   const c = useThemeColors();
   const shop = state.shopData;
   if (!shop) return null;
 
   return (
-    <Box style={{ position: 'absolute', left: 0, top: 0, width: '100%', height: '100%', padding: 20, alignItems: 'center' }}>
-      <Text style={{ fontSize: 24, color: '#9933ff', fontWeight: 'bold' }}>UPGRADES</Text>
-      <Text style={{ fontSize: 14, color: 'rgba(255,255,255,0.9)', marginTop: 6 }}>
+    <Box style={{ position: 'absolute', left: 0, top: 0, width: '100%', height: '100%', padding: 12, alignItems: 'center' }}>
+      <Text style={{ fontSize: 20, color: '#9933ff', fontWeight: 'bold' }}>UPGRADES</Text>
+      <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.9)', marginTop: 4 }}>
         {`Points: ${Math.floor(shop.points)}`}
       </Text>
-      <Text style={{ fontSize: 11, color: 'rgba(153,153,153,0.7)', marginTop: 2 }}>
+      <Text style={{ fontSize: 10, color: 'rgba(153,153,153,0.7)', marginTop: 2 }}>
         {`Preparing Round ${shop.nextRound}`}
       </Text>
 
-      <Box style={{ gap: 4, marginTop: 12, width: 380 }}>
+      <Box style={{ gap: 3, marginTop: 8, width: '90%' }}>
         {shop.upgrades.map((u) => (
           <Box
             key={u.name}
+            onClick={() => {
+              console.log('[shop-click] u=' + u.name + ' canAfford=' + u.canAfford + ' maxed=' + u.maxed);
+              if (u.canAfford && !u.maxed) onBuy(u.name);
+            }}
+            hoverStyle={{
+              backgroundColor: u.canAfford ? 'rgba(77,38,128,0.5)' : 'rgba(51,26,77,0.4)',
+              borderColor: 'rgba(153,77,255,0.4)',
+            }}
             style={{
               flexDirection: 'row',
               justifyContent: 'space-between',
@@ -103,25 +111,25 @@ function ShopOverlay({ state }: { state: GameState }) {
               backgroundColor: 'rgba(26,13,40,0.5)',
               borderWidth: 1,
               borderColor: 'rgba(77,38,128,0.3)',
-              borderRadius: 6,
-              padding: 8,
-              paddingLeft: 12,
-              paddingRight: 12,
+              borderRadius: 4,
+              padding: 5,
+              paddingLeft: 10,
+              paddingRight: 10,
               width: '100%',
             }}
           >
-            <Box style={{ gap: 2 }}>
+            <Box style={{ gap: 1 }}>
               <Text style={{
-                fontSize: 13,
+                fontSize: 11,
                 color: u.canAfford ? 'rgba(255,255,255,1)' : 'rgba(128,128,128,0.5)',
                 fontWeight: 'bold',
               }}>
                 {`${u.label}  Lv ${u.level}`}
               </Text>
-              <Text style={{ fontSize: 10, color: 'rgba(179,179,179,0.7)' }}>{u.preview}</Text>
+              <Text style={{ fontSize: 9, color: 'rgba(179,179,179,0.7)' }}>{u.preview}</Text>
             </Box>
             <Text style={{
-              fontSize: 14,
+              fontSize: 12,
               color: u.maxed ? 'rgba(128,128,128,0.4)' : u.canAfford ? '#4de650' : 'rgba(153,77,77,0.6)',
               fontWeight: 'bold',
             }}>
@@ -131,7 +139,7 @@ function ShopOverlay({ state }: { state: GameState }) {
         ))}
       </Box>
 
-      <Text style={{ fontSize: 11, color: 'rgba(128,128,128,0.5)', marginTop: 12 }}>
+      <Text style={{ fontSize: 9, color: 'rgba(128,128,128,0.5)', marginTop: 8 }}>
         Click card to buy | Space to start round
       </Text>
     </Box>
@@ -139,9 +147,15 @@ function ShopOverlay({ state }: { state: GameState }) {
 }
 
 export function BlackholeStory() {
+  const bridge = useBridge();
   const [gameState, setGameState] = useState<GameState>({
     screen: 'title', round: 0, timer: 0, points: 0, asteroids: 0,
   });
+
+  const sendCommand = useCallback((command: string, args?: any) => {
+    console.log('[sendCommand] ' + command + ' args=' + JSON.stringify(args));
+    bridge.rpc('game:command', { module: 'blackhole', command, args });
+  }, [bridge]);
 
   return (
     <Box style={{ flexDirection: 'row', width: '100%', height: '100%', gap: 2 }}>
@@ -167,7 +181,7 @@ export function BlackholeStory() {
           {gameState.screen === 'title' && <TitleOverlay />}
           {gameState.screen === 'playing' && <HUDOverlay state={gameState} />}
           {gameState.screen === 'roundover' && <RoundOverOverlay state={gameState} />}
-          {gameState.screen === 'shop' && <ShopOverlay state={gameState} />}
+          {gameState.screen === 'shop' && <ShopOverlay state={gameState} onBuy={(name) => sendCommand('buy', { upgrade: name })} />}
         </Game>
       </Box>
     </Box>

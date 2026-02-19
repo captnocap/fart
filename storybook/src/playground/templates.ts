@@ -981,4 +981,548 @@ export const templates: Template[] = [
   );
 }`,
   },
+
+  // ── AI + Audio + Controls ───────────────────────────────
+
+  {
+    id: 'ai-coproducer-studio',
+    name: 'AI Co-Producer Studio',
+    description: 'Step sequencer + audio rack hooks + AI co-writing loop',
+    category: 'Crossover',
+    code: `function MyComponent() {
+  var [tempo, setTempo] = useState(118);
+  var [energy, setEnergy] = useState(0.62);
+  var [swing, setSwing] = useState(0.08);
+  var [playing, setPlaying] = useState(false);
+  var [recording, setRecording] = useState(false);
+  var [step, setStep] = useState(0);
+
+  var audioReady = useAudioInit();
+  var rack = useRack();
+
+  var [pattern, setPattern] = useState([
+    [true, false, false, false, true, false, false, false, true, false, false, false, true, false, false, false],
+    [false, false, true, false, false, false, true, false, false, false, true, false, false, false, true, false],
+    [true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true],
+    [false, false, false, false, true, false, false, false, false, false, false, false, true, false, false, false],
+  ]);
+  var [levels, setLevels] = useState([0.35, 0.22, 0.3, 0.24]);
+  var [messages, setMessages] = useState([
+    { role: 'assistant', content: 'Co-producer online. Ask for drums, bass, or arrangement ideas.' },
+  ]);
+
+  function density() {
+    var total = 0;
+    var t = 0;
+    var s = 0;
+    for (t = 0; t < pattern.length; t += 1) {
+      for (s = 0; s < pattern[t].length; s += 1) {
+        if (pattern[t][s]) total += 1;
+      }
+    }
+    return total / (pattern.length * 16);
+  }
+
+  useEffect(function() {
+    if (!playing) return;
+    var msPerStep = Math.max(80, Math.round((60000 / tempo) / 4));
+    var interval = setInterval(function() {
+      setStep(function(prev) {
+        var next = (prev + 1) % 16;
+        setLevels(function(old) {
+          return old.map(function(v, trackIndex) {
+            var hit = pattern[trackIndex] && pattern[trackIndex][next];
+            var target = hit
+              ? Math.min(1, 0.45 + energy * 0.5 + Math.random() * 0.2)
+              : 0.05 + Math.random() * 0.08;
+            return v * 0.42 + target * 0.58;
+          });
+        });
+        return next;
+      });
+    }, msPerStep);
+    return function() { clearInterval(interval); };
+  }, [playing, tempo, energy, pattern]);
+
+  function toggleStep(track, stepIndex, active) {
+    setPattern(function(prev) {
+      return prev.map(function(row, rowIndex) {
+        if (rowIndex !== track) return row;
+        return row.map(function(cell, colIndex) {
+          if (colIndex !== stepIndex) return cell;
+          return active;
+        });
+      });
+    });
+  }
+
+  function buildReply(prompt) {
+    var lower = prompt.toLowerCase();
+    var groove = density() > 0.58
+      ? 'Groove is dense; carve space on hats or lower swing.'
+      : 'Groove has headroom; add syncopation on bass and hats.';
+    var mood = energy > 0.7
+      ? 'Energy is high, so push transient shape and short fills.'
+      : 'Energy is moderate, so let the kick breathe and widen ambience.';
+    var detail = 'Try ' + tempo + ' BPM with ' + Math.round(swing * 100) + '% swing.';
+    if (lower.indexOf('bass') >= 0) {
+      return groove + ' Bass note: mirror kick on step 1 and 9, then ghost note step 12. ' + detail;
+    }
+    if (lower.indexOf('drum') >= 0 || lower.indexOf('kick') >= 0) {
+      return groove + ' Drum note: add one off-beat snare ghost before bar turn. ' + detail;
+    }
+    if (lower.indexOf('hook') >= 0 || lower.indexOf('melody') >= 0) {
+      return mood + ' Hook note: keep phrase to 3 notes, then answer with a higher octave. ' + detail;
+    }
+    return groove + ' ' + mood + ' ' + detail;
+  }
+
+  function sendToAI(text) {
+    setMessages(function(prev) {
+      return prev.concat([{ role: 'user', content: text }]);
+    });
+    return new Promise(function(resolve) {
+      setTimeout(function() {
+        setMessages(function(prev) {
+          return prev.concat([{ role: 'assistant', content: buildReply(text) }]);
+        });
+        resolve();
+      }, 280);
+    });
+  }
+
+  return (
+    <Box style={{ width: '100%', height: '100%', backgroundColor: '#090f1f', padding: 12, gap: 10 }}>
+      <Box style={{ flexDirection: 'row', width: '100%', height: '100%', gap: 12 }}>
+        <Card style={{ flexGrow: 1 }} title="AI Co-Producer Studio" subtitle="Compose with controls + chat loop">
+          <Box style={{ gap: 10 }}>
+            <Box style={{ flexDirection: 'row', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Text style={{ color: '#94a3b8', fontSize: 11 }}>
+                {'Audio engine: ' + (audioReady ? 'ready' : 'loading') + ' | Modules: ' + rack.modules.length + ' | Wires: ' + rack.connections.length}
+              </Text>
+              <Badge label={recording ? 'REC' : 'LIVE'} variant={recording ? 'error' : 'success'} />
+            </Box>
+
+            <TransportBar
+              playing={playing}
+              recording={recording}
+              onPlay={function() { setPlaying(true); }}
+              onStop={function() { setPlaying(false); }}
+              onRecord={function() { setRecording(function(r) { return !r; }); }}
+              bpm={Math.round(tempo)}
+              position={'step ' + (step + 1) + '/16'}
+            />
+
+            <Box style={{ flexDirection: 'row', gap: 16, alignItems: 'end' }}>
+              <Knob value={tempo} onChange={setTempo} min={90} max={160} step={1} label="Tempo" />
+              <Fader value={energy} onChange={setEnergy} min={0} max={1} step={0.01} label="Energy" height={90} />
+              <Knob value={swing} onChange={setSwing} min={0} max={0.3} step={0.01} label="Swing" />
+              <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'end', marginLeft: 8 }}>
+                {levels.map(function(level, i) {
+                  return (
+                    <Box key={i} style={{ alignItems: 'center', gap: 4 }}>
+                      <Meter value={level} peak={Math.min(1, level + 0.12)} width={12} height={70} />
+                      <Text style={{ color: '#64748b', fontSize: 9 }}>{['K', 'S', 'H', 'B'][i]}</Text>
+                    </Box>
+                  );
+                })}
+              </Box>
+            </Box>
+
+            <StepSequencer
+              tracks={4}
+              steps={16}
+              pattern={pattern}
+              currentStep={step}
+              onStepToggle={toggleStep}
+              trackLabels={['Kick', 'Snare', 'Hat', 'Bass']}
+              trackColors={['#22d3ee', '#f97316', '#a3e635', '#f472b6']}
+            />
+
+            <ActionBar
+              items={[
+                { key: 'tight', label: 'Tighten Groove', color: '#93c5fd' },
+                { key: 'space', label: 'Add Space', color: '#86efac' },
+                { key: 'hook', label: 'Write Hook', color: '#f9a8d4' },
+              ]}
+              onAction={function(key) {
+                if (key === 'tight') sendToAI('Tighten drums and glue the groove');
+                if (key === 'space') sendToAI('Create more space in arrangement');
+                if (key === 'hook') sendToAI('Give me a melodic hook idea');
+              }}
+            />
+          </Box>
+        </Card>
+
+        <Card style={{ width: 360 }} title="AI Notes" subtitle="Prompt ideas and get production guidance">
+          <Box style={{ width: '100%', height: 360 }}>
+            <AIMessageList messages={messages} />
+          </Box>
+          <AIChatInput send={sendToAI} placeholder="ex: Give me a darker bassline and tighter hats" />
+        </Card>
+      </Box>
+    </Box>
+  );
+}`,
+  },
+
+  // ── AI + 3D + Visual Analytics ──────────────────────────
+
+  {
+    id: 'scene-alchemist',
+    name: 'Scene Alchemist',
+    description: 'Prompt-driven 3D mood board + visual telemetry',
+    category: 'Crossover',
+    code: `function MyComponent() {
+  var [mood, setMood] = useState(0.55);
+  var [chaos, setChaos] = useState(0.32);
+  var [glow, setGlow] = useState(0.7);
+  var [meshType, setMeshType] = useState('sphere');
+  var [messages, setMessages] = useState([
+    { role: 'assistant', content: 'Describe a vibe and I will reshape the scene.' },
+  ]);
+
+  var spin = useSpring(chaos * 320, { stiffness: 90, damping: 14 });
+  var pulse = useSpring(0.75 + glow * 0.6, { stiffness: 85, damping: 13 });
+
+  function clamp(value, min, max) {
+    return Math.max(min, Math.min(max, value));
+  }
+
+  function parsePrompt(text) {
+    var lower = text.toLowerCase();
+    var nextMood = mood;
+    var nextChaos = chaos;
+    var nextGlow = glow;
+
+    if (lower.indexOf('calm') >= 0 || lower.indexOf('ambient') >= 0) nextChaos -= 0.2;
+    if (lower.indexOf('chaotic') >= 0 || lower.indexOf('glitch') >= 0) nextChaos += 0.25;
+    if (lower.indexOf('dark') >= 0) nextGlow -= 0.2;
+    if (lower.indexOf('bright') >= 0 || lower.indexOf('neon') >= 0) nextGlow += 0.2;
+    if (lower.indexOf('warm') >= 0) nextMood -= 0.15;
+    if (lower.indexOf('cool') >= 0 || lower.indexOf('ocean') >= 0) nextMood += 0.15;
+
+    if (lower.indexOf('cube') >= 0 || lower.indexOf('box') >= 0) setMeshType('box');
+    if (lower.indexOf('sphere') >= 0 || lower.indexOf('planet') >= 0) setMeshType('sphere');
+    if (lower.indexOf('plane') >= 0) setMeshType('plane');
+
+    nextMood = clamp(nextMood, 0.05, 1);
+    nextChaos = clamp(nextChaos, 0, 1);
+    nextGlow = clamp(nextGlow, 0, 1);
+
+    setMood(nextMood);
+    setChaos(nextChaos);
+    setGlow(nextGlow);
+
+    return 'Updated scene: mood ' + Math.round(nextMood * 100) + ', chaos ' + Math.round(nextChaos * 100) + ', glow ' + Math.round(nextGlow * 100) + '.';
+  }
+
+  function sendPrompt(text) {
+    setMessages(function(prev) { return prev.concat([{ role: 'user', content: text }]); });
+    return new Promise(function(resolve) {
+      setTimeout(function() {
+        setMessages(function(prev) {
+          return prev.concat([{ role: 'assistant', content: parsePrompt(text) }]);
+        });
+        resolve();
+      }, 260);
+    });
+  }
+
+  var colorMain = mood > 0.5 ? '#22d3ee' : '#fb7185';
+  var colorAlt = mood > 0.5 ? '#60a5fa' : '#f59e0b';
+  var panelBg = mood > 0.5 ? '#06122b' : '#1d0f19';
+
+  var radarData = [
+    Math.round((1 - chaos) * 100),
+    Math.round(glow * 100),
+    Math.round(mood * 100),
+    Math.round((0.35 + chaos * 0.65) * 100),
+    Math.round((0.25 + mood * 0.75) * 100),
+  ];
+
+  var lineData = [];
+  var i = 0;
+  for (i = 0; i < 24; i += 1) {
+    var wave = 35 + Math.sin((i / 24) * Math.PI * 2 + chaos * 3) * (14 + glow * 16) + mood * 30;
+    lineData.push({ x: String(i), value: Math.round(Math.max(3, wave)) });
+  }
+
+  return (
+    <Box style={{ width: '100%', height: '100%', backgroundColor: '#070b16', padding: 12, gap: 10 }}>
+      <Box style={{ flexDirection: 'row', width: '100%', height: '100%', gap: 12 }}>
+        <Card style={{ flexGrow: 1 }} title="Scene Alchemist" subtitle="3D canvas + prompt steering">
+          <Box style={{ gap: 10 }}>
+            <Scene
+              style={{ width: '100%', height: 220, borderRadius: 10, overflow: 'hidden' }}
+              backgroundColor={panelBg}
+              stars={true}
+              orbitControls={true}
+            >
+              <Camera position={[0, -2.2, 3.2]} lookAt={[0, 0, 0]} />
+              <AmbientLight color={mood > 0.5 ? '#0f172a' : '#2a101f'} intensity={0.18 + glow * 0.55} />
+              <DirectionalLight direction={[0.35, -1, -0.28]} color={colorMain} intensity={0.35 + glow * 0.7} />
+              <Mesh
+                geometry={meshType}
+                color={colorMain}
+                wireframe={chaos > 0.68}
+                edgeColor="#0b1020"
+                edgeWidth={0.03}
+                scale={pulse}
+                rotation={[0, spin * 0.02, chaos * 0.5]}
+                position={[0, 0.2, 0]}
+              />
+              <Mesh
+                geometry="plane"
+                color={colorAlt}
+                opacity={0.25}
+                scale={[2.2, 2.2, 2.2]}
+                rotation={[-1.57, 0, 0]}
+                position={[0, -0.9, 0]}
+              />
+            </Scene>
+
+            <Box style={{ flexDirection: 'row', gap: 14 }}>
+              <Box style={{ gap: 3 }}>
+                <Text style={{ color: '#94a3b8', fontSize: 10 }}>{'Mood: ' + Math.round(mood * 100)}</Text>
+                <Slider value={mood} onValueChange={setMood} minimumValue={0} maximumValue={1} step={0.01} style={{ width: 160 }} />
+              </Box>
+              <Box style={{ gap: 3 }}>
+                <Text style={{ color: '#94a3b8', fontSize: 10 }}>{'Chaos: ' + Math.round(chaos * 100)}</Text>
+                <Slider value={chaos} onValueChange={setChaos} minimumValue={0} maximumValue={1} step={0.01} style={{ width: 160 }} />
+              </Box>
+              <Box style={{ gap: 3 }}>
+                <Text style={{ color: '#94a3b8', fontSize: 10 }}>{'Glow: ' + Math.round(glow * 100)}</Text>
+                <Slider value={glow} onValueChange={setGlow} minimumValue={0} maximumValue={1} step={0.01} style={{ width: 160 }} />
+              </Box>
+            </Box>
+
+            <ActionBar
+              items={[
+                { key: 'neon-night', label: 'Neon Night', color: '#22d3ee' },
+                { key: 'ember-void', label: 'Ember Void', color: '#fb7185' },
+                { key: 'quiet-fog', label: 'Quiet Fog', color: '#a3e635' },
+              ]}
+              onAction={function(key) {
+                if (key === 'neon-night') sendPrompt('neon cool futuristic city, bright and calm sphere');
+                if (key === 'ember-void') sendPrompt('warm dark cinematic chaos with cube and glitch');
+                if (key === 'quiet-fog') sendPrompt('calm ambient low chaos with soft plane horizon');
+              }}
+            />
+          </Box>
+        </Card>
+
+        <Card style={{ width: 360 }} title="AI + Metrics" subtitle="Prompt log and vibe telemetry">
+          <Box style={{ gap: 8 }}>
+            <RadarChart
+              axes={[
+                { label: 'focus', max: 100 },
+                { label: 'glow', max: 100 },
+                { label: 'cool', max: 100 },
+                { label: 'motion', max: 100 },
+                { label: 'depth', max: 100 },
+              ]}
+              data={radarData}
+              size={150}
+              color={colorMain}
+              interactive
+            />
+            <LineChart data={lineData} width={320} height={80} color={colorAlt} showArea interactive />
+          </Box>
+
+          <Box style={{ width: '100%', height: 220, marginTop: 10 }}>
+            <AIMessageList messages={messages} />
+          </Box>
+          <AIChatInput send={sendPrompt} placeholder="ex: Make it darker, calmer, and more cinematic" />
+        </Card>
+      </Box>
+    </Box>
+  );
+}`,
+  },
+
+  // ── AI + Game Systems + Controls ────────────────────────
+
+  {
+    id: 'bossfight-conductor',
+    name: 'Bossfight Conductor',
+    description: 'Combat systems + quest tracking + AI tactical coach',
+    category: 'Crossover',
+    code: `function MyComponent() {
+  var hero = useCombat({
+    stats: { hp: 120, maxHp: 120, attack: 18, defense: 6, mp: 42, maxMp: 42 },
+  });
+  var boss = useCombat({
+    stats: { hp: 260, maxHp: 260, attack: 14, defense: 4, mp: 0, maxMp: 0 },
+  });
+  var bag = useInventory({ slots: 8, maxStack: 5 });
+  var quests = useQuest([
+    {
+      id: 'break-shield',
+      name: 'Break The Shield',
+      description: 'Punch through phase one armor',
+      objectives: [{ description: 'Land heavy strikes', current: 0, target: 6 }],
+    },
+    {
+      id: 'finale',
+      name: 'Finale Burst',
+      description: 'Finish with controlled aggression',
+      objectives: [{ description: 'Drop boss below 20% HP', current: 0, target: 1 }],
+    },
+  ]);
+
+  var [booted, setBooted] = useState(false);
+  var [playing, setPlaying] = useState(false);
+  var [intensity, setIntensity] = useState(0.52);
+  var [focus, setFocus] = useState(0.58);
+  var [messages, setMessages] = useState([
+    { role: 'assistant', content: 'Tactical AI online. Keep rhythm, conserve potions, finish clean.' },
+  ]);
+
+  useEffect(function() {
+    if (booted) return;
+    bag.add({ id: 'potion', name: 'Potion', quantity: 3, maxStack: 5 });
+    bag.add({ id: 'ether', name: 'Ether', quantity: 2, maxStack: 5 });
+    quests.start('break-shield');
+    setBooted(true);
+  }, [booted]);
+
+  useEffect(function() {
+    if (!playing) return;
+    if (hero.isDead || boss.isDead) return;
+    var interval = setInterval(function() {
+      var incoming = Math.round(7 + Math.random() * 9 + intensity * 7);
+      hero.takeDamage({ amount: incoming, type: 'void' });
+      hero.update(0.9);
+      boss.update(0.9);
+      if (hero.isDead) setPlaying(false);
+    }, 900);
+    return function() { clearInterval(interval); };
+  }, [playing, intensity, hero.isDead, boss.isDead]);
+
+  function pushAI(text) {
+    setMessages(function(prev) { return prev.concat([{ role: 'assistant', content: text }]); });
+  }
+
+  function strike() {
+    if (hero.isDead || boss.isDead) return;
+    var base = 10 + Math.random() * 8;
+    var dmg = Math.round(base * (0.85 + intensity * 0.95));
+    var dealt = boss.takeDamage({ amount: dmg, type: 'physical' });
+    quests.incrementObjective('break-shield', 0, 1);
+    if (quests.isComplete('break-shield')) quests.complete('break-shield');
+
+    var counter = Math.round(3 + Math.random() * 5 + (1 - focus) * 5);
+    hero.takeDamage({ amount: counter, type: 'counter' });
+
+    if (boss.stats.hp <= boss.stats.maxHp * 0.2) {
+      quests.start('finale');
+      quests.updateObjective('finale', 0, 1);
+      quests.complete('finale');
+      pushAI('Window open. Final burst now while stagger is active.');
+    } else {
+      pushAI('Strike landed for ' + dealt + '. Keep pressure steady.');
+    }
+  }
+
+  function drinkPotion() {
+    if (bag.remove('potion', 1)) {
+      hero.heal(28);
+      pushAI('Potion consumed. Stabilize and re-enter on beat.');
+    } else {
+      pushAI('No potion stacks left. Play safer for the next 8 steps.');
+    }
+  }
+
+  function overdrive() {
+    setIntensity(function(v) { return Math.min(1, v + 0.12); });
+    hero.addBuff({ id: 'overdrive', stat: 'attack', modifier: 1.2, duration: 4 });
+    pushAI('Overdrive engaged. Land two precise hits before backing off.');
+  }
+
+  function askCoach(text) {
+    setMessages(function(prev) { return prev.concat([{ role: 'user', content: text }]); });
+    return new Promise(function(resolve) {
+      setTimeout(function() {
+        var hpPct = Math.round((hero.stats.hp / hero.stats.maxHp) * 100);
+        var bossPct = Math.round((boss.stats.hp / boss.stats.maxHp) * 100);
+        var tip = 'Hero ' + hpPct + '%, boss ' + bossPct + '%. ';
+        if (hpPct < 35) tip += 'You are in danger. Potion first, strike second.';
+        else if (bossPct < 30) tip += 'Boss is in collapse range. Stay aggressive but clean.';
+        else tip += 'You can trade one hit, then reset focus and continue.';
+        pushAI(tip);
+        resolve();
+      }, 260);
+    });
+  }
+
+  var threat = Math.min(1, (1 - hero.stats.hp / hero.stats.maxHp) * 0.6 + intensity * 0.4);
+  var phase = boss.stats.hp > boss.stats.maxHp * 0.5 ? 'Phase I' : 'Phase II';
+
+  return (
+    <Box style={{ width: '100%', height: '100%', backgroundColor: '#080d18', padding: 12, gap: 10 }}>
+      <Card title="Bossfight Conductor" subtitle="Run the encounter like a musical performance">
+        <Box style={{ gap: 10 }}>
+          <Box style={{ flexDirection: 'row', gap: 16, width: '100%' }}>
+            <Box style={{ flexGrow: 1, gap: 8 }}>
+              <Text style={{ color: '#cbd5e1', fontSize: 11 }}>Hero</Text>
+              <HealthBar hp={hero.stats.hp} maxHp={hero.stats.maxHp} width={240} height={12} />
+              <GameStatusBar value={Math.round(focus * 100)} max={100} width={240} height={8} fillColor="#38bdf8" />
+
+              <Text style={{ color: '#cbd5e1', fontSize: 11, marginTop: 4 }}>Boss</Text>
+              <HealthBar hp={boss.stats.hp} maxHp={boss.stats.maxHp} width={240} height={12} />
+              <ProgressBar value={boss.stats.hp / boss.stats.maxHp} color="#fb7185" height={6} />
+            </Box>
+
+            <Box style={{ width: 270, gap: 8 }}>
+              <QuestLog quests={quests} width={260} showCompleted />
+              <Box style={{ gap: 4 }}>
+                <Text style={{ color: '#94a3b8', fontSize: 10 }}>Inventory</Text>
+                <InventoryGrid inventory={bag} columns={4} slotSize={34} />
+              </Box>
+            </Box>
+          </Box>
+
+          <TransportBar
+            playing={playing}
+            onPlay={function() { setPlaying(true); }}
+            onStop={function() { setPlaying(false); }}
+            bpm={Math.round(96 + intensity * 52)}
+            position={phase}
+          />
+
+          <Box style={{ flexDirection: 'row', gap: 16, alignItems: 'end' }}>
+            <Knob value={intensity} onChange={setIntensity} min={0} max={1} step={0.01} label="Intensity" />
+            <Fader value={focus} onChange={setFocus} min={0} max={1} step={0.01} label="Focus" height={90} />
+            <Box style={{ alignItems: 'center', gap: 4 }}>
+              <Meter value={threat} peak={Math.min(1, threat + 0.1)} width={14} height={80} />
+              <Text style={{ color: '#94a3b8', fontSize: 9 }}>Threat</Text>
+            </Box>
+            <ActionBar
+              size="md"
+              items={[
+                { key: 'strike', label: 'Strike', color: '#93c5fd' },
+                { key: 'potion', label: 'Potion', color: '#86efac' },
+                { key: 'overdrive', label: 'Overdrive', color: '#f9a8d4' },
+              ]}
+              onAction={function(key) {
+                if (key === 'strike') strike();
+                if (key === 'potion') drinkPotion();
+                if (key === 'overdrive') overdrive();
+              }}
+            />
+          </Box>
+        </Box>
+      </Card>
+
+      <Card title="AI Tactical Coach" subtitle="Ask for pacing, survival, or damage routes">
+        <Box style={{ width: '100%', height: 180 }}>
+          <AIMessageList messages={messages} />
+        </Box>
+        <AIChatInput send={askCoach} placeholder="ex: Should I burst now or heal?" />
+      </Card>
+    </Box>
+  );
+}`,
+  },
 ];

@@ -19,6 +19,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   Widget: '#f59e0b',
   Navigation: '#06b6d4',
   Motion: '#ef4444',
+  Crossover: '#f97316',
   Recent: '#a78bfa',
 };
 

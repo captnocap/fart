@@ -20,6 +20,7 @@ function LabeledSlider({
   step?: number;
   onChange: (v: number) => void;
 }) {
+  const c = useThemeColors();
   return (
     <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8, height: 24 }}>
       <Text style={{ fontSize: 11, color: c.textSecondary, width: 90 }}>{label}</Text>

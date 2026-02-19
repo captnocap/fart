@@ -53,6 +53,8 @@ import { TabsStory } from './TabsStory';
 import { BreadcrumbsStory } from './BreadcrumbsStory';
 import { ToolbarStory } from './ToolbarStory';
 import { AppShellDemoStory } from './AppShellDemo';
+import { TradingViewBarsStory } from './TradingViewBarsStory';
+import { TradingPerfLabStory } from './TradingPerfLabStory';
 import { AutoSizeBasic } from './AutoSizeBasic';
 import { OverflowStressStory } from './OverflowStress';
 import { FetchStory } from './FetchStory';
@@ -80,6 +82,8 @@ import { PieChartStory } from './PieChartStory';
 import { RadarChartStory } from './RadarChartStory';
 import { Scene3DBasicStory } from './Scene3DBasic';
 import { Scene3DPlanetStory } from './Scene3DPlanet';
+import { Scene3DFrameworkCubeStory } from './Scene3DFrameworkCube';
+import { Scene3DFrameworkGalaxyStory } from './Scene3DFrameworkGalaxy';
 import { GamePlatformerStory } from './GamePlatformerStory';
 import { GameRogueliteStory } from './GameRogueliteStory';
 import { GameTurnBasedStory } from './GameTurnBasedStory';
@@ -167,9 +171,12 @@ export const stories: StoryDef[] = [
   { id: 'weather-demo', title: 'Weather', category: 'Demo', component: WeatherDemoStory },
   { id: 'data-dashboard', title: 'Data Dashboard', category: 'Demo', component: DataDashboardDemoStory },
   { id: 'app-shell', title: 'App Shell', category: 'Demo', component: AppShellDemoStory },
+  { id: 'tradingview-bars', title: 'TradingView 2D/3D', category: 'Demo', component: TradingViewBarsStory },
 
   // Stress Test
   { id: 'overflow-stress', title: 'Overflow Stress', category: 'Stress Test', component: OverflowStressStory },
+  { id: 'trading-perf-lab', title: 'Trading Perf Lab', category: 'Stress Test', component: TradingPerfLabStory },
+  { id: 'scene-3d-framework-galaxy', title: '3D Cube Galaxy', category: 'Stress Test', component: Scene3DFrameworkGalaxyStory },
   { id: 'llms-txt-reader', title: 'llms.txt Reader', category: 'Stress Test', component: LlmsTxtReader },
 
   // AI
@@ -194,6 +201,7 @@ export const stories: StoryDef[] = [
   // 3D
   { id: 'scene-3d-basic', title: '3D Scene', category: '3D', component: Scene3DBasicStory },
   { id: 'scene-3d-planet', title: 'Planet', category: '3D', component: Scene3DPlanetStory },
+  { id: 'scene-3d-framework-cube', title: 'Framework Cube', category: '3D', component: Scene3DFrameworkCubeStory },
 
   // Game Templates
   { id: 'game-platformer', title: 'Platformer', category: 'Game Templates', component: GamePlatformerStory },
