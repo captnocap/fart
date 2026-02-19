@@ -1,7 +1,7 @@
 {
   "name": "ilovereact",
   "version": "0.1.0",
-  "description": "Write React components once, render in Love2D — DOM overlays (web) or draw commands (native)",
+  "description": "Write it in React, render it anywhere there's a surface — custom OpenGL renderer, Love2D, terminal, web, and more",
   "private": true,
   "workspaces": [
     "packages/shared",

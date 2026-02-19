@@ -30,7 +30,8 @@ Use iLoveReact to build UIs once, deploy them anywhere. Write React components, 
 
 | Target | What it is | Status |
 |--------|-----------|--------|
-| **Love2D** | Native game UI (QuickJS in-process) | Full flexbox, images, scroll, events, animation |
+| **SDL2 / OpenGL** | Custom renderer — no game engine | LuaJIT + SDL2 + OpenGL 2.1 + FreeType via FFI |
+| **Love2D** | Game engine UI (QuickJS in-process) | Full flexbox, images, video, inspector, binary dist |
 | **Web** | Browser DOM | Shared components via dual-mode primitives |
 | **Terminal** | 24-bit truecolor ANSI | Cell buffer with diff-based updates |
 | **ComputerCraft** | Minecraft computers (WebSocket) | 16-color palette, 51x19 character grid |
@@ -216,7 +217,7 @@ Use auto-sizing for cards, badges, buttons, labels. Use explicit sizing for root
 4. **No `flexGrow` without sibling sizing context** — needs a parent with known dimensions
 5. **Pre-compute grid dimensions** — don't rely on child content to infer container size
 6. **Keep flex trees shallow** — prefer direct layout over deep wrapper hierarchies
-7. **Fill the viewport** — Love2D is a fixed canvas, not a scrolling page
+7. **Fill the viewport** — native targets (Love2D, SDL2) are fixed canvases. No reflow, no scroll, no default height. What you don't size is zero.
 8. **Use `█` (U+2588) as a grid blueprint only, never in `<Text>`** — convert it to a boolean grid with colored `<Box>` elements instead. The linter enforces this via `no-block-char-in-text`
 
 The static linter catches violations as build-blocking errors. Escape hatch: `// ilr-ignore-next-line`.
@@ -366,9 +367,13 @@ Adding a target means writing a painter (~50-100 lines) and choosing a transport
 
 These use `@ilovereact/grid` — a simplified JS flexbox engine that outputs flat `DrawCommand[]` arrays. Each target provides a thin client that receives commands and draws.
 
-### Love2D Target
+### Native Targets (Love2D + SDL2)
 
-The full-featured target. React runs inside Love2D via QuickJS. The Lua side has a 930-line flexbox engine, a full painter with gradients/shadows/transforms/clipping, and bidirectional event handling — all communicating via zero-copy FFI.
+Both native targets share the same pipeline: QuickJS bridge, retained tree, layout engine, event system. The target interface (`lua/target_*.lua`) is the only thing that changes.
+
+**SDL2 / OpenGL** (`lua/target_sdl2.lua`): The forward target. LuaJIT + SDL2 + OpenGL 2.1 + FreeType via FFI — no game engine required. Runs anywhere LuaJIT does. Entry point: `luajit sdl2_init.lua`. Same React pipeline, same layout engine, same QuickJS bridge, different painter.
+
+**Love2D** (`lua/target_love2d.lua`): The original proving ground. React runs inside Love2D via QuickJS. Full painter with gradients, shadows, transforms, clipping. Images, video (FFmpeg), audio, bidirectional event handling, visual inspector (F12). Ships as a self-extracting binary.
 
 ### Bridge Protocol (Lua ↔ JS)
 

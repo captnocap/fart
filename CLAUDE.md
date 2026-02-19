@@ -21,9 +21,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-iLoveReact is a multi-target React rendering framework. Write React components once, render them on Love2D, terminals, Neovim, ComputerCraft, Hammerspoon, AwesomeWM, or web browsers.
+iLoveReact is a platform-agnostic React rendering framework. The core pipeline — reconciler, tree, layout engine, component library — is target-agnostic. Each target supplies two modules: `measure` (text metrics) and `painter` (how to turn `{x, y, w, h, color, text}` into visible output on that surface). Swap the target table, change the renderer entirely.
 
 **Rendering pipeline:** React reconciler → mutation commands → transport layer → layout engine → target-specific painter.
+
+**Native targets (Lua-side, pixel-accurate):**
+- **SDL2 / OpenGL** — Custom renderer: LuaJIT + SDL2 + OpenGL 2.1 + FreeType via FFI. No game engine dependency. Entry point: `luajit sdl2_init.lua`. This is the primary forward direction — a renderer we fully own.
+- **Love2D** — The original proving ground. Full-featured: images, video (FFmpeg), audio, inspector, binary dist. Still excellent for game UI and kiosks.
+
+**Grid / JS targets:** Terminal, ComputerCraft, Neovim, Hammerspoon, AwesomeWM, Web.
+
+The target interface is formalized in `lua/target_love2d.lua` and `lua/target_sdl2.lua`. A target is a `{ name, measure, painter, images?, videos? }` table — the rest of the framework never needs to know which one is active.
 
 ## CLI-First Workflow (IMPORTANT)
 
@@ -147,7 +155,9 @@ npm workspaces monorepo. Path aliases (`@ilovereact/*`) defined in `tsconfig.bas
 | `packages/awesome` | `@ilovereact/awesome` | AwesomeWM target (stdio, Cairo) |
 | `packages/components` | `@ilovereact/components` | Re-exports layout helpers (Card, Badge, FlexRow, etc.) |
 
-**Lua runtime** (`lua/`): Layout engine (`layout.lua`), painter (`painter.lua`), QuickJS FFI bridge (`bridge_quickjs.lua`), instance tree, event handling, text measurement, error overlay, visual inspector (F12).
+**Lua runtime** (`lua/`): Layout engine (`layout.lua`), painter (`painter.lua`), QuickJS FFI bridge (`bridge_quickjs.lua`), instance tree (`tree.lua`), event system (`events.lua`), text measurement (`measure.lua`), error overlay, visual inspector (F12).
+
+**Target interface** — `lua/target_love2d.lua` (default; uses `painter.lua` + `measure.lua`) and `lua/target_sdl2.lua` (custom OpenGL renderer; uses `sdl2_painter.lua` + `sdl2_measure.lua` + `sdl2_font.lua`). SDL2 run loop: `lua/sdl2_init.lua`. OpenGL bindings: `lua/sdl2_gl.lua`.
 
 **Storybook** (`storybook/`): Top-level reference app — component library, documentation, playground. Not an example project.
 
@@ -157,7 +167,7 @@ npm workspaces monorepo. Path aliases (`@ilovereact/*`) defined in `tsconfig.bas
 
 These are encoded in `cli/targets.mjs` — you should never need to specify them manually:
 
-- **Love2D**: `--format=iife --global-name=ReactLove` (runs inside QuickJS)
+- **Love2D / SDL2**: `--format=iife --global-name=ReactLove` (bundle runs inside QuickJS in-process). Love2D: launched via `love .`. SDL2: launched via `luajit sdl2_init.lua`. Same bundle format, different run loop.
 - **Grid targets** (terminal, nvim, cc, hs, awesome): `--platform=node --format=esm`
 - **Web**: `--format=esm`
 - WebSocket targets (cc, hs) additionally need `--external:ws`
@@ -172,7 +182,7 @@ These cause the most bugs:
 3. **No `flexGrow` without sibling sizing context** — needs a parent with known dimensions
 4. **Pre-compute grid dimensions** — don't rely on child content to infer container size
 5. **Keep flex trees shallow** — prefer `<Box flexDirection='row'>` over deep wrapper hierarchies
-6. **Fill the viewport** — Love2D is a fixed canvas, not a scrolling page
+6. **Fill the viewport** — native targets (Love2D, SDL2) are fixed canvases, not scrolling pages. Nothing reflows. Nothing has default height. What you don't size is zero.
 7. **Row Boxes NEED explicit width for `justifyContent` to work** — Box nodes have no intrinsic width (only Text nodes do via measurement). A `flexDirection: 'row'` Box without an explicit width won't respond to `justifyContent: 'center'` or other justify values. Always add `width: '100%'` (or a fixed width) to row Boxes that need horizontal content distribution.
 8. **Never put Unicode symbols in `<Text>`** — characters like `▶` `⏸` `█` `●` `✓` arrows, dingbats, geometric shapes, etc. won't render in Love2D's default font. Convert them to Box-based geometry: boolean grids with `backgroundColor` for block art (see NeofetchDemo heart), colored `<Box>` elements for shapes (play triangles, pause bars, checkmarks). The `usePixelArt` hook can convert Unicode art strings to Box grids automatically. The linter enforces this via `no-unicode-symbol-in-text`.
 
