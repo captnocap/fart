@@ -377,13 +377,21 @@ function ReactLove.init(config)
   if themeMenuEnabled then
     themeMenu.init({
       key = "f9",
-      onSwitch = function(name)
+      onSwitch = function(name, resolvedTheme, overrides)
         if themes and themes[name] then
           currentThemeName = name
-          currentTheme = themes[name]
+          currentTheme = resolvedTheme or themes[name]
           if painter then painter.setTheme(currentTheme) end
           if tree then tree.markDirty() end
-          pushEvent({ type = "theme:switch", payload = { type = "theme:switch", name = name } })
+          themeMenu.setCurrentTheme(name, currentTheme)
+          pushEvent({
+            type = "theme:switch",
+            payload = {
+              type = "theme:switch",
+              name = name,
+              overrides = overrides or {},
+            }
+          })
         end
       end
     })
@@ -465,10 +473,14 @@ function ReactLove.init(config)
     local thOk, thMod = pcall(require, "lua.themes")
     if thOk and type(thMod) == "table" then
       themes = thMod
-      currentTheme = themes[currentThemeName]
+      if themeMenuEnabled then themeMenu.setThemes(themes) end
+      local resolvedTheme = nil
+      if themeMenuEnabled and themeMenu.getResolvedTheme then
+        resolvedTheme = themeMenu.getResolvedTheme(currentThemeName)
+      end
+      currentTheme = resolvedTheme or themes[currentThemeName]
       if painter then painter.setTheme(currentTheme) end
       if themeMenuEnabled then
-        themeMenu.setThemes(themes)
         themeMenu.setCurrentTheme(currentThemeName, currentTheme)
       end
     end
@@ -598,10 +610,14 @@ function ReactLove.init(config)
     local thOk, thMod = pcall(require, "lua.themes")
     if thOk and type(thMod) == "table" then
       themes = thMod
-      currentTheme = themes[currentThemeName]
+      if themeMenuEnabled then themeMenu.setThemes(themes) end
+      local resolvedTheme = nil
+      if themeMenuEnabled and themeMenu.getResolvedTheme then
+        resolvedTheme = themeMenu.getResolvedTheme(currentThemeName)
+      end
+      currentTheme = resolvedTheme or themes[currentThemeName]
       if painter then painter.setTheme(currentTheme) end
       if themeMenuEnabled then
-        themeMenu.setThemes(themes)
         themeMenu.setCurrentTheme(currentThemeName, currentTheme)
       end
     end
@@ -623,6 +639,19 @@ function ReactLove.init(config)
   rpcHandlers["game:command"] = function(args)
     io.write("[rpc] game:command received: " .. tostring(args and args.command) .. " module=" .. tostring(args and args.module) .. "\n"); io.flush()
     if gamemod then return gamemod.handleCommand(args) end
+  end
+
+  -- Expose current inspector perf counters for stress-test dashboards.
+  rpcHandlers["dev:perf"] = function()
+    if inspector and inspector.getPerfData then
+      return inspector.getPerfData()
+    end
+    return {
+      fps = love.timer.getFPS(),
+      layoutMs = 0,
+      paintMs = 0,
+      nodeCount = 0,
+    }
   end
 
   -- Register settings RPC handlers (API key management)
@@ -921,11 +950,11 @@ function ReactLove.update(dt)
     if tree.isDirty() then
       local root = tree.getTree()
       if root then
-        if inspectorEnabled and inspector.isEnabled() then inspector.beginLayout() end
+        if inspectorEnabled then inspector.beginLayout() end
         local vh = inspectorEnabled and devtools.getViewportHeight() or nil
         layout.layout(root, nil, nil, nil, vh)
         emitLayoutEvents(root)
-        if inspectorEnabled and inspector.isEnabled() then inspector.endLayout() end
+        if inspectorEnabled then inspector.endLayout(root) end
       end
       tree.clearDirty()
     end
@@ -1174,10 +1203,14 @@ function ReactLove.update(dt)
           local name = payload and payload.name
           if name and themes and themes[name] then
             currentThemeName = name
-            currentTheme = themes[name]
+            local resolvedTheme = nil
+            if themeMenuEnabled and themeMenu.getResolvedTheme then
+              resolvedTheme = themeMenu.getResolvedTheme(name)
+            end
+            currentTheme = resolvedTheme or themes[name]
             if painter then painter.setTheme(currentTheme) end
             if tree then tree.markDirty() end
-            if themeMenuEnabled then themeMenu.setCurrentTheme(name, themes[name]) end
+            if themeMenuEnabled then themeMenu.setCurrentTheme(name, currentTheme) end
             io.write("[react-love] Theme switched to: " .. name .. "\n"); io.flush()
           end
 
@@ -1386,11 +1419,11 @@ function ReactLove.update(dt)
   if tree.isDirty() then
     local root = tree.getTree()
     if root then
-      if inspectorEnabled and inspector.isEnabled() then inspector.beginLayout() end
+      if inspectorEnabled then inspector.beginLayout() end
       local vh = inspectorEnabled and devtools.getViewportHeight() or nil
       layout.layout(root, nil, nil, nil, vh)
       emitLayoutEvents(root)
-      if inspectorEnabled and inspector.isEnabled() then inspector.endLayout() end
+      if inspectorEnabled then inspector.endLayout(root) end
     end
     tree.clearDirty()
   end
@@ -1507,9 +1540,9 @@ function ReactLove.draw()
         end
       end
     end
-    if inspectorEnabled and inspector.isEnabled() then inspector.beginPaint() end
+    if inspectorEnabled then inspector.beginPaint() end
     local ok, paintErr = pcall(painter.paint, root)
-    if inspectorEnabled and inspector.isEnabled() then inspector.endPaint() end
+    if inspectorEnabled then inspector.endPaint() end
     if not ok then
       errors.push({
         source = "lua",

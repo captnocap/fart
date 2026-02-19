@@ -1,28 +1,33 @@
 --[[
-  theme_menu.lua -- Theme browser overlay
+  theme_menu.lua -- Theme browser + tuning overlay
 
-  A Lua-side overlay (like settings/devtools) that lets users browse and
-  switch themes visually. Shows a scrollable list of theme cards with
-  neofetch-style color swatches and a live mini-preview of the current app
-  frame captured via Love2D canvas.
+  A Lua-side overlay (F9 by default) for browsing themes and tuning semantic
+  color tokens in real time.
+
+  What this panel does:
+    - Left column: scrollable theme list + swatch strips
+    - Right column: primitive showcase (Box/Text/Pressable/Input/Status chips)
+      rendered entirely from active theme tokens
+    - Right column editor: choose semantic token, edit hex, apply/reset
 
   Usage:
     local themeMenu = require("lua.theme_menu")
-    themeMenu.init({ key = "f9", onSwitch = function(name) ... end })
+    themeMenu.init({ key = "f9", onSwitch = function(name, theme, overrides) ... end })
     -- In love.keypressed:   if themeMenu.keypressed(key) then return end
     -- In love.mousepressed: if themeMenu.mousepressed(x, y, btn) then return end
     -- In love.mousereleased: themeMenu.mousereleased(x, y, btn)
     -- In love.mousemoved:   themeMenu.mousemoved(x, y)
     -- In love.wheelmoved:   if themeMenu.wheelmoved(x, y) then return end
     -- In love.textinput:    if themeMenu.textinput(text) then return end
-    -- In love.draw:         wrap paint with beginCapture/endCapture, then draw()
+    -- In love.draw:         themeMenu.draw()
 
   Controls:
-    F9 (configurable)   -- Toggle theme menu open/closed
+    F9 (configurable)   -- Toggle menu
     Up/Down arrows      -- Navigate theme list
-    Enter               -- Apply highlighted theme
-    Escape              -- Close
-    Mouse click         -- Select theme / close on outside
+    Enter               -- Apply selected theme
+    Tab / Shift+Tab     -- Cycle editable token
+    Escape              -- Close input (if editing), otherwise close menu
+    Mouse click         -- Select theme, token, buttons
     Scroll wheel        -- Scroll theme list
 ]]
 
@@ -35,88 +40,100 @@ local Color = require("lua.color")
 -- ============================================================================
 
 local state = {
-  open        = false,
-  toggleKey   = "f9",
+  open          = false,
+  toggleKey     = "f9",
 
   -- Theme data
-  themes      = nil,        -- reference to lua/themes registry
-  themeNames  = {},          -- sorted list of theme IDs
-  currentName = nil,         -- currently active theme name
-  currentTheme = nil,        -- currently active theme table
+  themes        = nil,      -- reference to lua/themes registry
+  themeNames    = {},       -- sorted list of theme IDs
+  currentName   = nil,      -- active theme ID
+  currentTheme  = nil,      -- active resolved theme (with overrides merged)
+  customColors  = {},       -- { [themeName] = { [token] = "#rrggbb" } }
 
   -- Navigation
-  selectedIdx = 1,           -- keyboard highlight index (1-based)
-  hoverIdx    = nil,         -- mouse hover index (1-based, nil = none)
-  scrollY     = 0,           -- scroll offset for theme list
-  maxScrollY  = 0,           -- computed max scroll
+  selectedIdx   = 1,
+  hoverIdx      = nil,
+  scrollY       = 0,
+  maxScrollY    = 0,
+
+  -- Editor state
+  editKeyIdx        = 1,    -- index in EDIT_KEYS
+  editorText        = "",
+  editingInput      = false,
+  hoverEditorToken  = nil,
+  hoverApply        = false,
+  hoverResetToken   = false,
+  hoverResetTheme   = false,
 
   -- Hover
-  hoverClose  = false,       -- mouse over close button
+  hoverClose    = false,
 
   -- Layout cache
-  panelRect   = nil,         -- { x, y, w, h }
-  cardRects   = {},          -- { [idx] = { x, y, w, h } }
-  closeRect   = nil,         -- { x, y, w, h }
+  panelRect         = nil,
+  listRect          = nil,
+  cardRects         = {},   -- { [idx] = { x, y, w, h } }
+  closeRect         = nil,
+  editorTokenRects  = {},   -- { [idx] = { x, y, w, h } }
+  inputRect         = nil,
+  applyRect         = nil,
+  resetTokenRect    = nil,
+  resetThemeRect    = nil,
 
-  -- Canvas capture
-  captureCanvas = nil,       -- Love2D canvas for live preview
+  -- Status
+  statusMessage   = nil,
+  statusKind      = "info",
+  statusExpiresAt = 0,
 
   -- Callback
-  onSwitch    = nil,         -- function(themeName) called when user switches
+  onSwitch      = nil,      -- function(name, resolvedTheme, overrides)
 }
 
 -- ============================================================================
 -- Visual constants
 -- ============================================================================
 
-local PANEL_W_RATIO  = 0.55
-local PANEL_H_RATIO  = 0.80
-local MIN_PANEL_W    = 420
-local MIN_PANEL_H    = 350
-local TITLE_BAR_H    = 32
-local CORNER_R       = 6
-local SCROLL_SPEED   = 30
-local STATUS_BAR_H   = 24
-local CARD_H         = 52
-local CARD_PAD       = 6
-local CARD_INNER_PAD = 8
-local SWATCH_SIZE    = 16
-local SWATCH_GAP     = 3
-local SWATCH_RADIUS  = 2
-local PREVIEW_RATIO  = 0.32  -- fraction of panel height for preview area
-local DIVIDER_H      = 1
+local PANEL_W_RATIO   = 0.82
+local PANEL_H_RATIO   = 0.84
+local MIN_PANEL_W     = 820
+local MIN_PANEL_H     = 520
+local TITLE_BAR_H     = 34
+local STATUS_BAR_H    = 24
+local CORNER_R        = 6
+local BODY_PAD        = 8
+local SECTION_PAD     = 6
+local SCROLL_SPEED    = 32
 
--- Semantic color keys to display as swatches (in order)
+local LIST_RATIO      = 0.43
+local LIST_HEADER_H   = 22
+local CARD_H          = 56
+local CARD_PAD        = 6
+local CARD_INNER_PAD  = 8
+local SWATCH_SIZE     = 13
+local SWATCH_GAP      = 3
+local SWATCH_RADIUS   = 2
+
+local SHOWCASE_RATIO  = 0.52
+local INPUT_H         = 24
+local BUTTON_H        = 22
+
 local SWATCH_KEYS = {
   "bg", "bgAlt", "bgElevated", "primary", "accent",
   "text", "textSecondary", "surface", "border",
   "error", "warning", "success", "info",
 }
 
--- Colors (dark theme, matching devtools/settings palette)
-local C = {
-  backdrop    = { 0.00, 0.00, 0.00, 0.45 },
-  panelBg     = { 0.06, 0.06, 0.11, 0.96 },
-  titleBg     = { 0.08, 0.08, 0.14, 1 },
-  titleText   = { 0.88, 0.90, 0.94, 1 },
-  border      = { 0.20, 0.20, 0.30, 0.8 },
-  cardBg      = { 0.08, 0.08, 0.13, 1 },
-  cardHover   = { 0.10, 0.10, 0.17, 1 },
-  cardActive  = { 0.12, 0.14, 0.22, 1 },
-  cardBorder  = { 0.20, 0.20, 0.30, 0.5 },
-  activeBorder = { 0.38, 0.65, 0.98, 0.9 },
-  themeName   = { 0.78, 0.80, 0.86, 1 },
-  themeNameActive = { 0.38, 0.65, 0.98, 1 },
-  closeNormal = { 0.55, 0.58, 0.65, 1 },
-  closeHover  = { 0.95, 0.45, 0.45, 1 },
-  statusBg    = { 0.06, 0.06, 0.11, 1 },
-  statusText  = { 0.45, 0.48, 0.55, 1 },
-  scrollbar   = { 0.25, 0.25, 0.35, 0.6 },
-  scrollthumb = { 0.40, 0.42, 0.50, 0.8 },
-  previewLabel = { 0.55, 0.58, 0.65, 1 },
-  previewBorder = { 0.20, 0.20, 0.30, 0.6 },
-  swatchBorder = { 1, 1, 1, 0.12 },
+local EDIT_KEYS = {
+  "bg", "bgAlt", "bgElevated",
+  "surface", "surfaceHover", "border", "borderFocus",
+  "text", "textSecondary", "textDim",
+  "primary", "primaryHover", "primaryPressed",
+  "accent", "error", "warning", "success", "info",
 }
+
+-- Forward declarations for helpers referenced before definition.
+local ensureVisible
+local syncEditorTextFromTheme
+local applyThemeByName
 
 -- ============================================================================
 -- Font cache
@@ -129,7 +146,7 @@ local function getFont(size)
 end
 
 -- ============================================================================
--- Drawing helpers
+-- Basic helpers
 -- ============================================================================
 
 local function setColor(c)
@@ -147,15 +164,93 @@ local function drawText(text, x, y, font, color)
   love.graphics.print(text, x, y)
 end
 
+local function drawCenteredText(text, x, y, w, font, color)
+  love.graphics.setFont(font)
+  setColor(color)
+  love.graphics.printf(text, x, y, w, "center")
+end
+
 local function inRect(mx, my, r)
   return r and mx >= r.x and mx <= r.x + r.w and my >= r.y and my <= r.y + r.h
 end
 
---- Parse a hex color string to Love2D RGBA (0-1 range).
+local function tableSize(t)
+  if type(t) ~= "table" then return 0 end
+  local n = 0
+  for _ in pairs(t) do n = n + 1 end
+  return n
+end
+
+local function copyMap(m)
+  if type(m) ~= "table" then return nil end
+  local out = {}
+  for k, v in pairs(m) do out[k] = v end
+  return out
+end
+
+local function copyTheme(theme)
+  if type(theme) ~= "table" then return nil end
+  local out = {}
+  for k, v in pairs(theme) do out[k] = v end
+  if type(theme.colors) == "table" then
+    out.colors = copyMap(theme.colors)
+  end
+  return out
+end
+
 local function hexToRGBA(hex)
   if not hex or type(hex) ~= "string" then return nil end
   local r, g, b, a = Color.parse(hex)
   if r then return { r, g, b, a } end
+  return nil
+end
+
+local function normalizeColorInput(raw)
+  if type(raw) ~= "string" then return nil end
+  local text = raw:gsub("^%s+", ""):gsub("%s+$", "")
+  if text == "" then return nil end
+
+  if text:match("^%x+$") and (#text == 3 or #text == 4 or #text == 6 or #text == 8) then
+    text = "#" .. text
+  end
+
+  local r, g, b, a = Color.parse(text)
+  if not r then return nil end
+  return Color.toHex(r, g, b, a)
+end
+
+local function withAlpha(rgba, alpha)
+  return { rgba[1], rgba[2], rgba[3], alpha }
+end
+
+local function luminance(c)
+  return 0.2126 * c[1] + 0.7152 * c[2] + 0.0722 * c[3]
+end
+
+local function contrastRatio(a, b)
+  local la = luminance(a) + 0.05
+  local lb = luminance(b) + 0.05
+  if la < lb then la, lb = lb, la end
+  return la / lb
+end
+
+local function pickTextColor(bg, optionA, optionB)
+  local cA = contrastRatio(bg, optionA)
+  local cB = contrastRatio(bg, optionB)
+  if cA >= cB then return optionA end
+  return optionB
+end
+
+local function colorFromTokens(colors, key, fallbackA, fallbackB, fallbackC)
+  if type(colors) ~= "table" then return nil end
+
+  local order = { key, fallbackA, fallbackB, fallbackC }
+  for _, token in ipairs(order) do
+    if token and colors[token] then
+      local rgba = hexToRGBA(colors[token])
+      if rgba then return rgba end
+    end
+  end
   return nil
 end
 
@@ -167,8 +262,8 @@ local function getPanelRect()
   local sw, sh = love.graphics.getDimensions()
   local pw = math.max(MIN_PANEL_W, math.floor(sw * PANEL_W_RATIO))
   local ph = math.max(MIN_PANEL_H, math.floor(sh * PANEL_H_RATIO))
-  pw = math.min(pw, sw - 40)
-  ph = math.min(ph, sh - 40)
+  pw = math.min(pw, sw - 32)
+  ph = math.min(ph, sh - 32)
   return {
     x = math.floor((sw - pw) / 2),
     y = math.floor((sh - ph) / 2),
@@ -177,8 +272,66 @@ local function getPanelRect()
   }
 end
 
+local function getLayout(p)
+  local bodyY = p.y + TITLE_BAR_H
+  local bodyH = p.h - TITLE_BAR_H - STATUS_BAR_H
+
+  local usableW = p.w - BODY_PAD * 3
+  local listW = math.floor(usableW * LIST_RATIO)
+  local minListW = 270
+  local maxListW = math.max(minListW, usableW - 300)
+  listW = math.max(minListW, math.min(listW, maxListW))
+  local detailW = usableW - listW
+
+  local list = {
+    x = p.x + BODY_PAD,
+    y = bodyY + BODY_PAD,
+    w = listW,
+    h = bodyH - BODY_PAD * 2,
+  }
+
+  local listContent = {
+    x = list.x + SECTION_PAD,
+    y = list.y + LIST_HEADER_H + 1,
+    w = list.w - SECTION_PAD * 2,
+    h = list.h - LIST_HEADER_H - SECTION_PAD,
+  }
+
+  local detail = {
+    x = list.x + list.w + BODY_PAD,
+    y = list.y,
+    w = detailW,
+    h = list.h,
+  }
+
+  local showcaseH = math.floor((detail.h - SECTION_PAD) * SHOWCASE_RATIO)
+  showcaseH = math.max(170, math.min(showcaseH, detail.h - 170))
+
+  local showcase = {
+    x = detail.x,
+    y = detail.y,
+    w = detail.w,
+    h = showcaseH,
+  }
+
+  local editor = {
+    x = detail.x,
+    y = detail.y + showcaseH + SECTION_PAD,
+    w = detail.w,
+    h = detail.h - showcaseH - SECTION_PAD,
+  }
+
+  return {
+    list = list,
+    listContent = listContent,
+    detail = detail,
+    showcase = showcase,
+    editor = editor,
+  }
+end
+
 -- ============================================================================
--- Theme name sorting (group by family, then alphabetical within family)
+-- Theme helpers
 -- ============================================================================
 
 local function buildThemeNames(registry)
@@ -187,13 +340,173 @@ local function buildThemeNames(registry)
     names[#names + 1] = name
   end
   table.sort(names, function(a, b)
-    -- Extract family prefix (everything before the last dash)
     local fa = a:match("^(.+)-") or a
     local fb = b:match("^(.+)-") or b
     if fa ~= fb then return fa < fb end
     return a < b
   end)
   return names
+end
+
+local function getThemeByName(name)
+  if not state.themes or not name then return nil end
+  return state.themes[name]
+end
+
+local function getResolvedThemeInternal(name)
+  local base = getThemeByName(name)
+  if not base then return nil end
+
+  local resolved = copyTheme(base)
+  if not resolved then return nil end
+
+  local overrides = state.customColors[name]
+  if type(overrides) == "table" and type(resolved.colors) == "table" then
+    for key, value in pairs(overrides) do
+      resolved.colors[key] = value
+    end
+  end
+  return resolved
+end
+
+local function getUiTheme()
+  local name = state.currentName or state.themeNames[state.selectedIdx] or state.themeNames[1]
+  if not name then return nil end
+  return getResolvedThemeInternal(name)
+end
+
+local function buildUiColors(colors)
+  local bg          = colorFromTokens(colors, "bg", "bgAlt", "surface")
+  local bgAlt       = colorFromTokens(colors, "bgAlt", "bg", "surface")
+  local bgElevated  = colorFromTokens(colors, "bgElevated", "surface", "bgAlt")
+  local surface     = colorFromTokens(colors, "surface", "bgElevated", "bgAlt")
+  local surfaceHover = colorFromTokens(colors, "surfaceHover", "surface", "bgElevated")
+  local text        = colorFromTokens(colors, "text", "textSecondary", "primary")
+  local textSecondary = colorFromTokens(colors, "textSecondary", "text", "textDim")
+  local textDim     = colorFromTokens(colors, "textDim", "textSecondary", "text")
+  local border      = colorFromTokens(colors, "border", "textDim", "surface")
+  local borderFocus = colorFromTokens(colors, "borderFocus", "primary", "accent")
+  local primary     = colorFromTokens(colors, "primary", "accent", "text")
+  local accent      = colorFromTokens(colors, "accent", "primary", "text")
+  local error       = colorFromTokens(colors, "error", "accent", "primary")
+  local warning     = colorFromTokens(colors, "warning", "accent", "primary")
+  local success     = colorFromTokens(colors, "success", "primary", "accent")
+
+  if not (bg and bgAlt and bgElevated and surface and text and border and primary) then
+    return nil
+  end
+
+  return {
+    backdrop      = withAlpha(bg, 0.74),
+    panelBg       = withAlpha(bgAlt, 0.98),
+    titleBg       = withAlpha(bgElevated, 0.98),
+    titleText     = text,
+    border        = withAlpha(border, 0.90),
+    sectionBg     = withAlpha(surface, 0.93),
+
+    cardBg        = withAlpha(surface, 0.95),
+    cardHover     = withAlpha(surfaceHover or bgElevated, 0.97),
+    cardActive    = withAlpha(bgElevated, 0.99),
+    cardBorder    = withAlpha(border, 0.55),
+    activeBorder  = withAlpha(borderFocus or primary, 0.95),
+    themeName     = textSecondary or text,
+    themeNameActive = primary,
+
+    closeNormal   = textDim or textSecondary or text,
+    closeHover    = error or accent or primary,
+
+    statusBg      = withAlpha(bgAlt, 1),
+    statusText    = textSecondary or text,
+    statusError   = error or text,
+    statusSuccess = success or primary,
+    statusWarn    = warning or accent or text,
+
+    scrollbar     = withAlpha(border, 0.55),
+    scrollThumb   = withAlpha(primary, 0.85),
+    swatchBorder  = withAlpha(border, 0.65),
+
+    inputBg       = withAlpha(bg, 0.70),
+    inputBorder   = withAlpha(border, 0.90),
+    inputFocus    = withAlpha(borderFocus or primary, 1),
+    inputText     = text,
+    placeholder   = textDim or textSecondary or text,
+
+    buttonApply   = withAlpha(primary, 0.95),
+    buttonReset   = withAlpha(warning or accent or primary, 0.95),
+    buttonDanger  = withAlpha(error or accent or primary, 0.95),
+
+    mutedText     = textDim or textSecondary or text,
+  }
+end
+
+local function currentEditableThemeName()
+  return state.currentName or state.themeNames[state.selectedIdx]
+end
+
+syncEditorTextFromTheme = function(themeName)
+  local key = EDIT_KEYS[state.editKeyIdx]
+  if not key then
+    state.editorText = ""
+    return
+  end
+
+  local resolved = themeName and getResolvedThemeInternal(themeName) or nil
+  local color = resolved and resolved.colors and resolved.colors[key] or ""
+  state.editorText = type(color) == "string" and color or ""
+end
+
+local function setEditKey(idx)
+  local total = #EDIT_KEYS
+  if total == 0 then return end
+  local normalized = ((idx - 1) % total) + 1
+  state.editKeyIdx = normalized
+  syncEditorTextFromTheme(currentEditableThemeName())
+end
+
+local function setStatus(msg, kind, ttl)
+  state.statusMessage = msg
+  state.statusKind = kind or "info"
+  state.statusExpiresAt = love.timer.getTime() + (ttl or 2.5)
+end
+
+local function themeOverridesCopy(name)
+  return copyMap(state.customColors[name])
+end
+
+local function setThemeOverride(name, key, value)
+  local normalized = normalizeColorInput(value)
+  if not normalized then return false, "Invalid color. Use #rgb, #rrggbb, or #rrggbbaa." end
+
+  if not name or not getThemeByName(name) then
+    return false, "No active theme selected."
+  end
+
+  local overrides = state.customColors[name]
+  if type(overrides) ~= "table" then
+    overrides = {}
+    state.customColors[name] = overrides
+  end
+  overrides[key] = normalized
+  state.editorText = normalized
+  return true, normalized
+end
+
+local function clearThemeOverride(name, key)
+  local overrides = state.customColors[name]
+  if type(overrides) ~= "table" then return false end
+  if overrides[key] == nil then return false end
+
+  overrides[key] = nil
+  if next(overrides) == nil then
+    state.customColors[name] = nil
+  end
+  return true
+end
+
+local function clearThemeOverrides(name)
+  if state.customColors[name] == nil then return false end
+  state.customColors[name] = nil
+  return true
 end
 
 -- ============================================================================
@@ -209,7 +522,7 @@ end
 function ThemeMenu.setThemes(registry)
   state.themes = registry
   state.themeNames = buildThemeNames(registry)
-  -- Set selectedIdx to current theme if possible
+
   if state.currentName then
     for i, name in ipairs(state.themeNames) do
       if name == state.currentName then
@@ -217,18 +530,57 @@ function ThemeMenu.setThemes(registry)
         break
       end
     end
+    state.currentTheme = getResolvedThemeInternal(state.currentName) or state.currentTheme
+  elseif state.themeNames[1] then
+    state.selectedIdx = 1
   end
+
+  syncEditorTextFromTheme(currentEditableThemeName())
 end
 
 function ThemeMenu.setCurrentTheme(name, theme)
   state.currentName = name
-  state.currentTheme = theme
-  -- Update selectedIdx
+
+  local resolved = getResolvedThemeInternal(name)
+  state.currentTheme = resolved or theme
+
   for i, n in ipairs(state.themeNames) do
     if n == name then
       state.selectedIdx = i
       break
     end
+  end
+
+  syncEditorTextFromTheme(currentEditableThemeName())
+end
+
+function ThemeMenu.getResolvedTheme(name)
+  local resolved = getResolvedThemeInternal(name or state.currentName)
+  if not resolved then return nil end
+  return copyTheme(resolved)
+end
+
+function ThemeMenu.getThemeOverrides(name)
+  return themeOverridesCopy(name or state.currentName)
+end
+
+function ThemeMenu.setThemeOverrides(name, overrides)
+  if not name or type(overrides) ~= "table" then return end
+  local nextOverrides = {}
+  for _, key in ipairs(EDIT_KEYS) do
+    local normalized = normalizeColorInput(overrides[key])
+    if normalized then nextOverrides[key] = normalized end
+  end
+
+  if next(nextOverrides) then
+    state.customColors[name] = nextOverrides
+  else
+    state.customColors[name] = nil
+  end
+
+  if state.currentName == name then
+    state.currentTheme = getResolvedThemeInternal(name) or state.currentTheme
+    syncEditorTextFromTheme(name)
   end
 end
 
@@ -238,10 +590,18 @@ end
 
 local function open()
   state.open = true
-  state.scrollY = 0
   state.hoverIdx = nil
+  state.scrollY = 0
   state.cardRects = {}
-  -- Ensure selectedIdx tracks current theme
+  state.editorTokenRects = {}
+  state.editingInput = false
+  state.hoverEditorToken = nil
+
+  if not state.currentName and state.themeNames[1] then
+    state.currentName = state.themeNames[1]
+    state.currentTheme = getResolvedThemeInternal(state.currentName)
+  end
+
   if state.currentName then
     for i, n in ipairs(state.themeNames) do
       if n == state.currentName then
@@ -250,159 +610,176 @@ local function open()
       end
     end
   end
+
+  syncEditorTextFromTheme(currentEditableThemeName())
 end
 
 local function close()
   state.open = false
+  state.editingInput = false
 end
 
-local function switchTheme(idx)
+applyThemeByName = function(name, force)
+  if not name or not state.themes or not state.themes[name] then return end
+  if not force and name == state.currentName then return end
+
+  local resolved = getResolvedThemeInternal(name)
+  if not resolved then return end
+
+  state.currentName = name
+  state.currentTheme = resolved
+  syncEditorTextFromTheme(name)
+
+  if state.onSwitch then
+    state.onSwitch(name, resolved, themeOverridesCopy(name) or {})
+  end
+end
+
+local function switchTheme(idx, force)
   local name = state.themeNames[idx]
   if not name then return end
-  if name == state.currentName then return end
   state.selectedIdx = idx
-  if state.onSwitch then
-    state.onSwitch(name)
+  applyThemeByName(name, force == true)
+end
+
+local function applyEditorValue()
+  local themeName = currentEditableThemeName()
+  local key = EDIT_KEYS[state.editKeyIdx]
+  if not themeName or not key then return end
+
+  local ok, result = setThemeOverride(themeName, key, state.editorText)
+  if not ok then
+    setStatus(result, "error", 3.2)
+    return
+  end
+
+  applyThemeByName(themeName, true)
+  setStatus(string.format("%s set to %s", key, result), "success", 2.0)
+end
+
+local function resetEditorToken()
+  local themeName = currentEditableThemeName()
+  local key = EDIT_KEYS[state.editKeyIdx]
+  if not themeName or not key then return end
+
+  local removed = clearThemeOverride(themeName, key)
+  syncEditorTextFromTheme(themeName)
+  applyThemeByName(themeName, true)
+
+  if removed then
+    setStatus(string.format("%s restored to base value", key), "info", 2.0)
+  else
+    setStatus(string.format("%s is already at base value", key), "warn", 2.0)
+  end
+end
+
+local function resetEditorTheme()
+  local themeName = currentEditableThemeName()
+  if not themeName then return end
+
+  local removed = clearThemeOverrides(themeName)
+  syncEditorTextFromTheme(themeName)
+  applyThemeByName(themeName, true)
+
+  if removed then
+    setStatus("All custom colors cleared for current theme", "info", 2.2)
+  else
+    setStatus("No custom colors to clear", "warn", 2.0)
   end
 end
 
 -- ============================================================================
--- Canvas capture (live preview)
+-- Compatibility hooks (no-op now that live canvas preview was removed)
 -- ============================================================================
 
-function ThemeMenu.beginCapture()
-  local sw, sh = love.graphics.getDimensions()
-  -- Create or resize canvas
-  if not state.captureCanvas
-    or state.captureCanvas:getWidth() ~= sw
-    or state.captureCanvas:getHeight() ~= sh then
-    state.captureCanvas = love.graphics.newCanvas(sw, sh)
-  end
-  love.graphics.setCanvas(state.captureCanvas)
-  love.graphics.clear(0, 0, 0, 1)
-end
-
-function ThemeMenu.endCapture()
-  love.graphics.setCanvas()
-  -- Draw the captured frame to screen at full size (so app looks normal)
-  love.graphics.setColor(1, 1, 1, 1)
-  love.graphics.draw(state.captureCanvas, 0, 0)
-end
+function ThemeMenu.beginCapture() end
+function ThemeMenu.endCapture() end
 
 -- ============================================================================
--- Drawing
+-- Draw helpers
 -- ============================================================================
 
-function ThemeMenu.draw()
-  if not state.open then return end
-  if not state.themes or #state.themeNames == 0 then return end
+local function drawThemeList(layout, ui, fontName, fontStatus)
+  local list = layout.list
+  local content = layout.listContent
 
-  local sw, sh = love.graphics.getDimensions()
-  local p = getPanelRect()
-  state.panelRect = p
+  setColor(ui.sectionBg)
+  drawRoundedRect("fill", list.x, list.y, list.w, list.h, 4)
+  setColor(ui.border)
+  drawRoundedRect("line", list.x, list.y, list.w, list.h, 4)
 
-  local fontTitle  = getFont(14)
-  local fontName   = getFont(11)
-  local fontStatus = getFont(10)
+  drawText("Themes", list.x + 8, list.y + 4, fontName, ui.titleText)
 
-  -- ── Backdrop ──
-  setColor(C.backdrop)
-  love.graphics.rectangle("fill", 0, 0, sw, sh)
-
-  -- ── Panel background ──
-  setColor(C.panelBg)
-  drawRoundedRect("fill", p.x, p.y, p.w, p.h, CORNER_R)
-  setColor(C.border)
-  love.graphics.setLineWidth(1)
-  drawRoundedRect("line", p.x, p.y, p.w, p.h, CORNER_R)
-
-  -- ── Title bar ──
-  setColor(C.titleBg)
-  drawRoundedRect("fill", p.x, p.y, p.w, TITLE_BAR_H, CORNER_R)
-  love.graphics.rectangle("fill", p.x, p.y + TITLE_BAR_H - CORNER_R, p.w, CORNER_R)
-
-  drawText("Theme Browser", p.x + 12, p.y + 8, fontTitle, C.titleText)
-
-  -- Close button
-  local closeX = p.x + p.w - 28
-  local closeY = p.y + 6
-  state.closeRect = { x = closeX, y = closeY, w = 20, h = 20 }
-  local closeColor = state.hoverClose and C.closeHover or C.closeNormal
-  love.graphics.setFont(getFont(14))
-  setColor(closeColor)
-  love.graphics.print("x", closeX + 5, closeY + 2)
-
-  -- Title border
-  setColor(C.border)
-  love.graphics.line(p.x, p.y + TITLE_BAR_H, p.x + p.w, p.y + TITLE_BAR_H)
-
-  -- ── Layout zones ──
-  local previewH = math.floor(p.h * PREVIEW_RATIO)
-  local listY = p.y + TITLE_BAR_H
-  local listH = p.h - TITLE_BAR_H - previewH - STATUS_BAR_H - DIVIDER_H
-  local previewY = listY + listH + DIVIDER_H
-  local statusY = p.y + p.h - STATUS_BAR_H
-
-  -- ── Theme card list (scrollable) ──
-  love.graphics.setScissor(p.x, listY, p.w, listH)
+  love.graphics.setScissor(content.x, content.y, content.w, content.h)
 
   state.cardRects = {}
-  local curY = listY - state.scrollY + CARD_PAD
+  local curY = content.y - state.scrollY + CARD_PAD
   local totalContentH = 0
 
   for i, name in ipairs(state.themeNames) do
-    local theme = state.themes[name]
-    local colors = theme and theme.colors
-    local cardX = p.x + CARD_PAD
-    local cardW = p.w - CARD_PAD * 2
+    local resolvedTheme = getResolvedThemeInternal(name)
+    local colors = resolvedTheme and resolvedTheme.colors
+    local cardX = content.x
+    local cardW = content.w
+
     local isActive = (name == state.currentName)
     local isHover = (state.hoverIdx == i)
     local isSelected = (state.selectedIdx == i)
+    local overridesCount = tableSize(state.customColors[name])
 
     state.cardRects[i] = { x = cardX, y = curY, w = cardW, h = CARD_H }
 
-    -- Card background
-    local bg = C.cardBg
-    if isActive then bg = C.cardActive
-    elseif isHover then bg = C.cardHover end
-    setColor(bg)
-    drawRoundedRect("fill", cardX, curY, cardW, CARD_H, 4)
+    local drawTop = curY + CARD_H >= content.y
+    local drawBottom = curY <= content.y + content.h
+    if drawTop and drawBottom then
+      local bg = ui.cardBg
+      if isActive then bg = ui.cardActive
+      elseif isHover then bg = ui.cardHover end
+      setColor(bg)
+      drawRoundedRect("fill", cardX, curY, cardW, CARD_H, 4)
 
-    -- Card border
-    if isActive then
-      setColor(C.activeBorder)
-      love.graphics.setLineWidth(2)
-    elseif isSelected then
-      setColor(C.activeBorder)
+      if isActive then
+        setColor(ui.activeBorder)
+        love.graphics.setLineWidth(2)
+      elseif isSelected then
+        setColor(ui.activeBorder)
+        love.graphics.setLineWidth(1)
+      else
+        setColor(ui.cardBorder)
+        love.graphics.setLineWidth(1)
+      end
+      drawRoundedRect("line", cardX, curY, cardW, CARD_H, 4)
       love.graphics.setLineWidth(1)
-    else
-      setColor(C.cardBorder)
-      love.graphics.setLineWidth(1)
-    end
-    drawRoundedRect("line", cardX, curY, cardW, CARD_H, 4)
-    love.graphics.setLineWidth(1)
 
-    -- Theme name
-    local nameColor = isActive and C.themeNameActive or C.themeName
-    local displayName = name
-    if isActive then displayName = name .. "  (active)" end
-    drawText(displayName, cardX + CARD_INNER_PAD, curY + 4, fontName, nameColor)
+      local nameColor = isActive and ui.themeNameActive or ui.themeName
+      local title = name
+      if isActive then title = title .. "  (active)" end
+      drawText(title, cardX + CARD_INNER_PAD, curY + 4, fontName, nameColor)
 
-    -- Color swatches
-    local swatchY = curY + 22
-    local swatchX = cardX + CARD_INNER_PAD
-    if colors then
-      for _, key in ipairs(SWATCH_KEYS) do
-        local hex = colors[key]
-        local rgba = hexToRGBA(hex)
-        if rgba then
-          setColor(rgba)
-          drawRoundedRect("fill", swatchX, swatchY, SWATCH_SIZE, SWATCH_SIZE, SWATCH_RADIUS)
-          -- Subtle border for visibility
-          setColor(C.swatchBorder)
-          drawRoundedRect("line", swatchX, swatchY, SWATCH_SIZE, SWATCH_SIZE, SWATCH_RADIUS)
+      if overridesCount > 0 then
+        drawText(
+          "+" .. tostring(overridesCount) .. " custom",
+          cardX + cardW - 86,
+          curY + 4,
+          fontStatus,
+          ui.themeNameActive
+        )
+      end
+
+      local swatchY = curY + 24
+      local swatchX = cardX + CARD_INNER_PAD
+      if colors then
+        for _, key in ipairs(SWATCH_KEYS) do
+          if swatchX + SWATCH_SIZE > cardX + cardW - 4 then break end
+          local rgba = hexToRGBA(colors[key])
+          if rgba then
+            setColor(rgba)
+            drawRoundedRect("fill", swatchX, swatchY, SWATCH_SIZE, SWATCH_SIZE, SWATCH_RADIUS)
+            setColor(ui.swatchBorder)
+            drawRoundedRect("line", swatchX, swatchY, SWATCH_SIZE, SWATCH_SIZE, SWATCH_RADIUS)
+          end
+          swatchX = swatchX + SWATCH_SIZE + SWATCH_GAP
         end
-        swatchX = swatchX + SWATCH_SIZE + SWATCH_GAP
       end
     end
 
@@ -410,77 +787,354 @@ function ThemeMenu.draw()
     totalContentH = totalContentH + CARD_H + CARD_PAD
   end
 
-  -- Compute max scroll
-  state.maxScrollY = math.max(0, totalContentH + CARD_PAD - listH)
+  state.maxScrollY = math.max(0, totalContentH + CARD_PAD - content.h)
+  state.scrollY = math.max(0, math.min(state.scrollY, state.maxScrollY))
 
-  -- Scrollbar
   if state.maxScrollY > 0 then
     local scrollbarW = 4
-    local scrollbarX = p.x + p.w - scrollbarW - 2
-    local thumbRatio = listH / (totalContentH + CARD_PAD)
-    local thumbH = math.max(20, math.floor(listH * thumbRatio))
+    local scrollbarX = list.x + list.w - scrollbarW - 3
+    local thumbRatio = content.h / (totalContentH + CARD_PAD)
+    local thumbH = math.max(20, math.floor(content.h * thumbRatio))
     local scrollRatio = state.scrollY / state.maxScrollY
-    local thumbY = listY + math.floor((listH - thumbH) * scrollRatio)
+    local thumbY = content.y + math.floor((content.h - thumbH) * scrollRatio)
 
-    setColor(C.scrollbar)
-    love.graphics.rectangle("fill", scrollbarX, listY, scrollbarW, listH, 2, 2)
-    setColor(C.scrollthumb)
+    setColor(ui.scrollbar)
+    love.graphics.rectangle("fill", scrollbarX, content.y, scrollbarW, content.h, 2, 2)
+    setColor(ui.scrollThumb)
     love.graphics.rectangle("fill", scrollbarX, thumbY, scrollbarW, thumbH, 2, 2)
   end
 
   love.graphics.setScissor()
+end
 
-  -- ── Divider ──
-  setColor(C.border)
-  love.graphics.line(p.x, previewY - 1, p.x + p.w, previewY - 1)
+local function drawPrimitiveShowcase(layout, ui, fontName, fontStatus)
+  local pane = layout.showcase
+  local theme = state.currentTheme or getResolvedThemeInternal(state.currentName)
+  local colors = theme and theme.colors or nil
+  if not colors then return end
 
-  -- ── Live preview ──
-  local previewPad = 10
-  local previewLabelH = 16
-  drawText("Live Preview", p.x + previewPad, previewY + 4, fontStatus, C.previewLabel)
+  setColor(ui.sectionBg)
+  drawRoundedRect("fill", pane.x, pane.y, pane.w, pane.h, 4)
+  setColor(ui.border)
+  drawRoundedRect("line", pane.x, pane.y, pane.w, pane.h, 4)
 
-  if state.captureCanvas then
-    local canvasW = state.captureCanvas:getWidth()
-    local canvasH = state.captureCanvas:getHeight()
+  drawText("Primitive Showcase", pane.x + 8, pane.y + 4, fontName, ui.titleText)
 
-    -- Available space for the preview image
-    local availW = p.w - previewPad * 2
-    local availH = previewH - previewLabelH - previewPad * 2
+  local surface = colorFromTokens(colors, "surface", "bgElevated", "bgAlt")
+  local bg = colorFromTokens(colors, "bg", "bgAlt", "surface")
+  local bgAlt = colorFromTokens(colors, "bgAlt", "bg", "surface")
+  local bgElevated = colorFromTokens(colors, "bgElevated", "surface", "bgAlt")
+  local border = colorFromTokens(colors, "border", "textDim", "surface")
+  local borderFocus = colorFromTokens(colors, "borderFocus", "primary", "accent")
+  local text = colorFromTokens(colors, "text", "textSecondary", "primary")
+  local textSecondary = colorFromTokens(colors, "textSecondary", "text", "textDim")
+  local textDim = colorFromTokens(colors, "textDim", "textSecondary", "text")
+  local primary = colorFromTokens(colors, "primary", "accent", "text")
+  local accent = colorFromTokens(colors, "accent", "primary", "text")
+  local success = colorFromTokens(colors, "success", "primary", "accent")
+  local warning = colorFromTokens(colors, "warning", "accent", "primary")
+  local error = colorFromTokens(colors, "error", "accent", "primary")
 
-    -- Scale to fit
-    local scale = math.min(availW / canvasW, availH / canvasH)
-    local drawW = math.floor(canvasW * scale)
-    local drawH = math.floor(canvasH * scale)
-    local drawX = p.x + previewPad + math.floor((availW - drawW) / 2)
-    local drawY = previewY + previewLabelH + 4
-
-    -- Preview border
-    setColor(C.previewBorder)
-    love.graphics.rectangle("line", drawX - 1, drawY - 1, drawW + 2, drawH + 2, 2, 2)
-
-    -- Draw scaled preview
-    love.graphics.setColor(1, 1, 1, 1)
-    love.graphics.draw(state.captureCanvas, drawX, drawY, 0, scale, scale)
+  if not (surface and bg and border and text and primary and accent and success and warning and error) then
+    return
   end
 
-  -- ── Status bar ──
-  setColor(C.statusBg)
-  love.graphics.rectangle("fill", p.x, statusY, p.w, STATUS_BAR_H)
-  -- Bottom rounded corners
+  local contentX = pane.x + 10
+  local contentY = pane.y + 24
+  local contentW = pane.w - 20
+  local contentH = pane.h - 32
+
+  setColor(withAlpha(bg, 0.96))
+  drawRoundedRect("fill", contentX, contentY, contentW, contentH, 4)
+  setColor(withAlpha(border, 0.95))
+  drawRoundedRect("line", contentX, contentY, contentW, contentH, 4)
+
+  drawText("Text / Box / Pressable / Input / Status", contentX + 8, contentY + 6, fontStatus, textSecondary or text)
+
+  local rowY = contentY + 24
+  local rowW = contentW - 16
+  local rowX = contentX + 8
+
+  -- Box primitive
+  setColor(withAlpha(surface, 0.95))
+  drawRoundedRect("fill", rowX, rowY, rowW, 32, 4)
+  setColor(withAlpha(border, 0.85))
+  drawRoundedRect("line", rowX, rowY, rowW, 32, 4)
+  drawText("Box", rowX + 8, rowY + 9, fontName, text)
+
+  -- Pressable + Badge row
+  local actionY = rowY + 40
+  local buttonW = math.floor(rowW * 0.58)
+  local onPrimary = pickTextColor(primary, text, bg)
+  setColor(primary)
+  drawRoundedRect("fill", rowX, actionY, buttonW, 25, 4)
+  drawCenteredText("Pressable", rowX, actionY + 6, buttonW, fontStatus, onPrimary)
+
+  local badgeX = rowX + buttonW + 8
+  local badgeW = rowW - buttonW - 8
+  local onAccent = pickTextColor(accent, text, bg)
+  setColor(accent)
+  drawRoundedRect("fill", badgeX, actionY, badgeW, 25, 13)
+  drawCenteredText("Badge", badgeX, actionY + 6, badgeW, fontStatus, onAccent)
+
+  -- TextInput primitive
+  local inputY = actionY + 33
+  setColor(withAlpha(bgAlt or bg, 0.94))
+  drawRoundedRect("fill", rowX, inputY, rowW, 24, 4)
+  setColor(withAlpha(borderFocus or border, 0.95))
+  drawRoundedRect("line", rowX, inputY, rowW, 24, 4)
+  drawText("TextInput placeholder", rowX + 8, inputY + 6, fontStatus, textDim or textSecondary or text)
+
+  -- Divider + Progress primitive
+  local dividerY = inputY + 30
+  setColor(withAlpha(border, 0.8))
+  love.graphics.line(rowX, dividerY, rowX + rowW, dividerY)
+
+  local progressY = dividerY + 8
+  setColor(withAlpha(bgElevated or surface, 0.95))
+  drawRoundedRect("fill", rowX, progressY, rowW, 10, 5)
+  setColor(success)
+  drawRoundedRect("fill", rowX, progressY, math.floor(rowW * 0.63), 10, 5)
+
+  -- Status chips (Error / Warn / Success)
+  local chipY = progressY + 17
+  local chipGap = 6
+  local chipW = math.floor((rowW - chipGap * 2) / 3)
+
+  local onError = pickTextColor(error, text, bg)
+  local onWarn = pickTextColor(warning, text, bg)
+  local onSuccess = pickTextColor(success, text, bg)
+
+  setColor(error)
+  drawRoundedRect("fill", rowX, chipY, chipW, 18, 9)
+  drawCenteredText("Error", rowX, chipY + 4, chipW, fontStatus, onError)
+
+  setColor(warning)
+  drawRoundedRect("fill", rowX + chipW + chipGap, chipY, chipW, 18, 9)
+  drawCenteredText("Warning", rowX + chipW + chipGap, chipY + 4, chipW, fontStatus, onWarn)
+
+  setColor(success)
+  drawRoundedRect("fill", rowX + (chipW + chipGap) * 2, chipY, chipW, 18, 9)
+  drawCenteredText("Success", rowX + (chipW + chipGap) * 2, chipY + 4, chipW, fontStatus, onSuccess)
+end
+
+local function drawTokenEditor(layout, ui, fontName, fontStatus)
+  local pane = layout.editor
+
+  setColor(ui.sectionBg)
+  drawRoundedRect("fill", pane.x, pane.y, pane.w, pane.h, 4)
+  setColor(ui.border)
+  drawRoundedRect("line", pane.x, pane.y, pane.w, pane.h, 4)
+
+  local themeName = currentEditableThemeName() or "none"
+  drawText("Theme Color Tuning", pane.x + 8, pane.y + 4, fontName, ui.titleText)
+  drawText(themeName, pane.x + pane.w - 170, pane.y + 4, fontStatus, ui.mutedText)
+
+  local innerX = pane.x + 8
+  local innerY = pane.y + 22
+  local innerW = pane.w - 16
+  local innerH = pane.h - 30
+
+  local cols = 3
+  local rows = math.ceil(#EDIT_KEYS / cols)
+  local rowH = 20
+  local colGap = 6
+  local colW = math.floor((innerW - colGap * (cols - 1)) / cols)
+
+  state.editorTokenRects = {}
+
+  for idx, key in ipairs(EDIT_KEYS) do
+    local col = (idx - 1) % cols
+    local row = math.floor((idx - 1) / cols)
+    local x = innerX + col * (colW + colGap)
+    local y = innerY + row * rowH
+    local rect = { x = x, y = y, w = colW, h = rowH - 2 }
+    state.editorTokenRects[idx] = rect
+
+    local isActive = (idx == state.editKeyIdx)
+    local isHover = (idx == state.hoverEditorToken)
+
+    local bg = ui.inputBg
+    if isActive then bg = ui.cardActive
+    elseif isHover then bg = ui.cardHover end
+
+    setColor(bg)
+    drawRoundedRect("fill", rect.x, rect.y, rect.w, rect.h, 3)
+
+    local borderColor = isActive and ui.inputFocus or ui.inputBorder
+    setColor(borderColor)
+    drawRoundedRect("line", rect.x, rect.y, rect.w, rect.h, 3)
+
+    local resolvedTheme = getResolvedThemeInternal(themeName)
+    local swatch = resolvedTheme and resolvedTheme.colors and hexToRGBA(resolvedTheme.colors[key]) or nil
+    if swatch then
+      setColor(swatch)
+      drawRoundedRect("fill", rect.x + 4, rect.y + 4, 10, 10, 2)
+      setColor(ui.swatchBorder)
+      drawRoundedRect("line", rect.x + 4, rect.y + 4, 10, 10, 2)
+    end
+
+    drawText(key, rect.x + 18, rect.y + 4, fontStatus, isActive and ui.themeNameActive or ui.themeName)
+  end
+
+  local tokenGridBottomY = innerY + rows * rowH
+  local inputY = tokenGridBottomY + 8
+  local inputW = innerW
+  state.inputRect = { x = innerX, y = inputY, w = inputW, h = INPUT_H }
+
+  setColor(ui.inputBg)
+  drawRoundedRect("fill", innerX, inputY, inputW, INPUT_H, 4)
+  setColor(state.editingInput and ui.inputFocus or ui.inputBorder)
+  drawRoundedRect("line", innerX, inputY, inputW, INPUT_H, 4)
+
+  local displayText = state.editorText ~= "" and state.editorText or "#rrggbb"
+  local displayColor = (state.editorText ~= "") and ui.inputText or ui.placeholder
+  drawText(displayText, innerX + 6, inputY + 6, fontName, displayColor)
+
+  if state.editingInput and math.floor(love.timer.getTime() * 2) % 2 == 0 then
+    local tw = getFont(11):getWidth(displayText)
+    local cursorX = math.min(innerX + inputW - 6, innerX + 6 + tw + 1)
+    setColor(ui.inputFocus)
+    love.graphics.line(cursorX, inputY + 4, cursorX, inputY + INPUT_H - 4)
+  end
+
+  local buttonY = inputY + INPUT_H + 8
+  local buttonGap = 6
+  local buttonW = math.floor((innerW - buttonGap * 2) / 3)
+
+  state.applyRect = { x = innerX, y = buttonY, w = buttonW, h = BUTTON_H }
+  state.resetTokenRect = { x = innerX + buttonW + buttonGap, y = buttonY, w = buttonW, h = BUTTON_H }
+  state.resetThemeRect = { x = innerX + (buttonW + buttonGap) * 2, y = buttonY, w = buttonW, h = BUTTON_H }
+
+  local function drawButton(rect, bg, text, textColor, hovered)
+    setColor(bg)
+    drawRoundedRect("fill", rect.x, rect.y, rect.w, rect.h, 4)
+    setColor(hovered and ui.inputFocus or ui.border)
+    drawRoundedRect("line", rect.x, rect.y, rect.w, rect.h, 4)
+    drawCenteredText(text, rect.x, rect.y + 5, rect.w, fontStatus, textColor)
+  end
+
+  local onApply = pickTextColor(ui.buttonApply, ui.titleText, ui.inputBg)
+  local onReset = pickTextColor(ui.buttonReset, ui.titleText, ui.inputBg)
+  local onDanger = pickTextColor(ui.buttonDanger, ui.titleText, ui.inputBg)
+
+  drawButton(state.applyRect, ui.buttonApply, "Apply", onApply, state.hoverApply)
+  drawButton(state.resetTokenRect, ui.buttonReset, "Reset Token", onReset, state.hoverResetToken)
+  drawButton(state.resetThemeRect, ui.buttonDanger, "Reset Theme", onDanger, state.hoverResetTheme)
+
+  drawText(
+    "Tip: click token, type color, Enter/Apply",
+    innerX,
+    buttonY + BUTTON_H + 4,
+    fontStatus,
+    ui.mutedText
+  )
+end
+
+-- ============================================================================
+-- Draw
+-- ============================================================================
+
+function ThemeMenu.draw()
+  if not state.open then return end
+  if not state.themes or #state.themeNames == 0 then return end
+
+  local p = getPanelRect()
+  state.panelRect = p
+
+  local uiTheme = getUiTheme()
+  if not uiTheme or not uiTheme.colors then return end
+  local ui = buildUiColors(uiTheme.colors)
+  if not ui then return end
+
+  local fontTitle = getFont(14)
+  local fontName = getFont(11)
+  local fontStatus = getFont(10)
+
+  -- Backdrop
+  setColor(ui.backdrop)
+  love.graphics.rectangle("fill", 0, 0, love.graphics.getDimensions())
+
+  -- Panel
+  setColor(ui.panelBg)
+  drawRoundedRect("fill", p.x, p.y, p.w, p.h, CORNER_R)
+  setColor(ui.border)
+  drawRoundedRect("line", p.x, p.y, p.w, p.h, CORNER_R)
+
+  -- Title bar
+  setColor(ui.titleBg)
+  drawRoundedRect("fill", p.x, p.y, p.w, TITLE_BAR_H, CORNER_R)
+  love.graphics.rectangle("fill", p.x, p.y + TITLE_BAR_H - CORNER_R, p.w, CORNER_R)
+  drawText("Theme Studio", p.x + 12, p.y + 9, fontTitle, ui.titleText)
+
+  local closeX = p.x + p.w - 28
+  local closeY = p.y + 6
+  state.closeRect = { x = closeX, y = closeY, w = 20, h = 20 }
+  setColor(state.hoverClose and ui.closeHover or ui.closeNormal)
+  love.graphics.setFont(getFont(14))
+  love.graphics.print("x", closeX + 5, closeY + 2)
+
+  setColor(ui.border)
+  love.graphics.line(p.x, p.y + TITLE_BAR_H, p.x + p.w, p.y + TITLE_BAR_H)
+
+  local layout = getLayout(p)
+  state.listRect = layout.listContent
+
+  drawThemeList(layout, ui, fontName, fontStatus)
+  drawPrimitiveShowcase(layout, ui, fontName, fontStatus)
+  drawTokenEditor(layout, ui, fontName, fontStatus)
+
+  -- Status bar
+  local statusY = p.y + p.h - STATUS_BAR_H
+  setColor(ui.statusBg)
   drawRoundedRect("fill", p.x, statusY, p.w, STATUS_BAR_H, CORNER_R)
   love.graphics.rectangle("fill", p.x, statusY, p.w, CORNER_R)
-
-  setColor(C.border)
+  setColor(ui.border)
   love.graphics.line(p.x, statusY, p.x + p.w, statusY)
 
-  local statusMsg = string.format("Current: %s  |  %d themes  |  F9 close",
-    state.currentName or "none", #state.themeNames)
-  drawText(statusMsg, p.x + 10, statusY + 5, fontStatus, C.statusText)
+  local statusMsg = string.format(
+    "Current: %s | %d themes | F9 close",
+    state.currentName or "none",
+    #state.themeNames
+  )
+  local statusColor = ui.statusText
+
+  if state.statusMessage and love.timer.getTime() <= state.statusExpiresAt then
+    statusMsg = state.statusMessage
+    if state.statusKind == "error" then
+      statusColor = ui.statusError
+    elseif state.statusKind == "success" then
+      statusColor = ui.statusSuccess
+    elseif state.statusKind == "warn" then
+      statusColor = ui.statusWarn
+    else
+      statusColor = ui.statusText
+    end
+  end
+
+  drawText(statusMsg, p.x + 10, statusY + 5, fontStatus, statusColor)
 end
 
 -- ============================================================================
 -- Input handlers
 -- ============================================================================
+
+local function appendEditorInput(text)
+  if type(text) ~= "string" or text == "" then return end
+  for ch in text:gmatch(".") do
+    if ch:match("[%x]") or ch == "#" then
+      if #state.editorText < 9 then
+        if ch == "#" then
+          if not state.editorText:find("#", 1, true) and #state.editorText == 0 then
+            state.editorText = state.editorText .. ch
+          end
+        else
+          state.editorText = state.editorText .. ch:lower()
+        end
+      end
+    end
+  end
+end
 
 function ThemeMenu.keypressed(key)
   if key == state.toggleKey then
@@ -490,9 +1144,39 @@ function ThemeMenu.keypressed(key)
   if not state.open then return false end
 
   if key == "escape" then
-    close()
+    if state.editingInput then
+      state.editingInput = false
+      syncEditorTextFromTheme(currentEditableThemeName())
+      setStatus("Color editing cancelled", "info", 1.5)
+    else
+      close()
+    end
     return true
-  elseif key == "up" then
+  end
+
+  local ctrl = love.keyboard.isDown("lctrl", "rctrl", "lgui", "rgui")
+
+  if state.editingInput then
+    if key == "backspace" then
+      if #state.editorText > 0 then
+        state.editorText = state.editorText:sub(1, #state.editorText - 1)
+      end
+      return true
+    elseif key == "return" or key == "kpenter" then
+      applyEditorValue()
+      return true
+    elseif key == "tab" then
+      local dir = love.keyboard.isDown("lshift", "rshift") and -1 or 1
+      setEditKey(state.editKeyIdx + dir)
+      return true
+    elseif ctrl and key == "v" and love.system and love.system.getClipboardText then
+      appendEditorInput(love.system.getClipboardText() or "")
+      return true
+    end
+    return true
+  end
+
+  if key == "up" then
     state.selectedIdx = math.max(1, state.selectedIdx - 1)
     ensureVisible(state.selectedIdx)
     return true
@@ -501,38 +1185,73 @@ function ThemeMenu.keypressed(key)
     ensureVisible(state.selectedIdx)
     return true
   elseif key == "return" or key == "kpenter" then
-    switchTheme(state.selectedIdx)
+    switchTheme(state.selectedIdx, false)
+    return true
+  elseif key == "tab" then
+    local dir = love.keyboard.isDown("lshift", "rshift") and -1 or 1
+    setEditKey(state.editKeyIdx + dir)
+    return true
+  elseif key == "left" then
+    setEditKey(state.editKeyIdx - 1)
+    return true
+  elseif key == "right" then
+    setEditKey(state.editKeyIdx + 1)
+    return true
+  elseif key == "e" then
+    state.editingInput = true
     return true
   end
 
-  -- Consume all keys when open
   return true
 end
 
 function ThemeMenu.mousepressed(x, y, button)
   if not state.open then return false end
 
-  -- Click outside panel = close
   if not inRect(x, y, state.panelRect) then
     close()
     return true
   end
 
-  -- Close button
   if inRect(x, y, state.closeRect) then
     close()
     return true
   end
 
-  -- Theme card clicks
-  if button == 1 then
-    for i, rect in pairs(state.cardRects) do
-      -- Adjust rect for scroll
-      if inRect(x, y, rect) then
-        state.selectedIdx = i
-        switchTheme(i)
-        return true
-      end
+  if button ~= 1 then return true end
+
+  if inRect(x, y, state.inputRect) then
+    state.editingInput = true
+    return true
+  else
+    state.editingInput = false
+  end
+
+  if inRect(x, y, state.applyRect) then
+    applyEditorValue()
+    return true
+  end
+  if inRect(x, y, state.resetTokenRect) then
+    resetEditorToken()
+    return true
+  end
+  if inRect(x, y, state.resetThemeRect) then
+    resetEditorTheme()
+    return true
+  end
+
+  for i, rect in ipairs(state.editorTokenRects) do
+    if inRect(x, y, rect) then
+      setEditKey(i)
+      return true
+    end
+  end
+
+  for i, rect in ipairs(state.cardRects) do
+    if inRect(x, y, rect) then
+      state.selectedIdx = i
+      switchTheme(i, false)
+      return true
     end
   end
 
@@ -547,50 +1266,71 @@ end
 function ThemeMenu.mousemoved(x, y)
   if not state.open then return end
 
-  -- Close button hover
   state.hoverClose = inRect(x, y, state.closeRect)
 
-  -- Theme card hover
   state.hoverIdx = nil
-  for i, rect in pairs(state.cardRects) do
+  if inRect(x, y, state.listRect) then
+    for i, rect in ipairs(state.cardRects) do
+      if inRect(x, y, rect) then
+        state.hoverIdx = i
+        break
+      end
+    end
+  end
+
+  state.hoverEditorToken = nil
+  for i, rect in ipairs(state.editorTokenRects) do
     if inRect(x, y, rect) then
-      state.hoverIdx = i
+      state.hoverEditorToken = i
       break
     end
   end
+
+  state.hoverApply = inRect(x, y, state.applyRect)
+  state.hoverResetToken = inRect(x, y, state.resetTokenRect)
+  state.hoverResetTheme = inRect(x, y, state.resetThemeRect)
 end
 
 function ThemeMenu.wheelmoved(x, y)
   if not state.open then return false end
 
-  state.scrollY = state.scrollY - y * SCROLL_SPEED
-  state.scrollY = math.max(0, math.min(state.scrollY, state.maxScrollY))
+  local mx, my = love.mouse.getPosition()
+  if inRect(mx, my, state.listRect) then
+    state.scrollY = state.scrollY - y * SCROLL_SPEED
+    state.scrollY = math.max(0, math.min(state.scrollY, state.maxScrollY))
+  end
   return true
 end
 
 function ThemeMenu.textinput(text)
   if not state.open then return false end
-  return true  -- consume
+  if state.editingInput then
+    appendEditorInput(text)
+  end
+  return true
 end
 
 -- ============================================================================
 -- Scroll helpers
 -- ============================================================================
 
---- Ensure the card at idx is visible in the scroll viewport.
-function ensureVisible(idx)
+ensureVisible = function(idx)
   local p = getPanelRect()
-  local previewH = math.floor(p.h * PREVIEW_RATIO)
-  local listH = p.h - TITLE_BAR_H - previewH - STATUS_BAR_H - DIVIDER_H
+  local layout = getLayout(p)
+  local listH = layout.listContent.h
 
   local cardTop = (idx - 1) * (CARD_H + CARD_PAD) + CARD_PAD
   local cardBottom = cardTop + CARD_H
+
+  local totalContentH = (#state.themeNames) * (CARD_H + CARD_PAD)
+  state.maxScrollY = math.max(0, totalContentH + CARD_PAD - listH)
 
   if cardTop < state.scrollY then
     state.scrollY = cardTop
   elseif cardBottom > state.scrollY + listH then
     state.scrollY = cardBottom - listH
   end
+
   state.scrollY = math.max(0, math.min(state.scrollY, state.maxScrollY))
 end
 
