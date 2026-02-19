@@ -14,6 +14,14 @@
 │   ├── package.json
 │   ├── src
 │   │   ├── browse.ts
+│   │   ├── components
+│   │   │   ├── AIChatInput.tsx
+│   │   │   ├── AIConversationSidebar.tsx
+│   │   │   ├── AIMessageList.tsx
+│   │   │   ├── AIMessageWithActions.tsx
+│   │   │   ├── AIModelSelector.tsx
+│   │   │   ├── AISettingsPanel.tsx
+│   │   │   └── index.ts
 │   │   ├── context.tsx
 │   │   ├── hooks.ts
 │   │   ├── index.ts
@@ -29,6 +37,11 @@
 │   │   │   ├── anthropic.ts
 │   │   │   └── openai.ts
 │   │   ├── stream.ts
+│   │   ├── templates
+│   │   │   ├── index.ts
+│   │   │   ├── MinimalChat.tsx
+│   │   │   ├── PowerChatUI.tsx
+│   │   │   └── SimpleChatUI.tsx
 │   │   ├── tools.ts
 │   │   └── types.ts
 │   └── tsconfig.json
@@ -46,12 +59,15 @@
 │   │   ├── nasa.ts
 │   │   ├── notion.ts
 │   │   ├── plex.ts
+│   │   ├── registry.ts
+│   │   ├── settings.ts
 │   │   ├── spotify.ts
 │   │   ├── steam.ts
 │   │   ├── telegram.ts
 │   │   ├── tmdb.ts
 │   │   ├── todoist.ts
 │   │   ├── trakt.ts
+│   │   ├── useServiceKey.ts
 │   │   ├── weather.ts
 │   │   └── ynab.ts
 │   └── tsconfig.json
@@ -97,6 +113,18 @@
 │   │   │   └── Spacer.tsx
 │   │   └── stories.ts
 │   └── tsconfig.json
+├── controls
+│   ├── package.json
+│   ├── src
+│   │   ├── Fader.tsx
+│   │   ├── index.ts
+│   │   ├── Knob.tsx
+│   │   ├── LEDIndicator.tsx
+│   │   ├── Meter.tsx
+│   │   ├── PadButton.tsx
+│   │   ├── StepSequencer.tsx
+│   │   └── TransportBar.tsx
+│   └── tsconfig.json
 ├── crypto
 │   ├── package.json
 │   ├── src
@@ -133,6 +161,7 @@
 │   │   │   ├── useEntity.ts
 │   │   │   ├── useSpawner.ts
 │   │   │   └── useStateMachine.ts
+│   │   ├── GameCanvas.tsx
 │   │   ├── index.ts
 │   │   ├── physics
 │   │   │   ├── useCollision.ts
@@ -231,6 +260,7 @@
 ├── shared
 │   ├── package.json
 │   ├── src
+│   │   ├── ActionBar.tsx
 │   │   ├── animation.ts
 │   │   ├── AreaChart.tsx
 │   │   ├── Badge.tsx
@@ -239,11 +269,13 @@
 │   │   ├── bridge.ts
 │   │   ├── Card.tsx
 │   │   ├── ChartTooltip.tsx
+│   │   ├── ChatInput.tsx
 │   │   ├── Checkbox.tsx
 │   │   ├── CodeBlock.tsx
 │   │   ├── colors.ts
 │   │   ├── ContextMenu.tsx
 │   │   ├── context.ts
+│   │   ├── ConversationCard.tsx
 │   │   ├── DebugOverlay.tsx
 │   │   ├── Divider.tsx
 │   │   ├── FlatList.tsx
@@ -253,6 +285,9 @@
 │   │   ├── HorizontalBarChart.tsx
 │   │   ├── index.ts
 │   │   ├── LineChart.tsx
+│   │   ├── LoadingDots.tsx
+│   │   ├── MessageBubble.tsx
+│   │   ├── MessageList.tsx
 │   │   ├── Modal.tsx
 │   │   ├── NavPanel.tsx
 │   │   ├── PieChart.tsx
@@ -262,6 +297,8 @@
 │   │   ├── ProgressBar.tsx
 │   │   ├── RadarChart.tsx
 │   │   ├── Radio.tsx
+│   │   ├── ScaleContext.tsx
+│   │   ├── scaleStyle.ts
 │   │   ├── ScrollView.tsx
 │   │   ├── Select.tsx
 │   │   ├── Slider.tsx
@@ -306,6 +343,24 @@
 │       ├── index.ts
 │       ├── input.ts
 │       └── TerminalApp.ts
+├── theme
+│   ├── package.json
+│   └── src
+│       ├── createTheme.ts
+│       ├── index.ts
+│       ├── ThemeProvider.tsx
+│       ├── themes
+│       │   ├── catppuccin.ts
+│       │   ├── dracula.ts
+│       │   ├── gruvbox.ts
+│       │   ├── index.ts
+│       │   ├── nord.ts
+│       │   ├── one-dark.ts
+│       │   ├── rose-pine.ts
+│       │   ├── solarized.ts
+│       │   └── tokyo-night.ts
+│       ├── types.ts
+│       └── useTheme.ts
 ├── tree.md
 ├── web
 │   ├── package.json
@@ -324,4 +379,4 @@
     │   └── types.ts
     └── tsconfig.json
 
-62 directories, 263 files
+69 directories, 311 files

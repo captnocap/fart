@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
-  Box, Text, Pressable, ScrollView, TextInput,
+  Box, Text, Pressable, ScrollView, TextInput, Modal,
   useLoveRPC, useLoveEvent, usePeerServer, useClipboard,
 } from '@ilovereact/core';
 
@@ -33,7 +33,7 @@ type IRCPacket =
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const IRC_EXTERNAL_PORT = 6667; // the port exposed on the .onion (what peers connect to)
+const IRC_PORT = 6667;
 
 const C = {
   bg:           '#0d1117',
@@ -153,7 +153,7 @@ function Header({ myOnion, torStatus, serverReady }: HeaderProps) {
       <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
         <StatusDot color={serverReady ? C.success : C.warning} />
         <Text style={{ fontSize: 10, color: C.dim }}>
-          {serverReady ? `:${IRC_EXTERNAL_PORT}` : 'server...'}
+          {serverReady ? `:${IRC_PORT}` : 'server...'}
         </Text>
       </Box>
     </Box>
@@ -383,14 +383,7 @@ interface AddPeerModalProps {
 
 function AddPeerModal({ value, onChange, onConfirm, onCancel, torReady }: AddPeerModalProps) {
   return (
-    <Box style={{
-      position: 'absolute',
-      top: 0, left: 0, right: 0, bottom: 0,
-      backgroundColor: 'rgba(0,0,0,0.75)',
-      alignItems: 'center',
-      justifyContent: 'center',
-      zIndex: 100,
-    }}>
+    <Modal visible onDismiss={onCancel}>
       <Box style={{
         width: 460,
         backgroundColor: C.surface,
@@ -467,7 +460,7 @@ function AddPeerModal({ value, onChange, onConfirm, onCancel, torReady }: AddPee
           </Pressable>
         </Box>
       </Box>
-    </Box>
+    </Modal>
   );
 }
 
@@ -477,16 +470,13 @@ export function App() {
   // ── Tor ────────────────────────────────────────────────────────────────────
   const [myOnion, setMyOnion] = useState<string | null>(null);
   const [torStatus, setTorStatus] = useState<TorStatus>('bootstrapping');
-  const [localPort, setLocalPort] = useState<number | null>(null);
   const getHostname = useLoveRPC<string>('tor:getHostname');
-  const getLocalPort = useLoveRPC<number>('tor:getLocalPort');
 
   // Query once on mount — catches case where Tor was already ready
   useEffect(() => {
     getHostname().then(h => {
       if (h) { setMyOnion(h); setTorStatus('ready'); }
     }).catch(() => {});
-    getLocalPort().then(p => { if (p) setLocalPort(p); }).catch(() => {});
   }, []);
 
   // Fires when Tor finishes bootstrapping after mount
@@ -495,8 +485,6 @@ export function App() {
       setMyOnion(payload.hostname);
       setTorStatus('ready');
     }
-    // Re-query local port in case it wasn't ready at mount
-    getLocalPort().then(p => { if (p) setLocalPort(p); }).catch(() => {});
   });
 
   const myNickRef = useRef<string>('???');
@@ -505,9 +493,7 @@ export function App() {
   myOnionRef.current = myOnion;
 
   // ── Server (accepts incoming peers) ────────────────────────────────────────
-  // localPort is assigned by Tor (maps .onion:6667 → 127.0.0.1:localPort)
-  // so multiple instances on the same machine never conflict
-  const server = usePeerServer(localPort);
+  const server = usePeerServer(IRC_PORT);
 
   // ── Chat state ─────────────────────────────────────────────────────────────
   const [peers, setPeers] = useState<Peer[]>([]);
@@ -592,7 +578,7 @@ export function App() {
     setPeers(p => [...p, { onion, nick, direction: 'out', status: 'connecting' }]);
     addMsg('', `Connecting to ${nick}...`, false, true);
 
-    const ws = new WebSocket(`ws://${onion}:${IRC_EXTERNAL_PORT}`);
+    const ws = new WebSocket(`ws://${onion}:${IRC_PORT}`);
     outgoingRef.current.set(onion, ws);
 
     ws.onopen = () => {
@@ -630,12 +616,10 @@ export function App() {
       outgoingRef.current.delete(onion);
     };
 
-    ws.onerror = (e: any) => {
-      const reason = e?.message ? ` (${e.message})` : '';
-      addMsg('', `${nick}: connection failed${reason} — retrying...`, false, true);
-      setPeers(p => p.map(x => x.onion === onion ? { ...x, status: 'connecting' } : x));
-      // Don't delete from outgoingRef — Lua auto-reconnects with the same id,
-      // so ws.onopen will fire again when the circuit eventually establishes.
+    ws.onerror = () => {
+      addMsg('', `Failed to connect to ${nick}`, false, true);
+      setPeers(p => p.map(x => x.onion === onion ? { ...x, status: 'closed' } : x));
+      outgoingRef.current.delete(onion);
     };
   }, [addMsg]);
 
