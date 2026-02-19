@@ -44,6 +44,7 @@ ffi.cdef[[
     SQLITE_OK         = 0,
     SQLITE_ERROR      = 1,
     SQLITE_BUSY       = 5,
+    SQLITE_LOCKED     = 6,
     SQLITE_ROW        = 100,
     SQLITE_DONE       = 101,
     SQLITE_OPEN_READWRITE = 0x00000002,
@@ -66,6 +67,7 @@ ffi.cdef[[
   const char *sqlite3_errmsg(sqlite3 *db);
   int sqlite3_changes(sqlite3 *db);
   long long sqlite3_last_insert_rowid(sqlite3 *db);
+  int sqlite3_busy_timeout(sqlite3 *db, int ms);
 
   // Simple exec (for DDL, simple statements)
   int sqlite3_exec(sqlite3 *db, const char *sql, void *callback, void *arg, char **errmsg);
@@ -158,6 +160,8 @@ SQLite.available = true
 -- ============================================================================
 
 local SQLITE_OK         = 0
+local SQLITE_BUSY       = 5
+local SQLITE_LOCKED     = 6
 local SQLITE_ROW        = 100
 local SQLITE_DONE       = 101
 local SQLITE_INTEGER    = 1
@@ -166,6 +170,70 @@ local SQLITE_TEXT       = 3
 local SQLITE_BLOB       = 4
 local SQLITE_NULL       = 5
 local SQLITE_TRANSIENT  = ffi.cast("void(*)(void*)", -1)  -- SQLITE_TRANSIENT = ((void(*)(void*))-1)
+
+-- Default busy timeout in ms. sqlite3_busy_timeout makes SQLite retry internally,
+-- but if the lock outlasts this, we do our own app-level retries on top.
+local DEFAULT_BUSY_TIMEOUT = 5000
+local BUSY_RETRY_ATTEMPTS  = 3
+local BUSY_RETRY_DELAY_MS  = 50  -- sleep between app-level retries
+
+-- ============================================================================
+-- Busy-resilient helpers
+-- ============================================================================
+
+--- Cross-platform millisecond sleep (LuaJIT FFI).
+local function sleep_ms(ms)
+  local sec = math.floor(ms / 1000)
+  local nsec = (ms % 1000) * 1000000
+  ffi.C.nanosleep(ffi.new("struct timespec", {sec, nsec}), nil)
+end
+
+-- nanosleep struct declaration (safe to call multiple times in cdef)
+pcall(ffi.cdef, [[
+  struct timespec { long tv_sec; long tv_nsec; };
+  int nanosleep(const struct timespec *req, struct timespec *rem);
+]])
+
+--- Step a prepared statement with automatic BUSY/LOCKED retry.
+--- Returns the final result code. Only errors on non-BUSY failures.
+local function busyStep(db, stmt)
+  for attempt = 1, BUSY_RETRY_ATTEMPTS + 1 do
+    local rc = lib.sqlite3_step(stmt)
+    if rc ~= SQLITE_BUSY and rc ~= SQLITE_LOCKED then
+      return rc
+    end
+    -- Last attempt — give up
+    if attempt > BUSY_RETRY_ATTEMPTS then
+      io.write("[sqlite] Database locked after " .. BUSY_RETRY_ATTEMPTS .. " retries (path: " .. (db.path or "?") .. ")\n")
+      io.flush()
+      return rc
+    end
+    -- Reset the statement so it can be re-stepped after the lock clears
+    lib.sqlite3_reset(stmt)
+    sleep_ms(BUSY_RETRY_DELAY_MS * attempt)  -- linear backoff
+  end
+end
+
+--- Like sqlite3_exec but retries on BUSY/LOCKED.
+local function busyExec(db, sql)
+  local errmsg_ptr = ffi.new("char*[1]")
+  for attempt = 1, BUSY_RETRY_ATTEMPTS + 1 do
+    local rc = lib.sqlite3_exec(db._db, sql, nil, nil, errmsg_ptr)
+    if rc ~= SQLITE_BUSY and rc ~= SQLITE_LOCKED then
+      return rc, errmsg_ptr
+    end
+    if errmsg_ptr[0] ~= nil then
+      lib.sqlite3_free(errmsg_ptr[0])
+      errmsg_ptr[0] = nil
+    end
+    if attempt > BUSY_RETRY_ATTEMPTS then
+      io.write("[sqlite] Database locked after " .. BUSY_RETRY_ATTEMPTS .. " retries on exec (path: " .. (db.path or "?") .. ")\n")
+      io.flush()
+      return rc, errmsg_ptr
+    end
+    sleep_ms(BUSY_RETRY_DELAY_MS * attempt)
+  end
+end
 
 -- ============================================================================
 -- Database object
@@ -206,16 +274,21 @@ function SQLite.open(path)
   end
 
   local self = setmetatable({
-    _db = db_ptr[0],
     _stmtCache = {},    -- prepared statement cache
     _closed = false,
     path = path,
   }, Database)
 
-  -- GC safety: if the user forgets to close, clean up the cdata pointer
-  ffi.gc(db_ptr[0], function(ptr)
+  -- GC safety: store the GC-wrapped pointer as _db itself so it stays alive
+  -- as long as the Database object exists. If the user forgets to close(),
+  -- the finalizer will clean up when the Database is collected.
+  self._db = ffi.gc(db_ptr[0], function(ptr)
     if not self._closed then self:close() end
   end)
+
+  -- Set busy timeout FIRST so the WAL pragma doesn't crash on a locked db.
+  -- This makes SQLite internally retry for up to N ms before returning SQLITE_BUSY.
+  lib.sqlite3_busy_timeout(self._db, DEFAULT_BUSY_TIMEOUT)
 
   -- Enable WAL mode for better concurrent read/write performance
   self:exec("PRAGMA journal_mode=WAL")
@@ -250,9 +323,11 @@ end
 -- ============================================================================
 
 local function checkOk(db, rc)
-  if rc ~= SQLITE_OK then
-    error("[sqlite] " .. ffi.string(lib.sqlite3_errmsg(db._db)))
+  if rc == SQLITE_OK then return end
+  if rc == SQLITE_BUSY or rc == SQLITE_LOCKED then
+    error("[sqlite] Database is locked — another connection holds the lock (path: " .. (db.path or "?") .. ")")
   end
+  error("[sqlite] " .. ffi.string(lib.sqlite3_errmsg(db._db)))
 end
 
 -- ============================================================================
@@ -386,9 +461,11 @@ function Database:exec(sql, ...)
 
   -- No params: use simple exec for DDL/multi-statement
   if #args == 0 then
-    local errmsg_ptr = ffi.new("char*[1]")
-    local rc = lib.sqlite3_exec(self._db, sql, nil, nil, errmsg_ptr)
+    local rc, errmsg_ptr = busyExec(self, sql)
     if rc ~= SQLITE_OK then
+      if rc == SQLITE_BUSY or rc == SQLITE_LOCKED then
+        error("[sqlite] Database is locked — timed out after retries (path: " .. (self.path or "?") .. ")")
+      end
       local err = ffi.string(errmsg_ptr[0])
       lib.sqlite3_free(errmsg_ptr[0])
       error("[sqlite] " .. err)
@@ -406,7 +483,7 @@ function Database:exec(sql, ...)
   local stmt = prepare(self, sql)
   bindAll(self, stmt, params)
 
-  local rc = lib.sqlite3_step(stmt)
+  local rc = busyStep(self, stmt)
   if rc ~= SQLITE_DONE and rc ~= SQLITE_ROW then
     checkOk(self, rc)
   end
@@ -437,7 +514,7 @@ function Database:query(sql, ...)
 
   local rows = {}
   while true do
-    local rc = lib.sqlite3_step(stmt)
+    local rc = busyStep(self, stmt)
     if rc == SQLITE_ROW then
       rows[#rows + 1] = extractRow(stmt)
     elseif rc == SQLITE_DONE then
@@ -472,7 +549,7 @@ function Database:queryOne(sql, ...)
   local stmt = prepare(self, sql)
   bindAll(self, stmt, params)
 
-  local rc = lib.sqlite3_step(stmt)
+  local rc = busyStep(self, stmt)
   if rc == SQLITE_ROW then
     return extractRow(stmt)
   elseif rc == SQLITE_DONE then
@@ -504,7 +581,7 @@ function Database:scalar(sql, ...)
   local stmt = prepare(self, sql)
   bindAll(self, stmt, params)
 
-  local rc = lib.sqlite3_step(stmt)
+  local rc = busyStep(self, stmt)
   if rc == SQLITE_ROW then
     return extractColumn(stmt, 0)
   elseif rc == SQLITE_DONE then
@@ -573,6 +650,59 @@ function Database:clearCache()
     lib.sqlite3_finalize(stmt)
   end
   self._stmtCache = {}
+end
+
+--- Set the busy timeout in milliseconds. Default is 5000ms.
+--- SQLite will internally retry for up to this duration before returning SQLITE_BUSY.
+--- @param ms number  Timeout in milliseconds (0 = no waiting, fail immediately)
+function Database:setBusyTimeout(ms)
+  assert(not self._closed, "[sqlite] Database is closed")
+  lib.sqlite3_busy_timeout(self._db, ms)
+end
+
+--- Safe exec — returns true on success, or false + error message on failure.
+--- Use this when you want to handle errors without crashing.
+---
+---   local ok, err = db:tryExec("INSERT INTO t VALUES (?)", data)
+---   if not ok then print("Write failed: " .. err) end
+---
+--- @param sql string  SQL statement
+--- @param ... any     Parameters to bind
+--- @return boolean, string|nil
+function Database:tryExec(sql, ...)
+  local ok, err = pcall(self.exec, self, sql, ...)
+  if ok then return true end
+  return false, tostring(err)
+end
+
+--- Safe query — returns rows on success, or nil + error message on failure.
+---
+---   local rows, err = db:tryQuery("SELECT * FROM t")
+---   if not rows then print("Query failed: " .. err) end
+---
+--- @param sql string  SQL query
+--- @param ... any     Parameters to bind
+--- @return table[]|nil, string|nil
+function Database:tryQuery(sql, ...)
+  local ok, result = pcall(self.query, self, sql, ...)
+  if ok then return result end
+  return nil, tostring(result)
+end
+
+--- Safe transaction — returns true on success, or false + error message on failure.
+--- The transaction is rolled back on failure.
+---
+---   local ok, err = db:tryTransaction(function()
+---     db:exec("INSERT INTO t VALUES (?)", data)
+---   end)
+---   if not ok then print("Transaction failed: " .. err) end
+---
+--- @param fn function  Function to execute inside the transaction
+--- @return boolean, string|nil
+function Database:tryTransaction(fn)
+  local ok, err = pcall(self.transaction, self, fn)
+  if ok then return true end
+  return false, tostring(err)
 end
 
 return SQLite
