@@ -357,11 +357,11 @@ Commands.register("manifest", {
         table.insert(lines, { text = "  toolchain: " .. m.build.toolchain, color = {0.6, 0.7, 0.8} })
       end
     end
-    if m.signature then
-      table.insert(lines, { text = "  signature: present", color = {1.0, 0.8, 0.2} })
-    else
-      table.insert(lines, { text = "  signature: none", color = {0.4, 0.4, 0.5} })
-    end
+    -- Signature status comes from the trust gate verdict, not the manifest itself
+    local sigStatus = verdictName or "unknown"
+    local sigColor = sigStatus == "verified" and {0.3, 0.85, 0.4} or
+                     sigStatus == "unsigned" and {1.0, 0.8, 0.2} or {1.0, 0.3, 0.3}
+    table.insert(lines, { text = "  signature: " .. sigStatus, color = sigColor })
     return { type = "lines", data = lines }
   end,
 })
