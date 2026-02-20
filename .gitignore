@@ -32,6 +32,9 @@ cli/runtime/fonts/
 # QuickJS build artifacts
 libquickjs/
 quickjs/
+
+# llama.cpp build artifacts
+llama.cpp/
 *.so
 *.so.*
 *.dylib
@@ -98,3 +101,4 @@ storybook/t.md
 # Love2D Windows download cache
 vendor/
 zig-out-win/
+vendor/mpv-win64/
