@@ -223,3 +223,6 @@ export { Native } from './Native';
 export { Audio, Timer } from './capabilities';
 export { useCapabilities } from './useCapabilities';
 export type { NativeProps, AudioProps, TimerProps, CapabilitySchema } from './types';
+
+// Cartridge Inspector
+export { CartridgeInspector, type CartridgeInspectorProps } from './CartridgeInspector';

@@ -73,6 +73,7 @@ local sysmon   = nil                          -- sysmon.lua (system monitoring: 
 local permit   = require("lua.permit")       -- permit.lua (capability enforcement: mint/check/freeze)
 local audit    = require("lua.audit")        -- audit.lua (structured audit logger for permit system)
 local manifestMod = require("lua.manifest")  -- manifest.lua (cartridge manifest loader + validator)
+local cartReader  = require("lua.cart_reader") -- cart_reader.lua (file reader for dropped cartridges)
 
 -- Theme system
 local themes   = nil                          -- lua/themes/init.lua (theme registry)
@@ -1042,6 +1043,9 @@ function ReactLove.init(config)
     rpcHandlers[method] = handler
   end
   for method, handler in pairs(manifestMod.getHandlers()) do
+    rpcHandlers[method] = handler
+  end
+  for method, handler in pairs(cartReader.getHandlers()) do
     rpcHandlers[method] = handler
   end
 

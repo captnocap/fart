@@ -97,6 +97,7 @@ import { ThemeSwitcherStory } from './ThemeSwitcherStory';
 import SettingsMenuStory from './SettingsMenuStory';
 import { CapabilitiesStory } from './CapabilitiesStory';
 import { MapBasicStory } from './MapBasicStory';
+import { CartridgeInspectorStory } from './CartridgeInspectorStory';
 
 export const stories: StoryDef[] = [
   // Primitives
@@ -237,6 +238,9 @@ export const stories: StoryDef[] = [
   // Dev Tools
   { id: 'error-test', title: 'Error Test', category: 'Dev Tools', component: ErrorTestStory },
   { id: 'block-test', title: 'Block Test', category: 'Dev Tools', component: BlockTestStory },
+
+  // CartridgeOS
+  { id: 'cartridge-inspector', title: 'Cartridge Inspector', category: 'CartridgeOS', component: CartridgeInspectorStory },
 
   // Addon components (from @ilovereact/components)
   ...addonStories,
