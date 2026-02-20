@@ -343,13 +343,45 @@ function SDL2Init.run(config)
         local kmod    = event.key.keysym.mod
         local isRep   = event.key["repeat"] ~= 0
         local keyname = sdlKeynameToLove(sym)
-        local mods = {
-          ctrl  = bit.band(kmod, 0x00C0) ~= 0,  -- KMOD_CTRL
-          shift = bit.band(kmod, 0x0003) ~= 0,  -- KMOD_SHIFT
-          alt   = bit.band(kmod, 0x0300) ~= 0,  -- KMOD_ALT
-          meta  = bit.band(kmod, 0x0C00) ~= 0,  -- KMOD_GUI
-        }
-        bridge:pushEvent(events.createKeyEvent(evtype, keyname, tostring(scan), isRep, mods))
+        local ctrl  = bit.band(kmod, 0x00C0) ~= 0
+        local shift = bit.band(kmod, 0x0003) ~= 0
+        local alt   = bit.band(kmod, 0x0300) ~= 0
+        local meta  = bit.band(kmod, 0x0C00) ~= 0
+        local mods = { ctrl = ctrl, shift = shift, alt = alt, meta = meta }
+
+        -- ── Lua-side key shortcuts (on keydown only) ──
+        local consumed = false
+        if t == SDL_KEYDOWN then
+          -- Escape: quit
+          if keyname == "escape" then
+            running = false
+            consumed = true
+
+          -- Ctrl+=/Ctrl+-/Ctrl+0: text scale
+          elseif ctrl or meta then
+            if keyname == "=" or keyname == "kp+" then
+              Measure.setTextScale(Measure.getTextScale() + 0.1)
+              if tree then tree.markDirty() end
+              needsLayout = true
+              consumed = true
+            elseif keyname == "-" or keyname == "kp-" then
+              Measure.setTextScale(Measure.getTextScale() - 0.1)
+              if tree then tree.markDirty() end
+              needsLayout = true
+              consumed = true
+            elseif keyname == "0" or keyname == "kp0" then
+              Measure.setTextScale(1.0)
+              if tree then tree.markDirty() end
+              needsLayout = true
+              consumed = true
+            end
+          end
+        end
+
+        -- Forward to JS if not consumed by Lua
+        if not consumed then
+          bridge:pushEvent(events.createKeyEvent(evtype, keyname, tostring(scan), isRep, mods))
+        end
 
       elseif t == SDL_TEXTINPUT then
         local text = ffi.string(event.text.text)
