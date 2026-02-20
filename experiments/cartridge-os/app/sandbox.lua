@@ -103,10 +103,22 @@ local ffi_lib_whitelist = {
   SDL2 = true, GL = true, ["libGL.so.1"] = true,
 }
 
+-- Wrap ffi.cast to block integer-to-pointer forgery.
+-- Allowed: pointer-to-pointer casts (e.g. ffi.cast("SDL_MouseMotionEvent*", event))
+-- Blocked: integer-to-pointer (e.g. ffi.cast("uint8_t*", 0x7fff0000) = arbitrary memory)
+local real_ffi_cast = real_ffi.cast
+local function safe_ffi_cast(ct, val)
+  -- If val is a Lua number (not cdata), block it — that's integer-to-pointer
+  if real_type(val) == "number" then
+    real_error("[sandbox] ffi.cast blocked: integer-to-pointer cast (use cdata pointers only)", 2)
+  end
+  return real_ffi_cast(ct, val)
+end
+
 local sandboxed_ffi = {
   cdef     = real_ffi.cdef,
   new      = real_ffi.new,
-  cast     = real_ffi.cast,
+  cast     = safe_ffi_cast,
   string   = real_ffi.string,
   fill     = real_ffi.fill,
   sizeof   = real_ffi.sizeof,
@@ -242,6 +254,36 @@ _G.loadfile   = nil
 _G.load       = nil
 _G.debug      = nil
 -- dofile is nil'd after we use it to launch main.lua
+
+-- ── Block environment manipulation (Lua 5.1 / LuaJIT escape hatches) ────────
+
+_G.getfenv   = nil
+_G.setfenv   = nil
+_G.newproxy  = nil
+_G.module    = nil
+
+-- ── Protect string metatable ────────────────────────────────────────────────
+-- getmetatable("") returns the string metatable. An attacker can poison it
+-- to inject code into every string operation. Lock it down.
+
+local string_mt = getmetatable("")
+if string_mt then
+  -- __metatable on the string metatable itself: getmetatable("") returns this
+  -- value instead of the real table. Setting to false hides it.
+  string_mt.__metatable = false
+
+  -- Freeze the table: prevent adding/replacing methods on the string metatable.
+  -- We set a meta-metatable with __newindex blocked.
+  real_setmetatable(string_mt, {
+    __newindex = function()
+      real_error("[sandbox] cannot modify string metatable", 2)
+    end,
+  })
+end
+
+-- ── Block collectgarbage (DoS vector) ───────────────────────────────────────
+
+_G.collectgarbage = nil
 
 -- ── Log sandbox activation ───────────────────────────────────────────────────
 
