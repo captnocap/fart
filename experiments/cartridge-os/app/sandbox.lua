@@ -101,13 +101,27 @@ CART_BOOT = {
   -- Sandboxed eval for the console REPL. Uses real_loadstring but the
   -- returned function's environment is _G (already sandboxed), so it runs
   -- under all sandbox rules. Cart code cannot access loadstring directly.
+  -- Returns: ok, result_string
   eval = function(code)
     local fn, err = real_loadstring("return " .. code)
     if not fn then
       fn, err = real_loadstring(code)
     end
     if not fn then return false, err end
-    return real_pcall(fn)
+    local results = {real_pcall(fn)}
+    local ok = results[1]
+    if not ok then
+      return false, results[2]
+    end
+    -- Format all return values (e.g. io.open returns nil, "error msg")
+    local parts = {}
+    for i = 2, #results do
+      parts[#parts + 1] = real_tostring(results[i])
+    end
+    if #parts == 0 then
+      return true, nil
+    end
+    return true, real_table.concat(parts, "\t")
   end,
 }
 
