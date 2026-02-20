@@ -652,8 +652,12 @@ while running do
 
     elseif etype == SDL_MOUSEMOTION_EVENT then
       local m = ffi.cast("SDL_MouseMotionEvent*", event)
-      mouseX = math.max(0, math.min(W, mouseX + m.xrel))
-      mouseY = math.max(0, math.min(H, mouseY + m.yrel))
+      -- Use absolute coordinates (usb-tablet provides them).
+      -- SDL window coords may differ from drawable coords (KMSDRM picks
+      -- native CRTC mode), so we use the absolute x,y directly — KMSDRM
+      -- fullscreen means window coords == drawable coords.
+      mouseX = math.max(0, math.min(W, m.x))
+      mouseY = math.max(0, math.min(H, m.y))
 
     elseif etype == SDL_TEXTINPUT_EVENT then
       if Console.isOpen() then

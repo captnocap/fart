@@ -286,19 +286,38 @@ static int extract_payload(const char *cart_path, uint64_t payload_offset,
 {
     printf("  Extracting payload to %s...\n", dest_dir);
 
-    /* Build extraction command using dd + cpio pipeline.
-     * dd: skip header+manifest, extract exactly payload_len bytes.
-     * cpio: extract newc format archive. */
-    char cmd[1024];
-    snprintf(cmd, sizeof(cmd),
-        "dd if='%s' bs=1 skip=%llu count=%llu 2>/dev/null | "
-        "(cd '%s' && /bin/busybox cpio -i -d -u)",
-        cart_path,
-        (unsigned long long)(CART_HEADER_SIZE + payload_offset),
-        (unsigned long long)payload_len,
-        dest_dir);
+    /* Open the .cart file and seek past header + manifest */
+    FILE *cart = fopen(cart_path, "rb");
+    if (!cart) {
+        fprintf(stderr, "[init] cannot open cart: %s\n", cart_path);
+        return -1;
+    }
+    fseek(cart, CART_HEADER_SIZE + payload_offset, SEEK_SET);
 
-    int rc = system(cmd);
+    /* Pipe payload bytes directly into busybox cpio */
+    char cpio_cmd[512];
+    snprintf(cpio_cmd, sizeof(cpio_cmd),
+        "cd '%s' && /bin/busybox cpio -i -d -u", dest_dir);
+
+    FILE *pipe = popen(cpio_cmd, "w");
+    if (!pipe) {
+        fprintf(stderr, "[init] cannot start cpio\n");
+        fclose(cart);
+        return -1;
+    }
+
+    uint8_t buf[65536];
+    uint64_t remaining = payload_len;
+    while (remaining > 0) {
+        size_t chunk = remaining < sizeof(buf) ? (size_t)remaining : sizeof(buf);
+        size_t got = fread(buf, 1, chunk, cart);
+        if (got == 0) break;
+        fwrite(buf, 1, got, pipe);
+        remaining -= got;
+    }
+    fclose(cart);
+
+    int rc = pclose(pipe);
     if (rc != 0) {
         fprintf(stderr, "[init] cpio extraction failed (rc=%d)\n", rc);
         return -1;
