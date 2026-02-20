@@ -28,6 +28,13 @@ ffi.cdef[[
     int32_t  yrel;
   } SDL_MouseMotionEvent;
 
+  typedef struct {
+    uint32_t type;
+    uint32_t timestamp;
+    uint32_t windowID;
+    char     text[32];
+  } SDL_TextInputEvent;
+
   typedef void SDL_Window;
   typedef void *SDL_GLContext;
 
@@ -49,6 +56,8 @@ ffi.cdef[[
   uint32_t      SDL_GetMouseState(int *x, int *y);
   uint32_t      SDL_GetRelativeMouseState(int *x, int *y);
   int           SDL_SetRelativeMouseMode(int enabled);
+  void          SDL_StartTextInput(void);
+  void          SDL_StopTextInput(void);
 ]]
 
 local sdl = ffi.load("SDL2")
@@ -64,6 +73,7 @@ local SDL_MOUSEMOTION_EVENT  = 0x400
 local SDL_MOUSEBUTTONDOWN    = 0x401
 local SDL_MOUSEBUTTONUP      = 0x402
 local SDL_KEYDOWN_EVENT      = 0x300
+local SDL_TEXTINPUT_EVENT    = 0x303
 
 -- kmsdrm will pick the native mode; these are just initial hints
 local W, H = 0, 0
@@ -71,16 +81,28 @@ local mouseX, mouseY = 0, 0
 
 -- ── Init ──────────────────────────────────────────────────────────────────────
 
--- Load input modules (PS/2 mouse + evdev for /dev/input/eventN)
+-- Load input modules: USB stack + HID + PS/2 fallback + evdev
 io.write("[cartridge] loading input modules...\n"); io.flush()
-os.execute("modprobe psmouse 2>&1")
-os.execute("modprobe evdev 2>&1")
-os.execute("modprobe mousedev 2>&1")
+local input_mods = {
+  -- USB host controllers (xHCI for USB 3.x, EHCI for 2.0, UHCI/OHCI for 1.x)
+  "usb-common", "usbcore", "xhci-hcd", "xhci-pci", "ehci-hcd", "ehci-pci",
+  "uhci-hcd", "ohci-hcd", "ohci-pci",
+  -- HID (keyboard/mouse class drivers)
+  "hid", "hid-generic", "usbhid",
+  -- virtio-input (for VMs)
+  "virtio_input",
+  -- PS/2 fallback
+  "psmouse",
+  -- userspace device nodes
+  "evdev", "mousedev",
+}
+for _, mod in ipairs(input_mods) do
+  os.execute("modprobe " .. mod .. " 2>/dev/null")
+end
 -- Give the kernel a moment to enumerate input devices
 local function usleep(ms) local t=os.clock()+ms/1000 while os.clock()<t do end end
-usleep(200)
+usleep(300)
 
--- Check what we got
 local pi = io.popen("ls /dev/input/ 2>&1")
 if pi then
   io.write("[cartridge] /dev/input/: ")
@@ -239,14 +261,47 @@ if p then
 end
 local dri_str = #dri_devs > 0 and table.concat(dri_devs, "  ") or "none"
 
+-- ── Console ───────────────────────────────────────────────────────────────────
+
+local EventBus = require("eventbus")
+local Commands = require("commands")
+local Console  = require("console")
+
+Console.init({
+  GL   = GL,
+  Font = Font,
+  rect = rect,
+  W    = W,
+  H    = H,
+})
+
+-- Emit startup events
+EventBus.emit("os", "CartridgeOS v0.1.0 booted")
+EventBus.emit("os", "kernel " .. kernel .. " (uptime " .. uptimeSec .. "s)")
+EventBus.emit("gpu", "kmsdrm initialized, DRI: " .. dri_str)
+EventBus.emit("gpu", "OpenGL context " .. W .. "x" .. H)
+EventBus.emit("input", "USB + HID + evdev loaded")
+
+-- Count input devices
+local inputDevCount = 0
+local id = io.popen("ls /dev/input/ 2>/dev/null")
+if id then
+  for _ in id:lines() do inputDevCount = inputDevCount + 1 end
+  id:close()
+end
+if inputDevCount > 0 then
+  EventBus.emit("input", inputDevCount .. " input device(s) detected")
+end
+
 -- ── Run loop ──────────────────────────────────────────────────────────────────
 
 local event    = ffi.new("SDL2_Event")
 local running  = true
-local TARGET_MS = math.floor(1000 / 60)
 local t0       = sdl.SDL_GetTicks()
+local lastTick = t0
 local cursorStyle = "arrow"
-local mouseLogCount = 0
+local appError = nil  -- set if paintFrame pcall fails
+local textInputActive = false
 
 -- ── Cursor rendering ────────────────────────────────────────────────────────
 
@@ -409,61 +464,109 @@ local function paintFrame(t)
   rect(0, footerY, W, 44, 0.06, 0.06, 0.10, 1)
   rect(0, footerY, W, 1,  0.15, 0.15, 0.25, 1)
   text("iLoveReact", cardX, footerY + 14, 14, 0.4, 0.3, 0.9, 1)
-  centeredText("Press Ctrl+Alt+Del to quit", W/2, footerY + 14, 13, 0.3, 0.3, 0.4, 1)
+  local hint = Console.isOpen() and "`:close console" or "`:open console"
+  centeredText(hint, W/2, footerY + 14, 13, 0.3, 0.3, 0.4, 1)
 
   local versionStr = "v0.1.0"
   local vw = Font.measureWidth(versionStr, 13)
   text(versionStr, W - cardX - vw, footerY + 14, 13, 0.3, 0.3, 0.4, 1)
 end
 
+-- ── Main loop ─────────────────────────────────────────────────────────────────
+
 while running do
   local frameStart = sdl.SDL_GetTicks()
+  local dt = (frameStart - lastTick) / 1000.0
+  lastTick = frameStart
 
-  -- Debug: log first N mouse events to serial console
+  -- ── Event polling ─────────────────────────────────────────────────────────
   while sdl.SDL_PollEvent(event) == 1 do
     local etype = event.type
+
     if etype == SDL_QUIT_EVENT then
       running = false
+
     elseif etype == SDL_MOUSEMOTION_EVENT then
       local m = ffi.cast("SDL_MouseMotionEvent*", event)
       mouseX = math.max(0, math.min(W, mouseX + m.xrel))
       mouseY = math.max(0, math.min(H, mouseY + m.yrel))
-      if mouseLogCount < 20 then
-        io.write(string.format("[mouse] x=%d y=%d xrel=%d yrel=%d | cursor=%d,%d\n",
-          m.x, m.y, m.xrel, m.yrel, mouseX, mouseY))
-        io.flush()
-        mouseLogCount = mouseLogCount + 1
+
+    elseif etype == SDL_TEXTINPUT_EVENT then
+      -- Text input — only goes to console
+      if Console.isOpen() then
+        local ti = ffi.cast("SDL_TextInputEvent*", event)
+        Console.handleTextInput(ffi.string(ti.text))
       end
+
     elseif etype == SDL_KEYDOWN_EVENT then
       local ptr = ffi.cast("uint32_t*", event)
       local scancode = ptr[4]
-      if mouseLogCount < 20 then
-        io.write(string.format("[key] scancode=%d\n", scancode))
-        io.flush()
-      end
-      -- F2 (scancode 59) toggles cursor style
-      if scancode == 59 then
-        cursorStyle = (cursorStyle == "arrow") and "scimitar" or "arrow"
-      end
-    else
-      -- Log unknown event types to see what SDL2 is actually sending
-      if mouseLogCount < 5 then
-        io.write(string.format("[event] type=0x%x\n", etype))
-        io.flush()
+
+      -- Backtick (scancode 53) — ALWAYS toggles console regardless of state
+      if scancode == 53 then
+        local action = Console.toggle()
+        if action == "open" then
+          sdl.SDL_StartTextInput()
+          textInputActive = true
+        elseif action == "close" then
+          sdl.SDL_StopTextInput()
+          textInputActive = false
+        end
+
+      elseif Console.isOpen() then
+        -- Console eats all key events when open
+        local consumed, action = Console.handleKeyDown(scancode)
+        if action == "close" then
+          sdl.SDL_StopTextInput()
+          textInputActive = false
+        end
+
+      else
+        -- Normal app key handling
+        -- F2 toggles cursor style
+        if scancode == 59 then
+          cursorStyle = (cursorStyle == "arrow") and "scimitar" or "arrow"
+        end
       end
     end
   end
 
-  paintFrame(frameStart)
+  -- ── Update ──────────────────────────────────────────────────────────────────
+  Console.update(dt)
+
+  -- ── Render ──────────────────────────────────────────────────────────────────
+  -- pcall around paintFrame: if app errors, console survives
+  local ok, err = pcall(paintFrame, frameStart)
+  if not ok then
+    -- Clear to dark and show error — but keep going
+    GL.glClearColor(0.08, 0.02, 0.02, 1)
+    GL.glClear(bit.bor(GL.COLOR_BUFFER_BIT, GL.STENCIL_BUFFER_BIT))
+    GL.glLoadIdentity()
+
+    if not appError then
+      appError = tostring(err)
+      EventBus.emit("os", "app crash: " .. appError)
+    end
+
+    text("APP ERROR", 60, 60, 24, 1, 0.3, 0.3, 1)
+    text(appError, 60, 100, 14, 0.8, 0.4, 0.4, 1)
+    text("console is still alive  --  press ` to open", 60, 140, 14, 0.5, 0.5, 0.6, 1)
+  end
+
+  -- Console always draws on top
+  Console.draw()
   drawCursor(mouseX, mouseY)
 
   sdl.SDL_GL_SwapWindow(window)
 
-  local elapsed = sdl.SDL_GetTicks() - frameStart
-  if elapsed < TARGET_MS then sdl.SDL_Delay(TARGET_MS - elapsed) end
+  -- Yield a minimal amount to avoid busy-spinning (1ms)
+  sdl.SDL_Delay(1)
 end
 
 -- Cleanup
+if textInputActive then
+  sdl.SDL_StopTextInput()
+end
 Font.done()
 sdl.SDL_GL_DeleteContext(ctx)
 sdl.SDL_DestroyWindow(window)
