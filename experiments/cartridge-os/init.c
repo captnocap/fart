@@ -121,7 +121,9 @@ static int ed25519_verify_detached(
 {
     /* Stack buffer: sig(64) + msg. For .cart, msg = header = 160 bytes. */
     uint8_t signed_buf[64 + CART_HEADER_SIZE];
-    uint8_t recovered[CART_HEADER_SIZE];
+    /* crypto_sign_open writes ALL n bytes to m[] before verifying,
+     * so the output buffer must be at least as large as the input. */
+    uint8_t recovered[64 + CART_HEADER_SIZE];
     unsigned long long recovered_len;
 
     if (msglen > CART_HEADER_SIZE) return -1;  /* safety */
