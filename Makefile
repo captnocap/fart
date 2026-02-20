@@ -7,7 +7,7 @@ LIB_DIR = $(NATIVE_GAME)/lib
 STORYBOOK_LOVE = storybook/love
 STORYBOOK_LIB = $(STORYBOOK_LOVE)/lib
 
-.PHONY: all clean dist-clean setup build build-native build-web build-storybook build-storybook-native run dev dev-storybook storybook storybook-web install dist-storybook cli-setup
+.PHONY: all clean dist-clean setup build build-native build-web build-storybook build-storybook-native run dev dev-storybook storybook storybook-web install dist-storybook dist-storybook-windows cli-setup
 
 all: setup build
 
@@ -118,6 +118,13 @@ PAYLOAD_DIR = /tmp/ilovereact-demo-payload
 # Only linux-vdso is kernel-injected and cannot be bundled.
 VDSO_EXCLUDE = linux-vdso
 
+# ── Windows dist vars ────────────────────────────────────
+LOVE_WIN_VERSION = 11.5
+LOVE_WIN_ZIP     = vendor/love-$(LOVE_WIN_VERSION)-win64.zip
+LOVE_WIN_DIR     = vendor/love-$(LOVE_WIN_VERSION)-win64
+WIN_STAGING      = /tmp/ilovereact-demo-win
+DIST_WIN_ZIP     = $(DIST_DIR)/ilovereact-demo-windows.zip
+
 dist-storybook: build-storybook-native setup
 	@echo "=== Packaging single-file binary ==="
 	mkdir -p $(DIST_DIR)
@@ -200,6 +207,58 @@ dist-storybook: build-storybook-native setup
 	@echo "=== Done: $(DIST_BINARY) ==="
 	@echo "  Size: $$(du -h $(DIST_BINARY) | cut -f1)"
 	@echo "  Run:  ./$(DIST_BINARY)"
+
+# ── Windows dist ────────────────────────────────────────
+
+# Download Love2D Windows binaries (one-time, cached in vendor/).
+$(LOVE_WIN_ZIP):
+	mkdir -p vendor
+	curl -L -o $(LOVE_WIN_ZIP) \
+		https://github.com/love2d/love/releases/download/$(LOVE_WIN_VERSION)/love-$(LOVE_WIN_VERSION)-win64.zip
+	@echo "  Downloaded $(LOVE_WIN_ZIP)"
+
+$(LOVE_WIN_DIR)/love.exe: $(LOVE_WIN_ZIP)
+	mkdir -p $(LOVE_WIN_DIR)
+	unzip -o $(LOVE_WIN_ZIP) -d vendor/
+	touch $(LOVE_WIN_DIR)/love.exe
+	@echo "  Extracted Love2D win64 to $(LOVE_WIN_DIR)"
+
+# Cross-compile libquickjs for Windows via Zig (output kept separate from Linux build).
+zig-out-win/bin/quickjs.dll:
+	zig build libquickjs -Dtarget=x86_64-windows-gnu --prefix zig-out-win
+	@echo "  Built quickjs.dll for Windows"
+
+dist-storybook-windows: build-storybook-native $(LOVE_WIN_DIR)/love.exe zig-out-win/bin/quickjs.dll
+	@echo "=== Packaging Windows zip ==="
+	mkdir -p $(DIST_DIR)
+	rm -rf $(WIN_STAGING)
+	# ── Build the .love zip (identical to Linux packaging) ──
+	mkdir -p $(STAGING_DIR)/lua/audio/modules $(STAGING_DIR)/lua/themes $(STAGING_DIR)/love
+	cp $(STORYBOOK_LOVE)/bundle.js $(STAGING_DIR)/love/
+	cp packaging/storybook/main.lua $(STAGING_DIR)/
+	cp packaging/storybook/conf.lua $(STAGING_DIR)/
+	cp lua/*.lua $(STAGING_DIR)/lua/
+	cp lua/audio/*.lua $(STAGING_DIR)/lua/audio/
+	cp lua/audio/modules/*.lua $(STAGING_DIR)/lua/audio/modules/
+	cp lua/themes/*.lua $(STAGING_DIR)/lua/themes/
+	cd $(STAGING_DIR) && zip -9 -r /tmp/ilovereact-demo.love .
+	rm -rf $(STAGING_DIR)
+	# ── Fuse love.exe + game.love → single exe ──
+	# Love2D on Windows finds the embedded .love by scanning its own binary.
+	mkdir -p $(WIN_STAGING)/lib
+	cat $(LOVE_WIN_DIR)/love.exe /tmp/ilovereact-demo.love > $(WIN_STAGING)/ilovereact-demo.exe
+	# ── Copy Love2D runtime DLLs (SDL2, OpenAL, etc.) ──
+	cp $(LOVE_WIN_DIR)/*.dll $(WIN_STAGING)/
+	# ── Copy libquickjs.dll into lib/ (named libquickjs.dll to match bridge path) ──
+	cp zig-out-win/bin/quickjs.dll $(WIN_STAGING)/lib/libquickjs.dll
+	# ── Zip everything up ──
+	rm -f $(DIST_WIN_ZIP)
+	cd $(WIN_STAGING) && zip -9 -r $(CURDIR)/$(DIST_WIN_ZIP) .
+	# ── Cleanup ──
+	rm -rf $(WIN_STAGING) /tmp/ilovereact-demo.love
+	@echo "=== Done: $(DIST_WIN_ZIP) ==="
+	@echo "  Size: $$(du -h $(DIST_WIN_ZIP) | cut -f1)"
+	@echo "  Share the zip — your friend unzips and runs ilovereact-demo.exe"
 
 # ── Run ─────────────────────────────────────────────────
 

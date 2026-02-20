@@ -94,3 +94,7 @@ storybook/src/stories/t.md
 .gitignore
 lua/tree.md
 storybook/t.md
+
+# Love2D Windows download cache
+vendor/
+zig-out-win/

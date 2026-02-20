@@ -389,9 +389,17 @@ function Bridge.new(libpath)
     end
   end
 
-  -- dlopen doesn't auto-append .so when path contains /, so add it explicitly
-  if not libpath:match("%.so") and not libpath:match("%.dylib") then
-    libpath = libpath .. ".so"
+  -- Append the correct extension for the platform if not already present.
+  -- ffi.load doesn't auto-add extensions when the path contains a slash.
+  if not libpath:match("%.so") and not libpath:match("%.dylib") and not libpath:match("%.dll") then
+    local os = love and love.system and love.system.getOS()
+    if os == "Windows" then
+      libpath = libpath .. ".dll"
+    elseif os == "OS X" then
+      libpath = libpath .. ".dylib"
+    else
+      libpath = libpath .. ".so"
+    end
   end
 
   local qjs = ffi.load(libpath)
