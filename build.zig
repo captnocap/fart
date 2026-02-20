@@ -183,7 +183,7 @@ pub fn build(b: *std.Build) void {
 
         const mod = b.createModule(.{
             .target = musl_target,
-            .optimize = .ReleaseSafe,
+            .optimize = .ReleaseFast,
         });
 
         const exe = b.addExecutable(.{
