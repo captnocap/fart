@@ -385,7 +385,6 @@ Commands.register("verify", {
     for _, key in ipairs({"manifest_hash", "payload_hash", "pubkey", "boot_time", "cart_path"}) do
       if bootFacts[key] then
         local val = bootFacts[key]
-        if #val > 32 then val = val:sub(1, 32) .. "..." end
         table.insert(lines, { text = "  " .. key .. ": " .. val, color = {0.5, 0.5, 0.6} })
       end
     end
