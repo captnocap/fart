@@ -233,12 +233,38 @@ function SDL2Init.run(config)
   events.setTreeModule(tree)
   layout.init({ measure = Measure })
 
+  -- ------------------------------------------------------------------
+  -- 3b. Love2D compatibility shim (for inspector/devtools/console)
+  -- ------------------------------------------------------------------
+  local Shim = require("lua.sdl2_love_shim")
+  Shim.init({
+    font   = Font,
+    sdl    = sdl,
+    width  = W,
+    height = H,
+  })
+
+  -- ------------------------------------------------------------------
+  -- 3c. Devtools (inspector, console, unified panel)
+  -- ------------------------------------------------------------------
+  local inspector = require("lua.inspector")
+  local console   = require("lua.console")
+  local devtools  = require("lua.devtools")
+
   local Bridge  = require("lua.bridge_quickjs")
   local bridge  = Bridge.new("lib/libquickjs.so")
   bridge:eval("globalThis.__deferMount = true;", "<pre-bundle>")
   bridge:eval(io.open(bundle):read("*a"), bundle)
   bridge:callGlobal("__mount")
   bridge:tick()
+
+  -- Helper for viewport events
+  local function pushEvent(ev) bridge:pushEvent(ev) end
+
+  -- Init console + devtools
+  console.init({ bridge = bridge, tree = tree, inspector = inspector })
+  devtools.init({ inspector = inspector, console = console, tree = tree, bridge = bridge, pushEvent = pushEvent })
+
   -- Push initial viewport
   bridge:pushEvent({ type="viewport", payload={width=W, height=H} })
 
@@ -279,6 +305,7 @@ function SDL2Init.run(config)
           GL.glOrtho(0, W, H, 0, -1, 1)
           GL.glMatrixMode(GL.MODELVIEW)
           Painter.setDimensions(W, H)
+          Shim.setDimensions(W, H)
           bridge:pushEvent({ type="viewport", payload={width=W, height=H} })
           needsLayout = true
         end
@@ -286,6 +313,8 @@ function SDL2Init.run(config)
       elseif t == SDL_MOUSEMOTION then
         mx = event.motion.x * scaleX
         my = event.motion.y * scaleY
+        Shim.setMousePosition(mx, my)
+        devtools.mousemoved(mx, my)
         if root then
           events.updateHover(root, mx, my)
         end
@@ -294,7 +323,17 @@ function SDL2Init.run(config)
         local btn    = event.button.button  -- 1=left, 2=middle, 3=right
         mx = event.button.x * scaleX
         my = event.button.y * scaleY
-        if root then
+        Shim.setMousePosition(mx, my)
+
+        -- Route to devtools first
+        local devConsumed = false
+        if t == SDL_MOUSEBTNDOWN then
+          devConsumed = devtools.mousepressed(mx, my, btn)
+        else
+          devConsumed = devtools.mousereleased(mx, my, btn)
+        end
+
+        if not devConsumed and root then
           local hit = events.hitTest(root, mx, my)
           if hit then
             if t == SDL_MOUSEBTNDOWN then
@@ -316,7 +355,11 @@ function SDL2Init.run(config)
       elseif t == SDL_MOUSEWHEEL then
         local dx = event.wheel.x
         local dy = event.wheel.y
-        if root then
+
+        -- Route to devtools first
+        if devtools.wheelmoved(dx, dy) then
+          -- consumed by devtools panel
+        elseif root then
           local hit = events.hitTest(root, mx, my)
           if hit then
             -- Update Lua-side scroll state for immediate visual response
@@ -349,11 +392,19 @@ function SDL2Init.run(config)
         local meta  = bit.band(kmod, 0x0C00) ~= 0
         local mods = { ctrl = ctrl, shift = shift, alt = alt, meta = meta }
 
+        -- Update shim key state
+        Shim.setKeyDown(keyname, t == SDL_KEYDOWN)
+
         -- ── Lua-side key shortcuts (on keydown only) ──
         local consumed = false
         if t == SDL_KEYDOWN then
-          -- Escape: quit
-          if keyname == "escape" then
+          -- Devtools gets first shot at keys (F12, backtick, Escape, etc.)
+          if devtools.keypressed(keyname) then
+            consumed = true
+            needsLayout = true
+
+          -- Escape: quit (only if devtools didn't consume it)
+          elseif keyname == "escape" then
             running = false
             consumed = true
 
@@ -386,7 +437,10 @@ function SDL2Init.run(config)
       elseif t == SDL_TEXTINPUT then
         local text = ffi.string(event.text.text)
         if text ~= "" then
-          bridge:pushEvent(events.createTextInputEvent(text))
+          -- Route to devtools first (console text input)
+          if not devtools.textinput(text) then
+            bridge:pushEvent(events.createTextInputEvent(text))
+          end
         end
       end
     end
@@ -405,7 +459,8 @@ function SDL2Init.run(config)
     -- ---- Layout ----
     root = tree.getTree()
     if root and needsLayout then
-      layout.layout(root, 0, 0, W, H)
+      local vh = devtools.getViewportHeight()
+      layout.layout(root, 0, 0, W, vh)
       needsLayout = false
     end
 
@@ -420,6 +475,9 @@ function SDL2Init.run(config)
         io.flush()
       end
     end
+
+    -- ---- Devtools overlay ----
+    devtools.draw(root)
 
     sdl.SDL_GL_SwapWindow(window)
 
