@@ -36,6 +36,8 @@ local historyIndex  = 0        -- 0 = not navigating
 
 local scrollOffset  = 0        -- lines scrolled up from bottom
 
+local ignoreNextTextInput = false  -- eat the backtick that opened the console
+
 local mode          = "console"  -- "console" or "lua"
 local lastTabTime   = 0          -- for double-tab detection
 local TAB_DOUBLE_MS = 0.35       -- seconds between taps for double-tab
@@ -132,7 +134,7 @@ end
 function Console.toggle()
   open = not open
   if open then
-    -- Signal to main.lua to call SDL_StartTextInput
+    ignoreNextTextInput = true  -- eat the backtick character
     return "open"
   else
     return "close"
@@ -158,6 +160,11 @@ end
 
 function Console.handleTextInput(text)
   if not open then return false end
+  -- Eat the backtick that triggered the console open
+  if ignoreNextTextInput then
+    ignoreNextTextInput = false
+    return true
+  end
   -- Insert text at cursor position
   local before = inputText:sub(1, cursorPos)
   local after  = inputText:sub(cursorPos + 1)
@@ -522,27 +529,29 @@ function Console.draw()
   -- Output area (scrollable)
   local outputAreaTop = PADDING
   local outputAreaBottom = inputY - 8
-  local outputAreaH = outputAreaBottom - outputAreaTop
+  local outputAreaH = math.max(0, outputAreaBottom - outputAreaTop)
   local visibleLines = math.floor(outputAreaH / LINE_HEIGHT)
 
-  -- Enable scissor for output area
-  GL.glEnable(GL.SCISSOR_TEST)
-  GL.glScissor(0, H - outputAreaBottom, w, outputAreaH)
+  if outputAreaH > 0 then
+    -- Enable scissor for output area — let GL clip partial lines
+    GL.glEnable(GL.SCISSOR_TEST)
+    GL.glScissor(0, H - (outputAreaTop + outputAreaH), math.max(0, w), math.max(0, outputAreaH))
 
-  local startIdx = math.max(1, #outputLines - visibleLines - scrollOffset + 1)
-  local endIdx   = math.max(1, #outputLines - scrollOffset)
+    local startIdx = math.max(1, #outputLines - visibleLines - scrollOffset)
+    local endIdx   = math.max(1, #outputLines - scrollOffset)
 
-  local drawY = outputAreaTop
-  for i = startIdx, endIdx do
-    local line = outputLines[i]
-    if line and drawY + LINE_HEIGHT <= outputAreaBottom then
-      Font.draw(line.text, PADDING + 8, drawY, FONT_SIZE,
-                line.color[1], line.color[2], line.color[3], 1)
-      drawY = drawY + LINE_HEIGHT
+    local drawY = outputAreaTop
+    for i = startIdx, endIdx do
+      local line = outputLines[i]
+      if line then
+        Font.draw(line.text, PADDING + 8, drawY, FONT_SIZE,
+                  line.color[1], line.color[2], line.color[3], 1)
+        drawY = drawY + LINE_HEIGHT
+      end
     end
-  end
 
-  GL.glDisable(GL.SCISSOR_TEST)
+    GL.glDisable(GL.SCISSOR_TEST)
+  end
 
   -- Scroll indicator
   if scrollOffset > 0 then
