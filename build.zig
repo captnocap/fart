@@ -15,6 +15,7 @@
 //!   zig build libquickjs -Dtarget=x86_64-macos
 //!   zig build libquickjs -Dtarget=aarch64-macos
 //!   zig build libquickjs -Dtarget=x86_64-windows-gnu
+//!   zig build win-launcher  → zig-out/bin/ilr-launcher.exe (always x86_64-windows)
 //!
 //! Outputs → zig-out/lib/ (shared libraries) and zig-out/cartridge/ (init binary).
 //! The Makefile cli-setup target copies from zig-out/lib/ into cli/runtime/lib/.
@@ -216,5 +217,36 @@ pub fn build(b: *std.Build) void {
         const step = b.step("cartridge", "Build CartridgeOS PID 1 (x86_64-linux-musl static)");
         step.dependOn(&install.step);
         all_step.dependOn(&install.step);
+    }
+
+    // ── win-launcher ──────────────────────────────────────────────────────────
+    // Self-extracting Windows launcher stub. Always targets x86_64-windows
+    // regardless of the host -Dtarget flag. SUBSYSTEM:WINDOWS so no console.
+    // Output: zig-out/bin/ilr-launcher.exe
+    {
+        const win_target = b.resolveTargetQuery(.{
+            .cpu_arch = .x86_64,
+            .os_tag = .windows,
+            .abi = .gnu,
+        });
+
+        const mod = b.createModule(.{
+            .target = win_target,
+            .optimize = .ReleaseFast,
+        });
+
+        const exe = b.addExecutable(.{
+            .name = "ilr-launcher",
+            .root_module = mod,
+        });
+
+        exe.root_module.root_source_file = b.path("native/win-launcher/launcher.zig");
+        exe.subsystem = .Windows; // no console window
+
+        const install = b.addInstallArtifact(exe, .{});
+        b.getInstallStep().dependOn(&install.step);
+
+        const step = b.step("win-launcher", "Build Windows self-extracting launcher stub");
+        step.dependOn(&install.step);
     }
 }

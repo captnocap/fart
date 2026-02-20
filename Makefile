@@ -123,7 +123,6 @@ LOVE_WIN_VERSION = 11.5
 LOVE_WIN_ZIP     = vendor/love-$(LOVE_WIN_VERSION)-win64.zip
 LOVE_WIN_DIR     = vendor/love-$(LOVE_WIN_VERSION)-win64
 WIN_STAGING      = /tmp/ilovereact-demo-win
-DIST_WIN_ZIP     = $(DIST_DIR)/ilovereact-demo-windows.zip
 
 dist-storybook: build-storybook-native setup
 	@echo "=== Packaging single-file binary ==="
@@ -228,11 +227,16 @@ zig-out-win/bin/quickjs.dll:
 	zig build libquickjs -Dtarget=x86_64-windows-gnu --prefix zig-out-win
 	@echo "  Built quickjs.dll for Windows"
 
-dist-storybook-windows: build-storybook-native $(LOVE_WIN_DIR)/love.exe zig-out-win/bin/quickjs.dll
-	@echo "=== Packaging Windows zip ==="
+# Zig self-extracting launcher stub (always Windows, no console window).
+zig-out/bin/ilr-launcher.exe:
+	zig build win-launcher
+	@echo "  Built ilr-launcher.exe"
+
+dist-storybook-windows: build-storybook-native $(LOVE_WIN_DIR)/love.exe zig-out-win/bin/quickjs.dll zig-out/bin/ilr-launcher.exe
+	@echo "=== Packaging single-file Windows exe ==="
 	mkdir -p $(DIST_DIR)
 	rm -rf $(WIN_STAGING)
-	# ── Build the .love zip (identical to Linux packaging) ──
+	# ── Build the .love zip ──
 	mkdir -p $(STAGING_DIR)/lua/audio/modules $(STAGING_DIR)/lua/themes $(STAGING_DIR)/love
 	cp $(STORYBOOK_LOVE)/bundle.js $(STAGING_DIR)/love/
 	cp packaging/storybook/main.lua $(STAGING_DIR)/
@@ -243,22 +247,21 @@ dist-storybook-windows: build-storybook-native $(LOVE_WIN_DIR)/love.exe zig-out-
 	cp lua/themes/*.lua $(STAGING_DIR)/lua/themes/
 	cd $(STAGING_DIR) && zip -9 -r /tmp/ilovereact-demo.love .
 	rm -rf $(STAGING_DIR)
-	# ── Fuse love.exe + game.love → single exe ──
-	# Love2D on Windows finds the embedded .love by scanning its own binary.
+	# ── Assemble payload zip: fused love.exe + DLLs + libquickjs.dll ──
 	mkdir -p $(WIN_STAGING)/lib
 	cat $(LOVE_WIN_DIR)/love.exe /tmp/ilovereact-demo.love > $(WIN_STAGING)/ilovereact-demo.exe
-	# ── Copy Love2D runtime DLLs (SDL2, OpenAL, etc.) ──
 	cp $(LOVE_WIN_DIR)/*.dll $(WIN_STAGING)/
-	# ── Copy libquickjs.dll into lib/ (named libquickjs.dll to match bridge path) ──
 	cp zig-out-win/bin/quickjs.dll $(WIN_STAGING)/lib/libquickjs.dll
-	# ── Zip everything up ──
-	rm -f $(DIST_WIN_ZIP)
-	cd $(WIN_STAGING) && zip -9 -r $(CURDIR)/$(DIST_WIN_ZIP) .
-	# ── Cleanup ──
+	cd $(WIN_STAGING) && zip -9 -r /tmp/ilovereact-payload.zip .
 	rm -rf $(WIN_STAGING) /tmp/ilovereact-demo.love
-	@echo "=== Done: $(DIST_WIN_ZIP) ==="
-	@echo "  Size: $$(du -h $(DIST_WIN_ZIP) | cut -f1)"
-	@echo "  Share the zip — your friend unzips and runs ilovereact-demo.exe"
+	# ── Concatenate: launcher.exe + payload.zip + 8-byte offset footer ──
+	rm -f $(DIST_DIR)/ilovereact-demo.exe
+	cat zig-out/bin/ilr-launcher.exe /tmp/ilovereact-payload.zip > $(DIST_DIR)/ilovereact-demo.exe
+	python3 -c "import sys,struct; sys.stdout.buffer.write(struct.pack('<Q', $$(wc -c < zig-out/bin/ilr-launcher.exe)))" >> $(DIST_DIR)/ilovereact-demo.exe
+	rm -f /tmp/ilovereact-payload.zip
+	@echo "=== Done: $(DIST_DIR)/ilovereact-demo.exe ==="
+	@echo "  Size: $$(du -h $(DIST_DIR)/ilovereact-demo.exe | cut -f1)"
+	@echo "  Single file — send ilovereact-demo.exe, double-click to run"
 
 # ── Run ─────────────────────────────────────────────────
 
