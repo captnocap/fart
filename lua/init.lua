@@ -36,11 +36,12 @@ local themeMenuEnabled = true                 -- can be disabled via config.them
 
 local animate  = nil   -- animate.lua module (Lua-side transitions/animations)
 local images   = nil   -- images.lua module (image cache)
-local videos   = nil   -- videos.lua module (video cache + FFmpeg transcoding)
+local videos   = nil   -- videos.lua module (libmpv cache + frame rendering)
 local scene3d  = nil   -- scene3d.lua module (3D scene rendering via g3d)
 local mapmod   = nil   -- map.lua module (geo/tile map rendering)
 local gamemod  = nil   -- game.lua module (game canvas rendering + module system)
 local emumod   = nil   -- emulator.lua module (NES emulation via agnes)
+local effectsmod = nil -- effects.lua module (generative canvas effects)
 local videoplayer = nil                       -- videoplayer.lua (Lua-native video controls)
 local focus    = require("lua.focus")         -- focus manager for Lua-owned inputs
 local texteditor = nil                        -- texteditor.lua (loaded on demand)
@@ -482,6 +483,8 @@ function ReactLove.init(config)
     gamemod.init()
     emumod = require("lua.emulator")
     emumod.init()
+    effectsmod = require("lua.effects")
+    effectsmod.loadAll()
 
     tree    = require("lua.tree")
     tree.init({ images = images, videos = videos, animate = animate, scene3d = scene3d })
@@ -492,7 +495,7 @@ function ReactLove.init(config)
     layout.init({ measure = measure })
 
     painter = require("lua.painter")
-    painter.init({ measure = measure, images = images, videos = videos, scene3d = scene3d, map = mapmod, game = gamemod, emulator = emumod })
+    painter.init({ measure = measure, images = images, videos = videos, scene3d = scene3d, map = mapmod, game = gamemod, emulator = emumod, effects = effectsmod })
 
     events  = require("lua.events")
     events.setTreeModule(tree)
@@ -595,6 +598,8 @@ function ReactLove.init(config)
     gamemod.init()
     emumod = require("lua.emulator")
     emumod.init()
+    effectsmod = require("lua.effects")
+    effectsmod.loadAll()
 
     tree    = require("lua.tree")
     tree.init({ images = images, videos = videos, animate = animate, scene3d = scene3d })
@@ -605,7 +610,7 @@ function ReactLove.init(config)
     layout.init({ measure = measure })
 
     painter = require("lua.painter")
-    painter.init({ measure = measure, images = images, videos = videos, scene3d = scene3d, map = mapmod, game = gamemod, emulator = emumod })
+    painter.init({ measure = measure, images = images, videos = videos, scene3d = scene3d, map = mapmod, game = gamemod, emulator = emumod, effects = effectsmod })
 
     events  = require("lua.events")
     events.setTreeModule(tree)
@@ -1533,6 +1538,13 @@ function ReactLove.update(dt)
     emumod.renderAll()
   end
 
+  -- 8d3. Sync generative effects with tree, update animations, render to off-screen Canvases
+  if effectsmod then
+    effectsmod.syncWithTree(tree.getNodes())
+    effectsmod.updateAll(dt)
+    effectsmod.renderAll()
+  end
+
   -- 8e. Sync declarative capabilities (Audio, Timer, etc.) with tree
   if capabilities then
     capabilities.syncWithTree(tree.getNodes(), pushEvent, dt)
@@ -1542,13 +1554,21 @@ function ReactLove.update(dt)
   if videos then
     local videoEvents = videos.poll()
     for _, evt in ipairs(videoEvents) do
-      -- Resolve src → tracked nodeIds so JS can dispatch to the right components
-      local nodes = videos.getNodesForSrc(evt.src)
-      for _, nodeId in ipairs(nodes) do
+      -- poll() can provide a direct nodeId for per-node errors; otherwise
+      -- resolve src → tracked nodeIds.
+      if evt.nodeId then
         pushEvent({
           type = "video:" .. evt.status,
-          payload = { src = evt.src, message = evt.message, targetId = nodeId },
+          payload = { src = evt.src, message = evt.message, targetId = evt.nodeId },
         })
+      else
+        local nodes = videos.getNodesForSrc(evt.src)
+        for _, nodeId in ipairs(nodes) do
+          pushEvent({
+            type = "video:" .. evt.status,
+            payload = { src = evt.src, message = evt.message, targetId = nodeId },
+          })
+        end
       end
     end
 
@@ -1934,6 +1954,17 @@ end
 local SCROLLBAR_THICKNESS = 8   -- hit area (wider than visual 4px for easier clicking)
 local SCROLLBAR_VISUAL = 4      -- must match painter.lua barThickness
 
+local function getScrollAxisFlags(node)
+  local props = node and node.props
+  if props and props.horizontal == true then
+    return true, false
+  end
+  if props and props.horizontal == false then
+    return false, true
+  end
+  return true, true
+end
+
 --- Check if screen point (mx,my) is on a scrollbar of any scroll container.
 --- Walks the tree to find scroll containers whose scrollbar area contains the point.
 --- Returns { node, axis, thumbPos, thumbSize, trackSize, maxScroll } or nil.
@@ -1948,12 +1979,13 @@ local function hitTestScrollbar(root, mx, my)
     local c = node.computed
     if c and s.overflow == "scroll" and node.scrollState then
       local ss = node.scrollState
+      local allowX, allowY = getScrollAxisFlags(node)
       local viewW, viewH = c.w, c.h
       local contentW = ss.contentW or viewW
       local contentH = ss.contentH or viewH
 
       -- Vertical scrollbar hit area (right edge)
-      if contentH > viewH then
+      if allowY and contentH > viewH then
         local barX = c.x + viewW - SCROLLBAR_THICKNESS
         if mx >= barX and mx <= c.x + viewW and my >= c.y and my <= c.y + viewH then
           local trackH = viewH
@@ -1971,7 +2003,7 @@ local function hitTestScrollbar(root, mx, my)
       end
 
       -- Horizontal scrollbar hit area (bottom edge)
-      if contentW > viewW then
+      if allowX and contentW > viewW then
         local barY = c.y + viewH - SCROLLBAR_THICKNESS
         if mx >= c.x and mx <= c.x + viewW and my >= barY and my <= c.y + viewH then
           local trackW = viewW
@@ -2205,8 +2237,9 @@ function ReactLove.mousepressed(x, y, button)
 
   if hit then
     if hit.type == "TextEditor" then
-      -- Clicked a TextEditor: handle internally
-      if texteditor.handleMousePressed(hit, x, y, button) then
+      -- Clicked a TextEditor: handle internally (convert screen -> content coords)
+      local cx, cy = events.screenToContent(hit, x, y)
+      if texteditor.handleMousePressed(hit, cx, cy, button) then
         if not focus.isFocused(hit) then
           focus.set(hit)
           pushEvent({
@@ -2220,20 +2253,22 @@ function ReactLove.mousepressed(x, y, button)
         end
       end
     elseif hit.type == "TextInput" then
-      -- Clicked a TextInput: handle internally
-      if textinput.handleMousePressed(hit, x, y, button) then
-        if not focus.isFocused(hit) then
-          focus.set(hit)
-          pushEvent({
+      -- Clicked a TextInput: set focus unconditionally (hitTest already verified bounds),
+      -- then position cursor within the text (best-effort coordinate mapping)
+      if not focus.isFocused(hit) then
+        focus.set(hit)
+        textinput.focus(hit)  -- reset blink so cursor is immediately visible
+        pushEvent({
+          type = "textinput:focus",
+          payload = {
             type = "textinput:focus",
-            payload = {
-              type = "textinput:focus",
-              targetId = hit.id,
-              value = textinput.getValue(hit),
-            }
-          })
-        end
+            targetId = hit.id,
+            value = textinput.getValue(hit),
+          }
+        })
       end
+      local cx, cy = events.screenToContent(hit, x, y)
+      textinput.handleMousePressed(hit, cx, cy, button)
     elseif hit.type == "CodeBlock" then
       -- Clicked a CodeBlock: check copy button
       -- Convert screen coords to content-space (account for scroll ancestors)
@@ -2483,11 +2518,13 @@ function ReactLove.mousemoved(x, y)
   -- TextEditor/TextInput drag selection
   local focusedNode = focus.get()
   if focusedNode and focusedNode.type == "TextEditor" then
-    if texteditor.handleMouseMoved(focusedNode, x, y) then
+    local cx, cy = events.screenToContent(focusedNode, x, y)
+    if texteditor.handleMouseMoved(focusedNode, cx, cy) then
       return  -- TextEditor consumed the mouse move
     end
   elseif focusedNode and focusedNode.type == "TextInput" then
-    if textinput.handleMouseMoved(focusedNode, x, y) then
+    local cx, cy = events.screenToContent(focusedNode, x, y)
+    if textinput.handleMouseMoved(focusedNode, cx, cy) then
       return  -- TextInput consumed the mouse move
     end
   end
@@ -2874,8 +2911,21 @@ function ReactLove.wheelmoved(x, y)
     -- Update scroll position directly in Lua for immediate response
     local ss = scrollContainer.scrollState
     local scrollSpeed = 40  -- pixels per wheel tick
-    local newScrollX = (ss.scrollX or 0) - x * scrollSpeed
-    local newScrollY = (ss.scrollY or 0) - y * scrollSpeed
+    local wheelX, wheelY = x, y
+    if events.resolveScrollWheelDeltas then
+      wheelX, wheelY = events.resolveScrollWheelDeltas(scrollContainer, x, y)
+    else
+      local allowX, allowY = getScrollAxisFlags(scrollContainer)
+      if allowX and not allowY and wheelX == 0 and wheelY ~= 0 then
+        wheelX = wheelY
+        wheelY = 0
+      end
+      if not allowX then wheelX = 0 end
+      if not allowY then wheelY = 0 end
+    end
+
+    local newScrollX = (ss.scrollX or 0) - wheelX * scrollSpeed
+    local newScrollY = (ss.scrollY or 0) - wheelY * scrollSpeed
 
     tree.setScroll(scrollContainer.id, newScrollX, newScrollY)
     emitScrollEvent(scrollContainer)
@@ -3101,6 +3151,134 @@ function ReactLove.gamepadaxis(joystick, axis, value)
   pushEvent(events.createGamepadAxisEvent(axis, value, joystickId))
 end
 
+local FILE_DROP_PREVIEW_MAX_BYTES = 128 * 1024
+local FILE_DROP_TEXT_EXTENSIONS = {
+  txt = true,
+  text = true,
+  md = true,
+  markdown = true,
+  rst = true,
+  log = true,
+  csv = true,
+  tsv = true,
+  json = true,
+  yaml = true,
+  yml = true,
+  toml = true,
+  ini = true,
+  cfg = true,
+  conf = true,
+  xml = true,
+  html = true,
+  css = true,
+  js = true,
+  jsx = true,
+  ts = true,
+  tsx = true,
+  lua = true,
+  py = true,
+  rb = true,
+  go = true,
+  rs = true,
+  c = true,
+  h = true,
+  cpp = true,
+  hpp = true,
+  java = true,
+  kt = true,
+  swift = true,
+  cs = true,
+  sh = true,
+  bash = true,
+  zsh = true,
+  fish = true,
+  ps1 = true,
+  bat = true,
+  cmd = true,
+  sql = true,
+}
+
+local function normalizeFileDropMode(value)
+  if type(value) ~= "string" then return nil end
+  local mode = string.lower(value)
+  if mode == "upload" or mode == "preview" then
+    return mode
+  end
+  return nil
+end
+
+local function resolveFileDropMode(node)
+  local current = node
+  while current do
+    local props = current.props
+    if props then
+      local mode = normalizeFileDropMode(props.fileDropMode)
+      if mode then
+        return mode
+      end
+    end
+    current = current.parent
+  end
+  return "upload"
+end
+
+local function fileNameFromPath(path)
+  if type(path) ~= "string" then return nil end
+  return path:match("([^/\\]+)$") or path
+end
+
+local function fileExtensionFromPath(path)
+  if type(path) ~= "string" then return nil end
+  local ext = path:match("%.([^./\\]+)$")
+  if ext then
+    return string.lower(ext)
+  end
+  return nil
+end
+
+local function stripUtf8Bom(text)
+  if type(text) ~= "string" or #text < 3 then return text end
+  local b1, b2, b3 = text:byte(1, 3)
+  if b1 == 0xEF and b2 == 0xBB and b3 == 0xBF then
+    return text:sub(4)
+  end
+  return text
+end
+
+local function isLikelyBinary(data)
+  if type(data) ~= "string" or #data == 0 then return false end
+  if data:find("\0", 1, true) then
+    return true
+  end
+  local control = 0
+  local len = #data
+  for i = 1, len do
+    local b = data:byte(i)
+    if b < 9 or (b > 13 and b < 32) then
+      control = control + 1
+      if control > (len * 0.10) then
+        return true
+      end
+    end
+  end
+  return false
+end
+
+local function readFilePreview(file)
+  local raw = file:read(FILE_DROP_PREVIEW_MAX_BYTES + 1)
+  if type(raw) ~= "string" then
+    return nil, false, "preview_read_failed"
+  end
+  local truncated = #raw > FILE_DROP_PREVIEW_MAX_BYTES
+  if truncated then
+    raw = raw:sub(1, FILE_DROP_PREVIEW_MAX_BYTES)
+  end
+  if isLikelyBinary(raw) then
+    return nil, truncated, "preview_binary_file"
+  end
+  return stripUtf8Bom(raw), truncated, nil
+end
+
 --- Call from love.filedropped(file).
 --- Lua modules get first crack at file drops. If no module consumes it,
 --- falls through to React via the bridge.
@@ -3132,19 +3310,53 @@ function ReactLove.filedropped(file)
   if not hit then return end
 
   local path = file:getFilename()
+  local fileName = fileNameFromPath(path)
+  local fileExtension = fileExtensionFromPath(path)
+  local fileDropMode = resolveFileDropMode(hit)
+
+  local size = nil
+  local dropMeta = {
+    fileDropMode = fileDropMode,
+    fileName = fileName,
+    fileExtension = fileExtension,
+  }
 
   -- DroppedFile:getSize() may fail if the file hasn't been opened yet.
-  -- Open → getSize → close, all wrapped in pcall for safety.
-  local size = nil
-  pcall(function()
-    if file:open("r") then
-      size = file:getSize()
-      file:close()
+  -- Open → read metadata/content → close, all wrapped in pcall for safety.
+  local ioOk = pcall(function()
+    if not file:open("r") then
+      if fileDropMode == "preview" then
+        dropMeta.filePreviewError = "preview_open_failed"
+      end
+      return
     end
+
+    size = file:getSize()
+
+    if fileDropMode == "preview" then
+      if fileExtension and not FILE_DROP_TEXT_EXTENSIONS[fileExtension] then
+        dropMeta.filePreviewError = "preview_unsupported_extension"
+      else
+        local previewText, truncated, previewErr = readFilePreview(file)
+        if previewText ~= nil then
+          dropMeta.filePreviewText = previewText
+          dropMeta.filePreviewTruncated = truncated
+          dropMeta.filePreviewEncoding = "utf-8"
+        else
+          dropMeta.filePreviewError = previewErr
+          dropMeta.filePreviewTruncated = truncated
+        end
+      end
+    end
+
+    file:close()
   end)
+  if not ioOk and fileDropMode == "preview" and not dropMeta.filePreviewError then
+    dropMeta.filePreviewError = "preview_io_error"
+  end
 
   local bubblePath = events.buildBubblePath(hit)
-  pushEvent(events.createFileDropEvent("filedrop", hit.id, mx, my, path, size, bubblePath))
+  pushEvent(events.createFileDropEvent("filedrop", hit.id, mx, my, path, size, bubblePath, dropMeta))
 end
 
 --- Call from love.directorydropped(path).

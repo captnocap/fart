@@ -12,7 +12,7 @@
     - lineHeight override (manual line-by-line rendering when set)
     - letterSpacing (character-by-character rendering -- known to be expensive)
     - Image: actual image rendering with scaling, opacity, and borderRadius
-    - Video: Theora video playback with objectFit, play/pause/loop/volume control
+    - Video: libmpv-backed playback with objectFit, play/pause/loop/volume control
     - Opacity propagation: nested opacity values multiply down the tree
     - overflow:hidden with borderRadius > 0: stencil-based clipping with nesting support
     - overflow:hidden with borderRadius = 0: scissor-based rectangular clipping
@@ -30,6 +30,7 @@ local Scene3DModule = nil -- Injected at init time via Painter.init()
 local MapModule = nil     -- Injected at init time via Painter.init()
 local GameModule = nil    -- Injected at init time via Painter.init()
 local EmulatorModule = nil -- Injected at init time via Painter.init()
+local EffectsModule = nil  -- Injected at init time via Painter.init()
 local CapabilitiesModule = nil  -- Lazy-loaded on first use
 local ZIndex = require("lua.zindex")
 local Color = require("lua.color")
@@ -81,6 +82,7 @@ function Painter.init(config)
   MapModule = config.map
   GameModule = config.game
   EmulatorModule = config.emulator
+  EffectsModule = config.effects
   getFont = Measure.getFont
 end
 
@@ -896,6 +898,16 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
       end
     end
 
+    -- Background effect canvas (renders behind children, from child effect with background=true)
+    if EffectsModule then
+      local bgCanvas = EffectsModule.getBackground(node.id)
+      if bgCanvas then
+        love.graphics.setColor(1, 1, 1, effectiveOpacity)
+        local cw, ch = bgCanvas:getDimensions()
+        love.graphics.draw(bgCanvas, c.x, c.y, 0, c.w / cw, c.h / ch)
+      end
+    end
+
   elseif not isHidden and (node.type == "Text" or node.type == "__TEXT__") then
     -- Draw text selection highlight BEFORE text (so text renders on top)
     if not TextSelectionModule then
@@ -1321,6 +1333,15 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
       end
     end
 
+  elseif not isHidden and EffectsModule and EffectsModule.isEffect(node.type) then
+    -- Generative effect viewport: draw the pre-rendered Canvas from effects.lua
+    local canvas = EffectsModule.get(node.id)
+    if canvas then
+      local cw, ch = canvas:getDimensions()
+      love.graphics.setColor(1, 1, 1, effectiveOpacity)
+      love.graphics.draw(canvas, c.x, c.y, 0, c.w / cw, c.h / ch)
+    end
+
   elseif not isHidden and node.type == "Slider" then
     if not SliderModule then
       SliderModule = require("lua.slider")
@@ -1476,6 +1497,15 @@ function Painter.drawScrollbars(node, opacity)
   local c = node.computed
   local ss = node.scrollState
   if not c or not ss then return end
+  local props = node.props or {}
+  local horizontalMode = props.horizontal
+  local allowX = true
+  local allowY = true
+  if horizontalMode == true then
+    allowY = false
+  elseif horizontalMode == false then
+    allowX = false
+  end
 
   local viewportW = c.w
   local viewportH = c.h
@@ -1489,7 +1519,7 @@ function Painter.drawScrollbars(node, opacity)
   local barColor = { 1, 1, 1, 0.3 * opacity }
 
   -- Vertical scrollbar (right edge)
-  if contentH > viewportH then
+  if allowY and contentH > viewportH then
     local trackH = viewportH
     local thumbH = math.max(20, (viewportH / contentH) * trackH)
     local maxScroll = contentH - viewportH
@@ -1501,7 +1531,7 @@ function Painter.drawScrollbars(node, opacity)
   end
 
   -- Horizontal scrollbar (bottom edge)
-  if contentW > viewportW then
+  if allowX and contentW > viewportW then
     local trackW = viewportW
     local thumbW = math.max(20, (viewportW / contentW) * trackW)
     local maxScroll = contentW - viewportW
