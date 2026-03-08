@@ -177,17 +177,6 @@ const STYLE_USAGE_CODE = `import { Box, Text } from '@reactjit/core';
   backgroundColor: '#8b5cf6',
   borderRadius: 8,
   padding: 16,
-}} />
-
-// Spring transition on width
-<Box style={{
-  width: active ? 200 : 80,
-  backgroundColor: '#06b6d4',
-  borderRadius: 8,
-  height: 40,
-  transition: {
-    width: { duration: 600, easing: 'spring' },
-  },
 }} />`;
 
 const ICON_USAGE_CODE = `import { Icon } from '@reactjit/icons';
@@ -347,7 +336,6 @@ const STYLE_PROPS: [string, string, string][] = [
   ['top / right / bottom / left', 'number | string', 'move'],
   ['zIndex', 'number', 'layers'],
   ['overflow', "'hidden' | 'visible' | 'scroll'", 'scissors'],
-  ['transition', '{ [prop]: { duration, easing } }', 'activity'],
 ];
 
 const ICON_PROPS: [string, string][] = [
@@ -378,7 +366,6 @@ const STYLE_BEHAVIOR_NOTES = [
   'backgroundGradient overrides backgroundColor. Use direction: "horizontal", "vertical", or "diagonal" with a colors array.',
   'Per-side borders (borderTopWidth etc.) require borderColor to also be set. borderWidth sets all four sides at once.',
   'transform is applied as a single object: { rotate, scaleX, scaleY, translateX, translateY }. All fields are optional.',
-  'transition animates style changes using spring physics. Specify the property key and { duration, easing } \u2014 supported easings: "spring", "ease-in", "ease-out", "ease-in-out", "linear".',
   'overflow: "hidden" clips children to the box bounds. overflow: "visible" lets children paint outside (default).',
   'position: "absolute" removes the element from flex flow. Use top/right/bottom/left for placement. zIndex controls stacking order.',
 ];
@@ -396,8 +383,6 @@ export function StyleStory() {
   const [errors, setErrors] = useState<string[]>([]);
 
   // Style demos
-  const [expanded, setExpanded] = useState(false);
-  const [toggled, setToggled] = useState(false);
 
   // Icon browser
   const [iconFilter, setIconFilter] = useState('');
@@ -657,60 +642,6 @@ export function StyleStory() {
                     </Box>
                     <S.StoryTiny>{'visible'}</S.StoryTiny>
                   </S.CenterG4>
-                </Box>
-
-                {/* ── Spring Transitions ── */}
-                <SectionLabel>{'TRANSITION \u2014 WIDTH (SPRING)'}</SectionLabel>
-                <Box style={{ alignItems: 'center', gap: 8 }}>
-                  <Pressable onPress={() => setExpanded(v => !v)} style={{
-                    backgroundColor: c.primary, paddingLeft: 12, paddingRight: 12,
-                    paddingTop: 6, paddingBottom: 6, borderRadius: 6, alignItems: 'center',
-                  }}>
-                    <S.WhiteBody>{expanded ? 'Collapse' : 'Expand'}</S.WhiteBody>
-                  </Pressable>
-                  <Box style={{
-                    width: expanded ? '100%' : 80,
-                    height: 36,
-                    backgroundColor: c.primary,
-                    borderRadius: 6,
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                    overflow: 'hidden',
-                    transition: { width: { duration: 600, easing: 'spring' } },
-                  }}>
-                    <S.WhiteCaption>{expanded ? 'expanded' : '80px'}</S.WhiteCaption>
-                  </Box>
-                </Box>
-
-                <SectionLabel>{'TRANSITION \u2014 TRANSFORM (SPRING)'}</SectionLabel>
-                <Box style={{ alignItems: 'center', gap: 8 }}>
-                  <Pressable onPress={() => setToggled(v => !v)} style={{
-                    backgroundColor: c.primary, paddingLeft: 12, paddingRight: 12,
-                    paddingTop: 6, paddingBottom: 6, borderRadius: 6, alignItems: 'center',
-                  }}>
-                    <S.WhiteBody>{'Toggle'}</S.WhiteBody>
-                  </Pressable>
-                  <Box style={{ width: '100%', height: 80, position: 'relative' }}>
-                    <Box style={{
-                      position: 'absolute',
-                      top: 10,
-                      left: 0,
-                      width: 60,
-                      height: 60,
-                      backgroundColor: P.red,
-                      borderRadius: 30,
-                      transform: {
-                        translateX: toggled ? 160 : 0,
-                        scaleX: toggled ? 1.2 : 1,
-                        scaleY: toggled ? 1.2 : 1,
-                      },
-                      justifyContent: 'center',
-                      alignItems: 'center',
-                      transition: { transform: { duration: 600, easing: 'spring' } },
-                    }}>
-                      <S.WhiteCaption>{toggled ? '160' : '0'}</S.WhiteCaption>
-                    </Box>
-                  </Box>
                 </Box>
 
                 {/* ── Recipes ── */}
@@ -1005,7 +936,7 @@ export function StyleStory() {
                 {/* ── Overview ── */}
                 <SectionLabel>{'OVERVIEW'}</SectionLabel>
                 <S.StoryBody>
-                  {'Style properties control the visual appearance of nodes beyond layout. Gradients add color depth. Borders define edges. Shadows lift elements. Transform rotates, scales, and translates without affecting flow. Transitions animate changes with spring or easing curves. Icons provide vector glyphs at any size. The theme system delivers semantic color tokens that adapt across palettes.'}
+                  {'Style properties control the visual appearance of nodes beyond layout. Gradients add color depth. Borders define edges. Shadows lift elements. Transform rotates, scales, and translates without affecting flow. Icons provide vector glyphs at any size. The theme system delivers semantic color tokens that adapt across palettes.'}
                 </S.StoryBody>
 
                 <HorizontalDivider />
