@@ -1121,6 +1121,29 @@ export interface SPIDeviceProps {
  * <GameServer type="minecraft" config={{ port: 25565, difficulty: "normal" }} />
  * <GameServer type="goldsrc" config={{ port: 27015, game: "cstrike", map: "de_dust2" }} />
  */
+/**
+ * Props for the FileWatcher capability.
+ *
+ * @example
+ * <FileWatcher path="/home/user/src" recursive onChange={(e) => console.log(e.changeType, e.path)} />
+ * <FileWatcher path="/etc/myapp.conf" interval={5000} onChange={handleReload} />
+ */
+export interface FileWatcherProps {
+  /** File or directory path to watch. */
+  path: string;
+  /** Recurse into subdirectories. Default: false. */
+  recursive?: boolean;
+  /** Polling interval in milliseconds. Default: 1000. Min: 100. */
+  interval?: number;
+  /** Filename glob filter (e.g. '*.lua', '*.ts'). */
+  pattern?: string;
+  /** Enable or disable watching. Default: true. */
+  running?: boolean;
+  /** Fires on file create/modify/delete. Event has changeType, path, size, mtime. */
+  onChange?: (event: LoveEvent) => void;
+  key?: string | number;
+}
+
 export interface GameServerProps {
   /**
    * Server engine type:

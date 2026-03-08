@@ -326,6 +326,7 @@ function Capabilities.loadAll()
     "structure_view",
     "draw_canvas",
     "game_server",
+    "filewatcher",
   }
   local loaded, failed = {}, {}
   for _, name in ipairs(files) do

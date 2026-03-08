@@ -372,12 +372,12 @@ export { DebugOverlay, DebugBox, useDebugOverlay } from './DebugOverlay';
 
 // Declarative native capabilities
 export { Native } from './Native';
-export { Audio, TTS, Timer, LLMAgent, Window, Notification, Pin, PWM, SerialPort, I2CDevice, SPIDevice, Boids, ImageSelect, ImageProcess, Libretro, GameServer } from './capabilities';
+export { Audio, TTS, Timer, LLMAgent, Window, Notification, Pin, PWM, SerialPort, I2CDevice, SPIDevice, Boids, ImageSelect, ImageProcess, Libretro, GameServer, FileWatcher } from './capabilities';
 export { useCapabilities } from './useCapabilities';
 export type {
   NativeProps, AudioProps, TTSProps, TimerProps, LLMAgentProps, WindowProps, NotificationProps,
   PinProps, PWMProps, SerialPortProps, I2CDeviceProps, SPIDeviceProps,
-  BoidsProps, ImageSelectProps, ImageProcessProps, LibretroProps, GameServerProps,
+  BoidsProps, ImageSelectProps, ImageProcessProps, LibretroProps, GameServerProps, FileWatcherProps,
   CapabilitySchema,
   TooltipProp, TooltipConfig,
 } from './types';

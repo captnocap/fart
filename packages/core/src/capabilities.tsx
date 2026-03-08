@@ -22,6 +22,7 @@ import type {
   AudioProps, TTSProps, TimerProps, LLMAgentProps, WindowProps, NotificationProps,
   PinProps, PWMProps, SerialPortProps, I2CDeviceProps, SPIDeviceProps,
   BoidsProps, ImageSelectProps, ImageProcessProps, LibretroProps, GameServerProps,
+  FileWatcherProps,
 } from './types';
 
 /**
@@ -263,4 +264,23 @@ export function Libretro(props: LibretroProps) {
  */
 export function GameServer({ type: engineType, ...rest }: GameServerProps) {
   return <Native type="GameServer" engineType={engineType} {...rest} />;
+}
+
+/**
+ * Declarative filesystem watcher.
+ *
+ * Polls a file or directory for changes and fires onChange events.
+ * Supports recursive directory watching and glob pattern filtering.
+ *
+ * @example
+ * <FileWatcher path="/home/user/project/src" recursive onChange={(e) => {
+ *   console.log(e.changeType, e.path)  // "modified" "/home/user/project/src/app.lua"
+ * }} />
+ *
+ * <FileWatcher path="/etc/myapp.conf" interval={5000} onChange={handleReload} />
+ *
+ * <FileWatcher path="/home/user/assets" recursive pattern="*.png" onChange={reloadAssets} />
+ */
+export function FileWatcher(props: FileWatcherProps) {
+  return <Native type="FileWatcher" {...props} />;
 }
