@@ -4246,22 +4246,20 @@ function ReactJIT.mousepressed(x, y, button)
     local bh = c and math.floor(c.h) or "?"
     local handlers = hit.hasHandlers and "hasHandlers" or "noHandlers"
     local hover = (hit.props and hit.props.hoverStyle) and "hasHover" or "noHover"
-    io.write("[click] React hitTest found: type=" .. tostring(hit.type)
-      .. " id=" .. tostring(hit.id)
-      .. " bounds=" .. bx .. "," .. by .. " " .. bw .. "x" .. bh
-      .. " " .. handlers .. " " .. hover .. "\n"); io.flush()
+    Log.log("events", "[click] hit type=%s id=%s bounds=%s,%s %sx%s %s %s",
+      tostring(hit.type), tostring(hit.id), tostring(bx), tostring(by), tostring(bw), tostring(bh), handlers, hover)
   else
-    io.write("[click] React hitTest found: nil (nothing in React tree at " .. math.floor(x) .. "," .. math.floor(y) .. ")\n"); io.flush()
+    Log.log("events", "[click] miss at %d,%d", math.floor(x), math.floor(y))
   end
 
   -- Route to game module if click is on a GameCanvas or missed React entirely
   if M.gamemod then
     local hitIsGame = hit and hit.type == "GameCanvas"
     if not hit or hitIsGame then
-      io.write("[click] -> routing to game module (React had " .. (hitIsGame and "GameCanvas" or "nothing") .. ")\n"); io.flush()
+      Log.log("events", "[click] routed to game module reactHad=%s", hitIsGame and "GameCanvas" or "nothing")
       M.gamemod.mousepressed(x, y, button)
     else
-      io.write("[click] -> React claims this click (game module skipped)\n"); io.flush()
+      Log.log("events", "[click] retained by React")
     end
   end
 
@@ -4804,12 +4802,10 @@ function ReactJIT.keypressed(key, scancode, isrepeat)
     error("INTENTIONAL TEST CRASH — triggered by Ctrl+Shift+F12")
   end
 
-  -- Any key: dump font metrics (temporary debug)
-  io.write("[KEY-DBG] key=" .. tostring(key) .. " scancode=" .. tostring(scancode) .. "\n"); io.flush()
   if key == "." or key == "period" then
     local Layout = require("lua.layout")
     Layout._dumpFontMetrics = true
-    io.write("[KEY-DBG] font metrics dump triggered\n"); io.flush()
+    Log.log("events", "[key] font metrics dump triggered")
   end
 
   -- Context menu keyboard handling

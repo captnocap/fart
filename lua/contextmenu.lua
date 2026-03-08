@@ -15,6 +15,7 @@
 ]]
 
 local ContextMenu = {}
+local Log = require("lua.debug_log")
 
 local Measure       = nil
 local Events        = nil
@@ -291,13 +292,9 @@ end
 --- @param root table The tree root node
 --- @param pushEventFn function Bridge push function for boundary events
 function ContextMenu.open(x, y, root, pushEventFn)
-  io.write("[contextmenu] open() called at " .. x .. ", " .. y .. "\n"); io.flush()
-
   -- Find what's under the cursor
   local hitNode = Events and Events.hitTest(root, x, y) or nil
   local textNode = Events and Events.textHitTest(root, x, y) or nil
-
-  io.write("[contextmenu] hitNode=" .. tostring(hitNode and hitNode.type) .. " textNode=" .. tostring(textNode and textNode.type) .. "\n"); io.flush()
 
   -- Resolve __TEXT__ to parent Text
   if textNode and textNode.type == "__TEXT__" and textNode.parent then
@@ -307,11 +304,9 @@ function ContextMenu.open(x, y, root, pushEventFn)
   -- Build items
   local items, cmNode = buildItems(hitNode, textNode, root)
 
-  io.write("[contextmenu] items=" .. #items .. " cmNode=" .. tostring(cmNode and cmNode.type) .. "\n"); io.flush()
-
   -- If no items at all, don't open
   if #items == 0 then
-    io.write("[contextmenu] BAILING: items=0 — no text node and no ContextMenu ancestor. hitNode=" .. tostring(hitNode) .. " textNode=" .. tostring(textNode) .. "\n"); io.flush()
+    Log.log("events", "[contextmenu] bail: items=0 hit=%s text=%s", tostring(hitNode and hitNode.type), tostring(textNode and textNode.type))
     return false
   end
 
@@ -335,8 +330,7 @@ function ContextMenu.open(x, y, root, pushEventFn)
     selectedText = selectedText,
     pushEvent = pushEventFn,
   }
-
-  io.write("[contextmenu] state SET — menu at " .. mx .. "," .. my .. " size=" .. menuW .. "x" .. menuH .. " items=" .. #items .. "\n"); io.flush()
+  Log.log("events", "[contextmenu] open at %d,%d size=%dx%d items=%d", mx, my, menuW, menuH, #items)
 
   -- Fire open boundary event
   if cmNode and pushEventFn then
@@ -457,9 +451,8 @@ end
 function ContextMenu.handleMousePressed(x, y, button)
   if not state then return false end
 
-  io.write("[contextmenu] handleMousePressed at " .. x .. "," .. y .. " button=" .. button .. "\n"); io.flush()
   local index = itemIndexAt(x, y)
-  io.write("[contextmenu] itemIndexAt=" .. index .. "\n"); io.flush()
+  Log.log("events", "[contextmenu] press at %d,%d button=%s index=%d", x, y, tostring(button), index)
   if index > 0 then
     selectItem(index)
     return true
@@ -539,11 +532,6 @@ end
 --- Draw the context menu overlay.
 function ContextMenu.draw()
   if not state then return end
-
-  if not state._loggedDraw then
-    state._loggedDraw = true
-    io.write("[contextmenu] draw() called — pos=" .. state.x .. "," .. state.y .. " items=" .. #state.items .. "\n"); io.flush()
-  end
 
   local font = getFont()
   local menuW, menuH = calcMenuSize(state.items, font)
