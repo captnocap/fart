@@ -4310,6 +4310,9 @@ function ReactJIT.mousepressed(x, y, button)
       -- Convert screen coords to content-space (account for scroll ancestors)
       local cx, cy = M.events.screenToContent(hit, x, y)
       if M.widgets.handleMousePressed(hit, cx, cy, button) then
+        if not focus.isFocused(hit) then
+          focus.set(hit)
+        end
         -- Handled by unified widget dispatch (Slider, Fader, Knob, Switch, Checkbox, Radio, Select)
         do end  -- no-op body; dispatch already happened in the condition
       else
@@ -4951,6 +4954,8 @@ function ReactJIT.keypressed(key, scancode, isrepeat)
     if M.presentationeditor and M.presentationeditor.handleKeyPressed(focusedNode, key, scancode, isrepeat) then
       return
     end
+  elseif focusedNode and M.widgets and M.widgets.handleKeyPressed(focusedNode, key, scancode, isrepeat) then
+    return
   elseif focusedNode and M.capabilities and M.capabilities.isHittable(focusedNode.type) then
     -- Route to focused visual capability with keyboard handling
     local capDef = M.capabilities.getDefinition(focusedNode.type)
@@ -5078,6 +5083,8 @@ function ReactJIT.textinput(text)
       capDef.handleTextInput(focusedNode, text)
       return  -- consumed by visual capability
     end
+  elseif focusedNode and M.widgets and M.widgets.handleTextInput(focusedNode, text) then
+    return
   end
 
   if not M.bridge then return end
@@ -5139,6 +5146,10 @@ function ReactJIT.wheelmoved(x, y)
     if M.presentationeditor.handleWheel(hit, x, y) then
       return
     end
+  end
+
+  if M.widgets and M.widgets.handleWheel(hit, x, y) then
+    return
   end
 
   -- Hittable capabilities handle their own scroll (e.g. ClaudeCanvas)

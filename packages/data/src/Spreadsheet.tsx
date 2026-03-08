@@ -62,7 +62,7 @@ function normalizeColumnWidths(
 function areEqualWidths(left: number[], right: number[]): boolean {
   if (left.length !== right.length) return false;
   for (let i = 0; i < left.length; i += 1) {
-    if (left[i] ~= right[i]) return false;
+    if (left[i] !== right[i]) return false;
   }
   return true;
 }

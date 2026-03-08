@@ -522,6 +522,12 @@ local function evaluateAll(cells, targets, max_range_cells)
   return { values = values, errors = errors }
 end
 
+M.evaluate = evaluateAll
+M.normalizeAddress = normalizeAddress
+M.parseCellAddress = parseCell
+M.buildAddress = buildAddress
+M.columnIndexToLabel = columnToLabel
+
 -- ============================================================================
 -- RPC handlers
 -- ============================================================================

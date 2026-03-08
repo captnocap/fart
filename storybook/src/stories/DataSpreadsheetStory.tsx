@@ -1,7 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Box, CodeBlock, Pressable, ScrollView, Text, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
-import { Spreadsheet, columnIndexToLabel, useDataEvaluate } from '../../../packages/data/src';
+import { Spreadsheet, columnIndexToLabel } from '../../../packages/data/src';
 import type { SpreadsheetCellMap } from '../../../packages/data/src';
 
 const INSTALL_CODE = `import { Spreadsheet } from '@reactjit/data'
@@ -40,10 +40,6 @@ const SCALE_PRESETS: ScalePreset[] = [
   { id: 'massive', label: 'Massive', rows: 140, cols: 28, viewportHeight: 500 },
 ];
 const FOCUS_CELLS = ['B2', 'C2', 'F2', 'B7', 'C10', 'D10'];
-const MINI_SIZE = { width: 330, height: 235 };
-const MEDIUM_SIZE = { width: 560, height: 300 };
-const MINI_VIEWPORT_HEIGHT = 170;
-const MEDIUM_VIEWPORT_HEIGHT = 210;
 
 const LOGISTICS_PRESET: SpreadsheetCellMap = {
   A1: 'Route',
@@ -170,18 +166,11 @@ export function DataSpreadsheetStory() {
   const [cells, setCells] = useState<SpreadsheetCellMap>(() =>
     ensureScaleCells(LOGISTICS_PRESET, SCALE_PRESETS[0].rows, SCALE_PRESETS[0].cols),
   );
-
-  const evaluate = useDataEvaluate();
-  const [errorCount, setErrorCount] = useState(0);
-  useEffect(() => {
-    evaluate({ cells }).then(r => setErrorCount(Object.keys(r.errors).length)).catch(() => {});
-  }, [cells]);
   const summary = useMemo(() => ({
     formulaCount:    Object.values(cells).filter(v => v.trim().startsWith('=')).length,
     conversionCount: Object.values(cells).filter(v => v.includes('CONVERT(')).length,
     mathCount:       Object.values(cells).filter(v => /(REMAP|CLAMP|DIST2D|ROUND|AVG|SUM)\(/.test(v)).length,
-    errorCount,
-  }), [cells, errorCount]);
+  }), [cells]);
 
   return (
     <ScrollView style={{ width: '100%', height: '100%', backgroundColor: c.bg }}>
@@ -199,7 +188,6 @@ export function DataSpreadsheetStory() {
           <StatCard label="Formula Cells" value={String(summary.formulaCount)} tone={c.primary} />
           <StatCard label="CONVERT Calls" value={String(summary.conversionCount)} tone={c.success} />
           <StatCard label="Math Calls" value={String(summary.mathCount)} tone={c.warning} />
-          <StatCard label="Evaluation Errors" value={String(summary.errorCount)} tone={summary.errorCount > 0 ? c.error : c.success} />
           <StatCard label="Grid Size" value={`${scalePreset.rows} x ${scalePreset.cols}`} tone={c.accent} />
           <StatCard label="Selected Cell" value={selectedAddress} tone={c.primary} />
         </S.RowG8>
@@ -314,62 +302,13 @@ export function DataSpreadsheetStory() {
         </Box>
 
         <Box style={{ gap: 8 }}>
-          <S.StoryBody style={{ fontWeight: 'bold' }}>{'Embed Sizes: Mini + Medium'}</S.StoryBody>
+          <S.StoryBody style={{ fontWeight: 'bold' }}>{'Native Grid Notes'}</S.StoryBody>
           <S.StoryCap>
-            {'Same dataset, same formulas, same jump behavior. These are constrained component containers, not full-screen views.'}
+            {'This page now mounts one live spreadsheet. The grid itself renders in Lua; React owns only the formula/status shell and the story controls.'}
           </S.StoryCap>
-          <S.RowWrap style={{ gap: 12 }}>
-            <Box style={{
-              width: MINI_SIZE.width,
-              maxWidth: '100%',
-              height: MINI_SIZE.height,
-              borderRadius: 8,
-              borderWidth: 1,
-              borderColor: c.border,
-              overflow: 'hidden',
-            }}>
-              <Spreadsheet
-                rows={12}
-                cols={8}
-                cells={cells}
-                selectedAddress={selectedAddress}
-                onSelectedAddressChange={setSelectedAddress}
-                autoScrollToSelection
-                columnWidths={columnWidths.slice(0, 8)}
-                fitColumnsToViewport
-                viewportHeight={MINI_VIEWPORT_HEIGHT}
-                minVisibleRows={4}
-                maxVisibleRows={8}
-                showFormulaBar={false}
-                showStatusBar
-              />
-            </Box>
-
-            <Box style={{
-              width: MEDIUM_SIZE.width,
-              maxWidth: '100%',
-              height: MEDIUM_SIZE.height,
-              borderRadius: 8,
-              borderWidth: 1,
-              borderColor: c.border,
-              overflow: 'hidden',
-            }}>
-              <Spreadsheet
-                rows={20}
-                cols={12}
-                cells={cells}
-                selectedAddress={selectedAddress}
-                onSelectedAddressChange={setSelectedAddress}
-                autoScrollToSelection
-                columnWidths={columnWidths.slice(0, 12)}
-                fitColumnsToViewport
-                viewportHeight={MEDIUM_VIEWPORT_HEIGHT}
-                minVisibleRows={6}
-                maxVisibleRows={12}
-                showStatusBar
-              />
-            </Box>
-          </S.RowWrap>
+          <S.StoryCap>
+            {'The previous route-in delay came from mounting three interactive sheets and running a duplicate top-level evaluation pass in the story.'}
+          </S.StoryCap>
         </Box>
 
         <S.RowG12 style={{ alignItems: 'start' }}>

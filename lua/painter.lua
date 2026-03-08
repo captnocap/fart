@@ -56,6 +56,7 @@ local SwitchModule = nil     -- Lazy-loaded to avoid circular deps
 local CheckboxModule = nil   -- Lazy-loaded to avoid circular deps
 local RadioModule = nil      -- Lazy-loaded to avoid circular deps
 local SelectModule = nil     -- Lazy-loaded to avoid circular deps
+local SpreadsheetModule = nil -- Lazy-loaded to avoid circular deps
 local PianoKeyboardModule = nil  -- Lazy-loaded to avoid circular deps
 local StepSequencerModule = nil  -- Lazy-loaded to avoid circular deps
 local XYPadModule = nil
@@ -1747,6 +1748,12 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
       SelectModule = require("lua.select")
     end
     SelectModule.draw(node, effectiveOpacity)
+
+  elseif not isHidden and node.type == "SpreadsheetGrid" then
+    if not SpreadsheetModule then
+      SpreadsheetModule = require("lua.spreadsheet")
+    end
+    SpreadsheetModule.draw(node, effectiveOpacity)
 
   elseif not isHidden and node.type == "PianoKeyboard" then
     if not PianoKeyboardModule then

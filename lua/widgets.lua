@@ -42,6 +42,7 @@ function Widgets.init(deps)
     { type = "Checkbox", mod = "lua.checkbox"   },
     { type = "Radio",    mod = "lua.radio"      },
     { type = "Select",        mod = "lua.select",          stateKey = "_select",        dragField = "isOpen" },
+    { type = "SpreadsheetGrid", mod = "lua.spreadsheet",   stateKey = "_spreadsheet",   dragField = "dragKind" },
     { type = "PianoKeyboard", mod = "lua.piano_keyboard",  stateKey = "_pianokeyboard", dragField = "isDragging" },
     { type = "StepSequencer", mod = "lua.step_sequencer",  stateKey = "_stepsequencer", dragField = "isDragging" },
     { type = "XYPad",         mod = "lua.xypad",           stateKey = "_xypad",         dragField = "isDragging" },
@@ -100,11 +101,18 @@ function Widgets.drainAllEvents(pushEvent)
           local payload = {
             type = evt.type,
             targetId = evt.nodeId,
-            value = evt.value,
           }
-          -- Forward extra fields (e.g. x, y for XYPad)
-          if evt.x ~= nil then payload.x = evt.x end
-          if evt.y ~= nil then payload.y = evt.y end
+          for key, value in pairs(evt) do
+            if key ~= "nodeId" and key ~= "type" then
+              if key == "payload" and type(value) == "table" then
+                for payloadKey, payloadValue in pairs(value) do
+                  payload[payloadKey] = payloadValue
+                end
+              else
+                payload[key] = value
+              end
+            end
+          end
           pushEvent({ type = evt.type, payload = payload })
         end
       end
@@ -125,8 +133,7 @@ end
 function Widgets.handleMousePressed(hit, x, y, button)
   local entry = registry[hit.type]
   if entry and entry.mod.handleMousePressed then
-    entry.mod.handleMousePressed(hit, x, y, button)
-    return true
+    return entry.mod.handleMousePressed(hit, x, y, button) == true
   end
   return false
 end
@@ -173,6 +180,45 @@ function Widgets.handleMouseMoved(treeModule, x, y)
       end
     end
   end
+end
+
+--- Dispatch keyPressed to a focused Lua-owned widget.
+--- @param node table
+--- @param key string
+--- @param scancode string|nil
+--- @param isrepeat boolean
+--- @return boolean
+function Widgets.handleKeyPressed(node, key, scancode, isrepeat)
+  local entry = node and registry[node.type]
+  if entry and entry.mod.handleKeyPressed then
+    return entry.mod.handleKeyPressed(node, key, scancode, isrepeat) == true
+  end
+  return false
+end
+
+--- Dispatch textInput to a focused Lua-owned widget.
+--- @param node table
+--- @param text string
+--- @return boolean
+function Widgets.handleTextInput(node, text)
+  local entry = node and registry[node.type]
+  if entry and entry.mod.handleTextInput then
+    return entry.mod.handleTextInput(node, text) == true
+  end
+  return false
+end
+
+--- Dispatch wheel to a hit Lua-owned widget.
+--- @param node table
+--- @param x number
+--- @param y number
+--- @return boolean
+function Widgets.handleWheel(node, x, y)
+  local entry = node and registry[node.type]
+  if entry and entry.mod.handleWheel then
+    return entry.mod.handleWheel(node, x, y) == true
+  end
+  return false
 end
 
 return Widgets

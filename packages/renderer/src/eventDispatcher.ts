@@ -360,6 +360,22 @@ export function initEventDispatching(bridge: Subscribable): void {
     dispatchToTargetOnly(event, 'onValueChange');
   });
 
+  bridge.subscribe('spreadsheet:select', (event: LoveEvent) => {
+    dispatchToTargetOnly(event, 'onSpreadsheetSelect');
+  });
+
+  bridge.subscribe('spreadsheet:change', (event: LoveEvent) => {
+    dispatchToTargetOnly(event, 'onSpreadsheetChange');
+  });
+
+  bridge.subscribe('spreadsheet:columnresize', (event: LoveEvent) => {
+    dispatchToTargetOnly(event, 'onSpreadsheetColumnResize');
+  });
+
+  bridge.subscribe('spreadsheet:state', (event: LoveEvent) => {
+    dispatchToTargetOnly(event, 'onSpreadsheetState');
+  });
+
   // ── PianoKeyboard events (Lua-owned, target-only) ─────────
 
   bridge.subscribe('pianokeyboard:keydown', (event: LoveEvent) => {
