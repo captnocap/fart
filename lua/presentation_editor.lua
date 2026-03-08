@@ -19,6 +19,7 @@ local PresentationEditor = {}
 
 local Measure = nil
 local pendingEvents = {}
+local getFontForText
 
 local HANDLE_SIZE = 10
 local MIN_NODE_SIZE = 24
@@ -229,12 +230,37 @@ local function isEditableNode(nodeDef)
     or nodeDef.kind == "video"
 end
 
+local function getNodeBounds(nodeDef, frame)
+  local width = math.max(0, frame.width or 0)
+  local height = math.max(0, frame.height or 0)
+
+  if nodeDef.kind == "text" then
+    local padding = 12
+    local font = getFontForText(nodeDef)
+    local contentWidth = math.max(1, width - padding * 2)
+    local lineHeight = font and font:getHeight() or 28
+    local wrappedCount = 1
+
+    if font and font.getWrap then
+      local _, wrappedLines = font:getWrap(tostring(nodeDef.text or ""), contentWidth)
+      if wrappedLines and #wrappedLines > 0 then
+        wrappedCount = #wrappedLines
+      end
+    end
+
+    height = math.max(height, padding * 2 + wrappedCount * lineHeight)
+  end
+
+  return width, height
+end
+
 local function findNodeRecord(nodes, nodeId, parentX, parentY, overrides)
   for _, entry in ipairs(sortedNodes(nodes)) do
     local nodeDef = entry.node
     local frame = resolveFrame(nodeDef, overrides)
     local absX = parentX + (frame.x or 0)
     local absY = parentY + (frame.y or 0)
+    local boundsW, boundsH = getNodeBounds(nodeDef, frame)
 
     if nodeDef.id == nodeId then
       return {
@@ -242,6 +268,8 @@ local function findNodeRecord(nodes, nodeId, parentX, parentY, overrides)
         frame = frame,
         absX = absX,
         absY = absY,
+        boundsW = boundsW,
+        boundsH = boundsH,
         parentX = parentX,
         parentY = parentY,
       }
@@ -264,8 +292,7 @@ local function hitTestNodes(nodes, worldX, worldY, parentX, parentY, overrides)
       local frame = resolveFrame(nodeDef, overrides)
       local absX = parentX + (frame.x or 0)
       local absY = parentY + (frame.y or 0)
-      local width = frame.width or 0
-      local height = frame.height or 0
+      local width, height = getNodeBounds(nodeDef, frame)
 
       if nodeDef.kind == "group" and nodeDef.children then
         local allowChildren = true
@@ -425,8 +452,7 @@ local function collectSelectionsInRect(nodes, slideId, x, y, w, h, parentX, pare
       local frame = resolveFrame(nodeDef, overrides)
       local absX = parentX + (frame.x or 0)
       local absY = parentY + (frame.y or 0)
-      local width = frame.width or 0
-      local height = frame.height or 0
+      local width, height = getNodeBounds(nodeDef, frame)
 
       if nodeDef.kind == "group" and nodeDef.children then
         local allowChildren = true
@@ -641,15 +667,16 @@ local function worldToScreen(layout, camera, wx, wy)
 end
 
 local function getHandleWorldPosition(record, handle)
-  local frame = record.frame
+  local width = record.boundsW or (record.frame.width or 0)
+  local height = record.boundsH or (record.frame.height or 0)
   if handle == "nw" then
     return record.absX, record.absY
   elseif handle == "ne" then
-    return record.absX + frame.width, record.absY
+    return record.absX + width, record.absY
   elseif handle == "sw" then
-    return record.absX, record.absY + frame.height
+    return record.absX, record.absY + height
   end
-  return record.absX + frame.width, record.absY + frame.height
+  return record.absX + width, record.absY + height
 end
 
 local function hitResizeHandle(state, slide, layout, sx, sy)
@@ -712,7 +739,7 @@ local function resolveAsset(document, assetId)
   return assets[assetId]
 end
 
-local function getFontForText(nodeDef)
+getFontForText = function(nodeDef)
   local textStyle = nodeDef.textStyle or {}
   local style = nodeDef.style or {}
   local fontSize = textStyle.fontSize or style.fontSize or 28
@@ -917,13 +944,9 @@ local function drawSelection(document, slide, state, layout, opacity)
   local handleWorldSize = HANDLE_SIZE / math.max(layout.scale, 0.0001)
 
   for _, record in ipairs(selectionRecords) do
-    local frame = record.frame
-    setParsedColor(accent, opacity, FALLBACK_SELECTION)
-    love.graphics.rectangle("fill", record.absX, record.absY, frame.width, frame.height)
-
     setParsedColor(accent, opacity, FALLBACK_ACCENT)
     love.graphics.setLineWidth(outlineWidth)
-    love.graphics.rectangle("line", record.absX, record.absY, frame.width, frame.height)
+    love.graphics.rectangle("line", record.absX, record.absY, record.boundsW, record.boundsH)
   end
 
   if #selectionRecords == 1 then
