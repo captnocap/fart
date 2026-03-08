@@ -1,15 +1,16 @@
 /**
- * Files — file drop, media scanning, archive walking, classification.
+ * Files — file drop, file watching, media scanning, archive walking, classification.
  *
  * Everything file-related in one place: drag-and-drop from the OS,
- * directory scanning via Lua, archive reading via libarchive FFI,
- * instant local file classification, and format utilities.
+ * filesystem change detection, directory scanning via Lua, archive
+ * reading via libarchive FFI, instant local file classification,
+ * and format utilities.
  *
  * Static hoist ALL code strings and style objects outside the component.
  */
 
 import React, { useState, useCallback, useMemo } from 'react';
-import { Box, Text, Image, ScrollView, CodeBlock, Pressable, ImageGallery, classifiers as S} from '../../../packages/core/src';
+import { Box, Text, Image, ScrollView, CodeBlock, Pressable, ImageGallery, FileWatcher, classifiers as S} from '../../../packages/core/src';
 import type { LoveEvent } from '../../../packages/core/src';
 import { classifyFile, formatSize } from '../../../packages/media/src';
 import type { MediaType } from '../../../packages/media/src';
@@ -113,6 +114,33 @@ classifyFile('readme.pdf')    // 'document'
 classifyFile('backup.rar')    // 'archive'
 formatSize(4831838208)        // '4.5 GB'`;
 
+const WATCH_FILE_CODE = `import { FileWatcher } from '@reactjit/core'
+
+// Watch a single config file
+<FileWatcher
+  path="/etc/myapp.conf"
+  interval={5000}
+  onChange={(e) => {
+    console.log(e.changeType)  // "modified"
+    console.log(e.path)        // "/etc/myapp.conf"
+    console.log(e.size)        // 2048
+    console.log(e.mtime)       // 1741234567
+  }}
+/>`;
+
+const WATCH_DIR_CODE = `// Watch a directory recursively with pattern filter
+<FileWatcher
+  path="/home/user/project/src"
+  recursive
+  pattern="*.lua"
+  interval={2000}
+  onChange={(e) => {
+    if (e.changeType === 'modified') hotReload(e.path)
+    if (e.changeType === 'created') indexNewFile(e.path)
+    if (e.changeType === 'deleted') removeFromIndex(e.path)
+  }}
+/>`;
+
 const GALLERY_CODE = `import { ImageGallery } from '@reactjit/core'
 
 <ImageGallery
@@ -147,6 +175,7 @@ const FEATURES = [
   { label: 'Archive Read', desc: 'List/extract RAR, ZIP, 7z, TAR, ISO via libarchive FFI', color: C.red },
   { label: 'Classification', desc: '40+ extensions: video, audio, image, subtitle, document, archive', color: C.blue },
   { label: 'Image Gallery', desc: 'Grid layout with modal viewer overlay', color: C.teal },
+  { label: 'File Watcher', desc: 'Poll-based change detection for files and directories', color: C.green },
 ];
 
 const ARCHIVE_FORMATS = [
@@ -402,6 +431,62 @@ function GalleryDemo() {
   );
 }
 
+// ── Live Demo: File Watcher ──────────────────────────────
+
+function FileWatcherDemo() {
+  const c = useThemeColors();
+  const [events, setEvents] = useState<Array<{ changeType: string; path: string; time: string }>>([]);
+  const [watching, setWatching] = useState(true);
+
+  const handleChange = useCallback((e: LoveEvent) => {
+    setEvents(prev => {
+      const next = [{ changeType: e.changeType, path: e.path, time: new Date().toLocaleTimeString() }, ...prev];
+      return next.length > 12 ? next.slice(0, 12) : next;
+    });
+  }, []);
+
+  const TYPE_COLORS: Record<string, string> = {
+    created: C.green,
+    modified: C.yellow,
+    deleted: C.red,
+  };
+
+  return (
+    <S.StackG6W100>
+      <FileWatcher path="/tmp" interval={2000} running={watching} onChange={handleChange} />
+
+      <S.RowCenterG8>
+        <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: watching ? C.green : c.muted }} />
+        <S.StoryBody>{watching ? 'Watching /tmp (2s interval)' : 'Paused'}</S.StoryBody>
+        <Box style={{ flexGrow: 1 }} />
+        <Pressable onPress={() => setWatching(w => !w)}>
+          <Box style={{ backgroundColor: c.surface1, borderRadius: 4, paddingLeft: 8, paddingRight: 8, paddingTop: 4, paddingBottom: 4 }}>
+            <Text style={{ fontSize: 9, color: C.accent }}>{watching ? 'Pause' : 'Resume'}</Text>
+          </Box>
+        </Pressable>
+        <Pressable onPress={() => setEvents([])}>
+          <Box style={{ backgroundColor: c.surface1, borderRadius: 4, paddingLeft: 8, paddingRight: 8, paddingTop: 4, paddingBottom: 4 }}>
+            <Text style={{ fontSize: 9, color: c.muted }}>{'Clear'}</Text>
+          </Box>
+        </Pressable>
+      </S.RowCenterG8>
+
+      <Box style={{ backgroundColor: c.surface1, borderRadius: 6, padding: 8, gap: 3, minHeight: 60 }}>
+        {events.length === 0 ? (
+          <S.StoryCap>{'No changes detected yet. Touch a file in /tmp to see events.'}</S.StoryCap>
+        ) : events.map((ev, i) => (
+          <S.RowCenterG8 key={`${ev.path}-${ev.time}-${i}`}>
+            <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: TYPE_COLORS[ev.changeType] || c.muted, flexShrink: 0 }} />
+            <Text style={{ fontSize: 9, color: TYPE_COLORS[ev.changeType] || c.muted, width: 55, flexShrink: 0 }}>{ev.changeType}</Text>
+            <S.StoryCap style={{ flexGrow: 1, flexShrink: 1 }}>{ev.path}</S.StoryCap>
+            <S.DimMicro>{ev.time}</S.DimMicro>
+          </S.RowCenterG8>
+        ))}
+      </Box>
+    </S.StackG6W100>
+  );
+}
+
 // ── FilesStory ───────────────────────────────────────────
 
 export function FilesStory() {
@@ -592,7 +677,58 @@ export function FilesStory() {
 
         <Divider />
 
-        {/* ── Band 7: demo | text + code — IMAGE GALLERY ── */}
+        {/* ── Band 7: demo | text + code — FILE WATCHER ── */}
+        <Band>
+          <Half>
+            <FileWatcherDemo />
+          </Half>
+          <Half>
+            <SectionLabel icon="eye">{'FILE WATCHER'}</SectionLabel>
+            <Text style={{ color: C.accent, fontSize: 9, fontStyle: 'italic' }}>{'I see you changed that'}</Text>
+            <S.StoryBody>
+              {'Declarative filesystem watching as a capability. Poll-based change detection that fires onChange for created, modified, and deleted files. Watch a single file, an entire directory, or recurse with glob filtering.'}
+            </S.StoryBody>
+            <S.StoryCap>
+              {'Uses find + batched stat under the hood — one subprocess per poll interval, not per frame. Follows symlinks. Configurable interval (default 1s, min 100ms). Toggle running prop to pause/resume.'}
+            </S.StoryCap>
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={WATCH_FILE_CODE} />
+          </Half>
+        </Band>
+
+        <Divider />
+
+        {/* ── Band 8: text + code — DIR WATCHER ── */}
+        <Band>
+          <Half>
+            <SectionLabel icon="folder">{'RECURSIVE WATCH'}</SectionLabel>
+            <Text style={{ color: C.accent, fontSize: 9, fontStyle: 'italic' }}>{'Every. Single. File.'}</Text>
+            <S.StoryBody>
+              {'Set recursive to scan subdirectories. Add a pattern prop to filter by glob (e.g. "*.lua", "*.ts"). Changes to the path, recursive, or pattern props trigger a fresh baseline scan.'}
+            </S.StoryBody>
+            <CodeBlock language="tsx" fontSize={9} style={{ width: '100%' }} code={WATCH_DIR_CODE} />
+          </Half>
+          <Half>
+            <S.StackG4W100>
+              <S.StoryCap>{'onChange event fields:'}</S.StoryCap>
+              {[
+                { label: 'changeType', desc: '"created" | "modified" | "deleted"', color: C.green },
+                { label: 'path', desc: 'Absolute path to the changed file', color: C.blue },
+                { label: 'size', desc: 'File size in bytes (not on delete)', color: C.yellow },
+                { label: 'mtime', desc: 'Unix timestamp of last modification', color: C.mauve },
+              ].map(f => (
+                <S.RowCenterG8 key={f.label}>
+                  <Box style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: f.color, flexShrink: 0 }} />
+                  <S.StoryBreadcrumbActive style={{ width: 90, flexShrink: 0 }}>{f.label}</S.StoryBreadcrumbActive>
+                  <S.StoryCap>{f.desc}</S.StoryCap>
+                </S.RowCenterG8>
+              ))}
+            </S.StackG4W100>
+          </Half>
+        </Band>
+
+        <Divider />
+
+        {/* ── Band 9: demo | text + code — IMAGE GALLERY ── */}
         <Band>
           <Half>
             <GalleryDemo />
