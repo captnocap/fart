@@ -1197,7 +1197,6 @@ function PresentationEditor.handleMouseMoved(node, sx, sy)
     state.camera.y = gesture.startCamera.y - dy / math.max(layout.scale, 0.0001)
     state.cameraDirty = true
     state.cameraCommitTimer = nil
-    emitCameraChange(node.id, slide.id, state.camera, true)
     return true
   end
 
@@ -1342,7 +1341,6 @@ function PresentationEditor.handleWheel(node, _dx, dy)
   state.cameraDirty = true
   state.cameraCommitTimer = CAMERA_COMMIT_DELAY
 
-  emitCameraChange(node.id, slide.id, state.camera, true)
   return true
 end
 

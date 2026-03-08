@@ -68,7 +68,7 @@ function summarizeSlide(slide: PresentationSlide): { preview: string; textCount:
   return { preview, textCount, shapeCount, mediaCount };
 }
 
-function ActionButton({
+const ActionButton = React.memo(function ActionButton({
   label,
   disabled,
   onPress,
@@ -101,9 +101,9 @@ function ActionButton({
       <Text style={{ fontSize: 10, color: disabled ? PANEL_MUTED : PANEL_TEXT, fontWeight: 'bold' }}>{label}</Text>
     </Pressable>
   );
-}
+});
 
-export function PresentationSlideStrip(props: PresentationSlideStripProps) {
+export const PresentationSlideStrip = React.memo(function PresentationSlideStrip(props: PresentationSlideStripProps) {
   const {
     document,
     activeSlideId,
@@ -123,6 +123,10 @@ export function PresentationSlideStrip(props: PresentationSlideStripProps) {
   const canRemove = document.slides.length > 1 && activeSlide != null;
   const canMoveUp = activeSlideIndex > 0;
   const canMoveDown = activeSlideIndex >= 0 && activeSlideIndex < document.slides.length - 1;
+  const slideSummaries = React.useMemo(
+    () => document.slides.map((slide) => summarizeSlide(slide)),
+    [document],
+  );
 
   return (
     <Box
@@ -182,7 +186,7 @@ export function PresentationSlideStrip(props: PresentationSlideStripProps) {
         }}
       >
         {document.slides.map((slide, index) => {
-          const summary = summarizeSlide(slide);
+          const summary = slideSummaries[index];
           const active = slide.id === (activeSlide?.id ?? '');
 
           return (
@@ -258,4 +262,4 @@ export function PresentationSlideStrip(props: PresentationSlideStripProps) {
       </ScrollView>
     </Box>
   );
-}
+});

@@ -468,6 +468,9 @@ export function PresentationStory() {
   }, []);
 
   const handleCameraChange = useCallback((event: PresentationEditorCameraEvent) => {
+    if (event.transient) {
+      return;
+    }
     if (event.slideId === activeSlideId) {
       setCameraPreview(event.camera);
     }
