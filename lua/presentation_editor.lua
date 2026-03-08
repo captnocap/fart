@@ -892,12 +892,56 @@ local function closeContextMenu(state)
   state.contextMenu = nil
 end
 
-local function buildContextMenuItems(document, slide, state, worldX, worldY)
+local function deepCopy(value)
+  if type(value) ~= "table" then
+    return value
+  end
+
+  local copy = {}
+  for key, entry in pairs(value) do
+    copy[key] = deepCopy(entry)
+  end
+  return copy
+end
+
+local function cloneNodeForDuplicate(nodeDef, offsetX, offsetY)
+  local clone = deepCopy(nodeDef)
+  clone.id = createNodeId(nodeDef.kind or "node")
+  clone.frame = copyFrame(nodeDef.frame)
+  clone.frame.x = (clone.frame.x or 0) + (offsetX or 0)
+  clone.frame.y = (clone.frame.y or 0) + (offsetY or 0)
+  clone.locked = false
+
+  if clone.kind == "group" and clone.children then
+    local children = {}
+    for index, child in ipairs(clone.children) do
+      children[index] = cloneNodeForDuplicate(child, 0, 0)
+    end
+    clone.children = children
+  end
+
+  return clone
+end
+
+local function areAllSelectionRecordsLocked(selectionRecords)
+  if not selectionRecords or #selectionRecords == 0 then return false end
+  for _, record in ipairs(selectionRecords) do
+    if not record.node.locked then
+      return false
+    end
+  end
+  return true
+end
+
+local function buildContextMenuItems(document, slide, state, worldX, worldY, hit)
   local imageAssetId = getFirstAssetIdByKind(document, "image")
   local videoAssetId = getFirstAssetIdByKind(document, "video")
-  local hasSelection = #(state.selection or {}) > 0
+  local selectionRecords = getSelectionRecords(state, slide)
+  local hasSelection = #selectionRecords > 0
+  local hitNode = hit and hit.node or nil
+  local allLocked = areAllSelectionRecordsLocked(selectionRecords)
 
-  return {
+  local items = {
     {
       label = "Insert Text",
       action = "insertText",
@@ -941,6 +985,32 @@ local function buildContextMenuItems(document, slide, state, worldX, worldY)
       action = "resetCamera",
     },
   }
+
+  if hitNode or hasSelection then
+    items[#items + 1] = { separator = true }
+    items[#items + 1] = {
+      label = "Duplicate Selection",
+      action = "duplicateSelection",
+      disabled = not hasSelection,
+    }
+    items[#items + 1] = {
+      label = "Bring Forward",
+      action = "bringForward",
+      disabled = not hasSelection,
+    }
+    items[#items + 1] = {
+      label = "Send Backward",
+      action = "sendBackward",
+      disabled = not hasSelection,
+    }
+    items[#items + 1] = {
+      label = allLocked and "Unlock Selection" or "Lock Selection",
+      action = allLocked and "unlockSelection" or "lockSelection",
+      disabled = not hasSelection,
+    }
+  end
+
+  return items
 end
 
 local function deleteCurrentSelection(node, state, slide)
@@ -968,14 +1038,15 @@ local function deleteCurrentSelection(node, state, slide)
   return true
 end
 
-local function openContextMenu(node, state, document, slide, sx, sy, worldX, worldY)
+local function openContextMenu(node, state, document, slide, sx, sy, worldX, worldY, hit)
   local font = getMenuFont()
-  local items = buildContextMenuItems(document, slide, state, worldX, worldY)
+  local items = buildContextMenuItems(document, slide, state, worldX, worldY, hit)
   local menu = {
     x = sx,
     y = sy,
     worldX = worldX,
     worldY = worldY,
+    hitNodeId = hit and hit.node and hit.node.id or nil,
     items = items,
     width = calcMenuWidth(items, font),
     height = calcMenuHeight(items),
@@ -1084,6 +1155,69 @@ local function activateContextMenuItem(node, state, document, slide, item)
     setSelection(node, state, collectSelectableSelections(slide.nodes, slide.id))
     closeContextMenu(state)
     return true
+  end
+
+  if item.action == "duplicateSelection" then
+    local selectionRecords = getSelectionRecords(state, slide)
+    local nextSelection = {}
+    for _, record in ipairs(selectionRecords) do
+      local clone = cloneNodeForDuplicate(record.node, 28, 28)
+      emitPatch(node.id, {
+        type = "addNode",
+        slideId = slide.id,
+        node = clone,
+      }, false)
+      nextSelection[#nextSelection + 1] = {
+        slideId = slide.id,
+        nodeId = clone.id,
+      }
+    end
+    state.pendingSelection = nextSelection[1]
+    closeContextMenu(state)
+    return #nextSelection > 0
+  end
+
+  if item.action == "bringForward" or item.action == "sendBackward" then
+    local delta = item.action == "bringForward" and 1 or -1
+    local selectionRecords = getSelectionRecords(state, slide)
+    for _, record in ipairs(selectionRecords) do
+      local nextFrame = copyFrame(record.frame)
+      nextFrame.zIndex = (nextFrame.zIndex or 0) + delta
+      state.frameOverrides[record.node.id] = nextFrame
+      emitPatch(node.id, {
+        type = "updateNode",
+        slideId = slide.id,
+        nodeId = record.node.id,
+        changes = {
+          frame = {
+            x = nextFrame.x,
+            y = nextFrame.y,
+            width = nextFrame.width,
+            height = nextFrame.height,
+            zIndex = nextFrame.zIndex,
+          },
+        },
+      }, false)
+    end
+    closeContextMenu(state)
+    return #selectionRecords > 0
+  end
+
+  if item.action == "lockSelection" or item.action == "unlockSelection" then
+    local nextLocked = item.action == "lockSelection"
+    local selectionRecords = getSelectionRecords(state, slide)
+    for _, record in ipairs(selectionRecords) do
+      emitPatch(node.id, {
+        type = "updateNode",
+        slideId = slide.id,
+        nodeId = record.node.id,
+        changes = {
+          locked = nextLocked,
+        },
+      }, false)
+    end
+    closeContextMenu(state)
+    return #selectionRecords > 0
   end
 
   if item.action == "deleteSelection" then
@@ -1541,7 +1675,7 @@ function PresentationEditor.handleMousePressed(node, sx, sy, button)
     else
       setSelection(node, state, nil)
     end
-    openContextMenu(node, state, document, slide, sx, sy, worldX, worldY)
+    openContextMenu(node, state, document, slide, sx, sy, worldX, worldY, hit)
     return true
   end
 
