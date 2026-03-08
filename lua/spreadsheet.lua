@@ -145,6 +145,14 @@ local function drawText(font, text, x, y, width, height, align, color)
   love.graphics.print(clipped, math.floor(tx + 0.5), math.floor(ty + 0.5))
 end
 
+local function intersectScissorRect(x, y, w, h)
+  local sx, sy = love.graphics.transformPoint(x, y)
+  local sx2, sy2 = love.graphics.transformPoint(x + w, y + h)
+  local sw = math.max(0, sx2 - sx)
+  local sh = math.max(0, sy2 - sy)
+  love.graphics.intersectScissor(sx, sy, sw, sh)
+end
+
 local function toDisplayString(value)
   if type(value) == "number" then
     if value == math.floor(value) then return tostring(math.floor(value)) end
@@ -737,6 +745,8 @@ function Spreadsheet.draw(node, effectiveOpacity)
   }
 
   local prevScissor = { love.graphics.getScissor() }
+  intersectScissorRect(computed.x, computed.y, computed.w, computed.h)
+  local widgetScissorX, widgetScissorY, widgetScissorW, widgetScissorH = love.graphics.getScissor()
 
   local headerFont = getFontHandle(10)
   local bodyFont = getFontHandle(10)
@@ -750,7 +760,7 @@ function Spreadsheet.draw(node, effectiveOpacity)
   local bodyHeight = math.max(0, computed.h - props.rowHeight)
 
   if bodyWidth > 0 and bodyHeight > 0 then
-    love.graphics.setScissor(computed.x + ROW_HEADER_WIDTH, computed.y + props.rowHeight, bodyWidth, bodyHeight)
+    intersectScissorRect(computed.x + ROW_HEADER_WIDTH, computed.y + props.rowHeight, bodyWidth, bodyHeight)
     for row = firstRow, lastRow do
       local y = computed.y + props.rowHeight + row * props.rowHeight - state.scrollY
       if y + props.rowHeight >= computed.y + props.rowHeight and y <= computed.y + computed.h then
@@ -802,10 +812,11 @@ function Spreadsheet.draw(node, effectiveOpacity)
         end
       end
     end
+    love.graphics.setScissor(widgetScissorX, widgetScissorY, widgetScissorW, widgetScissorH)
   end
 
   if computed.h > props.rowHeight then
-    love.graphics.setScissor(computed.x, computed.y + props.rowHeight, math.min(ROW_HEADER_WIDTH, computed.w), computed.h - props.rowHeight)
+    intersectScissorRect(computed.x, computed.y + props.rowHeight, math.min(ROW_HEADER_WIDTH, computed.w), computed.h - props.rowHeight)
     for row = firstRow, lastRow do
       local y = computed.y + props.rowHeight + row * props.rowHeight - state.scrollY
       if y + props.rowHeight >= computed.y + props.rowHeight and y <= computed.y + computed.h then
@@ -822,9 +833,10 @@ function Spreadsheet.draw(node, effectiveOpacity)
         })
       end
     end
+    love.graphics.setScissor(widgetScissorX, widgetScissorY, widgetScissorW, widgetScissorH)
   end
 
-  love.graphics.setScissor(computed.x, computed.y, math.min(ROW_HEADER_WIDTH, computed.w), math.min(props.rowHeight, computed.h))
+  intersectScissorRect(computed.x, computed.y, math.min(ROW_HEADER_WIDTH, computed.w), math.min(props.rowHeight, computed.h))
   love.graphics.setColor(colors.surface[1], colors.surface[2], colors.surface[3], colors.surface[4] * effectiveOpacity)
   love.graphics.rectangle("fill", computed.x, computed.y, ROW_HEADER_WIDTH, props.rowHeight)
   love.graphics.setColor(colors.border[1], colors.border[2], colors.border[3], colors.border[4] * effectiveOpacity)
@@ -832,9 +844,10 @@ function Spreadsheet.draw(node, effectiveOpacity)
   drawText(rowFont, "ROW", computed.x, computed.y, ROW_HEADER_WIDTH, props.rowHeight, "center", {
     colors.textDim[1], colors.textDim[2], colors.textDim[3], colors.textDim[4] * effectiveOpacity,
   })
+  love.graphics.setScissor(widgetScissorX, widgetScissorY, widgetScissorW, widgetScissorH)
 
   if computed.w > ROW_HEADER_WIDTH then
-    love.graphics.setScissor(computed.x + ROW_HEADER_WIDTH, computed.y, computed.w - ROW_HEADER_WIDTH, math.min(props.rowHeight, computed.h))
+    intersectScissorRect(computed.x + ROW_HEADER_WIDTH, computed.y, computed.w - ROW_HEADER_WIDTH, math.min(props.rowHeight, computed.h))
     for idx = 1, props.cols do
       local width = state.renderedWidths[idx] or props.columnWidth
       local x = computed.x + (state.columnOffsets[idx] or ROW_HEADER_WIDTH) - state.scrollX
@@ -860,6 +873,7 @@ function Spreadsheet.draw(node, effectiveOpacity)
         end
       end
     end
+    love.graphics.setScissor(widgetScissorX, widgetScissorY, widgetScissorW, widgetScissorH)
   end
 
   if prevScissor[1] then
