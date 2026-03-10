@@ -241,6 +241,7 @@ Capabilities.register("ClaudeCanvas", {
       local currentGroupType = nil
 
       local classifiedCache = {}  -- built during render, stored for clipboard dump
+      local promptVtRow = nil  -- vterm row of the ❯ prompt (for cursor drawing)
 
       -- Group type lookup: which tokens form interactive groups
       local GROUP_TYPES = {
@@ -440,6 +441,7 @@ Capabilities.register("ClaudeCanvas", {
               kind = "input_border"
             elseif kind == "user_prompt" or kind == "idle_prompt" then
               kind = "user_input"
+              if not promptVtRow then promptVtRow = row end
             elseif kind == "status_bar" then
               kind = "status_bar"
             elseif kind == "confirmation" or kind == "menu_option" or kind == "selector" or kind == "menu_title" then
@@ -627,11 +629,12 @@ Capabilities.register("ClaudeCanvas", {
       Scissor.restore(prevScissor)
 
       -- ── Prompt cursor ─────────────────────────────────────────
-      -- Use the vterm's actual cursor position — it is the SSoT.
-      if inputState.blinkOn then
+      -- We are the terminal. The cursor is our box overlay.
+      -- Use the prompt row we found during classification + vterm cursor col.
+      if inputState.blinkOn and promptVtRow then
         local cursor = vterm:getCursor()
         if cursor then
-          local cy = c.y + 8 + cursor.row * lineH - scrollY
+          local cy = c.y + 8 + promptVtRow * lineH - scrollY
           local cx = c.x + cellOffsetX + cursor.col * charW
           if cy >= c.y and cy + lineH <= contentBottom then
             love.graphics.setColor(0.9, 0.9, 0.95, 0.85 * effectiveOpacity)
