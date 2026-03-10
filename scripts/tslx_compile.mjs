@@ -1259,6 +1259,13 @@ ${schemaLua}
   events = ${eventsLua},
 
   create = function(nodeId, props)
+    -- Capability node fills its parent (like a React fragment)
+    local node = Tree.getNodes()[nodeId]
+    if node then
+      if not node.style then node.style = {} end
+      node.style.width = "100%"
+      node.style.height = "100%"
+    end
     local state = ${stateInit}
     local capState = { state = state, props = props }
     local function refresh()
@@ -1352,6 +1359,13 @@ ${schemaLua}
   events = ${eventsLua},
 
   create = function(nodeId, props)
+    -- Capability node fills its parent (like a React fragment)
+    local node = Tree.getNodes()[nodeId]
+    if node then
+      if not node.style then node.style = {} end
+      node.style.width = "100%"
+      node.style.height = "100%"
+    end
 ${createBody}
   end,
 
