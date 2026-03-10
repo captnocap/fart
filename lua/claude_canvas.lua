@@ -906,7 +906,7 @@ Capabilities.register("ClaudeCanvas", {
       escape    = "\27",
     }
 
-    io.write("[KEY] keyPressed → PTY: '" .. key .. "'\n"); io.flush()
+    -- io.write("[KEY] keyPressed → PTY: '" .. key .. "'\n"); io.flush()
 
     -- Enter: capture prompt text for renderer, then send \r to PTY
     if key == "return" or key == "kpenter" then
@@ -1007,7 +1007,7 @@ Capabilities.register("ClaudeCanvas", {
   handleTextInput = function(node, text)
     -- Don't send keystrokes until CLI prompt is ready
     if not Session.isReady() then return end
-    io.write("[KEY] textInput → PTY: '" .. text .. "'\n"); io.flush()
+    -- io.write("[KEY] textInput → PTY: '" .. text .. "'\n"); io.flush()
     -- Send typed characters directly to PTY
     Session.writeRaw(text)
   end,
