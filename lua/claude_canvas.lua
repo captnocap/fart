@@ -121,64 +121,11 @@ Capabilities.register("ClaudeCanvas", {
   end,
 
   tick = function(nodeId, state, dt, pushEvent, props)
-    -- Don't grab focus — the Input bar owns focus and forwards keystrokes here
-    -- via keystrokeTarget/submitTarget props.
-    state._focusGrabbed = true
-
     local inputState = getInputState(nodeId)
     inputState.blinkTimer = inputState.blinkTimer + dt
     if inputState.blinkTimer >= 0.53 then
       inputState.blinkTimer = 0
       inputState.blinkOn = not inputState.blinkOn
-    end
-
-    -- Sync proxy input cursor directly from vterm cursor position.
-    -- getPromptState() fails in splash mode — bypass it entirely.
-    -- The vterm cursor IS the SSoT for cursor position.
-    local sessionId = props and props.sessionId or "default"
-    local vt = Session.getVTerm(sessionId)
-    if vt then
-      local cursor = vt:getCursor()
-      if cursor then
-        -- Find the prompt prefix width by scanning for ❯/>/! symbol + space
-        local promptWidth = 0
-        local boundary = Session.getInputBoundary(sessionId) or 0
-        if cursor.row >= boundary then
-          for col = 0, math.min(15, cursor.col) do
-            local cell = vt:getCell(cursor.row, col)
-            if cell and cell.char then
-              local ch = cell.char
-              if ch:find("❯", 1, true) or ch == "!" or ch == ">" or ch == "›" then
-                -- Prompt symbol found. Skip it + the space/NBSP after it.
-                promptWidth = col + 2
-                break
-              end
-            end
-          end
-        end
-
-        local cursorCol = math.max(0, cursor.col - promptWidth)
-
-        local allNodes = Tree.getNodes()
-        if allNodes then
-          for _, n in pairs(allNodes) do
-            if n.type == "TextInput" and n.props and n.props.keystrokeTarget == "ClaudeCanvas" then
-              if n.inputState then
-                -- Convert cell column to byte offset
-                local bytePos = 0
-                local cellCount = 0
-                for char in n.inputState.text:gmatch("[%z\1-\127\194-\244][\128-\191]*") do
-                  if cellCount >= cursorCol then break end
-                  bytePos = bytePos + #char
-                  cellCount = cellCount + 1
-                end
-                n.inputState.cursorPos = math.min(bytePos, #n.inputState.text)
-              end
-              break
-            end
-          end
-        end
-      end
     end
   end,
 
