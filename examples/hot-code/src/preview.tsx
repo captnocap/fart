@@ -1,43 +1,25 @@
 function Preview() {
-  const cards = [
-    { label: 'Files Changed', value: '142', color: '#a6e3a1' },
-    { label: 'Build Time', value: '23ms', color: '#89b4fa' },
-    { label: 'Hot Reloads', value: '38', color: '#f9e2af' },
-    { label: 'Errors', value: '0', color: '#f38ba8' },
+  const items = [
+    { label: 'reconciler', status: 'hot', color: '#a6e3a1' },
+    { label: 'lua bridge', status: 'hot', color: '#a6e3a1' },
+    { label: 'layout engine', status: 'warm', color: '#f9e2af' },
+    { label: 'painter', status: 'cold', color: '#6c7086' },
   ];
 
   return (
-    <Box style={{ padding: 20, gap: 16, flexDirection: 'column' }}>
-      <Text style={{ fontSize: 18, color: '#cdd6f4', fontWeight: 'bold' }}>
-        Hot Code Dashboard
-      </Text>
-      <Box style={{ flexDirection: 'row', gap: 12, flexWrap: 'wrap' }}>
-        {cards.map((c, i) => (
-          <Box key={i} style={{
-            padding: 16,
-            backgroundColor: 'rgba(30,30,50,0.8)',
-            borderRadius: 8,
-            borderWidth: 1,
-            borderColor: c.color,
-            minWidth: 120,
-            gap: 6,
-          }}>
-            <Text style={{ fontSize: 24, color: c.color, fontWeight: 'bold' }}>{c.value}</Text>
-            <Text style={{ fontSize: 11, color: '#6c7086' }}>{c.label}</Text>
-          </Box>
-        ))}
-      </Box>
-      <Box style={{
-        padding: 14,
-        backgroundColor: 'rgba(166,227,161,0.06)',
-        borderRadius: 6,
-        borderWidth: 1,
-        borderColor: 'rgba(166,227,161,0.2)',
-      }}>
-        <Text style={{ fontSize: 12, color: '#a6e3a1' }}>
-          Ctrl+click any element to steer Claude
-        </Text>
-      </Box>
+    <Box style={{ padding: 24, gap: 12, flexDirection: 'column' }}>
+      <Text style={{ fontSize: 16, color: '#cdd6f4', fontWeight: 'bold' }}>pipeline</Text>
+      {items.map((item, i) => (
+        <Box key={i} style={{
+          flexDirection: 'row', alignItems: 'center', gap: 10,
+          paddingLeft: 12, paddingRight: 12, paddingTop: 10, paddingBottom: 10,
+          backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: 6,
+        }}>
+          <Box style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: item.color }} />
+          <Text style={{ fontSize: 12, color: '#cdd6f4', flexGrow: 1 }}>{item.label}</Text>
+          <Text style={{ fontSize: 10, color: item.color }}>{item.status}</Text>
+        </Box>
+      ))}
     </Box>
   );
 }

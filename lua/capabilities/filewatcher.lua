@@ -48,12 +48,21 @@ end
 
 --- Scan a directory. Returns { [filepath] = { mtime, size } }.
 --- Uses find -L (follows symlinks) + batched stat for efficiency.
-local function scanDir(path, recursive, pattern)
+local function scanDir(path, recursive, pattern, exclude)
   local depth = recursive and "" or "-maxdepth 1 "
   local nameFilter = pattern and ("-name " .. sq(pattern) .. " ") or ""
+  -- Build exclusion prune clauses (skips entire subtrees, not just individual files)
+  local prune = ""
+  if exclude then
+    local parts = {}
+    for _, dir in ipairs(exclude) do
+      parts[#parts + 1] = "-name " .. sq(dir) .. " -prune"
+    end
+    prune = "\\( " .. table.concat(parts, " -o ") .. " \\) -o "
+  end
   local cmd = string.format(
-    "find -L %s %s-type f %s-exec stat -c '%%Y %%s %%n' {} + 2>/dev/null",
-    sq(path), depth, nameFilter)
+    "find -L %s %s%s-type f %s-exec stat -c '%%Y %%s %%n' {} + 2>/dev/null",
+    sq(path), depth, prune, nameFilter)
   local p = io.popen(cmd)
   if not p then return {} end
   local files = {}
@@ -68,9 +77,9 @@ local function scanDir(path, recursive, pattern)
 end
 
 --- Build initial snapshot for a path.
-local function buildSnapshot(path, recursive, pattern)
+local function buildSnapshot(path, recursive, pattern, exclude)
   if isDir(path) then
-    return scanDir(path, recursive, pattern), true
+    return scanDir(path, recursive, pattern, exclude), true
   end
   local info = statFile(path)
   return info and { [path] = info } or {}, false
@@ -105,6 +114,7 @@ Capabilities.register("FileWatcher", {
     recursive = { type = "bool", default = false, desc = "Recurse into subdirectories" },
     interval  = { type = "number", default = 1000, min = 100, desc = "Polling interval in milliseconds" },
     pattern   = { type = "string", desc = "Filename glob filter (e.g. '*.lua', '*.ts')" },
+    exclude   = { type = "table", desc = "Directory names to skip (e.g. {'.git','node_modules'})" },
     running   = { type = "bool", default = true, desc = "Enable or disable watching" },
   },
 
@@ -115,7 +125,7 @@ Capabilities.register("FileWatcher", {
     if not path or path == "" then
       return { snapshot = {}, elapsed = 0, isDir = false, ok = false }
     end
-    local snapshot, dir = buildSnapshot(path, props.recursive, props.pattern)
+    local snapshot, dir = buildSnapshot(path, props.recursive, props.pattern, props.exclude)
     return { snapshot = snapshot, elapsed = 0, isDir = dir, ok = true }
   end,
 
@@ -130,7 +140,7 @@ Capabilities.register("FileWatcher", {
         state.ok = false
         return
       end
-      local snapshot, dir = buildSnapshot(path, props.recursive, props.pattern)
+      local snapshot, dir = buildSnapshot(path, props.recursive, props.pattern, props.exclude)
       state.snapshot = snapshot
       state.isDir = dir
       state.elapsed = 0
@@ -153,7 +163,7 @@ Capabilities.register("FileWatcher", {
     -- Rescan
     local curr
     if state.isDir then
-      curr = scanDir(path, props.recursive, props.pattern)
+      curr = scanDir(path, props.recursive, props.pattern, props.exclude)
     else
       local info = statFile(path)
       curr = info and { [path] = info } or {}

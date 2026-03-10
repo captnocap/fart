@@ -937,13 +937,10 @@ Capabilities.register("ClaudeCode", {
       if state.vterm then
         local curRows, curCols = state.vterm:size()
         if curCols ~= _desiredCols then
-          io.write(string.format("[RESIZE] %d -> %d cols\n", curCols, _desiredCols)); io.flush()
           state.vterm:resize(curRows, _desiredCols)
           if state.proc then state.proc:resize(curRows, _desiredCols) end
           state._emittedRows = {}
         end
-      else
-        io.write("[RESIZE] _desiredCols=" .. _desiredCols .. " but NO vterm\n"); io.flush()
       end
       _desiredCols = nil
     end

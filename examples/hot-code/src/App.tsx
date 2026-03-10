@@ -122,10 +122,6 @@ function HotPanel() {
   const handleChange = useCallback((e: any) => {
     const path = e.path as string;
     if (!path) return;
-    if (path.includes('/.git/')) return;
-    if (path.includes('/node_modules/')) return;
-    if (path.includes('/love/bundle')) return;
-    if (path.includes('/lua/generated/')) return;
     if (/\.(png|jpg|gif|svg|ico|woff|ttf|so|o|a|lock)$/i.test(path)) return;
     loadFile(path, e.changeType as string);
   }, [loadFile]);
@@ -134,8 +130,13 @@ function HotPanel() {
 
   return (
     <Box style={{ flexGrow: 1, flexBasis: 0, height: '100%', flexDirection: 'column', backgroundColor: C.surface }}>
-      <FileWatcher path={WORK_DIR} recursive interval={500} onChange={handleChange} />
-
+      <FileWatcher
+        path={WORK_DIR}
+        recursive
+        interval={1000}
+        exclude={['.git', 'node_modules', 'love', 'lua', 'lib', 'bin', 'fonts', 'deps', 'cli']}
+        onChange={handleChange}
+      />
       {/* Header */}
       <Box style={{
         flexShrink: 0, flexDirection: 'row', alignItems: 'center', gap: 8,
