@@ -8,7 +8,7 @@
  */
 
 import React, { useState } from 'react';
-import { Box, Text, ScrollView, CodeBlock, Pressable, Native, classifiers as S } from '../../../packages/core/src';
+import { Box, Text, ScrollView, CodeBlock, Pressable, TextInput, Native, classifiers as S } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { ClaudeCanvas } from '../../../packages/terminal/src';
 import { Band, Half, HeroBand, CalloutBand, Divider, SectionLabel, PageColumn } from './_shared/StoryScaffold';
@@ -264,6 +264,7 @@ function StatePreview() {
 export function ClaudeCanvasStory() {
   const c = useThemeColors();
   const [showLive, setShowLive] = useState(false);
+  const [workingDir, setWorkingDir] = useState('.');
 
   return (
     <S.StoryRoot>
@@ -320,6 +321,28 @@ export function ClaudeCanvasStory() {
             <S.StoryBody>
               {'Toggle the live canvas to spawn a real Claude Code session. This is the actual ClaudeCanvas component rendering — not a mockup. It connects to your local Claude CLI installation.'}
             </S.StoryBody>
+            <Box style={{ width: '100%', gap: 4 }}>
+              <Text style={{ fontSize: 9, color: c.muted }}>{'Working directory'}</Text>
+              <TextInput
+                value={workingDir}
+                onChangeText={setWorkingDir}
+                placeholder="/path/to/your/project"
+                style={{
+                  width: '100%',
+                  fontSize: 10,
+                  backgroundColor: C.canvasBg,
+                  color: '#cdd6f4',
+                  borderWidth: 1,
+                  borderColor: C.canvasBorder,
+                  borderRadius: 4,
+                  paddingLeft: 8, paddingRight: 8,
+                  paddingTop: 5, paddingBottom: 5,
+                }}
+              />
+              <S.StoryCap>
+                {'Absolute path to the project Claude will operate in. Defaults to "." (storybook root).'}
+              </S.StoryCap>
+            </Box>
             <Pressable onPress={() => setShowLive(!showLive)}>
               <Box style={{
                 backgroundColor: showLive ? 'rgba(243, 139, 168, 0.15)' : 'rgba(166, 227, 161, 0.15)',
@@ -340,7 +363,7 @@ export function ClaudeCanvasStory() {
           <Half>
             {showLive ? (
               <Box style={{ width: '100%', height: 300 }}>
-                <Native type="ClaudeCode" sessionId="story-demo" workingDir="." />
+                <Native type="ClaudeCode" sessionId="story-demo" workingDir={workingDir} />
                 <ClaudeCanvas sessionId="story-demo" style={{ width: '100%', height: 300, borderRadius: 6 }} />
               </Box>
             ) : (
