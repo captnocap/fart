@@ -106,7 +106,7 @@ local themeMenu  = M.themeMenu
 local systemPanel = M.systemPanel
 local focus      = M.focus
 local tooltips   = require("lua.tooltips")
-local windowchrome = require("lua.windowchrome")
+local windowchrome = { init = function() end, draw = function() end, setTheme = function() end, setTitle = function() end, getContentInsetY = function() return 0 end, mousepressed = function() return false end, mousereleased = function() end, mousemoved = function() return false end }
 local permit     = M.permit
 local audit      = M.audit
 local manifestMod = M.manifestMod

@@ -13,7 +13,7 @@
 import React from 'react';
 import { Box, Text, Image, ScrollView, CodeBlock, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
-import { Band, Half, HeroBand, CalloutBand, Divider, SectionLabel } from './_shared/StoryScaffold';
+import {Band, Half, HeroBand, CalloutBand, Divider, SectionLabel, PageColumn} from './_shared/StoryScaffold';
 
 // ── Palette ──────────────────────────────────────────────
 
@@ -85,6 +85,7 @@ export function Layout2Story() {
       {/* ── Center ── */}
       <ScrollView style={{ flexGrow: 1 }}>
 
+        <PageColumn>
         {/* ── Hero band ── */}
         <HeroBand accentColor={C.accent}>
           <S.StoryHeadline>
@@ -170,6 +171,7 @@ export function Layout2Story() {
           <CodeBlock language="tsx" fontSize={9} code={OPTIONS_CODE} />
         </Band>
 
+        </PageColumn>
       </ScrollView>
 
       {/* ── Footer ── */}

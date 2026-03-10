@@ -33,6 +33,7 @@ import {
   XYPad,
   PitchWheel,
 } from '../../../packages/controls/src';
+import { Band, Half, HeroBand, CalloutBand, Divider, SectionLabel, PageColumn } from './_shared/StoryScaffold';
 
 // ── Palette ──────────────────────────────────────────────
 
@@ -1059,6 +1060,7 @@ export function AudioStory() {
       {/* ── Content ── */}
       <ScrollView style={{ flexGrow: 1 }}>
 
+        <PageColumn>
         {/* ── Hero band: accent stripe + overview ── */}
         <Box style={{
           borderLeftWidth: 3,
@@ -1451,6 +1453,7 @@ export function AudioStory() {
           </Box>
         </Box>
 
+        </PageColumn>
       </ScrollView>
 
       {/* ── Footer ── */}

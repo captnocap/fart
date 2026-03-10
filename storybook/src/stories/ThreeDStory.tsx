@@ -16,7 +16,7 @@
 import React, { useState, useCallback } from 'react';
 import { Box, Text, Image, ScrollView, Pressable, CodeBlock, useLuaInterval, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
-import { Band, Half, HeroBand, CalloutBand, Divider, SectionLabel } from './_shared/StoryScaffold';
+import { Band, Half, HeroBand, CalloutBand, Divider, SectionLabel, PageColumn } from './_shared/StoryScaffold';
 import { Scene, Camera, Mesh, DirectionalLight, AmbientLight } from '../../../packages/3d/src';
 import type { Vec3 } from '../../../packages/3d/src';
 
@@ -475,6 +475,7 @@ export function ThreeDStory() {
 
       {/* ── Center ── */}
       <ScrollView style={{ flexGrow: 1 }}>
+        <PageColumn>
 
         {/* ── Hero band ── */}
         <HeroBand accentColor={C.accent}>
@@ -622,6 +623,7 @@ export function ThreeDStory() {
           <FeatureCatalog />
         </S.StoryFullBand>
 
+        </PageColumn>
       </ScrollView>
 
       {/* ── Footer ── */}

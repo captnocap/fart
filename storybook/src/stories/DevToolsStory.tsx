@@ -10,7 +10,7 @@
 import React from 'react';
 import { Box, Text, Image, ScrollView, CodeBlock, Pressable, useHotState, DevToolsEmbed, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
-import { Band, Half, HeroBand, CalloutBand, Divider, SectionLabel } from './_shared/StoryScaffold';
+import {Band, Half, HeroBand, CalloutBand, Divider, SectionLabel, PageColumn} from './_shared/StoryScaffold';
 
 // -- Palette ----------------------------------------------------------
 
@@ -455,6 +455,7 @@ export function DevToolsStory() {
       {/* Content */}
       <ScrollView style={{ flexGrow: 1 }}>
 
+        <PageColumn>
         {/* Hero */}
         <HeroBand accentColor={C.accent}>
           <S.StoryHeadline>
@@ -723,6 +724,7 @@ export function DevToolsStory() {
           </S.StoryBody>
         </CalloutBand>
 
+        </PageColumn>
       </ScrollView>
 
       {/* Footer */}

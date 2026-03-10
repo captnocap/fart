@@ -15,7 +15,7 @@ import type { LoveEvent } from '../../../packages/core/src';
 import { classifyFile, formatSize } from '../../../packages/media/src';
 import type { MediaType } from '../../../packages/media/src';
 import { useThemeColors } from '../../../packages/theme/src';
-import { Band, Half, HeroBand, CalloutBand, Divider, SectionLabel } from './_shared/StoryScaffold';
+import {Band, Half, HeroBand, CalloutBand, Divider, SectionLabel, PageColumn} from './_shared/StoryScaffold';
 
 // ── Palette ──────────────────────────────────────────────
 
@@ -520,6 +520,7 @@ export function FilesStory() {
       {/* ── Content ── */}
       <ScrollView style={{ flexGrow: 1 }}>
 
+        <PageColumn>
         {/* ── Hero band ── */}
         <HeroBand accentColor={C.accent}>
           <S.StoryHeadline>
@@ -772,6 +773,7 @@ export function FilesStory() {
           </S.StoryBody>
         </CalloutBand>
 
+        </PageColumn>
       </ScrollView>
 
       {/* ── Footer ── */}

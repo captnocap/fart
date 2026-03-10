@@ -76,6 +76,34 @@ export function StorySection({
 //   - Padding, gap, and alignment adapt to breakpoint but are FIXED here.
 //   - Stories never override them. Every band has identical padding at a given breakpoint.
 
+/** Max content width per breakpoint. sm/md are unconstrained. */
+const CONTENT_MAX: Record<string, number | undefined> = {
+  sm: undefined,
+  md: undefined,
+  lg: 960,
+  xl: 1100,
+};
+
+/** Constrains Layout2 content to a readable width on large screens.
+ *  Wrap this around all bands inside the ScrollView. */
+export function PageColumn({ children }: { children: React.ReactNode }) {
+  const bp = useBreakpoint();
+  const maxW = CONTENT_MAX[bp];
+  return (
+    <Box style={{
+      width: '100%',
+      alignItems: 'center',
+    }}>
+      <Box style={{
+        width: '100%',
+        maxWidth: maxW,
+      }}>
+        {children}
+      </Box>
+    </Box>
+  );
+}
+
 /** Full-width 1px separator between bands. */
 export function Divider() {
   const c = useThemeColors();

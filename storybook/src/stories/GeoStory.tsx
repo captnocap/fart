@@ -19,7 +19,7 @@ import {
 } from '../../../packages/geo/src';
 import type { LatLngTuple } from '../../../packages/geo/src';
 import { useThemeColors } from '../../../packages/theme/src';
-import { Band, Half, Divider, SectionLabel } from './_shared/StoryScaffold';
+import {Band, Half, Divider, SectionLabel, PageColumn} from './_shared/StoryScaffold';
 
 // ── Palette ──────────────────────────────────────────────
 
@@ -829,6 +829,7 @@ export function GeoStory() {
       {/* ── Content ── */}
       <ScrollView style={{ flexGrow: 1 }}>
 
+        <PageColumn>
         {/* ── Hero ── */}
         <Box style={{ borderLeftWidth: 3, borderColor: C.accent, paddingLeft: 25, paddingRight: 28, paddingTop: 24, paddingBottom: 24, gap: 8 }}>
           <S.StoryHeadline>
@@ -1492,6 +1493,7 @@ export function GeoStory() {
           </S.StoryBody>
         </Box>
 
+        </PageColumn>
       </ScrollView>
 
       {/* ── Footer ── */}

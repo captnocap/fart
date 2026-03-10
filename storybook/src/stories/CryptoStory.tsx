@@ -11,6 +11,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Box, Text, Image, ScrollView, CodeBlock, Pressable, classifiers as S} from '../../../packages/core/src';
 import { useCrypto } from '../../../packages/crypto/src';
 import { useThemeColors } from '../../../packages/theme/src';
+import {Band, Half, HeroBand, CalloutBand, Divider, SectionLabel, PageColumn} from './_shared/StoryScaffold';
 
 // ── Palette ──────────────────────────────────────────────
 
@@ -96,7 +97,6 @@ const ALGORITHMS = [
   { label: 'toHex/toBase64', desc: 'Pure JS encoding — no bridge needed', color: C.mauve },
 ];
 
-import { Band, Half, HeroBand, CalloutBand, Divider, SectionLabel } from './_shared/StoryScaffold';
 
 // ── Live Demo: Hash Functions ────────────────────────────
 
@@ -511,6 +511,7 @@ export function CryptoStory() {
       {/* ── Content ── */}
       <ScrollView style={{ flexGrow: 1 }}>
 
+        <PageColumn>
         {/* ── Hero band ── */}
         <Box style={{
           borderLeftWidth: 3,
@@ -705,6 +706,7 @@ export function CryptoStory() {
           </S.StoryBody>
         </Box>
 
+        </PageColumn>
       </ScrollView>
 
       {/* ── Footer ── */}

@@ -15,6 +15,7 @@ import { useEventBus, useEvent, useEventState, useEmit } from '../../../packages
 import type { EventBus } from '../../../packages/core/src/useEvents';
 import { useIFTTT } from '../../../packages/core/src/useIFTTT';
 import { useThemeColors } from '../../../packages/theme/src';
+import {Band, Half, HeroBand, CalloutBand, Divider, SectionLabel, PageColumn} from './_shared/StoryScaffold';
 
 // ── Palette ──────────────────────────────────────────────
 
@@ -169,7 +170,6 @@ const CART_ITEMS = [
   { name: 'Cookie', price: 2.25 },
 ];
 
-import { Band, Half, HeroBand, CalloutBand, Divider, SectionLabel } from './_shared/StoryScaffold';
 
 // ── Live Demo: Timer ─────────────────────────────────────
 
@@ -613,6 +613,7 @@ export function CapabilitiesStory() {
       {/* ── Center ── */}
       <ScrollView style={{ flexGrow: 1 }}>
 
+        <PageColumn>
         {/* ── Hero band ── */}
         <HeroBand accentColor={C.accent}>
           <S.StoryHeadline>
@@ -870,6 +871,7 @@ export function CapabilitiesStory() {
           <CodeBlock language="tsx" fontSize={9} code={ONELINER_CODE} style={{ flexGrow: 1, flexBasis: 0 }} />
         </Band>
 
+        </PageColumn>
       </ScrollView>
 
       {/* ── Footer ── */}

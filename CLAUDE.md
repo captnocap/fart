@@ -22,12 +22,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 When adding a new capability, feature, or integration — always ask: **can someone who doesn't code use this in one line?** If the answer is no, wrap it until it is. The target user is someone who knows their domain (music, art, data, games) but doesn't know bridges, RPCs, or Lua internals. An AI should be able to discover and control it without documentation.
 
-The pattern is the **declarative capability system** (`lua/capabilities.lua` + `lua/capabilities/` for multi-file capabilities):
-1. Lua side: `Capabilities.register("Audio", { schema, create, update, tick, destroy })`
-2. React side: `<Audio src="beat.mp3" playing volume={0.8} />`
-3. AI discovery: `useCapabilities()` returns schemas for everything registered
+The pattern is a **.tslx file** in the package:
+1. Write a `.tslx` capability that composes from primitives (Box, Text, Pressable, etc.)
+2. Put shared compute in `.tsl` modules (or inline in the `compute()` block)
+3. The schema IS the documentation — AI discovery via `useCapabilities()`
+4. Usage: `<Audio src="beat.mp3" playing volume={0.8} />`
 
-Every new Lua-side feature (audio, timers, sensors, file watchers, notifications, whatever) should follow this pattern. The Lua module does the work, the React component is a one-liner, and the schema is the documentation. If you're adding something that requires the user to call `bridge.rpc()` or understand the transport layer, you haven't finished — wrap it in a capability.
+For framework-level features that need raw Lua (new node types, GL operations, layout engine changes), the old pattern still applies: hand-written Lua in `lua/` + `Capabilities.register()`. But UI capabilities — anything composed from Box/Text/Pressable — should always be .tslx. If you're writing `love.graphics` calls for something that Box already does, you haven't finished — write a .tslx instead.
 
 ## The Proxy Input Rule (NON-NEGOTIABLE)
 
@@ -60,6 +61,104 @@ React is a **layout declaration engine and tree diffing algorithm.** That's it. 
 - **React does NOT manage runtime state well.** `useHotState()` stores state in Lua memory and survives hot reload. `useLocalStore()` persists to SQLite. React's `useState` is for ephemeral UI state only.
 - **react-dom does not exist in this framework.** There is no DOM target. There never will be. Components do not render `<div>`, `<span>`, `<input>`, or any HTML element. If you see a component branching on renderer mode to produce DOM elements, that code is wrong and must be removed.
 - **If React is doing anything beyond declaring layout + forwarding to Lua = massive problem.** Late frames, input lag, state desync — all symptoms of React trying to be a runtime instead of a proxy.
+
+## .tslx and .tsl — The Authoring Layer (READ THIS)
+
+**See `examples/tslx-demo/` for the before/after Rosetta Stone.**
+
+React doesn't know what a `div` is — `react-dom` does.
+React doesn't know what a `Box` is — the ReactJIT reconciler does.
+
+On the web: `.tsx → React.createElement('div') → react-dom → browser DOM`
+In ReactJIT: `.tsx → React.createElement('View') → reconciler → Lua tree`
+With .tslx: `.tslx → Lua tree directly (no React middleman)`
+
+Same output. Shorter path. **Write .tslx exactly like you write React components.**
+
+### Two file extensions, one language
+
+| Extension | What it is | Web equivalent |
+|-----------|-----------|----------------|
+| `.tslx` | React component → compiles to Lua capability | `.tsx` → compiles to JS |
+| `.tsl` | TypeScript module → compiles to Lua module | `.ts` → compiles to JS |
+
+Both are authored in TypeScript. Both compile to Lua. No Lua knowledge required.
+
+### The primitives (this is the full set)
+
+`Box` (View), `Text`, `Image`, `Pressable`, `ScrollView`, `TextInput`
+
+Everything is composed from these. A periodic table is Boxes and Text. A dashboard
+is Boxes and Text. There are no special node types. Same way every website is
+ultimately divs and spans.
+
+### .tslx structure
+
+```
+capability ElementTile {
+  require "lua.capabilities.chemistry" as Chemistry   // import modules
+
+  schema: {                                            // component props
+    element: { type: "number", default: 1 },
+    selected: { type: "bool", default: false },
+  }
+
+  compute(props) {                                     // data logic (runs in LuaJIT)
+    const el = Chemistry.getElement(props.element)
+    return { el, bg: COLORS[el.category] }
+  }
+
+  render(props, state) {                               // JSX — compose from primitives
+    return (
+      <Box style={{ backgroundColor: state.bg }}>
+        <Text>{state.el.symbol}</Text>
+      </Box>
+    )
+  }
+}
+```
+
+Read it as a React component: `schema` = props, `compute()` = hooks, `render()` = JSX.
+Composition works identically — `<ElementTile>` inside `<PeriodicTable>`, same as React.
+
+### .tsl = shared compute
+
+```
+// chemistry/elements.tsl — TypeScript that compiles to Lua
+export function getElement(key: number | string) { ... }
+export function molarMass(formula: string) { ... }
+```
+
+Scoping rule (same as web):
+- Compute used by ONE component → inline in `.tslx` `compute()` block
+- Compute used by MANY components → separate `.tsl` file
+
+### The wall (NON-NEGOTIABLE)
+
+Compiled Lua output goes to `lua/generated/` which is **gitignored**. It is build
+output — same as `dist/`. You never edit it. It doesn't exist in the repo until
+you build.
+
+```
+Source (edit this):     packages/chemistry/src/ElementTile.tslx
+Build output (don't):  lua/generated/element_tile.lua       (gitignored)
+Deleted (was waste):   lua/capabilities/element_tile.lua     (hand-drawn love.graphics)
+Deleted (was waste):   packages/chemistry/src/capabilities.tsx (black-box <Native> wrappers)
+```
+
+**What stays hand-written in Lua:** Only the framework engine — `layout.lua`,
+`painter.lua`, `tree.lua`, `bridge_quickjs.lua`, `events.lua`, `measure.lua`,
+`capabilities.lua` (the registry). These are the browser engine equivalent.
+Application code is always .tslx/.tsl.
+
+### DO NOT
+
+- Write `love.graphics` draw calls for UI — use Box/Text/Pressable
+- Write hand-written Lua capabilities for UI — write .tslx instead
+- Write `<Native type="X">` wrappers — .tslx IS the component
+- Duplicate data in .ts that exists in .tsl — single source of truth
+- Put .tslx files outside their package — they live in `packages/X/src/`
+- Edit `lua/generated/` — it's build output, regenerated on every build
 
 ## What This Is
 
@@ -228,7 +327,15 @@ These are unique to each project and are NOT managed by the CLI:
 - `reactjit init` creates starter versions; `reactjit update` never touches them.
 - To copy app code between projects, copy only `src/` and any custom entry points.
 
-### Adding a new Lua-side feature (checklist)
+### Adding a new UI capability (checklist — the common case)
+
+1. Write a `.tslx` file in the package (`packages/X/src/Component.tslx`)
+2. If shared compute is needed, write `.tsl` modules (`packages/X/src/compute/thing.tsl`)
+3. `rjit build` compiles .tslx/.tsl → `lua/generated/`, then bundles
+4. Add a storybook story demonstrating it
+5. Done. No hand-written Lua. No TSX wrapper. No `make cli-setup`.
+
+### Adding a new framework-level feature (rare — layout engine, new node types, GL ops)
 
 1. Edit/create files in `lua/` (the source of truth)
 2. Edit/create files in `packages/core/src/` and `packages/renderer/src/` as needed
@@ -432,25 +539,25 @@ This has two non-negotiable consequences:
 **2. Every new feature gets a storybook story.** When you implement a new capability — a new component, hook, event type, Lua-side feature, layout behavior, anything user-facing — you must also create or update a story in `storybook/src/stories/` that demonstrates it. Do not wait to be asked. The story is part of the feature, not a follow-up task.
 
 ## Git Discipline (CRITICAL)
-
-Commit early and often. This project has no test suite, so git history IS the safety net. **You must commit your own work as you go. Do not leave it for the user or another Claude to deal with.**
-
+DO NOT LEAVE WORK UN COMMITTED 
+Commit early and often.  **You must commit your own work as you go. Do not leave it for the user or another Claude to deal with.**
+DO NOT LEAVE WORK UN COMMITTED 
 ### When to commit (non-negotiable)
-
+DO NOT LEAVE WORK UN COMMITTED 
 - **After completing each logical unit of work.** Finished a feature? Commit. Fixed a bug? Commit. Added a new component? Commit. Do NOT move on to the next thing with uncommitted changes sitting in the working tree.
 - **Before risky operations.** About to refactor a core file, change the build pipeline, or touch Lua runtime code? Commit your current working state first so there's a clean rollback point.
 - **When you've touched 3+ files.** That's already a commit-sized change. Stop and commit before continuing.
 - **At natural breakpoints in multi-step work.** If a task has phases (e.g., add types → add Lua shader → add React component → update story), commit after each phase, not all at the end.
 - **When debugging: commit on confirmation, not between attempts.** Do NOT commit after every debug iteration — that pollutes history. But when the human says something positive ("nice", "thanks", "cool", "ok", "that works", "good", thumbs up, or moves on to a new topic), that IS the approval signal. Commit immediately. Do not wait for a more explicit signal — casual acknowledgment IS confirmation.
 - **When in doubt, commit.** Uncommitted work is lost work. It is always safer to commit too often than too rarely. If you finished something and it works, commit it. Don't wait to be told.
-
+DO NOT LEAVE WORK UN COMMITTED 
 ### How to commit
-
+DO NOT LEAVE WORK UN COMMITTED 
 - **Use descriptive conventional-commit messages.** Say what changed and why: `feat(3d): add Blinn-Phong lighting shader with directional + ambient lights` not `update stuff`.
 - **Don't batch unrelated changes.** One logical change per commit. If you added a feature AND fixed a bug, that's two commits.
 - **Never leave a session with uncommitted work.** If the conversation is winding down and there are unstaged changes, commit them. The next Claude instance that picks up this repo should start from a clean tree.
 - **When the human approves, commit immediately + update docs.** Once you hear "yes, this works" or similar confirmation, that is the signal to: (1) run `git status` and `git diff` to prepare the commit, (2) create the commit with a descriptive message, (3) emit the CHANGESET brief, (4) invoke `/docs` to update documentation. Do not wait or ask for permission again — the approval already happened.
-
+DO NOT LEAVE WORK UN COMMITTED 
 ### Parallel sessions and the "empty fridge" problem (READ THIS)
 
 Multiple Claude instances work on this repo simultaneously. This causes a specific failure mode:

@@ -9,6 +9,7 @@ import { Box, Text, Image, ScrollView, Pressable, CodeBlock, classifiers as S} f
 import { useLoveRPC } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { useConvert } from '../../../packages/convert/src';
+import { Band, Half, HeroBand, CalloutBand, Divider, SectionLabel, PageColumn } from './_shared/StoryScaffold';
 
 // ── Palette ──────────────────────────────────────────────
 
@@ -450,6 +451,7 @@ export function ConversionsStory() {
 
       <ScrollView style={{ flexGrow: 1 }}>
 
+        <PageColumn>
         {/* ── Hero ── */}
         <Box style={{ borderLeftWidth: 3, borderColor: C.accent, paddingLeft: 25, paddingRight: 28, paddingTop: 24, paddingBottom: 24, gap: 8 }}>
           <S.StoryHeadline>
@@ -612,6 +614,7 @@ export function ConversionsStory() {
           <Box style={HALF}><RegistryCatalog /></Box>
         </Box>
 
+        </PageColumn>
       </ScrollView>
 
       <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderTopWidth: 1, paddingLeft: 20, paddingRight: 20, paddingTop: 6, paddingBottom: 6, gap: 12 }}>

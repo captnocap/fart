@@ -772,11 +772,11 @@ Capabilities.register("ClaudeCanvas", {
       c.x + 8, debugTop)
     love.graphics.print(
       string.format("mode=%s alive=%s boundary=%d dirty=%d",
-        dbg.mode, tostring(dbg.alive), dbg.boundary, dbg.dirty),
+        dbg.mode or "?", tostring(dbg.alive), dbg.boundary or 0, dbg.dirty or 0),
       c.x + 8, debugTop + dfH)
     love.graphics.print(
       string.format("lastDmg=%dms settle=%dms streamLen=%d vtContent=%d",
-        dbg.lastDmg, dbg.settle, dbg.streaming, dbg.vtContent or 0),
+        dbg.lastDmg or 0, dbg.settle or 0, dbg.streaming or 0, dbg.vtContent or 0),
       c.x + 8, debugTop + dfH * 2)
 
   end,

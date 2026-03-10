@@ -362,6 +362,20 @@ function Capabilities.loadAll()
     end
   end
 
+  -- Load top-level capabilities (not in lua/capabilities/)
+  local toplevel = {
+    "lua.claude_canvas",
+  }
+  for _, path in ipairs(toplevel) do
+    local ok, err = pcall(require, path)
+    if ok then
+      loaded[#loaded + 1] = path
+    else
+      failed[#failed + 1] = path
+      if _G._reactjit_verbose then io.write("[capabilities] WARNING: " .. path .. ": " .. tostring(err) .. "\n"); io.flush() end
+    end
+  end
+
   if _G._reactjit_verbose then io.write("[capabilities] " .. #loaded .. " capabilities registered\n"); io.flush() end
 end
 

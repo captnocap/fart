@@ -9,6 +9,7 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Box, Text, Image, ScrollView, Pressable, CodeBlock, Math as MathBlock, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { useMath } from '../../../packages/math/src';
+import { Band, Half, HeroBand, CalloutBand, Divider, SectionLabel, PageColumn } from './_shared/StoryScaffold';
 
 // ── Palette ──────────────────────────────────────────────
 
@@ -651,6 +652,7 @@ export function MathStory() {
       {/* ── Center ── */}
       <ScrollView style={{ flexGrow: 1 }}>
 
+        <PageColumn>
         {/* ── Hero band ── */}
         <Box style={{
           borderLeftWidth: 3,
@@ -983,6 +985,7 @@ export function MathStory() {
           <FeatureCatalog />
         </S.StoryFullBand>
 
+        </PageColumn>
       </ScrollView>
 
       {/* ── Footer ── */}

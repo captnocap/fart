@@ -32,6 +32,7 @@ import {
   isYesterday,
   isTomorrow,
 } from '../../../packages/time/src';
+import { Band, Half, HeroBand, CalloutBand, Divider, SectionLabel, PageColumn } from './_shared/StoryScaffold';
 
 // ── Palette ──────────────────────────────────────────────
 
@@ -353,6 +354,7 @@ export function TimeStory() {
       {/* ── Center ── */}
       <ScrollView style={{ flexGrow: 1 }}>
 
+        <PageColumn>
         {/* ── Hero band ── */}
         <Box style={{
           borderLeftWidth: 3,
@@ -529,6 +531,7 @@ export function TimeStory() {
           </S.HalfCenter>
         </S.RowCenter>
 
+        </PageColumn>
       </ScrollView>
 
       {/* ── Footer ── */}

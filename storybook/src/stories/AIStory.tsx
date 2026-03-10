@@ -11,7 +11,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Box, Text, Image, ScrollView, CodeBlock, Pressable, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
-import { Band, Half, HeroBand, CalloutBand, Divider, SectionLabel, ExternalDependencyNotice } from './_shared/StoryScaffold';
+import {Band, Half, HeroBand, CalloutBand, Divider, SectionLabel, ExternalDependencyNotice, PageColumn} from './_shared/StoryScaffold';
 
 // ── Palette ──────────────────────────────────────────────
 
@@ -748,6 +748,7 @@ export function AIStory() {
       {/* ── Content ── */}
       <ScrollView style={{ flexGrow: 1 }}>
 
+        <PageColumn>
         {/* ── Hero band ── */}
         <HeroBand accentColor={C.accent}>
           <S.StoryHeadline>
@@ -1116,6 +1117,7 @@ export function AIStory() {
           </S.StoryBody>
         </CalloutBand>
 
+        </PageColumn>
       </ScrollView>
 
       {/* ── Footer ── */}

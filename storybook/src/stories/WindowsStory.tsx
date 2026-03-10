@@ -12,7 +12,7 @@
 import React, { useState, useCallback } from 'react';
 import { Box, Text, Image, ScrollView, CodeBlock, Pressable, Window, Notification, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
-import { Band, Half, HeroBand, CalloutBand, Divider, SectionLabel } from './_shared/StoryScaffold';
+import {Band, Half, HeroBand, CalloutBand, Divider, SectionLabel, PageColumn} from './_shared/StoryScaffold';
 
 // -- Palette ----------------------------------------------------------
 
@@ -420,6 +420,7 @@ export function WindowsStory() {
       {/* Content */}
       <ScrollView style={{ flexGrow: 1 }}>
 
+        <PageColumn>
         {/* Hero */}
         <HeroBand accentColor={C.accent}>
           <S.StoryHeadline>
@@ -595,6 +596,7 @@ export function WindowsStory() {
           </S.StoryBody>
         </CalloutBand>
 
+        </PageColumn>
       </ScrollView>
 
       {/* Footer */}

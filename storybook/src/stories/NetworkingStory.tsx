@@ -10,7 +10,7 @@ import React, { useState } from 'react';
 import { Box, Text, Image, ScrollView, CodeBlock, Pressable, Input, classifiers as S} from '../../../packages/core/src';
 import { useScrape } from '../../../packages/core/src/useScrape';
 import { useThemeColors } from '../../../packages/theme/src';
-import { ExternalDependencyNotice } from './_shared/StoryScaffold';
+import {ExternalDependencyNotice, PageColumn} from './_shared/StoryScaffold';
 
 // ── Palette ──────────────────────────────────────────────
 
@@ -441,6 +441,7 @@ export function NetworkingStory() {
       {/* ── Center ── */}
       <ScrollView style={{ flexGrow: 1 }}>
 
+        <PageColumn>
         {/* ── Hero band ── */}
         <Box style={{
           borderLeftWidth: 3,
@@ -874,6 +875,7 @@ export function NetworkingStory() {
           </S.HalfCenter>
         </S.RowCenter>
 
+        </PageColumn>
       </ScrollView>
 
       {/* ── Footer ── */}

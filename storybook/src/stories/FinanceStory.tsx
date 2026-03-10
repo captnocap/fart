@@ -35,7 +35,7 @@ import {
   HoldingRow,
 } from '../../../packages/finance/src/components';
 import type { BookLevel, TickerItem } from '../../../packages/finance/src';
-import { Band, Half, Divider, SectionLabel } from './_shared/StoryScaffold';
+import {Band, Half, Divider, SectionLabel, PageColumn} from './_shared/StoryScaffold';
 import { useLuaInterval } from '../../../packages/core/src';
 
 // ── Palette ──────────────────────────────────────────────
@@ -664,6 +664,7 @@ export function FinanceStory() {
       {/* ── Content ── */}
       <ScrollView style={{ flexGrow: 1 }}>
 
+        <PageColumn>
         {/* ── Hero band ── */}
         <Box style={{
           borderLeftWidth: 3,
@@ -977,6 +978,7 @@ export function FinanceStory() {
           </S.StoryBody>
         </Box>
 
+        </PageColumn>
       </ScrollView>
 
       {/* ── Footer ── */}

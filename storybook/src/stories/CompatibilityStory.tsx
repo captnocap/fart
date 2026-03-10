@@ -12,7 +12,7 @@ import React, { useState, useMemo } from 'react';
 import { Box, Text, Image, ScrollView, Pressable, CodeBlock, Row, Input, useBreakpoint, useWindowDimensions, classifiers as S} from '../../../packages/core/src';
 import { tw } from '../../../packages/core/src/tw';
 import { useThemeColors } from '../../../packages/theme/src';
-import { Band, Half, HeroBand, CalloutBand, Divider, SectionLabel } from './_shared/StoryScaffold';
+import {Band, Half, HeroBand, CalloutBand, Divider, SectionLabel, PageColumn} from './_shared/StoryScaffold';
 
 // ── Palette ──────────────────────────────────────────────
 
@@ -1149,6 +1149,7 @@ export function CompatibilityStory() {
       {/* ── Center ── */}
       <ScrollView style={{ flexGrow: 1 }}>
 
+        <PageColumn>
         {/* ── Hero ── */}
         <HeroBand accentColor={C.accent}>
           <S.StoryHeadline>
@@ -1395,6 +1396,7 @@ export function CompatibilityStory() {
         {/* ── Footer padding ── */}
         <Box style={{ height: 24 }} />
 
+        </PageColumn>
       </ScrollView>
 
       {/* ── Footer ── */}

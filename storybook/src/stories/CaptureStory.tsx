@@ -10,7 +10,7 @@
 import React, { useState, useCallback } from 'react';
 import { Box, Text, Image, ScrollView, Pressable, CodeBlock, useGifRecorder, useRecorder, classifiers as S } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
-import { Band, Half, Divider, SectionLabel } from './_shared/StoryScaffold';
+import {Band, Half, Divider, SectionLabel, PageColumn} from './_shared/StoryScaffold';
 
 // ── Palette ──────────────────────────────────────────────
 
@@ -269,6 +269,7 @@ export function CaptureStory() {
       {/* ── Content ── */}
       <ScrollView style={{ flexGrow: 1 }}>
 
+        <PageColumn>
         {/* ── Hero band ── */}
         <Box style={{
           borderLeftWidth: 3,
@@ -443,6 +444,7 @@ export function CaptureStory() {
           </S.StoryBody>
         </Box>
 
+        </PageColumn>
       </ScrollView>
 
       {/* ── Footer ── */}

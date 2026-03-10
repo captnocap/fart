@@ -13,7 +13,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Box, Text, Image, ScrollView, Pressable, CodeBlock, classifiers as S} from '../../../packages/core/src';
 import { useOverlay } from '../../../packages/core/src/overlay';
 import { useThemeColors } from '../../../packages/theme/src';
-import { Band, Half, HeroBand, CalloutBand, Divider, SectionLabel } from './_shared/StoryScaffold';
+import {Band, Half, HeroBand, CalloutBand, Divider, SectionLabel, PageColumn} from './_shared/StoryScaffold';
 
 // ── Palette ──────────────────────────────────────────────
 
@@ -513,6 +513,7 @@ export function OverlayStory() {
       {/* ── Content ── */}
       <ScrollView style={{ flexGrow: 1 }}>
 
+        <PageColumn>
         {/* ── Hero band ── */}
         <HeroBand accentColor={C.accent}>
           <S.StoryHeadline>
@@ -709,6 +710,7 @@ export function OverlayStory() {
           <FeatureCatalog />
         </S.StoryFullBand>
 
+        </PageColumn>
       </ScrollView>
 
       {/* ── Footer ── */}

@@ -16,6 +16,7 @@ import { useLocalStore } from '../../../packages/core/src/useLocalStore';
 import { useHotState } from '../../../packages/core/src/useHotState';
 import { useSearch, useFuzzySearch } from '../../../packages/core/src/useSearch';
 import { useThemeColors } from '../../../packages/theme/src';
+import { Band, Half, HeroBand, CalloutBand, Divider, SectionLabel, PageColumn } from './_shared/StoryScaffold';
 
 // ── Palette ──────────────────────────────────────────────
 
@@ -406,6 +407,7 @@ export function StorageStory() {
       {/* ── Center ── */}
       <ScrollView style={{ flexGrow: 1 }}>
 
+        <PageColumn>
         {/* ── Hero band ── */}
         <Box style={{
           borderLeftWidth: 3,
@@ -645,6 +647,7 @@ export function StorageStory() {
           </Box>
         </Box>
 
+        </PageColumn>
       </ScrollView>
 
       {/* ── Footer ── */}

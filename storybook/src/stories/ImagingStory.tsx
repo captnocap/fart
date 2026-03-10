@@ -14,7 +14,7 @@ import { Box, Text, Image, ScrollView, Pressable, CodeBlock, Native, classifiers
 import { useThemeColors } from '../../../packages/theme/src';
 import { useImagingComposer, useImagingHistory, useImaging, useImagingSelection, useDrawCanvas } from '../../../packages/imaging/src';
 import type { BlendMode, ImagingComposition, ImagingLayerCrop, ImagingLayerPivot, ImagingSelectionShape } from '../../../packages/imaging/src';
-import { Band, Half, HeroBand, CalloutBand, Divider, SectionLabel } from './_shared/StoryScaffold';
+import {Band, Half, HeroBand, CalloutBand, Divider, SectionLabel, PageColumn} from './_shared/StoryScaffold';
 
 // ── Palette ──────────────────────────────────────────────
 
@@ -1199,6 +1199,7 @@ export function ImagingStory() {
       {/* ── Center ── */}
       <ScrollView style={{ flexGrow: 1 }}>
 
+        <PageColumn>
         {/* ── Hero band ── */}
         <HeroBand accentColor={C.accent}>
           <S.StoryHeadline>
@@ -1390,6 +1391,7 @@ export function ImagingStory() {
           <FeatureCatalog />
         </S.StoryFullBand>
 
+        </PageColumn>
       </ScrollView>
 
       {/* ── Footer ── */}

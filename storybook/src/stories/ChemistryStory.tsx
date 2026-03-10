@@ -23,7 +23,7 @@ import {
 } from '../../../packages/chemistry/src';
 import type { PubChemCompound } from '../../../packages/chemistry/src';
 import type { ReagentType } from '../../../packages/chemistry/src';
-import { Band, Half, Divider, SectionLabel, CalloutBand, ExternalDependencyNotice } from './_shared/StoryScaffold';
+import {Band, Half, Divider, SectionLabel, CalloutBand, ExternalDependencyNotice, PageColumn} from './_shared/StoryScaffold';
 
 // ── Palette ──────────────────────────────────────────────
 
@@ -957,6 +957,7 @@ export function ChemistryStory() {
       {/* ── Content ── */}
       <ScrollView style={{ flexGrow: 1 }}>
 
+        <PageColumn>
         {/* ── Hero band ── */}
         <Box style={{
           borderLeftWidth: 3,
@@ -1225,6 +1226,7 @@ export function ChemistryStory() {
           </S.StoryBody>
         </CalloutBand>
 
+        </PageColumn>
       </ScrollView>
 
       {/* ── Footer ── */}

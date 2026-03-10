@@ -15,7 +15,7 @@ import {
   entranceStyle,
   classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
-import { Band, Half, HeroBand, CalloutBand, Divider, SectionLabel } from './_shared/StoryScaffold';
+import {Band, Half, HeroBand, CalloutBand, Divider, SectionLabel, PageColumn} from './_shared/StoryScaffold';
 
 // ── Palette ──────────────────────────────────────────────
 
@@ -1369,6 +1369,7 @@ export function AnimationStory() {
       {/* ── Center ── */}
       <ScrollView style={{ flexGrow: 1 }}>
 
+        <PageColumn>
         {/* ── Hero band ── */}
         <HeroBand accentColor={C.accent}>
           <S.StoryHeadline>
@@ -1573,6 +1574,7 @@ export function AnimationStory() {
           </Half>
         </Band>
 
+        </PageColumn>
       </ScrollView>
 
       {/* ── Footer ── */}

@@ -40,6 +40,7 @@ const INSTALL_CODE = `import { PhysicsWorld, RigidBody, Collider } from '@reactj
 import { Sensor, MouseJoint } from '@reactjit/physics'
 import { RevoluteJoint, DistanceJoint, RopeJoint } from '@reactjit/physics'
 import { useForce, useImpulse, useTorque } from '@reactjit/physics'`;
+import { PageColumn } from './_shared/StoryScaffold'
 
 const WORLD_CODE = `<PhysicsWorld gravity={[0, 980]} debug>
   {/* Everything inside is simulated */}
@@ -531,6 +532,7 @@ export function PhysicsStory() {
       {/* ── Content ── */}
       <ScrollView style={{ flexGrow: 1 }}>
 
+        <PageColumn>
         {/* ── Hero band ── */}
         <Box style={{
           borderLeftWidth: 3,
@@ -692,6 +694,7 @@ export function PhysicsStory() {
           <FeatureCatalog />
         </S.StoryFullBand>
 
+        </PageColumn>
       </ScrollView>
 
       {/* ── Footer ── */}
