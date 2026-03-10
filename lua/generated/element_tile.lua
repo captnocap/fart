@@ -9,16 +9,21 @@ local Chemistry = require("lua.capabilities.chemistry")
 
 local function computeData(props)
   local el = Chemistry.getElement(props.element)
-      local CATEGORY_COLORS = {
-        {"alkali-metal"} = "#7b6faa", {"alkaline-earth"} = "#9a9cc4",
-        {"transition-metal"} = "#de9a9a", {"post-transition-metal"} = "#8fbc8f",
-        {"metalloid"} = "#c8c864", {"nonmetal"} = "#59b5e6",
-        {"halogen"} = "#d4a844", {"noble-gas"} = "#c87e4a",
-        {"lanthanide"} = "#c45879", {"actinide"} = "#d4879a",
-      }
-      local bg = CATEGORY_COLORS[el.category] or "#868e96"
-      local massStr = string.format("%.2f", el.mass)
-      return { el = el, bg = bg, massStr = massStr }
+  local CATEGORY_COLORS = {
+    ["alkali-metal"] = "#7b6faa",
+    ["alkaline-earth"] = "#9a9cc4",
+    ["transition-metal"] = "#de9a9a",
+    ["post-transition-metal"] = "#8fbc8f",
+    ["metalloid"] = "#c8c864",
+    ["nonmetal"] = "#59b5e6",
+    ["halogen"] = "#d4a844",
+    ["noble-gas"] = "#c87e4a",
+    ["lanthanide"] = "#c45879",
+    ["actinide"] = "#d4879a",
+  }
+  local bg = CATEGORY_COLORS[el.category] or "#868e96"
+  local massStr = string.format("%.2f", el.mass)
+  return { el = el, bg = bg, massStr = massStr }
 end
 local function buildTemplate(h)
   return {

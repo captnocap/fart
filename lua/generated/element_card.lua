@@ -9,36 +9,66 @@ local Chemistry = require("lua.capabilities.chemistry")
 
 local function computeData(props)
   local el = Chemistry.getElement(props.element)
-      local valence = Chemistry.valenceElectrons(el.number)
-      local CATEGORY_COLORS = {
-        {"alkali-metal"} = "#7b6faa", {"alkaline-earth"} = "#9a9cc4",
-        {"transition-metal"} = "#de9a9a", {"post-transition-metal"} = "#8fbc8f",
-        {"metalloid"} = "#c8c864", {"nonmetal"} = "#59b5e6",
-        {"halogen"} = "#d4a844", {"noble-gas"} = "#c87e4a",
-        {"lanthanide"} = "#c45879", {"actinide"} = "#d4879a",
-      }
-      local PHASE_COLORS = {
-        solid = "#69db7c", liquid = "#4dabf7",
-        gas = "#ffd43b", unknown = "#868e96",
-      }
-      local catColor = CATEGORY_COLORS[el.category] or "#868e96"
-      local phaseColor = PHASE_COLORS[el.phase] or "#868e96"
-      local rows = {
-        { label = "Atomic Mass",       value = string.format("%.3f u", el.mass) },
-        { label = "Group",             value = tostring(el.group) },
-        { label = "Period",            value = tostring(el.period) },
-        { label = "Phase",             value = el.phase, color = phaseColor },
-        { label = "Valence Electrons", value = tostring(valence) },
-        { label = "Electronegativity", value = (el.electronegativity) and tostring(el.electronegativity) or "\u{ 2014 = 2014}" },
-        { label = "Melting Point",     value = (el.meltingPoint) and string.format("%.0f K", el.meltingPoint) or "\u{ 2014 = 2014}" },
-        { label = "Boiling Point",     value = (el.boilingPoint) and string.format("%.0f K", el.boilingPoint) or "\u{ 2014 = 2014}" },
-        { label = "Density",           value = (el.density) and string.format("%.3f g/cm\u{ 00B3 = 00B3 }", el.density) or "\u{ 2014 = 2014}" },
-        { label = "Electron Config",   value = el.electronConfig or "" },
-      }
-      local categoryLabel = string.gsub(el.category, "-", " ")
-      return { el = el, catColor = catColor, rows = rows, categoryLabel = categoryLabel }
+  local valence = Chemistry.valenceElectrons(el.number)
+  local CATEGORY_COLORS = {
+    ["alkali-metal"] = "#7b6faa",
+    ["alkaline-earth"] = "#9a9cc4",
+    ["transition-metal"] = "#de9a9a",
+    ["post-transition-metal"] = "#8fbc8f",
+    ["metalloid"] = "#c8c864",
+    ["nonmetal"] = "#59b5e6",
+    ["halogen"] = "#d4a844",
+    ["noble-gas"] = "#c87e4a",
+    ["lanthanide"] = "#c45879",
+    ["actinide"] = "#d4879a",
+  }
+  local PHASE_COLORS = {
+    solid = "#69db7c",
+    liquid = "#4dabf7",
+    gas = "#ffd43b",
+    unknown = "#868e96",
+  }
+  local catColor = CATEGORY_COLORS[el.category] or "#868e96"
+  local phaseColor = PHASE_COLORS[el.phase] or "#868e96"
+  local rows = {
+    {
+    label = "Atomic Mass",
+    value = string.format("%.3f u", el.mass),
+  },
+    { label = "Group", value = tostring(el.group) },
+    { label = "Period", value = tostring(el.period) },
+    { label = "Phase", value = el.phase, color = phaseColor },
+    { label = "Valence Electrons", value = tostring(valence) },
+    {
+    label = "Electronegativity",
+    value = (el.electronegativity and tostring(el.electronegativity) or "—"),
+  },
+    {
+    label = "Melting Point",
+    value = (el.meltingPoint and string.format("%.0f K", el.meltingPoint) or "—"),
+  },
+    {
+    label = "Boiling Point",
+    value = (el.boilingPoint and string.format("%.0f K", el.boilingPoint) or "—"),
+  },
+    {
+    label = "Density",
+    value = (el.density and string.format("%.3f g/cm³", el.density) or "—"),
+  },
+    {
+    label = "Electron Config",
+    value = el.electronConfig or "",
+  },
+  }
+  local categoryLabel = string.gsub(el.category, "-", " ")
+  return {
+    el = el,
+    catColor = catColor,
+    rows = rows,
+    categoryLabel = categoryLabel,
+  }
 end
-local function rebuildList_0(wrapperNodeId, items)
+local function rebuildList_0(wrapperNodeId, items, data)
   Tree.removeDeclaredChildren(wrapperNodeId)
   if not items or #items == 0 then return end
   local tmpl = {}
@@ -90,7 +120,7 @@ local function updateTree(handles, props)
   Tree.updateChildProps(handles["n0_3_1_1_2_3_4_0_t"], { text = data.el.symbol or "" })
   Tree.updateChildProps(handles["n0_3_1_3_5_1_6_0_t"], { text = data.el.name or "" })
   Tree.updateChildProps(handles["n0_3_1_3_5_3_7_0_t"], { text = data.categoryLabel or "" })
-  rebuildList_0(handles["n0_7_list_0"], data.rows)
+  rebuildList_0(handles["n0_7_list_0"], data.rows, data)
 end
 
 Capabilities.register("ElementCard", {

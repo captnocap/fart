@@ -9,31 +9,59 @@ local Chemistry = require("lua.capabilities.chemistry")
 
 local function computeData(props)
   local el = Chemistry.getElement(props.element)
-      local valence = Chemistry.valenceElectrons(el.number)
-      local CATEGORY_COLORS = {
-        {"alkali-metal"} = "#7b6faa", {"alkaline-earth"} = "#9a9cc4",
-        {"transition-metal"} = "#de9a9a", {"post-transition-metal"} = "#8fbc8f",
-        {"metalloid"} = "#c8c864", {"nonmetal"} = "#59b5e6",
-        {"halogen"} = "#d4a844", {"noble-gas"} = "#c87e4a",
-        {"lanthanide"} = "#c45879", {"actinide"} = "#d4879a",
-      }
-      local catColor = CATEGORY_COLORS[el.category] or "#868e96"
-      local categoryLabel = string.gsub(el.category, "-", " ")
-  
-      local chips = {
-        { label = "Group",      value = tostring(el.group) },
-        { label = "Period",     value = tostring(el.period) },
-        { label = "Phase",      value = el.phase },
-        { label = "Valence e-", value = tostring(valence) },
-      }
-      if (el.electronegativity) chips.push({ label = "EN", value = tostring(el.electronegativity) })
-      if (el.meltingPoint) chips.push({ label = "MP", value = string.format("%.0f K", el.meltingPoint) })
-      if (el.boilingPoint) chips.push({ label = "BP", value = string.format("%.0f K", el.boilingPoint) })
-      if (el.density) chips.push({ label = "Density", value = string.format("%.2f g/cm\u{ 00B3 = 00B3 }", el.density) })
-  
-      return { el = el, catColor = catColor, categoryLabel = categoryLabel, chips = chips }
+  local valence = Chemistry.valenceElectrons(el.number)
+  local CATEGORY_COLORS = {
+    ["alkali-metal"] = "#7b6faa",
+    ["alkaline-earth"] = "#9a9cc4",
+    ["transition-metal"] = "#de9a9a",
+    ["post-transition-metal"] = "#8fbc8f",
+    ["metalloid"] = "#c8c864",
+    ["nonmetal"] = "#59b5e6",
+    ["halogen"] = "#d4a844",
+    ["noble-gas"] = "#c87e4a",
+    ["lanthanide"] = "#c45879",
+    ["actinide"] = "#d4879a",
+  }
+  local catColor = CATEGORY_COLORS[el.category] or "#868e96"
+  local categoryLabel = string.gsub(el.category, "-", " ")
+  local chips = {
+    { label = "Group", value = tostring(el.group) },
+    { label = "Period", value = tostring(el.period) },
+    { label = "Phase", value = el.phase },
+    { label = "Valence e-", value = tostring(valence) },
+  }
+  if el.electronegativity then
+    table.insert(chips, {
+      label = "EN",
+      value = tostring(el.electronegativity),
+    })
+  end
+  if el.meltingPoint then
+    table.insert(chips, {
+      label = "MP",
+      value = string.format("%.0f K", el.meltingPoint),
+    })
+  end
+  if el.boilingPoint then
+    table.insert(chips, {
+      label = "BP",
+      value = string.format("%.0f K", el.boilingPoint),
+    })
+  end
+  if el.density then
+    table.insert(chips, {
+      label = "Density",
+      value = string.format("%.2f g/cm³", el.density),
+    })
+  end
+  return {
+    el = el,
+    catColor = catColor,
+    categoryLabel = categoryLabel,
+    chips = chips,
+  }
 end
-local function rebuildList_0(wrapperNodeId, items)
+local function rebuildList_0(wrapperNodeId, items, data)
   Tree.removeDeclaredChildren(wrapperNodeId)
   if not items or #items == 0 then return end
   local tmpl = {}
@@ -95,7 +123,7 @@ local function updateTree(handles, props)
   Tree.updateChildProps(handles["n0_3_1_3_5_3_7_0_t"], { text = string.format("%.3f u", data.el.mass) or "" })
   Tree.updateChildProps(handles["n0_3_1_3_5_5_8_0_t"], { text = data.categoryLabel or "" })
   Tree.updateChildProps(handles["n0_11_10_1_t"], { text = data.el.electronConfig or "" })
-  rebuildList_0(handles["n0_7_9_1_list_0"], data.chips)
+  rebuildList_0(handles["n0_7_9_1_list_0"], data.chips, data)
 end
 
 Capabilities.register("ElementDetail", {

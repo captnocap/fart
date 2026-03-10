@@ -12,6 +12,7 @@
 import ts from 'typescript';
 import fs from 'fs';
 import path from 'path';
+import { transpile as tslTranspile } from '../cli/lib/tsl.mjs';
 
 // ── Helpers ──────────────────────────────────────────────
 
@@ -79,6 +80,9 @@ function tsBlockToLua(text) {
     prev = result;
     result = result.replace(/\[([^\[\]]*)\]/g, (match, inner, offset) => {
       if (offset > 0 && /[\w\])]/.test(result[offset - 1])) return match;
+      // Skip Lua table key syntax: ["key"] = value (already converted from "key": value)
+      const after = result.slice(offset + match.length);
+      if (/^"[^"]*"$/.test(inner.trim()) && /^\s*=/.test(after)) return match;
       return '{' + inner + '}';
     });
   } while (result !== prev);
@@ -327,8 +331,9 @@ function parsePushEventCall(arrowNode, sf) {
 
 /**
  * Parse an arrow function that calls setState: () => setState({ key: value })
- * Returns { fieldsLua } or null if not a setState call.
- * fieldsLua is the object literal converted to Lua table assignments.
+ * Also handles parameterized: (text) => setState({ search: text })
+ * Returns { fields, params } or null if not a setState call.
+ * fields is array of {key, val}. params is array of parameter names (may be empty).
  */
 function parseSetStateCall(arrowNode, sf) {
   let body = arrowNode.body;
@@ -346,6 +351,14 @@ function parseSetStateCall(arrowNode, sf) {
   const args = body.arguments;
   if (args.length < 1) return null;
 
+  // Extract parameter names from the arrow function (e.g., (text) => ...)
+  const params = [];
+  if (arrowNode.parameters) {
+    for (const p of arrowNode.parameters) {
+      params.push(p.name.text || p.name.escapedText);
+    }
+  }
+
   // Extract field assignments from the object literal
   const objNode = args[0];
   if (objNode.kind !== ts.SyntaxKind.ObjectLiteralExpression) return null;
@@ -356,7 +369,7 @@ function parseSetStateCall(arrowNode, sf) {
     const val = exprToLua(p.initializer, sf);
     fields.push({ key, val });
   }
-  return { fields };
+  return { fields, params };
 }
 
 /**
@@ -415,7 +428,10 @@ function exprToLua(node, sf) {
     case ts.SyntaxKind.ObjectLiteralExpression: {
       const props = node.properties.map(p => {
         const key = p.name.text || p.name.escapedText;
-        const val = exprToLua(p.initializer, sf);
+        // Handle shorthand properties: { gap } → gap = gap
+        const val = p.kind === ts.SyntaxKind.ShorthandPropertyAssignment
+          ? exprToLua(p.name, sf)
+          : exprToLua(p.initializer, sf);
         return `${key} = ${val}`;
       });
       return `{ ${props.join(', ')} }`;
@@ -476,7 +492,10 @@ function exprToLua(node, sf) {
     case ts.SyntaxKind.Identifier:
       // Substitute render-local variables with their resolved expressions
       if (activeRenderLocals[node.text] !== undefined) {
-        return activeRenderLocals[node.text];
+        const resolved = activeRenderLocals[node.text];
+        // Wrap in parens if resolved contains operators to prevent precedence issues
+        if (/\b(or|and)\b/.test(resolved)) return `(${resolved})`;
+        return resolved;
       }
       return node.text;
 
@@ -654,7 +673,8 @@ function processElement(opening, fullNode, sf, parentKeyPrefix) {
           if (styleNode.kind === ts.SyntaxKind.ObjectLiteralExpression) {
             for (const p of styleNode.properties) {
               const k = p.name.text || p.name.escapedText;
-              style[k] = exprToLua(p.initializer, sf);
+              style[k] = p.kind === ts.SyntaxKind.ShorthandPropertyAssignment
+                ? exprToLua(p.name, sf) : exprToLua(p.initializer, sf);
             }
           }
         } else if (attrName === 'key') {
@@ -680,7 +700,7 @@ function processElement(opening, fullNode, sf, parentKeyPrefix) {
                 const handlerKey = `__setState_${setStateCounter++}`;
                 handlerBindings[attrName] = handlerKey;
                 if (!handlerBindings._setStates) handlerBindings._setStates = [];
-                handlerBindings._setStates.push({ handlerKey, fields: ssInfo.fields });
+                handlerBindings._setStates.push({ handlerKey, fields: ssInfo.fields, params: ssInfo.params || [] });
               } else {
                 props[attrName] = attrToLua(attr.initializer, sf);
               }
@@ -699,14 +719,20 @@ function processElement(opening, fullNode, sf, parentKeyPrefix) {
   const children = getJsxChildren(fullNode, sf, key);
 
   // Propagate parent's flex layout properties to .map() wrapper Views
-  // so list items inherit the correct flow direction from their context
+  // so list items inherit the correct flow direction from their context.
+  // Only propagate static values into the template; dynamic values become bindings.
   const layoutProps = ['flexDirection', 'flexWrap', 'gap', 'alignItems'];
   for (const child of children) {
     if (child._isListWrapper) {
       if (!child.style) child.style = {};
       for (const prop of layoutProps) {
         if (style[prop] !== undefined && child.style[prop] === undefined) {
-          child.style[prop] = style[prop];
+          if (isStaticValue(style[prop])) {
+            child.style[prop] = style[prop];
+          } else {
+            // Dynamic layout prop — track as binding, use in updateTree()
+            dynamicBindings.push({ key: child.key, expr: style[prop], styleProp: prop });
+          }
         }
       }
       delete child._isListWrapper;
@@ -833,6 +859,81 @@ function listItemEntryToLua(node, sf, parentPrefix, level, condition) {
       return `${pad}{ type = "__TEXT__", key = "${parentPrefix}_e${suffix}_" .. _i, text = ${luaExpr} }`;
     }
 
+    // Nested .map() call: {row.map(z => <El/>)}
+    if (expr.kind === ts.SyntaxKind.CallExpression) {
+      const callee = expr.expression;
+      if (callee.kind === ts.SyntaxKind.PropertyAccessExpression &&
+          (callee.name.text === 'map' || callee.name.escapedText === 'map')) {
+        const innerArrayExpr = exprToLua(callee.expression, sf);
+        const innerCallback = expr.arguments[0];
+        const innerItemParam = innerCallback.parameters[0].name.text || innerCallback.parameters[0].name.escapedText;
+        // Use _j, _k, _l for nested iterator vars to avoid collision with outer _i
+        const innerIterVar = level <= 2 ? '_j' : level <= 3 ? '_k' : '_l';
+
+        let innerJsxBody = innerCallback.body;
+        innerJsxBody = unwrapParens(innerJsxBody);
+
+        // Handle block body with if/return statements
+        if (innerJsxBody.kind === ts.SyntaxKind.Block) {
+          const stmts = innerJsxBody.statements;
+          // Generate inline Lua for loop with conditional branches
+          const branches = [];
+          for (const stmt of stmts) {
+            if (stmt.kind === ts.SyntaxKind.IfStatement) {
+              const cond = exprToLua(stmt.expression, sf);
+              const thenBody = stmt.thenStatement;
+              let thenRet = null;
+              if (thenBody.kind === ts.SyntaxKind.Block) {
+                const retStmt = thenBody.statements.find(s => s.kind === ts.SyntaxKind.ReturnStatement);
+                if (retStmt) thenRet = unwrapParens(retStmt.expression);
+              } else if (thenBody.kind === ts.SyntaxKind.ReturnStatement) {
+                thenRet = unwrapParens(thenBody.expression);
+              }
+              if (thenRet && isJsxNode(thenRet)) {
+                const savedCounter = listItemKeyCounter;
+                const itemLua = listItemEntryToLua(thenRet, sf, parentPrefix + '_inner', level + 1);
+                branches.push({ cond, itemLua });
+              }
+            } else if (stmt.kind === ts.SyntaxKind.ReturnStatement && stmt.expression) {
+              const retExpr = unwrapParens(stmt.expression);
+              if (isJsxNode(retExpr)) {
+                const itemLua = listItemEntryToLua(retExpr, sf, parentPrefix + '_inner', level + 1);
+                branches.push({ cond: null, itemLua }); // else/default branch
+              }
+            }
+          }
+
+          // Emit nested for loop with if/elseif/else
+          const innerPad = pad + '  ';
+          const innerPad2 = innerPad + '  ';
+          let loopBody = '';
+          for (let bi = 0; bi < branches.length; bi++) {
+            const b = branches[bi];
+            if (b.cond && bi === 0) {
+              loopBody += `${innerPad}if ${b.cond} then\n${innerPad2}inner_children[#inner_children + 1] =\n${b.itemLua}\n`;
+            } else if (b.cond) {
+              loopBody += `${innerPad}elseif ${b.cond} then\n${innerPad2}inner_children[#inner_children + 1] =\n${b.itemLua}\n`;
+            } else {
+              loopBody += `${innerPad}else\n${innerPad2}inner_children[#inner_children + 1] =\n${b.itemLua}\n`;
+            }
+          }
+          if (branches.length > 0) loopBody += `${innerPad}end\n`;
+
+          // Return as inline nested code that builds inner_children
+          // We need to replace the key suffix from _i to include the nested iterator
+          const fixedLoopBody = loopBody.replace(/_" \.\. _i/g, `_" .. _i .. "_" .. ${innerIterVar}`);
+          return `${pad}-- nested_map build children inline\n${pad}local inner_children = {}\n${pad}for ${innerIterVar}, ${innerItemParam} in ipairs(${innerArrayExpr}) do\n${fixedLoopBody}${pad}end`;
+        }
+
+        // Simple expression body (single JSX element)
+        if (isJsxNode(innerJsxBody)) {
+          const innerItemLua = listItemEntryToLua(innerJsxBody, sf, parentPrefix + '_inner', level + 1);
+          const fixedItemLua = innerItemLua.replace(/_" \.\. _i/g, `_" .. _i .. "_" .. ${innerIterVar}`);
+          return `${pad}-- nested_map build children inline\n${pad}local inner_children = {}\n${pad}for ${innerIterVar}, ${innerItemParam} in ipairs(${innerArrayExpr}) do\n${pad}  inner_children[#inner_children + 1] =\n${fixedItemLua}\n${pad}end`;
+        }
+      }
+    }
+
     // Plain text expression: {item.name}
     const suffix = listItemKeyCounter++;
     const luaExpr = exprToLua(expr, sf);
@@ -876,7 +977,9 @@ function listItemElementToLua(opening, fullNode, sf, parentPrefix, level, condit
         if (styleNode.kind === ts.SyntaxKind.ObjectLiteralExpression) {
           for (const p of styleNode.properties) {
             const k = p.name.text || p.name.escapedText;
-            styleParts.push(`${k} = ${exprToLua(p.initializer, sf)}`);
+            const sval = p.kind === ts.SyntaxKind.ShorthandPropertyAssignment
+              ? exprToLua(p.name, sf) : exprToLua(p.initializer, sf);
+            styleParts.push(`${k} = ${sval}`);
           }
         }
       } else if (attrName.startsWith('on') && attr.initializer?.kind === ts.SyntaxKind.JsxExpression && attr.initializer.expression) {
@@ -886,7 +989,8 @@ function listItemElementToLua(opening, fullNode, sf, parentPrefix, level, condit
           if (ssInfo) {
             listItemNeedsStateRefresh = true;
             const assigns = ssInfo.fields.map(f => `state.${f.key} = ${f.val}`).join('; ');
-            handlerParts.push(`${attrName} = function() ${assigns}; refresh() end`);
+            const paramList = (ssInfo.params && ssInfo.params.length > 0) ? ssInfo.params.join(', ') : '';
+            handlerParts.push(`${attrName} = function(${paramList}) ${assigns}; refresh() end`);
           } else {
             const pushInfo = parsePushEventCall(valExpr, sf);
             if (pushInfo) {
@@ -920,6 +1024,13 @@ function listItemElementToLua(opening, fullNode, sf, parentPrefix, level, condit
   // Children
   const childLua = listItemChildrenToLua(fullNode, sf, myKey, level + 1);
   if (childLua) {
+    // Check if children contain a nested map (builds inner_children inline)
+    if (childLua.includes('-- nested_map')) {
+      // The nested map code builds inner_children and must run before the template entry
+      // Split: code block goes before, the entry references inner_children
+      parts.push(`children = inner_children`);
+      return `${childLua}\n${pad}tmpl[#tmpl + 1] =\n${pad}{ ${parts.join(', ')} }`;
+    }
     parts.push(`children = {\n${childLua}\n${pad}  }`);
   }
 
@@ -1141,49 +1252,78 @@ function emitLua(parsed) {
       val = tsBlockToLua(val);
       return `      capState.state.${f.key} = ${val}`;
     }).join('\n');
-    return `    h.${sh.handlerKey} = function()\n${assignments}\n      refresh()\n    end`;
+    const paramList = (sh.params && sh.params.length > 0) ? sh.params.join(', ') : '';
+    return `    h.${sh.handlerKey} = function(${paramList})\n${assignments}\n      refresh()\n    end`;
   }).join('\n') : '';
 
-  // Compute function — signature changes if state is involved
+  // Compute function — use the TSL transpiler for proper AST-based JS→Lua conversion
   let computeFn = '';
   if (computeBody) {
-    const sig = computeHasState ? 'local function computeData(props, state)' : 'local function computeData(props)';
-    const luaBody = tsBlockToLua(computeBody);
-    computeFn = `\n${sig}\n${luaBody.split('\n').map(l => '  ' + l).join('\n')}\nend\n`;
+    const tsSig = computeHasState ? 'function computeData(props: any, state: any)' : 'function computeData(props: any)';
+    const tsSource = `${tsSig} {\n${computeBody}\n}`;
+    try {
+      const luaOutput = tslTranspile(tsSource, 'compute.tsl');
+      // TSL outputs the whole function; just prefix 'local'
+      computeFn = '\n' + luaOutput.replace(/^function /, 'local function ').trim() + '\n';
+    } catch (e) {
+      // Fallback to regex-based conversion if TSL transpiler fails
+      const sig = computeHasState ? 'local function computeData(props, state)' : 'local function computeData(props)';
+      const luaBody = tsBlockToLua(computeBody);
+      computeFn = `\n${sig}\n${luaBody.split('\n').map(l => '  ' + l).join('\n')}\nend\n`;
+      console.error(`Warning: TSL transpile failed for compute block, using fallback: ${e.message}`);
+    }
   }
 
-  // List rebuilder functions — add state, refresh params when list items use setState
+  // Post-process list rebuilder expressions BEFORE building function strings
+  for (const lr of listRebuilders) {
+    for (const field of ['arrayExpr', 'itemLua']) {
+      let v = lr[field];
+      if (!v) continue;
+      for (const [local_, resolved] of Object.entries(renderLocals || {})) {
+        // Skip table key positions: don't replace identifiers followed by ' = ' (but allow '==')
+        v = v.replace(new RegExp('(?<!\\.)\\b' + local_ + '\\b(?!\\s*=[^=])', 'g'), resolved);
+      }
+      if (renderHasComputed && computeBody) {
+        v = v.replace(/\bcomputed\./g, 'data.');
+      } else if (renderHasState && computeBody) {
+        v = v.replace(/\bstate\./g, 'data.');
+      }
+      v = tsBlockToLua(v);
+      lr[field] = v;
+    }
+  }
+
+  // List rebuilder functions — add extra params when list items reference data/props/state
   const listFns = listRebuilders.map(lr => {
-    const extraParams = lr.needsStateRefresh ? ', state, refresh' : '';
+    const allLua = lr.itemLua + ' ' + (lr.arrayExpr || '');
+    const needsData = /\bdata\./.test(allLua);
+    const needsProps = /\bprops\./.test(allLua) || /\bcapState\.props/.test(allLua);
+    lr._needsData = needsData;
+    lr._needsProps = needsProps;
+    let extraParams = '';
+    if (needsData) extraParams += ', data';
+    if (needsProps) extraParams += ', props';
+    if (lr.needsStateRefresh) extraParams += ', state, refresh';
+    const hasNestedMap = lr.itemLua.includes('-- nested_map');
+    // When nested map is used, the item code handles its own tmpl appending
+    const loopBody = hasNestedMap
+      ? `\n${lr.itemLua}`
+      : `\n    tmpl[#tmpl + 1] =\n${lr.itemLua}`;
     return `local function rebuildList_${lr.index}(wrapperNodeId, items${extraParams})
   Tree.removeDeclaredChildren(wrapperNodeId)
   if not items or #items == 0 then return end
   local tmpl = {}
-  for _i, ${lr.itemParam} in ipairs(items) do
-    tmpl[#tmpl + 1] =
-${lr.itemLua}
+  for _i, ${lr.itemParam} in ipairs(items) do${loopBody}
   end
   Tree.declareChildren(wrapperNodeId, tmpl)
 end`;
   }).join('\n\n');
 
-  // Post-process list rebuilder array expressions (same substitutions as dynamic bindings)
-  for (const lr of listRebuilders) {
-    let v = lr.arrayExpr;
-    for (const [local_, resolved] of Object.entries(renderLocals || {})) {
-      v = v.replace(new RegExp('(?<!\\.)\\b' + local_ + '\\b', 'g'), resolved);
-    }
-    if (renderHasComputed && computeBody) {
-      v = v.replace(/\bcomputed\./g, 'data.');
-    } else if (renderHasState && computeBody) {
-      v = v.replace(/\bstate\./g, 'data.');
-    }
-    v = tsBlockToLua(v);
-    lr.arrayExpr = v;
-  }
-
   const listCalls = listRebuilders.map(lr => {
-    const extraArgs = lr.needsStateRefresh ? ', state, refresh' : '';
+    let extraArgs = '';
+    if (lr._needsData) extraArgs += ', data';
+    if (lr._needsProps) extraArgs += ', props';
+    if (lr.needsStateRefresh) extraArgs += ', state, refresh';
     return `  rebuildList_${lr.index}(handles["${lr.wrapperKey}"], ${lr.arrayExpr}${extraArgs})`;
   }).join('\n');
 

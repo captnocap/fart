@@ -383,6 +383,21 @@ function emitForStatement(node, ctx) {
   return result;
 }
 
+/** Check if a loop variable is used as an array index (e.g. arr[i]) in the subtree. */
+function bodyUsesVarAsArrayIndex(node, varName) {
+  if (!node) return false;
+  if (ts.isElementAccessExpression(node)) {
+    if (ts.isIdentifier(node.argumentExpression) && node.argumentExpression.text === varName) {
+      return true;
+    }
+  }
+  let found = false;
+  ts.forEachChild(node, child => {
+    if (bodyUsesVarAsArrayIndex(child, varName)) found = true;
+  });
+  return found;
+}
+
 function tryNumericFor(node, ctx) {
   if (!node.initializer || !ts.isVariableDeclarationList(node.initializer)) return null;
   const decls = node.initializer.declarations;
@@ -400,15 +415,19 @@ function tryNumericFor(node, ctx) {
   if (!ts.isIdentifier(condLeft) || condLeft.text !== varName) return null;
 
   const op = node.condition.operatorToken.kind;
+  // Detect if loop variable is used as an array index (arr[i]) — if so,
+  // adjust start +1 and limit +1 to convert from JS 0-based to Lua 1-based.
+  const isArrayIndex = bodyUsesVarAsArrayIndex(node.statement, varName);
   let limit;
   if (op === ts.SyntaxKind.LessThanToken) {
-    limit = `${emitExpression(condRight, ctx)} - 1`;
+    // JS: i < N  →  Lua: i <= N-1  (or i <= N when +1 adjustment cancels the -1)
+    limit = isArrayIndex ? emitExpression(condRight, ctx) : `${emitExpression(condRight, ctx)} - 1`;
   } else if (op === ts.SyntaxKind.LessThanEqualsToken) {
-    limit = emitExpression(condRight, ctx);
+    limit = isArrayIndex ? `${emitExpression(condRight, ctx)} + 1` : emitExpression(condRight, ctx);
   } else if (op === ts.SyntaxKind.GreaterThanToken) {
-    limit = `${emitExpression(condRight, ctx)} + 1`;
+    limit = isArrayIndex ? `${emitExpression(condRight, ctx)}` : `${emitExpression(condRight, ctx)} + 1`;
   } else if (op === ts.SyntaxKind.GreaterThanEqualsToken) {
-    limit = emitExpression(condRight, ctx);
+    limit = isArrayIndex ? `${emitExpression(condRight, ctx)} + 1` : emitExpression(condRight, ctx);
   } else {
     return null;
   }
@@ -444,8 +463,11 @@ function tryNumericFor(node, ctx) {
   // If counting down with default step, add -1
   if (isCountDown && !step) step = '-1';
 
+  // Adjust start for 0→1 indexing when loop var is used as array index
+  const adjustedStart = isArrayIndex ? (start === '0' ? '1' : `${start} + 1`) : start;
+
   const stepStr = step ? `, ${step}` : '';
-  let result = `${indent(ctx)}for ${varName} = ${start}, ${limit}${stepStr} do\n`;
+  let result = `${indent(ctx)}for ${varName} = ${adjustedStart}, ${limit}${stepStr} do\n`;
   ctx.indent++;
   result += emitBlockBody(node.statement, ctx);
   if (bodyUsesContinue(node.statement)) {
@@ -910,7 +932,9 @@ function emitBinaryExpression(node, ctx) {
 
   // Assignment operators
   if (op === SK.EqualsToken) {
+    ctx._isAssignmentTarget = true;
     const left = emitExpression(node.left, ctx);
+    delete ctx._isAssignmentTarget;
     const right = emitExpression(node.right, ctx);
     return `${left} = ${right}`;
   }
@@ -923,7 +947,9 @@ function emitBinaryExpression(node, ctx) {
 
   // String += → ..
   if (op === SK.PlusEqualsToken && (looksLikeString(node.left) || looksLikeString(node.right))) {
+    ctx._isAssignmentTarget = true;
     const left = emitExpression(node.left, ctx);
+    delete ctx._isAssignmentTarget;
     const right = emitExpression(node.right, ctx);
     return `${left} = ${left} .. ${right}`;
   }
@@ -945,13 +971,17 @@ function emitBinaryExpression(node, ctx) {
     [SK.CaretEqualsToken]: 'bit.bxor',
   };
   if (bitwiseCompoundOps[op]) {
+    ctx._isAssignmentTarget = true;
     const left = emitExpression(node.left, ctx);
+    delete ctx._isAssignmentTarget;
     const right = emitExpression(node.right, ctx);
     return `${left} = ${bitwiseCompoundOps[op]}(${left}, ${right})`;
   }
 
   if (compoundOps[op]) {
+    ctx._isAssignmentTarget = true;
     const left = emitExpression(node.left, ctx);
+    delete ctx._isAssignmentTarget;
     const right = emitExpression(node.right, ctx);
     return `${left} = ${left} ${compoundOps[op]} ${right}`;
   }
@@ -1368,7 +1398,8 @@ function emitElementAccess(node, ctx) {
   const index = emitExpression(node.argumentExpression, ctx);
 
   // String character access: str[i] → string.sub(str, i+1, i+1)
-  if (looksLikeString(node.expression)) {
+  // But NEVER when this is an assignment target (LHS of =), since string.sub() can't be assigned to
+  if (looksLikeString(node.expression) && !ctx._isAssignmentTarget) {
     if (ts.isNumericLiteral(node.argumentExpression)) {
       const num = parseInt(node.argumentExpression.text, 10);
       return `string.sub(${obj}, ${num + 1}, ${num + 1})`;

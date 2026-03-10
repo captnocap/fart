@@ -5,38 +5,56 @@
 
 local Capabilities = require("lua.capabilities")
 local Tree = require("lua.tree")
-local Elements = require("lua.generated.chemistry.elements")
-local Formulas = require("lua.generated.chemistry.formulas")
+local Elements = require("chemistry.elements")
+local Formulas = require("chemistry.formulas")
 
 local function computeData(props, state)
   local el = Elements.getElement(state.selected)
-      local valence = (el) and Elements.valenceElectrons(el.number) or 0
-  
-      local DEMO_FORMULAS = {"H2O", "CO2", "C6H12O6", "C8H10N4O2", "NaCl", "CH4", "NH3", "C2H5OH"}
-      local DEMO_REACTIONS = {
-        "H2 + O2 -> H2O",
-        "CH4 + O2 -> CO2 + H2O",
-        "N2 + H2 -> NH3",
-        "Fe2O3 + CO -> Fe + CO2",
-        "C3H8 + O2 -> CO2 + H2O",
-        "CaCO3 -> CaO + CO2",
-      }
-  
-      local TABS = {
-        { id = "table", label = "Periodic Table" },
-        { id = "molecules", label = "Molecules" },
-        { id = "reactions", label = "Reactions" },
-      }
-  
-      local QUICK_ELEMENTS = {
-        { n = 1, sym = "H" }, { n = 6, sym = "C" }, { n = 7, sym = "N" },
-        { n = 8, sym = "O" }, { n = 26, sym = "Fe" }, { n = 29, sym = "Cu" },
-        { n = 47, sym = "Ag" }, { n = 79, sym = "Au" }, { n = 92, sym = "U" },
-      }
-  
-      return { el = el, valence = valence, DEMO_FORMULAS = DEMO_FORMULAS, DEMO_REACTIONS = DEMO_REACTIONS, TABS = TABS, QUICK_ELEMENTS = QUICK_ELEMENTS }
+  local valence = (el and Elements.valenceElectrons(el.number) or 0)
+  local DEMO_FORMULAS = {
+    "H2O",
+    "CO2",
+    "C6H12O6",
+    "C8H10N4O2",
+    "NaCl",
+    "CH4",
+    "NH3",
+    "C2H5OH",
+  }
+  local DEMO_REACTIONS = {
+    "H2 + O2 -> H2O",
+    "CH4 + O2 -> CO2 + H2O",
+    "N2 + H2 -> NH3",
+    "Fe2O3 + CO -> Fe + CO2",
+    "C3H8 + O2 -> CO2 + H2O",
+    "CaCO3 -> CaO + CO2",
+  }
+  local TABS = {
+    { id = "table", label = "Periodic Table" },
+    { id = "molecules", label = "Molecules" },
+    { id = "reactions", label = "Reactions" },
+  }
+  local QUICK_ELEMENTS = {
+    { n = 1, sym = "H" },
+    { n = 6, sym = "C" },
+    { n = 7, sym = "N" },
+    { n = 8, sym = "O" },
+    { n = 26, sym = "Fe" },
+    { n = 29, sym = "Cu" },
+    { n = 47, sym = "Ag" },
+    { n = 79, sym = "Au" },
+    { n = 92, sym = "U" },
+  }
+  return {
+    el = el,
+    valence = valence,
+    DEMO_FORMULAS = DEMO_FORMULAS,
+    DEMO_REACTIONS = DEMO_REACTIONS,
+    TABS = TABS,
+    QUICK_ELEMENTS = QUICK_ELEMENTS,
+  }
 end
-local function rebuildList_0(wrapperNodeId, items, state, refresh)
+local function rebuildList_0(wrapperNodeId, items, data, state, refresh)
   Tree.removeDeclaredChildren(wrapperNodeId)
   if not items or #items == 0 then return end
   local tmpl = {}
@@ -51,7 +69,7 @@ local function rebuildList_0(wrapperNodeId, items, state, refresh)
   Tree.declareChildren(wrapperNodeId, tmpl)
 end
 
-local function rebuildList_1(wrapperNodeId, items, state, refresh)
+local function rebuildList_1(wrapperNodeId, items, data, state, refresh)
   Tree.removeDeclaredChildren(wrapperNodeId)
   if not items or #items == 0 then return end
   local tmpl = {}
@@ -66,7 +84,7 @@ local function rebuildList_1(wrapperNodeId, items, state, refresh)
   Tree.declareChildren(wrapperNodeId, tmpl)
 end
 
-local function rebuildList_2(wrapperNodeId, items, state, refresh)
+local function rebuildList_2(wrapperNodeId, items, data, state, refresh)
   Tree.removeDeclaredChildren(wrapperNodeId)
   if not items or #items == 0 then return end
   local tmpl = {}
@@ -81,7 +99,7 @@ local function rebuildList_2(wrapperNodeId, items, state, refresh)
   Tree.declareChildren(wrapperNodeId, tmpl)
 end
 
-local function rebuildList_3(wrapperNodeId, items, state, refresh)
+local function rebuildList_3(wrapperNodeId, items, data, state, refresh)
   Tree.removeDeclaredChildren(wrapperNodeId)
   if not items or #items == 0 then return end
   local tmpl = {}
@@ -153,10 +171,10 @@ local function updateTree(handles, props, state, refresh)
   Tree.updateChildProps(handles["n0_1_1_11_6_5_8_3_11_1_12"], { element = state.selected or "" })
   Tree.updateChildProps(handles["n0_1_1_15_14_7_16"], { formula = state.selectedFormula or "" })
   Tree.updateChildProps(handles["n0_1_1_19_17_7_19"], { equation = state.selectedReaction or "" })
-  rebuildList_0(handles["n0_1_1_7_5_1_list_0"], data.TABS, state, refresh)
-  rebuildList_1(handles["n0_1_1_11_6_9_13_1_list_1"], data.QUICK_ELEMENTS, state, refresh)
-  rebuildList_2(handles["n0_1_1_15_14_3_15_1_list_2"], data.DEMO_FORMULAS, state, refresh)
-  rebuildList_3(handles["n0_1_1_19_17_3_18_1_list_3"], data.DEMO_REACTIONS, state, refresh)
+  rebuildList_0(handles["n0_1_1_7_5_1_list_0"], data.TABS, data, state, refresh)
+  rebuildList_1(handles["n0_1_1_11_6_9_13_1_list_1"], data.QUICK_ELEMENTS, data, state, refresh)
+  rebuildList_2(handles["n0_1_1_15_14_3_15_1_list_2"], data.DEMO_FORMULAS, data, state, refresh)
+  rebuildList_3(handles["n0_1_1_19_17_3_18_1_list_3"], data.DEMO_REACTIONS, data, state, refresh)
 end
 
 Capabilities.register("ChemistryStory", {
