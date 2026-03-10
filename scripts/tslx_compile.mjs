@@ -73,10 +73,15 @@ function tsBlockToLua(text) {
     });
 
   // Array literals [...] → {...} — standalone arrays only, not property access foo[x]
-  result = result.replace(/\[([^\]]*)\]/g, (match, inner, offset) => {
-    if (offset > 0 && /[\w\])]/.test(result[offset - 1])) return match;
-    return '{' + inner + '}';
-  });
+  // Run repeatedly to handle nested arrays (inner brackets convert first)
+  let prev;
+  do {
+    prev = result;
+    result = result.replace(/\[([^\[\]]*)\]/g, (match, inner, offset) => {
+      if (offset > 0 && /[\w\])]/.test(result[offset - 1])) return match;
+      return '{' + inner + '}';
+    });
+  } while (result !== prev);
 
   // Ternary: condition ? trueVal : falseVal → (condition) and trueVal or falseVal
   // Handles both standalone ternaries and ternaries after assignment (local x = cond ? a : b)
