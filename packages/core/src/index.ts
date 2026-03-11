@@ -100,6 +100,9 @@ export {
   setPreservationBridge,
 } from './preserveState';
 
+// Android VM control (Puppeteer-like ADB wrapper)
+export { useAndroidVM, type AndroidVMOptions, type AndroidDevice } from './useAndroidVM';
+
 // GIF recorder (capture Love2D window as animated GIF via ffmpeg)
 export { useGifRecorder, type GifRecorderOptions, type GifRecorderResult } from './useGifRecorder';
 

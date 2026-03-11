@@ -331,6 +331,7 @@ function Capabilities.loadAll()
     "filewatcher",
     "hello_card",
     "dashboard_card",
+    "android_vm",
   }
   local loaded, failed = {}, {}
   for _, name in ipairs(files) do
