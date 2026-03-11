@@ -97,6 +97,35 @@ local profiles = {
     },
   },
 
+  retrobit_n64 = {
+    label = "Retro-bit N64",
+    buttons = {
+      dpup         = "navigate_up",
+      dpdown       = "navigate_down",
+      dpleft       = "navigate_left",
+      dpright      = "navigate_right",
+      b            = "confirm",        -- Physical A (Retro-bit maps A→SDL b)
+      a            = "back",           -- Physical B (Retro-bit maps B→SDL a)
+      start        = "scroll_up",      -- Physical C-Up
+      y            = "scroll_down",    -- Physical C-Down
+      x            = "scroll_left",    -- Physical C-Left
+      back         = "scroll_right",   -- Physical C-Right
+      leftshoulder = "group_prev",     -- Physical L
+      rightshoulder= "group_next",     -- Physical R
+      guide        = "menu",           -- Physical Start
+      leftstick    = nil,
+      rightstick   = nil,
+    },
+    axes = {
+      leftx        = "navigate_x",    -- Analog stick
+      lefty        = "navigate_y",
+      rightx       = nil,
+      righty       = nil,
+      triggerleft  = "back",           -- Physical Z trigger
+      triggerright  = nil,
+    },
+  },
+
   ps = {
     label = "PlayStation",
     buttons = {
@@ -166,11 +195,39 @@ local profiles = {
 -- Per-controller state: { [joystickId] = { profile = "xbox", overrides = { buttons = {}, axes = {} } } }
 local controllerState = {}
 
+-- Auto-detect profile from joystick name (substring match, case-insensitive)
+local autoDetectPatterns = {
+  { pattern = "retro%-bit", profile = "retrobit_n64" },
+  { pattern = "raphnet.*n64", profile = "n64" },
+  { pattern = "n64",         profile = "n64" },
+  { pattern = "dualshock",   profile = "ps" },
+  { pattern = "dualsense",   profile = "ps" },
+  { pattern = "playstation", profile = "ps" },
+  { pattern = "switch",      profile = "switch" },
+  { pattern = "pro controller", profile = "switch" },
+}
+
+local function detectProfile(joystickId)
+  local joysticks = love.joystick and love.joystick.getJoysticks() or {}
+  for _, joy in ipairs(joysticks) do
+    if joy:getID() == tonumber(joystickId) then
+      local name = joy:getName():lower()
+      for _, entry in ipairs(autoDetectPatterns) do
+        if name:find(entry.pattern) then
+          return entry.profile
+        end
+      end
+      break
+    end
+  end
+  return "xbox"  -- default fallback
+end
+
 local function getOrCreateState(joystickId)
   local id = tostring(joystickId)
   if not controllerState[id] then
     controllerState[id] = {
-      profile = "xbox",  -- default
+      profile = detectProfile(joystickId),
       overrides = { buttons = {}, axes = {} },
     }
   end

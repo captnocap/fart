@@ -5436,12 +5436,13 @@ function ReactJIT.wheelmoved(x, y)
     return
   end
 
-  -- Hittable capabilities handle their own scroll (e.g. ClaudeCanvas)
+  -- Hittable capabilities handle their own scroll (e.g. ClaudeCanvas, Terminal)
   if M.capabilities and M.capabilities.isHittable(hit.type) then
     local capDef = M.capabilities.getDefinition(hit.type)
     if capDef and capDef.handleWheelMoved then
-      capDef.handleWheelMoved(hit, x, y)
-      return
+      local consumed = capDef.handleWheelMoved(hit, x, y)
+      if consumed then return end
+      -- Not consumed (nothing to scroll) — fall through to parent ScrollView
     end
   end
 
@@ -5565,6 +5566,11 @@ end
 --- Call from love.gamepadpressed(joystick, button).
 --- Uses gamepad_maps to resolve button → action, then dispatches by action.
 function ReactJIT.gamepadpressed(joystick, button)
+  -- RAW DEBUG: print exactly what SDL reports for each button press
+  io.write(string.format("[GAMEPAD-RAW] pressed: button='%s' joystick=%d name='%s'\n",
+    tostring(button), joystick:getID(), tostring(joystick:getName())))
+  io.flush()
+
   if not isRendering() then return end
   if not M.bridge then return end
   if M.systemPanelEnabled and systemPanel.isDeviceBlocked("controllers", joystick:getID()) then return end
@@ -5650,8 +5656,22 @@ function ReactJIT.gamepadpressed(joystick, button)
   if action == "scroll_up" or action == "scroll_down"
   or action == "scroll_left" or action == "scroll_right" then
     local scrollNode = nil
-    local node = focus.getForController(joystickId)
-    if node then scrollNode = findScrollAncestor(node) end
+    -- Use cursor position to find scroll container when cursor is visible
+    if M.gamepadCursor.isVisible() then
+      local cx, cy = M.gamepadCursor.getPosition(joystickId)
+      local root = M.tree.getTree()
+      if root then
+        local hit = M.events.hitTest(root, cx, cy)
+        if hit then
+          scrollNode = M.events.findScrollContainer(hit, cx, cy)
+        end
+      end
+    end
+    -- Fallback: focused node's scroll ancestor, or any scroll node
+    if not scrollNode then
+      local node = focus.getForController(joystickId)
+      if node then scrollNode = findScrollAncestor(node) end
+    end
     if not scrollNode then scrollNode = findAnyScrollNode() end
     if scrollNode and scrollNode.scrollState then
       local ss = scrollNode.scrollState
@@ -5801,6 +5821,13 @@ end
 --- Call from love.gamepadaxis(joystick, axis, value).
 --- Uses gamepad_maps to resolve axis → action, then dispatches.
 function ReactJIT.gamepadaxis(joystick, axis, value)
+  -- RAW DEBUG: print axis values above deadzone
+  if math.abs(value) > 0.3 then
+    io.write(string.format("[GAMEPAD-RAW] axis='%s' value=%.2f joystick=%d\n",
+      tostring(axis), value, joystick:getID()))
+    io.flush()
+  end
+
   if not isRendering() then return end
   if not M.bridge then return end
   if M.systemPanelEnabled and systemPanel.isDeviceBlocked("controllers", joystick:getID()) then return end
