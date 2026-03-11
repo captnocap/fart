@@ -341,20 +341,25 @@ export function GPIOStory() {
         {/* ── Live LED Matrix visual ── */}
         <Band>
           <Half>
-            <Box style={{ flexDirection: 'row', gap: 12, justifyContent: 'center', width: '100%' }}>
-              <Native type="LEDMatrix" color="red" pattern="cycle" style={{ width: 120, height: 120 }} />
-              <Native type="LEDMatrix" color="green" pattern="wave" speed={1.5} style={{ width: 120, height: 120 }} />
-              <Native type="LEDMatrix" color="blue" pattern="spiral" style={{ width: 120, height: 120 }} />
+            <Box style={{ gap: 10, width: '100%', alignItems: 'center' }}>
+              <Box style={{ flexDirection: 'row', gap: 10, justifyContent: 'center', width: '100%' }}>
+                <Native type="LEDMatrix" color="red" pattern="cycle" style={{ width: 100, height: 100 }} />
+                <Native type="LEDMatrix" color="green" pattern="wave" speed={1.5} style={{ width: 100, height: 100 }} />
+                <Native type="LEDMatrix" color="blue" pattern="spiral" style={{ width: 100, height: 100 }} />
+              </Box>
+              <Native type="LEDMatrix" cols={32} rows={8} color="yellow" pattern="scroll" scrollText="REACTJIT GPIO " style={{ width: 280, height: 70 }} />
+              <Native type="LEDMatrix" cols={32} rows={32} color="cyan" pattern="spiral" speed={0.8} style={{ width: 140, height: 140 }} />
             </Box>
           </Half>
           <Half>
-            <SectionLabel icon="grid" accentColor={C.serial}>{'8x8 LED MATRIX'}</SectionLabel>
+            <SectionLabel icon="grid" accentColor={C.serial}>{'LED MATRIX'}</SectionLabel>
             <Text style={{ color: c.text, fontSize: 10 }}>
-              {'Three LED matrices running different patterns simultaneously. Left cycles through 8 built-in bitmaps (smiley, heart, arrow, checkerboard, skull, space invader). Center renders a real-time wave function. Right draws an animated spiral. All patterns computed in Lua every frame.'}
+              {'Any size — 8x8, 8x32, 32x32, 64x64, 128x128. Set rows and cols props to match your physical matrix. Built-in patterns scale via nearest-neighbor sampling. Procedural patterns (wave, rain, spiral) are resolution-independent. Glow effects auto-disable above 1024 LEDs for performance.'}
             </Text>
             <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
               <Tag text="LEDMatrix" color={C.serial} />
-              <Tag text="8 patterns" color={C.i2c} />
+              <Tag text="rows x cols" color={C.i2c} />
+              <Tag text="8 patterns" color={C.pwm} />
               <Tag text="scroll text" color={C.spi} />
             </Box>
           </Half>
