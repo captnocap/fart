@@ -520,7 +520,34 @@ function LLMStudio() {
                   <AIMessageList
                     messages={chat.messages} isStreaming={chat.isStreaming}
                     style={{ flexGrow: 1 }}
-                    renderMessage={(msg, i) => <FormattedMessage key={i} message={msg} />}
+                    renderMessage={(msg, i) => (
+                      <FormattedMessage
+                        key={i}
+                        message={msg}
+                        onCopy={() => {
+                          const text = typeof msg.content === 'string'
+                            ? msg.content
+                            : msg.content.map(b => b.text || '').join('');
+                          // Copy via bridge clipboard RPC
+                          try { (globalThis as any).__rjitBridge?.rpc('clipboard:set', text); } catch {}
+                        }}
+                        onDelete={() => {
+                          chat.setMessages(chat.messages.filter((_, mi) => mi !== i));
+                        }}
+                        onRegenerate={msg.role === 'assistant' ? () => {
+                          // Remove this assistant message and re-send the preceding user message
+                          const preceding = chat.messages.slice(0, i);
+                          const lastUser = [...preceding].reverse().find(m => m.role === 'user');
+                          chat.setMessages(preceding);
+                          if (lastUser) {
+                            const text = typeof lastUser.content === 'string'
+                              ? lastUser.content
+                              : lastUser.content.map(b => b.text || '').join('');
+                            setTimeout(() => chat.send(text), 50);
+                          }
+                        } : undefined}
+                      />
+                    )}
                   />
                 )}
                 <Box style={{ padding: 12, borderTopWidth: 1, borderColor: C.border }}>
@@ -653,7 +680,14 @@ function LLMStudio() {
 
 // ── Formatted message with markdown-like rendering ───────────────────────────
 
-function FormattedMessage({ message }: { message: Message }) {
+function FormattedMessage({ message, onCopy, onDelete, onRegenerate }: {
+  message: Message;
+  onCopy?: () => void;
+  onDelete?: () => void;
+  onRegenerate?: () => void;
+}) {
+  const [hovered, setHovered] = useState(false);
+  const [copied, setCopied] = useState(false);
   const content = typeof message.content === 'string'
     ? message.content
     : message.content.map(b => b.text || '').join('');
@@ -663,45 +697,80 @@ function FormattedMessage({ message }: { message: Message }) {
   const isUser = message.role === 'user';
   const parts = parseMarkdown(content);
 
-  return (
-    <Box style={{
-      paddingLeft: isUser ? 60 : 16, paddingRight: isUser ? 16 : 60,
-      paddingTop: 8, paddingBottom: 8,
-    }}>
-      {/* Role label */}
-      <Text style={{ fontSize: 10, color: C.textDim, fontWeight: 'bold', paddingBottom: 4 }}>
-        {isUser ? 'You' : 'Assistant'}
-      </Text>
+  const handleCopy = useCallback(() => {
+    onCopy?.();
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }, [onCopy]);
 
-      {/* Content */}
-      <Box style={{
-        padding: 12, borderRadius: 10, gap: 6,
-        backgroundColor: isUser ? C.surfaceActive : C.surface,
-      }}>
-        {parts.map((part, i) => {
-          if (part.type === 'code') {
-            return <CodeBlock key={i} code={part.content} language={part.language} style={{ borderRadius: 6 }} />;
-          }
-          if (part.type === 'heading') {
-            return (
-              <Text key={i} style={{ fontSize: 15, color: C.text, fontWeight: 'bold', paddingTop: i > 0 ? 4 : 0 }}>
-                {part.content}
-              </Text>
-            );
-          }
-          if (part.type === 'bullet') {
-            return (
-              <Box key={i} style={{ flexDirection: 'row', gap: 6, paddingLeft: 4 }}>
-                <Text style={{ fontSize: 13, color: C.accent }}>*</Text>
-                <Text style={{ fontSize: 13, color: C.text, flexGrow: 1 }}>{part.content}</Text>
+  return (
+    <Pressable onHoverIn={() => setHovered(true)} onHoverOut={() => setHovered(false)}>
+      {() => (
+        <Box style={{
+          paddingLeft: isUser ? 60 : 16, paddingRight: isUser ? 16 : 60,
+          paddingTop: 8, paddingBottom: 8,
+        }}>
+          {/* Role label + actions */}
+          <Box style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 4 }}>
+            <Text style={{ fontSize: 10, color: C.textDim, fontWeight: 'bold' }}>
+              {isUser ? 'You' : 'Assistant'}
+            </Text>
+            {hovered && (
+              <Box style={{ flexDirection: 'row', gap: 4 }}>
+                <MsgAction label={copied ? 'Copied' : 'Copy'} color={copied ? C.green : C.textDim} onPress={handleCopy} />
+                {!isUser && onRegenerate && (
+                  <MsgAction label="Retry" color={C.textDim} onPress={onRegenerate} />
+                )}
+                {onDelete && <MsgAction label="Del" color={C.red} onPress={onDelete} />}
               </Box>
-            );
-          }
-          // Regular text — render inline code with highlighting
-          return <RichText key={i} text={part.content} />;
-        })}
-      </Box>
-    </Box>
+            )}
+          </Box>
+
+          {/* Content */}
+          <Box style={{
+            padding: 12, borderRadius: 10, gap: 6,
+            backgroundColor: isUser ? C.surfaceActive : C.surface,
+          }}>
+            {parts.map((part, i) => {
+              if (part.type === 'code') {
+                return <CodeBlock key={i} code={part.content} language={part.language} style={{ borderRadius: 6 }} />;
+              }
+              if (part.type === 'heading') {
+                return (
+                  <Text key={i} style={{ fontSize: 15, color: C.text, fontWeight: 'bold', paddingTop: i > 0 ? 4 : 0 }}>
+                    {part.content}
+                  </Text>
+                );
+              }
+              if (part.type === 'bullet') {
+                return (
+                  <Box key={i} style={{ flexDirection: 'row', gap: 6, paddingLeft: 4 }}>
+                    <Text style={{ fontSize: 13, color: C.accent }}>*</Text>
+                    <Text style={{ fontSize: 13, color: C.text, flexGrow: 1 }}>{part.content}</Text>
+                  </Box>
+                );
+              }
+              return <RichText key={i} text={part.content} />;
+            })}
+          </Box>
+        </Box>
+      )}
+    </Pressable>
+  );
+}
+
+function MsgAction({ label, color, onPress }: { label: string; color: string; onPress: () => void }) {
+  return (
+    <Pressable onPress={onPress}>
+      {({ hovered: h }) => (
+        <Box style={{
+          paddingLeft: 6, paddingRight: 6, paddingTop: 1, paddingBottom: 1,
+          borderRadius: 3, backgroundColor: h ? C.surfaceHover : 'transparent',
+        }}>
+          <Text style={{ fontSize: 9, color, fontWeight: 'bold' }}>{label}</Text>
+        </Box>
+      )}
+    </Pressable>
   );
 }
 
@@ -1179,9 +1248,53 @@ function ModelBrowser({
   onRefresh: () => void; provider: Provider;
 }) {
   const [search, setSearch] = useState('');
+  const [pullModel, setPullModel] = useState('');
+  const [pulling, setPulling] = useState(false);
+  const [pullStatus, setPullStatus] = useState('');
+
+  const isOllama = provider.id === 'ollama';
   const filtered = search
     ? models.filter(m => m.name.toLowerCase().includes(search.toLowerCase()))
     : models;
+
+  const handlePull = useCallback(async () => {
+    if (!pullModel.trim() || !isOllama) return;
+    setPulling(true);
+    setPullStatus(`Pulling ${pullModel}...`);
+    try {
+      const baseURL = provider.baseURL || 'http://localhost:11434';
+      const res = await fetch(`${baseURL}/api/pull`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: pullModel, stream: false }),
+      } as any);
+      if (res.ok) {
+        setPullStatus(`${pullModel} pulled successfully`);
+        setPullModel('');
+        onRefresh();
+      } else {
+        const body = await res.text();
+        setPullStatus(`Failed: ${body.slice(0, 100)}`);
+      }
+    } catch (err: any) {
+      setPullStatus(`Error: ${err.message}`);
+    }
+    setPulling(false);
+    setTimeout(() => setPullStatus(''), 5000);
+  }, [pullModel, isOllama, provider.baseURL, onRefresh]);
+
+  const handleDelete = useCallback(async (modelName: string) => {
+    if (!isOllama) return;
+    try {
+      const baseURL = provider.baseURL || 'http://localhost:11434';
+      await fetch(`${baseURL}/api/delete`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: modelName }),
+      } as any);
+      onRefresh();
+    } catch { /* ok */ }
+  }, [isOllama, provider.baseURL, onRefresh]);
 
   return (
     <Box style={{ flexGrow: 1, padding: 20, gap: 16 }}>
@@ -1197,6 +1310,35 @@ function ModelBrowser({
           <Btn label="Refresh" color={C.accent} bgColor={C.surface} onPress={onRefresh} />
         </Box>
       </Box>
+
+      {/* Ollama pull section */}
+      {isOllama && (
+        <Box style={{ padding: 12, backgroundColor: C.surface, borderRadius: 8, gap: 8 }}>
+          <Text style={{ fontSize: 11, color: C.textMuted, fontWeight: 'bold' }}>Pull Model from Ollama</Text>
+          <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+            <Box style={{ flexGrow: 1 }}>
+              <TextInput
+                value={pullModel} onChangeText={setPullModel}
+                onSubmit={handlePull}
+                placeholder="e.g. llama3, mistral, codellama:13b" placeholderColor={C.textDim}
+                style={{ backgroundColor: C.bgInput, borderRadius: 6, padding: 8 }}
+                textStyle={{ color: C.text, fontSize: 12 }}
+              />
+            </Box>
+            <Btn
+              label={pulling ? 'Pulling...' : 'Pull'}
+              color="#fff"
+              bgColor={pulling ? C.textDim : C.accent}
+              onPress={handlePull}
+            />
+          </Box>
+          {pullStatus ? (
+            <Text style={{ fontSize: 10, color: pullStatus.startsWith('Error') || pullStatus.startsWith('Failed') ? C.red : C.green }}>
+              {pullStatus}
+            </Text>
+          ) : null}
+        </Box>
+      )}
 
       <TextInput
         value={search} onChangeText={setSearch}
@@ -1233,11 +1375,25 @@ function ModelBrowser({
                       </Text>
                       <Text style={{ fontSize: 10, color: C.textDim }}>{m.id}</Text>
                     </Box>
-                    {m.id === activeModel && (
-                      <Box style={{ paddingLeft: 8, paddingRight: 8, paddingTop: 2, paddingBottom: 2, borderRadius: 4, backgroundColor: C.accent }}>
-                        <Text style={{ fontSize: 10, color: '#fff', fontWeight: 'bold' }}>Active</Text>
-                      </Box>
-                    )}
+                    <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+                      {m.id === activeModel && (
+                        <Box style={{ paddingLeft: 8, paddingRight: 8, paddingTop: 2, paddingBottom: 2, borderRadius: 4, backgroundColor: C.accent }}>
+                          <Text style={{ fontSize: 10, color: '#fff', fontWeight: 'bold' }}>Active</Text>
+                        </Box>
+                      )}
+                      {isOllama && hovered && (
+                        <Pressable onPress={() => handleDelete(m.id)}>
+                          {({ pressed: dp }) => (
+                            <Box style={{
+                              paddingLeft: 6, paddingRight: 6, paddingTop: 2, paddingBottom: 2,
+                              borderRadius: 4, backgroundColor: dp ? C.red : C.redDim,
+                            }}>
+                              <Text style={{ fontSize: 9, color: C.red, fontWeight: 'bold' }}>Delete</Text>
+                            </Box>
+                          )}
+                        </Pressable>
+                      )}
+                    </Box>
                   </Box>
                 )}
               </Pressable>
