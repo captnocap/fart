@@ -29,26 +29,47 @@ import { getProvider } from '@reactjit/ai';
 
 // ── Color palette ────────────────────────────────────────────────────────────
 
+// Phosphor Terminal palette — CRT warmth meets dark terminal
 const C = {
-  bg: '#0c0c14',
-  bgSidebar: '#0a0a12',
-  bgElevated: '#141420',
-  bgInput: '#1a1a2a',
-  surface: '#1e1e30',
-  surfaceHover: '#252540',
-  surfaceActive: '#2a2a4a',
-  border: '#2a2a40',
-  text: '#e8e8f0',
-  textMuted: '#8888a8',
-  textDim: '#5a5a78',
-  accent: '#6c5ce7',
-  accentHover: '#7c6cf7',
-  accentDim: '#4a3cb5',
-  green: '#2ed573',
-  greenDim: '#1a3a2a',
-  red: '#ff4757',
-  redDim: '#3a1a1a',
-  yellow: '#ffa502',
+  bg: '#0a0a0a',
+  bgSidebar: '#080808',
+  bgElevated: '#0c0c10',
+  bgInput: '#111111',
+  surface: '#141414',
+  surfaceHover: '#1a1a1a',
+  surfaceActive: '#222222',
+  border: '#222222',
+  text: '#d4d4d4',
+  textMuted: '#777777',
+  textDim: '#444444',
+  accent: '#D97757',       // terracotta (Anthropic-inspired warmth)
+  accentHover: '#e88868',
+  accentDim: '#3a2218',
+  green: '#10B981',
+  greenDim: '#0a2a1e',
+  red: '#F43F5E',
+  redDim: '#2a0f14',
+  yellow: '#F59E0B',
+  user: '#10B981',          // green — user messages
+  assistant: '#F59E0B',     // amber — assistant messages
+  tool: '#06B6D4',          // cyan — tool/system
+};
+
+// Provider accent colors from YAAI spec
+const PROVIDER_COLORS: Record<string, string> = {
+  ollama: '#888888',
+  llamacpp: '#888888',
+  vllm: '#888888',
+  lmstudio: '#888888',
+  openai: '#10a37f',
+  anthropic: '#D97757',
+  deepseek: '#4D6BFE',
+  google: '#4285F4',
+  mistral: '#FA520F',
+  groq: '#F55036',
+  meta: '#1D65C1',
+  cohere: '#39594D',
+  perplexity: '#22B8CD',
 };
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -925,11 +946,12 @@ function FormattedMessage({ message, onCopy, onDelete, onRegenerate, onEdit, onB
           {/* Role label + actions */}
           <Box style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 4 }}>
             <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
-              <Text style={{ fontSize: 10, color: C.textDim, fontWeight: 'bold' }}>
-                {isUser ? 'You' : 'Assistant'}
+              <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: isUser ? C.user : C.assistant }} />
+              <Text style={{ fontSize: 10, color: isUser ? C.user : C.assistant, fontWeight: 'bold', fontFamily: 'monospace' }}>
+                {isUser ? 'YOU' : 'ASSISTANT'}
               </Text>
-              <Text style={{ fontSize: 8, color: C.textDim }}>
-                {`~${Math.round(content.length / 4)} tokens`}
+              <Text style={{ fontSize: 8, color: C.textDim, fontFamily: 'monospace' }}>
+                {`${Math.round(content.length / 4)} tok`}
               </Text>
             </Box>
             {hovered && !editing && (
@@ -1090,8 +1112,8 @@ function RichText({ text }: { text: string }) {
       {segments.map((seg, i) => {
         if (seg.startsWith('`') && seg.endsWith('`')) {
           return (
-            <Box key={i} style={{ backgroundColor: '#2a2a4a', borderRadius: 3, paddingLeft: 4, paddingRight: 4 }}>
-              <Text style={{ fontSize: 12, color: '#a78bfa', fontFamily: 'monospace' }}>
+            <Box key={i} style={{ backgroundColor: '#1a1a1a', borderRadius: 3, paddingLeft: 4, paddingRight: 4 }}>
+              <Text style={{ fontSize: 12, color: C.accent, fontFamily: 'monospace' }}>
                 {seg.slice(1, -1)}
               </Text>
             </Box>
@@ -1136,12 +1158,12 @@ function Sidebar({
       {/* App title + status */}
       <Box style={{ padding: 16, paddingBottom: 8 }}>
         <Box style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Text style={{ fontSize: 18, color: C.text, fontWeight: 'bold' }}>LLM Studio</Text>
+          <Text style={{ fontSize: 16, color: C.text, fontWeight: 'bold', fontFamily: 'monospace' }}>LLM STUDIO</Text>
           {activeProvider && (
             <HealthDot healthy={activeProvider.healthy} />
           )}
         </Box>
-        <Text style={{ fontSize: 11, color: C.textDim }}>Local & Cloud AI</Text>
+        <Text style={{ fontSize: 10, color: C.textDim, fontFamily: 'monospace' }}>local + cloud inference</Text>
       </Box>
 
       {/* Nav tabs */}
@@ -1341,7 +1363,7 @@ function TopBar({
       <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
         <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
           <Text style={{ fontSize: 14 }}>{provider.icon}</Text>
-          <Text style={{ fontSize: 13, color: C.text, fontWeight: 'bold' }}>{provider.name}</Text>
+          <Text style={{ fontSize: 12, color: PROVIDER_COLORS[provider.id] || C.text, fontWeight: 'bold', fontFamily: 'monospace' }}>{provider.name}</Text>
           <HealthDot healthy={provider.healthy} />
         </Box>
         <Box style={{ width: 200 }}>
@@ -1388,38 +1410,39 @@ function TopBar({
 // ── Welcome screen ───────────────────────────────────────────────────────────
 
 function WelcomeScreen({ provider, model }: { provider: Provider; model: string }) {
+  const providerColor = PROVIDER_COLORS[provider.id] || C.accent;
   return (
     <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', gap: 16 }}>
       <Text style={{ fontSize: 48 }}>{provider.icon}</Text>
-      <Text style={{ fontSize: 22, color: C.text, fontWeight: 'bold' }}>LLM Studio</Text>
-      <Text style={{ fontSize: 14, color: C.textMuted }}>
-        {`Connected to ${provider.name}${model ? ` / ${model}` : ''}`}
+      <Text style={{ fontSize: 20, color: C.text, fontWeight: 'bold', fontFamily: 'monospace' }}>LLM STUDIO</Text>
+      <Text style={{ fontSize: 12, color: providerColor, fontFamily: 'monospace' }}>
+        {`${provider.name}${model ? ` // ${model}` : ''}`}
       </Text>
-      <Box style={{ gap: 6, alignItems: 'center' }}>
-        <Text style={{ fontSize: 12, color: C.textDim }}>Type a message below to start chatting</Text>
-        <Text style={{ fontSize: 10, color: C.textDim }}>
-          Conversations are saved automatically
+      <Box style={{ gap: 4, alignItems: 'center' }}>
+        <Text style={{ fontSize: 11, color: C.textDim, fontFamily: 'monospace' }}>type below to begin</Text>
+        <Text style={{ fontSize: 9, color: C.textDim, fontFamily: 'monospace' }}>
+          conversations persist automatically
         </Text>
       </Box>
 
       {/* Quick start tips */}
-      <Box style={{ gap: 8, paddingTop: 16, width: 320 }}>
-        <Box style={{ padding: 10, backgroundColor: C.surface, borderRadius: 8, gap: 2 }}>
-          <Text style={{ fontSize: 11, color: C.accent, fontWeight: 'bold' }}>Local Models</Text>
+      <Box style={{ gap: 6, paddingTop: 16, width: 340 }}>
+        <Box style={{ padding: 10, backgroundColor: C.surface, borderRadius: 4, borderLeftWidth: 2, borderColor: C.user, gap: 2 }}>
+          <Text style={{ fontSize: 10, color: C.user, fontWeight: 'bold', fontFamily: 'monospace' }}>LOCAL</Text>
           <Text style={{ fontSize: 10, color: C.textDim }}>
             Start Ollama, llama.cpp, or vLLM and select it from the sidebar
           </Text>
         </Box>
-        <Box style={{ padding: 10, backgroundColor: C.surface, borderRadius: 8, gap: 2 }}>
-          <Text style={{ fontSize: 11, color: C.accent, fontWeight: 'bold' }}>Cloud APIs</Text>
+        <Box style={{ padding: 10, backgroundColor: C.surface, borderRadius: 4, borderLeftWidth: 2, borderColor: C.assistant, gap: 2 }}>
+          <Text style={{ fontSize: 10, color: C.assistant, fontWeight: 'bold', fontFamily: 'monospace' }}>CLOUD</Text>
           <Text style={{ fontSize: 10, color: C.textDim }}>
             Add your API key in Settings (Ctrl+,) for OpenAI or Anthropic
           </Text>
         </Box>
-        <Box style={{ padding: 10, backgroundColor: C.surface, borderRadius: 8, gap: 2 }}>
-          <Text style={{ fontSize: 11, color: C.accent, fontWeight: 'bold' }}>Custom Endpoints</Text>
+        <Box style={{ padding: 10, backgroundColor: C.surface, borderRadius: 4, borderLeftWidth: 2, borderColor: C.tool, gap: 2 }}>
+          <Text style={{ fontSize: 10, color: C.tool, fontWeight: 'bold', fontFamily: 'monospace' }}>COMPARE</Text>
           <Text style={{ fontSize: 10, color: C.textDim }}>
-            Add any OpenAI-compatible server from the Providers tab
+            Use Compare tab to send the same prompt to multiple models at once
           </Text>
         </Box>
       </Box>
