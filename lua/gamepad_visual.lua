@@ -75,91 +75,215 @@ local function drawN64(x, y, scale, buttons, axes)
   love.graphics.translate(x, y)
   love.graphics.scale(s, s)
 
-  -- Body dimensions (centered at 0,0 — total ~280 wide, ~200 tall)
-  local bodyW = 280
-  local bodyH = 60
-  local prongW = 50
-  local prongH = 90
-
-  -- ── Body shell ──────────────────────────────────────
-  -- Main horizontal bar
-  setColor(0.55, 0.55, 0.58)
-  roundRect("fill", -bodyW/2, -bodyH/2, bodyW, bodyH, 12)
-
-  -- Left prong (D-pad side)
-  setColor(0.52, 0.52, 0.55)
-  roundRect("fill", -bodyW/2 + 10, bodyH/2 - 8, prongW, prongH, 10)
-  -- Grip ridges on left prong
-  setColor(0.48, 0.48, 0.51)
-  for i = 0, 3 do
-    love.graphics.rectangle("fill", -bodyW/2 + 18, bodyH/2 + 30 + i * 12, prongW - 16, 3, 1, 1)
-  end
-
-  -- Center prong (analog stick side) — the defining feature
-  setColor(0.52, 0.52, 0.55)
-  roundRect("fill", -prongW/2, bodyH/2 - 8, prongW, prongH + 20, 10)
-  -- Grip ridges on center prong
-  setColor(0.48, 0.48, 0.51)
-  for i = 0, 4 do
-    love.graphics.rectangle("fill", -prongW/2 + 8, bodyH/2 + 40 + i * 12, prongW - 16, 3, 1, 1)
-  end
-
-  -- Right prong (A/B/C side)
-  setColor(0.52, 0.52, 0.55)
-  roundRect("fill", bodyW/2 - prongW - 10, bodyH/2 - 8, prongW, prongH, 10)
-  -- Grip ridges on right prong
-  setColor(0.48, 0.48, 0.51)
-  for i = 0, 3 do
-    love.graphics.rectangle("fill", bodyW/2 - prongW - 2, bodyH/2 + 30 + i * 12, prongW - 16, 3, 1, 1)
-  end
-
-  -- ── L and R shoulder buttons ────────────────────────
-  local shoulderW = 60
-  local shoulderH = 14
-  local shoulderY = -bodyH/2 - shoulderH + 2
-
-  -- L button
-  setColor(btnColor(buttons.leftshoulder, 0.40, 0.40, 0.44, 0.70, 0.80, 0.95))
-  roundRect("fill", -bodyW/2 + 15, shoulderY, shoulderW, shoulderH, 5)
-  setColor(0.30, 0.30, 0.34)
-  roundRect("line", -bodyW/2 + 15, shoulderY, shoulderW, shoulderH, 5)
-  -- Label
-  setColor(0.15, 0.15, 0.18)
   local font = love.graphics.getFont()
-  love.graphics.print("L", -bodyW/2 + 15 + shoulderW/2 - font:getWidth("L")/2, shoulderY + 1)
 
-  -- R button
-  setColor(btnColor(buttons.rightshoulder, 0.40, 0.40, 0.44, 0.70, 0.80, 0.95))
-  roundRect("fill", bodyW/2 - shoulderW - 15, shoulderY, shoulderW, shoulderH, 5)
+  -- Reference: N64 controller is ~320 wide, ~240 tall (with prongs)
+  -- Origin at center of the body (not center of total height)
+  -- The body has curved wings that sweep up at the sides
+
+  -- ── Body shell (curved polygon) ────────────────────────
+  -- The N64 body is an organic shape: wide wings on left/right that curve up,
+  -- a lower belly in the center where Start lives, with smooth transitions.
+  -- We approximate with a polygon + overlapping rounded shapes.
+
+  -- Main body fill — upper curved section
+  setColor(0.72, 0.72, 0.74)
+  -- Left wing
+  love.graphics.polygon("fill",
+    -60, -10,     -- center-left body edge
+    -80, -25,     -- wing starts rising
+    -110, -38,    -- wing shoulder area
+    -140, -40,    -- left wing tip top
+    -148, -36,    -- left wing outer curve
+    -145, -20,    -- wing underside
+    -130, 0,      -- left wing lower-inner
+    -110, 15,     -- where left prong starts
+    -80, 20,      -- body lower-left
+    -60, 15       -- back to center
+  )
+  -- Right wing (mirror)
+  love.graphics.polygon("fill",
+    60, -10,
+    80, -25,
+    110, -38,
+    140, -40,
+    148, -36,
+    145, -20,
+    130, 0,
+    110, 15,
+    80, 20,
+    60, 15
+  )
+  -- Center body connecting the wings
+  love.graphics.polygon("fill",
+    -65, -10,
+    -60, -30,     -- upper edge left
+    -30, -38,     -- top center-left
+    0, -40,       -- top center (highest point)
+    30, -38,      -- top center-right
+    60, -30,      -- upper edge right
+    65, -10,
+    60, 15,       -- lower right
+    30, 22,       -- belly right
+    0, 25,        -- belly bottom (Start area)
+    -30, 22,      -- belly left
+    -60, 15       -- lower left
+  )
+
+  -- Body outline
+  setColor(0.30, 0.30, 0.33)
+  love.graphics.setLineWidth(2)
+  -- Full body outline (one continuous path)
+  love.graphics.polygon("line",
+    -- Top edge left to right
+    -110, 15,
+    -130, 0,
+    -145, -20,
+    -148, -36,
+    -140, -40,
+    -110, -38,
+    -80, -30,
+    -40, -38,
+    0, -40,
+    40, -38,
+    80, -30,
+    110, -38,
+    140, -40,
+    148, -36,
+    145, -20,
+    130, 0,
+    110, 15,
+    -- Bottom edge right to left
+    80, 20,
+    60, 18,
+    30, 22,
+    0, 25,
+    -30, 22,
+    -60, 18,
+    -80, 20
+  )
+
+  -- Subtle highlight on top edge
+  setColor(0.78, 0.78, 0.80, 0.5)
+  love.graphics.setLineWidth(1)
+  love.graphics.line(-80, -30, -40, -37, 0, -39, 40, -37, 80, -30)
+
+  -- ── Left prong (curves outward to the left) ───────────
+  setColor(0.70, 0.70, 0.72)
+  love.graphics.polygon("fill",
+    -110, 15,     -- top-left of prong (connects to wing)
+    -80, 20,      -- top-right of prong
+    -78, 60,      -- shaft right
+    -82, 100,     -- lower-right (tapers)
+    -95, 130,     -- bottom-right (rounded tip area)
+    -108, 135,    -- bottom center
+    -120, 130,    -- bottom-left
+    -128, 100,    -- lower-left (tapers out)
+    -132, 60,     -- shaft left
+    -130, 0,      -- back up to wing
+    -145, -20     -- wing outer edge
+  )
+  -- Prong outline
+  setColor(0.30, 0.30, 0.33)
+  love.graphics.setLineWidth(1.5)
+  love.graphics.line(-80, 20, -78, 60, -82, 100, -95, 130, -108, 135, -120, 130, -128, 100, -132, 60, -145, -20)
+  -- Grip ridges
+  setColor(0.64, 0.64, 0.67)
+  for i = 0, 3 do
+    local gy = 65 + i * 14
+    love.graphics.line(-124, gy, -88, gy)
+  end
+
+  -- ── Center prong (straight down, slightly tapered) ─────
+  setColor(0.70, 0.70, 0.72)
+  love.graphics.polygon("fill",
+    -30, 22,      -- top-left
+    30, 22,       -- top-right
+    28, 70,       -- shaft right
+    24, 120,      -- taper right
+    18, 150,      -- near tip right
+    0, 158,       -- tip
+    -18, 150,     -- near tip left
+    -24, 120,     -- taper left
+    -28, 70       -- shaft left
+  )
+  -- Prong outline
+  setColor(0.30, 0.30, 0.33)
+  love.graphics.setLineWidth(1.5)
+  love.graphics.line(-30, 22, -28, 70, -24, 120, -18, 150, 0, 158, 18, 150, 24, 120, 28, 70, 30, 22)
+  -- Grip ridges
+  setColor(0.64, 0.64, 0.67)
+  for i = 0, 4 do
+    local gy = 75 + i * 14
+    love.graphics.line(-20, gy, 20, gy)
+  end
+
+  -- ── Right prong (curves outward to the right, mirror of left) ──
+  setColor(0.70, 0.70, 0.72)
+  love.graphics.polygon("fill",
+    110, 15,
+    80, 20,
+    78, 60,
+    82, 100,
+    95, 130,
+    108, 135,
+    120, 130,
+    128, 100,
+    132, 60,
+    130, 0,
+    145, -20
+  )
+  setColor(0.30, 0.30, 0.33)
+  love.graphics.setLineWidth(1.5)
+  love.graphics.line(80, 20, 78, 60, 82, 100, 95, 130, 108, 135, 120, 130, 128, 100, 132, 60, 145, -20)
+  -- Grip ridges
+  setColor(0.64, 0.64, 0.67)
+  for i = 0, 3 do
+    local gy = 65 + i * 14
+    love.graphics.line(88, gy, 124, gy)
+  end
+
+  -- ── L shoulder button (on top-left wing edge) ─────────
+  setColor(btnColor(buttons.leftshoulder, 0.58, 0.58, 0.62, 0.75, 0.85, 1.0))
+  love.graphics.polygon("fill",
+    -140, -40, -110, -40, -108, -48, -138, -48
+  )
+  setColor(0.30, 0.30, 0.33)
+  love.graphics.polygon("line", -140, -40, -110, -40, -108, -48, -138, -48)
+  setColor(0.25, 0.25, 0.28)
+  love.graphics.print("L", -127 - font:getWidth("L")/2, -48)
+
+  -- ── R shoulder button ─────────────────────────────────
+  setColor(btnColor(buttons.rightshoulder, 0.58, 0.58, 0.62, 0.75, 0.85, 1.0))
+  love.graphics.polygon("fill",
+    140, -40, 110, -40, 108, -48, 138, -48
+  )
+  setColor(0.30, 0.30, 0.33)
+  love.graphics.polygon("line", 140, -40, 110, -40, 108, -48, 138, -48)
+  setColor(0.25, 0.25, 0.28)
+  love.graphics.print("R", 127 - font:getWidth("R")/2, -48)
+
+  -- ── Z trigger (underneath center prong) ────────────────
+  local zY = 145
+  setColor(btnColor(buttons.leftstick, 0.50, 0.50, 0.55, 0.70, 0.80, 1.0))
+  love.graphics.polygon("fill", -16, zY, 16, zY, 14, zY + 10, -14, zY + 10)
   setColor(0.30, 0.30, 0.34)
-  roundRect("line", bodyW/2 - shoulderW - 15, shoulderY, shoulderW, shoulderH, 5)
-  setColor(0.15, 0.15, 0.18)
-  love.graphics.print("R", bodyW/2 - shoulderW - 15 + shoulderW/2 - font:getWidth("R")/2, shoulderY + 1)
+  love.graphics.polygon("line", -16, zY, 16, zY, 14, zY + 10, -14, zY + 10)
+  setColor(0.20, 0.20, 0.24)
+  love.graphics.print("Z", -font:getWidth("Z")/2, zY - 1)
 
-  -- ── Z trigger (underneath center prong) ─────────────
-  local zW = 36
-  local zH = 10
-  local zY = bodyH/2 + prongH + 14
-  setColor(btnColor(buttons.leftstick, 0.35, 0.35, 0.40, 0.60, 0.70, 0.90))
-  roundRect("fill", -zW/2, zY, zW, zH, 4)
-  setColor(0.25, 0.25, 0.30)
-  roundRect("line", -zW/2, zY, zW, zH, 4)
-  setColor(0.15, 0.15, 0.18)
-  love.graphics.print("Z", -font:getWidth("Z")/2, zY)
-
-  -- ── D-pad ──────────────────────────────────────────
-  local dpadCX = -bodyW/2 + 10 + prongW/2
-  local dpadCY = 4
+  -- ── D-pad (on left wing) ──────────────────────────────
+  local dpadCX = -105
+  local dpadCY = -12
   local dpadArm = 12
   local dpadThick = 10
 
-  -- Cross shape
-  setColor(btnColor(buttons.dpup or buttons.dpdown or buttons.dpleft or buttons.dpright,
-    0.18, 0.18, 0.22, 0.18, 0.18, 0.22))
+  -- Cross base
+  setColor(0.22, 0.22, 0.26)
   love.graphics.rectangle("fill", dpadCX - dpadThick/2, dpadCY - dpadArm - dpadThick/2, dpadThick, dpadArm * 2 + dpadThick, 2, 2)
   love.graphics.rectangle("fill", dpadCX - dpadArm - dpadThick/2, dpadCY - dpadThick/2, dpadArm * 2 + dpadThick, dpadThick, 2, 2)
 
-  -- Individual direction highlights
+  -- Direction highlights
   if buttons.dpup then
     setColor(0.95, 0.88, 0.30, 0.9)
     love.graphics.rectangle("fill", dpadCX - dpadThick/2 + 1, dpadCY - dpadArm - dpadThick/2 + 1, dpadThick - 2, dpadArm, 2, 2)
@@ -176,129 +300,114 @@ local function drawN64(x, y, scale, buttons, axes)
     setColor(0.95, 0.88, 0.30, 0.9)
     love.graphics.rectangle("fill", dpadCX + dpadThick/2, dpadCY - dpadThick/2 + 1, dpadArm, dpadThick - 2, 2, 2)
   end
-
-  -- Center nub
-  setColor(0.25, 0.25, 0.30)
+  setColor(0.28, 0.28, 0.32)
   filledCircle(dpadCX, dpadCY, 3)
 
-  -- ── Analog stick (center prong) ─────────────────────
+  -- ── Analog stick (on center prong, below body) ─────────
   local stickCX = 0
-  local stickCY = bodyH/2 + 20
-  local stickR = 18
-  local stickDeflect = 10
+  local stickCY = 48
+  local stickR = 20
+  local stickDeflect = 12
 
-  -- Base ring
-  setColor(0.40, 0.40, 0.44)
-  love.graphics.setLineWidth(2)
-  outlineCircle(stickCX, stickCY, stickR + 4, 2)
+  -- Dark recessed well
+  setColor(0.35, 0.35, 0.38)
+  filledCircle(stickCX, stickCY, stickR + 8)
 
-  -- Octagonal gate (subtle)
-  setColor(0.35, 0.35, 0.39)
+  -- Octagonal gate
+  setColor(0.40, 0.40, 0.43)
+  love.graphics.setLineWidth(1.5)
   for i = 0, 7 do
-    local a1 = (i / 8) * math.pi * 2
-    local a2 = ((i + 1) / 8) * math.pi * 2
-    local gateR = stickR + 6
+    local a1 = (i / 8) * math.pi * 2 - math.pi / 8
+    local a2 = ((i + 1) / 8) * math.pi * 2 - math.pi / 8
+    local gateR = stickR + 5
     love.graphics.line(
       stickCX + math.cos(a1) * gateR, stickCY + math.sin(a1) * gateR,
       stickCX + math.cos(a2) * gateR, stickCY + math.sin(a2) * gateR
     )
   end
 
-  -- Stick cap (deflected by axis values)
+  -- Stick cap (deflected by axis)
   local sx = (axes.leftx or 0) * stickDeflect
   local sy = (axes.lefty or 0) * stickDeflect
-  setColor(0.62, 0.62, 0.66)
+  setColor(0.58, 0.58, 0.62)
   filledCircle(stickCX + sx, stickCY + sy, stickR)
-  -- Stick cap texture (concentric rings)
-  setColor(0.56, 0.56, 0.60)
+  -- Concentric grip rings
+  setColor(0.52, 0.52, 0.56)
   outlineCircle(stickCX + sx, stickCY + sy, stickR - 3, 1)
   outlineCircle(stickCX + sx, stickCY + sy, stickR - 7, 1)
   outlineCircle(stickCX + sx, stickCY + sy, stickR - 11, 1)
-  -- Stick center dot
-  setColor(0.48, 0.48, 0.52)
+  setColor(0.45, 0.45, 0.50)
   filledCircle(stickCX + sx, stickCY + sy, 3)
 
-  -- ── Start button ───────────────────────────────────
+  -- ── Start button (red, in the belly) ──────────────────
   local startCX = 0
-  local startCY = -2
-  local startW = 20
-  local startH = 8
-  setColor(btnColor(buttons.start, 0.55, 0.15, 0.15, 0.95, 0.30, 0.30))
-  pill("fill", startCX - startW/2, startCY - startH/2, startW, startH)
-  setColor(0.40, 0.10, 0.10)
-  pill("line", startCX - startW/2, startCY - startH/2, startW, startH)
-
-  -- "START" label (tiny)
+  local startCY = 4
+  setColor(btnColor(buttons.start, 0.60, 0.15, 0.15, 0.95, 0.25, 0.25))
+  filledCircle(startCX, startCY, 8)
+  setColor(0.45, 0.10, 0.10)
+  outlineCircle(startCX, startCY, 8, 1.5)
+  -- "START" label below
   setColor(0.90, 0.85, 0.80)
   local sf6 = getSmallFont(6)
   love.graphics.setFont(sf6)
-  love.graphics.print("START", startCX - sf6:getWidth("START")/2, startCY + startH/2 + 2)
-  love.graphics.setFont(font)  -- restore
+  love.graphics.print("START", startCX - sf6:getWidth("START")/2, startCY - sf6:getHeight()/2)
+  love.graphics.setFont(font)
 
-  -- ── A button (big blue) ────────────────────────────
-  local aCX = bodyW/2 - prongW/2 - 6
-  local aCY = -2
-  local aR = 14
-  setColor(btnColor(buttons.a, 0.10, 0.15, 0.55, 0.20, 0.35, 0.90))
-  filledCircle(aCX, aCY, aR)
-  setColor(0.08, 0.10, 0.40)
-  outlineCircle(aCX, aCY, aR, 1.5)
-  -- "A" label
-  setColor(0.85, 0.88, 0.95)
-  love.graphics.print("A", aCX - font:getWidth("A")/2, aCY - font:getHeight()/2)
-
-  -- ── B button (smaller green, left of A) ────────────
-  local bCX = aCX - 28
-  local bCY = aCY + 10
+  -- ── B button (green, smaller, above-left of A) ────────
+  local bCX = 52
+  local bCY = -4
   local bR = 10
-  setColor(btnColor(buttons.b, 0.10, 0.40, 0.15, 0.20, 0.75, 0.30))
+  setColor(btnColor(buttons.b, 0.12, 0.42, 0.18, 0.22, 0.78, 0.32))
   filledCircle(bCX, bCY, bR)
-  setColor(0.08, 0.30, 0.10)
+  setColor(0.08, 0.32, 0.12)
   outlineCircle(bCX, bCY, bR, 1.5)
-  setColor(0.85, 0.95, 0.88)
+  setColor(0.88, 0.96, 0.90)
   love.graphics.print("B", bCX - font:getWidth("B")/2, bCY - font:getHeight()/2)
 
-  -- ── C-buttons (4 yellow buttons in diamond) ─────────
-  local cCX = aCX + 2
-  local cCY = aCY - 34
-  local cR = 7
-  local cSpread = 12
+  -- ── A button (blue, bigger, below-right of B) ─────────
+  local aCX = 75
+  local aCY = 12
+  local aR = 14
+  setColor(btnColor(buttons.a, 0.10, 0.16, 0.58, 0.22, 0.38, 0.92))
+  filledCircle(aCX, aCY, aR)
+  setColor(0.08, 0.12, 0.42)
+  outlineCircle(aCX, aCY, aR, 1.5)
+  setColor(0.86, 0.90, 0.96)
+  love.graphics.print("A", aCX - font:getWidth("A")/2, aCY - font:getHeight()/2)
 
-  local cButtons = {
-    { dx = 0,         dy = -cSpread,  name = "C\u{25B2}", btn = "x" },   -- C-up → SDL x
-    { dx = 0,         dy =  cSpread,  name = "C\u{25BC}", btn = "y" },   -- C-down → SDL y
-    { dx = -cSpread,  dy = 0,         name = "C\u{25C0}", btn = "x" },   -- C-left (approximate)
-    { dx =  cSpread,  dy = 0,         name = "C\u{25B6}", btn = "y" },   -- C-right (approximate)
-  }
+  -- ── C-buttons (4 yellow, diamond on right wing) ────────
+  local cCX = 120
+  local cCY = -14
+  local cR = 8
+  local cSpread = 13
 
-  -- For C-buttons, the mapping depends on adapter. We'll show them all
-  -- and light based on right stick + x/y buttons
   local cUp    = buttons.x or (axes.righty and axes.righty < -0.5)
   local cDown  = buttons.y or (axes.righty and axes.righty > 0.5)
   local cLeft  = (axes.rightx and axes.rightx < -0.5)
   local cRight = (axes.rightx and axes.rightx > 0.5)
-  local cStates = { cUp, cDown, cLeft, cRight }
 
-  for i, cb in ipairs(cButtons) do
-    local pressed = cStates[i]
-    setColor(btnColor(pressed, 0.55, 0.50, 0.15, 0.95, 0.88, 0.25))
+  local cDefs = {
+    { dx = 0,         dy = -cSpread, pressed = cUp,    arrow = "\u{25B2}" },
+    { dx = 0,         dy =  cSpread, pressed = cDown,  arrow = "\u{25BC}" },
+    { dx = -cSpread,  dy = 0,        pressed = cLeft,  arrow = "\u{25C0}" },
+    { dx =  cSpread,  dy = 0,        pressed = cRight, arrow = "\u{25B6}" },
+  }
+
+  for _, cb in ipairs(cDefs) do
+    setColor(btnColor(cb.pressed, 0.60, 0.55, 0.15, 0.98, 0.90, 0.25))
     filledCircle(cCX + cb.dx, cCY + cb.dy, cR)
-    setColor(0.45, 0.40, 0.10)
+    setColor(0.48, 0.42, 0.10)
     outlineCircle(cCX + cb.dx, cCY + cb.dy, cR, 1)
   end
-
-  -- C label in center
-  setColor(0.70, 0.65, 0.20, 0.6)
+  -- "C" label in center
+  setColor(0.72, 0.66, 0.22, 0.7)
   love.graphics.print("C", cCX - font:getWidth("C")/2, cCY - font:getHeight()/2)
 
-  -- ── Nintendo logo area (center of body, between start and top) ──
-  setColor(0.45, 0.45, 0.50, 0.4)
-  local logoW = 30
-  love.graphics.rectangle("fill", -logoW/2, -bodyH/2 + 4, logoW, 12, 3, 3)
-  setColor(0.60, 0.60, 0.65, 0.5)
+  -- ── "Nintendo" text at top center ─────────────────────
+  setColor(0.40, 0.40, 0.44, 0.6)
   local sf7 = getSmallFont(7)
   love.graphics.setFont(sf7)
-  love.graphics.print("N64", -sf7:getWidth("N64")/2, -bodyH/2 + 5)
+  love.graphics.print("Nintendo", -sf7:getWidth("Nintendo")/2, -36)
   love.graphics.setFont(font)
 
   love.graphics.pop()
@@ -755,7 +864,7 @@ end
 function Visual.getSize(profileId, scale)
   scale = scale or 1
   if profileId == "n64" then
-    return 280 * scale, 200 * scale
+    return 300 * scale, 210 * scale
   end
   return 300 * scale, 200 * scale
 end
