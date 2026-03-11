@@ -150,10 +150,19 @@ end
 -- Edge-scroll helper
 -- ============================================================================
 
--- Track the last scroll container the cursor was inside, per joystick.
--- This persists when cursor leaves the scroll area (into header/footer)
--- so screen-edge scrolling still has a target.
-local lastScrollNode = {}  -- { [joystickId] = scrollNode }
+-- Track the last scroll container ID the cursor was inside, per joystick.
+-- Stored as ID (not node reference) so it survives tree rebuilds.
+local lastScrollNodeId = {}  -- { [joystickId] = nodeId }
+
+--- Look up a scroll node by ID from the current tree.
+local function getScrollNodeById(nodeId)
+  if not nodeId or not treeModule then return nil end
+  local nodes = treeModule.getNodes()
+  if not nodes then return nil end
+  local node = nodes[nodeId]
+  if node and node.scrollState then return node end
+  return nil
+end
 
 --- Compute edge-scroll based on screen edges (not scroll container edges).
 --- Uses the scroll container under the cursor, or the last known one if
@@ -168,24 +177,23 @@ local function computeEdgeScroll(c, joystickId, dt)
     h = love.graphics.getHeight()
   end
 
-  -- Try to find scroll container under cursor and remember it
+  -- Try to find scroll container under cursor and remember its ID
   local root = treeModule.getTree()
   if root then
     local hit = eventsModule.hitTest(root, c.x, c.y)
     if hit then
       local sc = eventsModule.findScrollContainer(hit, c.x, c.y)
       if sc and sc.scrollState then
-        lastScrollNode[joystickId] = sc
+        lastScrollNodeId[joystickId] = sc.id
       end
     end
   end
 
-  -- Use last known scroll container (survives cursor leaving scroll area)
-  local scrollNode = lastScrollNode[joystickId]
-  if not scrollNode or not scrollNode.scrollState then
-    -- Final fallback: any scroll node in tree
+  -- Resolve scroll node: last known ID → fallback to any scroll node
+  local scrollNode = getScrollNodeById(lastScrollNodeId[joystickId])
+  if not scrollNode then
     if root then scrollNode = GamepadCursor._findAnyScrollNode(root) end
-    if scrollNode then lastScrollNode[joystickId] = scrollNode end
+    if scrollNode then lastScrollNodeId[joystickId] = scrollNode.id end
   end
   if not scrollNode or not scrollNode.scrollState then return nil, 0, 0 end
 
@@ -278,26 +286,14 @@ function GamepadCursor.update(dt)
       end
     end
 
-    -- === Hover tracking ===
+    -- === Track hovered node (for scroll container detection) ===
+    -- NOTE: We do NOT fire pointerEnter/pointerLeave from the cursor.
+    -- Those are already handled by the mouse hover system in init.lua.
+    -- Firing them here would conflict and cause blank-page bugs.
     if eventsModule and treeModule then
       local root = treeModule.getTree()
       if root then
-        local hit = eventsModule.hitTest(root, c.x, c.y)
-        if hit ~= c.hoveredNode then
-          if pushEventFn then
-            if c.hoveredNode then
-              pushEventFn(eventsModule.createEvent(
-                "pointerLeave", c.hoveredNode.id, c.x, c.y, nil
-              ))
-            end
-            if hit then
-              pushEventFn(eventsModule.createEvent(
-                "pointerEnter", hit.id, c.x, c.y, nil
-              ))
-            end
-          end
-          c.hoveredNode = hit
-        end
+        c.hoveredNode = eventsModule.hitTest(root, c.x, c.y)
       end
     end
 

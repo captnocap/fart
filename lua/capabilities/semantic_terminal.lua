@@ -596,19 +596,30 @@ Capabilities.register("SemanticTerminal", {
       local entry = rowLookup[row]
       local kind = entry and entry.kind or "output"
       local tokenColor = getTokenColor(kind)
+      local isSpecific = kind ~= "output"
 
-      -- Token badge (left gutter)
+      -- Token badge (left gutter) — lights up only for specific classifications
       if showTokens and entry then
-        -- Badge background
-        love.graphics.setColor(0.15, 0.18, 0.25, 0.8 * alpha)
-        local badgeWidth = badgeFont and badgeFont:getWidth(kind) + 6 or 50
-        love.graphics.rectangle("fill", c.x + 2, yPos + 1, badgeWidth, lineHeight - 2, 3, 3)
 
-        -- Badge text
-        love.graphics.setColor(tokenColor[1], tokenColor[2], tokenColor[3], 0.7 * alpha)
-        if badgeFont then
-          love.graphics.setFont(badgeFont)
-          love.graphics.print(kind, c.x + 5, yPos + (lineHeight - badgeFontSize) / 2)
+        if isSpecific then
+          -- Bright badge: classifier found something meaningful
+          love.graphics.setColor(0.15, 0.18, 0.25, 0.8 * alpha)
+          local badgeWidth = badgeFont and badgeFont:getWidth(kind) + 6 or 50
+          love.graphics.rectangle("fill", c.x + 2, yPos + 1, badgeWidth, lineHeight - 2, 3, 3)
+
+          love.graphics.setColor(tokenColor[1], tokenColor[2], tokenColor[3], 0.85 * alpha)
+          if badgeFont then
+            love.graphics.setFont(badgeFont)
+            love.graphics.print(kind, c.x + 5, yPos + (lineHeight - badgeFontSize) / 2)
+          end
+
+          -- Left edge accent bar (2px) — visual "lit" indicator
+          love.graphics.setColor(tokenColor[1], tokenColor[2], tokenColor[3], 0.9 * alpha)
+          love.graphics.rectangle("fill", c.x, yPos, 2, lineHeight)
+        else
+          -- Dim dot: generic output, classifier didn't match anything specific
+          love.graphics.setColor(0.3, 0.33, 0.4, 0.25 * alpha)
+          love.graphics.rectangle("fill", c.x, yPos + lineHeight * 0.35, 2, lineHeight * 0.3)
         end
       end
 
@@ -673,8 +684,8 @@ Capabilities.register("SemanticTerminal", {
           end
         end
 
-        -- Right-side debug info: token color RGB, classifier kind, row number
-        if showTokens then
+        -- Right-side debug info: only for specific classifications (not generic output)
+        if showTokens and isSpecific then
           if badgeFont then love.graphics.setFont(badgeFont) end
           local hex = TOKEN_COLORS[kind] or "#e2e8f0"
           -- Get first cell fg for debug display
