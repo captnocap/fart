@@ -10,6 +10,7 @@
  * - Keyboard shortcuts: Ctrl+N, Ctrl+,, Escape
  * - Streaming chat with code block rendering
  * - Provider health indicator
+ * - Multi-model compare: send same input to N models side-by-side, pick favorite
  */
 
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
@@ -83,7 +84,7 @@ const DEFAULT_PROVIDERS: Provider[] = [
   { id: 'anthropic', name: 'Anthropic', type: 'anthropic', icon: '\u{1F9E0}' },
 ];
 
-type View = 'chat' | 'providers' | 'models' | 'server';
+type View = 'chat' | 'compare' | 'providers' | 'models' | 'server';
 
 // ── Schemas for SQLite persistence ───────────────────────────────────────────
 
@@ -137,6 +138,8 @@ function LLMStudio() {
   const [providerModalOpen, setProviderModalOpen] = useState(false);
   const [serverEnabled, setServerEnabled] = useState(false);
   const [serverPort, setServerPort] = useState(5001);
+  const [compareMode, setCompareMode] = useState(false);
+  const [compareModels, setCompareModels] = useState<string[]>([]);
 
   const activeProvider = providers.find(p => p.id === activeProviderId) || providers[0];
 
@@ -464,9 +467,10 @@ function LLMStudio() {
     else if (settingsOpen) setSettingsOpen(false);
   });
   useHotkey('ctrl+1', () => setView('chat'));
-  useHotkey('ctrl+2', () => setView('models'));
-  useHotkey('ctrl+3', () => setView('providers'));
-  useHotkey('ctrl+4', () => setView('server'));
+  useHotkey('ctrl+2', () => setView('compare'));
+  useHotkey('ctrl+3', () => setView('models'));
+  useHotkey('ctrl+4', () => setView('providers'));
+  useHotkey('ctrl+5', () => setView('server'));
 
   return (
     <Box style={{ width: '100%', height: '100%', flexDirection: 'row', backgroundColor: C.bg }}>
@@ -490,6 +494,12 @@ function LLMStudio() {
           settingsOpen={settingsOpen} onToggleSettings={() => setSettingsOpen(v => !v)}
           isStreaming={chat.isStreaming} onStop={chat.stop}
           tokenEstimate={tokenEstimate}
+          compareMode={compareMode}
+          onToggleCompare={() => {
+            setCompareMode(v => !v);
+            if (!compareMode) setView('compare');
+            else setView('chat');
+          }}
         />
 
         {(chat.error || modelsError) && (
@@ -550,6 +560,25 @@ function LLMStudio() {
                 />
               )}
             </>
+          )}
+
+          {view === 'compare' && (
+            <CompareView
+              models={models}
+              compareModels={compareModels}
+              onSetCompareModels={setCompareModels}
+              provider={activeProvider}
+              systemPrompt={systemPrompt}
+              temperature={temperature}
+              maxTokens={maxTokens}
+              onPickResponse={(modelId, messages) => {
+                // Switch to single chat with the picked model's output
+                setActiveModel(modelId);
+                setCompareMode(false);
+                setView('chat');
+                chat.setMessages(messages);
+              }}
+            />
           )}
 
           {view === 'models' && (
@@ -805,9 +834,10 @@ function Sidebar({
       {/* Nav tabs */}
       <Box style={{ flexDirection: 'row', paddingLeft: 8, paddingRight: 8, gap: 4, paddingBottom: 8 }}>
         <NavTab label="Chat" active={view === 'chat'} onPress={() => onSetView('chat')} hint="1" />
-        <NavTab label="Models" active={view === 'models'} onPress={() => onSetView('models')} hint="2" />
-        <NavTab label="Providers" active={view === 'providers'} onPress={() => onSetView('providers')} hint="3" />
-        <NavTab label="Server" active={view === 'server'} onPress={() => onSetView('server')} hint="4" />
+        <NavTab label="Compare" active={view === 'compare'} onPress={() => onSetView('compare')} hint="2" />
+        <NavTab label="Models" active={view === 'models'} onPress={() => onSetView('models')} hint="3" />
+        <NavTab label="Providers" active={view === 'providers'} onPress={() => onSetView('providers')} hint="4" />
+        <NavTab label="Server" active={view === 'server'} onPress={() => onSetView('server')} hint="5" />
       </Box>
 
       {/* Provider selector */}
@@ -889,7 +919,7 @@ function Sidebar({
       {/* Footer: keyboard shortcuts hint */}
       <Box style={{ padding: 8, borderTopWidth: 1, borderColor: C.border }}>
         <Text style={{ fontSize: 9, color: C.textDim, textAlign: 'center' }}>
-          Ctrl+N New  |  Ctrl+, Settings  |  Ctrl+1/2/3/4 Tabs
+          Ctrl+N New  |  Ctrl+, Settings  |  Ctrl+1-5 Tabs
         </Text>
       </Box>
     </Box>
@@ -914,11 +944,13 @@ function HealthDot({ healthy }: { healthy?: boolean }) {
 function TopBar({
   provider, model, models, modelsLoading, onSelectModel, onRefreshModels,
   settingsOpen, onToggleSettings, isStreaming, onStop, tokenEstimate,
+  compareMode, onToggleCompare,
 }: {
   provider: Provider; model: string; models: { id: string; name: string }[];
   modelsLoading: boolean; onSelectModel: (id: string) => void; onRefreshModels: () => void;
   settingsOpen: boolean; onToggleSettings: () => void; isStreaming: boolean; onStop: () => void;
   tokenEstimate: number;
+  compareMode: boolean; onToggleCompare: () => void;
 }) {
   return (
     <Box style={{
@@ -957,6 +989,12 @@ function TopBar({
           <Text style={{ fontSize: 10, color: C.textDim }}>{`~${tokenEstimate} tokens`}</Text>
         )}
         {isStreaming && <Btn label="Stop" color={C.red} bgColor={C.redDim} onPress={onStop} />}
+        <Btn
+          label="Compare"
+          color={compareMode ? '#fff' : C.textMuted}
+          bgColor={compareMode ? C.accent : C.surface}
+          onPress={onToggleCompare}
+        />
         <Btn
           label="Settings"
           color={settingsOpen ? C.accent : C.textMuted}
@@ -1453,6 +1491,270 @@ response = client.chat.completions.create(
               ))}
             </Box>
           </ScrollView>
+        </Box>
+      )}
+    </Box>
+  );
+}
+
+// ── Compare mode: side-by-side multi-model chat ─────────────────────────────
+
+function CompareView({
+  models, compareModels, onSetCompareModels, provider,
+  systemPrompt, temperature, maxTokens, onPickResponse,
+}: {
+  models: { id: string; name: string }[];
+  compareModels: string[];
+  onSetCompareModels: (ids: string[]) => void;
+  provider: Provider;
+  systemPrompt: string;
+  temperature: number;
+  maxTokens: number;
+  onPickResponse: (modelId: string, messages: Message[]) => void;
+}) {
+  const [sharedInput, setSharedInput] = useState('');
+  const [sendSignal, setSendSignal] = useState(0); // increment to trigger all columns
+
+  const toggleModel = useCallback((id: string) => {
+    onSetCompareModels(
+      compareModels.includes(id)
+        ? compareModels.filter(m => m !== id)
+        : compareModels.length < 8 ? [...compareModels, id] : compareModels
+    );
+  }, [compareModels, onSetCompareModels]);
+
+  const sendToAll = useCallback(() => {
+    if (!sharedInput.trim() || compareModels.length === 0) return;
+    setSendSignal(s => s + 1);
+    setSharedInput('');
+  }, [sharedInput, compareModels.length]);
+
+  return (
+    <Box style={{ flexGrow: 1, flexDirection: 'column' }}>
+      {/* Model selector strip */}
+      <Box style={{ padding: 8, borderBottomWidth: 1, borderColor: C.border, backgroundColor: C.bgElevated }}>
+        <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <Text style={{ fontSize: 11, color: C.textMuted, fontWeight: 'bold' }}>Models:</Text>
+          {models.map(m => {
+            const selected = compareModels.includes(m.id);
+            return (
+              <Pressable key={m.id} onPress={() => toggleModel(m.id)}>
+                {({ hovered }) => (
+                  <Box style={{
+                    paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3,
+                    borderRadius: 4, borderWidth: 1,
+                    borderColor: selected ? C.accent : C.border,
+                    backgroundColor: selected ? C.accentDim : hovered ? C.surfaceHover : 'transparent',
+                  }}>
+                    <Text style={{ fontSize: 10, color: selected ? C.text : C.textMuted }}>
+                      {m.name}
+                    </Text>
+                  </Box>
+                )}
+              </Pressable>
+            );
+          })}
+          <Text style={{ fontSize: 9, color: C.textDim }}>
+            {`${compareModels.length}/8 selected`}
+          </Text>
+        </Box>
+      </Box>
+
+      {/* Side-by-side columns */}
+      {compareModels.length === 0 ? (
+        <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', gap: 8 }}>
+          <Text style={{ fontSize: 16, color: C.textMuted }}>Select models to compare</Text>
+          <Text style={{ fontSize: 12, color: C.textDim }}>
+            Pick 2-8 models above, then type a message below
+          </Text>
+        </Box>
+      ) : (
+        <Box style={{ flexGrow: 1, flexDirection: 'row' }}>
+          {compareModels.map((modelId, idx) => (
+            <CompareChatColumn
+              key={modelId}
+              modelId={modelId}
+              modelName={models.find(m => m.id === modelId)?.name || modelId}
+              provider={provider}
+              systemPrompt={systemPrompt}
+              temperature={temperature}
+              maxTokens={maxTokens}
+              sharedInput={sharedInput}
+              sendSignal={sendSignal}
+              isLast={idx === compareModels.length - 1}
+              onPick={onPickResponse}
+              columnColor={COMPARE_COLORS[idx % COMPARE_COLORS.length]}
+            />
+          ))}
+        </Box>
+      )}
+
+      {/* Shared input bar */}
+      <Box style={{ padding: 12, borderTopWidth: 1, borderColor: C.border, flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+        <Box style={{ flexGrow: 1 }}>
+          <TextInput
+            value={sharedInput}
+            onChangeText={setSharedInput}
+            onSubmit={sendToAll}
+            placeholder={`Message ${compareModels.length} models simultaneously...`}
+            placeholderColor={C.textDim}
+            style={{ backgroundColor: C.bgInput, borderRadius: 8, padding: 10 }}
+            textStyle={{ color: C.text, fontSize: 13 }}
+          />
+        </Box>
+        <Pressable onPress={sendToAll}>
+          {({ hovered }) => (
+            <Box style={{
+              paddingLeft: 16, paddingRight: 16, paddingTop: 8, paddingBottom: 8,
+              borderRadius: 8,
+              backgroundColor: compareModels.length > 0 ? (hovered ? C.accentHover : C.accent) : C.surface,
+            }}>
+              <Text style={{ fontSize: 13, color: '#fff', fontWeight: 'bold' }}>
+                {`Send to ${compareModels.length}`}
+              </Text>
+            </Box>
+          )}
+        </Pressable>
+      </Box>
+    </Box>
+  );
+}
+
+const COMPARE_COLORS = ['#6c5ce7', '#00b894', '#e17055', '#0984e3', '#fdcb6e', '#e84393', '#00cec9', '#636e72'];
+
+function CompareChatColumn({
+  modelId, modelName, provider, systemPrompt, temperature, maxTokens,
+  sharedInput, sendSignal, isLast, onPick, columnColor,
+}: {
+  modelId: string;
+  modelName: string;
+  provider: Provider;
+  systemPrompt: string;
+  temperature: number;
+  maxTokens: number;
+  sharedInput: string;
+  sendSignal: number;
+  isLast: boolean;
+  onPick: (modelId: string, messages: Message[]) => void;
+  columnColor: string;
+}) {
+  const chat = useChat({
+    provider: provider.type,
+    model: modelId,
+    apiKey: provider.apiKey,
+    baseURL: provider.baseURL,
+    temperature,
+    maxTokens,
+    systemPrompt,
+  });
+
+  const lastSignal = useRef(0);
+
+  // Send when signal changes (shared input broadcast)
+  useEffect(() => {
+    if (sendSignal > lastSignal.current && sharedInput.trim()) {
+      lastSignal.current = sendSignal;
+      chat.send(sharedInput);
+    }
+  }, [sendSignal]);
+
+  // Get latest assistant message for the "pick" action
+  const lastAssistant = useMemo(() => {
+    for (let i = chat.messages.length - 1; i >= 0; i--) {
+      if (chat.messages[i].role === 'assistant') return chat.messages[i];
+    }
+    return null;
+  }, [chat.messages]);
+
+  return (
+    <Box style={{
+      flexGrow: 1, flexDirection: 'column',
+      borderRightWidth: isLast ? 0 : 1, borderColor: C.border,
+    }}>
+      {/* Column header */}
+      <Box style={{
+        padding: 8, borderBottomWidth: 2, borderColor: columnColor,
+        flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+        backgroundColor: C.bgElevated,
+      }}>
+        <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Box style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: columnColor }} />
+          <Text style={{ fontSize: 11, color: C.text, fontWeight: 'bold' }} numberOfLines={1}>
+            {modelName}
+          </Text>
+        </Box>
+        <Box style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
+          {chat.isStreaming && (
+            <Text style={{ fontSize: 9, color: C.yellow }}>streaming...</Text>
+          )}
+          {lastAssistant && !chat.isStreaming && (
+            <Pressable onPress={() => onPick(modelId, chat.messages)}>
+              {({ hovered }) => (
+                <Box style={{
+                  paddingLeft: 8, paddingRight: 8, paddingTop: 2, paddingBottom: 2,
+                  borderRadius: 4,
+                  backgroundColor: hovered ? C.green : C.greenDim,
+                }}>
+                  <Text style={{ fontSize: 9, color: hovered ? '#fff' : C.green, fontWeight: 'bold' }}>
+                    Pick
+                  </Text>
+                </Box>
+              )}
+            </Pressable>
+          )}
+        </Box>
+      </Box>
+
+      {/* Messages */}
+      {chat.messages.length === 0 ? (
+        <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <Text style={{ fontSize: 11, color: C.textDim }}>Waiting for input...</Text>
+        </Box>
+      ) : (
+        <ScrollView style={{ flexGrow: 1 }}>
+          <Box style={{ padding: 8, gap: 6 }}>
+            {chat.messages.map((msg, i) => {
+              if (msg.role === 'system' || msg.role === 'tool') return null;
+              const text = typeof msg.content === 'string'
+                ? msg.content
+                : msg.content.map(b => b.text || '').join('');
+              const isUser = msg.role === 'user';
+              return (
+                <Box key={i} style={{
+                  padding: 8, borderRadius: 6, gap: 4,
+                  backgroundColor: isUser ? C.surfaceActive : C.surface,
+                }}>
+                  <Text style={{ fontSize: 9, color: C.textDim, fontWeight: 'bold' }}>
+                    {isUser ? 'You' : modelName}
+                  </Text>
+                  {parseMarkdown(text).map((part, pi) => {
+                    if (part.type === 'code') {
+                      return <CodeBlock key={pi} code={part.content} language={part.language} style={{ borderRadius: 4 }} />;
+                    }
+                    return (
+                      <Text key={pi} style={{ fontSize: 12, color: C.text, lineHeight: 1.4 }}>
+                        {part.content}
+                      </Text>
+                    );
+                  })}
+                </Box>
+              );
+            })}
+            {chat.isStreaming && (
+              <Box style={{ padding: 4 }}>
+                <Text style={{ fontSize: 10, color: columnColor }}>...</Text>
+              </Box>
+            )}
+          </Box>
+        </ScrollView>
+      )}
+
+      {/* Error display */}
+      {chat.error && (
+        <Box style={{ padding: 6, backgroundColor: C.redDim }}>
+          <Text style={{ fontSize: 10, color: C.red }} numberOfLines={2}>
+            {chat.error.message}
+          </Text>
         </Box>
       )}
     </Box>
