@@ -30,23 +30,9 @@ The pattern is a **.tslx file** in the package:
 
 For framework-level features that need raw Lua (new node types, GL operations, layout engine changes), the old pattern still applies: hand-written Lua in `lua/` + `Capabilities.register()`. But UI capabilities — anything composed from Box/Text/Pressable — should always be .tslx. If you're writing `love.graphics` calls for something that Box already does, you haven't finished — write a .tslx instead.
 
-## The Proxy Input Rule (NON-NEGOTIABLE)
+## Input Pattern
 
-**The ClaudeCanvas (PTY/vterm) is the single source of truth for ALL text state.** The semantic classifier scrapes it every frame into classified tokens. Every piece of UI that displays text from the session — input bars, prompt displays, conversation views, ALL of it — reads from classified tokens. Period.
-
-**An input bar is NOT an input.** It is a rectangle that displays the `user_input` classified token's text via `value={promptText}`. It holds focus so keystrokes route to ClaudeCanvas via `keystrokeTarget`/`submitTarget`. It has ZERO local text state. It does not accumulate characters. It does not interpret Enter or Escape. It forwards keystrokes to the canvas and displays what the classifier says. That's it.
-
-**The pattern (memorize this):**
-1. `usePromptText()` hook polls `claude:classified`, finds the prompt token, returns the text
-2. `<Input autoFocus keystrokeTarget="ClaudeCanvas" submitTarget="ClaudeCanvas" value={promptText} />`
-3. Lua proxy mode: keystrokes forward to target, TextInput never touches its own buffer
-
-**If you are ever tempted to:**
-- Sync text between two buffers → STOP. Read from the classified token.
-- Make a TextInput manage its own text AND forward to a target → STOP. One SSoT.
-- Add "proxy mode" or "forwarding" logic for text content → STOP. The display reads from the classifier. Keystrokes go to the canvas. Two separate concerns. Don't mix them.
-
-**This is exactly how BlankSlateCanvas works.** It polls `claude:classified` and renders tokens. The input bar does the same thing for the prompt token. Same pipe. Same SSoT. No special cases.
+**TextInput is a normal input.** Use `onChangeText` for state updates and `onSubmit` for submission. No proxy mode, no keystroke forwarding, no classified token polling. See `examples/hot-code/src/App.tsx` for the canonical pattern.
 
 ## Model Selection
 
@@ -61,6 +47,29 @@ React is a **layout declaration engine and tree diffing algorithm.** That's it. 
 - **React does NOT manage runtime state well.** `useHotState()` stores state in Lua memory and survives hot reload. `useLocalStore()` persists to SQLite. React's `useState` is for ephemeral UI state only.
 - **react-dom does not exist in this framework.** There is no DOM target. There never will be. Components do not render `<div>`, `<span>`, `<input>`, or any HTML element. If you see a component branching on renderer mode to produce DOM elements, that code is wrong and must be removed.
 - **If React is doing anything beyond declaring layout + forwarding to Lua = massive problem.** Late frames, input lag, state desync — all symptoms of React trying to be a runtime instead of a proxy.
+
+## useEffect is BANNED (NON-NEGOTIABLE)
+
+**`useEffect` and `useLayoutEffect` are BANNED in user code.** The linter enforces this as a build-blocking error (`no-use-effect`). React's commit-phase scheduling (async, batched, not frame-synced) causes late frames, input lag, and state desync in ReactJIT. ALL side effects must run in Lua's `love.update(dt)` loop.
+
+**Use these instead:**
+
+| Pattern | Hook | Import from |
+|---------|------|-------------|
+| Timer (replaces setInterval) | `useLuaEffect({ type: 'timer', interval: 1000 }, handler, deps)` | `@reactjit/core` |
+| Polling (replaces setInterval+fetch) | `useLuaEffect({ type: 'poll', interval: 5000 }, handler, deps)` | `@reactjit/core` |
+| Per-frame tick | `useLuaEffect({ type: 'tick' }, handler, deps)` | `@reactjit/core` |
+| Mount/unmount | `useMount(() => { ... return cleanup })` | `@reactjit/core` |
+| Data fetching | `useLuaQuery('rpc:method', args, deps)` | `@reactjit/core` |
+| Subscribe to Lua events | `useLoveEvent(event, handler)` | `@reactjit/core` |
+| Keyboard shortcuts | `useHotkey(combo, handler)` | `@reactjit/core` |
+| Lua-side interval | `useLuaInterval(ms, handler)` | `@reactjit/core` |
+| HMR-safe state | `useHotState(key, initial)` | `@reactjit/core` |
+| Persistent state | `useLocalStore(key, initial)` | `@reactjit/core` |
+
+**How it works:** `useLuaEffect` registers an effect in Lua via RPC. Lua manages the lifecycle (setup/tick/cleanup) inside `love.update(dt)` — frame-perfect timing, zero JS event loop jitter. The effect pushes events back to React via the bridge, and the hook's handler runs on receipt.
+
+**Escape hatch:** If you absolutely must use a raw effect in framework code (`packages/core/`, `packages/time/`, etc.), add `// rjit-ignore-next-line` above the call. User code in `src/`, `examples/`, and `storybook/src/stories/` has NO escape hatch — find the right Lua-managed hook or create one.
 
 ## .tslx and .tsl — The Authoring Layer (READ THIS)
 

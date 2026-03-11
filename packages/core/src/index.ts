@@ -65,6 +65,16 @@ export {
   type Overlay,
 } from './hooks';
 
+// Lua-managed effects (replaces useEffect — see useLuaEffect.ts)
+export {
+  useLuaEffect,
+  useMount,
+  useLuaQuery,
+  type LuaEffectType,
+  type LuaEffectConfig,
+  type LuaQueryResult,
+} from './useLuaEffect';
+
 // Overlay mode (game overlay — transparent, always-on-top, input passthrough)
 export { useOverlay, type OverlayState, type OverlayMode } from './overlay';
 

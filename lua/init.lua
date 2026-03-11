@@ -430,6 +430,27 @@ local function findScrollAncestor(node)
   return nil
 end
 
+-- Gamepad axis state — Lua owns this, React polls it via RPC.
+local gamepadAxes = {}  -- [joystickId] = { leftx=0, lefty=0, rightx=0, ... }
+local gamepadButtons = {}  -- [joystickId] = { a=false, b=false, ... }
+
+--- Find any ScrollView in the tree (fallback when no focused node).
+--- Returns the first scroll node found via BFS from root.
+local function findAnyScrollNode()
+  if not M.tree or not M.tree.root then return nil end
+  local stack = { M.tree.root }
+  while #stack > 0 do
+    local node = table.remove(stack, 1)
+    if node.style and (node.style.overflow == "scroll" or node.style.overflow == "auto") then
+      return node
+    end
+    for _, child in ipairs(node.children or {}) do
+      stack[#stack + 1] = child
+    end
+  end
+  return nil
+end
+
 -- ============================================================================
 -- Theme loading helper (used in both canvas and native init branches)
 -- ============================================================================
@@ -1188,6 +1209,15 @@ function ReactJIT.init(config)
     end
   end
 
+  -- Gamepad state poll — React reads axis/button state at its own pace
+  rpcHandlers["gamepad:state"] = function(args)
+    local id = (args and args.joystickId) or 1
+    return {
+      axes = gamepadAxes[id] or {},
+      buttons = gamepadButtons[id] or {},
+    }
+  end
+
   -- Register game module RPC handler (JS → Lua commands)
   rpcHandlers["game:command"] = function(args)
     io.write("[rpc] game:command received: " .. tostring(args and args.command) .. " module=" .. tostring(args and args.module) .. "\n"); io.flush()
@@ -1365,6 +1395,33 @@ function ReactJIT.init(config)
         pushEvent({ type = ft.event, payload = ft.payload or { timerId = id } })
       end
     end
+  end
+
+  -- ── Lua-side managed effects (replaces useEffect) ──────────────────────
+  local meOk, managedEffects = pcall(require, "lua.managed_effects")
+  if meOk then
+    rpcHandlers["effect:register"] = function(args)
+      if not args or not args.id or not args.type then
+        return { ok = false, error = "effect:register requires id and type" }
+      end
+      local ok = managedEffects.register(args.id, args.type, args.config or {}, pushEvent)
+      return { ok = ok }
+    end
+    rpcHandlers["effect:update"] = function(args)
+      if not args or not args.id then
+        return { ok = false, error = "effect:update requires id" }
+      end
+      local ok = managedEffects.update(args.id, args.config or {}, pushEvent)
+      return { ok = ok }
+    end
+    rpcHandlers["effect:cleanup"] = function(args)
+      if not args or not args.id then return end
+      managedEffects.cleanup(args.id)
+    end
+    M._tickManagedEffects = function(dt)
+      managedEffects.tick(dt, pushEvent)
+    end
+    startupLog("[reactjit] Managed effects loaded")
   end
 
   -- ── @reactjit/time — stopwatches, countdowns, wall clock ──────────────
@@ -2113,6 +2170,13 @@ function ReactJIT.init(config)
     rpcHandlers["test:resize"]     = function(a) return tr.resize(a) end
     rpcHandlers["test:writeFile"]  = function(a) return tr.writeFile(a) end
     rpcHandlers["test:sleep"]      = function(a) return tr.sleep(a) end
+    rpcHandlers["test:gamepad-connect"]  = function(a) return tr.gamepad_connect(a) end
+    rpcHandlers["test:gamepad-pressed"]  = function(a) return tr.gamepad_pressed(a) end
+    rpcHandlers["test:gamepad-released"] = function(a) return tr.gamepad_released(a) end
+    rpcHandlers["test:gamepad-axis"]     = function(a) return tr.gamepad_axis(a) end
+    rpcHandlers["test:get-focused"]      = function(a) return tr.get_focused(a) end
+    rpcHandlers["test:get-scroll"]       = function(a) return tr.get_scroll(a) end
+    rpcHandlers["test:get-focusables"]   = function(a) return tr.get_focusables(a) end
     rpcHandlers["test:done"]       = function(a) return tr.report(a) end
     ReactJIT._testFrameCount = 0
     ReactJIT._testStarted    = false
@@ -2360,6 +2424,7 @@ function ReactJIT.update(dt)
     -- 3. Tick Lua-side transitions, animations, and interval timers (before layout)
     if M.animate then M.animate.tick(dt) end
     if M._tickLuaTimers then M._tickLuaTimers(dt) end
+    if M._tickManagedEffects then M._tickManagedEffects(dt) end
     if M._tickLuaTime   then M._tickLuaTime(dt)   end
 
     -- 4. Relayout if tree changed
@@ -2541,6 +2606,7 @@ function ReactJIT.update(dt)
 
   -- 1b. Tick Lua-side interval timers (pushes events for JS polling hooks)
   if M._tickLuaTimers then M._tickLuaTimers(dt) end
+    if M._tickManagedEffects then M._tickManagedEffects(dt) end
   if M._tickLuaTime   then M._tickLuaTime(dt)   end
 
   -- 2. Tell JS to process any pending input events
@@ -4266,6 +4332,15 @@ function ReactJIT.mousepressed(x, y, button)
 
   local hit = M.events.hitTest(root, x, y)
 
+  -- DEBUG: trace what hitTest returns
+  if hit then
+    io.write(string.format("[HIT-DBG] hitTest -> type=%s id=%s hasHandlers=%s isHittable=%s\n",
+      tostring(hit.type), tostring(hit.id), tostring(hit.hasHandlers),
+      tostring(M.capabilities and M.capabilities.isHittable(hit.type)))); io.flush()
+  else
+    io.write(string.format("[HIT-DBG] hitTest -> nil at %d,%d\n", math.floor(x), math.floor(y))); io.flush()
+  end
+
   -- Record semantic click event in trail now that we know the target
   eventTrail.recordClick(hit, button)
 
@@ -4422,8 +4497,10 @@ function ReactJIT.mousepressed(x, y, button)
       end
     elseif M.capabilities and M.capabilities.isHittable(hit.type) then
       -- Clicked a hittable capability (e.g. ClaudeCanvas): set focus
+      io.write(string.format("[CLICK-DBG] hittable capability clicked: type=%s id=%s isFocused=%s\n", tostring(hit.type), tostring(hit.id), tostring(focus.isFocused(hit)))); io.flush()
       if not focus.isFocused(hit) then
         focus.set(hit)
+        io.write(string.format("[CLICK-DBG] focus SET to %s id=%s\n", tostring(hit.type), tostring(hit.id))); io.flush()
       end
     elseif M.widgets then
       -- Convert screen coords to content-space (account for scroll ancestors)
@@ -4868,6 +4945,10 @@ end
 --- Call from love.keypressed(key, scancode, isrepeat).
 --- Routes keydown to focused node when in focus mode, broadcasts otherwise.
 function ReactJIT.keypressed(key, scancode, isrepeat)
+  -- DEBUG: trace focus state on every keypress
+  local _dbgFocus = focus.get()
+  io.write(string.format("[KEY-ENTRY] key=%s focusedNode=%s type=%s\n", tostring(key), tostring(_dbgFocus and _dbgFocus.id or "nil"), tostring(_dbgFocus and _dbgFocus.type or "nil"))); io.flush()
+
   if M.overlay and M.overlay.keypressed(key) then return end
   if M.systemPanelEnabled and systemPanel.keypressed(key) then return end
   if M.settingsEnabled and settings.keypressed(key) then return end
@@ -5103,12 +5184,19 @@ function ReactJIT.keypressed(key, scancode, isrepeat)
     return
   elseif focusedNode and M.capabilities and M.capabilities.isHittable(focusedNode.type) then
     -- Route to focused visual capability with keyboard handling
+    io.write(string.format("[KEY-DBG] routing to hittable cap: type=%s id=%s\n", tostring(focusedNode.type), tostring(focusedNode.id))); io.flush()
     local capDef = M.capabilities.getDefinition(focusedNode.type)
     if capDef and capDef.handleKeyPressed then
       local result = capDef.handleKeyPressed(focusedNode, key, scancode, isrepeat)
       if result ~= false then
         return  -- consumed by visual capability
       end
+    else
+      io.write(string.format("[KEY-DBG] no handleKeyPressed on capDef for %s\n", tostring(focusedNode.type))); io.flush()
+    end
+  else
+    if focusedNode then
+      io.write(string.format("[KEY-DBG] focusedNode type=%s id=%s isHittable=%s\n", tostring(focusedNode.type), tostring(focusedNode.id), tostring(M.capabilities and M.capabilities.isHittable(focusedNode.type)))); io.flush()
     end
   end
 
@@ -5426,7 +5514,6 @@ end
 --- D-pad drives spatial navigation, A activates, B/Start synthesize Escape.
 --- Other buttons pass through as gamepad events for custom handling.
 function ReactJIT.gamepadpressed(joystick, button)
-  print("[GAMEPAD] pressed: " .. tostring(button) .. " isRendering=" .. tostring(isRendering()) .. " bridge=" .. tostring(M.bridge ~= nil))
   if not isRendering() then return end
   if not M.bridge then return end
   if M.systemPanelEnabled and systemPanel.isDeviceBlocked("controllers", joystick:getID()) then return end
@@ -5434,33 +5521,67 @@ function ReactJIT.gamepadpressed(joystick, button)
   local joystickId = joystick:getID()
   focus.setControllerMode()
 
+  -- Store button state in Lua
+  if not gamepadButtons[joystickId] then gamepadButtons[joystickId] = {} end
+  gamepadButtons[joystickId][button] = true
+
+  -- Broadcast to React handlers FIRST (onGamepadPress fires for ALL buttons)
+  pushEvent(M.events.createGamepadButtonEvent("gamepadpressed", button, joystickId))
+
   -- On-screen keyboard intercepts ALL input while open
   if M.osk and M.osk.isOpen() then
     M.osk.handleGamepadPressed(button, joystickId)
     return
   end
 
-  -- D-pad → spatial navigation (routed to correct FocusGroup)
-  if button == "dpup" then focus.navigate("up", joystickId); return end
-  if button == "dpdown" then focus.navigate("down", joystickId); return end
-  if button == "dpleft" then focus.navigate("left", joystickId); return end
-  if button == "dpright" then focus.navigate("right", joystickId); return end
+  -- D-pad → spatial navigation; if no target in that direction, scroll instead
+  local DPAD_SCROLL = 40
+  if button == "dpup" then
+    if not focus.navigate("up", joystickId) then
+      local sn = findAnyScrollNode()
+      if sn and sn.scrollState then
+        M.tree.setScroll(sn.id, sn.scrollState.scrollX or 0, (sn.scrollState.scrollY or 0) - DPAD_SCROLL)
+        emitScrollEvent(sn)
+      end
+    end
+    return
+  end
+  if button == "dpdown" then
+    if not focus.navigate("down", joystickId) then
+      local sn = findAnyScrollNode()
+      if sn and sn.scrollState then
+        M.tree.setScroll(sn.id, sn.scrollState.scrollX or 0, (sn.scrollState.scrollY or 0) + DPAD_SCROLL)
+        emitScrollEvent(sn)
+      end
+    end
+    return
+  end
+  if button == "dpleft" then
+    if not focus.navigate("left", joystickId) then
+      local sn = findAnyScrollNode()
+      if sn and sn.scrollState then
+        M.tree.setScroll(sn.id, (sn.scrollState.scrollX or 0) - DPAD_SCROLL, sn.scrollState.scrollY or 0)
+        emitScrollEvent(sn)
+      end
+    end
+    return
+  end
+  if button == "dpright" then
+    if not focus.navigate("right", joystickId) then
+      local sn = findAnyScrollNode()
+      if sn and sn.scrollState then
+        M.tree.setScroll(sn.id, (sn.scrollState.scrollX or 0) + DPAD_SCROLL, sn.scrollState.scrollY or 0)
+        emitScrollEvent(sn)
+      end
+    end
+    return
+  end
 
   -- A button → activate focused node for this controller (synthesize click)
   if button == "a" then
     local node = focus.getForController(joystickId)
-    print("[GAMEPAD] A pressed, focused node=" .. tostring(node and node.id) .. " type=" .. tostring(node and node.type) .. " hasHandlers=" .. tostring(node and node.hasHandlers))
     if node then
       local bubblePath = M.events.buildBubblePath(node)
-      print("[GAMEPAD]   bubblePath length=" .. tostring(#bubblePath))
-      for i, bp in ipairs(bubblePath) do
-        print("[GAMEPAD]   bubble[" .. i .. "] id=" .. tostring(bp) .. " type=" .. tostring(M.tree and M.tree.getNode and M.tree.getNode(bp) and M.tree.getNode(bp).type))
-      end
-      if node.children then
-        for i, child in ipairs(node.children) do
-          print("[GAMEPAD]   child[" .. i .. "] id=" .. tostring(child.id) .. " type=" .. tostring(child.type) .. " hasHandlers=" .. tostring(child.hasHandlers))
-        end
-      end
       local cx = node.computed.x + node.computed.w / 2
       local cy = node.computed.y + node.computed.h / 2
       -- Send "click" — same event type as mousepressed uses for onPress/onClick
@@ -5498,8 +5619,7 @@ function ReactJIT.gamepadpressed(joystick, button)
     return
   end
 
-  -- Other buttons: pass through as gamepad events for custom handling
-  pushEvent(M.events.createGamepadButtonEvent("gamepadpressed", button, joystickId))
+  -- Other buttons: already broadcast at top of function
 end
 
 --- Call from love.gamepadreleased(joystick, button).
@@ -5510,6 +5630,13 @@ function ReactJIT.gamepadreleased(joystick, button)
   if M.systemPanelEnabled and systemPanel.isDeviceBlocked("controllers", joystick:getID()) then return end
 
   local joystickId = joystick:getID()
+
+  -- Store button state in Lua
+  if not gamepadButtons[joystickId] then gamepadButtons[joystickId] = {} end
+  gamepadButtons[joystickId][button] = false
+
+  -- Broadcast to React handlers FIRST (onGamepadRelease fires for ALL buttons)
+  pushEvent(M.events.createGamepadButtonEvent("gamepadreleased", button, joystickId))
 
   if button == "a" then
     local node = focus.getForController(joystickId)
@@ -5524,8 +5651,6 @@ function ReactJIT.gamepadreleased(joystick, button)
     end
     return
   end
-
-  pushEvent(M.events.createGamepadButtonEvent("gamepadreleased", button, joystickId))
 end
 
 --- Call from love.gamepadaxis(joystick, axis, value).
@@ -5538,6 +5663,10 @@ function ReactJIT.gamepadaxis(joystick, axis, value)
 
   local joystickId = joystick:getID()
   focus.setControllerMode()
+
+  -- Store axis state in Lua — React polls this, never event-driven
+  if not gamepadAxes[joystickId] then gamepadAxes[joystickId] = {} end
+  gamepadAxes[joystickId][axis] = value
 
   -- On-screen keyboard intercepts stick input while open
   if M.osk and M.osk.isOpen() then
@@ -5552,27 +5681,29 @@ function ReactJIT.gamepadaxis(joystick, axis, value)
   end
 
   -- Right stick → scroll the nearest scroll ancestor of focused node
+  -- Falls back to any ScrollView in the tree if no focused node
   if axis == "rightx" or axis == "righty" then
+    local scrollNode = nil
     local node = focus.getForController(joystickId)
     if node then
-      local scrollNode = findScrollAncestor(node)
-      if scrollNode and scrollNode.scrollState then
-        local SCROLL_SPEED = 8
-        local ss = scrollNode.scrollState
-        if axis == "rightx" and math.abs(value) > 0.3 then
-          M.tree.setScroll(scrollNode.id, (ss.scrollX or 0) + value * SCROLL_SPEED, ss.scrollY or 0)
-          emitScrollEvent(scrollNode)
-        elseif axis == "righty" and math.abs(value) > 0.3 then
-          M.tree.setScroll(scrollNode.id, ss.scrollX or 0, (ss.scrollY or 0) + value * SCROLL_SPEED)
-          emitScrollEvent(scrollNode)
-        end
+      scrollNode = findScrollAncestor(node)
+    end
+    if not scrollNode then
+      scrollNode = findAnyScrollNode()
+    end
+    if scrollNode and scrollNode.scrollState then
+      local SCROLL_SPEED = 8
+      local ss = scrollNode.scrollState
+      if axis == "rightx" and math.abs(value) > 0.3 then
+        M.tree.setScroll(scrollNode.id, (ss.scrollX or 0) + value * SCROLL_SPEED, ss.scrollY or 0)
+        emitScrollEvent(scrollNode)
+      elseif axis == "righty" and math.abs(value) > 0.3 then
+        M.tree.setScroll(scrollNode.id, ss.scrollX or 0, (ss.scrollY or 0) + value * SCROLL_SPEED)
+        emitScrollEvent(scrollNode)
       end
     end
     return
   end
-
-  -- Triggers and other axes: pass through
-  pushEvent(M.events.createGamepadAxisEvent(axis, value, joystickId))
 end
 
 local FILE_DROP_PREVIEW_MAX_BYTES = 128 * 1024

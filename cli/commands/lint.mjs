@@ -11,6 +11,7 @@
  *   no-image-without-src        (error)   <Image> missing "src" prop
  *   no-pressable-without-onpress (warning) <Pressable> without onPress handler
  *   no-usecrud-without-schema   (error)   useCRUD() called without a schema argument
+ *   no-use-effect               (error)   useEffect/useLayoutEffect banned — use Lua-managed alternatives
  *
  *
  * Removed rules (layout engine handles these correctly now):
@@ -1439,6 +1440,9 @@ function buildContexts(sourceFile, filePath, ts) {
 
 const STORAGE_HOOKS = new Set(['useCRUD', 'useStorage', 'createCRUD']);
 
+// Hooks banned in user code — useEffect must go through Lua-managed alternatives
+const BANNED_HOOKS = new Set(['useEffect', 'useLayoutEffect']);
+
 /**
  * Walk a source file's AST to find storage hook call expressions.
  * Returns a flat list of call context objects for rule analysis.
@@ -1460,7 +1464,7 @@ function findCallExpressions(sourceFile, filePath, ts) {
         funcName = node.expression.text;
       }
 
-      if (funcName && STORAGE_HOOKS.has(funcName)) {
+      if (funcName && (STORAGE_HOOKS.has(funcName) || BANNED_HOOKS.has(funcName))) {
         const pos = ts.getLineAndCharacterOfPosition(sourceFile, node.getStart(sourceFile));
         const line = pos.line + 1;
         calls.push({
@@ -1495,6 +1499,28 @@ const callRules = [
         return `${call.funcName}() requires at least ${minArgs} arguments: ${sig} — schema validation ensures type safety and runtime correctness`;
       }
       return null;
+    },
+  },
+
+  // useEffect / useLayoutEffect are banned in user code — use Lua-managed alternatives
+  {
+    name: 'no-use-effect',
+    severity: 'error',
+    check(call) {
+      if (!BANNED_HOOKS.has(call.funcName)) return null;
+      const alternatives = [
+        'useLuaEffect({ type: "timer", interval: N }, handler, deps)  — replaces setInterval',
+        'useLuaEffect({ type: "poll", interval: N }, handler, deps)   — replaces polling',
+        'useLuaEffect({ type: "tick" }, handler, deps)                — replaces per-frame effects',
+        'useMount(() => { ... return cleanup })                       — replaces useEffect(..., [])',
+        'useLuaQuery("rpc:method", args, deps)                       — replaces fetch-on-mount',
+        'useLoveEvent(event, handler)                                 — replaces bridge.subscribe',
+        'useLuaInterval(ms, handler)                                  — replaces setInterval',
+        'useHotkey(combo, handler)                                    — replaces keyboard listeners',
+        'useHotState(key, initial)                                    — replaces state sync effects',
+        'useLocalStore(key, initial)                                  — replaces persistence effects',
+      ].join('\n        ');
+      return `${call.funcName}() is banned — it runs in React's commit phase (async, batched, not frame-synced) which causes performance problems in ReactJIT. All effects must run in Lua's love.update(dt) loop. Use one of these instead:\n        ${alternatives}`;
     },
   },
 ];
