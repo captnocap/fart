@@ -62,15 +62,16 @@ Capabilities.register("ElementTile", {
   events = { "onPress" },
 
   create = function(nodeId, props)
+    local key = props.element
     return {
       screenX = 0, screenY = 0,
       flipProgress = 0,
       flipVelocity = 0,
-      flipTarget = 0,
+      flipTarget = (props.flipped and 1 or 0),
       internalFlipped = false,
       wasPressed = false,
-      elementData = nil,
-      prevElement = nil,
+      elementData = key and Chemistry.getElement(key) or nil,
+      prevElement = key,
     }
   end,
 

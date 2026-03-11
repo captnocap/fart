@@ -1205,7 +1205,7 @@ export function PreviewElementTile({ c }: { c: ThemeColors }) {
     <S.GrowCenterAlign style={{ padding: 16 }}>
       <S.RowG8 style={{ flexWrap: 'wrap', justifyContent: 'center' }}>
         {representatives.map(sym => (
-          <ElementTile key={sym} element={sym} size={64} />
+          <ElementTile key={sym} element={sym} size={96} />
         ))}
       </S.RowG8>
     </S.GrowCenterAlign>

@@ -35,9 +35,14 @@ Capabilities.register("ReactionView", {
   events = {},
 
   create = function(nodeId, props)
+    local eq = props.equation
+    local rxn = nil
+    if eq and eq ~= "" then
+      rxn = Chemistry.balanceEquation(eq)
+    end
     return {
-      reaction = nil,
-      prevEquation = nil,
+      reaction = rxn,
+      prevEquation = eq,
     }
   end,
 

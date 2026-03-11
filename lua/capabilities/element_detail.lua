@@ -66,7 +66,11 @@ Capabilities.register("ElementDetail", {
   events = {},
 
   create = function(nodeId, props)
-    return { elementData = nil, prevElement = nil }
+    local key = props.element
+    return {
+      elementData = key and Chemistry.getElement(key) or nil,
+      prevElement = key,
+    }
   end,
 
   update = function(nodeId, props, prev, state)

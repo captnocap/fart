@@ -30,10 +30,11 @@ Capabilities.register("ElectronShell", {
   events = {},
 
   create = function(nodeId, props)
+    local key = props.element
     return {
       time = 0,
-      elementData = nil,
-      prevElement = nil,
+      elementData = key and Chemistry.getElement(key) or nil,
+      prevElement = key,
     }
   end,
 

@@ -33,9 +33,10 @@ Capabilities.register("MoleculeCard", {
   events = {},
 
   create = function(nodeId, props)
+    local formula = props.formula
     return {
-      molecule = nil,
-      prevFormula = nil,
+      molecule = formula and Chemistry.buildMolecule(formula) or nil,
+      prevFormula = formula,
     }
   end,
 
