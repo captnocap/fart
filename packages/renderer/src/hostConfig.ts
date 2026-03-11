@@ -471,7 +471,7 @@ export const hostConfig: HostConfig<
         // user component that uses them (Band, LayoutStory, etc.).
         const PRIMITIVE_NAMES = new Set([
           'Box', 'Text', 'Image', 'Pressable', 'TextInput', 'ScrollView',
-          'Modal', 'Row', 'Col', 'CodeBlock', 'Window', 'TextEditor',
+          'Modal', 'Row', 'Col', 'CodeBlock', 'Markdown', 'Window', 'TextEditor',
         ]);
         let fiber = internalHandle;
         while (fiber) {

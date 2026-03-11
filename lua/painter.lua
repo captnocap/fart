@@ -46,6 +46,7 @@ local _paintCount = 0
 local TextEditorModule = nil  -- Lazy-loaded to avoid circular deps
 local TextInputModule = nil   -- Lazy-loaded to avoid circular deps
 local CodeBlockModule = nil   -- Lazy-loaded to avoid circular deps
+local MarkdownModule = nil    -- Lazy-loaded to avoid circular deps
 local LatexModule = nil       -- Lazy-loaded to avoid circular deps
 local VideoPlayerModule = nil -- Lazy-loaded to avoid circular deps
 local SliderModule = nil     -- Lazy-loaded to avoid circular deps
@@ -1556,6 +1557,16 @@ function Painter.paintNode(node, inheritedOpacity, stencilDepth)
     local c = node.computed
     if c and c.w > 0 and c.h > 0 then
       CodeBlockModule.render(node, c, effectiveOpacity)
+    end
+
+  elseif not isHidden and node.type == "Markdown" then
+    -- Lua-owned markdown: delegate rendering entirely to markdown.lua
+    if not MarkdownModule then
+      MarkdownModule = require("lua.markdown")
+    end
+    local c = node.computed
+    if c and c.w > 0 and c.h > 0 then
+      MarkdownModule.render(node, c, effectiveOpacity)
     end
 
   elseif not isHidden and node.type == "Math" then

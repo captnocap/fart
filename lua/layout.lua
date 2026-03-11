@@ -28,6 +28,7 @@ local Log = require("lua.debug_log")
 
 local Measure = nil  -- Injected at init time via Layout.init()
 local CodeBlockModule = nil  -- Lazy-loaded for CodeBlock measurement
+local MarkdownModule = nil   -- Lazy-loaded for Markdown measurement
 local LatexModule = nil      -- Lazy-loaded for Math (LaTeX) measurement
 local LatexModule = nil      -- Lazy-loaded for Math (LaTeX) measurement
 
@@ -745,7 +746,22 @@ local function estimateIntrinsicMain(node, isRow, pw, ph)
     return padMain
   end
 
-  -- 2d. Math (LaTeX) nodes: intrinsic size from parsed expression
+  -- 2d. Markdown nodes: intrinsic size from parsed content
+  if node.type == "Markdown" then
+    if not MarkdownModule then
+      MarkdownModule = require("lua.markdown")
+    end
+    local measured = MarkdownModule.measure(node, isRow)
+    if measured then
+      if isRow then
+        return measured.width + padMain
+      end
+      return measured.height + padMain
+    end
+    return padMain
+  end
+
+  -- 2e. Math (LaTeX) nodes: intrinsic size from parsed expression
   if node.type == "Math" then
     if not LatexModule then
       LatexModule = require("lua.latex")
@@ -1110,6 +1126,7 @@ function Layout.layoutNode(node, px, py, pw, ph, depth)
   -- wraps correctly inside the padding box.
   local isTextNode = (node.type == "Text" or node.type == "__TEXT__")
   local isCodeBlock = (node.type == "CodeBlock")
+  local isMarkdown = (node.type == "Markdown")
   local isMath = (node.type == "Math")
   local isTextInput = (node.type == "TextInput")
 
@@ -1160,6 +1177,29 @@ function Layout.layoutNode(node, px, py, pw, ph, depth)
           local contentW = math.max(50, measured.width + padL + padR)
           if parentAssignedW and w then
             -- Shrink-wrap to content but never exceed parent bounds
+            w = math.min(contentW, w)
+          elseif not w then
+            w = contentW
+          end
+          wSource = "text"
+        end
+        if not explicitH and h == nil then
+          h = measured.height + padT + padB
+          hSource = "text"
+        end
+      end
+    end
+  elseif isMarkdown then
+    -- Markdown node: measure via markdown.lua
+    if not explicitW or not explicitH then
+      if not MarkdownModule then
+        MarkdownModule = require("lua.markdown")
+      end
+      local measured = MarkdownModule.measure(node, true)
+      if measured then
+        if not explicitW then
+          local contentW = math.max(50, measured.width + padL + padR)
+          if parentAssignedW and w then
             w = math.min(contentW, w)
           elseif not w then
             w = contentW

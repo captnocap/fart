@@ -237,6 +237,10 @@ export { TextEditor } from './TextEditor';
 export { CodeBlock } from './CodeBlock';
 export type { CodeBlockProps } from './CodeBlock';
 
+// Markdown (Lua-owned markdown renderer)
+export { Markdown } from './Markdown';
+export type { MarkdownProps } from './Markdown';
+
 // Math (Lua-owned LaTeX typesetting)
 export { Math } from './Math';
 export type { MathProps } from './Math';
