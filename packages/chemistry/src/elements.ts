@@ -139,6 +139,8 @@ for (const el of ELEMENTS) {
 
 export function getElement(key: number | string): Element | undefined {
   if (typeof key === 'number') return byNumber.get(key);
-  if (key.length <= 3) return bySymbol.get(key) ?? byName.get(key.toLowerCase());
-  return byName.get(key.toLowerCase());
+  const trimmed = key.trim();
+  if (trimmed === '') return undefined;
+  const normalizedSymbol = trimmed.slice(0, 1).toUpperCase() + trimmed.slice(1).toLowerCase();
+  return bySymbol.get(trimmed) ?? bySymbol.get(normalizedSymbol) ?? byName.get(trimmed.toLowerCase());
 }

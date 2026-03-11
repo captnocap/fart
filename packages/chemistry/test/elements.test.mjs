@@ -41,10 +41,12 @@ describe('chemistry element lookup semantics', () => {
   it('finds elements by atomic number, symbol, and case-insensitive name', () => {
     const oxygenByNumber = getElement(8);
     const oxygenBySymbol = getElement('O');
+    const oxygenByWhitespace = getElement(' o ');
     const oxygenByName = getElement('oxygen');
     const oxygenByTitle = getElement('Oxygen');
 
     assert.deepEqual(oxygenByNumber, oxygenBySymbol);
+    assert.deepEqual(oxygenByNumber, oxygenByWhitespace);
     assert.deepEqual(oxygenByNumber, oxygenByName);
     assert.deepEqual(oxygenByNumber, oxygenByTitle);
     assert.equal(oxygenByNumber?.name, 'Oxygen');

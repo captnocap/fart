@@ -63,8 +63,9 @@ export function getElement(key: number | string) {
   if (typeof key === 'string') {
     const trimmed = key.trim()
     if (trimmed === '') return null
+    const normalizedSymbol = trimmed.substring(0, 1).toUpperCase() + trimmed.substring(1).toLowerCase()
     return BY_SYMBOL[trimmed]
-      || BY_SYMBOL[trimmed[0].toUpperCase() + trimmed.slice(1).toLowerCase()]
+      || BY_SYMBOL[normalizedSymbol]
       || BY_ELEMENT_NAME[trimmed.toLowerCase()]
   }
   return null
