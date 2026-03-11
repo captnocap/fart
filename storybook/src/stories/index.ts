@@ -93,13 +93,16 @@ import { Layout1Story } from './Layout1Story';
 import { Layout2Story } from './Layout2Story';
 import { Layout3Story } from './Layout3Story';
 import { AutomationStory } from './AutomationStory';
+import { GamepadStory } from './GamepadStory';
 import { GPIOStory } from './GPIOStory';
+import { EnvironmentsStory } from './EnvironmentsStory';
 
 export const stories: StoryDef[] = [
   // ── Primitives (Layout1) ──────────────────────────────
   { id: 'box', title: 'Box', section: 'Primitives', component: BoxStory },
   { id: 'classifier', title: 'Classifier', section: 'Primitives', component: ClassifierStory },
   { id: 'image-video', title: 'Image & Video', section: 'Primitives', component: ImageVideoStory },
+  { id: 'gamepad', title: 'Gamepad', section: 'Primitives', component: GamepadStory },
   { id: 'input', title: 'Input', section: 'Primitives', component: InputStory },
   { id: 'layout', title: 'Layout', section: 'Primitives', component: LayoutStory },
   { id: 'style', title: 'Style', section: 'Primitives', component: StyleStory },
@@ -172,4 +175,5 @@ export const stories: StoryDef[] = [
   { id: 'layout-3', title: 'Layout 3', section: 'Layouts', component: Layout3Story },
   { id: 'automation', title: 'Automation', section: 'Dev', component: AutomationStory },
   { id: 'gpio', title: 'GPIO', section: 'Packages', component: GPIOStory },
+  { id: 'environments', title: 'Environments', section: 'Dev', component: EnvironmentsStory },
 ];
