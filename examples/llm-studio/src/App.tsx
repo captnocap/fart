@@ -23,6 +23,8 @@ import { AIMessageList, AIChatInput } from '@reactjit/ai';
 import { StorageProvider, useCRUD } from '@reactjit/storage/hooks';
 import { z } from '@reactjit/storage/schema';
 import { MemoryAdapter } from '@reactjit/storage/adapters/memory';
+import { useServer } from '@reactjit/server';
+import { getProvider } from '@reactjit/ai';
 
 // ── Color palette ────────────────────────────────────────────────────────────
 
@@ -81,7 +83,7 @@ const DEFAULT_PROVIDERS: Provider[] = [
   { id: 'anthropic', name: 'Anthropic', type: 'anthropic', icon: '\u{1F9E0}' },
 ];
 
-type View = 'chat' | 'providers' | 'models';
+type View = 'chat' | 'providers' | 'models' | 'server';
 
 // ── Schemas for SQLite persistence ───────────────────────────────────────────
 
@@ -133,8 +135,143 @@ function LLMStudio() {
   const [view, setView] = useState<View>('chat');
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [providerModalOpen, setProviderModalOpen] = useState(false);
+  const [serverEnabled, setServerEnabled] = useState(false);
+  const [serverPort, setServerPort] = useState(5001);
 
   const activeProvider = providers.find(p => p.id === activeProviderId) || providers[0];
+
+  // ── OpenAI-compatible proxy server ───────────────────
+  const serverConfig = useMemo(() => {
+    if (!serverEnabled) return null;
+    return {
+      port: serverPort,
+      routes: [
+        {
+          path: '/v1/models',
+          method: 'GET' as const,
+          handler: async () => {
+            // Forward to active provider's model list
+            try {
+              const baseURL = activeProvider.baseURL || 'https://api.openai.com';
+              const res = await fetch(`${baseURL}/v1/models`, {
+                headers: activeProvider.apiKey
+                  ? { authorization: `Bearer ${activeProvider.apiKey}` }
+                  : {},
+              } as any);
+              const body = await res.text();
+              return {
+                status: res.ok ? 200 : (res.status as number),
+                headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+                body,
+              };
+            } catch (err: any) {
+              return {
+                status: 502,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ error: { message: `Upstream error: ${err.message}`, type: 'proxy_error' } }),
+              };
+            }
+          },
+        },
+        {
+          path: '/v1/chat/completions',
+          method: 'POST' as const,
+          handler: async (req: any) => {
+            // Forward chat completions to active provider
+            try {
+              const provider = getProvider(activeProvider.type);
+              const body = JSON.parse(req.body || '{}');
+              const messages = body.messages || [];
+              const model = body.model || effectiveModel;
+              const stream = body.stream || false;
+
+              const formatted = provider.formatRequest(
+                messages,
+                {
+                  provider: activeProvider.type,
+                  model,
+                  apiKey: activeProvider.apiKey,
+                  baseURL: activeProvider.baseURL,
+                  temperature: body.temperature ?? temperature,
+                  maxTokens: body.max_tokens ?? maxTokens,
+                },
+                undefined,
+                stream,
+              );
+
+              const res = await fetch(formatted.url, {
+                method: formatted.method,
+                headers: formatted.headers,
+                body: formatted.body,
+              } as any);
+
+              const responseBody = await res.text();
+              return {
+                status: res.ok ? 200 : (res.status as number),
+                headers: {
+                  'Content-Type': stream ? 'text/event-stream' : 'application/json',
+                  'Access-Control-Allow-Origin': '*',
+                },
+                body: responseBody,
+              };
+            } catch (err: any) {
+              return {
+                status: 502,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ error: { message: `Proxy error: ${err.message}`, type: 'proxy_error' } }),
+              };
+            }
+          },
+        },
+        {
+          path: '/v1/completions',
+          method: 'POST' as const,
+          handler: async (req: any) => {
+            // Forward legacy completions
+            try {
+              const baseURL = activeProvider.baseURL || 'https://api.openai.com';
+              const res = await fetch(`${baseURL}/v1/completions`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  ...(activeProvider.apiKey ? { authorization: `Bearer ${activeProvider.apiKey}` } : {}),
+                },
+                body: req.body,
+              } as any);
+              const responseBody = await res.text();
+              return {
+                status: res.ok ? 200 : (res.status as number),
+                headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+                body: responseBody,
+              };
+            } catch (err: any) {
+              return {
+                status: 502,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ error: { message: `Proxy error: ${err.message}` } }),
+              };
+            }
+          },
+        },
+        {
+          // CORS preflight
+          path: '/v1/*',
+          method: 'OPTIONS' as const,
+          handler: async () => ({
+            status: 204,
+            headers: {
+              'Access-Control-Allow-Origin': '*',
+              'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+              'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+            },
+            body: '',
+          }),
+        },
+      ],
+    };
+  }, [serverEnabled, serverPort, activeProvider, effectiveModel, temperature, maxTokens]);
+
+  const server = useServer(serverConfig);
 
   // ── CRUD for persistence ─────────────────────────────
   const convoCRUD = useCRUD('conversations', conversationSchema);
@@ -209,16 +346,16 @@ function LLMStudio() {
     apiKey: activeProvider.apiKey,
   });
 
-  useEffect(() => {
-    if (models.length > 0 && !activeModel) setActiveModel(models[0].id);
-  }, [models, activeModel]);
-
-  useEffect(() => { setActiveModel(''); }, [activeProviderId]);
+  // Derive effective model: if activeModel isn't in the current model list, fall back to first
+  const effectiveModel = useMemo(() => {
+    if (activeModel && models.some(m => m.id === activeModel)) return activeModel;
+    return models.length > 0 ? models[0].id : '';
+  }, [activeModel, models]);
 
   // ── Chat hook ────────────────────────────────────────
   const chat = useChat({
     provider: activeProvider.type,
-    model: activeModel,
+    model: effectiveModel,
     apiKey: activeProvider.apiKey,
     baseURL: activeProvider.baseURL,
     temperature,
@@ -255,13 +392,13 @@ function LLMStudio() {
     const id = `conv_${Date.now().toString(36)}`;
     const convo: ConversationRecord = {
       id, title: 'New Chat', providerId: activeProviderId,
-      model: activeModel, messages: [], systemPrompt, updatedAt: Date.now(),
+      model: effectiveModel, messages: [], systemPrompt, updatedAt: Date.now(),
     };
     setConversations(prev => [convo, ...prev]);
     setActiveConvoId(id);
     chat.setMessages([]);
     persistConversation(convo);
-  }, [activeProviderId, activeModel, systemPrompt, chat, persistConversation]);
+  }, [activeProviderId, effectiveModel, systemPrompt, chat, persistConversation]);
 
   // Sync messages to conversation + persist
   useEffect(() => {
@@ -329,6 +466,7 @@ function LLMStudio() {
   useHotkey('ctrl+1', () => setView('chat'));
   useHotkey('ctrl+2', () => setView('models'));
   useHotkey('ctrl+3', () => setView('providers'));
+  useHotkey('ctrl+4', () => setView('server'));
 
   return (
     <Box style={{ width: '100%', height: '100%', flexDirection: 'row', backgroundColor: C.bg }}>
@@ -346,7 +484,7 @@ function LLMStudio() {
       {/* ── Main content ── */}
       <Box style={{ flexGrow: 1, flexDirection: 'column' }}>
         <TopBar
-          provider={activeProvider} model={activeModel}
+          provider={activeProvider} model={effectiveModel}
           models={models} modelsLoading={modelsLoading}
           onSelectModel={setActiveModel} onRefreshModels={refetchModels}
           settingsOpen={settingsOpen} onToggleSettings={() => setSettingsOpen(v => !v)}
@@ -367,7 +505,7 @@ function LLMStudio() {
             <>
               <Box style={{ flexGrow: 1, flexDirection: 'column' }}>
                 {chat.messages.length === 0 ? (
-                  <WelcomeScreen provider={activeProvider} model={activeModel} />
+                  <WelcomeScreen provider={activeProvider} model={effectiveModel} />
                 ) : (
                   <AIMessageList
                     messages={chat.messages} isStreaming={chat.isStreaming}
@@ -383,7 +521,7 @@ function LLMStudio() {
                         const id = `conv_${Date.now().toString(36)}`;
                         const convo: ConversationRecord = {
                           id, title: 'New Chat', providerId: activeProviderId,
-                          model: activeModel, messages: [], systemPrompt, updatedAt: Date.now(),
+                          model: effectiveModel, messages: [], systemPrompt, updatedAt: Date.now(),
                         };
                         setConversations(prev => [convo, ...prev]);
                         setActiveConvoId(id);
@@ -392,7 +530,7 @@ function LLMStudio() {
                       chat.send(text);
                     }}
                     isLoading={chat.isLoading}
-                    placeholder={`Message ${activeProvider.name}${activeModel ? ` / ${activeModel}` : ''}...`}
+                    placeholder={`Message ${activeProvider.name}${effectiveModel ? ` / ${effectiveModel}` : ''}...`}
                     sendColor={C.accent} autoFocus
                   />
                 </Box>
@@ -417,7 +555,7 @@ function LLMStudio() {
           {view === 'models' && (
             <ModelBrowser
               models={models} loading={modelsLoading} error={modelsError}
-              activeModel={activeModel}
+              activeModel={effectiveModel}
               onSelectModel={(id) => { setActiveModel(id); setView('chat'); }}
               onRefresh={refetchModels} provider={activeProvider}
             />
@@ -435,6 +573,20 @@ function LLMStudio() {
               onUpdateKey={(id, key) => {
                 setProviders(prev => prev.map(p => p.id === id ? { ...p, apiKey: key } : p));
               }}
+            />
+          )}
+
+          {view === 'server' && (
+            <ServerPanel
+              serverEnabled={serverEnabled}
+              onToggleServer={() => setServerEnabled(v => !v)}
+              serverPort={serverPort}
+              onPortChange={setServerPort}
+              serverReady={server.ready}
+              requests={server.requests}
+              provider={activeProvider}
+              model={effectiveModel}
+              onStopServer={server.close}
             />
           )}
         </Box>
@@ -655,6 +807,7 @@ function Sidebar({
         <NavTab label="Chat" active={view === 'chat'} onPress={() => onSetView('chat')} hint="1" />
         <NavTab label="Models" active={view === 'models'} onPress={() => onSetView('models')} hint="2" />
         <NavTab label="Providers" active={view === 'providers'} onPress={() => onSetView('providers')} hint="3" />
+        <NavTab label="Server" active={view === 'server'} onPress={() => onSetView('server')} hint="4" />
       </Box>
 
       {/* Provider selector */}
@@ -736,7 +889,7 @@ function Sidebar({
       {/* Footer: keyboard shortcuts hint */}
       <Box style={{ padding: 8, borderTopWidth: 1, borderColor: C.border }}>
         <Text style={{ fontSize: 9, color: C.textDim, textAlign: 'center' }}>
-          Ctrl+N New  |  Ctrl+, Settings  |  Ctrl+1/2/3 Tabs
+          Ctrl+N New  |  Ctrl+, Settings  |  Ctrl+1/2/3/4 Tabs
         </Text>
       </Box>
     </Box>
@@ -1128,6 +1281,180 @@ function ProviderManager({
           })}
         </Box>
       </ScrollView>
+    </Box>
+  );
+}
+
+// ── Server panel ─────────────────────────────────────────────────────────────
+
+function ServerPanel({
+  serverEnabled, onToggleServer, serverPort, onPortChange,
+  serverReady, requests, provider, model, onStopServer,
+}: {
+  serverEnabled: boolean; onToggleServer: () => void;
+  serverPort: number; onPortChange: (p: number) => void;
+  serverReady: boolean; requests: any[];
+  provider: Provider; model: string; onStopServer: () => void;
+}) {
+  return (
+    <Box style={{ flexGrow: 1, padding: 20, gap: 16 }}>
+      {/* Header */}
+      <Box style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Box>
+          <Text style={{ fontSize: 18, color: C.text, fontWeight: 'bold' }}>API Server</Text>
+          <Text style={{ fontSize: 12, color: C.textMuted }}>
+            Serve your models as an OpenAI-compatible API
+          </Text>
+        </Box>
+        <Pressable onPress={onToggleServer}>
+          {({ hovered }) => (
+            <Box style={{
+              paddingLeft: 16, paddingRight: 16, paddingTop: 8, paddingBottom: 8,
+              borderRadius: 8,
+              backgroundColor: serverEnabled
+                ? (hovered ? '#c0392b' : C.red)
+                : (hovered ? C.greenDim : C.green),
+            }}>
+              <Text style={{ fontSize: 13, color: '#fff', fontWeight: 'bold' }}>
+                {serverEnabled ? 'Stop Server' : 'Start Server'}
+              </Text>
+            </Box>
+          )}
+        </Pressable>
+      </Box>
+
+      {/* Status */}
+      <Box style={{ padding: 16, backgroundColor: C.surface, borderRadius: 10, gap: 12 }}>
+        <Box style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Text style={{ fontSize: 13, color: C.text, fontWeight: 'bold' }}>Status</Text>
+          <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Box style={{
+              width: 10, height: 10, borderRadius: 5,
+              backgroundColor: serverReady ? C.green : serverEnabled ? C.yellow : C.red,
+            }} />
+            <Text style={{ fontSize: 12, color: serverReady ? C.green : serverEnabled ? C.yellow : C.textDim }}>
+              {serverReady ? 'Running' : serverEnabled ? 'Starting...' : 'Stopped'}
+            </Text>
+          </Box>
+        </Box>
+
+        {/* Port config */}
+        <Box style={{ gap: 4 }}>
+          <Text style={{ fontSize: 11, color: C.textMuted, fontWeight: 'bold' }}>Port</Text>
+          <TextInput
+            value={serverPort.toString()}
+            onChangeText={(text) => { const n = parseInt(text, 10); if (!isNaN(n) && n > 0 && n < 65536) onPortChange(n); }}
+            placeholder="5001" placeholderColor={C.textDim}
+            style={{ backgroundColor: C.bgInput, borderRadius: 6, padding: 8 }}
+            textStyle={{ color: C.text, fontSize: 13 }}
+          />
+        </Box>
+
+        {/* Active provider + model */}
+        <Box style={{ gap: 4 }}>
+          <Text style={{ fontSize: 11, color: C.textMuted, fontWeight: 'bold' }}>Proxying To</Text>
+          <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Text style={{ fontSize: 14 }}>{provider.icon}</Text>
+            <Text style={{ fontSize: 13, color: C.text }}>{provider.name}</Text>
+            {model && <Text style={{ fontSize: 11, color: C.textDim }}>{`/ ${model}`}</Text>}
+          </Box>
+          {provider.baseURL && (
+            <Text style={{ fontSize: 10, color: C.textDim }}>{provider.baseURL}</Text>
+          )}
+        </Box>
+      </Box>
+
+      {/* Endpoints */}
+      <Box style={{ padding: 16, backgroundColor: C.surface, borderRadius: 10, gap: 8 }}>
+        <Text style={{ fontSize: 13, color: C.text, fontWeight: 'bold' }}>Endpoints</Text>
+        <Text style={{ fontSize: 11, color: C.textMuted }}>
+          Other apps can connect using these URLs:
+        </Text>
+        {[
+          { method: 'GET', path: '/v1/models', desc: 'List available models' },
+          { method: 'POST', path: '/v1/chat/completions', desc: 'Chat completions (streaming supported)' },
+          { method: 'POST', path: '/v1/completions', desc: 'Legacy completions' },
+        ].map(ep => (
+          <Box key={ep.path} style={{ flexDirection: 'row', gap: 8, alignItems: 'center', paddingTop: 4 }}>
+            <Box style={{
+              paddingLeft: 6, paddingRight: 6, paddingTop: 2, paddingBottom: 2,
+              borderRadius: 4, backgroundColor: ep.method === 'GET' ? '#1a3a2a' : '#1a2a3a',
+            }}>
+              <Text style={{ fontSize: 9, color: ep.method === 'GET' ? C.green : '#5dade2', fontWeight: 'bold' }}>
+                {ep.method}
+              </Text>
+            </Box>
+            <Box>
+              <Text style={{ fontSize: 12, color: C.accent, fontFamily: 'monospace' }}>
+                {`http://localhost:${serverPort}${ep.path}`}
+              </Text>
+              <Text style={{ fontSize: 10, color: C.textDim }}>{ep.desc}</Text>
+            </Box>
+          </Box>
+        ))}
+      </Box>
+
+      {/* Usage example */}
+      <Box style={{ padding: 16, backgroundColor: C.surface, borderRadius: 10, gap: 8 }}>
+        <Text style={{ fontSize: 13, color: C.text, fontWeight: 'bold' }}>Usage</Text>
+        <Text style={{ fontSize: 11, color: C.textMuted }}>Connect from any OpenAI-compatible client:</Text>
+        <CodeBlock
+          code={`curl http://localhost:${serverPort}/v1/chat/completions \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": "${model || 'your-model'}",
+    "messages": [{"role": "user", "content": "Hello!"}]
+  }'`}
+          language="bash"
+          style={{ borderRadius: 6 }}
+        />
+        <Text style={{ fontSize: 11, color: C.textMuted, paddingTop: 4 }}>Python (OpenAI SDK):</Text>
+        <CodeBlock
+          code={`from openai import OpenAI
+
+client = OpenAI(
+    base_url="http://localhost:${serverPort}/v1",
+    api_key="not-needed"  # for local models
+)
+
+response = client.chat.completions.create(
+    model="${model || 'your-model'}",
+    messages=[{"role": "user", "content": "Hello!"}]
+)`}
+          language="python"
+          style={{ borderRadius: 6 }}
+        />
+      </Box>
+
+      {/* Request log */}
+      {requests.length > 0 && (
+        <Box style={{ padding: 16, backgroundColor: C.surface, borderRadius: 10, gap: 8 }}>
+          <Box style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Text style={{ fontSize: 13, color: C.text, fontWeight: 'bold' }}>Request Log</Text>
+            <Text style={{ fontSize: 10, color: C.textDim }}>{`${requests.length} requests`}</Text>
+          </Box>
+          <ScrollView style={{ maxHeight: 200 }}>
+            <Box style={{ gap: 4 }}>
+              {requests.slice(0, 20).map((req, i) => (
+                <Box key={i} style={{
+                  flexDirection: 'row', gap: 8, alignItems: 'center',
+                  padding: 6, backgroundColor: C.bgInput, borderRadius: 4,
+                }}>
+                  <Box style={{
+                    paddingLeft: 4, paddingRight: 4, paddingTop: 1, paddingBottom: 1,
+                    borderRadius: 3, backgroundColor: req.method === 'GET' ? '#1a3a2a' : '#1a2a3a',
+                  }}>
+                    <Text style={{ fontSize: 8, color: req.method === 'GET' ? C.green : '#5dade2', fontWeight: 'bold' }}>
+                      {req.method}
+                    </Text>
+                  </Box>
+                  <Text style={{ fontSize: 11, color: C.text }}>{req.path}</Text>
+                </Box>
+              ))}
+            </Box>
+          </ScrollView>
+        </Box>
+      )}
     </Box>
   );
 }
