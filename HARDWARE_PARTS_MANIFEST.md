@@ -1,14 +1,46 @@
 # Hardware Parts Manifest — Virtual Component Playground
 
+This is a subsystem spec. Every hardware part becomes a Lua visual capability.
+Multiple Claude instances build from this manifest in parallel. The contracts
+below are non-negotiable — they exist so 20 parts built by 20 Claudes converge
+into one coherent system.
+
+---
+
+## Architecture: Three Systems (NOT One)
+
+The hardware playground is three distinct systems. They share data, not code.
+No part may implement concerns from another system.
+
+### System A — Part Renderer
+Each hardware capability draws itself and simulates local behavior.
+Lives in `lua/capabilities/hw/`. One file per part.
+
+### System B — Wiring / Netlist
+Tracks connections between parts: net names, signal propagation, bus grouping,
+wire visuals. Lives in `lua/hw/netlist.lua` and `lua/hw/wire.lua`.
+Parts do NOT own their wires. Parts expose anchors. The netlist connects them.
+
+### System C — Hardware Backend
+Routes part I/O to either simulated signals or real hardware adapters.
+Lives in `lua/hw/backend_sim.lua` and `lua/hw/backend_real.lua`.
+Parts call `backend:read(pin)` / `backend:write(pin, value)`. They never
+call `libgpiod` or `serial` directly.
+
+**If a part draws itself AND manages global connection state AND directly
+pokes hardware — that part is wrong. Rewrite it.**
+
+---
+
 ## Foundation Rules (NON-NEGOTIABLE)
 
-Every part in this catalog becomes a **Lua visual capability**. Not a React component.
+Every part is a **Lua visual capability**. Not a React component.
 Not a .tslx. Not a useEffect animation. Pure Lua.
 
 - `render(node, canvas, opacity)` — all drawing via `love.graphics`
 - `tick(node, dt)` — all animation, simulation state, timing
 - `pushEvent(node, name, data)` — all events back to React
-- React's only job: `<Native type="DHT22" temp={22.5} />` — declare and pass props
+- React's only job: `<Native type="HW_DHT22" temp={22.5} />` — declare and pass props
 - Zero JS in the visual/interactive loop. LuaJIT runs at 60fps. QuickJS does not.
 
 ### Reference implementations
@@ -16,36 +48,398 @@ Not a .tslx. Not a useEffect animation. Pure Lua.
 - `lua/capabilities/led_matrix.lua` — visual + animation: NxM grid, patterns, scroll text
 - `lua/capabilities/gpio_pin.lua` — non-visual: real hardware I/O lifecycle
 
-### File convention
-Each part: `lua/capabilities/hw/<category>/<part_name>.lua`
-Each part registers via `Capabilities.register("HW_PartName", { visual = true, ... })`
-React usage: `<Native type="HW_PartName" prop1={val} />`
+### Naming convention (STRICT)
+- Capability type: `HW_ArduinoUno`, `HW_LED`, `HW_DHT22` — always `HW_` prefix
+- No mixed abbreviations. No pretty names at runtime layer.
+- Human-facing labels can be pretty. Capability IDs stay boring and predictable.
+- React usage: `<Native type="HW_ArduinoUno" />`
 
-### Rendering pattern (copy this)
+### File convention
+```
+lua/capabilities/hw/
+  _colors.lua          — shared color palette
+  _draw.lua            — shared drawing helpers
+  _simulate.lua        — shared simulation helpers
+  _anchors.lua         — shared anchor/pin helpers
+  _layout.lua          — shared board layout helpers
+  development_boards/
+    arduino_uno.lua
+    arduino_nano.lua
+    esp32_devkit.lua
+    ...
+  displays/
+    oled_ssd1306.lua
+    lcd_hd44780.lua
+    seven_segment.lua
+    ...
+  sensors/
+    dht22.lua
+    hc_sr04.lua
+    ...
+  actuators/
+    servo_sg90.lua
+    ...
+  input/
+    rotary_encoder.lua
+    potentiometer.lua
+    tactile_button.lua
+    ...
+  communication/
+    esp8266_module.lua
+    ...
+  passive/
+    led.lua
+    resistor.lua
+    capacitor.lua
+    breadboard.lua
+    wire.lua
+    ...
+  motor/
+    stepper_nema17.lua
+    ...
+  breakout/
+    rtc_ds3231.lua
+    ...
+```
+
+Each part registers via:
 ```lua
+Capabilities.register("HW_PartName", { visual = true, ... })
+```
+
+---
+
+## Mandatory Capability Skeleton
+
+**Every part MUST implement this exact structure.** No variations. No shortcuts.
+No "I'll add the pins later." If a field doesn't apply, set it to `nil` or `{}`.
+
+```lua
+local Capabilities = require("lua.capabilities")
+local Colors = require("lua.capabilities.hw._colors")
+local Draw = require("lua.capabilities.hw._draw")
+local Anchors = require("lua.capabilities.hw._anchors")
+
+-- ============================================================================
+-- Internal coordinate system (part draws at this scale, container scales it)
+-- ============================================================================
+local INTERNAL_W = 400   -- choose per part
+local INTERNAL_H = 260
+
+-- ============================================================================
+-- Logical pins (what the part IS electrically)
+-- ============================================================================
+local PINS = {
+  { id = "D13",  kind = "gpio",   direction = "bidirectional" },
+  { id = "GND",  kind = "ground", direction = "sink" },
+  { id = "5V",   kind = "power",  direction = "source" },
+  { id = "A0",   kind = "analog", direction = "input" },
+  { id = "SDA",  kind = "i2c",    direction = "bidirectional" },
+  -- ...
+}
+
+-- ============================================================================
+-- Visual anchors (where pins appear in internal coordinate space)
+-- Separate from logical pins. Wiring system uses these. Schematic view ignores them.
+-- ============================================================================
+local ANCHORS = {
+  D13 = { x = 340, y = 42 },
+  GND = { x = 340, y = 190 },
+  ["5V"] = { x = 12, y = 30 },
+  A0  = { x = 12, y = 80 },
+  SDA = { x = 12, y = 130 },
+  -- ...
+}
+
+-- ============================================================================
+-- Validation rules (machine-readable, consumed by netlist validator)
+-- ============================================================================
+local VALIDATION = {
+  bus = nil,                        -- "i2c", "spi", "uart", or nil
+  i2cAddress = nil,                 -- 7-bit address if I2C device
+  maxVoltage = 5,                   -- max input voltage
+  requirements = {},                -- e.g. {"resistor_for_led"}
+  warnings = {},                    -- e.g. {"no_5v_to_3v3_device"}
+  pwmCapable = {},                  -- pin IDs that support PWM
+}
+
+-- ============================================================================
+-- Static geometry cache (built once in init, NEVER in render)
+-- ============================================================================
+local _cache = {}
+
+-- ============================================================================
+-- Lifecycle
+-- ============================================================================
+
+local function init(node)
+  -- Build all static geometry, label positions, color lookups.
+  -- Store in node.state._cache or a local upvalue.
+  -- This runs ONCE when the node is created.
+  node.state = node.state or {}
+  node.state.time = 0
+  node.state._cache = {}
+  -- Pre-compute anything that doesn't change per-frame:
+  -- pin positions, label strings, color tables, glow radii, etc.
+end
+
+local function tick(node, dt)
+  -- Update ONLY time-varying state: animation timers, simulation values,
+  -- LED blink phase, servo angle interpolation, sensor data generation.
+  -- NO table creation. NO string building. NO color computation.
+  -- Write to node.state.* fields that render() will read.
+  node.state.time = (node.state.time or 0) + dt
+end
+
 local function render(node, c, opacity)
   local x, y = node.layout.x, node.layout.y
   local w, h = node.layout.width, node.layout.height
+
   -- Scale internal coordinate system to fit container
   local scaleX = w / INTERNAL_W
   local scaleY = h / INTERNAL_H
   local scale = math.min(scaleX, scaleY)
+
   love.graphics.push()
-  love.graphics.translate(x + (w - INTERNAL_W * scale) / 2, y + (h - INTERNAL_H * scale) / 2)
+  love.graphics.translate(
+    x + (w - INTERNAL_W * scale) / 2,
+    y + (h - INTERNAL_H * scale) / 2
+  )
   love.graphics.scale(scale)
-  -- ... draw at internal coordinates ...
+
+  -- Draw ONLY from cached state. No computation here.
+  -- Use Colors.* for all colors. Use Draw.* for shared shapes.
+
   love.graphics.pop()
 end
+
+local function destroy(node)
+  -- Clean up any resources (rare for visual-only parts)
+end
+
+-- ============================================================================
+-- Registration
+-- ============================================================================
+
+Capabilities.register("HW_PartName", {
+  visual = true,
+  interactive = true,       -- set false for display-only parts
+  category = "development_boards",
+  version = 1,
+
+  propsSchema = {
+    -- Every prop that React can set, with types
+    digitalPins = "table",
+    simulate    = "boolean",
+  },
+
+  defaultProps = {
+    -- Defaults for every prop. simulate is ALWAYS defaulted true.
+    simulate = true,
+  },
+
+  -- Logical pin and anchor definitions (consumed by netlist/wiring systems)
+  pins = PINS,
+  anchors = ANCHORS,
+  validation = VALIDATION,
+
+  -- Internal dimensions (consumed by wiring system for anchor scaling)
+  internalSize = { w = INTERNAL_W, h = INTERNAL_H },
+
+  -- Lifecycle
+  init = init,
+  tick = tick,
+  render = render,
+  destroy = destroy,
+})
 ```
 
-### Simulation model
-Each part has two modes, selected by a `simulate` prop (default true in playground):
-- **simulate = true**: Part runs its own physics/behavior in `tick()`. A DHT22 generates
-  fake temperature curves. A servo animates to target angle. An OLED renders pixel buffer.
-- **simulate = false**: Part talks to real hardware via the gpio/i2c/serial modules.
-  Same visual, real data.
+**This is the shape. Every part. No exceptions.**
 
-React code is identical in both modes. That's the whole point.
+---
+
+## Derived State Cache Rules (LAW, not suggestion)
+
+These are performance rules. Violating them causes frame drops at scale.
+
+| Function | MAY do | MUST NOT do |
+|----------|--------|-------------|
+| `init()` | Create tables, build geometry, compute labels, cache colors | — |
+| `tick()` | Update numbers/booleans in `node.state.*` | Create tables, build strings, compute colors |
+| `render()` | Read `node.state.*`, call `love.graphics.*`, use `Draw.*` | Create tables, build strings, compute colors, call any non-drawing function |
+
+**Specific prohibitions in `render()`:**
+- No `string.format()` — pre-build strings in `tick()` or `init()`
+- No `{ r, g, b, a }` table literals — use pre-allocated color tables from `Colors.*`
+- No `math.sin/cos` for color — pre-compute in `tick()`, store result
+- No `table.insert` — no table creation at all
+- `math.sin/cos` for position/rotation is OK (cheap, no allocation)
+
+---
+
+## Logical Pins vs Visual Anchors (CRITICAL SEPARATION)
+
+Every part defines TWO related but distinct structures:
+
+### Logical pins (`PINS` table)
+What the part IS electrically. Used by validation, netlist, and schematic view.
+
+```lua
+{ id = "D13", kind = "gpio", direction = "bidirectional" }
+{ id = "GND", kind = "ground", direction = "sink" }
+{ id = "SDA", kind = "i2c", direction = "bidirectional" }
+{ id = "TX",  kind = "uart", direction = "output" }
+```
+
+**Pin kinds:** `gpio`, `analog`, `power`, `ground`, `i2c`, `spi`, `uart`, `pwm`, `data`, `nc`
+**Directions:** `input`, `output`, `bidirectional`, `source`, `sink`
+
+### Visual anchors (`ANCHORS` table)
+Where pins appear in render-space. Used by wiring system for wire attachment.
+
+```lua
+D13 = { x = 340, y = 42 }
+GND = { x = 340, y = 190 }
+```
+
+Coordinates are in the part's internal coordinate system (pre-scale).
+
+### Why they're separate
+- Wires use anchors (render coordinates)
+- Validation uses pins (electrical rules)
+- Board view needs both
+- Schematic view ignores anchors entirely
+- A pin may exist without a visible anchor (internal connections)
+- An anchor may move if the part has multiple visual modes
+
+---
+
+## Prop Parity Rule (PROTECT THIS)
+
+> React code is identical in both modes. That's the whole point.
+
+This is the thesis. Hard rules:
+
+- **No prop may exist only for simulation** unless prefixed `sim_` (e.g. `sim_noiseLevel`)
+- **No prop may exist only for real mode** unless it is transport/backend config (e.g. `i2cBus`, `serialPort`)
+- **Domain props describe the part, not the implementation path.** `temperature` is a domain prop. `fakeTemperature` is wrong — it's just `temperature` and the backend decides where it comes from.
+- A user switching from `simulate=true` to `simulate=false` should change ZERO other props to get the same behavior with real hardware.
+
+---
+
+## Simulation Model
+
+Each part has two modes, selected by a `simulate` prop (default `true`):
+
+- **simulate = true**: Part generates its own data in `tick()`. A DHT22 produces
+  sine-wave temperature curves. A servo animates to target angle. An OLED renders
+  its demo screen. The simulation helpers in `_simulate.lua` provide noise, curves,
+  random triggers, and fake data streams.
+- **simulate = false**: Part reads/writes through the hardware backend (`System C`).
+  Same visual rendering, real data. If the backend is unavailable, the part renders
+  normally with stale/zero data — it does NOT crash or error.
+
+---
+
+## Shared Foundation Modules (build BEFORE any parts)
+
+### `lua/capabilities/hw/_colors.lua`
+Shared color palette for all parts. Consistency across 50+ parts requires ONE palette.
+
+Must include:
+- PCB colors: substrate green, edge, soldermask, silkscreen white
+- Metal: copper, gold, solder, silver, tin
+- Component bodies: IC black, resistor tan, capacitor blue/orange, LED dome colors
+- LED glow: red, green, blue, yellow, white, cyan, purple (each with on/off/glow variants)
+- Wire colors: red, black, orange, yellow, green, blue, white, purple, grey, brown
+- State indicators: active green, warning amber, error red, inactive grey
+- PCB variants: Arduino blue, Raspberry Pi green, ESP32 black, Adafruit purple, SparkFun red
+
+### `lua/capabilities/hw/_draw.lua`
+Shared drawing primitives. Every part uses these instead of raw `love.graphics`.
+
+Must include:
+- `drawRoundRect(x, y, w, h, r, color, opacity)` — rounded rectangle
+- `drawPad(cx, cy, size, color, opacity)` — solder pad / hole
+- `drawIC(x, y, w, h, label, pinCount, opacity)` — DIP/QFP/QFN package
+- `drawPinHeader(x, y, cols, rows, pitch, opacity)` — pin header grid
+- `drawLED(cx, cy, r, color, on, brightness, opacity)` — LED with glow halo
+- `drawResistorBands(x, y, w, h, ohms, opacity)` — color-coded resistor
+- `drawCapacitor(x, y, type, value, opacity)` — ceramic disc or electrolytic
+- `drawUSBPort(x, y, type, opacity)` — USB-A/B/C/micro/mini
+- `drawBarrelJack(x, y, opacity)` — DC power jack
+- `drawScrewTerminal(x, y, count, opacity)` — screw terminals
+- `drawCrystal(x, y, opacity)` — oscillator crystal
+- `drawLabel(x, y, text, fontSize, color, opacity)` — silkscreen label
+- `drawMountingHole(cx, cy, r, opacity)` — PCB mounting hole
+- `drawTrace(points, width, color, opacity)` — copper trace between points
+- `drawWire(x1, y1, x2, y2, color, opacity)` — bezier jumper wire
+- `drawGlow(cx, cy, r, color, intensity, opacity)` — radial glow effect
+
+### `lua/capabilities/hw/_simulate.lua`
+Shared simulation helpers for `tick()` functions.
+
+Must include:
+- `sineWave(time, frequency, min, max)` — smooth oscillation
+- `noise(time, amplitude)` — Perlin-ish noise for sensor jitter
+- `randomTrigger(dt, probability)` — stochastic event firing
+- `lerp(current, target, speed, dt)` — smooth value interpolation
+- `stepToward(current, target, stepSize, dt)` — discrete stepping
+- `blinkPhase(time, onDuration, offDuration)` — returns true/false
+- `pulseIntensity(time, frequency)` — 0-1 pulse for LED glow
+- `fakeTempCurve(time)` — realistic temperature variation
+- `fakeHumidityCurve(time)` — realistic humidity variation
+- `fakePressureCurve(time)` — realistic barometric variation
+- `fakeGPSPath(time)` — lat/lon walking a path
+- `fakeSerialStream(time)` — generates plausible serial data
+
+### `lua/capabilities/hw/_anchors.lua`
+Helpers for pin/anchor management and hit testing.
+
+Must include:
+- `createAnchorMap(pins, anchors)` — validate pins have matching anchors
+- `hitTestAnchor(anchors, internalX, internalY, radius)` — find anchor under point
+- `anchorToScreen(anchor, nodeLayout, internalSize)` — convert internal coords to screen
+- `screenToAnchor(screenX, screenY, nodeLayout, internalSize)` — reverse mapping
+- `nearestAnchor(anchors, x, y)` — snap-to-nearest for wire attachment
+- `anchorBounds(anchors)` — bounding box of all anchors
+- `labelPosition(anchor, side)` — compute label placement relative to anchor
+
+### `lua/capabilities/hw/_layout.lua`
+Common board layout patterns — eliminates repeated placement math across parts.
+
+Must include:
+- `pinHeaderRow(startX, startY, count, pitch, direction)` — generate anchor positions for a row of pins
+- `pinHeaderGrid(startX, startY, cols, rows, pitch)` — 2D pin header
+- `dipPackage(x, y, w, h, pinCount)` — DIP IC pin positions
+- `qfpPackage(x, y, size, pinCount)` — QFP IC pin positions
+- `breakoutCenter(boardW, boardH, componentW, componentH)` — center a component on a breakout PCB
+- `pcbMargins(internalW, internalH, margin)` — usable area inside PCB edges
+- `screwTerminalRow(startX, startY, count, pitch)` — terminal block positions
+- `matrixGrid(startX, startY, cols, rows, cellSize, gap)` — LED/pixel matrix positions
+
+---
+
+## Quality Acceptance Checklist
+
+Every part must pass ALL of these before merge. No exceptions.
+
+- [ ] **Recognizable silhouette** — someone who has used the real part recognizes it instantly
+- [ ] **Reads clearly at thumbnail scale** — identifiable even in a 60x60 sidebar tile
+- [ ] **Scales cleanly** — internal coord system + uniform scale, no pixel artifacts at any size
+- [ ] **At least one animated/live state** — LED glow, blink, pulse, rotation, data readout
+- [ ] **All props documented** in propsSchema with types
+- [ ] **All logical pins defined** in PINS with kind + direction
+- [ ] **All visual anchors defined** in ANCHORS with internal coordinates
+- [ ] **No render-time allocations** — zero table creation, zero string building in render()
+- [ ] **simulate=true works standalone** — part is interesting without any wiring or backend
+- [ ] **simulate=false does not crash** — gracefully shows stale/zero data if backend unavailable
+- [ ] **Emits at least one event** if interactive (buttons, encoders, sensors)
+- [ ] **Selected/hover visual state** if the part has clickable surfaces
+- [ ] **Uses shared palette** — all colors from `_colors.lua`, not local hex values
+- [ ] **Uses shared drawing helpers** — `_draw.lua` for standard shapes, not bespoke duplicates
+- [ ] **Follows the skeleton exactly** — init/tick/render/destroy, PINS, ANCHORS, VALIDATION, propsSchema, defaultProps
+- [ ] **`simulate` prop defaults to `true`** in defaultProps
 
 ---
 
@@ -55,124 +449,146 @@ Status key: `[ ]` not started, `[~]` in progress, `[x]` done
 
 ---
 
-### CATEGORY: Development Boards
+### CATEGORY: Development Boards (`development_boards/`)
 The brain of every project. Pin headers, power rails, status LEDs.
 
-#### `[x] PCBBoard` (exists — lua/capabilities/pcb_board.lua)
+#### `[x] HW_PCBBoard` (exists — lua/capabilities/pcb_board.lua, needs migration to hw/ skeleton)
 - Generic stylized PCB. Already renders IC chips, headers, traces, LED.
 - Reference implementation for all board visuals.
+- **Migration needed:** move to `hw/development_boards/`, add PINS/ANCHORS/VALIDATION, rename type to `HW_PCBBoard`
 
-#### `[ ] ArduinoUno`
+#### `[ ] HW_ArduinoUno`
 - **What it is:** ATmega328P dev board, the most common starter board on earth
 - **Visual:** Blue PCB, USB-B port, DC barrel jack, crystal, ATmega328P DIP-28, reset button, 2x digital pin headers (D0-D13), 1x analog header (A0-A5), 1x power header, L/TX/RX/ON LEDs, ICSP header
 - **Internal coords:** 400x260 (real board is ~68.6x53.4mm)
 - **Interactive surfaces:** Pin headers highlight on hover, LEDs animate, reset button is pressable
-- **Props:** `digitalPins: number[]` (D0-D13 HIGH/LOW state), `analogPins: number[]` (A0-A5 0-1023), `powerLed: bool`, `txLed: bool`, `rxLed: bool`, `userLed: bool` (pin 13)
-- **Events:** `onPinTap(pin, type)` — user clicked a pin
+- **Props:** `digitalPins: table` (D0-D13 HIGH/LOW state), `analogPins: table` (A0-A5 0-1023), `powerLed: bool`, `txLed: bool`, `rxLed: bool`, `userLed: bool` (pin 13)
+- **Events:** `onPinTap(pin, type)` — user clicked a pin, `onReset()` — reset button pressed
 - **Simulation:** TX/RX LEDs flicker when serial data flows, user LED mirrors D13 state
+- **Pins:** D0-D13 (gpio), A0-A5 (analog), 5V/3.3V/VIN (power), GND x3 (ground), SDA/SCL (i2c), MOSI/MISO/SCK/SS (spi), TX/RX (uart), RESET (control), AREF (reference)
+- **Anchors:** Along top edge (digital), bottom edge (analog + power), ICSP cluster center-right
 
-#### `[ ] ArduinoNano`
+#### `[ ] HW_ArduinoNano`
 - **What it is:** Compact ATmega328P board, breadboard-friendly
 - **Visual:** Blue/black PCB, mini-USB, pin headers along both long edges, smaller form factor
 - **Internal coords:** 340x140 (real: 45x18mm)
-- **Props:** Same as Uno but compact layout
+- **Props:** Same pin set as Uno but compact two-row layout
 - **Events:** `onPinTap(pin, type)`
+- **Pins:** Same as Uno
+- **Anchors:** Two rows along long edges, 15 per side
 
-#### `[ ] ESP32DevKit`
+#### `[ ] HW_ESP32DevKit`
 - **What it is:** ESP-WROOM-32 module on breakout board, WiFi + BLE
 - **Visual:** Black PCB, USB-C/micro-USB, silver RF shield with ESP32 label, 2x15 pin headers, EN + BOOT buttons, red power LED
 - **Internal coords:** 360x180
 - **Props:** `pins: table`, `wifiConnected: bool`, `bleConnected: bool`, `powerLed: bool`
 - **Events:** `onPinTap(pin)`, `onBootPress()`, `onResetPress()`
 - **Simulation:** WiFi icon indicator, BLE icon indicator
+- **Pins:** GPIO0-GPIO39 (gpio, many also analog/touch/pwm), 3.3V/5V (power), GND x3 (ground), SDA/SCL (i2c), MOSI/MISO/SCK/SS (spi), TX/RX (uart), EN (control)
+- **Anchors:** Two rows of 15, along long edges
 
-#### `[ ] RaspberryPiGPIO`
+#### `[ ] HW_RaspberryPiGPIO`
 - **What it is:** 40-pin GPIO header as found on Pi 3/4/5
 - **Visual:** Green PCB snippet showing the 2x20 pin header, color-coded by function (power=red, ground=black, GPIO=green, I2C=blue, SPI=purple, UART=orange), pin numbers and BCM labels
 - **Internal coords:** 300x200
 - **Props:** `pinStates: table` (BCM number -> HIGH/LOW), `i2cActive: bool`, `spiActive: bool`, `uartActive: bool`
 - **Events:** `onPinTap(bcm, physicalPin)`
 - **Note:** This is just the header, not the full Pi board — meant for wiring diagrams
+- **Pins:** BCM0-BCM27 (gpio), 3.3V x2 (power), 5V x2 (power), GND x8 (ground), SDA/SCL (i2c), MOSI/MISO/SCLK/CE0/CE1 (spi), TXD/RXD (uart), ID_SD/ID_SC (i2c eeprom)
+- **Anchors:** 2x20 grid, 2.54mm pitch scaled to internal coords
 
-#### `[ ] STM32BluePill`
+#### `[ ] HW_STM32BluePill`
 - **What it is:** STM32F103C8T6 board, popular cheap ARM board
 - **Visual:** Blue PCB, micro-USB, STM32 chip (QFP-48), 2x20 pin headers, reset button, boot jumpers, power LED
 - **Internal coords:** 360x160
 - **Props:** `pins: table`, `bootMode: number` (0 or 1)
+- **Pins:** PA0-PA15, PB0-PB15, PC13-PC15 (gpio), 3.3V/5V (power), GND (ground), SDA/SCL (i2c), MOSI/MISO/SCK (spi), TX/RX (uart), BOOT0/BOOT1 (control)
 
 ---
 
-### CATEGORY: Displays
+### CATEGORY: Displays (`displays/`)
 Visual output — the things people want to see working first.
 
-#### `[x] LEDMatrix` (exists — lua/capabilities/led_matrix.lua)
+#### `[x] HW_LEDMatrix` (exists — lua/capabilities/led_matrix.lua, needs migration)
 - NxM dot matrix with glow effects, patterns, scroll text. Already done.
+- **Migration needed:** move to `hw/displays/`, add PINS/ANCHORS/VALIDATION, rename type
 
-#### `[ ] OLED_SSD1306`
+#### `[ ] HW_OLED_SSD1306`
 - **What it is:** 0.96" 128x64 monochrome OLED, I2C (addr 0x3C). The most common small display.
 - **Visual:** Black PCB, 4-pin header (GND/VCC/SCL/SDA), display area with pixel grid, blue or white pixels on black. Slight bezel.
 - **Internal coords:** 200x160 (PCB), display area 128x64 logical pixels
 - **Render:** Pixel buffer as Lua table, drawn as tiny filled rects. Glow optional for OLED look.
 - **Props:** `pixels: string` (base64 encoded 128x64 bitmap or nil for built-in demo), `contrast: number`, `inverted: bool`, `enabled: bool`
 - **Simulation:** If no pixel data provided, cycles demo screens (logo, text, bars, scrolling)
-- **Events:** none (display only)
-- **Text rendering:** Built-in 5x7 font (extend from LED matrix font), `drawText(x, y, str)` helper
+- **Events:** none (display only, `interactive = false`)
+- **Pins:** GND (ground), VCC (power), SCL (i2c), SDA (i2c)
+- **Anchors:** 4-pin header at bottom edge
+- **Validation:** `bus = "i2c"`, `i2cAddress = 0x3C`
 
-#### `[ ] LCD_HD44780`
+#### `[ ] HW_LCD_HD44780`
 - **What it is:** 16x2 or 20x4 character LCD, parallel or I2C backpack
 - **Visual:** Green/blue background with dark characters, 16-pin header or 4-pin I2C, potentiometer for contrast, backlight glow
 - **Internal coords:** 320x120 (16x2), 380x160 (20x4)
 - **Render:** Character cells on a grid, each cell is a 5x8 dot matrix. Background glow.
-- **Props:** `cols: number` (16/20), `rows: number` (2/4), `text: string[]` (array of row strings), `backlight: bool`, `cursorPos: {row, col}`, `cursorBlink: bool`, `contrast: number`
+- **Props:** `cols: number` (16/20), `rows: number` (2/4), `text: table` (array of row strings), `backlight: bool`, `cursorPos: table` ({row, col}), `cursorBlink: bool`, `contrast: number`
 - **Simulation:** Cursor blink animation, backlight on/off transition
-- **Events:** none (display only)
+- **Events:** none (`interactive = false`)
+- **Pins (I2C mode):** GND (ground), VCC (power), SDA (i2c), SCL (i2c)
+- **Validation:** `bus = "i2c"`, `i2cAddress = 0x27`
 
-#### `[ ] SevenSegment`
+#### `[ ] HW_SevenSegment`
 - **What it is:** 7-segment LED display (1-8 digits), common anode/cathode
 - **Visual:** Dark PCB, each digit is 7 segments + decimal point, LED glow effect per segment
 - **Internal coords:** 60 per digit width, 100 height
 - **Props:** `digits: number` (1-8), `value: string` (e.g. "12.34"), `color: string`, `leadingZeros: bool`, `colonPosition: number` (for clock displays)
 - **Simulation:** Segment-by-segment rendering with glow, colon blink for clock mode
-- **Events:** none
+- **Events:** none (`interactive = false`)
+- **Pins:** VCC (power), GND (ground), DIN (data), CLK (gpio), LATCH (gpio)
 
-#### `[ ] NeopixelStrip`
+#### `[ ] HW_NeopixelStrip`
 - **What it is:** WS2812B addressable RGB LED strip/ring
 - **Visual:** Black flex PCB strip with round RGB LEDs, or circular ring layout
-- **Props:** `count: number`, `layout: "strip"|"ring"|"matrix"`, `colors: number[]` (packed RGB per LED), `brightness: number`
+- **Props:** `count: number`, `layout: string` ("strip"|"ring"|"matrix"), `colors: table` (packed RGB per LED), `brightness: number`, `pattern: string`
 - **Render:** Each LED is a circle with RGB color and glow. Ring mode arranges in circle. Matrix mode arranges in grid.
 - **Simulation:** Rainbow cycle, chase, breathe, solid — selectable via `pattern` prop
-- **Events:** none
+- **Events:** none (`interactive = false`)
+- **Pins:** DIN (data), 5V (power), GND (ground)
 
-#### `[ ] TFT_ST7789`
+#### `[ ] HW_TFT_ST7789`
 - **What it is:** 1.3"/1.54" 240x240 or 240x320 color TFT display, SPI
 - **Visual:** Black PCB, 7-8 pin header, full color display area
 - **Internal coords:** 280x300 (with PCB border)
 - **Props:** `width: number`, `height: number`, `framebuffer: string` (RGB565 base64), `rotation: number`
 - **Simulation:** Color bars, bouncing logo, gradient demo
-- **Note:** Higher complexity — good stretch goal
+- **Pins:** GND (ground), VCC (power), SCL (spi), SDA (spi), RES (gpio), DC (gpio), CS (spi), BLK (gpio)
+- **Validation:** `bus = "spi"`
+- **Note:** Stretch goal — framebuffer decode is expensive
 
-#### `[ ] EInk_IL3829`
+#### `[ ] HW_EInk`
 - **What it is:** 2.13" e-ink/e-paper display (common Waveshare modules), SPI
 - **Visual:** White PCB, display area with papery texture, slow refresh animation
 - **Props:** `pixels: string`, `partialRefresh: bool`
-- **Simulation:** Full refresh animation (black flash → image), partial refresh for clock demo
+- **Simulation:** Full refresh animation (black flash then image), partial refresh for clock demo
 - **Render:** Black/white/red pixels on off-white background, slight paper texture
+- **Pins:** VCC (power), GND (ground), DIN (spi), CLK (spi), CS (spi), DC (gpio), RST (gpio), BUSY (gpio)
+- **Validation:** `bus = "spi"`
 
 ---
 
-### CATEGORY: Sensors
+### CATEGORY: Sensors (`sensors/`)
 The input side — temperature, distance, motion, light, pressure.
 
-#### `[ ] DHT22`
+#### `[ ] HW_DHT22`
 - **What it is:** Digital temperature + humidity sensor (also DHT11 variant)
 - **Visual:** White plastic housing with grid ventilation pattern, 4 pins (VCC, DATA, NC, GND), small PCB breakout option
 - **Internal coords:** 120x160
-- **Props:** `temperature: number` (-40 to 80 C), `humidity: number` (0-100%), `variant: "DHT11"|"DHT22"`
+- **Props:** `temperature: number` (-40 to 80 C), `humidity: number` (0-100%), `variant: string` ("DHT11"|"DHT22")
 - **Visual state:** Small readout text on the part showing current values, data pin pulses on read
 - **Simulation:** Generates slow sine-wave temperature (20-28C) and humidity (40-65%) curves with noise
 - **Events:** `onRead(temp, humidity)` — fires at configurable interval
+- **Pins:** VCC (power), DATA (data), NC (nc), GND (ground)
 
-#### `[ ] HC_SR04`
+#### `[ ] HW_HC_SR04`
 - **What it is:** Ultrasonic distance sensor, the one with two silver cylinders
 - **Visual:** Blue PCB, two silver ultrasonic transducers (circles), 4-pin header (VCC/TRIG/ECHO/GND), crystal oscillator
 - **Internal coords:** 180x120
@@ -180,122 +596,137 @@ The input side — temperature, distance, motion, light, pressure.
 - **Visual state:** Animated sound wave arcs emanating from transducers when measuring, distance readout
 - **Simulation:** Returns configurable distance, animated wave pulse visualization
 - **Events:** `onMeasure(distanceCm)`
+- **Pins:** VCC (power), TRIG (gpio, output), ECHO (gpio, input), GND (ground)
 
-#### `[ ] PIR_HCSR501`
-- **What it is:** Passive infrared motion sensor, the dome one
+#### `[ ] HW_PIR`
+- **What it is:** HC-SR501 passive infrared motion sensor, the dome one
 - **Visual:** Green PCB, white Fresnel lens dome, 3 pins (VCC/OUT/GND), two potentiometers (sensitivity + delay)
 - **Internal coords:** 140x140
 - **Props:** `motionDetected: bool`, `sensitivity: number`, `delay: number`
 - **Visual state:** Dome lights up / pulses when motion detected, LED indicator
 - **Simulation:** Random motion triggers based on sensitivity setting
-- **Events:** `onMotion(detected: bool)`
+- **Events:** `onMotion(detected)`
+- **Pins:** VCC (power), OUT (gpio, output), GND (ground)
 
-#### `[ ] BMP280`
+#### `[ ] HW_BMP280`
 - **What it is:** Barometric pressure + temperature sensor, I2C, tiny breakout board
 - **Visual:** Purple/blue PCB, small silver sensor package, 4-6 pin header
 - **Internal coords:** 100x80
 - **Props:** `temperature: number`, `pressure: number` (hPa), `altitude: number` (m)
 - **Simulation:** Slow pressure/temp curves simulating weather changes
 - **Events:** `onRead(temp, pressure, altitude)`
+- **Pins:** VCC (power), GND (ground), SCL (i2c), SDA (i2c)
+- **Validation:** `bus = "i2c"`, `i2cAddress = 0x76`
 
-#### `[ ] MPU6050`
+#### `[ ] HW_MPU6050`
 - **What it is:** 6-axis accelerometer + gyroscope, I2C
 - **Visual:** Purple breakout board, small QFN IC, 8 pin header
 - **Internal coords:** 120x80
-- **Props:** `accel: {x,y,z}` (g), `gyro: {x,y,z}` (deg/s), `temperature: number`
+- **Props:** `accel: table` ({x,y,z} in g), `gyro: table` ({x,y,z} in deg/s), `temperature: number`
 - **Visual state:** Tilt visualization — a small 3D box that rotates based on accel/gyro
 - **Simulation:** Gentle wobble/drift or user-interactive tilt
 - **Events:** `onRead(accel, gyro, temp)`
+- **Pins:** VCC (power), GND (ground), SCL (i2c), SDA (i2c), INT (gpio, output), AD0 (gpio)
+- **Validation:** `bus = "i2c"`, `i2cAddress = 0x68`
 
-#### `[ ] Photoresistor`
+#### `[ ] HW_Photoresistor`
 - **What it is:** LDR (light-dependent resistor), analog sensor
 - **Visual:** Small disc with squiggly trace pattern, 2 leads, on mini breakout or bare
 - **Internal coords:** 60x80
 - **Props:** `lightLevel: number` (0-1023 analog), `resistance: number` (ohms)
 - **Simulation:** Slow ambient light variation
 - **Events:** `onRead(value)`
+- **Pins:** A (analog, input), GND (ground)
 
-#### `[ ] SoilMoisture`
+#### `[ ] HW_SoilMoisture`
 - **What it is:** Capacitive soil moisture sensor, analog
 - **Visual:** Long green PCB probe with traces, 3-pin header
 - **Internal coords:** 60x200
 - **Props:** `moisture: number` (0-100%), `raw: number` (0-1023)
 - **Simulation:** Slowly drying out then watered
 - **Events:** `onRead(moisture, raw)`
+- **Pins:** VCC (power), GND (ground), AOUT (analog, output)
 
-#### `[ ] IR_Receiver`
+#### `[ ] HW_IR_Receiver`
 - **What it is:** VS1838B IR receiver, 38kHz, used with remote controls
 - **Visual:** Dark dome on 3 pins, often on small PCB with LED indicator
 - **Internal coords:** 80x60
 - **Props:** `lastCode: string`, `protocol: string`
 - **Simulation:** Generates NEC protocol codes as if receiving remote presses
 - **Events:** `onReceive(code, protocol)`
+- **Pins:** VOUT (data, output), GND (ground), VCC (power)
 
 ---
 
-### CATEGORY: Actuators
+### CATEGORY: Actuators (`actuators/`)
 Things that move, make noise, or switch power.
 
-#### `[ ] Servo_SG90`
-- **What it is:** Micro servo motor, 0-180 degrees, the tiny blue one
+#### `[ ] HW_Servo`
+- **What it is:** SG90 micro servo motor, 0-180 degrees, the tiny blue one
 - **Visual:** Blue plastic body, output shaft with horn (white cross/arm), 3-wire cable (brown/red/orange)
 - **Internal coords:** 140x120
-- **Props:** `angle: number` (0-180), `speed: number` (deg/s for animation), `hornType: "cross"|"arm"|"wheel"`
+- **Props:** `angle: number` (0-180), `speed: number` (deg/s for animation), `hornType: string` ("cross"|"arm"|"wheel")
 - **Visual state:** Horn rotates to target angle with smooth animation in tick()
 - **Simulation:** Smooth rotation to target angle with configurable speed
 - **Events:** `onReach(angle)` — fires when servo reaches target
+- **Pins:** SIGNAL (pwm, input), VCC (power), GND (ground)
 
-#### `[ ] DCMotor_L298N`
+#### `[ ] HW_DCMotor`
 - **What it is:** L298N dual H-bridge motor driver + DC motor
 - **Visual:** Red PCB driver board with heatsink, screw terminals, 2x DC motors with spinning shaft visualization
 - **Internal coords:** 240x180
-- **Props:** `motorA: {speed: number, direction: "cw"|"ccw"|"stop"}`, `motorB: same`, `enableA: bool`, `enableB: bool`
+- **Props:** `motorA: table` ({speed, direction}), `motorB: table` ({speed, direction}), `enableA: bool`, `enableB: bool`
 - **Visual state:** Motor shafts rotate at visual speed, direction arrows
 - **Simulation:** Motor spin animation proportional to speed value
-- **Events:** none (output only)
+- **Events:** none (`interactive = false`)
+- **Pins:** IN1/IN2/IN3/IN4 (gpio, input), ENA/ENB (pwm, input), 12V/5V (power), GND (ground), OUT1/OUT2/OUT3/OUT4 (power, output)
 
-#### `[ ] Stepper_28BYJ48`
-- **What it is:** 5V stepper motor with ULN2003 driver board
+#### `[ ] HW_Stepper`
+- **What it is:** 28BYJ-48 5V stepper motor with ULN2003 driver board
 - **Visual:** Silver motor cylinder, blue driver PCB with 4 LEDs (A/B/C/D phases), 5-pin connector
 - **Internal coords:** 200x140
-- **Props:** `targetSteps: number`, `speed: number` (RPM), `direction: "cw"|"ccw"`, `stepMode: "full"|"half"`
+- **Props:** `targetSteps: number`, `speed: number` (RPM), `direction: string` ("cw"|"ccw"), `stepMode: string` ("full"|"half")
 - **Visual state:** Phase LEDs sequence, motor shaft rotates with step counting
 - **Simulation:** Step sequence animation with LED phases
 - **Events:** `onStep(currentStep, totalSteps)`, `onComplete()`
+- **Pins:** IN1/IN2/IN3/IN4 (gpio, input), 5V (power), GND (ground)
 
-#### `[ ] RelayModule`
+#### `[ ] HW_Relay`
 - **What it is:** 5V relay module (1/2/4 channel), optoisolated
 - **Visual:** Blue PCB, relay cube(s) with markings, LED indicator, screw terminals (NO/NC/COM), signal pins
 - **Internal coords:** 160x100 (1ch), 280x100 (2ch)
-- **Props:** `channels: number` (1-4), `states: bool[]` (per channel on/off)
+- **Props:** `channels: number` (1-4), `states: table` (per channel on/off)
 - **Visual state:** LED lights up, relay "clicks" (brief position shift animation), contact indicator switches NO/NC
 - **Simulation:** Click animation + LED toggle
 - **Events:** `onToggle(channel, state)`
+- **Pins (per channel):** IN (gpio, input), VCC (power), GND (ground), COM/NO/NC (power, output)
 
-#### `[ ] Buzzer`
+#### `[ ] HW_Buzzer`
 - **What it is:** Piezo buzzer, active or passive
 - **Visual:** Black cylinder on small PCB, 2 pins, + marking
 - **Internal coords:** 80x80
 - **Props:** `active: bool`, `frequency: number` (passive mode), `playing: bool`
 - **Visual state:** Vibration animation (subtle oscillation) when playing, sound wave rings
 - **Simulation:** Visual-only (sound wave animation). Real mode uses PWM.
-- **Events:** none
+- **Events:** none (`interactive = false`)
+- **Pins:** SIGNAL (pwm, input), GND (ground)
 
 ---
 
-### CATEGORY: Input Devices
+### CATEGORY: Input Devices (`input/`)
 Buttons, knobs, keypads — human-to-circuit interfaces.
 
-#### `[ ] RotaryEncoder`
+#### `[ ] HW_RotaryEncoder`
 - **What it is:** KY-040 rotary encoder with push button
 - **Visual:** Blue PCB, silver knob with knurled shaft, 5 pins (CLK/DT/SW/+/GND)
 - **Internal coords:** 100x120
 - **Props:** `value: number` (cumulative position), `pressed: bool`, `detents: number` (clicks per revolution)
 - **Visual state:** Knob rotates with value, press animation
 - **Interactive:** Mouse wheel or drag to rotate in simulation
-- **Events:** `onRotate(direction: "cw"|"ccw", value)`, `onPress()`, `onRelease()`
+- **Events:** `onRotate(direction, value)`, `onPress()`, `onRelease()`
+- **Pins:** CLK (gpio, output), DT (gpio, output), SW (gpio, output), VCC (power), GND (ground)
 
-#### `[ ] JoystickModule`
+#### `[ ] HW_Joystick`
 - **What it is:** Dual-axis analog joystick with button (PS2 style)
 - **Visual:** Black PCB, joystick cap (red/black), 5 pins (VRx/VRy/SW/5V/GND)
 - **Internal coords:** 120x120
@@ -303,26 +734,29 @@ Buttons, knobs, keypads — human-to-circuit interfaces.
 - **Visual state:** Stick visual tilts to match x/y, press animation
 - **Interactive:** Mouse drag to move stick in simulation
 - **Events:** `onMove(x, y)`, `onPress()`, `onRelease()`
+- **Pins:** VRx (analog, output), VRy (analog, output), SW (gpio, output), 5V (power), GND (ground)
 
-#### `[ ] Keypad4x4`
+#### `[ ] HW_Keypad`
 - **What it is:** 4x4 membrane matrix keypad (0-9, A-D, *, #)
 - **Visual:** White/grey membrane pad, 16 keys with labels, 8 pin ribbon cable
 - **Internal coords:** 200x260
-- **Props:** `pressedKey: string|nil`
+- **Props:** `pressedKey: string`
 - **Visual state:** Key press/release animation (darken on press)
 - **Interactive:** Click keys in simulation
-- **Events:** `onKeyDown(key: string)`, `onKeyUp(key: string)`
+- **Events:** `onKeyDown(key)`, `onKeyUp(key)`
+- **Pins:** R1/R2/R3/R4 (gpio, output), C1/C2/C3/C4 (gpio, input)
 
-#### `[ ] Potentiometer`
+#### `[ ] HW_Potentiometer`
 - **What it is:** 10K rotary potentiometer (the knob with 3 pins)
 - **Visual:** Blue/black body, metal shaft, 3 pins
 - **Internal coords:** 80x100
-- **Props:** `value: number` (0-1), `taper: "linear"|"log"`
+- **Props:** `value: number` (0-1), `taper: string` ("linear"|"log")
 - **Visual state:** Shaft rotation indicator
 - **Interactive:** Mouse drag to rotate
-- **Events:** `onChange(value: number)`
+- **Events:** `onChange(value)`
+- **Pins:** VCC (power), WIPER (analog, output), GND (ground)
 
-#### `[ ] Tactile Button`
+#### `[ ] HW_Button`
 - **What it is:** 6mm tactile switch, the tiny clicky ones
 - **Visual:** Small square, 4 pins, colored cap options (red/blue/green/yellow/black)
 - **Internal coords:** 40x40
@@ -330,13 +764,14 @@ Buttons, knobs, keypads — human-to-circuit interfaces.
 - **Visual state:** Depress animation on press
 - **Interactive:** Click to press in simulation
 - **Events:** `onPress()`, `onRelease()`
+- **Pins:** A1/A2 (gpio, bidirectional), B1/B2 (gpio, bidirectional)
 
 ---
 
-### CATEGORY: Communication Modules
+### CATEGORY: Communication Modules (`communication/`)
 WiFi, Bluetooth, Radio, GPS, RFID.
 
-#### `[ ] ESP8266_Module`
+#### `[ ] HW_ESP8266`
 - **What it is:** ESP-01 WiFi module, the tiny blue one with 8 pins
 - **Visual:** Blue PCB, black antenna trace, 2x4 pin header, red power LED
 - **Internal coords:** 120x100
@@ -344,24 +779,30 @@ WiFi, Bluetooth, Radio, GPS, RFID.
 - **Visual state:** LED on when powered, WiFi signal strength bars
 - **Simulation:** Fake connection lifecycle, signal strength variation
 - **Events:** `onConnect(ip)`, `onDisconnect()`, `onData(payload)`
+- **Pins:** VCC (power), GND (ground), TX (uart, output), RX (uart, input), CH_PD (gpio), RST (gpio), GPIO0 (gpio), GPIO2 (gpio)
+- **Validation:** `bus = "uart"`
 
-#### `[ ] HC05_Bluetooth`
+#### `[ ] HW_Bluetooth`
 - **What it is:** HC-05 Bluetooth SPP module
 - **Visual:** PCB with black Bluetooth module, red LED (blink=searching, solid=paired), 6 pins
 - **Internal coords:** 140x80
-- **Props:** `paired: bool`, `deviceName: string`, `led: "blink"|"solid"|"off"`
-- **Simulation:** Blink → pair → solid LED lifecycle
+- **Props:** `paired: bool`, `deviceName: string`, `led: string` ("blink"|"solid"|"off")
+- **Simulation:** Blink then pair then solid LED lifecycle
 - **Events:** `onPair(device)`, `onData(bytes)`
+- **Pins:** VCC (power), GND (ground), TX (uart, output), RX (uart, input), STATE (gpio, output), EN (gpio, input)
+- **Validation:** `bus = "uart"`
 
-#### `[ ] NRF24L01`
-- **What it is:** 2.4GHz wireless transceiver
+#### `[ ] HW_NRF24`
+- **What it is:** 2.4GHz wireless transceiver nRF24L01
 - **Visual:** Green PCB, silver antenna (or PCB antenna), 2x4 pin header
 - **Internal coords:** 120x100
 - **Props:** `channel: number`, `txPower: string`, `dataRate: string`, `sending: bool`
 - **Visual state:** TX animation (pulse from antenna) when sending
 - **Events:** `onReceive(pipe, data)`
+- **Pins:** VCC (power), GND (ground), CE (gpio), CSN (spi), SCK (spi), MOSI (spi), MISO (spi), IRQ (gpio)
+- **Validation:** `bus = "spi"`
 
-#### `[ ] GPS_NEO6M`
+#### `[ ] HW_GPS`
 - **What it is:** u-blox NEO-6M GPS module with ceramic antenna
 - **Visual:** PCB with large beige ceramic antenna, LED, 4-pin header
 - **Internal coords:** 140x140
@@ -369,8 +810,10 @@ WiFi, Bluetooth, Radio, GPS, RFID.
 - **Visual state:** LED blinks on fix, satellite count display
 - **Simulation:** Walks a fake GPS path, slow satellite acquisition
 - **Events:** `onFix(lat, lon, alt, satellites)`
+- **Pins:** VCC (power), GND (ground), TX (uart, output), RX (uart, input)
+- **Validation:** `bus = "uart"`
 
-#### `[ ] RFID_RC522`
+#### `[ ] HW_RFID`
 - **What it is:** MFRC522 RFID reader, 13.56MHz
 - **Visual:** Blue PCB, copper coil antenna visible, 8 pins, LED
 - **Internal coords:** 160x160
@@ -378,149 +821,176 @@ WiFi, Bluetooth, Radio, GPS, RFID.
 - **Visual state:** LED lights on card detect, RF field animation
 - **Simulation:** Periodic card detect/remove cycle
 - **Events:** `onCardDetect(uid, type)`, `onCardRemove()`
+- **Pins:** VCC (power), GND (ground), RST (gpio), IRQ (gpio), MISO (spi), MOSI (spi), SCK (spi), SDA/CS (spi)
+- **Validation:** `bus = "spi"`
 
 ---
 
-### CATEGORY: Power & Passive Components
+### CATEGORY: Passive Components (`passive/`)
 The boring-but-essential bits that complete every circuit.
 
-#### `[ ] Breadboard`
+#### `[ ] HW_Breadboard`
 - **What it is:** 830-point solderless breadboard (or half-size 400)
 - **Visual:** White/cream body, 5-hole rows, power rails (red/blue), center channel, labeled columns (a-j) and rows (1-63)
 - **Internal coords:** 600x200 (full), 300x200 (half)
-- **Props:** `size: "full"|"half"`, `connections: table` (list of {row, col, color} for placed wires)
+- **Props:** `size: string` ("full"|"half"), `connections: table` (list of {row, col, color} for placed wires)
 - **Render:** Grid of holes, highlighted when connected, wire paths
 - **Interactive:** This is the canvas base — wires drawn between holes
-- **Note:** This is the most complex single part. It's the foundation of the playground.
+- **Note:** This is a PLATFORM OBJECT, not "just another part." It has its own subsystem complexity: hole grid, row/rail mapping, snapping, occupancy, anchor targeting, wire routing, labels, zoom. Treat it with the same weight as the netlist system.
+- **Pins:** Power rail pins (positive/negative, top and bottom), but these are structural, not individual capability pins
 
-#### `[ ] BreadboardPSU`
+#### `[ ] HW_BreadboardPSU`
 - **What it is:** MB102 breadboard power supply module, USB or DC jack input, 3.3V/5V selectable
 - **Visual:** PCB that plugs onto breadboard power rails, USB port, DC jack, on/off switch, 3.3V/5V jumpers, power LED
 - **Internal coords:** 200x60
-- **Props:** `voltage: "3.3"|"5"`, `on: bool`, `inputType: "usb"|"dc"`
+- **Props:** `voltage: string` ("3.3"|"5"), `on: bool`, `inputType: string` ("usb"|"dc")
 - **Visual state:** LED on/off, jumper position
-- **Events:** none
+- **Events:** none (`interactive = false`)
+- **Pins:** 5V (power), 3.3V (power), GND (ground), VIN (power)
 
-#### `[ ] Resistor`
+#### `[ ] HW_Resistor`
 - **What it is:** Through-hole resistor with color bands
 - **Visual:** Tan body with 4-5 color bands, two leads
 - **Internal coords:** 80x20
 - **Props:** `ohms: number` — auto-calculates color bands
-- **Render:** Color bands computed from resistance value (standard color code)
+- **Render:** Color bands computed from resistance value (standard 4-band color code)
+- **Pins:** A (gpio, bidirectional), B (gpio, bidirectional)
 
-#### `[ ] Capacitor`
+#### `[ ] HW_Capacitor`
 - **What it is:** Ceramic disc or electrolytic capacitor
 - **Visual:** Ceramic = small orange/blue disc, 2 leads. Electrolytic = cylinder with stripe, + marking, 2 leads
 - **Internal coords:** 40x30 (ceramic), 40x60 (electrolytic)
-- **Props:** `type: "ceramic"|"electrolytic"`, `value: number` (uF), `voltage: number`
+- **Props:** `type: string` ("ceramic"|"electrolytic"), `value: number` (uF), `voltage: number`
+- **Pins:** PLUS (power, input), MINUS (ground) [electrolytic]; A/B (bidirectional) [ceramic]
 
-#### `[ ] LED`
+#### `[ ] HW_LED`
 - **What it is:** Standard 5mm through-hole LED
 - **Visual:** Colored dome, 2 leads (long=anode), glow effect when on
 - **Internal coords:** 30x50
 - **Props:** `color: string`, `on: bool`, `brightness: number` (0-1)
 - **Render:** Dome with glow halo when lit, same glow technique as LED matrix
+- **Pins:** ANODE (gpio, input), CATHODE (ground)
+- **Validation:** `requirements = {"series_resistor"}`
 
-#### `[ ] Diode`
+#### `[ ] HW_Diode`
 - **What it is:** 1N4007 rectifier diode
 - **Visual:** Black cylinder with silver band (cathode), 2 leads
 - **Internal coords:** 60x20
 - **Props:** `forward: bool` (orientation indicator)
+- **Pins:** ANODE (gpio, bidirectional), CATHODE (gpio, bidirectional)
 
-#### `[ ] Transistor`
+#### `[ ] HW_Transistor`
 - **What it is:** 2N2222 NPN transistor (TO-92 package)
 - **Visual:** Black half-cylinder, flat face, 3 leads (E/B/C), label
 - **Internal coords:** 40x50
-- **Props:** `type: "NPN"|"PNP"`, `model: string`, `active: bool`
+- **Props:** `type: string` ("NPN"|"PNP"), `model: string`, `active: bool`
 - **Visual state:** Small indicator when conducting
+- **Pins:** E (gpio, bidirectional), B (gpio, input), C (gpio, bidirectional)
 
-#### `[ ] Wire`
+#### `[ ] HW_Wire`
 - **What it is:** Jumper wire / dupont cable
 - **Visual:** Colored insulated wire with pin ends
-- **Props:** `from: {x,y}`, `to: {x,y}`, `color: string`, `type: "mm"|"mf"|"ff"` (male-male, male-female, female-female)
+- **Props:** `from: table` ({x,y}), `to: table` ({x,y}), `color: string`, `wireType: string` ("mm"|"mf"|"ff")
 - **Render:** Bezier curve between points, colored insulation
-- **Note:** Used by the wiring system, not placed standalone
+- **Note:** Used by the wiring system (System B), not placed standalone as a capability. This may be implemented as part of the netlist renderer rather than a standalone capability.
 
 ---
 
-### CATEGORY: Motor & Motion
+### CATEGORY: Motor & Motion (`motor/`)
 Beyond basic servo/DC — the parts for robotics projects.
 
-#### `[ ] StepperNEMA17`
+#### `[ ] HW_StepperNEMA17`
 - **What it is:** NEMA 17 stepper motor, the standard 3D printer motor
 - **Visual:** Square faceplate with mounting holes, round center shaft, 4-wire cable
 - **Internal coords:** 140x140
 - **Props:** `angle: number`, `speed: number` (RPM), `enabled: bool`, `microstep: number`
 - **Visual state:** Shaft rotation with step granularity visible at low speeds
+- **Pins:** A1/A2/B1/B2 (gpio, input)
 
-#### `[ ] MotorDriver_A4988`
+#### `[ ] HW_MotorDriver_A4988`
 - **What it is:** A4988 stepper driver (Pololu-style), the 3D printer driver
 - **Visual:** Small red/green PCB, chip with heatsink, 16 pins, potentiometer
 - **Internal coords:** 60x100
 - **Props:** `enabled: bool`, `step: bool`, `direction: bool`, `microstep: number`, `currentLimit: number`
 - **Visual state:** Pulse animation on step, direction arrow
+- **Pins:** VDD/VMOT (power), GND x2 (ground), STEP (gpio, input), DIR (gpio, input), EN (gpio, input), MS1/MS2/MS3 (gpio, input), RESET/SLEEP (gpio, input), 1A/1B/2A/2B (power, output)
 
 ---
 
-### CATEGORY: Breakout Boards & Modules
+### CATEGORY: Breakout Boards & Modules (`breakout/`)
 Pre-assembled modules that integrate multiple ICs for a specific purpose.
 
-#### `[ ] RTC_DS3231`
-- **What it is:** Real-time clock module with battery backup
+#### `[ ] HW_RTC`
+- **What it is:** DS3231 real-time clock module with battery backup
 - **Visual:** Blue/purple PCB, DS3231 IC, coin cell holder, 6 pins, crystal
 - **Internal coords:** 120x100
 - **Props:** `time: string` (HH:MM:SS), `date: string` (YYYY-MM-DD), `alarm: bool`
 - **Simulation:** Runs real-time, configurable start time
 - **Events:** `onAlarm()`, `onTick(time, date)`
+- **Pins:** VCC (power), GND (ground), SCL (i2c), SDA (i2c), SQW (gpio, output), 32K (gpio, output)
+- **Validation:** `bus = "i2c"`, `i2cAddress = 0x68`
 
-#### `[ ] MicroSD_Module`
+#### `[ ] HW_MicroSD`
 - **What it is:** MicroSD card breakout, SPI
 - **Visual:** Blue PCB, SD card slot, 6 pins
 - **Internal coords:** 100x80
 - **Props:** `inserted: bool`, `activity: bool`
 - **Visual state:** LED flicker on read/write activity
 - **Events:** `onMount(sizeGB)`, `onError(msg)`
+- **Pins:** VCC (power), GND (ground), CS (spi), MOSI (spi), MISO (spi), SCK (spi)
+- **Validation:** `bus = "spi"`
 
-#### `[ ] AudioAmp_MAX98357`
-- **What it is:** I2S audio amplifier breakout
+#### `[ ] HW_AudioAmp`
+- **What it is:** MAX98357 I2S audio amplifier breakout
 - **Visual:** Small purple/red PCB, speaker terminal, 7 pins
 - **Internal coords:** 100x60
 - **Props:** `playing: bool`, `volume: number`
 - **Visual state:** Sound wave animation when playing
+- **Pins:** VIN (power), GND (ground), SD (gpio), GAIN (gpio), DIN (data), BCLK (data), LRC (data)
 
 ---
 
 ## Priority Tiers (for parallel assignment)
 
-### Tier 1 — Ship first (makes the playground usable)
-These are the parts that make the playground feel real with minimal effort:
-1. `Breadboard` — the canvas everything sits on
-2. `LED` — simplest output, instant gratification
-3. `TactileButton` — simplest input
-4. `ArduinoUno` — the brain
-5. `Wire` — connect things
-6. `Resistor` — every circuit needs them
-7. `SevenSegment` — impressive visual output
-8. `Servo_SG90` — first moving part
+### Tier 0 — Shared Foundations (build FIRST, before ANY parts)
+1. `_colors.lua` — shared color palette
+2. `_draw.lua` — shared drawing helpers
+3. `_simulate.lua` — shared simulation helpers
+4. `_anchors.lua` — shared anchor/pin helpers
+5. `_layout.lua` — shared board layout helpers
 
-### Tier 2 — Core sensor/display kit
-9. `DHT22` — most popular sensor
-10. `HC_SR04` — ultrasonic distance (cool wave animation)
-11. `OLED_SSD1306` — pixel display
-12. `LCD_HD44780` — character display
-13. `NeopixelStrip` — RGB LEDs
-14. `RotaryEncoder` — interactive input
-15. `Buzzer` — audio feedback
-16. `Potentiometer` — analog input
+**No part may be started until Tier 0 is complete and committed.**
 
-### Tier 3 — Communication & advanced
-17. `ESP32DevKit` — WiFi/BLE board
-18. `HC05_Bluetooth` — wireless
-19. `RelayModule` — power switching
-20. `DCMotor_L298N` — motor control
-21. `Stepper_28BYJ48` — precision motion
-22. `GPS_NEO6M` — location
-23. `RFID_RC522` — contactless ID
+### Tier 1 — Minimum Viable Playground (9 parts)
+These are the parts that make the playground feel real:
+1. `HW_Breadboard` — the canvas everything sits on (PLATFORM OBJECT — extra weight)
+2. `HW_LED` — simplest output, instant gratification
+3. `HW_Button` — simplest input
+4. `HW_ArduinoUno` — the brain
+5. `HW_Wire` — connect things (may be part of netlist system instead)
+6. `HW_Resistor` — every circuit needs them
+7. `HW_SevenSegment` — impressive visual output
+8. `HW_Servo` — first moving part
+9. `HW_Potentiometer` — interactive analog input, drag interaction primitive
+
+### Tier 2 — Core sensor/display kit (8 parts)
+10. `HW_DHT22` — most popular sensor
+11. `HW_HC_SR04` — ultrasonic distance (cool wave animation)
+12. `HW_OLED_SSD1306` — pixel display
+13. `HW_LCD_HD44780` — character display
+14. `HW_NeopixelStrip` — RGB LEDs
+15. `HW_RotaryEncoder` — interactive input
+16. `HW_Buzzer` — audio feedback
+17. `HW_Joystick` — dual-axis interactive
+
+### Tier 3 — Communication & advanced (7 parts)
+18. `HW_ESP32DevKit` — WiFi/BLE board
+19. `HW_Bluetooth` — wireless
+20. `HW_Relay` — power switching
+21. `HW_DCMotor` — motor control
+22. `HW_Stepper` — precision motion
+23. `HW_GPS` — location
+24. `HW_RFID` — contactless ID
 
 ### Tier 4 — Completeness
 Everything else — round out the catalog.
@@ -529,28 +999,67 @@ Everything else — round out the catalog.
 
 ## Parallel Work Assignment
 
-Each Claude instance picks a tier (or a slice of a tier) and builds:
+### Phase 0 — Foundations (1 Claude, blocks everything else)
+Build all 5 shared modules in `lua/capabilities/hw/`. Commit. Then parts can begin.
+
+### Phase 1 — Parts (N Claudes in parallel)
+Each Claude picks a slice and builds:
 1. The Lua capability file in `lua/capabilities/hw/<category>/`
-2. Register it in capabilities system
-3. Test it standalone: `<Native type="HW_PartName" style={{width: 200, height: 200}} />`
+2. Following the mandatory skeleton EXACTLY
+3. Using shared helpers from `_colors`, `_draw`, `_simulate`, `_anchors`, `_layout`
+4. Register it in capabilities system
+5. Test it standalone: `<Native type="HW_PartName" style={{width: 200, height: 200}} />`
+6. Pass the quality acceptance checklist
 
-### Shared foundations (build BEFORE parts)
-- `lua/capabilities/hw/colors.lua` — shared color palette (PCB greens, copper, solder, LED glow colors, wire colors)
-- `lua/capabilities/hw/draw.lua` — shared drawing helpers (rounded rect, pad, pin, lead, glow, IC package, resistor color bands)
-- `lua/capabilities/hw/simulate.lua` — shared simulation helpers (noise generators, sine curves, random triggers, fake data streams)
+**Assignment slices (suggested, can redistribute):**
+- Claude A: `HW_ArduinoUno`, `HW_ArduinoNano`, `HW_ESP32DevKit`, `HW_RaspberryPiGPIO`
+- Claude B: `HW_LED`, `HW_Resistor`, `HW_Capacitor`, `HW_Diode`, `HW_Transistor`, `HW_Button`
+- Claude C: `HW_SevenSegment`, `HW_OLED_SSD1306`, `HW_LCD_HD44780`, `HW_NeopixelStrip`
+- Claude D: `HW_Servo`, `HW_DCMotor`, `HW_Stepper`, `HW_Relay`, `HW_Buzzer`
+- Claude E: `HW_DHT22`, `HW_HC_SR04`, `HW_PIR`, `HW_BMP280`, `HW_MPU6050`, `HW_Photoresistor`
+- Claude F: `HW_RotaryEncoder`, `HW_Joystick`, `HW_Keypad`, `HW_Potentiometer`
+- Claude G: `HW_Breadboard` (solo — it's a platform object with subsystem complexity)
+- Claude H: `HW_ESP8266`, `HW_Bluetooth`, `HW_NRF24`, `HW_GPS`, `HW_RFID`
 
-### Integration (build AFTER parts)
+### Phase 2 — Integration (after parts exist)
 - Playground story in storybook: parts picker sidebar, canvas area, code panel
-- Wiring system: click-to-connect between pins
+- Wiring system (System B): click-to-connect between anchors
 - Circuit simulation: signal propagation between connected parts
+- Hardware backend (System C): route to real GPIO/I2C/Serial/SPI
 
 ---
 
 ## Visual Quality Bar
 
-Look at `pcb_board.lua` and `led_matrix.lua`. That's the bar. Every part should:
+Look at `pcb_board.lua` and `led_matrix.lua`. That's the bar. Every part must:
 - Be immediately recognizable to someone who has used the real thing
+- **Read clearly at thumbnail scale** — identifiable even in a 60x60 sidebar tile
 - Scale cleanly to any container size (internal coord system + uniform scale)
-- Have subtle animation (LED glow, blink, pulse, rotation) — not static
-- Use the shared color palette for consistency
+- Have at least one animated/live state (LED glow, blink, pulse, rotation) — not static
+- Use the shared color palette (`_colors.lua`) for consistency — no local hex values
+- Use the shared drawing helpers (`_draw.lua`) — no duplicate glow/pad/IC helpers
 - Render at 60fps with no per-frame allocations (pre-compute in tick, draw in render)
+
+---
+
+## Implementation Execution Phases
+
+### Phase 0 — Foundations
+Build: `_colors.lua`, `_draw.lua`, `_simulate.lua`, `_anchors.lua`, `_layout.lua`
+Gate: committed and importable before any part begins.
+
+### Phase 1 — Minimal Believable Loop
+Build: `HW_LED`, `HW_Button`, `HW_Resistor`, `HW_Wire`, `HW_ArduinoUno`, simple non-breadboard canvas.
+Goal: click button, LED changes, pin highlight works.
+
+### Phase 2 — First "Wow" Board
+Build: `HW_Breadboard`, `HW_Potentiometer`, `HW_Servo`, `HW_SevenSegment`
+Goal: basic breadboard placement + wiring + live simulation.
+
+### Phase 3 — Display/Sensor Expansion
+Build: `HW_DHT22`, `HW_HC_SR04`, `HW_OLED_SSD1306`, `HW_LCD_HD44780`, `HW_NeopixelStrip`
+Goal: rich sensor data flowing to rich display output.
+
+### Phase 4 — Real Backend Bridge
+Map selected parts to: GPIO, PWM, Serial, I2C, SPI.
+Goal: same code, real hardware, zero prop changes.
