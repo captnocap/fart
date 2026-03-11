@@ -325,6 +325,7 @@ export function GamepadStory() {
 
   // Poll gamepad axes from Lua at ~10fps (no axis events cross the bridge)
   const axesRef = useRef<Record<string, number>>({});
+  // rjit-ignore-next-line
   useEffect(() => {
     let alive = true;
     const poll = async () => {

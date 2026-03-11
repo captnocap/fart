@@ -83,3 +83,43 @@ import { register } from './galleryRegistry';
 // Components are registered below via register() calls.
 // To add a new one: bash scripts/scaffold_gallery_component.sh <Name> [pkg]
 // ══════════════════════════════════════════════════════════
+
+// ── Card ──────────────────────────────────────────
+
+function ThumbCard({ c }: { c: Record<string, string> }) {
+  return (
+    <S.FullCenter>
+      <S.SurfaceBordered style={{ width: 50, borderRadius: 3, overflow: 'hidden' }}>
+        <Box style={{ height: 10, backgroundColor: c.primary, opacity: 0.15 }} />
+        <Box style={{ padding: 3, gap: 2 }}>
+          <Box style={{ height: 2, width: 24, backgroundColor: c.muted, borderRadius: 1, opacity: 0.5 }} />
+          <Box style={{ height: 2, width: 16, backgroundColor: c.muted, borderRadius: 1, opacity: 0.3 }} />
+        </Box>
+      </S.SurfaceBordered>
+    </S.FullCenter>
+  );
+}
+
+function PreviewCard({ c }: { c: Record<string, string> }) {
+  return (
+    <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', padding: 20, gap: 12 }}>
+      <Card title="Settings" subtitle="Application configuration">
+        <Box style={{ gap: 6, padding: 8 }}>
+          <Text style={{ fontSize: 12, color: c.text }}>{'Card body content goes here.'}</Text>
+          <Badge label="Stable" variant="success" />
+        </Box>
+      </Card>
+      <Card title="Minimal Card">
+        <Text style={{ fontSize: 11, color: c.muted, padding: 8 }}>{'Cards separate header and body regions.'}</Text>
+      </Card>
+    </Box>
+  );
+}
+
+register({ id: 'card', label: 'Card', pkg: 'core',
+  desc: 'Container with title, subtitle, border, and rounded corners. Separates header and body regions for grouped content panels.',
+  usage: `<Card title="Settings" subtitle="App config">\n  <Text>Card body content</Text>\n</Card>`,
+  props: [['title', 'string'], ['subtitle', 'string'], ['style', 'Style'], ['headerStyle', 'Style'], ['bodyStyle', 'Style']],
+  callbacks: [],
+  thumb: (c) => <ThumbCard c={c} />, preview: (c) => <PreviewCard c={c} />,
+});
