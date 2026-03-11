@@ -56,6 +56,8 @@ function VerticalDivider() {
 export function GalleryStory() {
   const c = useThemeColors();
   const TABS = getAll();
+  // Expose entry list for test runner (rjit test)
+  (globalThis as any).__galleryEntries = TABS.map(t => ({ id: t.id, label: t.label }));
   const [activeId, setActiveId] = useState(TABS[0]?.id ?? '');
   const [searchQuery, setSearchQuery] = useState('');
   const [tabsExpanded, setTabsExpanded] = useState(false);
@@ -248,7 +250,7 @@ export function GalleryStory() {
                           justifyContent: 'center', alignItems: 'center',
                           flexDirection: 'row', gap: 3,
                         }}>
-                          <Text style={{ color: active ? c.text : c.muted, fontSize: 6 }}>{comp.label}</Text>
+                          <Text testId={`gallery-thumb-${comp.id}`} style={{ color: active ? c.text : c.muted, fontSize: 6 }}>{comp.label}</Text>
                         </Box>
                       </Box>
                     </Pressable>

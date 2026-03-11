@@ -207,6 +207,14 @@ function StorybookPanel() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [scaleCurve, setScaleCurve] = useState<ScaleCurve>('sqrt');
   currentActiveIdx = activeIdx; // sync for __getDevState
+
+  // Expose programmatic navigation for tests (rjit test)
+  (globalThis as any).__navigateToStory = (id: string): boolean => {
+    const idx = stories.findIndex(s => s.id === id);
+    if (idx < 0) return false;
+    setActiveIdx(idx);
+    return true;
+  };
   const groups = groupBySection(stories);
   const active = stories[activeIdx];
   const StoryComp = active?.component;
@@ -226,6 +234,7 @@ function StorybookPanel() {
 
   // ── Record route changes in the event trail for crash diagnostics ──
   const bridge = useBridge();
+  // rjit-ignore-next-line
   useEffect(() => {
     if (active) bridge.rpc('trail:navigate', { route: active.title });
   }, [activeIdx]);
