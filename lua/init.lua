@@ -776,6 +776,8 @@ function ReactJIT.init(config)
       audit = pcall(require, "lua.audit") and require("lua.audit") or nil,
       midi = pcall(require, "lua.audio.midi") and require("lua.audio.midi") or nil,
       gamepadMaps = M.gamepadMaps,
+      getGamepadButtons = function(id) return gamepadButtons[id] or {} end,
+      getGamepadAxes = function(id) return gamepadAxes[id] or {} end,
     })
   end
   M.gamepadMaps.init()

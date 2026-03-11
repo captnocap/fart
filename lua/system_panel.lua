@@ -48,6 +48,12 @@ local audit = nil
 local midi = nil
 local audioEngine = nil
 local gamepadMaps = nil
+local getGamepadButtons = nil
+local getGamepadAxes = nil
+
+-- Visual controller diagrams
+local ok_visual, gamepadVisual = pcall(require, "lua.gamepad_visual")
+if not ok_visual then gamepadVisual = nil end
 
 -- ============================================================================
 -- State
@@ -649,6 +655,28 @@ function SystemPanel.draw()
           profX = profX + profW + 4
         end
         y = y + ITEM_ROW_H
+
+        -- Controller visual diagram (live input feedback)
+        if gamepadVisual then
+          local visScale = 0.65
+          local visW, visH = gamepadVisual.getSize(currentProfile, visScale)
+          local visCX = x + w / 2  -- center in panel
+          local visCY = y + visH / 2 + 8
+
+          -- Subtle background behind the visual
+          love.graphics.setColor(0, 0, 0, 0.15)
+          love.graphics.rectangle("fill", x + 22, y + 2, w - 44, visH + 16, 8, 8)
+
+          -- Draw the controller with live state
+          local numId = tonumber(ctrl.id) or ctrl.id
+          local btns = getGamepadButtons and getGamepadButtons(numId) or {}
+          local axs = getGamepadAxes and getGamepadAxes(numId) or {}
+          gamepadVisual.draw(currentProfile, visCX, visCY, visScale, btns, axs)
+
+          -- Reset color after visual
+          love.graphics.setColor(1, 1, 1, 1)
+          y = y + visH + 24
+        end
 
         -- Button mapping sub-section (collapsed by default)
         local mapKey = "map:" .. ctrl.id
@@ -1284,6 +1312,8 @@ function SystemPanel.init(deps)
   midi = deps.midi
   audioEngine = deps.audioEngine
   gamepadMaps = deps.gamepadMaps
+  getGamepadButtons = deps.getGamepadButtons
+  getGamepadAxes = deps.getGamepadAxes
 
   loadPrefs()
 
