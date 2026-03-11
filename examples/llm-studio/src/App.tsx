@@ -94,6 +94,7 @@ interface ConversationRecord {
   updatedAt: number;
   totalTokens?: number;
   tags?: string[];
+  pinned?: boolean;
 }
 
 interface OllamaModelInfo {
@@ -172,6 +173,10 @@ function LLMStudio() {
   const [stopSequences, setStopSequences] = useState<string[]>([]);
   const [customPresets, setCustomPresets] = useState<{ label: string; prompt: string }[]>([]);
   const [sidebarTagFilter, setSidebarTagFilter] = useState<string | null>(null);
+  const [modelPickerOpen, setModelPickerOpen] = useState(false);
+  const [streamStats, setStreamStats] = useState<{ tokensPerSec: number; totalTokens: number; elapsed: number } | null>(null);
+  const streamStartRef = useRef(0);
+  const streamCharsRef = useRef(0);
   const [view, setView] = useState<View>('chat');
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [providerModalOpen, setProviderModalOpen] = useState(false);
@@ -425,7 +430,23 @@ function LLMStudio() {
     initialMessages: activeConvoId
       ? conversations.find(c => c.id === activeConvoId)?.messages || []
       : [],
+    onChunk: (chunk) => {
+      if (streamStartRef.current === 0) streamStartRef.current = Date.now();
+      streamCharsRef.current += chunk.length;
+      const elapsed = (Date.now() - streamStartRef.current) / 1000;
+      const approxTokens = Math.round(streamCharsRef.current / 4);
+      if (elapsed > 0.2) setStreamStats({ tokensPerSec: Math.round(approxTokens / elapsed), totalTokens: approxTokens, elapsed: Math.round(elapsed * 10) / 10 });
+    },
   });
+
+  // Reset stream stats when streaming starts/stops
+  const prevStreaming = useRef(false);
+  if (chat.isStreaming && !prevStreaming.current) {
+    streamStartRef.current = 0;
+    streamCharsRef.current = 0;
+    setStreamStats(null);
+  }
+  prevStreaming.current = chat.isStreaming;
 
   // ── Token estimation ─────────────────────────────────
   const tokenEstimate = useMemo(() => {
@@ -648,6 +669,7 @@ function LLMStudio() {
   useHotkey('ctrl+3', () => setView('models'));
   useHotkey('ctrl+4', () => setView('providers'));
   useHotkey('ctrl+5', () => setView('server'));
+  useHotkey('ctrl+m', () => setModelPickerOpen(v => !v));
 
   return (
     <Box style={{ width: '100%', height: '100%', flexDirection: 'row', backgroundColor: C.bg }}>
@@ -668,6 +690,11 @@ function LLMStudio() {
         view={view} onSetView={setView}
         onAddProvider={() => setProviderModalOpen(true)}
         tagFilter={sidebarTagFilter} onTagFilter={setSidebarTagFilter}
+        onPinConvo={(id) => {
+          setConversations(prev => prev.map(c =>
+            c.id === id ? { ...c, pinned: !c.pinned } : c
+          ));
+        }}
         onTagConvo={(id, tag) => {
           setConversations(prev => prev.map(c => {
             if (c.id !== id) return c;
@@ -687,6 +714,7 @@ function LLMStudio() {
           settingsOpen={settingsOpen} onToggleSettings={() => setSettingsOpen(v => !v)}
           isStreaming={chat.isStreaming} onStop={chat.stop}
           tokenEstimate={tokenEstimate}
+          streamStats={streamStats}
           compareMode={compareMode}
           onToggleCompare={() => {
             setCompareMode(v => !v);
@@ -931,6 +959,18 @@ function LLMStudio() {
               <Btn label="Add Provider" color="#fff" bgColor={C.accent} onPress={addProvider} />
             </Box>
           </Box>
+        </Modal>
+      )}
+
+      {/* ── Quick model picker (Ctrl+M) ── */}
+      {modelPickerOpen && (
+        <Modal visible onClose={() => setModelPickerOpen(false)}>
+          <QuickModelPicker
+            models={models}
+            activeModel={effectiveModel}
+            onSelect={(id) => { setActiveModel(id); setModelPickerOpen(false); setView('chat'); }}
+            onClose={() => setModelPickerOpen(false)}
+          />
         </Modal>
       )}
 
@@ -1203,6 +1243,7 @@ function Sidebar({
   onExport: () => string; onImport: (json: string) => boolean;
   view: View; onSetView: (v: View) => void; onAddProvider: () => void;
   tagFilter: string | null; onTagFilter: (tag: string | null) => void;
+  onPinConvo: (id: string) => void;
   onTagConvo: (id: string, tag: string) => void;
 }) {
   const [importModalOpen, setImportModalOpen] = useState(false);
@@ -1232,7 +1273,8 @@ function Sidebar({
         });
       });
     }
-    return list;
+    // Pinned conversations float to top
+    return [...list].sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
   }, [conversations, tagFilter, search]);
 
   const activeProvider = providers.find(p => p.id === activeProviderId);
@@ -1347,9 +1389,12 @@ function Sidebar({
                           onCancel={() => onStartRename(null)}
                         />
                       ) : (
-                        <Text style={{ fontSize: 13, color: convo.id === activeConvoId ? C.text : C.textMuted }} numberOfLines={1}>
-                          {convo.title}
-                        </Text>
+                        <Box style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
+                          {convo.pinned && <Text style={{ fontSize: 10, color: C.yellow }}>*</Text>}
+                          <Text style={{ fontSize: 13, color: convo.id === activeConvoId ? C.text : C.textMuted }} numberOfLines={1}>
+                            {convo.title}
+                          </Text>
+                        </Box>
                       )}
                       <Box style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
                         <Text style={{ fontSize: 10, color: C.textDim }}>{convo.model || 'no model'}</Text>
@@ -1367,6 +1412,7 @@ function Sidebar({
                   {hovered && renamingConvoId !== convo.id && (
                     <>
                       <Box style={{ flexDirection: 'row', gap: 3, paddingTop: 2 }}>
+                        <MsgAction label={convo.pinned ? 'Unpin' : 'Pin'} color={C.yellow} onPress={() => onPinConvo(convo.id)} />
                         <MsgAction label="Rename" color={C.textDim} onPress={() => onStartRename(convo.id)} />
                         <MsgAction label="Clone" color={C.textDim} onPress={() => onCloneConvo(convo.id)} />
                         <MsgAction label="Tag" color={C.yellow} onPress={() => setTaggingConvoId(taggingConvoId === convo.id ? null : convo.id)} />
@@ -1504,12 +1550,13 @@ function HealthDot({ healthy }: { healthy?: boolean }) {
 function TopBar({
   provider, model, models, modelsLoading, onSelectModel, onRefreshModels,
   settingsOpen, onToggleSettings, isStreaming, onStop, tokenEstimate,
-  compareMode, onToggleCompare,
+  streamStats, compareMode, onToggleCompare,
 }: {
   provider: Provider; model: string; models: { id: string; name: string }[];
   modelsLoading: boolean; onSelectModel: (id: string) => void; onRefreshModels: () => void;
   settingsOpen: boolean; onToggleSettings: () => void; isStreaming: boolean; onStop: () => void;
   tokenEstimate: number;
+  streamStats: { tokensPerSec: number; totalTokens: number; elapsed: number } | null;
   compareMode: boolean; onToggleCompare: () => void;
 }) {
   return (
@@ -1545,7 +1592,22 @@ function TopBar({
       </Box>
 
       <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-        {tokenEstimate > 0 && (
+        {streamStats && (
+          <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+            <Box style={{
+              paddingLeft: 6, paddingRight: 6, paddingTop: 2, paddingBottom: 2,
+              borderRadius: 4, backgroundColor: isStreaming ? C.greenDim : C.surface,
+            }}>
+              <Text style={{ fontSize: 10, color: isStreaming ? C.green : C.textMuted, fontFamily: 'monospace' }}>
+                {`${streamStats.tokensPerSec} tok/s`}
+              </Text>
+            </Box>
+            <Text style={{ fontSize: 9, color: C.textDim }}>
+              {`${streamStats.totalTokens} tok / ${streamStats.elapsed}s`}
+            </Text>
+          </Box>
+        )}
+        {!streamStats && tokenEstimate > 0 && (
           <Text style={{ fontSize: 10, color: C.textDim }}>{`~${tokenEstimate} tokens`}</Text>
         )}
         {isStreaming && <Btn label="Stop" color={C.red} bgColor={C.redDim} onPress={onStop} />}
@@ -2890,6 +2952,79 @@ function LabeledInput({ label, value, onChange, placeholder }: {
         style={{ backgroundColor: C.bgInput, borderRadius: 6, padding: 8 }}
         textStyle={{ color: C.text, fontSize: 13 }}
       />
+    </Box>
+  );
+}
+
+// ── Quick model picker (Ctrl+M overlay) ─────────────────────────────────────
+
+function QuickModelPicker({
+  models, activeModel, onSelect, onClose,
+}: {
+  models: { id: string; name: string }[];
+  activeModel: string;
+  onSelect: (id: string) => void;
+  onClose: () => void;
+}) {
+  const [query, setQuery] = useState('');
+  const filtered = query
+    ? models.filter(m => m.name.toLowerCase().includes(query.toLowerCase()) || m.id.toLowerCase().includes(query.toLowerCase()))
+    : models;
+
+  return (
+    <Box style={{
+      width: 460, maxHeight: 500, backgroundColor: C.bgElevated,
+      borderRadius: 12, borderWidth: 1, borderColor: C.border, overflow: 'hidden',
+    }}>
+      <Box style={{ padding: 12, borderBottomWidth: 1, borderColor: C.border }}>
+        <Box style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 8 }}>
+          <Text style={{ fontSize: 14, color: C.text, fontWeight: 'bold' }}>Quick Model Switch</Text>
+          <Text style={{ fontSize: 9, color: C.textDim }}>Ctrl+M</Text>
+        </Box>
+        <TextInput
+          value={query} onChangeText={setQuery}
+          placeholder="Type to filter models..." placeholderColor={C.textDim}
+          autoFocus
+          style={{ backgroundColor: C.bgInput, borderRadius: 8, padding: 10 }}
+          textStyle={{ color: C.text, fontSize: 13 }}
+          onSubmit={() => { if (filtered.length > 0) onSelect(filtered[0].id); }}
+        />
+      </Box>
+      <ScrollView style={{ maxHeight: 380 }}>
+        <Box style={{ padding: 4, gap: 2 }}>
+          {filtered.map(m => (
+            <Pressable key={m.id} onPress={() => onSelect(m.id)}>
+              {({ hovered }) => (
+                <Box style={{
+                  padding: 10, paddingLeft: 14, borderRadius: 6,
+                  backgroundColor: m.id === activeModel ? C.surfaceActive : hovered ? C.surfaceHover : 'transparent',
+                  flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+                }}>
+                  <Box>
+                    <Text style={{
+                      fontSize: 13, color: m.id === activeModel ? C.text : C.textMuted,
+                      fontWeight: m.id === activeModel ? 'bold' : 'normal',
+                    }}>
+                      {m.name}
+                    </Text>
+                    <Text style={{ fontSize: 10, color: C.textDim }}>{m.id}</Text>
+                  </Box>
+                  {m.id === activeModel && (
+                    <Box style={{ paddingLeft: 8, paddingRight: 8, paddingTop: 2, paddingBottom: 2, borderRadius: 4, backgroundColor: C.accent }}>
+                      <Text style={{ fontSize: 9, color: '#fff', fontWeight: 'bold' }}>Active</Text>
+                    </Box>
+                  )}
+                </Box>
+              )}
+            </Pressable>
+          ))}
+          {filtered.length === 0 && (
+            <Box style={{ padding: 20, alignItems: 'center' }}>
+              <Text style={{ fontSize: 12, color: C.textDim }}>No models match</Text>
+            </Box>
+          )}
+        </Box>
+      </ScrollView>
     </Box>
   );
 }
