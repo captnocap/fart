@@ -1,5 +1,5 @@
-import React, { useMemo, useState, useRef } from 'react';
-import { Box, Text, Slider, Switch, Badge, useLoveRPC, useLuaInterval, classifiers as S} from '../../../packages/core/src';
+import React, { useMemo, useState } from 'react';
+import { Box, Text, Slider, Badge, useLoveRPC, useLuaInterval, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { Scene, Camera, Mesh, AmbientLight, DirectionalLight } from '../../../packages/3d/src';
 
@@ -8,7 +8,7 @@ type CubeNode = {
   y: number;
   z: number;
   scale: number;
-  spin: number;
+  spinRate: number;
   tilt: number;
   phase: number;
   seed: number;
@@ -49,7 +49,7 @@ function buildGalaxy(count: number, arms: number, radius: number): CubeNode[] {
       y: py,
       z: pz,
       scale: 0.08 + rand(i, 5) * 0.12,
-      spin: 0.4 + rand(i, 6) * 1.8,
+      spinRate: 0.4 + rand(i, 6) * 1.8,
       tilt: (rand(i, 7) - 0.5) * 1.1,
       phase: rand(i, 8) * TAU,
       seed: 11 + (i % 4),
@@ -100,18 +100,12 @@ function LabeledSlider({
 
 export function Scene3DFrameworkGalaxyStory() {
   const c = useThemeColors();
-  const [time, setTime] = useState(0);
-  const [running, setRunning] = useState(true);
   const [cubeCount, setCubeCount] = useState(220);
   const [arms, setArms] = useState(5);
   const [radius, setRadius] = useState(8.8);
   const [speed, setSpeed] = useState(1.0);
   const [perf, setPerf] = useState<PerfStats>({});
   const getPerf = useLoveRPC<PerfStats>('dev:perf');
-
-  useLuaInterval(running ? 16 : null, () => {
-    setTime((prev) => prev + 0.014 * speed);
-  });
 
   useLuaInterval(500, async () => {
     try {
@@ -154,12 +148,7 @@ export function Scene3DFrameworkGalaxyStory() {
           <LabeledSlider label="Cube Count" value={cubeCount} min={80} max={460} step={20} onChange={setCubeCount} />
           <LabeledSlider label="Galaxy Arms" value={arms} min={2} max={8} step={1} onChange={setArms} />
           <LabeledSlider label="Radius" value={radius} min={5} max={13} step={0.2} onChange={setRadius} />
-          <LabeledSlider label="Speed" value={speed} min={0.2} max={2.5} step={0.1} onChange={setSpeed} />
-
-          <S.RowCenterG8>
-            <Text style={{ color: c.textSecondary, fontSize: 10 }}>Animation</Text>
-            <Switch value={running} onValueChange={setRunning} />
-          </S.RowCenterG8>
+          <LabeledSlider label="Speed" value={speed} min={0} max={2.5} step={0.1} onChange={setSpeed} />
 
           <S.Bordered style={{ backgroundColor: c.bg, borderRadius: 8, padding: 8, gap: 3 }}>
             <Text style={{ color: c.text, fontSize: 10, fontWeight: 'normal' }}>
@@ -190,7 +179,7 @@ export function Scene3DFrameworkGalaxyStory() {
             edgeWidth={0.01}
             position={[0, 0, -1.1]}
             scale={[4.2, 4.2, 1]}
-            rotation={[0, 0, time * 0.25]}
+            spin={[0, 0, 0.25 * speed]}
           />
           <Mesh
             geometry="cube"
@@ -198,7 +187,7 @@ export function Scene3DFrameworkGalaxyStory() {
             seed={11}
             position={[0, 0, 0.1]}
             scale={1.45}
-            rotation={[time * 0.35, time * 0.75, time * 0.2]}
+            spin={[0.35 * speed, 0.75 * speed, 0.2 * speed]}
             edgeColor="#0f172a"
             edgeWidth={0.02}
             specular={76}
@@ -221,10 +210,11 @@ export function Scene3DFrameworkGalaxyStory() {
               seed={node.seed}
               position={[node.x, node.y, node.z]}
               scale={node.scale}
-              rotation={[
-                node.tilt + time * node.spin * 0.45,
-                node.phase + time * node.spin,
-                time * 0.2 + (i % 9) * 0.07,
+              rotation={[node.tilt, node.phase, (i % 9) * 0.07]}
+              spin={[
+                node.spinRate * 0.45 * speed,
+                node.spinRate * speed,
+                0.2 * speed,
               ]}
               edgeColor={denseMode ? undefined : '#0b1220'}
               edgeWidth={0.012}

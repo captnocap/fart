@@ -126,6 +126,8 @@ export interface MeshProps {
   position?: Vec3;
   /** Rotation in euler angles [rx, ry, rz] (radians) */
   rotation?: Vec3;
+  /** Lua-side spin animation [rx, ry, rz] in radians/sec — zero React re-renders */
+  spin?: Vec3;
   /** Scale — uniform number or [sx, sy, sz] */
   scale?: number | Vec3;
   /** Edge/wireframe color (hex string) — draws borders on face edges */

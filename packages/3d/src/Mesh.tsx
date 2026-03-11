@@ -10,6 +10,7 @@ export function Mesh(props: MeshProps) {
     seed: props.seed,
     position: props.position,
     rotation: props.rotation,
+    spin: props.spin,
     scale: props.scale,
     edgeColor: props.edgeColor,
     edgeWidth: props.edgeWidth,

@@ -864,6 +864,19 @@ local function ensureMeshModel(scene, meshNode)
   entry.fresnel = props.fresnel or 0
   entry.unlit = props.unlit or false
 
+  -- Spin: Lua-side per-frame rotation (radians/sec per axis)
+  local spin = props.spin
+  if spin and type(spin) == "table" then
+    entry.spin = {spin[1] or 0, spin[2] or 0, spin[3] or 0}
+    -- Initialize accumulated spin offset on first encounter
+    if not entry.spinAccum then
+      entry.spinAccum = {0, 0, 0}
+    end
+  else
+    entry.spin = nil
+    entry.spinAccum = nil
+  end
+
   -- Apply transform from props (these are cheap to update every frame)
   local pos = props.position or {0, 0, 0}
   local rot = props.rotation or {0, 0, 0}
@@ -874,9 +887,24 @@ local function ensureMeshModel(scene, meshNode)
   end
   scl = scl or {1, 1, 1}
 
+  -- Add accumulated spin offset to base rotation
+  local finalRot
+  if entry.spinAccum then
+    finalRot = {
+      (rot[1] or 0) + entry.spinAccum[1],
+      (rot[2] or 0) + entry.spinAccum[2],
+      (rot[3] or 0) + entry.spinAccum[3],
+    }
+  else
+    finalRot = {rot[1] or 0, rot[2] or 0, rot[3] or 0}
+  end
+
+  -- Store base rotation for spin accumulation
+  entry.baseRotation = {rot[1] or 0, rot[2] or 0, rot[3] or 0}
+
   entry.model:setTransform(
     {pos[1] or 0, pos[2] or 0, pos[3] or 0},
-    {rot[1] or 0, rot[2] or 0, rot[3] or 0},
+    finalRot,
     {scl[1] or 1, scl[2] or 1, scl[3] or 1}
   )
 
@@ -1114,6 +1142,23 @@ local function renderScene(scene)
       g3d.camera.aspectRatio = scene.width / scene.height
       g3d.camera.updateProjectionMatrix()
       g3d.camera.updateViewMatrix()
+    end
+
+    -- Spin animation: accumulate per-frame rotation in Lua (zero bridge traffic)
+    local dt = love.timer.getDelta()
+    for _, entry in pairs(scene.meshes) do
+      if entry.spin and entry.spinAccum then
+        entry.spinAccum[1] = entry.spinAccum[1] + entry.spin[1] * dt
+        entry.spinAccum[2] = entry.spinAccum[2] + entry.spin[2] * dt
+        entry.spinAccum[3] = entry.spinAccum[3] + entry.spin[3] * dt
+        -- Apply updated rotation (base + accumulated spin)
+        local br = entry.baseRotation or {0, 0, 0}
+        entry.model:setRotation(
+          br[1] + entry.spinAccum[1],
+          br[2] + entry.spinAccum[2],
+          br[3] + entry.spinAccum[3]
+        )
+      end
     end
 
     -- Orbit controls: poll mouse directly for zero-latency rotation
