@@ -1126,6 +1126,16 @@ function ReactJIT.init(config)
     end
   end
 
+  -- Register workspace (i3 tiling) RPC handlers
+  do
+    local wsOk, ws = pcall(require, "lua.workspace")
+    if wsOk then
+      for method, handler in pairs(ws.getHandlers()) do
+        rpcHandlers[method] = handler
+      end
+    end
+  end
+
   -- Register GIF recorder RPC handlers
   do
     local gifOk, gif = pcall(require, "lua.gif")
@@ -5416,6 +5426,7 @@ end
 --- D-pad drives spatial navigation, A activates, B/Start synthesize Escape.
 --- Other buttons pass through as gamepad events for custom handling.
 function ReactJIT.gamepadpressed(joystick, button)
+  print("[GAMEPAD] pressed: " .. tostring(button) .. " isRendering=" .. tostring(isRendering()) .. " bridge=" .. tostring(M.bridge ~= nil))
   if not isRendering() then return end
   if not M.bridge then return end
   if M.systemPanelEnabled and systemPanel.isDeviceBlocked("controllers", joystick:getID()) then return end
@@ -5438,22 +5449,24 @@ function ReactJIT.gamepadpressed(joystick, button)
   -- A button → activate focused node for this controller (synthesize click)
   if button == "a" then
     local node = focus.getForController(joystickId)
+    print("[GAMEPAD] A pressed, focused node=" .. tostring(node and node.id) .. " type=" .. tostring(node and node.type) .. " hasHandlers=" .. tostring(node and node.hasHandlers))
     if node then
       local bubblePath = M.events.buildBubblePath(node)
-      pushEvent({
-        type = "mousedown",
-        payload = {
-          type = "mousedown",
-          targetId = node.id,
-          x = node.computed.x + node.computed.w / 2,
-          y = node.computed.y + node.computed.h / 2,
-          button = 1,
-          bubblePath = bubblePath,
-          gamepadButton = "a",
-          joystickId = joystickId,
-        }
-      })
+      print("[GAMEPAD]   bubblePath length=" .. tostring(#bubblePath))
+      for i, bp in ipairs(bubblePath) do
+        print("[GAMEPAD]   bubble[" .. i .. "] id=" .. tostring(bp) .. " type=" .. tostring(M.tree and M.tree.getNode and M.tree.getNode(bp) and M.tree.getNode(bp).type))
+      end
+      if node.children then
+        for i, child in ipairs(node.children) do
+          print("[GAMEPAD]   child[" .. i .. "] id=" .. tostring(child.id) .. " type=" .. tostring(child.type) .. " hasHandlers=" .. tostring(child.hasHandlers))
+        end
+      end
+      local cx = node.computed.x + node.computed.w / 2
+      local cy = node.computed.y + node.computed.h / 2
+      -- Send "click" — same event type as mousepressed uses for onPress/onClick
+      pushEvent(M.events.createEvent("click", node.id, cx, cy, 1, bubblePath))
       if M.events then M.events.setPressedNode(node) end
+      applyInteractionStyle(node)
 
       -- Auto-open OSK for TextInput nodes
       if M.osk and (node.type == "TextInput" or node.type == "text-input") then
@@ -5466,6 +5479,16 @@ function ReactJIT.gamepadpressed(joystick, button)
   -- B button → synthesize Escape keydown
   if button == "b" then
     pushEvent(M.events.createKeyEvent("keydown", "escape", "escape", false))
+    return
+  end
+
+  -- Shoulder buttons → cycle focus groups
+  if button == "leftshoulder" then
+    focus.cycleGroup("prev")
+    return
+  end
+  if button == "rightshoulder" then
+    focus.cycleGroup("next")
     return
   end
 
@@ -5492,20 +5515,12 @@ function ReactJIT.gamepadreleased(joystick, button)
     local node = focus.getForController(joystickId)
     if node then
       local bubblePath = M.events.buildBubblePath(node)
-      pushEvent({
-        type = "mouseup",
-        payload = {
-          type = "mouseup",
-          targetId = node.id,
-          x = node.computed.x + node.computed.w / 2,
-          y = node.computed.y + node.computed.h / 2,
-          button = 1,
-          bubblePath = bubblePath,
-          gamepadButton = "a",
-          joystickId = joystickId,
-        }
-      })
-      if M.events then M.events.clearPressedNode() end
+      local cx = node.computed.x + node.computed.w / 2
+      local cy = node.computed.y + node.computed.h / 2
+      -- Send "release" — same event type as mousereleased, triggers onRelease → onPress
+      M.events.clearPressedNode()
+      applyInteractionStyle(node)  -- revert active style (node no longer pressed)
+      pushEvent(M.events.createEvent("release", node.id, cx, cy, 1, bubblePath))
     end
     return
   end

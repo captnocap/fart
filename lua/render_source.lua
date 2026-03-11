@@ -24,6 +24,14 @@ local RenderSource = {}
 local feeds = {}
 
 -- ============================================================================
+-- Feed recycling pool — prevents process restart on React tree restructuring
+-- When a Render node unmounts, its feed goes here instead of being killed.
+-- When a new Render mounts with the same command, it grabs the feed from the pool.
+-- ============================================================================
+local recyclePool = {}    -- { command = { feed = ..., recycledAt = timestamp } }
+local RECYCLE_TTL = 5.0   -- seconds before a recycled feed is actually killed
+
+-- ============================================================================
 -- X11 + XShm FFI bindings (screen capture fast path)
 -- ============================================================================
 
@@ -271,6 +279,19 @@ local function findFreeVNCPort()
     local ok, err = s:connect("127.0.0.1", port)
     s:close()
     if not ok then return port end  -- port is free if connect fails
+  end
+  return nil
+end
+
+local function findFreeADBPort()
+  local socket_ok, socket = pcall(require, "socket")
+  if not socket_ok then return 5556 end  -- fallback
+  for port = 5556, 5599 do
+    local s = socket.tcp()
+    s:settimeout(0.1)
+    local ok, err = s:connect("127.0.0.1", port)
+    s:close()
+    if not ok then return port end
   end
   return nil
 end
@@ -622,6 +643,7 @@ sock:send(string.char(2, 0) .. u16be(2) .. u32be(0) .. u32be(0xFFFFFF21))
 statusChannel:push("ready")
 
 local frameInterval = 1.0 / targetFps
+local firstFrame = true
 
 while true do
   -- Process control messages (stop + input forwarding)
@@ -650,7 +672,7 @@ while true do
     ctrl = controlChannel:pop()
   end
 
-  -- Request full framebuffer update (non-incremental for reliability)
+  -- Request full framebuffer update (non-incremental — partial rect compositing not yet implemented)
   sock:send(string.char(3, 0) .. u16be(0) .. u16be(0) .. u16be(fbWidth) .. u16be(fbHeight))
 
   -- Read FramebufferUpdate response
@@ -713,6 +735,7 @@ while true do
     if gotFullFrame or numRects > 0 then
       frameChannel:clear()
       frameChannel:push(framebuf)
+      firstFrame = false
     end
   else
     -- Unknown message type, skip
@@ -729,7 +752,8 @@ while true do
   end
 
   ::continue::
-  socket.sleep(frameInterval)
+  -- Minimal sleep — VNC round-trip is the natural rate limiter
+  socket.sleep(0.001)
 end
 ]=]
 
@@ -786,7 +810,7 @@ local function createDisplayFeed(nodeId, props)
   -- Auto-launch command into the virtual display
   local appPid
   if props.command and props.command ~= "" then
-    local appCmd = string.format("DISPLAY=:%d %s", displayNum, props.command)
+    local appCmd = string.format("DISPLAY=:%d unset CLAUDECODE; %s", displayNum, props.command)
     Log.log("render", "Launching into :%d: %s", displayNum, appCmd)
     appPid = spawnProcess(appCmd)
     if appPid then
@@ -876,6 +900,7 @@ local function createDisplayFeed(nodeId, props)
       xServerPid = xServerPid,
       xServerType = xServerType,
       appPid = appPid,
+      command = props.command,
       -- Per-display XShm state
       displayDpy = displayDpy,
       displayRoot = displayRoot,
@@ -924,6 +949,7 @@ local function createDisplayFeed(nodeId, props)
       xServerPid = xServerPid,
       xServerType = xServerType,
       appPid = appPid,
+      command = props.command,
     }
   end
 
@@ -982,12 +1008,19 @@ local function createVMFeed(nodeId, parsed, props)
     kvmFlag = "-enable-kvm"
   end
 
+  -- Find free ADB port for host forwarding
+  local adbPort = findFreeADBPort()
+  local netFlags = ""
+  if adbPort then
+    netFlags = string.format("-netdev user,id=net0,hostfwd=tcp::%d-:5555 -device virtio-net-pci,netdev=net0", adbPort)
+  end
+
   local qemuCmd = string.format(
-    "qemu-system-x86_64 %s -m %d -smp %d %s -vga none -device virtio-vga-gl -display egl-headless -vnc :%d -usb -device usb-tablet",
-    kvmFlag, memory, cpus, driveFlags, vncDisplay
+    "qemu-system-x86_64 %s -m %d -smp %d %s %s -vga none -device virtio-vga-gl -display egl-headless -vnc :%d -usb -device usb-tablet",
+    kvmFlag, memory, cpus, driveFlags, netFlags, vncDisplay
   )
 
-  Log.log("render", "Starting VM: %s", qemuCmd)
+  Log.log("render", "Starting VM: %s (ADB port: %s)", qemuCmd, tostring(adbPort))
 
   local qemuPid = spawnProcess(qemuCmd)
   if not qemuPid then
@@ -1046,6 +1079,7 @@ local function createVMFeed(nodeId, parsed, props)
     vncPort = vncPort,
     vncDisplay = vncDisplay,
     vncDimsReceived = false,
+    adbPort = adbPort,
   }
 
   feeds[nodeId] = feed
@@ -1240,10 +1274,8 @@ function RenderSource.create(nodeId, props)
   return feed
 end
 
-function RenderSource.destroy(nodeId)
-  local feed = feeds[nodeId]
-  if not feed then return end
-
+-- Actually destroy a feed (kill processes, free resources)
+local function destroyFeedFinal(feed)
   local Registry = require("lua.process_registry")
 
   if feed.backend == "xshm" then
@@ -1257,7 +1289,6 @@ function RenderSource.destroy(nodeId)
     if feed.controlChannel then feed.controlChannel:clear() end
 
   elseif feed.backend == "display_xshm" then
-    -- Clean up XShm capture for virtual display
     if feed.xshmCap and feed.displayDpy then
       libXext.XShmDetach(feed.displayDpy, feed.xshmCap.shminfo)
       ffi.C.shmdt(feed.xshmCap.shminfo.shmaddr)
@@ -1267,12 +1298,10 @@ function RenderSource.destroy(nodeId)
     if feed.displayDpy then
       libX11.XCloseDisplay(feed.displayDpy)
     end
-    -- Kill the app process
     if feed.appPid then
       os.execute("kill " .. feed.appPid .. " 2>/dev/null")
       Registry.unregister(feed.appPid)
     end
-    -- Kill the virtual X server
     if feed.xServerPid then
       os.execute("kill " .. feed.xServerPid .. " 2>/dev/null")
       Registry.unregister(feed.xServerPid)
@@ -1280,18 +1309,15 @@ function RenderSource.destroy(nodeId)
     end
 
   elseif feed.backend == "display" then
-    -- Stop FFmpeg capture thread
     if feed.controlChannel then feed.controlChannel:push("stop") end
     if feed.thread and feed.thread:isRunning() then feed.thread:wait() end
     if feed.frameChannel then feed.frameChannel:clear() end
     if feed.statusChannel then feed.statusChannel:clear() end
     if feed.controlChannel then feed.controlChannel:clear() end
-    -- Kill the app process
     if feed.appPid then
       os.execute("kill " .. feed.appPid .. " 2>/dev/null")
       Registry.unregister(feed.appPid)
     end
-    -- Kill the virtual X server
     if feed.xServerPid then
       os.execute("kill " .. feed.xServerPid .. " 2>/dev/null")
       Registry.unregister(feed.xServerPid)
@@ -1299,14 +1325,12 @@ function RenderSource.destroy(nodeId)
     end
 
   elseif feed.backend == "vnc" then
-    -- Stop VNC reader thread
     if feed.controlChannel then feed.controlChannel:push("stop") end
     if feed.thread and feed.thread:isRunning() then feed.thread:wait() end
     if feed.frameChannel then feed.frameChannel:clear() end
     if feed.statusChannel then feed.statusChannel:clear() end
     if feed.infoChannel then feed.infoChannel:clear() end
     if feed.controlChannel then feed.controlChannel:clear() end
-    -- Kill QEMU
     if feed.qemuPid then
       os.execute("kill " .. feed.qemuPid .. " 2>/dev/null")
       Registry.unregister(feed.qemuPid)
@@ -1316,7 +1340,24 @@ function RenderSource.destroy(nodeId)
 
   if feed.imageData then feed.imageData:release() end
   if feed.image then feed.image:release() end
+end
 
+function RenderSource.destroy(nodeId)
+  local feed = feeds[nodeId]
+  if not feed then return end
+
+  -- Recycle feeds instead of killing — they might be remounted after tree restructure
+  local recycleKey = feed.command or feed.source
+  local recyclable = feed.backend == "display_xshm" or feed.backend == "display" or feed.backend == "vnc"
+  if recyclable and recycleKey then
+    feed.nodeId = nil  -- detach from old node
+    recyclePool[recycleKey] = { feed = feed, recycledAt = love.timer.getTime() }
+    feeds[nodeId] = nil
+    Log.log("render", "Recycled feed (%s): %s", feed.backend, recycleKey)
+    return
+  end
+
+  destroyFeedFinal(feed)
   feeds[nodeId] = nil
 end
 
@@ -1325,29 +1366,70 @@ end
 -- ============================================================================
 
 function RenderSource.syncWithTree(nodes)
+  -- Phase 1: collect which Render nodes exist
   local seen = {}
   for id, node in pairs(nodes) do
     if node.type == "Render" then
       seen[id] = true
-      local props = node.props or {}
-
-      if not feeds[id] then
-        RenderSource.create(id, props)
-      elseif feeds[id].source ~= props.source then
-        RenderSource.destroy(id)
-        RenderSource.create(id, props)
-      end
     end
   end
 
+  -- Phase 2: destroy/recycle feeds for removed nodes FIRST (fills the pool)
   for id in pairs(feeds) do
     if not seen[id] then
       RenderSource.destroy(id)
     end
   end
+
+  -- Phase 3: create/update feeds (can now find recycled feeds in the pool)
+  for id, node in pairs(nodes) do
+    if node.type == "Render" then
+      local props = node.props or {}
+
+      if not feeds[id] then
+        -- Check recycle pool for a matching feed (by command or source)
+        local poolKey = props.command or props.source
+        if poolKey and recyclePool[poolKey] then
+          local recycled = recyclePool[poolKey]
+          local feed = recycled.feed
+          feed.nodeId = id
+          feeds[id] = feed
+          recyclePool[poolKey] = nil
+          Log.log("render", "Reused recycled feed for: %s", poolKey)
+        else
+          RenderSource.create(id, props)
+        end
+      elseif feeds[id].source ~= props.source
+          or (feeds[id].command and feeds[id].command ~= (props.command or "")) then
+        -- Source or command changed (e.g. tile swap) — recycle old, grab or create new
+        RenderSource.destroy(id)
+        local poolKey = props.command or props.source
+        if poolKey and recyclePool[poolKey] then
+          local recycled = recyclePool[poolKey]
+          local feed = recycled.feed
+          feed.nodeId = id
+          feeds[id] = feed
+          recyclePool[poolKey] = nil
+          Log.log("render", "Reused recycled feed for: %s", poolKey)
+        else
+          RenderSource.create(id, props)
+        end
+      end
+    end
+  end
 end
 
 function RenderSource.updateAll()
+  -- Clean up expired recycled feeds
+  local now = love.timer.getTime()
+  for cmd, entry in pairs(recyclePool) do
+    if now - entry.recycledAt > RECYCLE_TTL then
+      Log.log("render", "Recycle expired, destroying: %s", cmd)
+      destroyFeedFinal(entry.feed)
+      recyclePool[cmd] = nil
+    end
+  end
+
   for nodeId, feed in pairs(feeds) do
 
     if feed.backend == "xshm" then
@@ -1598,18 +1680,22 @@ function RenderSource.forwardMouse(nodeId, eventType, localX, localY, button)
   local parsed = feed.parsed
 
   if feed.backend == "vnc" then
-    -- VNC protocol mouse forwarding via control channel
+    -- VNC protocol: every PointerEvent must include the FULL current button state
     if feed.controlChannel then
-      local buttonMask = 0
+      if not feed.vncButtonMask then feed.vncButtonMask = 0 end
+      local bit_val = 0
+      if button == 1 then bit_val = 1
+      elseif button == 2 then bit_val = 4
+      elseif button == 3 then bit_val = 2 end
+
       if eventType == "mousepressed" then
-        if button == 1 then buttonMask = 1
-        elseif button == 2 then buttonMask = 4
-        elseif button == 3 then buttonMask = 2 end
+        feed.vncButtonMask = bit.bor(feed.vncButtonMask, bit_val)
+      elseif eventType == "mousereleased" then
+        feed.vncButtonMask = bit.band(feed.vncButtonMask, bit.bnot(bit_val))
       end
-      -- For mousereleased, buttonMask = 0 (all released)
-      -- For mousemoved, keep current mask (0 = no buttons)
+      -- mousemoved: keep current mask unchanged
       feed.controlChannel:push(string.format("mouse:%d:%d:%d",
-        math.floor(localX), math.floor(localY), buttonMask))
+        math.floor(localX), math.floor(localY), feed.vncButtonMask))
     end
     return
   end
