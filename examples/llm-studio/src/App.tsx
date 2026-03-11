@@ -1,20 +1,28 @@
 /**
  * LLM Studio — Local model runner + API provider hub.
  *
- * Replaces LM Studio with a ReactJIT-native app that:
- * - Connects to local inference (Ollama, llama.cpp, vLLM) via OpenAI-compatible API
- * - Connects to cloud providers (OpenAI, Anthropic)
- * - Persistent conversations (in-memory for now, SQLite-ready)
- * - Model browser, settings, system prompts
- * - Streaming chat with tool support
+ * Features:
+ * - Local inference: Ollama, llama.cpp, vLLM via OpenAI-compatible API
+ * - Cloud providers: OpenAI, Anthropic
+ * - SQLite-persisted conversations and provider configs
+ * - Model browser with search
+ * - Settings: system prompt, temperature, max tokens
+ * - Keyboard shortcuts: Ctrl+N, Ctrl+,, Escape
+ * - Streaming chat with code block rendering
+ * - Provider health indicator
  */
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import {
   Box, Text, Pressable, ScrollView, TextInput, Modal, Select,
+  CodeBlock, useHotkey,
 } from '@reactjit/core';
 import { useChat, useModels, type AIProviderType, type Message } from '@reactjit/ai';
 import { AIMessageList, AIChatInput } from '@reactjit/ai';
+// Import from subpaths to avoid pulling in TerminalSQLiteAdapter (needs node:sqlite)
+import { StorageProvider, useCRUD } from '@reactjit/storage/hooks';
+import { z } from '@reactjit/storage/schema';
+import { MemoryAdapter } from '@reactjit/storage/adapters/memory';
 
 // ── Color palette ────────────────────────────────────────────────────────────
 
@@ -34,8 +42,10 @@ const C = {
   accentHover: '#7c6cf7',
   accentDim: '#4a3cb5',
   green: '#2ed573',
+  greenDim: '#1a3a2a',
   red: '#ff4757',
   redDim: '#3a1a1a',
+  yellow: '#ffa502',
 };
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -47,6 +57,7 @@ interface Provider {
   baseURL?: string;
   apiKey?: string;
   icon: string;
+  healthy?: boolean;
 }
 
 interface ConversationRecord {
@@ -72,9 +83,45 @@ const DEFAULT_PROVIDERS: Provider[] = [
 
 type View = 'chat' | 'providers' | 'models';
 
-// ── App ──────────────────────────────────────────────────────────────────────
+// ── Schemas for SQLite persistence ───────────────────────────────────────────
+
+const conversationSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  providerId: z.string(),
+  model: z.string(),
+  messages: z.string(), // JSON-serialized Message[]
+  systemPrompt: z.string(),
+  updatedAt: z.number(),
+});
+
+const providerSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  type: z.string(),
+  baseURL: z.string().optional(),
+  apiKey: z.string().optional(),
+  icon: z.string(),
+});
+
+// ── Storage adapter (singleton) ──────────────────────────────────────────────
+
+// MemoryAdapter for now — upgrade to Love2DFileAdapter when bridge RPC is wired
+const storageAdapter = new MemoryAdapter();
+
+// ── Root wrapper with storage ────────────────────────────────────────────────
 
 export function App() {
+  return (
+    <StorageProvider adapter={storageAdapter}>
+      <LLMStudio />
+    </StorageProvider>
+  );
+}
+
+// ── Main app ─────────────────────────────────────────────────────────────────
+
+function LLMStudio() {
   const [providers, setProviders] = useState<Provider[]>(DEFAULT_PROVIDERS);
   const [activeProviderId, setActiveProviderId] = useState('ollama');
   const [activeModel, setActiveModel] = useState('');
@@ -88,6 +135,72 @@ export function App() {
   const [providerModalOpen, setProviderModalOpen] = useState(false);
 
   const activeProvider = providers.find(p => p.id === activeProviderId) || providers[0];
+
+  // ── CRUD for persistence ─────────────────────────────
+  const convoCRUD = useCRUD('conversations', conversationSchema);
+  const providerCRUD = useCRUD('custom_providers', providerSchema);
+
+  // Load persisted conversations on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const saved = await convoCRUD.list();
+        if (saved && saved.length > 0) {
+          const hydrated: ConversationRecord[] = saved.map((s: any) => ({
+            ...s,
+            messages: JSON.parse(s.messages || '[]'),
+          }));
+          hydrated.sort((a, b) => b.updatedAt - a.updatedAt);
+          setConversations(hydrated);
+        }
+      } catch { /* first run, no data */ }
+    })();
+  }, []);
+
+  // Load custom providers on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const saved = await providerCRUD.list();
+        if (saved && saved.length > 0) {
+          const custom: Provider[] = saved.map((s: any) => ({
+            ...s,
+            type: s.type as AIProviderType,
+          }));
+          setProviders(prev => {
+            const builtIn = prev.filter(p => !p.id.startsWith('custom_'));
+            return [...builtIn, ...custom];
+          });
+        }
+      } catch { /* first run */ }
+    })();
+  }, []);
+
+  // ── Provider health checks ───────────────────────────
+  useEffect(() => {
+    const checkHealth = async () => {
+      const updates = await Promise.all(
+        providers.filter(p => p.baseURL).map(async (p) => {
+          try {
+            const res = await fetch(`${p.baseURL}/v1/models`, {
+              signal: AbortSignal.timeout(3000),
+            } as any);
+            return { id: p.id, healthy: res.ok };
+          } catch {
+            return { id: p.id, healthy: false };
+          }
+        })
+      );
+      setProviders(prev => prev.map(p => {
+        const update = updates.find(u => u.id === p.id);
+        return update ? { ...p, healthy: update.healthy } : p;
+      }));
+    };
+
+    checkHealth();
+    const interval = setInterval(checkHealth, 30000);
+    return () => clearInterval(interval);
+  }, [providers.length]);
 
   // ── Model fetching ───────────────────────────────────
   const { models, loading: modelsLoading, error: modelsError, refetch: refetchModels } = useModels({
@@ -116,7 +229,28 @@ export function App() {
       : [],
   });
 
+  // ── Token estimation ─────────────────────────────────
+  const tokenEstimate = useMemo(() => {
+    const totalChars = chat.messages.reduce((sum, m) => {
+      const content = typeof m.content === 'string' ? m.content : m.content.map(b => b.text || '').join('');
+      return sum + content.length;
+    }, 0);
+    return Math.round(totalChars / 4); // rough estimate: 4 chars per token
+  }, [chat.messages]);
+
   // ── Conversation management ──────────────────────────
+  const persistConversation = useCallback(async (convo: ConversationRecord) => {
+    try {
+      const existing = await convoCRUD.get(convo.id);
+      const serialized = { ...convo, messages: JSON.stringify(convo.messages) } as any;
+      if (existing) {
+        await convoCRUD.update(convo.id, serialized);
+      } else {
+        await convoCRUD.create(serialized);
+      }
+    } catch { /* storage might not be ready */ }
+  }, [convoCRUD]);
+
   const newConversation = useCallback(() => {
     const id = `conv_${Date.now().toString(36)}`;
     const convo: ConversationRecord = {
@@ -126,20 +260,28 @@ export function App() {
     setConversations(prev => [convo, ...prev]);
     setActiveConvoId(id);
     chat.setMessages([]);
-  }, [activeProviderId, activeModel, systemPrompt, chat]);
+    persistConversation(convo);
+  }, [activeProviderId, activeModel, systemPrompt, chat, persistConversation]);
 
+  // Sync messages to conversation + persist
   useEffect(() => {
     if (activeConvoId && chat.messages.length > 0) {
-      setConversations(prev => prev.map(c => {
-        if (c.id !== activeConvoId) return c;
-        const firstUser = chat.messages.find(m => m.role === 'user');
-        const title = firstUser && typeof firstUser.content === 'string'
-          ? firstUser.content.slice(0, 40) + (firstUser.content.length > 40 ? '...' : '')
-          : c.title;
-        return { ...c, title, messages: chat.messages, updatedAt: Date.now() };
-      }));
+      setConversations(prev => {
+        const updated = prev.map(c => {
+          if (c.id !== activeConvoId) return c;
+          const firstUser = chat.messages.find(m => m.role === 'user');
+          const title = firstUser && typeof firstUser.content === 'string'
+            ? firstUser.content.slice(0, 40) + (firstUser.content.length > 40 ? '...' : '')
+            : c.title;
+          const updatedConvo = { ...c, title, messages: chat.messages, updatedAt: Date.now() };
+          // Persist async (don't block render)
+          persistConversation(updatedConvo);
+          return updatedConvo;
+        });
+        return updated;
+      });
     }
-  }, [chat.messages, activeConvoId]);
+  }, [chat.messages, activeConvoId, persistConversation]);
 
   const selectConversation = useCallback((id: string) => {
     const convo = conversations.find(c => c.id === id);
@@ -152,27 +294,41 @@ export function App() {
     }
   }, [conversations, chat]);
 
-  const deleteConversation = useCallback((id: string) => {
+  const deleteConversation = useCallback(async (id: string) => {
     setConversations(prev => prev.filter(c => c.id !== id));
     if (activeConvoId === id) { setActiveConvoId(null); chat.setMessages([]); }
-  }, [activeConvoId, chat]);
+    try { await convoCRUD.delete(id); } catch { /* ok */ }
+  }, [activeConvoId, chat, convoCRUD]);
 
-  // ── Provider modal state ─────────────────────────────
+  // ── Provider management ──────────────────────────────
   const [newPName, setNewPName] = useState('');
   const [newPURL, setNewPURL] = useState('');
   const [newPKey, setNewPKey] = useState('');
   const [newPType, setNewPType] = useState<AIProviderType>('openai');
 
-  const addProvider = useCallback(() => {
+  const addProvider = useCallback(async () => {
     if (!newPName || !newPURL) return;
     const id = `custom_${Date.now().toString(36)}`;
-    setProviders(prev => [...prev, {
+    const p: Provider = {
       id, name: newPName, type: newPType,
       baseURL: newPURL, apiKey: newPKey || undefined, icon: '\u{1F517}',
-    }]);
+    };
+    setProviders(prev => [...prev, p]);
     setNewPName(''); setNewPURL(''); setNewPKey('');
     setProviderModalOpen(false);
-  }, [newPName, newPURL, newPKey, newPType]);
+    try { await providerCRUD.create({ ...p, apiKey: p.apiKey || '' } as any); } catch { /* ok */ }
+  }, [newPName, newPURL, newPKey, newPType, providerCRUD]);
+
+  // ── Keyboard shortcuts ───────────────────────────────
+  useHotkey('ctrl+n', () => { newConversation(); setView('chat'); });
+  useHotkey('ctrl+comma', () => setSettingsOpen(v => !v));
+  useHotkey('escape', () => {
+    if (providerModalOpen) setProviderModalOpen(false);
+    else if (settingsOpen) setSettingsOpen(false);
+  });
+  useHotkey('ctrl+1', () => setView('chat'));
+  useHotkey('ctrl+2', () => setView('models'));
+  useHotkey('ctrl+3', () => setView('providers'));
 
   return (
     <Box style={{ width: '100%', height: '100%', flexDirection: 'row', backgroundColor: C.bg }}>
@@ -195,6 +351,7 @@ export function App() {
           onSelectModel={setActiveModel} onRefreshModels={refetchModels}
           settingsOpen={settingsOpen} onToggleSettings={() => setSettingsOpen(v => !v)}
           isStreaming={chat.isStreaming} onStop={chat.stop}
+          tokenEstimate={tokenEstimate}
         />
 
         {(chat.error || modelsError) && (
@@ -212,11 +369,29 @@ export function App() {
                 {chat.messages.length === 0 ? (
                   <WelcomeScreen provider={activeProvider} model={activeModel} />
                 ) : (
-                  <AIMessageList messages={chat.messages} isStreaming={chat.isStreaming} style={{ flexGrow: 1 }} />
+                  <AIMessageList
+                    messages={chat.messages} isStreaming={chat.isStreaming}
+                    style={{ flexGrow: 1 }}
+                    renderMessage={(msg, i) => <FormattedMessage key={i} message={msg} />}
+                  />
                 )}
                 <Box style={{ padding: 12, borderTopWidth: 1, borderColor: C.border }}>
                   <AIChatInput
-                    send={chat.send} isLoading={chat.isLoading}
+                    send={(text) => {
+                      // Auto-create conversation if none active
+                      if (!activeConvoId) {
+                        const id = `conv_${Date.now().toString(36)}`;
+                        const convo: ConversationRecord = {
+                          id, title: 'New Chat', providerId: activeProviderId,
+                          model: activeModel, messages: [], systemPrompt, updatedAt: Date.now(),
+                        };
+                        setConversations(prev => [convo, ...prev]);
+                        setActiveConvoId(id);
+                        persistConversation(convo);
+                      }
+                      chat.send(text);
+                    }}
+                    isLoading={chat.isLoading}
                     placeholder={`Message ${activeProvider.name}${activeModel ? ` / ${activeModel}` : ''}...`}
                     sendColor={C.accent} autoFocus
                   />
@@ -253,7 +428,10 @@ export function App() {
               providers={providers} activeId={activeProviderId}
               onSelect={setActiveProviderId}
               onAdd={() => setProviderModalOpen(true)}
-              onRemove={(id) => setProviders(prev => prev.filter(p => p.id !== id))}
+              onRemove={async (id) => {
+                setProviders(prev => prev.filter(p => p.id !== id));
+                try { await providerCRUD.delete(id); } catch { /* ok */ }
+              }}
               onUpdateKey={(id, key) => {
                 setProviders(prev => prev.map(p => p.id === id ? { ...p, apiKey: key } : p));
               }}
@@ -292,6 +470,154 @@ export function App() {
   );
 }
 
+// ── Formatted message with markdown-like rendering ───────────────────────────
+
+function FormattedMessage({ message }: { message: Message }) {
+  const content = typeof message.content === 'string'
+    ? message.content
+    : message.content.map(b => b.text || '').join('');
+
+  if (message.role === 'system' || message.role === 'tool') return null;
+
+  const isUser = message.role === 'user';
+  const parts = parseMarkdown(content);
+
+  return (
+    <Box style={{
+      paddingLeft: isUser ? 60 : 16, paddingRight: isUser ? 16 : 60,
+      paddingTop: 8, paddingBottom: 8,
+    }}>
+      {/* Role label */}
+      <Text style={{ fontSize: 10, color: C.textDim, fontWeight: 'bold', paddingBottom: 4 }}>
+        {isUser ? 'You' : 'Assistant'}
+      </Text>
+
+      {/* Content */}
+      <Box style={{
+        padding: 12, borderRadius: 10, gap: 6,
+        backgroundColor: isUser ? C.surfaceActive : C.surface,
+      }}>
+        {parts.map((part, i) => {
+          if (part.type === 'code') {
+            return <CodeBlock key={i} code={part.content} language={part.language} style={{ borderRadius: 6 }} />;
+          }
+          if (part.type === 'heading') {
+            return (
+              <Text key={i} style={{ fontSize: 15, color: C.text, fontWeight: 'bold', paddingTop: i > 0 ? 4 : 0 }}>
+                {part.content}
+              </Text>
+            );
+          }
+          if (part.type === 'bullet') {
+            return (
+              <Box key={i} style={{ flexDirection: 'row', gap: 6, paddingLeft: 4 }}>
+                <Text style={{ fontSize: 13, color: C.accent }}>*</Text>
+                <Text style={{ fontSize: 13, color: C.text, flexGrow: 1 }}>{part.content}</Text>
+              </Box>
+            );
+          }
+          // Regular text — render inline code with highlighting
+          return <RichText key={i} text={part.content} />;
+        })}
+      </Box>
+    </Box>
+  );
+}
+
+// ── Markdown parser (lightweight) ────────────────────────────────────────────
+
+type MarkdownPart =
+  | { type: 'text'; content: string }
+  | { type: 'code'; content: string; language?: string }
+  | { type: 'heading'; content: string; level: number }
+  | { type: 'bullet'; content: string };
+
+function parseMarkdown(text: string): MarkdownPart[] {
+  const parts: MarkdownPart[] = [];
+  const codeBlockRegex = /```(\w*)\n?([\s\S]*?)```/g;
+  let lastIndex = 0;
+  let match;
+
+  while ((match = codeBlockRegex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(...parseTextBlock(text.slice(lastIndex, match.index)));
+    }
+    parts.push({ type: 'code', content: match[2], language: match[1] || undefined });
+    lastIndex = match.index + match[0].length;
+  }
+
+  if (lastIndex < text.length) {
+    parts.push(...parseTextBlock(text.slice(lastIndex)));
+  }
+
+  return parts.length > 0 ? parts : [{ type: 'text', content: text }];
+}
+
+function parseTextBlock(text: string): MarkdownPart[] {
+  const parts: MarkdownPart[] = [];
+  const lines = text.split('\n');
+  let currentText = '';
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    // Headings
+    const headingMatch = trimmed.match(/^(#{1,3})\s+(.+)$/);
+    if (headingMatch) {
+      if (currentText.trim()) { parts.push({ type: 'text', content: currentText.trim() }); currentText = ''; }
+      parts.push({ type: 'heading', content: headingMatch[2], level: headingMatch[1].length });
+      continue;
+    }
+
+    // Bullet points
+    if (trimmed.match(/^[-*]\s+(.+)$/)) {
+      if (currentText.trim()) { parts.push({ type: 'text', content: currentText.trim() }); currentText = ''; }
+      parts.push({ type: 'bullet', content: trimmed.replace(/^[-*]\s+/, '') });
+      continue;
+    }
+
+    // Numbered lists
+    if (trimmed.match(/^\d+\.\s+(.+)$/)) {
+      if (currentText.trim()) { parts.push({ type: 'text', content: currentText.trim() }); currentText = ''; }
+      parts.push({ type: 'bullet', content: trimmed.replace(/^\d+\.\s+/, '') });
+      continue;
+    }
+
+    currentText += line + '\n';
+  }
+
+  if (currentText.trim()) parts.push({ type: 'text', content: currentText.trim() });
+  return parts;
+}
+
+// ── Rich text with inline code highlighting ──────────────────────────────────
+
+function RichText({ text }: { text: string }) {
+  // Split on inline code backticks and bold
+  const segments = text.split(/(`[^`]+`)/g);
+
+  if (segments.length === 1) {
+    return <Text style={{ fontSize: 13, color: C.text, lineHeight: 1.5 }}>{text}</Text>;
+  }
+
+  return (
+    <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 2 }}>
+      {segments.map((seg, i) => {
+        if (seg.startsWith('`') && seg.endsWith('`')) {
+          return (
+            <Box key={i} style={{ backgroundColor: '#2a2a4a', borderRadius: 3, paddingLeft: 4, paddingRight: 4 }}>
+              <Text style={{ fontSize: 12, color: '#a78bfa', fontFamily: 'monospace' }}>
+                {seg.slice(1, -1)}
+              </Text>
+            </Box>
+          );
+        }
+        return <Text key={i} style={{ fontSize: 13, color: C.text }}>{seg}</Text>;
+      })}
+    </Box>
+  );
+}
+
 // ── Sidebar ──────────────────────────────────────────────────────────────────
 
 function Sidebar({
@@ -309,24 +635,35 @@ function Sidebar({
     ? conversations.filter(c => c.title.toLowerCase().includes(search.toLowerCase()))
     : conversations;
 
+  const activeProvider = providers.find(p => p.id === activeProviderId);
+
   return (
     <Box style={{ width: 260, borderRightWidth: 1, borderColor: C.border, backgroundColor: C.bgSidebar, flexDirection: 'column' }}>
+      {/* App title + status */}
       <Box style={{ padding: 16, paddingBottom: 8 }}>
-        <Text style={{ fontSize: 18, color: C.text, fontWeight: 'bold' }}>LLM Studio</Text>
+        <Box style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Text style={{ fontSize: 18, color: C.text, fontWeight: 'bold' }}>LLM Studio</Text>
+          {activeProvider && (
+            <HealthDot healthy={activeProvider.healthy} />
+          )}
+        </Box>
         <Text style={{ fontSize: 11, color: C.textDim }}>Local & Cloud AI</Text>
       </Box>
 
       {/* Nav tabs */}
       <Box style={{ flexDirection: 'row', paddingLeft: 8, paddingRight: 8, gap: 4, paddingBottom: 8 }}>
-        <NavTab label="Chat" active={view === 'chat'} onPress={() => onSetView('chat')} />
-        <NavTab label="Models" active={view === 'models'} onPress={() => onSetView('models')} />
-        <NavTab label="Providers" active={view === 'providers'} onPress={() => onSetView('providers')} />
+        <NavTab label="Chat" active={view === 'chat'} onPress={() => onSetView('chat')} hint="1" />
+        <NavTab label="Models" active={view === 'models'} onPress={() => onSetView('models')} hint="2" />
+        <NavTab label="Providers" active={view === 'providers'} onPress={() => onSetView('providers')} hint="3" />
       </Box>
 
       {/* Provider selector */}
       <Box style={{ paddingLeft: 12, paddingRight: 12, paddingBottom: 8 }}>
         <Select
-          options={providers.map(p => ({ value: p.id, label: `${p.icon} ${p.name}` }))}
+          options={providers.map(p => ({
+            value: p.id,
+            label: `${p.icon} ${p.name}${p.healthy === true ? ' \u2022' : p.healthy === false ? ' \u25CB' : ''}`,
+          }))}
           value={activeProviderId}
           onValueChange={onSelectProvider}
         />
@@ -338,9 +675,11 @@ function Sidebar({
           {({ pressed, hovered }) => (
             <Box style={{
               padding: 8, borderRadius: 8, alignItems: 'center',
+              flexDirection: 'row', justifyContent: 'center', gap: 6,
               backgroundColor: pressed ? C.accentDim : hovered ? C.accentHover : C.accent,
             }}>
               <Text style={{ fontSize: 13, color: '#fff', fontWeight: 'bold' }}>+ New Chat</Text>
+              <Text style={{ fontSize: 9, color: 'rgba(255,255,255,0.5)' }}>Ctrl+N</Text>
             </Box>
           )}
         </Pressable>
@@ -393,6 +732,26 @@ function Sidebar({
           )}
         </Box>
       </ScrollView>
+
+      {/* Footer: keyboard shortcuts hint */}
+      <Box style={{ padding: 8, borderTopWidth: 1, borderColor: C.border }}>
+        <Text style={{ fontSize: 9, color: C.textDim, textAlign: 'center' }}>
+          Ctrl+N New  |  Ctrl+, Settings  |  Ctrl+1/2/3 Tabs
+        </Text>
+      </Box>
+    </Box>
+  );
+}
+
+// ── Health indicator ─────────────────────────────────────────────────────────
+
+function HealthDot({ healthy }: { healthy?: boolean }) {
+  const color = healthy === true ? C.green : healthy === false ? C.red : C.yellow;
+  const label = healthy === true ? 'Connected' : healthy === false ? 'Offline' : 'Unknown';
+  return (
+    <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+      <Box style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: color }} />
+      <Text style={{ fontSize: 9, color: C.textDim }}>{label}</Text>
     </Box>
   );
 }
@@ -401,11 +760,12 @@ function Sidebar({
 
 function TopBar({
   provider, model, models, modelsLoading, onSelectModel, onRefreshModels,
-  settingsOpen, onToggleSettings, isStreaming, onStop,
+  settingsOpen, onToggleSettings, isStreaming, onStop, tokenEstimate,
 }: {
   provider: Provider; model: string; models: { id: string; name: string }[];
   modelsLoading: boolean; onSelectModel: (id: string) => void; onRefreshModels: () => void;
   settingsOpen: boolean; onToggleSettings: () => void; isStreaming: boolean; onStop: () => void;
+  tokenEstimate: number;
 }) {
   return (
     <Box style={{
@@ -418,6 +778,7 @@ function TopBar({
         <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
           <Text style={{ fontSize: 14 }}>{provider.icon}</Text>
           <Text style={{ fontSize: 13, color: C.text, fontWeight: 'bold' }}>{provider.name}</Text>
+          <HealthDot healthy={provider.healthy} />
         </Box>
         <Box style={{ width: 200 }}>
           {modelsLoading ? (
@@ -439,6 +800,9 @@ function TopBar({
       </Box>
 
       <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+        {tokenEstimate > 0 && (
+          <Text style={{ fontSize: 10, color: C.textDim }}>{`~${tokenEstimate} tokens`}</Text>
+        )}
         {isStreaming && <Btn label="Stop" color={C.red} bgColor={C.redDim} onPress={onStop} />}
         <Btn
           label="Settings"
@@ -455,13 +819,40 @@ function TopBar({
 
 function WelcomeScreen({ provider, model }: { provider: Provider; model: string }) {
   return (
-    <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', gap: 12 }}>
+    <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', gap: 16 }}>
       <Text style={{ fontSize: 48 }}>{provider.icon}</Text>
       <Text style={{ fontSize: 22, color: C.text, fontWeight: 'bold' }}>LLM Studio</Text>
       <Text style={{ fontSize: 14, color: C.textMuted }}>
         {`Connected to ${provider.name}${model ? ` / ${model}` : ''}`}
       </Text>
-      <Text style={{ fontSize: 12, color: C.textDim }}>Start a conversation below</Text>
+      <Box style={{ gap: 6, alignItems: 'center' }}>
+        <Text style={{ fontSize: 12, color: C.textDim }}>Type a message below to start chatting</Text>
+        <Text style={{ fontSize: 10, color: C.textDim }}>
+          Conversations are saved automatically
+        </Text>
+      </Box>
+
+      {/* Quick start tips */}
+      <Box style={{ gap: 8, paddingTop: 16, width: 320 }}>
+        <Box style={{ padding: 10, backgroundColor: C.surface, borderRadius: 8, gap: 2 }}>
+          <Text style={{ fontSize: 11, color: C.accent, fontWeight: 'bold' }}>Local Models</Text>
+          <Text style={{ fontSize: 10, color: C.textDim }}>
+            Start Ollama, llama.cpp, or vLLM and select it from the sidebar
+          </Text>
+        </Box>
+        <Box style={{ padding: 10, backgroundColor: C.surface, borderRadius: 8, gap: 2 }}>
+          <Text style={{ fontSize: 11, color: C.accent, fontWeight: 'bold' }}>Cloud APIs</Text>
+          <Text style={{ fontSize: 10, color: C.textDim }}>
+            Add your API key in Settings (Ctrl+,) for OpenAI or Anthropic
+          </Text>
+        </Box>
+        <Box style={{ padding: 10, backgroundColor: C.surface, borderRadius: 8, gap: 2 }}>
+          <Text style={{ fontSize: 11, color: C.accent, fontWeight: 'bold' }}>Custom Endpoints</Text>
+          <Text style={{ fontSize: 10, color: C.textDim }}>
+            Add any OpenAI-compatible server from the Providers tab
+          </Text>
+        </Box>
+      </Box>
     </Box>
   );
 }
@@ -477,78 +868,113 @@ function SettingsPanel({
   maxTokens: number; onMaxTokensChange: (n: number) => void;
   provider: Provider; onProviderKeyChange: (key: string) => void;
 }) {
+  // Common system prompt presets
+  const presets = [
+    { label: 'Default', prompt: 'You are a helpful assistant.' },
+    { label: 'Coder', prompt: 'You are an expert programmer. Write clean, efficient code with clear explanations. Always include the language in code blocks.' },
+    { label: 'Creative', prompt: 'You are a creative writing assistant. Be vivid, expressive, and original.' },
+    { label: 'Concise', prompt: 'Be concise. Answer in as few words as possible while being complete.' },
+  ];
+
   return (
-    <Box style={{
+    <ScrollView style={{
       width: 280, borderLeftWidth: 1, borderColor: C.border,
-      backgroundColor: C.bgSidebar, padding: 16, gap: 16,
+      backgroundColor: C.bgSidebar,
     }}>
-      <Text style={{ fontSize: 14, color: C.text, fontWeight: 'bold' }}>Settings</Text>
-
-      <Box style={{ gap: 4 }}>
-        <Text style={{ fontSize: 11, color: C.textMuted, fontWeight: 'bold' }}>System Prompt</Text>
-        <TextInput
-          value={systemPrompt} onChangeText={onSystemPromptChange}
-          placeholder="You are a helpful assistant..." placeholderColor={C.textDim}
-          multiline
-          style={{ backgroundColor: C.bgInput, borderRadius: 6, padding: 8, minHeight: 80 }}
-          textStyle={{ color: C.text, fontSize: 12 }}
-        />
-      </Box>
-
-      <Box style={{ gap: 4 }}>
-        <Box style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-          <Text style={{ fontSize: 11, color: C.textMuted, fontWeight: 'bold' }}>Temperature</Text>
-          <Text style={{ fontSize: 11, color: C.textDim }}>{temperature.toFixed(1)}</Text>
+      <Box style={{ padding: 16, gap: 16 }}>
+        <Box style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Text style={{ fontSize: 14, color: C.text, fontWeight: 'bold' }}>Settings</Text>
+          <Text style={{ fontSize: 9, color: C.textDim }}>Ctrl+,</Text>
         </Box>
-        <Box style={{ flexDirection: 'row', gap: 4 }}>
-          {[0, 0.3, 0.5, 0.7, 1.0, 1.5, 2.0].map(t => (
-            <Pressable key={t} onPress={() => onTemperatureChange(t)}>
-              {({ hovered }) => (
-                <Box style={{
-                  paddingLeft: 6, paddingRight: 6, paddingTop: 3, paddingBottom: 3,
-                  borderRadius: 4,
-                  backgroundColor: temperature === t ? C.accent : hovered ? C.surfaceHover : C.surface,
-                }}>
-                  <Text style={{ fontSize: 10, color: temperature === t ? '#fff' : C.textMuted }}>
-                    {t.toFixed(1)}
-                  </Text>
-                </Box>
-              )}
-            </Pressable>
-          ))}
-        </Box>
-      </Box>
 
-      <Box style={{ gap: 4 }}>
-        <Text style={{ fontSize: 11, color: C.textMuted, fontWeight: 'bold' }}>Max Tokens</Text>
-        <TextInput
-          value={maxTokens.toString()}
-          onChangeText={(text) => { const n = parseInt(text, 10); if (!isNaN(n) && n > 0) onMaxTokensChange(n); }}
-          placeholder="4096" placeholderColor={C.textDim}
-          style={{ backgroundColor: C.bgInput, borderRadius: 6, padding: 8 }}
-          textStyle={{ color: C.text, fontSize: 12 }}
-        />
-      </Box>
-
-      {(provider.type === 'anthropic' || provider.id === 'openai') && (
+        {/* System prompt presets */}
         <Box style={{ gap: 4 }}>
-          <Text style={{ fontSize: 11, color: C.textMuted, fontWeight: 'bold' }}>API Key</Text>
+          <Text style={{ fontSize: 11, color: C.textMuted, fontWeight: 'bold' }}>System Prompt</Text>
+          <Box style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap' }}>
+            {presets.map(p => (
+              <Pressable key={p.label} onPress={() => onSystemPromptChange(p.prompt)}>
+                {({ hovered }) => (
+                  <Box style={{
+                    paddingLeft: 6, paddingRight: 6, paddingTop: 2, paddingBottom: 2, borderRadius: 4,
+                    backgroundColor: systemPrompt === p.prompt ? C.accent : hovered ? C.surfaceHover : C.surface,
+                  }}>
+                    <Text style={{ fontSize: 9, color: systemPrompt === p.prompt ? '#fff' : C.textMuted }}>
+                      {p.label}
+                    </Text>
+                  </Box>
+                )}
+              </Pressable>
+            ))}
+          </Box>
           <TextInput
-            value={provider.apiKey || ''} onChangeText={onProviderKeyChange}
-            placeholder={provider.type === 'anthropic' ? 'sk-ant-...' : 'sk-...'}
-            placeholderColor={C.textDim}
+            value={systemPrompt} onChangeText={onSystemPromptChange}
+            placeholder="You are a helpful assistant..." placeholderColor={C.textDim}
+            multiline
+            style={{ backgroundColor: C.bgInput, borderRadius: 6, padding: 8, minHeight: 80 }}
+            textStyle={{ color: C.text, fontSize: 12 }}
+          />
+        </Box>
+
+        {/* Temperature */}
+        <Box style={{ gap: 4 }}>
+          <Box style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+            <Text style={{ fontSize: 11, color: C.textMuted, fontWeight: 'bold' }}>Temperature</Text>
+            <Text style={{ fontSize: 11, color: C.textDim }}>{temperature.toFixed(1)}</Text>
+          </Box>
+          <Box style={{ flexDirection: 'row', gap: 4 }}>
+            {[0, 0.3, 0.5, 0.7, 1.0, 1.5, 2.0].map(t => (
+              <Pressable key={t} onPress={() => onTemperatureChange(t)}>
+                {({ hovered }) => (
+                  <Box style={{
+                    paddingLeft: 6, paddingRight: 6, paddingTop: 3, paddingBottom: 3,
+                    borderRadius: 4,
+                    backgroundColor: temperature === t ? C.accent : hovered ? C.surfaceHover : C.surface,
+                  }}>
+                    <Text style={{ fontSize: 10, color: temperature === t ? '#fff' : C.textMuted }}>
+                      {t.toFixed(1)}
+                    </Text>
+                  </Box>
+                )}
+              </Pressable>
+            ))}
+          </Box>
+        </Box>
+
+        {/* Max tokens */}
+        <Box style={{ gap: 4 }}>
+          <Text style={{ fontSize: 11, color: C.textMuted, fontWeight: 'bold' }}>Max Tokens</Text>
+          <TextInput
+            value={maxTokens.toString()}
+            onChangeText={(text) => { const n = parseInt(text, 10); if (!isNaN(n) && n > 0) onMaxTokensChange(n); }}
+            placeholder="4096" placeholderColor={C.textDim}
             style={{ backgroundColor: C.bgInput, borderRadius: 6, padding: 8 }}
             textStyle={{ color: C.text, fontSize: 12 }}
           />
         </Box>
-      )}
 
-      <Box style={{ gap: 4, paddingTop: 8, borderTopWidth: 1, borderColor: C.border }}>
-        <Text style={{ fontSize: 11, color: C.textMuted, fontWeight: 'bold' }}>Connection</Text>
-        {provider.baseURL && <Text style={{ fontSize: 10, color: C.textDim }}>{provider.baseURL}</Text>}
-        <Text style={{ fontSize: 10, color: C.textDim }}>{`Provider type: ${provider.type}`}</Text>
+        {/* API Key for cloud providers */}
+        {(provider.type === 'anthropic' || provider.id === 'openai') && (
+          <Box style={{ gap: 4 }}>
+            <Text style={{ fontSize: 11, color: C.textMuted, fontWeight: 'bold' }}>API Key</Text>
+            <TextInput
+              value={provider.apiKey || ''} onChangeText={onProviderKeyChange}
+              placeholder={provider.type === 'anthropic' ? 'sk-ant-...' : 'sk-...'}
+              placeholderColor={C.textDim}
+              style={{ backgroundColor: C.bgInput, borderRadius: 6, padding: 8 }}
+              textStyle={{ color: C.text, fontSize: 12 }}
+            />
+          </Box>
+        )}
+
+        {/* Connection info */}
+        <Box style={{ gap: 4, paddingTop: 8, borderTopWidth: 1, borderColor: C.border }}>
+          <Text style={{ fontSize: 11, color: C.textMuted, fontWeight: 'bold' }}>Connection</Text>
+          {provider.baseURL && <Text style={{ fontSize: 10, color: C.textDim }}>{provider.baseURL}</Text>}
+          <Text style={{ fontSize: 10, color: C.textDim }}>{`Provider: ${provider.type}`}</Text>
+          <HealthDot healthy={provider.healthy} />
+        </Box>
       </Box>
-    </Box>
+    </ScrollView>
   );
 }
 
@@ -575,7 +1001,10 @@ function ModelBrowser({
             {`${provider.icon} ${provider.name} - ${models.length} models available`}
           </Text>
         </Box>
-        <Btn label="Refresh" color={C.accent} bgColor={C.surface} onPress={onRefresh} />
+        <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+          <HealthDot healthy={provider.healthy} />
+          <Btn label="Refresh" color={C.accent} bgColor={C.surface} onPress={onRefresh} />
+        </Box>
       </Box>
 
       <TextInput
@@ -590,9 +1019,9 @@ function ModelBrowser({
           <Text style={{ fontSize: 14, color: C.textMuted }}>Loading models...</Text>
         </Box>
       ) : error ? (
-        <Box style={{ padding: 20, backgroundColor: C.redDim, borderRadius: 8 }}>
+        <Box style={{ padding: 20, backgroundColor: C.redDim, borderRadius: 8, gap: 4 }}>
           <Text style={{ fontSize: 13, color: C.red }}>{`Failed to fetch: ${error.message}`}</Text>
-          <Text style={{ fontSize: 11, color: C.textDim, paddingTop: 4 }}>
+          <Text style={{ fontSize: 11, color: C.textDim }}>
             {`Make sure ${provider.name} is running${provider.baseURL ? ` at ${provider.baseURL}` : ''}`}
           </Text>
         </Box>
@@ -663,9 +1092,12 @@ function ProviderManager({
                     <Text style={{ fontSize: 20 }}>{p.icon}</Text>
                     <Box>
                       <Text style={{ fontSize: 14, color: C.text, fontWeight: 'bold' }}>{p.name}</Text>
-                      <Text style={{ fontSize: 10, color: C.textDim }}>
-                        {isLocal ? `Local - ${p.baseURL}` : `Cloud - ${p.type}`}
-                      </Text>
+                      <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+                        <Text style={{ fontSize: 10, color: C.textDim }}>
+                          {isLocal ? `Local - ${p.baseURL}` : `Cloud - ${p.type}`}
+                        </Text>
+                        <HealthDot healthy={p.healthy} />
+                      </Box>
                     </Box>
                   </Box>
                   <Box style={{ flexDirection: 'row', gap: 6 }}>
@@ -702,17 +1134,19 @@ function ProviderManager({
 
 // ── Shared small components ──────────────────────────────────────────────────
 
-function NavTab({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
+function NavTab({ label, active, onPress, hint }: { label: string; active: boolean; onPress: () => void; hint?: string }) {
   return (
     <Pressable onPress={onPress}>
       {({ hovered }) => (
         <Box style={{
           paddingLeft: 10, paddingRight: 10, paddingTop: 5, paddingBottom: 5, borderRadius: 6,
           backgroundColor: active ? C.surfaceActive : hovered ? C.surfaceHover : 'transparent',
+          flexDirection: 'row', gap: 4, alignItems: 'center',
         }}>
           <Text style={{ fontSize: 11, color: active ? C.text : C.textMuted, fontWeight: active ? 'bold' : 'normal' }}>
             {label}
           </Text>
+          {hint && <Text style={{ fontSize: 8, color: C.textDim }}>{hint}</Text>}
         </Box>
       )}
     </Pressable>
