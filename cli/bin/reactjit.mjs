@@ -26,6 +26,7 @@ import { migrateFlutterCommand } from '../commands/migrate-flutter.mjs';
 import { testCommand } from '../commands/test.mjs';
 import { overlayCommand } from '../commands/overlay.mjs';
 import { classifyCommand } from '../commands/classify.mjs';
+import { gradioCommand } from '../commands/gradio.mjs';
 
 const [,, command, ...args] = argv;
 
@@ -86,6 +87,12 @@ const HELP = `
     rjit migrate-blessed <app.js>   Convert Blessed terminal UI → ReactJIT TSX
     rjit migrate-pyqt6 <app.py>     Convert PyQt6/PySide6 app → ReactJIT TSX
     rjit migrate-flutter <app.dart>  Convert Flutter/Dart app → ReactJIT TSX
+
+  Gradio:
+    rjit gradio <url>             Render a running Gradio app natively
+    rjit gradio <app.py>          Launch app.py headless + render natively
+    rjit gradio config <url>      Dump /config as JSON
+    rjit gradio components <url>  List components in the app
 
   Tools:
     rjit convert <file>           Convert HTML/React div-soup → ReactJIT
@@ -182,6 +189,9 @@ switch (command) {
     break;
   case 'migrate-flutter':
     migrateFlutterCommand(args);
+    break;
+  case 'gradio':
+    await gradioCommand(args);
     break;
   case '--version':
   case '-v':
