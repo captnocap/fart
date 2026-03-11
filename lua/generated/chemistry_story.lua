@@ -60,6 +60,7 @@ local function rebuildList_0(wrapperNodeId, items, data, state, refresh)
   local tmpl = {}
   for _i, tab in ipairs(items) do
     tmpl[#tmpl + 1] =
+    -- rjit-ignore-next-line
     { type = "View", key = "li_0_" .. _i, style = { paddingTop = 6, paddingBottom = 6, paddingLeft = 12, paddingRight = 12, borderRadius = 6, backgroundColor = (state.activeTab == tab.id) and "#10b981" or "#363a4f" }, handlers = { onPress = function() state.activeTab = tab.id; refresh() end }, children = {
       { type = "Text", key = "li_0_1_" .. _i, style = { fontSize = 12, color = (state.activeTab == tab.id) and "#000000" or "#a5adcb" }, children = {
         { type = "__TEXT__", key = "li_0_1_e2_" .. _i, text = tab.label or "" }
@@ -75,6 +76,7 @@ local function rebuildList_1(wrapperNodeId, items, data, state, refresh)
   local tmpl = {}
   for _i, e in ipairs(items) do
     tmpl[#tmpl + 1] =
+    -- rjit-ignore-next-line
     { type = "View", key = "li_0_" .. _i, style = { paddingTop = 4, paddingBottom = 4, paddingLeft = 8, paddingRight = 8, borderRadius = 4, backgroundColor = (state.selected == e.n) and "#10b981" or "#363a4f" }, handlers = { onPress = function() state.selected = e.n; refresh() end }, children = {
       { type = "Text", key = "li_0_1_" .. _i, style = { fontSize = 11, color = (state.selected == e.n) and "#000000" or "#cad3f5" }, children = {
         { type = "__TEXT__", key = "li_0_1_e2_" .. _i, text = e.sym or "" }
@@ -90,6 +92,7 @@ local function rebuildList_2(wrapperNodeId, items, data, state, refresh)
   local tmpl = {}
   for _i, f in ipairs(items) do
     tmpl[#tmpl + 1] =
+    -- rjit-ignore-next-line
     { type = "View", key = "li_0_" .. _i, style = { paddingTop = 4, paddingBottom = 4, paddingLeft = 8, paddingRight = 8, borderRadius = 4, backgroundColor = (state.selectedFormula == f) and "#10b981" or "#363a4f" }, handlers = { onPress = function() state.selectedFormula = f; refresh() end }, children = {
       { type = "Text", key = "li_0_1_" .. _i, style = { fontSize = 11, color = (state.selectedFormula == f) and "#000000" or "#cad3f5" }, children = {
         { type = "__TEXT__", key = "li_0_1_e2_" .. _i, text = f or "" }
@@ -105,6 +108,7 @@ local function rebuildList_3(wrapperNodeId, items, data, state, refresh)
   local tmpl = {}
   for _i, eq in ipairs(items) do
     tmpl[#tmpl + 1] =
+    -- rjit-ignore-next-line
     { type = "View", key = "li_0_" .. _i, style = { paddingTop = 6, paddingBottom = 6, paddingLeft = 10, paddingRight = 10, borderRadius = 4, backgroundColor = (state.selectedReaction == eq) and "rgba(16,185,129,0.15)" or "#363a4f" }, handlers = { onPress = function() state.selectedReaction = eq; refresh() end }, children = {
       { type = "Text", key = "li_0_1_" .. _i, style = { fontSize = 12, color = (state.selectedReaction == eq) and "#10b981" or "#a5adcb" }, children = {
         { type = "__TEXT__", key = "li_0_1_e2_" .. _i, text = eq or "" }
