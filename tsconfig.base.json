@@ -42,7 +42,8 @@
       "@reactjit/finance": ["./packages/finance/src"],
       "@reactjit/chemistry": ["./packages/chemistry/src"],
       "@reactjit/data": ["./packages/data/src"],
-      "@reactjit/networking": ["./packages/networking/src"]
+      "@reactjit/networking": ["./packages/networking/src"],
+      "@reactjit/environments": ["./packages/environments/src"]
     }
   }
 }

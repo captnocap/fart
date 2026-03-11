@@ -2005,6 +2005,16 @@ function ReactJIT.init(config)
     startupLog("[reactjit] Archive module loaded")
   end
 
+  -- Load environments module (process environment management)
+  local envOk, envMod = pcall(require, "lua.environments")
+  if envOk and envMod then
+    M.environments = envMod
+    for method, handler in pairs(envMod.getHandlers()) do
+      rpcHandlers[method] = handler
+    end
+    startupLog("[reactjit] Environments module loaded")
+  end
+
   -- Load math utilities module (noise, FFT, bezier, batch compute)
   local mathOk, mathMod = pcall(require, "lua.math_utils")
   if mathOk and mathMod then
@@ -3462,6 +3472,16 @@ function ReactJIT.update(dt)
   if M.httpserver then
     local httpEvents = M.httpserver.pollAll()
     for _, evt in ipairs(httpEvents) do
+      local evtType = evt.type
+      evt.type = nil
+      pushEvent({ type = evtType, payload = evt })
+    end
+  end
+
+  -- 7b. Poll environments for process I/O and setup completion
+  if M.environments then
+    local envEvents = M.environments.pollAll()
+    for _, evt in ipairs(envEvents) do
       local evtType = evt.type
       evt.type = nil
       pushEvent({ type = evtType, payload = evt })
@@ -6157,6 +6177,9 @@ function ReactJIT.quit()
   end
   -- canvas mode uses bridge_fs which has no destroy method
   M.bridge = nil
+
+  -- Shut down environments (kill all managed processes)
+  if M.environments then M.environments.shutdown() end
 
   -- Kill any remaining child processes (belt-and-suspenders with individual stop() calls above)
   local regOk, reg = pcall(require, "lua.process_registry")
