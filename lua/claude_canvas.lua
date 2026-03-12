@@ -234,6 +234,9 @@ Capabilities.register("ClaudeCanvas", {
     local font = Measure.getFont(fontSize, nil, nil)
     local lineHeight = font:getHeight()
 
+    -- Debug mode: must be computed before layout decisions that depend on it
+    local debugVis = (props.debugVisible == nil) and true or props.debugVisible
+
     -- Debug overlay height (3 lines of debug text + margin)
     local df, dfH, debugTop
     if debugVis then
@@ -276,7 +279,6 @@ Capabilities.register("ClaudeCanvas", {
       local rows, cols = vterm:size()
 
       -- Debug mode: show tag labels, row numbers, color strings
-      local debugVis = (props.debugVisible == nil) and true or props.debugVisible
       local cellOffsetX, rowNumW
       if debugVis then
         local tagW = tagFont:getWidth("[list_selectable] ")
