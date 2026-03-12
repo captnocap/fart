@@ -1117,6 +1117,88 @@ local handlers = {
       outputPath = outputPath,
     }
   end,
+
+  -- -------------------------------------------------------------------------
+  -- Seed-point flood detection RPCs
+  -- -------------------------------------------------------------------------
+
+  --- Detect a region by flood-filling from a seed point, then refining the
+  --- boundary through multi-channel edge consensus (Sobel + Laplacian +
+  --- luminance gradient + chroma gradient, averaged).
+  ---
+  --- @param args.src string  Source image path
+  --- @param args.seedX number  Seed point X coordinate (pixels)
+  --- @param args.seedY number  Seed point Y coordinate (pixels)
+  --- @param args.tolerance number  (optional) Color distance threshold (0-1, default 0.2)
+  --- @param args.adaptive boolean  (optional) Compare against running mean (default true)
+  --- @param args.edgeStrength number  (optional) Edge refinement strength (0-1)
+  --- @param args.edgeThreshold number  (optional) Edge detection sensitivity
+  --- @param args.morphRadius number  (optional) Morphological cleanup radius
+  --- @param args.featherRadius number  (optional) Edge feather radius
+  --- @param args.output string  (optional) Save mask to file
+  --- @return { ok, maskId, width, height, meanColor, error }
+  ["imaging:flood_detect"] = function(args)
+    args = args or {}
+    local FloodDetect = require("lua.imaging.ops.flood_detect")
+
+    local src = args.src
+    if not src or src == "" then
+      return { ok = false, error = "src is required" }
+    end
+
+    local seedX = tonumber(args.seedX)
+    local seedY = tonumber(args.seedY)
+    if not seedX or not seedY then
+      return { ok = false, error = "seedX and seedY are required" }
+    end
+
+    -- Load source image
+    local loadOk, img = pcall(love.graphics.newImage, src)
+    if not loadOk or not img then
+      return { ok = false, error = "Failed to load: " .. tostring(src) }
+    end
+
+    local iw, ih = img:getWidth(), img:getHeight()
+    local source = love.graphics.newCanvas(iw, ih)
+    love.graphics.push("all")
+    love.graphics.setCanvas(source)
+    love.graphics.clear(0, 0, 0, 0)
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.draw(img, 0, 0)
+    love.graphics.pop()
+    img:release()
+
+    local detectOk, mask, meanColor = pcall(function()
+      return FloodDetect.floodDetect(source, seedX, seedY, {
+        tolerance = args.tolerance and tonumber(args.tolerance) or nil,
+        adaptive = args.adaptive,
+        edgeStrength = args.edgeStrength and tonumber(args.edgeStrength) or nil,
+        edgeThreshold = args.edgeThreshold and tonumber(args.edgeThreshold) or nil,
+        morphRadius = args.morphRadius and tonumber(args.morphRadius) or nil,
+        featherRadius = args.featherRadius and tonumber(args.featherRadius) or nil,
+      })
+    end)
+
+    source:release()
+
+    if not detectOk or not mask then
+      return { ok = false, error = "Flood detection failed: " .. tostring(mask) }
+    end
+
+    -- Save mask if output specified
+    if args.output and args.output ~= "" then
+      pcall(Imaging.save, mask, args.output)
+    end
+
+    local maskId = MaskRegistry.store(mask)
+    return {
+      ok = true,
+      maskId = maskId,
+      width = iw,
+      height = ih,
+      meanColor = meanColor,
+    }
+  end,
 }
 
 local Caps = require("lua.capabilities")

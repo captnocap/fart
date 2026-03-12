@@ -1,125 +1,107 @@
 /**
- * Object Detection — foreground segmentation + background replacement demo.
+ * Object Detection — two approaches to foreground segmentation + background replacement.
  *
- * Uses GPU-accelerated edge-aware color distance segmentation to separate
- * the robot (avatar.png) from its background, then composites it onto
- * the mountain landscape (landscape.png).
+ * Tab 1 "Border Detect": samples border pixels as background, auto-segments foreground.
+ * Tab 2 "Seed Flood": user clicks a point on the subject, flood-fills outward by color
+ *   similarity, then validates the boundary through 4 edge detection channels averaged
+ *   into a consensus edge.
  *
- * All compute runs in Lua/GLSL. React just declares the layout and buttons.
+ * All compute runs in Lua/GLSL. React just declares layout and buttons.
  */
 
 import React, { useState } from 'react';
 import { Box, Text, Image, Pressable, ScrollView, Native, CodeBlock, classifiers as S } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
-import { useObjectDetect, useImaging } from '../../../packages/imaging/src';
-import type { DetectForegroundParams } from '../../../packages/imaging/src';
-import { Band, Half, HeroBand, CalloutBand, Divider, SectionLabel, PageColumn } from './_shared/StoryScaffold';
+import { useObjectDetect, useFloodDetect, useImaging } from '../../../packages/imaging/src';
+import type { DetectForegroundParams, FloodDetectParams } from '../../../packages/imaging/src';
+import { Band, Half, CalloutBand, SectionLabel, PageColumn } from './_shared/StoryScaffold';
 
 // ── Palette ──────────────────────────────────────────────
 
 const C = {
   accent: '#06b6d4',
-  accentDim: 'rgba(6, 182, 212, 0.12)',
-  callout: 'rgba(6, 182, 212, 0.06)',
-  calloutBorder: 'rgba(6, 182, 212, 0.30)',
   detect: '#22d3ee',
+  flood: '#f59e0b',
   mask: '#a78bfa',
   composite: '#34d399',
   param: '#fbbf24',
+  callout: 'rgba(6, 182, 212, 0.06)',
+  calloutBorder: 'rgba(6, 182, 212, 0.30)',
+  floodCallout: 'rgba(245, 158, 11, 0.06)',
+  floodCalloutBorder: 'rgba(245, 158, 11, 0.30)',
 };
 
 // ── Static images ────────────────────────────────────────
 
 const FG_SRC = 'lib/placeholders/avatar.png';
 const BG_SRC = 'lib/placeholders/landscape.png';
-const OUTPUT_PATH = 'object_detect_result.png';
+const BORDER_OUTPUT = 'object_detect_result.png';
+const FLOOD_OUTPUT = 'flood_detect_result.png';
+const BORDER_MASK_OUTPUT = 'object_detect_mask.png';
+const FLOOD_MASK_OUTPUT = 'flood_detect_mask.png';
 
 // ── Code samples ─────────────────────────────────────────
 
-const HOOK_CODE = `import { useObjectDetect }
-  from '@reactjit/imaging'
+const BORDER_CODE = `const { detectForeground,
+        compositeBackground } = useObjectDetect();
 
-const { detectForeground,
-        compositeBackground,
-        releaseMask } = useObjectDetect();
-
-// Step 1: detect
-const det = await detectForeground(
-  'avatar.png'
-);
-
-// Step 2: composite
+const det = await detectForeground('avatar.png');
 await compositeBackground(
-  'avatar.png',
-  'landscape.png',
-  det.maskId,
-  'output.png'
+  'avatar.png', 'landscape.png',
+  det.maskId, 'output.png'
+);`;
+
+const FLOOD_CODE = `const { floodDetect,
+        compositeBackground } = useFloodDetect();
+
+// User clicked at (256, 300) on the robot
+const det = await floodDetect(
+  'avatar.png', 256, 300,
+  { tolerance: 0.2 }
 );
+await compositeBackground(
+  'avatar.png', 'landscape.png',
+  det.maskId, 'output.png'
+);`;
 
-// Step 3: cleanup
-await releaseMask(det.maskId);`;
+// ── Border detect presets ────────────────────────────────
 
-const LUA_CODE = `local Detect = require("lua.imaging.ops.detect")
-local Imaging = require("lua.imaging")
+const BORDER_PRESETS: { label: string; params: DetectForegroundParams }[] = [
+  { label: 'Auto', params: {} },
+  { label: 'Tight', params: { threshold: 0.15, softness: 0.04, morphRadius: 3, featherRadius: 2, edgeWeight: 1.0 } },
+  { label: 'Soft', params: { threshold: 0.25, softness: 0.12, morphRadius: 2, featherRadius: 6, edgeWeight: 0.5 } },
+  { label: 'Wide', params: { threshold: 0.35, softness: 0.15, morphRadius: 1, featherRadius: 4, edgeWeight: 0.3 } },
+];
 
--- Load source
-local img = love.graphics.newImage("avatar.png")
-local canvas = love.graphics.newCanvas(
-  img:getWidth(), img:getHeight()
-)
--- ... draw img to canvas ...
+// ── Flood detect presets ─────────────────────────────────
 
--- Detect foreground -> grayscale mask
-local mask = Detect.detectForeground(canvas, {
-  threshold = 0.25,
-  edgeWeight = 0.8,
-  featherRadius = 4,
-})
+const FLOOD_PRESETS: { label: string; params: FloodDetectParams }[] = [
+  { label: 'Normal', params: { tolerance: 0.2 } },
+  { label: 'Tight', params: { tolerance: 0.12, edgeStrength: 1.0, edgeThreshold: 0.05 } },
+  { label: 'Loose', params: { tolerance: 0.35, edgeStrength: 0.6, edgeThreshold: 0.12 } },
+  { label: 'Broad', params: { tolerance: 0.5, adaptive: true, edgeStrength: 0.8, featherRadius: 4 } },
+];
 
--- Composite with new background
-local bg = love.graphics.newImage("landscape.png")
-local bgCanvas = -- ... load to canvas ...
-local result = Detect.compositeBackground(
-  canvas, bgCanvas, mask
-)`;
+// ── Seed point presets (interesting spots on the robot) ──
 
-// ── Param presets ────────────────────────────────────────
-
-interface Preset {
-  label: string;
-  icon: string;
-  params: DetectForegroundParams;
-}
-
-const PRESETS: Preset[] = [
-  {
-    label: 'Auto',
-    icon: 'A',
-    params: {},
-  },
-  {
-    label: 'Tight',
-    icon: 'T',
-    params: { threshold: 0.15, softness: 0.04, morphRadius: 3, featherRadius: 2, edgeWeight: 1.0 },
-  },
-  {
-    label: 'Soft',
-    icon: 'S',
-    params: { threshold: 0.25, softness: 0.12, morphRadius: 2, featherRadius: 6, edgeWeight: 0.5 },
-  },
-  {
-    label: 'Wide',
-    icon: 'W',
-    params: { threshold: 0.35, softness: 0.15, morphRadius: 1, featherRadius: 4, edgeWeight: 0.3 },
-  },
+const SEED_POINTS: { label: string; x: number; y: number }[] = [
+  { label: 'Head', x: 260, y: 140 },
+  { label: 'Chest', x: 280, y: 310 },
+  { label: 'Shoulder', x: 180, y: 260 },
+  { label: 'Eye', x: 290, y: 170 },
+  { label: 'Scarf', x: 250, y: 240 },
+  { label: 'Center', x: 256, y: 256 },
 ];
 
 // ── Styles (hoisted) ─────────────────────────────────────
 
 const S_ROOT = { width: '100%' as const, height: '100%' as const };
-const S_HEADER = { paddingTop: 32, paddingBottom: 16, paddingLeft: 24, paddingRight: 24, alignItems: 'center' as const };
+const S_HEADER = { paddingTop: 32, paddingBottom: 8, paddingLeft: 24, paddingRight: 24, alignItems: 'center' as const };
 const S_TITLE = { fontSize: 28, fontWeight: 'bold' as const };
 const S_SUBTITLE = { fontSize: 14, marginTop: 4 };
+const S_TABS = { flexDirection: 'row' as const, justifyContent: 'center' as const, gap: 0, marginTop: 12, marginBottom: 16 };
+const S_TAB = { paddingLeft: 20, paddingRight: 20, paddingTop: 10, paddingBottom: 10 };
+const S_TAB_TXT = { fontSize: 14, fontWeight: 'bold' as const };
 const S_PREVIEW_ROW = { flexDirection: 'row' as const, gap: 12, justifyContent: 'center' as const, paddingLeft: 16, paddingRight: 16 };
 const S_PREVIEW_BOX = { borderRadius: 8, overflow: 'hidden' as const };
 const S_PREVIEW_LABEL = { fontSize: 11, textAlign: 'center' as const, marginTop: 4, marginBottom: 2 };
@@ -136,123 +118,317 @@ const S_RESULT_WRAP = { alignItems: 'center' as const, paddingTop: 8, paddingBot
 const S_SECTION = { paddingLeft: 24, paddingRight: 24, paddingTop: 16, paddingBottom: 16 };
 const S_DIVIDER = { height: 1, marginTop: 16, marginBottom: 16 };
 
-// ── Component ────────────────────────────────────────────
+// ── Shared: Preset Row ───────────────────────────────────
 
-export function ObjectDetectStory() {
+function PresetRow({ items, active, onSelect, accentColor }: {
+  items: { label: string }[];
+  active: number;
+  onSelect: (i: number) => void;
+  accentColor: string;
+}) {
+  const c = useThemeColors();
+  return (
+    <Box style={S_PRESETS}>
+      {items.map((p, i) => (
+        <Pressable key={p.label} onPress={() => onSelect(i)}>
+          <Box style={{
+            ...S_PRESET_BTN,
+            backgroundColor: i === active ? accentColor : c.bgElevated,
+            borderWidth: 1,
+            borderColor: i === active ? accentColor : c.border,
+          }}>
+            <Text style={{
+              ...S_PRESET_TXT,
+              color: i === active ? '#000' : c.text,
+              fontWeight: i === active ? 'bold' as const : 'normal' as const,
+            }}>
+              {p.label}
+            </Text>
+          </Box>
+        </Pressable>
+      ))}
+    </Box>
+  );
+}
+
+// ── Tab 1: Border Detect ─────────────────────────────────
+
+function BorderDetectPanel() {
   const c = useThemeColors();
   const { detectForeground, compositeBackground, releaseMask, processing, error } = useObjectDetect();
   const { apply } = useImaging();
 
   const [maskId, setMaskId] = useState<string | null>(null);
   const [hasResult, setHasResult] = useState(false);
-  const [hasMaskPreview, setHasMaskPreview] = useState(false);
-  const [activePreset, setActivePreset] = useState(0);
-  const [statusMsg, setStatusMsg] = useState('Ready. Press Detect to begin.');
+  const [hasMask, setHasMask] = useState(false);
+  const [preset, setPreset] = useState(0);
+  const [status, setStatus] = useState('Press Run All to detect + composite.');
+
+  const runAll = async () => {
+    if (maskId) { await releaseMask(maskId); setMaskId(null); }
+    setHasResult(false);
+    setHasMask(false);
+    setStatus('Running border detection pipeline...');
+
+    const params = BORDER_PRESETS[preset].params;
+    const det = await detectForeground(FG_SRC, params);
+    if (!det?.ok) { setStatus(`Failed: ${det?.error || 'unknown'}`); return; }
+    setMaskId(det.maskId);
+
+    await apply({ src: FG_SRC, operations: [{ op: 'detect_foreground', ...params }], output: BORDER_MASK_OUTPUT });
+    setHasMask(true);
+
+    const comp = await compositeBackground(FG_SRC, BG_SRC, det.maskId, BORDER_OUTPUT);
+    if (!comp?.ok) { setStatus(`Composite failed: ${comp?.error || 'unknown'}`); return; }
+
+    setHasResult(true);
+    setStatus(`Done! ${comp.width}x${comp.height}`);
+  };
+
+  return (
+    <Box>
+      <SectionLabel color={C.detect} label="Preset" />
+      <PresetRow items={BORDER_PRESETS} active={preset} onSelect={setPreset} accentColor={C.detect} />
+
+      <Box style={S_ACTIONS}>
+        <Pressable onPress={runAll}>
+          <Box style={{ ...S_BTN, backgroundColor: C.detect }}>
+            <Text style={{ ...S_BTN_TXT, color: '#000' }}>Run All</Text>
+          </Box>
+        </Pressable>
+      </Box>
+
+      <Text style={{ ...S_STATUS, color: error ? '#ef4444' : processing ? C.accent : c.muted }}>
+        {processing ? 'Processing...' : error || status}
+      </Text>
+
+      {hasMask && (
+        <Box>
+          <SectionLabel color={C.mask} label="Detection Mask" />
+          <Box style={S_RESULT_WRAP}>
+            <Box style={{ ...S_PREVIEW_BOX, borderWidth: 2, borderColor: C.mask }}>
+              <Native type="Imaging" src={BORDER_MASK_OUTPUT} operations="[]" style={S_IMG} />
+            </Box>
+          </Box>
+        </Box>
+      )}
+
+      {hasResult && (
+        <Box>
+          <SectionLabel color={C.composite} label="Result" />
+          <Box style={S_RESULT_WRAP}>
+            <Box style={{ ...S_PREVIEW_BOX, borderWidth: 2, borderColor: C.composite }}>
+              <Native type="Imaging" src={BORDER_OUTPUT} operations="[]" style={S_RESULT_IMG} />
+            </Box>
+          </Box>
+        </Box>
+      )}
+
+      <CalloutBand borderColor={C.calloutBorder} bgColor={C.callout}>
+        <Text style={{ fontSize: 12, color: c.text, lineHeight: 18 }}>
+          {`Approach: Sample border pixels as "definite background", k-means cluster into 4 colors, GPU shader measures per-pixel distance to clusters, Sobel edge refines boundaries, morphological cleanup + feather.`}
+        </Text>
+      </CalloutBand>
+
+      <Box style={{ ...S_DIVIDER, backgroundColor: c.border }} />
+      <SectionLabel color={C.detect} label="Code" />
+      <Box style={S_SECTION}>
+        <CodeBlock value={BORDER_CODE} />
+      </Box>
+    </Box>
+  );
+}
+
+// ── Tab 2: Seed Flood Detect ─────────────────────────────
+
+function FloodDetectPanel() {
+  const c = useThemeColors();
+  const { floodDetect, compositeBackground, releaseMask, processing, error } = useFloodDetect();
+
+  const [maskId, setMaskId] = useState<string | null>(null);
+  const [hasResult, setHasResult] = useState(false);
+  const [hasMask, setHasMask] = useState(false);
+  const [preset, setPreset] = useState(0);
+  const [seedIdx, setSeedIdx] = useState(0);
+  const [status, setStatus] = useState('Pick a seed point on the robot, then press Detect.');
+
+  const seed = SEED_POINTS[seedIdx];
 
   const runDetect = async () => {
-    // Clean up previous mask
-    if (maskId) {
-      await releaseMask(maskId);
-      setMaskId(null);
-    }
+    if (maskId) { await releaseMask(maskId); setMaskId(null); }
     setHasResult(false);
-    setHasMaskPreview(false);
-    setStatusMsg('Detecting foreground...');
+    setHasMask(false);
+    setStatus(`Flood filling from (${seed.x}, ${seed.y})...`);
 
-    const params = PRESETS[activePreset].params;
-    const det = await detectForeground(FG_SRC, params);
-    if (!det || !det.ok) {
-      setStatusMsg(`Detection failed: ${det?.error || 'unknown'}`);
-      return;
-    }
-
+    const params = FLOOD_PRESETS[preset].params;
+    const det = await floodDetect(FG_SRC, seed.x, seed.y, { ...params, output: FLOOD_MASK_OUTPUT } as any);
+    if (!det?.ok) { setStatus(`Failed: ${det?.error || 'unknown'}`); return; }
     setMaskId(det.maskId);
-    setStatusMsg(`Mask generated (${det.width}x${det.height}). Generating mask preview...`);
-
-    // Generate mask preview by applying the mask as an image op
-    const maskPreview = await apply({
-      src: FG_SRC,
-      operations: [{ op: 'detect_foreground', ...params }],
-      output: 'object_detect_mask.png',
-    });
-
-    if (maskPreview?.ok) {
-      setHasMaskPreview(true);
-    }
-
-    setStatusMsg(`Mask ready. Press Composite to swap background.`);
+    setHasMask(true);
+    setStatus(`Mask ready (${det.width}x${det.height}). Press Composite.`);
   };
 
   const runComposite = async () => {
-    if (!maskId) {
-      setStatusMsg('No mask. Run Detect first.');
-      return;
-    }
-    setStatusMsg('Compositing foreground onto mountain landscape...');
+    if (!maskId) { setStatus('No mask. Run Detect first.'); return; }
+    setStatus('Compositing...');
 
-    const result = await compositeBackground(FG_SRC, BG_SRC, maskId, OUTPUT_PATH);
-    if (!result || !result.ok) {
-      setStatusMsg(`Composite failed: ${result?.error || 'unknown'}`);
-      return;
-    }
+    const comp = await compositeBackground(FG_SRC, BG_SRC, maskId, FLOOD_OUTPUT);
+    if (!comp?.ok) { setStatus(`Failed: ${comp?.error || 'unknown'}`); return; }
 
     setHasResult(true);
-    setStatusMsg(`Done! ${result.width}x${result.height} composited.`);
+    setStatus(`Done! ${comp.width}x${comp.height}`);
   };
 
   const runAll = async () => {
-    if (maskId) {
-      await releaseMask(maskId);
-      setMaskId(null);
-    }
+    if (maskId) { await releaseMask(maskId); setMaskId(null); }
     setHasResult(false);
-    setHasMaskPreview(false);
-    setStatusMsg('Running full pipeline...');
+    setHasMask(false);
+    setStatus(`Full pipeline from seed (${seed.x}, ${seed.y})...`);
 
-    const params = PRESETS[activePreset].params;
-    const det = await detectForeground(FG_SRC, params);
-    if (!det || !det.ok) {
-      setStatusMsg(`Detection failed: ${det?.error || 'unknown'}`);
-      return;
-    }
+    const params = FLOOD_PRESETS[preset].params;
+    const det = await floodDetect(FG_SRC, seed.x, seed.y, { ...params, output: FLOOD_MASK_OUTPUT } as any);
+    if (!det?.ok) { setStatus(`Failed: ${det?.error || 'unknown'}`); return; }
     setMaskId(det.maskId);
+    setHasMask(true);
 
-    // Mask preview
-    const maskPreview = await apply({
-      src: FG_SRC,
-      operations: [{ op: 'detect_foreground', ...params }],
-      output: 'object_detect_mask.png',
-    });
-    if (maskPreview?.ok) setHasMaskPreview(true);
-
-    // Composite
-    const result = await compositeBackground(FG_SRC, BG_SRC, det.maskId, OUTPUT_PATH);
-    if (!result || !result.ok) {
-      setStatusMsg(`Composite failed: ${result?.error || 'unknown'}`);
-      return;
-    }
+    const comp = await compositeBackground(FG_SRC, BG_SRC, det.maskId, FLOOD_OUTPUT);
+    if (!comp?.ok) { setStatus(`Composite failed: ${comp?.error || 'unknown'}`); return; }
 
     setHasResult(true);
-    setStatusMsg(`Pipeline complete! ${result.width}x${result.height}`);
+    setStatus(`Done! ${comp.width}x${comp.height}`);
   };
+
+  return (
+    <Box>
+      {/* Seed point selector */}
+      <SectionLabel color={C.flood} label="Seed Point" />
+      <Text style={{ fontSize: 11, color: c.muted, textAlign: 'center', paddingBottom: 4 }}>
+        {`Where on the robot to start flood-filling from`}
+      </Text>
+      <PresetRow items={SEED_POINTS} active={seedIdx} onSelect={setSeedIdx} accentColor={C.flood} />
+
+      {/* Tolerance preset */}
+      <SectionLabel color={C.flood} label="Tolerance Preset" />
+      <PresetRow items={FLOOD_PRESETS} active={preset} onSelect={setPreset} accentColor={C.flood} />
+
+      {/* Actions */}
+      <Box style={S_ACTIONS}>
+        <Pressable onPress={runDetect}>
+          <Box style={{ ...S_BTN, backgroundColor: C.flood }}>
+            <Text style={{ ...S_BTN_TXT, color: '#000' }}>Detect</Text>
+          </Box>
+        </Pressable>
+        <Pressable onPress={runComposite}>
+          <Box style={{ ...S_BTN, backgroundColor: C.composite }}>
+            <Text style={{ ...S_BTN_TXT, color: '#000' }}>Composite</Text>
+          </Box>
+        </Pressable>
+        <Pressable onPress={runAll}>
+          <Box style={{ ...S_BTN, backgroundColor: C.mask }}>
+            <Text style={{ ...S_BTN_TXT, color: '#000' }}>Run All</Text>
+          </Box>
+        </Pressable>
+      </Box>
+
+      <Text style={{ ...S_STATUS, color: error ? '#ef4444' : processing ? C.flood : c.muted }}>
+        {processing ? 'Processing...' : error || status}
+      </Text>
+
+      {hasMask && (
+        <Box>
+          <SectionLabel color={C.mask} label="Flood Mask" />
+          <Box style={S_RESULT_WRAP}>
+            <Box style={{ ...S_PREVIEW_BOX, borderWidth: 2, borderColor: C.mask }}>
+              <Native type="Imaging" src={FLOOD_MASK_OUTPUT} operations="[]" style={S_IMG} />
+            </Box>
+            <Text style={{ ...S_PREVIEW_LABEL, color: C.mask, marginTop: 6 }}>
+              {`Seed: ${seed.label} (${seed.x}, ${seed.y})`}
+            </Text>
+          </Box>
+        </Box>
+      )}
+
+      {hasResult && (
+        <Box>
+          <SectionLabel color={C.composite} label="Result" />
+          <Box style={S_RESULT_WRAP}>
+            <Box style={{ ...S_PREVIEW_BOX, borderWidth: 2, borderColor: C.composite }}>
+              <Native type="Imaging" src={FLOOD_OUTPUT} operations="[]" style={S_RESULT_IMG} />
+            </Box>
+          </Box>
+        </Box>
+      )}
+
+      <CalloutBand borderColor={C.floodCalloutBorder} bgColor={C.floodCallout}>
+        <Text style={{ fontSize: 12, color: c.text, lineHeight: 18 }}>
+          {`Approach: BFS flood fill from seed point by color similarity (adaptive mean). Boundary validated through 4 independent edge channels (Sobel, Laplacian, luminance gradient, chroma gradient) averaged into consensus edge. Morphological cleanup + feather.`}
+        </Text>
+      </CalloutBand>
+
+      <Box style={{ ...S_DIVIDER, backgroundColor: c.border }} />
+      <SectionLabel color={C.flood} label="Code" />
+      <Box style={S_SECTION}>
+        <CodeBlock value={FLOOD_CODE} />
+      </Box>
+    </Box>
+  );
+}
+
+// ── Main Component ───────────────────────────────────────
+
+export function ObjectDetectStory() {
+  const c = useThemeColors();
+  const [tab, setTab] = useState<'border' | 'flood'>('border');
 
   return (
     <ScrollView style={S_ROOT}>
       <PageColumn>
-        {/* ── Header ── */}
+        {/* Header */}
         <Box style={S_HEADER}>
           <Text style={{ ...S_TITLE, color: c.text }}>Object Detection</Text>
           <Text style={{ ...S_SUBTITLE, color: c.muted }}>
-            {`GPU-accelerated foreground segmentation + background replacement`}
+            {`Two approaches to foreground segmentation + background replacement`}
           </Text>
         </Box>
 
-        {/* ── Source images ── */}
-        <SectionLabel color={C.detect} label="Source Images" />
+        {/* Tab bar */}
+        <Box style={S_TABS}>
+          <Pressable onPress={() => setTab('border')}>
+            <Box style={{
+              ...S_TAB,
+              backgroundColor: tab === 'border' ? C.detect : 'transparent',
+              borderBottomWidth: 2,
+              borderBottomColor: tab === 'border' ? C.detect : c.border,
+              borderTopLeftRadius: 8,
+              borderBottomLeftRadius: 0,
+            }}>
+              <Text style={{ ...S_TAB_TXT, color: tab === 'border' ? '#000' : c.muted }}>
+                Border Detect
+              </Text>
+            </Box>
+          </Pressable>
+          <Pressable onPress={() => setTab('flood')}>
+            <Box style={{
+              ...S_TAB,
+              backgroundColor: tab === 'flood' ? C.flood : 'transparent',
+              borderBottomWidth: 2,
+              borderBottomColor: tab === 'flood' ? C.flood : c.border,
+              borderTopRightRadius: 8,
+              borderBottomRightRadius: 0,
+            }}>
+              <Text style={{ ...S_TAB_TXT, color: tab === 'flood' ? '#000' : c.muted }}>
+                Seed Flood
+              </Text>
+            </Box>
+          </Pressable>
+        </Box>
+
+        {/* Source images (shared) */}
+        <SectionLabel color={tab === 'border' ? C.detect : C.flood} label="Source Images" />
         <Box style={S_PREVIEW_ROW}>
           <Box>
-            <Text style={{ ...S_PREVIEW_LABEL, color: C.detect }}>Foreground</Text>
-            <Box style={{ ...S_PREVIEW_BOX, borderWidth: 2, borderColor: C.detect }}>
+            <Text style={{ ...S_PREVIEW_LABEL, color: tab === 'border' ? C.detect : C.flood }}>Foreground</Text>
+            <Box style={{ ...S_PREVIEW_BOX, borderWidth: 2, borderColor: tab === 'border' ? C.detect : C.flood }}>
               <Image src={FG_SRC} style={S_IMG} />
             </Box>
           </Box>
@@ -264,134 +440,10 @@ export function ObjectDetectStory() {
           </Box>
         </Box>
 
-        {/* ── Preset selector ── */}
         <Box style={{ ...S_DIVIDER, backgroundColor: c.border }} />
-        <SectionLabel color={C.param} label="Detection Preset" />
-        <Box style={S_PRESETS}>
-          {PRESETS.map((p, i) => (
-            <Pressable key={p.label} onPress={() => setActivePreset(i)}>
-              <Box style={{
-                ...S_PRESET_BTN,
-                backgroundColor: i === activePreset ? C.accent : c.bgElevated,
-                borderWidth: 1,
-                borderColor: i === activePreset ? C.accent : c.border,
-              }}>
-                <Text style={{
-                  ...S_PRESET_TXT,
-                  color: i === activePreset ? '#000' : c.text,
-                  fontWeight: i === activePreset ? 'bold' as const : 'normal' as const,
-                }}>
-                  {`${p.icon} ${p.label}`}
-                </Text>
-              </Box>
-            </Pressable>
-          ))}
-        </Box>
 
-        {/* ── Action buttons ── */}
-        <Box style={S_ACTIONS}>
-          <Pressable onPress={runDetect}>
-            <Box style={{ ...S_BTN, backgroundColor: C.detect }}>
-              <Text style={{ ...S_BTN_TXT, color: '#000' }}>Detect</Text>
-            </Box>
-          </Pressable>
-          <Pressable onPress={runComposite}>
-            <Box style={{ ...S_BTN, backgroundColor: C.composite }}>
-              <Text style={{ ...S_BTN_TXT, color: '#000' }}>Composite</Text>
-            </Box>
-          </Pressable>
-          <Pressable onPress={runAll}>
-            <Box style={{ ...S_BTN, backgroundColor: C.mask }}>
-              <Text style={{ ...S_BTN_TXT, color: '#000' }}>Run All</Text>
-            </Box>
-          </Pressable>
-        </Box>
-
-        {/* ── Status ── */}
-        <Text style={{
-          ...S_STATUS,
-          color: error ? '#ef4444' : processing ? C.accent : c.muted,
-        }}>
-          {processing ? 'Processing...' : error || statusMsg}
-        </Text>
-
-        {/* ── Mask preview ── */}
-        {hasMaskPreview && (
-          <Box>
-            <SectionLabel color={C.mask} label="Detection Mask" />
-            <Box style={S_RESULT_WRAP}>
-              <Box style={{ ...S_PREVIEW_BOX, borderWidth: 2, borderColor: C.mask }}>
-                <Native
-                  type="Imaging"
-                  src="object_detect_mask.png"
-                  operations="[]"
-                  style={S_IMG}
-                />
-              </Box>
-              <Text style={{ ...S_PREVIEW_LABEL, color: C.mask, marginTop: 6 }}>
-                {`White = foreground, Black = background`}
-              </Text>
-            </Box>
-          </Box>
-        )}
-
-        {/* ── Final result ── */}
-        {hasResult && (
-          <Box>
-            <Box style={{ ...S_DIVIDER, backgroundColor: c.border }} />
-            <SectionLabel color={C.composite} label="Result: Robot on Mountains" />
-            <Box style={S_RESULT_WRAP}>
-              <Box style={{ ...S_PREVIEW_BOX, borderWidth: 2, borderColor: C.composite }}>
-                <Native
-                  type="Imaging"
-                  src={OUTPUT_PATH}
-                  operations="[]"
-                  style={S_RESULT_IMG}
-                />
-              </Box>
-            </Box>
-          </Box>
-        )}
-
-        {/* ── How it works ── */}
-        <Box style={{ ...S_DIVIDER, backgroundColor: c.border }} />
-        <SectionLabel color={C.accent} label="How It Works" />
-        <CalloutBand borderColor={C.calloutBorder} bgColor={C.callout}>
-          <Text style={{ fontSize: 13, color: c.text, lineHeight: 20 }}>
-            {`1. Sample border pixels as "definite background" colors\n2. K-means cluster border samples into 4 representative colors\n3. GPU shader: per-pixel color distance to nearest cluster center\n4. Sobel edge detection refines mask along object boundaries\n5. Morphological cleanup (erode + dilate) removes noise\n6. Gaussian feather softens mask edges\n7. Composite: mask blends foreground over new background`}
-          </Text>
-        </CalloutBand>
-
-        {/* ── Code samples ── */}
-        <Box style={{ ...S_DIVIDER, backgroundColor: c.border }} />
-        <SectionLabel color={C.detect} label="React Hook API" />
-        <Band>
-          <Half>
-            <CodeBlock value={HOOK_CODE} style={{ flexGrow: 1, flexBasis: 0 }} />
-          </Half>
-          <Half>
-            <CodeBlock value={LUA_CODE} style={{ flexGrow: 1, flexBasis: 0 }} />
-          </Half>
-        </Band>
-
-        {/* ── Pipeline params reference ── */}
-        <Box style={{ ...S_DIVIDER, backgroundColor: c.border }} />
-        <SectionLabel color={C.param} label="Detection Parameters" />
-        <Box style={S_SECTION}>
-          {[
-            { name: 'threshold', desc: 'Color distance cutoff (0-1). Higher = more foreground.' },
-            { name: 'softness', desc: 'Transition width. Higher = more gradual fg/bg edge.' },
-            { name: 'borderWidth', desc: 'Pixels from edges sampled as background. Default: 5% of image.' },
-            { name: 'morphRadius', desc: 'Cleanup radius. Erode removes noise, dilate restores shape.' },
-            { name: 'featherRadius', desc: 'Gaussian blur on final mask edges for smooth compositing.' },
-            { name: 'edgeWeight', desc: 'Sobel edge refinement strength (0-1). Sharpens mask at boundaries.' },
-          ].map((p) => (
-            <Box key={p.name} style={{ flexDirection: 'row', gap: 8, paddingBottom: 6 }}>
-              <Text style={{ fontSize: 12, color: C.param, fontWeight: 'bold', width: 100 }}>{p.name}</Text>
-              <Text style={{ fontSize: 12, color: c.muted, flexGrow: 1 }}>{p.desc}</Text>
-            </Box>
-          ))}
-        </Box>
+        {/* Tab content */}
+        {tab === 'border' ? <BorderDetectPanel /> : <FloodDetectPanel />}
 
         <Box style={{ height: 32 }} />
       </PageColumn>

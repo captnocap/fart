@@ -16,6 +16,9 @@ import type {
   DetectForegroundResult,
   CompositeBackgroundResult,
   UseObjectDetectResult,
+  FloodDetectParams,
+  FloodDetectResult,
+  UseFloodDetectResult,
 } from './types';
 import {
   commitImagingHistory,
@@ -361,4 +364,92 @@ export function useObjectDetect(): UseObjectDetectResult {
   }, [bridge]);
 
   return { detectForeground, compositeBackground, releaseMask, processing, error };
+}
+
+/**
+ * Hook for seed-point flood detection with multi-channel edge consensus.
+ *
+ * Different approach from useObjectDetect: instead of assuming the border
+ * is background, the user clicks a point ON the subject they want to select.
+ * The algorithm flood-fills outward by color similarity, then refines the
+ * boundary through 4 independent edge detection channels (Sobel, Laplacian,
+ * luminance gradient, chroma gradient) averaged into a consensus edge.
+ *
+ * Usage:
+ *   const { floodDetect, compositeBackground, releaseMask } = useFloodDetect();
+ *
+ *   // Click on robot's chest at (256, 300)
+ *   const det = await floodDetect('avatar.png', 256, 300, { tolerance: 0.2 });
+ *   await compositeBackground('avatar.png', 'landscape.png', det.maskId, 'out.png');
+ *   await releaseMask(det.maskId);
+ */
+export function useFloodDetect(): UseFloodDetectResult {
+  const bridge = useBridge();
+  const [processing, setProcessing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const floodDetect = useCallback(async (
+    src: string,
+    seedX: number,
+    seedY: number,
+    params?: FloodDetectParams,
+  ): Promise<FloodDetectResult | null> => {
+    if (!bridge) return null;
+    setProcessing(true);
+    setError(null);
+    try {
+      const result = await bridge.rpc<FloodDetectResult>('imaging:flood_detect', {
+        src,
+        seedX,
+        seedY,
+        tolerance: params?.tolerance,
+        adaptive: params?.adaptive,
+        edgeStrength: params?.edgeStrength,
+        edgeThreshold: params?.edgeThreshold,
+        morphRadius: params?.morphRadius,
+        featherRadius: params?.featherRadius,
+      });
+      if (result && !result.ok) {
+        setError(result.error || 'Flood detection failed');
+      }
+      return result || null;
+    } catch (err: any) {
+      setError(err?.message || String(err));
+      return null;
+    } finally {
+      setProcessing(false);
+    }
+  }, [bridge]);
+
+  const compositeBackground = useCallback(async (
+    src: string,
+    background: string,
+    maskId: string,
+    output?: string,
+  ): Promise<CompositeBackgroundResult | null> => {
+    if (!bridge) return null;
+    setProcessing(true);
+    setError(null);
+    try {
+      const result = await bridge.rpc<CompositeBackgroundResult>('imaging:composite_background', {
+        src, background, maskId, output,
+      });
+      if (result && !result.ok) {
+        setError(result.error || 'Composite failed');
+      }
+      return result || null;
+    } catch (err: any) {
+      setError(err?.message || String(err));
+      return null;
+    } finally {
+      setProcessing(false);
+    }
+  }, [bridge]);
+
+  const releaseMask = useCallback(async (maskId: string): Promise<void> => {
+    if (!bridge) return;
+    await bridge.rpc('imaging:mask_release', { maskId });
+  }, [bridge]);
+
+  return { floodDetect, compositeBackground, releaseMask, processing, error };
 }

@@ -26,6 +26,9 @@ export type {
   DetectForegroundResult,
   CompositeBackgroundResult,
   UseObjectDetectResult,
+  FloodDetectParams,
+  FloodDetectResult,
+  UseFloodDetectResult,
   DrawCanvasProps,
   UseDrawCanvasResult,
 } from './types';
@@ -39,6 +42,7 @@ export {
   useImagingSelection,
   useImagingTools,
   useObjectDetect,
+  useFloodDetect,
 } from './hooks';
 
 export { useDrawCanvas } from './canvas';

@@ -318,6 +318,50 @@ export interface UseObjectDetectResult {
 }
 
 // ============================================================================
+// Flood Detection (seed-point)
+// ============================================================================
+
+/** Parameters for seed-point flood detection. */
+export interface FloodDetectParams {
+  /** Color distance threshold (0-1). Higher = more permissive region expansion. Default 0.2. */
+  tolerance?: number;
+  /** Compare against running region mean instead of seed color. Default true. */
+  adaptive?: boolean;
+  /** Multi-channel edge consensus strength (0-1). Default 0.9. */
+  edgeStrength?: number;
+  /** Edge detection sensitivity threshold. Default 0.08. */
+  edgeThreshold?: number;
+  /** Morphological cleanup radius. */
+  morphRadius?: number;
+  /** Edge feather radius. */
+  featherRadius?: number;
+}
+
+export interface FloodDetectResult {
+  ok: boolean;
+  /** Mask handle — pass to compositeBackground or imaging:apply's maskId. */
+  maskId: string;
+  width: number;
+  height: number;
+  /** Mean color of the detected region { r, g, b } (0-1 range). */
+  meanColor?: { r: number; g: number; b: number };
+  error?: string;
+}
+
+export interface UseFloodDetectResult {
+  /** Flood-detect a region from a seed point. Returns a maskId for compositing. */
+  floodDetect: (src: string, seedX: number, seedY: number, params?: FloodDetectParams) => Promise<FloodDetectResult | null>;
+  /** Composite foreground over a new background using a detection mask. */
+  compositeBackground: (src: string, background: string, maskId: string, output?: string) => Promise<CompositeBackgroundResult | null>;
+  /** Release a detection mask from memory. */
+  releaseMask: (maskId: string) => Promise<void>;
+  /** Whether an operation is running. */
+  processing: boolean;
+  /** Error from the last operation. */
+  error: string | null;
+}
+
+// ============================================================================
 // Draw Canvas
 // ============================================================================
 
