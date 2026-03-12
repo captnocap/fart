@@ -1155,6 +1155,28 @@ rpc["pty:screen"] = function(args)
   }
 end
 
+-- ── Public API for session sharing ──────────────────────────────────────────
+-- Allows SemanticTerminal to borrow a Terminal's vterm for classification overlay.
+
+local TerminalAPI = {}
+
+function TerminalAPI.getSessionVTerm(sessionName)
+  local nid = _sessionNames[sessionName]
+  if nid and _sessions[nid] then
+    return _sessions[nid].vterm
+  end
+  return nil
+end
+
+function TerminalAPI.getSessionState(sessionName)
+  local nid = _sessionNames[sessionName]
+  if nid then return _sessions[nid] end
+  return nil
+end
+
+-- Store on the Capabilities module so other capabilities can access it
+Capabilities._terminalAPI = TerminalAPI
+
 -- ── Register RPC handlers ────────────────────────────────────────────────────
 
 local Caps     = require("lua.capabilities")

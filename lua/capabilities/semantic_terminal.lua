@@ -277,6 +277,8 @@ Capabilities.register("SemanticTerminal", {
     showTokens     = { type = "bool",   default = false,   desc = "Show token badges overlay" },
     showGraph      = { type = "bool",   default = false,   desc = "Show semantic graph panel" },
     showTimeline   = { type = "bool",   default = true,    desc = "Show timeline scrubber in playback mode" },
+    showDebug      = { type = "bool",   default = false,   desc = "Show debug footer with vterm/classifier info" },
+    session        = { type = "string",                    desc = "Attach to existing Terminal PTY session instead of spawning" },
   },
 
   events = {
@@ -303,6 +305,9 @@ Capabilities.register("SemanticTerminal", {
       vterm     = nil,
       connected = false,
 
+      -- Session attachment: if `session` prop is set, we borrow the Terminal's PTY
+      attachedSession = props.session or nil,
+
       -- Playback mode
       player = nil,
 
@@ -324,8 +329,12 @@ Capabilities.register("SemanticTerminal", {
       rowHistory = {},
     }
 
-    -- Live mode: create vterm now, PTY spawns on first tick
-    if mode == "live" then
+    -- Session attachment: don't create our own vterm, we'll borrow from the Terminal
+    if props.session then
+      -- vterm will be resolved on each tick from the Terminal's session
+      state.connected = true  -- we're "connected" to the other session
+    elseif mode == "live" then
+      -- Live mode: create vterm now, PTY spawns on first tick
       local r = props.rows or 40
       local c = props.cols or 120
       state.vterm = VTerm.new(r, c)
@@ -361,6 +370,12 @@ Capabilities.register("SemanticTerminal", {
   -- ── Update ────────────────────────────────────────────────────────────────
 
   update = function(nodeId, props, prev, state)
+    -- Session attachment changed
+    if props.session ~= (prev.session or nil) then
+      state.attachedSession = props.session or nil
+      state.classifiedCache = {}
+    end
+
     -- Classifier changed: reload and re-classify
     local classifierName = props.classifier or "basic"
     if classifierName ~= state.classifierName then
@@ -396,7 +411,25 @@ Capabilities.register("SemanticTerminal", {
     state.frameCounter = state.frameCounter + 1
     local needsClassify = false
 
-    if state.mode == "live" then
+    -- Session attachment mode: borrow vterm from an existing Terminal session
+    if state.attachedSession then
+      local termAPI = Capabilities._terminalAPI
+      if termAPI then
+        local borrowedVterm = termAPI.getSessionVTerm(state.attachedSession)
+        if borrowedVterm then
+          -- Check if vterm content changed (simple: compare row text of first few rows)
+          if borrowedVterm ~= state._lastBorrowedVterm then
+            state._lastBorrowedVterm = borrowedVterm
+            needsClassify = true
+          end
+          -- Also classify periodically (every 10 frames) to catch scrollback changes
+          if state.frameCounter % 10 == 0 then
+            needsClassify = true
+          end
+        end
+      end
+
+    elseif state.mode == "live" then
       -- Auto-spawn PTY on first tick
       if not state.connected then
         local pty, err = spawnPTY(props)
@@ -461,7 +494,12 @@ Capabilities.register("SemanticTerminal", {
     -- Classification pass
     if needsClassify then
       local vterm = state.vterm
-      if state.player then
+      if state.attachedSession then
+        local termAPI = Capabilities._terminalAPI
+        if termAPI then
+          vterm = termAPI.getSessionVTerm(state.attachedSession)
+        end
+      elseif state.player then
         vterm = state.player:getVTerm()
       end
 
@@ -504,7 +542,8 @@ Capabilities.register("SemanticTerminal", {
       state.pty:close()
       state.pty = nil
     end
-    if state.vterm then
+    -- Only free our own vterm, not borrowed ones
+    if state.vterm and not state.attachedSession then
       state.vterm:free()
       state.vterm = nil
     end
@@ -538,9 +577,14 @@ Capabilities.register("SemanticTerminal", {
 
     local alpha = effectiveOpacity or 1
 
-    -- Resolve the active vterm
+    -- Resolve the active vterm (own, borrowed, or playback)
     local vterm = state.vterm
-    if state.player then
+    if state.attachedSession then
+      local termAPI = Capabilities._terminalAPI
+      if termAPI then
+        vterm = termAPI.getSessionVTerm(state.attachedSession)
+      end
+    elseif state.player then
       vterm = state.player:getVTerm()
     end
     if not vterm then return end
@@ -560,7 +604,11 @@ Capabilities.register("SemanticTerminal", {
     -- Compute content area
     local showTimeline = props.showTimeline and state.mode == "playback" and state.player
     local timelineHeight = showTimeline and 32 or 0
-    local contentHeight = c.h - timelineHeight
+    local showDebug = props.showDebug
+    local debugFont = showDebug and Measure and Measure.getFont(10, "monospace", nil)
+    local debugFontH = debugFont and debugFont:getHeight() or 12
+    local debugHeight = showDebug and (debugFontH * 3 + 8) or 0
+    local contentHeight = c.h - timelineHeight - debugHeight
     local showTokens = props.showTokens
 
     -- Token badge gutter width
@@ -593,10 +641,23 @@ Capabilities.register("SemanticTerminal", {
         goto nextRow
       end
 
+      -- Alternating row background for visual tracking
+      if row % 2 == 1 then
+        love.graphics.setColor(1, 1, 1, 0.025 * alpha)
+        love.graphics.rectangle("fill", c.x, yPos, c.w, lineHeight)
+      end
+
       local entry = rowLookup[row]
       local kind = entry and entry.kind or "output"
       local tokenColor = getTokenColor(kind)
       local isSpecific = kind ~= "output"
+
+      -- Group gutter bar: color bar on left edge for grouped rows
+      if entry and entry.groupType then
+        local groupColor = getTokenColor(entry.kind)
+        love.graphics.setColor(groupColor[1], groupColor[2], groupColor[3], 0.5 * alpha)
+        love.graphics.rectangle("fill", c.x, yPos, 3, lineHeight)
+      end
 
       -- Token badge (left gutter) — lights up only for specific classifications
       if showTokens and entry then
@@ -684,19 +745,26 @@ Capabilities.register("SemanticTerminal", {
           end
         end
 
-        -- Right-side debug info: only for specific classifications (not generic output)
-        if showTokens and isSpecific then
+        -- Right-side debug info: show for all rows when tokens visible
+        if showTokens then
           if badgeFont then love.graphics.setFont(badgeFont) end
-          local hex = TOKEN_COLORS[kind] or "#e2e8f0"
           -- Get first cell fg for debug display
           local firstCell = vterm:getCell(row, 0)
           local fgStr = "def"
           if firstCell and firstCell.fg then
             fgStr = string.format("%d,%d,%d", firstCell.fg[1], firstCell.fg[2], firstCell.fg[3])
           end
-          local debugStr = string.format("%s  %s  %d", fgStr, kind, row)
+          -- Build debug string with nodeId, kind, row number, and fg colors
+          local nid = entry and entry.nodeId or ""
+          local debugStr
+          if isSpecific then
+            debugStr = string.format("%s  %s  %s  %d", fgStr, kind, nid, row)
+          else
+            debugStr = string.format("%3d", row)
+          end
           local debugW = badgeFont and badgeFont:getWidth(debugStr) or 80
-          love.graphics.setColor(tokenColor[1], tokenColor[2], tokenColor[3], 0.35 * alpha)
+          local debugAlpha = isSpecific and 0.45 or 0.2
+          love.graphics.setColor(tokenColor[1], tokenColor[2], tokenColor[3], debugAlpha * alpha)
           love.graphics.print(debugStr, c.x + c.w - debugW - 6, yPos + (lineHeight - badgeFontSize) / 2)
           if font then love.graphics.setFont(font) end
         end
@@ -717,6 +785,41 @@ Capabilities.register("SemanticTerminal", {
     end
 
     Scissor.restore(prevScissor)
+
+    -- ── Debug footer ─────────────────────────────────────────────────────────
+    if showDebug and debugFont then
+      local dbgY = c.y + contentHeight
+      -- Background
+      love.graphics.setColor(0.06, 0.08, 0.12, 0.95 * alpha)
+      love.graphics.rectangle("fill", c.x, dbgY, c.w, debugHeight)
+      -- Top border
+      love.graphics.setColor(0.2, 0.23, 0.3, alpha)
+      love.graphics.rectangle("fill", c.x, dbgY, c.w, 1)
+
+      love.graphics.setFont(debugFont)
+      love.graphics.setColor(1, 1, 0.2, 0.8 * alpha)
+      local vtRows, vtCols = vterm:size()
+      love.graphics.print(
+        string.format("cols=%d rows=%d  w=%.0f h=%.0f  classifier=%s",
+          vtCols, vtRows, c.w, c.h, state.classifierName),
+        c.x + 8, dbgY + 3)
+      love.graphics.print(
+        string.format("mode=%s  connected=%s  frame=%d  cached=%d  scroll=%.0f",
+          state.mode, tostring(state.connected), state.frameCounter,
+          #state.classifiedCache, state.scrollY),
+        c.x + 8, dbgY + 3 + debugFontH)
+      -- Graph info
+      local graphInfo = "graph: none"
+      if state.graph and state.graph.state then
+        local gs = state.graph.state
+        graphInfo = string.format("graph: %d nodes  %d turns  %d groups",
+          gs.nodeCount or 0, gs.turnCount or 0, gs.groupCount or 0)
+      end
+      if state.attachedSession then
+        graphInfo = graphInfo .. "  session=" .. state.attachedSession
+      end
+      love.graphics.print(graphInfo, c.x + 8, dbgY + 3 + debugFontH * 2)
+    end
 
     -- ── Timeline scrubber (playback mode) ──────────────────────────────────
 

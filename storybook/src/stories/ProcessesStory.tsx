@@ -9,7 +9,7 @@
  */
 
 import React, { useState, useCallback } from 'react';
-import { Box, Text, Image, ScrollView, CodeBlock, Pressable, TextInput, Terminal, SemanticTerminal, Native, classifiers as S } from '../../../packages/core/src';
+import { Box, Text, Image, ScrollView, CodeBlock, Pressable, TextInput, Terminal, SemanticTerminal, Native, classifiers as S, useLoveRPC } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { useEnvironments, useEnvRun } from '../../../packages/environments/src';
 import { ClaudeCanvas } from '../../../packages/terminal/src';
@@ -487,26 +487,54 @@ function PipelineDiagram() {
 
 // -- Live Env Cards ---------------------------------------------------
 
+const SAMPLE_ENVS = [
+  { name: 'storybook-shell', type: 'custom', setup: '', cwd: '/tmp' },
+  { name: 'demo-python', type: 'python', packages: ['requests'], cwd: '/tmp' },
+  { name: 'demo-node', type: 'node', packages: ['lodash'], cwd: '/tmp' },
+];
+
 function EnvCardsDemo() {
   const c = useThemeColors();
-  const { environments, refresh } = useEnvironments();
-  const [refreshing, setRefreshing] = useState(false);
-  const doRefresh = useCallback(() => { setRefreshing(true); refresh().finally(() => setRefreshing(false)); }, [refresh]);
+  const { environments, refresh, remove } = useEnvironments();
+  const createRpc = useLoveRPC('env:create');
+  const [busy, setBusy] = useState(false);
+
+  const createSamples = useCallback(async () => {
+    setBusy(true);
+    for (const env of SAMPLE_ENVS) await createRpc(env);
+    await refresh();
+    setBusy(false);
+  }, [createRpc, refresh]);
+
+  const removeAll = useCallback(async () => {
+    setBusy(true);
+    for (const env of environments) await remove(env.config.name);
+    await refresh();
+    setBusy(false);
+  }, [remove, environments, refresh]);
 
   return (
     <Box style={{ width: '100%', gap: 6 }}>
       <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
         <Text style={{ fontSize: 9, color: c.muted }}>{'Stored environments'}</Text>
-        <Pressable onPress={doRefresh}>
-          <Box style={{ backgroundColor: C.env, paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3, borderRadius: 4 }}>
-            <Text style={{ fontSize: 10, color: '#000' }}>{refreshing ? 'Refreshing...' : 'Refresh'}</Text>
-          </Box>
-        </Pressable>
+        {environments.length === 0 ? (
+          <Pressable onPress={createSamples}>
+            <Box style={{ backgroundColor: C.env, paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3, borderRadius: 4 }}>
+              <Text style={{ fontSize: 10, color: '#000' }}>{busy ? 'Creating...' : 'Create Samples'}</Text>
+            </Box>
+          </Pressable>
+        ) : (
+          <Pressable onPress={removeAll}>
+            <Box style={{ backgroundColor: C.red + '60', paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3, borderRadius: 4 }}>
+              <Text style={{ fontSize: 10, color: C.red }}>{busy ? 'Removing...' : 'Remove All'}</Text>
+            </Box>
+          </Pressable>
+        )}
       </Box>
       {environments.length === 0 ? (
         <Box style={{ backgroundColor: c.bg, padding: 12, borderRadius: 6, borderWidth: 1, borderColor: c.border, gap: 4, alignItems: 'center' }}>
           <Image src="inbox" style={{ width: 20, height: 20 }} tintColor={c.muted} />
-          <Text style={{ fontSize: 10, color: c.muted }}>{'No environments yet'}</Text>
+          <Text style={{ fontSize: 10, color: c.muted }}>{'Hit "Create Samples" to populate'}</Text>
         </Box>
       ) : (
         <Box style={{ gap: 6 }}>
@@ -548,18 +576,29 @@ function EnvCardsDemo() {
 
 function QuickRunDemo() {
   const c = useThemeColors();
+  const { environments } = useEnvironments();
+  const hasEnv = environments.some(e => e.config.name === 'storybook-shell');
   const [started, setStarted] = useState(false);
-  const proc = useEnvRun('demo-env', 'echo "Hello from environment!" && uname -a && date', { autoStart: false, onExit: () => {} });
+  const proc = useEnvRun('storybook-shell', 'echo "Hello from environment!" && uname -a && date', { autoStart: false, onExit: () => {} });
   const doRun = useCallback(() => { setStarted(true); proc.start(); }, [proc]);
   const statusColor = !started ? c.muted : proc.running ? STATE_COLORS.running : proc.exitCode === 0 ? STATE_COLORS.exited : STATE_COLORS.failed;
   const statusLabel = !started ? 'idle' : proc.running ? 'running' : proc.exitCode === 0 ? 'exited (0)' : proc.exitCode !== null ? `failed (${proc.exitCode})` : 'spawning';
+
+  if (!hasEnv) {
+    return (
+      <Box style={{ width: '100%', backgroundColor: c.bg, padding: 12, borderRadius: 6, borderWidth: 1, borderColor: c.border, gap: 4, alignItems: 'center' }}>
+        <Image src="arrow-up" style={{ width: 16, height: 16 }} tintColor={c.muted} />
+        <Text style={{ fontSize: 10, color: c.muted }}>{'Create sample environments above first'}</Text>
+      </Box>
+    );
+  }
 
   return (
     <Box style={{ width: '100%', gap: 6 }}>
       <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
         <Pressable onPress={doRun}>
           <Box style={{ backgroundColor: started ? c.muted : C.green, paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3, borderRadius: 4 }}>
-            <Text style={{ fontSize: 10, color: '#000' }}>{started ? (proc.running ? 'Running...' : 'Done') : 'Run'}</Text>
+            <Text style={{ fontSize: 10, color: '#000' }}>{started ? (proc.running ? 'Running...' : 'Done') : 'Run in storybook-shell'}</Text>
           </Box>
         </Pressable>
         <Box style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
@@ -592,13 +631,15 @@ function SemanticToggleDemo() {
           </Box>
         </Pressable>
         <Text style={{ fontSize: 9, color: C.dimText }}>
-          {semantic ? 'Rows classified by lua/classifiers/basic.lua' : 'Standard vterm cell grid'}
+          {semantic ? 'Rows classified by lua/classifiers/basic.lua — same PTY session' : 'Standard vterm cell grid'}
         </Text>
       </Box>
-      {semantic ? (
-        <SemanticTerminal mode="live" command="bash" classifier="basic" showTokens style={S_TERM} />
-      ) : (
-        <Terminal type="user" shell="bash" session="story-toggle" style={S_TERM} />
+      {/* Terminal always mounted — PTY stays alive across toggle */}
+      <Box style={{ ...S_TERM, display: semantic ? 'none' : 'flex' }}>
+        <Terminal type="user" shell="bash" session="story-toggle" style={{ flexGrow: 1 }} />
+      </Box>
+      {semantic && (
+        <SemanticTerminal session="story-toggle" classifier="basic" showTokens showDebug style={S_TERM} />
       )}
     </Box>
   );

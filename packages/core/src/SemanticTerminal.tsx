@@ -54,6 +54,12 @@ export interface SemanticTerminalProps {
   showGraph?: boolean;
   /** Show timeline scrubber in playback mode */
   showTimeline?: boolean;
+  /** Show debug footer with vterm dimensions, classifier info, frame counter */
+  showDebug?: boolean;
+  /** Attach to an existing Terminal's PTY session instead of spawning a new one.
+   *  Use this for toggle-without-reset: keep a <Terminal session="foo"> alive
+   *  and pass session="foo" here to overlay semantic classification on the same PTY. */
+  session?: string;
   /** Layout style */
   style?: Record<string, any>;
   /** Fires when a row is classified */
