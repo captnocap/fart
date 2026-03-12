@@ -40,6 +40,8 @@ export const ALIAS_MAP = {
   privacy: '@reactjit/privacy',
   wireguard: '@reactjit/wireguard',
   data: '@reactjit/data',
+  gradio: '@reactjit/gradio',
+  networking: '@reactjit/networking',
 };
 
 /**
@@ -47,16 +49,44 @@ export const ALIAS_MAP = {
  * @param {string} cwd - Project root directory
  * @returns {string[]} Array of --alias:@reactjit/pkg=<path>/src flags
  */
+/**
+ * Walk up from cwd to find the monorepo root (has packages/ directory).
+ * Returns the relative path prefix (e.g. '../' or '../../') or null.
+ */
+function findMonorepoPrefix(cwd) {
+  const prefixes = ['..', '../..', '../../..'];
+  for (const prefix of prefixes) {
+    const candidate = join(cwd, prefix, 'packages', 'core', 'src');
+    if (existsSync(candidate)) return prefix;
+  }
+  return null;
+}
+
 export function getEsbuildAliases(cwd) {
   const flags = [];
+  const monorepoPrefix = findMonorepoPrefix(cwd);
+
+  // In a monorepo, pin react to the root node_modules so all packages
+  // (including @reactjit/* resolved from packages/) share one React instance.
+  // Without this, local node_modules/react and root node_modules/react both
+  // get bundled, causing "Invalid hook call" crashes.
+  if (monorepoPrefix) {
+    const rootReact = join(cwd, monorepoPrefix, 'node_modules', 'react');
+    if (existsSync(rootReact)) {
+      flags.push(`--alias:react=${monorepoPrefix}/node_modules/react`);
+    }
+  }
+
   for (const [dir, alias] of Object.entries(ALIAS_MAP)) {
     // In a monorepo, prefer the source-of-truth packages/ over local copies.
     // This prevents duplicate module instances when source files also use
     // relative imports to packages/ (e.g. ../../packages/core/src).
-    const monorepoSrc = join(cwd, '..', 'packages', dir, 'src');
-    if (existsSync(monorepoSrc)) {
-      flags.push(`--alias:${alias}=../packages/${dir}/src`);
-      continue;
+    if (monorepoPrefix) {
+      const monorepoSrc = join(cwd, monorepoPrefix, 'packages', dir, 'src');
+      if (existsSync(monorepoSrc)) {
+        flags.push(`--alias:${alias}=${monorepoPrefix}/packages/${dir}/src`);
+        continue;
+      }
     }
 
     // Standalone project: use the local copy synced by `reactjit update`
