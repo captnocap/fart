@@ -1401,6 +1401,21 @@ function ReactJIT.init(config)
     return data
   end
 
+  rpcHandlers["a11y:text"] = function(args)
+    local app = args and args.app or ""
+    local path = args and args.path or ""
+    local max = args and args.max or 50000
+    local url = string.format("http://127.0.0.1:9876/text/%s?path=%s&max=%d", app, path, max)
+    local h = io.popen("curl -s " .. url .. " 2>/dev/null")
+    if not h then return { error = "curl failed" } end
+    local body = h:read("*a")
+    h:close()
+    if not body or #body == 0 then return { error = "no response" } end
+    local ok2, data = pcall(json.decode, body)
+    if not ok2 then return { error = "json parse failed" } end
+    return data
+  end
+
   rpcHandlers["a11y:action"] = function(args)
     local payload = json.encode({
       app = args.app or "",

@@ -291,13 +291,18 @@ function MirrorView({ tree, appName, onAction, selectedNode, onSelectNode }: {
               const label = n.name || n.text || '';
               const showLabel = label && pos.width > 20 && pos.height > 8;
 
-              const nodeBox = (
-                <Box
+              return (
+                <Pressable
                   key={`l-${i}`}
+                  onPress={() => onSelectNode(n)}
                   style={{
                     position: 'absolute',
                     left: pos.left, top: pos.top,
                     width: pos.width, height: pos.height,
+                  }}
+                >
+                  <Box style={{
+                    width: '100%', height: '100%',
                     backgroundColor: isSelected ? `${color}44` : `${color}22`,
                     borderWidth: isSelected ? 2 : 1,
                     borderColor: isSelected ? color : `${color}88`,
@@ -305,54 +310,18 @@ function MirrorView({ tree, appName, onAction, selectedNode, onSelectNode }: {
                     overflow: 'hidden',
                     justifyContent: 'center',
                     paddingLeft: 2, paddingRight: 2,
-                  }}
-                >
-                  {showLabel ? (
-                    <Text style={{
-                      color: isSelected ? '#fff' : `${color}cc`,
-                      fontSize: Math.min(9, pos.height * 0.6),
-                    }}>
-                      {label.slice(0, Math.floor(pos.width / 5))}
-                    </Text>
-                  ) : null}
-                </Box>
+                  }}>
+                    {showLabel ? (
+                      <Text style={{
+                        color: isSelected ? '#fff' : `${color}cc`,
+                        fontSize: Math.min(9, pos.height * 0.6),
+                      }}>
+                        {label.slice(0, Math.floor(pos.width / 5))}
+                      </Text>
+                    ) : null}
+                  </Box>
+                </Pressable>
               );
-
-              if (hasAction) {
-                return (
-                  <Pressable
-                    key={`l-${i}`}
-                    onPress={() => onSelectNode(n)}
-                    style={{
-                      position: 'absolute',
-                      left: pos.left, top: pos.top,
-                      width: pos.width, height: pos.height,
-                    }}
-                  >
-                    <Box style={{
-                      width: '100%', height: '100%',
-                      backgroundColor: isSelected ? `${color}44` : `${color}22`,
-                      borderWidth: isSelected ? 2 : 1,
-                      borderColor: isSelected ? color : `${color}88`,
-                      borderRadius: 2,
-                      overflow: 'hidden',
-                      justifyContent: 'center',
-                      paddingLeft: 2, paddingRight: 2,
-                    }}>
-                      {showLabel ? (
-                        <Text style={{
-                          color: isSelected ? '#fff' : `${color}cc`,
-                          fontSize: Math.min(9, pos.height * 0.6),
-                        }}>
-                          {label.slice(0, Math.floor(pos.width / 5))}
-                        </Text>
-                      ) : null}
-                    </Box>
-                  </Pressable>
-                );
-              }
-
-              return nodeBox;
             })}
           </Box>
         </ScrollView>
@@ -390,8 +359,10 @@ function MirrorView({ tree, appName, onAction, selectedNode, onSelectNode }: {
                 ))}
               </Box>
             ) : null}
-            {selectedNode.text ? (
-              <Text style={{ color: C.text, fontSize: 11, fontStyle: 'italic' }}>{`"${selectedNode.text.slice(0, 80)}"`}</Text>
+            {TEXT_ROLES.has(selectedNode.role) ? (
+              <TextPreview appName={appName} path={selectedNode.path} />
+            ) : selectedNode.text ? (
+              <Text style={{ color: C.text, fontSize: 11, fontStyle: 'italic' }}>{`"${selectedNode.text.slice(0, 200)}"`}</Text>
             ) : null}
             {selectedNode.actions.length > 0 ? (
               <Box style={{ gap: 4, paddingTop: 4 }}>
@@ -419,6 +390,69 @@ function MirrorView({ tree, appName, onAction, selectedNode, onSelectNode }: {
           <Text style={{ color: c.muted, fontSize: 11 }}>Click an element to inspect</Text>
         )}
       </Box>
+    </Box>
+  );
+}
+
+// ── Text Preview ─────────────────────────────────────────
+
+const TEXT_ROLES = new Set(['text', 'document text', 'document frame', 'terminal', 'text field']);
+
+function TextPreview({ appName, path }: { appName: string; path: number[] }) {
+  const c = useThemeColors();
+  const bridge = useBridge();
+  const [textData, setTextData] = useState<{ text: string; length: number; caret?: number; selection?: { start: number; end: number } } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const pathKey = path.join(',');
+
+  useMount(() => {
+    bridge.rpc<any>('a11y:text', { app: appName, path: pathKey, max: 50000 }).then((result: any) => {
+      if (result && !result.error) {
+        setTextData(result);
+      }
+      setLoading(false);
+    });
+  });
+
+  // Poll for live updates
+  useLuaEffect({ type: 'poll', interval: 1000 }, () => {
+    bridge.rpc<any>('a11y:text', { app: appName, path: pathKey, max: 50000 }).then((result: any) => {
+      if (result && !result.error) {
+        setTextData(result);
+      }
+    });
+  }, [appName, pathKey]);
+
+  if (loading) return <Text style={{ color: c.muted, fontSize: 10 }}>Loading text...</Text>;
+  if (!textData) return <Text style={{ color: c.muted, fontSize: 10 }}>No text content</Text>;
+
+  return (
+    <Box style={{ gap: 4 }}>
+      <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+        <Text style={{ color: c.muted, fontSize: 9 }}>
+          {`${textData.length.toLocaleString()} chars`}
+        </Text>
+        {textData.caret !== undefined ? (
+          <Text style={{ color: '#f59e0b', fontSize: 9 }}>
+            {`caret: ${textData.caret}`}
+          </Text>
+        ) : null}
+        {textData.selection ? (
+          <Text style={{ color: '#a78bfa', fontSize: 9 }}>
+            {`sel: ${textData.selection.start}-${textData.selection.end}`}
+          </Text>
+        ) : null}
+      </Box>
+      <ScrollView style={{ height: 300, backgroundColor: '#0f172a', borderRadius: 4, paddingLeft: 8, paddingRight: 8, paddingTop: 6, paddingBottom: 6 }}>
+        <Text style={{ color: '#e2e8f0', fontSize: 10, fontFamily: 'monospace' }}>
+          {textData.text}
+        </Text>
+      </ScrollView>
+      {textData.truncated ? (
+        <Text style={{ color: '#f59e0b', fontSize: 9 }}>
+          {`Showing first ${textData.text.length.toLocaleString()} of ${textData.length.toLocaleString()} chars`}
+        </Text>
+      ) : null}
     </Box>
   );
 }

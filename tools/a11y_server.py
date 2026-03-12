@@ -450,6 +450,49 @@ class A11yHandler(BaseHTTPRequestHandler):
                     return
             self.send_json(tree)
 
+        elif path.startswith('/text/'):
+            # /text/<app>?path=0,1,2 — get full text content from a text widget
+            app_name = path[6:]
+            path_str = qs.get('path', [''])[0]
+            index_path = [int(x) for x in path_str.split(',') if x]
+            max_chars = int(qs.get('max', ['50000'])[0])
+            app = find_app(app_name)
+            if not app:
+                self.send_json({"error": f"App '{app_name}' not found"}, 404)
+                return
+            node = navigate_to_node(app, index_path)
+            if not node:
+                self.send_json({"error": f"Node not found at path {index_path}"}, 404)
+                return
+            text_iface = node.get_text_iface()
+            if not text_iface:
+                self.send_json({"error": "Node has no text interface"}, 400)
+                return
+            count = text_iface.get_character_count()
+            text = Atspi.Text.get_text(text_iface, 0, min(count, max_chars))
+            result = {
+                "text": text,
+                "length": count,
+                "truncated": count > max_chars,
+            }
+            # Caret position
+            try:
+                result["caret"] = text_iface.get_caret_offset()
+            except:
+                pass
+            # Selection
+            try:
+                n_sel = text_iface.get_n_selections()
+                if n_sel > 0:
+                    sel = Atspi.Text.get_selection(text_iface, 0)
+                    result["selection"] = {
+                        "start": sel.start_offset,
+                        "end": sel.end_offset,
+                    }
+            except:
+                pass
+            self.send_json(result)
+
         else:
             self.send_json({"error": "Not found"}, 404)
 
