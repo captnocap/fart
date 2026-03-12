@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef } from 'react';
-import { Box, Text, ScrollView, Modal, Input } from '@reactjit/core';
+import { Box, Text, ScrollView, Modal, Input, useTray } from '@reactjit/core';
 import {
   useProcessManager, useServerLogs, useDaemonManager,
   useAuditLog, useReservedPorts, formatUptime,
@@ -598,6 +598,56 @@ export function App() {
   const handlePin = useCallback((s: ServerInfo) => {
     if (s.pinned) unpinServer(s.name); else pinServer(s.name);
   }, [pinServer, unpinServer]);
+
+  // ── System tray icon ──────────────────────────────────────────────────
+  const trayMenu = React.useMemo(() => {
+    const items: Array<{ label?: string; action?: string; separator?: boolean }> = [];
+
+    // Server list with status
+    for (const s of servers) {
+      const dot = s.status === 'running' ? '\u25CF' : s.status === 'failed' ? '\u25A0' : '\u25CB';
+      items.push({ label: `${dot} ${s.name}`, action: `select:${s.name}` });
+    }
+
+    if (servers.length > 0) items.push({ separator: true });
+
+    // Bulk actions
+    const anyRunning = servers.some(s => s.status === 'running');
+    const anyStopped = servers.some(s => s.status !== 'running');
+    if (anyStopped) items.push({ label: 'Start All', action: 'start-all' });
+    if (anyRunning) items.push({ label: 'Stop All',  action: 'stop-all' });
+
+    items.push({ separator: true });
+    items.push({ label: 'Open Dashboard', action: 'focus' });
+    items.push({ label: 'Quit', action: 'quit' });
+    return items;
+  }, [servers]);
+
+  const { updateMenu } = useTray({
+    id: 'devctl',
+    title: 'dv',
+    menu: trayMenu,
+    onAction: useCallback((action: string) => {
+      if (action === 'quit') {
+        // Will be handled by the bridge
+      } else if (action === 'focus') {
+        // Bring window to front (already visible via Love2D)
+      } else if (action === 'start-all') {
+        servers.filter(s => s.status !== 'running').forEach(s => startServer(s.name));
+      } else if (action === 'stop-all') {
+        servers.filter(s => s.status === 'running').forEach(s => stopServer(s.name));
+      } else if (action.startsWith('select:')) {
+        const name = action.slice(7);
+        setSelectedServer(name);
+      }
+    }, [servers, startServer, stopServer]),
+  });
+
+  // Keep tray menu in sync when server list changes
+  // rjit-ignore-next-line
+  React.useEffect(() => {
+    updateMenu(trayMenu);
+  }, [trayMenu, updateMenu]);
 
   return (
     <Box style={{ width: '100%', height: '100%', backgroundColor: C.bg }}>
