@@ -1572,22 +1572,20 @@ rpc["semantic_terminal:export_buffer"] = function(args)
     f:write(string.format("-- %s  classifier=%s  scrollback=%d  grid=%dx%d  frame=%d\n",
       result.meta.timestamp, state.classifierName, sbCount, vtRows, vtCols, state.frameCounter))
     f:write("--\n")
-    f:write("-- Format: [row] [zone] [kind] [nodeId] [turnId] [groupId] [colors] | text\n")
-    f:write("-- Edit the [kind] column to retag identifiers, then re-import.\n")
-    f:write("-- Colors are the distinct fg RGB values sampled from vterm cells.\n")
+    f:write("-- Format mirrors the semantic terminal debug render:\n")
+    f:write("-- [kind] <content> [colors] [grouping] [row]\n")
+    f:write("-- Edit the [kind] tag to retag identifiers, then re-import.\n")
     f:write("--\n")
 
     for _, line in ipairs(lines) do
-      local colorStr = #line.colors > 0 and table.concat(line.colors, " ") or "-"
-      f:write(string.format("%-5d %-10s %-20s %-8s t:%-3s g:%-3s  [%s] | %s\n",
-        line.row,
-        line.zone,
+      local colorStr = #line.colors > 0 and table.concat(line.colors, ",") or "-"
+      local groupStr = line.nodeId or "-"
+      f:write(string.format("[%-18s] %s\t%s\t%s\t%d\n",
         line.kind,
-        line.nodeId or "-",
-        tostring(line.turnId or "-"),
-        tostring(line.groupId or "-"),
+        line.text,
         colorStr,
-        line.text))
+        groupStr,
+        line.row))
     end
 
     f:close()
@@ -1611,23 +1609,23 @@ rpc["semantic_terminal:import_tags"] = function(args)
     if not f then return { error = "Cannot read: " .. tostring(err) } end
 
     local newCache = {}
+    local sbCount = state.vterm and state.vterm:scrollbackCount() or 0
     for line in f:lines() do
       -- Skip comment lines
       if not line:match("^%-%-") then
-        local row, zone, kind, nodeId, turnStr, groupStr, text =
-          line:match("^(%d+)%s+(%S+)%s+(%S+)%s+(%S+)%s+t:(%S+)%s+g:(%S+)%s+| (.*)$")
-        if row and zone == "grid" then
-          local gridRow = tonumber(row) - (state.vterm and state.vterm:scrollbackCount() or 0)
+        -- Parse: [kind] text\tcolors\tgrouping\trow
+        local kind, text, colorStr, nodeId, rowStr =
+          line:match("^%[(.-)%]%s(.-)%\t(.-)%\t(.-)%\t(%d+)$")
+        if kind and rowStr then
+          kind = kind:match("^%s*(.-)%s*$")  -- trim whitespace from kind
+          local row = tonumber(rowStr)
+          local gridRow = row - sbCount
           if gridRow >= 0 then
-            local turnId = turnStr ~= "-" and tonumber(turnStr) or nil
-            local groupId = groupStr ~= "-" and tonumber(groupStr) or nil
             newCache[#newCache + 1] = {
               row     = gridRow,
               kind    = kind,
               text    = text or "",
               nodeId  = nodeId ~= "-" and nodeId or nil,
-              turnId  = turnId,
-              groupId = groupId,
               colors  = { TOKEN_COLORS[kind] or TOKEN_COLORS.output },
             }
           end
