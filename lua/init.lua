@@ -1446,6 +1446,66 @@ function ReactJIT.init(config)
     startupLog("[reactjit] Managed effects loaded")
   end
 
+  -- ── System tray (libayatana-appindicator3) ─────────────────────────────
+  local trayOk, trayMod = pcall(require, "lua.tray")
+  if trayOk then
+    trayMod.setPushEvent(pushEvent)
+    M.tray = trayMod
+
+    rpcHandlers["tray:create"] = function(args)
+      if not args or not args.id then
+        return { ok = false, error = "tray:create requires id" }
+      end
+      local ok, err = trayMod.create(args)
+      return { ok = ok, error = err }
+    end
+
+    rpcHandlers["tray:update_menu"] = function(args)
+      if not args or not args.id or not args.menu then
+        return { ok = false, error = "tray:update_menu requires id and menu" }
+      end
+      return { ok = trayMod.update_menu(args.id, args.menu) }
+    end
+
+    rpcHandlers["tray:set_status"] = function(args)
+      if not args or not args.id or not args.status then
+        return { ok = false, error = "tray:set_status requires id and status" }
+      end
+      return { ok = trayMod.set_status(args.id, args.status) }
+    end
+
+    rpcHandlers["tray:set_icon"] = function(args)
+      if not args or not args.id or not args.icon then
+        return { ok = false, error = "tray:set_icon requires id and icon" }
+      end
+      return { ok = trayMod.set_icon(args.id, args.icon) }
+    end
+
+    rpcHandlers["tray:set_label"] = function(args)
+      if not args or not args.id then
+        return { ok = false, error = "tray:set_label requires id" }
+      end
+      return { ok = trayMod.set_label(args.id, args.label or "") }
+    end
+
+    rpcHandlers["tray:destroy"] = function(args)
+      if not args or not args.id then
+        return { ok = false, error = "tray:destroy requires id" }
+      end
+      return { ok = trayMod.destroy(args.id) }
+    end
+
+    rpcHandlers["tray:list"] = function()
+      return { ids = trayMod.list() }
+    end
+
+    rpcHandlers["tray:available"] = function()
+      return { available = trayMod.available() }
+    end
+
+    startupLog("[reactjit] System tray support loaded")
+  end
+
   -- ── @reactjit/time — stopwatches, countdowns, wall clock ──────────────
   -- time:now              → { epoch, mono, localStr, utcStr }
   -- time:stopwatch:*      → create / control / destroy per-component stopwatches
@@ -2422,6 +2482,8 @@ function ReactJIT.update(dt)
 
   -- System panel update runs regardless of mode (debounced save, device rescan)
   if M.systemPanelEnabled then systemPanel.update(dt) end
+  -- Pump GTK events for system tray (non-blocking)
+  if M.tray then M.tray.update() end
   if M.inspectorEnabled and devtools and devtools.beginFrame then
     devtools.beginFrame(dt)
   end
@@ -6453,6 +6515,7 @@ function ReactJIT.quit()
     devtools.dockBack()
   end
   if M.overlay and M.overlay.shmMode then M.overlay.shutdown() end
+  if M.tray then M.tray.destroy_all() end
   if M.dragdrop then M.dragdrop.cleanup() end
   if M.videos then M.videos.shutdown() end
   if M.tor then M.tor.stop() end

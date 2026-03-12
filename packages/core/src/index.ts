@@ -75,6 +75,9 @@ export {
   type LuaQueryResult,
 } from './useLuaEffect';
 
+// System tray (notification area indicator with context menu)
+export { useTray, type TrayOptions, type TrayMenuItem } from './useTray';
+
 // Overlay mode (game overlay — transparent, always-on-top, input passthrough)
 export { useOverlay, type OverlayState, type OverlayMode } from './overlay';
 
