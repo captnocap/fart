@@ -1098,8 +1098,10 @@ Capabilities.register("ClaudeCanvas", {
       return true
     end
 
-    -- Regular keys are handled by handleTextInput below
-    return false
+    -- Regular character keys are handled by handleTextInput, but we still
+    -- consume the event here so it doesn't bubble to parent React handlers
+    -- (e.g. storybook j/k navigation stealing keystrokes from the terminal).
+    return true
   end,
 
   handleTextInput = function(node, text)
