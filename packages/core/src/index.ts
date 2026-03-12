@@ -156,6 +156,7 @@ export {
   type ClassifiedRow,
   type GraphState,
   type PlayerState,
+  type ExportBufferResult,
 } from './useSemanticTerminal';
 
 // ScrollView

@@ -1383,6 +1383,212 @@ rpc["semantic_terminal:save_recording"] = function(args)
   end
 end
 
+-- Export entire buffer with per-line semantic debug annotations
+-- Returns structured data or writes to file. Format:
+--   { lines = { { row, kind, nodeId, turnId, groupId, text }, ... }, meta = { ... } }
+rpc["semantic_terminal:export_buffer"] = function(args)
+  local Caps = require("lua.capabilities")
+  local inst = Caps.getInstance(args.id)
+  if not inst then return { error = "No instance" } end
+
+  local state = inst.state
+  local vterm = state.vterm
+  if state.attachedSession then
+    local termAPI = Caps._terminalAPI
+    if termAPI then
+      vterm = termAPI.getSessionVTerm(state.attachedSession)
+    end
+  elseif state.player then
+    vterm = state.player:getVTerm()
+  end
+  if not vterm then return { error = "No vterm available" } end
+
+  -- Build row lookup from classified cache (grid-relative indices)
+  local rowLookup = {}
+  for _, entry in ipairs(state.classifiedCache) do
+    rowLookup[entry.row] = entry
+  end
+
+  local vtRows, vtCols = vterm:size()
+  local sbCount = vterm:scrollbackCount()
+  local lines = {}
+
+  -- Scrollback rows (no classification — pre-scroll content)
+  for i = 0, sbCount - 1 do
+    local sbRow = vterm:getScrollbackRow(i + 1)
+    local text = ""
+    if sbRow then
+      local chars = {}
+      for j, cell in ipairs(sbRow) do chars[j] = cell.char or "" end
+      text = table.concat(chars)
+    end
+    lines[#lines + 1] = {
+      row    = i,
+      zone   = "scrollback",
+      kind   = "scrollback",
+      nodeId = nil,
+      turnId = nil,
+      groupId = nil,
+      text   = text,
+    }
+  end
+
+  -- Grid rows (with classification)
+  for r = 0, vtRows - 1 do
+    local text = vterm:getRowText(r)
+    local entry = rowLookup[r]
+    lines[#lines + 1] = {
+      row     = sbCount + r,
+      zone    = "grid",
+      gridRow = r,
+      kind    = entry and entry.kind or "output",
+      nodeId  = entry and entry.nodeId or nil,
+      turnId  = entry and entry.turnId or nil,
+      groupId = entry and entry.groupId or nil,
+      text    = text,
+    }
+  end
+
+  local result = {
+    lines = lines,
+    meta = {
+      classifier   = state.classifierName,
+      scrollback   = sbCount,
+      gridRows     = vtRows,
+      gridCols     = vtCols,
+      totalLines   = #lines,
+      cacheEntries = #state.classifiedCache,
+      frame        = state.frameCounter,
+      mode         = state.mode,
+      session      = state.attachedSession,
+      timestamp    = os.date("!%Y-%m-%dT%H:%M:%SZ"),
+    },
+  }
+
+  -- If path given, write to file as annotated text
+  if args.path then
+    local f, err = io.open(args.path, "w")
+    if not f then return { error = "Cannot write: " .. tostring(err) } end
+
+    f:write("-- SemanticTerminal buffer export\n")
+    f:write(string.format("-- %s  classifier=%s  scrollback=%d  grid=%dx%d  frame=%d\n",
+      result.meta.timestamp, state.classifierName, sbCount, vtRows, vtCols, state.frameCounter))
+    f:write("--\n")
+    f:write("-- Format: [row] [zone] [kind] [nodeId] [turnId] [groupId] | text\n")
+    f:write("-- Edit the [kind] column to retag identifiers, then re-import.\n")
+    f:write("--\n")
+
+    for _, line in ipairs(lines) do
+      f:write(string.format("%-5d %-10s %-20s %-8s t:%-3s g:%-3s | %s\n",
+        line.row,
+        line.zone,
+        line.kind,
+        line.nodeId or "-",
+        tostring(line.turnId or "-"),
+        tostring(line.groupId or "-"),
+        line.text))
+    end
+
+    f:close()
+    return { ok = true, path = args.path, totalLines = #lines }
+  end
+
+  return result
+end
+
+-- Import re-tagged buffer: accepts the same format as export, updates classifier cache
+rpc["semantic_terminal:import_tags"] = function(args)
+  local Caps = require("lua.capabilities")
+  local inst = Caps.getInstance(args.id)
+  if not inst then return { error = "No instance" } end
+
+  local state = inst.state
+
+  if args.path then
+    -- Read from file: parse the annotated text format
+    local f, err = io.open(args.path, "r")
+    if not f then return { error = "Cannot read: " .. tostring(err) } end
+
+    local newCache = {}
+    for line in f:lines() do
+      -- Skip comment lines
+      if not line:match("^%-%-") then
+        local row, zone, kind, nodeId, turnStr, groupStr, text =
+          line:match("^(%d+)%s+(%S+)%s+(%S+)%s+(%S+)%s+t:(%S+)%s+g:(%S+)%s+| (.*)$")
+        if row and zone == "grid" then
+          local gridRow = tonumber(row) - (state.vterm and state.vterm:scrollbackCount() or 0)
+          if gridRow >= 0 then
+            local turnId = turnStr ~= "-" and tonumber(turnStr) or nil
+            local groupId = groupStr ~= "-" and tonumber(groupStr) or nil
+            newCache[#newCache + 1] = {
+              row     = gridRow,
+              kind    = kind,
+              text    = text or "",
+              nodeId  = nodeId ~= "-" and nodeId or nil,
+              turnId  = turnId,
+              groupId = groupId,
+              colors  = { TOKEN_COLORS[kind] or TOKEN_COLORS.output },
+            }
+          end
+        end
+      end
+    end
+
+    f:close()
+    state.classifiedCache = newCache
+    return { ok = true, imported = #newCache }
+
+  elseif args.tags then
+    -- Direct tag update: array of { gridRow, kind }
+    local rowLookup = {}
+    for _, entry in ipairs(state.classifiedCache) do
+      rowLookup[entry.row] = entry
+    end
+    local updated = 0
+    for _, tag in ipairs(args.tags) do
+      local entry = rowLookup[tag.gridRow or tag.row]
+      if entry then
+        entry.kind = tag.kind
+        entry.colors = { TOKEN_COLORS[tag.kind] or TOKEN_COLORS.output }
+        if tag.nodeId then entry.nodeId = tag.nodeId end
+        updated = updated + 1
+      end
+    end
+    return { ok = true, updated = updated }
+  end
+
+  return { error = "Provide 'path' (file) or 'tags' (array of {gridRow, kind})" }
+end
+
+-- Start/stop recording on the fly (toggle without needing prop change)
+rpc["semantic_terminal:toggle_recording"] = function(args)
+  local Caps = require("lua.capabilities")
+  local inst = Caps.getInstance(args.id)
+  if not inst then return { error = "No instance" } end
+
+  local state = inst.state
+
+  if state.recorder then
+    -- Stop and save
+    state.recorder:stop()
+    local path = args.path or ("recording_" .. os.date("!%Y%m%d_%H%M%S") .. ".rec.lua")
+    local ok, err = state.recorder:save(path)
+    state.recorder = nil
+    if ok then
+      return { ok = true, action = "stopped", path = path }
+    else
+      return { error = "Save failed: " .. tostring(err) }
+    end
+  else
+    -- Start recording
+    state.recorder = Recorder.new({
+      rows = state.vterm and select(1, state.vterm:size()) or 40,
+      cols = state.vterm and select(2, state.vterm:size()) or 120,
+    })
+    return { ok = true, action = "started" }
+  end
+end
+
 -- ── Register RPC handlers ─────────────────────────────────────────────────
 -- Same pattern as terminal.lua: augment Capabilities.getHandlers()
 

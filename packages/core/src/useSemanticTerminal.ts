@@ -93,6 +93,30 @@ export interface PlayerState {
   speed: number;
 }
 
+/** Result from exportBuffer RPC */
+export interface ExportBufferResult {
+  lines: Array<{
+    row: number;
+    zone: 'scrollback' | 'grid';
+    gridRow?: number;
+    kind: string;
+    nodeId: string | null;
+    turnId: number | null;
+    groupId: number | null;
+    text: string;
+  }>;
+  meta: {
+    classifier: string;
+    scrollback: number;
+    gridRows: number;
+    gridCols: number;
+    totalLines: number;
+    frame: number;
+    mode: string;
+    timestamp: string;
+  };
+}
+
 export interface UseSemanticTerminalResult {
   /** All classified rows received so far */
   classifiedRows: ClassifiedRow[];
@@ -114,6 +138,12 @@ export interface UseSemanticTerminalResult {
   setSpeed: (speed: number) => void;
   /** Save the current recording to a file path */
   saveRecording: (path: string) => void;
+  /** Export the full buffer with per-line semantic annotations. If path given, writes to file. */
+  exportBuffer: (path?: string) => Promise<ExportBufferResult | null>;
+  /** Import re-tagged buffer from file or direct tag array */
+  importTags: (opts: { path?: string; tags?: Array<{ gridRow: number; kind: string }> }) => void;
+  /** Toggle recording on/off. When stopping, saves to path (or auto-generated name). */
+  toggleRecording: (path?: string) => void;
   /** Spread these props onto a `<SemanticTerminal>` element */
   terminalProps: SemanticTerminalProps;
 }
@@ -192,6 +222,34 @@ export function useSemanticTerminal(
   const saveRecording = useCallback(
     (path: string) => {
       bridge?.rpc('semantic_terminal:save_recording', { session, path });
+    },
+    [bridge, session],
+  );
+
+  // ── Buffer export/import ─────────────────────────────────────────────────
+
+  const exportBuffer = useCallback(
+    async (path?: string): Promise<ExportBufferResult | null> => {
+      if (!bridge) return null;
+      const result = await bridge.rpc('semantic_terminal:export_buffer', {
+        id: session,
+        path,
+      });
+      return result as ExportBufferResult | null;
+    },
+    [bridge, session],
+  );
+
+  const importTags = useCallback(
+    (opts: { path?: string; tags?: Array<{ gridRow: number; kind: string }> }) => {
+      bridge?.rpc('semantic_terminal:import_tags', { id: session, ...opts });
+    },
+    [bridge, session],
+  );
+
+  const toggleRecording = useCallback(
+    (path?: string) => {
+      bridge?.rpc('semantic_terminal:toggle_recording', { id: session, path });
     },
     [bridge, session],
   );
@@ -285,6 +343,9 @@ export function useSemanticTerminal(
     stepBack,
     setSpeed,
     saveRecording,
+    exportBuffer,
+    importTags,
+    toggleRecording,
     terminalProps,
   };
 }
