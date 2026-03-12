@@ -32,6 +32,7 @@ local Recorder     = require("lua.session_recorder")
 local Player       = require("lua.session_player")
 local Color        = require("lua.color")
 local Scissor      = require("lua.scissor")
+local Tree         = require("lua.tree")
 
 -- ── Lazy-loaded Measure module (not available at require time) ──────────────
 
