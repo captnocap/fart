@@ -1190,6 +1190,11 @@ function ReactJIT.init(config)
     end
   end
 
+  -- Load resource node capabilities (Timer, WindowConfig, BridgeEvent, Hotkey)
+  pcall(require, "lua.capabilities.timer_cap")
+  pcall(require, "lua.capabilities.window_config")
+  pcall(require, "lua.capabilities.bridge_nodes")
+
   -- Register chemistry RPC handlers
   do
     local chemOk, chem = pcall(require, "lua.capabilities.chemistry")

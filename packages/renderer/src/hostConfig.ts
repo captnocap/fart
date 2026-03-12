@@ -10,6 +10,43 @@ import type { HostConfig } from 'react-reconciler';
 import { reportError } from './errorReporter';
 import { debugLog } from './debugLog';
 import { tw } from '@reactjit/core';
+import { manageSubscription, cleanupSubscriptionsRecursive } from './subscriptionManager';
+
+// ── Hotkey combo parser (shared with hooks.ts) ──────────────────────
+
+interface ParsedCombo {
+  ctrl: boolean;
+  shift: boolean;
+  alt: boolean;
+  meta: boolean;
+  key: string;
+}
+
+function parseCombo(combo: string): ParsedCombo {
+  const parts = combo.toLowerCase().split('+').map(s => s.trim());
+  const result: ParsedCombo = { ctrl: false, shift: false, alt: false, meta: false, key: '' };
+  for (const part of parts) {
+    if (part === 'ctrl' || part === 'control') result.ctrl = true;
+    else if (part === 'shift') result.shift = true;
+    else if (part === 'alt') result.alt = true;
+    else if (part === 'meta' || part === 'cmd' || part === 'gui') result.meta = true;
+    else result.key = part;
+  }
+  return result;
+}
+
+function matchesCombo(event: any, parsed: ParsedCombo): boolean {
+  if (!!event.ctrl !== parsed.ctrl) return false;
+  if (!!event.shift !== parsed.shift) return false;
+  if (!!event.alt !== parsed.alt) return false;
+  if (!!event.meta !== parsed.meta) return false;
+  return (event.key ?? '').toLowerCase() === parsed.key;
+}
+
+function makeComboFilter(combo: string): (payload: any) => boolean {
+  const parsed = parseCombo(combo);
+  return (payload: any) => matchesCombo(payload, parsed);
+}
 
 // ── HTML Element Remapping ───────────────────────────────────────────
 // Maps standard HTML element types to ReactJIT host types so that
@@ -536,6 +573,18 @@ export const hostConfig: HostConfig<
       handlerRegistry.set(id, handlers);
     }
 
+    // Reconciler-managed bridge subscriptions — nodes with __subscribe props
+    // get auto-managed subscribe/unsubscribe tied to node lifecycle.
+    if (clean.__subscribe) {
+      const nodeHandlers = handlers;
+      manageSubscription(id, clean.__subscribe, 'onEvent', () => nodeHandlers.onEvent);
+    }
+    if (clean.__subscribeKey) {
+      const nodeHandlers = handlers;
+      const comboFilter = clean.combo ? makeComboFilter(clean.combo) : undefined;
+      manageSubscription(id, clean.__subscribeKey, 'onKeyDown', () => nodeHandlers.onKeyDown, comboFilter);
+    }
+
     return { id, type: resolvedType, props: clean, handlers, children: [], renderCount: 1 };
   },
 
@@ -712,6 +761,21 @@ export const hostConfig: HostConfig<
         handlerMeta: hasHandlers ? buildHandlerMeta(handlers) : undefined,
       });
     }
+
+    // Update reconciler-managed subscriptions when props change
+    if (clean.__subscribe !== undefined) {
+      manageSubscription(instance.id, clean.__subscribe, 'onEvent', () => {
+        const h = handlerRegistry.get(instance.id);
+        return h?.onEvent as ((payload: any) => void) | undefined;
+      });
+    }
+    if (clean.__subscribeKey !== undefined) {
+      const comboFilter = clean.combo ? makeComboFilter(clean.combo) : undefined;
+      manageSubscription(instance.id, clean.__subscribeKey, 'onKeyDown', () => {
+        const h = handlerRegistry.get(instance.id);
+        return h?.onKeyDown as ((payload: any) => void) | undefined;
+      }, comboFilter);
+    }
   },
 
   commitTextUpdate(_textInstance: TextInstance, _oldText: string, newText: string) {
@@ -777,4 +841,6 @@ function cleanupHandlers(node: Instance | TextInstance): void {
       cleanupHandlers(child);
     }
   }
+  // Also clean up reconciler-managed bridge subscriptions
+  cleanupSubscriptionsRecursive(node as any);
 }

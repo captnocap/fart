@@ -15,6 +15,7 @@ import React from 'react';
 import type { ReactNode } from 'react';
 import { NativeBridge } from './NativeBridge';
 import { createRoot } from './NativeRenderer';
+import { setSubscriptionBridge } from './subscriptionManager';
 import {
   BridgeProvider,
   enableStatePreservation,
@@ -34,6 +35,9 @@ export function createLove2DApp(): Love2DAppHandle {
   // advanced debugging from the QuickJS console. Set before any other
   // init so the test shim (eval'd after this bundle) sees it immediately.
   (globalThis as any).__rjitBridge = bridge;
+
+  // Wire bridge into reconciler-managed subscriptions (BridgeEvent, Hotkey nodes)
+  setSubscriptionBridge(bridge);
 
   // Crypto is optional — wire it up if installed, skip silently if not
   try {

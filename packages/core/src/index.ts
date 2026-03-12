@@ -75,6 +75,18 @@ export {
   type LuaQueryResult,
 } from './useLuaEffect';
 
+// Resource nodes — non-visual tree nodes that replace useEffect-based hooks.
+// Lifecycle managed by reconciler + Lua capabilities. Zero useEffect.
+// Timer is already exported from ./capabilities above.
+export {
+  BridgeEvent,
+  Hotkey,
+  WindowConfig,
+  type BridgeEventProps,
+  type HotkeyProps,
+  type WindowConfigProps,
+} from './ResourceNodes';
+
 // System tray (notification area indicator with context menu)
 export { useTray, type TrayOptions, type TrayMenuItem } from './useTray';
 
