@@ -468,9 +468,21 @@ Capabilities.register("SemanticTerminal", {
             end
           end
           -- Capture raw PTY data for recording (Terminal stashes last read)
+          -- Only capture frames that contain newlines (command output, not per-keystroke echo)
           if state.recorder and termState._lastRawData then
-            state.recorder:capture(termState._lastRawData)
+            local data = termState._lastRawData
             termState._lastRawData = nil  -- consume so we don't double-capture
+            if data:find("\n") or data:find("\r") then
+              state.recorder:capture(data)
+            else
+              -- Buffer non-newline data until we see a newline
+              state._recBuf = (state._recBuf or "") .. data
+            end
+            -- Flush buffer when we do get a newline
+            if state._recBuf and (data:find("\n") or data:find("\r")) then
+              state.recorder:capture(state._recBuf)
+              state._recBuf = nil
+            end
           end
         end
       end
@@ -497,9 +509,18 @@ Capabilities.register("SemanticTerminal", {
           state.vterm:feed(data)
           needsClassify = true
 
-          -- Record if enabled
+          -- Record if enabled (batch on newlines, not per-keystroke)
           if state.recorder then
-            state.recorder:capture(data)
+            if data:find("\n") or data:find("\r") then
+              if state._recBuf then
+                state.recorder:capture(state._recBuf .. data)
+                state._recBuf = nil
+              else
+                state.recorder:capture(data)
+              end
+            else
+              state._recBuf = (state._recBuf or "") .. data
+            end
           end
         end
 
@@ -599,6 +620,14 @@ Capabilities.register("SemanticTerminal", {
     end
     if state.recorder then
       state.recorder:stop()
+      -- Auto-save on destroy using session timestamp
+      local path = "recording_" .. (state._sessionTimestamp or os.date("!%Y%m%d_%H%M%S")) .. ".rec.lua"
+      local ok, err = state.recorder:save(path)
+      if ok then
+        io.write("[semantic_terminal] recording saved: " .. path .. "\n"); io.flush()
+      else
+        io.write("[semantic_terminal] recording save failed: " .. tostring(err) .. "\n"); io.flush()
+      end
     end
   end,
 
