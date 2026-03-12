@@ -457,7 +457,7 @@ Capabilities.register("ClaudeCanvas", {
           -- row sets the kind for ALL other rows in the same block.
           -- Major kinds that SET the block (everything else inherits):
           local BLOCK_SETTERS = {
-            banner = true, user_prompt = true, thinking = true,
+            banner = true, thinking = true,
             tool = true, result = true, diff = true,
             plan_mode = true, permission = true, error = true, warning = true,
             status_bar = true, input_border = true, input_zone = true,
@@ -544,8 +544,9 @@ Capabilities.register("ClaudeCanvas", {
           end
 
           -- ── Turn + group tracking ───────────────────────────────
-          -- turnId: increments on user_prompt (new conversation turn)
-          if kind == "user_prompt" then
+          -- turnId: increments on user_prompt ONLY when it's the actual ❯ prompt row,
+          -- not continuation lines that inherited user_prompt from block context
+          if kind == "user_prompt" and rowText:find("❯", 1, true) then
             currentTurnId = currentTurnId + 1
             -- Reset per-turn sequence counters
             turnThinkSeq = 0; turnToolSeq = 0; turnResultSeq = 0; turnAsstSeq = 0

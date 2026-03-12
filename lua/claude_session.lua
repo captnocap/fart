@@ -279,8 +279,9 @@ local function classifyRow(text, row, totalRows)
   local hasBullet = text:find("● ", 1, true) or text:find("• ", 1, true) or text:find("◆ ", 1, true)
   if hasBullet and text:match("[●•◆]%s+%a+%(") then return "tool" end
 
-  -- Assistant text: bullet followed by prose (not a tool invocation)
-  if hasBullet then return "assistant_text" end
+  -- Assistant text: bullet followed by prose (not a tool invocation, not a system hint)
+  -- Exclude "• /command" patterns (system hints like "• /memory to edit")
+  if hasBullet and not text:match("[●•◆]%s+/[%w%-]") then return "assistant_text" end
 
   -- Diff lines
   if text:match("^%+") or text:match("^%-") then return "diff" end
@@ -313,6 +314,7 @@ local function classifyRow(text, row, totalRows)
   -- Warning/notice: performance warnings, large file warnings, memory hints
   if text:find("will impact performance", 1, true)
      or text:find("chars >", 1, true)
+     or text:find("Large.*CLAUDE%.md")
      or text:find("/memory to edit", 1, true) then
     return "warning"
   end
