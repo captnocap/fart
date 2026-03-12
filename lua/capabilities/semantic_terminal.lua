@@ -611,8 +611,19 @@ Capabilities.register("SemanticTerminal", {
     local contentHeight = c.h - timelineHeight - debugHeight
     local showTokens = props.showTokens
 
-    -- Token badge gutter width
-    local gutterWidth = showTokens and 80 or 0
+    -- Compute layout widths based on showTokens mode (matches claude_canvas debug layout)
+    local tagFont = showTokens and Measure and Measure.getFont(badgeFontSize, "monospace", nil) or nil
+    local cellOffsetX, rowNumW
+    if showTokens and tagFont then
+      local tagW = tagFont:getWidth("[list_selectable] ")
+      cellOffsetX = tagW + 4
+      rowNumW = 180  -- right margin for row numbers + nodeId + colors
+    else
+      cellOffsetX = 8
+      rowNumW = 0
+    end
+    local cellAreaW = c.w - cellOffsetX - rowNumW
+    local maxCellCols = math.max(1, math.floor(cellAreaW / charWidth))
 
     -- Scissor to content area
     local prevScissor = Scissor.saveIntersected(c.x, c.y, c.w, contentHeight)
@@ -623,13 +634,23 @@ Capabilities.register("SemanticTerminal", {
       rowLookup[entry.row] = entry
     end
 
-    -- Determine visible row range based on scroll
+    -- Find last non-empty row to avoid rendering blank rows
     local rows, cols = vterm:size()
-    local maxScroll = math.max(0, rows * lineHeight - contentHeight)
+    local lastNonEmpty = 0
+    for r = rows - 1, 0, -1 do
+      if #(vterm:getRowText(r)) > 0 then lastNonEmpty = r; break end
+    end
+
+    -- Determine visible row range based on scroll
+    local totalContentH = (lastNonEmpty + 1) * lineHeight + 16
+    local maxScroll = math.max(0, totalContentH - contentHeight)
     state.scrollY = math.max(0, math.min(state.scrollY, maxScroll))
 
     local firstVisibleRow = math.floor(state.scrollY / lineHeight)
-    local lastVisibleRow = math.min(rows - 1, firstVisibleRow + math.ceil(contentHeight / lineHeight))
+    local lastVisibleRow = math.min(lastNonEmpty, firstVisibleRow + math.ceil(contentHeight / lineHeight) + 1)
+
+    -- Per-row color sampling (for debug display, only when showTokens)
+    local rowColors = {}
 
     -- Render visible rows
     for row = firstVisibleRow, lastVisibleRow do
@@ -643,7 +664,7 @@ Capabilities.register("SemanticTerminal", {
 
       -- Alternating row background for visual tracking
       if row % 2 == 1 then
-        love.graphics.setColor(1, 1, 1, 0.025 * alpha)
+        love.graphics.setColor(1, 1, 1, 0.03 * alpha)
         love.graphics.rectangle("fill", c.x, yPos, c.w, lineHeight)
       end
 
@@ -652,44 +673,37 @@ Capabilities.register("SemanticTerminal", {
       local tokenColor = getTokenColor(kind)
       local isSpecific = kind ~= "output"
 
-      -- Group gutter bar: color bar on left edge for grouped rows
-      if entry and entry.groupType then
-        local groupColor = getTokenColor(entry.kind)
-        love.graphics.setColor(groupColor[1], groupColor[2], groupColor[3], 0.5 * alpha)
-        love.graphics.rectangle("fill", c.x, yPos, 3, lineHeight)
+      -- Left edge accent bar: bright for specific tokens, dim for output
+      if isSpecific then
+        love.graphics.setColor(tokenColor[1], tokenColor[2], tokenColor[3], 0.9 * alpha)
+        love.graphics.rectangle("fill", c.x, yPos, 2, lineHeight)
+      else
+        love.graphics.setColor(0.3, 0.33, 0.4, 0.25 * alpha)
+        love.graphics.rectangle("fill", c.x, yPos + lineHeight * 0.35, 2, lineHeight * 0.3)
       end
 
-      -- Token badge (left gutter) — lights up only for specific classifications
-      if showTokens and entry then
-
+      -- [kind] tag prefix (like claude_canvas debug mode)
+      if showTokens and tagFont then
+        love.graphics.setFont(tagFont)
         if isSpecific then
-          -- Bright badge: classifier found something meaningful
-          love.graphics.setColor(0.15, 0.18, 0.25, 0.8 * alpha)
-          local badgeWidth = badgeFont and badgeFont:getWidth(kind) + 6 or 50
-          love.graphics.rectangle("fill", c.x + 2, yPos + 1, badgeWidth, lineHeight - 2, 3, 3)
-
-          love.graphics.setColor(tokenColor[1], tokenColor[2], tokenColor[3], 0.85 * alpha)
-          if badgeFont then
-            love.graphics.setFont(badgeFont)
-            love.graphics.print(kind, c.x + 5, yPos + (lineHeight - badgeFontSize) / 2)
-          end
-
-          -- Left edge accent bar (2px) — visual "lit" indicator
-          love.graphics.setColor(tokenColor[1], tokenColor[2], tokenColor[3], 0.9 * alpha)
-          love.graphics.rectangle("fill", c.x, yPos, 2, lineHeight)
+          love.graphics.setColor(tokenColor[1], tokenColor[2], tokenColor[3], 0.7 * alpha)
         else
-          -- Dim dot: generic output, classifier didn't match anything specific
-          love.graphics.setColor(0.3, 0.33, 0.4, 0.25 * alpha)
-          love.graphics.rectangle("fill", c.x, yPos + lineHeight * 0.35, 2, lineHeight * 0.3)
+          love.graphics.setColor(0.4, 0.5, 0.6, 0.35 * alpha)
         end
+        love.graphics.print("[" .. kind .. "]", c.x + 4, yPos + 2)
       end
 
-      -- Row text: render cell-by-cell with vterm ANSI colors (like terminal.lua)
+      -- Row text: render cell-by-cell with vterm ANSI colors
       if #text > 0 and font then
         love.graphics.setFont(font)
-        local textX = c.x + gutterWidth + 4
+        local textX = c.x + cellOffsetX
+
+        -- Sample all distinct fg colors on this row (for debug display)
+        local colorList, colorSeen = {}, {}
+        local sampledFg = nil
+
         local col = 0
-        while col < cols do
+        while col < math.min(cols, maxCellCols) do
           local cell = vterm:getCell(row, col)
           if cell.char == "" or cell.char == " " then
             -- Draw bg on space/empty cells if present
@@ -699,6 +713,16 @@ Capabilities.register("SemanticTerminal", {
             end
             col = col + 1
           else
+            -- Sample fg color for debug
+            if showTokens and cell.fg then
+              if not sampledFg then sampledFg = cell.fg end
+              local label = string.format("%d,%d,%d", cell.fg[1], cell.fg[2], cell.fg[3])
+              if not colorSeen[label] then
+                colorSeen[label] = true
+                colorList[#colorList + 1] = label
+              end
+            end
+
             -- Start a span of same-fg chars for performance
             local spanStart = col
             local spanFg = cell.fg
@@ -707,13 +731,21 @@ Capabilities.register("SemanticTerminal", {
             local spanChars = { cell.char }
             col = col + (cell.width and cell.width > 0 and cell.width or 1)
 
-            while col < cols do
+            while col < math.min(cols, maxCellCols) do
               local nc = vterm:getCell(row, col)
               if nc.char == "" or nc.char == " " then break end
               local sameFg = (spanFg == nil and nc.fg == nil) or
                 (spanFg and nc.fg and spanFg[1] == nc.fg[1] and spanFg[2] == nc.fg[2] and spanFg[3] == nc.fg[3])
               local sameBold = (spanBold == nc.bold)
               if not sameFg or not sameBold then break end
+              -- Sample this cell too
+              if showTokens and nc.fg then
+                local label = string.format("%d,%d,%d", nc.fg[1], nc.fg[2], nc.fg[3])
+                if not colorSeen[label] then
+                  colorSeen[label] = true
+                  colorList[#colorList + 1] = label
+                end
+              end
               spanChars[#spanChars + 1] = nc.char
               col = col + (nc.width and nc.width > 0 and nc.width or 1)
             end
@@ -745,38 +777,66 @@ Capabilities.register("SemanticTerminal", {
           end
         end
 
-        -- Right-side debug info: show for all rows when tokens visible
-        if showTokens then
-          if badgeFont then love.graphics.setFont(badgeFont) end
-          -- Get first cell fg for debug display
-          local firstCell = vterm:getCell(row, 0)
-          local fgStr = "def"
-          if firstCell and firstCell.fg then
-            fgStr = string.format("%d,%d,%d", firstCell.fg[1], firstCell.fg[2], firstCell.fg[3])
-          end
-          -- Build debug string with nodeId, kind, row number, and fg colors
-          local nid = entry and entry.nodeId or ""
-          local debugStr
-          if isSpecific then
-            debugStr = string.format("%s  %s  %s  %d", fgStr, kind, nid, row)
-          else
-            debugStr = string.format("%3d", row)
-          end
-          local debugW = badgeFont and badgeFont:getWidth(debugStr) or 80
-          local debugAlpha = isSpecific and 0.45 or 0.2
-          love.graphics.setColor(tokenColor[1], tokenColor[2], tokenColor[3], debugAlpha * alpha)
-          love.graphics.print(debugStr, c.x + c.w - debugW - 6, yPos + (lineHeight - badgeFontSize) / 2)
-          if font then love.graphics.setFont(font) end
-        end
+        -- Store sampled colors for right-side debug
+        rowColors[row] = { fg = sampledFg, colors = colorList }
       end
 
       ::nextRow::
     end
 
+    -- Right-side debug overlay: row numbers + nodeId + fg colors (like claude_canvas)
+    if showTokens and tagFont then
+      love.graphics.setFont(tagFont)
+      for row = firstVisibleRow, lastVisibleRow do
+        local yPos = c.y + (row * lineHeight) - state.scrollY
+        if yPos + lineHeight < c.y or yPos > c.y + contentHeight then goto nextDebug end
+
+        local entry = rowLookup[row]
+        local kind = entry and entry.kind or "output"
+        local isSpecific = kind ~= "output"
+        local tokenColor = getTokenColor(kind)
+        local text = vterm:getRowText(row)
+
+        -- Row number (right edge)
+        if isSpecific then
+          love.graphics.setColor(0.3, 1, 0.3, 0.5 * alpha)
+        elseif #text > 0 then
+          love.graphics.setColor(0.3, 1, 0.3, 0.3 * alpha)
+        else
+          love.graphics.setColor(1, 1, 1, 0.15 * alpha)
+        end
+        love.graphics.print(string.format("%3d", row), c.x + c.w - 30, yPos)
+
+        -- NodeId next to row number
+        if entry and entry.nodeId then
+          love.graphics.setColor(0.6, 0.8, 0.4, 0.6 * alpha)
+          local mw = tagFont:getWidth(entry.nodeId .. "  ")
+          love.graphics.print(entry.nodeId, c.x + c.w - 34 - mw, yPos)
+        end
+
+        -- All distinct fg colors further left
+        local rc = rowColors[row]
+        if rc and rc.colors and #rc.colors > 0 then
+          love.graphics.setColor(0.5, 0.5, 0.5, 0.5 * alpha)
+          local rmWidth = 0
+          if entry and entry.nodeId then
+            rmWidth = tagFont:getWidth(entry.nodeId .. "    ")
+          end
+          local colorStr = table.concat(rc.colors, " ")
+          local cw2 = tagFont:getWidth(colorStr .. "  ")
+          love.graphics.print(colorStr, c.x + c.w - 34 - rmWidth - cw2, yPos)
+        end
+
+        ::nextDebug::
+      end
+      if font then love.graphics.setFont(font) end
+    end
+
     -- Cursor
-    if vterm:isCursorVisible() and state.mode == "live" then
+    local showCursor = state.mode == "live" or state.attachedSession
+    if vterm:isCursorVisible() and showCursor then
       local cursor = vterm:getCursor()
-      local cursorX = c.x + gutterWidth + 4 + cursor.col * charWidth
+      local cursorX = c.x + cellOffsetX + cursor.col * charWidth
       local cursorY = c.y + (cursor.row * lineHeight) - state.scrollY
       if cursorY >= c.y and cursorY + lineHeight <= c.y + contentHeight then
         love.graphics.setColor(0.89, 0.91, 0.94, 0.7 * alpha)
@@ -886,9 +946,19 @@ Capabilities.register("SemanticTerminal", {
     if not capInst then return false end
     local state = capInst.state
 
-    if state.mode == "live" then
+    -- Resolve the PTY to write to: own or borrowed from attached session
+    local pty = state.pty
+    if state.attachedSession then
+      local termAPI = Capabilities._terminalAPI
+      if termAPI then
+        local termState = termAPI.getSessionState(state.attachedSession)
+        if termState then pty = termState.pty end
+      end
+    end
+
+    if state.mode == "live" or state.attachedSession then
       -- Forward keyboard to PTY via key-to-escape-sequence mapping
-      if state.pty and state.connected then
+      if pty then
         local seq = nil
         if key == "return" then seq = "\r"
         elseif key == "backspace" then seq = "\x7f"
@@ -921,11 +991,12 @@ Capabilities.register("SemanticTerminal", {
         end
 
         if seq then
-          state.pty:write(seq)
+          pty:write(seq)
           return true
         end
       end
-      return false
+      -- Consume the event even if no PTY (prevent bubbling to storybook nav)
+      return true
 
     elseif state.mode == "playback" and state.player then
       -- Playback controls
@@ -967,8 +1038,18 @@ Capabilities.register("SemanticTerminal", {
     if not capInst then return end
     local state = capInst.state
 
-    if state.mode == "live" and state.pty and state.connected then
-      state.pty:write(text)
+    -- Resolve PTY: own or borrowed from attached Terminal session
+    local pty = state.pty
+    if state.attachedSession then
+      local termAPI = Capabilities._terminalAPI
+      if termAPI then
+        local termState = termAPI.getSessionState(state.attachedSession)
+        if termState then pty = termState.pty end
+      end
+    end
+
+    if (state.mode == "live" or state.attachedSession) and pty then
+      pty:write(text)
     end
   end,
 
