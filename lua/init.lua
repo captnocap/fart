@@ -4180,6 +4180,12 @@ local function hitTestScrollbar(root, mx, my)
   return best
 end
 
+local function getScrollPageStep(node, axis)
+  local c = node and node.computed or nil
+  local viewport = axis == "x" and (c and c.w or 0) or (c and c.h or 0)
+  return math.max(40, math.floor(viewport * 0.85))
+end
+
 --- Start a scrollbar drag or jump-to-position on click.
 local function scrollbarMousePressed(root, mx, my, button)
   if button ~= 1 then return false end
@@ -4196,27 +4202,21 @@ local function scrollbarMousePressed(root, mx, my, button)
       scrollbarDrag = { node = node, axis = "v", startMouse = my,
                         startScroll = ss.scrollY or 0 }
     else
-      -- Click on track: jump to position
-      local ratio = (my - hit.trackStart) / hit.trackSize
-      local newScroll = ratio * hit.maxScroll
+      -- Click on track: page toward the tapped position.
+      local direction = my < hit.thumbY and -1 or 1
+      local newScroll = (ss.scrollY or 0) + direction * getScrollPageStep(node, "y")
       M.tree.setScroll(node.id, ss.scrollX or 0, newScroll)
       emitScrollEvent(node)
-      -- Start drag from new position
-      local thumbH = math.max(20, (node.computed.h / (ss.contentH or 1)) * hit.trackSize)
-      scrollbarDrag = { node = node, axis = "v", startMouse = my,
-                        startScroll = newScroll }
     end
   else
     if mx >= hit.thumbX and mx <= hit.thumbX + hit.thumbW then
       scrollbarDrag = { node = node, axis = "h", startMouse = mx,
                         startScroll = ss.scrollX or 0 }
     else
-      local ratio = (mx - hit.trackStart) / hit.trackSize
-      local newScroll = ratio * hit.maxScroll
+      local direction = mx < hit.thumbX and -1 or 1
+      local newScroll = (ss.scrollX or 0) + direction * getScrollPageStep(node, "x")
       M.tree.setScroll(node.id, newScroll, ss.scrollY or 0)
       emitScrollEvent(node)
-      scrollbarDrag = { node = node, axis = "h", startMouse = mx,
-                        startScroll = newScroll }
     end
   end
   return true
@@ -5519,9 +5519,7 @@ function ReactJIT.wheelmoved(x, y)
 
     -- Horizontal tilt remapped to vertical → use page-sized scroll
     if isHorizontalTilt and wheelY ~= 0 then
-      local c = scrollContainer.computed
-      local viewportH = c and c.h or 400
-      scrollSpeed = math.max(40, math.floor(viewportH * 0.85))
+      scrollSpeed = getScrollPageStep(scrollContainer, "y")
     end
 
     local newScrollX = (ss.scrollX or 0) - wheelX * scrollSpeed
