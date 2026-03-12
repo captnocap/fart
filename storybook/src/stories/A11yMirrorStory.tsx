@@ -2,16 +2,15 @@
  * Accessibility Mirror — reads the desktop accessibility tree via AT-SPI2
  * and renders it as a live React component hierarchy.
  *
- * Polls the tree and diffs against previous state — only damaged nodes update.
- * Expand/collapse state is preserved across polls.
+ * All data flows through Lua RPC (frame-synced in love.update).
+ * No useEffect, no useAPI, no fetch() polyfill.
  *
  * Requires: /usr/bin/python3 tools/a11y_server.py running on port 9876
  */
 
 import React, { useState, useCallback, useRef } from 'react';
-import { Box, Text, Pressable, ScrollView } from '../../../packages/core/src';
+import { Box, Text, Pressable, ScrollView, useLuaEffect, useMount, useBridge } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
-import { useAPI, useAPIMutation } from '../../../packages/apis/src/base';
 
 // ── Palette ──────────────────────────────────────────────
 
@@ -82,6 +81,8 @@ interface A11yNode {
   value?: { current: number; min: number; max: number };
   childCount: number;
   children?: A11yNode[];
+  truncated?: boolean;
+  shownChildren?: number;
 }
 
 interface AppInfo {
@@ -90,8 +91,6 @@ interface AppInfo {
 }
 
 // ── Stable tree merge ────────────────────────────────────
-// Diff incoming tree against previous, return same reference if unchanged.
-// This prevents React from re-rendering nodes that haven't changed.
 
 function nodeFingerprint(n: A11yNode): string {
   const r = n.rect;
@@ -104,7 +103,6 @@ function mergeTree(prev: A11yNode | null, next: A11yNode): A11yNode {
 
   const sameSelf = nodeFingerprint(prev) === nodeFingerprint(next);
 
-  // Merge children recursively
   let mergedChildren: A11yNode[] | undefined;
   let childrenChanged = false;
 
@@ -118,21 +116,13 @@ function mergeTree(prev: A11yNode | null, next: A11yNode): A11yNode {
     });
     if (mergedChildren.length !== prevChildren.length) childrenChanged = true;
   } else if (prev.children && !next.children) {
-    // Next has no children data (shallow fetch) — keep previous children
     mergedChildren = prev.children;
   }
 
-  if (sameSelf && !childrenChanged) return prev; // same reference = no re-render
+  if (sameSelf && !childrenChanged) return prev;
 
-  return {
-    ...next,
-    children: mergedChildren || next.children,
-  };
+  return { ...next, children: mergedChildren || next.children };
 }
-
-// ── Server URL ───────────────────────────────────────────
-
-const SERVER = 'http://127.0.0.1:9876';
 
 // ── Components ───────────────────────────────────────────
 
@@ -177,10 +167,10 @@ function LazyNode({ node, depth, appName, onAction }: {
   onAction: (path: number[], actionIndex: number) => void;
 }) {
   const c = useThemeColors();
-  const [expanded, setExpanded] = useState(depth < 2);
   const hasInlineChildren = node.children && node.children.length > 0;
   const hasMoreChildren = node.childCount > 0 && !hasInlineChildren;
   const expandable = hasInlineChildren || hasMoreChildren;
+  const [expanded, setExpanded] = useState(depth < 2 && !hasMoreChildren);
   const color = roleColor(node.role);
   const isContainer = node.role === 'application' || node.role === 'frame' || node.role === 'filler' || node.role === 'panel';
   const isVisible = isContainer || node.states.length === 0 || node.states.includes('visible') || node.states.includes('showing');
@@ -189,7 +179,6 @@ function LazyNode({ node, depth, appName, onAction }: {
     <Box style={{ paddingLeft: depth > 0 ? 16 : 0, opacity: isVisible ? 1.0 : 0.4 }}>
       {/* Node header row */}
       <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingTop: 2, paddingBottom: 2 }}>
-        {/* Expand toggle */}
         {expandable ? (
           <Pressable onPress={() => setExpanded(!expanded)} style={{ paddingRight: 4 }}>
             <Text style={{ color: c.muted, fontSize: 11 }}>{expanded ? '▼' : '▶'}</Text>
@@ -198,7 +187,6 @@ function LazyNode({ node, depth, appName, onAction }: {
           <Box style={{ width: 16 }} />
         )}
 
-        {/* Role badge */}
         <Box style={{
           backgroundColor: color,
           paddingLeft: 6, paddingRight: 6,
@@ -208,17 +196,14 @@ function LazyNode({ node, depth, appName, onAction }: {
           <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700' }}>{node.role}</Text>
         </Box>
 
-        {/* Name */}
         {node.name ? (
           <Text style={{ color: c.text, fontSize: 12 }}>{`"${node.name}"`}</Text>
         ) : null}
 
-        {/* Rect */}
         <Text style={{ color: c.muted, fontSize: 10 }}>
           {node.rect ? `${node.rect.x},${node.rect.y} ${node.rect.w}x${node.rect.h}` : 'hidden'}
         </Text>
 
-        {/* Action buttons */}
         {node.actions.map((action, i) => (
           <Pressable
             key={`a-${i}`}
@@ -236,7 +221,6 @@ function LazyNode({ node, depth, appName, onAction }: {
           </Pressable>
         ))}
 
-        {/* State badges */}
         {node.states.includes('focused') ? (
           <Box style={{ backgroundColor: 'rgba(239, 68, 68, 0.2)', paddingLeft: 4, paddingRight: 4, paddingTop: 1, paddingBottom: 1, borderRadius: 2 }}>
             <Text style={{ color: '#ef4444', fontSize: 9 }}>focused</Text>
@@ -254,14 +238,12 @@ function LazyNode({ node, depth, appName, onAction }: {
         ) : null}
       </Box>
 
-      {/* Text content */}
       {node.text ? (
         <Box style={{ paddingLeft: 32 }}>
           <Text style={{ color: C.text, fontSize: 11, fontStyle: 'italic' }}>{`"${node.text.slice(0, 100)}"`}</Text>
         </Box>
       ) : null}
 
-      {/* Inline children (already fetched) */}
       {expanded && hasInlineChildren ? (
         <Box>
           {node.children!.map((child, i) => (
@@ -276,12 +258,10 @@ function LazyNode({ node, depth, appName, onAction }: {
         </Box>
       ) : null}
 
-      {/* Lazy children (need to fetch) */}
       {expanded && hasMoreChildren ? (
         <LazyChildren appName={appName} path={node.path} depth={depth} onAction={onAction} />
       ) : null}
 
-      {/* Collapsed indicator */}
       {!expanded && expandable ? (
         <Box style={{ paddingLeft: 32 }}>
           <Text style={{ color: c.muted, fontSize: 10 }}>
@@ -295,7 +275,7 @@ function LazyNode({ node, depth, appName, onAction }: {
   );
 }
 
-/** Fetches children of a node lazily when expanded, polls and diffs */
+/** Fetches children via Lua RPC (one-shot, no polling) */
 function LazyChildren({ appName, path, depth, onAction }: {
   appName: string;
   path: number[];
@@ -303,21 +283,32 @@ function LazyChildren({ appName, path, depth, onAction }: {
   onAction: (path: number[], actionIndex: number) => void;
 }) {
   const c = useThemeColors();
-  const pathStr = path.join(',');
+  const bridge = useBridge();
+  const [data, setData] = useState<A11yNode | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const stableRef = useRef<A11yNode | null>(null);
 
-  const { data: rawData, loading, error } = useAPI<A11yNode>(
-    `${SERVER}/subtree/${appName}?path=${pathStr}&depth=2`,
-    { interval: 1500 }
-  );
+  useMount(() => {
+    bridge.rpc<A11yNode>('a11y:subtree', {
+      app: appName,
+      path: path.join(','),
+      depth: 1,
+    }).then((result: any) => {
+      if (result && result.error) {
+        setError(result.error);
+      } else if (result) {
+        stableRef.current = mergeTree(stableRef.current, result);
+        setData(stableRef.current);
+      }
+      setLoading(false);
+    }).catch((err: any) => {
+      setError(String(err));
+      setLoading(false);
+    });
+  });
 
-  // Merge incoming data with stable reference
-  if (rawData) {
-    stableRef.current = mergeTree(stableRef.current, rawData);
-  }
-  const data = stableRef.current;
-
-  if (loading && !data) {
+  if (loading) {
     return (
       <Box style={{ paddingLeft: 32 }}>
         <Text style={{ color: c.muted, fontSize: 10 }}>Loading...</Text>
@@ -325,10 +316,10 @@ function LazyChildren({ appName, path, depth, onAction }: {
     );
   }
 
-  if (error && !data) {
+  if (error) {
     return (
       <Box style={{ paddingLeft: 32 }}>
-        <Text style={{ color: '#ef4444', fontSize: 10 }}>{`Error: ${error?.message || 'no data'}`}</Text>
+        <Text style={{ color: '#ef4444', fontSize: 10 }}>{`Error: ${error}`}</Text>
       </Box>
     );
   }
@@ -360,46 +351,70 @@ function LazyChildren({ appName, path, depth, onAction }: {
 
 export function A11yMirrorStory() {
   const c = useThemeColors();
+  const bridge = useBridge();
   const [selectedApp, setSelectedApp] = useState<string | null>(null);
+  const [apps, setApps] = useState<AppInfo[]>([]);
+  const [treeData, setTreeData] = useState<A11yNode | null>(null);
+  const [treeLoading, setTreeLoading] = useState(false);
+  const [treeError, setTreeError] = useState<string | null>(null);
   const stableTreeRef = useRef<A11yNode | null>(null);
+  const prevAppRef = useRef<string | null>(null);
 
-  // Fetch app list, poll every 5s
-  const { data: appsData } = useAPI<{ apps: AppInfo[] }>(
-    `${SERVER}/apps`,
-    { interval: 5000 }
-  );
+  // Poll app list every 5s via Lua timer
+  useLuaEffect({ type: 'poll', interval: 5000 }, () => {
+    bridge.rpc<{ apps: AppInfo[] }>('a11y:apps').then((result: any) => {
+      if (result && result.apps) setApps(result.apps);
+    });
+  }, []);
 
-  // Fetch shallow tree, poll every 3s, diff against stable ref
-  const { data: rawTree, loading: treeLoading, error: treeError } = useAPI<A11yNode>(
-    selectedApp ? `${SERVER}/tree/${selectedApp}?depth=3` : null,
-    { interval: 1500 }
-  );
+  // Fetch app list once on mount
+  useMount(() => {
+    bridge.rpc<{ apps: AppInfo[] }>('a11y:apps').then((result: any) => {
+      if (result && result.apps) setApps(result.apps);
+    });
+  });
 
-  // Merge incoming tree into stable reference — only changed nodes get new references
-  if (rawTree) {
-    stableTreeRef.current = mergeTree(stableTreeRef.current, rawTree);
-  }
-  // Reset stable ref when switching apps
-  const prevAppRef = useRef(selectedApp);
-  if (selectedApp !== prevAppRef.current) {
-    stableTreeRef.current = null;
-    prevAppRef.current = selectedApp;
-  }
-  const treeData = stableTreeRef.current;
-
-  // Action mutation
-  const { execute: executeAction } = useAPIMutation<{ ok: boolean; action: string }>();
-
-  const handleAction = useCallback((path: number[], actionIndex: number) => {
+  // Poll selected app's tree every 1.5s via Lua timer
+  useLuaEffect({ type: 'poll', interval: 1500 }, () => {
     if (!selectedApp) return;
-    executeAction(`${SERVER}/action`, {
-      method: 'POST',
-      body: { app: selectedApp, path, action: actionIndex },
+    bridge.rpc<A11yNode>('a11y:tree', { app: selectedApp, depth: 3 }).then((result: any) => {
+      if (result && result.error) {
+        setTreeError(result.error);
+        return;
+      }
+      if (result) {
+        stableTreeRef.current = mergeTree(stableTreeRef.current, result);
+        setTreeData(stableTreeRef.current);
+        setTreeError(null);
+      }
     });
   }, [selectedApp]);
 
-  const apps = appsData?.apps || [];
-  const serverDown = !appsData && !treeLoading;
+  // Handle app selection — reset tree and fetch immediately
+  const handleSelectApp = useCallback((name: string) => {
+    setSelectedApp(name);
+    stableTreeRef.current = null;
+    setTreeData(null);
+    setTreeLoading(true);
+    setTreeError(null);
+    bridge.rpc<A11yNode>('a11y:tree', { app: name, depth: 3 }).then((result: any) => {
+      if (result && result.error) {
+        setTreeError(result.error);
+      } else if (result) {
+        stableTreeRef.current = result;
+        setTreeData(result);
+      }
+      setTreeLoading(false);
+    });
+  }, [bridge]);
+
+  // Handle action execution
+  const handleAction = useCallback((path: number[], actionIndex: number) => {
+    if (!selectedApp) return;
+    bridge.rpc('a11y:action', { app: selectedApp, path, action: actionIndex });
+  }, [selectedApp, bridge]);
+
+  const serverDown = apps.length === 0 && !treeLoading;
 
   return (
     <Box style={{ width: '100%', height: '100%', backgroundColor: c.bg }}>
@@ -411,7 +426,7 @@ export function A11yMirrorStory() {
       }}>
         <Text style={{ color: c.text, fontSize: 20, fontWeight: '700' }}>Accessibility Mirror</Text>
         <Text style={{ color: c.muted, fontSize: 12, paddingTop: 4 }}>
-          {`Live AT-SPI2 tree — polls every 3s, only damaged nodes update`}
+          {`Live AT-SPI2 tree — Lua RPC polling, damage-only updates`}
         </Text>
       </Box>
 
@@ -438,7 +453,7 @@ export function A11yMirrorStory() {
           <Text style={{ color: c.muted, fontSize: 11, paddingBottom: 6 }}>
             {`${apps.length} apps with windows`}
           </Text>
-          <AppPicker apps={apps} onSelect={setSelectedApp} selected={selectedApp} />
+          <AppPicker apps={apps} onSelect={handleSelectApp} selected={selectedApp} />
         </Box>
       ) : null}
 
@@ -452,9 +467,9 @@ export function A11yMirrorStory() {
           <Box style={{ padding: 20 }}>
             <Text style={{ color: c.muted, fontSize: 13 }}>Loading tree...</Text>
           </Box>
-        ) : selectedApp ? (
+        ) : selectedApp && treeError ? (
           <Box style={{ padding: 20 }}>
-            <Text style={{ color: '#ef4444', fontSize: 13 }}>{`Error: ${treeError?.message || 'Failed to load tree'}`}</Text>
+            <Text style={{ color: '#ef4444', fontSize: 13 }}>{`Error: ${treeError}`}</Text>
           </Box>
         ) : (
           <Box style={{ padding: 20 }}>

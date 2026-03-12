@@ -1352,6 +1352,68 @@ function ReactJIT.init(config)
     return { ok = true, path = args.path }
   end
 
+  -- ── AT-SPI2 accessibility tree proxy ──────────────────────────────────
+  -- Fetches from the local a11y_server.py via io.popen + curl.
+  -- Runs synchronously inside love.update(dt) — frame-synced, no async jitter.
+  -- Keeps responses under the QuickJS string size limit by using shallow depth.
+
+  rpcHandlers["a11y:apps"] = function()
+    local h = io.popen("curl -s http://127.0.0.1:9876/apps 2>/dev/null")
+    if not h then return { error = "curl failed" } end
+    local body = h:read("*a")
+    h:close()
+    if not body or #body == 0 then return { error = "no response" } end
+    local ok2, data = pcall(json.decode, body)
+    if not ok2 then return { error = "json parse failed" } end
+    return data
+  end
+
+  rpcHandlers["a11y:tree"] = function(args)
+    local app = args and args.app or ""
+    local depth = args and args.depth or 3
+    local url = string.format("http://127.0.0.1:9876/tree/%s?depth=%d", app, depth)
+    local h = io.popen("curl -s " .. url .. " 2>/dev/null")
+    if not h then return { error = "curl failed" } end
+    local body = h:read("*a")
+    h:close()
+    if not body or #body == 0 then return { error = "no response" } end
+    local ok2, data = pcall(json.decode, body)
+    if not ok2 then return { error = "json parse failed" } end
+    return data
+  end
+
+  rpcHandlers["a11y:subtree"] = function(args)
+    local app = args and args.app or ""
+    local path = args and args.path or ""
+    local depth = args and args.depth or 1
+    local url = string.format("http://127.0.0.1:9876/subtree/%s?path=%s&depth=%d", app, path, depth)
+    local h = io.popen("curl -s " .. url .. " 2>/dev/null")
+    if not h then return { error = "curl failed" } end
+    local body = h:read("*a")
+    h:close()
+    if not body or #body == 0 then return { error = "no response" } end
+    local ok2, data = pcall(json.decode, body)
+    if not ok2 then return { error = "json parse failed" } end
+    return data
+  end
+
+  rpcHandlers["a11y:action"] = function(args)
+    local payload = json.encode({
+      app = args.app or "",
+      path = args.path or {},
+      action = args.action or 0,
+    })
+    local cmd = string.format("curl -s -X POST http://127.0.0.1:9876/action -H 'Content-Type: application/json' -d '%s' 2>/dev/null", payload)
+    local h = io.popen(cmd)
+    if not h then return { error = "curl failed" } end
+    local body = h:read("*a")
+    h:close()
+    if not body or #body == 0 then return { error = "no response" } end
+    local ok2, data = pcall(json.decode, body)
+    if not ok2 then return { error = "json parse failed" } end
+    return data
+  end
+
   -- ── Lua-side interval timer service ──────────────────────────────────
   -- JS calls timer:create to start a repeating timer. Lua ticks it in
   -- love.update(dt) and pushes a timer:tick event each interval.
