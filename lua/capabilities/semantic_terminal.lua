@@ -221,6 +221,47 @@ local function classifyVTerm(vterm, classifier, state)
   return cache
 end
 
+-- ── Export helpers ────────────────────────────────────────────────────────
+
+-- Sample all distinct fg colors from a row of vterm cells
+local function sampleRowColors(vterm, gridRow, cols)
+  local colors = {}
+  local seen = {}
+  for col = 0, cols - 1 do
+    local cell = vterm:getCell(gridRow, col)
+    if cell and cell.fg then
+      local label = string.format("%d %d %d", cell.fg[1], cell.fg[2], cell.fg[3])
+      if not seen[label] then
+        seen[label] = true
+        colors[#colors + 1] = label
+      end
+    end
+  end
+  return colors
+end
+
+-- Sample colors from a scrollback row
+local function sampleScrollbackColors(sbRow)
+  local colors = {}
+  local seen = {}
+  if not sbRow then return colors end
+  for _, cell in ipairs(sbRow) do
+    if cell.fg then
+      local label = string.format("%d %d %d", cell.fg[1], cell.fg[2], cell.fg[3])
+      if not seen[label] then
+        seen[label] = true
+        colors[#colors + 1] = label
+      end
+    end
+  end
+  return colors
+end
+
+-- Strip ANSI escape sequences from text
+local function stripAnsi(text)
+  return text:gsub("\27%[%d*;?%d*;?%d*;?%d*m", ""):gsub("\27%[[%d;]*[A-Za-z]", ""):gsub("\27%].-\27\\", "")
+end
+
 -- ── PTY spawn helper ──────────────────────────────────────────────────────
 
 local function buildEnv(props)
@@ -1489,45 +1530,6 @@ rpc["semantic_terminal:save_recording"] = function(args)
   else
     return { error = tostring(err) }
   end
-end
-
--- Helper: sample all distinct fg colors from a row of vterm cells
-local function sampleRowColors(vterm, gridRow, cols)
-  local colors = {}
-  local seen = {}
-  for col = 0, cols - 1 do
-    local cell = vterm:getCell(gridRow, col)
-    if cell and cell.fg then
-      local label = string.format("%d %d %d", cell.fg[1], cell.fg[2], cell.fg[3])
-      if not seen[label] then
-        seen[label] = true
-        colors[#colors + 1] = label
-      end
-    end
-  end
-  return colors
-end
-
--- Helper: sample colors from a scrollback row
-local function sampleScrollbackColors(sbRow)
-  local colors = {}
-  local seen = {}
-  if not sbRow then return colors end
-  for _, cell in ipairs(sbRow) do
-    if cell.fg then
-      local label = string.format("%d %d %d", cell.fg[1], cell.fg[2], cell.fg[3])
-      if not seen[label] then
-        seen[label] = true
-        colors[#colors + 1] = label
-      end
-    end
-  end
-  return colors
-end
-
--- Helper: strip ANSI escape sequences from text
-local function stripAnsi(text)
-  return text:gsub("\27%[%d*;?%d*;?%d*;?%d*m", ""):gsub("\27%[[%d;]*[A-Za-z]", ""):gsub("\27%].-\27\\", "")
 end
 
 -- Export entire buffer with per-line semantic debug annotations + color sequences
