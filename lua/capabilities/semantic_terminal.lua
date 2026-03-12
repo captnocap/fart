@@ -639,20 +639,19 @@ Capabilities.register("SemanticTerminal", {
     local prevScissor = Scissor.saveIntersected(c.x, c.y, c.w, contentHeight)
 
     -- Build a lookup from row index to classified entry
+    -- (classifier row indices are grid-relative; offset by sbCount for total-row indexing)
     local rowLookup = {}
     for _, entry in ipairs(state.classifiedCache) do
       rowLookup[entry.row] = entry
     end
 
-    -- Find last non-empty row to avoid rendering blank rows
-    local rows, cols = vterm:size()
-    local lastNonEmpty = 0
-    for r = rows - 1, 0, -1 do
-      if #(vterm:getRowText(r)) > 0 then lastNonEmpty = r; break end
-    end
+    -- Scrollback + grid row count (matches terminal.lua pattern)
+    local vtRows, cols = vterm:size()
+    local sbCount = vterm:scrollbackCount()
+    local totalRows = sbCount + vtRows
 
-    -- Determine visible row range based on scroll
-    local totalContentH = (lastNonEmpty + 1) * lineHeight + 16
+    -- Scroll bounds: scrollback + grid vs viewport
+    local totalContentH = totalRows * lineHeight
     local maxScroll = math.max(0, totalContentH - contentHeight)
 
     -- Auto-scroll to bottom when new content arrives (unless user scrolled up)
@@ -664,14 +663,44 @@ Capabilities.register("SemanticTerminal", {
     state._userScrolled = (state.scrollY < maxScroll - 2)
 
     local firstVisibleRow = math.floor(state.scrollY / lineHeight)
-    local lastVisibleRow = math.min(lastNonEmpty, firstVisibleRow + math.ceil(contentHeight / lineHeight) + 1)
+    local lastVisibleRow = math.min(totalRows - 1, firstVisibleRow + math.ceil(contentHeight / lineHeight) + 1)
+
+    -- Helper: get cell for a total-row index (scrollback or grid)
+    local function getCell(totalRow, col)
+      if totalRow < sbCount then
+        -- Scrollback row (1-indexed in vterm scrollback API)
+        local sbRow = vterm:getScrollbackRow(totalRow + 1)
+        if sbRow and sbRow[col + 1] then return sbRow[col + 1] end
+        return { char = "", fg = nil, bg = nil, bold = false }
+      else
+        -- Grid row
+        return vterm:getCell(totalRow - sbCount, col)
+      end
+    end
+
+    -- Helper: get row text for a total-row index
+    local function getRowText(totalRow)
+      if totalRow < sbCount then
+        local sbRow = vterm:getScrollbackRow(totalRow + 1)
+        if not sbRow then return "" end
+        local chars = {}
+        for i, cell in ipairs(sbRow) do
+          chars[i] = cell.char or ""
+        end
+        return table.concat(chars)
+      else
+        return vterm:getRowText(totalRow - sbCount)
+      end
+    end
 
     -- Per-row color sampling (for debug display, only when showTokens)
     local rowColors = {}
 
-    -- Render visible rows
+    -- Render visible rows (total-row index: 0..sbCount-1 = scrollback, sbCount..totalRows-1 = grid)
     for row = firstVisibleRow, lastVisibleRow do
-      local text = vterm:getRowText(row)
+      local text = getRowText(row)
+      -- Classifier uses grid-relative indices
+      local gridRow = row - sbCount
       local yPos = c.y + (row * lineHeight) - state.scrollY
 
       -- Skip rows fully outside the visible area
@@ -685,7 +714,7 @@ Capabilities.register("SemanticTerminal", {
         love.graphics.rectangle("fill", c.x, yPos, c.w, lineHeight)
       end
 
-      local entry = rowLookup[row]
+      local entry = rowLookup[gridRow]
       local kind = entry and entry.kind or "output"
       local tokenColor = getTokenColor(kind)
       local isSpecific = kind ~= "output"
@@ -721,7 +750,7 @@ Capabilities.register("SemanticTerminal", {
 
         local col = 0
         while col < math.min(cols, maxCellCols) do
-          local cell = vterm:getCell(row, col)
+          local cell = getCell(row, col)
           if cell.char == "" or cell.char == " " then
             -- Draw bg on space/empty cells if present
             if cell.bg then
@@ -749,7 +778,7 @@ Capabilities.register("SemanticTerminal", {
             col = col + (cell.width and cell.width > 0 and cell.width or 1)
 
             while col < math.min(cols, maxCellCols) do
-              local nc = vterm:getCell(row, col)
+              local nc = getCell(row, col)
               if nc.char == "" or nc.char == " " then break end
               local sameFg = (spanFg == nil and nc.fg == nil) or
                 (spanFg and nc.fg and spanFg[1] == nc.fg[1] and spanFg[2] == nc.fg[2] and spanFg[3] == nc.fg[3])
@@ -808,11 +837,12 @@ Capabilities.register("SemanticTerminal", {
         local yPos = c.y + (row * lineHeight) - state.scrollY
         if yPos + lineHeight < c.y or yPos > c.y + contentHeight then goto nextDebug end
 
-        local entry = rowLookup[row]
+        local gridRow = row - sbCount
+        local entry = rowLookup[gridRow]
         local kind = entry and entry.kind or "output"
         local isSpecific = kind ~= "output"
         local tokenColor = getTokenColor(kind)
-        local text = vterm:getRowText(row)
+        local text = getRowText(row)
 
         -- Row number (right edge)
         if isSpecific then
@@ -849,12 +879,12 @@ Capabilities.register("SemanticTerminal", {
       if font then love.graphics.setFont(font) end
     end
 
-    -- Cursor (blinks 0.5s on / 0.5s off)
+    -- Cursor (blinks 0.5s on / 0.5s off — cursor.row is grid-relative, offset by sbCount)
     local showCursor = state.mode == "live" or state.attachedSession
     if vterm:isCursorVisible() and showCursor and state._blinkOn then
       local cursor = vterm:getCursor()
       local cursorX = c.x + cellOffsetX + cursor.col * charWidth
-      local cursorY = c.y + (cursor.row * lineHeight) - state.scrollY
+      local cursorY = c.y + ((cursor.row + sbCount) * lineHeight) - state.scrollY
       if cursorY >= c.y and cursorY + lineHeight <= c.y + contentHeight then
         love.graphics.setColor(0.89, 0.91, 0.94, 0.7 * alpha)
         love.graphics.rectangle("fill", cursorX, cursorY, charWidth, lineHeight)
@@ -1142,14 +1172,16 @@ Capabilities.register("SemanticTerminal", {
     if not vterm then return false end
 
     local lineHeight = ensureMeasure() and Measure.getFont(13, nil, nil):getHeight() or 16
-    local rows = vterm:size()
+    local vtRows = vterm:size()
+    local sbCount = vterm:scrollbackCount()
+    local totalRows = sbCount + vtRows
     local showTimeline = props.showTimeline and state.mode == "playback" and state.player
     local timelineH = showTimeline and 32 or 0
     local showDebug = props.showDebug
     local debugFontH = ensureMeasure() and Measure.getFont(10, "monospace", nil):getHeight() or 12
     local debugH = showDebug and (debugFontH * 3 + 8) or 0
     local viewportH = c.h - timelineH - debugH
-    local maxScroll = math.max(0, rows * lineHeight - viewportH)
+    local maxScroll = math.max(0, totalRows * lineHeight - viewportH)
 
     -- Nothing to scroll
     if maxScroll <= 0 then return false end
