@@ -1115,8 +1115,11 @@ Capabilities.register("ClaudeCanvas", {
   handleWheelMoved = function(node, dx, dy)
     local inputState = getInputState(node.id)
     -- dy is positive when scrolling up, negative when scrolling down (love2d convention)
+    local prevScrollY = inputState.scrollY
     inputState.scrollY = inputState.scrollY - dy * SCROLL_LINE
     if inputState.scrollY < 0 then inputState.scrollY = 0 end
+    -- Consume the event so it doesn't bubble to parent ScrollView
+    return true
   end,
 })
 
