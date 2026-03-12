@@ -5,10 +5,9 @@
  * Static hoist ALL code strings and style objects outside the component.
  */
 
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { Box, Text, Image, ScrollView, Pressable, CodeBlock, Math as MathBlock, classifiers as S} from '../../../packages/core/src';
+import React, { useState, useMemo, useCallback } from 'react';
+import { Box, Text, Image, ScrollView, Pressable, CodeBlock, Math as MathBlock, classifiers as S, useLuaQuery} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
-import { useMath } from '../../../packages/math/src';
 import { Band, Half, HeroBand, CalloutBand, Divider, SectionLabel, PageColumn } from './_shared/StoryScaffold';
 
 // ── Palette ──────────────────────────────────────────────
@@ -187,26 +186,42 @@ const HALF = { flexGrow: 1, flexBasis: 0, gap: 8, alignItems: 'center' as const,
 
 function VectorDemo() {
   const c = useThemeColors();
-  const math = useMath();
   const [angle, setAngle] = useState(0);
-  const [r, setR] = useState<any>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const b = await math({ op: 'vec2.fromAngle', radians: angle });
-      const scaled = await math({ op: 'vec2.scale', v: b, s: 2 });
-      const res = await math({ batch: [
-        { op: 'vec2.add', a: [3, 1], b: scaled },
-        { op: 'vec2.dot', a: await math({ op: 'vec2.normalize', v: [3, 1] }), b },
-        { op: 'vec2.cross', a: [3, 1], b },
-      ] });
-      const sum = res[0];
-      const dist = await math({ op: 'vec2.distance', a: [3, 1], b: sum });
-      if (!cancelled) setR({ b, sum, dot: res[1], cross: res[2], dist });
-    })();
-    return () => { cancelled = true; };
-  }, [math, angle]);
+  // Query 1: independent base ops
+  const { data: base } = useLuaQuery<any[]>('math:call', { batch: [
+    { op: 'vec2.fromAngle', radians: angle },
+    { op: 'vec2.normalize', v: [3, 1] },
+  ]}, [angle]);
+
+  const b = base?.[0] as number[] | undefined;
+  const normA = base?.[1] as number[] | undefined;
+
+  // Query 2: ops that depend on b and normA
+  const { data: mid } = useLuaQuery<any[]>('math:call',
+    b && normA ? { batch: [
+      { op: 'vec2.scale', v: b, s: 2 },
+      { op: 'vec2.dot', a: normA, b },
+      { op: 'vec2.cross', a: [3, 1], b },
+    ]} : { batch: [] },
+    [b?.[0], b?.[1]],
+  );
+
+  const scaled = (b && mid?.[0]) as number[] | undefined;
+  const dot = mid?.[1] as number | undefined;
+  const cross = mid?.[2] as number | undefined;
+
+  // Query 3: ops that depend on scaled
+  const { data: final } = useLuaQuery<any[]>('math:call',
+    scaled ? { batch: [
+      { op: 'vec2.add', a: [3, 1], b: scaled },
+      { op: 'vec2.length', v: scaled },
+    ]} : { batch: [] },
+    [scaled?.[0], scaled?.[1]],
+  );
+
+  const sum = final?.[0] as number[] | undefined;
+  const dist = final?.[1] as number | undefined;
 
   return (
     <S.StackG8W100>
@@ -216,12 +231,12 @@ function VectorDemo() {
         <Tag text="Vec4" color={C.vec} />
       </S.RowG8>
       <Label label="a" value={'[3, 1]'} />
-      {r && <>
-        <Label label="b = fromAngle" value={`[${r.b[0].toFixed(3)}, ${r.b[1].toFixed(3)}]`} color={C.vec} />
-        <Label label="a + 2b" value={`[${r.sum[0].toFixed(3)}, ${r.sum[1].toFixed(3)}]`} color={C.vec} />
-        <Label label="dot(norm(a), b)" value={r.dot.toFixed(4)} />
-        <Label label="cross(a, b)" value={r.cross.toFixed(4)} />
-        <Label label="distance(a, a+2b)" value={r.dist.toFixed(4)} />
+      {b && sum && dot != null && cross != null && dist != null && <>
+        <Label label="b = fromAngle" value={`[${b[0].toFixed(3)}, ${b[1].toFixed(3)}]`} color={C.vec} />
+        <Label label="a + 2b" value={`[${sum[0].toFixed(3)}, ${sum[1].toFixed(3)}]`} color={C.vec} />
+        <Label label="dot(norm(a), b)" value={dot.toFixed(4)} />
+        <Label label="cross(a, b)" value={cross.toFixed(4)} />
+        <Label label="distance(a, a+2b)" value={dist.toFixed(4)} />
       </>}
       <S.RowG8>
         <ActionBtn label={'\u2190 Rotate'} color={C.vec} onPress={() => setAngle(p => p - 0.3)} />
@@ -238,33 +253,40 @@ function VectorDemo() {
 
 function MatrixDemo() {
   const c = useThemeColors();
-  const math = useMath();
   const [rx, setRx] = useState(0);
-  const [r, setR] = useState<any>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const identity = await math({ op: 'mat4.identity' });
-      const m = await math({ op: 'mat4.rotateX', m: identity, radians: rx });
-      const res = await math({ batch: [
-        { op: 'mat4.transformPoint', m, v: [1, 0, 0] },
-        { op: 'mat4.determinant', m },
-        { op: 'mat4.decompose', m },
-      ] });
-      if (!cancelled) setR({ transformed: res[0], det: res[1], decomposed: res[2] });
-    })();
-    return () => { cancelled = true; };
-  }, [math, rx]);
+  // Query 1: get identity matrix (mount-once)
+  const { data: identity } = useLuaQuery<any>('math:call', { op: 'mat4.identity' }, []);
+
+  // Query 2: rotate identity by rx (dep on rx, identity)
+  const { data: m } = useLuaQuery<any>('math:call',
+    identity ? { op: 'mat4.rotateX', m: identity, radians: rx } : { batch: [] },
+    [rx, identity ? 1 : 0],
+  );
+
+  // Query 3: analyze the rotated matrix
+  const { data: res } = useLuaQuery<any[]>('math:call',
+    m && !Array.isArray(m) ? { batch: [] } :
+    m ? { batch: [
+      { op: 'mat4.transformPoint', m, v: [1, 0, 0] },
+      { op: 'mat4.determinant', m },
+      { op: 'mat4.decompose', m },
+    ]} : { batch: [] },
+    [m ? 1 : 0, rx],
+  );
+
+  const transformed = res?.[0];
+  const det = res?.[1];
+  const decomposed = res?.[2];
 
   return (
     <S.StackG8W100>
       <Tag text="Mat4" color={C.mat} />
       <Label label="rotateX" value={`${(rx * 180 / Math.PI).toFixed(1)}\u00B0`} color={C.mat} />
-      {r && <>
-        <Label label="transform([1,0,0])" value={`[${r.transformed[0].toFixed(3)}, ${r.transformed[1].toFixed(3)}, ${r.transformed[2].toFixed(3)}]`} color={C.mat} />
-        <Label label="determinant" value={r.det.toFixed(6)} />
-        <Label label="decompose.scale" value={`[${r.decomposed.scale.map((v: number) => v.toFixed(2)).join(', ')}]`} />
+      {transformed && det != null && decomposed && <>
+        <Label label="transform([1,0,0])" value={`[${transformed[0].toFixed(3)}, ${transformed[1].toFixed(3)}, ${transformed[2].toFixed(3)}]`} color={C.mat} />
+        <Label label="determinant" value={det.toFixed(6)} />
+        <Label label="decompose.scale" value={`[${decomposed.scale.map((v: number) => v.toFixed(2)).join(', ')}]`} />
       </>}
       <S.RowG8>
         <ActionBtn label={`Rotate +12\u00B0`} color={C.mat} onPress={() => setRx(p => p + Math.PI / 15)} />
@@ -277,24 +299,35 @@ function MatrixDemo() {
 // ── Quaternion Demo (Lua-backed) ────────────────────────
 
 function QuaternionDemo() {
-  const math = useMath();
   const [t, setT] = useState(0);
-  const [r, setR] = useState<any>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const q2 = await math({ op: 'quat.fromAxisAngle', axis: [0, 1, 0], radians: Math.PI / 2 });
-      const q1 = await math({ op: 'quat.identity' });
-      const interpolated = await math({ op: 'quat.slerp', a: q1, b: q2, t });
-      const res = await math({ batch: [
-        { op: 'quat.toEuler', q: interpolated },
-        { op: 'quat.rotateVec3', q: interpolated, v: [1, 0, 0] },
-      ] });
-      if (!cancelled) setR({ euler: res[0], rotated: res[1] });
-    })();
-    return () => { cancelled = true; };
-  }, [math, t]);
+  // Query 1: base quaternions (mount-once — these are constants)
+  const { data: bases } = useLuaQuery<any[]>('math:call', { batch: [
+    { op: 'quat.fromAxisAngle', axis: [0, 1, 0], radians: Math.PI / 2 },
+    { op: 'quat.identity' },
+  ]}, []);
+
+  const q2 = bases?.[0];
+  const q1 = bases?.[1];
+
+  // Query 2: slerp interpolation (dep on t)
+  const { data: interpolated } = useLuaQuery<any>('math:call',
+    q1 && q2 ? { op: 'quat.slerp', a: q1, b: q2, t } : { batch: [] },
+    [t, q1 ? 1 : 0],
+  );
+
+  // Query 3: analyze interpolated quaternion
+  const { data: res } = useLuaQuery<any[]>('math:call',
+    interpolated && !Array.isArray(interpolated) ? { batch: [] } :
+    interpolated ? { batch: [
+      { op: 'quat.toEuler', q: interpolated },
+      { op: 'quat.rotateVec3', q: interpolated, v: [1, 0, 0] },
+    ]} : { batch: [] },
+    [interpolated ? 1 : 0, t],
+  );
+
+  const euler = res?.[0];
+  const rotated = res?.[1];
 
   const clampT = useCallback((v: number) => Math.max(0, Math.min(1, v)), []);
 
@@ -302,9 +335,9 @@ function QuaternionDemo() {
     <S.StackG8W100>
       <Tag text="Quat" color={C.quat} />
       <Label label="slerp t" value={t.toFixed(2)} color={C.quat} />
-      {r && <>
-        <Label label="euler (deg)" value={`[${r.euler.map((v: number) => (v * 180 / Math.PI).toFixed(1)).join(', ')}]`} />
-        <Label label="rotateVec3([1,0,0])" value={`[${r.rotated.map((v: number) => v.toFixed(3)).join(', ')}]`} color={C.quat} />
+      {euler && rotated && <>
+        <Label label="euler (deg)" value={`[${euler.map((v: number) => (v * 180 / Math.PI).toFixed(1)).join(', ')}]`} />
+        <Label label="rotateVec3([1,0,0])" value={`[${rotated.map((v: number) => v.toFixed(3)).join(', ')}]`} color={C.quat} />
       </>}
       <S.RowG8>
         <ActionBtn label={'\u2190 t'} color={C.quat} onPress={() => setT(p => clampT(p - 0.1))} />
@@ -320,43 +353,43 @@ const INTERP_STEPS = 32;
 
 function InterpolationDemo() {
   const c = useThemeColors();
-  const math = useMath();
-  const [curves, setCurves] = useState<{ name: string; values: number[]; color: string }[] | null>(null);
-  const [extras, setExtras] = useState<any>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const batch: any[] = [];
-      const names = ['lerp', 'smoothstep', 'smootherstep', 'damp(5)'];
-      const colors = ['#4fc3f7', '#66bb6a', '#ffa726', '#ef5350'];
-      for (let n = 0; n < 4; n++) {
-        for (let i = 0; i <= INTERP_STEPS; i++) {
-          const t = i / INTERP_STEPS;
-          if (n === 0) batch.push({ op: 'interp.lerp', a: 0, b: 1, t });
-          else if (n === 1) batch.push({ op: 'interp.smoothstep', edge0: 0, edge1: 1, x: t });
-          else if (n === 2) batch.push({ op: 'interp.smootherstep', edge0: 0, edge1: 1, x: t });
-          else batch.push({ op: 'interp.damp', a: 0, b: 1, smoothing: 5, dt: t });
-        }
+  // Build the batch statically (mount-once, no deps)
+  const batch = useMemo(() => {
+    const b: any[] = [];
+    for (let n = 0; n < 4; n++) {
+      for (let i = 0; i <= INTERP_STEPS; i++) {
+        const t = i / INTERP_STEPS;
+        if (n === 0) b.push({ op: 'interp.lerp', a: 0, b: 1, t });
+        else if (n === 1) b.push({ op: 'interp.smoothstep', edge0: 0, edge1: 1, x: t });
+        else if (n === 2) b.push({ op: 'interp.smootherstep', edge0: 0, edge1: 1, x: t });
+        else b.push({ op: 'interp.damp', a: 0, b: 1, smoothing: 5, dt: t });
       }
-      batch.push({ op: 'interp.pingPong', value: 2.7, length: 1 });
-      batch.push({ op: 'interp.remap', value: 0.5, inMin: 0, inMax: 1, outMin: 100, outMax: 200 });
-      batch.push({ op: 'interp.inverseLerp', a: 10, b: 20, value: 15 });
-      batch.push({ op: 'interp.wrap', value: 370, min: 0, max: 360 });
-      const res = await math({ batch });
-      if (cancelled) return;
-      const perCurve = INTERP_STEPS + 1;
-      const out = names.map((name, n) => ({
-        name,
-        color: colors[n],
-        values: res.slice(n * perCurve, (n + 1) * perCurve) as number[],
-      }));
-      setCurves(out);
-      const base = 4 * perCurve;
-      setExtras({ pingPong: res[base], remap: res[base + 1], inverseLerp: res[base + 2], wrap: res[base + 3] });
-    })();
-    return () => { cancelled = true; };
-  }, [math]);
+    }
+    b.push({ op: 'interp.pingPong', value: 2.7, length: 1 });
+    b.push({ op: 'interp.remap', value: 0.5, inMin: 0, inMax: 1, outMin: 100, outMax: 200 });
+    b.push({ op: 'interp.inverseLerp', a: 10, b: 20, value: 15 });
+    b.push({ op: 'interp.wrap', value: 370, min: 0, max: 360 });
+    return b;
+  }, []);
+
+  const { data: res } = useLuaQuery<any[]>('math:call', { batch }, []);
+
+  const names = ['lerp', 'smoothstep', 'smootherstep', 'damp(5)'];
+  const colors = ['#4fc3f7', '#66bb6a', '#ffa726', '#ef5350'];
+  const perCurve = INTERP_STEPS + 1;
+
+  const curves = res ? names.map((name, n) => ({
+    name,
+    color: colors[n],
+    values: res.slice(n * perCurve, (n + 1) * perCurve) as number[],
+  })) : null;
+
+  const base = 4 * perCurve;
+  const extras = res ? {
+    pingPong: res[base], remap: res[base + 1],
+    inverseLerp: res[base + 2], wrap: res[base + 3],
+  } : null;
 
   return (
     <S.StackG8W100>
@@ -384,27 +417,21 @@ function InterpolationDemo() {
 
 function GeometryDemo() {
   const c = useThemeColors();
-  const math = useMath();
   const [px, setPx] = useState(3);
-  const [r, setR] = useState<any>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    const boxA = { min: [0, 0], max: [4, 4] };
-    const boxB = { min: [px, 1], max: [px + 3, 5] };
-    (async () => {
-      const res = await math({ batch: [
-        { op: 'geo.bbox2_intersects', a: boxA, b: boxB },
-        { op: 'geo.bbox2_intersection', a: boxA, b: boxB },
-        { op: 'geo.bbox2_union', a: boxA, b: boxB },
-        { op: 'geo.distancePointToSegment', point: [px, 3], a: [0, 0], b: [4, 4] },
-        { op: 'geo.circleContainsPoint', center: [2, 2], radius: 3, point: [px, 3] },
-        { op: 'geo.lineIntersection', a1: [0, 0], a2: [4, 4], b1: [0, 4], b2: [4, 0] },
-      ] });
-      if (!cancelled) setR({ intersects: res[0], overlap: res[1], union: res[2], segDist: res[3], inCircle: res[4], lineHit: res[5] });
-    })();
-    return () => { cancelled = true; };
-  }, [math, px]);
+  const boxA = { min: [0, 0], max: [4, 4] };
+  const boxB = { min: [px, 1], max: [px + 3, 5] };
+
+  const { data: res } = useLuaQuery<any[]>('math:call', { batch: [
+    { op: 'geo.bbox2_intersects', a: boxA, b: boxB },
+    { op: 'geo.bbox2_intersection', a: boxA, b: boxB },
+    { op: 'geo.bbox2_union', a: boxA, b: boxB },
+    { op: 'geo.distancePointToSegment', point: [px, 3], a: [0, 0], b: [4, 4] },
+    { op: 'geo.circleContainsPoint', center: [2, 2], radius: 3, point: [px, 3] },
+    { op: 'geo.lineIntersection', a1: [0, 0], a2: [4, 4], b1: [0, 4], b2: [4, 0] },
+  ]}, [px]);
+
+  const r = res ? { intersects: res[0], overlap: res[1], union: res[2], segDist: res[3], inCircle: res[4], lineHit: res[5] } : null;
 
   return (
     <S.StackG8W100>
@@ -440,32 +467,31 @@ function GeometryDemo() {
 
 function NoiseFieldDemo() {
   const c = useThemeColors();
-  const math = useMath();
   const [seed, setSeed] = useState(42);
   const [scale, setScale] = useState(0.1);
   const SIZE = 24;
-  const [rows, setRows] = useState<string[][] | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const field = await math({ op: 'noisefield', width: SIZE, height: SIZE, scale, seed, octaves: 4 });
-      if (cancelled || !field) return;
-      const next: string[][] = [];
-      for (let row = 0; row < SIZE; row++) {
-        const rowColors: string[] = [];
-        for (let col = 0; col < SIZE; col++) {
-          const v = field[row * SIZE + col] ?? 0;
-          const brightness = Math.floor(Math.max(0, Math.min(1, v)) * 255);
-          const hex = brightness.toString(16).padStart(2, '0');
-          rowColors.push(`#${hex}${hex}${hex}`);
-        }
-        next.push(rowColors);
+  const { data: field } = useLuaQuery<number[]>('math:call',
+    { op: 'noisefield', width: SIZE, height: SIZE, scale, seed, octaves: 4 },
+    [seed, scale],
+  );
+
+  // Derive color grid from noise field (presentation mapping — style props from data)
+  const rows = useMemo(() => {
+    if (!field) return null;
+    const next: string[][] = [];
+    for (let row = 0; row < SIZE; row++) {
+      const rowColors: string[] = [];
+      for (let col = 0; col < SIZE; col++) {
+        const v = field[row * SIZE + col] ?? 0;
+        const brightness = Math.floor(Math.max(0, Math.min(1, v)) * 255);
+        const hex = brightness.toString(16).padStart(2, '0');
+        rowColors.push(`#${hex}${hex}${hex}`);
       }
-      setRows(next);
-    })();
-    return () => { cancelled = true; };
-  }, [math, seed, scale]);
+      next.push(rowColors);
+    }
+    return next;
+  }, [field]);
 
   return (
     <S.StackG8W100>
@@ -497,7 +523,6 @@ function NoiseFieldDemo() {
 
 function FFTDemo() {
   const c = useThemeColors();
-  const math = useMath();
   const [freq, setFreq] = useState(4);
   const N = 64;
 
@@ -509,16 +534,7 @@ function FFTDemo() {
     return s;
   }, [freq]);
 
-  const [spectrum, setSpectrum] = useState<number[] | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const result = await math({ op: 'fft', samples });
-      if (!cancelled && result) setSpectrum(result);
-    })();
-    return () => { cancelled = true; };
-  }, [math, samples]);
+  const { data: spectrum } = useLuaQuery<number[]>('math:call', { op: 'fft', samples }, [freq]);
 
   const halfN = N / 2;
   const spectrumSlice = spectrum ? spectrum.slice(0, halfN) : null;
@@ -562,19 +578,13 @@ function FFTDemo() {
 
 function BezierDemo() {
   const c = useThemeColors();
-  const math = useMath();
   const [cy, setCy] = useState(150);
   const controlPoints: [number, number][] = useMemo(() => [[0, 0], [80, cy], [220, 300 - cy], [300, 150]], [cy]);
-  const [curve, setCurve] = useState<[number, number][] | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const result = await math({ op: 'bezier', points: controlPoints, segments: 32 });
-      if (!cancelled && result) setCurve(result);
-    })();
-    return () => { cancelled = true; };
-  }, [math, controlPoints]);
+  const { data: curve } = useLuaQuery<[number, number][]>('math:call',
+    { op: 'bezier', points: controlPoints, segments: 32 },
+    [cy],
+  );
 
   return (
     <S.StackG8W100>

@@ -412,7 +412,12 @@ export interface PeerMessage {
 }
 
 export function usePeerServer(
-  port: number | null
+  port: number | null,
+  callbacks?: {
+    onConnect?: (clientId: number) => void;
+    onDisconnect?: (clientId: number) => void;
+    onMessage?: (clientId: number, data: string) => void;
+  },
 ): {
   ready: boolean;
   peers: number[];
@@ -427,6 +432,15 @@ export function usePeerServer(
   const [error, setError] = useState<string | null>(null);
   const serverIdRef = useRef<string | null>(null);
 
+  // Stable refs for callbacks — avoids stale closures in __wsListen
+  const onConnectRef = useRef(callbacks?.onConnect);
+  const onDisconnectRef = useRef(callbacks?.onDisconnect);
+  const onMessageRef = useRef(callbacks?.onMessage);
+  onConnectRef.current = callbacks?.onConnect;
+  onDisconnectRef.current = callbacks?.onDisconnect;
+  onMessageRef.current = callbacks?.onMessage;
+
+  // rjit-ignore-next-line
   useEffect(() => {
     if (port == null) {
       setReady(false);
@@ -447,12 +461,15 @@ export function usePeerServer(
       onerror: (evt: any) => setError(evt.error || 'Server error'),
       onconnect: (clientId: number) => {
         setPeers(prev => [...prev, clientId]);
+        onConnectRef.current?.(clientId);
       },
       onmessage: (clientId: number, data: string) => {
         setLastMessage({ clientId, data });
+        onMessageRef.current?.(clientId, data);
       },
       ondisconnect: (clientId: number) => {
         setPeers(prev => prev.filter(id => id !== clientId));
+        onDisconnectRef.current?.(clientId);
       },
     });
 

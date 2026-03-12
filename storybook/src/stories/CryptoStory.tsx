@@ -7,8 +7,8 @@
  * Static hoist ALL code strings and style objects outside the component.
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { Box, Text, Image, ScrollView, CodeBlock, Pressable, classifiers as S} from '../../../packages/core/src';
+import React, { useState, useCallback } from 'react';
+import { Box, Text, Image, ScrollView, CodeBlock, Pressable, classifiers as S, useMount} from '../../../packages/core/src';
 import { useCrypto } from '../../../packages/crypto/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import {Band, Half, HeroBand, CalloutBand, Divider, SectionLabel, PageColumn} from './_shared/StoryScaffold';
@@ -108,7 +108,7 @@ function HashDemo() {
   const [hashes, setHashes] = useState<{ label: string; hex: string; color: string }[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  useMount(() => {
     Promise.all([
       crypto.sha256(input),
       crypto.sha512(input),
@@ -127,7 +127,7 @@ function HashDemo() {
     }).catch(err => {
       setError(err instanceof Error ? err.message : String(err));
     });
-  }, []);
+  });
 
   return (
     <S.StackG6W100>
@@ -169,7 +169,7 @@ function EncryptDemo() {
   const [kdf, setKdf] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  useMount(() => {
     (async () => {
       try {
         const enc = await crypto.encrypt(plaintext, password);
@@ -183,7 +183,7 @@ function EncryptDemo() {
         setError(err instanceof Error ? err.message : String(err));
       }
     })();
-  }, []);
+  });
 
   return (
     <S.StackG6W100>
@@ -241,7 +241,7 @@ function SignDemo() {
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  useMount(() => {
     (async () => {
       try {
         const keys = await crypto.generateSigningKeys();
@@ -253,7 +253,7 @@ function SignDemo() {
         setError(err instanceof Error ? err.message : String(err));
       }
     })();
-  }, []);
+  });
 
   return (
     <S.StackG6W100>
@@ -334,7 +334,7 @@ function DHDemo() {
     })();
   }, [crypto]);
 
-  useEffect(() => { regenerate(); }, []);
+  useMount(() => { regenerate(); });
 
   return (
     <S.StackG6W100>
@@ -411,7 +411,7 @@ function TokenDemo() {
     });
   }, [crypto]);
 
-  useEffect(() => { regenerate(); }, []);
+  useMount(() => { regenerate(); });
 
   return (
     <S.StackG6W100>

@@ -4,11 +4,9 @@
  * All conversions run through the Lua backend via useConvert().
  */
 
-import React, { useState, useEffect } from 'react';
-import { Box, Text, Image, ScrollView, Pressable, CodeBlock, classifiers as S} from '../../../packages/core/src';
-import { useLoveRPC } from '../../../packages/core/src';
+import React, { useState } from 'react';
+import { Box, Text, Image, ScrollView, Pressable, CodeBlock, classifiers as S, useLoveRPC, useMount, useLuaQuery } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
-import { useConvert } from '../../../packages/convert/src';
 import { Band, Half, HeroBand, CalloutBand, Divider, SectionLabel, PageColumn } from './_shared/StoryScaffold';
 
 // ── Palette ──────────────────────────────────────────────
@@ -120,27 +118,25 @@ const COLOR_PRESETS = ['#ff6b35', '#4fc3f7', '#66bb6a', '#ab47bc', '#ffa726', '#
 
 function ColorDemo() {
   const c = useThemeColors();
-  const convert = useConvert();
   const [hex, setHex] = useState('#ff6b35');
-  const [rgb, setRgb] = useState<any>(null);
-  const [hsl, setHsl] = useState<any>(null);
-  const [roundtrip, setRoundtrip] = useState('');
 
-  useEffect(() => {
-    convert({ from: 'hex', to: 'rgb', value: hex })
-      .then(({ result: r }) => {
-        setRgb(r);
-        return Promise.all([
-          convert({ from: 'rgb', to: 'hsl', value: r }),
-          convert({ from: 'rgb', to: 'hex', value: r }),
-        ]);
-      })
-      .then(([{ result: h }, { result: rt }]) => {
-        setHsl(h);
-        setRoundtrip(rt);
-      })
-      .catch(() => {});
-  }, [hex]);
+  // Query 1: hex → rgb
+  const { data: rgbRaw } = useLuaQuery<{ result: any }>('convert:convert', { from: 'hex', to: 'rgb', value: hex }, [hex]);
+  const rgb = rgbRaw?.result ?? null;
+
+  // Query 2: rgb → hsl (depends on query 1)
+  const { data: hslRaw } = useLuaQuery<{ result: any }>('convert:convert',
+    rgb ? { from: 'rgb', to: 'hsl', value: rgb } : { from: 'hex', to: 'rgb', value: '' },
+    [rgb?.r, rgb?.g, rgb?.b],
+  );
+  const hsl = rgb ? hslRaw?.result ?? null : null;
+
+  // Query 3: rgb → hex round-trip (depends on query 1)
+  const { data: rtRaw } = useLuaQuery<{ result: any }>('convert:convert',
+    rgb ? { from: 'rgb', to: 'hex', value: rgb } : { from: 'hex', to: 'rgb', value: '' },
+    [rgb?.r, rgb?.g, rgb?.b],
+  );
+  const roundtrip = rgb ? rtRaw?.result ?? '' : '';
 
   return (
     <Box style={{ gap: 8 }}>
@@ -177,31 +173,27 @@ function ColorDemo() {
 
 function UnitDemo() {
   const c = useThemeColors();
-  const convert = useConvert();
   const [miles, setMiles] = useState(5);
-  const [results, setResults] = useState<any>(null);
 
-  useEffect(() => {
-    Promise.all([
-      convert({ from: 'mi',  to: 'km',  value: miles }),
-      convert({ from: 'mi',  to: 'ft',  value: miles }),
-      convert({ from: 'f',   to: 'c',   value: 72 }),
-      convert({ from: 'gal', to: 'l',   value: 1 }),
-      convert({ from: 'deg', to: 'rad', value: 180 }),
-    ]).then(rs => setResults(rs.map((r: any) => r.result))).catch(() => {});
-  }, [miles]);
+  const { data: kmRaw } = useLuaQuery<{ result: number }>('convert:convert', { from: 'mi', to: 'km', value: miles }, [miles]);
+  const { data: ftRaw } = useLuaQuery<{ result: number }>('convert:convert', { from: 'mi', to: 'ft', value: miles }, [miles]);
+  const { data: tempRaw } = useLuaQuery<{ result: number }>('convert:convert', { from: 'f', to: 'c', value: 72 }, []);
+  const { data: litRaw } = useLuaQuery<{ result: number }>('convert:convert', { from: 'gal', to: 'l', value: 1 }, []);
+  const { data: radRaw } = useLuaQuery<{ result: number }>('convert:convert', { from: 'deg', to: 'rad', value: 180 }, []);
+
+  const ready = kmRaw && ftRaw && tempRaw && litRaw && radRaw;
 
   return (
     <Box style={{ gap: 8 }}>
       <S.StoryCap>{'Bidirectional registry \u2014 distance, temp, volume, angle'}</S.StoryCap>
 
-      {results && (
+      {ready && (
         <Box style={{ gap: 2 }}>
-          <Text style={{ fontSize: 10, color: C.units }}>{`${miles} mi -> ${results[0].toFixed(3)} km`}</Text>
-          <Text style={{ fontSize: 10, color: C.units }}>{`${miles} mi -> ${results[1].toFixed(0)} ft`}</Text>
-          <Text style={{ fontSize: 10, color: C.units }}>{`72\u00B0F -> ${results[2].toFixed(2)}\u00B0C`}</Text>
-          <Text style={{ fontSize: 10, color: C.units }}>{`1 gal -> ${results[3].toFixed(4)} L`}</Text>
-          <Text style={{ fontSize: 10, color: C.units }}>{`180\u00B0 -> ${results[4].toFixed(6)} rad`}</Text>
+          <Text style={{ fontSize: 10, color: C.units }}>{`${miles} mi -> ${kmRaw.result.toFixed(3)} km`}</Text>
+          <Text style={{ fontSize: 10, color: C.units }}>{`${miles} mi -> ${ftRaw.result.toFixed(0)} ft`}</Text>
+          <Text style={{ fontSize: 10, color: C.units }}>{`72\u00B0F -> ${tempRaw.result.toFixed(2)}\u00B0C`}</Text>
+          <Text style={{ fontSize: 10, color: C.units }}>{`1 gal -> ${litRaw.result.toFixed(4)} L`}</Text>
+          <Text style={{ fontSize: 10, color: C.units }}>{`180\u00B0 -> ${radRaw.result.toFixed(6)} rad`}</Text>
         </Box>
       )}
 
@@ -228,37 +220,35 @@ const HTML_INPUT = '<script>alert("xss")</script>';
 
 function EncodingDemo() {
   const c = useThemeColors();
-  const convert = useConvert();
-  const [enc, setEnc] = useState<any>(null);
 
-  useEffect(() => {
-    Promise.all([
-      convert({ from: 'text', to: 'base64',  value: ENC_INPUT }),
-      convert({ from: 'text', to: 'hex-enc', value: 'ABC' }),
-      convert({ from: 'text', to: 'url',     value: ENC_INPUT }),
-      convert({ from: 'text', to: 'html',    value: HTML_INPUT }),
-    ]).then(rs => {
-      const b64 = rs[0].result;
-      convert({ from: 'base64', to: 'text', value: b64 }).then(({ result: rt }) => {
-        setEnc({ b64, hex: rs[1].result, url: rs[2].result, html: rs[3].result, roundtrip: rt });
-      });
-    }).catch(() => {});
-  }, []);
+  const { data: b64Raw } = useLuaQuery<{ result: string }>('convert:convert', { from: 'text', to: 'base64', value: ENC_INPUT }, []);
+  const { data: hexRaw } = useLuaQuery<{ result: string }>('convert:convert', { from: 'text', to: 'hex-enc', value: 'ABC' }, []);
+  const { data: urlRaw } = useLuaQuery<{ result: string }>('convert:convert', { from: 'text', to: 'url', value: ENC_INPUT }, []);
+  const { data: htmlRaw } = useLuaQuery<{ result: string }>('convert:convert', { from: 'text', to: 'html', value: HTML_INPUT }, []);
+
+  const b64 = b64Raw?.result;
+  // Round-trip: base64 → text (depends on b64 result)
+  const { data: rtRaw } = useLuaQuery<{ result: string }>('convert:convert',
+    b64 ? { from: 'base64', to: 'text', value: b64 } : { from: 'text', to: 'base64', value: '' },
+    [b64],
+  );
+
+  const ready = b64 && hexRaw && urlRaw && htmlRaw;
 
   return (
     <Box style={{ gap: 8 }}>
       <S.StoryCap>{'text <-> base64, hex, url, html entities'}</S.StoryCap>
-      {enc && (
+      {ready && (
         <>
           <Box style={{ gap: 2 }}>
             <S.SecondaryBody>{`Input: "${ENC_INPUT}"`}</S.SecondaryBody>
-            <Text style={{ fontSize: 10, color: C.encoding }}>{`Base64: ${enc.b64}`}</Text>
-            <Text style={{ fontSize: 10, color: c.success }}>{`Round-trip: "${enc.roundtrip}" \u2713`}</Text>
+            <Text style={{ fontSize: 10, color: C.encoding }}>{`Base64: ${b64}`}</Text>
+            <Text style={{ fontSize: 10, color: c.success }}>{`Round-trip: "${b64 ? rtRaw?.result ?? '...' : '...'}" \u2713`}</Text>
           </Box>
           <Box style={{ gap: 2 }}>
-            <Text style={{ fontSize: 10, color: C.encoding }}>{`"ABC" -> hex: ${enc.hex}`}</Text>
-            <Text style={{ fontSize: 10, color: C.encoding }}>{`URL: ${enc.url}`}</Text>
-            <Text style={{ fontSize: 10, color: C.encoding }}>{`HTML: ${enc.html}`}</Text>
+            <Text style={{ fontSize: 10, color: C.encoding }}>{`"ABC" -> hex: ${hexRaw.result}`}</Text>
+            <Text style={{ fontSize: 10, color: C.encoding }}>{`URL: ${urlRaw.result}`}</Text>
+            <Text style={{ fontSize: 10, color: C.encoding }}>{`HTML: ${htmlRaw.result}`}</Text>
           </Box>
         </>
       )}
@@ -269,27 +259,22 @@ function EncodingDemo() {
 // ── Number Base Demo ──────────────────────────────────────
 
 function NumberBaseDemo() {
-  const c = useThemeColors();
-  const convert = useConvert();
   const [num, setNum] = useState(255);
-  const [bases, setBases] = useState<any>(null);
 
-  useEffect(() => {
-    Promise.all([
-      convert({ from: 'decimal', to: 'binary',  value: num }),
-      convert({ from: 'decimal', to: 'octal',   value: num }),
-      convert({ from: 'decimal', to: 'hex-num', value: num }),
-    ]).then(rs => setBases(rs.map((r: any) => r.result))).catch(() => {});
-  }, [num]);
+  const { data: binRaw } = useLuaQuery<{ result: string }>('convert:convert', { from: 'decimal', to: 'binary', value: num }, [num]);
+  const { data: octRaw } = useLuaQuery<{ result: string }>('convert:convert', { from: 'decimal', to: 'octal', value: num }, [num]);
+  const { data: hexRaw } = useLuaQuery<{ result: string }>('convert:convert', { from: 'decimal', to: 'hex-num', value: num }, [num]);
+
+  const ready = binRaw && octRaw && hexRaw;
 
   return (
     <Box style={{ gap: 8 }}>
       <S.StoryCap>{'decimal <-> binary, octal, hex'}</S.StoryCap>
-      {bases && (
+      {ready && (
         <Box style={{ gap: 2 }}>
-          <Text style={{ fontSize: 10, color: C.numbers }}>{`${num} -> binary: ${bases[0]}`}</Text>
-          <Text style={{ fontSize: 10, color: C.numbers }}>{`${num} -> octal:  ${bases[1]}`}</Text>
-          <Text style={{ fontSize: 10, color: C.numbers }}>{`${num} -> hex:    ${bases[2]}`}</Text>
+          <Text style={{ fontSize: 10, color: C.numbers }}>{`${num} -> binary: ${binRaw.result}`}</Text>
+          <Text style={{ fontSize: 10, color: C.numbers }}>{`${num} -> octal:  ${octRaw.result}`}</Text>
+          <Text style={{ fontSize: 10, color: C.numbers }}>{`${num} -> hex:    ${hexRaw.result}`}</Text>
         </Box>
       )}
       <S.RowG8>
@@ -340,20 +325,14 @@ function PipelineStage({ label, value, color, bg }: { label: string; value: stri
 
 function PipelineDemo() {
   const c = useThemeColors();
-  const convert = useConvert();
   const [idx, setIdx] = useState(0);
-  const [result, setResult] = useState<string | null>(null);
 
   const preset = PIPELINE_PRESETS[idx];
-
-  useEffect(() => {
-    setResult(null);
-    convert({ from: preset.from, to: preset.to, value: preset.value })
-      .then(({ result: r }) => {
-        setResult(typeof r === 'number' ? r.toFixed(4) : String(r));
-      })
-      .catch(() => {});
-  }, [idx]);
+  const { data: raw } = useLuaQuery<{ result: any }>('convert:convert',
+    { from: preset.from, to: preset.to, value: preset.value },
+    [idx],
+  );
+  const result = raw?.result != null ? (typeof raw.result === 'number' ? raw.result.toFixed(4) : String(raw.result)) : null;
 
   return (
     <Box style={{ gap: 10 }}>
@@ -403,14 +382,14 @@ function RegistryCatalog() {
   const [catalog, setCatalog] = useState<{ cat: string; units: string[] }[]>([]);
   const [total, setTotal] = useState<number | null>(null);
 
-  useEffect(() => {
+  useMount(() => {
     Promise.all([getCategories({}), getSize({})]).then(([cats, size]) => {
       setTotal(size);
       return Promise.all((cats as string[]).map((cat: string) =>
         getUnits({ category: cat }).then((units: string[]) => ({ cat, units }))
       ));
     }).then(rows => setCatalog(rows)).catch(() => {});
-  }, []);
+  });
 
   return (
     <Box style={{ gap: 6 }}>

@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import {
   Box, Text, Pressable, ScrollView, TextInput,
-  useLoveRPC, useLoveEvent, usePeerServer, useClipboard,
+  useLoveRPC, useLoveEvent, usePeerServer, useClipboard, useMount,
 } from '@reactjit/core';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -482,12 +482,12 @@ export function App() {
   const getLocalPort = useLoveRPC<number>('tor:getLocalPort');
 
   // Query once on mount — catches case where Tor was already ready
-  useEffect(() => {
+  useMount(() => {
     getHostname().then(h => {
       if (h) { setMyOnion(h); setTorStatus('ready'); }
     }).catch(() => {});
     getLocalPort().then(p => { if (p) setLocalPort(p); }).catch(() => {});
-  }, []);
+  });
 
   // Fires when Tor finishes bootstrapping after mount
   useLoveEvent('tor:ready', (payload: any) => {
@@ -504,11 +504,6 @@ export function App() {
   myNickRef.current = myOnion ? getNick(myOnion) : '???';
   myOnionRef.current = myOnion;
 
-  // ── Server (accepts incoming peers) ────────────────────────────────────────
-  // localPort is assigned by Tor (maps .onion:6667 → 127.0.0.1:localPort)
-  // so multiple instances on the same machine never conflict
-  const server = usePeerServer(localPort);
-
   // ── Chat state ─────────────────────────────────────────────────────────────
   const [peers, setPeers] = useState<Peer[]>([]);
   const peersRef = useRef<Peer[]>([]);
@@ -520,65 +515,59 @@ export function App() {
     setMessages(prev => [...prev, { id: makeId(), nick, text, ts: Date.now(), self, system }]);
   }, []);
 
-  // ── Outgoing connections (one WebSocket per peer we dialed) ────────────────
-  const outgoingRef = useRef<Map<string, WebSocket>>(new Map());
+  // Ref for server.send — resolves circular dependency (server defined below)
+  const serverSendRef = useRef<(clientId: number, data: string) => void>(() => {});
 
-  // ── Handle server peer connect / disconnect ────────────────────────────────
-  const prevServerPeers = useRef<number[]>([]);
-  useEffect(() => {
-    const prev = prevServerPeers.current;
-    const curr = server.peers;
-
-    for (const id of curr.filter(id => !prev.includes(id))) {
+  // ── Server (accepts incoming peers) ────────────────────────────────────────
+  // localPort is assigned by Tor (maps .onion:6667 → 127.0.0.1:localPort)
+  // so multiple instances on the same machine never conflict
+  // Callbacks fire from ws events — no useEffect needed for peer/message tracking
+  const server = usePeerServer(localPort, {
+    onConnect: (clientId) => {
       setPeers(p =>
-        p.some(x => x.clientId === id) ? p :
-        [...p, { onion: 'unknown.onion', nick: `peer${id}`, direction: 'in', status: 'connecting', clientId: id }]
+        p.some(x => x.clientId === clientId) ? p :
+        [...p, { onion: 'unknown.onion', nick: `peer${clientId}`, direction: 'in' as const, status: 'connecting' as const, clientId }]
       );
-    }
-
-    for (const id of prev.filter(id => !curr.includes(id))) {
-      const peer = peersRef.current.find(p => p.clientId === id);
+    },
+    onDisconnect: (clientId) => {
+      const peer = peersRef.current.find(p => p.clientId === clientId);
       if (peer && !peer.onion.startsWith('unknown')) {
         addMsg('', `${peer.nick} disconnected`, false, true);
       }
-      setPeers(p => p.filter(x => x.clientId !== id));
-    }
-
-    prevServerPeers.current = curr;
-  }, [server.peers]);
-
-  // ── Handle messages from incoming peers ───────────────────────────────────
-  useEffect(() => {
-    if (!server.lastMessage) return;
-    const { clientId, data } = server.lastMessage;
-
-    let packet: IRCPacket;
-    try { packet = JSON.parse(data); } catch { return; }
-
-    if (packet.type === 'hello') {
-      // Update placeholder with real identity, then reply
-      setPeers(p => p.map(x =>
-        x.clientId === clientId
-          ? { ...x, nick: packet.nick, onion: packet.onion, status: 'open' }
-          : x
-      ));
-      addMsg('', `${packet.nick} connected`, false, true);
-      server.send(clientId, JSON.stringify({
-        type: 'hello',
-        nick: myNickRef.current,
-        onion: myOnionRef.current ?? 'unknown',
-      } satisfies IRCPacket));
-
-    } else if (packet.type === 'msg') {
-      const peer = peersRef.current.find(p => p.clientId === clientId);
-      addMsg(peer?.nick ?? `peer${clientId}`, packet.text, false);
-
-    } else if (packet.type === 'part') {
-      const peer = peersRef.current.find(p => p.clientId === clientId);
-      addMsg('', `${peer?.nick ?? 'peer'} left`, false, true);
       setPeers(p => p.filter(x => x.clientId !== clientId));
-    }
-  }, [server.lastMessage]);
+    },
+    onMessage: (clientId, data) => {
+      let packet: IRCPacket;
+      try { packet = JSON.parse(data); } catch { return; }
+
+      if (packet.type === 'hello') {
+        setPeers(p => p.map(x =>
+          x.clientId === clientId
+            ? { ...x, nick: packet.nick, onion: (packet as any).onion, status: 'open' as const }
+            : x
+        ));
+        addMsg('', `${packet.nick} connected`, false, true);
+        serverSendRef.current(clientId, JSON.stringify({
+          type: 'hello',
+          nick: myNickRef.current,
+          onion: myOnionRef.current ?? 'unknown',
+        } satisfies IRCPacket));
+
+      } else if (packet.type === 'msg') {
+        const peer = peersRef.current.find(p => p.clientId === clientId);
+        addMsg(peer?.nick ?? `peer${clientId}`, packet.text, false);
+
+      } else if (packet.type === 'part') {
+        const peer = peersRef.current.find(p => p.clientId === clientId);
+        addMsg('', `${peer?.nick ?? 'peer'} left`, false, true);
+        setPeers(p => p.filter(x => x.clientId !== clientId));
+      }
+    },
+  });
+  serverSendRef.current = server.send;
+
+  // ── Outgoing connections (one WebSocket per peer we dialed) ────────────────
+  const outgoingRef = useRef<Map<string, WebSocket>>(new Map());
 
   // ── Connect to a peer by .onion address ───────────────────────────────────
   const connectToPeer = useCallback((rawAddr: string) => {
