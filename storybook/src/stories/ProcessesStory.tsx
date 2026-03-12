@@ -639,7 +639,7 @@ function SemanticToggleDemo() {
         <Terminal type="user" shell="bash" session="story-toggle" style={{ flexGrow: 1 }} />
       </Box>
       {semantic && (
-        <SemanticTerminal session="story-toggle" classifier="basic" showTokens showDebug style={S_TERM} />
+        <SemanticTerminal session="story-toggle" classifier="basic" showTokens showDebug recording style={S_TERM} />
       )}
     </Box>
   );

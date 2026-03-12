@@ -453,16 +453,24 @@ Capabilities.register("SemanticTerminal", {
     if state.attachedSession then
       local termAPI = Capabilities._terminalAPI
       if termAPI then
-        local borrowedVterm = termAPI.getSessionVTerm(state.attachedSession)
-        if borrowedVterm then
-          -- Check if vterm content changed (simple: compare row text of first few rows)
-          if borrowedVterm ~= state._lastBorrowedVterm then
-            state._lastBorrowedVterm = borrowedVterm
-            needsClassify = true
+        local termState = termAPI.getSessionState(state.attachedSession)
+        if termState then
+          local borrowedVterm = termState.vterm
+          if borrowedVterm then
+            -- Check if vterm content changed
+            if borrowedVterm ~= state._lastBorrowedVterm then
+              state._lastBorrowedVterm = borrowedVterm
+              needsClassify = true
+            end
+            -- Also classify periodically (every 10 frames) to catch scrollback changes
+            if state.frameCounter % 10 == 0 then
+              needsClassify = true
+            end
           end
-          -- Also classify periodically (every 10 frames) to catch scrollback changes
-          if state.frameCounter % 10 == 0 then
-            needsClassify = true
+          -- Capture raw PTY data for recording (Terminal stashes last read)
+          if state.recorder and termState._lastRawData then
+            state.recorder:capture(termState._lastRawData)
+            termState._lastRawData = nil  -- consume so we don't double-capture
           end
         end
       end

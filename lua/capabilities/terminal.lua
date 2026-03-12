@@ -418,6 +418,7 @@ Capabilities.register("Terminal", {
 
     -- Read PTY output -> feed into vterm
     local data = state.pty:read()
+    state._lastRawData = data  -- stash for session consumers (e.g. SemanticTerminal recorder)
     if data and #data > 0 then
       -- Push raw bytes for backward compat (onData still fires)
       pushCap(pushEvent, nodeId, "onData", { data = data })
