@@ -7,8 +7,8 @@
  * Static hoist ALL code strings and style objects outside the component.
  */
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Box, Text, Image, ScrollView, CodeBlock, Pressable, Slider, useLuaInterval, classifiers as S} from '../../../packages/core/src';
+import React, { useState, useCallback, useRef } from 'react';
+import { Box, Text, Image, ScrollView, CodeBlock, Pressable, Slider, useLuaInterval, useMount, classifiers as S} from '../../../packages/core/src';
 import {
   useAudioInit,
   useRack,
@@ -301,14 +301,16 @@ const halfStyle = { flexGrow: 1, flexBasis: 0, gap: 8, alignItems: 'center' as c
 // ── Live Demo: Rack Info ────────────────────────────────
 
 function RackInfoDemo() {
-  const c = useThemeColors();
   const ready = useAudioInit();
-  const rack = useRack(TOPOLOGY_ONLY_RACK_OPTIONS);
-  const patchBuilt = useRef(false);
+  if (!ready) return <S.StoryCap>{'Initializing audio engine...'}</S.StoryCap>;
+  return <RackInfoDemoReady />;
+}
 
-  useEffect(() => {
-    if (!ready || patchBuilt.current) return;
-    patchBuilt.current = true;
+function RackInfoDemoReady() {
+  const c = useThemeColors();
+  const rack = useRack(TOPOLOGY_ONLY_RACK_OPTIONS);
+
+  useMount(() => {
     // Gain 0 on everything — this demo shows topology, not audio
     rack.addModule('oscillator', 'demo_osc', { waveform: 'saw', frequency: 440, gain: 0 });
     rack.addModule('filter', 'demo_filt', { mode: 'lowpass', cutoff: 2000, resonance: 2 });
@@ -317,7 +319,7 @@ function RackInfoDemo() {
     rack.connect('demo_osc', 'audio_out', 'demo_filt', 'audio_in');
     rack.connect('demo_filt', 'audio_out', 'demo_amp', 'audio_in');
     rack.connect('demo_amp', 'audio_out', 'demo_mix', 'input_1');
-  }, [ready]);
+  });
 
   const types: Record<string, number> = {};
   for (const mod of rack.modules) {
@@ -435,22 +437,20 @@ function ModuleParamDemo() {
 // ── Live Demo: Clock Transport ──────────────────────────
 
 function ClockDemo() {
-  const c = useThemeColors();
   const ready = useAudioInit();
-  const rack = useRack(TOPOLOGY_ONLY_RACK_OPTIONS);
-  const clockReady = useRef(false);
+  if (!ready) return <S.StoryCap>{'Waiting for engine...'}</S.StoryCap>;
+  return <ClockDemoReady />;
+}
 
-  useEffect(() => {
-    if (!ready || clockReady.current) return;
-    clockReady.current = true;
+function ClockDemoReady() {
+  const c = useThemeColors();
+  const rack = useRack(TOPOLOGY_ONLY_RACK_OPTIONS);
+
+  useMount(() => {
     rack.addModule('clock', 'demo_clock', { bpm: 120, division: '1/16', running: false });
-  }, [ready]);
+  });
 
   const clock = useClock('demo_clock');
-
-  if (!ready) {
-    return <S.StoryCap>{'Waiting for engine...'}</S.StoryCap>;
-  }
 
   return (
     <S.StackG6W100>
@@ -508,24 +508,22 @@ function ClockDemo() {
 // ── Live Demo: Sequencer Grid ───────────────────────────
 
 function SequencerDemo() {
-  const c = useThemeColors();
   const ready = useAudioInit();
-  const rack = useRack(TOPOLOGY_ONLY_RACK_OPTIONS);
-  const seqReady = useRef(false);
+  if (!ready) return <S.StoryCap>{'Waiting for engine...'}</S.StoryCap>;
+  return <SequencerDemoReady />;
+}
 
-  useEffect(() => {
-    if (!ready || seqReady.current) return;
-    seqReady.current = true;
+function SequencerDemoReady() {
+  const c = useThemeColors();
+  const rack = useRack(TOPOLOGY_ONLY_RACK_OPTIONS);
+
+  useMount(() => {
     rack.addModule('sequencer', 'demo_seq', { steps: 16, tracks: 4 });
-  }, [ready]);
+  });
 
   const seq = useSequencer('demo_seq');
   const trackLabels = ['KICK', 'SNARE', 'HAT', 'PERC'];
   const trackColors = [C.blue, C.green, C.orange, C.pink];
-
-  if (!ready) {
-    return <S.StoryCap>{'Waiting for engine...'}</S.StoryCap>;
-  }
 
   return (
     <S.StackG6W100>
@@ -578,23 +576,21 @@ function SequencerDemo() {
 // ── Live Demo: Sampler Slots ────────────────────────────
 
 function SamplerDemo() {
-  const c = useThemeColors();
   const ready = useAudioInit();
-  const rack = useRack(TOPOLOGY_ONLY_RACK_OPTIONS);
-  const samplerReady = useRef(false);
+  if (!ready) return <S.StoryCap>{'Waiting for engine...'}</S.StoryCap>;
+  return <SamplerDemoReady />;
+}
 
-  useEffect(() => {
-    if (!ready || samplerReady.current) return;
-    samplerReady.current = true;
+function SamplerDemoReady() {
+  const c = useThemeColors();
+  const rack = useRack(TOPOLOGY_ONLY_RACK_OPTIONS);
+
+  useMount(() => {
     rack.addModule('sampler', 'demo_sampler');
-  }, [ready]);
+  });
 
   const sampler = useSampler('demo_sampler');
   const slotColors = [C.blue, C.green, C.orange, C.pink, C.teal, C.mauve, C.yellow, C.cyan];
-
-  if (!ready) {
-    return <S.StoryCap>{'Waiting for engine...'}</S.StoryCap>;
-  }
 
   return (
     <S.StackG6W100>
@@ -714,17 +710,18 @@ function MIDIDemo() {
 // ── Live Demo: Recorder State ───────────────────────────
 
 function RecorderDemo() {
-  const c = useThemeColors();
   const ready = useAudioInit();
+  if (!ready) return <S.StoryCap>{'Waiting for engine...'}</S.StoryCap>;
+  return <RecorderDemoReady />;
+}
+
+function RecorderDemoReady() {
+  const c = useThemeColors();
   const recorder = useRecorder();
 
-  useEffect(() => {
-    if (ready) recorder.listDevices();
-  }, [ready]);
-
-  if (!ready) {
-    return <S.StoryCap>{'Waiting for engine...'}</S.StoryCap>;
-  }
+  useMount(() => {
+    recorder.listDevices();
+  });
 
   return (
     <S.StackG6W100>
