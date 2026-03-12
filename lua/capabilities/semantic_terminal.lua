@@ -421,6 +421,32 @@ Capabilities.register("SemanticTerminal", {
       state._blinkOn = not state._blinkOn
     end
 
+    -- Auto-resize: fit vterm rows/cols to layout dimensions (like terminal.lua)
+    local node = Tree.getNodes()[nodeId]
+    if node and node.computed and state.vterm and not state.attachedSession then
+      local cw, ch = node.computed.w, node.computed.h
+      if cw and ch and cw > 0 and ch > 0 then
+        ensureMeasure()
+        local font = Measure and Measure.getFont(13, "monospace", nil)
+        local lineH = font and font:getHeight() or 16
+        local charW = font and font:getWidth("M") or 8
+        -- Subtract debug footer and timeline from available height
+        local showDebug = props.showDebug
+        local debugFontH = Measure and Measure.getFont(10, "monospace", nil):getHeight() or 12
+        local debugH = showDebug and (debugFontH * 3 + 8) or 0
+        local showTimeline = props.showTimeline and state.mode == "playback" and state.player
+        local timelineH = showTimeline and 32 or 0
+        local availH = ch - debugH - timelineH
+        local fitCols = math.max(20, math.floor(cw / charW))
+        local fitRows = math.max(4, math.floor(availH / lineH))
+        local curRows, curCols = state.vterm:size()
+        if fitCols ~= curCols or fitRows ~= curRows then
+          state.vterm:resize(fitRows, fitCols)
+          if state.pty then state.pty:resize(fitRows, fitCols) end
+        end
+      end
+    end
+
     -- Session attachment mode: borrow vterm from an existing Terminal session
     if state.attachedSession then
       local termAPI = Capabilities._terminalAPI
@@ -645,12 +671,18 @@ Capabilities.register("SemanticTerminal", {
       rowLookup[entry.row] = entry
     end
 
-    -- Scrollback + grid row count (matches terminal.lua pattern)
+    -- Scrollback + grid row count
     local vtRows, cols = vterm:size()
     local sbCount = vterm:scrollbackCount()
-    local totalRows = sbCount + vtRows
 
-    -- Scroll bounds: scrollback + grid vs viewport
+    -- Find last non-empty grid row (avoid phantom scroll from trailing empty rows)
+    local lastNonEmptyGrid = 0
+    for r = vtRows - 1, 0, -1 do
+      if #(vterm:getRowText(r)) > 0 then lastNonEmptyGrid = r; break end
+    end
+    local totalRows = sbCount + lastNonEmptyGrid + 1
+
+    -- Scroll bounds: scrollback + used grid rows vs viewport
     local totalContentH = totalRows * lineHeight
     local maxScroll = math.max(0, totalContentH - contentHeight)
 
@@ -1174,7 +1206,12 @@ Capabilities.register("SemanticTerminal", {
     local lineHeight = ensureMeasure() and Measure.getFont(13, nil, nil):getHeight() or 16
     local vtRows = vterm:size()
     local sbCount = vterm:scrollbackCount()
-    local totalRows = sbCount + vtRows
+    -- Clip to last non-empty grid row (match render)
+    local lastNonEmptyGrid = 0
+    for r = vtRows - 1, 0, -1 do
+      if #(vterm:getRowText(r)) > 0 then lastNonEmptyGrid = r; break end
+    end
+    local totalRows = sbCount + lastNonEmptyGrid + 1
     local showTimeline = props.showTimeline and state.mode == "playback" and state.player
     local timelineH = showTimeline and 32 or 0
     local showDebug = props.showDebug
