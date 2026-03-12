@@ -13,6 +13,7 @@ import { useEffect, useCallback, useRef } from 'react';
 import { useBridgeOptional } from './context';
 import type { IBridge } from './bridge';
 import { getOriginalUseState } from './preserveState';
+import { useMount } from './useLuaEffect';
 
 export interface UseLocalStoreOptions {
   /** Storage namespace. Defaults to 'app'. */
@@ -36,6 +37,7 @@ export function useLocalStore<T>(
   bridgeRef.current = bridge;
 
   // Load stored value on mount
+  // rjit-ignore-next-line — Dep-driven: reloads stored value when bridge/namespace/key changes
   useEffect(() => {
     if (!bridge) return;
 
@@ -66,11 +68,11 @@ export function useLocalStore<T>(
   );
 
   // Clean up debounce timer on unmount
-  useEffect(() => {
+  useMount(() => {
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, []);
+  });
 
   const setValue = useCallback(
     (action: SetStateAction<T>) => {

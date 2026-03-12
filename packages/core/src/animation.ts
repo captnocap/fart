@@ -197,6 +197,7 @@ export function useCountUp(to: number, config?: {
   const delay = config?.delay ?? 0;
   const [value, setValue] = useState(from);
 
+  // rjit-ignore-next-line — Dep-driven animation lifecycle: re-runs animation when target/config changes
   useEffect(() => {
     let start: number | null = null;
     let timer: ReturnType<typeof setTimeout>;
@@ -229,6 +230,7 @@ export function useTypewriter(text: string, config?: {
   const textRef = useRef(text);
   textRef.current = text;
 
+  // rjit-ignore-next-line — Dep-driven animation lifecycle: restarts typewriter on text/config change
   useEffect(() => {
     setCharCount(0);
     let idx = 0;

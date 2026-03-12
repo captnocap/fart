@@ -52,6 +52,7 @@ export function ScaleProvider({ reference, curve = 'linear', cap = 1.8, insetWid
 
   // Send scale config to Lua on mount and when curve/reference/cap/inset changes.
   // Lua computes the actual scale factor per frame in layout.lua.
+  // rjit-ignore-next-line — Dep-driven: sends scale config RPC when reference/curve/cap changes
   useEffect(() => {
     bridge.rpc('scale:configure', {
       refW: reference.width,
@@ -65,6 +66,7 @@ export function ScaleProvider({ reference, curve = 'linear', cap = 1.8, insetWid
   // Subscribe to Lua's computed scale factor — only fires when it actually
   // changes, NOT on every resize frame. Zero React re-renders during drag.
   const [scaleState, setScaleState] = useState({ scale: 1, rawScale: 1 });
+  // rjit-ignore-next-line — Dep-driven: subscribes to scale change events from Lua
   useEffect(() => {
     return bridge.subscribe('scaleChanged', (payload: { scale: number; rawScale: number }) => {
       if (!payload) return;

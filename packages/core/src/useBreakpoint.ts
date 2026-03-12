@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useBridge } from './context';
+// useBreakpoint/useOrientation/useLayout are framework primitives — they subscribe
+// to the viewport bridge event directly with dep-driven lifecycle.
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -101,6 +103,7 @@ export function useBreakpoint(): Breakpoint {
     const { width } = getInitialViewport();
     return width > 0 ? resolveBreakpoint(width) : 'sm';
   });
+  // rjit-ignore-next-line — Framework primitive: useBreakpoint subscribes to viewport events
   useEffect(() => {
     return bridge.subscribe('viewport', (payload: { width: number }) => {
       if (!payload || !payload.width) return;
@@ -118,6 +121,7 @@ export function useOrientation(): Orientation {
     const { width, height } = getInitialViewport();
     return width > 0 ? resolveOrientation(width, height) : 'square';
   });
+  // rjit-ignore-next-line — Framework primitive: useOrientation subscribes to viewport events
   useEffect(() => {
     return bridge.subscribe('viewport', (payload: { width: number; height: number }) => {
       if (!payload || !payload.width || !payload.height) return;
@@ -138,6 +142,7 @@ export function useLayout(): { breakpoint: Breakpoint; orientation: Orientation 
       orientation: width > 0 ? resolveOrientation(width, height) : 'square' as Orientation,
     };
   });
+  // rjit-ignore-next-line — Framework primitive: useLayout subscribes to viewport events
   useEffect(() => {
     return bridge.subscribe('viewport', (payload: { width: number; height: number }) => {
       if (!payload || !payload.width || !payload.height) return;

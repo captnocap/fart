@@ -10,6 +10,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useBridgeOptional } from './context';
 import { useLuaInterval } from './hooks';
+import { useMount } from './useLuaEffect';
 import type { IBridge } from './bridge';
 
 // ── Dynamic require (esbuild-safe) ──────────────────────────
@@ -198,10 +199,10 @@ export function useSystemInfo(refreshInterval: number = 0): SystemInfo {
 
   const logger = useMemo(() => makeSysLogger(bridge), [bridge]);
 
-  useEffect(() => {
+  useMount(() => {
     mountedRef.current = true;
     return () => { mountedRef.current = false; };
-  }, []);
+  });
 
   const fetchData = useCallback(() => {
     if (!mountedRef.current) return;
@@ -231,6 +232,7 @@ export function useSystemInfo(refreshInterval: number = 0): SystemInfo {
   }, [bridge, logger]);
 
   // Initial fetch
+  // rjit-ignore-next-line — Dep-driven: re-fetches when fetchData callback identity changes
   useEffect(() => { fetchData(); }, [fetchData]);
 
   // Polling driven by Lua-side timer (bridge mode) or stays as one-shot (no bridge)

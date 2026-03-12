@@ -15,6 +15,7 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useBridgeOptional } from './context';
+import { useMount } from './useLuaEffect';
 
 export interface AndroidVMOptions {
   port?: number;
@@ -34,12 +35,13 @@ export function useAndroidVM(options?: AndroidVMOptions) {
   const [booted, setBooted] = useState(false);
   const mountedRef = useRef(true);
 
-  useEffect(() => {
+  useMount(() => {
     mountedRef.current = true;
     return () => { mountedRef.current = false; };
-  }, []);
+  });
 
   // Auto-connect on mount if requested
+  // rjit-ignore-next-line — Dep-driven: re-connects when bridge/autoConnect/port changes
   useEffect(() => {
     if (options?.autoConnect && bridge) {
       bridge.rpc('adb:connect', { port }).then((r: any) => {

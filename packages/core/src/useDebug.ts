@@ -16,7 +16,8 @@
  *   }
  */
 
-import { useEffect, useRef } from 'react';
+import { useRef } from 'react';
+import { useMount } from './useLuaEffect';
 
 // Global debug registry — lives on globalThis so the console can eval it
 declare global {
@@ -42,11 +43,11 @@ export function useDebug(key: string, data: any): void {
   globalThis.__debug[key] = data;
 
   // Clean up on unmount
-  useEffect(() => {
+  useMount(() => {
     return () => {
       delete globalThis.__debug[keyRef.current];
     };
-  }, []);
+  });
 }
 
 /**

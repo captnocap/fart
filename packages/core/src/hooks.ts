@@ -6,6 +6,7 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useBridge } from './context';
+import { useMount } from './useLuaEffect';
 import type { LoveEvent } from './types';
 
 /**
@@ -24,6 +25,7 @@ export function useWindowDimensions(): { width: number; height: number } {
   const bridge = useBridge();
   const [dims, setDims] = useState(_lastViewport);
 
+  // rjit-ignore-next-line — Framework primitive: useWindowDimensions subscribes to viewport events
   useEffect(() => {
     return bridge.subscribe('viewport', (payload: { width: number; height: number }) => {
       if (!payload || !payload.width || !payload.height) return;
@@ -66,6 +68,7 @@ export function useWindowSize(
   const duration = options?.duration;
   const revert = options?.revert ?? false;
 
+  // rjit-ignore-next-line — Framework primitive: useWindowSize sends RPC on dep change + reverts on cleanup
   useEffect(() => {
     let prevSize: { width: number; height: number } | null = null;
     if (revert) {
@@ -107,6 +110,7 @@ export function useWindowPosition(
   const duration = options?.duration;
   const revert = options?.revert ?? false;
 
+  // rjit-ignore-next-line — Framework primitive: useWindowPosition sends RPC on dep change + reverts on cleanup
   useEffect(() => {
     let prevPos: { x: number; y: number } | null = null;
 
@@ -149,6 +153,7 @@ export function useWindowAlwaysOnTop(
   const windowId = options?.windowId;
   const revert = options?.revert ?? false;
 
+  // rjit-ignore-next-line — Framework primitive: useWindowAlwaysOnTop sends RPC on dep change
   useEffect(() => {
     bridge.rpc('window:setAlwaysOnTop', { onTop, windowId });
 
@@ -174,6 +179,7 @@ export function useLove<T>(
   const bridge = useBridge();
   const [state, setState] = useState<T>(initialState);
 
+  // rjit-ignore-next-line — Framework primitive: useLove subscribes to bridge events
   useEffect(() => {
     return bridge.subscribe(eventType, (payload: T) => setState(payload));
   }, [bridge, eventType]);
@@ -200,6 +206,7 @@ export function useLoveEvent(
   const handlerRef = useRef(handler);
   handlerRef.current = handler;
 
+  // rjit-ignore-next-line — Framework primitive: useLoveEvent IS the bridge event hook for user code
   useEffect(() => {
     return bridge.subscribe(eventType, (payload) =>
       handlerRef.current(payload)
@@ -236,6 +243,7 @@ export function useLoveState<T>(
   const bridge = useBridge();
   const [value, setLocal] = useState<T>(initialValue);
 
+  // rjit-ignore-next-line — Framework primitive: useLoveState subscribes to state events
   useEffect(() => {
     return bridge.subscribe(`state:${key}`, (payload: T) =>
       setLocal(payload)
@@ -260,6 +268,7 @@ export function useLoveReady(): boolean {
   const bridge = useBridge();
   const [ready, setReady] = useState(bridge.isReady());
 
+  // rjit-ignore-next-line — Framework primitive: useLoveReady waits for bridge initialization
   useEffect(() => {
     if (!ready) bridge.onReady(() => setReady(true));
   }, [bridge, ready]);
@@ -297,6 +306,7 @@ export function useFetch<T = any>(
   const optionsRef = useRef(options);
   optionsRef.current = options;
 
+  // rjit-ignore-next-line — Framework primitive: useFetch manages async fetch lifecycle on url change
   useEffect(() => {
     if (url == null) {
       setData(null);
@@ -359,6 +369,7 @@ export function useWebSocket(
   const [error, setError] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
+  // rjit-ignore-next-line — Framework primitive: useWebSocket manages WebSocket lifecycle
   useEffect(() => {
     if (!url) {
       setStatus('closed');
@@ -519,6 +530,7 @@ export function useLoveOverlays(
   const [overlays, setOverlays] = useState<Overlay[]>([]);
   const [rect, setRect] = useState<DOMRect | null>(null);
 
+  // rjit-ignore-next-line — Framework primitive: useLoveOverlays tracks canvas resize
   useEffect(() => {
     if (!canvasRef.current) return;
     const observer = new ResizeObserver(() => {
@@ -594,6 +606,7 @@ export function useHotkey(
   handlerRef.current = handler;
   const enabled = options?.enabled ?? true;
 
+  // rjit-ignore-next-line — Framework primitive: useHotkey IS the keyboard shortcut hook for user code
   useEffect(() => {
     if (!enabled) return;
 
@@ -636,11 +649,11 @@ export function useClipboard(): {
   }, [bridge]);
 
   // Clean up timer on unmount
-  useEffect(() => {
+  useMount(() => {
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, []);
+  });
 
   return { copy, paste, copied };
 }
@@ -658,6 +671,7 @@ export function useLuaInterval(intervalMs: number | null | undefined, callback: 
   callbackRef.current = callback;
   const timerIdRef = useRef<number | null>(null);
 
+  // rjit-ignore-next-line — Framework primitive: useLuaInterval IS the Lua-side timer hook for user code
   useEffect(() => {
     if (!intervalMs || intervalMs <= 0) return;
 

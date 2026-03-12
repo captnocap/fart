@@ -3,6 +3,7 @@ import { Box, Text } from './primitives';
 import { Input } from './Input';
 import { Pressable } from './Pressable';
 import { useIFTTT } from './useIFTTT';
+import { useMount } from './useLuaEffect';
 import type { InputProps, LayoutEvent, Style, TextEditorViewState } from './types';
 
 const DEFAULT_ACTIVITY_ITEMS = ['TAB', 'EX', 'CODE', 'MAP'];
@@ -260,16 +261,19 @@ export function MonacoMirror({
     () => shoulderNavigationOwnerId === instanceIdRef.current,
   );
 
+  // rjit-ignore-next-line — Dep-driven: syncs mirror text when controlled value prop changes
   useEffect(() => {
     if (value !== undefined) setMirrorText(value);
   }, [value]);
 
+  // rjit-ignore-next-line — Dep-driven: syncs internal selected file when filePath changes
   useEffect(() => {
     if (selectedFilePath === undefined) setInternalSelectedFile(normalizePath(filePath));
   }, [filePath, selectedFilePath]);
 
   const activeFilePath = selectedFilePath ? normalizePath(selectedFilePath) : internalSelectedFile;
 
+  // rjit-ignore-next-line — Dep-driven: resets editor view state when active file changes
   useEffect(() => {
     setEditorViewState(null);
   }, [activeFilePath]);
@@ -316,14 +320,17 @@ export function MonacoMirror({
   const widthCanShowSidebar = explicitWidth === undefined || explicitWidth >= 520;
   const widthCanShowMinimap = explicitWidth === undefined || explicitWidth >= 620;
 
+  // rjit-ignore-next-line — Dep-driven: closes sidebar when showSidebar/compact changes
   useEffect(() => {
     if (!showSidebar || compact) setSidebarOpen(false);
   }, [showSidebar, compact]);
 
+  // rjit-ignore-next-line — Dep-driven: closes minimap when showMinimap/compact changes
   useEffect(() => {
     if (!showMinimap || compact) setMinimapOpen(false);
   }, [showMinimap, compact]);
 
+  // rjit-ignore-next-line — Dep-driven: auto-toggles panels based on available width
   useEffect(() => {
     if (panelPreferenceTouched || compact) return;
     if (showSidebar) setSidebarOpen(widthCanShowSidebar);
@@ -435,6 +442,7 @@ export function MonacoMirror({
     return output;
   }, [activeFilePath]);
 
+  // rjit-ignore-next-line — Dep-driven: expands collapsed folders when active file ancestors change
   useEffect(() => {
     if (activeFolderAncestors.length === 0) return;
     setCollapsedFolders((prev) => {
@@ -450,21 +458,22 @@ export function MonacoMirror({
     });
   }, [activeFolderAncestors]);
 
-  useEffect(() => {
+  useMount(() => {
     return subscribeShoulderNavigationOwner((ownerId) => {
       setIsShoulderNavigationOwner(ownerId === instanceIdRef.current);
     });
-  }, []);
+  });
 
-  useEffect(() => {
+  useMount(() => {
     if (shoulderNavigationOwnerId === null) setShoulderNavigationOwner(instanceIdRef.current);
     return () => {
       if (shoulderNavigationOwnerId === instanceIdRef.current) {
         setShoulderNavigationOwner(null);
       }
     };
-  }, []);
+  });
 
+  // rjit-ignore-next-line — Dep-driven: falls back to valid viewTarget when available targets change
   useEffect(() => {
     if (availableViewTargets.includes(viewTarget)) return;
     if (availableViewTargets.includes('editor')) {

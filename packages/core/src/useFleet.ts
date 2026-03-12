@@ -121,6 +121,7 @@ export function useFleet(options: FleetOptions): FleetResult {
   const [autoAccept, setAutoAccept] = useState(false);
 
   // Sync auto-accept from Lua on mount
+  // rjit-ignore-next-line — Dep-driven: syncs auto-accept state when rpcAutoAccept changes
   useEffect(() => {
     rpcAutoAccept({}).then((res: any) => {
       setAutoAccept(!!res?.autoAccept);

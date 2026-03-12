@@ -27,10 +27,12 @@ export function useOverlay(): OverlayState {
   });
   const rpcRef = useRef(bridge.rpc.bind(bridge));
 
+  // rjit-ignore-next-line — Dep-driven: syncs rpcRef when bridge changes
   useEffect(() => {
     rpcRef.current = bridge.rpc.bind(bridge);
   }, [bridge]);
 
+  // rjit-ignore-next-line — Mount-once polling for overlay state (setInterval should migrate to useLuaInterval)
   useEffect(() => {
     const poll = () => {
       rpcRef.current('overlay:state', {}).then((result: any) => {

@@ -24,6 +24,7 @@ export function useCapabilities(): {
   const [capabilities, setCapabilities] = useState<Record<string, CapabilitySchema> | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // rjit-ignore-next-line — Dep-driven: re-fetches capabilities when bridge changes
   useEffect(() => {
     if (!bridge) {
       setLoading(false);

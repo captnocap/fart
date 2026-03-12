@@ -168,6 +168,7 @@ export function useEvent<T = any>(
     [Array.isArray(channel) ? channel.join('\0') : channel],
   );
 
+  // rjit-ignore-next-line — Framework primitive: useEvent subscribes to EventBus channels
   useEffect(() => {
     const unsubs = channels.map(ch =>
       bus.on(ch, (payload, c) => handlerRef.current(payload, c)),

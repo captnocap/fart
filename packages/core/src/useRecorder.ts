@@ -61,6 +61,7 @@ export function useRecorder(): RecorderResult {
   const [format, setFormat] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // rjit-ignore-next-line — Dep-driven: polls recorder status while recording is active
   useEffect(() => {
     if (!recording || !bridge) return;
     pollRef.current = setInterval(() => {

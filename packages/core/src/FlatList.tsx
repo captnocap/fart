@@ -128,6 +128,7 @@ function FlatListInner<T>(
   const totalContentSize = rowCount * rowSize;
 
   // Reset onEndReached guard when data length changes
+  // rjit-ignore-next-line — Dep-driven: resets guard when data.length changes
   useEffect(() => {
     if (data.length !== prevDataLengthRef.current) {
       onEndReachedCalledRef.current = false;
@@ -136,6 +137,7 @@ function FlatListInner<T>(
   }, [data.length]);
 
   // Reset visible range when data shrinks below current range
+  // rjit-ignore-next-line — Dep-driven: clamps visible range when data shrinks
   useEffect(() => {
     if (data.length === 0) {
       setVisibleRange([0, 0]);

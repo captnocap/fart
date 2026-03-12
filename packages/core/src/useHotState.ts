@@ -59,6 +59,7 @@ export function useHotState<T>(
   // On mount: write initial value to Lua so it's tracked for next HMR.
   // If we restored from cache, this re-persists the cached value.
   // If fresh start, this seeds the atom with the default.
+  // rjit-ignore-next-line — Dep-driven: re-persists to Lua when bridge/key changes
   useEffect(() => {
     if (!bridge) return;
     bridge.rpc('hotstate:set', { key, value: valueRef.current }).catch(() => {});

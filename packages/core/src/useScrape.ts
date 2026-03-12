@@ -483,6 +483,7 @@ export function useScrape<T extends SelectorMap>(
   }, []);
 
   // Fetch + parse
+  // rjit-ignore-next-line — Dep-driven: re-fetches and parses HTML when url/fetchCount changes
   useEffect(() => {
     if (!url) {
       setData(null);
@@ -545,6 +546,7 @@ export function useScrape<T extends SelectorMap>(
   const bridge = useBridge();
   const intervalMs = options?.interval;
 
+  // rjit-ignore-next-line — Dep-driven: manages Lua-side timer for auto-refetch interval
   useEffect(() => {
     if (!intervalMs || intervalMs <= 0 || !url) return;
 

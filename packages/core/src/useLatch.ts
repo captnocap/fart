@@ -44,6 +44,7 @@ export function applyLatchFrame(updates: Record<string, number>): void {
 export function useLatch(key: string, defaultValue = 0): number {
   const [value, setValue] = useState<number>(() => store.get(key) ?? defaultValue);
 
+  // rjit-ignore-next-line — Framework primitive: useLatch subscribes to latch value updates by key
   useEffect(() => {
     // Sync with any value already in the store from before mount
     const current = store.get(key);

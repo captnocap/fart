@@ -37,6 +37,7 @@ export function Modal({
 }: ModalProps) {
   // Fire onShow when modal becomes visible
   const prevVisibleRef = useRef(false);
+  // rjit-ignore-next-line — Dep-driven: fires onShow callback when visible transitions to true
   useEffect(() => {
     if (visible && !prevVisibleRef.current && onShow) {
       onShow();

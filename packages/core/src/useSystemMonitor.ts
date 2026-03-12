@@ -10,6 +10,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useBridgeOptional } from './context';
 import { useLuaInterval } from './hooks';
+import { useMount } from './useLuaEffect';
 import type { IBridge } from './bridge';
 
 // ── Types ────────────────────────────────────────────────────
@@ -210,10 +211,10 @@ export function useSystemMonitor(
     [bridge],
   );
 
-  useEffect(() => {
+  useMount(() => {
     mountedRef.current = true;
     return () => { mountedRef.current = false; };
-  }, []);
+  });
 
   const fetchData = useCallback(() => {
     if (!bridge || !mountedRef.current) return;
@@ -255,6 +256,7 @@ export function useSystemMonitor(
   }, [bridge, processLimit, logger]);
 
   // Initial fetch
+  // rjit-ignore-next-line — Dep-driven: re-fetches when fetchData callback identity changes
   useEffect(() => { fetchData(); }, [fetchData]);
 
   // Polling driven by Lua-side timer

@@ -346,6 +346,7 @@ export function useIFTTT(trigger: Trigger, action: Action): IFTTTResult {
     [trigger],
   );
 
+  // rjit-ignore-next-line — Dep-driven: subscribes to bridge events based on parsed trigger string
   useEffect(() => {
     if (typeof trigger !== 'string' || !parsed) return;
 
@@ -441,6 +442,7 @@ export function useIFTTT(trigger: Trigger, action: Action): IFTTTResult {
   const prevCondition = useRef(false);
   const isMounted = useRef(false);
 
+  // rjit-ignore-next-line — Every-render edge detector: fires on false->true transition of trigger()
   useEffect(() => {
     if (typeof trigger !== 'function') return;
 

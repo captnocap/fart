@@ -308,6 +308,7 @@ export function useAsyncSearch<T>(
   const fetcherRef = useRef(fetcher);
   fetcherRef.current = fetcher;
 
+  // rjit-ignore-next-line — Dep-driven: re-runs async search when query/minLength/debounce changes
   useEffect(() => {
     const q = query.trim();
     if (q.length < minLength) {

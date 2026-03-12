@@ -43,6 +43,7 @@ export function useGifRecorder(): GifRecorderResult {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Poll frame count while recording
+  // rjit-ignore-next-line — Dep-driven: polls GIF recorder status while recording is active
   useEffect(() => {
     if (!recording || !bridge) return;
     pollRef.current = setInterval(() => {

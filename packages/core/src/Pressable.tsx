@@ -12,6 +12,7 @@
 
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { Box } from './primitives';
+import { useMount } from './useLuaEffect';
 import type { Style, LoveEvent } from './types';
 
 export interface PressableState {
@@ -93,6 +94,7 @@ export function Pressable({
     }
   }, []);
 
+  // rjit-ignore-next-line — Dep-driven: resets interaction state when disabled prop changes
   useEffect(() => {
     if (disabled) {
       setPressed(false);
@@ -103,9 +105,9 @@ export function Pressable({
     }
   }, [disabled, clearLongPressTimer]);
 
-  useEffect(() => {
+  useMount(() => {
     return () => clearLongPressTimer();
-  }, [clearLongPressTimer]);
+  });
 
   const handlePressIn = useCallback((event: LoveEvent) => {
     if (disabled) return;

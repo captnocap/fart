@@ -8,6 +8,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useBridgeOptional } from './context';
 import { useLuaInterval } from './hooks';
+import { useMount } from './useLuaEffect';
 import type { IBridge } from './bridge';
 
 // ── Types ────────────────────────────────────────────────────
@@ -75,10 +76,10 @@ export function usePorts(interval: number = 2000): PortMonitor {
 
   const logger = useMemo(() => makeSysLogger(bridge), [bridge]);
 
-  useEffect(() => {
+  useMount(() => {
     mountedRef.current = true;
     return () => { mountedRef.current = false; };
-  }, []);
+  });
 
   const fetchData = useCallback(() => {
     if (!bridge || !mountedRef.current) return;
@@ -95,6 +96,7 @@ export function usePorts(interval: number = 2000): PortMonitor {
   }, [bridge, logger]);
 
   // Initial fetch
+  // rjit-ignore-next-line — Dep-driven: re-fetches when fetchData callback identity changes
   useEffect(() => { fetchData(); }, [fetchData]);
 
   // Polling driven by Lua-side timer

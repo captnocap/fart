@@ -76,6 +76,7 @@ function ContextPortal({
 }) {
   const portalContext = useContext(PortalContext);
 
+  // rjit-ignore-next-line — Dep-driven: re-registers portal content when key/children change
   useEffect(() => {
     if (portalContext) {
       portalContext.register(portalKey, children);
