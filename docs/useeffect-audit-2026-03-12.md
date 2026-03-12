@@ -9,62 +9,53 @@ Rule used for this audit:
 - Every raw `useEffect` call is treated as a violation.
 - `// rjit-ignore-next-line` is recorded as a bandaid, not an exemption.
 
-Summary:
+Current live-tree summary:
 
 | Metric | Count |
 | --- | ---: |
-| Total raw `useEffect` calls | 223 |
-| Unique files with violations | 94 |
-| Calls carrying ignore comments | 15 |
+| Total raw `useEffect` calls | 100 |
+| Unique files with violations | 50 |
+| Calls carrying ignore comments | 87 |
+| Unsuppressed calls | 13 |
 | `useLayoutEffect` calls | 0 |
 
 By area:
 
 | Area | Calls | Files |
 | --- | ---: | ---: |
-| `packages/*/src` | 152 | 58 |
-| `examples/*/src` | 18 | 10 |
-| `storybook/src` | 53 | 26 |
+| `packages/*/src` | 100 | 50 |
+| `examples/*/src` | 0 | 0 |
+| `storybook/src` | 0 | 0 |
 
-Top offenders:
+What changed on recheck:
+- The earlier snapshot was stale against the dirty worktree.
+- Example and storybook violations were already migrated away in current source.
+- The remaining debt is package-internal only.
 
-| File | Calls |
-| --- | ---: |
-| `packages/core/src/useUtils.ts` | 16 |
-| `packages/core/src/hooks.ts` | 15 |
-| `packages/core/src/MonacoMirror.tsx` | 10 |
-| `storybook/src/stories/MathStory.tsx` | 8 |
-| `packages/networking/src/hooks.ts` | 7 |
-| `packages/time/src/hooks.ts` | 7 |
-| `packages/media/src/hooks.ts` | 6 |
-| `storybook/src/stories/ConversionsStory.tsx` | 6 |
-| `examples/llm-studio/src/App.tsx` | 5 |
-| `packages/chemistry/src/hooks.ts` | 5 |
-| `storybook/src/stories/AudioStory.tsx` | 5 |
-| `storybook/src/stories/CryptoStory.tsx` | 5 |
-| `packages/wireguard/src/hooks.ts` | 4 |
-| `examples/tor-irc/src/App.tsx` | 3 |
-| `packages/core/src/useBreakpoint.ts` | 3 |
+Real current hotspots:
 
-Ignored/bandaid call sites:
-
-| File | Line | Ignore style |
+| File | Calls | Suppression status |
 | --- | ---: | --- |
-| `examples/devctl/src/App.tsx` | 648 | previous line |
-| `examples/llm-studio/src/App.tsx` | 138 | previous line |
-| `examples/llm-studio/src/App.tsx` | 336 | previous line |
-| `examples/llm-studio/src/App.tsx` | 1868 | previous line |
-| `examples/llm-studio/src/App.tsx` | 2392 | previous line |
-| `examples/llm-studio/src/App.tsx` | 2538 | previous line |
-| `packages/core/src/useTray.ts` | 72 | previous line |
-| `packages/networking/src/hooks.ts` | 64 | same line |
-| `packages/networking/src/hooks.ts` | 83 | same line |
-| `packages/networking/src/hooks.ts` | 95 | same line |
-| `packages/networking/src/hooks.ts` | 114 | same line |
-| `storybook/src/main.tsx` | 238 | previous line |
-| `storybook/src/stories/AnimationStory.tsx` | 957 | previous line |
-| `storybook/src/stories/AnimationStory.tsx` | 1158 | previous line |
-| `storybook/src/stories/GamepadStory.tsx` | 329 | previous line |
+| `packages/core/src/hooks.ts` | 14 | all ignored |
+| `packages/core/src/MonacoMirror.tsx` | 10 | unsuppressed |
+| `packages/time/src/hooks.ts` | 4 | all ignored |
+| `packages/core/src/useLuaEffect.ts` | 3 | unsuppressed |
+| `packages/core/src/useBreakpoint.ts` | 3 | all ignored |
+| `packages/finance/src/feeds.ts` | 3 | all ignored |
+| `packages/finance/src/hooks.ts` | 3 | all ignored |
+| `packages/geo/src/hooks.ts` | 3 | all ignored |
+
+Unsuppressed problem areas:
+
+| File | Calls | Why it stands out |
+| --- | ---: | --- |
+| `packages/core/src/MonacoMirror.tsx` | 10 | local state syncing and UI coordination effects |
+| `packages/core/src/useLuaEffect.ts` | 3 | framework hook still implemented on top of raw React effects |
+
+Interpretation:
+- The broad repo-wide cleanup mostly already happened in the current worktree.
+- The remaining cleanup target is not app code; it is framework internals.
+- If you want the next reduction pass to move the number materially, start with `MonacoMirror` and then decide whether `useLuaEffect` should remain the sanctioned internal bridge or be redesigned.
 
 Full table:
 - [docs/useeffect-audit-2026-03-12.csv](/home/siah/creative/reactjit/docs/useeffect-audit-2026-03-12.csv)
