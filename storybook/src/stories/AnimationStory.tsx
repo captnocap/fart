@@ -953,6 +953,7 @@ const SBLOCKS: SBlock[] = (() => {
 function ShatterButton({ label, baseColor, hueBase }: { label: string; baseColor: string; hueBase: number }) {
   const [active, setActive] = useState(false);
 
+  // rjit-ignore-next-line
   useEffect(() => {
     if (active) {
       const t = setTimeout(() => setActive(false), 1400);
@@ -1153,6 +1154,7 @@ function ConfettiButton() {
   const c = useThemeColors();
   const [active, setActive] = useState(false);
 
+  // rjit-ignore-next-line
   useEffect(() => {
     if (active) {
       const t = setTimeout(() => setActive(false), 1800);
