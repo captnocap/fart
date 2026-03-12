@@ -1,16 +1,20 @@
 /**
  * useGradioClient — Hook that manages communication with a Gradio server.
  *
- * Fetches /config on mount, manages component state, and handles predict calls.
- * All HTTP goes through the bridge (Lua http.lua) for non-blocking IO.
+ * Updated for Gradio v6 protocol:
+ * - POST /gradio_api/call/<api_name> → { event_id }
+ * - GET  /gradio_api/call/<api_name>/<event_id> → SSE stream
+ * - targets are [componentId, eventName] tuples
+ * - file results come as { url, path } objects
  */
 
 import { useState, useCallback, useRef } from 'react';
-import { useMount, useLoveEvent } from '@reactjit/core';
+import { useMount } from '@reactjit/core';
 import type {
   GradioConfig,
   GradioComponentState,
   GradioDependency,
+  GradioFileData,
 } from './types';
 
 interface GradioClientState {
@@ -26,11 +30,8 @@ interface GradioClient {
   components: Map<number, GradioComponentState>;
   loading: boolean;
   error: string | null;
-  /** Update a component's value locally (user input) */
   setValue: (id: number, value: any) => void;
-  /** Trigger a dependency (e.g. button click → predict) */
   trigger: (componentId: number, eventName: string) => void;
-  /** Check if a specific fn_index is currently predicting */
   isPredicting: (fnIndex: number) => boolean;
 }
 
@@ -41,6 +42,17 @@ function generateSessionHash(): string {
     hash += chars[Math.floor(Math.random() * chars.length)];
   }
   return hash;
+}
+
+/** Extract a usable value from Gradio's result data, resolving file objects */
+function resolveValue(val: any, baseUrl: string): any {
+  if (val && typeof val === 'object' && val.url) {
+    // GradioFileData — return the full URL for Image/Audio/Video
+    const fileUrl: string = val.url;
+    if (fileUrl.startsWith('http')) return fileUrl;
+    return `${baseUrl}${fileUrl}`;
+  }
+  return val;
 }
 
 export function useGradioClient(
@@ -125,25 +137,36 @@ export function useGradioClient(
     });
   }, []);
 
-  // ── Find dependencies for a component + event ─────────
+  // ── Find dependencies for a component + event (v6) ────
 
   const findDependencies = useCallback((
     componentId: number,
     eventName: string,
     config: GradioConfig,
   ): GradioDependency[] => {
-    return config.dependencies.filter(dep =>
-      dep.targets.includes(componentId) && dep.trigger === eventName
-    );
+    return config.dependencies.filter(dep => {
+      // v6: targets is [[componentId, eventName], ...]
+      if (Array.isArray(dep.targets)) {
+        return dep.targets.some(t => {
+          if (Array.isArray(t)) {
+            return t[0] === componentId && t[1] === eventName;
+          }
+          // v5 fallback: targets is number[], trigger is separate
+          return t === componentId && dep.trigger === eventName;
+        });
+      }
+      return false;
+    });
   }, []);
 
-  // ── Execute a predict call ────────────────────────────
+  // ── Execute prediction (v6 event-based protocol) ──────
 
   const executePrediction = useCallback(async (
     dep: GradioDependency,
     fnIndex: number,
     components: Map<number, GradioComponentState>,
     baseUrl: string,
+    apiPrefix: string,
   ) => {
     // Gather input values
     const inputData = dep.inputs.map(id => {
@@ -155,7 +178,6 @@ export function useGradioClient(
     setState(prev => {
       const predicting = new Set(prev.predicting);
       predicting.add(fnIndex);
-      // Mark output components as loading
       const comps = new Map(prev.components);
       for (const outId of dep.outputs) {
         const comp = comps.get(outId);
@@ -170,34 +192,65 @@ export function useGradioClient(
         headers['Authorization'] = `Bearer ${optionsRef.current.apiKey}`;
       }
 
-      const apiName = dep.api_name ?? `/predict`;
-      const apiUrl = `${baseUrl}/api${apiName}`;
+      const apiName = dep.api_name ?? 'predict';
+      const callUrl = `${baseUrl}${apiPrefix}/call/${apiName}`;
 
-      const res = await fetch(apiUrl, {
+      // Step 1: POST to get event_id
+      const callRes = await fetch(callUrl, {
         method: 'POST',
         headers,
         body: JSON.stringify({
           data: inputData,
-          fn_index: fnIndex,
           session_hash: sessionHash.current,
         }),
       });
 
-      if (!res.ok) throw new Error(`Predict returned HTTP ${res.status}`);
-      const result = await res.json();
+      if (!callRes.ok) throw new Error(`Call returned HTTP ${callRes.status}`);
+      const { event_id } = await callRes.json();
 
-      // Update output components with results
+      // Step 2: GET SSE stream for result
+      const streamUrl = `${callUrl}/${event_id}`;
+      const streamRes = await fetch(streamUrl);
+      if (!streamRes.ok) throw new Error(`Stream returned HTTP ${streamRes.status}`);
+
+      const text = await streamRes.text();
+
+      // Parse SSE events — look for "event: complete" followed by "data: [...]"
+      let resultData: any[] = [];
+      const lines = text.split('\n');
+      let foundComplete = false;
+      for (const line of lines) {
+        if (line.startsWith('event: complete')) {
+          foundComplete = true;
+        } else if (foundComplete && line.startsWith('data: ')) {
+          try {
+            resultData = JSON.parse(line.slice(6));
+          } catch {}
+          break;
+        } else if (line.startsWith('event: error')) {
+          // Next data line is the error message
+          foundComplete = false;
+          const nextIdx = lines.indexOf(line) + 1;
+          if (nextIdx < lines.length && lines[nextIdx].startsWith('data: ')) {
+            throw new Error(lines[nextIdx].slice(6));
+          }
+        }
+      }
+
+      // Resolve file URLs in results
+      const resolvedData = resultData.map(v => resolveValue(v, baseUrl));
+
+      // Update output components
       setState(prev => {
         const predicting = new Set(prev.predicting);
         predicting.delete(fnIndex);
         const comps = new Map(prev.components);
-        const outputData: any[] = result.data ?? [];
         dep.outputs.forEach((outId, i) => {
           const comp = comps.get(outId);
           if (comp) {
             comps.set(outId, {
               ...comp,
-              value: i < outputData.length ? outputData[i] : comp.value,
+              value: i < resolvedData.length ? resolvedData[i] : comp.value,
               loading: false,
               error: null,
             });
@@ -206,7 +259,7 @@ export function useGradioClient(
         return { ...prev, predicting, components: comps };
       });
 
-      optionsRef.current?.onPrediction?.(fnIndex, result.data ?? []);
+      optionsRef.current?.onPrediction?.(fnIndex, resolvedData);
     } catch (err) {
       setState(prev => {
         const predicting = new Set(prev.predicting);
@@ -235,13 +288,13 @@ export function useGradioClient(
 
     const deps = findDependencies(componentId, eventName, config);
     const baseUrl = config.root ?? urlRef.current.replace(/\/$/, '');
+    const apiPrefix = config.api_prefix ?? '/gradio_api';
 
     for (let i = 0; i < deps.length; i++) {
       const dep = deps[i];
-      if (!dep.backend_fn) continue;
-      // fn_index is the dependency's position in the dependencies array
+      if (dep.backend_fn === false) continue;
       const fnIndex = config.dependencies.indexOf(dep);
-      executePrediction(dep, fnIndex, components, baseUrl);
+      executePrediction(dep, fnIndex, components, baseUrl, apiPrefix);
     }
   }, [state, findDependencies, executePrediction]);
 

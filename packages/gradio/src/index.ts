@@ -9,6 +9,8 @@ export type {
   GradioComponentState,
   GradioPredictRequest,
   GradioPredictResponse,
-  GradioQueueMessage,
+  GradioFileData,
+  GradioCallResponse,
+  GradioSSEEvent,
   GradioAppProps,
 } from './types';

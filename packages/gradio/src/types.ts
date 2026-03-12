@@ -1,8 +1,11 @@
 /**
  * Gradio config types — mirrors the JSON returned by GET /config on a Gradio server.
  *
- * The config is the *entire* UI description: component types, props, layout tree,
- * and dependency wiring (which button triggers which function with which inputs/outputs).
+ * Updated for Gradio v6 protocol:
+ * - api_prefix defaults to /gradio_api
+ * - targets are [componentId, eventName] tuples
+ * - predict uses event_id + SSE streaming
+ * - file results include { url, path, orig_name } objects
  */
 
 // ── Component config ────────────────────────────────────
@@ -12,10 +15,14 @@ export interface GradioComponentConfig {
   type: string;
   props: Record<string, any>;
   api_info?: {
-    info: { type: string };
-    serializer: string;
+    type: string;
   };
+  api_info_as_input?: { type: string };
+  api_info_as_output?: { type: string };
   example_inputs?: any;
+  skip_api?: boolean;
+  key?: string | null;
+  component_class_id?: string;
 }
 
 // ── Layout tree ─────────────────────────────────────────
@@ -25,16 +32,18 @@ export interface GradioLayoutNode {
   children?: GradioLayoutNode[];
 }
 
-// ── Dependency (event wiring) ───────────────────────────
+// ── Dependency (event wiring) — v6 format ───────────────
 
 export interface GradioDependency {
-  targets: number[];
-  trigger: string;
+  /** v6: array of [componentId, eventName] tuples */
+  targets: Array<[number, string]>;
+  /** v5 compat: sometimes present as separate field */
+  trigger?: string;
   inputs: number[];
   outputs: number[];
   api_name: string | null;
-  backend_fn: boolean;
-  queue: boolean | null;
+  backend_fn?: boolean;
+  queue?: boolean | null;
   js?: string;
   scroll_to_output?: boolean;
   show_progress?: 'full' | 'minimal' | 'hidden';
@@ -57,8 +66,12 @@ export interface GradioConfig {
   theme?: string;
   layout: GradioLayoutNode;
   dependencies: GradioDependency[];
+  /** Base URL — set by client after fetch */
   root?: string;
   version?: string;
+  /** v6: API prefix, defaults to /gradio_api */
+  api_prefix?: string;
+  app_id?: number;
 }
 
 // ── Runtime state ───────────────────────────────────────
@@ -72,11 +85,23 @@ export interface GradioComponentState {
   error: string | null;
 }
 
+// ── File data (v6 image/audio/file results) ─────────────
+
+export interface GradioFileData {
+  path: string;
+  url: string;
+  size: number | null;
+  orig_name: string;
+  mime_type: string | null;
+  is_stream: boolean;
+  meta?: { _type: string };
+}
+
 // ── Predict request/response ────────────────────────────
 
 export interface GradioPredictRequest {
   data: any[];
-  fn_index: number;
+  fn_index?: number;
   session_hash?: string;
 }
 
@@ -87,16 +112,17 @@ export interface GradioPredictResponse {
   is_generating?: boolean;
 }
 
-// ── Queue protocol ──────────────────────────────────────
+// ── Event-based protocol (v6) ───────────────────────────
 
-export type GradioQueueMessage =
-  | { msg: 'send_hash'; session_hash: string; fn_index: number }
-  | { msg: 'send_data'; data: any[]; fn_index: number; session_hash: string }
-  | { msg: 'estimation'; rank: number; queue_size: number; avg_event_process_time: number }
-  | { msg: 'process_starts' }
-  | { msg: 'process_generating'; output: { data: any[] }; success: boolean }
-  | { msg: 'process_completed'; output: { data: any[] }; success: boolean }
-  | { msg: 'close_stream' };
+export interface GradioCallResponse {
+  event_id: string;
+}
+
+export type GradioSSEEvent =
+  | { event: 'complete'; data: any[] }
+  | { event: 'generating'; data: any[] }
+  | { event: 'error'; data: string }
+  | { event: 'heartbeat' };
 
 // ── GradioApp props ─────────────────────────────────────
 

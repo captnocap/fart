@@ -493,6 +493,7 @@ export const LAYOUT_MAP: Record<string, string> = {
   group: 'column',
   accordion: 'column',
   box: 'column',
+  form: 'column',
 };
 
 export { unsupported };
