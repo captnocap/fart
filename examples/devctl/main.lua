@@ -103,10 +103,11 @@ local function ensureDaemonRunning()
   if daemonReachable() then return true end
   local source = love.filesystem.getSource()
   os.execute("DEVCTL_HEADLESS=1 love " .. shellQuote(source) .. " >/dev/null 2>&1 &")
+  -- Quick check: 10 attempts × 50ms = 500ms max (was 40 × 100ms = 4s)
   if socketOk and socket and socket.sleep then
-    for _ = 1, 40 do
+    for _ = 1, 10 do
       if daemonReachable() then return true end
-      socket.sleep(0.1)
+      socket.sleep(0.05)
     end
   end
   return daemonReachable()
@@ -135,10 +136,13 @@ local function stopDaemonFromGui()
   if pid then
     commandSucceeded("kill " .. tostring(pid) .. " >/dev/null 2>&1")
   end
+  -- Invalidate persistent connection
+  if _daemonConn then pcall(function() _daemonConn:close() end); _daemonConn = nil end
+  -- Quick check: 10 × 50ms = 500ms max (was 40 × 100ms = 4s)
   if socketOk and socket and socket.sleep then
-    for _ = 1, 40 do
+    for _ = 1, 10 do
       if not daemonReachable() then break end
-      socket.sleep(0.1)
+      socket.sleep(0.05)
     end
   end
   local status = daemonStatus()
@@ -152,28 +156,108 @@ local function toggleDaemonFromGui()
   return startDaemonFromGui()
 end
 
+-- ── Non-blocking daemon client ────────────────────────────────────────────────
+-- Keeps a persistent TCP connection. Returns cached data when possible.
+-- Worst case: 0.15s block (was 1.5s with per-call connect).
+
+local _daemonConn = nil          -- persistent socket
+local _daemonCache = {}          -- { [cacheKey] = { data, time } }
+local _cacheTTL = {              -- freshness window per command (seconds)
+  list           = 1.0,          -- server list: cache 1s
+  logs           = 1.0,          -- logs: cache 1s
+  auditLog       = 3.0,          -- audit: cache 3s
+  daemonStatus   = 2.0,          -- daemon status: cache 2s
+  ports          = 5.0,          -- ports: rarely changes
+  getReservedPorts = 5.0,
+}
+
+local function getDaemonConnection()
+  if _daemonConn then
+    -- Test if still alive: try a zero-byte read
+    _daemonConn:settimeout(0)
+    local _, err = _daemonConn:receive(0)
+    if err == "closed" then
+      pcall(function() _daemonConn:close() end)
+      _daemonConn = nil
+    end
+  end
+  if not _daemonConn then
+    if not socketOk or not socket then return nil, "luasocket unavailable" end
+    local client, err = socket.tcp()
+    if not client then return nil, "socket init failed: " .. tostring(err) end
+    client:settimeout(0.15)  -- 150ms max — was 1500ms
+    local okConn, connErr = client:connect("127.0.0.1", CONTROL_PORT)
+    if not okConn then
+      pcall(function() client:close() end)
+      return nil, "daemon unavailable: " .. tostring(connErr)
+    end
+    _daemonConn = client
+  end
+  return _daemonConn, nil
+end
+
 local function sendDaemonCommand(msg)
   if not socketOk or not socket then
     return { error = "luasocket unavailable" }
   end
-  local client, err = socket.tcp()
-  if not client then return { error = "socket init failed: " .. tostring(err) } end
-  client:settimeout(1.5)
-  local okConn, connErr = client:connect("127.0.0.1", CONTROL_PORT)
-  if not okConn then
-    pcall(function() client:close() end)
-    return { error = "daemon unavailable: " .. tostring(connErr) }
+
+  -- Check cache: return stale data if fresh enough
+  local cacheKey = msg and msg.cmd or ""
+  if msg and msg.name then cacheKey = cacheKey .. ":" .. msg.name end
+  local ttl = _cacheTTL[msg and msg.cmd] or 0
+  local cached = _daemonCache[cacheKey]
+  local now = love.timer.getTime()
+
+  if cached and ttl > 0 and (now - cached.time) < ttl then
+    return cached.data
   end
+
+  -- Send command over persistent connection
+  local client, connErr = getDaemonConnection()
+  if not client then
+    -- Connection failed: return stale cache if available, else error
+    if cached then return cached.data end
+    return { error = connErr or "daemon unavailable" }
+  end
+
+  client:settimeout(0.15)
   local sent, sendErr = client:send(json.encode(msg or {}) .. "\n")
   if not sent then
+    -- Connection broken: close and retry once
     pcall(function() client:close() end)
-    return { error = "send failed: " .. tostring(sendErr) }
+    _daemonConn = nil
+    client, connErr = getDaemonConnection()
+    if not client then
+      if cached then return cached.data end
+      return { error = "send failed: " .. tostring(sendErr) }
+    end
+    client:settimeout(0.15)
+    sent, sendErr = client:send(json.encode(msg or {}) .. "\n")
+    if not sent then
+      pcall(function() client:close() end)
+      _daemonConn = nil
+      if cached then return cached.data end
+      return { error = "send failed: " .. tostring(sendErr) }
+    end
   end
+
   local line, recvErr = client:receive("*l")
-  pcall(function() client:close() end)
-  if not line then return { error = "receive failed: " .. tostring(recvErr) } end
+  if not line then
+    -- Receive failed: connection is dead
+    pcall(function() client:close() end)
+    _daemonConn = nil
+    if cached then return cached.data end
+    return { error = "receive failed: " .. tostring(recvErr) }
+  end
+
   local okDecode, decoded = pcall(json.decode, line)
-  if not okDecode or not decoded then return { error = "invalid daemon response" } end
+  if not okDecode or not decoded then
+    if cached then return cached.data end
+    return { error = "invalid daemon response" }
+  end
+
+  -- Update cache
+  _daemonCache[cacheKey] = { data = decoded, time = now }
   return decoded
 end
 
