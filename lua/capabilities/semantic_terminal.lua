@@ -1107,8 +1107,14 @@ Capabilities.register("SemanticTerminal", {
     local c = node.computed
     if not c or c.h <= 0 then return false end
 
+    -- Resolve vterm: own, attached, or playback
     local vterm = state.vterm
-    if state.mode == "playback" and state.player then
+    if state.attachedSession then
+      local termAPI = Capabilities._terminalAPI
+      if termAPI then
+        vterm = termAPI.getSessionVTerm(state.attachedSession)
+      end
+    elseif state.mode == "playback" and state.player then
       vterm = state.player:getVTerm()
     end
     if not vterm then return false end
@@ -1117,7 +1123,10 @@ Capabilities.register("SemanticTerminal", {
     local rows = vterm:size()
     local showTimeline = props.showTimeline and state.mode == "playback" and state.player
     local timelineH = showTimeline and 32 or 0
-    local viewportH = c.h - timelineH
+    local showDebug = props.showDebug
+    local debugFontH = ensureMeasure() and Measure.getFont(10, "monospace", nil):getHeight() or 12
+    local debugH = showDebug and (debugFontH * 3 + 8) or 0
+    local viewportH = c.h - timelineH - debugH
     local maxScroll = math.max(0, rows * lineHeight - viewportH)
 
     -- Nothing to scroll
