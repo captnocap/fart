@@ -1220,6 +1220,16 @@ function ReactJIT.init(config)
     end
   end
 
+  -- Register game server hosting RPC handlers
+  do
+    local gsOk, gs = pcall(require, "lua.capabilities.game_server")
+    if gsOk and gs.getHandlers then
+      for method, handler in pairs(gs.getHandlers()) do
+        rpcHandlers[method] = handler
+      end
+    end
+  end
+
   -- Gamepad state poll — React reads axis/button state at its own pace
   rpcHandlers["gamepad:state"] = function(args)
     local id = (args and args.joystickId) or 1
@@ -3254,9 +3264,21 @@ function ReactJIT.update(dt)
   -- Payload is JSON-encoded into a single string to avoid the QuickJS GC race
   -- that silently drops large string properties during recursive FFI traversal.
   -- Streaming responses have a `type` field (chunk/done/error); regular responses don't.
+  --
+  -- Route installer-owned responses to the installer instead of JS.
+  local _gsInstaller = nil
+  do
+    local gsOk2, gs2 = pcall(require, "lua.capabilities.game_server.installer")
+    if gsOk2 then _gsInstaller = gs2 end
+  end
   if M.http then
     local responses = M.http.poll()
     for _, resp in ipairs(responses) do
+      -- If this response belongs to the game server installer, route it there
+      if _gsInstaller and _gsInstaller.isActive() and resp.id and
+         _gsInstaller.getRequestId() and resp.id == _gsInstaller.getRequestId() then
+        _gsInstaller.feedResponse(resp)
+      else
       local traceId = resp and resp.id and netTraceId("http", resp.id) or nil
       if resp.type == "chunk" then
         local phase = "chunk"
@@ -3349,6 +3371,7 @@ function ReactJIT.update(dt)
           payload = { _json = json.encode(resp) },
         })
       end
+      end -- close installer routing else
     end
   end
 
@@ -4327,6 +4350,11 @@ end
 --- Hit-tests the tree and dispatches a click event to JS.
 --- Also starts tracking for potential drag operations.
 function ReactJIT.mousepressed(x, y, button)
+  -- Crash recovery: route clicks to BSOD overlay, skip everything else
+  if crashRecoveryMode then
+    pcall(errors.bsodMousepressed, x, y, button)
+    return
+  end
   -- Error overlay gets first crack at mouse events
   if errors.mousepressed(x, y, button) then return end
   -- Window chrome: drag-to-move, resize, title bar buttons
@@ -4601,6 +4629,7 @@ end
 --- Call from love.mousereleased(x, y, button).
 --- Ends any active drag operation and dispatches release event.
 function ReactJIT.mousereleased(x, y, button)
+  if crashRecoveryMode then return end
   windowchrome.mousereleased(x, y, button)
   if M.systemPanelEnabled and systemPanel.mousereleased(x, y, button) then return end
   if M.inspectorEnabled and devtools.mousereleased(x, y, button) then return end
@@ -4715,6 +4744,7 @@ end
 --- Tracks pointer enter/leave and dispatches hover events.
 --- Also updates drag state if a drag is active.
 function ReactJIT.mousemoved(x, y)
+  if crashRecoveryMode then return end
   lastMouseX, lastMouseY = x, y
   -- Window chrome drag/resize takes priority over everything
   if windowchrome.mousemoved(x, y) then return end
@@ -5007,6 +5037,11 @@ end
 --- Call from love.keypressed(key, scancode, isrepeat).
 --- Routes keydown to focused node when in focus mode, broadcasts otherwise.
 function ReactJIT.keypressed(key, scancode, isrepeat)
+  -- Crash recovery: route keys to BSOD overlay, skip everything else
+  if crashRecoveryMode then
+    pcall(errors.keypressed, key)
+    return
+  end
   if M.overlay and M.overlay.keypressed(key) then return end
   if M.systemPanelEnabled and systemPanel.keypressed(key) then return end
   if M.settingsEnabled and settings.keypressed(key) then return end
@@ -5299,6 +5334,7 @@ end
 --- Call from love.keyreleased(key, scancode).
 --- Routes keyup to focused node when in focus mode, broadcasts otherwise.
 function ReactJIT.keyreleased(key, scancode)
+  if crashRecoveryMode then return end
   if not isRendering() then return end
   if M.gamemod then M.gamemod.keyreleased(key, scancode) end
   if M.emumod and M.emumod.keyreleased(key, scancode) then
@@ -5328,6 +5364,11 @@ end
 --- Call from love.textinput(text).
 --- Routes text input to focused node when in focus mode, broadcasts otherwise.
 function ReactJIT.textinput(text)
+  -- Crash recovery: route text input to BSOD editor, skip everything else
+  if crashRecoveryMode then
+    pcall(errors.textinput, text)
+    return
+  end
   -- System panel captures text input when open
   if M.systemPanelEnabled and systemPanel.textinput(text) then return end
   -- Settings overlay captures text input when active
@@ -5386,6 +5427,11 @@ end
 --- directly in Lua for immediate visual response AND send the event to JS.
 --- The scroll speed multiplier converts Love2D wheel units to pixels.
 function ReactJIT.wheelmoved(x, y)
+  -- Crash recovery: route scroll to BSOD overlay, skip everything else
+  if crashRecoveryMode then
+    pcall(errors.wheelmoved, x, y)
+    return
+  end
   -- love.js passes raw browser wheel deltas (can be 100+) instead of
   -- Love2D's normalized ±1. Clamp to ±1 so scrollSpeed stays sane.
   if mode == "wasm" or mode == "canvas" then

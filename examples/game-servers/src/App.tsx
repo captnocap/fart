@@ -12,6 +12,8 @@ import {
 } from '@reactjit/core';
 import { GameServer, useGameServer, type GameServerConfig } from '@reactjit/networking';
 
+
+
 // ── Palette ──────────────────────────────────────────────────────────────────
 
 const C = {
@@ -42,6 +44,7 @@ function formatDuration(secs: number): string {
 function stateColor(state: string): string {
   if (state === 'running') return C.green;
   if (state === 'starting') return C.yellow;
+  if (state === 'installing') return C.purple;
   if (state === 'stopping') return C.orange;
   if (state === 'error') return C.red;
   return C.dim;
@@ -92,12 +95,15 @@ function ActionButton({ label, color, onPress, disabled }: {
 
 // ── ServerControls ───────────────────────────────────────────────────────────
 
-function ServerControls({ server, engineLabel }: {
+function ServerControls({ server, engineLabel, config }: {
   server: ReturnType<typeof useGameServer>;
   engineLabel: string;
+  config: GameServerConfig;
 }) {
   const isRunning = server.state === 'running';
+  const isInstalling = server.state === 'installing';
   const isStopped = server.state === 'stopped' || server.state === 'error';
+  const port = config.port || 27015;
 
   return (
     <Box style={{
@@ -124,33 +130,67 @@ function ServerControls({ server, engineLabel }: {
         )}
       </Box>
 
-      {/* Status details */}
-      {server.status && isRunning && (
-        <Box style={{ flexDirection: 'row', gap: 20, width: '100%' }}>
+      {/* Connection info */}
+      <Box style={{
+        width: '100%', backgroundColor: C.bg, borderRadius: 4,
+        padding: 10, gap: 6,
+      }}>
+        <Box style={{ flexDirection: 'row', gap: 20, width: '100%', flexWrap: 'wrap' }}>
           <Box style={{ gap: 2 }}>
-            <Text style={{ fontSize: 10, color: C.dim }}>MAP</Text>
-            <Text style={{ fontSize: 12, color: C.accent }}>{server.status.map || '—'}</Text>
+            <Text style={{ fontSize: 10, color: C.dim }}>ADDRESS</Text>
+            <Text style={{ fontSize: 12, color: C.accent }}>{`localhost:${port}`}</Text>
           </Box>
-          <Box style={{ gap: 2 }}>
-            <Text style={{ fontSize: 10, color: C.dim }}>GAME</Text>
-            <Text style={{ fontSize: 12, color: C.text }}>{server.status.game || '—'}</Text>
-          </Box>
-          <Box style={{ gap: 2 }}>
-            <Text style={{ fontSize: 10, color: C.dim }}>VERSION</Text>
-            <Text style={{ fontSize: 12, color: C.text }}>{server.status.version || '—'}</Text>
-          </Box>
-          {server.status.ping != null && (
+          {config.name && (
             <Box style={{ gap: 2 }}>
-              <Text style={{ fontSize: 10, color: C.dim }}>PING</Text>
-              <Text style={{ fontSize: 12, color: C.text }}>{`${server.status.ping}ms`}</Text>
+              <Text style={{ fontSize: 10, color: C.dim }}>HOSTNAME</Text>
+              <Text style={{ fontSize: 12, color: C.text }}>{config.name}</Text>
+            </Box>
+          )}
+          {config.game && (
+            <Box style={{ gap: 2 }}>
+              <Text style={{ fontSize: 10, color: C.dim }}>GAME</Text>
+              <Text style={{ fontSize: 12, color: C.text }}>{config.game}</Text>
+            </Box>
+          )}
+          <Box style={{ gap: 2 }}>
+            <Text style={{ fontSize: 10, color: C.dim }}>MAX PLAYERS</Text>
+            <Text style={{ fontSize: 12, color: C.text }}>{`${config.maxPlayers || 0}`}</Text>
+          </Box>
+          {config.rconPassword && (
+            <Box style={{ gap: 2 }}>
+              <Text style={{ fontSize: 10, color: C.dim }}>RCON PORT</Text>
+              <Text style={{ fontSize: 12, color: C.text }}>{`${config.rconPort || port}`}</Text>
             </Box>
           )}
         </Box>
-      )}
+
+        {/* Running status details */}
+        {server.status && isRunning && (
+          <Box style={{ flexDirection: 'row', gap: 20, width: '100%', flexWrap: 'wrap', paddingTop: 4 }}>
+            <Box style={{ gap: 2 }}>
+              <Text style={{ fontSize: 10, color: C.dim }}>MAP</Text>
+              <Text style={{ fontSize: 12, color: C.green }}>{server.status.map || '—'}</Text>
+            </Box>
+            {server.status.version && (
+              <Box style={{ gap: 2 }}>
+                <Text style={{ fontSize: 10, color: C.dim }}>VERSION</Text>
+                <Text style={{ fontSize: 12, color: C.text }}>{server.status.version}</Text>
+              </Box>
+            )}
+            {server.status.ping != null && (
+              <Box style={{ gap: 2 }}>
+                <Text style={{ fontSize: 10, color: C.dim }}>PING</Text>
+                <Text style={{ fontSize: 12, color: C.text }}>{`${server.status.ping}ms`}</Text>
+              </Box>
+            )}
+          </Box>
+        )}
+      </Box>
 
       {/* Action buttons */}
       <Box style={{ flexDirection: 'row', gap: 8, width: '100%' }}>
-        <ActionButton label="Start" color={C.green} onPress={server.start} disabled={!isStopped} />
+        <ActionButton label="Install" color={C.purple} onPress={server.install} disabled={!isStopped || isInstalling} />
+        <ActionButton label="Start" color={C.green} onPress={server.start} disabled={!isStopped || isInstalling} />
         <ActionButton label="Stop" color={C.red} onPress={server.stop} disabled={!isRunning} />
       </Box>
     </Box>
@@ -218,13 +258,14 @@ function LogViewer({ server }: { server: ReturnType<typeof useGameServer> }) {
   return (
     <Box style={{
       width: '100%',
+      flexGrow: 1,
       backgroundColor: C.surface,
       borderRadius: 8,
       borderWidth: 1,
       borderColor: C.border,
       padding: 12,
       gap: 6,
-      flexGrow: 1,
+      flexDirection: 'column',
     }}>
       <Box style={{ flexDirection: 'row', alignItems: 'center', width: '100%' }}>
         <Text style={{ fontSize: 11, fontWeight: '700', color: C.dim, flexGrow: 1 }}>
@@ -236,10 +277,10 @@ function LogViewer({ server }: { server: ReturnType<typeof useGameServer> }) {
         {server.logs.length === 0 ? (
           <Text style={{ fontSize: 11, color: C.dim }}>No log entries.</Text>
         ) : (
-          server.logs.slice(-50).map((log, i) => (
+          server.logs.map((log, i) => (
             <Box key={i} style={{ flexDirection: 'row', gap: 6, paddingTop: 1, paddingBottom: 1 }}>
               <Text style={{ fontSize: 10, color: C.dim, width: 52 }}>
-                {new Date(log.timestamp).toLocaleTimeString().slice(0, 8)}
+                {`${String(new Date(log.timestamp).getHours()).padStart(2,'0')}:${String(new Date(log.timestamp).getMinutes()).padStart(2,'0')}:${String(new Date(log.timestamp).getSeconds()).padStart(2,'0')}`}
               </Text>
               <Text style={{ fontSize: 10, color: levelColor(log.level), width: 36 }}>
                 {`[${log.level}]`}
@@ -391,22 +432,22 @@ function MapSelector({ maps, current, onSelect }: {
 
 // ── ServerPanel — one complete server management view ─────────────────────────
 
-function ServerPanel({ engineLabel, gameServerElement, maps, server }: {
+function ServerPanel({ engineLabel, gameServerElement, server, config }: {
   engineLabel: string;
   gameServerElement: React.ReactNode;
-  maps: string[];
   server: ReturnType<typeof useGameServer>;
+  config: GameServerConfig;
 }) {
   return (
-    <Box style={{ flexGrow: 1, gap: 12, flexDirection: 'column' }}>
+    <Box style={{ width: '100%', flexGrow: 1, flexDirection: 'column', gap: 12 }}>
       {/* The declarative <GameServer> node (non-visual — manages the process) */}
       {gameServerElement}
 
-      <ServerControls server={server} engineLabel={engineLabel} />
+      <ServerControls server={server} engineLabel={engineLabel} config={config} />
 
-      {maps.length > 0 && (
+      {server.maps.length > 0 && (
         <MapSelector
-          maps={maps}
+          maps={server.maps}
           current={server.status?.map ?? null}
           onSelect={server.changeMap}
         />
@@ -421,10 +462,6 @@ function ServerPanel({ engineLabel, gameServerElement, maps, server }: {
 
 // ── CS Maps / MC Worlds ──────────────────────────────────────────────────────
 
-const CS_MAPS = [
-  'de_dust2', 'de_inferno', 'de_mirage', 'de_nuke',
-  'de_overpass', 'de_ancient', 'cs_office', 'cs_italy',
-];
 
 // ── Tabs ─────────────────────────────────────────────────────────────────────
 
@@ -477,7 +514,6 @@ export default function App() {
     maxPlayers: 24,
     rconPassword: 'rcon_secret',
     tickrate: 128,
-    mapRotation: CS_MAPS,
     name: 'ReactJIT CS Server',
   });
 
@@ -528,41 +564,39 @@ export default function App() {
         </Box>
       </Box>
 
-      {/* Main content — scrollable */}
-      <ScrollView style={{ flexGrow: 1, padding: 16 }}>
-        <Box style={{ width: '100%', gap: 12 }}>
-          {tab === 'cs' && (
-            <ServerPanel
-              engineLabel="Counter-Strike (Source)"
-              gameServerElement={
-                <GameServer
-                  type="source"
-                  config={csConfig}
-                  onReady={() => {}}
-                  onPlayerJoin={(e) => server.say(`Welcome ${e.player}!`)}
-                />
-              }
-              maps={CS_MAPS}
-              server={server}
-            />
-          )}
+      {/* Main content */}
+      <Box style={{ flexGrow: 1, padding: 16, flexDirection: 'column' }}>
+        {tab === 'cs' && (
+          <ServerPanel
+            engineLabel="Counter-Strike (Source)"
+            gameServerElement={
+              <GameServer
+                type="source"
+                config={csConfig}
+                onReady={() => {}}
+                onPlayerJoin={(e) => server.say(`Welcome ${e.player}!`)}
+              />
+            }
+            server={server}
+            config={csConfig}
+          />
+        )}
 
-          {tab === 'minecraft' && (
-            <ServerPanel
-              engineLabel="Minecraft (Java)"
-              gameServerElement={
-                <GameServer
-                  type="minecraft"
-                  config={mcConfig}
-                  onReady={() => {}}
-                />
-              }
-              maps={[]}
-              server={server}
-            />
-          )}
-        </Box>
-      </ScrollView>
+        {tab === 'minecraft' && (
+          <ServerPanel
+            engineLabel="Minecraft (Java)"
+            gameServerElement={
+              <GameServer
+                type="minecraft"
+                config={mcConfig}
+                onReady={() => {}}
+              />
+            }
+            server={server}
+            config={mcConfig}
+          />
+        )}
+      </Box>
 
     </Box>
   );

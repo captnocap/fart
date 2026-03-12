@@ -14,6 +14,7 @@
     http.streamRequest(id, opts)  — same as request() but streams chunks
     Poll returns mixed messages:
       Regular:   { id, status, headers, body }
+      Progress:  { id, type = "progress", bytes = N }  (during regular downloads)
       Chunk:     { id, type = "chunk", data = "..." }
       Done:      { id, type = "done", status = N, headers = {} }
       Error:     { id, type = "error", error = "..." }
@@ -271,12 +272,32 @@ while true do
         })
       end
     else
-      -- ── Regular mode (buffered) ─────────────────────────────
+      -- ── Regular mode (buffered with progress) ──────────────
       local ok2, result = pcall(function()
         local ltn12 = require("ltn12")
         local responseBody = {}
+        local bytesReceived = 0
+        local lastProgress = 0
+        local PROGRESS_INTERVAL = 16384  -- report every 16KB
 
-        local reqTable, httpMod = buildRequest(ltn12.sink.table(responseBody))
+        -- Custom sink: accumulate body + push progress updates
+        local progressSink = function(chunk, sinkErr)
+          if sinkErr then return nil, sinkErr end
+          if chunk == nil or chunk == "" then return nil end
+          responseBody[#responseBody + 1] = chunk
+          bytesReceived = bytesReceived + #chunk
+          if bytesReceived - lastProgress >= PROGRESS_INTERVAL then
+            lastProgress = bytesReceived
+            responseChannel:push({
+              id = id,
+              type = "progress",
+              bytes = bytesReceived,
+            })
+          end
+          return 1
+        end
+
+        local reqTable, httpMod = buildRequest(progressSink)
         local _, status, respHeaders = httpMod.request(reqTable)
 
         return {

@@ -21,7 +21,7 @@ export type GameServerType =
   | 'source2'    // CS2, Deadlock
   | 'minecraft';
 
-export type ServerState = 'stopped' | 'starting' | 'running' | 'stopping' | 'error';
+export type ServerState = 'stopped' | 'starting' | 'running' | 'stopping' | 'installing' | 'error';
 
 // ============================================================================
 // Config — the single object that defines how a server runs
@@ -172,6 +172,8 @@ export interface UseGameServerResult {
   start: () => void;
   /** Stop the server gracefully. */
   stop: () => void;
+  /** Download and install the server binary (SteamCMD or Minecraft JAR). */
+  install: () => void;
   /** Kick a player by name. */
   kick: (playerName: string, reason?: string) => void;
   /** Ban a player by name. */
@@ -180,6 +182,8 @@ export interface UseGameServerResult {
   changeMap: (map: string) => void;
   /** Send a chat message as the server. */
   say: (message: string) => void;
+  /** Available maps from the server's maps/ directory. */
+  maps: string[];
 }
 
 export interface UsePlayerListResult {
