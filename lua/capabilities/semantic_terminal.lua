@@ -920,9 +920,31 @@ Capabilities.register("SemanticTerminal", {
     end
 
     -- Normal scroll: adjust scrollY
-    local scrollAmount = 3 * (ensureMeasure() and Measure.getFont(13, nil, nil):getHeight() or 16)
-    state.scrollY = state.scrollY - wy * scrollAmount
-    -- Clamping happens in render
+    local c = node.computed
+    if not c or c.h <= 0 then return false end
+
+    local vterm = state.vterm
+    if state.mode == "playback" and state.player then
+      vterm = state.player:getVTerm()
+    end
+    if not vterm then return false end
+
+    local lineHeight = ensureMeasure() and Measure.getFont(13, nil, nil):getHeight() or 16
+    local rows = vterm:size()
+    local showTimeline = props.showTimeline and state.mode == "playback" and state.player
+    local timelineH = showTimeline and 32 or 0
+    local viewportH = c.h - timelineH
+    local maxScroll = math.max(0, rows * lineHeight - viewportH)
+
+    -- Nothing to scroll
+    if maxScroll <= 0 then return false end
+
+    local prevScrollY = state.scrollY
+    local scrollAmount = 3 * lineHeight
+    state.scrollY = math.max(0, math.min(state.scrollY - wy * scrollAmount, maxScroll))
+
+    -- Consume only if scroll actually changed
+    return state.scrollY ~= prevScrollY
   end,
 })
 
