@@ -342,7 +342,7 @@ Capabilities.register("ClaudeCanvas", {
       local BLOCK_TYPES = {
         assistant_text = true, user_text = true, diff = true,
         text = true, banner = true, thinking = true, plan_mode = true,
-        status_bar = true, input_border = true,
+        status_bar = true, input_border = true, warning = true,
         tool = true, result = true,
       }
 
@@ -442,7 +442,13 @@ Capabilities.register("ClaudeCanvas", {
             end
           end
 
+          -- Adjacency: text after assistant_text = assistant_text (multi-line response)
+          if kind == "text" and (prevKind == "assistant_text") then
+            kind = "assistant_text"
+          end
+
           -- Adjacency: text after user_prompt/user_text = user_text (multi-line input)
+          -- But NOT if this row is already classified as assistant_text
           if kind == "text" and (prevKind == "user_prompt" or prevKind == "user_text") then
             kind = "user_text"
           end
@@ -453,10 +459,10 @@ Capabilities.register("ClaudeCanvas", {
           local BLOCK_SETTERS = {
             banner = true, user_prompt = true, thinking = true,
             tool = true, result = true, diff = true,
-            plan_mode = true, permission = true, error = true,
+            plan_mode = true, permission = true, error = true, warning = true,
             status_bar = true, input_border = true, input_zone = true,
             idle_prompt = true, thought_complete = true, task_active = true,
-            image_attachment = true,
+            image_attachment = true, assistant_text = true,
           }
           if BLOCK_SETTERS[kind] then
             blockKind = kind
@@ -530,7 +536,7 @@ Capabilities.register("ClaudeCanvas", {
               kind = "status_bar"
             elseif kind == "confirmation" or kind == "menu_option" or kind == "selector" or kind == "menu_title" then
               -- keep these as-is
-            elseif rowText:match("^%s*/[%w%-]") then
+            elseif rowText:match("^%s*/[%w%-]") or rowText:find("/[%w%-].*…") then
               kind = "slash_menu"
             else
               kind = "input_zone"
@@ -588,6 +594,8 @@ Capabilities.register("ClaudeCanvas", {
             elseif kind == "error" then
               turnErrorSeq = turnErrorSeq + 1
               nid = "t" .. currentTurnId .. ":error:" .. turnErrorSeq
+            elseif kind == "warning" then
+              nid = "t" .. currentTurnId .. ":warning"
             elseif kind == "plan_mode" then
               nid = "t" .. currentTurnId .. ":plan_mode"
             elseif kind == "plan_border" then

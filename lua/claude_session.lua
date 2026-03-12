@@ -279,6 +279,9 @@ local function classifyRow(text, row, totalRows)
   local hasBullet = text:find("● ", 1, true) or text:find("• ", 1, true) or text:find("◆ ", 1, true)
   if hasBullet and text:match("[●•◆]%s+%a+%(") then return "tool" end
 
+  -- Assistant text: bullet followed by prose (not a tool invocation)
+  if hasBullet then return "assistant_text" end
+
   -- Diff lines
   if text:match("^%+") or text:match("^%-") then return "diff" end
 
@@ -306,6 +309,13 @@ local function classifyRow(text, row, totalRows)
 
   -- Image attachment without result bracket (standalone): [Image #1] (↑ to select)
   if text:find("[Image", 1, true) then return "image_attachment" end
+
+  -- Warning/notice: performance warnings, large file warnings, memory hints
+  if text:find("will impact performance", 1, true)
+     or text:find("chars >", 1, true)
+     or text:find("/memory to edit", 1, true) then
+    return "warning"
+  end
 
   -- Error
   if text:match("^%s*[Ee]rror:") then return "error" end
