@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { Box, Pressable, Text, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import {
@@ -452,9 +452,11 @@ export function PresentationStory() {
     [activeSlide, selection],
   );
 
-  useEffect(() => {
+  const prevSlideRef = useRef(activeSlide);
+  if (prevSlideRef.current !== activeSlide) {
+    prevSlideRef.current = activeSlide;
     setCameraPreview(activeSlide.camera);
-  }, [activeSlide]);
+  }
 
   const handlePatch = useCallback((event: PresentationEditorPatchEvent) => {
     setDocument((current) => applyPresentationPatch(current, event.patch));

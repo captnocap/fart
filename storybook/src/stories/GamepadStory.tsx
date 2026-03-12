@@ -7,8 +7,8 @@
  * Static hoist ALL code strings and style objects outside the component.
  */
 
-import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { Box, Text, ScrollView, CodeBlock, Pressable, TextInput, useBridge, classifiers as S } from '../../../packages/core/src';
+import React, { useState, useCallback, useRef } from 'react';
+import { Box, Text, ScrollView, CodeBlock, Pressable, TextInput, useBridge, useLuaInterval, classifiers as S } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { Band, Half, HeroBand, CalloutBand, Divider, SectionLabel, PageColumn } from './_shared/StoryScaffold';
 
@@ -325,37 +325,27 @@ export function GamepadStory() {
 
   // Poll gamepad axes from Lua at ~10fps (no axis events cross the bridge)
   const axesRef = useRef<Record<string, number>>({});
-  // rjit-ignore-next-line
-  useEffect(() => {
-    let alive = true;
-    const poll = async () => {
-      while (alive) {
-        try {
-          const state = await bridge.rpc('gamepad:state', { joystickId: 1 }) as any;
-          if (state && state.axes) {
-            const next = state.axes as Record<string, number>;
-            // Only setState if something actually changed (avoid re-renders)
-            const prev = axesRef.current;
-            let changed = false;
-            for (const k in next) {
-              if (Math.abs((prev[k] || 0) - (next[k] || 0)) > 0.01) { changed = true; break; }
-            }
-            for (const k in prev) {
-              if (!(k in next) && Math.abs(prev[k]) > 0.01) { changed = true; break; }
-            }
-            if (changed) {
-              axesRef.current = next;
-              setAxes(next);
-            }
-          }
-        } catch (_) { /* bridge not ready yet */ }
-        // ~10fps polling — 100ms between reads
-        await new Promise(r => setTimeout(r, 100));
+  useLuaInterval(100, async () => {
+    try {
+      const state = await bridge.rpc('gamepad:state', { joystickId: 1 }) as any;
+      if (state && state.axes) {
+        const next = state.axes as Record<string, number>;
+        // Only setState if something actually changed (avoid re-renders)
+        const prev = axesRef.current;
+        let changed = false;
+        for (const k in next) {
+          if (Math.abs((prev[k] || 0) - (next[k] || 0)) > 0.01) { changed = true; break; }
+        }
+        for (const k in prev) {
+          if (!(k in next) && Math.abs(prev[k]) > 0.01) { changed = true; break; }
+        }
+        if (changed) {
+          axesRef.current = next;
+          setAxes(next);
+        }
       }
-    };
-    poll();
-    return () => { alive = false; };
-  }, [bridge]);
+    } catch (_) { /* bridge not ready yet */ }
+  });
 
   return (
     <S.StoryRoot>

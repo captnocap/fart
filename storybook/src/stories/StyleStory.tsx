@@ -8,8 +8,8 @@
  * Playground: editable JSX with live preview.
  */
 
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
-import { Box, Text, Image, TextEditor, CodeBlock, Pressable, ScrollView, TextInput, classifiers as S} from '../../../packages/core/src';
+import React, { useState, useCallback, useMemo } from 'react';
+import { Box, Text, Image, TextEditor, CodeBlock, Pressable, ScrollView, TextInput, useMount, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors, ThemeSwitcher, useTheme, themeNames, themes } from '../../../packages/theme/src';
 import { Icon } from '../../../packages/icons/src';
 import * as AllIcons from '../../../packages/icons/src/icons';
@@ -412,11 +412,9 @@ export function StyleStory() {
     setUserComponent(() => evalResult.component);
   }, []);
 
-  useEffect(() => {
-    if (playground && code && !UserComponent) {
-      processCode(code);
-    }
-  }, [playground]);
+  useMount(() => {
+    if (code) processCode(code);
+  });
 
   const handleCodeChange = useCallback((src: string) => {
     setCode(src);

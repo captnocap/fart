@@ -6,8 +6,8 @@
  * leaf-node contract (no children).
  */
 
-import React, { useState, useCallback, useEffect } from 'react';
-import { Box, Text, Image, Video, VideoPlayer, TextEditor, CodeBlock, Pressable, ScrollView, classifiers as S} from '../../../packages/core/src';
+import React, { useState, useCallback } from 'react';
+import { Box, Text, Image, Video, VideoPlayer, TextEditor, CodeBlock, Pressable, ScrollView, useMount, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { transformJSX } from '../playground/lib/jsx-transform';
 import { evalComponent } from '../playground/lib/eval-component';
@@ -181,11 +181,9 @@ export function ImageVideoStory() {
     setUserComponent(() => evalResult.component);
   }, []);
 
-  useEffect(() => {
-    if (playground && code && !UserComponent) {
-      processCode(code);
-    }
-  }, [playground]);
+  useMount(() => {
+    if (code) processCode(code);
+  });
 
   const handleCodeChange = useCallback((src: string) => {
     setCode(src);

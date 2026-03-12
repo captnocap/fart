@@ -9,8 +9,8 @@
  * Static hoist ALL code strings and style objects outside the component.
  */
 
-import React, { useEffect, useState } from 'react';
-import { Box, Text, Image, ScrollView, Pressable, CodeBlock, Native, classifiers as S} from '../../../packages/core/src';
+import React, { useRef, useState } from 'react';
+import { Box, Text, Image, ScrollView, Pressable, CodeBlock, Native, useMount, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { useImagingComposer, useImagingHistory, useImaging, useImagingSelection, useDrawCanvas } from '../../../packages/imaging/src';
 import type { BlendMode, ImagingComposition, ImagingLayerCrop, ImagingLayerPivot, ImagingSelectionShape } from '../../../packages/imaging/src';
@@ -565,26 +565,27 @@ function LayerGraphDemo() {
   const [previewSrc, setPreviewSrc] = useState('');
   const [composeInfo, setComposeInfo] = useState('pending');
 
-  useEffect(() => {
-    let cancelled = false;
-    const run = async () => {
-      const composition = buildComposition(state);
-      const nonce = `${Date.now()}_${Math.floor(Math.random() * 10000)}`;
-      const output = `imaging_compose_${nonce}.png`;
-      const result = await compose({ composition, output });
-      if (cancelled || !result) return;
+  const runCompose = (s: GraphState) => {
+    const composition = buildComposition(s);
+    const nonce = `${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+    const output = `imaging_compose_${nonce}.png`;
+    compose({ composition, output }).then((result: any) => {
+      if (!result) return;
       if (result.ok) {
         setPreviewSrc(output);
         setComposeInfo(`${result.width}x${result.height} cache=${result.cacheHit ? 'hit' : 'miss'}`);
       } else {
         setComposeInfo(result.error || 'compose failed');
       }
-    };
-    run();
-    return () => {
-      cancelled = true;
-    };
-  }, [state, compose]);
+    });
+  };
+
+  // Trigger compose on mount and whenever state changes (undo/redo)
+  const prevStateRef = useRef<GraphState | null>(null);
+  if (prevStateRef.current !== state) {
+    prevStateRef.current = state;
+    runCompose(state);
+  }
 
   const setTone = (index: number) => {
     commit({ ...state, toneIndex: index }, `Tone ${COMPOSE_TONES[index].label}`);
@@ -742,26 +743,27 @@ function LayerTransformDemo() {
   const [previewSrc, setPreviewSrc] = useState('');
   const [composeInfo, setComposeInfo] = useState('pending');
 
-  useEffect(() => {
-    let cancelled = false;
-    const run = async () => {
-      const composition = buildTransformComposition(state);
-      const nonce = `${Date.now()}_${Math.floor(Math.random() * 10000)}`;
-      const output = `imaging_transform_${nonce}.png`;
-      const result = await compose({ composition, output });
-      if (cancelled || !result) return;
+  const runCompose = (s: TransformState) => {
+    const composition = buildTransformComposition(s);
+    const nonce = `${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+    const output = `imaging_transform_${nonce}.png`;
+    compose({ composition, output }).then((result: any) => {
+      if (!result) return;
       if (result.ok) {
         setPreviewSrc(output);
         setComposeInfo(`${result.width}x${result.height} cache=${result.cacheHit ? 'hit' : 'miss'}`);
       } else {
         setComposeInfo(result.error || 'compose failed');
       }
-    };
-    run();
-    return () => {
-      cancelled = true;
-    };
-  }, [state, compose]);
+    });
+  };
+
+  // Trigger compose on mount and whenever state changes (undo/redo)
+  const prevStateRef = useRef<TransformState | null>(null);
+  if (prevStateRef.current !== state) {
+    prevStateRef.current = state;
+    runCompose(state);
+  }
 
   const patch = (next: Partial<TransformState>, label: string) => {
     commit({ ...state, ...next }, label);

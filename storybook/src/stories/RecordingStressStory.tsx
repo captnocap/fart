@@ -8,7 +8,7 @@
  * a single ref-based tick — no React re-renders for animation.
  */
 
-import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useRef, useMemo } from 'react';
 import { Box, Text, Pressable, ScrollView, useLoveRPC, useRecorder, useLuaInterval, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 
@@ -97,8 +97,10 @@ function LoadBoxes({ count, width, height }: { count: number; width: number; hei
   const positions = useRef<Array<{ x: number; y: number; vx: number; vy: number; hue: number }>>([]);
   const [tick, setTick] = useState(0);
 
-  // Initialize/resize positions array
-  useEffect(() => {
+  // Initialize/resize positions array (synchronous ref mutation — safe in render)
+  const prevInit = useRef({ count: 0, width: 0, height: 0 });
+  if (prevInit.current.count !== count || prevInit.current.width !== width || prevInit.current.height !== height) {
+    prevInit.current = { count, width, height };
     const arr = positions.current;
     while (arr.length < count) {
       arr.push({
@@ -110,7 +112,7 @@ function LoadBoxes({ count, width, height }: { count: number; width: number; hei
       });
     }
     arr.length = count;
-  }, [count, width, height]);
+  }
 
   // Animate at ~60fps via interval
   useLuaInterval(16, () => {

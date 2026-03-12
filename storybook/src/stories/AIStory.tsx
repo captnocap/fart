@@ -8,8 +8,8 @@
  * Static hoist ALL code strings and style objects outside the component.
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { Box, Text, Image, ScrollView, CodeBlock, Pressable, classifiers as S} from '../../../packages/core/src';
+import React, { useState, useCallback } from 'react';
+import { Box, Text, Image, ScrollView, CodeBlock, Pressable, useMount, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import {Band, Half, HeroBand, CalloutBand, Divider, SectionLabel, ExternalDependencyNotice, PageColumn} from './_shared/StoryScaffold';
 
@@ -406,7 +406,7 @@ function ConversationDemo() {
     setTimeout(show, 400);
   }, []);
 
-  useEffect(() => { replay(); }, []);
+  useMount(() => { replay(); });
 
   const visible = DEMO_MESSAGES.slice(0, visibleCount);
 
@@ -475,7 +475,7 @@ function AgenticLoopDemo() {
     setTimeout(advance, 400);
   }, []);
 
-  useEffect(() => { replay(); }, []);
+  useMount(() => { replay(); });
 
   return (
     <S.StackG6W100>
@@ -563,7 +563,7 @@ function StreamingPipelineDemo() {
     setTimeout(advance, 300);
   }, []);
 
-  useEffect(() => { replay(); }, []);
+  useMount(() => { replay(); });
 
   return (
     <S.StackG4W100>

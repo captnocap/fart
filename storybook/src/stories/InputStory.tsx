@@ -9,11 +9,11 @@
  * (e.g. dragging a slider) only re-render that section.
  */
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   Box, Text, Image, TextEditor, TextInput, CodeBlock, Pressable, ScrollView,
   Slider, Switch, Checkbox, RadioGroup, Radio, Select, Modal,
-  useHotkey, useClipboard, classifiers as S} from '../../../packages/core/src';
+  useHotkey, useClipboard, useMount, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { transformJSX } from '../playground/lib/jsx-transform';
 import { evalComponent } from '../playground/lib/eval-component';
@@ -365,11 +365,9 @@ export function InputStory() {
     setUserComponent(() => evalResult.component);
   }, []);
 
-  useEffect(() => {
-    if (playground && code && !UserComponent) {
-      processCode(code);
-    }
-  }, [playground]);
+  useMount(() => {
+    if (code) processCode(code);
+  });
 
   const handleCodeChange = useCallback((src: string) => {
     setCode(src);

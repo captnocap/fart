@@ -6,7 +6,7 @@
  *         useFuzzySearch, useSearchHighlight, useSearchHistory, AppSearch
  */
 
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   Box,
   Text,
@@ -35,7 +35,7 @@ import {
   detectSearchableFields,
   useAppSearch,
   useHotkey,
-  type BreadcrumbItem, classifiers as S} from '../../../packages/core/src';
+  type BreadcrumbItem, useMount, classifiers as S} from '../../../packages/core/src';
 import type { NavSection, Tab, ToolbarEntry, SearchResultItem, CommandDef } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { transformJSX } from '../playground/lib/jsx-transform';
@@ -800,9 +800,9 @@ export function NavigationStory() {
     setUserComponent(() => evalResult.component);
   }, []);
 
-  useEffect(() => {
-    if (playground && code && !UserComponent) processCode(code);
-  }, [playground]);
+  useMount(() => {
+    if (code) processCode(code);
+  });
 
   const handleCodeChange = useCallback((src: string) => {
     setCode(src);

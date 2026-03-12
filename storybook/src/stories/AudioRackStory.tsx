@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Box, Text, Pressable, Slider, useLoveRPC, classifiers as S} from '../../../packages/core/src';
+import React, { useState, useRef, useCallback } from 'react';
+import { Box, Text, Pressable, Slider, useLoveRPC, useMount, classifiers as S} from '../../../packages/core/src';
 import {
   useAudioInit,
   useRack,
@@ -517,9 +517,8 @@ export function AudioRackStory() {
   const setTrackTargetRpc = useLoveRPC('audio:setTrackTarget');
   const patchBuilt = useRef(false);
 
-  // Build the patch once
-  useEffect(() => {
-    if (!ready || patchBuilt.current) return;
+  // Build the patch once (synchronous — rack methods queue bridge commands)
+  if (ready && !patchBuilt.current) {
     patchBuilt.current = true;
 
     // Synth modules
@@ -557,7 +556,7 @@ export function AudioRackStory() {
     setTrackTargetRpc({ moduleId: 'seq1', track: 1, target: 'env1' });
     setTrackTargetRpc({ moduleId: 'seq1', track: 2, target: 'env1' });
     setTrackTargetRpc({ moduleId: 'seq1', track: 3, target: 'sampler1' });
-  }, [ready]);
+  }
 
   if (!ready) {
     return (

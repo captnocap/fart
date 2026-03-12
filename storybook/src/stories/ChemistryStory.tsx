@@ -9,8 +9,8 @@
  * Static hoist ALL code strings and style objects outside the component.
  */
 
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { Box, Text, Image, ScrollView, CodeBlock, Pressable, TextInput, classifiers as S} from '../../../packages/core/src';
+import React, { useState, useCallback, useRef, useMemo } from 'react';
+import { Box, Text, Image, ScrollView, CodeBlock, Pressable, TextInput, useMount, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import {
   PeriodicTable, ElementCard, MoleculeCard, ElectronShell, ReactionView,
@@ -661,18 +661,16 @@ function ToolsDemo() {
 
   const massNum = parseFloat(mass) || 0;
 
-  useEffect(() => {
-    compute({ method: 'molarMass', formula }).then(setMm).catch(() => {});
-    compute({ method: 'massComposition', formula }).then(setComposition).catch(() => {});
-  }, [formula]);
+  const recomputeFormula = useCallback((f: string, m: number) => {
+    compute({ method: 'molarMass', formula: f }).then(setMm).catch(() => {});
+    compute({ method: 'massComposition', formula: f }).then(setComposition).catch(() => {});
+    compute({ method: 'massToMoles', mass: m, formula: f }).then((mol: number) => {
+      setMoles(mol);
+      compute({ method: 'molesToParticles', moles: mol }).then(setParticles).catch(() => {});
+    }).catch(() => {});
+  }, [compute]);
 
-  useEffect(() => {
-    compute({ method: 'massToMoles', mass: massNum, formula }).then(setMoles).catch(() => {});
-  }, [massNum, formula]);
-
-  useEffect(() => {
-    compute({ method: 'molesToParticles', moles }).then(setParticles).catch(() => {});
-  }, [moles]);
+  useMount(() => { recomputeFormula(formula, massNum); });
 
   return (
     <S.StackG8W100>
@@ -681,7 +679,7 @@ function ToolsDemo() {
         <TextInput
           placeholder="C6H12O6"
           value={formula}
-          onChangeText={setFormula}
+          onChangeText={(f: string) => { setFormula(f); recomputeFormula(f, massNum); }}
           style={{ backgroundColor: c.surface, borderRadius: 6, padding: 8, fontSize: 11, color: c.text }}
         />
         <S.RowCenterG6>
@@ -703,7 +701,7 @@ function ToolsDemo() {
         <TextInput
           placeholder="18"
           value={mass}
-          onChangeText={setMass}
+          onChangeText={(m: string) => { setMass(m); recomputeFormula(formula, parseFloat(m) || 0); }}
           style={{ backgroundColor: c.surface, borderRadius: 6, padding: 8, fontSize: 11, color: c.text }}
         />
         <Box style={{ flexDirection: 'row', gap: 16 }}>

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { Box, Text, Badge, Slider, Switch, Tabs, BarChart, Pressable, ScrollView, useLoveRPC, useSystemInfo, useWindowDimensions, formatUptime, formatMemory, useLuaInterval, classifiers as S} from '../../../packages/core/src';
 import type { Tab } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
@@ -336,10 +336,12 @@ export function TradingPerfLabStory() {
   const tapeLimit = loadProfile === 'turbo' ? 14 : loadProfile === 'balanced' ? 10 : 8;
   const historyLimit = loadProfile === 'turbo' ? 64 : loadProfile === 'balanced' ? 52 : 40;
 
-  useEffect(() => {
+  const prevEngineParams = useRef({ symbolCount: 0, depth: 0 });
+  if (prevEngineParams.current.symbolCount !== symbolCount || prevEngineParams.current.depth !== depth) {
+    prevEngineParams.current = { symbolCount, depth };
     engineRef.current = makeEngine(symbolCount, depth);
     setSelectedIndex((prev) => Math.min(prev, symbolCount - 1));
-  }, [symbolCount, depth]);
+  }
 
   const prevTickRef = useRef(nowMs());
   useLuaInterval(live ? 16 : null, () => {
@@ -446,8 +448,9 @@ export function TradingPerfLabStory() {
   const totalFrameWork = layoutMs + paintMs;
   const fpsVariant = fps >= 55 ? 'success' : fps >= 40 ? 'warning' : 'error';
 
-  useEffect(() => {
-    if (fps <= 0) return;
+  const prevFpsRef = useRef(0);
+  if (fps > 0 && prevFpsRef.current !== fps) {
+    prevFpsRef.current = fps;
     setLoadProfile((prev) => {
       if (prev === 'turbo') {
         return fps < 44 ? 'balanced' : 'turbo';
@@ -459,7 +462,7 @@ export function TradingPerfLabStory() {
       }
       return fps > 38 ? 'balanced' : 'lite';
     });
-  }, [fps]);
+  }
 
   const selectedPrev = selected && selected.history.length > 1 ? selected.history[selected.history.length - 2] : selected?.last || 0;
   const selectedDelta = selected ? selected.last - selectedPrev : 0;

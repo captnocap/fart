@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useRef, useMemo, useState } from 'react';
 import { Box, Text, Tabs, Switch, Badge, BarChart, useLuaInterval, classifiers as S} from '../../../packages/core/src';
 import type { Tab } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
@@ -196,9 +196,11 @@ export function TradingViewBarsStory() {
   const [spin, setSpin] = useState(0);
   const [candles, setCandles] = useState<Candle[]>(() => makeCandles('1h'));
 
-  useEffect(() => {
+  const prevTimeframe = useRef(timeframe);
+  if (prevTimeframe.current !== timeframe) {
+    prevTimeframe.current = timeframe;
     setCandles(makeCandles(timeframe));
-  }, [timeframe]);
+  }
 
   useLuaInterval(live ? 750 : null, () => {
     const cfg = TIMEFRAME_CONFIG[timeframe];

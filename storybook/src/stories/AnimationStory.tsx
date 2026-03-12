@@ -8,7 +8,7 @@
  * Static hoist ALL code strings and style objects outside the component.
  */
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import {
   Box, Text, Image, ScrollView, CodeBlock, Pressable,
   Easing, useShake,
@@ -952,19 +952,12 @@ const SBLOCKS: SBlock[] = (() => {
 
 function ShatterButton({ label, baseColor, hueBase }: { label: string; baseColor: string; hueBase: number }) {
   const [active, setActive] = useState(false);
-
-  // rjit-ignore-next-line
-  useEffect(() => {
-    if (active) {
-      const t = setTimeout(() => setActive(false), 1400);
-      return () => clearTimeout(t);
-    }
-  }, [active]);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   return (
     <S.CenterG4>
       <Box style={{ width: SH_W, height: SH_H + 110 }}>
-        <Pressable onPress={() => { if (!active) setActive(true); }}>
+        <Pressable onPress={() => { if (!active) { setActive(true); if (timerRef.current) clearTimeout(timerRef.current); timerRef.current = setTimeout(() => setActive(false), 1400); } }}>
           <Box style={{ width: SH_W, height: SH_H }}>
             {!active && (
               <Box style={{
@@ -1153,19 +1146,12 @@ const CONFETTI_PARTICLES = makeConfetti();
 function ConfettiButton() {
   const c = useThemeColors();
   const [active, setActive] = useState(false);
-
-  // rjit-ignore-next-line
-  useEffect(() => {
-    if (active) {
-      const t = setTimeout(() => setActive(false), 1800);
-      return () => clearTimeout(t);
-    }
-  }, [active]);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   return (
     <S.CenterG4>
       <Box style={{ width: 140, height: 120 }}>
-        <Pressable onPress={() => { if (!active) setActive(true); }}>
+        <Pressable onPress={() => { if (!active) { setActive(true); if (timerRef.current) clearTimeout(timerRef.current); timerRef.current = setTimeout(() => setActive(false), 1800); } }}>
           <Box style={{
             width: 140, height: 44, borderRadius: 8,
             backgroundColor: active ? `${C.accent}88` : C.accent,
