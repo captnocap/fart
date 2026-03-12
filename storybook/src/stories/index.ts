@@ -79,6 +79,7 @@ import { LoveReconcilerStory } from './LoveReconcilerStory';
 import { TslBoidsStory } from './TslBoidsStory';
 
 // ── Demos (hub layout) ─────────────────────────────────
+import { A11yMirrorStory } from './A11yMirrorStory';
 import { AudioRackStory } from './AudioRackStory';
 import { CreativeConceptsStory } from './CreativeConceptsStory';
 import { DemoStory } from './DemoStory';
@@ -159,6 +160,7 @@ export const stories: StoryDef[] = [
   { id: 'tsl-boids', title: 'TSL Boids', section: 'Dev', component: TslBoidsStory },
 
   // ── Demos (hub layout) ────────────────────────────────
+  { id: 'a11y-mirror', title: 'A11y Mirror', section: 'Demos', component: A11yMirrorStory },
   { id: 'audio-rack', title: 'Audio Rack', section: 'Demos', component: AudioRackStory },
   { id: 'creative-concepts', title: 'Creative Concepts', section: 'Demos', component: CreativeConceptsStory },
   { id: 'demo', title: 'Demos', section: 'Demos', component: DemoStory },
