@@ -321,6 +321,7 @@ Capabilities.register("SemanticTerminal", {
 
       -- Recording
       recorder = nil,
+      _sessionTimestamp = os.date("!%Y%m%d_%H%M%S"),
 
       -- Rendering state
       scrollY      = 0,
@@ -972,7 +973,7 @@ Capabilities.register("SemanticTerminal", {
       end
 
       -- Export path hint (right-aligned on line 2)
-      local exportPath = "recording_" .. os.date("!%Y%m%d_%H%M%S")
+      local exportPath = "recording_" .. state._sessionTimestamp
       love.graphics.setColor(0.6, 0.7, 0.8, 0.5 * alpha)
       local expLabel = "export: " .. exportPath
       local expW = debugFont:getWidth(expLabel)
