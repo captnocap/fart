@@ -48,9 +48,17 @@ end
 
 local function updateTree(handles, props)
   local data = computeData(props)
-  Tree.updateChildProps(handles["n0_1_1_1_2"], { style = { color = data.bg } })
-  Tree.updateChildProps(handles["n0_1_1"], { style = { borderWidth = (props.selected) and 2 or 1, borderColor = data.bg } })
-  Tree.updateChildProps(handles["n0"], { style = { width = props.size, height = props.size * 36 / 32 } })
+  local size = props.size or 64
+  local s = size / 64
+  local numFontSize = math.max(7, math.floor(10 * s + 0.5))
+  local symFontSize = math.max(10, math.floor(16 * s + 0.5))
+  local massFontSize = math.max(7, math.floor(9 * s + 0.5))
+  local pad = math.max(1, math.floor(2 * s + 0.5))
+  Tree.updateChildProps(handles["n0_1_1_1_2"], { style = { color = data.bg, fontSize = numFontSize } })
+  Tree.updateChildProps(handles["n0_1_1"], { style = { borderWidth = (props.selected) and 2 or 1, borderColor = data.bg, paddingTop = pad, paddingBottom = pad, overflow = "hidden", gap = 0 } })
+  Tree.updateChildProps(handles["n0"], { style = { width = size, height = size * 36 / 32 } })
+  Tree.updateChildProps(handles["n0_1_1_3_3"], { style = { color = "#ffffff", fontSize = symFontSize } })
+  Tree.updateChildProps(handles["n0_1_1_5_4"], { style = { color = "#999999", fontSize = massFontSize } })
   Tree.updateChildProps(handles["n0_1_1_1_2_0_t"], { text = data.el.number or "" })
   Tree.updateChildProps(handles["n0_1_1_3_3_0_t"], { text = data.el.symbol or "" })
   Tree.updateChildProps(handles["n0_1_1_5_4_0_t"], { text = data.massStr or "" })

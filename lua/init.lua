@@ -2402,21 +2402,34 @@ local function _pollLuaFiles()
       end
     end
   end
-  -- Also scan lua/capabilities/ subdirectory
-  local capItems = love.filesystem.getDirectoryItems("lua/capabilities")
-  if capItems then
-    for _, name in ipairs(capItems) do
-      if name:match("%.lua$") then
-        local path = "lua/capabilities/" .. name
-        local info = love.filesystem.getInfo(path)
-        if info and info.modtime then
-          local prev = luaFileMtimes[path]
-          if prev == nil then
-            luaFileMtimes[path] = info.modtime
-          elseif info.modtime ~= prev then
-            luaFileMtimes[path] = info.modtime
-            io.write("[reactjit] Lua file changed: " .. path .. "\n"); io.flush()
-            changed = true
+  -- Scan subdirectories: lua/capabilities/, lua/generated/ (+ any sub-subdirs)
+  local subdirs = { "lua/capabilities", "lua/generated" }
+  -- Auto-discover subdirectories of lua/generated/ (e.g. lua/generated/chemistry/)
+  local genItems = love.filesystem.getDirectoryItems("lua/generated")
+  if genItems then
+    for _, name in ipairs(genItems) do
+      local info = love.filesystem.getInfo("lua/generated/" .. name)
+      if info and info.type == "directory" then
+        subdirs[#subdirs + 1] = "lua/generated/" .. name
+      end
+    end
+  end
+  for _, dir in ipairs(subdirs) do
+    local subItems = love.filesystem.getDirectoryItems(dir)
+    if subItems then
+      for _, name in ipairs(subItems) do
+        if name:match("%.lua$") then
+          local path = dir .. "/" .. name
+          local info = love.filesystem.getInfo(path)
+          if info and info.modtime then
+            local prev = luaFileMtimes[path]
+            if prev == nil then
+              luaFileMtimes[path] = info.modtime
+            elseif info.modtime ~= prev then
+              luaFileMtimes[path] = info.modtime
+              io.write("[reactjit] Lua file changed: " .. path .. "\n"); io.flush()
+              changed = true
+            end
           end
         end
       end
@@ -6461,7 +6474,10 @@ function ReactJIT.reload()
         M.videoplayer.init({ measure = M.measure, videos = M.videos })
       end
       M.events.setWidgetsModule(M.widgets)
-      io.write("[reactjit] Lua HMR: core modules reloaded\n"); io.flush()
+      -- Re-load capabilities (hand-written + generated/compiled from .tslx)
+      local caps = require("lua.capabilities")
+      caps.loadAll()
+      io.write("[reactjit] Lua HMR: core modules + capabilities reloaded\n"); io.flush()
     end)
     if not reqOk then
       io.write("[reactjit] Lua HMR: re-require failed (continuing with old modules): " .. tostring(reqErr) .. "\n"); io.flush()
