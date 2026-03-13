@@ -25,6 +25,35 @@ const GlyphInfo = struct {
 
 const MAX_CACHED_GLYPHS = 512;
 
+// ── UTF-8 decoding ──────────────────────────────────────────────────────────
+
+const Utf8Char = struct {
+    codepoint: u32,
+    len: u3, // 1–4 bytes consumed
+};
+
+/// Decode one UTF-8 codepoint from the start of `bytes`.
+/// Returns the codepoint and how many bytes it consumed.
+/// Invalid sequences return U+FFFD (replacement character) and advance 1 byte.
+fn decodeUtf8(bytes: []const u8) Utf8Char {
+    if (bytes.len == 0) return .{ .codepoint = 0xFFFD, .len = 1 };
+    const b0 = bytes[0];
+    if (b0 < 0x80) {
+        return .{ .codepoint = b0, .len = 1 };
+    } else if (b0 < 0xC0) {
+        return .{ .codepoint = 0xFFFD, .len = 1 }; // stray continuation byte
+    } else if (b0 < 0xE0) {
+        if (bytes.len < 2) return .{ .codepoint = 0xFFFD, .len = 1 };
+        return .{ .codepoint = (@as(u32, b0 & 0x1F) << 6) | @as(u32, bytes[1] & 0x3F), .len = 2 };
+    } else if (b0 < 0xF0) {
+        if (bytes.len < 3) return .{ .codepoint = 0xFFFD, .len = 1 };
+        return .{ .codepoint = (@as(u32, b0 & 0x0F) << 12) | (@as(u32, bytes[1] & 0x3F) << 6) | @as(u32, bytes[2] & 0x3F), .len = 3 };
+    } else {
+        if (bytes.len < 4) return .{ .codepoint = 0xFFFD, .len = 1 };
+        return .{ .codepoint = (@as(u32, b0 & 0x07) << 18) | (@as(u32, bytes[1] & 0x3F) << 12) | (@as(u32, bytes[2] & 0x3F) << 6) | @as(u32, bytes[3] & 0x3F), .len = 4 };
+    }
+}
+
 // ── Text Engine ─────────────────────────────────────────────────────────────
 
 pub const TextEngine = struct {
@@ -171,9 +200,9 @@ pub const TextEngine = struct {
         return &self.cache_vals[idx];
     }
 
-        /// Get the advance width of a single character.
-    fn charAdvance(self: *TextEngine, byte: u8, size_px: u16) f32 {
-        if (self.rasterizeGlyph(@as(u32, byte), size_px)) |g| {
+    /// Get the advance width of a single Unicode codepoint.
+    fn cpAdvance(self: *TextEngine, codepoint: u32, size_px: u16) f32 {
+        if (self.rasterizeGlyph(codepoint, size_px)) |g| {
             return @floatFromInt(g.advance);
         }
         return 0;
@@ -209,6 +238,7 @@ pub const TextEngine = struct {
     /// Compute word-wrap line breaks for text within max_width.
     /// Words are delimited by spaces. Newlines force a break.
     /// Words wider than max_width get their own line (no mid-word break).
+    /// Iterates by UTF-8 codepoints so multi-byte characters stay intact.
     fn wordWrap(self: *TextEngine, text: []const u8, size_px: u16, max_width: f32) WrapResult {
         var result = WrapResult{};
 
@@ -218,7 +248,7 @@ pub const TextEngine = struct {
         }
 
         self.setSize(size_px);
-        const space_w = self.charAdvance(' ', size_px);
+        const space_w = self.cpAdvance(' ', size_px);
 
         var line_start: usize = 0;
         var line_width: f32 = 0;
@@ -243,12 +273,13 @@ pub const TextEngine = struct {
                 continue;
             }
 
-            // Found start of a word — measure the whole word
+            // Found start of a word — measure the whole word (UTF-8 aware)
             const word_start = i;
             var word_width: f32 = 0;
             while (i < text.len and text[i] != ' ' and text[i] != '\n') {
-                word_width += self.charAdvance(text[i], size_px);
-                i += 1;
+                const ch = decodeUtf8(text[i..]);
+                word_width += self.cpAdvance(ch.codepoint, size_px);
+                i += ch.len;
             }
             const word_end = i;
 
@@ -290,10 +321,13 @@ pub const TextEngine = struct {
         const lm = self.lineMetrics(size_px);
 
         var width: f32 = 0;
-        for (text) |byte| {
-            if (self.rasterizeGlyph(@as(u32, byte), size_px)) |g| {
+        var i: usize = 0;
+        while (i < text.len) {
+            const ch = decodeUtf8(text[i..]);
+            if (self.rasterizeGlyph(ch.codepoint, size_px)) |g| {
                 width += @floatFromInt(g.advance);
             }
+            i += ch.len;
         }
 
         return .{
@@ -314,15 +348,18 @@ pub const TextEngine = struct {
         const lm = self.lineMetrics(size_px);
         const wrap = self.wordWrap(text, size_px, max_width);
 
-        // Find the widest line
+        // Find the widest line (UTF-8 aware)
         var widest: f32 = 0;
         for (0..wrap.count) |li| {
             const line = text[wrap.line_starts[li]..wrap.line_ends[li]];
             var lw: f32 = 0;
-            for (line) |byte| {
-                if (self.rasterizeGlyph(@as(u32, byte), size_px)) |g| {
+            var j: usize = 0;
+            while (j < line.len) {
+                const ch = decodeUtf8(line[j..]);
+                if (self.rasterizeGlyph(ch.codepoint, size_px)) |g| {
                     lw += @floatFromInt(g.advance);
                 }
+                j += ch.len;
             }
             if (lw > widest) widest = lw;
         }
@@ -344,9 +381,10 @@ pub const TextEngine = struct {
         var pen_x = x;
         const baseline_y = y + lm.ascent;
 
-        for (text) |byte| {
-            const codepoint: u32 = byte;
-            if (self.rasterizeGlyph(codepoint, size_px)) |g| {
+        var i: usize = 0;
+        while (i < text.len) {
+            const ch = decodeUtf8(text[i..]);
+            if (self.rasterizeGlyph(ch.codepoint, size_px)) |g| {
                 if (g.texture) |tex| {
                     _ = c.SDL_SetTextureColorMod(tex, color.r, color.g, color.b);
                     _ = c.SDL_SetTextureAlphaMod(tex, color.a);
@@ -361,6 +399,7 @@ pub const TextEngine = struct {
                 }
                 pen_x += @floatFromInt(g.advance);
             }
+            i += ch.len;
         }
     }
 

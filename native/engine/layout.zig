@@ -300,18 +300,30 @@ fn estimateIntrinsicWidth(node: *Node) f32 {
     return max_cross + pad_l + pad_r;
 }
 
-fn estimateIntrinsicHeight(node: *Node) f32 {
+/// Estimate intrinsic height of a node.
+/// available_width: known parent width for text wrapping (0 = unknown).
+/// When a container has explicit width, that propagates down so text
+/// children can report wrapped height instead of single-line height.
+fn estimateIntrinsicHeight(node: *Node, available_width: f32) f32 {
     const s = node.style;
     if (s.height) |h| return h;
 
     const pad_t = s.padTop();
     const pad_b = s.padBottom();
+    const pad_l = s.padLeft();
+    const pad_r = s.padRight();
     const gap = s.gap;
     const is_row = s.flex_direction == .row;
 
-    // Text nodes: measure text height
+    // Resolve the inner width available for children:
+    // explicit width on this node > available_width from parent > 0 (unknown)
+    const inner_w: f32 = if (s.width) |w| w - pad_l - pad_r
+        else if (available_width > 0) available_width - pad_l - pad_r
+        else 0;
+
+    // Text nodes: measure with wrapping if width is known
     if (node.text != null) {
-        const m = measureNodeText(node);
+        const m = measureNodeTextW(node, inner_w);
         return m.height + pad_t + pad_b;
     }
 
@@ -329,7 +341,7 @@ fn estimateIntrinsicHeight(node: *Node) f32 {
 
     for (node.children) |*child| {
         if (child.style.display == .none) continue;
-        const ch = estimateIntrinsicHeight(child);
+        const ch = estimateIntrinsicHeight(child, inner_w);
         const cm_t = child.style.marTop();
         const cm_b = child.style.marBottom();
 
@@ -434,7 +446,7 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
 
         const cs = child.style;
         const cw = cs.width orelse estimateIntrinsicWidth(child);
-        const ch_val = cs.height orelse estimateIntrinsicHeight(child);
+        const ch_val = cs.height orelse estimateIntrinsicHeight(child, inner_w);
         const cw_clamped = clamp(cw, cs.min_width, cs.max_width);
         const ch_clamped = clamp(ch_val, cs.min_height, cs.max_height);
 
