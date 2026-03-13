@@ -61,7 +61,7 @@ local _sessionNodeMap = {}  -- "default" -> numeric nodeId
 
 -- Classified snapshots: captured on submit (Enter) and slash (/) after settle
 local _snapshots = {}       -- nodeId -> { { trigger, frame, timestamp, rows } }
-local _pendingCapture = {}  -- nodeId -> { trigger, framesLeft }
+local _pendingCaptures = {} -- nodeId -> { { trigger, framesLeft }, ... }
 
 -- Scroll step sizes
 local SCROLL_LINE = 40   -- pixels per mouse wheel notch
@@ -217,7 +217,7 @@ Capabilities.register("ClaudeCanvas", {
     _lastGraph[nodeId] = nil
     _lastDiff[nodeId] = nil
     _snapshots[nodeId] = nil
-    _pendingCapture[nodeId] = nil
+    _pendingCaptures[nodeId] = nil
   end,
 
   -- ── Visual capability methods (painter.lua / layout.lua) ──────
@@ -786,30 +786,35 @@ Capabilities.register("ClaudeCanvas", {
       -- Store classified cache for clipboard dump hotkey
       _lastClassified[nodeId] = classifiedCache
 
-      -- Pending snapshot capture (delayed after submit/slash to let menus settle)
-      local pending = _pendingCapture[nodeId]
-      if pending then
-        pending.framesLeft = pending.framesLeft - 1
-        if pending.framesLeft <= 0 then
-          if not _snapshots[nodeId] then _snapshots[nodeId] = {} end
-          local snap = {
-            trigger   = pending.trigger,
-            frame     = _frameCounter,
-            timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ"),
-            rows      = {},
-          }
-          for _, entry in ipairs(classifiedCache) do
-            snap.rows[#snap.rows + 1] = {
-              row     = entry.row,
-              kind    = entry.kind,
-              text    = entry.text,
-              nodeId  = entry.nodeId,
-              colors  = entry.colors,
+      -- Pending snapshot captures (multiple can be in flight: immediate + delayed)
+      local pendings = _pendingCaptures[nodeId]
+      if pendings and #pendings > 0 then
+        local remaining = {}
+        for _, pending in ipairs(pendings) do
+          pending.framesLeft = pending.framesLeft - 1
+          if pending.framesLeft <= 0 then
+            if not _snapshots[nodeId] then _snapshots[nodeId] = {} end
+            local snap = {
+              trigger   = pending.trigger,
+              frame     = _frameCounter,
+              timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ"),
+              rows      = {},
             }
+            for _, entry in ipairs(classifiedCache) do
+              snap.rows[#snap.rows + 1] = {
+                row     = entry.row,
+                kind    = entry.kind,
+                text    = entry.text,
+                nodeId  = entry.nodeId,
+                colors  = entry.colors,
+              }
+            end
+            _snapshots[nodeId][#_snapshots[nodeId] + 1] = snap
+          else
+            remaining[#remaining + 1] = pending
           end
-          _snapshots[nodeId][#_snapshots[nodeId] + 1] = snap
-          _pendingCapture[nodeId] = nil
         end
+        _pendingCaptures[nodeId] = #remaining > 0 and remaining or nil
       end
 
       -- Build semantic graph from classified cache
@@ -1085,8 +1090,13 @@ Capabilities.register("ClaudeCanvas", {
         end
       end
       Renderer.scrollToBottom(sessionId, inputState.viewportH)
-      -- Schedule classified snapshot after settle (~30 frames ≈ 0.5s)
-      _pendingCapture[nodeId] = { trigger = "submit", framesLeft = 30 }
+      -- Schedule TWO classified snapshots:
+      -- 1. Immediate (1 frame) — captures current state (which menu item is selected)
+      -- 2. Delayed (30 frames ≈ 0.5s) — captures result after menu transitions
+      if not _pendingCaptures[nodeId] then _pendingCaptures[nodeId] = {} end
+      local pc = _pendingCaptures[nodeId]
+      pc[#pc + 1] = { trigger = "submit:before", framesLeft = 1 }
+      pc[#pc + 1] = { trigger = "submit:after", framesLeft = 30 }
       Session.writeRaw("\r")
       return true
     end
@@ -1180,7 +1190,9 @@ Capabilities.register("ClaudeCanvas", {
     -- Schedule classified snapshot when / is typed (slash menu renders immediately)
     -- Capture after ~20 frames (~0.33s) to let the menu settle
     if text == "/" then
-      _pendingCapture[node.id] = { trigger = "slash", framesLeft = 20 }
+      if not _pendingCaptures[node.id] then _pendingCaptures[node.id] = {} end
+      local pc = _pendingCaptures[node.id]
+      pc[#pc + 1] = { trigger = "slash", framesLeft = 20 }
     end
     -- Send typed characters directly to PTY
     Session.writeRaw(text)
