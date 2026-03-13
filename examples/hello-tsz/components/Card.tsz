@@ -1,0 +1,8 @@
+// A card container — demonstrates children forwarding
+function Card({ children }: { children: any }) {
+  return (
+    <Box style={{ padding: 16, backgroundColor: '#1e1e2a', gap: 8 }}>
+      {children}
+    </Box>
+  );
+}

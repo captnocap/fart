@@ -78,25 +78,46 @@ const ENUM_MAP = {
   display: { field: 'display', values: { flex: '.flex', none: '.none' } },
 };
 
+// ── Primitives — these are native Zig nodes, not user components ─────────
+
+const PRIMITIVES = new Set(['Box', 'Text', 'Image', 'Pressable', 'ScrollView', 'TextInput']);
+
 // ── AST → Zig codegen ──────────────────────────────────────────────────────
 
 class TszCompiler {
-  constructor(sourceFile) {
+  constructor(sourceFile, inputFilePath) {
     this.sf = sourceFile;
+    this.inputFilePath = inputFilePath;
     this.nodeArrays = []; // collected var arrays for the generated main()
     this.arrayCounter = 0;
+    this.handlerCounter = 0; // for generating unique handler function names
+    this.handlerFunctions = []; // collected Zig fn declarations for event handlers
+    this.components = new Map(); // name → { node, sf } for all known components
   }
 
   /** Compile a .tsz source file to a complete Zig source string. */
   compile() {
-    // Find the default export or the last function that returns JSX
-    let rootComponent = null;
+    // Phase 1: Resolve imports from other .tsz files
+    this.resolveImports(this.sf, this.inputFilePath);
 
+    // Phase 2: Collect all function components in this file
+    this.collectComponents(this.sf);
+
+    // Phase 3: Find root component — named "App", or the last function
+    let rootComponent = null;
     ts.forEachChild(this.sf, (node) => {
       if (ts.isFunctionDeclaration(node) && node.name) {
-        rootComponent = node;
+        if (node.name.text === 'App') rootComponent = node;
       }
     });
+    // Fallback: last function declaration
+    if (!rootComponent) {
+      ts.forEachChild(this.sf, (node) => {
+        if (ts.isFunctionDeclaration(node) && node.name) {
+          rootComponent = node;
+        }
+      });
+    }
 
     if (!rootComponent) {
       throw new Error('No component function found in .tsz file');
@@ -108,11 +129,56 @@ class TszCompiler {
       throw new Error('Component must return JSX');
     }
 
-    // Generate the node tree from JSX
-    const { zigExpr, arrays } = this.emitJSX(returnStmt.expression);
+    // Generate the node tree from JSX (no prop scope for root)
+    const { zigExpr, arrays } = this.emitJSX(returnStmt.expression, null, null);
 
     // Build complete Zig source
     return this.buildZigSource(arrays, zigExpr);
+  }
+
+  /** Collect all function declarations as components from a source file. */
+  collectComponents(sourceFile) {
+    ts.forEachChild(sourceFile, (node) => {
+      if (ts.isFunctionDeclaration(node) && node.name) {
+        const name = node.name.text;
+        // Only collect uppercase (component) names
+        if (name[0] === name[0].toUpperCase()) {
+          this.components.set(name, { node, sf: sourceFile });
+        }
+      }
+    });
+  }
+
+  /** Parse import declarations and load components from .tsz files. */
+  resolveImports(sourceFile, filePath) {
+    ts.forEachChild(sourceFile, (node) => {
+      if (!ts.isImportDeclaration(node)) return;
+      const specifier = node.moduleSpecifier;
+      if (!ts.isStringLiteral(specifier)) return;
+
+      const importPath = specifier.text;
+      // Only handle .tsz imports
+      if (!importPath.endsWith('.tsz')) return;
+
+      // Resolve relative to the importing file
+      const baseDir = path.dirname(filePath);
+      const resolvedPath = path.resolve(baseDir, importPath);
+
+      if (!fs.existsSync(resolvedPath)) {
+        throw new Error(`Imported .tsz file not found: ${resolvedPath}`);
+      }
+
+      const importSource = fs.readFileSync(resolvedPath, 'utf-8');
+      const importSf = ts.createSourceFile(
+        resolvedPath, importSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX
+      );
+
+      // Recursively resolve imports in the imported file first
+      this.resolveImports(importSf, resolvedPath);
+
+      // Collect components from the imported file
+      this.collectComponents(importSf);
+    });
   }
 
   findReturn(block) {
@@ -128,23 +194,31 @@ class TszCompiler {
     return null;
   }
 
-  /** Emit a JSX element as a Zig Node literal. Returns { zigExpr, arrays }. */
-  emitJSX(node) {
+  /**
+   * Emit a JSX element as a Zig Node literal. Returns { zigExpr, arrays }.
+   * @param {object} node - The JSX AST node
+   * @param {Map|null} propScope - compile-time prop bindings (name → value string)
+   * @param {object} callerSf - the source file for prop resolution (may differ from this.sf for imported components)
+   * @param {Array|null} callerChildren - JSX children passed by the caller (for {children} forwarding)
+   */
+  emitJSX(node, propScope, callerSf, callerChildren) {
+    const sf = callerSf || this.sf;
+
     if (ts.isParenthesizedExpression(node)) {
-      return this.emitJSX(node.expression);
+      return this.emitJSX(node.expression, propScope, sf, callerChildren);
     }
 
     if (ts.isJsxElement(node)) {
-      return this.emitJSXElement(node.openingElement, node.children);
+      return this.emitJSXElement(node.openingElement, node.children, propScope, sf, callerChildren);
     }
 
     if (ts.isJsxSelfClosingElement(node)) {
-      return this.emitJSXElement(node, []);
+      return this.emitJSXElement(node, [], propScope, sf, callerChildren);
     }
 
     if (ts.isJsxFragment(node)) {
       // Fragment — emit children as an array
-      return this.emitJSXChildren(node.children);
+      return this.emitJSXChildren(node.children, propScope, sf, callerChildren);
     }
 
     // String literal in JSX
@@ -157,23 +231,86 @@ class TszCompiler {
       };
     }
 
+    // JSX expression — might be {children} or {props.children}
+    if (ts.isJsxExpression(node) && node.expression) {
+      const exprText = node.expression.getText(sf);
+      // Check for children forwarding — callerChildren is { nodes, sf } packed by inlineComponent
+      if (exprText === 'children' || exprText === 'props.children') {
+        if (callerChildren && callerChildren.nodes && callerChildren.nodes.length > 0) {
+          // Use the CALLER's source file for processing the forwarded children
+          return this.emitJSXChildren(callerChildren.nodes, propScope, callerChildren.sf, null);
+        }
+        return null;
+      }
+      // Check for prop reference that resolves to a string
+      if (propScope) {
+        const resolved = this.resolveExpression(node.expression, propScope, sf);
+        if (resolved !== null) {
+          return {
+            zigExpr: `.{ .text = "${this.escapeZigString(resolved)}" }`,
+            arrays: [],
+          };
+        }
+      }
+    }
+
     throw new Error(`Unsupported JSX node: ${ts.SyntaxKind[node.kind]}`);
   }
 
-  emitJSXElement(opening, children) {
-    const tagName = opening.tagName.getText(this.sf);
-    const attrs = this.parseAttributes(opening.attributes);
+  /** Emit an array of JSX children, returning a single wrapper node or combined result. */
+  emitJSXChildren(children, propScope, sf, callerChildren) {
     const arrays = [];
+    const childExprs = [];
+    for (const child of children) {
+      const result = this.emitJSX(child, propScope, sf, callerChildren);
+      if (result) {
+        childExprs.push(result.zigExpr);
+        arrays.push(...result.arrays);
+      }
+    }
+    if (childExprs.length === 0) return null;
+    if (childExprs.length === 1) return { zigExpr: childExprs[0], arrays };
+    // Wrap multiple children in a transparent container
+    const arrName = `_arr_${this.arrayCounter++}`;
+    arrays.push(`    var ${arrName} = [_]Node{ ${childExprs.join(', ')} };`);
+    return {
+      zigExpr: `.{ .children = &${arrName} }`,
+      arrays,
+    };
+  }
+
+  emitJSXElement(opening, children, propScope, callerSf, callerChildren) {
+    const sf = callerSf || this.sf;
+    const tagName = opening.tagName.getText(sf);
+
+    // ── User component? Inline it. ──────────────────────────────────
+    if (!PRIMITIVES.has(tagName) && tagName[0] === tagName[0].toUpperCase()) {
+      return this.inlineComponent(tagName, opening, children, propScope, sf);
+    }
+
+    // ── Primitive element (Box, Text, etc.) ─────────────────────────
+    const attrs = this.parseAttributes(opening.attributes, sf);
+    const arrays = [];
+
+    // Resolve prop references in attributes
+    if (propScope) {
+      this.resolveAttrs(attrs, propScope, sf);
+    }
 
     // Build style struct
     let styleFields = [];
     if (attrs.style) {
-      styleFields = this.emitStyleObject(attrs.style);
+      styleFields = this.emitStyleObject(attrs.style, sf);
+    }
+
+    // ScrollView → overflow: scroll
+    if (tagName === 'ScrollView') {
+      styleFields.push(`.overflow = .scroll`);
     }
 
     // Handle backgroundColor in style
     if (attrs.style?.backgroundColor) {
-      const colorStr = this.extractStringLiteral(attrs.style.backgroundColor);
+      const colorStr = this.extractStringLiteral(attrs.style.backgroundColor, sf);
       if (colorStr) {
         const zigColor = parseColor(colorStr);
         if (zigColor) {
@@ -191,19 +328,19 @@ class TszCompiler {
     }
 
     // Text content — from children or text prop
-    const textContent = this.extractTextContent(children);
+    const textContent = this.extractTextContent(children, propScope, sf);
     if (textContent) {
       fields.push(`.text = "${this.escapeZigString(textContent)}"`);
     }
 
     // fontSize prop
     if (attrs.fontSize !== undefined) {
-      fields.push(`.font_size = ${this.evalNumeric(attrs.fontSize)}`);
+      fields.push(`.font_size = ${this.evalNumeric(attrs.fontSize, sf)}`);
     }
 
     // color prop → text_color
     if (attrs.color !== undefined) {
-      const colorStr = this.extractStringLiteral(attrs.color);
+      const colorStr = this.extractStringLiteral(attrs.color, sf);
       if (colorStr) {
         const zigColor = parseColor(colorStr);
         if (zigColor) {
@@ -212,12 +349,28 @@ class TszCompiler {
       }
     }
 
+    // src prop → image_src (for <Image> elements)
+    if (attrs.src !== undefined) {
+      const srcStr = this.extractStringLiteral(attrs.src, sf);
+      if (srcStr) {
+        fields.push(`.image_src = "${this.escapeZigString(srcStr)}"`);
+      }
+    }
+
+    // onPress handler — generates a Zig function and wires it to .handlers.on_press
+    if (attrs.onPress !== undefined) {
+      const handlerName = `_handler_press_${this.handlerCounter++}`;
+      const body = this.emitHandlerBody(attrs.onPress, sf);
+      this.handlerFunctions.push(`fn ${handlerName}() void {\n    ${body}\n}`);
+      fields.push(`.handlers = .{ .on_press = ${handlerName} }`);
+    }
+
     // Children (non-text JSX children)
     const jsxChildren = this.getJSXChildren(children);
     if (jsxChildren.length > 0) {
       const childExprs = [];
       for (const child of jsxChildren) {
-        const result = this.emitJSX(child);
+        const result = this.emitJSX(child, propScope, sf, callerChildren);
         if (result) {
           childExprs.push(result.zigExpr);
           arrays.push(...result.arrays);
@@ -237,13 +390,218 @@ class TszCompiler {
     };
   }
 
-  parseAttributes(attrs) {
+  /**
+   * Extract the body of an event handler callback and emit Zig code.
+   * Supports:
+   *   - Arrow function: onPress={() => console.log("clicked")}
+   *   - Arrow with block: onPress={() => { console.log("clicked"); }}
+   * For now, callbacks emit std.debug.print statements.
+   * Future: call state functions (setState, etc.)
+   */
+  emitHandlerBody(node, sf) {
+    sf = sf || this.sf;
+
+    // Handle JSX expression wrapper
+    if (ts.isJsxExpression(node) && node.expression) {
+      return this.emitHandlerBody(node.expression, sf);
+    }
+
+    // Arrow function: () => expr  or  () => { stmts }
+    if (ts.isArrowFunction(node)) {
+      const body = node.body;
+      if (ts.isBlock(body)) {
+        // Block body — emit each statement
+        return body.statements.map(s => this.emitStatement(s, sf)).join('\n    ');
+      }
+      // Expression body — emit as a single statement
+      return this.emitExpression(body, sf);
+    }
+
+    // Function expression: function() { ... }
+    if (ts.isFunctionExpression(node)) {
+      if (node.body) {
+        return node.body.statements.map(s => this.emitStatement(s, sf)).join('\n    ');
+      }
+    }
+
+    // Fallback: just print what was there
+    const text = node.getText ? node.getText(sf) : 'unknown handler';
+    return `std.debug.print("[onPress] ${this.escapeZigString(text)}\\n", .{});`;
+  }
+
+  /** Emit a TS statement as Zig code. */
+  emitStatement(stmt, sf) {
+    if (ts.isExpressionStatement(stmt)) {
+      return this.emitExpression(stmt.expression, sf);
+    }
+    // Fallback
+    const text = stmt.getText ? stmt.getText(sf) : '';
+    return `std.debug.print("[stmt] ${this.escapeZigString(text)}\\n", .{});`;
+  }
+
+  /** Emit a TS expression as Zig code (for handler bodies). */
+  emitExpression(expr, sf) {
+    // console.log("text") → std.debug.print
+    if (ts.isCallExpression(expr)) {
+      const callee = expr.expression.getText(sf);
+      if (callee === 'console.log' || callee === 'console.info') {
+        const args = expr.arguments.map(a => {
+          const s = this.extractStringLiteral(a, sf);
+          return s !== null ? s : (a.getText ? a.getText(sf) : '?');
+        });
+        return `std.debug.print("${this.escapeZigString(args.join(' '))}\\n", .{});`;
+      }
+    }
+
+    // Fallback: print the raw expression text
+    const text = expr.getText ? expr.getText(sf) : 'expr';
+    return `std.debug.print("[event] ${this.escapeZigString(text)}\\n", .{});`;
+  }
+
+  /**
+   * Inline a user-defined component at the call site.
+   * Looks up the component, builds a prop scope from the passed attributes,
+   * then emits the component's return JSX with prop substitution.
+   */
+  inlineComponent(tagName, opening, callerChildren, outerPropScope, callerSf) {
+    const sf = callerSf || this.sf;
+    const compEntry = this.components.get(tagName);
+    if (!compEntry) {
+      throw new Error(`Unknown component: <${tagName}>. Not a primitive and not found in any .tsz file.`);
+    }
+
+    const { node: compNode, sf: compSf } = compEntry;
+
+    // Build prop scope: map param names → compile-time values from the caller
+    const propScope = new Map();
+    const attrs = this.parseAttributes(opening.attributes, sf);
+
+    // Resolve outer prop references in the attributes we're passing
+    if (outerPropScope) {
+      this.resolveAttrs(attrs, outerPropScope, sf);
+    }
+
+    // Extract the component's parameter names (from destructuring or props param)
+    const paramNames = this.extractParamNames(compNode);
+
+    // Map each passed attribute to a resolved string/number value
+    for (const [attrName, attrNode] of Object.entries(attrs)) {
+      if (attrName === 'style') continue; // style is an object, handled differently
+      const strVal = this.extractStringLiteral(attrNode, sf);
+      if (strVal !== null) {
+        propScope.set(attrName, strVal);
+        continue;
+      }
+      const numVal = this.evalNumeric(attrNode, sf);
+      if (numVal !== null) {
+        propScope.set(attrName, String(numVal));
+        continue;
+      }
+      // Fall through — prop not resolvable at compile time
+    }
+
+    // Style prop — pass through as-is if present
+    if (attrs.style) {
+      propScope.set('__style__', attrs.style);
+    }
+
+    // Find the component's return JSX
+    const returnStmt = this.findReturn(compNode.body);
+    if (!returnStmt || !returnStmt.expression) {
+      throw new Error(`Component <${tagName}> must return JSX`);
+    }
+
+    // Emit with the component's source file and prop scope.
+    // Pack callerChildren with the CALLER's source file so children forwarding
+    // uses the correct sf for getText() on the forwarded AST nodes.
+    const packedChildren = callerChildren && callerChildren.length > 0
+      ? { nodes: callerChildren, sf }
+      : null;
+    return this.emitJSX(returnStmt.expression, propScope, compSf, packedChildren);
+  }
+
+  /** Extract destructured parameter names from a component function. */
+  extractParamNames(funcNode) {
+    const names = [];
+    if (!funcNode.parameters || funcNode.parameters.length === 0) return names;
+    const firstParam = funcNode.parameters[0];
+    if (firstParam.name && ts.isObjectBindingPattern(firstParam.name)) {
+      for (const element of firstParam.name.elements) {
+        if (element.name && ts.isIdentifier(element.name)) {
+          names.push(element.name.text);
+        }
+      }
+    } else if (firstParam.name && ts.isIdentifier(firstParam.name)) {
+      names.push(firstParam.name.text);
+    }
+    return names;
+  }
+
+  /**
+   * Resolve a TS expression to a compile-time string value using the prop scope.
+   * Handles: `title`, `props.title`, string literals, numeric literals.
+   */
+  resolveExpression(node, propScope, sf) {
+    if (!propScope) return null;
+
+    // Direct identifier: `title`
+    if (ts.isIdentifier(node)) {
+      const name = node.text;
+      if (propScope.has(name)) return propScope.get(name);
+      return null;
+    }
+
+    // Property access: `props.title`
+    if (ts.isPropertyAccessExpression(node)) {
+      if (ts.isIdentifier(node.expression) && node.expression.text === 'props') {
+        const propName = node.name.text;
+        if (propScope.has(propName)) return propScope.get(propName);
+      }
+      return null;
+    }
+
+    // String literal
+    if (ts.isStringLiteral(node)) return node.text;
+
+    // Numeric literal
+    if (ts.isNumericLiteral(node)) return node.text;
+
+    return null;
+  }
+
+  /**
+   * Resolve prop references in parsed attributes.
+   * Mutates attrs in-place, replacing AST nodes with synthetic string literal nodes
+   * when a prop reference resolves to a compile-time value.
+   */
+  resolveAttrs(attrs, propScope, sf) {
+    for (const [key, valueNode] of Object.entries(attrs)) {
+      if (key === 'style' && typeof valueNode === 'object' && !valueNode.kind) {
+        // Style object — resolve prop refs inside it
+        for (const [sk, sv] of Object.entries(valueNode)) {
+          const resolved = this.resolveExpression(sv, propScope, sf);
+          if (resolved !== null) {
+            // Replace with a synthetic literal node
+            attrs.style[sk] = { __resolved: true, value: resolved };
+          }
+        }
+        continue;
+      }
+      const resolved = this.resolveExpression(valueNode, propScope, sf);
+      if (resolved !== null) {
+        attrs[key] = { __resolved: true, value: resolved };
+      }
+    }
+  }
+
+  parseAttributes(attrs, sf) {
+    sf = sf || this.sf;
     const result = {};
     if (!attrs || !attrs.properties) return result;
 
     for (const prop of attrs.properties) {
       if (ts.isJsxAttribute(prop) && prop.name) {
-        const name = prop.name.getText(this.sf);
+        const name = prop.name.getText(sf);
 
         if (prop.initializer) {
           if (ts.isStringLiteral(prop.initializer)) {
@@ -251,7 +609,7 @@ class TszCompiler {
           } else if (ts.isJsxExpression(prop.initializer) && prop.initializer.expression) {
             const expr = prop.initializer.expression;
             if (ts.isObjectLiteralExpression(expr) && name === 'style') {
-              result.style = this.parseObjectLiteral(expr);
+              result.style = this.parseObjectLiteral(expr, sf);
             } else {
               result[name] = expr;
             }
@@ -262,18 +620,20 @@ class TszCompiler {
     return result;
   }
 
-  parseObjectLiteral(node) {
+  parseObjectLiteral(node, sf) {
+    sf = sf || this.sf;
     const obj = {};
     for (const prop of node.properties) {
       if (ts.isPropertyAssignment(prop)) {
-        const key = prop.name.getText(this.sf);
+        const key = prop.name.getText(sf);
         obj[key] = prop.initializer;
       }
     }
     return obj;
   }
 
-  emitStyleObject(styleObj) {
+  emitStyleObject(styleObj, sf) {
+    sf = sf || this.sf;
     const fields = [];
 
     for (const [key, valueNode] of Object.entries(styleObj)) {
@@ -282,7 +642,7 @@ class TszCompiler {
       // Check enum mappings
       if (ENUM_MAP[key]) {
         const mapping = ENUM_MAP[key];
-        const strVal = this.extractStringLiteral(valueNode);
+        const strVal = this.extractStringLiteral(valueNode, sf);
         if (strVal && mapping.values[strVal]) {
           fields.push(`.${mapping.field} = ${mapping.values[strVal]}`);
         }
@@ -291,7 +651,7 @@ class TszCompiler {
 
       // Check numeric style props
       if (STYLE_MAP[key]) {
-        const num = this.evalNumeric(valueNode);
+        const num = this.evalNumeric(valueNode, sf);
         if (num !== null) {
           fields.push(`.${STYLE_MAP[key]} = ${num}`);
         }
@@ -302,25 +662,34 @@ class TszCompiler {
     return fields;
   }
 
-  evalNumeric(node) {
+  evalNumeric(node, sf) {
+    // Handle resolved prop values
+    if (node && node.__resolved) {
+      const n = parseFloat(node.value);
+      return isNaN(n) ? null : n;
+    }
     if (ts.isNumericLiteral(node)) return parseFloat(node.text);
     if (ts.isStringLiteral(node)) return parseFloat(node.text) || null;
     // Expression: try to extract the text
-    const text = node.getText ? node.getText(this.sf) : null;
+    sf = sf || this.sf;
+    const text = node.getText ? node.getText(sf) : null;
     if (text && !isNaN(Number(text))) return Number(text);
     return null;
   }
 
-  extractStringLiteral(node) {
+  extractStringLiteral(node, sf) {
+    // Handle resolved prop values
+    if (node && node.__resolved) return node.value;
     if (ts.isStringLiteral(node)) return node.text;
     if (ts.isNoSubstitutionTemplateLiteral(node)) return node.text;
     if (ts.isJsxExpression(node) && node.expression) {
-      return this.extractStringLiteral(node.expression);
+      return this.extractStringLiteral(node.expression, sf);
     }
     return null;
   }
 
-  extractTextContent(children) {
+  extractTextContent(children, propScope, sf) {
+    sf = sf || this.sf;
     if (!children || children.length === 0) return null;
     const texts = [];
     for (const child of children) {
@@ -328,11 +697,19 @@ class TszCompiler {
         const t = child.text.trim();
         if (t) texts.push(t);
       } else if (ts.isJsxExpression(child) && child.expression) {
+        // Check for prop reference: {title} or {props.title}
+        if (propScope) {
+          const resolved = this.resolveExpression(child.expression, propScope, sf);
+          if (resolved !== null) {
+            texts.push(resolved);
+            continue;
+          }
+        }
         if (ts.isStringLiteral(child.expression)) {
           texts.push(child.expression.text);
         } else if (ts.isTemplateExpression(child.expression)) {
           // Template literal — extract the static parts for now
-          texts.push(child.expression.getText(this.sf));
+          texts.push(child.expression.getText(sf));
         }
       }
     }
@@ -342,8 +719,26 @@ class TszCompiler {
   getJSXChildren(children) {
     if (!children) return [];
     return children.filter((c) => {
-      if (ts.isJsxText(c) && !c.text.trim()) return false;
-      if (ts.isJsxText(c)) return false; // text handled separately
+      if (ts.isJsxText(c)) return false; // text handled by extractTextContent
+      // Filter out simple text-bearing expressions — captured by extractTextContent.
+      // Keep {children}/{props.children} and JSX elements.
+      if (ts.isJsxExpression(c) && c.expression) {
+        if (ts.isStringLiteral(c.expression)) return false;
+        if (ts.isNumericLiteral(c.expression)) return false;
+        if (ts.isTemplateExpression(c.expression)) return false;
+        // Simple identifiers like {title} → text, except {children}
+        if (ts.isIdentifier(c.expression)) {
+          return c.expression.text === 'children';
+        }
+        // props.X → text, except props.children
+        if (ts.isPropertyAccessExpression(c.expression)) {
+          if (ts.isIdentifier(c.expression.expression) &&
+              c.expression.expression.text === 'props') {
+            return c.expression.name.text === 'children';
+          }
+          return false;
+        }
+      }
       return true;
     });
   }
@@ -366,6 +761,7 @@ const Style = layout.Style;
 const Color = layout.Color;
 const LayoutRect = layout.LayoutRect;
 const TextEngine = text_mod.TextEngine;
+const events = @import("events.zig");
 
 var g_text_engine: ?*TextEngine = null;
 
@@ -389,13 +785,16 @@ const Painter = struct {
         c.SDL_RenderPresent(self.renderer);
     }
 
-    pub fn paintTree(self: *Painter, node: *Node) void {
+    pub fn paintTree(self: *Painter, node: *Node, scroll_offset_x: f32, scroll_offset_y: f32) void {
         if (node.style.display == .none) return;
+        const screen_x = node.computed.x - scroll_offset_x;
+        const screen_y = node.computed.y - scroll_offset_y;
+
         if (node.style.background_color) |col| {
             _ = c.SDL_SetRenderDrawColor(self.renderer, col.r, col.g, col.b, col.a);
             var r = c.SDL_Rect{
-                .x = @intFromFloat(node.computed.x),
-                .y = @intFromFloat(node.computed.y),
+                .x = @intFromFloat(screen_x),
+                .y = @intFromFloat(screen_y),
                 .w = @intFromFloat(node.computed.w),
                 .h = @intFromFloat(node.computed.h),
             };
@@ -405,10 +804,36 @@ const Painter = struct {
             const pad_l = node.style.padLeft();
             const pad_t = node.style.padTop();
             const col = node.text_color orelse Color.rgb(255, 255, 255);
-            self.text_engine.drawText(txt, node.computed.x + pad_l, node.computed.y + pad_t, node.font_size, col);
+            self.text_engine.drawText(txt, screen_x + pad_l, screen_y + pad_t, node.font_size, col);
         }
+
+        var prev_clip: c.SDL_Rect = undefined;
+        var had_prev_clip = false;
+        const needs_clip = node.style.overflow != .visible;
+        if (needs_clip) {
+            c.SDL_RenderGetClipRect(self.renderer, &prev_clip);
+            had_prev_clip = (prev_clip.w > 0 and prev_clip.h > 0);
+            var clip = c.SDL_Rect{
+                .x = @intFromFloat(screen_x), .y = @intFromFloat(screen_y),
+                .w = @intFromFloat(node.computed.w), .h = @intFromFloat(node.computed.h),
+            };
+            if (had_prev_clip) {
+                const ix1 = @max(clip.x, prev_clip.x); const iy1 = @max(clip.y, prev_clip.y);
+                const ix2 = @min(clip.x + clip.w, prev_clip.x + prev_clip.w);
+                const iy2 = @min(clip.y + clip.h, prev_clip.y + prev_clip.h);
+                clip.x = ix1; clip.y = iy1;
+                clip.w = @max(0, ix2 - ix1); clip.h = @max(0, iy2 - iy1);
+            }
+            _ = c.SDL_RenderSetClipRect(self.renderer, &clip);
+        }
+        const child_sx = scroll_offset_x + if (needs_clip) node.scroll_x else @as(f32, 0);
+        const child_sy = scroll_offset_y + if (needs_clip) node.scroll_y else @as(f32, 0);
         for (node.children) |*child| {
-            self.paintTree(child);
+            self.paintTree(child, child_sx, child_sy);
+        }
+        if (needs_clip) {
+            if (had_prev_clip) { _ = c.SDL_RenderSetClipRect(self.renderer, &prev_clip); }
+            else { _ = c.SDL_RenderSetClipRect(self.renderer, null); }
         }
     }
 };
@@ -452,13 +877,25 @@ ${arrays.join('\n')}
                     }
                 },
                 c.SDL_KEYDOWN => { if (event.key.keysym.sym == c.SDLK_ESCAPE) running = false; },
+                c.SDL_MOUSEWHEEL => {
+                    var mx_i: c_int = undefined;
+                    var my_i: c_int = undefined;
+                    _ = c.SDL_GetMouseState(&mx_i, &my_i);
+                    const mx: f32 = @floatFromInt(mx_i);
+                    const my: f32 = @floatFromInt(my_i);
+                    if (events.findScrollContainer(&root, mx, my)) |scroll_node| {
+                        scroll_node.scroll_y -= @as(f32, @floatFromInt(event.wheel.y)) * 30.0;
+                        const max_scroll = @max(0.0, scroll_node.content_height - scroll_node.computed.h);
+                        scroll_node.scroll_y = @max(0.0, @min(scroll_node.scroll_y, max_scroll));
+                    }
+                },
                 else => {},
             }
         }
 
         layout.layout(&root, 0, 0, win_w, win_h);
         painter.clear(Color.rgb(24, 24, 32));
-        painter.paintTree(&root);
+        painter.paintTree(&root, 0, 0);
         painter.present();
     }
 }
@@ -482,7 +919,7 @@ if (!command || !inputFile) {
 const source = fs.readFileSync(inputFile, 'utf-8');
 const sf = ts.createSourceFile(inputFile, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
 
-const compiler = new TszCompiler(sf);
+const compiler = new TszCompiler(sf, path.resolve(inputFile));
 const zigSource = compiler.compile();
 
 // Write generated Zig to the engine directory

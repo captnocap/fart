@@ -1,32 +1,52 @@
-// The first .tsz application.
-// This compiles to a native binary via Zig. No runtime. No interpreter.
-// Just: tsz build app.tsz → ./tsz-app
+// Component composition demo — .tsz Phase 3.1
+// Multi-component, multi-file, children forwarding, prop substitution.
+// All resolved at compile time — no runtime dispatch.
+
+import { Button } from './components/Button.tsz';
+import { Card } from './components/Card.tsz';
+import { Header } from './components/Header.tsz';
+
+// Local component — defined in the same file as App
+function Badge({ text, bg }: { text: string; bg: string }) {
+  return (
+    <Box style={{ padding: 6, paddingLeft: 12, paddingRight: 12, backgroundColor: bg }}>
+      <Text fontSize={11} color="#ffffff">{text}</Text>
+    </Box>
+  );
+}
+
+// Another local component — uses Badge (component-in-component)
+function StatusBar() {
+  return (
+    <Box style={{ flexDirection: 'row', gap: 8, padding: 8, backgroundColor: '#16161e' }}>
+      <Badge text="Zig" bg="#f7a41d" />
+      <Badge text="SDL2" bg="#1a5fb4" />
+      <Badge text="No Runtime" bg="#4ec9b0" />
+    </Box>
+  );
+}
 
 function App() {
   return (
-    <Box style={{ width: 500, padding: 32, flexDirection: 'column', gap: 16, backgroundColor: '#1e1e2a' }}>
-      <Text fontSize={32} color="#ffffff">Hello from .tsz</Text>
-      <Text fontSize={16} color="#78788c">
-        This UI was written in TypeScript and compiled to a native binary.
-      </Text>
+    <Box style={{ width: 500, flexDirection: 'column', gap: 12 }}>
+      <Header title="Component Composition" />
 
-      <Box style={{ flexDirection: 'row', gap: 10 }}>
-        <Box style={{ flexGrow: 1, padding: 16, backgroundColor: '#eb5757' }}>
-          <Text fontSize={12} color="#ffffff">No Love2D</Text>
-        </Box>
-        <Box style={{ flexGrow: 1, padding: 16, backgroundColor: '#56a0d6' }}>
-          <Text fontSize={12} color="#ffffff">No LuaJIT</Text>
-        </Box>
-        <Box style={{ flexGrow: 1, padding: 16, backgroundColor: '#4ec9b0' }}>
-          <Text fontSize={12} color="#ffffff">No QuickJS</Text>
-        </Box>
-      </Box>
-
-      <Box style={{ padding: 16, backgroundColor: '#282838' }}>
-        <Text fontSize={14} color="#ff79c6">
-          TypeScript → Zig → native binary. One step.
+      <Card>
+        <Text fontSize={16} color="#aaaaaa">
+          This card uses children forwarding.
         </Text>
+        <Text fontSize={14} color="#666688">
+          Everything inlined at compile time.
+        </Text>
+      </Card>
+
+      <Box style={{ flexDirection: 'row', gap: 8, padding: 12 }}>
+        <Button label="Save" color="#4caf50" />
+        <Button label="Cancel" color="#f44336" />
+        <Button label="Help" color="#2196f3" />
       </Box>
+
+      <StatusBar />
     </Box>
   );
 }
