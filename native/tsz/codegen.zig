@@ -75,6 +75,9 @@ pub const Generator = struct {
     windows: [MAX_WINDOWS]WindowInfo,
     window_count: u32,
 
+    // TextInputs
+    input_count: u32,
+
     pub fn init(alloc: std.mem.Allocator, lex: *const Lexer, source: []const u8, input_file: []const u8) Generator {
         return .{
             .alloc = alloc,
@@ -97,6 +100,7 @@ pub const Generator = struct {
             .ffi_funcs = .{},
             .windows = undefined,
             .window_count = 0,
+            .input_count = 0,
         };
     }
 
@@ -323,8 +327,10 @@ pub const Generator = struct {
         var title_str: []const u8 = "";
         var width_str: []const u8 = "400";
         var height_str: []const u8 = "300";
+        var placeholder_str: []const u8 = "";
         const is_window = std.mem.eql(u8, tag_name, "Window");
         const is_scroll = std.mem.eql(u8, tag_name, "ScrollView");
+        const is_text_input = std.mem.eql(u8, tag_name, "TextInput");
 
         while (self.curKind() != .gt and self.curKind() != .slash_gt and self.curKind() != .eof) {
             if (self.curKind() == .identifier) {
@@ -346,6 +352,8 @@ pub const Generator = struct {
                         width_str = try self.parseExprAttr();
                     } else if (std.mem.eql(u8, attr_name, "height")) {
                         height_str = try self.parseExprAttr();
+                    } else if (std.mem.eql(u8, attr_name, "placeholder")) {
+                        placeholder_str = try self.parseStringAttr();
                     } else if (std.mem.eql(u8, attr_name, "onPress")) {
                         // Record the token range for the handler
                         on_press_start = self.pos;
@@ -459,7 +467,18 @@ pub const Generator = struct {
         } else if (text_content) |tc| {
             if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
             try fields.appendSlice(self.alloc, ".text = \"");
-            try fields.appendSlice(self.alloc, tc);
+            // Escape characters that break Zig string literals
+            for (tc) |ch| {
+                if (ch == '"') {
+                    try fields.appendSlice(self.alloc, "\\\"");
+                } else if (ch == '\\') {
+                    try fields.appendSlice(self.alloc, "\\\\");
+                } else if (ch == '\n') {
+                    try fields.appendSlice(self.alloc, "\\n");
+                } else {
+                    try fields.append(self.alloc, ch);
+                }
+            }
             try fields.appendSlice(self.alloc, "\"");
         }
 
@@ -504,6 +523,19 @@ pub const Generator = struct {
             try fields.appendSlice(self.alloc, ".handlers = .{ .on_press = ");
             try fields.appendSlice(self.alloc, handler_name);
             try fields.appendSlice(self.alloc, " }");
+        }
+
+        // TextInput — assign input ID and placeholder
+        if (is_text_input) {
+            const iid = self.input_count;
+            self.input_count += 1;
+            if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
+            try fields.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, ".input_id = {d}", .{iid}));
+            if (placeholder_str.len > 0) {
+                try fields.appendSlice(self.alloc, ", .placeholder = \"");
+                try fields.appendSlice(self.alloc, placeholder_str);
+                try fields.appendSlice(self.alloc, "\"");
+            }
         }
 
         // Children
@@ -1045,6 +1077,7 @@ pub const Generator = struct {
         try out.appendSlice(self.alloc, "const watchdog = @import(\"watchdog.zig\");\n");
         try out.appendSlice(self.alloc, "const bsod = @import(\"bsod.zig\");\n");
         try out.appendSlice(self.alloc, "const leaktest = @import(\"leaktest.zig\");\n");
+        try out.appendSlice(self.alloc, "const input_mod = @import(\"input.zig\");\n");
         if (self.has_state) try out.appendSlice(self.alloc, "const state = @import(\"state.zig\");\n");
 
         // FFI imports
@@ -1138,6 +1171,12 @@ pub const Generator = struct {
             // Dev mode: restore state from previous session + install save-on-signal
             try out.appendSlice(self.alloc, "    _ = state.loadState();\n");
             try out.appendSlice(self.alloc, "    state.installSignalHandler();\n");
+        }
+        // Register text inputs
+        if (self.input_count > 0) {
+            for (0..self.input_count) |i| {
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "    input_mod.register({d});\n", .{i}));
+            }
         }
         if (self.dyn_count > 0) try out.appendSlice(self.alloc, "    updateDynamicTexts();\n");
 

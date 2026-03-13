@@ -56,11 +56,31 @@ fn decodeUtf8(bytes: []const u8) Utf8Char {
 
 // ── Text Engine ─────────────────────────────────────────────────────────────
 
+const MAX_FALLBACK_FONTS = 4;
+
+/// System font paths to try as fallbacks (CJK, symbols, emoji).
+/// Checked in order; first one that exists on disk gets loaded.
+const FALLBACK_FONT_PATHS = [_][*:0]const u8{
+    // Noto Sans CJK (common on Debian/Ubuntu)
+    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+    // Noto Sans CJK (Arch, Fedora)
+    "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
+    // WenQuanYi (fallback CJK)
+    "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
+    // Noto Sans symbols
+    "/usr/share/fonts/truetype/noto/NotoSansSymbols2-Regular.ttf",
+};
+
 pub const TextEngine = struct {
     library: c.FT_Library,
     face: c.FT_Face,
     renderer: *c.SDL_Renderer,
     current_size: u16,
+    fallback_size: u16,
+
+    // Fallback fonts for glyphs missing from the primary face
+    fallback_faces: [MAX_FALLBACK_FONTS]c.FT_Face,
+    fallback_count: usize,
 
     // Simple flat cache — good enough for Phase 2
     cache_keys: [MAX_CACHED_GLYPHS]GlyphKey,
@@ -81,11 +101,27 @@ pub const TextEngine = struct {
         // Default size
         _ = c.FT_Set_Pixel_Sizes(face, 0, 16);
 
+        // Load fallback fonts (best-effort — missing fonts are silently skipped)
+        var fallbacks: [MAX_FALLBACK_FONTS]c.FT_Face = undefined;
+        var fb_count: usize = 0;
+        for (FALLBACK_FONT_PATHS) |fb_path| {
+            if (fb_count >= MAX_FALLBACK_FONTS) break;
+            var fb_face: c.FT_Face = undefined;
+            if (c.FT_New_Face(library, fb_path, 0, &fb_face) == 0) {
+                _ = c.FT_Set_Pixel_Sizes(fb_face, 0, 16);
+                fallbacks[fb_count] = fb_face;
+                fb_count += 1;
+            }
+        }
+
         return TextEngine{
             .library = library,
             .face = face,
             .renderer = renderer,
             .current_size = 16,
+            .fallback_size = 16,
+            .fallback_faces = fallbacks,
+            .fallback_count = fb_count,
             .cache_keys = undefined,
             .cache_vals = undefined,
             .cache_count = 0,
@@ -99,6 +135,9 @@ pub const TextEngine = struct {
                 c.SDL_DestroyTexture(tex);
             }
         }
+        for (0..self.fallback_count) |i| {
+            _ = c.FT_Done_Face(self.fallback_faces[i]);
+        }
         _ = c.FT_Done_Face(self.face);
         _ = c.FT_Done_FreeType(self.library);
     }
@@ -107,6 +146,15 @@ pub const TextEngine = struct {
         if (self.current_size != size_px) {
             _ = c.FT_Set_Pixel_Sizes(self.face, 0, size_px);
             self.current_size = size_px;
+        }
+    }
+
+    fn setFallbackSize(self: *TextEngine, size_px: u16) void {
+        if (self.fallback_size != size_px) {
+            for (0..self.fallback_count) |i| {
+                _ = c.FT_Set_Pixel_Sizes(self.fallback_faces[i], 0, size_px);
+            }
+            self.fallback_size = size_px;
         }
     }
 
@@ -136,13 +184,28 @@ pub const TextEngine = struct {
             self.cache_count -= 1;
         }
 
+        // Try primary face first; fall back to secondary faces if glyph is missing
         self.setSize(size_px);
+        const glyph_index = c.FT_Get_Char_Index(self.face, codepoint);
+        var use_face = self.face;
 
-        if (c.FT_Load_Char(self.face, codepoint, c.FT_LOAD_RENDER) != 0) {
+        if (glyph_index == 0 and self.fallback_count > 0) {
+            // Primary font doesn't have this glyph — try fallbacks
+            self.setFallbackSize(size_px);
+            for (0..self.fallback_count) |fi| {
+                const fb_idx = c.FT_Get_Char_Index(self.fallback_faces[fi], codepoint);
+                if (fb_idx != 0) {
+                    use_face = self.fallback_faces[fi];
+                    break;
+                }
+            }
+        }
+
+        if (c.FT_Load_Char(use_face, codepoint, c.FT_LOAD_RENDER) != 0) {
             return null;
         }
 
-        const glyph = self.face.*.glyph;
+        const glyph = use_face.*.glyph;
         const bitmap = glyph.*.bitmap;
         const bw: i32 = @intCast(bitmap.width);
         const bh: i32 = @intCast(bitmap.rows);

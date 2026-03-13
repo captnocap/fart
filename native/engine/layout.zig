@@ -181,6 +181,11 @@ pub const Node = struct {
     /// Image source path (null for non-image nodes)
     image_src: ?[]const u8 = null,
 
+    /// TextInput: input slot ID (null for non-input nodes)
+    input_id: ?u8 = null,
+    /// TextInput: placeholder text
+    placeholder: ?[]const u8 = null,
+
     /// Event handlers (onPress, onHover, onKey). Set at compile time.
     handlers: events.EventHandler = .{},
 
