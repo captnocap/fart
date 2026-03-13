@@ -441,8 +441,19 @@ const EXAMPLES: { label: string; code: string }[] = [
 export function SleepySyntaxStory() {
   const c = useThemeColors();
   const [code, setCode] = useState(EXAMPLES[0].code);
+  const [inputKey, setInputKey] = useState(0);
 
-  // Derive AST from code during render — no extra state, no feedback loop
+  // Guard against controlled TextInput feedback loop — only update if truly different
+  const handleChange = (text: string) => {
+    if (text !== code) setCode(text);
+  };
+
+  const loadExample = (ex: typeof EXAMPLES[number]) => {
+    setCode(ex.code);
+    setInputKey((k) => k + 1); // force TextInput remount with new defaultValue
+  };
+
+  // Derive AST from code during render
   let ast: SleepyNode | null = null;
   let parseError: string | null = null;
   try {
@@ -467,7 +478,7 @@ export function SleepySyntaxStory() {
           {EXAMPLES.map((ex) => (
             <Pressable
               key={ex.label}
-              onPress={() => setCode(ex.code)}
+              onPress={() => loadExample(ex)}
               style={({ hovered }: { hovered: boolean }) => ({
                 backgroundColor: hovered ? c.surface : c.bgElevated,
                 paddingLeft: 10, paddingRight: 10, paddingTop: 5, paddingBottom: 5, borderRadius: 5,
@@ -492,8 +503,10 @@ export function SleepySyntaxStory() {
           </Box>
           <Box style={{ flexGrow: 1, padding: 0 }}>
             <TextInput
-              value={code}
-              onChangeText={setCode}
+              key={inputKey}
+              defaultValue={code}
+              onLiveChange={handleChange}
+              liveChangeDebounce={150}
               multiline
               style={{
                 width: '100%', height: '100%',
