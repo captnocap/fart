@@ -142,7 +142,8 @@ pub const TextMetrics = struct {
 
 /// Function pointer type for text measurement callback.
 /// The layout engine calls this to measure text nodes.
-pub const MeasureTextFn = *const fn (text: []const u8, font_size: u16) TextMetrics;
+/// max_width: wrapping constraint in pixels (0 = unconstrained single line).
+pub const MeasureTextFn = *const fn (text: []const u8, font_size: u16, max_width: f32) TextMetrics;
 
 /// Image dimensions returned by the image measurement callback.
 pub const ImageDims = struct {
@@ -236,9 +237,15 @@ fn measureNodeImage(node: *Node) ImageDims {
 }
 
 fn measureNodeText(node: *Node) TextMetrics {
+    return measureNodeTextW(node, 0);
+}
+
+/// Measure text with a width constraint for word wrapping.
+/// max_width = 0 means unconstrained (single line).
+fn measureNodeTextW(node: *Node, max_width: f32) TextMetrics {
     if (node.text) |text| {
         if (_measure_fn) |measure| {
-            return measure(text, node.font_size);
+            return measure(text, node.font_size, max_width);
         }
     }
     return .{};
@@ -642,8 +649,9 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
     // ── Auto-height: shrink-wrap to content ─────────────────────────
     if (h == null) {
         if (node.text != null) {
-            // Text nodes: use measured text height + padding
-            const m = measureNodeText(node);
+            // Text nodes: measure with wrapping constraint from allocated width
+            const text_max_w = inner_w;
+            const m = measureNodeTextW(node, text_max_w);
             h = m.height + pad_t + pad_b;
         } else if (is_row) {
             h = content_cross_end + pad_t + pad_b;

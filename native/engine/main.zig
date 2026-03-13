@@ -25,9 +25,9 @@ var g_text_engine: ?*TextEngine = null;
 // ── Global image cache (set during init, used by layout measure callback) ───
 var g_image_cache: ?*ImageCache = null;
 
-fn measureCallback(t: []const u8, font_size: u16) layout.TextMetrics {
+fn measureCallback(t: []const u8, font_size: u16, max_width: f32) layout.TextMetrics {
     if (g_text_engine) |te| {
-        return te.measureText(t, font_size);
+        return te.measureTextWrapped(t, font_size, max_width);
     }
     return .{};
 }
@@ -122,16 +122,19 @@ const Painter = struct {
             }
         }
 
-        // Paint text
+        // Paint text (with word wrapping to node width)
         if (node.text) |txt| {
             const pad_l = node.style.padLeft();
+            const pad_r = node.style.padRight();
             const pad_t = node.style.padTop();
             const color = node.text_color orelse Color.rgb(255, 255, 255);
-            self.text_engine.drawText(
+            const text_max_w = node.computed.w - pad_l - pad_r;
+            self.text_engine.drawTextWrapped(
                 txt,
                 screen_x + pad_l,
                 screen_y + pad_t,
                 node.font_size,
+                text_max_w,
                 color,
             );
         }

@@ -171,44 +171,178 @@ pub const TextEngine = struct {
         return &self.cache_vals[idx];
     }
 
+        /// Get the advance width of a single character.
+    fn charAdvance(self: *TextEngine, byte: u8, size_px: u16) f32 {
+        if (self.rasterizeGlyph(@as(u32, byte), size_px)) |g| {
+            return @floatFromInt(g.advance);
+        }
+        return 0;
+    }
+
+    /// Get font-level line metrics for the current size.
+    fn lineMetrics(self: *TextEngine, size_px: u16) struct { ascent: f32, height: f32 } {
+        self.setSize(size_px);
+        const metrics = self.face.*.size.*.metrics;
+        const ascent: f32 = @as(f32, @floatFromInt(metrics.ascender)) / 64.0;
+        const descent: f32 = @as(f32, @floatFromInt(-metrics.descender)) / 64.0;
+        return .{ .ascent = ascent, .height = ascent + descent };
+    }
+
+    // ── Word wrapping ───────────────────────────────────────────────────
+
+    const MAX_WRAP_LINES = 256;
+
+    const WrapResult = struct {
+        line_starts: [MAX_WRAP_LINES]usize = undefined,
+        line_ends: [MAX_WRAP_LINES]usize = undefined,
+        count: usize = 0,
+
+        fn addLine(self: *WrapResult, start: usize, end: usize) void {
+            if (self.count < MAX_WRAP_LINES) {
+                self.line_starts[self.count] = start;
+                self.line_ends[self.count] = end;
+                self.count += 1;
+            }
+        }
+    };
+
+    /// Compute word-wrap line breaks for text within max_width.
+    /// Words are delimited by spaces. Newlines force a break.
+    /// Words wider than max_width get their own line (no mid-word break).
+    fn wordWrap(self: *TextEngine, text: []const u8, size_px: u16, max_width: f32) WrapResult {
+        var result = WrapResult{};
+
+        if (text.len == 0) {
+            result.addLine(0, 0);
+            return result;
+        }
+
+        self.setSize(size_px);
+        const space_w = self.charAdvance(' ', size_px);
+
+        var line_start: usize = 0;
+        var line_width: f32 = 0;
+        var last_word_end: usize = 0;
+        var i: usize = 0;
+
+        while (i < text.len) {
+            // Handle newline — explicit line break
+            if (text[i] == '\n') {
+                const end = if (last_word_end > line_start) last_word_end else i;
+                result.addLine(line_start, end);
+                i += 1;
+                line_start = i;
+                last_word_end = i;
+                line_width = 0;
+                continue;
+            }
+
+            // Skip spaces
+            if (text[i] == ' ') {
+                i += 1;
+                continue;
+            }
+
+            // Found start of a word — measure the whole word
+            const word_start = i;
+            var word_width: f32 = 0;
+            while (i < text.len and text[i] != ' ' and text[i] != '\n') {
+                word_width += self.charAdvance(text[i], size_px);
+                i += 1;
+            }
+            const word_end = i;
+
+            // Would adding this word overflow the line?
+            const need_space = (line_width > 0);
+            const with_word = line_width + (if (need_space) space_w else @as(f32, 0)) + word_width;
+
+            if (need_space and with_word > max_width) {
+                // Wrap: emit current line, start new line at this word
+                result.addLine(line_start, last_word_end);
+                line_start = word_start;
+                line_width = word_width;
+                last_word_end = word_end;
+            } else {
+                line_width = with_word;
+                last_word_end = word_end;
+            }
+        }
+
+        // Emit final line
+        if (line_start <= text.len) {
+            const end = if (last_word_end > line_start) last_word_end else text.len;
+            result.addLine(line_start, end);
+        }
+
+        if (result.count == 0) {
+            result.addLine(0, text.len);
+        }
+
+        return result;
+    }
+
+    // ── Measurement ─────────────────────────────────────────────────────
+
     /// Measure a string's width and height at the given font size.
     /// Height uses the font's line metrics (consistent per font size),
     /// not per-glyph ink bounds (which vary by character and cause overlap).
     pub fn measureText(self: *TextEngine, text: []const u8, size_px: u16) layout.TextMetrics {
-        self.setSize(size_px);
-
-        // Font-level line metrics (26.6 fixed point → pixels)
-        const metrics = self.face.*.size.*.metrics;
-        const line_ascent: f32 = @as(f32, @floatFromInt(metrics.ascender)) / 64.0;
-        const line_descent: f32 = @as(f32, @floatFromInt(-metrics.descender)) / 64.0;
-        const line_height: f32 = line_ascent + line_descent;
+        const lm = self.lineMetrics(size_px);
 
         var width: f32 = 0;
         for (text) |byte| {
-            const codepoint: u32 = byte; // ASCII for Phase 2
-            if (self.rasterizeGlyph(codepoint, size_px)) |g| {
+            if (self.rasterizeGlyph(@as(u32, byte), size_px)) |g| {
                 width += @floatFromInt(g.advance);
             }
         }
 
         return .{
             .width = width,
-            .height = line_height,
-            .ascent = line_ascent,
+            .height = lm.height,
+            .ascent = lm.ascent,
         };
     }
 
-    /// Draw a string at (x, y) with the given color and size.
+    /// Measure text with word wrapping within max_width.
+    /// Returns the widest wrapped line's width and total wrapped height.
+    /// If max_width <= 0, falls back to unwrapped measureText.
+    pub fn measureTextWrapped(self: *TextEngine, text: []const u8, size_px: u16, max_width: f32) layout.TextMetrics {
+        if (max_width <= 0) {
+            return self.measureText(text, size_px);
+        }
+
+        const lm = self.lineMetrics(size_px);
+        const wrap = self.wordWrap(text, size_px, max_width);
+
+        // Find the widest line
+        var widest: f32 = 0;
+        for (0..wrap.count) |li| {
+            const line = text[wrap.line_starts[li]..wrap.line_ends[li]];
+            var lw: f32 = 0;
+            for (line) |byte| {
+                if (self.rasterizeGlyph(@as(u32, byte), size_px)) |g| {
+                    lw += @floatFromInt(g.advance);
+                }
+            }
+            if (lw > widest) widest = lw;
+        }
+
+        return .{
+            .width = @min(widest, max_width),
+            .height = lm.height * @as(f32, @floatFromInt(wrap.count)),
+            .ascent = lm.ascent,
+        };
+    }
+
+    // ── Drawing ──────────────────────────────────────────────────────────
+
+    /// Draw a single line of text at (x, y) with the given color and size.
     /// y is the top of the text bounding box (not baseline).
     pub fn drawText(self: *TextEngine, text: []const u8, x: f32, y: f32, size_px: u16, color: layout.Color) void {
-        self.setSize(size_px);
-
-        // Use font-level ascent for consistent baseline (matches measureText)
-        const metrics = self.face.*.size.*.metrics;
-        const line_ascent: f32 = @as(f32, @floatFromInt(metrics.ascender)) / 64.0;
+        const lm = self.lineMetrics(size_px);
 
         var pen_x = x;
-        const baseline_y = y + line_ascent;
+        const baseline_y = y + lm.ascent;
 
         for (text) |byte| {
             const codepoint: u32 = byte;
@@ -227,6 +361,24 @@ pub const TextEngine = struct {
                 }
                 pen_x += @floatFromInt(g.advance);
             }
+        }
+    }
+
+    /// Draw text with word wrapping within max_width.
+    /// If max_width <= 0, falls back to single-line drawText.
+    pub fn drawTextWrapped(self: *TextEngine, text: []const u8, x: f32, y: f32, size_px: u16, max_width: f32, color: layout.Color) void {
+        if (max_width <= 0) {
+            self.drawText(text, x, y, size_px, color);
+            return;
+        }
+
+        const lm = self.lineMetrics(size_px);
+        const wrap = self.wordWrap(text, size_px, max_width);
+
+        for (0..wrap.count) |li| {
+            const line = text[wrap.line_starts[li]..wrap.line_ends[li]];
+            const line_y = y + lm.height * @as(f32, @floatFromInt(li));
+            self.drawText(line, x, line_y, size_px, color);
         }
     }
 };

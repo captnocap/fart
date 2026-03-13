@@ -269,9 +269,11 @@ fn paintNode(
 
     if (node.text) |txt| {
         const pad_l = node.style.padLeft();
+        const pad_r = node.style.padRight();
         const pad_t = node.style.padTop();
         const col = node.text_color orelse Color.rgb(255, 255, 255);
-        te.drawText(txt, screen_x + pad_l, screen_y + pad_t, node.font_size, col);
+        const text_max_w = node.computed.w - pad_l - pad_r;
+        te.drawTextWrapped(txt, screen_x + pad_l, screen_y + pad_t, node.font_size, text_max_w, col);
     }
 
     // Recurse children (simplified — no scissor clipping for now)
