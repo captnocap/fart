@@ -62,6 +62,7 @@ local _sessionNodeMap = {}  -- "default" -> numeric nodeId
 -- Classified snapshots: captured on submit (Enter) and slash (/) after settle
 local _snapshots = {}       -- nodeId -> { { trigger, frame, timestamp, rows } }
 local _pendingCaptures = {} -- nodeId -> { { trigger, framesLeft }, ... }
+local _lastSettleDmg = {}   -- nodeId -> lastDamageAt when last settle snapshot fired (dedup)
 
 -- Scroll step sizes
 local SCROLL_LINE = 40   -- pixels per mouse wheel notch
@@ -218,6 +219,7 @@ Capabilities.register("ClaudeCanvas", {
     _lastDiff[nodeId] = nil
     _snapshots[nodeId] = nil
     _pendingCaptures[nodeId] = nil
+    _lastSettleDmg[nodeId] = nil
   end,
 
   -- ── Visual capability methods (painter.lua / layout.lua) ──────
@@ -362,6 +364,7 @@ Capabilities.register("ClaudeCanvas", {
       -- Group type lookup: which tokens form interactive groups
       local GROUP_TYPES = {
         menu_title = "menu", menu_option = "menu", menu_desc = "menu",
+        menu_example = "menu", form_label = "menu", form_field = "menu",
         list_selectable = "menu", list_selected = "menu", list_info = "menu",
         search_box = "menu", selector = "menu", confirmation = "menu", hint = "menu",
         picker_title = "picker", picker_item = "picker",
@@ -376,7 +379,7 @@ Capabilities.register("ClaudeCanvas", {
         assistant_text = true, user_text = true, diff = true,
         text = true, banner = true, thinking = true, plan_mode = true,
         status_bar = true, input_border = true, warning = true,
-        tool = true, result = true,
+        tool = true, result = true, form_field = true, menu_example = true,
       }
 
       -- Per-turn sequence counters (reset on turn change)
@@ -558,6 +561,42 @@ Capabilities.register("ClaudeCanvas", {
             end
           end
 
+          -- Form label: list_selectable rows ending with ":" inside menu context
+          -- e.g. "Possible matcher values for field trigger:", "Matcher:"
+          if inMenu and (kind == "list_selectable") then
+            local trimmed = rowText:match("^%s*(.-)%s*$")
+            if trimmed:sub(-1) == ":" then
+              kind = "form_label"
+            end
+          end
+
+          -- Form field: box_drawing rows forming ╭ │ ╰ bordered input box inside menu context
+          -- Detect ╭───╮ / │ │ / ╰───╯ patterns when preceded by form_label
+          if inMenu and kind == "box_drawing" then
+            if rowText:find("╭", 1, true) or rowText:find("╰", 1, true)
+               or (rowText:find("│", 1, true) and prevKind == "form_field") then
+              -- Only reclassify if previous row was form_label or form_field
+              if prevKind == "form_label" or prevKind == "form_field" then
+                kind = "form_field"
+              end
+            end
+          end
+
+          -- Menu example: assistant_text (bullet rows) after a menu_title containing "Example"
+          -- e.g. "Example Matchers:" followed by "• Write (single tool)"
+          if kind == "assistant_text" and prevKind == "menu_example" then
+            kind = "menu_example"
+          end
+          if kind == "assistant_text" and prevKind == "menu_title" then
+            -- Check if previous menu_title contained "Example"
+            if row > 0 then
+              local prevText = vterm:getRowText(row - 1)
+              if prevText:find("Example", 1, true) then
+                kind = "menu_example"
+              end
+            end
+          end
+
           -- Override: rows in the input zone get zone-specific tags
           if row >= boundary then
             if Session.isSeparatorRow(vterm, row) then
@@ -654,6 +693,13 @@ Capabilities.register("ClaudeCanvas", {
             elseif kind == "menu_desc" then
               -- Share parent menu_option's nodeId so they're one logical node
               nid = "g" .. currentGroupId .. ":menu:item:" .. groupItemIndex
+            elseif kind == "form_label" then
+              groupItemIndex = groupItemIndex + 1
+              nid = "g" .. currentGroupId .. ":form:label:" .. groupItemIndex
+            elseif kind == "form_field" then
+              nid = "g" .. currentGroupId .. ":form:field:" .. groupItemIndex
+            elseif kind == "menu_example" then
+              nid = "g" .. currentGroupId .. ":menu:example"
             elseif kind == "list_selectable" then
               groupItemIndex = groupItemIndex + 1
               nid = "g" .. currentGroupId .. ":menu:item:" .. groupItemIndex
@@ -816,6 +862,31 @@ Capabilities.register("ClaudeCanvas", {
           end
         end
         _pendingCaptures[nodeId] = #remaining > 0 and remaining or nil
+      end
+
+      -- Settle-based snapshot: auto-capture when a form_field is visible and damage settles
+      -- This catches text typed into form fields (no Enter or / trigger)
+      local hasFormField = false
+      for _, entry in ipairs(classifiedCache) do
+        if entry.kind == "form_field" then hasFormField = true; break end
+      end
+      if hasFormField then
+        local dbgSettle = Session.getDebugInfo()
+        local dmgAge = dbgSettle.lastDmg or -1
+        -- Damage happened recently (< 2s ago) and has settled (settle timer expired)
+        if dmgAge > 200 and dmgAge < 2000 and (dbgSettle.settle or 0) < 0 then
+          local lastDmgKey = _lastSettleDmg[nodeId]
+          -- Only capture if this is a new settle epoch (different damage timestamp)
+          if lastDmgKey ~= dmgAge then
+            _lastSettleDmg[nodeId] = dmgAge
+            if not _pendingCaptures[nodeId] then _pendingCaptures[nodeId] = {} end
+            local pc = _pendingCaptures[nodeId]
+            pc[#pc + 1] = { trigger = "settle", framesLeft = 1 }
+          end
+        end
+      else
+        -- Reset settle dedup when no form field visible
+        _lastSettleDmg[nodeId] = nil
       end
 
       -- Build semantic graph from classified cache
