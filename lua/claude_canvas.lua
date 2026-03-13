@@ -394,6 +394,7 @@ Capabilities.register("ClaudeCanvas", {
       local turnDiffSeq = 0
       local turnErrorSeq = 0
       local turnBoxSeq = 0
+      local turnDivSeq = 0
       local turnPlanSeq = 0
       local turnWizardSeq = 0
       local turnImageSeq = 0
@@ -537,8 +538,8 @@ Capabilities.register("ClaudeCanvas", {
             kind = prevKind  -- inherit parent hint subtype
           end
 
-          -- Structure check: detect menu context after box_drawing separator
-          if prevKind == "box_drawing" then
+          -- Structure check: detect menu context after divider or box_drawing separator
+          if prevKind == "divider" or prevKind == "box_drawing" then
             if kind == "list_selectable" then
               if rowText:find("Search", 1, true) then
                 kind = "search_box"
@@ -638,7 +639,7 @@ Capabilities.register("ClaudeCanvas", {
             currentTurnId = currentTurnId + 1
             -- Reset per-turn sequence counters
             turnThinkSeq = 0; turnToolSeq = 0; turnResultSeq = 0; turnAsstSeq = 0
-            turnDiffSeq = 0; turnErrorSeq = 0; turnBoxSeq = 0
+            turnDiffSeq = 0; turnErrorSeq = 0; turnBoxSeq = 0; turnDivSeq = 0
             turnPlanSeq = 0; turnWizardSeq = 0; turnImageSeq = 0
           end
 
@@ -701,6 +702,9 @@ Capabilities.register("ClaudeCanvas", {
             elseif kind == "box_drawing" then
               turnBoxSeq = turnBoxSeq + 1
               nid = "t" .. currentTurnId .. ":box:" .. turnBoxSeq
+            elseif kind == "divider" then
+              turnDivSeq = turnDivSeq + 1
+              nid = "t" .. currentTurnId .. ":div:" .. turnDivSeq
             -- Group-scoped
             elseif kind == "menu_title" then nid = "g" .. currentGroupId .. ":menu:title"
             elseif kind == "menu_option" then

@@ -301,7 +301,7 @@ local function classifyRow(text, row, totalRows)
   -- Plan/content block borders: ╌╌╌ dashed lines (distinct from ─── solid chrome)
   local stripped = text:match("^%s*(.-)%s*$")
   if stripped:find("╌╌╌", 1, true) then return "plan_border" end
-  if stripped:find("────", 1, true) then return "box_drawing" end
+  if stripped:find("────", 1, true) then return "divider" end
 
   -- Wizard step indicator: ← □ Drop tar... □ Direction ✓ Submit →
   if text:find("□", 1, true) and (text:find("←", 1, true) or text:find("→", 1, true)) then
@@ -1106,7 +1106,7 @@ Capabilities.register("ClaudeCode", {
                 local kind = classifyRow(text, i, TERM_ROWS)
                 -- These kinds mark the start of Claude's output
                 if kind == "thinking" or kind == "tool" or kind == "box_drawing"
-                   or kind == "diff" or kind == "error" then
+                   or kind == "divider" or kind == "diff" or kind == "error" then
                   responseStart = i
                   break
                 end
@@ -1174,7 +1174,7 @@ Capabilities.register("ClaudeCode", {
                 if #text > 0 then
                   local kind = classifyRow(text, i, TERM_ROWS)
                   if kind == "thinking" or kind == "tool" or kind == "box_drawing"
-                     or kind == "diff" or kind == "error" then
+                     or kind == "divider" or kind == "diff" or kind == "error" then
                     responseStart = i
                     break
                   end
