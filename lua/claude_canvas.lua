@@ -380,7 +380,7 @@ Capabilities.register("ClaudeCanvas", {
       local BLOCK_TYPES = {
         assistant_text = true, user_text = true, diff = true,
         text = true, banner = true, thinking = true, plan_mode = true,
-        status_bar = true, input_border = true, warning = true,
+        status_bar = true, input_border = true, ["warning:large_prompt"] = true,
         tool = true, result = true, form_field = true, menu_example = true, detail_text = true,
         ["hint:navigate"] = true, ["hint:dismiss"] = true, ["hint:cancel"] = true,
         ["hint:search"] = true, ["hint:shortcut"] = true,
@@ -500,7 +500,7 @@ Capabilities.register("ClaudeCanvas", {
           local BLOCK_SETTERS = {
             banner = true, thinking = true,
             tool = true, result = true, diff = true,
-            plan_mode = true, permission = true, error = true, warning = true,
+            plan_mode = true, permission = true, error = true, ["warning:large_prompt"] = true,
             status_bar = true, input_border = true, input_zone = true,
             idle_prompt = true, thought_complete = true, task_active = true,
             image_attachment = true, assistant_text = true,
@@ -684,8 +684,8 @@ Capabilities.register("ClaudeCanvas", {
             elseif kind == "error" then
               turnErrorSeq = turnErrorSeq + 1
               nid = "t" .. currentTurnId .. ":error:" .. turnErrorSeq
-            elseif kind == "warning" then
-              nid = "t" .. currentTurnId .. ":warning"
+            elseif kind:sub(1, 8) == "warning:" then
+              nid = "t" .. currentTurnId .. ":" .. kind
             elseif kind == "plan_mode" then
               nid = "t" .. currentTurnId .. ":plan_mode"
             elseif kind == "plan_border" then

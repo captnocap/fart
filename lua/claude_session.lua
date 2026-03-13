@@ -316,7 +316,7 @@ local function classifyRow(text, row, totalRows)
      or text:find("chars >", 1, true)
      or text:find("Large.*CLAUDE%.md")
      or text:find("/memory to edit", 1, true) then
-    return "warning"
+    return "warning:large_prompt"
   end
 
   -- Error
