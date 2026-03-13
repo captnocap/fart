@@ -241,6 +241,7 @@ function VesperApp() {
             isLoading={chat.isLoading}
             isStreaming={chat.isStreaming}
             stop={chat.stop}
+            error={chat.error}
             provider={activeProvider}
             model={activeModel}
             models={models}

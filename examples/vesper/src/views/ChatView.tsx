@@ -5,10 +5,8 @@
  * Empty state with Vesper branding when no messages.
  */
 
-import React from 'react';
-import { Box, Text, ScrollView } from '@reactjit/core';
-import { useThemeColors } from '@reactjit/theme';
-import { useClipboard } from '@reactjit/core';
+import React, { useRef } from 'react';
+import { Box, Text, Pressable, ScrollView, LoadingDots, useShake, useClipboard } from '@reactjit/core';
 import { V } from '../theme';
 import { InputHub } from '../layout/InputHub';
 import { MessageItem } from '../components/MessageItem';
@@ -17,7 +15,14 @@ import type { ProviderConfig } from '../types';
 
 // ── Empty State ──────────────────────────────────────────
 
-function EmptyState() {
+const SUGGESTIONS = [
+  'Write a story about a forgotten library',
+  'Explain quantum entanglement simply',
+  'Debug this function for me',
+  'Help me design an API',
+];
+
+function EmptyState({ onSend }: { onSend: (text: string) => void }) {
   return (
     <Box style={{
       flexGrow: 1,
@@ -39,26 +44,25 @@ function EmptyState() {
         What would you like to explore?
       </Text>
       <Box style={{ gap: 6, paddingTop: 16 }}>
-        {[
-          'Write a story about a forgotten library',
-          'Explain quantum entanglement simply',
-          'Debug this function for me',
-          'Help me design an API',
-        ].map((suggestion, i) => (
-          <Box key={i} style={{
-            paddingLeft: 14,
-            paddingRight: 14,
-            paddingTop: 8,
-            paddingBottom: 8,
-            borderRadius: 6,
-            borderWidth: 1,
-            borderColor: V.borderSubtle,
-            backgroundColor: V.bgAlt,
-          }}>
+        {SUGGESTIONS.map((suggestion, i) => (
+          <Pressable
+            key={`sug-${i}`}
+            onPress={() => onSend(suggestion)}
+            style={(state) => ({
+              paddingLeft: 14,
+              paddingRight: 14,
+              paddingTop: 8,
+              paddingBottom: 8,
+              borderRadius: 6,
+              borderWidth: 1,
+              borderColor: state.hovered ? V.accent : V.borderSubtle,
+              backgroundColor: state.hovered ? V.accentSubtle : V.bgAlt,
+            })}
+          >
             <Text style={{ fontSize: 13, color: V.textSecondary }}>
               {suggestion}
             </Text>
-          </Box>
+          </Pressable>
         ))}
       </Box>
     </Box>
@@ -78,6 +82,7 @@ export interface ChatViewProps {
   models: ModelInfo[];
   onSelectModel: (id: string) => void;
   tokenEstimate: number;
+  error?: Error | null;
   onDeleteMessage?: (index: number) => void;
   onRegenerateMessage?: (index: number) => void;
   onEditMessage?: (index: number, content: string) => void;
@@ -94,11 +99,16 @@ export function ChatView({
   models,
   onSelectModel,
   tokenEstimate,
+  error,
   onDeleteMessage,
   onRegenerateMessage,
   onEditMessage,
 }: ChatViewProps) {
   const { copy } = useClipboard();
+  const errorShake = useShake({ intensity: 6, duration: 350 });
+  const prevErrorRef = useRef<Error | null | undefined>(null);
+  if (error && error !== prevErrorRef.current) errorShake.shake();
+  prevErrorRef.current = error;
   // rjit-ignore-next-line
   const hasMessages = messages.filter(m => m.role !== 'system').length > 0;
   // rjit-ignore-next-line
@@ -138,15 +148,37 @@ export function ChatView({
                 paddingTop: 8,
                 paddingBottom: 8,
               }}>
-                <Text style={{ fontSize: 13, color: V.assistant }}>
-                  Vesper is thinking...
-                </Text>
+                <LoadingDots label="Vesper is thinking" color={V.assistant} />
               </Box>
             )}
           </Box>
         </ScrollView>
       ) : (
-        <EmptyState />
+        <EmptyState onSend={send} />
+      )}
+
+      {/* Error banner with shake */}
+      {error && (
+        <Box style={{
+          width: '100%',
+          paddingLeft: 16, paddingRight: 16,
+          paddingTop: 6, paddingBottom: 6,
+          ...errorShake.style,
+        }}>
+          <Box style={{
+            width: '100%',
+            paddingLeft: 10, paddingRight: 10,
+            paddingTop: 8, paddingBottom: 8,
+            borderRadius: 4,
+            backgroundColor: 'rgba(239, 68, 68, 0.10)',
+            borderLeftWidth: 2,
+            borderLeftColor: V.error,
+          }}>
+            <Text style={{ fontSize: 12, color: V.error }}>
+              {error.message}
+            </Text>
+          </Box>
+        </Box>
       )}
 
       {/* Input hub */}
