@@ -341,19 +341,31 @@ local function classifyRow(text, row, totalRows)
   -- Splash art: rows dominated by block drawing characters (░▒▓█▄▀▌▐▛▜▝▞▟)
   -- and decorative symbols (*·…) during onboarding/login
   if row <= 18 then
-    -- Count UTF-8 characters (not bytes) — match multi-byte sequences
+    -- Walk bytes to count UTF-8 characters and classify as art or text
     local totalChars = 0
     local artChars = 0
-    for char in stripped:gmatch("[\0-\127\194-\244][\128-\191]*") do
-      if char ~= " " then
+    local i = 1
+    local len = #stripped
+    while i <= len do
+      local b = stripped:byte(i)
+      if b == 0x20 then
+        i = i + 1  -- skip spaces
+      elseif b < 0x80 then
+        -- ASCII character
         totalChars = totalChars + 1
-        local b = char:byte()
-        -- Multi-byte UTF-8 = art (block elements, shade chars, box drawing, dots, geometric)
-        if b >= 0xC2 then
-          artChars = artChars + 1
-        elseif b == 0x2A then  -- ASCII * used as sparkle
-          artChars = artChars + 1
+        if b == 0x2A then artChars = artChars + 1 end  -- * sparkle
+        i = i + 1
+      elseif b >= 0xC0 then
+        -- UTF-8 lead byte → multi-byte char = art (block elements, shade, dots, etc.)
+        totalChars = totalChars + 1
+        artChars = artChars + 1
+        -- Skip continuation bytes
+        i = i + 1
+        while i <= len and stripped:byte(i) >= 0x80 and stripped:byte(i) < 0xC0 do
+          i = i + 1
         end
+      else
+        i = i + 1  -- stray continuation byte, skip
       end
     end
     if totalChars > 0 and artChars / totalChars > 0.6 then
