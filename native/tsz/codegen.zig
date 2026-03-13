@@ -279,10 +279,11 @@ pub const Generator = struct {
                                         }
                                     } else {
                                         // Skip unknown field value
-                                        if (self.curKind() == .string or self.curKind() == .number or self.curKind() == .identifier) {
-                                            self.advance_token();
-                                        }
+                                        self.advance_token();
                                     }
+                                } else {
+                                    // Not an identifier — skip to avoid infinite loop
+                                    self.advance_token();
                                 }
                                 if (self.curKind() == .comma) self.advance_token();
                             }
@@ -298,6 +299,9 @@ pub const Generator = struct {
                                 self.classifier_count += 1;
                             }
                         }
+                    } else {
+                        // Not an identifier — skip to avoid infinite loop
+                        self.advance_token();
                     }
                     if (self.curKind() == .comma) self.advance_token();
                 }
@@ -577,8 +581,8 @@ pub const Generator = struct {
                         self.advance_token();
                     }
                     if (self.curKind() == .rbrace) self.advance_token();
-                } else if (self.curKind() == .identifier or self.curKind() == .number or self.curKind() == .string) {
-                    // Raw text content between tags
+                } else if (self.curKind() != .lt and self.curKind() != .lt_slash and self.curKind() != .eof) {
+                    // Raw text content between tags (any non-JSX token)
                     const raw = self.collectTextContent();
                     if (raw.len > 0) text_content = raw;
                 } else {
@@ -655,12 +659,13 @@ pub const Generator = struct {
             try fields.appendSlice(self.alloc, try self.parseColorValue(color_str));
         }
 
-        // Classifier text props (font_size, text_color from classifier sheet)
-        if (classifier_idx) |idx| {
-            const tp = self.classifier_text_props[idx];
-            if (tp.len > 0) {
+        // Classifier text_color (if not overridden by inline color prop)
+        if (classifier_idx != null and color_str.len == 0) {
+            const tp = self.classifier_text_props[classifier_idx.?];
+            // Extract text_color from text_props if present
+            if (std.mem.indexOf(u8, tp, ".text_color = ")) |tc_pos| {
                 if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
-                try fields.appendSlice(self.alloc, tp);
+                try fields.appendSlice(self.alloc, tp[tc_pos..]);
             }
         }
 
@@ -782,9 +787,14 @@ pub const Generator = struct {
     }
 
     fn parseStyleAttr(self: *Generator) ![]const u8 {
-        // style={{ key: value, ... }}
-        if (self.curKind() == .lbrace) self.advance_token(); // {
-        if (self.curKind() == .lbrace) self.advance_token(); // {
+        // style={{ key: value, ... }} (JSX) or style: { key: value } (classifier)
+        if (self.curKind() == .lbrace) self.advance_token(); // first {
+        // Only eat second { if it's there (JSX double-brace syntax)
+        var double_brace = false;
+        if (self.curKind() == .lbrace) {
+            self.advance_token(); // second {
+            double_brace = true;
+        }
 
         var fields: std.ArrayListUnmanaged(u8) = .{};
         
@@ -829,7 +839,7 @@ pub const Generator = struct {
         }
 
         if (self.curKind() == .rbrace) self.advance_token(); // }
-        if (self.curKind() == .rbrace) self.advance_token(); // }
+        if (double_brace and self.curKind() == .rbrace) self.advance_token(); // second }
 
         return try self.alloc.dupe(u8, fields.items);
     }
@@ -1334,7 +1344,7 @@ pub const Generator = struct {
 
         // collectSelectedText helper for cross-node Ctrl+C
         try out.appendSlice(self.alloc,
-            \\fn collectSelectedText(node: *Node, buf: []u8, pos: usize, state: *u8) usize {
+            \\fn collectSelectedText(node: *Node, buf: []u8, pos: usize, st: *u8) usize {
             \\    var p = pos;
             \\    if (node.text) |txt| {
             \\        const is_start = (sel_node == node);
@@ -1347,16 +1357,16 @@ pub const Generator = struct {
             \\                const n = @min(s1 - s0, buf.len - p);
             \\                if (n > 0) { @memcpy(buf[p..p+n], txt[s0..s0+n]); p += n; }
             \\            }
-            \\            state.* = 2;
-            \\        } else if (state.* == 0 and (is_start or is_end)) {
+            \\            st.* = 2;
+            \\        } else if (st.* == 0 and (is_start or is_end)) {
             \\            const byte = if (is_start) sel_start else sel_end;
             \\            if (byte < txt.len) {
             \\                if (p > 0 and p < buf.len) { buf[p] = '\n'; p += 1; }
             \\                const n = @min(txt.len - byte, buf.len - p);
             \\                if (n > 0) { @memcpy(buf[p..p+n], txt[byte..byte+n]); p += n; }
             \\            }
-            \\            state.* = 1;
-            \\        } else if (state.* == 1) {
+            \\            st.* = 1;
+            \\        } else if (st.* == 1) {
             \\            if (is_start or is_end) {
             \\                const byte = if (is_start) sel_start else sel_end;
             \\                if (byte > 0) {
@@ -1364,7 +1374,7 @@ pub const Generator = struct {
             \\                    const n = @min(byte, buf.len - p);
             \\                    if (n > 0) { @memcpy(buf[p..p+n], txt[0..n]); p += n; }
             \\                }
-            \\                state.* = 2;
+            \\                st.* = 2;
             \\            } else {
             \\                if (p > 0 and p < buf.len) { buf[p] = '\n'; p += 1; }
             \\                const n = @min(txt.len, buf.len - p);
@@ -1372,7 +1382,7 @@ pub const Generator = struct {
             \\            }
             \\        }
             \\    }
-            \\    for (node.children) |*child| { p = collectSelectedText(child, buf, p, state); }
+            \\    for (node.children) |*child| { p = collectSelectedText(child, buf, p, st); }
             \\    return p;
             \\}
             \\
