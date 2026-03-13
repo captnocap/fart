@@ -80,7 +80,7 @@ const ENUM_MAP = {
 
 // ── Primitives — these are native Zig nodes, not user components ─────────
 
-const PRIMITIVES = new Set(['Box', 'Text', 'Image', 'Pressable', 'ScrollView', 'TextInput']);
+const PRIMITIVES = new Set(['Box', 'Text', 'Image', 'Pressable', 'ScrollView', 'TextInput', 'Window']);
 
 // ── AST → Zig codegen ──────────────────────────────────────────────────────
 
@@ -103,6 +103,8 @@ class TszCompiler {
     this.ffiHeaders = [];         // ['time.h', 'sqlite3.h']
     this.ffiLibs = [];            // ['sqlite3']
     this.ffiFunctions = new Map(); // name → { params: [{name, type}], returnType }
+    // ── Window tracking ──────────────────────────────────────────────
+    this.secondaryWindows = [];   // [{ title, width, height, rootArrays, rootExpr }]
   }
 
   /** Compile a .tsz source file to a complete Zig source string. */
@@ -440,6 +442,75 @@ class TszCompiler {
       styleFields.push(`.overflow = .scroll`);
     }
 
+    // Window → secondary window, children become a separate tree
+    if (tagName === 'Window') {
+      const title = this.extractStringLiteral(attrs.title, sf) || 'Window';
+      const width = this.evalNumeric(attrs.width, sf) || 400;
+      const height = this.evalNumeric(attrs.height, sf) || 300;
+
+      // Emit children as a separate tree (with dynamic text tracking)
+      const jsxKids = this.getJSXChildren(children);
+      const winArrays = [];
+      const winChildExprs = [];
+      const winChildDynIds = [];
+      for (const child of jsxKids) {
+        this._lastDynamicBufId = null;
+        const result = this.emitJSX(child, propScope, sf, callerChildren);
+        if (result) {
+          winChildExprs.push(result.zigExpr);
+          winArrays.push(...result.arrays);
+          winChildDynIds.push(this._lastDynamicBufId);
+        } else {
+          winChildDynIds.push(null);
+        }
+      }
+
+      // Text content if any
+      const winText = this.extractTextContent(children, propScope, sf);
+
+      // Build root node for this window
+      let winRootFields = [];
+      if (styleFields.length > 0) {
+        winRootFields.push(`.style = .{ ${styleFields.join(', ')} }`);
+      }
+      if (winText && !winText.__dynamic) {
+        winRootFields.push(`.text = "${this.escapeZigString(winText)}"`);
+      }
+      if (winChildExprs.length > 0) {
+        const arrName = `_win${this.secondaryWindows.length}_arr_${this.arrayCounter++}`;
+        winArrays.push(`    var ${arrName} = [_]Node{ ${winChildExprs.join(', ')} };`);
+        winRootFields.push(`.children = &${arrName}`);
+
+        // Track dynamic text references into the window's array
+        // Only set nodeRef if not already set by a deeper level
+        if (this._dynamicTexts) {
+          for (let ci = 0; ci < winChildDynIds.length; ci++) {
+            const dynId = winChildDynIds[ci];
+            if (dynId !== null && dynId !== undefined) {
+              const dt = this._dynamicTexts.find(d => d.bufId === dynId);
+              if (dt && !dt.nodeRef) dt.nodeRef = { arrName, index: ci };
+            }
+          }
+        }
+      }
+
+      const winRootExpr = `.{ ${winRootFields.join(', ')} }`;
+      const winIdx = this.secondaryWindows.length;
+
+      this.secondaryWindows.push({
+        title,
+        width: Math.floor(width),
+        height: Math.floor(height),
+        rootArrays: winArrays,
+        rootExpr: winRootExpr,
+      });
+
+      // Return an empty/invisible node in the main tree (Window is not rendered there)
+      // Clear _lastDynamicBufId so parent doesn't try to track it
+      this._lastDynamicBufId = null;
+      return { zigExpr: `.{ .style = .{ .display = .none } }`, arrays: [] };
+    }
+
     // Handle backgroundColor in style
     if (attrs.style?.backgroundColor) {
       const colorStr = this.extractStringLiteral(attrs.style.backgroundColor, sf);
@@ -538,12 +609,13 @@ class TszCompiler {
         fields.push(`.children = &${arrName}`);
 
         // Record node references for dynamic text nodes
+        // Only set if not already set by a deeper array (first wins = correct parent)
         if (this._dynamicTexts) {
           for (let ci = 0; ci < childDynIds.length; ci++) {
             const dynId = childDynIds[ci];
             if (dynId !== null && dynId !== undefined) {
               const dt = this._dynamicTexts.find(d => d.bufId === dynId);
-              if (dt) dt.nodeRef = { arrName, index: ci };
+              if (dt && !dt.nodeRef) dt.nodeRef = { arrName, index: ci };
             }
           }
         }
@@ -635,6 +707,20 @@ class TszCompiler {
       if (callee === 'stopVideo') return 'mpv_mod.stop();';
       if (callee === 'pauseVideo') return 'mpv_mod.setPaused(true);';
       if (callee === 'resumeVideo') return 'mpv_mod.setPaused(false);';
+
+      // Window management — openWindow(N) opens secondary window N
+      // Deferred: we record the call and resolve window config in buildZigSource
+      if (callee === 'openWindow' && expr.arguments.length > 0) {
+        const idx = this.evalNumeric(expr.arguments[0], sf);
+        if (idx !== null) {
+          // Emit a call to a generated helper that will be resolved later
+          return `_openWindow${Math.floor(idx)}();`;
+        }
+      }
+      if (callee === 'closeWindow' && expr.arguments.length > 0) {
+        const arg = this.emitStateExpression(expr.arguments[0], sf);
+        return `win_mgr.close(@intCast(@as(u64, @bitCast(${arg}))));`;
+      }
 
       if (callee === 'console.log' || callee === 'console.info') {
         const args = expr.arguments.map(a => {
@@ -1161,7 +1247,9 @@ const TextEngine = text_mod.TextEngine;
 const image_mod = @import("image.zig");
 const ImageCache = image_mod.ImageCache;
 const events = @import("events.zig");
-const mpv_mod = @import("mpv.zig");${stateImport}${ffiImport}
+const mpv_mod = @import("mpv.zig");
+const win_mgr = @import("windows.zig");
+const watchdog = @import("watchdog.zig");${stateImport}${ffiImport}
 
 var g_text_engine: ?*TextEngine = null;
 var g_image_cache: ?*ImageCache = null;
@@ -1188,7 +1276,18 @@ fn measureImageCallback(img_path: []const u8) layout.ImageDims {
 // ── Generated node tree (module-level for state reactivity) ─────────
 ${arrays.map(a => a.replace(/^    /, '')).join('\n')}
 var root = Node{ ${rootExpr.slice(2)} ;
+${this.secondaryWindows.map((w, i) => {
+  const arrLines = w.rootArrays.map(a => a.replace(/^    /, '')).join('\n');
+  return `\n// ── Secondary window ${i}: "${w.title}" ─────────────────────────────\n${arrLines}\nvar _win${i}_root = Node{ ${w.rootExpr.slice(2)} ;`;
+}).join('\n')}
 ${dynBufDecls}${handlerDecls}${updateDynTextsFn}
+${this.secondaryWindows.map((w, i) => `// ── Open window helper for window ${i} ────────────────────────────
+fn _openWindow${i}() void {
+    if (win_mgr.isRootOpen(&_win${i}_root)) return; // already open
+    if (win_mgr.open("${this.escapeZigString(w.title)}", ${w.width}, ${w.height})) |win_idx| {
+        win_mgr.setRoot(win_idx, &_win${i}_root);
+    }
+}`).join('\n\n')}
 // ── Hover state ────────────────────────────────────────────────────
 var hovered_node: ?*Node = null;
 
@@ -1307,13 +1406,61 @@ pub fn main() !void {
     var painter = Painter{ .renderer = renderer, .text_engine = &text_engine, .image_cache = &image_cache };
 
 ${stateInitCode}${initialDynUpdate}
+    defer win_mgr.deinitAll();
+    watchdog.init(512); // 512MB hard limit — leak guard
+
     var running = true;
     var win_w: f32 = 800;
     var win_h: f32 = 600;
 
+    const main_window_id = c.SDL_GetWindowID(window);
+
     while (running) {
         var event: c.SDL_Event = undefined;
         while (c.SDL_PollEvent(&event) != 0) {
+            // ── Route events to secondary windows ────────────────
+            const evt_window_id: u32 = switch (event.type) {
+                c.SDL_WINDOWEVENT => event.window.windowID,
+                c.SDL_MOUSEMOTION => event.motion.windowID,
+                c.SDL_MOUSEBUTTONDOWN, c.SDL_MOUSEBUTTONUP => event.button.windowID,
+                c.SDL_MOUSEWHEEL => event.wheel.windowID,
+                c.SDL_KEYDOWN, c.SDL_KEYUP => event.key.windowID,
+                else => main_window_id,
+            };
+
+            if (evt_window_id != main_window_id) {
+                // Event belongs to a secondary window
+                if (win_mgr.findByWindowId(evt_window_id)) |win_idx| {
+                    switch (event.type) {
+                        c.SDL_WINDOWEVENT => {
+                            if (event.window.event == c.SDL_WINDOWEVENT_CLOSE) {
+                                win_mgr.handleClose(win_idx);
+                            } else if (event.window.event == c.SDL_WINDOWEVENT_SIZE_CHANGED) {
+                                win_mgr.handleResize(win_idx, event.window.data1, event.window.data2);
+                            }
+                        },
+                        c.SDL_MOUSEMOTION => {
+                            const mx: f32 = @floatFromInt(event.motion.x);
+                            const my: f32 = @floatFromInt(event.motion.y);
+                            win_mgr.handleMouseMotion(win_idx, mx, my);
+                        },
+                        c.SDL_MOUSEBUTTONDOWN => {
+                            const mx: f32 = @floatFromInt(event.button.x);
+                            const my: f32 = @floatFromInt(event.button.y);
+                            win_mgr.handleClick(win_idx, mx, my);
+                        },
+                        c.SDL_MOUSEWHEEL => {
+                            var mx_i: c_int = undefined;
+                            var my_i: c_int = undefined;
+                            _ = c.SDL_GetMouseState(&mx_i, &my_i);
+                            win_mgr.handleWheel(win_idx, @floatFromInt(mx_i), @floatFromInt(my_i), @floatFromInt(event.wheel.y));
+                        },
+                        else => {},
+                    }
+                    continue;
+                }
+            }
+
             switch (event.type) {
                 c.SDL_QUIT => running = false,
                 c.SDL_WINDOWEVENT => {
@@ -1365,11 +1512,16 @@ ${stateInitCode}${initialDynUpdate}
         }
 
 ${stateCheck}
+        if (watchdog.check()) running = false;
         mpv_mod.poll();
         layout.layout(&root, 0, 0, win_w, win_h);
         painter.clear(Color.rgb(24, 24, 32));
         painter.paintTree(&root, 0, 0);
         painter.present();
+
+        // ── Secondary windows ────────────────────────────────────
+        win_mgr.layoutAll();
+        win_mgr.paintAndPresent(brighten);
     }
 }
 `;
