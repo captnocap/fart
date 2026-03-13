@@ -704,6 +704,9 @@ class TszCompiler {
         const arg = this.extractStringLiteral(expr.arguments[0], sf);
         if (arg) return `mpv_mod.play("${this.escapeZigString(arg)}");`;
       }
+      // Dev/test: intentional leak for watchdog testing
+      if (callee === 'leakMemory') return 'state.setSlot(0, leaktest.leak64());';
+
       if (callee === 'stopVideo') return 'mpv_mod.stop();';
       if (callee === 'pauseVideo') return 'mpv_mod.setPaused(true);';
       if (callee === 'resumeVideo') return 'mpv_mod.setPaused(false);';
@@ -1249,7 +1252,9 @@ const ImageCache = image_mod.ImageCache;
 const events = @import("events.zig");
 const mpv_mod = @import("mpv.zig");
 const win_mgr = @import("windows.zig");
-const watchdog = @import("watchdog.zig");${stateImport}${ffiImport}
+const watchdog = @import("watchdog.zig");
+const bsod = @import("bsod.zig");
+const leaktest = @import("leaktest.zig");${stateImport}${ffiImport}
 
 var g_text_engine: ?*TextEngine = null;
 var g_image_cache: ?*ImageCache = null;
@@ -1512,7 +1517,14 @@ ${stateInitCode}${initialDynUpdate}
         }
 
 ${stateCheck}
-        if (watchdog.check()) running = false;
+        if (watchdog.check()) {
+            // Kill everything before showing BSOD — free leaked memory
+            win_mgr.deinitAll();
+            c.SDL_DestroyRenderer(renderer);
+            c.SDL_DestroyWindow(window);
+            bsod.show(watchdog.getLastReason(), watchdog.getLastDetail());
+            return; // skip normal cleanup (already destroyed)
+        }
         mpv_mod.poll();
         layout.layout(&root, 0, 0, win_w, win_h);
         painter.clear(Color.rgb(24, 24, 32));

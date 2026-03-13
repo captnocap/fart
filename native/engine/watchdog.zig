@@ -20,6 +20,12 @@ var warned: bool = false;
 const CHECK_INTERVAL: u64 = 60; // frames (~1 second at 60fps)
 const RATE_LIMIT_KB_PER_CHECK: u64 = 50 * 1024; // 50MB per check interval = leak
 
+// Last crash info for BSOD
+var last_reason_buf: [256]u8 = undefined;
+var last_reason: []const u8 = "";
+var last_detail_buf: [512]u8 = undefined;
+var last_detail: []const u8 = "";
+
 /// Set the hard RSS limit in MB. Call once at startup.
 pub fn init(limit_mb: u64) void {
     hard_limit_mb = limit_mb;
@@ -40,7 +46,9 @@ pub fn check() bool {
 
     // Hard limit
     if (rss_mb >= hard_limit_mb) {
-        std.debug.print("\n[watchdog] HARD LIMIT HIT: {d}MB >= {d}MB limit. Shutting down.\n", .{ rss_mb, hard_limit_mb });
+        last_reason = std.fmt.bufPrint(&last_reason_buf, "HARD LIMIT: {d}MB >= {d}MB limit", .{ rss_mb, hard_limit_mb }) catch "HARD LIMIT HIT";
+        last_detail = std.fmt.bufPrint(&last_detail_buf, "RSS reached {d}MB which exceeds the {d}MB hard limit. This usually means a memory leak — SDL textures, glyph cache copies, or unbounded allocations.", .{ rss_mb, hard_limit_mb }) catch "Memory limit exceeded.";
+        std.debug.print("\n[watchdog] {s}\n", .{last_reason});
         return true;
     }
 
@@ -49,7 +57,9 @@ pub fn check() bool {
         const delta = if (rss_kb > last_check_rss_kb) rss_kb - last_check_rss_kb else 0;
         if (delta > RATE_LIMIT_KB_PER_CHECK) {
             if (!warned) {
-                std.debug.print("\n[watchdog] LEAK DETECTED: +{d}MB in ~1s (RSS: {d}MB). Shutting down.\n", .{ delta / 1024, rss_mb });
+                last_reason = std.fmt.bufPrint(&last_reason_buf, "LEAK DETECTED: +{d}MB in ~1s", .{delta / 1024}) catch "LEAK DETECTED";
+                last_detail = std.fmt.bufPrint(&last_detail_buf, "RSS grew from {d}MB to {d}MB in one check interval (~1s). Rate limit is {d}MB/s. Check for per-frame allocations: texture creation, glyph cache copies, or unbounded buffers.", .{ last_check_rss_kb / 1024, rss_mb, RATE_LIMIT_KB_PER_CHECK / 1024 }) catch "Memory growing too fast.";
+                std.debug.print("\n[watchdog] {s}\n", .{last_reason});
                 warned = true;
                 return true;
             }
@@ -81,4 +91,14 @@ fn getRssKb() u64 {
 /// Get current RSS in MB (for display).
 pub fn getRssMb() u64 {
     return getRssKb() / 1024;
+}
+
+/// Get the reason string for the last watchdog trigger.
+pub fn getLastReason() []const u8 {
+    return if (last_reason.len > 0) last_reason else "Unknown";
+}
+
+/// Get the detail string for the last watchdog trigger.
+pub fn getLastDetail() []const u8 {
+    return if (last_detail.len > 0) last_detail else "No details available.";
 }
