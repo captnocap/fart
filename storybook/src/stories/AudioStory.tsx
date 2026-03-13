@@ -329,7 +329,7 @@ function RackInfoDemoReady() {
   return (
     <S.StackG6W100>
       <S.StoryCap>
-        {ready ? 'Engine ready — live rack state:' : 'Initializing audio engine...'}
+        {'Engine ready — live rack state:'}
       </S.StoryCap>
 
       <Box style={{ gap: 2 }}>

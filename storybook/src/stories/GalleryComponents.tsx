@@ -1572,14 +1572,11 @@ export function PreviewPadButton({ c }: { c: ThemeColors }) {
 }
 
 export function PreviewStepSequencer({ c }: { c: ThemeColors }) {
-  // rjit-ignore-next-line — static initial pattern, runs once
-  const [pattern, setPattern] = useState(() => {
-    const p: boolean[][] = [];
-    for (let t = 0; t < 4; t++) {
-      p.push(Array.from({ length: 16 }, (_, i) => (t === 0 && i % 4 === 0) || (t === 1 && i % 8 === 4)));
-    }
-    return p;
-  });
+  const initialPattern: boolean[][] = [];
+  for (let t = 0; t < 4; t++) {
+    initialPattern.push(Array.from({ length: 16 }, (_, i) => (t === 0 && i % 4 === 0) || (t === 1 && i % 8 === 4)));
+  }
+  const [pattern, setPattern] = useState(initialPattern);
   return (
     <S.GrowCenterAlign style={{ padding: 20 }}>
       <StepSequencer steps={16} tracks={4} pattern={pattern} onChange={setPattern} />

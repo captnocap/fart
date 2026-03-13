@@ -8,7 +8,7 @@
  * Static hoist ALL code strings and style objects outside the component.
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import { Box, Text, Image, ScrollView, Pressable, CodeBlock, Row, Input, useBreakpoint, useWindowDimensions, classifiers as S} from '../../../packages/core/src';
 import { tw } from '../../../packages/core/src/tw';
 import { useThemeColors } from '../../../packages/theme/src';
@@ -465,10 +465,9 @@ function HtmlPlayground() {
   const c = useThemeColors();
   const [html, setHtml] = useState(PG_DEFAULT);
   const [activePreset, setActivePreset] = useState(0);
-  const nodes = useMemo(() => {
-    try { return parseHTMLToNodes(html); }
-    catch { return null; }
-  }, [html]);
+  let nodes: ReturnType<typeof parseHTMLToNodes> | null;
+  try { nodes = parseHTMLToNodes(html); }
+  catch { nodes = null; }
 
   return (
     <Box style={{
@@ -565,14 +564,13 @@ function HtmlPlayground() {
 function TailwindLiveDemo() {
   const c = useThemeColors();
   const [input, setInput] = useState('p-4 flex-row gap-2 bg-blue-500 rounded-lg');
-  const resolved = useMemo(() => {
-    try {
-      const style = tw(input);
-      return JSON.stringify(style, null, 2);
-    } catch {
-      return '// invalid class';
-    }
-  }, [input]);
+  let resolved: string;
+  try {
+    const style = tw(input);
+    resolved = JSON.stringify(style, null, 2);
+  } catch {
+    resolved = '// invalid class';
+  }
 
   return (
     <S.Bordered style={{ width: '100%', backgroundColor: c.bgElevated, borderRadius: 8, padding: 12, gap: 8 }}>

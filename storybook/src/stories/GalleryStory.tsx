@@ -12,7 +12,7 @@
  * All thumbnails and previews live in GalleryComponents.tsx.
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import { Box, Text, Image, Pressable, ScrollView, CodeBlock, Input, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { getAll, PKG_COLORS, type GalleryEntry } from './galleryRegistry';
@@ -62,12 +62,10 @@ export function GalleryStory() {
   (globalThis as any).__gallerySetActive = setActiveId;
   const [searchQuery, setSearchQuery] = useState('');
   const [tabsExpanded, setTabsExpanded] = useState(false);
-  // rjit-ignore-next-line
   const tab = TABS.find(it => it.id === activeId) || TABS[0];
   const pkgColor = PKG_COLORS[tab?.pkg];
 
-  // rjit-ignore-next-line
-  const filteredTabs = useMemo(() => {
+  const filteredTabs = (() => {
     if (!searchQuery) return TABS;
     const q = searchQuery.toLowerCase();
     return TABS.filter(t =>
@@ -75,11 +73,10 @@ export function GalleryStory() {
       t.pkg.toLowerCase().includes(q) ||
       t.desc.toLowerCase().includes(q)
     );
-  }, [searchQuery, TABS]);
+  })();
 
   // Group filtered tabs by package in display order
-  // rjit-ignore-next-line
-  const groupedTabs = useMemo(() => {
+  const groupedTabs = (() => {
     const byPkg: Record<string, GalleryEntry[]> = {};
     for (const t of filteredTabs) {
       if (!byPkg[t.pkg]) byPkg[t.pkg] = [];
@@ -91,7 +88,7 @@ export function GalleryStory() {
       color: PKG_COLORS[p],
       items: byPkg[p],
     }));
-  }, [filteredTabs]);
+  })();
 
   const tabGridHeight = tabsExpanded ? 380 : 232;
 

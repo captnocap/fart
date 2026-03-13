@@ -166,14 +166,10 @@ export function DataSpreadsheetStory() {
   const [cells, setCells] = useState<SpreadsheetCellMap>(
     ensureScaleCells(LOGISTICS_PRESET, SCALE_PRESETS[0].rows, SCALE_PRESETS[0].cols),
   );
-  // rjit-ignore-next-line — cell formula counting with .filter()
   const cellValues = Object.values(cells);
   const summary = {
-    // rjit-ignore-next-line
     formulaCount:    cellValues.filter(v => v.trim().startsWith('=')).length,
-    // rjit-ignore-next-line
     conversionCount: cellValues.filter(v => v.includes('CONVERT(')).length,
-    // rjit-ignore-next-line
     mathCount:       cellValues.filter(v => /(REMAP|CLAMP|DIST2D|ROUND|AVG|SUM)\(/.test(v)).length,
   };
 

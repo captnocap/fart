@@ -1,5 +1,5 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { Box, Text, ScrollView, Pressable, classifiers as S} from '../../../packages/core/src';
+import React, { useState } from 'react';
+import { Box, Text, ScrollView, Pressable, classifiers as S, useMount } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 
 const CHUNK_SIZE = 50; // lines per Text node
@@ -9,7 +9,8 @@ function useTextFile(path: string) {
   const [error, setError] = useState<Error | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  // rjit-ignore-next-line
+  useMount(() => {
     let cancelled = false;
     fetch(path)
       .then((res: any) => {
@@ -23,7 +24,7 @@ function useTextFile(path: string) {
         if (!cancelled) { setError(err instanceof Error ? err : new Error(String(err))); setLoading(false); }
       });
     return () => { cancelled = true; };
-  }, [path]);
+  });
 
   return { data, error, loading };
 }
@@ -47,19 +48,14 @@ export function LlmsTxtReader() {
   const { data: raw, loading, error } = useTextFile('llms.txt');
   const [mode, setMode] = useState<'single' | 'chunked'>('chunked');
 
-  const lines = useMemo(() => {
-    if (!raw) return [];
-    return raw.split('\n');
-  }, [raw]);
+  const lines = raw ? raw.split('\n') : [];
 
-  const chunks = useMemo(() => {
-    if (lines.length === 0) return [];
-    const result: string[] = [];
+  const chunks: string[] = [];
+  if (lines.length > 0) {
     for (let i = 0; i < lines.length; i += CHUNK_SIZE) {
-      result.push(lines.slice(i, i + CHUNK_SIZE).join('\n'));
+      chunks.push(lines.slice(i, i + CHUNK_SIZE).join('\n'));
     }
-    return result;
-  }, [lines]);
+  }
 
   if (loading) {
     return (

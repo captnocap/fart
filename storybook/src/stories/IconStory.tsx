@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import { Box, Text, TextInput, Pressable, ScrollView, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { Icon } from '../../../packages/icons/src';
@@ -19,11 +19,11 @@ export function IconStory() {
   const [selectedIcon, setSelectedIcon] = useState<string | null>(null);
   const [page, setPage] = useState(0);
 
-  const filtered = useMemo(() => {
+  const filtered = (() => {
     if (!filter) return iconNames;
     const lower = filter.toLowerCase();
     return iconNames.filter(n => n.toLowerCase().includes(lower));
-  }, [filter]);
+  })();
 
   const totalPages = Math.ceil(filtered.length / ICONS_PER_PAGE);
   const pageIcons = filtered.slice(page * ICONS_PER_PAGE, (page + 1) * ICONS_PER_PAGE);

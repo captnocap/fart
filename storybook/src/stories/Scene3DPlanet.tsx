@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState } from 'react';
 import { Box, Text, Slider, useLuaInterval, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import type { LoveEvent } from '../../../packages/core/src';
@@ -60,12 +60,12 @@ export function Scene3DPlanetStory() {
   // Camera zoom (distance from origin)
   const [zoom, setZoom] = useState(3.5);
 
-  const handleWheel = useCallback((event: LoveEvent) => {
+  const handleWheel = (event: LoveEvent) => {
     setZoom((prev) => {
       const delta = (event.deltaY || 0) * 0.3;
       return Math.max(1.5, Math.min(10, prev - delta));
     });
-  }, []);
+  };
 
   useLuaInterval(16, () => {
     setTime((prev) => prev + 0.008);

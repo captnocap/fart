@@ -1502,6 +1502,33 @@ function findInlineCompute(sourceFile, filePath, ts) {
     return false;
   }
 
+  // Check if code is inside a React component's render body (the only scope we care about).
+  // Returns false for: module-level code, standalone helper functions, event handlers,
+  // setState updater callbacks, and any non-component function scope.
+  function isInsideComponentBody(node) {
+    let current = node.parent;
+    while (current) {
+      if (ts.isFunctionDeclaration(current) || ts.isFunctionExpression(current) ||
+          ts.isArrowFunction(current)) {
+        // Get the function's name
+        let name = '';
+        if (ts.isFunctionDeclaration(current) && current.name) {
+          name = current.name.text;
+        } else if (current.parent && ts.isVariableDeclaration(current.parent) &&
+                   ts.isIdentifier(current.parent.name)) {
+          name = current.parent.name.text;
+        }
+        // Uppercase first letter = React component = render-phase code
+        if (name && /^[A-Z]/.test(name)) return true;
+        // Lowercase or anonymous = helper function, callback, event handler — not render-phase
+        return false;
+      }
+      current = current.parent;
+    }
+    // Module level — not inside any function
+    return false;
+  }
+
   function visit(node) {
     // Detect useState(() => compute()) — lazy initializer
     if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) &&
@@ -1526,7 +1553,7 @@ function findInlineCompute(sourceFile, filePath, ts) {
     // Detect .sort(), .filter(), .reduce() etc. in variable declarations (not JSX)
     if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
       const methodName = node.expression.name.text;
-      if (COMPUTE_ARRAY_METHODS.has(methodName) && !isInsideJSX(node) && !isInsideLuaCallback(node)) {
+      if (COMPUTE_ARRAY_METHODS.has(methodName) && isInsideComponentBody(node) && !isInsideJSX(node) && !isInsideLuaCallback(node)) {
         // Only flag if in a variable declaration or assignment (const sorted = data.sort(...))
         let inVarDecl = false;
         let current = node.parent;

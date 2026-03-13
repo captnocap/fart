@@ -7,7 +7,7 @@
  * Static hoist ALL code strings and style objects outside the component.
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState } from 'react';
 import { Box, Text, Image, ScrollView, CodeBlock, Pressable, classifiers as S, useMount} from '../../../packages/core/src';
 import { useCrypto } from '../../../packages/crypto/src';
 import { useThemeColors } from '../../../packages/theme/src';
@@ -313,7 +313,7 @@ function DHDemo() {
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const regenerate = useCallback(() => {
+  const regenerate = () => {
     (async () => {
       try {
         const alice = await crypto.generateDHKeys();
@@ -332,7 +332,7 @@ function DHDemo() {
         setError(err instanceof Error ? err.message : String(err));
       }
     })();
-  }, [crypto]);
+  };
 
   useMount(() => { regenerate(); });
 
@@ -398,7 +398,7 @@ function TokenDemo() {
   const [tokens, setTokens] = useState<{ hex: string; id: string; b64: string }>({ hex: '', id: '', b64: '' });
   const [error, setError] = useState<string | null>(null);
 
-  const regenerate = useCallback(() => {
+  const regenerate = () => {
     Promise.all([
       crypto.randomToken(16),
       crypto.randomId(24),
@@ -409,7 +409,7 @@ function TokenDemo() {
     }).catch(err => {
       setError(err instanceof Error ? err.message : String(err));
     });
-  }, [crypto]);
+  };
 
   useMount(() => { regenerate(); });
 

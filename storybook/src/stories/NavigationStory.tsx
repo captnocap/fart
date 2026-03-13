@@ -59,7 +59,6 @@ function styleTooltip(style: Record<string, any>) {
     'alignItems', 'alignSelf', 'justifyContent', 'overflow',
     'position', 'zIndex', 'display',
   ]);
-  // rjit-ignore-next-line
   const entries = Object.entries(style).filter(([k, v]) => !STRUCTURAL.has(k) && v !== undefined);
   if (entries.length === 0) return undefined;
   const content = entries.map(([k, v]) => `${k}: ${v}`).join('\n');
@@ -172,9 +171,7 @@ const OPAQUE_DATA = [
   { id: 'u4', name: 'Diego Flores', email: 'diego@example.com', role: 'Engineer', department: 'Data', joined: 2023, avatar: 'x' },
 ];
 
-// rjit-ignore-next-line
 const LUA_FILES = FILES.filter((f) => f.meta === 'Lua');
-// rjit-ignore-next-line
 const TS_FILES = FILES.filter((f) => f.meta !== 'Lua');
 const FLAT_SEARCH_OPTIONS = { key: 'label', showAllOnEmpty: false, limit: 6 };
 const SECTION_SEARCH_OPTIONS = { key: 'label', showAllOnEmpty: false };

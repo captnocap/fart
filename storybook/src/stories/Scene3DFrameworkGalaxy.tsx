@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { Box, Text, Slider, Badge, useLoveRPC, useLuaInterval, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { Scene, Camera, Mesh, AmbientLight, DirectionalLight } from '../../../packages/3d/src';
@@ -118,7 +118,7 @@ export function Scene3DFrameworkGalaxyStory() {
     }
   });
 
-  const nodes = useMemo(() => buildGalaxy(cubeCount, arms, radius), [cubeCount, arms, radius]);
+  const nodes = buildGalaxy(cubeCount, arms, radius);
   const denseMode = cubeCount >= 320;
   const fps = typeof perf.fps === 'number' ? perf.fps : 0;
   const layoutMs = typeof perf.layoutMs === 'number' ? perf.layoutMs : 0;

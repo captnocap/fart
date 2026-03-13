@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import {
   Box,
   Text,
@@ -111,24 +111,22 @@ export function ImageGalleryStory() {
   const [wrapActiveIndex, setWrapActiveIndex] = useState(0);
   const wrapThumb = 220;
 
-  const images = useMemo<ImageGalleryItem[]>(() => {
-    const placeholderStems = [
-      'gallery_1.png',
-      'gallery_2.png',
-      'gallery_3.png',
-      'gallery_4.png',
-    ];
+  const placeholderStems = [
+    'gallery_1.png',
+    'gallery_2.png',
+    'gallery_3.png',
+    'gallery_4.png',
+  ];
 
-    return Array.from({ length: 24 }, (_, i) => {
-      return {
-        id: i,
-        src: `lib/placeholders/${placeholderStems[i % 4]}`,
-        title: `Post ${i + 1}`,
-        subtitle: `Tile ${i + 1}`,
-        description: 'Click any tile to open the modal viewer.',
-      };
-    });
-  }, []);
+  const images: ImageGalleryItem[] = Array.from({ length: 24 }, (_, i) => {
+    return {
+      id: i,
+      src: `lib/placeholders/${placeholderStems[i % 4]}`,
+      title: `Post ${i + 1}`,
+      subtitle: `Tile ${i + 1}`,
+      description: 'Click any tile to open the modal viewer.',
+    };
+  });
   const wrapImages = images.slice(0, 8);
 
   return (

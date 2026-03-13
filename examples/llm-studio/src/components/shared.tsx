@@ -61,7 +61,6 @@ export function QuickModelPicker({
   onClose: () => void;
 }) {
   const [query, setQuery] = useState('');
-  // rjit-ignore-next-line — trivial filter for search UI
   const filtered = query ? models.filter(m => m.name.toLowerCase().includes(query.toLowerCase()) || m.id.toLowerCase().includes(query.toLowerCase())) : models;
 
   return (

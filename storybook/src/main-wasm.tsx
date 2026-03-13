@@ -31,7 +31,6 @@ function getInitialStoryIdx(): number {
   try {
     const hash = window.location.hash.replace('#', '');
     if (hash) {
-      // rjit-ignore-next-line
       const idx = stories.findIndex(s => s.id === hash);
       if (idx >= 0) return idx;
     }

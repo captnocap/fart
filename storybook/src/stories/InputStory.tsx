@@ -9,7 +9,7 @@
  * (e.g. dragging a slider) only re-render that section.
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState } from 'react';
 import {
   Box, Text, Image, TextEditor, TextInput, CodeBlock, Pressable, ScrollView,
   Slider, Switch, Checkbox, RadioGroup, Radio, Select, Modal,
@@ -353,7 +353,7 @@ export function InputStory() {
   const [UserComponent, setUserComponent] = useState<React.ComponentType | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
 
-  const processCode = useCallback((src: string) => {
+  const processCode = (src: string) => {
     const result = transformJSX(src);
     if (result.errors.length > 0) {
       setErrors(result.errors.map(e => `Line ${e.line}:${e.col}: ${e.message}`));
@@ -363,16 +363,16 @@ export function InputStory() {
     if (evalResult.error) { setErrors([evalResult.error]); return; }
     setErrors([]);
     setUserComponent(() => evalResult.component);
-  }, []);
+  };
 
   useMount(() => {
     if (code) processCode(code);
   });
 
-  const handleCodeChange = useCallback((src: string) => {
+  const handleCodeChange = (src: string) => {
     setCode(src);
     processCode(src);
-  }, [processCode]);
+  };
 
   return (
     <S.StoryRoot>

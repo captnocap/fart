@@ -6,7 +6,7 @@
  * At most one template is ever mounted at a time.
  */
 
-import React, { useMemo, useState, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import { Box, Text, Pressable, useLocalStore, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { templates, type Template } from './templates';
@@ -49,13 +49,10 @@ class PreviewBoundary extends React.Component<
 }
 
 function useTemplateComponent(code: string): React.ComponentType | null {
-  // rjit-ignore-next-line — non-trivial compute: JSX transform + eval per template
-  return useMemo(() => {
-    const result = transformJSX(code);
-    if (result.errors.length > 0) return null;
-    const evalResult = evalComponent(result.code);
-    return evalResult.component;
-  }, [code]);
+  const result = transformJSX(code);
+  if (result.errors.length > 0) return null;
+  const evalResult = evalComponent(result.code);
+  return evalResult.component;
 }
 
 // ── Floating overlay ────────────────────────────────────────────────────────

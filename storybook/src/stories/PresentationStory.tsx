@@ -440,9 +440,7 @@ export function PresentationStory() {
   }>({ id: null });
   const [log, setLog] = useState<string[]>(INITIAL_LOG);
 
-  // rjit-ignore-next-line
   const activeSlide = document.slides.find((slide) => slide.id === activeSlideId) ?? document.slides[0];
-  // rjit-ignore-next-line
   const activeSlideIndex = Math.max(0, document.slides.findIndex((slide) => slide.id === activeSlide.id));
   const canRemoveSlide = document.slides.length > 1;
 
@@ -556,7 +554,6 @@ export function PresentationStory() {
   };
 
   const handleAddText = () => {
-    // rjit-ignore-next-line — trivial count for index generation
     const nextNode = createStarterTextNode(activeSlide.nodes.filter((node) => node.kind === 'text').length + 1);
     const patch: PresentationPatch = {
       type: 'addNode',
@@ -573,7 +570,6 @@ export function PresentationStory() {
   };
 
   const handleAddShape = () => {
-    // rjit-ignore-next-line — trivial count for index generation
     const nextNode = createStarterShapeNode(activeSlide.nodes.filter((node) => node.kind === 'shape').length + 1);
     const patch: PresentationPatch = {
       type: 'addNode',
@@ -590,7 +586,6 @@ export function PresentationStory() {
   };
 
   const handleAddImage = () => {
-    // rjit-ignore-next-line — trivial count for index generation
     const nextIndex = activeSlide.nodes.filter((node) => node.kind === 'image').length + 1;
     const asset = createStarterImageAsset(nextIndex);
     const nextNode = createStarterImageNode(nextIndex, asset.id);
@@ -608,7 +603,6 @@ export function PresentationStory() {
   };
 
   const handleAddVideo = () => {
-    // rjit-ignore-next-line — trivial count for index generation
     const nextIndex = activeSlide.nodes.filter((node) => node.kind === 'video').length + 1;
     const asset = createStarterVideoAsset(nextIndex);
     const nextNode = createStarterVideoNode(nextIndex, asset.id);

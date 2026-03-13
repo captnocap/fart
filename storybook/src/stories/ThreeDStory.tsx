@@ -13,7 +13,7 @@
  * Static hoist ALL code strings and style objects outside the component.
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState } from 'react';
 import { Box, Text, Image, ScrollView, Pressable, CodeBlock, useLuaInterval, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { Band, Half, HeroBand, CalloutBand, Divider, SectionLabel, PageColumn } from './_shared/StoryScaffold';
@@ -136,9 +136,9 @@ function GeometryDemo() {
   const c = useThemeColors();
   const [geo, setGeo] = useState<GeoChoice>('box');
 
-  const cycleGeo = useCallback(() => {
+  const cycleGeo = () => {
     setGeo(prev => GEO_CHOICES[(GEO_CHOICES.indexOf(prev) + 1) % GEO_CHOICES.length]);
-  }, []);
+  };
 
   return (
     <Box style={{ gap: 8, alignItems: 'center' }}>

@@ -307,11 +307,9 @@ function MoleculesDemo() {
   const [formula, setFormula] = useState('H2O');
   const [search, setSearch] = useState('');
 
-  // rjit-ignore-next-line
   const results = (() => {
     if (!search) return [];
     const q = search.toLowerCase();
-    // rjit-ignore-next-line
     return COMPOUNDS.filter(c =>
       c.name.toLowerCase().includes(q) ||
       c.formula.toLowerCase().includes(q) ||

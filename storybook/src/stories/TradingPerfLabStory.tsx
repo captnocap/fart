@@ -68,7 +68,6 @@ function seeded(i: number, salt: number) {
 
 function percentile(values: number[], q: number) {
   if (values.length === 0) return 0;
-  // rjit-ignore-next-line
   const sorted = values.slice().sort((a, b) => a - b);
   const index = Math.min(sorted.length - 1, Math.max(0, Math.floor((sorted.length - 1) * q)));
   return sorted[index];
@@ -217,7 +216,6 @@ function BookPanel({
   color: string;
   descending: boolean;
 }) {
-  // rjit-ignore-next-line
   const sorted = levels.slice().sort((a, b) => descending ? b.price - a.price : a.price - b.price).slice(0, 10);
   const maxSize = Math.max(1, ...sorted.map((l) => l.size));
   return (
@@ -439,11 +437,10 @@ export function TradingPerfLabStory() {
     }
   });
 
-  // rjit-ignore-next-line — .tslx migration candidate: symbol selection
-  const selected = useMemo(() => {
+  const selected = (() => {
     const symbols = engineRef.current.symbols;
     return symbols[Math.max(0, Math.min(selectedIndex, symbols.length - 1))] || null;
-  }, [selectedIndex, symbolCount, depth, uiTick]);
+  })();
   const fps = typeof runtimePerf.fps === 'number' ? runtimePerf.fps : 0;
   const layoutMs = typeof runtimePerf.layoutMs === 'number' ? runtimePerf.layoutMs : 0;
   const paintMs = typeof runtimePerf.paintMs === 'number' ? runtimePerf.paintMs : 0;
@@ -480,8 +477,7 @@ export function TradingPerfLabStory() {
   const sysMem = sysInfo.loading ? '--' : formatMemory(sysInfo.memory);
   const sysUp = sysInfo.loading ? '--' : formatUptime(sysInfo.uptime);
 
-  // rjit-ignore-next-line — .tslx migration candidate: watchlist derivation
-  const watchlistRows = useMemo(() => {
+  const watchlistRows = (() => {
     const symbols = engineRef.current.symbols;
     const maxRows = Math.min(symbols.length, watchlistLimit);
     const rows: Array<{ index: number; symbol: string; last: number; deltaPct: number; volume: number }> = [];
@@ -498,10 +494,9 @@ export function TradingPerfLabStory() {
       });
     }
     return rows;
-  }, [uiTick, symbolCount, watchlistLimit]);
+  })();
 
-  // rjit-ignore-next-line — .tslx migration candidate: tape derivation
-  const tapeRows = useMemo(() => {
+  const tapeRows = (() => {
     if (!selected) return [];
     const start = Math.max(1, selected.history.length - tapeLimit);
     const out: Array<{ id: number; side: 'BUY' | 'SELL'; price: number; size: number }> = [];
@@ -516,14 +511,13 @@ export function TradingPerfLabStory() {
       });
     }
     return out.reverse();
-  }, [selectedIndex, symbolCount, depth, uiTick, selected, tapeLimit]);
+  })();
 
-  // rjit-ignore-next-line — .tslx migration candidate: history windowing
-  const visibleHistory = useMemo(() => {
+  const visibleHistory = (() => {
     if (!selected) return [];
     if (selected.history.length <= historyLimit) return selected.history;
     return selected.history.slice(selected.history.length - historyLimit);
-  }, [selected, historyLimit]);
+  })();
 
   const shellBg = '#050b16';
   const panelBg = '#0b1322';

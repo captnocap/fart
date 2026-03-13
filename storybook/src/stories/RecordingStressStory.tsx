@@ -35,7 +35,6 @@ function nowMs() {
 
 function percentile(values: number[], q: number) {
   if (values.length === 0) return 0;
-  // rjit-ignore-next-line
   const sorted = values.slice().sort((a, b) => a - b);
   const idx = Math.min(sorted.length - 1, Math.max(0, Math.floor((sorted.length - 1) * q)));
   return sorted[idx];
@@ -132,7 +131,6 @@ function LoadBoxes({ count, width, height }: { count: number; width: number; hei
     setTick(t => t + 1);
   });
 
-  // rjit-ignore-next-line — loop building element array, migrate to .tslx
   const boxes = (() => {
     const arr = positions.current;
     const result: React.ReactElement[] = [];

@@ -1,4 +1,4 @@
-import React, { createContext, useState, useCallback, useMemo, useContext } from 'react';
+import React, { createContext, useState, useContext } from 'react';
 import { useBridgeOptional } from '../../../packages/core/src/context';
 import { useMount } from '../../../packages/core/src';
 
@@ -17,12 +17,12 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
   const bridge = useBridgeOptional();
   const [voice, setVoiceState] = useState<Voice>('shitpost');
 
-  const setVoice = useCallback((v: Voice) => {
+  const setVoice = (v: Voice) => {
     setVoiceState(v);
     if (bridge) {
       bridge.rpc('localstore:set', { namespace: 'voice', key: 'selected', value: v }).catch(() => {});
     }
-  }, [bridge]);
+  };
 
   useMount(() => {
     if (!bridge) return;
@@ -34,11 +34,11 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
       .catch(() => {});
   });
 
-  const value = useMemo<VoiceContextValue>(() => ({
+  const value: VoiceContextValue = {
     voice,
     setVoice,
     v: (shitpost: string, corpo: string) => voice === 'shitpost' ? shitpost : corpo,
-  }), [voice, setVoice]);
+  };
 
   return React.createElement(VoiceContext.Provider, { value }, children);
 }

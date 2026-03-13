@@ -40,7 +40,6 @@ export function PlaygroundPanel() {
   const processCode = (src: string) => {
     const msgs = lint(src);
     setLintMessages(msgs);
-    // rjit-ignore-next-line — trivial filter for error severity
     const errs = msgs.filter(m => m.severity === 'error');
     if (errs.length > 0) { setErrors(errs.map(e => `Line ${e.line}: ${e.message}`)); return; }
     const result = transformJSX(src);

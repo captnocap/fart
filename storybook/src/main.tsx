@@ -210,7 +210,6 @@ function StorybookPanel() {
 
   // Expose programmatic navigation for tests (rjit test)
   (globalThis as any).__navigateToStory = (id: string): boolean => {
-    // rjit-ignore-next-line
     const idx = stories.findIndex(s => s.id === id);
     if (idx < 0) return false;
     navigateToStory(idx);
@@ -269,7 +268,6 @@ function StorybookPanel() {
       try {
         const result = await bridge.rpc<any>('diagnose:run', undefined, 5000);
         if (result && !result.error) {
-          // rjit-ignore-next-line
           const ghostNodes = (result.nodes || []).filter((n: any) => n.status !== 'non-visual-cap' && n.status !== 'own-surface');
           allResults.push({
             story: story.title,
@@ -295,9 +293,7 @@ function StorybookPanel() {
     }
 
     // Print summary
-    // rjit-ignore-next-line
     const storiesWithGhosts = allResults.filter(r => r.ghost > 0);
-    // rjit-ignore-next-line
     const totalGhosts = allResults.reduce((sum, r) => sum + r.ghost, 0);
 
     console.log('\n[diagnose] ═══════════════════════════════════════');

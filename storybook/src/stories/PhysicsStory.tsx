@@ -6,7 +6,7 @@
  * Static hoist ALL code strings and style objects outside the component.
  */
 
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import { Box, Text, Image, ScrollView, Pressable, CodeBlock, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import {
@@ -189,7 +189,7 @@ function FallingBodiesDemo() {
   const [debug, setDebug] = useState(true);
   const shapeRef = useRef<'rectangle' | 'circle'>('rectangle');
 
-  const spawn = useCallback(() => {
+  const spawn = () => {
     const id = ++_spawnId;
     const shape = shapeRef.current;
     const size = 14 + Math.floor(Math.random() * 14);
@@ -197,12 +197,12 @@ function FallingBodiesDemo() {
     const x = 40 + Math.random() * 180;
     const y = 15 + Math.random() * 25;
     setBodies(prev => [...prev, { id, x, y, shape, color, size }]);
-  }, []);
+  };
 
-  const clear = useCallback(() => {
+  const clear = () => {
     setBodies([]);
     _spawnId = 0;
-  }, []);
+  };
 
   return (
     <S.CenterW100 style={{ gap: 8 }}>

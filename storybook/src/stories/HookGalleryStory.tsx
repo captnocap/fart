@@ -12,7 +12,7 @@
  * return type in the detail panel.
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import { Box, Text, Image, Pressable, ScrollView, CodeBlock, Input, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { HOOKS, getThumb } from './HookDemos';
@@ -62,20 +62,16 @@ export function HookGalleryStory() {
   const [activeCat, setActiveCat] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // rjit-ignore-next-line
   const hook = HOOKS.find(h => h.id === activeId) || HOOKS[0];
   const pkgColor = PKG[hook.pkg] || C.accent;
 
-  // rjit-ignore-next-line
-  const filtered = useMemo(() => {
+  const filtered = (() => {
     let list = HOOKS;
     if (activeCat !== 'All') {
-      // rjit-ignore-next-line
       list = list.filter(h => h.cat === activeCat);
     }
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
-      // rjit-ignore-next-line
       list = list.filter(h =>
         h.id.toLowerCase().includes(q) ||
         h.pkg.toLowerCase().includes(q) ||
@@ -84,7 +80,7 @@ export function HookGalleryStory() {
       );
     }
     return list;
-  }, [activeCat, searchQuery]);
+  })();
 
   return (
     <S.StoryRoot>
@@ -119,7 +115,6 @@ export function HookGalleryStory() {
       <S.RowCenterBorder style={{ flexShrink: 0, backgroundColor: c.bgElevated, borderBottomWidth: 1, paddingLeft: 16, paddingRight: 16, paddingTop: 6, paddingBottom: 6, gap: 4 }}>
         {CATEGORIES.map(cat => {
           const active = cat === activeCat;
-          // rjit-ignore-next-line
           const count = cat === 'All' ? HOOKS.length : HOOKS.filter(h => h.cat === cat).length;
           return (
             <Pressable key={cat} onPress={() => setActiveCat(cat)}>

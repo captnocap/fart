@@ -1052,7 +1052,6 @@ function RippleButton({ label, color }: { label: string; color: string }) {
     const ly = (e.y || 0) - layoutRef.current.y;
     const id = ++idRef.current;
     setRipples(prev => [...prev, { x: lx, y: ly, id }]);
-    // rjit-ignore-next-line — trivial filter to remove expired ripple by id
     setTimeout(() => setRipples(prev => prev.filter(r => r.id !== id)), 700);
   };
 

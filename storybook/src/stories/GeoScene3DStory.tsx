@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState } from 'react';
 import { Box, Text, Pressable, ScrollView, classifiers as S} from '@reactjit/core';
 import {
   GeoScene, TerrainLayer, BuildingLayer,
@@ -193,14 +193,11 @@ export function GeoScene3DStory() {
   const [fogLevel, setFogLevel] = useState(0.0008);
   const [heightScale, setHeightScale] = useState(1.5);
 
-  const preset = useMemo(
-    () => PRESETS.find((p) => p.id === presetId) || PRESETS[0],
-    [presetId],
-  );
+  const preset = PRESETS.find((p) => p.id === presetId) || PRESETS[0];
 
-  const jumpTo = useCallback((id: string) => {
+  const jumpTo = (id: string) => {
     setPresetId(id);
-  }, []);
+  };
 
   return (
     <Box style={{ width: '100%', height: '100%', backgroundColor: C.bg, flexDirection: 'row', gap: 8, padding: 8 }}>

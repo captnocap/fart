@@ -396,12 +396,10 @@ export function WindowsStory() {
   };
 
   const dismissNotif = (notifId: number) => {
-    // rjit-ignore-next-line — .filter for state update
     setActiveNotifs(prev => prev.filter(n => n.id !== notifId));
   };
 
   const dismissRichNotif = (notifId: number) => {
-    // rjit-ignore-next-line — .filter for state update
     setRichNotifs(prev => prev.filter(n => n.id !== notifId));
   };
 

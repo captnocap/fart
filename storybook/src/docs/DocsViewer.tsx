@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState } from 'react';
 import { Box, Text, Pressable } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { DocsSidebar } from './DocsSidebar';
@@ -53,10 +53,10 @@ function DocsViewerInner({ content }: DocsViewerProps) {
   const [activeSectionId, setActiveSectionId] = useState('01-getting-started');
   const [activeFileKey, setActiveFileKey] = useState('index');
 
-  const handleSelect = useCallback((sectionId: string, fileKey: string) => {
+  const handleSelect = (sectionId: string, fileKey: string) => {
     setActiveSectionId(sectionId);
     setActiveFileKey(fileKey);
-  }, []);
+  };
 
   const activeContent = content.sections[activeSectionId]?.[activeFileKey];
 

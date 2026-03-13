@@ -540,7 +540,6 @@ function EnvCardsDemo() {
         <Box style={{ gap: 6 }}>
           {environments.map(env => {
             const cfg = env.config;
-            // rjit-ignore-next-line
             const typeColor = ENV_TYPES.find(t => t.label === cfg.type)?.color || C.env;
             const statusColor = env.ready ? STATE_COLORS.ready : env.installing ? STATE_COLORS.installing : STATE_COLORS.creating;
             const statusLabel = env.ready ? 'ready' : env.installing ? 'installing' : 'creating';
@@ -578,7 +577,6 @@ function EnvCardsDemo() {
 function QuickRunDemo() {
   const c = useThemeColors();
   const { environments } = useEnvironments();
-  // rjit-ignore-next-line
   const hasEnv = environments.some(e => e.config.name === 'storybook-shell');
   const [started, setStarted] = useState(false);
   const proc = useEnvRun('storybook-shell', 'echo "Hello from environment!" && uname -a && date', { autoStart: false, onExit: () => {} });

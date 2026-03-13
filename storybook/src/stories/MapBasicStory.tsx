@@ -211,13 +211,11 @@ export function MapBasicStory() {
 
   const { distance } = useProjection();
 
-  // rjit-ignore-next-line
   const preset = PRESETS.find((p) => p.id === presetId) ?? first;
 
   const fleetMarkers = makeFleet(preset.center, 16);
   const buildingData = makeBuildings(preset.center);
 
-  // rjit-ignore-next-line — loop compute, migrate to .tslx
   const routeDistanceKm = (() => {
     const pts = preset.route;
     if (pts.length < 2) return 0;
@@ -238,7 +236,6 @@ export function MapBasicStory() {
   };
 
   const jumpTo = (id: string) => {
-    // rjit-ignore-next-line
     const p = PRESETS.find((x) => x.id === id);
     if (!p) return;
     setPresetId(p.id);

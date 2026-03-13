@@ -205,17 +205,13 @@ function MirrorView({ tree, appName, onAction, selectedNode, onSelectNode }: {
   if (!frame) return <Text style={{ color: c.muted }}>No frame rect found</Text>;
 
   const allNodes = flattenWithRects(tree);
-  // rjit-ignore-next-line — structural tree partitioning for a11y mirror rendering, needs .tslx migration
   const structural = allNodes.filter(n => isStructural(n) && !isLeafLike(n));
-  // rjit-ignore-next-line
   const leaves = allNodes.filter(n => isLeafLike(n));
   // Sort leaves by area (largest first) so small elements render on top
   leaves.sort((a, b) => (b.rect.w * b.rect.h) - (a.rect.w * a.rect.h));
   // Deduplicate table cells: group by row (same Y), prefer named cell, merge widths
   const dedupedLeaves: FlatNode[] = [];
-  // rjit-ignore-next-line
   const tableCells = leaves.filter(n => n.role === 'table cell');
-  // rjit-ignore-next-line
   const nonCells = leaves.filter(n => n.role !== 'table cell');
 
   // Group table cells by row (same Y position)
@@ -228,7 +224,6 @@ function MirrorView({ tree, appName, onAction, selectedNode, onSelectNode }: {
 
   // For each row, create one merged cell spanning the full row width
   for (const [, cells] of rowMap) {
-    // rjit-ignore-next-line
     const named = cells.find(c => c.name);
     if (!named) continue;
     const minX = Math.min(...cells.map(c => c.rect.x));

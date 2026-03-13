@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useState } from 'react';
 import { Box, MonacoMirror, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 
@@ -124,20 +124,20 @@ export function MonacoMirrorStory() {
   const [selectedFile, setSelectedFile] = useState(OPEN_FILES[0]);
   const activeCode = fileContents[selectedFile] ?? STARTER_CODE;
 
-  const handleChange = useCallback((next: string) => {
+  const handleChange = (next: string) => {
     setFileContents((current) => ({
       ...current,
       [selectedFile]: next,
     }));
-  }, [selectedFile]);
+  };
 
-  const handleSubmit = useCallback((next: string) => {
+  const handleSubmit = (next: string) => {
     setFileContents((current) => ({
       ...current,
       [selectedFile]: next,
     }));
     setLastSubmitChars(next.length);
-  }, [selectedFile]);
+  };
 
   return (
     <S.StoryRoot style={{ paddingLeft: 12, paddingRight: 12, paddingTop: 12, paddingBottom: 12, gap: 8 }}>

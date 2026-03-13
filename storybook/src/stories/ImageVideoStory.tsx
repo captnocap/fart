@@ -30,7 +30,6 @@ function styleTooltip(style: Record<string, any>): { content: string; layout: st
     'alignItems', 'alignSelf', 'justifyContent', 'overflow',
     'position', 'zIndex', 'display',
   ]);
-  // rjit-ignore-next-line
   const entries = Object.entries(style).filter(([k, v]) => !STRUCTURAL.has(k) && v !== undefined);
   if (entries.length === 0) return undefined;
   const content = entries.map(([k, v]) => `${k}: ${v}`).join('\n');

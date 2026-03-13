@@ -5,7 +5,7 @@
  * Static hoist ALL code strings and style objects outside the component.
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import { Box, Text, Image, ScrollView, Pressable, CodeBlock, Math as MathBlock, classifiers as S, useLuaQuery} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { Band, Half, HeroBand, CalloutBand, Divider, SectionLabel, PageColumn } from './_shared/StoryScaffold';
@@ -354,24 +354,20 @@ const INTERP_STEPS = 32;
 function InterpolationDemo() {
   const c = useThemeColors();
 
-  // rjit-ignore-next-line — heavy batch construction for interpolation curves
-  const batch = useMemo(() => {
-    const b: any[] = [];
-    for (let n = 0; n < 4; n++) {
-      for (let i = 0; i <= INTERP_STEPS; i++) {
-        const t = i / INTERP_STEPS;
-        if (n === 0) b.push({ op: 'interp.lerp', a: 0, b: 1, t });
-        else if (n === 1) b.push({ op: 'interp.smoothstep', edge0: 0, edge1: 1, x: t });
-        else if (n === 2) b.push({ op: 'interp.smootherstep', edge0: 0, edge1: 1, x: t });
-        else b.push({ op: 'interp.damp', a: 0, b: 1, smoothing: 5, dt: t });
-      }
+  const batch: any[] = [];
+  for (let n = 0; n < 4; n++) {
+    for (let i = 0; i <= INTERP_STEPS; i++) {
+      const t = i / INTERP_STEPS;
+      if (n === 0) batch.push({ op: 'interp.lerp', a: 0, b: 1, t });
+      else if (n === 1) batch.push({ op: 'interp.smoothstep', edge0: 0, edge1: 1, x: t });
+      else if (n === 2) batch.push({ op: 'interp.smootherstep', edge0: 0, edge1: 1, x: t });
+      else batch.push({ op: 'interp.damp', a: 0, b: 1, smoothing: 5, dt: t });
     }
-    b.push({ op: 'interp.pingPong', value: 2.7, length: 1 });
-    b.push({ op: 'interp.remap', value: 0.5, inMin: 0, inMax: 1, outMin: 100, outMax: 200 });
-    b.push({ op: 'interp.inverseLerp', a: 10, b: 20, value: 15 });
-    b.push({ op: 'interp.wrap', value: 370, min: 0, max: 360 });
-    return b;
-  }, []);
+  }
+  batch.push({ op: 'interp.pingPong', value: 2.7, length: 1 });
+  batch.push({ op: 'interp.remap', value: 0.5, inMin: 0, inMax: 1, outMin: 100, outMax: 200 });
+  batch.push({ op: 'interp.inverseLerp', a: 10, b: 20, value: 15 });
+  batch.push({ op: 'interp.wrap', value: 370, min: 0, max: 360 });
 
   const { data: res } = useLuaQuery<any[]>('math:call', { batch }, []);
 
@@ -476,10 +472,9 @@ function NoiseFieldDemo() {
     [seed, scale],
   );
 
-  // rjit-ignore-next-line — heavy compute: noise field to color grid mapping
-  const rows = useMemo(() => {
-    if (!field) return null;
-    const next: string[][] = [];
+  let rows: string[][] | null = null;
+  if (field) {
+    rows = [];
     for (let row = 0; row < SIZE; row++) {
       const rowColors: string[] = [];
       for (let col = 0; col < SIZE; col++) {
@@ -488,10 +483,9 @@ function NoiseFieldDemo() {
         const hex = brightness.toString(16).padStart(2, '0');
         rowColors.push(`#${hex}${hex}${hex}`);
       }
-      next.push(rowColors);
+      rows.push(rowColors);
     }
-    return next;
-  }, [field]);
+  }
 
   return (
     <S.StackG8W100>
@@ -526,14 +520,10 @@ function FFTDemo() {
   const [freq, setFreq] = useState(4);
   const N = 64;
 
-  // rjit-ignore-next-line — heavy compute: sine wave sample generation
-  const samples = useMemo(() => {
-    const s: number[] = [];
-    for (let i = 0; i < N; i++) {
-      s.push(Math.sin(i * freq * 2 * Math.PI / N) + 0.5 * Math.sin(i * freq * 3 * 2 * Math.PI / N));
-    }
-    return s;
-  }, [freq]);
+  const samples: number[] = [];
+  for (let i = 0; i < N; i++) {
+    samples.push(Math.sin(i * freq * 2 * Math.PI / N) + 0.5 * Math.sin(i * freq * 3 * 2 * Math.PI / N));
+  }
 
   const { data: spectrum } = useLuaQuery<number[]>('math:call', { op: 'fft', samples }, [freq]);
 

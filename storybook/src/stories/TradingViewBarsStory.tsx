@@ -1,4 +1,4 @@
-import React, { useRef, useMemo, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Box, Text, Tabs, Switch, Badge, BarChart, useLuaInterval, classifiers as S} from '../../../packages/core/src';
 import type { Tab } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
@@ -194,8 +194,7 @@ export function TradingViewBarsStory() {
   const [timeframe, setTimeframe] = useState<Timeframe>('1h');
   const [live, setLive] = useState(true);
   const [spin, setSpin] = useState(0);
-  // rjit-ignore-next-line — static initial candle generation, runs once
-  const [candles, setCandles] = useState<Candle[]>(() => makeCandles('1h'));
+  const [candles, setCandles] = useState<Candle[]>(makeCandles('1h'));
 
   const prevTimeframe = useRef(timeframe);
   if (prevTimeframe.current !== timeframe) {
@@ -244,8 +243,7 @@ export function TradingViewBarsStory() {
     });
   });
 
-  // rjit-ignore-next-line
-  const { minPrice, maxPrice, last, prev } = useMemo(() => {
+  const { minPrice, maxPrice, last, prev } = (() => {
     let min = Infinity;
     let max = -Infinity;
     for (let i = 0; i < candles.length; i += 1) {
@@ -266,7 +264,7 @@ export function TradingViewBarsStory() {
       last: current,
       prev: previous,
     };
-  }, [candles]);
+  })();
 
   const delta = last.close - prev.close;
   const deltaPct = prev.close ? (delta / prev.close) * 100 : 0;

@@ -9,7 +9,7 @@
  * ────────────────────────────────────────────────────────────────────────
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import {
   Box, Text, Image, Pressable, ScrollView, TextEditor, CodeBlock,
   Table, Badge, BarChart, ProgressBar, Sparkline,
@@ -38,7 +38,6 @@ function styleTooltip(style: Record<string, any>): { content: string; layout: st
     'alignItems', 'alignSelf', 'justifyContent', 'overflow',
     'position', 'zIndex', 'display',
   ]);
-  // rjit-ignore-next-line
   const entries = Object.entries(style).filter(([k, v]) => !STRUCTURAL.has(k) && v !== undefined);
   if (entries.length === 0) return undefined;
   const content = entries.map(([k, v]) => `${k}: ${v}`).join('\n');
@@ -239,8 +238,7 @@ function PreviewSection({ label, children }: { label: string; children: React.Re
 
 function DataPreview() {
   const c = useThemeColors();
-  // rjit-ignore-next-line — table columns with render callbacks, non-trivial
-  const tableColumns: TableColumn<Employee>[] = useMemo(() => [
+  const tableColumns: TableColumn<Employee>[] = [
     { key: 'name', title: 'Name' },
     { key: 'role', title: 'Role' },
     {
@@ -255,7 +253,7 @@ function DataPreview() {
       ),
     },
     { key: 'score', title: 'Score', width: 42, align: 'right' },
-  ], []);
+  ];
 
   return (
     <S.CenterW100 style={{ gap: 14 }}>

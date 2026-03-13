@@ -282,14 +282,12 @@ function CandlestickDemo() {
   const delta = last.close - prev.close;
   const up = delta >= 0;
 
-  // rjit-ignore-next-line — .map projection for chart data, needs .tslx migration
   const candleData = candles.map(c => ({
     time: c.time, open: c.open, high: c.high, low: c.low, close: c.close,
   }));
 
   const ticker = makeTicker(candles);
 
-  // rjit-ignore-next-line — overlay construction with .map projections, needs .tslx migration
   const overlays: ChartOverlay[] = (() => {
     const ov: ChartOverlay[] = [
       { values: ta.sma20, color: '#3b82f6', lineWidth: 1.5 },
@@ -309,17 +307,13 @@ function CandlestickDemo() {
     return ov;
   })();
 
-  // rjit-ignore-next-line — .filter for NaN removal in legend, needs .tslx migration
   const legendItems = (() => {
-    // rjit-ignore-next-line
     const sma20 = ta.sma20.filter(v => !isNaN(v));
-    // rjit-ignore-next-line
     const sma50 = ta.sma50.filter(v => !isNaN(v));
     const items: Array<{ label: string; color: string; value?: number }> = [];
     if (sma20.length > 0) items.push({ label: 'SMA 20', color: '#3b82f6', value: sma20[sma20.length - 1] });
     if (sma50.length > 0) items.push({ label: 'SMA 50', color: '#f59e0b', value: sma50[sma50.length - 1] });
     if (showBB) {
-      // rjit-ignore-next-line
       const bb = ta.bollinger.filter(b => !isNaN(b.upper));
       if (bb.length > 0) items.push({ label: 'BB', color: '#a78bfa', value: bb[bb.length - 1].upper - bb[bb.length - 1].lower });
     }
@@ -425,15 +419,12 @@ function RSIMACDDemo() {
 
   useLuaInterval(1300, () => { append(); });
 
-  // rjit-ignore-next-line — trivial NaN filter for last-value extraction
   const rsiLast = ta.rsi14.filter(v => !isNaN(v));
   const rsiValue = rsiLast.length > 0 ? rsiLast[rsiLast.length - 1] : 50;
 
-  // rjit-ignore-next-line — trivial NaN filter for last-value extraction
   const stochValid = ta.stochastic.filter(s => !isNaN(s.k));
   const stochLast = stochValid[stochValid.length - 1];
 
-  // rjit-ignore-next-line — trivial NaN filter for last-value extraction
   const bbValid = ta.bollinger.filter(b => !isNaN(b.upper));
   const bbLast = bbValid[bbValid.length - 1];
 
@@ -498,7 +489,6 @@ function PortfolioDemo() {
     }
   });
 
-  // rjit-ignore-next-line — .map projection for chart data, needs .tslx migration
   const allocationBars = snapshot.allocation.map(a => ({
     label: a.symbol,
     value: a.weight * 100,
