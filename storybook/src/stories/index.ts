@@ -83,6 +83,7 @@ import { A11yMirrorStory } from './A11yMirrorStory';
 import { AudioRackStory } from './AudioRackStory';
 import { CreativeConceptsStory } from './CreativeConceptsStory';
 import { DemoStory } from './DemoStory';
+import { SleepySyntaxStory } from './SleepySyntaxStory';
 
 // ── Stress Test ─────────────────────────────────────────
 import RecordingStressStory from './RecordingStressStory';
@@ -164,6 +165,7 @@ export const stories: StoryDef[] = [
   { id: 'audio-rack', title: 'Audio Rack', section: 'Demos', component: AudioRackStory },
   { id: 'creative-concepts', title: 'Creative Concepts', section: 'Demos', component: CreativeConceptsStory },
   { id: 'demo', title: 'Demos', section: 'Demos', component: DemoStory },
+  { id: 'sleepy-syntax', title: 'SleepySyntax', section: 'Demos', component: SleepySyntaxStory },
 
   // ── Stress Test ───────────────────────────────────────
   { id: 'recording-stress', title: 'Recording Stress', section: 'Stress Test', component: RecordingStressStory },
