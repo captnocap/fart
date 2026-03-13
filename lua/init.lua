@@ -2504,6 +2504,12 @@ function ReactJIT._pollHMR()
           ["lua.gpio.gpiod"] = true,
           ["lua.audio.midi"] = true,
           ["lua.g3d.model"] = true,
+          -- Preserve capabilities registry across reloads. The module holds the
+          -- live registry + instances tables as upvalues. Clearing it would create
+          -- a fresh empty registry, orphaning all live capability instances.
+          -- Generated/hand-written capability modules ARE cleared and re-required
+          -- via loadAll(), which calls register() on this preserved table.
+          ["lua.capabilities"] = true,
         }
         for modname, _ in pairs(package.loaded) do
           if type(modname) == "string" and modname:match("^lua%.") and not ffiModules[modname] then
