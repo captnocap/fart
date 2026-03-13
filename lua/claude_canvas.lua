@@ -364,7 +364,7 @@ Capabilities.register("ClaudeCanvas", {
       -- Group type lookup: which tokens form interactive groups
       local GROUP_TYPES = {
         menu_title = "menu", menu_option = "menu", menu_desc = "menu",
-        menu_example = "menu", form_label = "menu", form_field = "menu",
+        menu_example = "menu", form_label = "menu", form_field = "menu", detail_text = "menu",
         list_selectable = "menu", list_selected = "menu", list_info = "menu",
         search_box = "menu", selector = "menu", confirmation = "menu", hint = "menu",
         picker_title = "picker", picker_item = "picker",
@@ -379,7 +379,7 @@ Capabilities.register("ClaudeCanvas", {
         assistant_text = true, user_text = true, diff = true,
         text = true, banner = true, thinking = true, plan_mode = true,
         status_bar = true, input_border = true, warning = true,
-        tool = true, result = true, form_field = true, menu_example = true,
+        tool = true, result = true, form_field = true, menu_example = true, detail_text = true,
       }
 
       -- Per-turn sequence counters (reset on turn change)
@@ -826,6 +826,39 @@ Capabilities.register("ClaudeCanvas", {
           if cy >= c.y and cy + lineH <= contentBottom then
             love.graphics.setColor(0.9, 0.9, 0.95, 0.85 * effectiveOpacity)
             love.graphics.rectangle("fill", cx, cy, charW, lineH)
+          end
+        end
+      end
+
+      -- ── Post-pass: detect detail pages ─────────────────────────────
+      -- A menu group with no interactive elements (no menu_option, no list_selected)
+      -- is a detail/view page — reclassify list_selectable/form_label → detail_text.
+      -- This handles "View agent" output where all text is def-fg prose, not selectable items.
+      do
+        -- Collect groups and their interactive state
+        local groupHasInteractive = {}  -- groupId -> bool
+        local groupEntries = {}         -- groupId -> { idx, ... }
+        for idx, entry in ipairs(classifiedCache) do
+          local gid = entry.groupId
+          if gid then
+            if not groupEntries[gid] then groupEntries[gid] = {} end
+            groupEntries[gid][#groupEntries[gid] + 1] = idx
+            if entry.kind == "menu_option" or entry.kind == "list_selected"
+               or entry.kind == "selector" or entry.kind == "confirmation" then
+              groupHasInteractive[gid] = true
+            end
+          end
+        end
+        -- Reclassify non-interactive groups
+        for gid, entries in pairs(groupEntries) do
+          if not groupHasInteractive[gid] then
+            for _, idx in ipairs(entries) do
+              local entry = classifiedCache[idx]
+              if entry.kind == "list_selectable" or entry.kind == "form_label" then
+                entry.kind = "detail_text"
+                entry.nodeId = "g" .. gid .. ":detail"
+              end
+            end
           end
         end
       end
