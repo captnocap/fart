@@ -63,6 +63,7 @@ export function Input(rawProps: InputProps) {
     wordWrap,
     cursorColor,
     cursorPosition,
+    syntaxLanguage,
   } = rawProps as any;
 
   const anyProps = rawProps as any;
@@ -154,6 +155,7 @@ export function Input(rawProps: InputProps) {
       readOnly: editable === false,
       lineNumbers: lineNumbers ?? false,
       syntaxHighlight: syntaxHighlight ?? false,
+      syntaxLanguage: syntaxLanguage ?? '',
       tooltipLevel: tooltipLevel ?? '',
     };
 

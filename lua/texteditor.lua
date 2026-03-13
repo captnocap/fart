@@ -1333,6 +1333,7 @@ function TextEditor.draw(node, effectiveOpacity)
   local va = visibleArea(node, es)
   local lh = va.lineHeight
   local useSyntax = (node.props or {}).syntaxHighlight == true
+  local syntaxLang = (node.props or {}).syntaxLanguage or nil
   local tooltipLevel = (node.props or {}).tooltipLevel
 
   -- Sync controlled value first (content may change, invalidating scroll)
@@ -1554,7 +1555,7 @@ function TextEditor.draw(node, effectiveOpacity)
 
       if useSyntax then
         -- Per-token colored rendering
-        local tokens = tokenizeLine(lineStr)
+        local tokens = tokenizeLine(lineStr, syntaxLang)
         local xOff = textX
         for _, tok in ipairs(tokens) do
           setColorWithOpacity(tok.color, effectiveOpacity)

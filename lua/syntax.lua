@@ -1877,6 +1877,109 @@ local function tokenizeMarkdown(line)
 end
 
 -- ============================================================================
+-- SleepySyntax (.sleepy) tokenizer
+-- ============================================================================
+
+local function tokenizeSleepy(line)
+  local sc = Syntax.colors
+  local tokens = {}
+  local i = 1
+  local len = #line
+
+  -- Sleepy-specific colors mapped to existing palette
+  local C_BRACE   = sc.keyword     -- mauve for {}
+  local C_PAREN   = sc.component   -- lavender for ()
+  local C_BRACKET = sc.string      -- green for []
+  local C_COLON   = sc.punctuation -- overlay2 for :
+  local C_COMMA   = sc.punctuation -- overlay2 for ,
+  local C_STRING  = sc.tag         -- red for "strings"
+  local C_IDENT   = sc.prop        -- blue for identifiers
+  local C_API     = sc.number      -- peach for api.bindings
+  local C_VARIANT = sc.typeName    -- yellow for $variant
+  local C_COMMENT = sc.comment     -- overlay2 for //
+  local C_WS      = sc.text        -- base text for whitespace
+
+  while i <= len do
+    local ch = line:sub(i, i)
+
+    -- Whitespace
+    if ch:match("%s") then
+      local s = i
+      while i <= len and line:sub(i, i):match("%s") do i = i + 1 end
+      tokens[#tokens+1] = {text=line:sub(s, i-1), color=C_WS}
+
+    -- Comment //
+    elseif ch == "/" and i+1 <= len and line:sub(i+1, i+1) == "/" then
+      tokens[#tokens+1] = {text=line:sub(i), color=C_COMMENT}
+      i = len + 1
+
+    -- Braces
+    elseif ch == "{" or ch == "}" then
+      tokens[#tokens+1] = {text=ch, color=C_BRACE}
+      i = i + 1
+
+    -- Parens
+    elseif ch == "(" or ch == ")" then
+      tokens[#tokens+1] = {text=ch, color=C_PAREN}
+      i = i + 1
+
+    -- Brackets
+    elseif ch == "[" or ch == "]" then
+      tokens[#tokens+1] = {text=ch, color=C_BRACKET}
+      i = i + 1
+
+    -- Colon
+    elseif ch == ":" then
+      tokens[#tokens+1] = {text=ch, color=C_COLON}
+      i = i + 1
+
+    -- Comma
+    elseif ch == "," then
+      tokens[#tokens+1] = {text=ch, color=C_COMMA}
+      i = i + 1
+
+    -- String
+    elseif ch == '"' or ch == "'" then
+      local quote = ch
+      local s = i
+      i = i + 1
+      while i <= len and line:sub(i, i) ~= quote do
+        if line:sub(i, i) == "\\" then i = i + 1 end
+        i = i + 1
+      end
+      if i <= len then i = i + 1 end -- skip closing quote
+      tokens[#tokens+1] = {text=line:sub(s, i-1), color=C_STRING}
+
+    -- Identifier, api ref, or $variant
+    elseif ch:match("[a-zA-Z_]") or ch == "$" then
+      local s = i
+      while i <= len and line:sub(i, i):match("[a-zA-Z0-9_.$%-]") do i = i + 1 end
+      local word = line:sub(s, i-1)
+
+      if word:sub(1, 4) == "api." then
+        tokens[#tokens+1] = {text=word, color=C_API}
+      elseif word:find("%$") then
+        -- Split at $ : identifier part + variant part
+        local dIdx = word:find("%$")
+        if dIdx > 1 then
+          tokens[#tokens+1] = {text=word:sub(1, dIdx-1), color=C_IDENT}
+        end
+        tokens[#tokens+1] = {text=word:sub(dIdx), color=C_VARIANT}
+      else
+        tokens[#tokens+1] = {text=word, color=C_IDENT}
+      end
+
+    -- Fallback: single char
+    else
+      tokens[#tokens+1] = {text=ch, color=C_WS}
+      i = i + 1
+    end
+  end
+
+  return tokens
+end
+
+-- ============================================================================
 -- Plain text fallback
 -- ============================================================================
 
@@ -1918,6 +2021,8 @@ local TOKENIZERS = {
   wgsl=tokenizeGLSL,
   -- Docs
   md=tokenizeMarkdown, markdown=tokenizeMarkdown,
+  -- SleepySyntax
+  sleepy=tokenizeSleepy,
   -- Plain
   text=tokenizePlain, txt=tokenizePlain, plain=tokenizePlain,
 }
