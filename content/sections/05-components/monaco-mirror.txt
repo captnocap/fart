@@ -32,14 +32,22 @@ Props (inherits all Input props except multiline, lineNumbers, syntaxHighlight, 
 | workspaceLabel    | string                      | 'workspace'     | Label in explorer header                 |
 | branch            | string                      | 'main'          | Branch name displayed in tab bar         |
 | language          | string                      | auto-detected   | Override language label                  |
+| activityBarWidth  | number                      | 42              | Activity bar width in pixels             |
 | sidebarWidth      | number                      | 190             | Sidebar width in pixels                  |
 | minimapWidth      | number                      | 120             | Minimap panel width in pixels            |
+| topBarHeight      | number                      | 42 / 28 compact | Top tab bar height in pixels             |
+| breadcrumbBarHeight | number                    | 24              | Breadcrumb bar height in pixels          |
+| statusBarHeight   | number                      | 22 / 18 compact | Status bar height in pixels              |
+| editorPaddingLeft | number                      | 10              | Editor viewport left padding             |
+| editorPaddingRight| number                      | 10              | Editor viewport right padding            |
+| editorPaddingTop  | number                      | 8               | Editor viewport top padding              |
+| editorPaddingBottom | number                    | 8               | Editor viewport bottom padding           |
 | showActivityBar   | boolean                     | true            | Show left activity bar                   |
 | showSidebar       | boolean                     | true            | Show file explorer sidebar               |
 | showMinimap       | boolean                     | true            | Show code minimap panel                  |
 | showBreadcrumbs   | boolean                     | true            | Show breadcrumb path bar                 |
 | showStatusBar     | boolean                     | true            | Show bottom status bar                   |
-| minimapMaxLines   | number                      | 120             | Max source lines to render in minimap    |
+| minimapMaxLines   | number                      | 120             | Max sampled minimap stripes to render    |
 | layoutMode        | 'auto' \| 'full' \| 'compact' | 'auto'       | Layout mode selection                    |
 | compactMaxWidth   | number                      | 560             | Width threshold for auto compact mode    |
 | compactMaxHeight  | number                      | 260             | Height threshold for auto compact mode   |
@@ -131,7 +139,7 @@ Platforms: love2d
 Love2D:
   MonacoMirror is a React compound component -- the chrome (tab bar, sidebar, minimap, status bar) is built from Box, Text, and Pressable elements. Only the editor area itself delegates to a Lua-owned Input. This means the chrome re-renders when React state changes (file selection, panel toggles), but the actual text editing remains zero-latency Lua.
 
-  The minimap renders a simplified representation of the code as ink-density bars, not actual text. Its viewport highlight tracks the real Lua editor scroll position, and the status bar reflects the live cursor line/column from the Lua-owned editor.
+  The minimap renders a simplified representation of the code as ink-density bars, not actual text. Its viewport highlight tracks the real Lua editor scroll position using the live editor view state (`firstVisibleLine`, `visibleLineCount`, `totalVisibleLines`) and the measured minimap track height, so it stays aligned with the on-screen viewport instead of relying on a fixed approximation.
 
   At small container sizes (below compactMaxWidth or compactMaxHeight), the layout automatically switches to compact mode, hiding the activity bar, sidebar, minimap, and breadcrumbs to maximize editor space.
 

@@ -201,8 +201,16 @@ export interface MonacoMirrorProps extends Omit<InputProps, 'multiline' | 'lineN
   workspaceLabel?: string;
   branch?: string;
   language?: string;
+  activityBarWidth?: number;
   sidebarWidth?: number;
   minimapWidth?: number;
+  topBarHeight?: number;
+  breadcrumbBarHeight?: number;
+  statusBarHeight?: number;
+  editorPaddingLeft?: number;
+  editorPaddingRight?: number;
+  editorPaddingTop?: number;
+  editorPaddingBottom?: number;
   showActivityBar?: boolean;
   showSidebar?: boolean;
   showMinimap?: boolean;
@@ -244,8 +252,16 @@ export function MonacoMirror({
   workspaceLabel = 'workspace',
   branch = 'main',
   language,
+  activityBarWidth = 42,
   sidebarWidth = 190,
   minimapWidth = 120,
+  topBarHeight,
+  breadcrumbBarHeight = 24,
+  statusBarHeight,
+  editorPaddingLeft = 10,
+  editorPaddingRight = 10,
+  editorPaddingTop = 8,
+  editorPaddingBottom = 8,
   showActivityBar = true,
   showSidebar = true,
   showMinimap = true,
@@ -272,6 +288,7 @@ export function MonacoMirror({
   const [panelPreferenceTouched, setPanelPreferenceTouched] = useState(false);
   const [collapsedFolders, setCollapsedFolders] = useState<Record<string, boolean>>({});
   const [editorViewportHeight, setEditorViewportHeight] = useState<number | undefined>(undefined);
+  const [minimapTrackHeight, setMinimapTrackHeight] = useState<number | undefined>(undefined);
   const [editorViewStateSnapshot, setEditorViewStateSnapshot] = useState<ViewStateSnapshot | null>(null);
   const [preferredViewTarget, setPreferredViewTarget] = useState<ViewTarget>('editor');
   const instanceIdRef = useRef<string>(nextMonacoMirrorInstanceId());
@@ -325,9 +342,8 @@ export function MonacoMirror({
   // rjit-ignore-next-line — .tslx migration candidate: editor chrome compute
   const minimapSourceLines = useMemo(() => {
     return lines
-      .slice(0, Math.max(1, minimapMaxLines))
       .map((line) => line.replace(/\t/g, '  '));
-  }, [lines, minimapMaxLines]);
+  }, [lines]);
 
   const explicitWidth = typeof style?.width === 'number' ? style.width : undefined;
   const explicitHeight = typeof style?.height === 'number' ? style.height : undefined;
@@ -337,8 +353,8 @@ export function MonacoMirror({
     (explicitHeight !== undefined && explicitHeight <= compactMaxHeight)
   );
   const compact = layoutMode === 'compact' || (layoutMode === 'auto' && compactBySize);
-  const topBarHeight = compact ? 28 : 42;
-  const statusBarHeight = compact ? 18 : 22;
+  const resolvedTopBarHeight = topBarHeight ?? (compact ? 28 : 42);
+  const resolvedStatusBarHeight = statusBarHeight ?? (compact ? 18 : 22);
   const editorFontSize = compact ? 10 : 12;
 
   const widthCanShowSidebar = explicitWidth === undefined || explicitWidth >= 520;
@@ -375,26 +391,33 @@ export function MonacoMirror({
   const resolvedMinimapWidth = explicitWidth !== undefined
     ? Math.max(58, Math.min(minimapWidth, Math.floor(explicitWidth * 0.18)))
     : minimapWidth;
-  const minimapRowCount = Math.max(minimapSourceLines.length, 1);
+  const minimapRowCount = Math.max(editorViewState?.totalVisibleLines ?? minimapSourceLines.length, 1);
   const editorLineHeight = editorFontSize + 4;
-  const chromeHeight = topBarHeight + (renderBreadcrumbs ? 24 : 0) + (showStatusBar ? statusBarHeight : 0);
+  const chromeHeight = resolvedTopBarHeight + (renderBreadcrumbs ? breadcrumbBarHeight : 0) + (showStatusBar ? resolvedStatusBarHeight : 0);
   const approxEditorViewportHeight = explicitHeight !== undefined ? Math.max(explicitHeight - chromeHeight, 60) : 220;
   // Prefer measured editor viewport height so minimap highlight matches what is visible.
   const effectiveEditorViewportHeight = editorViewportHeight !== undefined ? Math.max(editorViewportHeight, 60) : approxEditorViewportHeight;
   const editorVisibleRows = Math.max(1, Math.floor((effectiveEditorViewportHeight - 16) / editorLineHeight));
   const minimapViewportRows = Math.max(1, Math.min(minimapRowCount, editorVisibleRows));
-  const minimapTrackRows = Math.max(16, Math.min(84, minimapRowCount));
+  const minimapStripePitch = 3;
+  const minimapTrackHeightPx = minimapTrackHeight !== undefined
+    ? Math.max(12, minimapTrackHeight)
+    : Math.max(12, approxEditorViewportHeight - 8);
+  const minimapSampleCount = Math.max(1, Math.min(
+    minimapMaxLines,
+    Math.max(1, Math.floor(minimapTrackHeightPx / minimapStripePitch)),
+  ));
   // rjit-ignore-next-line — .tslx migration candidate: editor chrome compute
   const minimapRows = useMemo(() => {
-    if (minimapSourceLines.length <= minimapTrackRows) return minimapSourceLines;
+    if (minimapSourceLines.length <= minimapSampleCount) return minimapSourceLines;
     const sampled: string[] = [];
-    for (let i = 0; i < minimapTrackRows; i += 1) {
-      const ratio = i / Math.max(1, minimapTrackRows - 1);
+    for (let i = 0; i < minimapSampleCount; i += 1) {
+      const ratio = i / Math.max(1, minimapSampleCount - 1);
       const index = Math.floor(ratio * (minimapSourceLines.length - 1));
       sampled.push(minimapSourceLines[index] ?? '');
     }
     return sampled;
-  }, [minimapSourceLines, minimapTrackRows]);
+  }, [minimapSampleCount, minimapSourceLines]);
   // rjit-ignore-next-line — .tslx migration candidate: editor chrome compute
   const minimapMaxLineLength = useMemo(() => {
     let maxLen = 1;
@@ -412,11 +435,11 @@ export function MonacoMirror({
       return Math.max(8, Math.min(100, Math.round((len / minimapMaxLineLength) * 100)));
     });
   }, [minimapMaxLineLength, minimapRows]);
-  const minimapTrackHeightPx = Math.max(minimapRows.length * 3, 12);
   const viewStateFirstVisibleLine = editorViewState?.firstVisibleLine ?? 1;
   const viewStateVisibleLineCount = editorViewState?.visibleLineCount ?? minimapViewportRows;
   const viewStateTotalVisibleLines = editorViewState?.totalVisibleLines ?? minimapRowCount;
   const minimapAllVisible = viewStateVisibleLineCount >= viewStateTotalVisibleLines;
+  const minimapScrollableLines = Math.max(0, viewStateTotalVisibleLines - viewStateVisibleLineCount);
   const minimapViewportPx = minimapAllVisible
     ? minimapTrackHeightPx
     : Math.max(10, Math.min(
@@ -429,7 +452,10 @@ export function MonacoMirror({
       0,
       Math.min(
         minimapTrackHeightPx - minimapViewportPx,
-        Math.round(((viewStateFirstVisibleLine - 1) / Math.max(1, viewStateTotalVisibleLines - 1)) * minimapTrackHeightPx),
+        Math.round(
+          ((viewStateFirstVisibleLine - 1) / Math.max(1, minimapScrollableLines))
+          * Math.max(0, minimapTrackHeightPx - minimapViewportPx),
+        ),
       ),
     );
   const cursorLineLabel = editorViewState?.cursorLine ?? 1;
@@ -621,6 +647,15 @@ export function MonacoMirror({
   const handleEditorViewportLayout = useCallback((event: LayoutEvent) => {
     const nextHeight = Math.max(0, Math.round(event.height));
     setEditorViewportHeight((prev) => {
+      if (prev !== undefined && Math.abs(prev - nextHeight) < 1) return prev;
+      return nextHeight;
+    });
+  }, []);
+
+  // rjit-ignore-next-line — .tslx migration candidate: editor chrome compute
+  const handleMinimapTrackLayout = useCallback((event: LayoutEvent) => {
+    const nextHeight = Math.max(0, Math.round(event.height));
+    setMinimapTrackHeight((prev) => {
       if (prev !== undefined && Math.abs(prev - nextHeight) < 1) return prev;
       return nextHeight;
     });
@@ -826,7 +861,7 @@ export function MonacoMirror({
       <Box
         style={{
           flexShrink: 0,
-          height: topBarHeight,
+          height: resolvedTopBarHeight,
           flexDirection: 'row',
           alignItems: 'stretch',
           backgroundColor: '#252526',
@@ -996,7 +1031,7 @@ export function MonacoMirror({
         {renderActivityBar && (
           <Box
             style={{
-              width: 42,
+              width: activityBarWidth,
               backgroundColor: '#333333',
               borderRightWidth: 1,
               borderColor: '#3c3c3c',
@@ -1167,7 +1202,7 @@ export function MonacoMirror({
             <Box
               style={{
                 flexShrink: 0,
-                height: 24,
+                height: breadcrumbBarHeight,
                 flexDirection: 'row',
                 alignItems: 'center',
                 backgroundColor: '#252526',
@@ -1251,10 +1286,10 @@ export function MonacoMirror({
                   flexGrow: 1,
                   backgroundColor: '#1e1e1e',
                   borderWidth: 0,
-                  paddingLeft: 10,
-                  paddingRight: 10,
-                  paddingTop: 8,
-                  paddingBottom: 8,
+                  paddingLeft: editorPaddingLeft,
+                  paddingRight: editorPaddingRight,
+                  paddingTop: editorPaddingTop,
+                  paddingBottom: editorPaddingBottom,
                   ...inputStyle,
                 }}
               />
@@ -1302,14 +1337,17 @@ export function MonacoMirror({
                     <Text style={{ color: '#6f6f6f', fontSize: 7, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{`${editorViewState?.lineCount ?? lineCount}L`}</Text>
                   </Box>
                 </Box>
-                <Box style={{ position: 'relative', height: minimapTrackHeightPx, overflow: 'hidden' }}>
+                <Box style={{ position: 'relative', flexGrow: 1, minHeight: 12, overflow: 'hidden' }} onLayout={handleMinimapTrackLayout}>
                   {minimapInkPercents.map((percent, index) => (
                     <Box
                       key={`minimap-ink:${index}`}
                       style={{
                         position: 'absolute',
                         left: 0,
-                        top: index * 3,
+                        top: Math.min(
+                          Math.max(0, minimapTrackHeightPx - 2),
+                          Math.round((index / Math.max(1, minimapInkPercents.length - 1)) * Math.max(0, minimapTrackHeightPx - 2)),
+                        ),
                         height: 2,
                         width: `${percent}%`,
                         borderRadius: 1,
@@ -1339,7 +1377,7 @@ export function MonacoMirror({
       {showStatusBar && (
         <Box
           style={{
-            height: statusBarHeight,
+            height: resolvedStatusBarHeight,
             flexShrink: 0,
             flexDirection: 'row',
             alignItems: 'center',
