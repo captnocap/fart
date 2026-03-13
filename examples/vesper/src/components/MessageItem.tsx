@@ -7,7 +7,7 @@
  */
 
 import React, { useState } from 'react';
-import { Box, Text, Pressable, CodeBlock, Markdown } from '@reactjit/core';
+import { Box, Text, Pressable, CodeBlock, Markdown, useTypewriter } from '@reactjit/core';
 import { useThemeColors } from '@reactjit/theme';
 import { V } from '../theme';
 import type { Message } from '@reactjit/ai';
@@ -104,6 +104,7 @@ function ToolCallDisplay({ toolCalls }: { toolCalls: Message['toolCalls'] }) {
 export interface MessageItemProps {
   message: Message;
   index: number;
+  isLatest?: boolean;
   onCopy?: (text: string) => void;
   onDelete?: (index: number) => void;
   onRegenerate?: (index: number) => void;
@@ -113,6 +114,7 @@ export interface MessageItemProps {
 export function MessageItem({
   message,
   index,
+  isLatest,
   onCopy,
   onDelete,
   onRegenerate,
@@ -124,6 +126,13 @@ export function MessageItem({
   const isUser = message.role === 'user';
   const isAssistant = message.role === 'assistant';
   const isTool = message.role === 'tool';
+
+  // Typewriter effect on the latest assistant message only
+  const typedText = useTypewriter(
+    isAssistant && isLatest ? text : '',
+    { speed: 12, delay: 100 },
+  );
+  const displayText = isAssistant && isLatest && typedText ? typedText : text;
 
   // Role-specific styling
   const glowColor = isUser ? V.userGlow : isAssistant ? V.assistantGlow : V.toolSubtle;
@@ -175,7 +184,7 @@ export function MessageItem({
         {/* Content */}
         {isAssistant ? (
           <Markdown
-            content={text}
+            content={displayText}
             style={{ fontSize: 14 }}
           />
         ) : (

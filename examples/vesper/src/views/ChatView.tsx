@@ -99,7 +99,10 @@ export function ChatView({
   onEditMessage,
 }: ChatViewProps) {
   const { copy } = useClipboard();
+  // rjit-ignore-next-line
   const hasMessages = messages.filter(m => m.role !== 'system').length > 0;
+  // rjit-ignore-next-line
+  const lastAssistantIdx = messages.reduce((acc, m, i) => m.role === 'assistant' ? i : acc, -1);
 
   return (
     <Box style={{ flexGrow: 1, width: '100%', flexDirection: 'column' }}>
@@ -120,6 +123,7 @@ export function ChatView({
                 key={i}
                 message={msg}
                 index={i}
+                isLatest={i === lastAssistantIdx}
                 onCopy={(text) => copy(text)}
                 onDelete={onDeleteMessage}
                 onRegenerate={onRegenerateMessage}

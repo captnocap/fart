@@ -12,6 +12,7 @@ import type { CommandDef } from '@reactjit/core';
 import { ThemeProvider } from '@reactjit/theme';
 import { StorageProvider, MemoryAdapter } from '@reactjit/storage';
 import { useChat, useModels } from '@reactjit/ai';
+import { useSettingsRegistry } from '@reactjit/apis';
 
 import './theme';  // side-effect: registers vesper theme
 import { Shell } from './layout/Shell';
@@ -35,6 +36,9 @@ const storageAdapter = new MemoryAdapter();
 // ── VesperApp (inside providers) ─────────────────────────
 
 function VesperApp() {
+  // ── API key settings overlay (F10) ─────────────────
+  useSettingsRegistry();
+
   // ── Navigation ───────────────────────────────────────
   const [activeView, setActiveView] = useState<ViewId>('chat');
   const [historyOpen, setHistoryOpen] = useState(false);
