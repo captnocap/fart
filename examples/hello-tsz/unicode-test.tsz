@@ -48,9 +48,19 @@ function App() {
       </Box>
 
       <Box style={{ padding: 12, backgroundColor: '#16213e' }}>
-        <Text fontSize={11} color="#e94560">Emoji (basic)</Text>
+        <Text fontSize={11} color="#e94560">Symbols (dingbats)</Text>
         <Text fontSize={14} color="#ccccdd">
           ★ ☆ ♠ ♥ ♦ ♣ ☀ ☁ ☂ ✓ ✗ ✈ ☎ ♪ ♫ ⚡ ⚠ ☯
+        </Text>
+      </Box>
+
+      <Box style={{ padding: 12, backgroundColor: '#16213e' }}>
+        <Text fontSize={11} color="#e94560">Color Emoji (should be colorful pictures, not monochrome text)</Text>
+        <Text fontSize={24} color="#ccccdd">
+          😀 🎉 🚀 ❤️ 🌍 🔥 ⭐ 🎨 🧠 💻 🎮 🏠 🌈 ☕ 🍕
+        </Text>
+        <Text fontSize={11} color="#666688">
+          Expected: grin, party, rocket, heart, globe, fire, star, palette, brain, laptop, gamepad, house, rainbow, coffee, pizza
         </Text>
       </Box>
     </Box>

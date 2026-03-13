@@ -21,6 +21,8 @@ const GlyphInfo = struct {
     bearing_x: i32,
     bearing_y: i32,
     advance: i32, // in pixels (pre-divided from 26.6 fixed point)
+    is_color: bool, // true for color emoji (BGRA bitmap) — don't tint with text color
+    scale: f32, // 1.0 for normal glyphs; <1.0 for bitmap strikes scaled down
 };
 
 const MAX_CACHED_GLYPHS = 512;
@@ -56,19 +58,57 @@ fn decodeUtf8(bytes: []const u8) Utf8Char {
 
 // ── Text Engine ─────────────────────────────────────────────────────────────
 
-const MAX_FALLBACK_FONTS = 4;
+const MAX_FALLBACK_FONTS = 8;
 
-/// System font paths to try as fallbacks (CJK, symbols, emoji).
-/// Checked in order; first one that exists on disk gets loaded.
-const FALLBACK_FONT_PATHS = [_][*:0]const u8{
-    // Noto Sans CJK (common on Debian/Ubuntu)
+// ── Fontconfig resolution ───────────────────────────────────────────────────
+// Uses `fc-match` to resolve font paths from the system's fontconfig database.
+// This respects user font preferences and works across distros.
+
+const FC_BUF_SIZE = 512;
+
+/// Run `fc-match <pattern> -f '%{file}'` and return the path as a
+/// null-terminated string in a static buffer. Returns null if fc-match fails.
+var fc_buf: [FC_BUF_SIZE]u8 = undefined;
+
+fn fcMatch(pattern: [*:0]const u8) ?[*:0]u8 {
+    const result = std.process.Child.run(.{
+        .allocator = std.heap.page_allocator,
+        .argv = &[_][]const u8{ "fc-match", std.mem.span(pattern), "-f", "%{file}" },
+    }) catch return null;
+    defer std.heap.page_allocator.free(result.stdout);
+    defer std.heap.page_allocator.free(result.stderr);
+
+    if (result.stdout.len == 0 or result.stdout.len >= FC_BUF_SIZE - 1) return null;
+    @memcpy(fc_buf[0..result.stdout.len], result.stdout);
+    fc_buf[result.stdout.len] = 0;
+    return @ptrCast(&fc_buf);
+}
+
+/// Resolve a fontconfig pattern to a FreeType face. Returns null if not found.
+fn fcLoadFace(library: c.FT_Library, pattern: [*:0]const u8) ?c.FT_Face {
+    const path: [*:0]const u8 = fcMatch(pattern) orelse return null;
+    var face: c.FT_Face = undefined;
+    if (c.FT_New_Face(library, path, 0, &face) == 0) {
+        return face;
+    }
+    return null;
+}
+
+/// Fontconfig patterns for fallback fonts (resolved at runtime).
+const FC_FALLBACK_PATTERNS = [_][*:0]const u8{
+    "Noto Sans CJK",
+    "Noto Color Emoji",
+    "Noto Sans Symbols",
+    "Noto Sans Symbols 2",
+};
+
+/// Hardcoded fallback paths in case fc-match is not available.
+const HARDCODED_FALLBACK_PATHS = [_][*:0]const u8{
     "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
-    // Noto Sans CJK (Arch, Fedora)
     "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
-    // WenQuanYi (fallback CJK)
-    "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
-    // Noto Sans symbols
+    "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf",
     "/usr/share/fonts/truetype/noto/NotoSansSymbols2-Regular.ttf",
+    "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
 };
 
 pub const TextEngine = struct {
@@ -101,16 +141,30 @@ pub const TextEngine = struct {
         // Default size
         _ = c.FT_Set_Pixel_Sizes(face, 0, 16);
 
-        // Load fallback fonts (best-effort — missing fonts are silently skipped)
+        // Load fallback fonts via fontconfig first, then hardcoded paths
         var fallbacks: [MAX_FALLBACK_FONTS]c.FT_Face = undefined;
         var fb_count: usize = 0;
-        for (FALLBACK_FONT_PATHS) |fb_path| {
+
+        // Try fontconfig patterns first
+        for (FC_FALLBACK_PATTERNS) |pattern| {
             if (fb_count >= MAX_FALLBACK_FONTS) break;
-            var fb_face: c.FT_Face = undefined;
-            if (c.FT_New_Face(library, fb_path, 0, &fb_face) == 0) {
+            if (fcLoadFace(library, pattern)) |fb_face| {
                 _ = c.FT_Set_Pixel_Sizes(fb_face, 0, 16);
                 fallbacks[fb_count] = fb_face;
                 fb_count += 1;
+            }
+        }
+
+        // If fontconfig didn't find much, try hardcoded paths
+        if (fb_count < 2) {
+            for (HARDCODED_FALLBACK_PATHS) |fb_path| {
+                if (fb_count >= MAX_FALLBACK_FONTS) break;
+                var fb_face: c.FT_Face = undefined;
+                if (c.FT_New_Face(library, fb_path, 0, &fb_face) == 0) {
+                    _ = c.FT_Set_Pixel_Sizes(fb_face, 0, 16);
+                    fallbacks[fb_count] = fb_face;
+                    fb_count += 1;
+                }
             }
         }
 
@@ -152,7 +206,14 @@ pub const TextEngine = struct {
     fn setFallbackSize(self: *TextEngine, size_px: u16) void {
         if (self.fallback_size != size_px) {
             for (0..self.fallback_count) |i| {
-                _ = c.FT_Set_Pixel_Sizes(self.fallback_faces[i], 0, size_px);
+                const fb = self.fallback_faces[i];
+                // For bitmap strike fonts (like Noto Color Emoji), select the
+                // first available strike instead of setting pixel size directly.
+                if (fb.*.num_fixed_sizes > 0) {
+                    _ = c.FT_Select_Size(fb, 0);
+                } else {
+                    _ = c.FT_Set_Pixel_Sizes(fb, 0, size_px);
+                }
             }
             self.fallback_size = size_px;
         }
@@ -185,24 +246,52 @@ pub const TextEngine = struct {
         }
 
         // Try primary face first; fall back to secondary faces if glyph is missing
+        // OR if a fallback has a color version (prefer color emoji over monochrome)
         self.setSize(size_px);
         const glyph_index = c.FT_Get_Char_Index(self.face, codepoint);
         var use_face = self.face;
 
-        if (glyph_index == 0 and self.fallback_count > 0) {
-            // Primary font doesn't have this glyph — try fallbacks
-            self.setFallbackSize(size_px);
-            for (0..self.fallback_count) |fi| {
-                const fb_idx = c.FT_Get_Char_Index(self.fallback_faces[fi], codepoint);
-                if (fb_idx != 0) {
-                    use_face = self.fallback_faces[fi];
-                    break;
+        var is_bitmap_strike = false;
+        if (self.fallback_count > 0) {
+            const need_fallback = (glyph_index == 0);
+            // For codepoints above U+2000, also check if a color fallback exists
+            // (prefer color emoji over monochrome dingbats from the primary font)
+            const want_color = (!need_fallback and codepoint >= 0x2000);
+
+            if (need_fallback or want_color) {
+                self.setFallbackSize(size_px);
+                for (0..self.fallback_count) |fi| {
+                    const fb = self.fallback_faces[fi];
+                    const fb_idx = c.FT_Get_Char_Index(fb, codepoint);
+                    if (fb_idx != 0) {
+                        if (need_fallback) {
+                            // Primary doesn't have it — use first fallback that does
+                            use_face = fb;
+                            is_bitmap_strike = (fb.*.num_fixed_sizes > 0);
+                            break;
+                        } else if (want_color and fb.*.num_fixed_sizes > 0) {
+                            // Primary has it but fallback has a color bitmap — prefer color
+                            use_face = fb;
+                            is_bitmap_strike = true;
+                            break;
+                        }
+                    }
                 }
             }
         }
 
-        if (c.FT_Load_Char(use_face, codepoint, c.FT_LOAD_RENDER) != 0) {
-            return null;
+        // For bitmap strike fonts (color emoji), select the strike first
+        if (is_bitmap_strike) {
+            _ = c.FT_Select_Size(use_face, 0);
+        }
+
+        // Try color load first (for emoji), fall back to grayscale
+        var is_color = false;
+        if (c.FT_Load_Char(use_face, codepoint, c.FT_LOAD_COLOR | c.FT_LOAD_RENDER) != 0) {
+            // Color load failed — try plain grayscale
+            if (c.FT_Load_Char(use_face, codepoint, c.FT_LOAD_RENDER) != 0) {
+                return null;
+            }
         }
 
         const glyph = use_face.*.glyph;
@@ -210,11 +299,15 @@ pub const TextEngine = struct {
         const bw: i32 = @intCast(bitmap.width);
         const bh: i32 = @intCast(bitmap.rows);
 
+        // Detect color bitmap (BGRA — used by color emoji fonts)
+        // FT_PIXEL_MODE_BGRA = 7
+        if (bitmap.pixel_mode == 7) {
+            is_color = true;
+        }
+
         var texture: ?*c.SDL_Texture = null;
 
         if (bw > 0 and bh > 0) {
-            // Create an ARGB surface from the grayscale bitmap.
-            // SDL_PIXELFORMAT_ARGB8888 on little-endian = bytes B, G, R, A in memory.
             const surface = c.SDL_CreateRGBSurfaceWithFormat(
                 0,
                 bw,
@@ -225,20 +318,30 @@ pub const TextEngine = struct {
             if (surface == null) return null;
             defer c.SDL_FreeSurface(surface);
 
-            // Copy FreeType bitmap (8-bit alpha) into ARGB surface
             const pixels: [*]u8 = @ptrCast(surface.*.pixels);
             const pitch: usize = @intCast(surface.*.pitch);
             const src_pitch: usize = @intCast(bitmap.pitch);
 
-            for (0..@intCast(bh)) |row| {
-                for (0..@intCast(bw)) |col| {
-                    const alpha = bitmap.buffer[row * src_pitch + col];
-                    const dst_offset = row * pitch + col * 4;
-                    // ARGB8888 little-endian memory: B, G, R, A
-                    pixels[dst_offset + 0] = 255; // B
-                    pixels[dst_offset + 1] = 255; // G
-                    pixels[dst_offset + 2] = 255; // R
-                    pixels[dst_offset + 3] = alpha; // A
+            if (is_color) {
+                // Color emoji: BGRA source → ARGB8888 dest
+                // FreeType BGRA: B, G, R, A per pixel (4 bytes)
+                // SDL ARGB8888 little-endian memory: B, G, R, A — same layout!
+                for (0..@intCast(bh)) |row| {
+                    const src_row = bitmap.buffer + row * src_pitch;
+                    const dst_row = pixels + row * pitch;
+                    @memcpy(dst_row[0..@intCast(@as(usize, @intCast(bw)) * 4)], src_row[0..@intCast(@as(usize, @intCast(bw)) * 4)]);
+                }
+            } else {
+                // Grayscale: 8-bit alpha → white + alpha
+                for (0..@intCast(bh)) |row| {
+                    for (0..@intCast(bw)) |col| {
+                        const alpha = bitmap.buffer[row * src_pitch + col];
+                        const dst_offset = row * pitch + col * 4;
+                        pixels[dst_offset + 0] = 255; // B
+                        pixels[dst_offset + 1] = 255; // G
+                        pixels[dst_offset + 2] = 255; // R
+                        pixels[dst_offset + 3] = alpha; // A
+                    }
                 }
             }
 
@@ -248,6 +351,19 @@ pub const TextEngine = struct {
             }
         }
 
+        // For bitmap strike fonts, compute scale factor: desired_size / strike_size
+        const glyph_scale: f32 = if (is_bitmap_strike and bh > 0)
+            @as(f32, @floatFromInt(size_px)) / @as(f32, @floatFromInt(bh))
+        else
+            1.0;
+
+        // Scale the advance for bitmap strikes
+        const raw_advance: f32 = @floatFromInt(glyph.*.advance.x >> 6);
+        const scaled_advance: i32 = if (is_bitmap_strike)
+            @intFromFloat(raw_advance * glyph_scale)
+        else
+            @intCast(glyph.*.advance.x >> 6);
+
         const idx = self.cache_count;
         self.cache_keys[idx] = .{ .codepoint = codepoint, .size_px = size_px };
         self.cache_vals[idx] = .{
@@ -256,7 +372,9 @@ pub const TextEngine = struct {
             .height = bh,
             .bearing_x = glyph.*.bitmap_left,
             .bearing_y = glyph.*.bitmap_top,
-            .advance = @intCast(glyph.*.advance.x >> 6), // 26.6 fixed → pixels
+            .advance = scaled_advance,
+            .is_color = is_color,
+            .scale = glyph_scale,
         };
         self.cache_count += 1;
 
@@ -449,14 +567,33 @@ pub const TextEngine = struct {
             const ch = decodeUtf8(text[i..]);
             if (self.rasterizeGlyph(ch.codepoint, size_px)) |g| {
                 if (g.texture) |tex| {
-                    _ = c.SDL_SetTextureColorMod(tex, color.r, color.g, color.b);
-                    _ = c.SDL_SetTextureAlphaMod(tex, color.a);
+                    if (g.is_color) {
+                        // Color emoji — render as-is, don't tint
+                        _ = c.SDL_SetTextureColorMod(tex, 255, 255, 255);
+                        _ = c.SDL_SetTextureAlphaMod(tex, 255);
+                    } else {
+                        // Monochrome glyph — tint with text color
+                        _ = c.SDL_SetTextureColorMod(tex, color.r, color.g, color.b);
+                        _ = c.SDL_SetTextureAlphaMod(tex, color.a);
+                    }
+
+                    // Scale bitmap strike glyphs (e.g. 128px emoji → 24px)
+                    const dw: i32 = if (g.scale < 1.0)
+                        @intFromFloat(@as(f32, @floatFromInt(g.width)) * g.scale)
+                    else
+                        g.width;
+                    const dh: i32 = if (g.scale < 1.0)
+                        @intFromFloat(@as(f32, @floatFromInt(g.height)) * g.scale)
+                    else
+                        g.height;
+                    const dbx: f32 = @as(f32, @floatFromInt(g.bearing_x)) * g.scale;
+                    const dby: f32 = @as(f32, @floatFromInt(g.bearing_y)) * g.scale;
 
                     var dst = c.SDL_Rect{
-                        .x = @intFromFloat(pen_x + @as(f32, @floatFromInt(g.bearing_x))),
-                        .y = @intFromFloat(baseline_y - @as(f32, @floatFromInt(g.bearing_y))),
-                        .w = g.width,
-                        .h = g.height,
+                        .x = @intFromFloat(pen_x + dbx),
+                        .y = @intFromFloat(baseline_y - dby),
+                        .w = dw,
+                        .h = dh,
                     };
                     _ = c.SDL_RenderCopy(self.renderer, tex, null, &dst);
                 }
