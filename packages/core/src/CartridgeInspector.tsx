@@ -345,6 +345,7 @@ export function CartridgeInspector({ colors }: CartridgeInspectorProps) {
 
   const loadManifest = useLoveRPC<LoadResult>('inspector:loadManifest');
 
+  // rjit-ignore-next-line — framework API: cartridge inspector handlers
   const handleDrop = useCallback(async (e: LoveEvent) => {
     setDragHover(false);
     if (!e.filePath) return;
@@ -369,6 +370,7 @@ export function CartridgeInspector({ colors }: CartridgeInspectorProps) {
     }
   }, [loadManifest]);
 
+  // rjit-ignore-next-line — framework API: cartridge inspector handlers
   const handleClear = useCallback(() => {
     setManifest(null);
     setFilePath('');

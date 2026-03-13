@@ -85,6 +85,7 @@ export function CommandPalette({
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
 
+  // rjit-ignore-next-line — .tslx migration candidate: command filtering
   const filtered = useMemo(() => {
     const lower = query.toLowerCase().trim();
     if (!lower) return commands;
@@ -92,6 +93,7 @@ export function CommandPalette({
   }, [query, commands]);
 
   // Group filtered results
+  // rjit-ignore-next-line — .tslx migration candidate: command filtering
   const grouped = useMemo(() => {
     const groups: Record<string, CommandDef[]> = {};
     for (const cmd of filtered) {
@@ -102,12 +104,14 @@ export function CommandPalette({
     return groups;
   }, [filtered]);
 
+  // rjit-ignore-next-line — .tslx migration candidate: command filtering
   const handleClose = useCallback(() => {
     setQuery('');
     setActiveIndex(0);
     onClose();
   }, [onClose]);
 
+  // rjit-ignore-next-line — .tslx migration candidate: command filtering
   const handleSelect = useCallback(
     (cmd: CommandDef) => {
       if (cmd.disabled) return;

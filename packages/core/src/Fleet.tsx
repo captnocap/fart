@@ -283,6 +283,7 @@ const AgentTile = React.memo(function AgentTile({
   const hasPerm = agent.perm !== null;
   const hasQuestion = agent.question !== null;
 
+  // rjit-ignore-next-line — framework API: fleet agent handlers
   const handleSubmit = useCallback(() => {
     setEditorKey(k => k + 1);
   }, []);
@@ -532,11 +533,13 @@ export function Fleet({
 }: FleetProps) {
   const fleet = useFleet({ workingDir, agents: agentConfigs });
 
+  // rjit-ignore-next-line — framework API: fleet agent handlers
   const [expandedSet, setExpandedSet] = useState<Set<string>>(() => {
     if (defaultExpanded) return new Set(defaultExpanded);
     return new Set(agentConfigs[0] ? [agentConfigs[0].id] : []);
   });
 
+  // rjit-ignore-next-line — framework API: fleet agent handlers
   const toggle = useCallback((id: string) => {
     setExpandedSet(prev => {
       const next = new Set(prev);

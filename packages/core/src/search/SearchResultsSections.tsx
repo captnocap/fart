@@ -65,7 +65,9 @@ export function SearchResultsSections<T extends SearchResultItem = SearchResultI
   borderColor = 'rgba(255,255,255,0.1)',
   borderRadius = 8,
 }: SearchResultsSectionsProps<T>) {
+  // rjit-ignore-next-line — .tslx migration candidate: section layout compute
   const hasResults = sections.some((s) => s.items.length > 0);
+  // rjit-ignore-next-line — .tslx migration candidate: section layout compute
   const totalItems = sections.reduce((sum, s) => sum + s.items.length, 0);
 
   if (loading) {
@@ -120,6 +122,7 @@ export function SearchResultsSections<T extends SearchResultItem = SearchResultI
   }
 
   // Compute approximate height for ScrollView
+  // rjit-ignore-next-line — .tslx migration candidate: section layout compute
   const estimatedHeight = sections.reduce((h, s) => h + 24 + s.items.length * 40 + 8, 8);
 
   let flatIndex = 0;

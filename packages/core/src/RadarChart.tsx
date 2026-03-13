@@ -31,6 +31,7 @@ export function RadarChart({
   const radius = size / 2 - 2; // 2px margin so rings aren't clipped
   const numAxes = axes.length;
 
+  // rjit-ignore-next-line — .tslx migration candidate: trigonometric compute
   const normalized = useMemo(() => {
     return data.map((val, i) => {
       const maxVal = axes[i]?.max ?? Math.max(...data);
@@ -39,6 +40,7 @@ export function RadarChart({
   }, [data, axes]);
 
   // Vertex positions in box-local coords (origin = box top-left)
+  // rjit-ignore-next-line — .tslx migration candidate: trigonometric compute
   const vertices = useMemo(() => {
     return normalized.map((val, i) => {
       const angle = (i / numAxes) * Math.PI * 2 - Math.PI / 2;
@@ -47,7 +49,9 @@ export function RadarChart({
     });
   }, [normalized, numAxes, radius, cx, cy]);
 
+  // rjit-ignore-next-line — .tslx migration candidate: trigonometric compute
   const polygonPoints = useMemo(
+    // rjit-ignore-next-line — .tslx migration candidate: trigonometric compute
     () => vertices.flatMap(v => [v.x, v.y]),
     [vertices],
   );

@@ -52,11 +52,13 @@ export function ChatInput({
   const isControlled = controlledValue !== undefined;
   const text = isControlled ? controlledValue : internalValue;
 
+  // rjit-ignore-next-line — framework API: chat input handlers
   const handleChange = useCallback((t: string) => {
     if (controlledOnChange) controlledOnChange(t);
     if (!isControlled) setInternalValue(t);
   }, [isControlled, controlledOnChange]);
 
+  // rjit-ignore-next-line — framework API: chat input handlers
   const handleSend = useCallback(() => {
     const trimmed = text.trim();
     if (!trimmed || disabled) return;
@@ -64,6 +66,7 @@ export function ChatInput({
     if (!isControlled) setInternalValue('');
   }, [text, disabled, onSend, isControlled]);
 
+  // rjit-ignore-next-line — framework API: chat input handlers
   const handleSubmit = useCallback((t: string) => {
     const trimmed = t.trim();
     if (!trimmed || disabled) return;

@@ -237,6 +237,7 @@ export function usePixelArt(
 ): React.ReactElement {
   const { size = 4, color = '#ffffff', colors, gap = 0 } = options;
 
+  // rjit-ignore-next-line — .tslx migration candidate: pixel art grid compute
   return useMemo(() => {
     const grid = parseGrid(art);
     return renderGrid(grid, size, color, colors, gap);

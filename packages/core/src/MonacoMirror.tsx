@@ -146,6 +146,7 @@ function buildExplorerTree(paths: string[]): ExplorerTreeNode[] {
       const isFile = i === segments.length - 1;
       runningPath = runningPath.length > 0 ? `${runningPath}/${segment}` : segment;
 
+      // rjit-ignore-next-line — .tslx migration candidate: editor chrome compute
       let node = level.find((candidate) => candidate.name === segment && candidate.kind === (isFile ? 'file' : 'folder'));
       if (!node) {
         node = isFile
@@ -159,6 +160,7 @@ function buildExplorerTree(paths: string[]): ExplorerTreeNode[] {
   }
 
   const sortNodes = (nodes: ExplorerTreeNode[]) => {
+    // rjit-ignore-next-line — .tslx migration candidate: explorer tree sorting
     nodes.sort((a, b) => {
       if (a.kind !== b.kind) return a.kind === 'folder' ? -1 : 1;
       return a.name.localeCompare(b.name);
@@ -259,6 +261,7 @@ export function MonacoMirror({
   const baseFilePath = normalizePath(filePath);
   const initialText = value ?? defaultValue ?? '';
   const [uncontrolledText, setUncontrolledText] = useState(initialText);
+  // rjit-ignore-next-line — .tslx migration candidate: editor chrome compute
   const [localSelectedFile, setLocalSelectedFile] = useState<LocalFileSelection>(() => ({
     baseFilePath,
     path: baseFilePath,
@@ -271,6 +274,7 @@ export function MonacoMirror({
   const [editorViewStateSnapshot, setEditorViewStateSnapshot] = useState<ViewStateSnapshot | null>(null);
   const [preferredViewTarget, setPreferredViewTarget] = useState<ViewTarget>('editor');
   const instanceIdRef = useRef<string>(nextMonacoMirrorInstanceId());
+  // rjit-ignore-next-line — .tslx migration candidate: editor chrome compute
   const [isShoulderNavigationOwner, setIsShoulderNavigationOwner] = useState(
     () => shoulderNavigationOwnerId === instanceIdRef.current,
   );
@@ -284,27 +288,32 @@ export function MonacoMirror({
     ? editorViewStateSnapshot.state
     : null;
 
+  // rjit-ignore-next-line — .tslx migration candidate: editor chrome compute
   const breadcrumbs = useMemo(() => {
     const source = activeFilePath || filePath || tabLabel || 'untitled.tsx';
     return splitPath(source);
   }, [activeFilePath, filePath, tabLabel]);
 
+  // rjit-ignore-next-line — .tslx migration candidate: editor chrome compute
   const fileName = useMemo(() => {
     if (tabLabel && tabLabel.length > 0) return tabLabel;
     if (breadcrumbs.length === 0) return 'untitled.tsx';
     return breadcrumbs[breadcrumbs.length - 1];
   }, [breadcrumbs, tabLabel]);
 
+  // rjit-ignore-next-line — .tslx migration candidate: editor chrome compute
   const languageLabel = useMemo(() => {
     return language ?? inferLanguage(fileName, 'plaintext');
   }, [fileName, language]);
 
+  // rjit-ignore-next-line — .tslx migration candidate: editor chrome compute
   const lines = useMemo(() => {
     return mirrorText.split('\n');
   }, [mirrorText]);
 
   const lineCount = Math.max(lines.length, 1);
   const charCount = mirrorText.length;
+  // rjit-ignore-next-line — .tslx migration candidate: editor chrome compute
   const minimapSourceLines = useMemo(() => {
     return lines
       .slice(0, Math.max(1, minimapMaxLines))
@@ -336,6 +345,7 @@ export function MonacoMirror({
   const renderSidebar = sidebarOpen;
   const renderMinimap = minimapOpen;
   const renderBreadcrumbs = showBreadcrumbs && !compact;
+  // rjit-ignore-next-line — .tslx migration candidate: editor chrome compute
   const availableViewTargets = useMemo<ViewTarget[]>(() => {
     const nextTargets: ViewTarget[] = ['tabs'];
     if (sidebarAvailable) nextTargets.push('explorer');
@@ -343,6 +353,7 @@ export function MonacoMirror({
     if (minimapAvailable) nextTargets.push('minimap');
     return nextTargets;
   }, [minimapAvailable, sidebarAvailable]);
+  // rjit-ignore-next-line — .tslx migration candidate: editor chrome compute
   const viewTarget = useMemo<ViewTarget>(() => {
     if (availableViewTargets.includes(preferredViewTarget)) return preferredViewTarget;
     if (availableViewTargets.includes('editor')) return 'editor';
@@ -364,6 +375,7 @@ export function MonacoMirror({
   const editorVisibleRows = Math.max(1, Math.floor((effectiveEditorViewportHeight - 16) / editorLineHeight));
   const minimapViewportRows = Math.max(1, Math.min(minimapRowCount, editorVisibleRows));
   const minimapTrackRows = Math.max(16, Math.min(84, minimapRowCount));
+  // rjit-ignore-next-line — .tslx migration candidate: editor chrome compute
   const minimapRows = useMemo(() => {
     if (minimapSourceLines.length <= minimapTrackRows) return minimapSourceLines;
     const sampled: string[] = [];
@@ -374,6 +386,7 @@ export function MonacoMirror({
     }
     return sampled;
   }, [minimapSourceLines, minimapTrackRows]);
+  // rjit-ignore-next-line — .tslx migration candidate: editor chrome compute
   const minimapMaxLineLength = useMemo(() => {
     let maxLen = 1;
     for (const row of minimapRows) {
@@ -382,6 +395,7 @@ export function MonacoMirror({
     }
     return maxLen;
   }, [minimapRows]);
+  // rjit-ignore-next-line — .tslx migration candidate: editor chrome compute
   const minimapInkPercents = useMemo(() => {
     return minimapRows.map((row) => {
       const len = row.trim().length;
@@ -412,12 +426,14 @@ export function MonacoMirror({
   const cursorLineLabel = editorViewState?.cursorLine ?? 1;
   const cursorColumnLabel = (editorViewState?.cursorCol ?? 0) + 1;
 
+  // rjit-ignore-next-line — .tslx migration candidate: editor chrome compute
   const candidateExplorerPaths = useMemo(() => {
     const sourcePaths = explorerFiles && explorerFiles.length > 0
       ? explorerFiles
       : buildFallbackExplorerPaths(filePath);
     return uniquePaths([...sourcePaths, filePath, activeFilePath]);
   }, [activeFilePath, explorerFiles, filePath]);
+  // rjit-ignore-next-line — .tslx migration candidate: editor chrome compute
   const tabPaths = useMemo(() => {
     const sourcePaths = openFiles && openFiles.length > 0
       ? openFiles
@@ -428,8 +444,11 @@ export function MonacoMirror({
     return uniquePaths([activeFilePath, ...visible]).slice(0, Math.max(1, maxTabs));
   }, [activeFilePath, candidateExplorerPaths, filePath, maxTabs, openFiles]);
 
+  // rjit-ignore-next-line — .tslx migration candidate: editor chrome compute
   const explorerTree = useMemo(() => buildExplorerTree(candidateExplorerPaths), [candidateExplorerPaths]);
+  // rjit-ignore-next-line — .tslx migration candidate: editor chrome compute
   const folderPaths = useMemo(() => collectFolderPaths(explorerTree), [explorerTree]);
+  // rjit-ignore-next-line — .tslx migration candidate: editor chrome compute
   const activeFolderAncestors = useMemo(() => {
     const segments = splitPath(activeFilePath);
     const folders = segments.slice(0, -1);
@@ -441,6 +460,7 @@ export function MonacoMirror({
     }
     return output;
   }, [activeFilePath]);
+  // rjit-ignore-next-line — .tslx migration candidate: editor chrome compute
   const effectiveCollapsedFolders = useMemo(() => {
     if (activeFolderAncestors.length === 0) return collapsedFolders;
     let changed = false;
@@ -468,40 +488,48 @@ export function MonacoMirror({
       }
     };
   });
+  // rjit-ignore-next-line — .tslx migration candidate: editor chrome compute
   const updateMirrorText = useCallback((next: string) => {
     setUncontrolledText(next);
   }, []);
 
+  // rjit-ignore-next-line — .tslx migration candidate: editor chrome compute
   const handleLiveChange = useCallback((next: string) => {
     updateMirrorText(next);
     onLiveChange?.(next);
   }, [onLiveChange, updateMirrorText]);
 
+  // rjit-ignore-next-line — .tslx migration candidate: editor chrome compute
   const handleEditorChange = useCallback((next: string) => {
     updateMirrorText(next);
     onChange?.(next);
     onLiveChange?.(next);
   }, [onChange, onLiveChange, updateMirrorText]);
 
+  // rjit-ignore-next-line — .tslx migration candidate: editor chrome compute
   const handleChangeText = useCallback((next: string) => {
     updateMirrorText(next);
     onChangeText?.(next);
   }, [onChangeText, updateMirrorText]);
 
+  // rjit-ignore-next-line — .tslx migration candidate: editor chrome compute
   const handleSubmit = useCallback((next: string) => {
     updateMirrorText(next);
     onSubmit?.(next);
   }, [onSubmit, updateMirrorText]);
 
+  // rjit-ignore-next-line — .tslx migration candidate: editor chrome compute
   const handleBlur = useCallback((next: string) => {
     updateMirrorText(next);
     onBlur?.(next);
   }, [onBlur, updateMirrorText]);
 
+  // rjit-ignore-next-line — .tslx migration candidate: editor chrome compute
   const claimShoulderNavigation = useCallback(() => {
     setShoulderNavigationOwner(instanceIdRef.current);
   }, []);
 
+  // rjit-ignore-next-line — .tslx migration candidate: editor chrome compute
   const targetView = useCallback((nextTarget: ViewTarget) => {
     if (!availableViewTargets.includes(nextTarget)) return;
     claimShoulderNavigation();
@@ -521,6 +549,7 @@ export function MonacoMirror({
     sidebarAvailable,
   ]);
 
+  // rjit-ignore-next-line — .tslx migration candidate: editor chrome compute
   const cycleTargetedView = useCallback((direction: -1 | 1) => {
     if (availableViewTargets.length <= 1) return;
     const currentIndex = availableViewTargets.indexOf(viewTarget);
@@ -539,6 +568,7 @@ export function MonacoMirror({
     cycleTargetedView(1);
   });
 
+  // rjit-ignore-next-line — .tslx migration candidate: editor chrome compute
   const toggleFolder = useCallback((path: string) => {
     claimShoulderNavigation();
     setCollapsedFolders((prev) => ({
@@ -547,6 +577,7 @@ export function MonacoMirror({
     }));
   }, [claimShoulderNavigation]);
 
+  // rjit-ignore-next-line — .tslx migration candidate: editor chrome compute
   const commitFileSelect = useCallback((path: string) => {
     if (selectedFilePath === undefined) {
       setLocalSelectedFile({
@@ -557,22 +588,26 @@ export function MonacoMirror({
     onFileSelect?.(path);
   }, [baseFilePath, onFileSelect, selectedFilePath]);
 
+  // rjit-ignore-next-line — .tslx migration candidate: editor chrome compute
   const handleTabSelect = useCallback((path: string) => {
     targetView('tabs');
     commitFileSelect(path);
   }, [commitFileSelect, targetView]);
 
+  // rjit-ignore-next-line — .tslx migration candidate: editor chrome compute
   const handleExplorerFileSelect = useCallback((path: string) => {
     targetView('explorer');
     commitFileSelect(path);
   }, [commitFileSelect, targetView]);
 
+  // rjit-ignore-next-line — .tslx migration candidate: editor chrome compute
   const handleEditorFocus = useCallback(() => {
     claimShoulderNavigation();
     setPreferredViewTarget('editor');
     onFocus?.();
   }, [claimShoulderNavigation, onFocus]);
 
+  // rjit-ignore-next-line — .tslx migration candidate: editor chrome compute
   const handleEditorViewportLayout = useCallback((event: LayoutEvent) => {
     const nextHeight = Math.max(0, Math.round(event.height));
     setEditorViewportHeight((prev) => {
@@ -581,6 +616,7 @@ export function MonacoMirror({
     });
   }, []);
 
+  // rjit-ignore-next-line — .tslx migration candidate: editor chrome compute
   const handleEditorStateChange = useCallback((nextState: TextEditorViewState) => {
     setEditorViewStateSnapshot((prev) => {
       const prevState = prev?.filePath === activeFilePath ? prev.state : null;
@@ -606,6 +642,7 @@ export function MonacoMirror({
     });
   }, [activeFilePath]);
 
+  // rjit-ignore-next-line — .tslx migration candidate: editor chrome compute
   const handleToggleSidebarPanel = useCallback(() => {
     if (!widthCanShowSidebar) return;
     claimShoulderNavigation();
@@ -618,6 +655,7 @@ export function MonacoMirror({
     });
   }, [claimShoulderNavigation, viewTarget, widthCanShowSidebar]);
 
+  // rjit-ignore-next-line — .tslx migration candidate: editor chrome compute
   const handleToggleMinimapPanel = useCallback(() => {
     if (!widthCanShowMinimap) return;
     claimShoulderNavigation();
@@ -630,6 +668,7 @@ export function MonacoMirror({
     });
   }, [claimShoulderNavigation, viewTarget, widthCanShowMinimap]);
 
+  // rjit-ignore-next-line — .tslx migration candidate: editor chrome compute
   const handleCollapseAll = useCallback(() => {
     claimShoulderNavigation();
     const next: Record<string, boolean> = {};
@@ -637,6 +676,7 @@ export function MonacoMirror({
     setCollapsedFolders(next);
   }, [claimShoulderNavigation, folderPaths]);
 
+  // rjit-ignore-next-line — .tslx migration candidate: editor chrome compute
   const handleExpandAll = useCallback(() => {
     claimShoulderNavigation();
     const next: Record<string, boolean> = {};

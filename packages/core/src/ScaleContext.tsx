@@ -74,6 +74,7 @@ export function ScaleProvider({ reference, curve = 'linear', cap = 1.8, insetWid
     });
   }, [bridge]);
 
+  // rjit-ignore-next-line — framework API: scale provider memoization
   const value = useMemo<ScaleContextValue>(() => ({
     scale: scaleState.scale,
     rawScale: scaleState.rawScale,

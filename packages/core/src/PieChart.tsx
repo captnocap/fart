@@ -16,6 +16,7 @@ export interface PieChartProps {
 }
 
 export function PieChart({ style, size, ...rest }: PieChartProps) {
+  // rjit-ignore-next-line — .tslx migration candidate: chart data compute
   const total = rest.data.reduce((s, d) => s + d.value, 0) || 1;
   const tooltip = rest.interactive && rest.data.length > 0
     ? { content: rest.data.map(d => `${d.label}:\t${d.value} (${Math.round(d.value / total * 100)}%)`).join('\n'), layout: 'table' as const }

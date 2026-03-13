@@ -43,6 +43,7 @@ export function RadioGroup({
   const isControlled = controlledValue !== undefined;
   const selectedValue = isControlled ? controlledValue : internalValue;
 
+  // rjit-ignore-next-line — framework API: radio group handler
   const onChange = useCallback((newValue: string) => {
     if (disabled) return;
     if (!isControlled) {

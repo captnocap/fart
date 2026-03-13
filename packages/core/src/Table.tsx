@@ -57,6 +57,7 @@ export function Table<T extends Record<string, any>>({
   };
 
   const border = borderless ? 0 : 1;
+  // rjit-ignore-next-line — .tslx migration candidate: table layout compute
   const hasFlexibleColumns = columns.some(col => !col.width);
 
   return (

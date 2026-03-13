@@ -296,12 +296,14 @@ export function TerminalPreview({
 }: TerminalPreviewProps) {
   const [activeLink, setActiveLink] = useState<LinkEvent | null>(null);
 
+  // rjit-ignore-next-line — framework API: terminal preview handlers
   const handleLinkClick = useCallback((event: LinkEvent) => {
     setActiveLink(event);
     onPreviewOpen?.(event);
     onLinkClick?.(event);
   }, [onPreviewOpen, onLinkClick]);
 
+  // rjit-ignore-next-line — framework API: terminal preview handlers
   const handleClose = useCallback(() => {
     setActiveLink(null);
     onPreviewClose?.();

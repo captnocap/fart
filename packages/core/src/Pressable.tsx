@@ -87,6 +87,7 @@ export function Pressable({
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
   const longPressFiredRef = useRef(false);
 
+  // rjit-ignore-next-line — framework API: press state machine handler identity
   const clearLongPressTimer = useCallback(() => {
     if (longPressTimerRef.current) {
       clearTimeout(longPressTimerRef.current);
@@ -109,6 +110,7 @@ export function Pressable({
     return () => clearLongPressTimer();
   });
 
+  // rjit-ignore-next-line — framework API: press state machine handler identity
   const handlePressIn = useCallback((event: LoveEvent) => {
     if (disabled) return;
 
@@ -130,6 +132,7 @@ export function Pressable({
   const pressedRef = useRef(false);
   pressedRef.current = pressed;
 
+  // rjit-ignore-next-line — framework API: press state machine handler identity
   const handlePressOut = useCallback((event: LoveEvent) => {
     if (disabled) return;
 
@@ -148,12 +151,14 @@ export function Pressable({
     longPressFiredRef.current = false;
   }, [disabled, needsReactState, onPressOut, onPress, clearLongPressTimer]);
 
+  // rjit-ignore-next-line — framework API: press state machine handler identity
   const handleHoverIn = useCallback((event: LoveEvent) => {
     if (disabled) return;
     if (needsReactState) setHovered(true);
     if (onHoverIn) onHoverIn(event);
   }, [disabled, needsReactState, onHoverIn]);
 
+  // rjit-ignore-next-line — framework API: press state machine handler identity
   const handleHoverOut = useCallback((event: LoveEvent) => {
     if (disabled) return;
     if (needsReactState) setHovered(false);
@@ -166,6 +171,7 @@ export function Pressable({
     }
   }, [disabled, needsReactState, onHoverOut, pressed, clearLongPressTimer]);
 
+  // rjit-ignore-next-line — framework API: press state machine handler identity
   const handleKeyDown = useCallback((event: LoveEvent) => {
     if (disabled) return;
     const key = event.key;
@@ -175,6 +181,7 @@ export function Pressable({
     }
   }, [disabled, needsReactState, handlePressIn]);
 
+  // rjit-ignore-next-line — framework API: press state machine handler identity
   const handleKeyUp = useCallback((event: LoveEvent) => {
     if (disabled) return;
     const key = event.key;
@@ -183,6 +190,7 @@ export function Pressable({
     }
   }, [disabled, handlePressOut]);
 
+  // rjit-ignore-next-line — framework API: press state machine handler identity
   const { baseStyle, hoverOverlay, activeOverlay } = useMemo(() => {
     if (isStyleFunction) {
       const styleFn = style as (state: PressableState) => Style;

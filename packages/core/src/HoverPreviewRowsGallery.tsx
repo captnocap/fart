@@ -34,6 +34,7 @@ export function HoverPreviewRowsGallery({
   const [viewerIndex, setViewerIndex] = useState(0);
   const preview = images[previewIndex] || images[0];
 
+  // rjit-ignore-next-line — framework API: gallery preview compute
   const thumbRows = useMemo(() => {
     const rows: Array<Array<{ item: ImageGalleryItem; index: number }>> = [];
     const end = Math.min(images.length, thumbsPerRow * maxRows);

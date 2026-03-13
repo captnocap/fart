@@ -77,6 +77,7 @@ export function SearchBar({
   const [query, setQuery] = useState('');
   const [focused, setFocused] = useState(false);
 
+  // rjit-ignore-next-line — framework API: search input handlers
   const handleLiveChange = useCallback(
     (text: string) => {
       setQuery(text);
@@ -86,6 +87,7 @@ export function SearchBar({
     [onSearch, onClear],
   );
 
+  // rjit-ignore-next-line — framework API: search input handlers
   const handleSubmit = useCallback(
     (text: string) => {
       setQuery(text);
@@ -94,6 +96,7 @@ export function SearchBar({
     [onSubmit],
   );
 
+  // rjit-ignore-next-line — framework API: search input handlers
   const handleBlur = useCallback(
     (/* text unused — query state already tracks latest debounced value */) => {
       setFocused(false);
@@ -101,6 +104,7 @@ export function SearchBar({
     [],
   );
 
+  // rjit-ignore-next-line — framework API: search input handlers
   const handleClear = useCallback(() => {
     setQuery('');
     onSearch?.('');

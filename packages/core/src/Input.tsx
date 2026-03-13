@@ -84,11 +84,13 @@ export function Input(rawProps: InputProps) {
 
   // -- Callbacks --
 
+  // rjit-ignore-next-line — framework API: input lifecycle handlers
   const handleFocus = useCallback(
     (_event: LoveEvent) => { onFocus?.(); },
     [onFocus],
   );
 
+  // rjit-ignore-next-line — framework API: input lifecycle handlers
   const handleBlur = useCallback(
     (event: LoveEvent) => {
       const text = (event as any).value ?? '';
@@ -98,6 +100,7 @@ export function Input(rawProps: InputProps) {
     [onBlur, onChangeText],
   );
 
+  // rjit-ignore-next-line — framework API: input lifecycle handlers
   const handleSubmit = useCallback(
     (event: LoveEvent) => {
       const text = (event as any).value ?? '';
@@ -110,6 +113,7 @@ export function Input(rawProps: InputProps) {
   // live=true: forward keystrokes via onLiveChange or onChangeText
   const effectiveLiveChange = onLiveChange || (live ? onChangeText : undefined);
 
+  // rjit-ignore-next-line — framework API: input lifecycle handlers
   const handleLiveChange = useCallback(
     (event: LoveEvent) => {
       const text = (event as any).value ?? '';
@@ -121,6 +125,7 @@ export function Input(rawProps: InputProps) {
   // live=true on editor path: forward idle-detection via onChange or onChangeText
   const effectiveOnChange = onChange || (live ? onChangeText : undefined);
 
+  // rjit-ignore-next-line — framework API: input lifecycle handlers
   const handleChange = useCallback(
     (event: LoveEvent) => {
       const text = (event as any).value ?? '';
@@ -129,6 +134,7 @@ export function Input(rawProps: InputProps) {
     [effectiveOnChange],
   );
 
+  // rjit-ignore-next-line — framework API: input lifecycle handlers
   const handleEditorState = useCallback(
     (event: LoveEvent) => {
       const state = (event as any).value;

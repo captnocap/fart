@@ -101,12 +101,14 @@ export function ImageViewerModal({
   imageStyle,
 }: ImageViewerModalProps) {
   const total = images.length;
+  // rjit-ignore-next-line — framework API: modal navigation handlers
   const safeIndex = useMemo(() => clampIndex(index, total), [index, total]);
   const current = images[safeIndex];
 
   const canGoPrev = total > 1 && (loop || safeIndex > 0);
   const canGoNext = total > 1 && (loop || safeIndex < total - 1);
 
+  // rjit-ignore-next-line — framework API: modal navigation handlers
   const goTo = useCallback((next: number) => {
     if (total <= 0 || !onIndexChange) return;
     if (loop) {
@@ -117,16 +119,19 @@ export function ImageViewerModal({
     onIndexChange(clampIndex(next, total));
   }, [onIndexChange, loop, total]);
 
+  // rjit-ignore-next-line — framework API: modal navigation handlers
   const goPrev = useCallback(() => {
     if (!canGoPrev) return;
     goTo(safeIndex - 1);
   }, [canGoPrev, goTo, safeIndex]);
 
+  // rjit-ignore-next-line — framework API: modal navigation handlers
   const goNext = useCallback(() => {
     if (!canGoNext) return;
     goTo(safeIndex + 1);
   }, [canGoNext, goTo, safeIndex]);
 
+  // rjit-ignore-next-line — framework API: modal navigation handlers
   const onNativeKeyDown = useCallback((event: LoveEvent) => {
     const key = keyName(event.key);
     if (key === 'left' || key === 'arrowleft') goPrev();

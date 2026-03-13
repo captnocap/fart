@@ -156,6 +156,7 @@ function FlatListInner<T>(
 
   // ── Scroll handler ──────────────────────────────────
 
+  // rjit-ignore-next-line — framework API: virtualized list rendering
   const handleScroll = useCallback(
     (event: ScrollEvent) => {
       // Forward the scroll event to the user's callback
@@ -226,6 +227,7 @@ function FlatListInner<T>(
 
   // ── Build the rendered items ────────────────────────
 
+  // rjit-ignore-next-line — framework API: virtualized list rendering
   const renderedContent = useMemo(() => {
     if (data.length === 0) {
       return ListEmptyComponent ?? null;

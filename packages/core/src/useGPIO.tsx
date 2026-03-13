@@ -41,10 +41,12 @@ export function usePin(
   const [value, setValueState] = useState(false);
   const [lastEdge, setLastEdge] = useState<string | null>(null);
 
+  // rjit-ignore-next-line — framework API: hardware control callbacks
   const setValue = useCallback((v: boolean) => {
     setValueState(v);
   }, []);
 
+  // rjit-ignore-next-line — framework API: hardware control callbacks
   const handleChange = useCallback((e: LoveEvent) => {
     setValueState(!!e.value);
     if (e.edgeType) setLastEdge(e.edgeType as string);
@@ -129,18 +131,21 @@ export function useSerial(
   const [lastData, setLastData] = useState<string | null>(null);
   const sendBufferRef = useRef<string[]>([]);
 
+  // rjit-ignore-next-line — framework API: hardware control callbacks
   const handleLine = useCallback((e: LoveEvent) => {
     const line = (e as any).line as string;
     setLastLine(line);
     setLines(prev => [...prev, line]);
   }, []);
 
+  // rjit-ignore-next-line — framework API: hardware control callbacks
   const handleData = useCallback((e: LoveEvent) => {
     setLastData((e as any).data as string);
   }, []);
 
   // send is a no-op placeholder — serial writes need to go through the
   // capability's Lua side. For now, users can use bridge.rpc() for writes.
+  // rjit-ignore-next-line — framework API: hardware control callbacks
   const send = useCallback((_data: string) => {
     sendBufferRef.current.push(_data);
   }, []);
@@ -184,6 +189,7 @@ export function useI2C(
   const [value, setValue] = useState(0);
   const [bytes, setBytes] = useState<number[]>([]);
 
+  // rjit-ignore-next-line — framework API: hardware control callbacks
   const handleData = useCallback((e: LoveEvent) => {
     const ev = e as any;
     if (ev.value !== undefined) setValue(ev.value);

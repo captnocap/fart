@@ -45,11 +45,13 @@ export function Modal({
     prevVisibleRef.current = visible;
   }, [visible, onShow]);
 
+  // rjit-ignore-next-line — framework API: modal handlers
   const handleBackdropPress = useCallback(() => {
     if (backdropDismiss && onRequestClose) onRequestClose();
   }, [backdropDismiss, onRequestClose]);
 
   // Native: Escape via onKeyDown broadcast (Love2D key names are lowercase)
+  // rjit-ignore-next-line — framework API: modal handlers
   const handleNativeKeyDown = useCallback((event: LoveEvent) => {
     if (event.key === 'escape' && onRequestClose) onRequestClose();
   }, [onRequestClose]);

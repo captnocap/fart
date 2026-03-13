@@ -59,6 +59,7 @@ export function Slider({
   const isControlled = controlledValue !== undefined;
   const currentValue = isControlled ? controlledValue : internalValue;
 
+  // rjit-ignore-next-line — framework API: slider value handler
   const handleValueChange = useCallback(
     (newValue: number) => {
       if (!isControlled) {

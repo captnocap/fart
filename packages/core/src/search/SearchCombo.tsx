@@ -101,6 +101,7 @@ export function SearchCombo<T extends ComboItem = ComboItem>({
   // Schema: what fields this combo is actually searching
   const schema = useSearchSchema(staticItems ?? [], { key: searchKey });
 
+  // rjit-ignore-next-line — framework API: search combo handlers
   const runSearch = useCallback(
     async (q: string) => {
       setQuery(q);
@@ -132,7 +133,9 @@ export function SearchCombo<T extends ComboItem = ComboItem>({
       }
       const keys = Array.isArray(searchKey) ? searchKey : [searchKey];
       const lower = q.toLowerCase();
+      // rjit-ignore-next-line — framework API: search combo handlers
       const matched = staticItems.filter((item) =>
+        // rjit-ignore-next-line — framework API: search combo handlers
         keys.some((k) => String(item[k] ?? '').toLowerCase().includes(lower)),
       );
       setResults(matched.slice(0, maxResults));
@@ -140,6 +143,7 @@ export function SearchCombo<T extends ComboItem = ComboItem>({
     [asyncSearch, staticItems, searchKey, maxResults],
   );
 
+  // rjit-ignore-next-line — framework API: search combo handlers
   const handleClear = useCallback(() => {
     setQuery('');
     setResults([]);
@@ -148,6 +152,7 @@ export function SearchCombo<T extends ComboItem = ComboItem>({
     onClear?.();
   }, [onClear]);
 
+  // rjit-ignore-next-line — framework API: search combo handlers
   const handleSelect = useCallback(
     (item: T, index: number) => {
       setOpen(false);

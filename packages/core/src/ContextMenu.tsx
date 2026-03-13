@@ -16,6 +16,7 @@ export function ContextMenu({
   onClose,
   children,
 }: ContextMenuProps) {
+  // rjit-ignore-next-line — framework API: context menu handlers
   const handleSelect = useCallback(
     (event: LoveEvent) => {
       const payload = event as any;
@@ -29,10 +30,12 @@ export function ContextMenu({
     [onSelect],
   );
 
+  // rjit-ignore-next-line — framework API: context menu handlers
   const handleOpen = useCallback(() => {
     onOpen?.();
   }, [onOpen]);
 
+  // rjit-ignore-next-line — framework API: context menu handlers
   const handleClose = useCallback(() => {
     onClose?.();
   }, [onClose]);

@@ -61,6 +61,7 @@ export function ImageGallery({
 
   const isColumnsLayout = layout === 'columns' || (layout !== 'wrap' && typeof columns === 'number');
   const normalizedColumns = clampColumns(columns ?? 3);
+  // rjit-ignore-next-line — framework API: gallery layout compute
   const rows = useMemo<Array<Array<{ item: ImageGalleryItem; index: number }>>>(() => {
     if (!isColumnsLayout) return [];
     const groupedRows: Array<Array<{ item: ImageGalleryItem; index: number }>> = [];
