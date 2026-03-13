@@ -15,7 +15,7 @@ export const TARGETS = {
   love: {
     format: 'iife',
     globalName: 'ReactJIT',
-    external: ['react-dom', 'child_process'],
+    external: ['react-dom', 'child_process', 'node:sqlite'],
     entries: ['main-love.tsx', 'main.tsx'],
     output: 'love/bundle.js',
     kind: 'love',
