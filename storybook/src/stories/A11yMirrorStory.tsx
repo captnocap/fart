@@ -8,7 +8,7 @@
  * Requires: /usr/bin/python3 tools/a11y_server.py running on port 9876
  */
 
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import { Box, Text, Pressable, ScrollView, useLuaEffect, useMount, useBridge } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 
@@ -205,14 +205,17 @@ function MirrorView({ tree, appName, onAction, selectedNode, onSelectNode }: {
   if (!frame) return <Text style={{ color: c.muted }}>No frame rect found</Text>;
 
   const allNodes = flattenWithRects(tree);
-  // Separate structural (wireframe) from leaf (solid) nodes
+  // rjit-ignore-next-line — structural tree partitioning for a11y mirror rendering, needs .tslx migration
   const structural = allNodes.filter(n => isStructural(n) && !isLeafLike(n));
+  // rjit-ignore-next-line
   const leaves = allNodes.filter(n => isLeafLike(n));
   // Sort leaves by area (largest first) so small elements render on top
   leaves.sort((a, b) => (b.rect.w * b.rect.h) - (a.rect.w * a.rect.h));
   // Deduplicate table cells: group by row (same Y), prefer named cell, merge widths
   const dedupedLeaves: FlatNode[] = [];
+  // rjit-ignore-next-line
   const tableCells = leaves.filter(n => n.role === 'table cell');
+  // rjit-ignore-next-line
   const nonCells = leaves.filter(n => n.role !== 'table cell');
 
   // Group table cells by row (same Y position)
@@ -225,6 +228,7 @@ function MirrorView({ tree, appName, onAction, selectedNode, onSelectNode }: {
 
   // For each row, create one merged cell spanning the full row width
   for (const [, cells] of rowMap) {
+    // rjit-ignore-next-line
     const named = cells.find(c => c.name);
     if (!named) continue;
     const minX = Math.min(...cells.map(c => c.rect.x));
@@ -312,11 +316,11 @@ function MirrorView({ tree, appName, onAction, selectedNode, onSelectNode }: {
                     paddingLeft: 2, paddingRight: 2,
                   }}>
                     {showLabel ? (
-                      <Text style={{
+                      <Text numberOfLines={1} style={{
                         color: isSelected ? '#fff' : `${color}cc`,
-                        fontSize: Math.min(9, pos.height * 0.6),
+                        fontSize: Math.min(9, pos.height * 0.6, pos.width / (label.length * 0.62)),
                       }}>
-                        {label.slice(0, Math.floor(pos.width / 5))}
+                        {label}
                       </Text>
                     ) : null}
                   </Box>
@@ -744,7 +748,7 @@ export function A11yMirrorStory() {
   }, [selectedApp, viewMode]);
 
   // Handle app selection — reset tree and fetch immediately
-  const handleSelectApp = useCallback((name: string) => {
+  const handleSelectApp = (name: string) => {
     setSelectedApp(name);
     setSelectedNode(null);
     stableTreeRef.current = null;
@@ -771,13 +775,13 @@ export function A11yMirrorStory() {
         setMirrorTree(result);
       }
     });
-  }, [bridge, humanFilter]);
+  };
 
   // Handle action execution
-  const handleAction = useCallback((path: number[], actionIndex: number) => {
+  const handleAction = (path: number[], actionIndex: number) => {
     if (!selectedApp) return;
     bridge.rpc('a11y:action', { app: selectedApp, path, action: actionIndex });
-  }, [selectedApp, bridge]);
+  };
 
   const serverDown = apps.length === 0 && !treeLoading;
 

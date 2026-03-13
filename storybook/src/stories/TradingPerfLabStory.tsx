@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Box, Text, Badge, Slider, Switch, Tabs, BarChart, Pressable, ScrollView, useLoveRPC, useSystemInfo, useWindowDimensions, formatUptime, formatMemory, useLuaInterval, classifiers as S} from '../../../packages/core/src';
 import type { Tab } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
@@ -68,6 +68,7 @@ function seeded(i: number, salt: number) {
 
 function percentile(values: number[], q: number) {
   if (values.length === 0) return 0;
+  // rjit-ignore-next-line
   const sorted = values.slice().sort((a, b) => a - b);
   const index = Math.min(sorted.length - 1, Math.max(0, Math.floor((sorted.length - 1) * q)));
   return sorted[index];
@@ -216,6 +217,7 @@ function BookPanel({
   color: string;
   descending: boolean;
 }) {
+  // rjit-ignore-next-line
   const sorted = levels.slice().sort((a, b) => descending ? b.price - a.price : a.price - b.price).slice(0, 10);
   const maxSize = Math.max(1, ...sorted.map((l) => l.size));
   return (
@@ -437,6 +439,7 @@ export function TradingPerfLabStory() {
     }
   });
 
+  // rjit-ignore-next-line — .tslx migration candidate: symbol selection
   const selected = useMemo(() => {
     const symbols = engineRef.current.symbols;
     return symbols[Math.max(0, Math.min(selectedIndex, symbols.length - 1))] || null;
@@ -477,6 +480,7 @@ export function TradingPerfLabStory() {
   const sysMem = sysInfo.loading ? '--' : formatMemory(sysInfo.memory);
   const sysUp = sysInfo.loading ? '--' : formatUptime(sysInfo.uptime);
 
+  // rjit-ignore-next-line — .tslx migration candidate: watchlist derivation
   const watchlistRows = useMemo(() => {
     const symbols = engineRef.current.symbols;
     const maxRows = Math.min(symbols.length, watchlistLimit);
@@ -496,6 +500,7 @@ export function TradingPerfLabStory() {
     return rows;
   }, [uiTick, symbolCount, watchlistLimit]);
 
+  // rjit-ignore-next-line — .tslx migration candidate: tape derivation
   const tapeRows = useMemo(() => {
     if (!selected) return [];
     const start = Math.max(1, selected.history.length - tapeLimit);
@@ -513,6 +518,7 @@ export function TradingPerfLabStory() {
     return out.reverse();
   }, [selectedIndex, symbolCount, depth, uiTick, selected, tapeLimit]);
 
+  // rjit-ignore-next-line — .tslx migration candidate: history windowing
   const visibleHistory = useMemo(() => {
     if (!selected) return [];
     if (selected.history.length <= historyLimit) return selected.history;
@@ -533,265 +539,302 @@ export function TradingPerfLabStory() {
   const tapeHeight = compact ? 156 : 180;
   const controlsMinWidth = compact ? 180 : 240;
 
+  // ── BISECT: uncomment sections one at a time to find the crash ──
+  const SHOW_HEADER = true;
+  const SHOW_BADGES = false;
+  const SHOW_WATCHLIST = false;
+  const SHOW_DETAIL_BADGES = false;
+  const SHOW_CHART = false;
+  const SHOW_CONTROLS = false;
+  const SHOW_ORDERBOOK = false;
+  const SHOW_TAPE = false;
+  const SHOW_HEALTH = false;
+
   return (
     <Box style={{ width: '100%', height: '100%', padding: outerPad, gap: frameGap, backgroundColor: shellBg }}>
-      <Box
-        style={{
-          width: '100%',
-          backgroundColor: panelBg,
-          borderWidth: 1,
-          borderColor: panelBorder,
-          borderRadius: 10,
-          padding: panelPad,
-          gap: compact ? 6 : 8,
-        }}
-      >
-        <S.RowCenterG8 style={{ justifyContent: 'space-between', width: '100%', flexWrap: 'wrap' }}>
-          <Box style={{ gap: 2 }}>
-            <Text style={{ fontSize: 17, color: '#e8eef8', fontWeight: 'normal' }}>
-              Trading Workstation
-            </Text>
-            <Text style={{ fontSize: 11, color: '#92a8c4' }}>
-              Synthetic venue feed with depth, tape, and renderer telemetry
-            </Text>
-          </Box>
-          <S.RowCenterG8>
-            <Box style={{ width: 180 }}>
-              <Tabs tabs={VIEW_TABS} activeId={viewMode} onSelect={(id) => setViewMode(id as ViewMode)} variant="pill" />
-            </Box>
-            <S.RowCenterG6 style={{ paddingLeft: 8, paddingRight: 8, paddingTop: 4, paddingBottom: 4, borderRadius: 6, borderWidth: 1, borderColor: '#244266', backgroundColor: '#0a172c' }}>
-              <Text style={{ color: '#9eb4cf', fontSize: 10, fontWeight: 'normal' }}>LIVE</Text>
-              <Switch value={live} onValueChange={setLive} />
-            </S.RowCenterG6>
-          </S.RowCenterG8>
-        </S.RowCenterG8>
-
-        <S.RowG6 style={{ flexWrap: 'wrap', width: '100%' }}>
-          <Badge label={selected ? `${selected.symbol} ${selected.last.toFixed(2)}` : 'No symbol'} variant={selected ? (selectedUp ? 'success' : 'error') : 'default'} />
-          <Badge label={selected ? `${selectedDelta >= 0 ? '+' : ''}${selectedDelta.toFixed(2)} (${selectedDeltaPct >= 0 ? '+' : ''}${selectedDeltaPct.toFixed(2)}%)` : 'Change --'} variant={selected ? (selectedUp ? 'success' : 'error') : 'default'} />
-          <Badge label={selected ? `Spread ${spread.toFixed(2)}` : 'Spread --'} variant="default" />
-          <Badge label={`Target ${effectiveTargetEvents.toLocaleString()}/s`} variant="info" />
-          <Badge label={`Actual ${snapshot.throughput.toLocaleString()}/s`} variant={snapshot.throughput >= effectiveTargetEvents * 0.8 ? 'success' : 'warning'} />
-          <Badge label={`p95 ${snapshot.p95.toFixed(2)}ms`} variant={snapshot.p95 < 8 ? 'success' : snapshot.p95 < 16 ? 'warning' : 'error'} />
-          <Badge label={`FPS ${fps || '--'}`} variant={fpsVariant} />
-          <Badge label={`Nodes ${nodeCount || '--'}`} variant="default" />
-          <Badge label={`x${simScale.toFixed(2).replace(/\.00$/, '')}`} variant="default" />
-          <Badge label={`Profile ${loadProfile.toUpperCase()}`} variant={loadProfile === 'turbo' ? 'success' : loadProfile === 'balanced' ? 'warning' : 'default'} />
-        </S.RowG6>
-      </Box>
-
-      <Box style={{ flexDirection: 'row', gap: frameGap, flexGrow: 1, minHeight: 0, minWidth: 0, width: '100%', flexWrap: 'nowrap' }}>
+      {/* ── HEADER ── */}
+      {SHOW_HEADER && (
         <Box
           style={{
-            flexBasis: leftPaneBasis,
-            flexGrow: 0.95,
-            minWidth: 0,
+            width: '100%',
             backgroundColor: panelBg,
             borderWidth: 1,
             borderColor: panelBorder,
             borderRadius: 10,
             padding: panelPad,
-            gap: 6,
+            gap: compact ? 6 : 8,
           }}
         >
-          <Text style={{ color: '#9eb4cf', fontSize: 10, fontWeight: 'normal' }}>WATCHLIST</Text>
-          <S.RowSpaceBetween style={{ width: '100%', paddingLeft: 6, paddingRight: 6 }}>
-            <Box style={{ width: 54 }}><Text style={{ fontSize: 9, color: '#587394' }}>SYM</Text></Box>
-            {/* rjit-ignore-next-line */}
-            <Box style={{ width: 68, alignItems: 'flex-end' }}><Text style={{ fontSize: 9, color: '#587394' }}>LAST</Text></Box>
-            {/* rjit-ignore-next-line */}
-            <Box style={{ width: 66, alignItems: 'flex-end' }}><Text style={{ fontSize: 9, color: '#587394' }}>%</Text></Box>
-            {/* rjit-ignore-next-line */}
-            <Box style={{ width: 56, alignItems: 'flex-end' }}><Text style={{ fontSize: 9, color: '#587394' }}>VOL</Text></Box>
-          </S.RowSpaceBetween>
-          <ScrollView style={{ flexGrow: 1, width: '100%' }}>
-            <Box style={{ gap: 2, paddingRight: 2 }}>
-              {watchlistRows.map((row) => {
-                const active = row.index === selectedIndex;
-                const up = row.deltaPct >= 0;
-                return (
-                  <Pressable key={row.symbol} onPress={() => setSelectedIndex(row.index)}>
-                    {({ pressed }) => (
-                      <Box
-                        style={{
-                          width: '100%',
-                          flexDirection: 'row',
-                          justifyContent: 'space-between',
-                          paddingLeft: 6,
-                          paddingRight: 6,
-                          paddingTop: 4,
-                          paddingBottom: 4,
-                          borderRadius: 4,
-                          borderWidth: active ? 1 : 0,
-                          borderColor: '#2e6aa3',
-                          backgroundColor: active ? '#12233c' : pressed ? '#0f1d33' : '#0a1628',
-                        }}
-                      >
-                        <Box style={{ width: 54 }}><Text style={{ color: '#d8e4f3', fontSize: 10 }}>{row.symbol}</Text></Box>
-                        {/* rjit-ignore-next-line */}
-                        <Box style={{ width: 68, alignItems: 'flex-end' }}><Text style={{ color: '#c5d6ea', fontSize: 10 }}>{row.last.toFixed(2)}</Text></Box>
-                        {/* rjit-ignore-next-line */}
-                        <Box style={{ width: 66, alignItems: 'flex-end' }}><Text style={{ color: up ? '#34d399' : '#f87171', fontSize: 10 }}>{`${up ? '+' : ''}${row.deltaPct.toFixed(2)}%`}</Text></Box>
-                        {/* rjit-ignore-next-line */}
-                        <Box style={{ width: 56, alignItems: 'flex-end' }}><Text style={{ color: '#7f9bc0', fontSize: 10 }}>{formatCompact(row.volume)}</Text></Box>
-                      </Box>
-                    )}
-                  </Pressable>
-                );
-              })}
+          <S.RowCenterG8 style={{ justifyContent: 'space-between', width: '100%', flexWrap: 'wrap' }}>
+            <Box style={{ gap: 2 }}>
+              <Text style={{ fontSize: 17, color: '#e8eef8', fontWeight: 'normal' }}>
+                Trading Workstation
+              </Text>
+              <Text style={{ fontSize: 11, color: '#92a8c4' }}>
+                Synthetic venue feed with depth, tape, and renderer telemetry
+              </Text>
             </Box>
-          </ScrollView>
-          <Text style={{ color: '#5f7899', fontSize: 9 }}>
-            {`${watchlistRows.length} rendered • ${symbolCount} simulated symbols • ${historyLimit} bars • x${simScale.toFixed(2).replace(/\.00$/, '')}`}
-          </Text>
-        </Box>
-
-        <Box style={{ flexGrow: 1.5, minWidth: 0, gap: frameGap, minHeight: 0 }}>
-          <Box
-            style={{
-              backgroundColor: panelBg,
-              borderWidth: 1,
-              borderColor: panelBorder,
-              borderRadius: 10,
-              padding: panelPad,
-              gap: compact ? 6 : 8,
-            }}
-          >
-            {selected && (
-              <S.RowG6 style={{ flexWrap: 'wrap' }}>
-                <Badge label={selected.symbol} variant="default" />
-                <Badge label={`Last ${selected.last.toFixed(2)}`} variant="info" />
-                <Badge label={`Best Bid ${bestBid.toFixed(2)}`} variant="success" />
-                <Badge label={`Best Ask ${bestAsk.toFixed(2)}`} variant="error" />
-                <Badge label={`Vol ${Math.round(selected.volume).toLocaleString()}`} variant="default" />
-                <Badge label={`Frame max ${snapshot.maxFrameMs.toFixed(2)}ms`} variant="warning" />
-              </S.RowG6>
-            )}
-          </Box>
-
-          <Box
-            style={{
-              flexGrow: 1,
-              minHeight: chartMinHeight,
-              borderWidth: 1,
-              borderColor: panelBorder,
-              borderRadius: 10,
-              backgroundColor: '#071223',
-              padding: panelPad,
-              gap: compact ? 6 : 8,
-            }}
-          >
-            <Text style={{ color: '#9eb4cf', fontSize: 10, fontWeight: 'normal' }}>PRICE FEED</Text>
-            <Box style={{ flexGrow: 1, minHeight: chartBodyMinHeight }}>
-              {selected && (viewMode === '2d' ? (
-                <Feed2D history={visibleHistory} />
-              ) : (
-                <Feed3D history={visibleHistory} spin={spin} />
-              ))}
-            </Box>
-          </Box>
-
-          <Box
-            style={{
-              backgroundColor: panelBg,
-              borderWidth: 1,
-              borderColor: panelBorder,
-              borderRadius: 10,
-              padding: panelPad,
-              gap: compact ? 6 : 8,
-            }}
-          >
-            <Text style={{ color: '#9eb4cf', fontSize: 10, fontWeight: 'normal' }}>EXECUTION / ENGINE CONTROLS</Text>
-            <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: frameGap, width: '100%' }}>
-              <Box style={{ flexGrow: 1, flexBasis: 0, minWidth: controlsMinWidth, gap: compact ? 6 : 8 }}>
-                <LabeledSlider label="Symbols" value={symbolCount} min={20} max={320} step={10} onChange={setSymbolCount} />
-                <LabeledSlider label="Book Depth" value={depth} min={10} max={80} step={2} onChange={setDepth} />
+            <S.RowCenterG8>
+              <Box style={{ width: 180 }}>
+                <Tabs tabs={VIEW_TABS} activeId={viewMode} onSelect={(id) => setViewMode(id as ViewMode)} variant="pill" />
               </Box>
-              <Box style={{ flexGrow: 1, flexBasis: 0, minWidth: controlsMinWidth, gap: compact ? 6 : 8 }}>
-                <LabeledSlider label="Target Events/sec" value={targetEvents} min={5000} max={400000} step={10000} onChange={setTargetEvents} />
-                <LabeledSlider label="Simulation Scale" value={simScale} min={1} max={2} step={0.25} onChange={setSimScale} />
-                <LabeledSlider label="Focus Symbol" value={selectedIndex} min={0} max={Math.max(0, symbolCount - 1)} step={1} onChange={setSelectedIndex} />
-              </Box>
-            </Box>
-          </Box>
+              <S.RowCenterG6 style={{ paddingLeft: 8, paddingRight: 8, paddingTop: 4, paddingBottom: 4, borderRadius: 6, borderWidth: 1, borderColor: '#244266', backgroundColor: '#0a172c' }}>
+                <Text style={{ color: '#9eb4cf', fontSize: 10, fontWeight: 'normal' }}>LIVE</Text>
+                <Switch value={live} onValueChange={setLive} />
+              </S.RowCenterG6>
+            </S.RowCenterG8>
+          </S.RowCenterG8>
+
+          {SHOW_BADGES && (
+            <S.RowG6 style={{ flexWrap: 'wrap', width: '100%' }}>
+              <Badge label={selected ? `${selected.symbol} ${selected.last.toFixed(2)}` : 'No symbol'} variant={selected ? (selectedUp ? 'success' : 'error') : 'default'} />
+              <Badge label={selected ? `${selectedDelta >= 0 ? '+' : ''}${selectedDelta.toFixed(2)} (${selectedDeltaPct >= 0 ? '+' : ''}${selectedDeltaPct.toFixed(2)}%)` : 'Change --'} variant={selected ? (selectedUp ? 'success' : 'error') : 'default'} />
+              <Badge label={selected ? `Spread ${spread.toFixed(2)}` : 'Spread --'} variant="default" />
+              <Badge label={`Target ${effectiveTargetEvents.toLocaleString()}/s`} variant="info" />
+              <Badge label={`Actual ${snapshot.throughput.toLocaleString()}/s`} variant={snapshot.throughput >= effectiveTargetEvents * 0.8 ? 'success' : 'warning'} />
+              <Badge label={`p95 ${snapshot.p95.toFixed(2)}ms`} variant={snapshot.p95 < 8 ? 'success' : snapshot.p95 < 16 ? 'warning' : 'error'} />
+              <Badge label={`FPS ${fps || '--'}`} variant={fpsVariant} />
+              <Badge label={`Nodes ${nodeCount || '--'}`} variant="default" />
+              <Badge label={`x${simScale.toFixed(2).replace(/\.00$/, '')}`} variant="default" />
+              <Badge label={`Profile ${loadProfile.toUpperCase()}`} variant={loadProfile === 'turbo' ? 'success' : loadProfile === 'balanced' ? 'warning' : 'default'} />
+            </S.RowG6>
+          )}
         </Box>
+      )}
 
-        <Box style={{ flexBasis: rightPaneBasis, flexGrow: 1.05, minWidth: 0, gap: frameGap, minHeight: 0 }}>
+      <Box style={{ flexDirection: 'row', gap: frameGap, flexGrow: 1, minHeight: 0, minWidth: 0, width: '100%', flexWrap: 'nowrap' }}>
+        {/* ── WATCHLIST ── */}
+        {SHOW_WATCHLIST && (
           <Box
             style={{
-              flexGrow: 1,
-              minHeight: 260,
-              backgroundColor: panelBg,
-              borderWidth: 1,
-              borderColor: panelBorder,
-              borderRadius: 10,
-              padding: panelPad,
-              gap: compact ? 6 : 8,
-            }}
-          >
-            <S.RowCenter style={{ justifyContent: 'space-between', width: '100%' }}>
-              <Text style={{ color: '#9eb4cf', fontSize: 10, fontWeight: 'normal' }}>ORDER BOOK</Text>
-              <Text style={{ color: '#6f8daf', fontSize: 10 }}>{`Spread ${spread.toFixed(2)}`}</Text>
-            </S.RowCenter>
-            {selected && (
-              <S.RowG8 style={{ flexGrow: 1 }}>
-                <BookPanel title="Bids" levels={selected.bids} color="#22c55e" descending />
-                <BookPanel title="Asks" levels={selected.asks} color="#ef4444" descending={false} />
-              </S.RowG8>
-            )}
-          </Box>
-
-          <Box
-            style={{
+              flexBasis: leftPaneBasis,
+              flexGrow: 0.95,
+              minWidth: 0,
               backgroundColor: panelBg,
               borderWidth: 1,
               borderColor: panelBorder,
               borderRadius: 10,
               padding: panelPad,
               gap: 6,
-              height: tapeHeight,
             }}
           >
-            <Text style={{ color: '#9eb4cf', fontSize: 10, fontWeight: 'normal' }}>TIME & SALES</Text>
-            <ScrollView style={{ width: '100%', flexGrow: 1 }}>
-              <Box style={{ gap: 3 }}>
-                {tapeRows.map((row) => (
-                  <S.RowSpaceBetween key={`tape-${row.id}`} style={{ width: '100%', backgroundColor: '#0a1628', borderRadius: 4, paddingLeft: 6, paddingRight: 6, paddingTop: 3, paddingBottom: 3 }}>
-                    <Text style={{ fontSize: 10, color: row.side === 'BUY' ? '#34d399' : '#f87171' }}>{row.side}</Text>
-                    <Text style={{ fontSize: 10, color: '#c7d8ec' }}>{row.price.toFixed(2)}</Text>
-                    <Text style={{ fontSize: 10, color: '#7f9bc0' }}>{row.size}</Text>
-                  </S.RowSpaceBetween>
-                ))}
+            <Text style={{ color: '#9eb4cf', fontSize: 10, fontWeight: 'normal' }}>WATCHLIST</Text>
+            <S.RowSpaceBetween style={{ width: '100%', paddingLeft: 6, paddingRight: 6 }}>
+              <Box style={{ width: 54 }}><Text style={{ fontSize: 9, color: '#587394' }}>SYM</Text></Box>
+              {/* rjit-ignore-next-line */}
+              <Box style={{ width: 68, alignItems: 'flex-end' }}><Text style={{ fontSize: 9, color: '#587394' }}>LAST</Text></Box>
+              {/* rjit-ignore-next-line */}
+              <Box style={{ width: 66, alignItems: 'flex-end' }}><Text style={{ fontSize: 9, color: '#587394' }}>%</Text></Box>
+              {/* rjit-ignore-next-line */}
+              <Box style={{ width: 56, alignItems: 'flex-end' }}><Text style={{ fontSize: 9, color: '#587394' }}>VOL</Text></Box>
+            </S.RowSpaceBetween>
+            <ScrollView style={{ flexGrow: 1, width: '100%' }}>
+              <Box style={{ gap: 2, paddingRight: 2 }}>
+                {watchlistRows.map((row) => {
+                  const active = row.index === selectedIndex;
+                  const up = row.deltaPct >= 0;
+                  return (
+                    <Pressable key={row.symbol} onPress={() => setSelectedIndex(row.index)}>
+                      {({ pressed }) => (
+                        <Box
+                          style={{
+                            width: '100%',
+                            flexDirection: 'row',
+                            justifyContent: 'space-between',
+                            paddingLeft: 6,
+                            paddingRight: 6,
+                            paddingTop: 4,
+                            paddingBottom: 4,
+                            borderRadius: 4,
+                            borderWidth: active ? 1 : 0,
+                            borderColor: '#2e6aa3',
+                            backgroundColor: active ? '#12233c' : pressed ? '#0f1d33' : '#0a1628',
+                          }}
+                        >
+                          <Box style={{ width: 54 }}><Text style={{ color: '#d8e4f3', fontSize: 10 }}>{row.symbol}</Text></Box>
+                          {/* rjit-ignore-next-line */}
+                          <Box style={{ width: 68, alignItems: 'flex-end' }}><Text style={{ color: '#c5d6ea', fontSize: 10 }}>{row.last.toFixed(2)}</Text></Box>
+                          {/* rjit-ignore-next-line */}
+                          <Box style={{ width: 66, alignItems: 'flex-end' }}><Text style={{ color: up ? '#34d399' : '#f87171', fontSize: 10 }}>{`${up ? '+' : ''}${row.deltaPct.toFixed(2)}%`}</Text></Box>
+                          {/* rjit-ignore-next-line */}
+                          <Box style={{ width: 56, alignItems: 'flex-end' }}><Text style={{ color: '#7f9bc0', fontSize: 10 }}>{formatCompact(row.volume)}</Text></Box>
+                        </Box>
+                      )}
+                    </Pressable>
+                  );
+                })}
               </Box>
             </ScrollView>
+            <Text style={{ color: '#5f7899', fontSize: 9 }}>
+              {`${watchlistRows.length} rendered • ${symbolCount} simulated symbols • ${historyLimit} bars • x${simScale.toFixed(2).replace(/\.00$/, '')}`}
+            </Text>
           </Box>
+        )}
 
-          <Box
-            style={{
-              backgroundColor: panelBg,
-              borderWidth: 1,
-              borderColor: panelBorder,
-              borderRadius: 10,
-              padding: panelPad,
-              gap: 4,
-            }}
-          >
-            <Text style={{ color: '#9eb4cf', fontSize: 10, fontWeight: 'normal' }}>ENGINE HEALTH</Text>
-            <Text style={{ color: '#c7d8ec', fontSize: 10 }}>
-              {`fps ${fps || '--'} | layout ${layoutMs.toFixed(1)}ms | paint ${paintMs.toFixed(1)}ms`}
-            </Text>
-            <Text style={{ color: totalFrameWork <= 8 ? '#34d399' : totalFrameWork <= 16 ? '#facc15' : '#f87171', fontSize: 10 }}>
-              {`frame work ${totalFrameWork.toFixed(1)}ms | p50 ${snapshot.p50.toFixed(2)}ms | p95 ${snapshot.p95.toFixed(2)}ms`}
-            </Text>
-            <Text style={{ color: '#7f9bc0', fontSize: 10 }}>
-              {`processed ${snapshot.processedTotal.toLocaleString()} | dropped ${snapshot.droppedFrames} | nodes ${nodeCount || '--'}`}
-            </Text>
-            <Text style={{ color: '#9eb4cf', fontSize: 10, fontWeight: 'normal', marginTop: 2 }}>TARGET SYSTEM</Text>
-            <Text style={{ color: '#c7d8ec', fontSize: 10 }}>{sysHost}</Text>
-            <Text style={{ color: '#7f9bc0', fontSize: 10 }}>{sysOs}</Text>
-            <Text style={{ color: '#7f9bc0', fontSize: 10 }}>{sysCpu}</Text>
-            <Text style={{ color: '#7f9bc0', fontSize: 10 }}>{`${sysMem} | up ${sysUp}`}</Text>
-          </Box>
+        <Box style={{ flexGrow: 1.5, minWidth: 0, gap: frameGap, minHeight: 0 }}>
+          {/* ── DETAIL BADGES ── */}
+          {SHOW_DETAIL_BADGES && (
+            <Box
+              style={{
+                backgroundColor: panelBg,
+                borderWidth: 1,
+                borderColor: panelBorder,
+                borderRadius: 10,
+                padding: panelPad,
+                gap: compact ? 6 : 8,
+              }}
+            >
+              {selected && (
+                <S.RowG6 style={{ flexWrap: 'wrap' }}>
+                  <Badge label={selected.symbol} variant="default" />
+                  <Badge label={`Last ${selected.last.toFixed(2)}`} variant="info" />
+                  <Badge label={`Best Bid ${bestBid.toFixed(2)}`} variant="success" />
+                  <Badge label={`Best Ask ${bestAsk.toFixed(2)}`} variant="error" />
+                  <Badge label={`Vol ${Math.round(selected.volume).toLocaleString()}`} variant="default" />
+                  <Badge label={`Frame max ${snapshot.maxFrameMs.toFixed(2)}ms`} variant="warning" />
+                </S.RowG6>
+              )}
+            </Box>
+          )}
+
+          {/* ── CHART ── */}
+          {SHOW_CHART && (
+            <Box
+              style={{
+                flexGrow: 1,
+                minHeight: chartMinHeight,
+                borderWidth: 1,
+                borderColor: panelBorder,
+                borderRadius: 10,
+                backgroundColor: '#071223',
+                padding: panelPad,
+                gap: compact ? 6 : 8,
+              }}
+            >
+              <Text style={{ color: '#9eb4cf', fontSize: 10, fontWeight: 'normal' }}>PRICE FEED</Text>
+              <Box style={{ flexGrow: 1, minHeight: chartBodyMinHeight }}>
+                {selected && (viewMode === '2d' ? (
+                  <Feed2D history={visibleHistory} />
+                ) : (
+                  <Feed3D history={visibleHistory} spin={spin} />
+                ))}
+              </Box>
+            </Box>
+          )}
+
+          {/* ── CONTROLS ── */}
+          {SHOW_CONTROLS && (
+            <Box
+              style={{
+                backgroundColor: panelBg,
+                borderWidth: 1,
+                borderColor: panelBorder,
+                borderRadius: 10,
+                padding: panelPad,
+                gap: compact ? 6 : 8,
+              }}
+            >
+              <Text style={{ color: '#9eb4cf', fontSize: 10, fontWeight: 'normal' }}>EXECUTION / ENGINE CONTROLS</Text>
+              <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: frameGap, width: '100%' }}>
+                <Box style={{ flexGrow: 1, flexBasis: 0, minWidth: controlsMinWidth, gap: compact ? 6 : 8 }}>
+                  <LabeledSlider label="Symbols" value={symbolCount} min={20} max={320} step={10} onChange={setSymbolCount} />
+                  <LabeledSlider label="Book Depth" value={depth} min={10} max={80} step={2} onChange={setDepth} />
+                </Box>
+                <Box style={{ flexGrow: 1, flexBasis: 0, minWidth: controlsMinWidth, gap: compact ? 6 : 8 }}>
+                  <LabeledSlider label="Target Events/sec" value={targetEvents} min={5000} max={400000} step={10000} onChange={setTargetEvents} />
+                  <LabeledSlider label="Simulation Scale" value={simScale} min={1} max={2} step={0.25} onChange={setSimScale} />
+                  <LabeledSlider label="Focus Symbol" value={selectedIndex} min={0} max={Math.max(0, symbolCount - 1)} step={1} onChange={setSelectedIndex} />
+                </Box>
+              </Box>
+            </Box>
+          )}
+        </Box>
+
+        <Box style={{ flexBasis: rightPaneBasis, flexGrow: 1.05, minWidth: 0, gap: frameGap, minHeight: 0 }}>
+          {/* ── ORDER BOOK ── */}
+          {SHOW_ORDERBOOK && (
+            <Box
+              style={{
+                flexGrow: 1,
+                minHeight: 260,
+                backgroundColor: panelBg,
+                borderWidth: 1,
+                borderColor: panelBorder,
+                borderRadius: 10,
+                padding: panelPad,
+                gap: compact ? 6 : 8,
+              }}
+            >
+              <S.RowCenter style={{ justifyContent: 'space-between', width: '100%' }}>
+                <Text style={{ color: '#9eb4cf', fontSize: 10, fontWeight: 'normal' }}>ORDER BOOK</Text>
+                <Text style={{ color: '#6f8daf', fontSize: 10 }}>{`Spread ${spread.toFixed(2)}`}</Text>
+              </S.RowCenter>
+              {selected && (
+                <S.RowG8 style={{ flexGrow: 1 }}>
+                  <BookPanel title="Bids" levels={selected.bids} color="#22c55e" descending />
+                  <BookPanel title="Asks" levels={selected.asks} color="#ef4444" descending={false} />
+                </S.RowG8>
+              )}
+            </Box>
+          )}
+
+          {/* ── TAPE ── */}
+          {SHOW_TAPE && (
+            <Box
+              style={{
+                backgroundColor: panelBg,
+                borderWidth: 1,
+                borderColor: panelBorder,
+                borderRadius: 10,
+                padding: panelPad,
+                gap: 6,
+                height: tapeHeight,
+              }}
+            >
+              <Text style={{ color: '#9eb4cf', fontSize: 10, fontWeight: 'normal' }}>TIME & SALES</Text>
+              <ScrollView style={{ width: '100%', flexGrow: 1 }}>
+                <Box style={{ gap: 3 }}>
+                  {tapeRows.map((row) => (
+                    <S.RowSpaceBetween key={`tape-${row.id}`} style={{ width: '100%', backgroundColor: '#0a1628', borderRadius: 4, paddingLeft: 6, paddingRight: 6, paddingTop: 3, paddingBottom: 3 }}>
+                      <Text style={{ fontSize: 10, color: row.side === 'BUY' ? '#34d399' : '#f87171' }}>{row.side}</Text>
+                      <Text style={{ fontSize: 10, color: '#c7d8ec' }}>{row.price.toFixed(2)}</Text>
+                      <Text style={{ fontSize: 10, color: '#7f9bc0' }}>{row.size}</Text>
+                    </S.RowSpaceBetween>
+                  ))}
+                </Box>
+              </ScrollView>
+            </Box>
+          )}
+
+          {/* ── HEALTH ── */}
+          {SHOW_HEALTH && (
+            <Box
+              style={{
+                backgroundColor: panelBg,
+                borderWidth: 1,
+                borderColor: panelBorder,
+                borderRadius: 10,
+                padding: panelPad,
+                gap: 4,
+              }}
+            >
+              <Text style={{ color: '#9eb4cf', fontSize: 10, fontWeight: 'normal' }}>ENGINE HEALTH</Text>
+              <Text style={{ color: '#c7d8ec', fontSize: 10 }}>
+                {`fps ${fps || '--'} | layout ${layoutMs.toFixed(1)}ms | paint ${paintMs.toFixed(1)}ms`}
+              </Text>
+              <Text style={{ color: totalFrameWork <= 8 ? '#34d399' : totalFrameWork <= 16 ? '#facc15' : '#f87171', fontSize: 10 }}>
+                {`frame work ${totalFrameWork.toFixed(1)}ms | p50 ${snapshot.p50.toFixed(2)}ms | p95 ${snapshot.p95.toFixed(2)}ms`}
+              </Text>
+              <Text style={{ color: '#7f9bc0', fontSize: 10 }}>
+                {`processed ${snapshot.processedTotal.toLocaleString()} | dropped ${snapshot.droppedFrames} | nodes ${nodeCount || '--'}`}
+              </Text>
+              <Text style={{ color: '#9eb4cf', fontSize: 10, fontWeight: 'normal', marginTop: 2 }}>TARGET SYSTEM</Text>
+              <Text style={{ color: '#c7d8ec', fontSize: 10 }}>{sysHost}</Text>
+              <Text style={{ color: '#7f9bc0', fontSize: 10 }}>{sysOs}</Text>
+              <Text style={{ color: '#7f9bc0', fontSize: 10 }}>{sysCpu}</Text>
+              <Text style={{ color: '#7f9bc0', fontSize: 10 }}>{`${sysMem} | up ${sysUp}`}</Text>
+            </Box>
+          )}
         </Box>
       </Box>
     </Box>

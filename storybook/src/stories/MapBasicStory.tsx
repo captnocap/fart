@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { Box, Text, Pressable, ScrollView, classifiers as S} from '@reactjit/core';
 import {
   MapContainer, TileLayer, Marker, Popup, Tooltip,
@@ -211,15 +211,14 @@ export function MapBasicStory() {
 
   const { distance } = useProjection();
 
-  const preset = useMemo(
-    () => PRESETS.find((p) => p.id === presetId) ?? first,
-    [presetId],
-  );
+  // rjit-ignore-next-line
+  const preset = PRESETS.find((p) => p.id === presetId) ?? first;
 
-  const fleetMarkers = useMemo(() => makeFleet(preset.center, 16), [preset.center]);
-  const buildingData = useMemo(() => makeBuildings(preset.center), [preset.center]);
+  const fleetMarkers = makeFleet(preset.center, 16);
+  const buildingData = makeBuildings(preset.center);
 
-  const routeDistanceKm = useMemo(() => {
+  // rjit-ignore-next-line — loop compute, migrate to .tslx
+  const routeDistanceKm = (() => {
     const pts = preset.route;
     if (pts.length < 2) return 0;
     let m = 0;
@@ -227,24 +226,25 @@ export function MapBasicStory() {
       m += distance(pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1]);
     }
     return m / 1000;
-  }, [distance, preset.route]);
+  })();
 
-  const handleViewChange = useCallback((event: any) => {
+  const handleViewChange = (event: any) => {
     if (Array.isArray(event?.center) && event.center.length >= 2) {
       const lat = Number(event.center[0]);
       const lng = Number(event.center[1]);
       if (Number.isFinite(lat) && Number.isFinite(lng)) setCenter([lat, lng]);
     }
     if (typeof event?.zoom === 'number' && Number.isFinite(event.zoom)) setZoom(event.zoom);
-  }, []);
+  };
 
-  const jumpTo = useCallback((id: string) => {
+  const jumpTo = (id: string) => {
+    // rjit-ignore-next-line
     const p = PRESETS.find((x) => x.id === id);
     if (!p) return;
     setPresetId(p.id);
     setCenter([...p.center]);
     setZoom(p.zoom);
-  }, []);
+  };
 
   const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 

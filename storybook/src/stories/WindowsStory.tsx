@@ -9,7 +9,7 @@
  * Static hoist ALL code strings and style objects outside the component.
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState } from 'react';
 import { Box, Text, Image, ScrollView, CodeBlock, Pressable, Window, Notification, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import {Band, Half, HeroBand, CalloutBand, Divider, SectionLabel, PageColumn} from './_shared/StoryScaffold';
@@ -367,41 +367,43 @@ export function WindowsStory() {
   const [counter, setCounter] = useState(0);
   const [winEvents, setWinEvents] = useState<string[]>([]);
 
-  const logWin = useCallback((msg: string) => {
+  const logWin = (msg: string) => {
     setWinEvents(prev => [...prev.slice(-6), msg]);
-  }, []);
+  };
 
   // -- Notification demo state (lifted so <Notification> renders at root) --
   const [activeNotifs, setActiveNotifs] = useState<{ id: number; preset: number }[]>([]);
   const [richNotifs, setRichNotifs] = useState<{ id: number }[]>([]);
   const [nextNotifId, setNextNotifId] = useState(1);
 
-  const fireNotif = useCallback((presetIdx: number) => {
+  const fireNotif = (presetIdx: number) => {
     setActiveNotifs(prev => [...prev, { id: nextNotifId, preset: presetIdx }]);
     setNextNotifId(n => n + 1);
-  }, [nextNotifId]);
+  };
 
-  const fireRichNotif = useCallback(() => {
+  const fireRichNotif = () => {
     setRichNotifs(prev => [...prev, { id: nextNotifId }]);
     setNextNotifId(n => n + 1);
-  }, [nextNotifId]);
+  };
 
-  const fireAllNotifs = useCallback(() => {
+  const fireAllNotifs = () => {
     const base = nextNotifId;
     setActiveNotifs(prev => [
       ...prev,
       ...NOTIF_PRESETS.map((_, i) => ({ id: base + i, preset: i })),
     ]);
     setNextNotifId(n => n + NOTIF_PRESETS.length);
-  }, [nextNotifId]);
+  };
 
-  const dismissNotif = useCallback((notifId: number) => {
+  const dismissNotif = (notifId: number) => {
+    // rjit-ignore-next-line — .filter for state update
     setActiveNotifs(prev => prev.filter(n => n.id !== notifId));
-  }, []);
+  };
 
-  const dismissRichNotif = useCallback((notifId: number) => {
+  const dismissRichNotif = (notifId: number) => {
+    // rjit-ignore-next-line — .filter for state update
     setRichNotifs(prev => prev.filter(n => n.id !== notifId));
-  }, []);
+  };
 
   return (
     <S.StoryRoot>

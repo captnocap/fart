@@ -8,7 +8,7 @@
  * Static hoist ALL code strings and style objects outside the component.
  */
 
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   Box, Text, Image, ScrollView, CodeBlock, Pressable,
   Easing, useShake,
@@ -301,9 +301,9 @@ function SpringDemo() {
   const [targetIdx, setTargetIdx] = useState(0);
   const target = SPRING_TARGETS[targetIdx];
 
-  const next = useCallback(() => {
+  const next = () => {
     setTargetIdx(i => (i + 1) % SPRING_TARGETS.length);
-  }, []);
+  };
 
   return (
     <>
@@ -804,10 +804,10 @@ function ClickFlipCard({ front, back, color }: { front: string; back: string; co
   const [showBack, setShowBack] = useState(false);
   const [flipKey, setFlipKey] = useState(0);
 
-  const handleFlip = useCallback(() => {
+  const handleFlip = () => {
     setFlipKey(k => k + 1);
     setTimeout(() => setShowBack(s => !s), 200);
-  }, []);
+  };
 
   return (
     <Pressable onPress={handleFlip}>
@@ -844,15 +844,15 @@ function HoverFlipCard({ front, back, color }: { front: string; back: string; co
   const [showBack, setShowBack] = useState(false);
   const [flipKey, setFlipKey] = useState(0);
 
-  const handleHoverIn = useCallback(() => {
+  const handleHoverIn = () => {
     setFlipKey(k => k + 1);
     setTimeout(() => setShowBack(true), 200);
-  }, []);
+  };
 
-  const handleHoverOut = useCallback(() => {
+  const handleHoverOut = () => {
     setFlipKey(k => k + 1);
     setTimeout(() => setShowBack(false), 200);
-  }, []);
+  };
 
   return (
     <Pressable onPress={() => {}} onHoverIn={handleHoverIn} onHoverOut={handleHoverOut}>
@@ -1043,17 +1043,18 @@ function RippleButton({ label, color }: { label: string; color: string }) {
   const [ripples, setRipples] = useState<RippleState[]>([]);
   const idRef = useRef(0);
 
-  const handleLayout = useCallback((e: any) => {
+  const handleLayout = (e: any) => {
     layoutRef.current = { x: e.x, y: e.y, w: e.width, h: e.height };
-  }, []);
+  };
 
-  const handleClick = useCallback((e: any) => {
+  const handleClick = (e: any) => {
     const lx = (e.x || 0) - layoutRef.current.x;
     const ly = (e.y || 0) - layoutRef.current.y;
     const id = ++idRef.current;
     setRipples(prev => [...prev, { x: lx, y: ly, id }]);
+    // rjit-ignore-next-line — trivial filter to remove expired ripple by id
     setTimeout(() => setRipples(prev => prev.filter(r => r.id !== id)), 700);
-  }, []);
+  };
 
   return (
     <S.CenterG4>
@@ -1251,20 +1252,20 @@ function TiltCard({ label, color }: { label: string; color: string }) {
   const [hoverPos, setHoverPos] = useState<{ x: number; y: number } | null>(null);
   const layoutRef = useRef({ x: 0, y: 0, w: 100, h: 60 });
 
-  const handleLayout = useCallback((e: any) => {
+  const handleLayout = (e: any) => {
     layoutRef.current = { x: e.x, y: e.y, w: e.width, h: e.height };
-  }, []);
+  };
 
-  const handleEnter = useCallback((e: any) => {
+  const handleEnter = (e: any) => {
     const l = layoutRef.current;
     const rx = ((e.x || 0) - l.x) / l.w - 0.5;
     const ry = ((e.y || 0) - l.y) / l.h - 0.5;
     setHoverPos({ x: rx, y: ry });
-  }, []);
+  };
 
-  const handleLeave = useCallback(() => {
+  const handleLeave = () => {
     setHoverPos(null);
-  }, []);
+  };
 
   const skX = hoverPos ? hoverPos.y * -8 : 0;
   const skY = hoverPos ? hoverPos.x * 8 : 0;

@@ -7,7 +7,7 @@
  * Static hoist ALL code strings and style objects outside the component.
  */
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState } from 'react';
 import { Box, Text, Image, ScrollView, CodeBlock, Pressable, classifiers as S } from '../../../packages/core/src';
 import {
   MapContainer, TileLayer, Marker, Popup, Tooltip,
@@ -508,14 +508,12 @@ function ProjectionDemo() {
   const c = useThemeColors();
   const { latlngToPixel, pixelToLatlng, distance } = useProjection();
 
-  const results = useMemo(() => {
-    const sf: LatLngTuple = [37.7749, -122.4194];
-    const tokyo: LatLngTuple = [35.6895, 139.6917];
-    const [px, py] = latlngToPixel(sf[0], sf[1], 12);
-    const [lat, lng] = pixelToLatlng(px, py, 12);
-    const dist = distance(sf[0], sf[1], tokyo[0], tokyo[1]);
-    return { px, py, lat, lng, dist };
-  }, [latlngToPixel, pixelToLatlng, distance]);
+  const sf: LatLngTuple = [37.7749, -122.4194];
+  const tokyo: LatLngTuple = [35.6895, 139.6917];
+  const [px, py] = latlngToPixel(sf[0], sf[1], 12);
+  const [lat, lng] = pixelToLatlng(px, py, 12);
+  const distKm = distance(sf[0], sf[1], tokyo[0], tokyo[1]);
+  const results = { px, py, lat, lng, dist: distKm };
 
   return (
     <S.StackG6W100>
@@ -562,13 +560,10 @@ function DistanceDemo() {
 
   const from = CITIES[fromIdx];
   const to = CITIES[toIdx];
-  const dist = useMemo(
-    () => distance(from.center[0], from.center[1], to.center[0], to.center[1]),
-    [distance, from, to],
-  );
+  const dist = distance(from.center[0], from.center[1], to.center[0], to.center[1]);
 
-  const cycleFrom = useCallback(() => setFromIdx(i => (i + 1) % CITIES.length), []);
-  const cycleTo = useCallback(() => setToIdx(i => (i + 1) % CITIES.length), []);
+  const cycleFrom = () => setFromIdx(i => (i + 1) % CITIES.length);
+  const cycleTo = () => setToIdx(i => (i + 1) % CITIES.length);
 
   return (
     <S.StackG6W100>
@@ -612,18 +607,16 @@ function MiniMapDemo() {
   const c = useThemeColors();
   const [cityIdx, setCityIdx] = useState(0);
   const city = CITIES[cityIdx];
-  const cycleCity = useCallback(() => setCityIdx(i => (i + 1) % CITIES.length), []);
+  const cycleCity = () => setCityIdx(i => (i + 1) % CITIES.length);
 
-  const route: LatLngTuple[] = useMemo(() => {
-    const [lat, lng] = city.center;
-    return [
-      [lat + 0.01, lng - 0.015],
-      [lat + 0.005, lng - 0.005],
-      [lat, lng],
-      [lat - 0.005, lng + 0.008],
-      [lat - 0.012, lng + 0.015],
-    ];
-  }, [city]);
+  const [lat, lng] = city.center;
+  const route: LatLngTuple[] = [
+    [lat + 0.01, lng - 0.015],
+    [lat + 0.005, lng - 0.005],
+    [lat, lng],
+    [lat - 0.005, lng + 0.008],
+    [lat - 0.012, lng + 0.015],
+  ];
 
   return (
     <S.StackG6W100>
@@ -663,7 +656,7 @@ function VectorLayersDemo() {
     [37.794, -122.397], [37.784, -122.407], [37.775, -122.419], [37.766, -122.434], [37.758, -122.447],
   ];
 
-  const geojsonData = useMemo(() => ({
+  const geojsonData = {
     type: 'FeatureCollection' as const,
     features: [
       {
@@ -677,7 +670,7 @@ function VectorLayersDemo() {
         properties: { name: 'District B', fill: '#a78bfa99', stroke: '#6d28d9' },
       },
     ],
-  }), []);
+  };
 
   return (
     <S.StackG6W100>

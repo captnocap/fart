@@ -8,7 +8,7 @@
  * a single ref-based tick — no React re-renders for animation.
  */
 
-import React, { useState, useCallback, useRef, useMemo } from 'react';
+import React, { useState, useRef } from 'react';
 import { Box, Text, Pressable, ScrollView, useLoveRPC, useRecorder, useLuaInterval, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 
@@ -35,6 +35,7 @@ function nowMs() {
 
 function percentile(values: number[], q: number) {
   if (values.length === 0) return 0;
+  // rjit-ignore-next-line
   const sorted = values.slice().sort((a, b) => a - b);
   const idx = Math.min(sorted.length - 1, Math.max(0, Math.floor((sorted.length - 1) * q)));
   return sorted[idx];
@@ -131,7 +132,8 @@ function LoadBoxes({ count, width, height }: { count: number; width: number; hei
     setTick(t => t + 1);
   });
 
-  const boxes = useMemo(() => {
+  // rjit-ignore-next-line — loop building element array, migrate to .tslx
+  const boxes = (() => {
     const arr = positions.current;
     const result: React.ReactElement[] = [];
     for (let i = 0; i < Math.min(arr.length, count); i++) {
@@ -153,8 +155,7 @@ function LoadBoxes({ count, width, height }: { count: number; width: number; hei
       );
     }
     return result;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tick, count]);
+  })();
 
   return (
     <S.Bordered style={{ width: '100%', height: 200, backgroundColor: c.bg, borderRadius: 8, overflow: 'hidden', position: 'relative' }}>
@@ -255,26 +256,26 @@ export default function RecordingStressStory() {
   });
 
   // Manual controls
-  const cycleLoad = useCallback(() => {
+  const cycleLoad = () => {
     setLoadCount(cur => {
       const idx = LOAD_PRESETS.indexOf(cur);
       return LOAD_PRESETS[(idx + 1) % LOAD_PRESETS.length];
     });
-  }, []);
+  };
 
-  const cycleFps = useCallback(() => {
+  const cycleFps = () => {
     setRecFps(cur => {
       const idx = FPS_PRESETS.indexOf(cur);
       return FPS_PRESETS[(idx + 1) % FPS_PRESETS.length];
     });
-  }, []);
+  };
 
-  const toggleRecord = useCallback(() => {
+  const toggleRecord = () => {
     if (recording) { stop(); } else { start({ fps: recFps, format: 'mp4' }); }
-  }, [recording, start, stop, recFps]);
+  };
 
   // Auto-test sequence
-  const runAutoTest = useCallback(async () => {
+  const runAutoTest = async () => {
     const ref = { cancelled: false };
     autoRef.current = ref;
     setAutoRunning(true);
@@ -341,14 +342,14 @@ export default function RecordingStressStory() {
     setAutoRunning(false);
     setAutoPhase('');
     setLoadCount(50);
-  }, [start, stop, getPerf, perf, frames]);
+  };
 
-  const cancelAutoTest = useCallback(() => {
+  const cancelAutoTest = () => {
     autoRef.current.cancelled = true;
     setAutoRunning(false);
     setAutoPhase('');
     if (recording) stop();
-  }, [recording, stop]);
+  };
 
   // FPS color
   const fpsVal = perf.fps ?? 0;

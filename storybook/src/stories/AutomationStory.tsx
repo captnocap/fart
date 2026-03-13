@@ -8,7 +8,7 @@
  * Static hoist ALL code strings and style objects outside the component.
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState } from 'react';
 import { Box, Text, Image, ScrollView, Pressable, CodeBlock, useAndroidVM, classifiers as S } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import { Band, Half, HeroBand, CalloutBand, Divider, SectionLabel, PageColumn } from './_shared/StoryScaffold';
@@ -255,48 +255,48 @@ function AndroidVMDemo() {
   const [log, setLog] = useState<string[]>([]);
   const [isConnected, setIsConnected] = useState(false);
 
-  const addLog = useCallback((msg: string) => {
+  const addLog = (msg: string) => {
     setLog(prev => [...prev.slice(-8), msg]);
-  }, []);
+  };
 
-  const doConnect = useCallback(async () => {
+  const doConnect = async () => {
     addLog('adb connect localhost:5556...');
     const r = await vm.connect();
     if (r?.ok) { setIsConnected(true); addLog('Connected: ' + (r.serial || '')); }
     else addLog('Failed: ' + (r?.error || 'unknown'));
-  }, [vm, addLog]);
+  };
 
-  const doTap = useCallback(async () => {
+  const doTap = async () => {
     addLog('input tap 540 960');
     await vm.tap(540, 960);
     addLog('OK');
-  }, [vm, addLog]);
+  };
 
-  const doHome = useCallback(async () => {
+  const doHome = async () => {
     addLog('input keyevent KEYCODE_HOME');
     await vm.key('HOME');
     addLog('OK');
-  }, [vm, addLog]);
+  };
 
-  const doShell = useCallback(async () => {
+  const doShell = async () => {
     addLog('shell getprop ro.build.version.release');
     const r = await vm.shell('getprop ro.build.version.release');
     addLog('=> ' + (r?.output || r?.error || '?'));
-  }, [vm, addLog]);
+  };
 
-  const doScreenshot = useCallback(async () => {
+  const doScreenshot = async () => {
     addLog('screencap -> /tmp/android_demo.png');
     const r = await vm.screenshot('/tmp/android_demo.png');
     if (r?.ok) addLog('Saved: ' + r.path);
     else addLog('Failed: ' + ((r as any)?.error || 'unknown'));
-  }, [vm, addLog]);
+  };
 
-  const doPackages = useCallback(async () => {
+  const doPackages = async () => {
     addLog('pm list packages');
     const r = await vm.packages();
     if (r?.packages) addLog(r.packages.length + ' packages installed');
     else addLog('Failed');
-  }, [vm, addLog]);
+  };
 
   const buttons = [
     { label: 'Connect', fn: doConnect, color: C.accent, needsConn: false },

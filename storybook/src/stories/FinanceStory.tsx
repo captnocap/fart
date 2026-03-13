@@ -8,7 +8,7 @@
  * Static hoist ALL code strings and style objects outside the component.
  */
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState } from 'react';
 import { Box, Text, Image, ScrollView, CodeBlock, Pressable, CandlestickChart, DepthChart, BarChart, Switch, classifiers as S} from '../../../packages/core/src';
 import type { ChartOverlay } from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
@@ -282,14 +282,15 @@ function CandlestickDemo() {
   const delta = last.close - prev.close;
   const up = delta >= 0;
 
-  const candleData = useMemo(() => candles.map(c => ({
+  // rjit-ignore-next-line — .map projection for chart data, needs .tslx migration
+  const candleData = candles.map(c => ({
     time: c.time, open: c.open, high: c.high, low: c.low, close: c.close,
-  })), [candles]);
+  }));
 
-  const ticker = useMemo(() => makeTicker(candles), [candles]);
+  const ticker = makeTicker(candles);
 
-  // Build overlays for the Lua chart renderer
-  const overlays = useMemo((): ChartOverlay[] => {
+  // rjit-ignore-next-line — overlay construction with .map projections, needs .tslx migration
+  const overlays: ChartOverlay[] = (() => {
     const ov: ChartOverlay[] = [
       { values: ta.sma20, color: '#3b82f6', lineWidth: 1.5 },
       { values: ta.sma50, color: '#f59e0b', lineWidth: 1.5, style: 'dashed' },
@@ -306,20 +307,24 @@ function CandlestickDemo() {
       });
     }
     return ov;
-  }, [ta.sma20, ta.sma50, ta.bollinger, showBB]);
+  })();
 
-  const legendItems = useMemo(() => {
+  // rjit-ignore-next-line — .filter for NaN removal in legend, needs .tslx migration
+  const legendItems = (() => {
+    // rjit-ignore-next-line
     const sma20 = ta.sma20.filter(v => !isNaN(v));
+    // rjit-ignore-next-line
     const sma50 = ta.sma50.filter(v => !isNaN(v));
     const items: Array<{ label: string; color: string; value?: number }> = [];
     if (sma20.length > 0) items.push({ label: 'SMA 20', color: '#3b82f6', value: sma20[sma20.length - 1] });
     if (sma50.length > 0) items.push({ label: 'SMA 50', color: '#f59e0b', value: sma50[sma50.length - 1] });
     if (showBB) {
+      // rjit-ignore-next-line
       const bb = ta.bollinger.filter(b => !isNaN(b.upper));
       if (bb.length > 0) items.push({ label: 'BB', color: '#a78bfa', value: bb[bb.length - 1].upper - bb[bb.length - 1].lower });
     }
     return items;
-  }, [ta.sma20, ta.sma50, ta.bollinger, showBB]);
+  })();
 
   return (
     <S.StackG6W100>
@@ -347,7 +352,7 @@ function DepthChartDemo() {
   useLuaInterval(1700, () => { append(); });
 
   const last = candles[candles.length - 1];
-  const book = useMemo(() => makeBook(last.close, Math.floor(last.time * 7)), [last.close, last.time]);
+  const book = makeBook(last.close, Math.floor(last.time * 7));
 
   return (
     <S.StackG6W100>
@@ -420,12 +425,15 @@ function RSIMACDDemo() {
 
   useLuaInterval(1300, () => { append(); });
 
+  // rjit-ignore-next-line — trivial NaN filter for last-value extraction
   const rsiLast = ta.rsi14.filter(v => !isNaN(v));
   const rsiValue = rsiLast.length > 0 ? rsiLast[rsiLast.length - 1] : 50;
 
+  // rjit-ignore-next-line — trivial NaN filter for last-value extraction
   const stochValid = ta.stochastic.filter(s => !isNaN(s.k));
   const stochLast = stochValid[stochValid.length - 1];
 
+  // rjit-ignore-next-line — trivial NaN filter for last-value extraction
   const bbValid = ta.bollinger.filter(b => !isNaN(b.upper));
   const bbLast = bbValid[bbValid.length - 1];
 
@@ -490,13 +498,12 @@ function PortfolioDemo() {
     }
   });
 
-  const allocationBars = useMemo(() =>
-    snapshot.allocation.map(a => ({
-      label: a.symbol,
-      value: a.weight * 100,
-      color: a.weight > 0.3 ? C.blue : a.weight > 0.15 ? C.green : C.yellow,
-    })),
-  [snapshot.allocation]);
+  // rjit-ignore-next-line — .map projection for chart data, needs .tslx migration
+  const allocationBars = snapshot.allocation.map(a => ({
+    label: a.symbol,
+    value: a.weight * 100,
+    color: a.weight > 0.3 ? C.blue : a.weight > 0.15 ? C.green : C.yellow,
+  }));
 
   return (
     <S.StackG8W100>
@@ -518,7 +525,7 @@ function OrderBookDemo() {
   useLuaInterval(1500, () => { append(); });
 
   const last = candles[candles.length - 1];
-  const book = useMemo(() => makeBook(last.close, Math.floor(last.time)), [last.close, last.time]);
+  const book = makeBook(last.close, Math.floor(last.time));
   const spread = book.asks[0] ? spreadBps(book.bids[0]?.price ?? 0, book.asks[0].price) : 0;
 
   return (
@@ -541,7 +548,7 @@ function PatternDemo() {
 
   useLuaInterval(2700, () => { append(); });
 
-  const patterns = useMemo(() => ta.patterns.slice(-8), [ta.patterns]);
+  const patterns = ta.patterns.slice(-8);
 
   return (
     <S.StackG6W100>

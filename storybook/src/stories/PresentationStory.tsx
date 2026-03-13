@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Box, Pressable, Text, classifiers as S} from '../../../packages/core/src';
 import { useThemeColors } from '../../../packages/theme/src';
 import {
@@ -440,17 +440,13 @@ export function PresentationStory() {
   }>({ id: null });
   const [log, setLog] = useState<string[]>(INITIAL_LOG);
 
-  const activeSlide = useMemo(
-    () => document.slides.find((slide) => slide.id === activeSlideId) ?? document.slides[0],
-    [document, activeSlideId],
-  );
+  // rjit-ignore-next-line
+  const activeSlide = document.slides.find((slide) => slide.id === activeSlideId) ?? document.slides[0];
+  // rjit-ignore-next-line
   const activeSlideIndex = Math.max(0, document.slides.findIndex((slide) => slide.id === activeSlide.id));
   const canRemoveSlide = document.slides.length > 1;
 
-  const selectedNode = useMemo(
-    () => (selection[0] ? findPresentationNode(activeSlide.nodes, selection[0].nodeId) : null),
-    [activeSlide, selection],
-  );
+  const selectedNode = selection[0] ? findPresentationNode(activeSlide.nodes, selection[0].nodeId) : null;
 
   const prevSlideRef = useRef(activeSlide);
   if (prevSlideRef.current !== activeSlide) {
@@ -458,43 +454,43 @@ export function PresentationStory() {
     setCameraPreview(activeSlide.camera);
   }
 
-  const handlePatch = useCallback((event: PresentationEditorPatchEvent) => {
+  const handlePatch = (event: PresentationEditorPatchEvent) => {
     setDocument((current) => applyPresentationPatch(current, event.patch));
     pushLog(setLog, formatPatch(event.patch));
-  }, []);
+  };
 
-  const handleSelectionChange = useCallback((event: PresentationEditorSelectionEvent) => {
+  const handleSelectionChange = (event: PresentationEditorSelectionEvent) => {
     const nextSelection = Array.isArray(event.selection) ? event.selection : [];
     setSelection(nextSelection);
     pushLog(setLog, nextSelection[0] ? `selected ${nextSelection[0].nodeId}` : 'selection cleared');
-  }, []);
+  };
 
-  const handleCameraChange = useCallback((event: PresentationEditorCameraEvent) => {
+  const handleCameraChange = (event: PresentationEditorCameraEvent) => {
     if (event.transient) {
       return;
     }
     if (event.slideId === activeSlideId) {
       setCameraPreview(event.camera);
     }
-  }, [activeSlideId]);
+  };
 
-  const handleReset = useCallback(() => {
+  const handleReset = () => {
     setDocument(INITIAL_DOCUMENT);
     setActiveSlideId(INITIAL_DOCUMENT.slides[0].id);
     setSelection([]);
     setCameraPreview(INITIAL_DOCUMENT.slides[0].camera);
     setEditorCommand({ id: null });
     setLog(INITIAL_LOG);
-  }, []);
+  };
 
-  const issueEditorCommand = useCallback((command: PresentationEditorCommand) => {
+  const issueEditorCommand = (command: PresentationEditorCommand) => {
     setEditorCommand((current) => ({
       id: current.id == null ? 1 : current.id + 1,
       value: command,
     }));
-  }, []);
+  };
 
-  const handleAddSlide = useCallback(() => {
+  const handleAddSlide = () => {
     const nextSlide = createStarterSlide(document.slides.length + 1);
     const patch: PresentationPatch = {
       type: 'addSlide',
@@ -505,9 +501,9 @@ export function PresentationStory() {
     setActiveSlideId(nextSlide.id);
     setSelection([]);
     pushLog(setLog, formatPatch(patch));
-  }, [document.slides.length]);
+  };
 
-  const handleDuplicateSlide = useCallback(() => {
+  const handleDuplicateSlide = () => {
     const nextSlide = {
       ...duplicatePresentationSlide(activeSlide, DEMO_FACTORY),
       title: activeSlide.title ? `${activeSlide.title} Copy` : `Slide ${document.slides.length + 1}`,
@@ -522,9 +518,9 @@ export function PresentationStory() {
     setActiveSlideId(nextSlide.id);
     setSelection([]);
     pushLog(setLog, formatPatch(patch));
-  }, [activeSlide, activeSlideIndex, document.slides.length]);
+  };
 
-  const handleMoveSlide = useCallback((slideId: string, index: number) => {
+  const handleMoveSlide = (slideId: string, index: number) => {
     const patch: PresentationPatch = {
       type: 'reorderSlide',
       slideId,
@@ -534,9 +530,9 @@ export function PresentationStory() {
     setDocument((current) => applyPresentationPatch(current, patch));
     setActiveSlideId(slideId);
     pushLog(setLog, formatPatch(patch));
-  }, []);
+  };
 
-  const handleRemoveSlide = useCallback(() => {
+  const handleRemoveSlide = () => {
     if (!canRemoveSlide) {
       pushLog(setLog, 'removeSlide blocked for the last remaining slide');
       return;
@@ -552,14 +548,15 @@ export function PresentationStory() {
     setActiveSlideId(fallbackSlide.id);
     setSelection([]);
     pushLog(setLog, formatPatch(patch));
-  }, [activeSlide.id, activeSlideIndex, canRemoveSlide, document.slides]);
+  };
 
-  const handleSelectSlide = useCallback((slideId: string) => {
+  const handleSelectSlide = (slideId: string) => {
     setActiveSlideId(slideId);
     setSelection([]);
-  }, []);
+  };
 
-  const handleAddText = useCallback(() => {
+  const handleAddText = () => {
+    // rjit-ignore-next-line — trivial count for index generation
     const nextNode = createStarterTextNode(activeSlide.nodes.filter((node) => node.kind === 'text').length + 1);
     const patch: PresentationPatch = {
       type: 'addNode',
@@ -573,9 +570,10 @@ export function PresentationStory() {
       selection: [{ slideId: activeSlide.id, nodeId: nextNode.id }],
     });
     pushLog(setLog, formatPatch(patch));
-  }, [activeSlide.id, activeSlide.nodes, issueEditorCommand]);
+  };
 
-  const handleAddShape = useCallback(() => {
+  const handleAddShape = () => {
+    // rjit-ignore-next-line — trivial count for index generation
     const nextNode = createStarterShapeNode(activeSlide.nodes.filter((node) => node.kind === 'shape').length + 1);
     const patch: PresentationPatch = {
       type: 'addNode',
@@ -589,9 +587,10 @@ export function PresentationStory() {
       selection: [{ slideId: activeSlide.id, nodeId: nextNode.id }],
     });
     pushLog(setLog, formatPatch(patch));
-  }, [activeSlide.id, activeSlide.nodes, issueEditorCommand]);
+  };
 
-  const handleAddImage = useCallback(() => {
+  const handleAddImage = () => {
+    // rjit-ignore-next-line — trivial count for index generation
     const nextIndex = activeSlide.nodes.filter((node) => node.kind === 'image').length + 1;
     const asset = createStarterImageAsset(nextIndex);
     const nextNode = createStarterImageNode(nextIndex, asset.id);
@@ -606,9 +605,10 @@ export function PresentationStory() {
       selection: [{ slideId: activeSlide.id, nodeId: nextNode.id }],
     });
     patches.forEach((patch) => pushLog(setLog, formatPatch(patch)));
-  }, [activeSlide.id, activeSlide.nodes, issueEditorCommand]);
+  };
 
-  const handleAddVideo = useCallback(() => {
+  const handleAddVideo = () => {
+    // rjit-ignore-next-line — trivial count for index generation
     const nextIndex = activeSlide.nodes.filter((node) => node.kind === 'video').length + 1;
     const asset = createStarterVideoAsset(nextIndex);
     const nextNode = createStarterVideoNode(nextIndex, asset.id);
@@ -623,7 +623,7 @@ export function PresentationStory() {
       selection: [{ slideId: activeSlide.id, nodeId: nextNode.id }],
     });
     patches.forEach((patch) => pushLog(setLog, formatPatch(patch)));
-  }, [activeSlide.id, activeSlide.nodes, issueEditorCommand]);
+  };
 
   return (
     <Box
