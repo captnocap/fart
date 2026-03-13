@@ -652,7 +652,8 @@ Capabilities.register("ClaudeCanvas", {
               groupItemIndex = groupItemIndex + 1
               nid = "g" .. currentGroupId .. ":menu:item:" .. groupItemIndex
             elseif kind == "menu_desc" then
-              nid = "g" .. currentGroupId .. ":menu:desc:" .. groupItemIndex
+              -- Share parent menu_option's nodeId so they're one logical node
+              nid = "g" .. currentGroupId .. ":menu:item:" .. groupItemIndex
             elseif kind == "list_selectable" then
               groupItemIndex = groupItemIndex + 1
               nid = "g" .. currentGroupId .. ":menu:item:" .. groupItemIndex
