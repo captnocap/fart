@@ -30,25 +30,20 @@ const STRESS_TESTS: StressDef[] = [
   { id: 'llms', name: 'llms.txt Reader', description: 'Large text/content parsing and render throughput.', category: 'I/O', component: LlmsTxtReader },
 ];
 
-const PREVIEW_SCALE = 0.25;
 const CARD_WIDTH = 220;
 const PREVIEW_HEIGHT = 120;
-const INNER_WIDTH = CARD_WIDTH / PREVIEW_SCALE;
-const INNER_HEIGHT = PREVIEW_HEIGHT / PREVIEW_SCALE;
 
-class PreviewBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean }> {
-  constructor(props: any) { super(props); this.state = { hasError: false }; }
-  static getDerivedStateFromError() { return { hasError: true }; }
-  render() {
-    if (this.state.hasError) return null;
-    return this.props.children;
-  }
-}
+const PREVIEW_ICONS: Record<string, string> = {
+  Layout: '◫',
+  Performance: '⚡',
+  Graphics: '◆',
+  'I/O': '▤',
+};
 
 function StressCard({ item, onSelect }: { item: StressDef; onSelect: (id: StressVariant) => void }) {
   const c = useThemeColors();
   const color = CATEGORY_COLORS[item.category] || c.textDim;
-  const Comp = item.component;
+  const icon = PREVIEW_ICONS[item.category] || '●';
 
   return (
     <Pressable
@@ -62,12 +57,9 @@ function StressCard({ item, onSelect }: { item: StressDef; onSelect: (id: Stress
         overflow: 'hidden',
       })}
     >
-      <Box style={{ width: CARD_WIDTH, height: PREVIEW_HEIGHT, overflow: 'hidden', backgroundColor: c.bgElevated }}>
-        <PreviewBoundary>
-          <Box style={{ width: INNER_WIDTH, height: INNER_HEIGHT, transform: { scaleX: PREVIEW_SCALE, scaleY: PREVIEW_SCALE, originX: 0, originY: 0 } }}>
-            <Comp />
-          </Box>
-        </PreviewBoundary>
+      <Box style={{ width: CARD_WIDTH, height: PREVIEW_HEIGHT, backgroundColor: c.bgElevated, justifyContent: 'center', alignItems: 'center', gap: 8 }}>
+        <Text style={{ fontSize: 32, color }}>{icon}</Text>
+        <Text style={{ fontSize: 10, color: c.textDim }}>{item.category}</Text>
       </Box>
       <Box style={{ padding: 12, gap: 6 }}>
         {/* rjit-ignore-next-line */}
