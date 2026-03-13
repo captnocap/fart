@@ -366,7 +366,9 @@ Capabilities.register("ClaudeCanvas", {
         menu_title = "menu", menu_option = "menu", menu_desc = "menu",
         menu_example = "menu", form_label = "menu", form_field = "menu", detail_text = "menu",
         list_selectable = "menu", list_selected = "menu", list_info = "menu",
-        search_box = "menu", selector = "menu", confirmation = "menu", hint = "menu",
+        search_box = "menu", selector = "menu", confirmation = "menu",
+        ["hint:navigate"] = "menu", ["hint:dismiss"] = "menu", ["hint:cancel"] = "menu",
+        ["hint:search"] = "menu", ["hint:shortcut"] = "menu",
         picker_title = "picker", picker_item = "picker",
         picker_selected = "picker", picker_meta = "picker",
         task_summary = "task", task_done = "task", task_open = "task", task_active = "task",
@@ -380,6 +382,8 @@ Capabilities.register("ClaudeCanvas", {
         text = true, banner = true, thinking = true, plan_mode = true,
         status_bar = true, input_border = true, warning = true,
         tool = true, result = true, form_field = true, menu_example = true, detail_text = true,
+        ["hint:navigate"] = true, ["hint:dismiss"] = true, ["hint:cancel"] = true,
+        ["hint:search"] = true, ["hint:shortcut"] = true,
       }
 
       -- Per-turn sequence counters (reset on turn change)
@@ -512,14 +516,25 @@ Capabilities.register("ClaudeCanvas", {
             kind = "menu_desc"
           end
 
-          -- Footer hints: keyboard shortcuts, navigation instructions
-          if kind == "text" and (rowText:find("Enter to select", 1, true)
-             or rowText:find("Arrow keys", 1, true)
-             or rowText:find("Esc to cancel", 1, true)
-             or rowText:find("Esc to go back", 1, true)
-             or rowText:find("Type to search", 1, true)
-             or (rowText:find("Ctrl+", 1, true) and rowText:find(" to ", 1, true))) then
-            kind = "hint"
+          -- Footer hints: keyboard shortcuts, navigation instructions (subtyped)
+          if kind == "text" then
+            if rowText:find("Enter to select", 1, true) or rowText:find("↑↓", 1, true)
+               or rowText:find("Arrow keys", 1, true) then
+              kind = "hint:navigate"
+            elseif rowText:find("Enter or Esc to go back", 1, true)
+               or rowText:find("Esc to go back", 1, true) then
+              kind = "hint:dismiss"
+            elseif rowText:find("Esc to cancel", 1, true) then
+              kind = "hint:cancel"
+            elseif rowText:find("Type to search", 1, true) then
+              kind = "hint:search"
+            elseif rowText:find("Ctrl+", 1, true) and rowText:find(" to ", 1, true) then
+              kind = "hint:shortcut"
+            end
+          end
+          -- Continuation line of a wrapped hint (e.g. "· to go back" on next row)
+          if kind == "text" and prevKind and prevKind:sub(1, 5) == "hint:" then
+            kind = prevKind  -- inherit parent hint subtype
           end
 
           -- Structure check: detect menu context after box_drawing separator
@@ -606,7 +621,8 @@ Capabilities.register("ClaudeCanvas", {
               if not promptVtRow then promptVtRow = row end
             elseif kind == "status_bar" then
               kind = "status_bar"
-            elseif kind == "confirmation" or kind == "menu_option" or kind == "selector" or kind == "menu_title" then
+            elseif kind == "confirmation" or kind == "menu_option" or kind == "selector"
+               or kind == "menu_title" or kind:sub(1, 5) == "hint:" then
               -- keep these as-is
             elseif rowText:match("^%s*/[%w%-]") or rowText:find("/[%w%-].*…") then
               kind = "slash_menu"
@@ -711,9 +727,9 @@ Capabilities.register("ClaudeCanvas", {
               nid = "g" .. currentGroupId .. ":search"
             elseif kind == "confirmation" then
               nid = "g" .. currentGroupId .. ":confirm"
-            elseif kind == "hint" then
+            elseif kind:sub(1, 5) == "hint:" then
               local gid = currentGroupId > 0 and currentGroupId or 0
-              nid = "g" .. gid .. ":hint"
+              nid = "g" .. gid .. ":" .. kind
             elseif kind == "selector" then
               nid = "g" .. currentGroupId .. ":selector"
             elseif kind == "picker_title" then
