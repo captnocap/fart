@@ -702,23 +702,38 @@ function StatePreview() {
 
 function ClaudeCanvasDemo() {
   const [showLive, setShowLive] = useState(false);
+  const [debugMode, setDebugMode] = useState(true);
   const [workingDir, setWorkingDir] = useState('.');
   return (
     <Box style={{ width: '100%', gap: 8 }}>
-      <Pressable onPress={() => setShowLive(!showLive)}>
-        <Box style={{
-          backgroundColor: showLive ? 'rgba(243, 139, 168, 0.15)' : 'rgba(166, 227, 161, 0.15)',
-          borderRadius: 6, paddingLeft: 12, paddingRight: 12, paddingTop: 6, paddingBottom: 6, alignItems: 'center',
-        }}>
-          <Text style={{ fontSize: 10, color: showLive ? C.red : C.green, fontWeight: 'bold' }}>
-            {showLive ? 'Stop Session' : 'Launch Claude Session'}
-          </Text>
-        </Box>
-      </Pressable>
+      <Box style={{ flexDirection: 'row', gap: 8 }}>
+        <Pressable onPress={() => setShowLive(!showLive)}>
+          <Box style={{
+            backgroundColor: showLive ? 'rgba(243, 139, 168, 0.15)' : 'rgba(166, 227, 161, 0.15)',
+            borderRadius: 6, paddingLeft: 12, paddingRight: 12, paddingTop: 6, paddingBottom: 6, alignItems: 'center',
+          }}>
+            <Text style={{ fontSize: 10, color: showLive ? C.red : C.green, fontWeight: 'bold' }}>
+              {showLive ? 'Stop Session' : 'Launch Claude Session'}
+            </Text>
+          </Box>
+        </Pressable>
+        {showLive ? (
+          <Pressable onPress={() => setDebugMode(!debugMode)}>
+            <Box style={{
+              backgroundColor: debugMode ? 'rgba(137, 180, 250, 0.15)' : 'rgba(250, 179, 135, 0.15)',
+              borderRadius: 6, paddingLeft: 12, paddingRight: 12, paddingTop: 6, paddingBottom: 6, alignItems: 'center',
+            }}>
+              <Text style={{ fontSize: 10, color: debugMode ? C.blue : C.peach, fontWeight: 'bold' }}>
+                {debugMode ? 'Debug Tags' : 'Styled View'}
+              </Text>
+            </Box>
+          </Pressable>
+        ) : null}
+      </Box>
       {showLive ? (
         <Box style={{ width: '100%', height: 300 }}>
           <Native type="ClaudeCode" sessionId="story-claude" workingDir={workingDir} configDir="/tmp/claude-login-test" />
-          <ClaudeCanvas sessionId="story-claude" recording style={{ width: '100%', height: 300, borderRadius: 6 }} />
+          <ClaudeCanvas sessionId="story-claude" recording debugVisible={debugMode} style={{ width: '100%', height: 300, borderRadius: 6 }} />
         </Box>
       ) : (
         <Box style={{

@@ -113,6 +113,97 @@ local COLORS = {
   inputPrompt = Color.toTable("#64748b"),
 }
 
+-- ── Semantic style map ───────────────────────────────────────────
+-- Maps token kinds to visual treatments: bg (row tint), bar (left accent), textColor override
+-- Colors are {r, g, b, a} in 0-1 range.
+local SEMANTIC_STYLES = {
+  -- Session chrome
+  banner              = { bg = {0.12, 0.16, 0.22, 0.8},  bar = {0.84, 0.47, 0.34, 0.9} },  -- slate + orange
+  status_bar          = { bg = {0.08, 0.10, 0.14, 0.5} },
+  input_border        = { bg = {0.15, 0.18, 0.25, 0.3} },
+  user_input          = { bg = {0.10, 0.14, 0.22, 0.9},  bar = {0.40, 0.55, 0.90, 0.7} },  -- blue accent
+  input_zone          = { bg = {0.10, 0.14, 0.22, 0.6} },
+
+  -- User
+  user_prompt         = { bg = {0.15, 0.22, 0.35, 0.6},  bar = {0.35, 0.55, 0.95, 0.8} },  -- blue
+  user_text           = { bg = {0.15, 0.22, 0.35, 0.4} },
+
+  -- Assistant
+  assistant_text      = { bg = {0.00, 0.00, 0.00, 0.0} },  -- clean, no tint
+  thinking            = { bg = {0.12, 0.12, 0.16, 0.3},  bar = {0.50, 0.50, 0.60, 0.4} },
+  thought_complete    = { bg = {0.10, 0.12, 0.14, 0.3} },
+
+  -- Tools
+  tool                = { bg = {0.08, 0.18, 0.12, 0.5},  bar = {0.31, 0.73, 0.40, 0.8} },  -- green
+  result              = { bg = {0.08, 0.12, 0.10, 0.3},  bar = {0.31, 0.73, 0.40, 0.4} },
+
+  -- Diff
+  diff                = { bg = {0.10, 0.14, 0.18, 0.4},  bar = {0.55, 0.65, 0.80, 0.5} },
+
+  -- Warnings / errors
+  ["warning:large_prompt"] = { bg = {0.25, 0.18, 0.05, 0.4}, bar = {1.0, 0.76, 0.03, 0.8} },  -- amber
+  error               = { bg = {0.25, 0.08, 0.08, 0.5},  bar = {0.95, 0.30, 0.30, 0.8} },  -- red
+
+  -- Interactive menus
+  menu_title          = { bg = {0.14, 0.16, 0.22, 0.5},  bar = {0.70, 0.73, 0.97, 0.6} },  -- lavender
+  menu_option         = { bg = {0.10, 0.12, 0.18, 0.3} },
+  menu_desc           = { bg = {0.10, 0.12, 0.18, 0.2} },
+  list_selected       = { bg = {0.18, 0.22, 0.38, 0.5},  bar = {0.70, 0.73, 0.97, 0.8} },  -- selected highlight
+  list_selectable     = { bg = {0.10, 0.12, 0.18, 0.2} },
+  list_info           = { bg = {0.08, 0.10, 0.14, 0.2} },
+  confirmation        = { bg = {0.10, 0.12, 0.16, 0.3} },
+  selector            = { bg = {0.15, 0.18, 0.28, 0.4},  bar = {0.70, 0.73, 0.97, 0.6} },
+  search_box          = { bg = {0.10, 0.14, 0.20, 0.4} },
+  menu_example        = { bg = {0.08, 0.10, 0.14, 0.3} },
+
+  -- Notice / trust page
+  notice_title        = { bg = {0.20, 0.16, 0.05, 0.4},  bar = {1.0, 0.76, 0.03, 0.8} },   -- amber
+  context_path        = { bg = {0.10, 0.14, 0.20, 0.4},  bar = {0.50, 0.60, 0.80, 0.5} },
+  detail_text         = { bg = {0.08, 0.10, 0.14, 0.2} },
+  link_text           = { bg = {0.08, 0.12, 0.16, 0.3},  bar = {0.40, 0.55, 0.80, 0.4} },
+
+  -- Auth / onboarding
+  splash_art          = { bg = {0.00, 0.00, 0.00, 0.0} },  -- art renders itself
+  onboarding          = { bg = {0.12, 0.14, 0.20, 0.3},  bar = {0.84, 0.47, 0.34, 0.5} },
+  ["auth:pending"]    = { bg = {0.20, 0.16, 0.05, 0.4},  bar = {1.0, 0.76, 0.03, 0.7} },   -- amber spinner
+  ["auth:success"]    = { bg = {0.08, 0.18, 0.10, 0.4},  bar = {0.31, 0.73, 0.40, 0.8} },   -- green
+  security_notice     = { bg = {0.20, 0.16, 0.05, 0.3},  bar = {1.0, 0.76, 0.03, 0.6} },
+
+  -- Tasks
+  task_summary        = { bg = {0.10, 0.12, 0.18, 0.3} },
+  task_done           = { bg = {0.08, 0.16, 0.10, 0.3},  bar = {0.31, 0.73, 0.40, 0.4} },
+  task_open           = { bg = {0.10, 0.12, 0.16, 0.2} },
+  task_active         = { bg = {0.15, 0.14, 0.05, 0.3},  bar = {0.84, 0.47, 0.34, 0.5} },
+
+  -- Plans
+  plan_border         = { bg = {0.12, 0.12, 0.18, 0.3} },
+  plan_mode           = { bg = {0.14, 0.12, 0.20, 0.3},  bar = {0.60, 0.50, 0.80, 0.5} },
+
+  -- Pickers
+  picker_title        = { bg = {0.12, 0.14, 0.20, 0.4} },
+  picker_item         = { bg = {0.08, 0.10, 0.16, 0.2} },
+  picker_selected     = { bg = {0.18, 0.22, 0.38, 0.5},  bar = {0.70, 0.73, 0.97, 0.8} },
+  picker_meta         = { bg = {0.08, 0.10, 0.14, 0.2} },
+
+  -- Hints
+  ["hint:navigate"]   = { bg = {0.08, 0.10, 0.14, 0.2} },
+  ["hint:dismiss"]    = { bg = {0.08, 0.10, 0.14, 0.2} },
+  ["hint:cancel"]     = { bg = {0.08, 0.10, 0.14, 0.2} },
+  ["hint:search"]     = { bg = {0.08, 0.10, 0.14, 0.2} },
+  ["hint:shortcut"]   = { bg = {0.08, 0.10, 0.14, 0.2} },
+
+  -- Permission
+  permission          = { bg = {0.20, 0.15, 0.05, 0.4},  bar = {1.0, 0.76, 0.03, 0.8} },
+
+  -- Structural
+  box_drawing         = { bg = {0.00, 0.00, 0.00, 0.0} },  -- invisible
+  divider             = { bg = {0.00, 0.00, 0.00, 0.0} },
+  image_attachment    = { bg = {0.12, 0.10, 0.18, 0.3},  bar = {0.60, 0.50, 0.80, 0.5} },
+
+  -- Fallback
+  text                = { bg = {0.00, 0.00, 0.00, 0.0} },
+}
+
 -- ── Capability Registration ────────────────────────────────────────
 
 Capabilities.register("ClaudeCanvas", {
@@ -880,31 +971,84 @@ Capabilities.register("ClaudeCanvas", {
 
           -- Drawing: only for visible rows
           if inViewport then
-            -- Draw tag prefix (debug only)
             if debugVis then
+              -- ── Debug mode: tag prefix + raw cells + row numbers ──
               love.graphics.setFont(tagFont)
-              -- Color-code by zone: blue=content, orange=input zone
               if row >= boundary then
                 love.graphics.setColor(1.0, 0.6, 0.2, 0.7 * effectiveOpacity)
               else
                 love.graphics.setColor(0.4, 0.7, 1.0, 0.6 * effectiveOpacity)
               end
               love.graphics.print("[" .. kind .. "]", c.x + 4, py + 2)
-            end
 
-            -- Draw cells
-            love.graphics.setFont(vtFont)
-            for col = 0, math.min(cols - 1, maxCellCols - 1) do
-              local cell = vterm:getCell(row, col)
-              if cell.char and #cell.char > 0 and cell.char ~= " " then
-                local px = c.x + cellOffsetX + col * charW
-                if cell.fg then
-                  love.graphics.setColor(cell.fg[1]/255, cell.fg[2]/255, cell.fg[3]/255, effectiveOpacity)
-                else
-                  love.graphics.setColor(COLORS.inputText[1], COLORS.inputText[2],
-                                         COLORS.inputText[3], effectiveOpacity)
+              love.graphics.setFont(vtFont)
+              for col = 0, math.min(cols - 1, maxCellCols - 1) do
+                local cell = vterm:getCell(row, col)
+                if cell.char and #cell.char > 0 and cell.char ~= " " then
+                  local px = c.x + cellOffsetX + col * charW
+                  if cell.fg then
+                    love.graphics.setColor(cell.fg[1]/255, cell.fg[2]/255, cell.fg[3]/255, effectiveOpacity)
+                  else
+                    love.graphics.setColor(COLORS.inputText[1], COLORS.inputText[2],
+                                           COLORS.inputText[3], effectiveOpacity)
+                  end
+                  love.graphics.print(cell.char, px, py)
                 end
-                love.graphics.print(cell.char, px, py)
+              end
+            else
+              -- ── Styled mode: semantic backgrounds + accent bars + cells ──
+              local style = SEMANTIC_STYLES[kind]
+              if not style then
+                -- Try prefix match for subtypes (hint:navigate → hint:*)
+                local prefix = kind:match("^(%a+):")
+                if prefix then style = SEMANTIC_STYLES[prefix .. ":navigate"] end  -- fallback to any hint
+              end
+
+              -- Row background tint
+              if style and style.bg and style.bg[4] > 0 then
+                love.graphics.setColor(style.bg[1], style.bg[2], style.bg[3], style.bg[4] * effectiveOpacity)
+                love.graphics.rectangle("fill", c.x, py, c.w, lineH)
+              end
+
+              -- Left accent bar (3px)
+              if style and style.bar then
+                love.graphics.setColor(style.bar[1], style.bar[2], style.bar[3], style.bar[4] * effectiveOpacity)
+                love.graphics.rectangle("fill", c.x, py, 3, lineH)
+              end
+
+              -- Divider: draw a subtle horizontal rule instead of raw ──── chars
+              if kind == "divider" or kind == "input_border" then
+                love.graphics.setColor(0.3, 0.35, 0.45, 0.4 * effectiveOpacity)
+                local ruleY = py + math.floor(lineH / 2)
+                love.graphics.rectangle("fill", c.x + 8, ruleY, c.w - 16, 1)
+              elseif kind == "plan_border" then
+                -- Dashed rule (simulated with short segments)
+                love.graphics.setColor(0.4, 0.35, 0.55, 0.4 * effectiveOpacity)
+                local ruleY = py + math.floor(lineH / 2)
+                local dashW, gapW = 6, 4
+                local dx = c.x + 8
+                while dx < c.x + c.w - 8 do
+                  love.graphics.rectangle("fill", dx, ruleY, dashW, 1)
+                  dx = dx + dashW + gapW
+                end
+              elseif kind == "box_drawing" then
+                -- Suppress raw box chars — draw nothing (table borders handled by content rows)
+              else
+                -- Draw cell text
+                love.graphics.setFont(vtFont)
+                for col = 0, math.min(cols - 1, maxCellCols - 1) do
+                  local cell = vterm:getCell(row, col)
+                  if cell.char and #cell.char > 0 and cell.char ~= " " then
+                    local px = c.x + cellOffsetX + col * charW
+                    if cell.fg then
+                      love.graphics.setColor(cell.fg[1]/255, cell.fg[2]/255, cell.fg[3]/255, effectiveOpacity)
+                    else
+                      love.graphics.setColor(COLORS.inputText[1], COLORS.inputText[2],
+                                             COLORS.inputText[3], effectiveOpacity)
+                    end
+                    love.graphics.print(cell.char, px, py)
+                  end
+                end
               end
             end
           end  -- inViewport drawing
