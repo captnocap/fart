@@ -13,7 +13,21 @@ const lexer = @import("lexer.zig");
 const codegen = @import("codegen.zig");
 const posix = std.posix;
 
-/// Compile a .tsz file: read → tokenize → codegen → write → zig build.
+/// Derive the binary name from input file: "counter.tsz" → "tsz-counter"
+fn appName(alloc: std.mem.Allocator, input_file: []const u8) []const u8 {
+    const base = std.fs.path.basename(input_file);
+    // Strip .tsz extension
+    const stem = if (std.mem.endsWith(u8, base, ".tsz")) base[0 .. base.len - 4] else base;
+    return std.fmt.allocPrint(alloc, "tsz-{s}", .{stem}) catch "tsz-app";
+}
+
+/// Full path to the app binary: "zig-out/bin/tsz-counter"
+fn appPath(alloc: std.mem.Allocator, input_file: []const u8) []const u8 {
+    const name = appName(alloc, input_file);
+    return std.fmt.allocPrint(alloc, "zig-out/bin/{s}", .{name}) catch "zig-out/bin/tsz-app";
+}
+
+/// Compile a .tsz file: read → tokenize → codegen → write → zig build → copy binary.
 /// Returns true on success, false on failure (prints errors).
 fn compile(alloc: std.mem.Allocator, input_file: []const u8) bool {
     // Read source
@@ -74,7 +88,14 @@ fn compile(alloc: std.mem.Allocator, input_file: []const u8) bool {
         std.debug.print("[tsz] Build failed:\n{s}\n", .{build_result.stderr});
         return false;
     }
-    std.debug.print("[tsz] Built → zig-out/bin/tsz-app\n", .{});
+
+    // Copy binary to per-app name so parallel sessions don't clobber each other
+    const dest = appPath(alloc, input_file);
+    std.fs.cwd().copyFile("zig-out/bin/tsz-app", std.fs.cwd(), dest, .{}) catch |err| {
+        std.debug.print("[tsz] Warning: could not copy to {s}: {}\n", .{ dest, err });
+        // Non-fatal — tsz-app still works
+    };
+    std.debug.print("[tsz] Built → {s}\n", .{dest});
     return true;
 }
 
@@ -86,10 +107,11 @@ fn getMtime(path: []const u8) i128 {
     return stat.mtime;
 }
 
-/// Spawn tsz-app as a child process. Returns the pid.
-/// Uses posix.spawn which inherits the full environment (DISPLAY, etc.).
-fn spawnApp(alloc: std.mem.Allocator) ?posix.pid_t {
-    const argv = [_][]const u8{"./zig-out/bin/tsz-app"};
+/// Spawn the app binary as a child process. Returns the pid.
+/// Uses the per-app binary path derived from the input file name.
+fn spawnApp(alloc: std.mem.Allocator, input_file: []const u8) ?posix.pid_t {
+    const path = appPath(alloc, input_file);
+    const argv = [_][]const u8{path};
     var child = std.process.Child.init(&argv, alloc);
     child.spawn() catch |err| {
         std.debug.print("[tsz] Failed to spawn app: {}\n", .{err});
@@ -131,8 +153,8 @@ fn devMode(alloc: std.mem.Allocator, input_file: []const u8) !void {
     var app_pid: ?posix.pid_t = null;
 
     // Launch if initial build succeeded
-    if (std.fs.cwd().access("zig-out/bin/tsz-app", .{})) |_| {
-        app_pid = spawnApp(alloc);
+    if (std.fs.cwd().access(appPath(alloc, input_file), .{})) |_| {
+        app_pid = spawnApp(alloc, input_file);
         if (app_pid != null) std.debug.print("[tsz] App launched. Watching {s}...\n\n", .{input_file});
     } else |_| {}
 
@@ -170,7 +192,7 @@ fn devMode(alloc: std.mem.Allocator, input_file: []const u8) !void {
         }
 
         // Launch new app
-        app_pid = spawnApp(alloc);
+        app_pid = spawnApp(alloc, input_file);
         if (app_pid != null) {
             std.debug.print("[tsz] App relaunched.\n\n", .{});
         }
@@ -215,7 +237,7 @@ pub fn main() !void {
         std.debug.print("[tsz] Running...\n\n", .{});
         const run_result = std.process.Child.run(.{
             .allocator = alloc,
-            .argv = &.{"./zig-out/bin/tsz-app"},
+            .argv = &.{appPath(alloc, input_file)},
         }) catch |err| {
             std.debug.print("[tsz] Run failed: {}\n", .{err});
             return;

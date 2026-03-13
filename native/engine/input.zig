@@ -14,7 +14,11 @@ pub const InputState = struct {
     buf: [BUF_SIZE]u8 = [_]u8{0} ** BUF_SIZE,
     len: u16 = 0,
     cursor: u16 = 0,
+    sel_start: u16 = 0, // selection start (anchor)
+    sel_end: u16 = 0, // selection end (moves with cursor)
+    has_selection: bool = false,
     active: bool = false,
+    multiline: bool = false,
 };
 
 var inputs: [MAX_INPUTS]InputState = [_]InputState{.{}} ** MAX_INPUTS;
@@ -26,6 +30,14 @@ var cursor_visible: bool = true;
 pub fn register(id: u8) void {
     if (id < MAX_INPUTS) {
         inputs[id].active = true;
+    }
+}
+
+/// Register a multiline input slot (TextArea).
+pub fn registerMultiline(id: u8) void {
+    if (id < MAX_INPUTS) {
+        inputs[id].active = true;
+        inputs[id].multiline = true;
     }
 }
 
@@ -71,6 +83,12 @@ pub fn handleTextInput(text: [*:0]const u8) void {
     if (id >= MAX_INPUTS) return;
     var inp = &inputs[id];
 
+    // Delete selection if any (typing replaces selection)
+    if (inp.has_selection) {
+        pushUndo(id, inp);
+        deleteSelection(inp);
+    }
+
     // Get the length of the input text
     var text_len: u16 = 0;
     while (text[text_len] != 0 and text_len < 32) : (text_len += 1) {}
@@ -103,17 +121,20 @@ pub fn handleKey(sym: c_int) bool {
     var inp = &inputs[id];
 
     if (sym == c.SDLK_BACKSPACE) {
-        if (inp.cursor > 0) {
-            // Shift left
+        if (inp.has_selection) {
+            pushUndo(id, inp);
+            deleteSelection(inp);
+        } else if (inp.cursor > 0) {
+            pushUndo(id, inp);
             var i = inp.cursor - 1;
             while (i < inp.len - 1) : (i += 1) {
                 inp.buf[i] = inp.buf[i + 1];
             }
             inp.len -= 1;
             inp.cursor -= 1;
-            cursor_blink = 0;
-            cursor_visible = true;
         }
+        cursor_blink = 0;
+        cursor_visible = true;
         return true;
     }
 
@@ -130,6 +151,7 @@ pub fn handleKey(sym: c_int) bool {
 
     if (sym == c.SDLK_LEFT) {
         if (inp.cursor > 0) inp.cursor -= 1;
+        clearSelection(inp);
         cursor_blink = 0;
         cursor_visible = true;
         return true;
@@ -137,6 +159,7 @@ pub fn handleKey(sym: c_int) bool {
 
     if (sym == c.SDLK_RIGHT) {
         if (inp.cursor < inp.len) inp.cursor += 1;
+        clearSelection(inp);
         cursor_blink = 0;
         cursor_visible = true;
         return true;
@@ -144,6 +167,7 @@ pub fn handleKey(sym: c_int) bool {
 
     if (sym == c.SDLK_HOME) {
         inp.cursor = 0;
+        clearSelection(inp);
         cursor_blink = 0;
         cursor_visible = true;
         return true;
@@ -151,18 +175,59 @@ pub fn handleKey(sym: c_int) bool {
 
     if (sym == c.SDLK_END) {
         inp.cursor = inp.len;
+        clearSelection(inp);
         cursor_blink = 0;
         cursor_visible = true;
         return true;
     }
 
     if (sym == c.SDLK_RETURN or sym == c.SDLK_KP_ENTER) {
-        // Submit handled externally — return true so caller knows
+        if (inp.multiline) {
+            // Insert newline
+            if (inp.len < BUF_SIZE - 1) {
+                // Shift right
+                if (inp.cursor < inp.len) {
+                    var i: u16 = inp.len;
+                    while (i > inp.cursor) {
+                        inp.buf[i] = inp.buf[i - 1];
+                        i -= 1;
+                    }
+                }
+                inp.buf[inp.cursor] = '\n';
+                inp.len += 1;
+                inp.cursor += 1;
+                cursor_blink = 0;
+                cursor_visible = true;
+            }
+            return true;
+        }
+        // Single-line: submit handled externally
         return true;
     }
 
     if (sym == c.SDLK_TAB) {
-        // Cycle to next active input
+        if (inp.multiline) {
+            // Insert 4 spaces
+            const spaces = "    ";
+            if (inp.len + 4 <= BUF_SIZE - 1) {
+                if (inp.cursor < inp.len) {
+                    var i: u16 = inp.len + 3;
+                    while (i > inp.cursor + 3) {
+                        inp.buf[i] = inp.buf[i - 4];
+                        i -= 1;
+                    }
+                }
+                for (0..4) |j| {
+                    inp.buf[inp.cursor + @as(u16, @intCast(j))] = spaces[j];
+                }
+                inp.len += 4;
+                inp.cursor += 4;
+                cursor_blink = 0;
+                cursor_visible = true;
+            }
+            return true;
+        }
+        // Single-line: cycle to next active input
         const current = id;
         var next = current +% 1;
         var tried: u8 = 0;
@@ -185,11 +250,159 @@ pub fn handleKey(sym: c_int) bool {
     return false;
 }
 
-/// Tick cursor blink. Call once per frame with delta time.
+// ── Selection helpers ────────────────────────────────────────────────
+
+/// Get the selection range (lo, hi) ordered.
+pub fn getSelection(id: u8) struct { lo: u16, hi: u16 } {
+    if (id >= MAX_INPUTS) return .{ .lo = 0, .hi = 0 };
+    const inp = &inputs[id];
+    if (!inp.has_selection) return .{ .lo = inp.cursor, .hi = inp.cursor };
+    return if (inp.sel_start <= inp.sel_end)
+        .{ .lo = inp.sel_start, .hi = inp.sel_end }
+    else
+        .{ .lo = inp.sel_end, .hi = inp.sel_start };
+}
+
+/// Delete the selected range and collapse cursor to the start.
+fn deleteSelection(inp: *InputState) void {
+    if (!inp.has_selection) return;
+    const lo = if (inp.sel_start <= inp.sel_end) inp.sel_start else inp.sel_end;
+    const hi = if (inp.sel_start <= inp.sel_end) inp.sel_end else inp.sel_start;
+    const del_len = hi - lo;
+    if (del_len == 0) return;
+    // Shift left
+    var i = lo;
+    while (i < inp.len - del_len) : (i += 1) {
+        inp.buf[i] = inp.buf[i + del_len];
+    }
+    inp.len -= del_len;
+    inp.cursor = lo;
+    inp.has_selection = false;
+}
+
+fn clearSelection(inp: *InputState) void {
+    inp.has_selection = false;
+    inp.sel_start = inp.cursor;
+    inp.sel_end = inp.cursor;
+}
+
+// ── Undo state ──────────────────────────────────────────────────────
+
+const MAX_UNDO = 32;
+const UndoEntry = struct {
+    buf: [BUF_SIZE]u8 = [_]u8{0} ** BUF_SIZE,
+    len: u16 = 0,
+    cursor: u16 = 0,
+};
+
+var undo_stack: [MAX_UNDO]UndoEntry = [_]UndoEntry{.{}} ** MAX_UNDO;
+var undo_count: u16 = 0;
+var undo_input_id: ?u8 = null; // which input the undo stack belongs to
+
+fn pushUndo(id: u8, inp: *const InputState) void {
+    if (undo_input_id != null and undo_input_id.? != id) {
+        // Different input — reset undo stack
+        undo_count = 0;
+    }
+    undo_input_id = id;
+    if (undo_count < MAX_UNDO) {
+        @memcpy(undo_stack[undo_count].buf[0..inp.len], inp.buf[0..inp.len]);
+        undo_stack[undo_count].len = inp.len;
+        undo_stack[undo_count].cursor = inp.cursor;
+        undo_count += 1;
+    }
+}
+
+fn popUndo(inp: *InputState) void {
+    if (undo_count > 0) {
+        undo_count -= 1;
+        const entry = &undo_stack[undo_count];
+        @memcpy(inp.buf[0..entry.len], entry.buf[0..entry.len]);
+        inp.len = entry.len;
+        inp.cursor = entry.cursor;
+        inp.has_selection = false;
+    }
+}
+
+// ── Ctrl+Key handler ────────────────────────────────────────────────
+
+/// Handle Ctrl+key combinations. Returns true if handled.
+pub fn handleCtrlKey(sym: c_int) bool {
+    const id = focused_id orelse return false;
+    if (id >= MAX_INPUTS) return false;
+    var inp = &inputs[id];
+
+    // Ctrl+A — select all
+    if (sym == c.SDLK_a) {
+        inp.sel_start = 0;
+        inp.sel_end = inp.len;
+        inp.has_selection = true;
+        inp.cursor = inp.len;
+        return true;
+    }
+
+    // Ctrl+C — copy selection to clipboard
+    if (sym == c.SDLK_c) {
+        if (inp.has_selection) {
+            const sel = getSelection(id);
+            if (sel.hi > sel.lo) {
+                // Null-terminate for SDL
+                var clip_buf: [BUF_SIZE + 1]u8 = undefined;
+                const clip_len = sel.hi - sel.lo;
+                @memcpy(clip_buf[0..clip_len], inp.buf[sel.lo..sel.hi]);
+                clip_buf[clip_len] = 0;
+                _ = c.SDL_SetClipboardText(@ptrCast(&clip_buf));
+            }
+        }
+        return true;
+    }
+
+    // Ctrl+X — cut selection
+    if (sym == c.SDLK_x) {
+        if (inp.has_selection) {
+            const sel = getSelection(id);
+            if (sel.hi > sel.lo) {
+                // Copy first
+                var clip_buf: [BUF_SIZE + 1]u8 = undefined;
+                const clip_len = sel.hi - sel.lo;
+                @memcpy(clip_buf[0..clip_len], inp.buf[sel.lo..sel.hi]);
+                clip_buf[clip_len] = 0;
+                _ = c.SDL_SetClipboardText(@ptrCast(&clip_buf));
+                // Then delete
+                pushUndo(id, inp);
+                deleteSelection(inp);
+            }
+        }
+        return true;
+    }
+
+    // Ctrl+V — paste from clipboard
+    if (sym == c.SDLK_v) {
+        const clip = c.SDL_GetClipboardText();
+        if (clip != null) {
+            pushUndo(id, inp);
+            // Delete selection first if any
+            if (inp.has_selection) deleteSelection(inp);
+            // Insert clipboard text
+            handleTextInput(clip);
+            c.SDL_free(@ptrCast(clip));
+        }
+        return true;
+    }
+
+    // Ctrl+Z — undo
+    if (sym == c.SDLK_z) {
+        pushUndo(id, inp); // save current for redo (simplified)
+        popUndo(inp);
+        return true;
+    }
+
+    return false;
+}
 /// Returns whether the cursor should be visible.
 pub fn tickBlink(dt: f32) bool {
     cursor_blink += dt;
-    if (cursor_blink >= 0.53) {
+    if (cursor_blink >= 1.6) {
         cursor_blink = 0;
         cursor_visible = !cursor_visible;
     }

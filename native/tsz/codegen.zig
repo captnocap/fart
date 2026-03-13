@@ -77,6 +77,7 @@ pub const Generator = struct {
 
     // TextInputs
     input_count: u32,
+    input_multiline: [16]bool,
 
     pub fn init(alloc: std.mem.Allocator, lex: *const Lexer, source: []const u8, input_file: []const u8) Generator {
         return .{
@@ -101,6 +102,7 @@ pub const Generator = struct {
             .windows = undefined,
             .window_count = 0,
             .input_count = 0,
+            .input_multiline = [_]bool{false} ** 16,
         };
     }
 
@@ -330,7 +332,8 @@ pub const Generator = struct {
         var placeholder_str: []const u8 = "";
         const is_window = std.mem.eql(u8, tag_name, "Window");
         const is_scroll = std.mem.eql(u8, tag_name, "ScrollView");
-        const is_text_input = std.mem.eql(u8, tag_name, "TextInput");
+        const is_text_input = std.mem.eql(u8, tag_name, "TextInput") or std.mem.eql(u8, tag_name, "TextArea");
+        const is_multiline = std.mem.eql(u8, tag_name, "TextArea");
 
         while (self.curKind() != .gt and self.curKind() != .slash_gt and self.curKind() != .eof) {
             if (self.curKind() == .identifier) {
@@ -528,6 +531,7 @@ pub const Generator = struct {
         // TextInput — assign input ID and placeholder
         if (is_text_input) {
             const iid = self.input_count;
+            if (iid < 16) self.input_multiline[iid] = is_multiline;
             self.input_count += 1;
             if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
             try fields.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, ".input_id = {d}", .{iid}));
@@ -1157,6 +1161,9 @@ pub const Generator = struct {
         try out.appendSlice(self.alloc, "var hovered_node: ?*Node = null;\n\n");
         try out.appendSlice(self.alloc, "fn brighten(color: Color) Color {\n    return .{ .r = @min(255, @as(u16, color.r) + 30), .g = @min(255, @as(u16, color.g) + 30), .b = @min(255, @as(u16, color.b) + 30), .a = color.a };\n}\n\n");
 
+        // Text selection state
+        try out.appendSlice(self.alloc, "var sel_node: ?*Node = null;\nvar sel_start: usize = 0;\nvar sel_end: usize = 0;\nvar sel_anchor: usize = 0;\nvar sel_dragging: bool = false;\nvar sel_last_click: u32 = 0;\nvar sel_click_count: u32 = 0;\n\n");
+
         // Painter (same as JS compiler template)
         try out.appendSlice(self.alloc, @embedFile("painter_template.txt"));
 
@@ -1175,7 +1182,11 @@ pub const Generator = struct {
         // Register text inputs
         if (self.input_count > 0) {
             for (0..self.input_count) |i| {
-                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "    input_mod.register({d});\n", .{i}));
+                if (i < 16 and self.input_multiline[i]) {
+                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "    input_mod.registerMultiline({d});\n", .{i}));
+                } else {
+                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "    input_mod.register({d});\n", .{i}));
+                }
             }
         }
         if (self.dyn_count > 0) try out.appendSlice(self.alloc, "    updateDynamicTexts();\n");
