@@ -344,6 +344,7 @@ function Capabilities.loadAll()
     "reaction_view",
     "periodic_table",
     "svg_animation",
+    "element_tile_handlua",
   }
   local loaded, failed = {}, {}
   for _, name in ipairs(files) do

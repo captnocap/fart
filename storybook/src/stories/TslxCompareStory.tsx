@@ -1,9 +1,9 @@
 /**
  * TSLX Compare — Three-way comparison of the same ElementTile:
  *
- * 1. Lua Capability: <Native type="ElementTile"> → hand-written love.graphics in Lua
- * 2. Pure React TSX: Box/Text/Pressable composed directly in React
- * 3. Compiled TSLX:  <Native type="TslxElementTile"> → .tslx compiled to Lua
+ * 1. Hand-written Lua: Tree.declareChildren with Box/Text nodes in manual Lua
+ * 2. Pure React TSX:   Box/Text/Pressable composed directly in React
+ * 3. Compiled TSLX:    .tslx compiled to Lua Tree.declareChildren
  *
  * Same props, same elements — see the visual diff across all three approaches.
  */
@@ -12,7 +12,6 @@ import React, { useState } from 'react';
 import { Box, Text, Pressable, classifiers as S } from '../../../packages/core/src';
 import { Native } from '../../../packages/core/src/Native';
 import { useThemeColors } from '../../../packages/theme/src';
-import { ElementTile } from '../../../packages/chemistry/src';
 import { getElement } from '../../../packages/chemistry/src/elements';
 
 const SAMPLE_ELEMENTS = [
@@ -146,14 +145,14 @@ export function TslxCompareStory() {
 
       {/* Three columns */}
       <S.RowGrow>
-        {/* 1: Lua Capability (hand-written love.graphics) */}
+        {/* 1: Hand-written Lua (Tree.declareChildren) */}
         <Box style={{ flexGrow: 1, flexBasis: 0, alignItems: 'center', justifyContent: 'center', gap: 14 }}>
-          <ColumnHeader color={C.lua} label={'Lua Capability'} desc={'<Native type="ElementTile"> → love.graphics'} />
-          <ElementTile element={selected} selected size={tileSize} />
+          <ColumnHeader color={C.lua} label={'Hand-written Lua'} desc={'Tree.declareChildren — manual Lua code'} />
+          <Native type="HandLuaElementTile" element={selected} selected size={tileSize} />
           <Box style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap', justifyContent: 'center', paddingLeft: 12, paddingRight: 12 }}>
             {SAMPLE_ELEMENTS.map(e => (
               <Pressable key={e.n} onPress={() => setSelected(e.n)}>
-                <ElementTile element={e.n} selected={e.n === selected} size={32} />
+                <Native type="HandLuaElementTile" element={e.n} selected={e.n === selected} size={32} />
               </Pressable>
             ))}
           </Box>
