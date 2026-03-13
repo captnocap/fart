@@ -93,6 +93,12 @@ class TszCompiler {
     this.handlerCounter = 0; // for generating unique handler function names
     this.handlerFunctions = []; // collected Zig fn declarations for event handlers
     this.components = new Map(); // name → { node, sf } for all known components
+    // ── State tracking ───────────────────────────────────────────────
+    this.stateSlots = [];        // [{ getter: 'count', setter: 'setCount', initial: 0, slotId: 0 }]
+    this.stateBindings = new Map(); // getter name → slot ID
+    this.setterBindings = new Map(); // setter name → slot ID
+    this.hasState = false;
+    this.dynamicTextCounter = 0; // for unique buf names in template literals
   }
 
   /** Compile a .tsz source file to a complete Zig source string. */
@@ -123,6 +129,9 @@ class TszCompiler {
       throw new Error('No component function found in .tsz file');
     }
 
+    // Phase 4: Collect useState() calls from root component
+    this.collectStateHooks(rootComponent);
+
     // Find the return statement with JSX
     const returnStmt = this.findReturn(rootComponent.body);
     if (!returnStmt || !returnStmt.expression) {
@@ -147,6 +156,57 @@ class TszCompiler {
         }
       }
     });
+  }
+
+  /**
+   * Scan a component function body for useState() calls.
+   * Pattern: const [getter, setter] = useState(initialValue)
+   * Allocates compile-time slot IDs and records bindings.
+   */
+  collectStateHooks(funcNode) {
+    if (!funcNode.body || !funcNode.body.statements) return;
+
+    for (const stmt of funcNode.body.statements) {
+      if (!ts.isVariableStatement(stmt)) continue;
+
+      for (const decl of stmt.declarationList.declarations) {
+        // Check for: const [x, setX] = useState(N)
+        if (!decl.initializer || !ts.isCallExpression(decl.initializer)) continue;
+        const callee = decl.initializer.expression;
+        if (!ts.isIdentifier(callee) || callee.text !== 'useState') continue;
+
+        // Must be array destructuring: [getter, setter]
+        if (!decl.name || !ts.isArrayBindingPattern(decl.name)) continue;
+        const elements = decl.name.elements;
+        if (elements.length < 2) continue;
+
+        const getter = elements[0].name.text;
+        const setter = elements[1].name.text;
+
+        // Extract initial value
+        let initial = 0;
+        if (decl.initializer.arguments.length > 0) {
+          const arg = decl.initializer.arguments[0];
+          if (ts.isNumericLiteral(arg)) {
+            initial = parseFloat(arg.text);
+          } else if (ts.isPrefixUnaryExpression(arg) && arg.operator === ts.SyntaxKind.MinusToken) {
+            if (ts.isNumericLiteral(arg.operand)) {
+              initial = -parseFloat(arg.operand.text);
+            }
+          } else if (arg.kind === ts.SyntaxKind.TrueKeyword) {
+            initial = 1; // bool true
+          } else if (arg.kind === ts.SyntaxKind.FalseKeyword) {
+            initial = 0; // bool false
+          }
+        }
+
+        const slotId = this.stateSlots.length;
+        this.stateSlots.push({ getter, setter, initial, slotId });
+        this.stateBindings.set(getter, slotId);
+        this.setterBindings.set(setter, slotId);
+        this.hasState = true;
+      }
+    }
   }
 
   /** Parse import declarations and load components from .tsz files. */
@@ -330,7 +390,23 @@ class TszCompiler {
     // Text content — from children or text prop
     const textContent = this.extractTextContent(children, propScope, sf);
     if (textContent) {
-      fields.push(`.text = "${this.escapeZigString(textContent)}"`);
+      if (textContent.__dynamic) {
+        // Dynamic text from state — placeholder, updated by updateDynamicTexts()
+        const bufId = this.dynamicTextCounter++;
+        if (!this._dynamicTexts) this._dynamicTexts = [];
+        this._dynamicTexts.push({
+          bufId,
+          fmtString: textContent.fmtString,
+          fmtArgs: textContent.fmtArgs,
+          nodeRef: null, // filled in when this node is placed in a parent array
+        });
+        // Use empty string placeholder — updateDynamicTexts() will set the real value
+        fields.push(`.text = ""`);
+        // Tag this expression so we can track it when placed into a parent array
+        this._lastDynamicBufId = bufId;
+      } else {
+        fields.push(`.text = "${this.escapeZigString(textContent)}"`);
+      }
     }
 
     // fontSize prop
@@ -369,11 +445,16 @@ class TszCompiler {
     const jsxChildren = this.getJSXChildren(children);
     if (jsxChildren.length > 0) {
       const childExprs = [];
+      const childDynIds = []; // track which children are dynamic text nodes
       for (const child of jsxChildren) {
+        this._lastDynamicBufId = null;
         const result = this.emitJSX(child, propScope, sf, callerChildren);
         if (result) {
           childExprs.push(result.zigExpr);
           arrays.push(...result.arrays);
+          childDynIds.push(this._lastDynamicBufId);
+        } else {
+          childDynIds.push(null);
         }
       }
 
@@ -381,6 +462,17 @@ class TszCompiler {
         const arrName = `_arr_${this.arrayCounter++}`;
         arrays.push(`    var ${arrName} = [_]Node{ ${childExprs.join(', ')} };`);
         fields.push(`.children = &${arrName}`);
+
+        // Record node references for dynamic text nodes
+        if (this._dynamicTexts) {
+          for (let ci = 0; ci < childDynIds.length; ci++) {
+            const dynId = childDynIds[ci];
+            if (dynId !== null && dynId !== undefined) {
+              const dt = this._dynamicTexts.find(d => d.bufId === dynId);
+              if (dt) dt.nodeRef = { arrName, index: ci };
+            }
+          }
+        }
       }
     }
 
@@ -444,6 +536,17 @@ class TszCompiler {
     // console.log("text") → std.debug.print
     if (ts.isCallExpression(expr)) {
       const callee = expr.expression.getText(sf);
+
+      // State setter: setCount(count + 1) → state.setSlot(N, state.getSlot(N) + 1)
+      if (ts.isIdentifier(expr.expression) && this.setterBindings.has(callee)) {
+        const slotId = this.setterBindings.get(callee);
+        if (expr.arguments.length > 0) {
+          const argZig = this.emitStateExpression(expr.arguments[0], sf);
+          return `state.setSlot(${slotId}, ${argZig});`;
+        }
+        return `state.setSlot(${slotId}, 0);`;
+      }
+
       if (callee === 'console.log' || callee === 'console.info') {
         const args = expr.arguments.map(a => {
           const s = this.extractStringLiteral(a, sf);
@@ -456,6 +559,70 @@ class TszCompiler {
     // Fallback: print the raw expression text
     const text = expr.getText ? expr.getText(sf) : 'expr';
     return `std.debug.print("[event] ${this.escapeZigString(text)}\\n", .{});`;
+  }
+
+  /**
+   * Emit a TS expression as a Zig value expression (for state setter arguments).
+   * Handles: count + 1, count - 1, numeric literals, state getters, etc.
+   */
+  emitStateExpression(node, sf) {
+    // Numeric literal
+    if (ts.isNumericLiteral(node)) return node.text;
+
+    // Identifier — state getter or literal
+    if (ts.isIdentifier(node)) {
+      if (this.stateBindings.has(node.text)) {
+        return `state.getSlot(${this.stateBindings.get(node.text)})`;
+      }
+      // true/false
+      if (node.text === 'true') return '1';
+      if (node.text === 'false') return '0';
+      return node.text;
+    }
+
+    // true/false keywords
+    if (node.kind === ts.SyntaxKind.TrueKeyword) return '1';
+    if (node.kind === ts.SyntaxKind.FalseKeyword) return '0';
+
+    // Binary expression: count + 1, count - 1, count * 2
+    if (ts.isBinaryExpression(node)) {
+      const left = this.emitStateExpression(node.left, sf);
+      const right = this.emitStateExpression(node.right, sf);
+      const op = node.operatorToken.getText(sf);
+      // Map JS operators to Zig
+      const zigOp = { '+': '+', '-': '-', '*': '*', '/': '@divTrunc', '%': '@mod' }[op];
+      if (zigOp === '@divTrunc') return `@divTrunc(${left}, ${right})`;
+      if (zigOp === '@mod') return `@mod(${left}, ${right})`;
+      if (zigOp) return `${left} ${zigOp} ${right}`;
+      return `${left} ${op} ${right}`;
+    }
+
+    // Prefix unary: -count, !flag
+    if (ts.isPrefixUnaryExpression(node)) {
+      const operand = this.emitStateExpression(node.operand, sf);
+      if (node.operator === ts.SyntaxKind.MinusToken) return `-${operand}`;
+      if (node.operator === ts.SyntaxKind.ExclamationToken) {
+        return `if (${operand} != 0) @as(i64, 0) else @as(i64, 1)`;
+      }
+    }
+
+    // Parenthesized
+    if (ts.isParenthesizedExpression(node)) {
+      return `(${this.emitStateExpression(node.expression, sf)})`;
+    }
+
+    // Arrow function as setter arg: setCount(prev => prev + 1)
+    // Treat the parameter as the current slot value
+    if (ts.isArrowFunction(node) && node.parameters.length > 0) {
+      // Find which setter this is inside (look up call stack — not easy from here)
+      // For now, fallback to the expression text
+      const text = node.getText ? node.getText(sf) : '0';
+      return `/* TODO: functional updater: ${this.escapeZigString(text)} */ 0`;
+    }
+
+    // Fallback
+    const text = node.getText ? node.getText(sf) : '0';
+    return `/* ${this.escapeZigString(text)} */ 0`;
   }
 
   /**
@@ -688,6 +855,41 @@ class TszCompiler {
     return null;
   }
 
+  /**
+   * Check if a template expression contains state variable references.
+   * Returns { isDynamic, fmtString, fmtArgs } or null.
+   * Example: `Count: ${count}` → { fmtString: "Count: {d}", fmtArgs: ["state.getSlot(0)"] }
+   */
+  analyzeTemplateLiteral(node, sf) {
+    if (!ts.isTemplateExpression(node)) return null;
+    if (!this.hasState) return null;
+
+    let hasDynamic = false;
+    let fmtString = this.escapeZigString(node.head.text);
+    const fmtArgs = [];
+
+    for (const span of node.templateSpans) {
+      const expr = span.expression;
+      const exprText = expr.getText(sf);
+
+      // Check if this expression is a state getter
+      if (ts.isIdentifier(expr) && this.stateBindings.has(expr.text)) {
+        hasDynamic = true;
+        fmtString += '{d}';
+        fmtArgs.push(`state.getSlot(${this.stateBindings.get(expr.text)})`);
+      } else {
+        // Not a state var — try to evaluate statically
+        fmtString += exprText;
+      }
+
+      // Add the literal text after the expression
+      fmtString += this.escapeZigString(span.literal.text);
+    }
+
+    if (!hasDynamic) return null;
+    return { fmtString, fmtArgs };
+  }
+
   extractTextContent(children, propScope, sf) {
     sf = sf || this.sf;
     if (!children || children.length === 0) return null;
@@ -708,8 +910,17 @@ class TszCompiler {
         if (ts.isStringLiteral(child.expression)) {
           texts.push(child.expression.text);
         } else if (ts.isTemplateExpression(child.expression)) {
-          // Template literal — extract the static parts for now
+          // Check for state variable references in the template
+          const analysis = this.analyzeTemplateLiteral(child.expression, sf);
+          if (analysis) {
+            // Mark as dynamic — return a special marker
+            return { __dynamic: true, ...analysis };
+          }
+          // Static template literal — extract the static parts
           texts.push(child.expression.getText(sf));
+        } else if (ts.isIdentifier(child.expression) && this.stateBindings.has(child.expression.text)) {
+          // Bare state variable reference: {count}
+          return { __dynamic: true, fmtString: '{d}', fmtArgs: [`state.getSlot(${this.stateBindings.get(child.expression.text)})`] };
         }
       }
     }
@@ -752,6 +963,54 @@ class TszCompiler {
       ? '\n// ── Generated event handlers ────────────────────────────────────\n' +
         this.handlerFunctions.join('\n\n') + '\n'
       : '';
+
+    // Generate state-related code
+    const stateImport = this.hasState ? '\nconst state = @import("state.zig");' : '';
+
+    // Dynamic text buffers (module-level so they persist across frames)
+    let dynBufDecls = '';
+    let updateDynTextsFn = '';
+    if (this._dynamicTexts && this._dynamicTexts.length > 0) {
+      const bufLines = [];
+      const updateLines = [];
+      for (const dt of this._dynamicTexts) {
+        bufLines.push(`var _dyn_buf_${dt.bufId}: [256]u8 = undefined;`);
+        bufLines.push(`var _dyn_text_${dt.bufId}: []const u8 = "";`);
+        if (dt.nodeRef) {
+          const args = dt.fmtArgs.join(', ');
+          updateLines.push(`    _dyn_text_${dt.bufId} = std.fmt.bufPrint(&_dyn_buf_${dt.bufId}, "${dt.fmtString}", .{ ${args} }) catch "";`);
+          updateLines.push(`    ${dt.nodeRef.arrName}[${dt.nodeRef.index}].text = _dyn_text_${dt.bufId};`);
+        }
+      }
+      dynBufDecls = '\n// ── Dynamic text buffers ─────────────────────────────────────────\n' +
+        bufLines.join('\n') + '\n';
+      updateDynTextsFn = '\nfn updateDynamicTexts() void {\n' + updateLines.join('\n') + '\n}\n';
+    }
+
+    // State initialization code
+    let stateInitCode = '';
+    if (this.hasState) {
+      const initLines = this.stateSlots.map(s =>
+        `    _ = state.createSlot(${Math.floor(s.initial)});`
+      );
+      stateInitCode = '\n    // ── Initialize state slots ─────────────────────────────────────\n' +
+        initLines.join('\n') + '\n';
+    }
+
+    // Main loop state check
+    const hasDynTexts = this._dynamicTexts && this._dynamicTexts.length > 0;
+    const stateCheck = this.hasState && hasDynTexts
+      ? `
+        // ── State reactivity ──────────────────────────────────────────
+        if (state.isDirty()) {
+            updateDynamicTexts();
+            state.clearDirty();
+        }`
+      : '';
+
+    // Initial dynamic text update (run once after tree is built)
+    const initialDynUpdate = hasDynTexts ? '\n    updateDynamicTexts();' : '';
+
     return `//! Generated by tsz compiler — do not edit
 //!
 //! Source: ${path.basename(this.sf.fileName)}
@@ -767,7 +1026,7 @@ const LayoutRect = layout.LayoutRect;
 const TextEngine = text_mod.TextEngine;
 const image_mod = @import("image.zig");
 const ImageCache = image_mod.ImageCache;
-const events = @import("events.zig");
+const events = @import("events.zig");${stateImport}
 
 var g_text_engine: ?*TextEngine = null;
 var g_image_cache: ?*ImageCache = null;
@@ -790,7 +1049,11 @@ fn measureImageCallback(img_path: []const u8) layout.ImageDims {
     }
     return .{};
 }
-\${handlerDecls}
+
+// ── Generated node tree (module-level for state reactivity) ─────────
+${arrays.map(a => a.replace(/^    /, '')).join('\n')}
+var root = Node{ ${rootExpr.slice(2)} ;
+${dynBufDecls}${handlerDecls}${updateDynTextsFn}
 // ── Hover state ────────────────────────────────────────────────────
 var hovered_node: ?*Node = null;
 
@@ -907,10 +1170,7 @@ pub fn main() !void {
     layout.setMeasureImageFn(measureImageCallback);
     var painter = Painter{ .renderer = renderer, .text_engine = &text_engine, .image_cache = &image_cache };
 
-    // ── Generated node tree ─────────────────────────────────────────
-${arrays.join('\n')}
-    var root = Node{ ${rootExpr.slice(2)} ;
-
+${stateInitCode}${initialDynUpdate}
     var running = true;
     var win_w: f32 = 800;
     var win_h: f32 = 600;
@@ -968,6 +1228,7 @@ ${arrays.join('\n')}
             }
         }
 
+${stateCheck}
         layout.layout(&root, 0, 0, win_w, win_h);
         painter.clear(Color.rgb(24, 24, 32));
         painter.paintTree(&root, 0, 0);
