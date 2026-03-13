@@ -550,6 +550,12 @@ Capabilities.register("ClaudeCanvas", {
             kind = "assistant_text"
           end
 
+          -- Numbered lists in assistant responses: classifyRow sees "1. Foo" as menu_option,
+          -- but inside a response it's just a numbered paragraph, not an interactive menu.
+          if kind == "menu_option" and lastContentKind == "assistant_text" and not inMenu then
+            kind = "assistant_text"
+          end
+
           -- Adjacency: text after user_prompt/user_text = user_text (multi-line input)
           -- But NOT if this row is already classified as assistant_text
           if kind == "text" and (prevKind == "user_prompt" or prevKind == "user_text") then
