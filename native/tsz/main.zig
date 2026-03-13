@@ -17,6 +17,7 @@ const lexer = @import("lexer.zig");
 const codegen = @import("codegen.zig");
 const registry = @import("registry.zig");
 const process = @import("process.zig");
+pub const actions = @import("actions.zig");
 const posix = std.posix;
 
 // ── Helpers ─────────────────────────────────────────────────────────────
@@ -407,18 +408,42 @@ fn cmdRm(alloc: std.mem.Allocator, name: []const u8) void {
 
 // ── Main ────────────────────────────────────────────────────────────────
 
-const USAGE =
-    \\Usage:
-    \\  tsz build <file.tsz>    Compile to native binary
-    \\  tsz run <file.tsz>      Compile and run (kills existing first)
-    \\  tsz dev <file.tsz>      Watch mode: recompile + relaunch on save
-    \\  tsz test <file.tsz>     Verify compile → build → smoke test
-    \\  tsz add [dir|file.tsz]  Register a .tsz project
-    \\  tsz ls                  List registered projects with status
-    \\  tsz rm <name>           Unregister a project
-    \\  tsz gui                 Open GUI dashboard
-    \\
-;
+fn printUsage() void {
+    std.debug.print("Usage:\n", .{});
+    for (actions.ALL) |a| {
+        // Build "tsz <name> <arg>" column
+        var col_buf: [40]u8 = undefined;
+        const arg_hint: []const u8 = switch (a.target) {
+            .project => " <file.tsz>",
+            .path => " [dir|file]",
+            .global => "",
+        };
+        const col = std.fmt.bufPrint(&col_buf, "tsz {s}{s}", .{ a.name, arg_hint }) catch a.name;
+        std.debug.print("  {s:<28} {s}\n", .{ col, a.description });
+    }
+    std.debug.print("\n", .{});
+}
+
+/// Execute an action by name on a project path. Used by both CLI and GUI.
+pub fn execAction(alloc: std.mem.Allocator, action_name: []const u8, arg: []const u8) !void {
+    if (std.mem.eql(u8, action_name, "build")) {
+        cmdBuild(alloc, arg);
+    } else if (std.mem.eql(u8, action_name, "run")) {
+        cmdRun(alloc, arg);
+    } else if (std.mem.eql(u8, action_name, "dev")) {
+        try cmdDev(alloc, arg);
+    } else if (std.mem.eql(u8, action_name, "test")) {
+        cmdTest(alloc, arg);
+    } else if (std.mem.eql(u8, action_name, "add")) {
+        cmdAdd(alloc, arg);
+    } else if (std.mem.eql(u8, action_name, "rm")) {
+        cmdRm(alloc, arg);
+    } else if (std.mem.eql(u8, action_name, "ls")) {
+        cmdLs(alloc);
+    } else if (std.mem.eql(u8, action_name, "gui")) {
+        std.debug.print("[tsz] GUI not yet implemented (Phase 2)\n", .{});
+    }
+}
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -429,46 +454,31 @@ pub fn main() !void {
     defer std.process.argsFree(alloc, args);
 
     if (args.len < 2) {
-        std.debug.print(USAGE, .{});
+        printUsage();
         std.process.exit(1);
     }
 
     const command = args[1];
 
-    // Commands that don't need a file argument
-    if (std.mem.eql(u8, command, "ls") or std.mem.eql(u8, command, "list")) {
-        cmdLs(alloc);
-        return;
-    }
-
-    if (std.mem.eql(u8, command, "gui")) {
-        std.debug.print("[tsz] GUI not yet implemented (Phase 2)\n", .{});
-        return;
-    }
-
-    // Commands that need an argument
-    if (args.len < 3) {
-        std.debug.print(USAGE, .{});
-        std.process.exit(1);
-    }
-
-    const arg = args[2];
-
-    if (std.mem.eql(u8, command, "add")) {
-        cmdAdd(alloc, arg);
-    } else if (std.mem.eql(u8, command, "rm") or std.mem.eql(u8, command, "remove")) {
-        cmdRm(alloc, arg);
-    } else if (std.mem.eql(u8, command, "build")) {
-        cmdBuild(alloc, arg);
-    } else if (std.mem.eql(u8, command, "run")) {
-        cmdRun(alloc, arg);
-    } else if (std.mem.eql(u8, command, "dev")) {
-        try cmdDev(alloc, arg);
-    } else if (std.mem.eql(u8, command, "test")) {
-        cmdTest(alloc, arg);
-    } else {
+    // Look up action in the shared table
+    const action = actions.find(command) orelse {
         std.debug.print("[tsz] Unknown command: {s}\n", .{command});
-        std.debug.print(USAGE, .{});
+        printUsage();
+        std.process.exit(1);
+        unreachable;
+    };
+
+    // Global actions don't need an argument
+    if (action.target == .global) {
+        try execAction(alloc, action.name, "");
+        return;
+    }
+
+    // Project/path actions need an argument
+    if (args.len < 3) {
+        printUsage();
         std.process.exit(1);
     }
+
+    try execAction(alloc, action.name, args[2]);
 }
