@@ -99,6 +99,10 @@ class TszCompiler {
     this.setterBindings = new Map(); // setter name → slot ID
     this.hasState = false;
     this.dynamicTextCounter = 0; // for unique buf names in template literals
+    // ── FFI tracking ─────────────────────────────────────────────────
+    this.ffiHeaders = [];         // ['time.h', 'sqlite3.h']
+    this.ffiLibs = [];            // ['sqlite3']
+    this.ffiFunctions = new Map(); // name → { params: [{name, type}], returnType }
   }
 
   /** Compile a .tsz source file to a complete Zig source string. */
@@ -131,6 +135,9 @@ class TszCompiler {
 
     // Phase 4: Collect useState() calls from root component
     this.collectStateHooks(rootComponent);
+
+    // Phase 5: Collect FFI pragmas and declare function statements
+    this.collectFFI(this.sf);
 
     // Find the return statement with JSX
     const returnStmt = this.findReturn(rootComponent.body);
@@ -206,6 +213,71 @@ class TszCompiler {
         this.setterBindings.set(setter, slotId);
         this.hasState = true;
       }
+    }
+  }
+
+  /**
+   * Collect FFI declarations from the source file.
+   * Two mechanisms:
+   *   1. Comment pragmas: // @ffi <time.h>  or  // @ffi <sqlite3.h> -lsqlite3
+   *   2. TypeScript `declare function` statements for function signatures
+   *
+   * The TS type annotations map to Zig/C types:
+   *   number → c_long (large enough for time_t, size_t, etc.)
+   *   string → [*:0]const u8 (null-terminated C string)
+   *   pointer → ?*anyopaque (void*)
+   *   void → void
+   *   boolean → c_int (0/1)
+   */
+  collectFFI(sourceFile) {
+    // 1. Scan source text for // @ffi pragmas
+    const sourceText = sourceFile.getFullText();
+    const ffiPragmaRe = /\/\/\s*@ffi\s+<([^>]+)>(?:\s+(-l\S+))?/g;
+    let match;
+    while ((match = ffiPragmaRe.exec(sourceText)) !== null) {
+      const header = match[1];
+      const lib = match[2]; // e.g. "-lsqlite3"
+      if (!this.ffiHeaders.includes(header)) {
+        this.ffiHeaders.push(header);
+      }
+      if (lib) {
+        const libName = lib.replace(/^-l/, '');
+        if (!this.ffiLibs.includes(libName)) {
+          this.ffiLibs.push(libName);
+        }
+      }
+    }
+
+    // 2. Scan for `declare function` statements
+    ts.forEachChild(sourceFile, (node) => {
+      if (!ts.isFunctionDeclaration(node)) return;
+      // `declare function` has no body and the Declare modifier
+      if (node.body) return; // has a body — it's a real function, not a declaration
+      const isDeclare = node.modifiers?.some(m => m.kind === ts.SyntaxKind.DeclareKeyword);
+      if (!isDeclare) return;
+      if (!node.name) return;
+
+      const name = node.name.text;
+      const params = (node.parameters || []).map(p => {
+        const pName = p.name.getText(sourceFile);
+        const pType = p.type ? p.type.getText(sourceFile) : 'number';
+        return { name: pName, type: pType };
+      });
+      const returnType = node.type ? node.type.getText(sourceFile) : 'void';
+
+      this.ffiFunctions.set(name, { params, returnType });
+    });
+  }
+
+  /** Map a TypeScript type annotation to a Zig type for FFI. */
+  tsTypeToZig(tsType) {
+    switch (tsType) {
+      case 'number': return 'c_long';
+      case 'string': return '[*:0]const u8';
+      case 'pointer': return '?*anyopaque';
+      case 'void': return 'void';
+      case 'boolean': return 'c_int';
+      default: return 'c_long'; // fallback
     }
   }
 
@@ -426,10 +498,12 @@ class TszCompiler {
     }
 
     // src prop → image_src (for <Image> elements)
+    // Resolve path relative to the .tsz source file, then make absolute
     if (attrs.src !== undefined) {
       const srcStr = this.extractStringLiteral(attrs.src, sf);
       if (srcStr) {
-        fields.push(`.image_src = "${this.escapeZigString(srcStr)}"`);
+        const absPath = path.resolve(path.dirname(this.sf.fileName), srcStr);
+        fields.push(`.image_src = "${this.escapeZigString(absPath)}"`);
       }
     }
 
@@ -547,6 +621,12 @@ class TszCompiler {
         return `state.setSlot(${slotId}, 0);`;
       }
 
+      // FFI function call: time(0) → ffi.time(0)
+      if (ts.isIdentifier(expr.expression) && this.ffiFunctions.has(callee)) {
+        const ffiArgs = expr.arguments.map(a => this.emitFFIArg(a, sf));
+        return `_ = ffi.${callee}(${ffiArgs.join(', ')});`;
+      }
+
       if (callee === 'console.log' || callee === 'console.info') {
         const args = expr.arguments.map(a => {
           const s = this.extractStringLiteral(a, sf);
@@ -568,6 +648,15 @@ class TszCompiler {
   emitStateExpression(node, sf) {
     // Numeric literal
     if (ts.isNumericLiteral(node)) return node.text;
+
+    // FFI function call in expression position: time(0) → ffi.time(0)
+    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)) {
+      const callee = node.expression.text;
+      if (this.ffiFunctions.has(callee)) {
+        const ffiArgs = node.arguments.map(a => this.emitFFIArg(a, sf));
+        return `ffi.${callee}(${ffiArgs.join(', ')})`;
+      }
+    }
 
     // Identifier — state getter or literal
     if (ts.isIdentifier(node)) {
@@ -623,6 +712,35 @@ class TszCompiler {
     // Fallback
     const text = node.getText ? node.getText(sf) : '0';
     return `/* ${this.escapeZigString(text)} */ 0`;
+  }
+
+  /**
+   * Emit an argument to an FFI function call as a Zig expression.
+   * Handles: numeric literals, string literals, state getters, null/0 → null.
+   */
+  emitFFIArg(node, sf) {
+    // Numeric literal — common for things like time(0)
+    if (ts.isNumericLiteral(node)) {
+      const val = parseInt(node.text);
+      if (val === 0) return 'null'; // time(0) → ffi.time(null) since the param is ?*anyopaque or similar
+      return node.text;
+    }
+
+    // String literal → pass as C string
+    if (ts.isStringLiteral(node)) {
+      return `"${this.escapeZigString(node.text)}"`;
+    }
+
+    // State getter
+    if (ts.isIdentifier(node) && this.stateBindings.has(node.text)) {
+      return `state.getSlot(${this.stateBindings.get(node.text)})`;
+    }
+
+    // null keyword
+    if (node.kind === ts.SyntaxKind.NullKeyword) return 'null';
+
+    // Fallback — try to emit as state expression
+    return this.emitStateExpression(node, sf);
   }
 
   /**
@@ -967,6 +1085,13 @@ class TszCompiler {
     // Generate state-related code
     const stateImport = this.hasState ? '\nconst state = @import("state.zig");' : '';
 
+    // Generate FFI @cImport block
+    let ffiImport = '';
+    if (this.ffiHeaders.length > 0) {
+      const includes = this.ffiHeaders.map(h => `    @cInclude("${h}");`).join('\n');
+      ffiImport = `\nconst ffi = @cImport({\n${includes}\n});\n`;
+    }
+
     // Dynamic text buffers (module-level so they persist across frames)
     let dynBufDecls = '';
     let updateDynTextsFn = '';
@@ -1026,7 +1151,7 @@ const LayoutRect = layout.LayoutRect;
 const TextEngine = text_mod.TextEngine;
 const image_mod = @import("image.zig");
 const ImageCache = image_mod.ImageCache;
-const events = @import("events.zig");${stateImport}
+const events = @import("events.zig");${stateImport}${ffiImport}
 
 var g_text_engine: ?*TextEngine = null;
 var g_image_cache: ?*ImageCache = null;
@@ -1264,6 +1389,13 @@ const outPath = path.join(engineDir, 'generated_app.zig');
 fs.writeFileSync(outPath, zigSource);
 
 console.log(`[tsz] Compiled ${path.basename(inputFile)} → generated_app.zig`);
+
+// Write FFI libs config for build.zig (one lib per line, or empty file)
+const ffiLibsPath = path.join(engineDir, 'ffi_libs.txt');
+fs.writeFileSync(ffiLibsPath, compiler.ffiLibs.join('\n'));
+if (compiler.ffiLibs.length > 0) {
+  console.log(`[tsz] FFI libs: ${compiler.ffiLibs.join(', ')}`);
+}
 
 // Build with Zig
 const repoRoot = path.resolve(engineDir, '../..');

@@ -301,6 +301,23 @@ pub fn build(b: *std.Build) void {
             .flags = &.{"-O2"},
         });
 
+        // ── FFI: link extra libraries from ffi_libs.txt ──────────────────
+        // The tsz compiler writes one library name per line (e.g. "sqlite3").
+        // If the file doesn't exist or is empty, no extra libs are linked.
+        if (std.fs.cwd().openFile("native/engine/ffi_libs.txt", .{})) |file| {
+            defer file.close();
+            var buf: [4096]u8 = undefined;
+            const len = file.readAll(&buf) catch 0;
+            const content = buf[0..len];
+            var iter = std.mem.splitScalar(u8, content, '\n');
+            while (iter.next()) |line| {
+                const trimmed = std.mem.trim(u8, line, &[_]u8{ ' ', '\r', '\t' });
+                if (trimmed.len > 0) {
+                    app_exe.linkSystemLibrary(trimmed);
+                }
+            }
+        } else |_| {}
+
         const app_install = b.addInstallArtifact(app_exe, .{});
         const app_step = b.step("engine-app", "Build a tsz-compiled application");
         app_step.dependOn(&app_install.step);
