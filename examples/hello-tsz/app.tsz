@@ -1,0 +1,32 @@
+// The first .tsz application.
+// This compiles to a native binary via Zig. No runtime. No interpreter.
+// Just: tsz build app.tsz → ./tsz-app
+
+function App() {
+  return (
+    <Box style={{ width: 500, padding: 32, flexDirection: 'column', gap: 16, backgroundColor: '#1e1e2a' }}>
+      <Text fontSize={32} color="#ffffff">Hello from .tsz</Text>
+      <Text fontSize={16} color="#78788c">
+        This UI was written in TypeScript and compiled to a native binary.
+      </Text>
+
+      <Box style={{ flexDirection: 'row', gap: 10 }}>
+        <Box style={{ flexGrow: 1, padding: 16, backgroundColor: '#eb5757' }}>
+          <Text fontSize={12} color="#ffffff">No Love2D</Text>
+        </Box>
+        <Box style={{ flexGrow: 1, padding: 16, backgroundColor: '#56a0d6' }}>
+          <Text fontSize={12} color="#ffffff">No LuaJIT</Text>
+        </Box>
+        <Box style={{ flexGrow: 1, padding: 16, backgroundColor: '#4ec9b0' }}>
+          <Text fontSize={12} color="#ffffff">No QuickJS</Text>
+        </Box>
+      </Box>
+
+      <Box style={{ padding: 16, backgroundColor: '#282838' }}>
+        <Text fontSize={14} color="#ff79c6">
+          TypeScript → Zig → native binary. One step.
+        </Text>
+      </Box>
+    </Box>
+  );
+}

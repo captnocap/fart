@@ -272,6 +272,30 @@ pub fn build(b: *std.Build) void {
         run_step.dependOn(&run_cmd.step);
     }
 
+    // ── engine-app (tsz-compiled application) ─────────────────────────────
+    // Built from generated_app.zig (output of the tsz compiler).
+    // The tsz compiler writes this file, then invokes `zig build engine-app`.
+    {
+        const app_exe = b.addExecutable(.{
+            .name = "tsz-app",
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("native/engine/generated_app.zig"),
+                .target = target,
+                .optimize = optimize,
+            }),
+        });
+
+        app_exe.linkLibC();
+        app_exe.linkSystemLibrary("SDL2");
+        app_exe.linkSystemLibrary("GL");
+        app_exe.linkSystemLibrary("freetype");
+        app_exe.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/freetype2" });
+
+        const app_install = b.addInstallArtifact(app_exe, .{});
+        const app_step = b.step("engine-app", "Build a tsz-compiled application");
+        app_step.dependOn(&app_install.step);
+    }
+
     // ── win-launcher ──────────────────────────────────────────────────────────
     // Self-extracting Windows launcher stub. Always targets x86_64-windows
     // regardless of the host -Dtarget flag. SUBSYSTEM:WINDOWS so no console.
