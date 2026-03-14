@@ -139,6 +139,11 @@ pub const Style = struct {
     border_radius: f32 = 0,
     opacity: f32 = 1.0,
 
+    // Transform (visual only — no layout impact, applied by compositor)
+    rotation: f32 = 0, // degrees
+    scale_x: f32 = 1.0,
+    scale_y: f32 = 1.0,
+
     // Border
     border_width: f32 = 0,
     border_color: ?Color = null,

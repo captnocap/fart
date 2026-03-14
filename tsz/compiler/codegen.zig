@@ -2001,6 +2001,7 @@ pub const Generator = struct {
         try out.appendSlice(self.alloc, "const leaktest = @import(\"leaktest.zig\");\n");
         try out.appendSlice(self.alloc, "const input_mod = @import(\"input.zig\");\n");
         try out.appendSlice(self.alloc, "const geometry = @import(\"geometry.zig\");\n");
+        try out.appendSlice(self.alloc, "const compositor = @import(\"compositor.zig\");\n");
         if (self.has_state) try out.appendSlice(self.alloc, "const state = @import(\"state.zig\");\n");
 
         // FFI imports
@@ -2189,9 +2190,6 @@ pub const Generator = struct {
             \\
         );
 
-        // Painter (same as JS compiler template)
-        try out.appendSlice(self.alloc, @embedFile("painter_template.txt"));
-
         // Main function
         try out.appendSlice(self.alloc, @embedFile("main_template.txt"));
 
@@ -2264,7 +2262,8 @@ pub const Generator = struct {
             }
         }
 
-        // Window init + main loop
+        // Compositor + window init + main loop
+        try out.appendSlice(self.alloc, "    compositor.init(renderer, &text_engine, &image_cache);\n    defer compositor.deinit();\n");
         try out.appendSlice(self.alloc, "    defer win_mgr.deinitAll();\n    watchdog.init(512);\n\n");
         try out.appendSlice(self.alloc, @embedFile("loop_template.txt"));
 
@@ -2313,10 +2312,8 @@ pub const Generator = struct {
         try out.appendSlice(self.alloc, "        if (watchdog.check()) {\n            win_mgr.deinitAll();\n            c.SDL_DestroyRenderer(renderer);\n            c.SDL_DestroyWindow(window);\n            bsod.show(watchdog.getLastReason(), watchdog.getLastDetail());\n            return;\n        }\n");
         try out.appendSlice(self.alloc, "        mpv_mod.poll();\n");
         try out.appendSlice(self.alloc, "        layout.layout(&root, 0, 0, win_w, win_h);\n");
-        try out.appendSlice(self.alloc, "        painter.clear(Color.rgb(24, 24, 32));\n");
-        try out.appendSlice(self.alloc, "        sel_paint_state = 0;\n");
-        try out.appendSlice(self.alloc, "        painter.paintTree(&root, 0, 0);\n");
-        try out.appendSlice(self.alloc, "        painter.present();\n");
+        try out.appendSlice(self.alloc, "        compositor.setHoveredNode(hovered_node);\n");
+        try out.appendSlice(self.alloc, "        compositor.frame(&root, win_w, win_h, Color.rgb(24, 24, 32));\n");
         try out.appendSlice(self.alloc, "        win_mgr.layoutAll();\n");
         try out.appendSlice(self.alloc, "        win_mgr.paintAndPresent(brighten);\n");
         try out.appendSlice(self.alloc, "    }\n    geometry.save(window);\n}\n");
@@ -2360,6 +2357,9 @@ fn mapStyleKey(key: []const u8) ?[]const u8 {
         .{ "right", "right" },
         .{ "bottom", "bottom" },
         .{ "aspectRatio", "aspect_ratio" },
+        .{ "rotation", "rotation" },
+        .{ "scaleX", "scale_x" },
+        .{ "scaleY", "scale_y" },
     };
     inline for (mappings) |m| {
         if (std.mem.eql(u8, key, m[0])) return m[1];
