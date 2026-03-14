@@ -145,16 +145,16 @@ fn killApp(pid: posix.pid_t) void {
 // ── Subcommands ─────────────────────────────────────────────────────────
 
 fn findProject(reg: *registry.Registry, input_file: []const u8) ?*registry.Project {
-    // Try by derived name first
-    const name = projectName(input_file);
-    if (reg.findByName(name)) |p| return p;
-    // Try by path (relative)
-    if (reg.findByPath(input_file)) |p| return p;
-    // Try by resolved absolute path
+    // 1. Try resolved absolute path first (most precise)
     var abs_buf: [std.fs.max_path_bytes]u8 = undefined;
     if (std.fs.cwd().realpath(input_file, &abs_buf)) |abs| {
         if (reg.findByPath(abs)) |p| return p;
     } else |_| {}
+    // 2. Try by relative path
+    if (reg.findByPath(input_file)) |p| return p;
+    // 3. Fall back to derived name (least precise — can collide)
+    const name = projectName(input_file);
+    if (reg.findByName(name)) |p| return p;
     return null;
 }
 
