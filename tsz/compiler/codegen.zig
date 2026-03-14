@@ -1003,6 +1003,8 @@ pub const Generator = struct {
         var height_str: []const u8 = "300";
         var placeholder_str: []const u8 = "";
         var language_str: []const u8 = "";
+        var debug_name_str: []const u8 = "";
+        var test_id_str: []const u8 = "";
 
         // Pre-populate from classifier defaults
         if (classifier_idx) |idx| {
@@ -1056,6 +1058,10 @@ pub const Generator = struct {
                         placeholder_str = try self.parseStringAttr();
                     } else if (std.mem.eql(u8, attr_name, "language")) {
                         language_str = try self.parseStringAttr();
+                    } else if (std.mem.eql(u8, attr_name, "debugName")) {
+                        debug_name_str = try self.parseStringAttr();
+                    } else if (std.mem.eql(u8, attr_name, "testId")) {
+                        test_id_str = try self.parseStringAttr();
                     } else if (std.mem.eql(u8, attr_name, "className")) {
                         const cls_str = try self.parseStringAttr();
                         if (cls_str.len > 0) {
@@ -1302,6 +1308,22 @@ pub const Generator = struct {
             if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
             try fields.appendSlice(self.alloc, ".font_size = ");
             try fields.appendSlice(self.alloc, font_size);
+        }
+
+        // Debug name (for test queries)
+        if (debug_name_str.len > 0) {
+            if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
+            try fields.appendSlice(self.alloc, ".debug_name = \"");
+            try fields.appendSlice(self.alloc, debug_name_str);
+            try fields.appendSlice(self.alloc, "\"");
+        }
+
+        // Test ID (for test queries)
+        if (test_id_str.len > 0) {
+            if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
+            try fields.appendSlice(self.alloc, ".test_id = \"");
+            try fields.appendSlice(self.alloc, test_id_str);
+            try fields.appendSlice(self.alloc, "\"");
         }
 
         // Code language (CodeBlock)
@@ -3156,7 +3178,7 @@ pub const Generator = struct {
                     try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
                         ".children = &_map_inner_{d}[_i]", .{mi}));
                 }
-                try out.appendSlice(self.alloc, " }};\n");
+                try out.appendSlice(self.alloc, " };\n");
 
                 // Close for loop
                 try out.appendSlice(self.alloc, "    }\n");

@@ -13,6 +13,20 @@ const std = @import("std");
 pub const MAX_SLOTS = 256;
 const STRING_BUF_SIZE = 256;
 
+// ── Array state ─────────────────────────────────────────────────────────
+
+pub const MAX_ARRAY_LEN = 256;
+const MAX_ARRAY_SLOTS = 16;
+
+pub const ArraySlot = struct {
+    values: [MAX_ARRAY_LEN]i64,
+    count: usize,
+    dirty: bool,
+};
+
+var array_slots: [MAX_ARRAY_SLOTS]ArraySlot = undefined;
+var array_slot_count: usize = 0;
+
 /// A state slot holds a tagged union of possible value types.
 pub const Value = union(enum) {
     int: i64,
@@ -181,12 +195,16 @@ pub fn clearDirty() void {
     for (0..slot_count) |i| {
         slots[i].dirty = false;
     }
+    for (0..array_slot_count) |i| {
+        array_slots[i].dirty = false;
+    }
     _dirty = false;
 }
 
 /// Reset all state (for testing or hot-reload).
 pub fn reset() void {
     slot_count = 0;
+    array_slot_count = 0;
     _dirty = false;
 }
 
@@ -218,6 +236,51 @@ pub fn toggleSlot(id: usize) void {
 /// Used by generated code for template literals like `Count: ${count}`.
 pub fn fmtInt(buf: []u8, val: i64) []const u8 {
     return std.fmt.bufPrint(buf, "{d}", .{val}) catch "?";
+}
+
+// ── Array state functions ────────────────────────────────────────────────
+
+/// Create a new array state slot with initial values.
+pub fn createArraySlot(initial: []const i64) usize {
+    const id = array_slot_count;
+    std.debug.assert(id < MAX_ARRAY_SLOTS);
+    array_slots[id] = .{
+        .values = [_]i64{0} ** MAX_ARRAY_LEN,
+        .count = initial.len,
+        .dirty = false,
+    };
+    @memcpy(array_slots[id].values[0..initial.len], initial);
+    array_slot_count += 1;
+    return id;
+}
+
+/// Get current array values as a slice.
+pub fn getArraySlot(id: usize) []const i64 {
+    return array_slots[id].values[0..array_slots[id].count];
+}
+
+/// Replace entire array contents.
+pub fn setArraySlot(id: usize, values: []const i64) void {
+    const new_count = @min(values.len, MAX_ARRAY_LEN);
+    @memcpy(array_slots[id].values[0..new_count], values[0..new_count]);
+    array_slots[id].count = new_count;
+    array_slots[id].dirty = true;
+    _dirty = true;
+}
+
+/// Append a value to an array slot.
+pub fn pushArraySlot(id: usize, value: i64) void {
+    if (array_slots[id].count < MAX_ARRAY_LEN) {
+        array_slots[id].values[array_slots[id].count] = value;
+        array_slots[id].count += 1;
+        array_slots[id].dirty = true;
+        _dirty = true;
+    }
+}
+
+/// Get the current length of an array slot.
+pub fn getArrayLen(id: usize) usize {
+    return array_slots[id].count;
 }
 
 // ── State persistence for dev mode hot reload ────────────────────────────
