@@ -167,6 +167,11 @@ pub fn run(alloc: std.mem.Allocator) !void {
     var log_click_time: u32 = 0;
     var log_click_count: u32 = 0;
 
+    // New project input mode
+    var input_mode: bool = false;
+    var input_buf: [256]u8 = undefined;
+    var input_len: usize = 0;
+
     var dirty = true;
     while (running) {
         var event: c.SDL_Event = undefined;
@@ -195,8 +200,50 @@ pub fn run(alloc: std.mem.Allocator) !void {
                         win_h = @floatFromInt(event.window.data2);
                     }
                 },
+                c.SDL_TEXTINPUT => {
+                    if (input_mode) {
+                        // Append typed characters
+                        const text_ptr: [*]const u8 = @ptrCast(&event.text.text);
+                        var ti: usize = 0;
+                        while (ti < 32 and text_ptr[ti] != 0) : (ti += 1) {
+                            if (input_len < input_buf.len - 1) {
+                                input_buf[input_len] = text_ptr[ti];
+                                input_len += 1;
+                            }
+                        }
+                    }
+                },
                 c.SDL_KEYDOWN => {
                     const ctrl = (event.key.keysym.mod & c.KMOD_CTRL) != 0;
+
+                    // Input mode key handling
+                    if (input_mode) {
+                        if (event.key.keysym.sym == c.SDLK_ESCAPE) {
+                            input_mode = false;
+                            input_len = 0;
+                        } else if (event.key.keysym.sym == c.SDLK_RETURN and input_len > 0) {
+                            // Create project
+                            const proj_name = input_buf[0..input_len];
+                            const argv = [_][]const u8{ "./zig-out/bin/tsz", "init", proj_name };
+                            const result = std.process.Child.run(.{
+                                .allocator = alloc,
+                                .argv = &argv,
+                            }) catch { break; };
+                            alloc.free(result.stdout);
+                            alloc.free(result.stderr);
+                            c.SDL_StopTextInput();
+                            // Reload registry
+                            reg = registry.load(alloc);
+                            process.cleanStale(&reg);
+                            if (has_tray) tray.buildMenu(&reg);
+                            input_mode = false;
+                            input_len = 0;
+                        } else if (event.key.keysym.sym == c.SDLK_BACKSPACE and input_len > 0) {
+                            input_len -= 1;
+                        }
+                        continue;
+                    }
+
                     if (event.key.keysym.sym == c.SDLK_ESCAPE) running = false;
                     if (event.key.keysym.sym == c.SDLK_r and !ctrl) {
                         reg = registry.load(alloc);
@@ -353,6 +400,12 @@ pub fn run(alloc: std.mem.Allocator) !void {
                     }
 
                     if (findHit(mx, my)) |hit| {
+                        // "New Project" button sentinel
+                        if (hit.project_idx == 0xFFFF and hit.action_idx == 0xFF) {
+                            input_mode = true;
+                            input_len = 0;
+                            c.SDL_StartTextInput();
+                        } else {
                         // Find action name
                         var ai: u8 = 0;
                         for (actions_mod.ALL) |a| {
@@ -375,6 +428,7 @@ pub fn run(alloc: std.mem.Allocator) !void {
                             }
                             ai += 1;
                         }
+                        } // close else from sentinel check
                     }
                 },
                 c.SDL_MOUSEBUTTONUP => {
@@ -462,7 +516,7 @@ pub fn run(alloc: std.mem.Allocator) !void {
         const list_bottom: f32 = if (has_log) win_h - log_panel_h - 30 else win_h - 30;
 
         // Clamp project scroll to available space
-        const content_h: f32 = 50 + 28 + @as(f32, @floatFromInt(reg.count)) * 38;
+        const content_h: f32 = 50 + 28 + @as(f32, @floatFromInt(reg.count)) * 38 + 38; // +38 for "New Project" row
         const max_scroll = @max(0, content_h - list_bottom);
         scroll_y = @min(scroll_y, max_scroll);
 
@@ -577,10 +631,41 @@ pub fn run(alloc: std.mem.Allocator) !void {
         }
 
         // Empty state
-        if (reg.count == 0) {
+        if (reg.count == 0 and !input_mode) {
             te.drawText("No projects registered.", 16, y + 20, 14, muted);
-            te.drawText("Run: tsz add <directory>", 16, y + 44, 12, muted);
         }
+
+        // "New Project" row
+        const new_row_h: f32 = 38;
+        if (input_mode) {
+            // Input field
+            fillRect(renderer, 0, y, win_w, new_row_h, Color.rgb(25, 35, 30));
+            fillRect(renderer, 80, y + 8, 300, 22, Color.rgb(35, 45, 40));
+            // Border
+            fillRect(renderer, 80, y + 8, 300, 1, accent);
+            fillRect(renderer, 80, y + 29, 300, 1, accent);
+            fillRect(renderer, 80, y + 8, 1, 22, accent);
+            fillRect(renderer, 379, y + 8, 1, 22, accent);
+
+            te.drawText("Name:", 16, y + 10, 13, accent);
+            if (input_len > 0) {
+                te.drawText(input_buf[0..input_len], 88, y + 10, 13, text_color);
+                // Cursor
+                const cursor_x = 88 + te.textWidth(input_buf[0..input_len], 13);
+                fillRect(renderer, cursor_x, y + 10, 1, 16, text_color);
+            } else {
+                te.drawText("project-name", 88, y + 10, 13, Color.rgb(70, 70, 90));
+                fillRect(renderer, 88, y + 10, 1, 16, text_color);
+            }
+            te.drawText("Enter = create  |  Esc = cancel", 400, y + 12, 10, muted);
+        } else {
+            // "+ New Project" button
+            const btn_hover = (hover_my >= y and hover_my < y + new_row_h);
+            fillRect(renderer, 0, y, win_w, new_row_h, if (btn_hover) Color.rgb(30, 35, 42) else Color.rgb(25, 25, 35));
+            te.drawText("+ New Project", 16, y + 10, 13, accent);
+            addHit(0, y, win_w, new_row_h, 0xFFFF, 0xFF); // special sentinel
+        }
+        y += new_row_h;
 
         // Clear clip before drawing log panel + footer
         _ = c.SDL_RenderSetClipRect(renderer, null);
