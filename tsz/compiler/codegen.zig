@@ -22,6 +22,39 @@ const MAX_FFI_FUNCS = 64;
 const MAX_WINDOWS = 8;
 const MAX_CONDS = 32;
 const MAX_EFFECTS = 32;
+const MAX_ANIM_HOOKS = 16;
+const MAX_ANIM_BINDINGS = 32;
+const MAX_ROUTES = 16;
+
+const RouteInfo = struct {
+    path: []const u8,
+    arr_name: []const u8,
+    child_idx: u32,
+};
+
+const AnimHookKind = enum { transition, spring };
+
+const AnimHookInfo = struct {
+    kind: AnimHookKind,
+    name: []const u8, // variable name (e.g., "opacity")
+    target_expr: []const u8, // translated Zig expression for target
+    duration_ms: u32 = 300, // transitions only
+    easing_name: []const u8 = "easeInOut", // transitions only
+    stiffness: f32 = 100, // springs only
+    damping: f32 = 10, // springs only
+};
+
+const AnimStyleBinding = struct {
+    anim_idx: u32, // index into anim_hooks
+    arr_name: []const u8, // filled in when array is created
+    arr_index: u32, // index within the array
+    style_field: []const u8, // e.g., "opacity", "rotation"
+};
+
+const PendingAnimBinding = struct {
+    anim_idx: u32,
+    style_field: []const u8,
+};
 
 const EffectKind = enum {
     mount, // useEffect(fn, [])       — run once at init
@@ -129,6 +162,21 @@ pub const Generator = struct {
     effects: [MAX_EFFECTS]EffectInfo,
     effect_count: u32,
 
+    // Animation hooks (useTransition / useSpring)
+    anim_hooks: [MAX_ANIM_HOOKS]AnimHookInfo,
+    anim_hook_count: u32,
+    anim_bindings: [MAX_ANIM_BINDINGS]AnimStyleBinding,
+    anim_binding_count: u32,
+    pending_anim: [8]PendingAnimBinding,
+    pending_anim_count: u32,
+    emit_float_as_f32: bool, // when true, decimal literals become @as(f32, N)
+
+    // Routes
+    routes: [MAX_ROUTES]RouteInfo,
+    route_count: u32,
+    has_routes: bool,
+    last_route_path: ?[]const u8, // temp: Route → Routes communication
+
     // Classifiers: name → { primitive_type, style_fields_string }
     classifier_names: [128][]const u8,
     classifier_primitives: [128][]const u8,
@@ -165,6 +213,17 @@ pub const Generator = struct {
             .cond_count = 0,
             .effects = undefined,
             .effect_count = 0,
+            .anim_hooks = undefined,
+            .anim_hook_count = 0,
+            .anim_bindings = undefined,
+            .anim_binding_count = 0,
+            .pending_anim = undefined,
+            .pending_anim_count = 0,
+            .emit_float_as_f32 = false,
+            .routes = undefined,
+            .route_count = 0,
+            .has_routes = false,
+            .last_route_path = null,
             .classifier_names = undefined,
             .classifier_primitives = undefined,
             .classifier_styles = undefined,
@@ -243,6 +302,13 @@ pub const Generator = struct {
         return false;
     }
 
+    fn isAnimVar(self: *Generator, name: []const u8) ?u32 {
+        for (0..self.anim_hook_count) |i| {
+            if (std.mem.eql(u8, self.anim_hooks[i].name, name)) return @intCast(i);
+        }
+        return null;
+    }
+
     /// Look up a classifier by name. Returns index or null.
     fn findClassifier(self: *Generator, name: []const u8) ?u32 {
         for (0..self.classifier_count) |i| {
@@ -280,6 +346,9 @@ pub const Generator = struct {
         // Phase 5: Collect useEffect calls
         self.pos = app_start;
         self.collectEffects(app_start);
+
+        // Phase 5b: Collect useTransition / useSpring hooks
+        self.collectAnimHooks(app_start);
 
         // Phase 6: Find return JSX and generate node tree
         self.pos = app_start;
@@ -615,6 +684,106 @@ pub const Generator = struct {
         }
     }
 
+    fn collectAnimHooks(self: *Generator, func_start: u32) void {
+        self.pos = func_start;
+        while (self.pos < self.lex.count and self.curKind() != .lbrace) self.advance_token();
+        if (self.curKind() == .lbrace) self.advance_token();
+
+        // Scan for: const <name> = useTransition(expr, { ... }) or useSpring(expr, { ... })
+        while (self.pos < self.lex.count) {
+            if (self.isIdent("const") or self.isIdent("let")) {
+                self.advance_token();
+                // Not destructuring (no [) — single identifier
+                if (self.curKind() == .identifier and !self.isIdent("const") and !self.isIdent("let")) {
+                    const name = self.curText();
+                    const saved = self.pos;
+                    self.advance_token();
+                    if (self.curKind() == .equals) {
+                        self.advance_token();
+                        if (self.isIdent("useTransition") or self.isIdent("useSpring")) {
+                            const is_spring = self.isIdent("useSpring");
+                            self.advance_token(); // skip hook name
+                            if (self.curKind() == .lparen) self.advance_token(); // skip (
+
+                            // Parse target expression — emitStateExpr handles ternaries, state refs
+                            // Set flag so float literals get @as(f32, ...) annotation
+                            self.emit_float_as_f32 = true;
+                            const target_expr = self.emitStateExpr() catch "0";
+                            self.emit_float_as_f32 = false;
+
+                            // Skip comma before config
+                            if (self.curKind() == .comma) self.advance_token();
+
+                            // Parse config object: { duration, easing, stiffness, damping }
+                            var duration: u32 = 300;
+                            var easing_name: []const u8 = "easeInOut";
+                            var stiffness: f32 = 100;
+                            var damping: f32 = 10;
+
+                            if (self.curKind() == .lbrace) {
+                                self.advance_token(); // skip {
+                                while (self.curKind() != .rbrace and self.curKind() != .eof) {
+                                    if (self.curKind() == .identifier) {
+                                        const field = self.curText();
+                                        self.advance_token();
+                                        if (self.curKind() == .colon) self.advance_token();
+                                        if (std.mem.eql(u8, field, "duration")) {
+                                            if (self.curKind() == .number)
+                                                duration = std.fmt.parseInt(u32, self.curText(), 10) catch 300;
+                                            self.advance_token();
+                                        } else if (std.mem.eql(u8, field, "easing")) {
+                                            if (self.curKind() == .string) {
+                                                const raw = self.curText();
+                                                easing_name = raw[1 .. raw.len - 1];
+                                            }
+                                            self.advance_token();
+                                        } else if (std.mem.eql(u8, field, "stiffness")) {
+                                            if (self.curKind() == .number)
+                                                stiffness = std.fmt.parseFloat(f32, self.curText()) catch 100;
+                                            self.advance_token();
+                                        } else if (std.mem.eql(u8, field, "damping")) {
+                                            if (self.curKind() == .number)
+                                                damping = std.fmt.parseFloat(f32, self.curText()) catch 10;
+                                            self.advance_token();
+                                        } else {
+                                            self.advance_token();
+                                        }
+                                    } else {
+                                        self.advance_token();
+                                    }
+                                    if (self.curKind() == .comma) self.advance_token();
+                                }
+                                if (self.curKind() == .rbrace) self.advance_token();
+                            }
+
+                            // Skip closing )
+                            if (self.curKind() == .rparen) self.advance_token();
+                            // Skip optional ;
+                            if (self.curKind() == .semicolon) self.advance_token();
+
+                            if (self.anim_hook_count < MAX_ANIM_HOOKS) {
+                                self.anim_hooks[self.anim_hook_count] = .{
+                                    .kind = if (is_spring) .spring else .transition,
+                                    .name = name,
+                                    .target_expr = target_expr,
+                                    .duration_ms = duration,
+                                    .easing_name = easing_name,
+                                    .stiffness = stiffness,
+                                    .damping = damping,
+                                };
+                                self.anim_hook_count += 1;
+                            }
+                            continue;
+                        }
+                    }
+                    self.pos = saved; // not an anim hook, rewind
+                }
+            }
+            if (self.isIdent("return")) break;
+            self.advance_token();
+        }
+    }
+
     fn emitEffectBody(self: *Generator, start: u32) ![]const u8 {
         const saved_pos = self.pos;
         self.pos = start;
@@ -681,6 +850,11 @@ pub const Generator = struct {
             } else {
                 std.debug.print("[tsz] Unknown classifier: C.{s}\n", .{cls_name});
             }
+        }
+
+        // Route element — extract path + element attrs, return the element expr
+        if (std.mem.eql(u8, tag_name, "Route")) {
+            return try self.parseRouteElement();
         }
 
         // Parse attributes
@@ -837,6 +1011,10 @@ pub const Generator = struct {
         var dyn_fmt: []const u8 = "";
         var dyn_args: []const u8 = "";
 
+        // Save pending anim count — bindings from THIS node's style should
+        // survive children processing and be consumed by the PARENT.
+        const own_pending_anim = self.pending_anim_count;
+
         if (!self_closing) {
             // Parse children until closing tag
             while (self.curKind() != .lt_slash and self.curKind() != .eof) {
@@ -845,6 +1023,32 @@ pub const Generator = struct {
                     self.last_dyn_id = null;
                     const child = try self.parseJSXElement();
                     try child_exprs.append(self.alloc, child);
+                    // Resolve pending animation bindings from CHILD's style only
+                    // (own_pending_anim..count are from the child; 0..own_pending_anim are ours)
+                    for (own_pending_anim..self.pending_anim_count) |pi| {
+                        if (self.anim_binding_count < MAX_ANIM_BINDINGS) {
+                            self.anim_bindings[self.anim_binding_count] = .{
+                                .anim_idx = self.pending_anim[pi].anim_idx,
+                                .arr_name = "",
+                                .arr_index = @intCast(child_exprs.items.len - 1),
+                                .style_field = self.pending_anim[pi].style_field,
+                            };
+                            self.anim_binding_count += 1;
+                        }
+                    }
+                    self.pending_anim_count = own_pending_anim; // keep our own bindings
+                    // Track Route → Routes metadata
+                    if (self.last_route_path) |path| {
+                        if (self.route_count < MAX_ROUTES) {
+                            self.routes[self.route_count] = .{
+                                .path = path,
+                                .arr_name = "",
+                                .child_idx = @intCast(child_exprs.items.len - 1),
+                            };
+                            self.route_count += 1;
+                        }
+                        self.last_route_path = null;
+                    }
                 } else if (self.curKind() == .lbrace) {
                     // Expression: {`template`} or {children}
                     self.advance_token(); // skip {
@@ -1142,6 +1346,22 @@ pub const Generator = struct {
                 }
             }
 
+            // Bind animation style bindings to this array
+            for (0..self.anim_binding_count) |bi| {
+                if (self.anim_bindings[bi].arr_name.len > 0) continue;
+                if (self.anim_bindings[bi].arr_index < child_exprs.items.len) {
+                    self.anim_bindings[bi].arr_name = arr_name;
+                }
+            }
+
+            // Bind routes to this array
+            for (0..self.route_count) |ri| {
+                if (self.routes[ri].arr_name.len > 0) continue;
+                if (self.routes[ri].child_idx < child_exprs.items.len) {
+                    self.routes[ri].arr_name = arr_name;
+                }
+            }
+
             // Track dynamic text references
             // (the last_dyn_id from the most recent child points into this array)
             // For now, simple: scan child_exprs for the dynamic placeholder
@@ -1293,7 +1513,19 @@ pub const Generator = struct {
                         try fields.appendSlice(self.alloc, ".");
                         try fields.appendSlice(self.alloc, zig_key);
                         try fields.appendSlice(self.alloc, " = ");
-                        try fields.appendSlice(self.alloc, val);
+                        // Check if value is an animation variable — emit placeholder
+                        if (self.isAnimVar(val)) |anim_idx| {
+                            try fields.appendSlice(self.alloc, "0");
+                            if (self.pending_anim_count < 8) {
+                                self.pending_anim[self.pending_anim_count] = .{
+                                    .anim_idx = anim_idx,
+                                    .style_field = zig_key,
+                                };
+                                self.pending_anim_count += 1;
+                            }
+                        } else {
+                            try fields.appendSlice(self.alloc, val);
+                        }
                     }
                 } else if (mapEnumKey(key)) |mapping| {
                     const val = try self.parseStringAttrInline();
@@ -1513,6 +1745,15 @@ pub const Generator = struct {
                 return try std.fmt.allocPrint(self.alloc, "state.setSlot({d}, {s});", .{ slot_id, arg });
             }
 
+            // navigate('/path') → router.push("/path")
+            if (std.mem.eql(u8, name, "navigate")) {
+                self.advance_token();
+                if (self.curKind() == .lparen) self.advance_token();
+                const path = try self.parseStringAttrInline();
+                if (self.curKind() == .rparen) self.advance_token();
+                return try std.fmt.allocPrint(self.alloc, "router.push(\"{s}\");", .{path});
+            }
+
             // FFI function: time(0) → ffi.time(null)
             if (self.isFFIFunc(name)) {
                 self.advance_token();
@@ -1624,7 +1865,23 @@ pub const Generator = struct {
             }
             self.advance_token(); // skip :
             const else_val = try self.emitTernary();
-            return try std.fmt.allocPrint(self.alloc, "(if ({s}) {s} else {s})", .{ cond, then_val, else_val });
+            // Wrap condition with != 0 for i64 state values (Zig requires bool in if)
+            // Conditions from comparisons/equality are already bool and `bool != 0` doesn't compile,
+            // so only wrap when the condition is a plain state getter or numeric expression.
+            const is_already_bool = std.mem.indexOf(u8, cond, "==") != null or
+                std.mem.indexOf(u8, cond, "!=") != null or
+                std.mem.indexOf(u8, cond, "< ") != null or
+                std.mem.indexOf(u8, cond, "> ") != null or
+                std.mem.indexOf(u8, cond, "<=") != null or
+                std.mem.indexOf(u8, cond, ">=") != null or
+                std.mem.eql(u8, cond, "true") or
+                std.mem.eql(u8, cond, "false") or
+                std.mem.indexOf(u8, cond, "(!") != null;
+            if (is_already_bool) {
+                return try std.fmt.allocPrint(self.alloc, "(if ({s}) {s} else {s})", .{ cond, then_val, else_val });
+            } else {
+                return try std.fmt.allocPrint(self.alloc, "(if (({s}) != 0) {s} else {s})", .{ cond, then_val, else_val });
+            }
         }
         return cond;
     }
@@ -1729,6 +1986,10 @@ pub const Generator = struct {
         if (self.curKind() == .number) {
             const val = self.curText();
             self.advance_token();
+            // In animation target context, annotate float literals to avoid comptime_float
+            if (self.emit_float_as_f32 and std.mem.indexOf(u8, val, ".") != null) {
+                return try std.fmt.allocPrint(self.alloc, "@as(f32, {s})", .{val});
+            }
             return val;
         }
         // String literal
@@ -1943,6 +2204,45 @@ pub const Generator = struct {
         };
     }
 
+    // ── Route element parsing ──────────────────────────────────────
+
+    fn parseRouteElement(self: *Generator) anyerror![]const u8 {
+        var path: []const u8 = "/";
+        var element_expr: []const u8 = ".{}";
+
+        // Parse attributes: path="..." element={<Component />}
+        while (self.curKind() != .gt and self.curKind() != .slash_gt and self.curKind() != .eof) {
+            if (self.curKind() == .identifier) {
+                const attr_name = self.curText();
+                self.advance_token();
+                if (self.curKind() == .equals) {
+                    self.advance_token(); // skip =
+                    if (std.mem.eql(u8, attr_name, "path")) {
+                        path = try self.parseStringAttr();
+                    } else if (std.mem.eql(u8, attr_name, "element")) {
+                        // element={<Component />}
+                        if (self.curKind() == .lbrace) self.advance_token();
+                        element_expr = try self.parseJSXElement();
+                        if (self.curKind() == .rbrace) self.advance_token();
+                    } else {
+                        try self.skipAttrValue();
+                    }
+                }
+            } else {
+                self.advance_token();
+            }
+        }
+
+        // Skip /> or >
+        self.advance_token();
+
+        // Signal to parent Routes
+        self.last_route_path = path;
+        self.has_routes = true;
+
+        return element_expr;
+    }
+
     // ── Color parsing ───────────────────────────────────────────────
 
     fn parseColorValue(self: *Generator, hex: []const u8) ![]const u8 {
@@ -2002,7 +2302,9 @@ pub const Generator = struct {
         try out.appendSlice(self.alloc, "const input_mod = @import(\"input.zig\");\n");
         try out.appendSlice(self.alloc, "const geometry = @import(\"geometry.zig\");\n");
         try out.appendSlice(self.alloc, "const compositor = @import(\"compositor.zig\");\n");
+        if (self.anim_hook_count > 0) try out.appendSlice(self.alloc, "const animate = @import(\"animate.zig\");\n");
         if (self.has_state) try out.appendSlice(self.alloc, "const state = @import(\"state.zig\");\n");
+        if (self.has_routes) try out.appendSlice(self.alloc, "const router = @import(\"router.zig\");\n");
 
         // FFI imports
         if (self.ffi_headers.items.len > 0) {
@@ -2123,6 +2425,36 @@ pub const Generator = struct {
                 }
             }
             try out.appendSlice(self.alloc, "}\n\n");
+        }
+
+        // updateRoutes — display-toggle routing
+        if (self.route_count > 0) {
+            try out.appendSlice(self.alloc, "fn updateRoutes() void {\n");
+            try out.appendSlice(self.alloc, "    const path = router.currentPath();\n");
+            // Build patterns array
+            try out.appendSlice(self.alloc, "    const patterns = [_][]const u8{ ");
+            for (0..self.route_count) |i| {
+                if (i > 0) try out.appendSlice(self.alloc, ", ");
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "\"{s}\"", .{self.routes[i].path}));
+            }
+            try out.appendSlice(self.alloc, " };\n");
+            try out.appendSlice(self.alloc, "    const best = router.findBestMatch(&patterns, path);\n");
+            // Hide all routes
+            for (0..self.route_count) |i| {
+                const r = self.routes[i];
+                if (r.arr_name.len == 0) continue;
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                    "    {s}[{d}].style.display = .none;\n", .{ r.arr_name, r.child_idx }));
+            }
+            // Show matched route
+            try out.appendSlice(self.alloc, "    if (best) |idx| {\n        switch (idx) {\n");
+            for (0..self.route_count) |i| {
+                const r = self.routes[i];
+                if (r.arr_name.len == 0) continue;
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                    "            {d} => {{ {s}[{d}].style.display = .flex; }},\n", .{ i, r.arr_name, r.child_idx }));
+            }
+            try out.appendSlice(self.alloc, "            else => {},\n        }\n    }\n}\n\n");
         }
 
         // Window open helpers
@@ -2248,6 +2580,30 @@ pub const Generator = struct {
         }
         if (self.dyn_count > 0) try out.appendSlice(self.alloc, "    updateDynamicTexts();\n");
         if (self.cond_count > 0) try out.appendSlice(self.alloc, "    updateConditionals();\n");
+        if (self.has_routes) {
+            try out.appendSlice(self.alloc, "    router.init(\"/\");\n");
+            try out.appendSlice(self.alloc, "    updateRoutes();\n");
+        }
+
+        // Animation slot creation
+        if (self.anim_hook_count > 0) {
+            try out.appendSlice(self.alloc, "\n    // ── Animation slots ──\n");
+            for (0..self.anim_hook_count) |i| {
+                const hook = self.anim_hooks[i];
+                switch (hook.kind) {
+                    .transition => {
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            "    _ = animate.createAnim({d}, animate.{s});\n",
+                            .{ hook.duration_ms, hook.easing_name }));
+                    },
+                    .spring => {
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            "    _ = animate.createSpring({d}, {d});\n",
+                            .{ hook.stiffness, hook.damping }));
+                    },
+                }
+            }
+        }
 
         // Mount effects — run once at init
         for (0..self.effect_count) |i| {
@@ -2293,6 +2649,14 @@ pub const Generator = struct {
             }
         }
 
+        // Router dirty check
+        if (self.has_routes) {
+            try out.appendSlice(self.alloc, "        if (router.isDirty()) {\n");
+            try out.appendSlice(self.alloc, "            router.clearDirty();\n");
+            try out.appendSlice(self.alloc, "            updateRoutes();\n");
+            try out.appendSlice(self.alloc, "        }\n");
+        }
+
         // Every-frame effects
         for (0..self.effect_count) |i| {
             if (self.effects[i].kind == .every_frame) {
@@ -2305,6 +2669,51 @@ pub const Generator = struct {
                 try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
                     "        {{\n            const _now = c.SDL_GetTicks();\n            if (_now -% _timer_{d} >= {d}) {{ _timer_{d} = _now; _effect_{d}(); }}\n        }}\n",
                     .{ i, self.effects[i].interval_ms, i, i }));
+            }
+        }
+
+        // Animation tick + style updates
+        if (self.anim_hook_count > 0) {
+            // Target checks — detect when target value changed, start/retarget animation
+            for (0..self.anim_hook_count) |i| {
+                const hook = self.anim_hooks[i];
+                switch (hook.kind) {
+                    .transition => {
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            "        {{\n            const _target: f32 = @floatCast({s});\n" ++
+                            "            if (_target != animate.getAnimTarget({d})) {{\n" ++
+                            "                animate.startAnim({d}, @floatCast(animate.getAnimValue({d})), _target);\n" ++
+                            "            }}\n        }}\n",
+                            .{ hook.target_expr, i, i, i }));
+                    },
+                    .spring => {
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            "        animate.setSpringTarget({d}, @floatCast({s}));\n",
+                            .{ i, hook.target_expr }));
+                    },
+                }
+            }
+            // Tick all animations
+            var has_transitions = false;
+            var has_springs = false;
+            for (0..self.anim_hook_count) |i| {
+                if (self.anim_hooks[i].kind == .transition) has_transitions = true;
+                if (self.anim_hooks[i].kind == .spring) has_springs = true;
+            }
+            if (has_transitions) try out.appendSlice(self.alloc, "        animate.tickAnims(c.SDL_GetTicks());\n");
+            if (has_springs) try out.appendSlice(self.alloc, "        animate.tickSprings(0.016);\n");
+
+            // Write animated values to node styles
+            for (0..self.anim_binding_count) |bi| {
+                const b = self.anim_bindings[bi];
+                if (b.arr_name.len == 0) continue; // unresolved
+                const getter = if (self.anim_hooks[b.anim_idx].kind == .spring)
+                    "animate.getSpringValue"
+                else
+                    "animate.getAnimValue";
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                    "        {s}[{d}].style.{s} = @floatCast({s}({d}));\n",
+                    .{ b.arr_name, b.arr_index, b.style_field, getter, b.anim_idx }));
             }
         }
 
