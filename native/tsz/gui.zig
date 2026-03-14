@@ -440,7 +440,16 @@ pub fn run(alloc: std.mem.Allocator) !void {
                         // Truncate long lines
                         const max_chars: usize = @intFromFloat(win_w / 6.5);
                         const display = if (line.len > max_chars) line[0..max_chars] else line;
-                        const line_col = if (std.mem.indexOf(u8, display, "FAIL") != null or std.mem.indexOf(u8, display, "error") != null) danger else Color.rgb(170, 170, 185);
+                        const line_col = if (std.mem.indexOf(u8, display, "FAIL") != null or std.mem.indexOf(u8, display, "error") != null)
+                            danger
+                        else if (std.mem.indexOf(u8, display, "PASS") != null or std.mem.indexOf(u8, display, "Built") != null or std.mem.indexOf(u8, display, "done") != null)
+                            success
+                        else if (std.mem.indexOf(u8, display, "[tsz]") != null)
+                            accent
+                        else if (std.mem.indexOf(u8, display, "warning") != null or std.mem.indexOf(u8, display, "Warning") != null)
+                            warning
+                        else
+                            Color.rgb(170, 170, 185);
                         te.drawText(display, 12, out_y, 11, line_col);
                         out_y += line_h;
                         lines_shown += 1;

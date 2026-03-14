@@ -14,6 +14,25 @@ pub const c = @cImport({
     @cInclude("freetype/freetype.h");
 });
 
+// ── UTF-8 decoding ──────────────────────────────────────────────────────
+
+fn decodeUtf8(bytes: []const u8) struct { codepoint: u32, len: u3 } {
+    if (bytes.len == 0) return .{ .codepoint = 0xFFFD, .len = 1 };
+    const b0 = bytes[0];
+    if (b0 < 0x80) return .{ .codepoint = b0, .len = 1 };
+    if (b0 < 0xC0) return .{ .codepoint = 0xFFFD, .len = 1 };
+    if (b0 < 0xE0) {
+        if (bytes.len < 2) return .{ .codepoint = 0xFFFD, .len = 1 };
+        return .{ .codepoint = (@as(u32, b0 & 0x1F) << 6) | @as(u32, bytes[1] & 0x3F), .len = 2 };
+    }
+    if (b0 < 0xF0) {
+        if (bytes.len < 3) return .{ .codepoint = 0xFFFD, .len = 1 };
+        return .{ .codepoint = (@as(u32, b0 & 0x0F) << 12) | (@as(u32, bytes[1] & 0x3F) << 6) | @as(u32, bytes[2] & 0x3F), .len = 3 };
+    }
+    if (bytes.len < 4) return .{ .codepoint = 0xFFFD, .len = 1 };
+    return .{ .codepoint = (@as(u32, b0 & 0x07) << 18) | (@as(u32, bytes[1] & 0x3F) << 12) | (@as(u32, bytes[2] & 0x3F) << 6) | @as(u32, bytes[3] & 0x3F), .len = 4 };
+}
+
 pub const Color = struct {
     r: u8,
     g: u8,
@@ -143,8 +162,10 @@ pub const TextEngine = struct {
         const ascent: f32 = @as(f32, @floatFromInt(metrics.ascender)) / 64.0;
         var pen_x = x;
         const baseline_y = y + ascent;
-        for (text) |byte| {
-            if (self.rasterizeGlyph(@as(u32, byte), size_px)) |g| {
+        var i: usize = 0;
+        while (i < text.len) {
+            const ch = decodeUtf8(text[i..]);
+            if (self.rasterizeGlyph(ch.codepoint, size_px)) |g| {
                 if (g.texture) |tex| {
                     _ = c.SDL_SetTextureColorMod(tex, color.r, color.g, color.b);
                     _ = c.SDL_SetTextureAlphaMod(tex, color.a);
@@ -158,15 +179,19 @@ pub const TextEngine = struct {
                 }
                 pen_x += @floatFromInt(g.advance);
             }
+            i += ch.len;
         }
     }
 
     pub fn textWidth(self: *TextEngine, text: []const u8, size_px: u16) f32 {
         var w: f32 = 0;
-        for (text) |byte| {
-            if (self.rasterizeGlyph(@as(u32, byte), size_px)) |g| {
+        var i: usize = 0;
+        while (i < text.len) {
+            const ch = decodeUtf8(text[i..]);
+            if (self.rasterizeGlyph(ch.codepoint, size_px)) |g| {
                 w += @floatFromInt(g.advance);
             }
+            i += ch.len;
         }
         return w;
     }
