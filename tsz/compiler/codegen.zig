@@ -494,6 +494,16 @@ pub const Generator = struct {
         return count;
     }
 
+    /// Convert sequential state index to regular (non-array) slot index.
+    /// Array slots use separate storage, so regular slots are numbered independently.
+    fn regularSlotId(self: *Generator, state_idx: u32) u32 {
+        var count: u32 = 0;
+        for (0..state_idx) |j| {
+            if (std.meta.activeTag(self.state_slots[j].initial) != .array) count += 1;
+        }
+        return count;
+    }
+
     fn isFFIFunc(self: *Generator, name: []const u8) bool {
         for (self.ffi_funcs.items) |f| {
             if (std.mem.eql(u8, f, name)) return true;
@@ -1845,6 +1855,7 @@ pub const Generator = struct {
                             // Dynamic text from state variable
                             is_dynamic_text = true;
                             const st = self.stateTypeById(slot_id);
+                            const rid = self.regularSlotId(slot_id);
                             dyn_fmt = switch (st) {
                                 .string => "{s}",
                                 .float => "{d}",
@@ -1852,10 +1863,10 @@ pub const Generator = struct {
                                 else => "{d}",
                             };
                             dyn_args = switch (st) {
-                                .string => try std.fmt.allocPrint(self.alloc, "state.getSlotString({d})", .{slot_id}),
-                                .float => try std.fmt.allocPrint(self.alloc, "state.getSlotFloat({d})", .{slot_id}),
-                                .boolean => try std.fmt.allocPrint(self.alloc, "if (state.getSlotBool({d})) \"true\" else \"false\"", .{slot_id}),
-                                else => try std.fmt.allocPrint(self.alloc, "state.getSlot({d})", .{slot_id}),
+                                .string => try std.fmt.allocPrint(self.alloc, "state.getSlotString({d})", .{rid}),
+                                .float => try std.fmt.allocPrint(self.alloc, "state.getSlotFloat({d})", .{rid}),
+                                .boolean => try std.fmt.allocPrint(self.alloc, "if (state.getSlotBool({d})) \"true\" else \"false\"", .{rid}),
+                                else => try std.fmt.allocPrint(self.alloc, "state.getSlot({d})", .{rid}),
                             };
                         } else if (self.isLocalVar(ident)) |lv| {
                             self.advance_token();
@@ -2542,36 +2553,37 @@ pub const Generator = struct {
                 // Check if expression is a state variable
                 if (self.isState(expr)) |slot_id| {
                     const st = self.stateTypeById(slot_id);
+                    const rid = self.regularSlotId(slot_id);
                     switch (st) {
                         .string => {
                             try fmt.appendSlice(self.alloc, "{s}");
                             if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
                             try args.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                                "state.getSlotString({d})", .{slot_id}));
+                                "state.getSlotString({d})", .{rid}));
                         },
                         .float => {
                             try fmt.appendSlice(self.alloc, "{d}");
                             if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
                             try args.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                                "state.getSlotFloat({d})", .{slot_id}));
+                                "state.getSlotFloat({d})", .{rid}));
                         },
                         .boolean => {
                             try fmt.appendSlice(self.alloc, "{s}");
                             if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
                             try args.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                                "if (state.getSlotBool({d})) \"true\" else \"false\"", .{slot_id}));
+                                "if (state.getSlotBool({d})) \"true\" else \"false\"", .{rid}));
                         },
                         .int => {
                             try fmt.appendSlice(self.alloc, "{d}");
                             if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
                             try args.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                                "state.getSlot({d})", .{slot_id}));
+                                "state.getSlot({d})", .{rid}));
                         },
                         .array => {
                             try fmt.appendSlice(self.alloc, "{d}");
                             if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
                             try args.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                                "state.getSlot({d})", .{slot_id}));
+                                "state.getSlot({d})", .{rid}));
                         },
                     }
                 } else if (self.findProp(expr)) |pval| {
@@ -2784,8 +2796,9 @@ pub const Generator = struct {
             const name = self.curText();
 
             // Check for state setter: setCount(...), setItems.push(...), etc.
-            if (self.isSetter(name)) |slot_id| {
-                const st = self.stateTypeById(slot_id);
+            if (self.isSetter(name)) |raw_slot_id| {
+                const st = self.stateTypeById(raw_slot_id);
+                const slot_id = if (st == .array) self.arraySlotId(raw_slot_id) else self.regularSlotId(raw_slot_id);
                 self.advance_token(); // skip setter name
 
                 // Array setter: setItems.push(expr)
@@ -2796,8 +2809,7 @@ pub const Generator = struct {
                         if (self.curKind() == .lparen) self.advance_token();
                         const arg = try self.emitStateExpr();
                         if (self.curKind() == .rparen) self.advance_token();
-                        const arr_slot = self.arraySlotId(slot_id);
-                        return try std.fmt.allocPrint(self.alloc, "state.pushArraySlot({d}, {s});", .{ arr_slot, arg });
+                        return try std.fmt.allocPrint(self.alloc, "state.pushArraySlot({d}, {s});", .{ slot_id, arg });
                     }
                 }
 
@@ -2827,7 +2839,7 @@ pub const Generator = struct {
                                 if (self.curKind() == .rparen) self.advance_token();
                                 arg1 = try std.fmt.allocPrint(self.alloc, "input_mod.getText({s})", .{id_t});
                             } else if (self.isState(a)) |inner_slot| {
-                                arg1 = try std.fmt.allocPrint(self.alloc, "state.getSlotString({d})", .{inner_slot});
+                                arg1 = try std.fmt.allocPrint(self.alloc, "state.getSlotString({d})", .{self.regularSlotId(inner_slot)});
                                 self.advance_token();
                             }
                         }
@@ -3267,11 +3279,12 @@ pub const Generator = struct {
             // State getter
             if (self.isState(name)) |slot_id| {
                 self.advance_token();
+                const rid = self.regularSlotId(slot_id);
                 // In animation target context, use float getter (getSlot returns i64, can't @floatCast)
                 if (self.emit_float_as_f32) {
-                    return try std.fmt.allocPrint(self.alloc, "@as(f32, @floatCast(state.getSlotFloat({d})))", .{slot_id});
+                    return try std.fmt.allocPrint(self.alloc, "@as(f32, @floatCast(state.getSlotFloat({d})))", .{rid});
                 }
-                return try std.fmt.allocPrint(self.alloc, "state.getSlot({d})", .{slot_id});
+                return try std.fmt.allocPrint(self.alloc, "state.getSlot({d})", .{rid});
             }
             // Component prop (compile-time substitution from call site)
             if (self.findProp(name)) |val| {
