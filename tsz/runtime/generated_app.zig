@@ -24,7 +24,6 @@ const geometry = @import("geometry.zig");
 const compositor = @import("compositor.zig");
 const telemetry = @import("telemetry.zig");
 const inspector = @import("inspector.zig");
-const state = @import("state.zig");
 const pty_mod = @import("pty.zig");
 const vterm_mod = @import("vterm.zig");
 const classifier_mod = @import("classifier.zig");
@@ -45,13 +44,9 @@ fn measureImageCallback(img_path: []const u8) layout.ImageDims {
 }
 
 // ── Generated node tree ─────────────────────────────────────────
-var _arr_0 = [_]Node{ .{ .text = "", .font_size = 12, .text_color = Color.rgb(88, 91, 112) } };
+var _arr_0 = [_]Node{ .{ .text = "Terminal 24x80", .font_size = 12, .text_color = Color.rgb(88, 91, 112) } };
 var _arr_1 = [_]Node{ .{ .style = .{ .padding = 8, .background_color = Color.rgb(24, 24, 37) }, .children = &_arr_0 }, .{ .style = .{ .flex_grow = 1, .background_color = Color.rgb(17, 17, 27) }, .test_id = "terminal" } };
 var root = Node{ .style = .{ .width = -1, .height = -1, .background_color = Color.rgb(30, 30, 46), .flex_direction = .column }, .children = &_arr_1 };
-
-// ── Dynamic text buffers ─────────────────────────────────────────
-var _dyn_buf_0: [256]u8 = undefined;
-var _dyn_text_0: []const u8 = "";
 
 // ── Effect timer variables ──────────────────────────────────────
 var _timer_1: u32 = 0;
@@ -63,13 +58,6 @@ fn _effect_0() void {
 
 fn _effect_1() void {
     _ = pty_mod.poll();
-    state.setSlot(0, (state.getSlot(0) + 1));
-
-}
-
-fn updateDynamicTexts() void {
-    _dyn_text_0 = std.fmt.bufPrint(&_dyn_buf_0, "Terminal 24x80 | Frame: {d}", .{ state.getSlot(0) }) catch "";
-    _arr_0[0].text = _dyn_text_0;
 }
 
 fn _onTextInput(text: [*:0]const u8) void {
@@ -190,10 +178,6 @@ pub fn main() !void {
         geometry.blockSaves();
     }
 
-    _ = state.createSlot(0);
-    _ = state.loadState();
-    state.installSignalHandler();
-    updateDynamicTexts();
     _effect_0();
     _timer_1 = c.SDL_GetTicks();
     compositor.init(renderer, &text_engine, &image_cache);
@@ -398,10 +382,6 @@ pub fn main() !void {
             }
         }
 
-        if (state.isDirty()) {
-            updateDynamicTexts();
-            state.clearDirty();
-        }
         {
             const _now = c.SDL_GetTicks();
             if (_now -% _timer_1 >= 16) { _timer_1 = _now; _effect_1(); }

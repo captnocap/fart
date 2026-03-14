@@ -411,10 +411,7 @@ pub fn initVterm(rows: u16, cols: u16) void {
 }
 
 pub fn feed(data: []const u8) void {
-    if (g_vterm) |*v| {
-        v.feedData(data);
-        g_needs_repaint = true;
-    }
+    if (g_vterm) |*v| v.feedData(data);
 }
 
 pub fn readOutput(buf: []u8) ?[]const u8 {
@@ -480,21 +477,11 @@ const DEFAULT_FG = Color{ .r = 205, .g = 214, .b = 244 }; // #cdd6f4
 const DEFAULT_BG = Color{ .r = 17, .g = 17, .b = 27 }; // #11111b
 const CURSOR_COLOR = Color{ .r = 166, .g = 227, .b = 161 }; // #a6e3a1
 
-// Track whether we need to repaint (set by feed, cleared after paint)
-var g_needs_repaint: bool = true;
-
-/// Mark terminal as needing repaint (called after feed).
-pub fn markDirty() void {
-    g_needs_repaint = true;
-}
-
 /// Paint terminal cells with vterm colors into a screen region.
 /// x, y, w, h define the terminal area in screen coordinates.
-/// Only repaints when vterm has new damage (avoids idle memory pressure).
+/// Always paints — cells must persist since compositor clears each frame.
 pub fn paintTerminal(x: f32, y: f32, w: f32, h: f32) void {
     const v = &(g_vterm orelse return);
-    if (!g_needs_repaint) return;
-    g_needs_repaint = false;
 
     // Compute cell dimensions from the available space
     const font_size: u16 = 13;
