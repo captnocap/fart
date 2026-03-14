@@ -129,6 +129,11 @@ pub fn init() void {
 pub fn connect(id: u32, url: []const u8, opts: ConnectOpts) void {
     const slot = findSlot() orelse return;
     var conn = &connections[slot];
+    // Clear any stale handoff state from previous use of this slot
+    conn.pending_ws = null;
+    conn.connect_done = false;
+    conn.connect_ok = false;
+    conn.ws = null;
     conn.active = true;
     conn.id = id;
     conn.status = .connecting;
@@ -168,6 +173,11 @@ pub fn closeConn(id: u32) void {
         conn.mutex.lock();
         conn.reconnect = false;
         conn.generation +%= 1; // invalidate any in-flight worker
+        // Clear pending handoff state
+        if (conn.pending_ws) |*pws| pws.shutdown();
+        conn.pending_ws = null;
+        conn.connect_done = false;
+        conn.connect_ok = false;
         if (conn.ws) |*ws| ws.shutdown();
         conn.ws = null;
         conn.status = .closed;
@@ -252,6 +262,11 @@ pub fn destroy() void {
     for (&connections) |*conn| {
         conn.mutex.lock();
         conn.generation +%= 1;
+        // Clear pending handoff state
+        if (conn.pending_ws) |*pws| pws.shutdown();
+        conn.pending_ws = null;
+        conn.connect_done = false;
+        conn.connect_ok = false;
         if (conn.active) {
             if (conn.ws) |*ws| ws.shutdown();
             conn.ws = null;
