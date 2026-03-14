@@ -48,52 +48,40 @@ pub const Runner = struct {
     }
 
     /// Check if a line is noise that should be filtered out.
+    /// Tracks whether we're inside a noise block (GPA trace).
+    /// Once we see a noise-starting line, suppress everything until
+    /// we see a non-noise line (like [tsz] or a real error).
+    var noise_block: bool = false;
+
     fn isNoiseLine(line: []const u8) bool {
-        // Strip timestamp prefix if present for matching
-        const raw = if (line.len > 11 and line[0] == '[' and line[10] == ']') line[11..] else line;
-        const trimmed = std.mem.trimLeft(u8, raw, &[_]u8{ ' ', '\t' });
+        const trimmed = std.mem.trimLeft(u8, line, &[_]u8{ ' ', '\t' });
 
-        // GPA memory leak debug spam
-        if (std.mem.indexOf(u8, trimmed, "error(gpa):") != null) return true;
-        if (std.mem.indexOf(u8, trimmed, "memory address 0x") != null) return true;
+        // Always allow [tsz] status lines through — these end noise blocks
+        if (std.mem.indexOf(u8, trimmed, "[tsz]") != null) {
+            noise_block = false;
+            return false;
+        }
 
-        // Zig std lib stack trace frames (file:line:col: 0xADDR in funcName)
+        // Start of a noise block
+        if (std.mem.indexOf(u8, trimmed, "error(gpa):") != null) { noise_block = true; return true; }
+        if (std.mem.indexOf(u8, trimmed, "memory address 0x") != null) { noise_block = true; return true; }
+
+        // If we're inside a noise block, suppress everything
+        if (noise_block) return true;
+
+        // Stack trace file:line:col patterns
+        if (std.mem.indexOf(u8, trimmed, ".zig:") != null and std.mem.indexOf(u8, trimmed, ": 0x") != null) return true;
         if (std.mem.indexOf(u8, trimmed, "/lib/zig/std/") != null) return true;
-        if (std.mem.indexOf(u8, trimmed, "linuxbrew") != null and std.mem.indexOf(u8, trimmed, ".zig:") != null) return true;
 
-        // Internal codegen stack traces (not user errors — these are from GPA leak traces)
-        if (std.mem.indexOf(u8, trimmed, "in parseJSXElement (main.zig)") != null) return true;
-        if (std.mem.indexOf(u8, trimmed, "in parseStyleAttr (main.zig)") != null) return true;
-        if (std.mem.indexOf(u8, trimmed, "in generate (main.zig)") != null) return true;
-        if (std.mem.indexOf(u8, trimmed, "in compile (main.zig)") != null) return true;
-        if (std.mem.indexOf(u8, trimmed, "in main (main.zig)") != null) return true;
-
-        // Generic patterns: "0x" hex address in trace lines
-        if (std.mem.indexOf(u8, trimmed, ": 0x") != null and std.mem.indexOf(u8, trimmed, " in ") != null) return true;
-
-        // Std lib function names that appear in leak traces
-        if (std.mem.indexOf(u8, trimmed, "in toOwnedSlice") != null) return true;
-        if (std.mem.indexOf(u8, trimmed, "in ensureTotalCapacity") != null) return true;
-        if (std.mem.indexOf(u8, trimmed, "in ensureUnusedCapacity") != null) return true;
-        if (std.mem.indexOf(u8, trimmed, "in growCapacity") != null) return true;
-        if (std.mem.indexOf(u8, trimmed, "in addOrOom") != null) return true;
-        if (std.mem.indexOf(u8, trimmed, "in allocPrint") != null) return true;
-        if (std.mem.indexOf(u8, trimmed, "in initCapacity") != null) return true;
-        if (std.mem.indexOf(u8, trimmed, "in append ") != null) return true;
-        if (std.mem.indexOf(u8, trimmed, "in appendSlice") != null) return true;
-        if (std.mem.indexOf(u8, trimmed, "in addOne") != null) return true;
-        if (std.mem.indexOf(u8, trimmed, "in alignedAlloc") != null) return true;
-        if (std.mem.indexOf(u8, trimmed, "reference(s) hidden") != null) return true;
-
-        // Lines that are just "^" caret pointer indicators
-        var only_whitespace_caret = true;
+        // Lines that are just whitespace + caret
+        var only_ws_caret = true;
         for (trimmed) |ch| {
             if (ch != ' ' and ch != '^' and ch != '\r' and ch != '\n' and ch != '\t') {
-                only_whitespace_caret = false;
+                only_ws_caret = false;
                 break;
             }
         }
-        if (only_whitespace_caret and trimmed.len > 0) return true;
+        if (only_ws_caret and trimmed.len > 0) return true;
 
         return false;
     }
