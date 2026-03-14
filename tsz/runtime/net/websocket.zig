@@ -97,6 +97,7 @@ pub const WebSocket = struct {
     /// Connect to a WebSocket server via TCP.
     pub fn connectTcp(host: []const u8, port: u16, path: []const u8) !WebSocket {
         const stream = try std.net.tcpConnectToHost(std.heap.page_allocator, host, port);
+        errdefer stream.close(); // don't leak on init failure
         return try init(stream, host, port, path);
     }
 

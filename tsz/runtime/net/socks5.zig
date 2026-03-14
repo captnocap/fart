@@ -131,51 +131,8 @@ pub fn connect(
     return stream;
 }
 
-// ── Async tunnel state machine ───────────────────────────────────────────
-// Reference: love2d/lua/socks5.lua:109-304
-// For Phase 5 (Network Manager). Placeholder for now.
-
-pub const TunnelStatus = enum { pending, done, err };
-
-pub const Tunnel = struct {
-    stream: ?std.net.Stream = null,
-    status: TunnelStatus = .pending,
-    error_msg: [256]u8 = undefined,
-    error_len: usize = 0,
-
-    pub fn getStream(self: *const Tunnel) ?std.net.Stream {
-        if (self.status == .done) return self.stream;
-        return null;
-    }
-
-    pub fn errorSlice(self: *const Tunnel) []const u8 {
-        return self.error_msg[0..self.error_len];
-    }
-
-    pub fn close(self: *Tunnel) void {
-        if (self.stream) |s| s.close();
-        self.stream = null;
-        self.status = .err;
-    }
-};
-
-/// Start an async SOCKS5 tunnel. For now, wraps the blocking connect in a thread.
-/// Full async state machine (like the Lua version) deferred to Phase 5.
-pub fn connectAsync(
-    proxy_host: []const u8,
-    proxy_port: u16,
-    target_host: []const u8,
-    target_port: u16,
-    user: ?[]const u8,
-    pass: ?[]const u8,
-) Tunnel {
-    // Store params and spawn thread
-    _ = proxy_host;
-    _ = proxy_port;
-    _ = target_host;
-    _ = target_port;
-    _ = user;
-    _ = pass;
-    // TODO: spawn thread that calls connect() and updates Tunnel
-    return .{};
-}
+// ── Async note ───────────────────────────────────────────────────────────
+// Async SOCKS5 tunneling is handled by the Network Manager (manager.zig)
+// which spawns a thread calling connect() and hands off via atomic flag.
+// No separate async state machine is needed — the Lua version's complexity
+// was due to single-threaded non-blocking I/O, which Zig threads replace.

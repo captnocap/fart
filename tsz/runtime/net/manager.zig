@@ -64,10 +64,15 @@ const ConnStatus = enum {
     closed,
 };
 
+// Atomic flag for thread-safe connect worker → main loop handoff
+const ConnectFlag = enum(u8) { idle = 0, pending = 1, success = 2, failed = 3 };
+
 const Connection = struct {
     active: bool = false,
     id: u32 = 0,
     ws: ?websocket.WebSocket = null,
+    pending_ws: ?websocket.WebSocket = null, // written by worker, consumed by poll
+    connect_flag: u8 = 0, // ConnectFlag, accessed via @atomicStore/@atomicLoad
     url: [MAX_URL]u8 = undefined,
     url_len: usize = 0,
     host: [256]u8 = undefined,
@@ -153,6 +158,21 @@ pub fn poll(out: []NetEvent) usize {
     for (&connections) |*conn| {
         if (!conn.active) continue;
 
+        // Check for connect worker completion (thread → main handoff)
+        const flag: ConnectFlag = @enumFromInt(@atomicLoad(u8, &conn.connect_flag, .seq_cst));
+        if (flag == .success) {
+            conn.ws = conn.pending_ws;
+            conn.pending_ws = null;
+            conn.status = .connecting; // WS upgrade will be driven by poll below
+            @atomicStore(u8, &conn.connect_flag, @intFromEnum(ConnectFlag.idle), .seq_cst);
+        } else if (flag == .failed) {
+            @atomicStore(u8, &conn.connect_flag, @intFromEnum(ConnectFlag.idle), .seq_cst);
+            handleDisconnect(conn);
+            continue;
+        } else if (flag == .pending) {
+            continue; // still connecting in background thread
+        }
+
         switch (conn.status) {
             .open, .connecting => {
                 if (conn.ws) |*ws| {
@@ -161,7 +181,11 @@ pub fn poll(out: []NetEvent) usize {
                     while (safety < 100) : (safety += 1) {
                         if (ws.update()) |event| {
                             switch (event) {
-                                .open => pushEvent(out, conn.id, .connected, ""),
+                                .open => {
+                                    conn.status = .open;
+                                    conn.backoff_ms = INITIAL_BACKOFF_MS; // reset on success
+                                    pushEvent(out, conn.id, .connected, "");
+                                },
                                 .message => |msg| pushEvent(out, conn.id, .message, msg),
                                 .close => |cl| {
                                     pushEvent(out, conn.id, .closed, cl.reason);
@@ -219,38 +243,41 @@ fn findById(id: u32) ?*Connection {
 }
 
 fn startConnection(conn: *Connection) void {
-    conn.status = .connecting;
+    // Set atomic flag to pending BEFORE spawning thread
+    @atomicStore(u8, &conn.connect_flag, @intFromEnum(ConnectFlag.pending), .seq_cst);
     // Spawn connection in a thread so it never blocks the main loop.
     // This is critical for .onion connects where SOCKS5 handshake + Tor
     // circuit setup can take seconds.
-    _ = std.Thread.spawn(.{}, connectWorker, .{conn}) catch {
-        conn.status = .closed;
-        handleDisconnect(conn);
+    _ = std.Thread.spawn(.{ .stack_size = 1024 * 1024 }, connectWorker, .{conn}) catch {
+        @atomicStore(u8, &conn.connect_flag, @intFromEnum(ConnectFlag.failed), .seq_cst);
     };
 }
 
 fn connectWorker(conn: *Connection) void {
+    // Worker thread: do blocking TCP/SOCKS5 connect, then hand off via atomic flag.
+    // ONLY writes pending_ws (before flag) and connect_flag (atomic). Never touches
+    // ws, status, or other main-thread fields.
     const host = conn.host[0..conn.host_len];
     const path = conn.path[0..conn.path_len];
 
     if (conn.is_onion) {
-        // Route through SOCKS5 proxy (Tor)
         const stream = socks5.connect("127.0.0.1", conn.tor_proxy_port, host, conn.port, null, null) catch {
-            conn.status = .closed;
+            @atomicStore(u8, &conn.connect_flag, @intFromEnum(ConnectFlag.failed), .seq_cst);
             return;
         };
-        conn.ws = websocket.WebSocket.connectViaStream(stream, host, conn.port, path) catch {
+        conn.pending_ws = websocket.WebSocket.connectViaStream(stream, host, conn.port, path) catch {
             stream.close();
-            conn.status = .closed;
+            @atomicStore(u8, &conn.connect_flag, @intFromEnum(ConnectFlag.failed), .seq_cst);
             return;
         };
     } else {
-        conn.ws = websocket.WebSocket.connectTcp(host, conn.port, path) catch {
-            conn.status = .closed;
+        conn.pending_ws = websocket.WebSocket.connectTcp(host, conn.port, path) catch {
+            @atomicStore(u8, &conn.connect_flag, @intFromEnum(ConnectFlag.failed), .seq_cst);
             return;
         };
     }
-    // Status stays .connecting — the poll loop will drive the WS upgrade
+    // pending_ws is fully written — now signal main thread
+    @atomicStore(u8, &conn.connect_flag, @intFromEnum(ConnectFlag.success), .seq_cst);
 }
 
 fn handleDisconnect(conn: *Connection) void {
