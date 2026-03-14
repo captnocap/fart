@@ -532,6 +532,70 @@ pub fn execAction(alloc: std.mem.Allocator, action_name: []const u8, arg: []cons
     }
 }
 
+fn checkPathInstall() void {
+    // Only offer once — check flag file
+    const home = std.posix.getenv("HOME") orelse return;
+    var flag_buf: [280]u8 = undefined;
+    const flag_path = std.fmt.bufPrint(&flag_buf, "{s}/.config/tsz/.path_offered", .{home}) catch return;
+    if (std.fs.cwd().access(flag_path, .{})) |_| return else |_| {}
+
+    // Check if `tsz` is already reachable in PATH
+    const path_env = std.posix.getenv("PATH") orelse return;
+    var self_buf: [std.fs.max_path_bytes]u8 = undefined;
+    const self_path = std.fs.selfExePath(&self_buf) catch return;
+
+    var it = std.mem.splitScalar(u8, path_env, ':');
+    while (it.next()) |dir| {
+        var link_buf: [std.fs.max_path_bytes]u8 = undefined;
+        const candidate = std.fmt.bufPrint(&link_buf, "{s}/tsz", .{dir}) catch continue;
+        // Check if this path exists and resolves to our binary
+        var resolved_buf: [std.fs.max_path_bytes]u8 = undefined;
+        if (std.fs.cwd().realpath(candidate, &resolved_buf)) |resolved| {
+            if (std.mem.eql(u8, resolved, self_path)) return; // Already in PATH
+        } else |_| {}
+    }
+
+    // Not in PATH — ask
+    std.debug.print("\n  \x1b[36mtsz\x1b[0m is not in your PATH.\n", .{});
+
+    var dest_buf: [280]u8 = undefined;
+    const dest = std.fmt.bufPrint(&dest_buf, "{s}/.local/bin/tsz", .{home}) catch return;
+    std.debug.print("  Add it so you can run \x1b[1mtsz\x1b[0m from anywhere?\n\n", .{});
+    std.debug.print("    \x1b[2m{s} → {s}\x1b[0m\n\n", .{ dest, self_path });
+    std.debug.print("  \x1b[1m[Y/n]\x1b[0m ", .{});
+
+    var ans_buf: [16]u8 = undefined;
+    const ans_len = std.posix.read(std.posix.STDIN_FILENO, &ans_buf) catch 0;
+    const answer = if (ans_len > 0) std.mem.trimRight(u8, ans_buf[0..ans_len], "\n\r\t ") else "";
+
+    if (answer.len == 0 or answer[0] == 'y' or answer[0] == 'Y') {
+        // Ensure ~/.local/bin exists
+        var bin_dir_buf: [280]u8 = undefined;
+        const bin_dir = std.fmt.bufPrint(&bin_dir_buf, "{s}/.local/bin", .{home}) catch return;
+        std.fs.cwd().makePath(bin_dir) catch {};
+
+        // Create symlink
+        std.posix.symlink(self_path, dest) catch |err| {
+            if (err == error.PathAlreadyExists) {
+                // Remove old and retry
+                std.fs.cwd().deleteFile(dest) catch return;
+                std.posix.symlink(self_path, dest) catch {
+                    std.debug.print("  \x1b[31mFailed to create symlink.\x1b[0m\n\n", .{});
+                    return;
+                };
+            } else {
+                std.debug.print("  \x1b[31mFailed to create symlink.\x1b[0m\n\n", .{});
+                return;
+            }
+        };
+        std.debug.print("  \x1b[32mDone!\x1b[0m Run \x1b[1mtsz\x1b[0m from anywhere.\n\n", .{});
+    }
+
+    // Write flag so we don't ask again
+    registry.ensureConfigDir();
+    if (std.fs.cwd().createFile(flag_path, .{})) |f| f.close() else |_| {}
+}
+
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
@@ -544,6 +608,8 @@ pub fn main() !void {
         printUsage();
         std.process.exit(1);
     }
+
+    checkPathInstall();
 
     const command = args[1];
 
