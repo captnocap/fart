@@ -53,6 +53,10 @@ var g_app_root: ?*Node = null;
 var g_app_w: f32 = 0;
 var g_app_h: f32 = 0;
 
+// Devtools: overlay state (F12 toggle, tab selection)
+var devtools_visible: bool = false;
+var devtools_tab: u8 = 0; // 0=Perf, 1=Elements, 2=Wireframe
+
 // Rounded rect texture (shared with main)
 var g_circle_tex: ?*c.SDL_Texture = null;
 const CIRCLE_TEX_SIZE = 32;
@@ -144,7 +148,10 @@ pub fn frame(root: *Node, win_w: f32, win_h: f32, bg_color: Color) void {
         _ = c.SDL_RenderCopy(renderer, root_tex, null, &dst);
     }
 
-    // win_w/win_h stored in g_app_w/g_app_h for devtools wireframe
+    // Devtools overlay (F12 to toggle)
+    if (devtools_visible) {
+        renderDevtoolsOverlay(renderer);
+    }
 
     c.SDL_RenderPresent(renderer);
 }
@@ -756,4 +763,195 @@ fn getOrCreateLayer(node: *Node) *Layer {
     const layer = &layers[layer_count];
     layer_count += 1;
     return layer;
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// Devtools overlay — auto-injected, F12 toggle
+// Renders directly to screen after app compositing, before present.
+// ════════════════════════════════════════════════════════════════════════
+
+pub fn toggleDevtools() void {
+    devtools_visible = !devtools_visible;
+}
+
+pub fn isDevtoolsVisible() bool {
+    return devtools_visible;
+}
+
+pub fn setDevtoolsTab(tab: u8) void {
+    if (tab < 3) devtools_tab = tab;
+}
+
+fn renderDevtoolsOverlay(renderer: *c.SDL_Renderer) void {
+    const te = g_text_engine orelse return;
+    const win_w = @as(i32, @intFromFloat(g_app_w));
+    const win_h = @as(i32, @intFromFloat(g_app_h));
+
+    const panel_h: i32 = 220;
+    const tab_bar_h: i32 = 24;
+    const status_h: i32 = 20;
+    const panel_y = win_h - panel_h;
+
+    // Panel background
+    _ = c.SDL_SetRenderDrawBlendMode(renderer, c.SDL_BLENDMODE_BLEND);
+    _ = c.SDL_SetRenderDrawColor(renderer, 12, 12, 24, 240);
+    var panel_rect = c.SDL_Rect{ .x = 0, .y = panel_y, .w = win_w, .h = panel_h };
+    _ = c.SDL_RenderFillRect(renderer, &panel_rect);
+
+    // Top border accent
+    _ = c.SDL_SetRenderDrawColor(renderer, 78, 201, 176, 255);
+    var accent = c.SDL_Rect{ .x = 0, .y = panel_y, .w = win_w, .h = 2 };
+    _ = c.SDL_RenderFillRect(renderer, &accent);
+
+    // Tab bar background
+    _ = c.SDL_SetRenderDrawColor(renderer, 8, 8, 16, 255);
+    var tab_bg = c.SDL_Rect{ .x = 0, .y = panel_y + 2, .w = win_w, .h = tab_bar_h };
+    _ = c.SDL_RenderFillRect(renderer, &tab_bg);
+
+    // Tab labels
+    const tab_names = [_][]const u8{ "Perf", "Elements", "Wireframe" };
+    var tx: f32 = 8;
+    for (tab_names, 0..) |name, i| {
+        const col = if (i == devtools_tab) Color.rgb(255, 255, 255) else Color.rgb(100, 100, 100);
+        te.drawText(name, tx, @as(f32, @floatFromInt(panel_y + 6)), 11, col);
+        tx += @as(f32, @floatFromInt(name.len * 8 + 16));
+    }
+
+    // Tab key hints
+    te.drawText("[1/2/3]", @as(f32, @floatFromInt(win_w - 64)), @as(f32, @floatFromInt(panel_y + 6)), 10, Color.rgb(60, 60, 60));
+
+    // Content area
+    const content_y = panel_y + 2 + tab_bar_h;
+    const content_h = panel_h - 2 - tab_bar_h - status_h;
+
+    switch (devtools_tab) {
+        0 => {
+            // Perf tab: sparkline + stats
+            // Create a temporary node-like region for the sparkline
+            const spark_h: i32 = @min(content_h - 40, 60);
+            if (spark_h > 0) {
+                renderSparklineAt(renderer, 8, content_y + 4, win_w - 16, spark_h);
+            }
+
+            // Stats text below sparkline
+            const stats_y = @as(f32, @floatFromInt(content_y + spark_h + 12));
+            var buf: [128]u8 = undefined;
+
+            const fps_str = std.fmt.bufPrint(&buf, "FPS: {d:.0}", .{telemetry.getFps()}) catch "FPS: ?";
+            const fps_col = if (telemetry.getFps() >= 55) Color.rgb(78, 201, 176) else if (telemetry.getFps() >= 30) Color.rgb(220, 220, 170) else Color.rgb(244, 71, 71);
+            te.drawText(fps_str, 8, stats_y, 13, fps_col);
+
+            const layout_str = std.fmt.bufPrint(&buf, "Layout: {d:.2}ms", .{telemetry.getLayoutMs()}) catch "Layout: ?";
+            te.drawText(layout_str, 100, stats_y, 13, Color.rgb(180, 180, 180));
+
+            const paint_str = std.fmt.bufPrint(&buf, "Paint: {d:.2}ms", .{telemetry.getPaintMs()}) catch "Paint: ?";
+            te.drawText(paint_str, 240, stats_y, 13, Color.rgb(180, 180, 180));
+
+            const node_str = std.fmt.bufPrint(&buf, "Nodes: {d}", .{telemetry.getNodeCount()}) catch "Nodes: ?";
+            te.drawText(node_str, 370, stats_y, 13, Color.rgb(180, 180, 180));
+
+            const rss_str = std.fmt.bufPrint(&buf, "RSS: {d}MB", .{telemetry.getRssMb()}) catch "RSS: ?";
+            te.drawText(rss_str, 470, stats_y, 13, Color.rgb(120, 120, 120));
+        },
+        1 => {
+            // Elements tab: node tree text
+            const root = g_app_root orelse return;
+            var y_off: f32 = @as(f32, @floatFromInt(content_y + 4));
+            const max_y: f32 = @as(f32, @floatFromInt(content_y + content_h));
+            drawNodeTreeEntry(te, root, 0, &y_off, max_y);
+        },
+        2 => {
+            // Wireframe tab
+            const root = g_app_root orelse return;
+            const pad: f32 = 8;
+            const avail_w = @as(f32, @floatFromInt(win_w)) - pad * 2;
+            const avail_h = @as(f32, @floatFromInt(content_h)) - pad * 2;
+            if (avail_w > 0 and avail_h > 0) {
+                const scale_x = avail_w / g_app_w;
+                const scale_y = avail_h / g_app_h;
+                const scale = @min(scale_x, scale_y);
+                const scaled_w = g_app_w * scale;
+                const scaled_h = g_app_h * scale;
+                const off_x = pad + (avail_w - scaled_w) / 2;
+                const off_y = @as(f32, @floatFromInt(content_y)) + pad + (avail_h - scaled_h) / 2;
+                drawWireframeNode(renderer, root, scale, off_x, off_y, 0);
+            }
+        },
+        else => {},
+    }
+
+    // Status bar at bottom
+    _ = c.SDL_SetRenderDrawColor(renderer, 8, 8, 16, 255);
+    var status_bg = c.SDL_Rect{ .x = 0, .y = win_h - status_h, .w = win_w, .h = status_h };
+    _ = c.SDL_RenderFillRect(renderer, &status_bg);
+
+    var sbuf: [256]u8 = undefined;
+    const status_text = std.fmt.bufPrint(&sbuf, "FPS: {d:.0}  |  Layout: {d:.2}ms  |  Paint: {d:.2}ms  |  Nodes: {d}  |  RSS: {d}MB", .{
+        telemetry.getFps(),
+        telemetry.getLayoutMs(),
+        telemetry.getPaintMs(),
+        telemetry.getNodeCount(),
+        telemetry.getRssMb(),
+    }) catch "devtools";
+    te.drawText(status_text, 8, @as(f32, @floatFromInt(win_h - status_h + 4)), 10, Color.rgb(78, 201, 176));
+    te.drawText("F12 close", @as(f32, @floatFromInt(win_w - 72)), @as(f32, @floatFromInt(win_h - status_h + 4)), 10, Color.rgb(60, 60, 60));
+}
+
+/// Sparkline rendered directly to screen (not via node texture)
+fn renderSparklineAt(renderer: *c.SDL_Renderer, x: i32, y: i32, w: i32, h: i32) void {
+    const history = telemetry.getHistory();
+    const count = telemetry.getHistoryCount();
+    if (count == 0) return;
+
+    const idx = telemetry.getHistoryIdx();
+    const budget_ms: f32 = 16.67;
+    const bar_count: usize = telemetry.HISTORY_SIZE;
+    const bar_w_f: f32 = @as(f32, @floatFromInt(w)) / @as(f32, @floatFromInt(bar_count));
+    const bar_w: i32 = @max(1, @as(i32, @intFromFloat(bar_w_f)));
+    const pad_bottom: i32 = 10;
+    const spark_h: i32 = h - pad_bottom;
+    if (spark_h <= 0) return;
+
+    for (0..bar_count) |i| {
+        const ring_idx = (idx + i) % telemetry.HISTORY_SIZE;
+        const sample = history[ring_idx];
+        if (i >= bar_count - count) {} else continue;
+
+        const total = sample.total_ms;
+        const ratio = @min(total / (budget_ms * 2.0), 1.0);
+        const bar_h = @as(i32, @intFromFloat(ratio * @as(f32, @floatFromInt(spark_h))));
+        const bx = x + @as(i32, @intFromFloat(@as(f32, @floatFromInt(i)) * bar_w_f));
+        const by = y + spark_h - bar_h;
+
+        const pct = total / budget_ms;
+        if (pct > 1.0) {
+            _ = c.SDL_SetRenderDrawColor(renderer, 244, 71, 71, 255);
+        } else if (pct > 0.8) {
+            _ = c.SDL_SetRenderDrawColor(renderer, 220, 220, 170, 255);
+        } else {
+            _ = c.SDL_SetRenderDrawColor(renderer, 78, 201, 176, 255);
+        }
+
+        var rect = c.SDL_Rect{ .x = bx, .y = by, .w = bar_w, .h = bar_h };
+        _ = c.SDL_RenderFillRect(renderer, &rect);
+    }
+
+    // Budget bar
+    const cur_total = telemetry.getLayoutMs() + telemetry.getPaintMs();
+    const budget_pct = @min(cur_total / budget_ms, 1.0);
+    const budget_w = @as(i32, @intFromFloat(budget_pct * @as(f32, @floatFromInt(w))));
+
+    _ = c.SDL_SetRenderDrawColor(renderer, 30, 30, 45, 255);
+    var bg_rect = c.SDL_Rect{ .x = x, .y = y + spark_h, .w = w, .h = pad_bottom };
+    _ = c.SDL_RenderFillRect(renderer, &bg_rect);
+
+    if (budget_pct > 1.0) {
+        _ = c.SDL_SetRenderDrawColor(renderer, 244, 71, 71, 255);
+    } else if (budget_pct > 0.8) {
+        _ = c.SDL_SetRenderDrawColor(renderer, 220, 220, 170, 255);
+    } else {
+        _ = c.SDL_SetRenderDrawColor(renderer, 78, 201, 176, 255);
+    }
+    var fill_rect = c.SDL_Rect{ .x = x, .y = y + spark_h + 2, .w = budget_w, .h = pad_bottom - 4 };
+    _ = c.SDL_RenderFillRect(renderer, &fill_rect);
 }
