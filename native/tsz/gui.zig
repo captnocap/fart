@@ -806,7 +806,7 @@ fn openLogPopout(te: *TextEngine, _: *c.SDL_Renderer) void {
         while (c.SDL_PollEvent(&event) != 0) {
             pop_dirty = true;
             switch (event.type) {
-                c.SDL_QUIT => pop_running = false,
+                c.SDL_QUIT => {}, // ignore — main window handles quit
                 c.SDL_WINDOWEVENT => {
                     if (event.window.event == c.SDL_WINDOWEVENT_CLOSE) pop_running = false
                     else if (event.window.event == c.SDL_WINDOWEVENT_SIZE_CHANGED) {
@@ -823,11 +823,13 @@ fn openLogPopout(te: *TextEngine, _: *c.SDL_Renderer) void {
                     }
                     if (ctrl and event.key.keysym.sym == c.SDLK_c) {
                         const cur = if (runner.getActive()) |a| a.getOutput() else output;
-                        if (psel_all) {
-                            if (cur.len > 0 and cur.len < 16383) {
+                        if (psel_all or !psel_active) {
+                            // Copy all output (Ctrl+A+C or Ctrl+C with no selection)
+                            if (cur.len > 0) {
+                                const clen = @min(cur.len, 16383);
                                 var clip: [16384]u8 = undefined;
-                                @memcpy(clip[0..cur.len], cur);
-                                clip[cur.len] = 0;
+                                @memcpy(clip[0..clen], cur[0..clen]);
+                                clip[clen] = 0;
                                 _ = c.SDL_SetClipboardText(@ptrCast(&clip));
                             }
                         } else if (psel_active and pop_vis_count > 0) {
