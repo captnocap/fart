@@ -1,6 +1,6 @@
 # tsz/ — Native Stack
 
-Zero-dependency native rendering. `.tsz` source → Zig compiler → SDL2 + FreeType + OpenGL binary.
+Zero-dependency native rendering. `.tsz` source → Zig compiler → SDL2 + wgpu + FreeType binary.
 No Node, no npm, no Lua, no QuickJS. The entire toolchain is two binaries.
 
 ## .tsz Syntax
@@ -99,4 +99,4 @@ Everything is Zig. There is no TypeScript, no Lua, no JavaScript anywhere in thi
 
 ## System Dependencies
 
-SDL2, OpenGL, FreeType, libmpv (optional, for video). GTK3 + libayatana-appindicator3 (for system tray).
+SDL2 (windowing/events only), wgpu-native (GPU rendering via Vulkan/Metal/DX12), FreeType, libmpv (optional, for video). GTK3 + libayatana-appindicator3 (for system tray). OpenGL is no longer used.

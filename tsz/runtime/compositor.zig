@@ -6,6 +6,7 @@
 //! Replaces the SDL_Renderer-based compositor with wgpu draw calls.
 
 const std = @import("std");
+const c = @import("c.zig").imports;
 const layout = @import("layout.zig");
 const text_mod = @import("text.zig");
 const image_mod = @import("image.zig");
@@ -26,19 +27,43 @@ var g_hovered_node: ?*Node = null;
 var g_app_root: ?*Node = null;
 var g_app_w: f32 = 0;
 var g_app_h: f32 = 0;
+var g_gpu_initialized: bool = false;
 
 // ════════════════════════════════════════════════════════════════════════
 // Public API
 // ════════════════════════════════════════════════════════════════════════
 
-pub fn init(text_engine: *TextEngine, image_cache: *ImageCache) void {
+/// Init compositor. Accepts SDL_Renderer for backward compatibility with
+/// generated_app.zig, but rendering is done via wgpu internally.
+pub fn init(renderer: *c.SDL_Renderer, text_engine: *TextEngine, image_cache: *ImageCache) void {
     g_text_engine = text_engine;
     g_image_cache = image_cache;
+
+    // Get the SDL window from the renderer to init wgpu
+    const window = c.SDL_RenderGetWindow(renderer);
+    if (window) |win| {
+        gpu.init(win) catch |err| {
+            std.debug.print("wgpu init failed in compositor: {}\n", .{err});
+            return;
+        };
+        gpu.initText(text_engine.library, text_engine.face, text_engine.fallback_faces, text_engine.fallback_count);
+        g_gpu_initialized = true;
+    }
 }
 
 pub fn deinit() void {
+    if (g_gpu_initialized) {
+        gpu.deinit();
+        g_gpu_initialized = false;
+    }
     g_text_engine = null;
     g_image_cache = null;
+}
+
+pub fn handleResize(width: u32, height: u32) void {
+    if (g_gpu_initialized) {
+        gpu.resize(width, height);
+    }
 }
 
 pub fn setHoveredNode(node: ?*Node) void {
