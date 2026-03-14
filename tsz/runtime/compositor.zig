@@ -18,6 +18,7 @@ const layout = @import("layout.zig");
 const text_mod = @import("text.zig");
 const image_mod = @import("image.zig");
 const Node = layout.Node;
+const telemetry = @import("telemetry.zig");
 const Style = layout.Style;
 const Color = layout.Color;
 const TextEngine = text_mod.TextEngine;
@@ -46,6 +47,11 @@ var g_image_cache: ?*ImageCache = null;
 
 // Hover state (set externally per frame)
 var g_hovered_node: ?*Node = null;
+
+// Devtools: root node reference for wireframe/inspector (set during frame())
+var g_app_root: ?*Node = null;
+var g_app_w: f32 = 0;
+var g_app_h: f32 = 0;
 
 // Rounded rect texture (shared with main)
 var g_circle_tex: ?*c.SDL_Texture = null;
@@ -103,6 +109,11 @@ pub fn setHoveredNode(node: ?*Node) void {
 pub fn frame(root: *Node, win_w: f32, win_h: f32, bg_color: Color) void {
     const renderer = g_renderer orelse return;
 
+    // Store root for devtools wireframe/inspector
+    g_app_root = root;
+    g_app_w = win_w;
+    g_app_h = win_h;
+
     // Ensure all nodes have correctly-sized textures
     syncTextures(root);
 
@@ -133,9 +144,7 @@ pub fn frame(root: *Node, win_w: f32, win_h: f32, bg_color: Color) void {
         _ = c.SDL_RenderCopy(renderer, root_tex, null, &dst);
     }
 
-    // Fill remaining screen area with bg color (already cleared above)
-    _ = win_w;
-    _ = win_h;
+    // win_w/win_h stored in g_app_w/g_app_h for devtools wireframe
 
     c.SDL_RenderPresent(renderer);
 }
@@ -350,6 +359,14 @@ fn renderContent(node: *Node) void {
         }
     }
 
+    // ── Devtools Visualizations ────────────────────────────────────
+    switch (node.devtools_viz) {
+        .sparkline => renderSparkline(node, w, h),
+        .wireframe => renderWireframe(w, h),
+        .node_tree => renderNodeTree(w, h),
+        .none => {},
+    }
+
     // ── Text ────────────────────────────────────────────────────────
     if (node.text) |txt| {
         if (g_text_engine) |te| {
@@ -371,6 +388,193 @@ fn renderContent(node: *Node) void {
                 node.number_of_lines,
             );
         }
+    }
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// Devtools: Sparkline — frame-time bar chart from telemetry ring buffer
+// ════════════════════════════════════════════════════════════════════════
+
+fn renderSparkline(_: *Node, w: i32, h: i32) void {
+    const renderer = g_renderer orelse return;
+    const history = telemetry.getHistory();
+    const count = telemetry.getHistoryCount();
+    if (count == 0) return;
+
+    const idx = telemetry.getHistoryIdx();
+    const budget_ms: f32 = 16.67; // 60fps target
+    const bar_count: usize = telemetry.HISTORY_SIZE;
+    const bar_w_f: f32 = @as(f32, @floatFromInt(w)) / @as(f32, @floatFromInt(bar_count));
+    const bar_w: i32 = @max(1, @as(i32, @intFromFloat(bar_w_f)));
+    const pad_bottom: i32 = 12; // space for budget bar
+    const spark_h: i32 = h - pad_bottom;
+    if (spark_h <= 0) return;
+
+    // Draw sparkline bars (most recent on the right)
+    for (0..bar_count) |i| {
+        const ring_idx = (idx + i) % telemetry.HISTORY_SIZE;
+        const sample = history[ring_idx];
+
+        // Skip empty entries
+        if (i >= bar_count - count) {} else continue;
+
+        const total = sample.total_ms;
+        const ratio = @min(total / (budget_ms * 2.0), 1.0); // scale: 0..2x budget fills full height
+        const bar_h = @as(i32, @intFromFloat(ratio * @as(f32, @floatFromInt(spark_h))));
+        const x = @as(i32, @intFromFloat(@as(f32, @floatFromInt(i)) * bar_w_f));
+        const y = spark_h - bar_h;
+
+        // Color by budget: green (<80%), yellow (80-100%), red (>100%)
+        const pct = total / budget_ms;
+        if (pct > 1.0) {
+            _ = c.SDL_SetRenderDrawColor(renderer, 244, 71, 71, 255); // red
+        } else if (pct > 0.8) {
+            _ = c.SDL_SetRenderDrawColor(renderer, 220, 220, 170, 255); // yellow
+        } else {
+            _ = c.SDL_SetRenderDrawColor(renderer, 78, 201, 176, 255); // green
+        }
+
+        var rect = c.SDL_Rect{ .x = x, .y = y, .w = bar_w, .h = bar_h };
+        _ = c.SDL_RenderFillRect(renderer, &rect);
+    }
+
+    // Budget bar at bottom: shows current frame budget usage
+    const cur_total = telemetry.getLayoutMs() + telemetry.getPaintMs();
+    const budget_pct = @min(cur_total / budget_ms, 1.0);
+    const budget_w = @as(i32, @intFromFloat(budget_pct * @as(f32, @floatFromInt(w))));
+
+    // Background
+    _ = c.SDL_SetRenderDrawColor(renderer, 45, 45, 61, 255);
+    var bg_rect = c.SDL_Rect{ .x = 0, .y = spark_h, .w = w, .h = pad_bottom };
+    _ = c.SDL_RenderFillRect(renderer, &bg_rect);
+
+    // Fill
+    if (budget_pct > 1.0) {
+        _ = c.SDL_SetRenderDrawColor(renderer, 244, 71, 71, 255);
+    } else if (budget_pct > 0.8) {
+        _ = c.SDL_SetRenderDrawColor(renderer, 220, 220, 170, 255);
+    } else {
+        _ = c.SDL_SetRenderDrawColor(renderer, 78, 201, 176, 255);
+    }
+    var fill_rect = c.SDL_Rect{ .x = 0, .y = spark_h + 2, .w = budget_w, .h = pad_bottom - 4 };
+    _ = c.SDL_RenderFillRect(renderer, &fill_rect);
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// Devtools: Wireframe — miniature scaled view of node tree
+// ════════════════════════════════════════════════════════════════════════
+
+fn renderWireframe(w: i32, h: i32) void {
+    const renderer = g_renderer orelse return;
+    const root = g_app_root orelse return;
+
+    const pad: f32 = 8;
+    const avail_w = @as(f32, @floatFromInt(w)) - pad * 2;
+    const avail_h = @as(f32, @floatFromInt(h)) - pad * 2;
+    if (avail_w <= 0 or avail_h <= 0) return;
+
+    // Compute scale to fit app viewport
+    const scale_x = avail_w / g_app_w;
+    const scale_y = avail_h / g_app_h;
+    const scale = @min(scale_x, scale_y);
+
+    // Center the scaled viewport
+    const scaled_w = g_app_w * scale;
+    const scaled_h = g_app_h * scale;
+    const off_x = pad + (avail_w - scaled_w) / 2;
+    const off_y = pad + (avail_h - scaled_h) / 2;
+
+    drawWireframeNode(renderer, root, scale, off_x, off_y, 0);
+}
+
+// Depth-based color palette (ref: love2d tab_wireframe.lua depth colors)
+const wf_colors = [_][3]u8{
+    .{ 78, 201, 176 }, // depth 0: teal
+    .{ 86, 156, 214 }, // depth 1: blue
+    .{ 206, 145, 120 }, // depth 2: orange
+    .{ 220, 220, 170 }, // depth 3: yellow
+    .{ 195, 132, 219 }, // depth 4: purple
+    .{ 244, 71, 71 }, // depth 5: red
+    .{ 100, 200, 100 }, // depth 6: green
+    .{ 180, 180, 180 }, // depth 7+: gray
+};
+
+fn drawWireframeNode(renderer: *c.SDL_Renderer, node: *const Node, scale: f32, off_x: f32, off_y: f32, depth: usize) void {
+    const cx = node.computed;
+    if (cx.w <= 0 or cx.h <= 0) return;
+
+    // Skip nodes that are part of devtools itself
+    if (node.devtools_viz != .none) return;
+
+    const sx = @as(i32, @intFromFloat(off_x + cx.x * scale));
+    const sy = @as(i32, @intFromFloat(off_y + cx.y * scale));
+    const sw = @max(1, @as(i32, @intFromFloat(cx.w * scale)));
+    const sh = @max(1, @as(i32, @intFromFloat(cx.h * scale)));
+
+    // Cull tiny rects
+    if (sw < 1 and sh < 1) return;
+
+    const color_idx = @min(depth, wf_colors.len - 1);
+    const col = wf_colors[color_idx];
+    _ = c.SDL_SetRenderDrawColor(renderer, col[0], col[1], col[2], 200);
+    var rect = c.SDL_Rect{ .x = sx, .y = sy, .w = sw, .h = sh };
+    _ = c.SDL_RenderDrawRect(renderer, &rect);
+
+    // Recurse children
+    for (node.children) |*child| {
+        drawWireframeNode(renderer, child, scale, off_x, off_y, depth + 1);
+    }
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// Devtools: NodeTree — indented text tree of nodes
+// ════════════════════════════════════════════════════════════════════════
+
+fn renderNodeTree(w: i32, h: i32) void {
+    const te = g_text_engine orelse return;
+    const root = g_app_root orelse return;
+    _ = w;
+
+    var y_offset: f32 = 4;
+    drawNodeTreeEntry(te, root, 0, &y_offset, @as(f32, @floatFromInt(h)));
+}
+
+fn drawNodeTreeEntry(te: *TextEngine, node: *const Node, depth: usize, y_offset: *f32, max_h: f32) void {
+    if (y_offset.* > max_h) return;
+    if (node.devtools_viz != .none) return;
+
+    // Format: "  Box 100x50" or "  Text 'hello'"
+    var buf: [128]u8 = undefined;
+    const indent = @min(depth * 2, 20);
+    var pos: usize = 0;
+    for (0..indent) |_| {
+        buf[pos] = ' ';
+        pos += 1;
+    }
+
+    const cx = node.computed;
+    const w_int = @as(i32, @intFromFloat(cx.w));
+    const h_int = @as(i32, @intFromFloat(cx.h));
+
+    if (node.text) |txt| {
+        // Show first 20 chars of text
+        const show_len = @min(txt.len, 20);
+        const label = std.fmt.bufPrint(buf[pos..], "Text {d}x{d} '{s}'", .{ w_int, h_int, txt[0..show_len] }) catch return;
+        pos += label.len;
+    } else {
+        const label = std.fmt.bufPrint(buf[pos..], "Box {d}x{d}", .{ w_int, h_int }) catch return;
+        pos += label.len;
+    }
+
+    const color_idx = @min(depth, wf_colors.len - 1);
+    const col = wf_colors[color_idx];
+    te.drawText(buf[0..pos], 4, y_offset.*, 11, Color.rgb(col[0], col[1], col[2]));
+    y_offset.* += 14;
+
+    // Recurse children
+    for (node.children) |*child| {
+        if (y_offset.* > max_h) return;
+        drawNodeTreeEntry(te, child, depth + 1, y_offset, max_h);
     }
 }
 

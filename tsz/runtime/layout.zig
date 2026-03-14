@@ -239,6 +239,14 @@ pub const LayoutRect = struct {
     h: f32 = 0,
 };
 
+/// Built-in devtools visualization types (rendered by compositor)
+pub const DevtoolsViz = enum {
+    none,
+    sparkline, // Frame-time sparkline from telemetry ring buffer
+    wireframe, // Miniature node tree wireframe
+    node_tree, // Indented node tree inspector
+};
+
 // ── Node ────────────────────────────────────────────────────────────────────
 
 pub const Node = struct {
@@ -272,6 +280,11 @@ pub const Node = struct {
     /// TextInput: placeholder text
     placeholder: ?[]const u8 = null,
 
+    /// Debug name for test queries (set explicitly or derived from component name)
+    debug_name: ?[]const u8 = null,
+    /// Test ID for test queries (set explicitly via testId prop)
+    test_id: ?[]const u8 = null,
+
     /// Event handlers (onPress, onHover, onKey). Set at compile time.
     handlers: events.EventHandler = .{},
 
@@ -280,6 +293,9 @@ pub const Node = struct {
     scroll_y: f32 = 0,
     /// Total content height (set by layout for scroll extent)
     content_height: f32 = 0,
+
+    /// Devtools: built-in visualization type
+    devtools_viz: DevtoolsViz = .none,
 
     // Internal: set by parent's flex pass, consumed by layoutNode
     _flex_w: ?f32 = null,

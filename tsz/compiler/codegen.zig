@@ -12,6 +12,7 @@ const Lexer = lexer_mod.Lexer;
 const tailwind = @import("tailwind.zig");
 const bootstrap = @import("bootstrap.zig");
 
+const MAX_LOCALS = 32;
 const MAX_ARRAYS = 256;
 const MAX_HANDLERS = 64;
 const MAX_STATE_SLOTS = 32;
@@ -93,6 +94,12 @@ const DynText = struct {
     arr_name: []const u8,
     arr_index: u32,
     has_ref: bool,
+};
+
+const LocalVar = struct {
+    name: []const u8,
+    expr: []const u8, // Zig expression (compile-time substitution)
+    state_type: StateType, // type hint for template literal formatting
 };
 
 const StateType = enum { int, float, boolean, string, array };
@@ -234,6 +241,10 @@ pub const Generator = struct {
     classifier_text_props: [128][]const u8, // fontSize, color for Text classifiers
     classifier_count: u32,
 
+    // Local variables (compile-time constant substitution)
+    local_vars: [MAX_LOCALS]LocalVar,
+    local_count: u32,
+
     pub fn init(alloc: std.mem.Allocator, lex: *const Lexer, source: []const u8, input_file: []const u8) Generator {
         return .{
             .alloc = alloc,
@@ -286,6 +297,8 @@ pub const Generator = struct {
             .classifier_styles = undefined,
             .classifier_text_props = undefined,
             .classifier_count = 0,
+            .local_vars = undefined,
+            .local_count = 0,
         };
     }
 
@@ -453,6 +466,9 @@ pub const Generator = struct {
 
         // Phase 5b: Collect useTransition / useSpring hooks
         self.collectAnimHooks(app_start);
+
+        // Phase 5c: Collect local variables (const x = expr)
+        self.collectLocalVars(app_start);
 
         // Phase 6: Find return JSX and generate node tree
         self.pos = app_start;
@@ -965,6 +981,96 @@ pub const Generator = struct {
         return try std.fmt.allocPrint(self.alloc, "    {s}", .{try self.emitHandlerExpr()});
     }
 
+    // ── Local variable helpers ────────────────────────────────────────
+
+    fn isLocalVar(self: *Generator, name: []const u8) ?*const LocalVar {
+        for (0..self.local_count) |i| {
+            if (std.mem.eql(u8, self.local_vars[i].name, name)) return &self.local_vars[i];
+        }
+        return null;
+    }
+
+    /// Collect local variable declarations between hooks and return.
+    /// Pattern: const <ident> = <expr>;  (not useState/useEffect/useTransition/useSpring)
+    fn collectLocalVars(self: *Generator, func_start: u32) void {
+        self.pos = func_start;
+        // Skip past function header to body
+        while (self.pos < self.lex.count and self.curKind() != .lbrace) self.advance_token();
+        if (self.curKind() == .lbrace) self.advance_token();
+
+        while (self.pos < self.lex.count) {
+            if (self.isIdent("return")) break;
+
+            if (self.isIdent("const") or self.isIdent("let")) {
+                self.advance_token();
+                // Skip array destructuring (useState): const [x, y] = ...
+                if (self.curKind() == .lbracket) {
+                    self.advance_token();
+                    continue;
+                }
+                if (self.curKind() == .identifier) {
+                    const var_name = self.curText();
+                    self.advance_token();
+                    if (self.curKind() == .equals) {
+                        self.advance_token();
+                        // Skip known hook calls — these are handled by other phases
+                        if (self.isIdent("useState") or self.isIdent("useEffect") or
+                            self.isIdent("useTransition") or self.isIdent("useSpring"))
+                        {
+                            // Skip to semicolon or next statement
+                            while (self.pos < self.lex.count and
+                                self.curKind() != .semicolon and !self.isIdent("const") and
+                                !self.isIdent("let") and !self.isIdent("return") and
+                                !self.isIdent("useEffect"))
+                            {
+                                self.advance_token();
+                            }
+                            if (self.curKind() == .semicolon) self.advance_token();
+                            continue;
+                        }
+                        // Parse the expression to get its Zig translation
+                        const expr = self.emitStateExpr() catch {
+                            self.advance_token();
+                            continue;
+                        };
+                        // Infer type from expression for template literal formatting
+                        var st: StateType = .int; // default
+                        if (std.mem.indexOf(u8, expr, "getSlotString") != null) {
+                            st = .string;
+                        } else if (std.mem.indexOf(u8, expr, "getSlotFloat") != null or
+                            std.mem.indexOf(u8, expr, "getFps") != null or
+                            std.mem.indexOf(u8, expr, "getLayoutMs") != null or
+                            std.mem.indexOf(u8, expr, "getPaintMs") != null)
+                        {
+                            st = .float;
+                        } else if (std.mem.indexOf(u8, expr, "getSlotBool") != null or
+                            std.mem.indexOf(u8, expr, "true") != null or
+                            std.mem.indexOf(u8, expr, "false") != null or
+                            std.mem.indexOf(u8, expr, "==") != null or
+                            std.mem.indexOf(u8, expr, "!=") != null or
+                            std.mem.indexOf(u8, expr, "< ") != null or
+                            std.mem.indexOf(u8, expr, "> ") != null)
+                        {
+                            st = .boolean;
+                        }
+
+                        if (self.local_count < MAX_LOCALS) {
+                            self.local_vars[self.local_count] = .{
+                                .name = var_name,
+                                .expr = expr,
+                                .state_type = st,
+                            };
+                            self.local_count += 1;
+                        }
+                        if (self.curKind() == .semicolon) self.advance_token();
+                        continue;
+                    }
+                }
+            }
+            self.advance_token();
+        }
+    }
+
     fn findReturnStatement(self: *Generator) void {
         while (self.pos < self.lex.count and !self.isIdent("return")) {
             self.advance_token();
@@ -1050,6 +1156,9 @@ pub const Generator = struct {
         const is_text_input = std.mem.eql(u8, tag_name, "TextInput") or std.mem.eql(u8, tag_name, "TextArea");
         const is_multiline = std.mem.eql(u8, tag_name, "TextArea");
         const is_code_block = std.mem.eql(u8, tag_name, "CodeBlock");
+        const is_sparkline = std.mem.eql(u8, tag_name, "Sparkline");
+        const is_wireframe = std.mem.eql(u8, tag_name, "Wireframe");
+        const is_node_tree = std.mem.eql(u8, tag_name, "NodeTree");
 
         while (self.curKind() != .gt and self.curKind() != .slash_gt and self.curKind() != .eof) {
             if (self.curKind() == .identifier) {
@@ -1433,6 +1542,18 @@ pub const Generator = struct {
                 try fields.appendSlice(self.alloc, src_str);
             }
             try fields.appendSlice(self.alloc, "\"");
+        }
+
+        // Devtools visualization type
+        if (is_sparkline or is_wireframe or is_node_tree) {
+            if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
+            if (is_sparkline) {
+                try fields.appendSlice(self.alloc, ".devtools_viz = .sparkline");
+            } else if (is_wireframe) {
+                try fields.appendSlice(self.alloc, ".devtools_viz = .wireframe");
+            } else if (is_node_tree) {
+                try fields.appendSlice(self.alloc, ".devtools_viz = .node_tree");
+            }
         }
 
         // Handlers — create handler functions and collect their names
@@ -1891,6 +2012,31 @@ pub const Generator = struct {
                                 "state.getSlot({d})", .{slot_id}));
                         },
                     }
+                } else if (self.isLocalVar(expr)) |lv| {
+                    // Local variable in template literal
+                    switch (lv.state_type) {
+                        .string => {
+                            try fmt.appendSlice(self.alloc, "{s}");
+                            if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
+                            try args.appendSlice(self.alloc, lv.expr);
+                        },
+                        .float => {
+                            try fmt.appendSlice(self.alloc, "{d}");
+                            if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
+                            try args.appendSlice(self.alloc, lv.expr);
+                        },
+                        .boolean => {
+                            try fmt.appendSlice(self.alloc, "{s}");
+                            if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
+                            try args.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                                "if ({s}) \"true\" else \"false\"", .{lv.expr}));
+                        },
+                        else => {
+                            try fmt.appendSlice(self.alloc, "{d}");
+                            if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
+                            try args.appendSlice(self.alloc, lv.expr);
+                        },
+                    }
                 } else if (self.map_item_param != null and std.mem.eql(u8, expr, self.map_item_param.?)) {
                     try fmt.appendSlice(self.alloc, "{d}");
                     if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
@@ -1930,12 +2076,39 @@ pub const Generator = struct {
 
         // Skip opening {
         if (self.curKind() == .lbrace) self.advance_token();
-        // Skip () =>
+        // Skip () => or (param) =>
         if (self.curKind() == .lparen) self.advance_token();
+        if (self.curKind() == .identifier) self.advance_token(); // skip handler param if present
         if (self.curKind() == .rparen) self.advance_token();
         if (self.curKind() == .arrow) self.advance_token();
 
-        // Parse the expression
+        // Multi-statement block: () => { stmt1; stmt2; }
+        if (self.curKind() == .lbrace) {
+            self.advance_token(); // skip {
+            var stmts = std.ArrayListUnmanaged([]const u8){};
+            while (self.curKind() != .rbrace and self.curKind() != .eof) {
+                const stmt = try self.emitHandlerExpr();
+                if (stmt.len > 0) {
+                    stmts.append(self.alloc, stmt) catch {};
+                }
+                // Consume semicolons between statements
+                while (self.curKind() == .semicolon) self.advance_token();
+            }
+            if (self.curKind() == .rbrace) self.advance_token();
+            // Join all statements
+            if (stmts.items.len == 0) return "";
+            if (stmts.items.len == 1) return stmts.items[0];
+            var result = std.ArrayListUnmanaged(u8){};
+            for (stmts.items, 0..) |s, i| {
+                result.appendSlice(self.alloc, s) catch {};
+                if (i + 1 < stmts.items.len) {
+                    result.appendSlice(self.alloc, "\n    ") catch {};
+                }
+            }
+            return self.alloc.dupe(u8, result.items) catch "";
+        }
+
+        // Single expression: () => expr
         return try self.emitHandlerExpr();
     }
 
@@ -2403,6 +2576,11 @@ pub const Generator = struct {
                 }
                 return try std.fmt.allocPrint(self.alloc, "state.getSlot({d})", .{slot_id});
             }
+            // Local variable (compile-time substitution)
+            if (self.isLocalVar(name)) |lv| {
+                self.advance_token();
+                return try self.alloc.dupe(u8, lv.expr);
+            }
             // FFI call in expression position
             // NOTE: Intentionally narrow — only bare numbers and 0→null mapping.
             if (self.isFFIFunc(name)) {
@@ -2421,6 +2599,45 @@ pub const Generator = struct {
                 }
                 if (self.curKind() == .rparen) self.advance_token();
                 return try std.fmt.allocPrint(self.alloc, "ffi.{s}({s})", .{ name, ffi_args.items });
+            }
+            // Telemetry getters (expression position)
+            if (std.mem.eql(u8, name, "getFps")) {
+                self.advance_token();
+                if (self.curKind() == .lparen) self.advance_token();
+                if (self.curKind() == .rparen) self.advance_token();
+                return try self.alloc.dupe(u8, "@as(f64, @floatCast(telemetry.getFps()))");
+            }
+            if (std.mem.eql(u8, name, "getLayoutMs")) {
+                self.advance_token();
+                if (self.curKind() == .lparen) self.advance_token();
+                if (self.curKind() == .rparen) self.advance_token();
+                return try self.alloc.dupe(u8, "@as(f64, @floatCast(telemetry.getLayoutMs()))");
+            }
+            if (std.mem.eql(u8, name, "getPaintMs")) {
+                self.advance_token();
+                if (self.curKind() == .lparen) self.advance_token();
+                if (self.curKind() == .rparen) self.advance_token();
+                return try self.alloc.dupe(u8, "@as(f64, @floatCast(telemetry.getPaintMs()))");
+            }
+            if (std.mem.eql(u8, name, "getNodeCount")) {
+                self.advance_token();
+                if (self.curKind() == .lparen) self.advance_token();
+                if (self.curKind() == .rparen) self.advance_token();
+                return try self.alloc.dupe(u8, "@as(i64, @intCast(telemetry.getNodeCount()))");
+            }
+            if (std.mem.eql(u8, name, "getRssMb")) {
+                self.advance_token();
+                if (self.curKind() == .lparen) self.advance_token();
+                if (self.curKind() == .rparen) self.advance_token();
+                return try self.alloc.dupe(u8, "@as(i64, @intCast(telemetry.getRssMb()))");
+            }
+            if (std.mem.eql(u8, name, "getFrameTime")) {
+                self.advance_token();
+                if (self.curKind() == .lparen) self.advance_token();
+                const idx_text = self.curText();
+                self.advance_token();
+                if (self.curKind() == .rparen) self.advance_token();
+                return try std.fmt.allocPrint(self.alloc, "@as(f64, @floatCast(telemetry.getFrameTime({s})))", .{idx_text});
             }
             // Bare identifier
             self.advance_token();
@@ -2971,6 +3188,7 @@ pub const Generator = struct {
         try out.appendSlice(self.alloc, "const input_mod = @import(\"input.zig\");\n");
         try out.appendSlice(self.alloc, "const geometry = @import(\"geometry.zig\");\n");
         try out.appendSlice(self.alloc, "const compositor = @import(\"compositor.zig\");\n");
+        try out.appendSlice(self.alloc, "const telemetry = @import(\"telemetry.zig\");\n");
         if (self.anim_hook_count > 0) try out.appendSlice(self.alloc, "const animate = @import(\"animate.zig\");\n");
         if (self.has_state) try out.appendSlice(self.alloc, "const state = @import(\"state.zig\");\n");
         if (self.has_routes) try out.appendSlice(self.alloc, "const router = @import(\"router.zig\");\n");
@@ -2992,7 +3210,7 @@ pub const Generator = struct {
         }
 
         // Globals
-        try out.appendSlice(self.alloc, "\nvar g_text_engine: ?*TextEngine = null;\nvar g_image_cache: ?*ImageCache = null;\n\n");
+        try out.appendSlice(self.alloc, "\nvar g_text_engine: ?*TextEngine = null;\nvar g_image_cache: ?*ImageCache = null;\nvar _telem_frame: u32 = 0;\n\n");
 
         // Measure callbacks
         try out.appendSlice(self.alloc, "fn measureCallback(t: []const u8, font_size: u16, max_width: f32, letter_spacing: f32, line_height: f32, max_lines: u16, no_wrap: bool) layout.TextMetrics {\n    if (g_text_engine) |te| { return te.measureTextWrappedEx(t, font_size, max_width, letter_spacing, line_height, max_lines, no_wrap); }\n    return .{};\n}\n\n");
@@ -3108,13 +3326,36 @@ pub const Generator = struct {
                 if (ci.arr_name.len == 0) continue;
                 switch (ci.kind) {
                     .show_hide => {
-                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                            "    {s}[{d}].style.display = if ({s} != 0) .flex else .none;\n",
-                            .{ ci.arr_name, ci.true_idx, ci.condition }));
+                        const cond_is_bool = std.mem.indexOf(u8, ci.condition, "==") != null or
+                            std.mem.indexOf(u8, ci.condition, "!=") != null or
+                            std.mem.indexOf(u8, ci.condition, "< ") != null or
+                            std.mem.indexOf(u8, ci.condition, "> ") != null or
+                            std.mem.indexOf(u8, ci.condition, "<=") != null or
+                            std.mem.indexOf(u8, ci.condition, ">=") != null;
+                        if (cond_is_bool) {
+                            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                                "    {s}[{d}].style.display = if ({s}) .flex else .none;\n",
+                                .{ ci.arr_name, ci.true_idx, ci.condition }));
+                        } else {
+                            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                                "    {s}[{d}].style.display = if ({s} != 0) .flex else .none;\n",
+                                .{ ci.arr_name, ci.true_idx, ci.condition }));
+                        }
                     },
                     .ternary => {
-                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                            "    if ({s} != 0) {{\n", .{ci.condition}));
+                        const cond_is_bool = std.mem.indexOf(u8, ci.condition, "==") != null or
+                            std.mem.indexOf(u8, ci.condition, "!=") != null or
+                            std.mem.indexOf(u8, ci.condition, "< ") != null or
+                            std.mem.indexOf(u8, ci.condition, "> ") != null or
+                            std.mem.indexOf(u8, ci.condition, "<=") != null or
+                            std.mem.indexOf(u8, ci.condition, ">=") != null;
+                        if (cond_is_bool) {
+                            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                                "    if ({s}) {{\n", .{ci.condition}));
+                        } else {
+                            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                                "    if ({s} != 0) {{\n", .{ci.condition}));
+                        }
                         try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
                             "        {s}[{d}].style.display = .flex;\n", .{ ci.arr_name, ci.true_idx }));
                         try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
@@ -3571,11 +3812,19 @@ pub const Generator = struct {
         // Layout + paint + present
         try out.appendSlice(self.alloc, "        if (watchdog.check()) {\n            win_mgr.deinitAll();\n            c.SDL_DestroyRenderer(renderer);\n            c.SDL_DestroyWindow(window);\n            bsod.show(watchdog.getLastReason(), watchdog.getLastDetail());\n            return;\n        }\n");
         try out.appendSlice(self.alloc, "        mpv_mod.poll();\n");
+        try out.appendSlice(self.alloc, "        telemetry.beginLayout();\n");
         try out.appendSlice(self.alloc, "        layout.layout(&root, 0, 0, win_w, win_h);\n");
+        try out.appendSlice(self.alloc, "        telemetry.endLayout();\n");
         try out.appendSlice(self.alloc, "        compositor.setHoveredNode(hovered_node);\n");
+        try out.appendSlice(self.alloc, "        telemetry.beginPaint();\n");
         try out.appendSlice(self.alloc, "        compositor.frame(&root, win_w, win_h, Color.rgb(24, 24, 32));\n");
+        try out.appendSlice(self.alloc, "        telemetry.endPaint();\n");
         try out.appendSlice(self.alloc, "        win_mgr.layoutAll();\n");
         try out.appendSlice(self.alloc, "        win_mgr.paintAndPresent(brighten);\n");
+        // Telemetry: count nodes every 30 frames, debug print every 60
+        try out.appendSlice(self.alloc, "        _telem_frame +%= 1;\n");
+        try out.appendSlice(self.alloc, "        if (_telem_frame % 30 == 0) _ = telemetry.countNodes(&root);\n");
+        try out.appendSlice(self.alloc, "        if (_telem_frame % 60 == 0) telemetry.debugPrint();\n");
 
         // Test harness: after first frame, run tests and exit
         try out.appendSlice(self.alloc,

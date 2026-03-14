@@ -1,0 +1,25 @@
+function StatusBar() {
+  const [fps, setFps] = useState(0.0);
+  const [layoutMs, setLayoutMs] = useState(0.0);
+  const [paintMs, setPaintMs] = useState(0.0);
+  const [nodes, setNodes] = useState(0);
+  const [rss, setRss] = useState(0);
+
+  useEffect(() => {
+    setFps(getFps());
+    setLayoutMs(getLayoutMs());
+    setPaintMs(getPaintMs());
+    setNodes(getNodeCount());
+    setRss(getRssMb());
+  }, 500);
+
+  return (
+    <Box style={{ flexDirection: 'row', height: 22, backgroundColor: '#12121e', paddingLeft: 8, paddingRight: 8, paddingTop: 2, paddingBottom: 2, gap: 16, alignItems: 'center' }}>
+      <Text fontSize={11} color="#4ec9b0">{`FPS: ${fps}`}</Text>
+      <Text fontSize={11} color="#666666">{`Layout: ${layoutMs}ms`}</Text>
+      <Text fontSize={11} color="#666666">{`Paint: ${paintMs}ms`}</Text>
+      <Text fontSize={11} color="#666666">{`Nodes: ${nodes}`}</Text>
+      <Text fontSize={11} color="#666666">{`RSS: ${rss}MB`}</Text>
+    </Box>
+  );
+}
