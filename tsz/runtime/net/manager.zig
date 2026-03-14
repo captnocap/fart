@@ -64,25 +64,22 @@ const ConnStatus = enum {
     closed,
 };
 
-// Thread-safe connect handoff: connect_state packs generation (upper 24 bits)
-// + flag (lower 8 bits) into a single u32 for atomic CAS. A worker can only
-// publish results if the generation hasn't changed (slot not reused).
-const ConnectFlag = enum(u8) { idle = 0, pending = 1, success = 2, failed = 3 };
-
-fn packState(gen: u24, flag: ConnectFlag) u32 {
-    return (@as(u32, gen) << 8) | @intFromEnum(flag);
-}
-fn unpackFlag(state: u32) ConnectFlag {
-    return @enumFromInt(@as(u8, @truncate(state)));
-}
+// Thread-safe connect handoff: mutex protects pending_ws, connect_done, connect_ok.
+// Worker locks mutex to publish results. Poll locks mutex to consume them.
+// Generation counter prevents stale workers from publishing into reused slots.
+const ConnectResult = enum { none, success, failed };
 
 const Connection = struct {
     active: bool = false,
     id: u32 = 0,
     ws: ?websocket.WebSocket = null,
-    pending_ws: ?websocket.WebSocket = null, // written by worker, consumed by poll
-    connect_state: u32 = 0, // packed generation + ConnectFlag, atomic CAS
-    generation: u24 = 0, // incremented on each slot reuse, read by main thread only
+    // Worker → main handoff (protected by mutex)
+    pending_ws: ?websocket.WebSocket = null,
+    connect_done: bool = false,
+    connect_ok: bool = false,
+    generation: u32 = 0,
+    mutex: std.Thread.Mutex = .{},
+    // Connection params
     url: [MAX_URL]u8 = undefined,
     url_len: usize = 0,
     host: [256]u8 = undefined,
@@ -96,6 +93,19 @@ const Connection = struct {
     next_retry_tick: u32 = 0,
     is_onion: bool = false,
     tor_proxy_port: u16 = DEFAULT_TOR_PROXY_PORT,
+};
+
+// Worker receives a copy of everything it needs — never reads conn.* fields.
+const ConnectParams = struct {
+    conn: *Connection, // only for mutex-protected publish
+    gen: u32,
+    host: [256]u8,
+    host_len: usize,
+    port: u16,
+    path: [256]u8,
+    path_len: usize,
+    is_onion: bool,
+    tor_proxy_port: u16,
 };
 
 // ── Module state ─────────────────────────────────────────────────────────
@@ -155,12 +165,14 @@ pub fn sendMsg(id: u32, data: []const u8) void {
 /// Close a connection. Bumps generation to invalidate any in-flight worker.
 pub fn closeConn(id: u32) void {
     if (findById(id)) |conn| {
+        conn.mutex.lock();
         conn.reconnect = false;
-        conn.generation +%= 1; // invalidate any in-flight worker via CAS
+        conn.generation +%= 1; // invalidate any in-flight worker
         if (conn.ws) |*ws| ws.shutdown();
         conn.ws = null;
         conn.status = .closed;
         conn.active = false;
+        conn.mutex.unlock();
     }
 }
 
@@ -171,33 +183,38 @@ pub fn poll(out: []NetEvent) usize {
     for (&connections) |*conn| {
         if (!conn.active) continue;
 
-        // Check for connect worker completion (thread → main handoff via CAS)
-        const state = @atomicLoad(u32, &conn.connect_state, .seq_cst);
-        const flag = unpackFlag(state);
-        if (flag == .success) {
-            conn.ws = conn.pending_ws;
-            conn.pending_ws = null;
-            conn.status = .connecting; // WS upgrade will be driven by poll below
-            @atomicStore(u32, &conn.connect_state, packState(conn.generation, .idle), .seq_cst);
-        } else if (flag == .failed) {
-            @atomicStore(u32, &conn.connect_state, packState(conn.generation, .idle), .seq_cst);
+        // Check for connect worker completion (mutex-protected handoff)
+        var connect_result: ConnectResult = .none;
+        {
+            conn.mutex.lock();
+            defer conn.mutex.unlock();
+            if (conn.connect_done) {
+                conn.connect_done = false;
+                if (conn.connect_ok) {
+                    conn.ws = conn.pending_ws;
+                    conn.pending_ws = null;
+                    conn.status = .connecting;
+                    connect_result = .success;
+                } else {
+                    connect_result = .failed;
+                }
+            }
+        }
+        if (connect_result == .failed) {
             handleDisconnect(conn);
             continue;
-        } else if (flag == .pending) {
-            continue; // still connecting in background thread
         }
 
         switch (conn.status) {
             .open, .connecting => {
                 if (conn.ws) |*ws| {
-                    // Poll WebSocket for events (drain all available)
                     var safety: u32 = 0;
                     while (safety < 100) : (safety += 1) {
                         if (ws.update()) |event| {
                             switch (event) {
                                 .open => {
                                     conn.status = .open;
-                                    conn.backoff_ms = INITIAL_BACKOFF_MS; // reset on success
+                                    conn.backoff_ms = INITIAL_BACKOFF_MS;
                                     pushEvent(out, conn.id, .connected, "");
                                 },
                                 .message => |msg| pushEvent(out, conn.id, .message, msg),
@@ -215,7 +232,6 @@ pub fn poll(out: []NetEvent) usize {
                 }
             },
             .reconnecting => {
-                // Check if it's time to retry
                 const now = getTicks();
                 if (now >= conn.next_retry_tick) {
                     pushEvent(out, conn.id, .reconnecting, "");
@@ -229,21 +245,24 @@ pub fn poll(out: []NetEvent) usize {
     return @min(event_count, out.len);
 }
 
-/// Shutdown all connections. Waits for in-flight connect threads.
+/// Shutdown all connections. Bumps generations, waits for in-flight threads.
+/// Best-effort wait: blocks up to 5s for workers, then returns regardless.
+/// Workers that finish after destroy() will see stale generation and clean up.
 pub fn destroy() void {
-    // Bump all generations to invalidate in-flight workers
     for (&connections) |*conn| {
+        conn.mutex.lock();
         conn.generation +%= 1;
         if (conn.active) {
             if (conn.ws) |*ws| ws.shutdown();
             conn.ws = null;
             conn.active = false;
         }
+        conn.mutex.unlock();
     }
-    // Wait for all in-flight connect threads to finish
+    // Best-effort wait for in-flight threads (max 5s)
     var wait_count: u32 = 0;
     while (@atomicLoad(u32, &active_workers, .seq_cst) > 0 and wait_count < 5000) : (wait_count += 1) {
-        std.Thread.sleep(1_000_000); // 1ms, max 5s total
+        std.Thread.sleep(1_000_000); // 1ms
     }
     initialized = false;
 }
@@ -265,55 +284,77 @@ fn findById(id: u32) ?*Connection {
 }
 
 fn startConnection(conn: *Connection) void {
-    // Capture generation for CAS in worker
-    const gen = conn.generation;
-    @atomicStore(u32, &conn.connect_state, packState(gen, .pending), .seq_cst);
+    // Build params struct with COPIES of all data the worker needs.
+    // Worker never reads conn.* fields — only uses conn pointer for
+    // mutex-protected publish at the end.
+    var params = ConnectParams{
+        .conn = conn,
+        .gen = conn.generation,
+        .host = undefined,
+        .host_len = conn.host_len,
+        .port = conn.port,
+        .path = undefined,
+        .path_len = conn.path_len,
+        .is_onion = conn.is_onion,
+        .tor_proxy_port = conn.tor_proxy_port,
+    };
+    @memcpy(params.host[0..conn.host_len], conn.host[0..conn.host_len]);
+    @memcpy(params.path[0..conn.path_len], conn.path[0..conn.path_len]);
+
+    conn.status = .connecting;
     _ = @atomicRmw(u32, &active_workers, .Add, 1, .seq_cst);
-    _ = std.Thread.spawn(.{ .stack_size = 1024 * 1024 }, connectWorker, .{ conn, gen }) catch {
+    _ = std.Thread.spawn(.{ .stack_size = 1024 * 1024 }, connectWorker, .{params}) catch {
         _ = @atomicRmw(u32, &active_workers, .Sub, 1, .seq_cst);
-        @atomicStore(u32, &conn.connect_state, packState(gen, .failed), .seq_cst);
+        handleDisconnect(conn);
     };
 }
 
-fn connectWorker(conn: *Connection, expected_gen: u24) void {
-    // Worker thread: do blocking TCP/SOCKS5 connect, then CAS to publish.
-    // CAS ensures stale workers can't corrupt a reused slot — if generation
-    // changed (closeConn/destroy bumped it), CAS fails and worker cleans up.
+fn connectWorker(params: ConnectParams) void {
+    // Worker thread: blocking TCP/SOCKS5 connect using COPIED params.
+    // Only touches conn.* under mutex for publish. No shared mutable state.
     defer _ = @atomicRmw(u32, &active_workers, .Sub, 1, .seq_cst);
 
-    const host = conn.host[0..conn.host_len];
-    const path = conn.path[0..conn.path_len];
+    const host = params.host[0..params.host_len];
+    const path = params.path[0..params.path_len];
+    const conn = params.conn;
 
     var new_ws: ?websocket.WebSocket = null;
-    var ok = false;
 
-    if (conn.is_onion) {
-        const stream = socks5.connect("127.0.0.1", conn.tor_proxy_port, host, conn.port, null, null) catch {
-            _ = @cmpxchgStrong(u32, &conn.connect_state, packState(expected_gen, .pending), packState(expected_gen, .failed), .seq_cst, .seq_cst);
+    if (params.is_onion) {
+        const stream = socks5.connect("127.0.0.1", params.tor_proxy_port, host, params.port, null, null) catch {
+            publishResult(conn, params.gen, null, false);
             return;
         };
-        new_ws = websocket.WebSocket.connectViaStream(stream, host, conn.port, path) catch {
+        new_ws = websocket.WebSocket.connectViaStream(stream, host, params.port, path) catch {
             stream.close();
-            _ = @cmpxchgStrong(u32, &conn.connect_state, packState(expected_gen, .pending), packState(expected_gen, .failed), .seq_cst, .seq_cst);
+            publishResult(conn, params.gen, null, false);
             return;
         };
-        ok = true;
     } else {
-        new_ws = websocket.WebSocket.connectTcp(host, conn.port, path) catch {
-            _ = @cmpxchgStrong(u32, &conn.connect_state, packState(expected_gen, .pending), packState(expected_gen, .failed), .seq_cst, .seq_cst);
+        new_ws = websocket.WebSocket.connectTcp(host, params.port, path) catch {
+            publishResult(conn, params.gen, null, false);
             return;
         };
-        ok = true;
     }
 
-    if (ok) {
-        // Write pending_ws, then CAS to publish. If CAS fails, slot was
-        // reused — clean up the WebSocket we just created.
+    publishResult(conn, params.gen, new_ws, true);
+}
+
+/// Mutex-protected publish. Checks generation under lock — if stale,
+/// cleans up the WebSocket without touching the slot.
+fn publishResult(conn: *Connection, expected_gen: u32, new_ws: ?websocket.WebSocket, ok: bool) void {
+    conn.mutex.lock();
+    defer conn.mutex.unlock();
+    if (conn.generation == expected_gen) {
+        // Slot still belongs to us — publish
         conn.pending_ws = new_ws;
-        if (@cmpxchgStrong(u32, &conn.connect_state, packState(expected_gen, .pending), packState(expected_gen, .success), .seq_cst, .seq_cst) != null) {
-            // Stale: slot was reused. Clean up.
-            if (new_ws) |*ws| ws.shutdown();
-            conn.pending_ws = null;
+        conn.connect_done = true;
+        conn.connect_ok = ok;
+    } else {
+        // Stale: slot was reused or closed. Clean up without touching slot.
+        if (new_ws) |ws| {
+            var ws_copy = ws;
+            ws_copy.shutdown();
         }
     }
 }
