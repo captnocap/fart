@@ -13,6 +13,7 @@ const registry = @import("registry.zig");
 const process = @import("process.zig");
 const actions_mod = @import("actions.zig");
 const tray = @import("tray.zig");
+const runner = @import("runner.zig");
 const posix = std.posix;
 
 // Signal flag: set by SIGUSR2 handler to raise the window
@@ -186,20 +187,18 @@ pub fn run(alloc: std.mem.Allocator) !void {
                             if (!a.show_in_gui) continue;
                             if (ai == hit.action_idx) {
                                 const p = &reg.projects[hit.project_idx];
-                                // Spawn the CLI action as a subprocess
                                 if (std.mem.eql(u8, a.name, "rm")) {
                                     process.killProject(p.getName());
                                     _ = reg.remove(p.getName());
                                     registry.save(&reg);
                                 } else {
+                                    // Use runner for captured output
+                                    var lbl_buf: [80]u8 = undefined;
+                                    const lbl = std.fmt.bufPrint(&lbl_buf, "{s}:{s}", .{ p.getName(), a.name }) catch a.name;
+                                    const r = runner.getRunner(lbl);
                                     const argv = [_][]const u8{ "./zig-out/bin/tsz", a.name, p.getPath() };
-                                    var child = std.process.Child.init(&argv, alloc);
-                                    child.spawn() catch {};
+                                    _ = r.start(&argv, alloc);
                                 }
-                                // Refresh
-                                std.Thread.sleep(200 * std.time.ns_per_ms);
-                                reg = registry.load(alloc);
-                                process.cleanStale(&reg);
                                 break;
                             }
                             ai += 1;
@@ -233,6 +232,10 @@ pub fn run(alloc: std.mem.Allocator) !void {
             // Process tray menu actions
             tray.resolvePendingAction(&reg, alloc);
         }
+
+        // Poll runners for output
+        runner.pollAll();
+        if (runner.getActive()) |_| dirty = true;
 
         // SIGUSR2 from another `tsz gui` → raise window
         if (sig_raise_window) {
@@ -377,10 +380,81 @@ pub fn run(alloc: std.mem.Allocator) !void {
             te.drawText("Run: tsz add <directory>", 16, y + 44, 12, muted);
         }
 
+        // ── Detail panel (live output from active runner) ─────────
+        if (runner.getActive()) |active| {
+            const panel_h: f32 = 160;
+            const panel_y = win_h - panel_h - 30 + scroll_y;
+
+            // Panel background
+            fillRect(renderer, 0, panel_y, win_w, panel_h, Color.rgb(18, 18, 24));
+            // Top border
+            fillRect(renderer, 0, panel_y, win_w, 1, Color.rgb(55, 55, 75));
+
+            // Label + status
+            const status_str: []const u8 = switch (active.status) {
+                .running => "running...",
+                .success => "done",
+                .failed => "FAILED",
+                .idle => "",
+            };
+            const status_col = switch (active.status) {
+                .running => accent,
+                .success => success,
+                .failed => danger,
+                .idle => muted,
+            };
+            te.drawText(active.getLabel(), 12, panel_y + 6, 11, accent);
+            te.drawText(status_str, 200, panel_y + 6, 11, status_col);
+
+            // Output text (last N lines that fit)
+            const output = active.getOutput();
+            if (output.len > 0) {
+                const line_h = te.lineHeight(11);
+                const max_lines: usize = @intFromFloat((panel_h - 24) / line_h);
+                var lines_shown: usize = 0;
+                var out_y = panel_y + 22;
+
+                // Walk backwards to find line starts
+                var line_starts: [64]usize = undefined;
+                var line_count: usize = 0;
+                var pos: usize = output.len;
+                while (pos > 0 and line_count < 64) {
+                    const prev = if (std.mem.lastIndexOf(u8, output[0..pos -| 1], "\n")) |nl| nl + 1 else 0;
+                    line_starts[line_count] = prev;
+                    line_count += 1;
+                    if (prev == 0) break;
+                    pos = prev -| 1;
+                }
+
+                // Draw from bottom, last N lines
+                const start = if (line_count > max_lines) line_count - max_lines else 0;
+                var li = start;
+                while (li < line_count and lines_shown < max_lines) {
+                    const idx = line_count - 1 - li;
+                    const ls = line_starts[idx];
+                    // Find line end
+                    const le = if (idx > 0) line_starts[idx - 1] -| 1 else output.len;
+                    const safe_le = @min(le, output.len);
+                    if (ls < safe_le) {
+                        const line = output[ls..safe_le];
+                        // Truncate long lines
+                        const max_chars: usize = @intFromFloat(win_w / 6.5);
+                        const display = if (line.len > max_chars) line[0..max_chars] else line;
+                        const line_col = if (std.mem.indexOf(u8, display, "FAIL") != null or std.mem.indexOf(u8, display, "error") != null) danger else Color.rgb(170, 170, 185);
+                        te.drawText(display, 12, out_y, 11, line_col);
+                        out_y += line_h;
+                        lines_shown += 1;
+                    }
+                    li += 1;
+                }
+            }
+        }
+
         // Footer
-        y = @max(y, win_h - 30 + scroll_y);
-        fillRect(renderer, 0, y, win_w, 30, Color.rgb(20, 20, 28));
-        te.drawText("R = refresh  |  Esc = quit  |  Scroll = mouse wheel", 16, y + 8, 10, muted);
+        const footer_y = win_h - 30 + scroll_y;
+        fillRect(renderer, 0, footer_y, win_w, 30, Color.rgb(20, 20, 28));
+        const footer_text = if (runner.getActive() != null) "R = refresh  |  Esc = quit  |  Output panel showing live logs" else "R = refresh  |  Esc = quit  |  Scroll = mouse wheel";
+        te.drawText(footer_text, 16, footer_y + 8, 10, muted);
 
         c.SDL_RenderPresent(renderer);
     }
