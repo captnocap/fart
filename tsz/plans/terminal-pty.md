@@ -408,34 +408,41 @@ In `build.zig`:
 exe.linkSystemLibrary("vterm");
 ```
 
+## Status (2026-03-14)
+
+### Completed
+- **Phase 0: PTY Spawning** — `tsz/runtime/pty.zig` (POSIX fork/setsid/exec, non-blocking I/O, resize, close)
+- **Phase 1: libvterm** — `tsz/runtime/vterm.zig` (manual extern decls, damage callbacks, cursor, cell access)
+- **Phase 2: Terminal Rendering** — `tsz/examples/terminal-test.tsz` (24 rows via .map() + getRowText)
+- **Phase 3: Keyboard** — handleKey() SDL→PTY translation (Ctrl+letter, arrows, home/end, pgup/pgdn)
+- **Phase 3: Classifier** — `tsz/runtime/classifier.zig` (basic 7-token + Claude Code 25+ token + adjacency refinement + token colors)
+- **Build** — libvterm linked for engine + engine-app targets
+- **Codegen** — spawnPty/pollPty/writePty/handleTerminalKey/getRowText/getCursorRow/getCursorCol built-ins
+
+### Remaining
+- **Phase 4: Dynamic token bar colors** — needs codegen support for runtime style expressions (classifyRow → getTokenColor → backgroundColor)
+- **Phase 5: Compiler primitive** — `<Terminal>` / `<SemanticTerminal>` as recognized primitives
+- **Phase 6: Claude Code classifier** — already ported in classifier.zig, needs integration test with real Claude output
+- **SDL_TEXTINPUT** — handleTextInput() in pty.zig exists but needs codegen/main.zig hookup
+- **Scrollback** — vterm scrollback capture deferred (cb_sb_pushline is a no-op)
+
 ## Files
 
 **Zig (system-level only):**
-| File | Change |
+| File | Status |
 |------|--------|
-| `tsz/runtime/pty.zig` | **New** — POSIX PTY spawning + I/O |
-| `tsz/runtime/vterm.zig` | **New** — libvterm wrapper + damage callbacks + cell access |
-| `tsz/runtime/classifier.zig` | **New** — classifier interface + basic + claude_code classifiers |
-| `tsz/compiler/codegen.zig` | Register PTY/vterm built-in functions (pollPty, getCell, writePty, etc.) |
-| `build.zig` | Link libvterm |
+| `tsz/runtime/pty.zig` | ✔ POSIX PTY + handleKey() + handleTextInput() |
+| `tsz/runtime/vterm.zig` | ✔ libvterm wrapper (manual extern, no C shim) |
+| `tsz/runtime/classifier.zig` | ✔ basic + claude_code classifiers + token colors |
+| `tsz/compiler/codegen.zig` | ✔ PTY built-ins + getRowText in templates + conditional param discard |
+| `tsz/compiler/loop_template.txt` | ✔ on_key 2-arg fix |
+| `build.zig` | ✔ libvterm linked |
 
 **.tsz (all UI):**
-| File | Change |
+| File | Status |
 |------|--------|
-| `tsz/components/Terminal.tsz` | **New** — cell grid, cursor, selection, keyboard, scroll |
-| `tsz/components/SemanticTerminal.tsz` | **New** — classified rendering with token color bars |
-
-**Rule: Only pty.zig, vterm.zig, and classifier.zig are Zig. All rendering is .tsz.**
-
-## Agent Split
-
-| Agent | Phases | Files |
-|-------|--------|-------|
-| A | 0-1 | `pty.zig`, `vterm.zig`, built-in function registration (Zig foundation) |
-| B | 2-3 | `Terminal.tsz`, `classifier.zig` (.tsz UI + classification logic) |
-| C | 4-6 | `SemanticTerminal.tsz`, claude_code classifier, compiler integration |
-
-**A must complete first.** B and C can parallel after A.
+| `tsz/examples/terminal-test.tsz` | ✔ 24-row terminal with keyboard input |
+| `tsz/examples/semantic-test.tsz` | ✔ scaffolded (static accent bars, dynamic coloring pending) |
 
 ## Verification
 
