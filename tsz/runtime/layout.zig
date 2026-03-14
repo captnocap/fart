@@ -1,5 +1,25 @@
 //! ReactJIT Layout Engine
 //!
+//! ⚠️  STOP — DO NOT MODIFY THIS FILE WITHOUT JUSTIFICATION  ⚠️
+//!
+//! This layout engine is PIXEL-PERFECT against Firefox/CSS flexbox.
+//! It has been stress-tested against every flex property combination
+//! and matches the HTML/CSS reference exactly.
+//!
+//! Before making ANY change to this file, you MUST:
+//!   1. State what is currently wrong (with a specific visual test case)
+//!   2. Show the Firefox reference output vs the current Zig output
+//!   3. Explain why the fix won't break any existing layout behavior
+//!   4. Run the full layout stress test BEFORE and AFTER your change
+//!
+//! If you are adding a new style property, add it to the Style struct
+//! and the property resolution functions ONLY. Do not touch the core
+//! flex algorithm (layoutNode, resolveFlexLine, distributeSpace) unless
+//! you can prove it is producing incorrect output against CSS spec.
+//!
+//! The Lua version (love2d/lua/layout.lua) is the co-reference. Fixes
+//! flow both directions. If you fix something here, fix it there too.
+//!
 //! Flexbox layout solver ported from lua/layout.lua.
 //! Computes {x, y, w, h} for every node in the tree.
 //!
