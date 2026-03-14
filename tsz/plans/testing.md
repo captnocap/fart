@@ -265,23 +265,16 @@ Reference: `love2d/lua/testrunner.lua` `test:screenshot` — captures full frame
 
 ## Implementation Order
 
-1. **debugName/testId on Node** — trivial, immediate value for debugging
-2. **Query engine** — find nodes by name/id/text
-3. **Input simulation** — SDL_PushEvent for click/type/key
-4. **Assertions** — visible, text, rect checks
-5. **Layout audit** — overflow/overlap/viewport detection
-6. **Test spec compilation** — parse test() blocks, emit runner
-7. **CLI `tsz test`** — orchestrate build + run + parse output
-8. **Screenshots** — SDL_RenderReadPixels → PNG
+1. ~~**debugName/testId on Node**~~ — **DONE** — `layout.zig` Node struct has `debug_name`, `test_id`
+2. ~~**Query engine**~~ — **DONE** — `query.zig` (find, findAll, countMatches, findByText/Name/Id)
+3. ~~**Input simulation**~~ — **DONE** — `testdriver.zig` (click, clickNode, moveMouse, key, typeText, scroll, resize, quit)
+4. ~~**Assertions**~~ — **DONE** — `testassert.zig` (expectVisible, expectHidden, expectText, expectContainsText, expectRect, expectWidth, expectHeight, expectExists, expectCount)
+5. ~~**Layout audit**~~ — **DONE** — `testassert.zig` audit() (child_overflow, sibling_overlap, off_viewport)
+6. **Test spec compilation** — **PARTIAL** — codegen emits `debug_name`/`test_id` props. **TODO:** parse `test()` blocks, emit test runner harness
+7. **CLI `tsz test`** — orchestrate build + run + parse output — **NEEDS Phase 6 test() blocks**
+8. ~~**Screenshots**~~ — **DONE** — `testdriver.zig` screenshot() via stb_image_write
 
-Can be split into **2 agents:**
-
-| Agent | Phases | Files |
-|-------|--------|-------|
-| A | 1-4 | layout.zig (debug props), query.zig, testdriver.zig, testassert.zig |
-| B | 5-8 | Audit, test spec compilation, CLI, screenshots |
-
-A first, B follows.
+All unit tests pass (27 total across query.zig and testassert.zig).
 
 ## Verification
 
