@@ -219,6 +219,17 @@ fn findById(id: u32) ?*Connection {
 }
 
 fn startConnection(conn: *Connection) void {
+    conn.status = .connecting;
+    // Spawn connection in a thread so it never blocks the main loop.
+    // This is critical for .onion connects where SOCKS5 handshake + Tor
+    // circuit setup can take seconds.
+    _ = std.Thread.spawn(.{}, connectWorker, .{conn}) catch {
+        conn.status = .closed;
+        handleDisconnect(conn);
+    };
+}
+
+fn connectWorker(conn: *Connection) void {
     const host = conn.host[0..conn.host_len];
     const path = conn.path[0..conn.path_len];
 
@@ -226,26 +237,24 @@ fn startConnection(conn: *Connection) void {
         // Route through SOCKS5 proxy (Tor)
         const stream = socks5.connect("127.0.0.1", conn.tor_proxy_port, host, conn.port, null, null) catch {
             conn.status = .closed;
-            handleDisconnect(conn);
             return;
         };
         conn.ws = websocket.WebSocket.connectViaStream(stream, host, conn.port, path) catch {
             stream.close();
             conn.status = .closed;
-            handleDisconnect(conn);
             return;
         };
     } else {
         conn.ws = websocket.WebSocket.connectTcp(host, conn.port, path) catch {
             conn.status = .closed;
-            handleDisconnect(conn);
             return;
         };
     }
-    conn.status = .connecting;
+    // Status stays .connecting — the poll loop will drive the WS upgrade
 }
 
 fn handleDisconnect(conn: *Connection) void {
+    if (conn.ws) |*ws| ws.shutdown(); // close the underlying stream
     conn.ws = null;
     if (conn.reconnect) {
         conn.status = .reconnecting;

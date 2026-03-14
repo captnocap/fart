@@ -14,11 +14,11 @@ pub fn main() !void {
     std.debug.print("[ok] Workers spawned\n", .{});
 
     // Queue a GET request
-    http.request(1, .{ .url = "https://httpbin.org/get" });
+    _ = http.request(1, .{ .url = "https://httpbin.org/get" });
     std.debug.print("[ok] Request queued (id=1, GET https://httpbin.org/get)\n", .{});
 
     // Queue a second request
-    http.request(2, .{ .url = "https://httpbin.org/status/404" });
+    _ = http.request(2, .{ .url = "https://httpbin.org/status/404" });
     std.debug.print("[ok] Request queued (id=2, GET https://httpbin.org/status/404)\n", .{});
 
     // Poll for responses (with timeout)

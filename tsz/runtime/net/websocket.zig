@@ -146,10 +146,12 @@ pub const WebSocket = struct {
         // Try to read more of the HTTP response
         const n = self.stream.read(self.upgrade_buf[self.upgrade_len..]) catch |err| {
             if (err == error.WouldBlock) return null;
+            self.stream.close();
             self.status = .closed;
             return .{ .err = "upgrade read failed" };
         };
         if (n == 0) {
+            self.stream.close();
             self.status = .closed;
             return .{ .err = "connection closed during upgrade" };
         }
@@ -165,6 +167,7 @@ pub const WebSocket = struct {
                 headers[0..@min(end_pos, 100)];
 
             if (std.mem.indexOf(u8, first_line, "101") == null) {
+                self.stream.close();
                 self.status = .closed;
                 return .{ .err = "upgrade rejected (not 101)" };
             }
@@ -194,10 +197,12 @@ pub const WebSocket = struct {
                     if (self.read_len >= 2) return self.tryParseFrame();
                     return null;
                 }
+                self.stream.close();
                 self.status = .closed;
                 return .{ .err = "read failed" };
             };
             if (n == 0) {
+                self.stream.close();
                 self.status = .closed;
                 return .{ .close = .{ .code = 1006, .reason = "connection lost" } };
             }

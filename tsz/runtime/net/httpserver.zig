@@ -182,6 +182,13 @@ pub const HttpServer = struct {
         // Need complete headers
         const header_end = std.mem.indexOf(u8, req, "\r\n\r\n") orelse return;
 
+        // Parse Content-Length to know if we have the full body
+        const headers = req[0..header_end];
+        const content_length = parseContentLength(headers);
+        const body_start = header_end + 4;
+        const body_received = if (client.req_len > body_start) client.req_len - body_start else 0;
+        if (body_received < content_length) return; // wait for full body
+
         // Parse request line: "METHOD /path HTTP/1.1"
         const first_line_end = std.mem.indexOf(u8, req[0..header_end], "\r\n") orelse return;
         const first_line = req[0..first_line_end];
@@ -196,7 +203,7 @@ pub const HttpServer = struct {
             return;
         }
 
-        // Match route
+        // Match route (exact prefix — path must equal route or continue with '/')
         const route = self.matchRoute(path);
 
         if (route) |r| {
@@ -204,6 +211,11 @@ pub const HttpServer = struct {
                 self.serveStatic(client, path, r);
                 return;
             }
+            // handler route matched — emit event below
+        } else {
+            // No route matched — 404
+            self.respondDirect(client, 404, "Not Found");
+            return;
         }
 
         // Dynamic route — emit event
@@ -216,10 +228,9 @@ pub const HttpServer = struct {
             const plen = @min(path.len, MAX_PATH);
             @memcpy(ev.path[0..plen], path[0..plen]);
             ev.path_len = plen;
-            // Body (after headers)
-            const body_start = header_end + 4;
-            if (body_start < client.req_len) {
-                const blen = @min(client.req_len - body_start, MAX_REQ);
+            // Body (after headers — full body guaranteed by Content-Length check)
+            if (body_received > 0) {
+                const blen = @min(body_received, MAX_REQ);
                 @memcpy(ev.body[0..blen], req[body_start .. body_start + blen]);
                 ev.body_len = blen;
             } else {
@@ -294,9 +305,14 @@ pub const HttpServer = struct {
         var best_len: usize = 0;
         for (0..self.route_count) |i| {
             const r = &self.routes[i];
+            // Exact prefix match with boundary: path must equal route prefix,
+            // or the character after the prefix must be '/' or end of string.
+            // This prevents /api matching /api2.
             if (std.mem.startsWith(u8, path, r.path) and r.path.len > best_len) {
-                best = r;
-                best_len = r.path.len;
+                if (path.len == r.path.len or path[r.path.len] == '/' or r.path[r.path.len - 1] == '/') {
+                    best = r;
+                    best_len = r.path.len;
+                }
             }
         }
         return best;
@@ -347,4 +363,28 @@ fn statusText(code: u16) []const u8 {
         503 => "Service Unavailable",
         else => "OK",
     };
+}
+
+/// Parse Content-Length from HTTP headers. Returns 0 if not found (GET, etc.).
+fn parseContentLength(headers: []const u8) usize {
+    // Case-insensitive search for "Content-Length: " or "content-length: "
+    var pos: usize = 0;
+    while (pos + 16 < headers.len) {
+        if (std.ascii.startsWithIgnoreCase(headers[pos..], "content-length:")) {
+            var start = pos + 15;
+            // Skip whitespace after colon
+            while (start < headers.len and headers[start] == ' ') start += 1;
+            var end = start;
+            while (end < headers.len and headers[end] >= '0' and headers[end] <= '9') end += 1;
+            if (end > start) {
+                return std.fmt.parseInt(usize, headers[start..end], 10) catch 0;
+            }
+            return 0;
+        }
+        // Skip to next line
+        if (std.mem.indexOf(u8, headers[pos..], "\r\n")) |nl| {
+            pos += nl + 2;
+        } else break;
+    }
+    return 0;
 }

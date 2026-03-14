@@ -48,6 +48,7 @@ pub const Response = struct {
     status: u16 = 0,
     body: [MAX_BODY]u8 = undefined,
     body_len: usize = 0,
+    truncated: bool = false, // true if response body exceeded MAX_BODY
     response_type: ResponseType = .complete,
     error_msg: [MAX_ERROR]u8 = undefined,
     error_len: usize = 0,
@@ -98,8 +99,8 @@ pub fn init() void {
     initialized = true;
 }
 
-/// Queue an HTTP request. Non-blocking — returns immediately.
-pub fn request(id: u32, opts: RequestOpts) void {
+/// Queue an HTTP request. Non-blocking. Returns false if queue is full.
+pub fn request(id: u32, opts: RequestOpts) bool {
     var req = Request{};
     req.id = id;
 
@@ -146,7 +147,7 @@ pub fn request(id: u32, opts: RequestOpts) void {
         }
     }
 
-    _ = request_queue.push(req);
+    return request_queue.push(req);
 }
 
 /// Poll for completed responses. Non-blocking — returns count.
@@ -157,11 +158,19 @@ pub fn poll(out: []Response) usize {
 /// Shutdown all workers and cleanup.
 pub fn destroy() void {
     if (!initialized) return;
-    // Send shutdown sentinels
-    for (0..MAX_WORKERS) |_| {
+    // Send shutdown sentinels — retry until all are queued
+    var sent: usize = 0;
+    while (sent < MAX_WORKERS) {
         var sentinel = Request{};
         sentinel.shutdown = true;
-        _ = request_queue.push(sentinel);
+        if (request_queue.push(sentinel)) {
+            sent += 1;
+        } else {
+            // Queue full — drain responses to make room
+            var discard: [16]Response = undefined;
+            _ = response_queue.drain(&discard);
+            std.Thread.sleep(1_000_000); // 1ms
+        }
     }
     // Join all threads
     for (0..MAX_WORKERS) |i| {
@@ -193,7 +202,10 @@ fn workerMain() void {
         var resp = Response{};
         resp.id = req.id;
         executeRequest(handle, &req, &resp);
-        _ = response_queue.push(resp);
+        // Retry push until response is queued (don't drop responses)
+        while (!response_queue.push(resp)) {
+            std.Thread.sleep(1_000_000); // 1ms backoff
+        }
     }
 }
 
@@ -255,12 +267,13 @@ fn executeRequest(handle: *c.CURL, req: *const Request, resp: *Response) void {
     // Timeout
     _ = c.curl_easy_setopt(handle, c.CURLOPT_TIMEOUT, @as(c_long, 30));
 
-    // Write callback — accumulate response body
+    // Write callback — accumulate response body, flag truncation
     const WriteCtx = struct {
         body: [*]u8,
         len: *usize,
+        truncated: *bool,
     };
-    var write_ctx = WriteCtx{ .body = &resp.body, .len = &resp.body_len };
+    var write_ctx = WriteCtx{ .body = &resp.body, .len = &resp.body_len, .truncated = &resp.truncated };
 
     const write_cb = struct {
         fn cb(data: [*c]u8, size: usize, nmemb: usize, userdata: *anyopaque) callconv(.c) usize {
@@ -268,6 +281,7 @@ fn executeRequest(handle: *c.CURL, req: *const Request, resp: *Response) void {
             const total = size * nmemb;
             const space = MAX_BODY - ctx.len.*;
             const to_copy = @min(total, space);
+            if (to_copy < total) ctx.truncated.* = true;
             if (to_copy > 0) {
                 @memcpy(ctx.body[ctx.len.*..][0..to_copy], data[0..to_copy]);
                 ctx.len.* += to_copy;

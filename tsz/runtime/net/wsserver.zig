@@ -104,7 +104,7 @@ pub const WsServer = struct {
         for (&self.clients) |*client| {
             if (client.active and client.id == client_id and client.status == .open) {
                 if (client.stream) |stream| {
-                    writeServerFrame(stream, data) catch {
+                    writeServerFrameWithOpcode(stream, 0x81, data) catch {
                         client.status = .closed;
                         client.active = false;
                     };
@@ -119,7 +119,7 @@ pub const WsServer = struct {
         for (&self.clients) |*client| {
             if (client.active and client.status == .open) {
                 if (client.stream) |stream| {
-                    writeServerFrame(stream, data) catch {
+                    writeServerFrameWithOpcode(stream, 0x81, data) catch {
                         client.status = .closed;
                         client.active = false;
                     };
@@ -298,8 +298,8 @@ pub const WsServer = struct {
             client.status = .closed;
             client.active = false;
         } else if (opcode == 9) {
-            // Ping → send pong
-            if (client.stream) |s| writeServerFrame(s, payload[0..payload_len]) catch {};
+            // Ping → send pong (opcode 0x0A)
+            if (client.stream) |s| writeServerFrameWithOpcode(s, 0x8A, payload[0..payload_len]) catch {};
         }
     }
 
@@ -340,10 +340,10 @@ fn extractHeader(headers: []const u8, name: []const u8) ?[]const u8 {
     return null;
 }
 
-/// Write an unmasked server→client frame (text opcode).
-fn writeServerFrame(stream: std.net.Stream, payload: []const u8) !void {
+/// Write an unmasked server→client frame with a specific first byte (FIN+opcode).
+fn writeServerFrameWithOpcode(stream: std.net.Stream, first_byte: u8, payload: []const u8) !void {
     const writer = stream.writer();
-    try writer.writeByte(0x81); // FIN + text
+    try writer.writeByte(first_byte);
     if (payload.len > 65535) {
         try writer.writeByte(127);
         var len_bytes: [8]u8 = undefined;
