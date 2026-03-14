@@ -2491,6 +2491,21 @@ pub const Generator = struct {
                     if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
                     try args.appendSlice(self.alloc, "vterm_mod.getCursorCol()");
                     self.has_pty = true;
+                } else if (std.mem.indexOf(u8, expr, "[")) |bracket_pos| {
+                    // Array indexing: items[0] or items[i]
+                    const arr_name = expr[0..bracket_pos];
+                    const idx_end = std.mem.indexOf(u8, expr[bracket_pos + 1 ..], "]") orelse (expr.len - bracket_pos - 1);
+                    const idx_expr = expr[bracket_pos + 1 .. bracket_pos + 1 + idx_end];
+                    if (self.isArrayState(arr_name)) |state_idx| {
+                        const arr_slot = self.arraySlotId(state_idx);
+                        try fmt.appendSlice(self.alloc, "{d}");
+                        if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
+                        try args.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            "state.getArrayElement({d}, @intCast({s}))", .{ arr_slot, idx_expr }));
+                    } else {
+                        // Unknown array — embed as static text
+                        try fmt.appendSlice(self.alloc, expr);
+                    }
                 } else {
                     // Static expression — just embed the text
                     try fmt.appendSlice(self.alloc, expr);
