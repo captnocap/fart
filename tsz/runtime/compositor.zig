@@ -51,6 +51,14 @@ var g_hovered_node: ?*Node = null;
 var g_circle_tex: ?*c.SDL_Texture = null;
 const CIRCLE_TEX_SIZE = 32;
 
+// Premultiplied alpha blend mode for compositing render-target textures.
+// When content is rendered onto a transparent texture with standard blending,
+// the resulting RGB values are already premultiplied by alpha. If we blit
+// with standard SDL_BLENDMODE_BLEND, alpha gets applied twice — darkening
+// antialiased text edges and semi-transparent elements.
+// This custom blend mode treats source as premultiplied: srcRGB * 1 + dstRGB * (1 - srcA).
+var g_premul_blend: c.SDL_BlendMode = c.SDL_BLENDMODE_BLEND; // fallback
+
 // ════════════════════════════════════════════════════════════════════════
 // Public API
 // ════════════════════════════════════════════════════════════════════════
@@ -60,6 +68,16 @@ pub fn init(renderer: *c.SDL_Renderer, text_engine: *TextEngine, image_cache: *I
     g_text_engine = text_engine;
     g_image_cache = image_cache;
     initCircleTexture(renderer);
+
+    // Create premultiplied alpha blend mode for compositing
+    g_premul_blend = c.SDL_ComposeCustomBlendMode(
+        c.SDL_BLENDFACTOR_ONE, // src color: already premultiplied
+        c.SDL_BLENDFACTOR_ONE_MINUS_SRC_ALPHA, // dst color
+        c.SDL_BLENDOPERATION_ADD,
+        c.SDL_BLENDFACTOR_ONE, // src alpha
+        c.SDL_BLENDFACTOR_ONE_MINUS_SRC_ALPHA, // dst alpha
+        c.SDL_BLENDOPERATION_ADD,
+    );
 }
 
 pub fn deinit() void {
@@ -98,7 +116,7 @@ pub fn frame(root: *Node, win_w: f32, win_h: f32, bg_color: Color) void {
 
     const root_layer = findLayer(root) orelse return;
     const root_tex = root_layer.texture orelse return;
-    _ = c.SDL_SetTextureBlendMode(root_tex, c.SDL_BLENDMODE_BLEND);
+    _ = c.SDL_SetTextureBlendMode(root_tex, g_premul_blend);
     var dst = c.SDL_Rect{
         .x = @intFromFloat(root.computed.x),
         .y = @intFromFloat(root.computed.y),
@@ -243,6 +261,10 @@ fn compositeChild(parent: *Node, child: *Node, scroll_x: f32, scroll_y: f32) voi
     // Opacity
     const alpha: u8 = @intFromFloat(@min(255.0, @max(0.0, child.style.opacity * 255.0)));
     _ = c.SDL_SetTextureAlphaMod(child_tex, alpha);
+
+    // Use premultiplied blend — content rendered to transparent texture
+    // has RGB already multiplied by alpha from standard blending.
+    _ = c.SDL_SetTextureBlendMode(child_tex, g_premul_blend);
 
     // Destination rect (may be scaled)
     var dw: f32 = @floatFromInt(child_layer.width);
