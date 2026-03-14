@@ -75,7 +75,7 @@
                             _ = c.SDL_SetClipboardText(@ptrCast(&clip_buf));
                         }
                     } else if (event.key.keysym.sym == c.SDLK_ESCAPE) { running = false; }
-                    else { if (hovered_node) |node| { if (node.handlers.on_key) |handler| handler(event.key.keysym.sym); } }
+                    else { const sdl_mod = event.key.keysym.mod; const mods: u16 = @intCast(sdl_mod & 0xFFFF); if (hovered_node) |node| { if (node.handlers.on_key) |handler| handler(event.key.keysym.sym, mods); } }
                 },
                 c.SDL_MOUSEMOTION => {
                     const mx: f32 = @floatFromInt(event.motion.x); const my: f32 = @floatFromInt(event.motion.y);

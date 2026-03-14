@@ -13,6 +13,8 @@ const tailwind = @import("tailwind.zig");
 const bootstrap = @import("bootstrap.zig");
 
 const MAX_LOCALS = 32;
+const MAX_COMPONENTS = 32;
+const MAX_COMPONENT_PROPS = 16;
 const MAX_ARRAYS = 256;
 const MAX_HANDLERS = 64;
 const MAX_STATE_SLOTS = 32;
@@ -100,6 +102,20 @@ const LocalVar = struct {
     name: []const u8,
     expr: []const u8, // Zig expression (compile-time substitution)
     state_type: StateType, // type hint for template literal formatting
+};
+
+const ComponentInfo = struct {
+    name: []const u8,
+    prop_names: [MAX_COMPONENT_PROPS][]const u8,
+    prop_count: u32,
+    body_pos: u32, // token position of the return's JSX (at the '<')
+    has_children: bool,
+};
+
+/// Active prop substitution (pushed when entering a component, popped on exit)
+const PropBinding = struct {
+    name: []const u8,
+    value: []const u8, // raw .tsz value (string literal, number, state ref)
 };
 
 const StateType = enum { int, float, boolean, string, array };
@@ -245,6 +261,16 @@ pub const Generator = struct {
     local_vars: [MAX_LOCALS]LocalVar,
     local_count: u32,
 
+    // Components (compile-time inlining)
+    components: [MAX_COMPONENTS]ComponentInfo,
+    component_count: u32,
+
+    // Prop substitution stack (active during component inlining)
+    prop_stack: [MAX_COMPONENT_PROPS]PropBinding,
+    prop_stack_count: u32,
+    // Children JSX to splice for {children} placeholders
+    component_children_exprs: ?*std.ArrayListUnmanaged([]const u8),
+
     pub fn init(alloc: std.mem.Allocator, lex: *const Lexer, source: []const u8, input_file: []const u8) Generator {
         return .{
             .alloc = alloc,
@@ -299,6 +325,11 @@ pub const Generator = struct {
             .classifier_count = 0,
             .local_vars = undefined,
             .local_count = 0,
+            .components = undefined,
+            .component_count = 0,
+            .prop_stack = undefined,
+            .prop_stack_count = 0,
+            .component_children_exprs = null,
         };
     }
 
@@ -454,6 +485,10 @@ pub const Generator = struct {
         // Phase 3: Collect classifiers
         self.pos = 0;
         self.collectClassifiers();
+
+        // Phase 3.5: Collect component definitions (non-App functions)
+        self.pos = 0;
+        self.collectComponents();
 
         // Phase 4: Find App function and collect useState
         self.pos = 0;
@@ -981,6 +1016,245 @@ pub const Generator = struct {
         return try std.fmt.allocPrint(self.alloc, "    {s}", .{try self.emitHandlerExpr()});
     }
 
+    // ── Component helpers ──────────────────────────────────────────────
+
+    fn findComponent(self: *Generator, name: []const u8) ?*const ComponentInfo {
+        for (0..self.component_count) |i| {
+            if (std.mem.eql(u8, self.components[i].name, name)) return &self.components[i];
+        }
+        return null;
+    }
+
+    fn findProp(self: *Generator, name: []const u8) ?[]const u8 {
+        // Search prop stack (most recent first for nesting)
+        var i: u32 = self.prop_stack_count;
+        while (i > 0) {
+            i -= 1;
+            if (std.mem.eql(u8, self.prop_stack[i].name, name)) return self.prop_stack[i].value;
+        }
+        return null;
+    }
+
+    /// Inline a component at its call site: collect props, jump to body, parse JSX.
+    fn inlineComponent(self: *Generator, comp: *const ComponentInfo) anyerror![]const u8 {
+        std.debug.print("[tsz-debug] inlineComponent: {s} at pos {d}\n", .{ comp.name, self.pos });
+        // 1. Collect attribute values from the call site as prop bindings
+        const saved_prop_count = self.prop_stack_count;
+        while (self.curKind() != .slash_gt and self.curKind() != .gt and self.curKind() != .eof) {
+            if (self.curKind() == .identifier) {
+                const attr_name = self.curText();
+                self.advance_token();
+                if (self.curKind() == .equals) {
+                    self.advance_token();
+                    var val: []const u8 = "";
+                    if (self.curKind() == .string) {
+                        val = self.curText();
+                        if (val.len >= 2 and val[0] == '\'') {
+                            val = try std.fmt.allocPrint(self.alloc, "\"{s}\"", .{val[1 .. val.len - 1]});
+                        }
+                        self.advance_token();
+                    } else if (self.curKind() == .lbrace) {
+                        self.advance_token(); // {
+                        val = try self.emitStateExpr();
+                        if (self.curKind() == .rbrace) self.advance_token(); // }
+                    }
+                    // Match to a component prop
+                    for (0..comp.prop_count) |pi| {
+                        if (std.mem.eql(u8, comp.prop_names[pi], attr_name)) {
+                            if (self.prop_stack_count < MAX_COMPONENT_PROPS) {
+                                self.prop_stack[self.prop_stack_count] = .{
+                                    .name = attr_name,
+                                    .value = val,
+                                };
+                                self.prop_stack_count += 1;
+                            }
+                            break;
+                        }
+                    }
+                }
+            } else {
+                self.advance_token();
+            }
+        }
+
+        // 2. Handle self-closing vs children
+        var caller_children = std.ArrayListUnmanaged([]const u8){};
+        var has_caller_children = false;
+        if (self.curKind() == .slash_gt) {
+            self.advance_token(); // />
+        } else if (self.curKind() == .gt) {
+            self.advance_token(); // >
+            if (comp.has_children) {
+                has_caller_children = true;
+                while (self.curKind() != .eof) {
+                    if (self.curKind() == .lt) {
+                        const peek = self.pos + 1;
+                        if (peek < self.lex.count and self.lex.get(peek).kind == .slash) {
+                            self.advance_token(); // <
+                            self.advance_token(); // /
+                            if (self.curKind() == .identifier) self.advance_token();
+                            if (self.curKind() == .gt) self.advance_token();
+                            break;
+                        }
+                        const child_expr = try self.parseJSXElement();
+                        caller_children.append(self.alloc, child_expr) catch {};
+                    } else {
+                        self.advance_token();
+                    }
+                }
+            } else {
+                // No {children} — skip to closing tag
+                var depth: u32 = 1;
+                while (self.pos < self.lex.count and depth > 0) {
+                    if (self.curKind() == .lt) {
+                        const peek = self.pos + 1;
+                        if (peek < self.lex.count and self.lex.get(peek).kind == .slash) {
+                            depth -= 1;
+                            if (depth == 0) {
+                                self.advance_token(); // <
+                                self.advance_token(); // /
+                                if (self.curKind() == .identifier) self.advance_token();
+                                if (self.curKind() == .gt) self.advance_token();
+                                break;
+                            }
+                        } else {
+                            depth += 1;
+                        }
+                    }
+                    self.advance_token();
+                }
+            }
+        }
+
+        // 3. Save position, jump to component body
+        const saved_pos = self.pos;
+        const saved_children = self.component_children_exprs;
+        if (has_caller_children) {
+            self.component_children_exprs = &caller_children;
+        } else {
+            self.component_children_exprs = null;
+        }
+        self.pos = comp.body_pos;
+
+        // 4. Parse the component's JSX
+        const result = try self.parseJSXElement();
+
+        // 5. Restore
+        std.debug.print("[tsz-debug] inlineComponent done: {s}, saved_pos={d}, result_len={d}, arrays={d}\n", .{ comp.name, saved_pos, result.len, self.array_counter });
+        self.pos = saved_pos;
+        self.prop_stack_count = saved_prop_count;
+        self.component_children_exprs = saved_children;
+
+        return result;
+    }
+
+    /// Collect function components (non-App functions with JSX return).
+    /// Records their name, props, and the token position of their return JSX.
+    fn collectComponents(self: *Generator) void {
+        self.pos = 0;
+        while (self.pos < self.lex.count and self.curKind() != .eof) {
+            if (self.isIdent("function")) {
+                const func_pos = self.pos;
+                self.advance_token(); // skip "function"
+                if (self.curKind() != .identifier) continue;
+                const name = self.curText();
+                // Skip "App" — that's the main entry point, not a component
+                if (std.mem.eql(u8, name, "App")) {
+                    self.advance_token();
+                    continue;
+                }
+                // Must start with uppercase (component convention)
+                if (name.len == 0 or name[0] < 'A' or name[0] > 'Z') {
+                    self.advance_token();
+                    continue;
+                }
+                self.advance_token(); // skip name
+
+                // Parse props: ({ prop1, prop2 }: Type) or ()
+                var prop_names: [MAX_COMPONENT_PROPS][]const u8 = undefined;
+                var prop_count: u32 = 0;
+                if (self.curKind() == .lparen) {
+                    self.advance_token(); // (
+                    if (self.curKind() == .lbrace) {
+                        self.advance_token(); // {
+                        while (self.curKind() != .rbrace and self.curKind() != .eof) {
+                            if (self.curKind() == .identifier) {
+                                if (prop_count < MAX_COMPONENT_PROPS) {
+                                    prop_names[prop_count] = self.curText();
+                                    prop_count += 1;
+                                }
+                            }
+                            self.advance_token();
+                            if (self.curKind() == .comma) self.advance_token();
+                        }
+                        if (self.curKind() == .rbrace) self.advance_token(); // }
+                    }
+                    // Skip type annotation: }: { label: string; color: string }
+                    // Just skip until closing paren
+                    var paren_depth: u32 = 1;
+                    while (self.pos < self.lex.count and paren_depth > 0) {
+                        if (self.curKind() == .lparen) paren_depth += 1;
+                        if (self.curKind() == .rparen) {
+                            paren_depth -= 1;
+                            if (paren_depth == 0) break;
+                        }
+                        self.advance_token();
+                    }
+                    if (self.curKind() == .rparen) self.advance_token(); // )
+                }
+
+                // Find the function body and its return JSX
+                if (self.curKind() == .lbrace) {
+                    self.advance_token(); // {
+                    // Find return statement
+                    var brace_depth: u32 = 1;
+                    while (self.pos < self.lex.count and brace_depth > 0) {
+                        if (self.isIdent("return") and brace_depth == 1) {
+                            self.advance_token(); // skip "return"
+                            if (self.curKind() == .lparen) self.advance_token(); // skip (
+                            // Now positioned at the '<' of the JSX
+                            if (self.curKind() == .lt and self.component_count < MAX_COMPONENTS) {
+                                // Check for {children} in body by scanning ahead
+                                const body_pos = self.pos;
+                                var has_children = false;
+                                const scan_save = self.pos;
+                                var scan_depth: u32 = 0;
+                                while (self.pos < self.lex.count) {
+                                    if (self.curKind() == .lt) scan_depth += 1;
+                                    if (self.isIdent("children")) {
+                                        has_children = true;
+                                        break;
+                                    }
+                                    // Stop at the function's closing brace
+                                    if (self.curKind() == .rbrace and scan_depth == 0) break;
+                                    self.advance_token();
+                                }
+                                self.pos = scan_save;
+
+                                self.components[self.component_count] = .{
+                                    .name = name,
+                                    .prop_names = prop_names,
+                                    .prop_count = prop_count,
+                                    .body_pos = body_pos,
+                                    .has_children = has_children,
+                                };
+                                self.component_count += 1;
+                            }
+                            break;
+                        }
+                        if (self.curKind() == .lbrace) brace_depth += 1;
+                        if (self.curKind() == .rbrace) brace_depth -= 1;
+                        self.advance_token();
+                    }
+                }
+                // Skip rest of function
+                _ = func_pos;
+                continue;
+            }
+            self.advance_token();
+        }
+    }
+
     // ── Local variable helpers ────────────────────────────────────────
 
     fn isLocalVar(self: *Generator, name: []const u8) ?*const LocalVar {
@@ -988,6 +1262,43 @@ pub const Generator = struct {
             if (std.mem.eql(u8, self.local_vars[i].name, name)) return &self.local_vars[i];
         }
         return null;
+    }
+
+    /// Infer the result type of a Zig expression for template literal formatting.
+    /// Checks output type (what the expression produces), not input type (what it reads).
+    fn inferExprType(self: *Generator, expr: []const u8) StateType {
+        _ = self;
+        // Ternary that produces strings: (if (...) "x" else "y")
+        // Check if expression contains string literals as ternary branches
+        const has_if = std.mem.indexOf(u8, expr, "if (") != null;
+        const has_else = std.mem.indexOf(u8, expr, " else ") != null;
+        if (has_if and has_else) {
+            // Count double-quote chars — if the branches are strings, there will be quotes
+            var dq_count: u32 = 0;
+            for (expr) |ch| {
+                if (ch == '"') dq_count += 1;
+            }
+            if (dq_count >= 4) return .string; // at least 2 string literals (open+close each)
+        }
+        // Direct string getter
+        if (std.mem.indexOf(u8, expr, "getSlotString") != null) return .string;
+        // String literal
+        if (expr.len >= 2 and expr[0] == '"') return .string;
+        // Float getters
+        if (std.mem.indexOf(u8, expr, "getSlotFloat") != null or
+            std.mem.indexOf(u8, expr, "getFps") != null or
+            std.mem.indexOf(u8, expr, "getLayoutMs") != null or
+            std.mem.indexOf(u8, expr, "getPaintMs") != null) return .float;
+        // Bool — only if it's a pure comparison (not a ternary)
+        if (!has_if) {
+            if (std.mem.indexOf(u8, expr, "getSlotBool") != null) return .boolean;
+            // Bare comparisons that aren't inside a ternary
+            if (std.mem.indexOf(u8, expr, "==") != null or
+                std.mem.indexOf(u8, expr, "!=") != null or
+                std.mem.indexOf(u8, expr, "< ") != null or
+                std.mem.indexOf(u8, expr, "> ") != null) return .boolean;
+        }
+        return .int;
     }
 
     /// Collect local variable declarations between hooks and return.
@@ -1034,25 +1345,7 @@ pub const Generator = struct {
                             continue;
                         };
                         // Infer type from expression for template literal formatting
-                        var st: StateType = .int; // default
-                        if (std.mem.indexOf(u8, expr, "getSlotString") != null) {
-                            st = .string;
-                        } else if (std.mem.indexOf(u8, expr, "getSlotFloat") != null or
-                            std.mem.indexOf(u8, expr, "getFps") != null or
-                            std.mem.indexOf(u8, expr, "getLayoutMs") != null or
-                            std.mem.indexOf(u8, expr, "getPaintMs") != null)
-                        {
-                            st = .float;
-                        } else if (std.mem.indexOf(u8, expr, "getSlotBool") != null or
-                            std.mem.indexOf(u8, expr, "true") != null or
-                            std.mem.indexOf(u8, expr, "false") != null or
-                            std.mem.indexOf(u8, expr, "==") != null or
-                            std.mem.indexOf(u8, expr, "!=") != null or
-                            std.mem.indexOf(u8, expr, "< ") != null or
-                            std.mem.indexOf(u8, expr, "> ") != null)
-                        {
-                            st = .boolean;
-                        }
+                        const st = self.inferExprType(expr);
 
                         if (self.local_count < MAX_LOCALS) {
                             self.local_vars[self.local_count] = .{
@@ -1089,6 +1382,38 @@ pub const Generator = struct {
         }
         self.advance_token(); // skip <
 
+        // Fragment: <>...</> — transparent wrapper, no style
+        if (self.curKind() == .gt) {
+            self.advance_token(); // skip >
+            var frag_children = std.ArrayListUnmanaged([]const u8){};
+            while (self.curKind() != .lt_slash and self.curKind() != .eof) {
+                if (self.curKind() == .lt) {
+                    const child = try self.parseJSXElement();
+                    try frag_children.append(self.alloc, child);
+                } else {
+                    self.advance_token();
+                }
+            }
+            // Skip closing </> (lt_slash + gt)
+            if (self.curKind() == .lt_slash) {
+                self.advance_token(); // </
+                if (self.curKind() == .gt) self.advance_token(); // >
+            }
+            if (frag_children.items.len == 0) {
+                return try self.alloc.dupe(u8, ".{}");
+            }
+            const arr_name = try std.fmt.allocPrint(self.alloc, "_arr_{d}", .{self.array_counter});
+            self.array_counter += 1;
+            var arr_body = std.ArrayListUnmanaged(u8){};
+            for (frag_children.items, 0..) |child_expr, ci| {
+                if (ci > 0) try arr_body.appendSlice(self.alloc, ", ");
+                try arr_body.appendSlice(self.alloc, child_expr);
+            }
+            const arr_decl = try std.fmt.allocPrint(self.alloc, "var {s} = [_]Node{{ {s} }};", .{ arr_name, arr_body.items });
+            try self.array_decls.append(self.alloc, arr_decl);
+            return try std.fmt.allocPrint(self.alloc, ".{{ .children = &{s} }}", .{arr_name});
+        }
+
         var tag_name = self.curText();
         self.advance_token(); // skip tag name
 
@@ -1105,6 +1430,12 @@ pub const Generator = struct {
             } else {
                 std.debug.print("[tsz] Unknown classifier: C.{s}\n", .{cls_name});
             }
+        }
+
+        // Custom component — inline at compile time
+        std.debug.print("[tsz-debug] parseJSXElement tag='{s}' pos={d} comp_count={d}\n", .{ tag_name, self.pos, self.component_count });
+        if (self.findComponent(tag_name)) |comp| {
+            return try self.inlineComponent(comp);
         }
 
         // Route element — extract path + element attrs, return the element expr
@@ -1127,6 +1458,8 @@ pub const Generator = struct {
         var on_change_text_end: ?u32 = null;
         var on_scroll_start: ?u32 = null;
         var on_scroll_end: ?u32 = null;
+        var on_key_start: ?u32 = null;
+        var on_key_end: ?u32 = null;
         var title_str: []const u8 = "";
         var width_str: []const u8 = "400";
         var height_str: []const u8 = "300";
@@ -1228,6 +1561,10 @@ pub const Generator = struct {
                         on_change_text_start = self.pos;
                         try self.skipBalanced();
                         on_change_text_end = self.pos;
+                    } else if (std.mem.eql(u8, attr_name, "onKeyDown")) {
+                        on_key_start = self.pos;
+                        try self.skipBalanced();
+                        on_key_end = self.pos;
                     } else if (std.mem.eql(u8, attr_name, "onScroll")) {
                         on_scroll_start = self.pos;
                         try self.skipBalanced();
@@ -1318,8 +1655,17 @@ pub const Generator = struct {
                         self.last_route_path = null;
                     }
                 } else if (self.curKind() == .lbrace) {
-                    // Expression: {`template`} or {children}
+                    // Expression: {`template`}, {children}, or conditionals
                     self.advance_token(); // skip {
+                    // {children} — splice caller's children into this component
+                    if (self.isIdent("children") and self.component_children_exprs != null) {
+                        self.advance_token(); // skip "children"
+                        if (self.curKind() == .rbrace) self.advance_token();
+                        for (self.component_children_exprs.?.items) |child_expr| {
+                            try child_exprs.append(self.alloc, child_expr);
+                        }
+                        continue;
+                    }
                     if (self.curKind() == .template_literal) {
                         const tl = try self.parseTemplateLiteral();
                         if (tl.is_dynamic) {
@@ -1367,8 +1713,45 @@ pub const Generator = struct {
                             self.maps[self.map_count - 1].child_idx = @intCast(child_exprs.items.len - 1);
                         }
                     } else if (self.curKind() == .identifier) {
-                        // Could be {children} or {varName}
-                        self.advance_token();
+                        // Prop, local var, or state as text content: {text}, {label}, etc.
+                        const ident = self.curText();
+                        if (self.findProp(ident)) |val| {
+                            self.advance_token();
+                            if (val.len >= 2 and (val[0] == '"' or val[0] == '\'')) {
+                                text_content = val[1 .. val.len - 1];
+                            } else {
+                                text_content = val;
+                            }
+                        } else if (self.isState(ident)) |slot_id| {
+                            self.advance_token();
+                            // Dynamic text from state variable
+                            is_dynamic_text = true;
+                            const st = self.stateTypeById(slot_id);
+                            dyn_fmt = switch (st) {
+                                .string => "{s}",
+                                .float => "{d}",
+                                .boolean => "{s}",
+                                else => "{d}",
+                            };
+                            dyn_args = switch (st) {
+                                .string => try std.fmt.allocPrint(self.alloc, "state.getSlotString({d})", .{slot_id}),
+                                .float => try std.fmt.allocPrint(self.alloc, "state.getSlotFloat({d})", .{slot_id}),
+                                .boolean => try std.fmt.allocPrint(self.alloc, "if (state.getSlotBool({d})) \"true\" else \"false\"", .{slot_id}),
+                                else => try std.fmt.allocPrint(self.alloc, "state.getSlot({d})", .{slot_id}),
+                            };
+                        } else if (self.isLocalVar(ident)) |lv| {
+                            self.advance_token();
+                            is_dynamic_text = true;
+                            dyn_fmt = switch (lv.state_type) {
+                                .string => "{s}",
+                                .float => "{d}",
+                                .boolean => "{s}",
+                                else => "{d}",
+                            };
+                            dyn_args = lv.expr;
+                        } else {
+                            self.advance_token();
+                        }
                     }
                     if (self.curKind() == .rbrace) self.advance_token();
                 } else if (self.curKind() != .lt and self.curKind() != .lt_slash and self.curKind() != .eof) {
@@ -1560,6 +1943,7 @@ pub const Generator = struct {
         var press_handler_name: ?[]const u8 = null;
         var change_handler_name: ?[]const u8 = null;
         var scroll_handler_name: ?[]const u8 = null;
+        var key_handler_name: ?[]const u8 = null;
 
         if (on_press_start) |start| {
             press_handler_name = try std.fmt.allocPrint(self.alloc, "_handler_press_{d}", .{self.handler_counter});
@@ -1585,6 +1969,14 @@ pub const Generator = struct {
             try self.handler_decls.append(self.alloc, handler_fn);
         }
 
+        if (on_key_start) |start| {
+            key_handler_name = try std.fmt.allocPrint(self.alloc, "_handler_key_{d}", .{self.handler_counter});
+            self.handler_counter += 1;
+            const body = try self.emitHandlerBody(start, on_key_end.?);
+            const handler_fn = try std.fmt.allocPrint(self.alloc, "fn {s}(_key: c_int, _mods: u16) void {{\n    _ = _key;\n    _ = _mods;\n    {s}\n}}", .{ key_handler_name.?, body });
+            try self.handler_decls.append(self.alloc, handler_fn);
+        }
+
         // Emit combined .handlers struct
         var hf: std.ArrayListUnmanaged(u8) = .{};
         if (press_handler_name) |n| {
@@ -1599,6 +1991,11 @@ pub const Generator = struct {
         if (scroll_handler_name) |n| {
             if (hf.items.len > 0) try hf.appendSlice(self.alloc, ", ");
             try hf.appendSlice(self.alloc, ".on_scroll = ");
+            try hf.appendSlice(self.alloc, n);
+        }
+        if (key_handler_name) |n| {
+            if (hf.items.len > 0) try hf.appendSlice(self.alloc, ", ");
+            try hf.appendSlice(self.alloc, ".on_key = ");
             try hf.appendSlice(self.alloc, n);
         }
         if (hf.items.len > 0) {
@@ -1897,6 +2294,20 @@ pub const Generator = struct {
             self.advance_token();
             return raw[1 .. raw.len - 1];
         }
+        // Prop or local var reference: backgroundColor: bg → resolve to prop value
+        if (self.curKind() == .identifier) {
+            const name = self.curText();
+            if (self.findProp(name)) |val| {
+                self.advance_token();
+                if (val.len >= 2 and (val[0] == '"' or val[0] == '\'')) return val[1 .. val.len - 1];
+                return val;
+            }
+            if (self.isLocalVar(name)) |lv| {
+                self.advance_token();
+                if (lv.expr.len >= 2 and (lv.expr[0] == '"' or lv.expr[0] == '\'')) return lv.expr[1 .. lv.expr.len - 1];
+                return lv.expr;
+            }
+        }
         self.advance_token();
         return "";
     }
@@ -2012,6 +2423,14 @@ pub const Generator = struct {
                                 "state.getSlot({d})", .{slot_id}));
                         },
                     }
+                } else if (self.findProp(expr)) |pval| {
+                    if (pval.len >= 2 and (pval[0] == '"' or pval[0] == '\'')) {
+                        try fmt.appendSlice(self.alloc, pval[1 .. pval.len - 1]);
+                    } else {
+                        try fmt.appendSlice(self.alloc, "{d}");
+                        if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
+                        try args.appendSlice(self.alloc, pval);
+                    }
                 } else if (self.isLocalVar(expr)) |lv| {
                     // Local variable in template literal
                     switch (lv.state_type) {
@@ -2045,6 +2464,33 @@ pub const Generator = struct {
                     try fmt.appendSlice(self.alloc, "{d}");
                     if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
                     try args.appendSlice(self.alloc, "_i");
+                } else if (std.mem.startsWith(u8, expr, "getRowText(")) {
+                    // PTY built-in: getRowText(N) → vterm_mod.getRowText(N)
+                    const arg_start = "getRowText(".len;
+                    const arg_end = std.mem.indexOf(u8, expr[arg_start..], ")") orelse expr.len - arg_start;
+                    const arg_expr = expr[arg_start .. arg_start + arg_end];
+                    try fmt.appendSlice(self.alloc, "{s}");
+                    if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
+                    // Check if arg is map index param
+                    if (self.map_index_param != null and std.mem.eql(u8, arg_expr, self.map_index_param.?)) {
+                        try args.appendSlice(self.alloc, "vterm_mod.getRowText(@intCast(_i))");
+                    } else if (self.map_item_param != null and std.mem.eql(u8, arg_expr, self.map_item_param.?)) {
+                        try args.appendSlice(self.alloc, "vterm_mod.getRowText(@intCast(_item))");
+                    } else {
+                        try args.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            "vterm_mod.getRowText({s})", .{arg_expr}));
+                    }
+                    self.has_pty = true;
+                } else if (std.mem.eql(u8, expr, "getCursorRow()")) {
+                    try fmt.appendSlice(self.alloc, "{d}");
+                    if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
+                    try args.appendSlice(self.alloc, "vterm_mod.getCursorRow()");
+                    self.has_pty = true;
+                } else if (std.mem.eql(u8, expr, "getCursorCol()")) {
+                    try fmt.appendSlice(self.alloc, "{d}");
+                    if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
+                    try args.appendSlice(self.alloc, "vterm_mod.getCursorCol()");
+                    self.has_pty = true;
                 } else {
                     // Static expression — just embed the text
                     try fmt.appendSlice(self.alloc, expr);
@@ -2539,10 +2985,14 @@ pub const Generator = struct {
             }
             return val;
         }
-        // String literal
+        // String literal — convert single quotes to double quotes for Zig
         if (self.curKind() == .string) {
             const val = self.curText();
             self.advance_token();
+            if (val.len >= 2 and val[0] == '\'') {
+                // Convert 'text' → "text"
+                return try std.fmt.allocPrint(self.alloc, "\"{s}\"", .{val[1 .. val.len - 1]});
+            }
             return val;
         }
         if (self.curKind() == .identifier) {
@@ -2555,6 +3005,13 @@ pub const Generator = struct {
             // Array state getter: items.length
             if (self.isArrayState(name)) |state_idx| {
                 self.advance_token();
+                if (self.curKind() == .lbracket) {
+                    self.advance_token(); // [
+                    const index_expr = try self.emitStateExpr();
+                    if (self.curKind() == .rbracket) self.advance_token(); // ]
+                    const arr_slot = self.arraySlotId(state_idx);
+                    return try std.fmt.allocPrint(self.alloc, "@as(i64, state.getArrayElement({d}, @intCast({s})))", .{ arr_slot, index_expr });
+                }
                 if (self.curKind() == .dot) {
                     self.advance_token(); // .
                     if (self.isIdent("length")) {
@@ -2575,6 +3032,15 @@ pub const Generator = struct {
                     return try std.fmt.allocPrint(self.alloc, "@as(f32, @floatCast(state.getSlotFloat({d})))", .{slot_id});
                 }
                 return try std.fmt.allocPrint(self.alloc, "state.getSlot({d})", .{slot_id});
+            }
+            // Component prop (compile-time substitution from call site)
+            if (self.findProp(name)) |val| {
+                self.advance_token();
+                // String prop values: strip quotes for Zig string literal
+                if (val.len >= 2 and (val[0] == '"' or val[0] == '\'')) {
+                    return val;
+                }
+                return val;
             }
             // Local variable (compile-time substitution)
             if (self.isLocalVar(name)) |lv| {
@@ -3231,7 +3697,7 @@ pub const Generator = struct {
         // Window roots
         for (0..self.window_count) |i| {
             const w = self.windows[i];
-            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "\n// ── Secondary window {d}: \"{s}\" ─────────\nvar _win{d}_root = Node{s};\n", .{ i, w.title, i, w.root_expr[2..] }));
+            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "\n// ── Secondary window {d}: \"{s}\" ─────────\nvar _win{d}_root = Node{{{s};\n", .{ i, w.title, i, w.root_expr[2..] }));
         }
 
         // Dynamic text buffers
