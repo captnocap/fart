@@ -382,16 +382,18 @@ pub fn run(alloc: std.mem.Allocator) !void {
                     log_sel_dragging = false;
                 },
                 c.SDL_MOUSEWHEEL => {
+                    const has_log_wh = runner.getActive() != null;
+                    const list_bot = if (has_log_wh) win_h - log_panel_h - 30 else win_h - 30;
                     const panel_top = win_h - log_panel_h - 30;
-                    const in_log_panel = (hover_my >= panel_top and runner.getActive() != null);
+                    const in_log_panel = (hover_my >= panel_top and has_log_wh);
                     if (in_log_panel) {
                         log_scroll -= @as(f32, @floatFromInt(event.wheel.y)) * 20.0;
                         log_scroll = @max(0, log_scroll);
                     } else {
                         scroll_y -= @as(f32, @floatFromInt(event.wheel.y)) * 30.0;
-                        const content_h: f32 = 50 + 28 + @as(f32, @floatFromInt(reg.count)) * 38 + 30;
-                        const max_scroll = @max(0, content_h - win_h);
-                        scroll_y = @max(0, @min(scroll_y, max_scroll));
+                        const ch: f32 = 50 + 28 + @as(f32, @floatFromInt(reg.count)) * 38;
+                        const ms = @max(0, ch - list_bot);
+                        scroll_y = @max(0, @min(scroll_y, ms));
                     }
                 },
                 else => {},
@@ -454,6 +456,24 @@ pub fn run(alloc: std.mem.Allocator) !void {
         hit_count = 0;
         _ = c.SDL_SetRenderDrawColor(renderer, bg.r, bg.g, bg.b, 255);
         _ = c.SDL_RenderClear(renderer);
+
+        // Calculate project list area (above log panel + footer)
+        const has_log = runner.getActive() != null;
+        const list_bottom: f32 = if (has_log) win_h - log_panel_h - 30 else win_h - 30;
+
+        // Clamp project scroll to available space
+        const content_h: f32 = 50 + 28 + @as(f32, @floatFromInt(reg.count)) * 38;
+        const max_scroll = @max(0, content_h - list_bottom);
+        scroll_y = @min(scroll_y, max_scroll);
+
+        // Clip project list to area above log panel
+        var list_clip = c.SDL_Rect{
+            .x = 0,
+            .y = 0,
+            .w = @intFromFloat(win_w),
+            .h = @intFromFloat(list_bottom),
+        };
+        _ = c.SDL_RenderSetClipRect(renderer, &list_clip);
 
         var y: f32 = -scroll_y;
 
@@ -561,6 +581,9 @@ pub fn run(alloc: std.mem.Allocator) !void {
             te.drawText("No projects registered.", 16, y + 20, 14, muted);
             te.drawText("Run: tsz add <directory>", 16, y + 44, 12, muted);
         }
+
+        // Clear clip before drawing log panel + footer
+        _ = c.SDL_RenderSetClipRect(renderer, null);
 
         // ── Detail panel (live output from active runner) ─────────
         if (runner.getActive()) |active| {
