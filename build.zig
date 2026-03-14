@@ -262,6 +262,7 @@ pub fn build(b: *std.Build) void {
         engine_exe.linkSystemLibrary("SDL2");
         engine_exe.linkSystemLibrary("freetype");
         engine_exe.linkSystemLibrary("curl");
+        if (tsz_os != .windows) engine_exe.linkSystemLibrary("vterm");
         if (tsz_os == .macos) {
             engine_exe.linkFramework("OpenGL");
             engine_exe.root_module.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/lib" });
@@ -282,6 +283,10 @@ pub fn build(b: *std.Build) void {
         engine_exe.root_module.addIncludePath(b.path("tsz/runtime"));
         engine_exe.root_module.addCSourceFile(.{
             .file = b.path("tsz/runtime/stb/stb_image_impl.c"),
+            .flags = &.{"-O2"},
+        });
+        engine_exe.root_module.addCSourceFile(.{
+            .file = b.path("tsz/runtime/stb/stb_image_write_impl.c"),
             .flags = &.{"-O2"},
         });
 
@@ -316,6 +321,7 @@ pub fn build(b: *std.Build) void {
         app_exe.linkSystemLibrary("freetype");
         if (tsz_os != .windows) app_exe.linkSystemLibrary("mpv");
         app_exe.linkSystemLibrary("curl");
+        if (tsz_os != .windows) app_exe.linkSystemLibrary("vterm");
         if (tsz_os == .macos) {
             app_exe.linkFramework("OpenGL");
             app_exe.root_module.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/lib" });
@@ -336,6 +342,10 @@ pub fn build(b: *std.Build) void {
         app_exe.root_module.addIncludePath(b.path("tsz/runtime"));
         app_exe.root_module.addCSourceFile(.{
             .file = b.path("tsz/runtime/stb/stb_image_impl.c"),
+            .flags = &.{"-O2"},
+        });
+        app_exe.root_module.addCSourceFile(.{
+            .file = b.path("tsz/runtime/stb/stb_image_write_impl.c"),
             .flags = &.{"-O2"},
         });
 
@@ -399,6 +409,10 @@ pub fn build(b: *std.Build) void {
         tsz_exe.root_module.addIncludePath(b.path("tsz/runtime"));
         tsz_exe.root_module.addCSourceFile(.{
             .file = b.path("tsz/runtime/stb/stb_image_impl.c"),
+            .flags = &.{"-O2"},
+        });
+        tsz_exe.root_module.addCSourceFile(.{
+            .file = b.path("tsz/runtime/stb/stb_image_write_impl.c"),
             .flags = &.{"-O2"},
         });
 

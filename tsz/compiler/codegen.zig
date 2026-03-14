@@ -217,6 +217,7 @@ pub const Generator = struct {
     route_count: u32,
     has_routes: bool,
     has_crypto: bool,
+    has_pty: bool,
     last_route_path: ?[]const u8, // temp: Route → Routes communication
     routes_bind_from: ?u32, // set when entering Routes, consumed on array creation
 
@@ -273,6 +274,7 @@ pub const Generator = struct {
             .route_count = 0,
             .has_routes = false,
             .has_crypto = false,
+            .has_pty = false,
             .last_route_path = null,
             .routes_bind_from = null,
             .maps = undefined,
@@ -428,6 +430,10 @@ pub const Generator = struct {
         // Phase 1: Collect FFI pragmas
         self.collectFFIPragmas();
 
+        // Phase 1b: Pre-scan for PTY built-in usage
+        self.pos = 0;
+        self.scanForPtyUsage();
+
         // Phase 2: Collect declare functions
         self.pos = 0;
         self.collectDeclaredFunctions();
@@ -568,6 +574,23 @@ pub const Generator = struct {
                             const lib = std.mem.trim(u8, after[l_pos + 2 ..], &[_]u8{ ' ', '\t', '\n', '\r' });
                             if (lib.len > 0) self.ffi_libs.append(self.alloc, lib) catch {};
                         }
+                    }
+                }
+            }
+        }
+    }
+
+    fn scanForPtyUsage(self: *Generator) void {
+        const pty_builtins = [_][]const u8{ "spawnPty", "pollPty", "writePty", "writePtyByte", "writePtyEscape", "resizePty", "closePty" };
+        var i: u32 = 0;
+        while (i < self.lex.count) : (i += 1) {
+            const tok = self.lex.get(i);
+            if (tok.kind == .identifier) {
+                const name = tok.text(self.source);
+                for (pty_builtins) |builtin| {
+                    if (std.mem.eql(u8, name, builtin)) {
+                        self.has_pty = true;
+                        return;
                     }
                 }
             }
@@ -2115,6 +2138,72 @@ pub const Generator = struct {
                 if (self.curKind() == .rparen) self.advance_token();
                 return try self.alloc.dupe(u8, "state.setSlot(0, leaktest.leak64());");
             }
+            // ── PTY / VTerm / Classifier built-ins ─────────────────────
+            if (std.mem.eql(u8, name, "spawnPty")) {
+                self.advance_token();
+                if (self.curKind() == .lparen) self.advance_token();
+                const shell = try self.parseStringAttrInline();
+                if (self.curKind() == .comma) self.advance_token();
+                const rows_arg = self.curText();
+                self.advance_token();
+                if (self.curKind() == .comma) self.advance_token();
+                const cols_arg = self.curText();
+                self.advance_token();
+                if (self.curKind() == .rparen) self.advance_token();
+                self.has_pty = true;
+                return try std.fmt.allocPrint(self.alloc, "{{ pty_mod.spawn(\"{s}\", {s}, {s}); vterm_mod.initVterm({s}, {s}); }}", .{ shell, rows_arg, cols_arg, rows_arg, cols_arg });
+            }
+            if (std.mem.eql(u8, name, "pollPty")) {
+                self.advance_token();
+                if (self.curKind() == .lparen) self.advance_token();
+                if (self.curKind() == .rparen) self.advance_token();
+                self.has_pty = true;
+                return try self.alloc.dupe(u8, "_ = pty_mod.poll();");
+            }
+            if (std.mem.eql(u8, name, "writePty")) {
+                self.advance_token();
+                if (self.curKind() == .lparen) self.advance_token();
+                const arg = try self.parseStringAttrInline();
+                if (self.curKind() == .rparen) self.advance_token();
+                self.has_pty = true;
+                return try std.fmt.allocPrint(self.alloc, "pty_mod.writePty(\"{s}\");", .{arg});
+            }
+            if (std.mem.eql(u8, name, "writePtyByte")) {
+                self.advance_token();
+                if (self.curKind() == .lparen) self.advance_token();
+                const val = self.curText();
+                self.advance_token();
+                if (self.curKind() == .rparen) self.advance_token();
+                self.has_pty = true;
+                return try std.fmt.allocPrint(self.alloc, "pty_mod.writeByte({s});", .{val});
+            }
+            if (std.mem.eql(u8, name, "writePtyEscape")) {
+                self.advance_token();
+                if (self.curKind() == .lparen) self.advance_token();
+                const seq = try self.parseStringAttrInline();
+                if (self.curKind() == .rparen) self.advance_token();
+                self.has_pty = true;
+                return try std.fmt.allocPrint(self.alloc, "pty_mod.writeEscape(\"{s}\");", .{seq});
+            }
+            if (std.mem.eql(u8, name, "resizePty")) {
+                self.advance_token();
+                if (self.curKind() == .lparen) self.advance_token();
+                const rows_arg = self.curText();
+                self.advance_token();
+                if (self.curKind() == .comma) self.advance_token();
+                const cols_arg = self.curText();
+                self.advance_token();
+                if (self.curKind() == .rparen) self.advance_token();
+                self.has_pty = true;
+                return try std.fmt.allocPrint(self.alloc, "pty_mod.resizePty({s}, {s});", .{ rows_arg, cols_arg });
+            }
+            if (std.mem.eql(u8, name, "closePty")) {
+                self.advance_token();
+                if (self.curKind() == .lparen) self.advance_token();
+                if (self.curKind() == .rparen) self.advance_token();
+                self.has_pty = true;
+                return try self.alloc.dupe(u8, "pty_mod.closePty();");
+            }
             if (std.mem.eql(u8, name, "console")) {
                 // console.log(...)
                 self.advance_token(); // console
@@ -2886,6 +2975,12 @@ pub const Generator = struct {
         if (self.has_state) try out.appendSlice(self.alloc, "const state = @import(\"state.zig\");\n");
         if (self.has_routes) try out.appendSlice(self.alloc, "const router = @import(\"router.zig\");\n");
         if (self.has_crypto) try out.appendSlice(self.alloc, "const crypto_mod = @import(\"crypto.zig\");\n");
+        if (self.has_pty) {
+            try out.appendSlice(self.alloc, "const pty_mod = @import(\"pty.zig\");\n");
+            try out.appendSlice(self.alloc, "const vterm_mod = @import(\"vterm.zig\");\n");
+            try out.appendSlice(self.alloc, "const classifier_mod = @import(\"classifier.zig\");\n");
+        }
+        try out.appendSlice(self.alloc, "const testharness = @import(\"testharness.zig\");\n");
 
         // FFI imports
         if (self.ffi_headers.items.len > 0) {
@@ -3369,7 +3464,8 @@ pub const Generator = struct {
 
         // Compositor + window init + main loop
         try out.appendSlice(self.alloc, "    compositor.init(renderer, &text_engine, &image_cache);\n    defer compositor.deinit();\n");
-        try out.appendSlice(self.alloc, "    defer win_mgr.deinitAll();\n    watchdog.init(512);\n\n");
+        try out.appendSlice(self.alloc, "    defer win_mgr.deinitAll();\n    watchdog.init(512);\n");
+        try out.appendSlice(self.alloc, "    if (testharness.envEnabled()) testharness.enable();\n\n");
         try out.appendSlice(self.alloc, @embedFile("loop_template.txt"));
 
         // State check in loop (with watch effects)
@@ -3480,6 +3576,15 @@ pub const Generator = struct {
         try out.appendSlice(self.alloc, "        compositor.frame(&root, win_w, win_h, Color.rgb(24, 24, 32));\n");
         try out.appendSlice(self.alloc, "        win_mgr.layoutAll();\n");
         try out.appendSlice(self.alloc, "        win_mgr.paintAndPresent(brighten);\n");
+
+        // Test harness: after first frame, run tests and exit
+        try out.appendSlice(self.alloc,
+            "        if (testharness.tick()) {\n" ++
+            "            const exit_code = testharness.runAll(&root, renderer);\n" ++
+            "            if (exit_code != 0) std.process.exit(exit_code);\n" ++
+            "            running = false;\n" ++
+            "        }\n");
+
         try out.appendSlice(self.alloc, "    }\n    geometry.save(window);\n}\n");
 
         return try out.toOwnedSlice(self.alloc);

@@ -1,0 +1,24 @@
+// Terminal test — PTY + libvterm integration
+// Spawns a bash shell in a pseudo-terminal and displays output.
+
+function App() {
+  const [frame, setFrame] = useState(0);
+
+  // Spawn shell on mount
+  useEffect(() => spawnPty("/bin/bash", 24, 80), []);
+
+  // Poll PTY every 16ms (~60fps)
+  useEffect(() => {
+    pollPty();
+    setFrame(frame + 1);
+  }, 16);
+
+  return (
+    <Box style={{ width: '100%', height: '100%', backgroundColor: '#1e1e2e', padding: 8 }}>
+      <Text fontSize={14} color="#cdd6f4">Terminal Test (PTY + libvterm)</Text>
+      <Box style={{ marginTop: 8, padding: 4, backgroundColor: '#11111b', flexGrow: 1 }}>
+        <Text fontSize={13} color="#a6adc8">{`Frame: ${frame}`}</Text>
+      </Box>
+    </Box>
+  );
+}
