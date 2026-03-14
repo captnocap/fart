@@ -84,6 +84,23 @@ pub const Registry = struct {
         }
         return null;
     }
+
+    pub fn findByPath(self: *Registry, path: []const u8) ?*Project {
+        for (0..self.count) |i| {
+            if (std.mem.eql(u8, self.projects[i].getPath(), path)) {
+                return &self.projects[i];
+            }
+        }
+        // Also try matching just the filename portion
+        const base = std.fs.path.basename(path);
+        for (0..self.count) |i| {
+            const proj_base = std.fs.path.basename(self.projects[i].getPath());
+            if (std.mem.eql(u8, proj_base, base)) {
+                return &self.projects[i];
+            }
+        }
+        return null;
+    }
 };
 
 // ── Config directory ────────────────────────────────────────────────────

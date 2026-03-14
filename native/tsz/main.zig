@@ -144,13 +144,18 @@ fn killApp(pid: posix.pid_t) void {
 
 // ── Subcommands ─────────────────────────────────────────────────────────
 
-fn cmdBuild(alloc: std.mem.Allocator, input_file: []const u8) void {
+fn findProject(reg: *registry.Registry, input_file: []const u8) ?*registry.Project {
+    // Try by derived name first, then by path
     const name = projectName(input_file);
+    if (reg.findByName(name)) |p| return p;
+    return reg.findByPath(input_file);
+}
+
+fn cmdBuild(alloc: std.mem.Allocator, input_file: []const u8) void {
     var reg = registry.load(alloc);
 
     if (!compile(alloc, input_file)) {
-        // Update registry with fail status
-        if (reg.findByName(name)) |p| {
+        if (findProject(&reg, input_file)) |p| {
             p.last_build = .fail;
             p.last_build_time = std.time.timestamp();
             registry.save(&reg);
@@ -158,8 +163,7 @@ fn cmdBuild(alloc: std.mem.Allocator, input_file: []const u8) void {
         std.process.exit(1);
     }
 
-    // Update registry with pass status
-    if (reg.findByName(name)) |p| {
+    if (findProject(&reg, input_file)) |p| {
         p.last_build = .pass;
         p.last_build_time = std.time.timestamp();
         registry.save(&reg);
@@ -301,9 +305,8 @@ fn cmdTest(alloc: std.mem.Allocator, input_file: []const u8) void {
     std.debug.print("\nAll checks passed for {s}\n", .{basename});
 
     // Update registry
-    const name = projectName(input_file);
     var reg = registry.load(alloc);
-    if (reg.findByName(name)) |p| {
+    if (findProject(&reg, input_file)) |p| {
         p.last_build = .pass;
         p.last_build_time = std.time.timestamp();
         registry.save(&reg);

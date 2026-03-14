@@ -471,17 +471,16 @@ pub fn run(alloc: std.mem.Allocator) !void {
             tray.resolvePendingAction(&reg, alloc);
         }
 
-        // Poll runners for output — reload registry when a runner finishes
-        const was_running = if (runner.getActive()) |a| a.isRunning() else false;
+        // Poll runners for output
+        const prev_running = if (runner.getActive()) |a| a.isRunning() else false;
         runner.pollAll();
-        if (runner.getActive()) |a| {
-            dirty = true;
-            // Runner just finished — reload registry to pick up build status
-            if (was_running and !a.isRunning()) {
-                reg = registry.load(alloc);
-                process.cleanStale(&reg);
-                if (has_tray) tray.buildMenu(&reg);
-            }
+        const now_running = if (runner.getActive()) |a| a.isRunning() else false;
+        if (runner.getActive() != null) dirty = true;
+        // Transition: was running → no longer running = just finished
+        if (prev_running and !now_running) {
+            reg = registry.load(alloc);
+            process.cleanStale(&reg);
+            if (has_tray) tray.buildMenu(&reg);
         }
 
         // SIGUSR2 from another `tsz gui` → raise window
