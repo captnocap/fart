@@ -691,6 +691,56 @@ pub const TextEngine = struct {
         return max_word_w;
     }
 
+    // ── Truncation ────────────────────────────────────────────────────────
+
+    /// Find the byte offset where text should be truncated to fit within
+    /// max_width minus the width of "...". Returns text.len if it fits.
+    fn findTruncationPoint(self: *TextEngine, text: []const u8, size_px: u16, max_width: f32, letter_spacing: f32) usize {
+        const ellipsis = "...";
+        const ellipsis_w = self.measureLineWidth(ellipsis, size_px, letter_spacing);
+        const avail = max_width - ellipsis_w;
+        if (avail <= 0) return 0;
+
+        // Linear scan (UTF-8 aware) — accumulate width until overflow
+        var pen: f32 = 0;
+        var last_ok: usize = 0;
+        var i: usize = 0;
+        var char_count: usize = 0;
+        while (i < text.len) {
+            const ch = decodeUtf8(text[i..]);
+            var adv: f32 = 0;
+            if (self.rasterizeGlyph(ch.codepoint, size_px)) |g| {
+                adv = @floatFromInt(g.advance);
+            }
+            if (char_count > 0) adv += letter_spacing;
+            if (pen + adv > avail) break;
+            pen += adv;
+            i += ch.len;
+            char_count += 1;
+            last_ok = i;
+        }
+        return last_ok;
+    }
+
+    /// Draw a single line of text truncated with "..." if it exceeds max_width.
+    pub fn drawTextTruncated(self: *TextEngine, text: []const u8, x: f32, y: f32, size_px: u16, max_width: f32, color: layout.Color, letter_spacing: f32) void {
+        const full_w = self.measureLineWidth(text, size_px, letter_spacing);
+        if (full_w <= max_width) {
+            self.drawTextEx(text, x, y, size_px, color, letter_spacing);
+            return;
+        }
+
+        const trunc = self.findTruncationPoint(text, size_px, max_width, letter_spacing);
+        if (trunc == 0) {
+            self.drawTextEx("...", x, y, size_px, color, letter_spacing);
+            return;
+        }
+
+        self.drawTextEx(text[0..trunc], x, y, size_px, color, letter_spacing);
+        const prefix_w = self.measureLineWidth(text[0..trunc], size_px, letter_spacing);
+        self.drawTextEx("...", x + prefix_w, y, size_px, color, letter_spacing);
+    }
+
     // ── Drawing ──────────────────────────────────────────────────────────
 
     /// Draw a single line of text at (x, y) with the given color and size.
@@ -775,17 +825,20 @@ pub const TextEngine = struct {
         }
 
         const wrap = self.wordWrap(text, size_px, wrap_width);
-        var line_count = wrap.count;
-        if (max_lines > 0 and line_count > max_lines) {
+        const total_lines = wrap.count;
+        var line_count = total_lines;
+        const is_truncated = (max_lines > 0 and line_count > max_lines);
+        if (is_truncated) {
             line_count = max_lines;
         }
 
         for (0..line_count) |li| {
             const line = text[wrap.line_starts[li]..wrap.line_ends[li]];
             const line_y = y + effective_lh * @as(f32, @floatFromInt(li));
+            const is_last_truncated = is_truncated and li + 1 == line_count;
 
             var line_x = x;
-            if (text_align != .left) {
+            if (text_align != .left and !is_last_truncated) {
                 const line_w = self.measureLineWidth(line, size_px, letter_spacing);
                 if (text_align == .center) {
                     line_x = x + (max_width - line_w) / 2.0;
@@ -794,9 +847,13 @@ pub const TextEngine = struct {
                 }
             }
 
-            self.drawTextEx(line, line_x, line_y, size_px, color, letter_spacing);
+            if (is_last_truncated) {
+                // Truncate last visible line with "..."
+                self.drawTextTruncated(line, line_x, line_y, size_px, max_width, color, letter_spacing);
+            } else {
+                self.drawTextEx(line, line_x, line_y, size_px, color, letter_spacing);
+            }
         }
-        return;
     }
 
     /// Draw text with word wrapping and alignment within max_width.
@@ -831,6 +888,18 @@ pub const TextEngine = struct {
             }
 
             self.drawText(line, line_x, line_y, size_px, color);
+        }
+    }
+
+    // ── Multi-Color Span Rendering ─────────────────────────────────────
+
+    /// Render a sequence of colored text spans on a single line.
+    /// Each span picks up where the previous one left off (x advances).
+    pub fn drawColorSpans(self: *TextEngine, spans: []const ColorSpan, x: f32, y: f32, size_px: u16) void {
+        var cx = x;
+        for (spans) |span| {
+            self.drawText(span.text, cx, y, size_px, span.color);
+            cx += self.measureLineWidth(span.text, size_px, 0);
         }
     }
 

@@ -67,6 +67,8 @@ pub const Overflow = enum { visible, hidden, scroll };
 
 pub const TextAlign = enum { left, center, right };
 
+pub const GradientDirection = enum { none, vertical, horizontal };
+
 /// Style properties for a node. Mirrors the CSS-like style object from React.
 /// All dimensions are in pixels (Phase 1 — no percentages/vw/vh yet).
 pub const Style = struct {
@@ -133,6 +135,10 @@ pub const Style = struct {
 
     // Stacking
     z_index: i16 = 0,
+
+    // Gradient
+    gradient_color_end: ?Color = null,
+    gradient_direction: GradientDirection = .none,
 
     // Box shadow
     shadow_offset_x: f32 = 0,

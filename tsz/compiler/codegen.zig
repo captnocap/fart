@@ -1213,6 +1213,12 @@ pub const Generator = struct {
                     if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
                     try fields.appendSlice(self.alloc, ".shadow_color = ");
                     try fields.appendSlice(self.alloc, color);
+                } else if (std.mem.eql(u8, key, "gradientColorEnd")) {
+                    const val = try self.parseStringAttrInline();
+                    const color = try self.parseColorValue(val);
+                    if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
+                    try fields.appendSlice(self.alloc, ".gradient_color_end = ");
+                    try fields.appendSlice(self.alloc, color);
                 } else if (mapStyleKeyI16(key)) |zig_key| {
                     const val = self.curText();
                     self.advance_token();
@@ -2341,6 +2347,7 @@ fn mapEnumKey(key: []const u8) ?EnumMapping {
     if (std.mem.eql(u8, key, "display")) return .{ .field = "display", .prefix = "d" };
     if (std.mem.eql(u8, key, "textAlign")) return .{ .field = "text_align", .prefix = "ta" };
     if (std.mem.eql(u8, key, "overflow")) return .{ .field = "overflow", .prefix = "ov" };
+    if (std.mem.eql(u8, key, "gradientDirection")) return .{ .field = "gradient_direction", .prefix = "gd" };
     return null;
 }
 
@@ -2391,6 +2398,11 @@ fn mapEnumValue(prefix: []const u8, value: []const u8) ?[]const u8 {
         if (std.mem.eql(u8, value, "visible")) return ".visible";
         if (std.mem.eql(u8, value, "hidden")) return ".hidden";
         if (std.mem.eql(u8, value, "scroll")) return ".scroll";
+    }
+    if (std.mem.eql(u8, prefix, "gd")) {
+        if (std.mem.eql(u8, value, "vertical")) return ".vertical";
+        if (std.mem.eql(u8, value, "horizontal")) return ".horizontal";
+        if (std.mem.eql(u8, value, "none")) return ".none";
     }
     return null;
 }

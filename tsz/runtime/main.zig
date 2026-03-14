@@ -61,6 +61,125 @@ var sel_click_count: u32 = 0;
 var sel_all: bool = false;
 var sel_paint_state: u8 = 0;
 
+// ── Rounded rect support ────────────────────────────────────────────────────
+// Pre-rendered quarter-circle texture for fast rounded corner blitting.
+
+const CIRCLE_TEX_SIZE = 32;
+var g_circle_tex: ?*c.SDL_Texture = null;
+
+fn initCircleTexture(renderer: *c.SDL_Renderer) void {
+    const surface = c.SDL_CreateRGBSurfaceWithFormat(0, CIRCLE_TEX_SIZE, CIRCLE_TEX_SIZE, 32, c.SDL_PIXELFORMAT_ARGB8888);
+    if (surface == null) return;
+    defer c.SDL_FreeSurface(surface);
+
+    const pixels: [*]u8 = @ptrCast(surface.*.pixels);
+    const pitch: usize = @intCast(surface.*.pitch);
+    const r: f32 = @as(f32, CIRCLE_TEX_SIZE) / 2.0;
+
+    for (0..CIRCLE_TEX_SIZE) |row| {
+        for (0..CIRCLE_TEX_SIZE) |col| {
+            const dx = @as(f32, @floatFromInt(col)) + 0.5 - r;
+            const dy = @as(f32, @floatFromInt(row)) + 0.5 - r;
+            const dist = @sqrt(dx * dx + dy * dy);
+            const alpha: u8 = if (dist <= r - 0.5) 255 else if (dist <= r + 0.5) @intFromFloat((r + 0.5 - dist) * 255.0) else 0;
+            const off = row * pitch + col * 4;
+            pixels[off + 0] = 255; // B
+            pixels[off + 1] = 255; // G
+            pixels[off + 2] = 255; // R
+            pixels[off + 3] = alpha; // A
+        }
+    }
+
+    const tex = c.SDL_CreateTextureFromSurface(renderer, surface);
+    if (tex) |t| {
+        _ = c.SDL_SetTextureBlendMode(t, c.SDL_BLENDMODE_BLEND);
+        g_circle_tex = t;
+    }
+}
+
+fn fillRoundedRect(renderer: *c.SDL_Renderer, ix: i32, iy: i32, iw: i32, ih: i32, radius_raw: f32, col: Color, opacity: u8) void {
+    const tex = g_circle_tex orelse {
+        // Fallback: plain rect
+        _ = c.SDL_SetRenderDrawColor(renderer, col.r, col.g, col.b, opacity);
+        var r = c.SDL_Rect{ .x = ix, .y = iy, .w = iw, .h = ih };
+        _ = c.SDL_RenderFillRect(renderer, &r);
+        return;
+    };
+
+    const radius = @min(radius_raw, @as(f32, @floatFromInt(@min(iw, ih))) / 2.0);
+    const ri: i32 = @intFromFloat(radius);
+    if (ri <= 0) {
+        _ = c.SDL_SetRenderDrawColor(renderer, col.r, col.g, col.b, opacity);
+        var r = c.SDL_Rect{ .x = ix, .y = iy, .w = iw, .h = ih };
+        _ = c.SDL_RenderFillRect(renderer, &r);
+        return;
+    }
+
+    _ = c.SDL_SetRenderDrawColor(renderer, col.r, col.g, col.b, opacity);
+    _ = c.SDL_SetTextureColorMod(tex, col.r, col.g, col.b);
+    _ = c.SDL_SetTextureAlphaMod(tex, opacity);
+
+    // Center rect (full width, between top/bottom radius rows)
+    var center = c.SDL_Rect{ .x = ix, .y = iy + ri, .w = iw, .h = ih - ri * 2 };
+    _ = c.SDL_RenderFillRect(renderer, &center);
+
+    // Top strip (between corners)
+    var top_r = c.SDL_Rect{ .x = ix + ri, .y = iy, .w = iw - ri * 2, .h = ri };
+    _ = c.SDL_RenderFillRect(renderer, &top_r);
+
+    // Bottom strip
+    var bot_r = c.SDL_Rect{ .x = ix + ri, .y = iy + ih - ri, .w = iw - ri * 2, .h = ri };
+    _ = c.SDL_RenderFillRect(renderer, &bot_r);
+
+    // Quarter circles at corners (using half of circle texture)
+    const half = CIRCLE_TEX_SIZE / 2;
+    // Top-left
+    var tl_src = c.SDL_Rect{ .x = 0, .y = 0, .w = half, .h = half };
+    var tl_dst = c.SDL_Rect{ .x = ix, .y = iy, .w = ri, .h = ri };
+    _ = c.SDL_RenderCopy(renderer, tex, &tl_src, &tl_dst);
+    // Top-right
+    var tr_src = c.SDL_Rect{ .x = half, .y = 0, .w = half, .h = half };
+    var tr_dst = c.SDL_Rect{ .x = ix + iw - ri, .y = iy, .w = ri, .h = ri };
+    _ = c.SDL_RenderCopy(renderer, tex, &tr_src, &tr_dst);
+    // Bottom-left
+    var bl_src = c.SDL_Rect{ .x = 0, .y = half, .w = half, .h = half };
+    var bl_dst = c.SDL_Rect{ .x = ix, .y = iy + ih - ri, .w = ri, .h = ri };
+    _ = c.SDL_RenderCopy(renderer, tex, &bl_src, &bl_dst);
+    // Bottom-right
+    var br_src = c.SDL_Rect{ .x = half, .y = half, .w = half, .h = half };
+    var br_dst = c.SDL_Rect{ .x = ix + iw - ri, .y = iy + ih - ri, .w = ri, .h = ri };
+    _ = c.SDL_RenderCopy(renderer, tex, &br_src, &br_dst);
+}
+
+fn lerpU8(a: u8, b: u8, t: f32) u8 {
+    const fa: f32 = @floatFromInt(a);
+    const fb: f32 = @floatFromInt(b);
+    return @intFromFloat(fa + (fb - fa) * t);
+}
+
+fn fillGradientRect(renderer: *c.SDL_Renderer, ix: i32, iy: i32, iw: i32, ih: i32, c1: Color, c2: Color, dir: layout.GradientDirection, opacity: f32) void {
+    const steps: u32 = if (dir == .vertical) @intCast(@max(1, ih)) else @intCast(@max(1, iw));
+    const steps_f: f32 = @floatFromInt(steps);
+
+    var step: u32 = 0;
+    while (step < steps) : (step += 1) {
+        const t: f32 = @as(f32, @floatFromInt(step)) / steps_f;
+        const r = lerpU8(c1.r, c2.r, t);
+        const g = lerpU8(c1.g, c2.g, t);
+        const b = lerpU8(c1.b, c2.b, t);
+        const a: u8 = @intFromFloat(@as(f32, @floatFromInt(lerpU8(c1.a, c2.a, t))) * opacity);
+        _ = c.SDL_SetRenderDrawColor(renderer, r, g, b, a);
+
+        if (dir == .vertical) {
+            var rect = c.SDL_Rect{ .x = ix, .y = iy + @as(i32, @intCast(step)), .w = iw, .h = 1 };
+            _ = c.SDL_RenderFillRect(renderer, &rect);
+        } else {
+            var rect = c.SDL_Rect{ .x = ix + @as(i32, @intCast(step)), .y = iy, .w = 1, .h = ih };
+            _ = c.SDL_RenderFillRect(renderer, &rect);
+        }
+    }
+}
+
 const Painter = struct {
     renderer: *c.SDL_Renderer,
     text_engine: *TextEngine,
@@ -147,13 +266,20 @@ const Painter = struct {
         }
 
         // ── Background ──────────────────────────────────────────
-        if (node.style.background_color) |color| {
+        if (node.style.gradient_direction != .none and node.style.background_color != null and node.style.gradient_color_end != null) {
+            // Gradient background (takes priority)
+            fillGradientRect(self.renderer, sx, sy, sw, sh, node.style.background_color.?, node.style.gradient_color_end.?, node.style.gradient_direction, effective_opacity);
+        } else if (node.style.background_color) |color| {
             const is_hovered = (hovered_node != null and hovered_node.? == node);
             const paint_color = if (is_hovered) brighten(color) else color;
             const a: u8 = @intFromFloat(@as(f32, @floatFromInt(paint_color.a)) * effective_opacity);
-            _ = c.SDL_SetRenderDrawColor(self.renderer, paint_color.r, paint_color.g, paint_color.b, a);
-            var bg_rect = c.SDL_Rect{ .x = sx, .y = sy, .w = sw, .h = sh };
-            _ = c.SDL_RenderFillRect(self.renderer, &bg_rect);
+            if (node.style.border_radius > 0) {
+                fillRoundedRect(self.renderer, sx, sy, sw, sh, node.style.border_radius, paint_color, a);
+            } else {
+                _ = c.SDL_SetRenderDrawColor(self.renderer, paint_color.r, paint_color.g, paint_color.b, a);
+                var bg_rect = c.SDL_Rect{ .x = sx, .y = sy, .w = sw, .h = sh };
+                _ = c.SDL_RenderFillRect(self.renderer, &bg_rect);
+            }
         }
 
         // ── Border ──────────────────────────────────────────────
@@ -353,6 +479,10 @@ pub fn main() !void {
     layout.setMeasureImageFn(measureImageCallback);
 
     var painter = Painter{ .renderer = renderer, .text_engine = &text_engine, .image_cache = &image_cache };
+
+    // Init rounded corner texture
+    initCircleTexture(renderer);
+    defer if (g_circle_tex) |t| c.SDL_DestroyTexture(t);
 
     // ── Colors ──────────────────────────────────────────────────────
     const bg = Color.rgb(24, 24, 32);
