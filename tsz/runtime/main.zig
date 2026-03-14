@@ -708,18 +708,59 @@ pub fn main() !void {
             .h = 2,
         };
 
-        // ── Paint pass ──────────────────────────────────────────────
-        // wgpu rendering (Step 1: clear to background color)
+        // ── Paint pass (wgpu) ────────────────────────────────────────
+        // Queue rects for this frame
+        // Container background (rounded)
+        gpu.drawRect(
+            (win_w - 540) / 2.0,
+            (win_h - 400) / 2.0,
+            540,
+            400,
+            30.0 / 255.0, 30.0 / 255.0, 42.0 / 255.0, 1.0, // color
+            12.0, // border_radius
+            0, // border_width
+            0, 0, 0, 0, // border_color
+        );
+
+        // Stat cards
+        const card_y = (win_h - 400) / 2.0 + 80;
+        const card_w: f32 = 160;
+        const card_h: f32 = 60;
+        const card_gap: f32 = 10;
+        const cards_start = (win_w - 540) / 2.0 + 24;
+
+        // Card 1
+        gpu.drawRect(cards_start, card_y, card_w, card_h, 40.0 / 255.0, 40.0 / 255.0, 56.0 / 255.0, 1.0, 6.0, 0, 0, 0, 0, 0);
+        // Card 2
+        gpu.drawRect(cards_start + card_w + card_gap, card_y, card_w, card_h, 40.0 / 255.0, 40.0 / 255.0, 56.0 / 255.0, 1.0, 6.0, 0, 0, 0, 0, 0);
+        // Card 3
+        gpu.drawRect(cards_start + (card_w + card_gap) * 2, card_y, card_w, card_h, 40.0 / 255.0, 40.0 / 255.0, 56.0 / 255.0, 1.0, 6.0, 0, 0, 0, 0, 0);
+
+        // Color bar
+        const bar_y = card_y + card_h + 12;
+        const bar_w = (540 - 24 * 2 - 12) / 4;
+        gpu.drawRect(cards_start, bar_y, bar_w, 40, 235.0 / 255.0, 87.0 / 255.0, 87.0 / 255.0, 1.0, 4.0, 0, 0, 0, 0, 0);
+        gpu.drawRect(cards_start + bar_w + 4, bar_y, bar_w, 40, 86.0 / 255.0, 156.0 / 255.0, 214.0 / 255.0, 1.0, 4.0, 0, 0, 0, 0, 0);
+        gpu.drawRect(cards_start + (bar_w + 4) * 2, bar_y, bar_w, 40, 78.0 / 255.0, 201.0 / 255.0, 176.0 / 255.0, 1.0, 4.0, 0, 0, 0, 0, 0);
+        gpu.drawRect(cards_start + (bar_w + 4) * 3, bar_y, bar_w, 40, 229.0 / 255.0, 192.0 / 255.0, 123.0 / 255.0, 1.0, 4.0, 0, 0, 0, 0, 0);
+
+        // Test: large border-radius rect (the crispy test)
+        gpu.drawRect(
+            (win_w - 540) / 2.0 + 24,
+            bar_y + 60,
+            200, 80,
+            1.0, 121.0 / 255.0, 198.0 / 255.0, 1.0, // accent pink
+            24.0, // large border-radius
+            2.0, // border
+            1.0, 1.0, 1.0, 0.5, // white semi-transparent border
+        );
+
+        // Render and present
         gpu.frame(
             @as(f64, @floatFromInt(bg.r)) / 255.0,
             @as(f64, @floatFromInt(bg.g)) / 255.0,
             @as(f64, @floatFromInt(bg.b)) / 255.0,
         );
-        // SDL fallback (kept temporarily until wgpu renders all primitives)
-        // painter.clear(bg);
-        // painter.paintTree(&container, 0, 0);
-        // painter.fillRect(pixel.computed, accent);
-        // painter.present();
     }
 
     std.debug.print("Engine shut down cleanly.\n", .{});
