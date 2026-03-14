@@ -4,7 +4,8 @@
 //! Simple JSON format, read/written via std.json.
 
 const std = @import("std");
-const posix = std.posix;
+const builtin = @import("builtin");
+const native_os = builtin.os.tag;
 
 pub const BuildStatus = enum { unknown, pass, fail };
 
@@ -110,10 +111,17 @@ var config_dir_len: usize = 0;
 
 pub fn configDir() []const u8 {
     if (config_dir_len > 0) return config_dir_buf[0..config_dir_len];
-    const home = std.posix.getenv("HOME") orelse "/tmp";
-    const path = std.fmt.bufPrint(&config_dir_buf, "{s}/.config/tsz", .{home}) catch return "/tmp/.config/tsz";
-    config_dir_len = path.len;
-    return path;
+    if (native_os == .windows) {
+        const appdata = std.process.getEnvVarOwned(std.heap.page_allocator, "APPDATA") catch "C:";
+        const path = std.fmt.bufPrint(&config_dir_buf, "{s}\\tsz", .{appdata}) catch return "C:\\tsz";
+        config_dir_len = path.len;
+        return path;
+    } else {
+        const home = std.posix.getenv("HOME") orelse "/tmp";
+        const path = std.fmt.bufPrint(&config_dir_buf, "{s}/.config/tsz", .{home}) catch return "/tmp/.config/tsz";
+        config_dir_len = path.len;
+        return path;
+    }
 }
 
 pub fn ensureConfigDir() void {

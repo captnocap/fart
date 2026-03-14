@@ -223,11 +223,15 @@ pub fn loadState() bool {
     return restore_count > 0;
 }
 
-// ── SIGUSR1 handler for dev mode state save ──────────────────────────────
+// ── Signal handler for dev mode state save ──────────────────────────────
+// POSIX: SIGUSR1 triggers state save before restart.
+// Windows: no equivalent signal; state save is triggered by other means.
 
+const builtin = @import("builtin");
 var _sigusr1_installed = false;
 
 pub fn installSignalHandler() void {
+    if (comptime builtin.os.tag == .windows) return; // no SIGUSR1 on Windows
     if (_sigusr1_installed) return;
     const handler = std.posix.Sigaction{
         .handler = .{ .handler = sigusr1Handler },

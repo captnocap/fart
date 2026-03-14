@@ -44,7 +44,9 @@ pub fn show(reason: []const u8, detail: []const u8) void {
     _ = c.SDL_SetRenderDrawBlendMode(renderer, c.SDL_BLENDMODE_BLEND);
 
     var te = TextEngine.init(renderer, "fonts/base/DejaVuSans-Regular.ttf") catch
-        TextEngine.init(renderer, "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf") catch {
+        TextEngine.init(renderer, "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf") catch
+        TextEngine.init(renderer, "C:/Windows/Fonts/segoeui.ttf") catch
+        TextEngine.init(renderer, "C:/Windows/Fonts/arial.ttf") catch {
         std.debug.print("\n=== CRASH (no font) ===\n{s}\n{s}\n", .{ reason, detail });
         return;
     };

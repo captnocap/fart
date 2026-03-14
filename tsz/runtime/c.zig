@@ -8,7 +8,11 @@
 const builtin = @import("builtin");
 
 pub const imports = @cImport({
-    @cInclude("SDL2/SDL.h");
+    if (builtin.os.tag == .windows) {
+        @cInclude("SDL.h");
+    } else {
+        @cInclude("SDL2/SDL.h");
+    }
     if (builtin.os.tag == .macos) {
         @cInclude("OpenGL/gl.h");
     } else {

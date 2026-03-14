@@ -266,6 +266,13 @@ pub fn build(b: *std.Build) void {
             engine_exe.root_module.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/lib" });
             engine_exe.root_module.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
             engine_exe.root_module.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include/freetype2" });
+        } else if (tsz_os == .windows) {
+            engine_exe.linkSystemLibrary("opengl32");
+            engine_exe.root_module.addLibraryPath(.{ .cwd_relative = "deps/windows/SDL2-2.30.12/lib/x64" });
+            engine_exe.root_module.addIncludePath(.{ .cwd_relative = "deps/windows/SDL2-2.30.12/include" });
+            engine_exe.root_module.addLibraryPath(.{ .cwd_relative = "deps/windows/freetype-windows-binaries-2.13.3/release dll/win64" });
+            engine_exe.root_module.addIncludePath(.{ .cwd_relative = "deps/windows/freetype-windows-binaries-2.13.3/include" });
+            engine_exe.root_module.addIncludePath(.{ .cwd_relative = "deps/windows/freetype-windows-binaries-2.13.3/include/freetype" });
         } else {
             engine_exe.linkSystemLibrary("GL");
             engine_exe.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/freetype2" });
@@ -305,12 +312,19 @@ pub fn build(b: *std.Build) void {
         app_exe.linkLibC();
         app_exe.linkSystemLibrary("SDL2");
         app_exe.linkSystemLibrary("freetype");
-        app_exe.linkSystemLibrary("mpv");
+        if (tsz_os != .windows) app_exe.linkSystemLibrary("mpv");
         if (tsz_os == .macos) {
             app_exe.linkFramework("OpenGL");
             app_exe.root_module.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/lib" });
             app_exe.root_module.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
             app_exe.root_module.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include/freetype2" });
+        } else if (tsz_os == .windows) {
+            app_exe.linkSystemLibrary("opengl32");
+            app_exe.root_module.addLibraryPath(.{ .cwd_relative = "deps/windows/SDL2-2.30.12/lib/x64" });
+            app_exe.root_module.addIncludePath(.{ .cwd_relative = "deps/windows/SDL2-2.30.12/include" });
+            app_exe.root_module.addLibraryPath(.{ .cwd_relative = "deps/windows/freetype-windows-binaries-2.13.3/release dll/win64" });
+            app_exe.root_module.addIncludePath(.{ .cwd_relative = "deps/windows/freetype-windows-binaries-2.13.3/include" });
+            app_exe.root_module.addIncludePath(.{ .cwd_relative = "deps/windows/freetype-windows-binaries-2.13.3/include/freetype" });
         } else {
             app_exe.linkSystemLibrary("GL");
             app_exe.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/freetype2" });
@@ -367,6 +381,13 @@ pub fn build(b: *std.Build) void {
             tsz_exe.root_module.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/lib" });
             tsz_exe.root_module.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
             tsz_exe.root_module.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include/freetype2" });
+        } else if (tsz_os == .windows) {
+            tsz_exe.linkSystemLibrary("opengl32");
+            tsz_exe.root_module.addLibraryPath(.{ .cwd_relative = "deps/windows/SDL2-2.30.12/lib/x64" });
+            tsz_exe.root_module.addIncludePath(.{ .cwd_relative = "deps/windows/SDL2-2.30.12/include" });
+            tsz_exe.root_module.addLibraryPath(.{ .cwd_relative = "deps/windows/freetype-windows-binaries-2.13.3/release dll/win64" });
+            tsz_exe.root_module.addIncludePath(.{ .cwd_relative = "deps/windows/freetype-windows-binaries-2.13.3/include" });
+            tsz_exe.root_module.addIncludePath(.{ .cwd_relative = "deps/windows/freetype-windows-binaries-2.13.3/include/freetype" });
         } else {
             tsz_exe.linkSystemLibrary("GL");
             tsz_exe.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/freetype2" });

@@ -251,7 +251,9 @@ pub fn main() !void {
     var text_engine = TextEngine.init(renderer, "fonts/base/DejaVuSans-Regular.ttf") catch
         TextEngine.init(renderer, "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf") catch
         TextEngine.init(renderer, "/System/Library/Fonts/Supplemental/Arial.ttf") catch
-        TextEngine.init(renderer, "/System/Library/Fonts/SFNS.ttf") catch {
+        TextEngine.init(renderer, "/System/Library/Fonts/SFNS.ttf") catch
+        TextEngine.init(renderer, "C:/Windows/Fonts/segoeui.ttf") catch
+        TextEngine.init(renderer, "C:/Windows/Fonts/arial.ttf") catch {
         std.debug.print("No font found!\n", .{});
         return error.FontNotFound;
     };

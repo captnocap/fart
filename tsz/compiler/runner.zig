@@ -2,10 +2,14 @@
 //!
 //! Used by the GUI to run build/test/run commands and display live output.
 //! Non-blocking pipe reads so the GUI loop doesn't stall.
+//!
+//! Cross-platform: fcntl on Linux/macOS, SetNamedPipeHandleState on Windows.
 
 const std = @import("std");
-const posix = std.posix;
+const builtin = @import("builtin");
+const native_os = builtin.os.tag;
 const process = @import("process.zig");
+const win32 = if (native_os == .windows) @import("win32.zig") else undefined;
 
 pub const Status = enum { idle, running, success, failed };
 
@@ -155,11 +159,42 @@ pub const Runner = struct {
         return true;
     }
 
-    /// Set a file descriptor to non-blocking mode.
-    fn setNonBlock(fd: posix.fd_t) void {
-        const O_NONBLOCK: u32 = 0o4000; // Linux O_NONBLOCK = 04000
-        const flags = std.os.linux.fcntl(fd, std.os.linux.F.GETFL, @as(u32, 0));
-        _ = std.os.linux.fcntl(fd, std.os.linux.F.SETFL, flags | O_NONBLOCK);
+    /// Set a file descriptor/handle to non-blocking mode.
+    fn setNonBlock(handle: anytype) void {
+        if (native_os == .windows) {
+            var mode: win32.DWORD = win32.PIPE_NOWAIT;
+            _ = win32.SetNamedPipeHandleState(handle, &mode, null, null);
+        } else {
+            const O_NONBLOCK: u32 = 0o4000;
+            const flags = std.os.linux.fcntl(handle, std.os.linux.F.GETFL, @as(u32, 0));
+            _ = std.os.linux.fcntl(handle, std.os.linux.F.SETFL, flags | O_NONBLOCK);
+        }
+    }
+
+    /// Read bytes from a pipe handle (cross-platform, non-blocking).
+    fn readPipe(handle: anytype, buf: []u8) usize {
+        if (native_os == .windows) {
+            var bytes_read: win32.DWORD = 0;
+            const result = win32.ReadFile(handle, buf.ptr, @intCast(buf.len), &bytes_read, null);
+            if (result == 0) return 0;
+            return bytes_read;
+        } else {
+            return std.posix.read(handle, buf) catch 0;
+        }
+    }
+
+    /// Check if child has exited (non-blocking).
+    fn checkChildExited(child: *std.process.Child) ?u8 {
+        if (native_os == .windows) {
+            var exit_code: win32.DWORD = 0;
+            if (win32.GetExitCodeProcess(child.id, &exit_code) == 0) return null;
+            if (exit_code == win32.STILL_ACTIVE) return null;
+            return @intCast(exit_code & 0xFF);
+        } else {
+            const result = std.posix.waitpid(child.id, 1); // WNOHANG
+            if (result.pid == 0) return null;
+            return @intCast((result.status & 0xFF00) >> 8);
+        }
     }
 
     /// Non-blocking read from child pipes. Call each frame.
@@ -169,26 +204,25 @@ pub const Runner = struct {
         // Read stdout (non-blocking)
         if (self.child.?.stdout) |stdout| {
             var buf: [4096]u8 = undefined;
-            const n = posix.read(stdout.handle, &buf) catch 0;
+            const n = readPipe(stdout.handle, &buf);
             if (n > 0) self.appendOutput(buf[0..n]);
         }
 
         // Read stderr (non-blocking)
         if (self.child.?.stderr) |stderr| {
             var buf: [4096]u8 = undefined;
-            const n = posix.read(stderr.handle, &buf) catch 0;
+            const n = readPipe(stderr.handle, &buf);
             if (n > 0) self.appendOutput(buf[0..n]);
         }
 
-        // Check if child has exited (WNOHANG)
+        // Check if child has exited
         if (self.child) |*child| {
-            const result = posix.waitpid(child.id, 1); // WNOHANG
-            if (result.pid != 0) {
+            if (checkChildExited(child)) |exit_ok| {
                 // Child exited — drain remaining
                 if (child.stdout) |stdout| {
                     var buf: [4096]u8 = undefined;
                     while (true) {
-                        const n = posix.read(stdout.handle, &buf) catch break;
+                        const n = readPipe(stdout.handle, &buf);
                         if (n == 0) break;
                         self.appendOutput(buf[0..n]);
                     }
@@ -196,14 +230,13 @@ pub const Runner = struct {
                 if (child.stderr) |stderr| {
                     var buf: [4096]u8 = undefined;
                     while (true) {
-                        const n = posix.read(stderr.handle, &buf) catch break;
+                        const n = readPipe(stderr.handle, &buf);
                         if (n == 0) break;
                         self.appendOutput(buf[0..n]);
                     }
                 }
 
-                const exit_ok = (result.status & 0xFF00) >> 8;
-                self.exit_code = @intCast(exit_ok);
+                self.exit_code = exit_ok;
                 self.status = if (exit_ok == 0) .success else .failed;
                 self.child = null;
             }
@@ -213,10 +246,15 @@ pub const Runner = struct {
     /// Kill the running child process.
     pub fn stop(self: *Runner) void {
         if (self.child) |*child| {
-            posix.kill(child.id, posix.SIG.TERM) catch {};
-            std.Thread.sleep(50 * std.time.ns_per_ms);
-            posix.kill(child.id, posix.SIG.KILL) catch {};
-            _ = posix.waitpid(child.id, 0);
+            if (native_os == .windows) {
+                _ = win32.TerminateProcess(child.id, 1);
+                std.Thread.sleep(100 * std.time.ns_per_ms);
+            } else {
+                std.posix.kill(child.id, std.posix.SIG.TERM) catch {};
+                std.Thread.sleep(50 * std.time.ns_per_ms);
+                std.posix.kill(child.id, std.posix.SIG.KILL) catch {};
+                _ = std.posix.waitpid(child.id, 0);
+            }
             self.child = null;
             self.status = .idle;
         }

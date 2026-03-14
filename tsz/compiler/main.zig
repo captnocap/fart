@@ -13,13 +13,15 @@
 //!   tsz gui                 Open GUI dashboard (Phase 2)
 
 const std = @import("std");
+const builtin = @import("builtin");
+const native_os = builtin.os.tag;
 const lexer = @import("lexer.zig");
 const codegen = @import("codegen.zig");
 const registry = @import("registry.zig");
 const process = @import("process.zig");
 pub const actions = @import("actions.zig");
 const gui = @import("gui.zig");
-const posix = std.posix;
+const win32 = if (native_os == .windows) @import("win32.zig") else undefined;
 
 // ── Helpers ─────────────────────────────────────────────────────────────
 
@@ -36,10 +38,11 @@ fn projectName(input_file: []const u8) []const u8 {
     return if (std.mem.endsWith(u8, base, ".tsz")) base[0 .. base.len - 4] else base;
 }
 
-/// Full path to the app binary: "zig-out/bin/tsz-counter"
+/// Full path to the app binary: "zig-out/bin/tsz-counter" (or .exe on Windows)
 fn appPath(alloc: std.mem.Allocator, input_file: []const u8) []const u8 {
     const name = appName(alloc, input_file);
-    return std.fmt.allocPrint(alloc, "zig-out/bin/{s}", .{name}) catch "zig-out/bin/tsz-app";
+    const ext = if (native_os == .windows) ".exe" else "";
+    return std.fmt.allocPrint(alloc, "zig-out/bin/{s}{s}", .{ name, ext }) catch "zig-out/bin/tsz-app";
 }
 
 /// Get the mtime of a file, or 0 on error.
@@ -112,8 +115,9 @@ fn compile(alloc: std.mem.Allocator, input_file: []const u8) bool {
     }
 
     // Copy binary to per-app name
+    const src_bin = if (native_os == .windows) "zig-out/bin/tsz-app.exe" else "zig-out/bin/tsz-app";
     const dest = appPath(alloc, input_file);
-    std.fs.cwd().copyFile("zig-out/bin/tsz-app", std.fs.cwd(), dest, .{}) catch |err| {
+    std.fs.cwd().copyFile(src_bin, std.fs.cwd(), dest, .{}) catch |err| {
         std.debug.print("[tsz] Warning: could not copy to {s}: {}\n", .{ dest, err });
     };
     std.debug.print("[tsz] Built → {s}\n", .{dest});
@@ -122,8 +126,8 @@ fn compile(alloc: std.mem.Allocator, input_file: []const u8) bool {
 
 // ── Spawn / Kill ────────────────────────────────────────────────────────
 
-/// Spawn the app binary as a child process. Returns the pid.
-fn spawnApp(alloc: std.mem.Allocator, input_file: []const u8) ?posix.pid_t {
+/// Spawn the app binary as a child process. Returns the platform PID.
+fn spawnApp(alloc: std.mem.Allocator, input_file: []const u8) ?process.PidType {
     const path = appPath(alloc, input_file);
     const argv = [_][]const u8{path};
     var child = std.process.Child.init(&argv, alloc);
@@ -131,15 +135,26 @@ fn spawnApp(alloc: std.mem.Allocator, input_file: []const u8) ?posix.pid_t {
         std.debug.print("[tsz] Failed to spawn app: {}\n", .{err});
         return null;
     };
-    return child.id;
+    if (native_os == .windows) {
+        return win32.GetProcessId(child.id);
+    } else {
+        return child.id;
+    }
 }
 
-/// Kill a running child process by pid.
-fn killApp(pid: posix.pid_t) void {
-    posix.kill(pid, posix.SIG.USR1) catch {};
-    std.Thread.sleep(50 * std.time.ns_per_ms);
-    posix.kill(pid, posix.SIG.TERM) catch {};
-    _ = posix.waitpid(pid, 0);
+/// Kill a running child process by PID.
+fn killApp(pid: process.PidType) void {
+    if (native_os == .windows) {
+        const handle = win32.OpenProcess(win32.PROCESS_TERMINATE, 0, pid) orelse return;
+        defer win32.closeHandle(handle);
+        _ = win32.TerminateProcess(handle, 1);
+        std.Thread.sleep(100 * std.time.ns_per_ms);
+    } else {
+        std.posix.kill(pid, std.posix.SIG.USR1) catch {};
+        std.Thread.sleep(50 * std.time.ns_per_ms);
+        std.posix.kill(pid, std.posix.SIG.TERM) catch {};
+        _ = std.posix.waitpid(pid, 0);
+    }
 }
 
 // ── Subcommands ─────────────────────────────────────────────────────────
@@ -189,7 +204,14 @@ fn cmdRun(alloc: std.mem.Allocator, input_file: []const u8) void {
     if (spawnApp(alloc, input_file)) |pid| {
         process.writePid(name, pid);
         // Wait for it to exit
-        _ = posix.waitpid(pid, 0);
+        if (native_os == .windows) {
+            // Poll until process exits
+            while (process.isRunning(pid)) {
+                std.Thread.sleep(100 * std.time.ns_per_ms);
+            }
+        } else {
+            _ = std.posix.waitpid(pid, 0);
+        }
         process.removePid(name);
     }
 }
@@ -216,7 +238,7 @@ fn cmdDev(alloc: std.mem.Allocator, input_file: []const u8) !void {
     }
 
     var last_mtime = getMtime(input_file);
-    var app_pid: ?posix.pid_t = null;
+    var app_pid: ?process.PidType = null;
 
     if (std.fs.cwd().access(appPath(alloc, input_file), .{})) |_| {
         app_pid = spawnApp(alloc, input_file);
@@ -232,8 +254,7 @@ fn cmdDev(alloc: std.mem.Allocator, input_file: []const u8) !void {
         const mtime = getMtime(input_file);
         if (mtime == last_mtime) {
             if (app_pid) |pid| {
-                const result = posix.waitpid(pid, 1);
-                if (result.pid != 0) {
+                if (!process.isRunning(pid)) {
                     std.debug.print("[tsz] App exited. Watching for changes...\n", .{});
                     app_pid = null;
                     process.removePid(name);
@@ -303,9 +324,14 @@ fn cmdTest(alloc: std.mem.Allocator, input_file: []const u8) void {
     };
     std.Thread.sleep(1 * std.time.ns_per_s);
     // Kill the app after 1 second
-    if (child.id != 0) {
-        posix.kill(child.id, posix.SIG.TERM) catch {};
-        _ = posix.waitpid(child.id, 0);
+    if (native_os == .windows) {
+        _ = win32.TerminateProcess(child.id, 0);
+        std.Thread.sleep(100 * std.time.ns_per_ms);
+    } else {
+        if (child.id != 0) {
+            std.posix.kill(child.id, std.posix.SIG.TERM) catch {};
+            _ = std.posix.waitpid(child.id, 0);
+        }
     }
     std.debug.print("PASS\n", .{});
 
@@ -533,6 +559,9 @@ pub fn execAction(alloc: std.mem.Allocator, action_name: []const u8, arg: []cons
 }
 
 fn checkPathInstall() void {
+    // PATH install is POSIX-only (symlinks to ~/.local/bin)
+    if (native_os == .windows) return;
+
     // Only offer once — check flag file
     const home = std.posix.getenv("HOME") orelse return;
     var flag_buf: [280]u8 = undefined;
@@ -613,7 +642,22 @@ pub fn main() !void {
             if (std.fs.path.dirname(ep)) |bin_dir| {
                 if (std.fs.path.dirname(bin_dir)) |zigout_dir| {
                     if (std.fs.path.dirname(zigout_dir)) |repo_root| {
-                        std.posix.chdir(repo_root) catch {};
+                        if (native_os == .windows) {
+                            // std.fs doesn't expose chdir on Windows,
+                            // so call the C runtime directly.
+                            const chdir_fn = struct {
+                                extern "c" fn _chdir(path: [*:0]const u8) c_int;
+                            };
+                            // repo_root is a slice — copy to null-terminated buffer
+                            var chdir_buf: [1024]u8 = undefined;
+                            if (repo_root.len < chdir_buf.len) {
+                                @memcpy(chdir_buf[0..repo_root.len], repo_root);
+                                chdir_buf[repo_root.len] = 0;
+                                _ = chdir_fn._chdir(@ptrCast(&chdir_buf));
+                            }
+                        } else {
+                            std.posix.chdir(repo_root) catch {};
+                        }
                     }
                 }
             }

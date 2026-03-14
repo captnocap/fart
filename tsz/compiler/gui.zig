@@ -14,7 +14,9 @@ const process = @import("process.zig");
 const actions_mod = @import("actions.zig");
 const tray = @import("tray.zig");
 const runner = @import("runner.zig");
-const posix = std.posix;
+const builtin = @import("builtin");
+const native_os = builtin.os.tag;
+const win32 = if (native_os == .windows) @import("win32.zig") else undefined;
 
 // Signal flag: set by SIGUSR2 handler to raise the window
 var sig_raise_window: bool = false;
@@ -110,7 +112,9 @@ pub fn run(alloc: std.mem.Allocator) !void {
     var te = TextEngine.init(renderer, "fonts/base/DejaVuSans-Regular.ttf") catch
         TextEngine.init(renderer, "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf") catch
         TextEngine.init(renderer, "/System/Library/Fonts/Supplemental/Arial.ttf") catch
-        TextEngine.init(renderer, "/System/Library/Fonts/SFNS.ttf") catch return;
+        TextEngine.init(renderer, "/System/Library/Fonts/SFNS.ttf") catch
+        TextEngine.init(renderer, "C:/Windows/Fonts/segoeui.ttf") catch
+        TextEngine.init(renderer, "C:/Windows/Fonts/arial.ttf") catch return;
     defer te.deinit();
 
     var reg = registry.load(alloc);
@@ -121,20 +125,29 @@ pub fn run(alloc: std.mem.Allocator) !void {
     if (gui_pid) |pid| {
         if (process.isRunning(pid)) {
             std.debug.print("[tsz] Dashboard already running (pid {d}). Raising window.\n", .{pid});
-            // Send SIGUSR2 to raise the existing window
-            std.posix.kill(pid, std.posix.SIG.USR2) catch {};
+            // Send SIGUSR2 to raise the existing window (POSIX only)
+            if (native_os != .windows) {
+                std.posix.kill(pid, std.posix.SIG.USR2) catch {};
+            }
             return;
         }
     }
     // Write our PID + install SIGUSR2 handler for window raise
-    process.writePid("__gui__", std.os.linux.getpid());
+    if (native_os == .windows) {
+        process.writePid("__gui__", win32.GetCurrentProcessId());
+    } else {
+        process.writePid("__gui__", std.os.linux.getpid());
+    }
     defer process.removePid("__gui__");
-    const sa = posix.Sigaction{
-        .handler = .{ .handler = sigusr2Handler },
-        .mask = posix.sigemptyset(),
-        .flags = 0,
-    };
-    posix.sigaction(posix.SIG.USR2, &sa, null);
+    if (native_os != .windows) {
+        const posix = std.posix;
+        const sa = posix.Sigaction{
+            .handler = .{ .handler = sigusr2Handler },
+            .mask = posix.sigemptyset(),
+            .flags = 0,
+        };
+        posix.sigaction(posix.SIG.USR2, &sa, null);
+    }
 
     // Init system tray
     const has_tray = tray.init();
@@ -862,7 +875,9 @@ fn openLogPopout(te: *TextEngine, _: *c.SDL_Renderer) void {
     var pop_te = TextEngine.init(pop_rend, "fonts/base/DejaVuSans-Regular.ttf") catch
         TextEngine.init(pop_rend, "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf") catch
         TextEngine.init(pop_rend, "/System/Library/Fonts/Supplemental/Arial.ttf") catch
-        TextEngine.init(pop_rend, "/System/Library/Fonts/SFNS.ttf") catch {
+        TextEngine.init(pop_rend, "/System/Library/Fonts/SFNS.ttf") catch
+        TextEngine.init(pop_rend, "C:/Windows/Fonts/segoeui.ttf") catch
+        TextEngine.init(pop_rend, "C:/Windows/Fonts/arial.ttf") catch {
         c.SDL_DestroyRenderer(pop_rend);
         c.SDL_DestroyWindow(pop_win);
         return;
