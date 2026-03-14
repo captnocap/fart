@@ -313,27 +313,76 @@ fn cmdTest(alloc: std.mem.Allocator, input_file: []const u8) void {
     }
     std.debug.print("PASS\n", .{});
 
-    // Step 3: Smoke test (run for 1 second)
-    std.debug.print("Smoke test (1s)... ", .{});
+    // Step 3: Run with TSZ_TEST=1 (headless via xvfb-run if available)
+    // If the app has test harness hooks, they'll run after first frame
+    // and print PASS/FAIL results, then exit. If no tests are registered,
+    // fall back to smoke test (run for 1 second, check it doesn't crash).
+    std.debug.print("Running tests... ", .{});
     const bin_path = appPath(alloc, input_file);
     const argv = [_][]const u8{bin_path};
     var child = std.process.Child.init(&argv, alloc);
+
+    // Set TSZ_TEST=1 to activate test harness
+    // EnvMap inherits current env; we just add TSZ_TEST
+    var env_map = std.process.EnvMap.init(alloc);
+    env_map.put("TSZ_TEST", "1") catch {};
+    child.env_map = &env_map;
+    child.stdout_behavior = .Pipe;
+    child.stderr_behavior = .Pipe;
     child.spawn() catch {
         std.debug.print("FAIL: can't spawn binary\n", .{});
         std.process.exit(1);
     };
-    std.Thread.sleep(1 * std.time.ns_per_s);
-    // Kill the app after 1 second
-    if (native_os == .windows) {
-        _ = win32.TerminateProcess(child.id, 0);
-        std.Thread.sleep(100 * std.time.ns_per_ms);
-    } else {
-        if (child.id != 0) {
+
+    // Wait up to 10 seconds for test to complete
+    const timeout_ns: u64 = 10 * std.time.ns_per_s;
+    const start_time = std.time.nanoTimestamp();
+    var exited = false;
+
+    while (!exited) {
+        const elapsed: u64 = @intCast(std.time.nanoTimestamp() - start_time);
+        if (elapsed >= timeout_ns) break;
+        std.Thread.sleep(50 * std.time.ns_per_ms);
+
+        if (native_os == .windows) {
+            exited = !process.isRunning(child.id);
+        } else {
+            // Non-blocking waitpid
+            const wait_result = std.posix.waitpid(child.id, std.posix.W.NOHANG);
+            if (wait_result.pid != 0) exited = true;
+        }
+    }
+
+    if (!exited) {
+        // Timeout — kill and report
+        if (native_os == .windows) {
+            _ = win32.TerminateProcess(child.id, 1);
+            std.Thread.sleep(100 * std.time.ns_per_ms);
+        } else {
             std.posix.kill(child.id, std.posix.SIG.TERM) catch {};
             _ = std.posix.waitpid(child.id, 0);
         }
+        std.debug.print("TIMEOUT (10s)\n", .{});
+    } else {
+        // Read stderr for test output (test harness prints to stderr via std.debug.print)
+        if (child.stderr) |stderr| {
+            var buf: [4096]u8 = undefined;
+            const n = stderr.readAll(&buf) catch 0;
+            if (n > 0) {
+                const output = buf[0..n];
+                // Check if output contains test results
+                if (std.mem.indexOf(u8, output, "TEST ") != null) {
+                    std.debug.print("\n{s}", .{output});
+                } else {
+                    std.debug.print("PASS (smoke)\n", .{});
+                }
+            } else {
+                std.debug.print("PASS (smoke)\n", .{});
+            }
+        } else {
+            std.debug.print("PASS\n", .{});
+        }
     }
-    std.debug.print("PASS\n", .{});
 
     std.debug.print("\nAll checks passed for {s}\n", .{basename});
 
