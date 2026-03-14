@@ -487,17 +487,18 @@ pub fn paintTerminal(x: f32, y: f32, w: f32, h: f32) void {
     const font_size: u16 = 13;
     const char_w: f32 = 7.8; // approximate monospace width at 13px
     const line_h: f32 = 18.0;
-    _ = w; // use cols from vterm
+    const max_col: u16 = @intFromFloat(@min(@as(f32, @floatFromInt(v.cols)), w / char_w));
 
     var cell_buf: VTermScreenCell = .{};
 
+    const max_row: u16 = @intFromFloat(@min(@as(f32, @floatFromInt(v.rows)), h / line_h));
+
     var row: u16 = 0;
-    while (row < v.rows) : (row += 1) {
+    while (row < max_row) : (row += 1) {
         const cy = y + @as(f32, @floatFromInt(row)) * line_h;
-        if (cy + line_h < y or cy > y + h) continue; // clip
 
         var col: u16 = 0;
-        while (col < v.cols) : (col += 1) {
+        while (col < max_col) : (col += 1) {
             const cx = x + @as(f32, @floatFromInt(col)) * char_w;
 
             const pos = VTermPos{ .row = @intCast(row), .col = @intCast(col) };
