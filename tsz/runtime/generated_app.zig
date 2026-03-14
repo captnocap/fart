@@ -20,12 +20,13 @@ const watchdog = @import("watchdog.zig");
 const bsod = @import("bsod.zig");
 const leaktest = @import("leaktest.zig");
 const input_mod = @import("input.zig");
+const geometry = @import("geometry.zig");
 
 var g_text_engine: ?*TextEngine = null;
 var g_image_cache: ?*ImageCache = null;
 
-fn measureCallback(t: []const u8, font_size: u16, max_width: f32) layout.TextMetrics {
-    if (g_text_engine) |te| { return te.measureTextWrapped(t, font_size, max_width); }
+fn measureCallback(t: []const u8, font_size: u16, max_width: f32, letter_spacing: f32, line_height: f32, max_lines: u16, no_wrap: bool) layout.TextMetrics {
+    if (g_text_engine) |te| { return te.measureTextWrappedEx(t, font_size, max_width, letter_spacing, line_height, max_lines, no_wrap); }
     return .{};
 }
 
@@ -35,13 +36,23 @@ fn measureImageCallback(img_path: []const u8) layout.ImageDims {
 }
 
 // ── Generated node tree ─────────────────────────────────────────
-var _arr_0 = [_]Node{ .{ .text = "Named color: navy + CSS border-radius", .font_size = 16, .text_color = Color.rgb(255, 255, 255) } };
-var _arr_1 = [_]Node{ .{ .text = "Named colors + rem units", .font_size = 16, .text_color = Color.rgb(255, 255, 0) } };
-var _arr_2 = [_]Node{ .{ .text = "Tailwind classes via className", .font_size = 16, .text_color = Color.rgb(255, 255, 255) } };
-var _arr_3 = [_]Node{ .{ .text = "Bootstrap classes via className", .font_size = 16, .text_color = Color.rgb(255, 255, 255) } };
-var _arr_4 = [_]Node{ .{ .text = "Mixed: Tailwind className + inline style", .font_size = 16, .text_color = Color.rgb(0, 255, 255) } };
-var _arr_5 = [_]Node{ .{ .text = "CSS Kebab-Case Properties", .font_size = 24, .text_color = Color.rgb(255, 255, 255) }, .{ .style = .{ .background_color = Color.rgb(0, 0, 128), .padding = 16, .border_radius = 8 }, .children = &_arr_0 }, .{ .style = .{ .background_color = Color.rgb(255, 0, 0), .margin_top = 32, .padding = 16 }, .children = &_arr_1 }, .{ .style = .{ .padding = 16, .background_color = Color.rgb(59, 130, 246), .flex_direction = .column, .align_items = .center, .border_radius = 8 }, .children = &_arr_2 }, .{ .style = .{ .display = .flex, .justify_content = .center, .padding = 12, .background_color = Color.rgb(13, 110, 253), .border_radius = 8 }, .children = &_arr_3 }, .{ .style = .{ .padding = 32, .background_color = Color.rgb(15, 23, 42), .flex_direction = .column, .gap = 8 }, .children = &_arr_4 } };
-var root = Node{ .style = .{ .background_color = Color.rgb(30, 30, 42), .flex_direction = .column, .padding = 32 }, .children = &_arr_5 };
+var _arr_0 = [_]Node{ .{ .text = "Tag A", .font_size = 12, .text_color = Color.rgb(255, 255, 255) } };
+var _arr_1 = [_]Node{ .{ .text = "Tag B", .font_size = 12, .text_color = Color.rgb(255, 255, 255) } };
+var _arr_2 = [_]Node{ .{ .style = .{ .background_color = Color.rgb(20, 184, 166), .padding = 8, .border_radius = 4 }, .children = &_arr_0 }, .{ .style = .{ .background_color = Color.rgb(168, 85, 247), .padding = 8, .border_radius = 4 }, .children = &_arr_1 } };
+var _arr_3 = [_]Node{ .{ .text = "Card Title", .font_size = 18, .text_color = Color.rgb(255, 255, 255) }, .{ .text = "Body text in a padded, rounded card", .font_size = 14, .text_color = Color.rgb(192, 192, 192) }, .{ .style = .{ .flex_direction = .row, .gap = 8 }, .children = &_arr_2 } };
+var _arr_4 = [_]Node{ .{ .text = "1. Inline CSS (kebab-case + units)", .font_size = 14, .text_color = Color.rgb(128, 128, 128) }, .{ .style = .{ .background_color = Color.rgb(30, 41, 59), .flex_direction = .column, .padding = 16, .border_radius = 8, .gap = 8 }, .children = &_arr_3 } };
+var _arr_5 = [_]Node{ .{ .text = "Tag A", .font_size = 12, .text_color = Color.rgb(255, 255, 255) } };
+var _arr_6 = [_]Node{ .{ .text = "Tag B", .font_size = 12, .text_color = Color.rgb(255, 255, 255) } };
+var _arr_7 = [_]Node{ .{ .style = .{ .background_color = Color.rgb(20, 184, 166), .padding = 8, .border_radius = 4 }, .children = &_arr_5 }, .{ .style = .{ .background_color = Color.rgb(168, 85, 247), .padding = 8, .border_radius = 4 }, .children = &_arr_6 } };
+var _arr_8 = [_]Node{ .{ .text = "Card Title", .font_size = 18, .text_color = Color.rgb(255, 255, 255) }, .{ .text = "Body text in a padded, rounded card", .font_size = 14, .text_color = Color.rgb(192, 192, 192) }, .{ .style = .{ .flex_direction = .row, .gap = 8 }, .children = &_arr_7 } };
+var _arr_9 = [_]Node{ .{ .text = "2. Tailwind classes", .font_size = 14, .text_color = Color.rgb(128, 128, 128) }, .{ .style = .{ .background_color = Color.rgb(30, 41, 59), .flex_direction = .column, .padding = 16, .border_radius = 8, .gap = 8 }, .children = &_arr_8 } };
+var _arr_10 = [_]Node{ .{ .text = "Tag A", .font_size = 12, .text_color = Color.rgb(255, 255, 255) } };
+var _arr_11 = [_]Node{ .{ .text = "Tag B", .font_size = 12, .text_color = Color.rgb(255, 255, 255) } };
+var _arr_12 = [_]Node{ .{ .style = .{ .background_color = Color.rgb(20, 184, 166), .padding = 8, .border_radius = 4 }, .children = &_arr_10 }, .{ .style = .{ .background_color = Color.rgb(168, 85, 247), .padding = 8, .border_radius = 4 }, .children = &_arr_11 } };
+var _arr_13 = [_]Node{ .{ .text = "Card Title", .font_size = 18, .text_color = Color.rgb(255, 255, 255) }, .{ .text = "Body text in a padded, rounded card", .font_size = 14, .text_color = Color.rgb(192, 192, 192) }, .{ .style = .{ .display = .flex, .flex_direction = .row, .gap = 4 }, .children = &_arr_12 } };
+var _arr_14 = [_]Node{ .{ .text = "3. Bootstrap classes", .font_size = 14, .text_color = Color.rgb(128, 128, 128) }, .{ .style = .{ .display = .flex, .flex_direction = .column, .padding = 12, .border_radius = 8, .gap = 8, .background_color = Color.rgb(30, 41, 59) }, .children = &_arr_13 } };
+var _arr_15 = [_]Node{ .{ .text = "Same card, three syntaxes:", .font_size = 20, .text_color = Color.rgb(255, 255, 255) }, .{ .style = .{ .flex_direction = .column, .gap = 8 }, .children = &_arr_4 }, .{ .style = .{ .flex_direction = .column, .gap = 8 }, .children = &_arr_9 }, .{ .style = .{ .flex_direction = .column, .gap = 8 }, .children = &_arr_14 } };
+var root = Node{ .style = .{ .background_color = Color.rgb(30, 30, 42), .flex_direction = .column, .padding = 24, .gap = 16 }, .children = &_arr_15 };
 var hovered_node: ?*Node = null;
 
 fn brighten(color: Color) Color {
@@ -285,14 +296,23 @@ pub fn main() !void {
     layout.setMeasureFn(measureCallback);
     layout.setMeasureImageFn(measureImageCallback);
     var painter = Painter{ .renderer = renderer, .text_engine = &text_engine, .image_cache = &image_cache };
+    var win_w: f32 = 1280;
+    var win_h: f32 = 800;
+
+    geometry.init("universal-style-test");
+    if (geometry.load()) |geom| {
+        c.SDL_SetWindowPosition(window, geom.x, geom.y);
+        c.SDL_SetWindowSize(window, @intCast(geom.width), @intCast(geom.height));
+        win_w = @floatFromInt(geom.width);
+        win_h = @floatFromInt(geom.height);
+        geometry.blockSaves();
+    }
 
     defer win_mgr.deinitAll();
     watchdog.init(512);
 
     const main_window_id = c.SDL_GetWindowID(window);
     var running = true;
-    var win_w: f32 = 1280;
-    var win_h: f32 = 800;
 
     while (running) {
         var event: c.SDL_Event = undefined;
@@ -326,7 +346,16 @@ pub fn main() !void {
             }
             switch (event.type) {
                 c.SDL_QUIT => running = false,
-                c.SDL_WINDOWEVENT => { if (event.window.event == c.SDL_WINDOWEVENT_SIZE_CHANGED) { win_w = @floatFromInt(event.window.data1); win_h = @floatFromInt(event.window.data2); } },
+                c.SDL_WINDOWEVENT => {
+                    if (event.window.event == c.SDL_WINDOWEVENT_SIZE_CHANGED) {
+                        win_w = @floatFromInt(event.window.data1);
+                        win_h = @floatFromInt(event.window.data2);
+                        geometry.save(window);
+                    }
+                    if (event.window.event == c.SDL_WINDOWEVENT_MOVED) {
+                        geometry.save(window);
+                    }
+                },
                 c.SDL_TEXTINPUT => {
                     input_mod.handleTextInput(@ptrCast(&event.text.text));
                 },
@@ -480,4 +509,5 @@ pub fn main() !void {
         win_mgr.layoutAll();
         win_mgr.paintAndPresent(brighten);
     }
+    geometry.save(window);
 }

@@ -687,6 +687,9 @@ pub const Generator = struct {
         var style_str: []const u8 = "";
         var className_str: []const u8 = "";
         var font_size: []const u8 = "";
+        var letter_spacing: []const u8 = "";
+        var line_height_val: []const u8 = "";
+        var number_of_lines: []const u8 = "";
         var color_str: []const u8 = "";
         var src_str: []const u8 = "";
         var on_press_start: ?u32 = null;
@@ -730,6 +733,12 @@ pub const Generator = struct {
                         style_str = try self.parseStyleAttr();
                     } else if (std.mem.eql(u8, attr_name, "fontSize")) {
                         font_size = try self.parseExprAttr();
+                    } else if (std.mem.eql(u8, attr_name, "letterSpacing")) {
+                        letter_spacing = try self.parseExprAttr();
+                    } else if (std.mem.eql(u8, attr_name, "lineHeight")) {
+                        line_height_val = try self.parseExprAttr();
+                    } else if (std.mem.eql(u8, attr_name, "numberOfLines")) {
+                        number_of_lines = try self.parseExprAttr();
                     } else if (std.mem.eql(u8, attr_name, "color")) {
                         color_str = try self.parseStringAttr();
                     } else if (std.mem.eql(u8, attr_name, "src")) {
@@ -948,6 +957,27 @@ pub const Generator = struct {
             if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
             try fields.appendSlice(self.alloc, ".font_size = ");
             try fields.appendSlice(self.alloc, font_size);
+        }
+
+        // Letter spacing
+        if (letter_spacing.len > 0) {
+            if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
+            try fields.appendSlice(self.alloc, ".letter_spacing = ");
+            try fields.appendSlice(self.alloc, letter_spacing);
+        }
+
+        // Line height
+        if (line_height_val.len > 0) {
+            if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
+            try fields.appendSlice(self.alloc, ".line_height = ");
+            try fields.appendSlice(self.alloc, line_height_val);
+        }
+
+        // Number of lines
+        if (number_of_lines.len > 0) {
+            if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
+            try fields.appendSlice(self.alloc, ".number_of_lines = ");
+            try fields.appendSlice(self.alloc, number_of_lines);
         }
 
         // Color
@@ -1171,6 +1201,26 @@ pub const Generator = struct {
                     if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
                     try fields.appendSlice(self.alloc, ".background_color = ");
                     try fields.appendSlice(self.alloc, color);
+                } else if (std.mem.eql(u8, key, "borderColor")) {
+                    const val = try self.parseStringAttrInline();
+                    const color = try self.parseColorValue(val);
+                    if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
+                    try fields.appendSlice(self.alloc, ".border_color = ");
+                    try fields.appendSlice(self.alloc, color);
+                } else if (std.mem.eql(u8, key, "shadowColor")) {
+                    const val = try self.parseStringAttrInline();
+                    const color = try self.parseColorValue(val);
+                    if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
+                    try fields.appendSlice(self.alloc, ".shadow_color = ");
+                    try fields.appendSlice(self.alloc, color);
+                } else if (mapStyleKeyI16(key)) |zig_key| {
+                    const val = self.curText();
+                    self.advance_token();
+                    if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
+                    try fields.appendSlice(self.alloc, ".");
+                    try fields.appendSlice(self.alloc, zig_key);
+                    try fields.appendSlice(self.alloc, " = ");
+                    try fields.appendSlice(self.alloc, val);
                 } else if (mapStyleKey(key)) |zig_key| {
                     // Numeric style property — handle bare numbers and CSS unit strings
                     if (self.curKind() == .string) {
@@ -1912,7 +1962,7 @@ pub const Generator = struct {
         try out.appendSlice(self.alloc, "\nvar g_text_engine: ?*TextEngine = null;\nvar g_image_cache: ?*ImageCache = null;\n\n");
 
         // Measure callbacks
-        try out.appendSlice(self.alloc, "fn measureCallback(t: []const u8, font_size: u16, max_width: f32, letter_spacing: f32, line_height: f32, max_lines: u16) layout.TextMetrics {\n    if (g_text_engine) |te| { return te.measureTextWrappedEx(t, font_size, max_width, letter_spacing, line_height, max_lines); }\n    return .{};\n}\n\n");
+        try out.appendSlice(self.alloc, "fn measureCallback(t: []const u8, font_size: u16, max_width: f32, letter_spacing: f32, line_height: f32, max_lines: u16, no_wrap: bool) layout.TextMetrics {\n    if (g_text_engine) |te| { return te.measureTextWrappedEx(t, font_size, max_width, letter_spacing, line_height, max_lines, no_wrap); }\n    return .{};\n}\n\n");
         try out.appendSlice(self.alloc, "fn measureImageCallback(img_path: []const u8) layout.ImageDims {\n    if (g_image_cache) |cache| { if (cache.load(img_path)) |img| { return .{ .width = @floatFromInt(img.width), .height = @floatFromInt(img.height) }; } }\n    return .{};\n}\n\n");
 
         // Node tree arrays
@@ -2246,10 +2296,26 @@ fn mapStyleKey(key: []const u8) ?[]const u8 {
         .{ "marginTop", "margin_top" },
         .{ "marginBottom", "margin_bottom" },
         .{ "borderRadius", "border_radius" },
+        .{ "opacity", "opacity" },
+        .{ "borderWidth", "border_width" },
+        .{ "shadowOffsetX", "shadow_offset_x" },
+        .{ "shadowOffsetY", "shadow_offset_y" },
+        .{ "shadowBlur", "shadow_blur" },
+        .{ "top", "top" },
+        .{ "left", "left" },
+        .{ "right", "right" },
+        .{ "bottom", "bottom" },
+        .{ "aspectRatio", "aspect_ratio" },
     };
     inline for (mappings) |m| {
         if (std.mem.eql(u8, key, m[0])) return m[1];
     }
+    return null;
+}
+
+/// Map style keys to i16 fields (zIndex).
+fn mapStyleKeyI16(key: []const u8) ?[]const u8 {
+    if (std.mem.eql(u8, key, "zIndex")) return "z_index";
     return null;
 }
 
@@ -2259,8 +2325,12 @@ fn mapEnumKey(key: []const u8) ?EnumMapping {
     if (std.mem.eql(u8, key, "flexDirection")) return .{ .field = "flex_direction", .prefix = "fd" };
     if (std.mem.eql(u8, key, "justifyContent")) return .{ .field = "justify_content", .prefix = "jc" };
     if (std.mem.eql(u8, key, "alignItems")) return .{ .field = "align_items", .prefix = "ai" };
+    if (std.mem.eql(u8, key, "alignSelf")) return .{ .field = "align_self", .prefix = "as" };
+    if (std.mem.eql(u8, key, "flexWrap")) return .{ .field = "flex_wrap", .prefix = "fw" };
+    if (std.mem.eql(u8, key, "position")) return .{ .field = "position", .prefix = "pos" };
     if (std.mem.eql(u8, key, "display")) return .{ .field = "display", .prefix = "d" };
     if (std.mem.eql(u8, key, "textAlign")) return .{ .field = "text_align", .prefix = "ta" };
+    if (std.mem.eql(u8, key, "overflow")) return .{ .field = "overflow", .prefix = "ov" };
     return null;
 }
 
@@ -2291,6 +2361,26 @@ fn mapEnumValue(prefix: []const u8, value: []const u8) ?[]const u8 {
         if (std.mem.eql(u8, value, "left")) return ".left";
         if (std.mem.eql(u8, value, "center")) return ".center";
         if (std.mem.eql(u8, value, "right")) return ".right";
+    }
+    if (std.mem.eql(u8, prefix, "as")) {
+        if (std.mem.eql(u8, value, "auto")) return ".auto";
+        if (std.mem.eql(u8, value, "start")) return ".start";
+        if (std.mem.eql(u8, value, "center")) return ".center";
+        if (std.mem.eql(u8, value, "end")) return ".end_";
+        if (std.mem.eql(u8, value, "stretch")) return ".stretch";
+    }
+    if (std.mem.eql(u8, prefix, "fw")) {
+        if (std.mem.eql(u8, value, "nowrap")) return ".nowrap";
+        if (std.mem.eql(u8, value, "wrap")) return ".wrap";
+    }
+    if (std.mem.eql(u8, prefix, "pos")) {
+        if (std.mem.eql(u8, value, "relative")) return ".relative";
+        if (std.mem.eql(u8, value, "absolute")) return ".absolute";
+    }
+    if (std.mem.eql(u8, prefix, "ov")) {
+        if (std.mem.eql(u8, value, "visible")) return ".visible";
+        if (std.mem.eql(u8, value, "hidden")) return ".hidden";
+        if (std.mem.eql(u8, value, "scroll")) return ".scroll";
     }
     return null;
 }

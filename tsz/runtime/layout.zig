@@ -197,7 +197,7 @@ pub const TextMetrics = struct {
 /// letter_spacing: extra pixels between glyphs (0 = none).
 /// line_height: override line height in pixels (0 = use font default).
 /// max_lines: max number of lines to measure (0 = unlimited).
-pub const MeasureTextFn = *const fn (text: []const u8, font_size: u16, max_width: f32, letter_spacing: f32, line_height: f32, max_lines: u16) TextMetrics;
+pub const MeasureTextFn = *const fn (text: []const u8, font_size: u16, max_width: f32, letter_spacing: f32, line_height: f32, max_lines: u16, no_wrap: bool) TextMetrics;
 
 /// Image dimensions returned by the image measurement callback.
 pub const ImageDims = struct {
@@ -237,6 +237,8 @@ pub const Node = struct {
     line_height: f32 = 0,
     /// Max visible lines (0 = unlimited)
     number_of_lines: u16 = 0,
+    /// Force single-line (no word wrap)
+    no_wrap: bool = false,
 
     /// Image source path (null for non-image nodes)
     image_src: ?[]const u8 = null,
@@ -314,7 +316,7 @@ fn measureNodeText(node: *Node) TextMetrics {
 fn measureNodeTextW(node: *Node, max_width: f32) TextMetrics {
     if (node.text) |text| {
         if (_measure_fn) |measure| {
-            return measure(text, node.font_size, max_width, node.letter_spacing, node.line_height, node.number_of_lines);
+            return measure(text, node.font_size, max_width, node.letter_spacing, node.line_height, node.number_of_lines, node.no_wrap);
         }
     }
     return .{};
@@ -463,7 +465,7 @@ fn computeMinContentW(node: *Node) f32 {
                 const word_start = i;
                 while (i < text.len and text[i] != ' ' and text[i] != '\n') : (i += 1) {}
                 const word = text[word_start..i];
-                const m = measure(word, node.font_size, 0, node.letter_spacing, node.line_height, node.number_of_lines);
+                const m = measure(word, node.font_size, 0, node.letter_spacing, node.line_height, node.number_of_lines, false);
                 if (m.width > max_word_w) max_word_w = m.width;
             }
             return max_word_w + pad_l + pad_r;

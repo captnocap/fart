@@ -598,9 +598,15 @@ pub const TextEngine = struct {
     }
 
     /// Measure text with wrapping + extended params. Uses measurement cache.
-    pub fn measureTextWrappedEx(self: *TextEngine, text: []const u8, size_px: u16, max_width: f32, letter_spacing: f32, line_height_override: f32, max_lines: u16) layout.TextMetrics {
-        if (max_width <= 0) {
-            return self.measureTextEx(text, size_px, letter_spacing, line_height_override, max_lines);
+    pub fn measureTextWrappedEx(self: *TextEngine, text: []const u8, size_px: u16, max_width: f32, letter_spacing: f32, line_height_override: f32, max_lines: u16, no_wrap: bool) layout.TextMetrics {
+        // noWrap: force single-line measurement regardless of max_width
+        if (max_width <= 0 or no_wrap) {
+            const m = self.measureTextEx(text, size_px, letter_spacing, line_height_override, max_lines);
+            if (no_wrap and max_width > 0) {
+                // Clamp width to max_width but keep single-line height
+                return .{ .width = @min(m.width, max_width), .height = m.height, .ascent = m.ascent };
+            }
+            return m;
         }
 
         // Check measurement cache
