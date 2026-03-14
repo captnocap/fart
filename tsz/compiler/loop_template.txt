@@ -37,6 +37,7 @@
                     if (event.window.event == c.SDL_WINDOWEVENT_SIZE_CHANGED) {
                         win_w = @floatFromInt(event.window.data1);
                         win_h = @floatFromInt(event.window.data2);
+                        gpu.resize(@intCast(event.window.data1), @intCast(event.window.data2));
                         geometry.save(window);
                     }
                     if (event.window.event == c.SDL_WINDOWEVENT_MOVED) {

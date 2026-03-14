@@ -3964,6 +3964,7 @@ pub const Generator = struct {
         try out.appendSlice(self.alloc, "const input_mod = @import(\"input.zig\");\n");
         try out.appendSlice(self.alloc, "const geometry = @import(\"geometry.zig\");\n");
         try out.appendSlice(self.alloc, "const compositor = @import(\"compositor.zig\");\n");
+        try out.appendSlice(self.alloc, "const gpu = @import(\"gpu.zig\");\n");
         try out.appendSlice(self.alloc, "const telemetry = @import(\"telemetry.zig\");\n");
         try out.appendSlice(self.alloc, "const inspector = @import(\"inspector.zig\");\n");
         if (self.anim_hook_count > 0) try out.appendSlice(self.alloc, "const animate = @import(\"animate.zig\");\n");
@@ -4480,6 +4481,28 @@ pub const Generator = struct {
         if (self.dyn_count > 0) try out.appendSlice(self.alloc, "    updateDynamicTexts();\n");
         if (self.dyn_style_count > 0) try out.appendSlice(self.alloc, "    updateDynamicStyles();\n");
         if (self.cond_count > 0) try out.appendSlice(self.alloc, "    updateConditionals();\n");
+        // Mark inspector overlay nodes so hit test skips them
+        if (self.has_inspector) {
+            var marked: [16]u32 = undefined;
+            var marked_count: usize = 0;
+            for (0..self.dyn_style_count) |si| {
+                const ds = self.dyn_styles[si];
+                if (!ds.has_ref) continue;
+                if (std.mem.indexOf(u8, ds.expression, "inspector.") != null) {
+                    var already = false;
+                    for (0..marked_count) |mi| {
+                        if (marked[mi] == ds.arr_index) { already = true; break; }
+                    }
+                    if (!already and marked_count < 16) {
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            "    {s}[{d}].devtools_viz = .inspector_overlay;\n",
+                            .{ ds.arr_name, ds.arr_index }));
+                        marked[marked_count] = ds.arr_index;
+                        marked_count += 1;
+                    }
+                }
+            }
+        }
         if (self.map_count > 0) {
             for (0..self.map_count) |mi| {
                 try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
@@ -4568,9 +4591,12 @@ pub const Generator = struct {
             }
         }
 
-        // Inspector: update dynamic styles every frame (hover rect changes on mouse move, not state)
+        // Inspector: update styles + conditionals every frame (hover rect changes on mouse move, not state)
         if (self.has_inspector and self.dyn_style_count > 0) {
             try out.appendSlice(self.alloc, "        updateDynamicStyles();\n");
+        }
+        if (self.has_inspector and self.cond_count > 0) {
+            try out.appendSlice(self.alloc, "        updateConditionals();\n");
         }
 
         // Router dirty check
