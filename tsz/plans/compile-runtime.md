@@ -24,6 +24,37 @@ tsz/devtools/InspectorOverlay.tsz    ← SOURCE OF TRUTH — edit this
 tsz/runtime/compiled/framework/inspector_overlay.gen.zig  ← BUILD ARTIFACT — never edit
 ```
 
+## RULE: Framework .tsz Files Use Classifiers, Not Inline Styles
+
+Framework runtime components (inspector, devtools, crash screen) MUST use the classifier
+system (`C.Name`) instead of inline `style={{...}}`. This serves two purposes:
+
+1. **Dogfooding** — proves the classifier system works. If our own framework can't use it,
+   why would anyone else?
+2. **Debugging isolation** — if `<C.PanelHeader>` looks wrong in one place but correct in
+   100 others, the problem isn't the classifier — it's what it's composed with. Inline styles
+   hide this signal because every instance is a unique snowflake.
+
+```tsx
+// BAD — inline styles on framework components
+<Box style={{ height: 28, backgroundColor: '#0a0a16', flexDirection: 'row', alignItems: 'center' }}>
+
+// GOOD — classifier system
+classifier({
+  PanelHeader: { type: 'Box', style: { height: 28, backgroundColor: '#0a0a16', flexDirection: 'row', alignItems: 'center' } },
+  TabButton: { type: 'Pressable', style: { paddingLeft: 12, paddingRight: 12, paddingTop: 6, paddingBottom: 6 } },
+  StatusBar: { type: 'Box', style: { height: 22, backgroundColor: '#0a0a16', flexDirection: 'row', alignItems: 'center', gap: 16 } },
+})
+
+<C.PanelHeader>
+  <C.TabButton onPress={() => setTab(0)}>
+    <Text fontSize={12} color={tab == 0 ? '#ffffff' : '#666666'}>Perf</Text>
+  </C.TabButton>
+</C.PanelHeader>
+```
+
+Cleaner files. Reusable styles. Debuggable composition. No excuses.
+
 ## What This Is
 
 A new CLI command that compiles a `.tsz` file into an embeddable Zig fragment — node definitions, style update functions, draw calls — suitable for freezing into the runtime. NOT a full app (no main loop, no SDL init, no event loop).
