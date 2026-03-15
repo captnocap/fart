@@ -232,17 +232,43 @@ When `mode == .runtime_fragment`, `emitZigSource()` changes:
 - **State slots:** offset by `slot_base` parameter so they don't conflict with the host app's slots
 - **Imports:** use relative paths (`@import("../layout.zig")` instead of `@import("layout.zig")`)
 
-### Step 3: Output directory
+### Step 3: Output — One Root, One .gen.zig
 
+The compiler follows imports from the root `.tsz` file, inlines all components and
+classifiers, and outputs **one `.gen.zig` file**. Same as how `tsz build app.tsz`
+produces one `generated_app.zig` from N source files.
+
+**Source structure (edit these):**
 ```
-tsz/runtime/compiled/
-  framework/     — ships with tsz (inspector, crash screen, devtools)
-  user/          — user's pre-compiled modules
+tsz/devtools/
+  style.cls.tsz           ← classifiers only (C.PanelHeader, C.TabButton, etc.)
+  DevtoolsRoot.tsz        ← root component — imports everything below
+  StatusBar.tsz            ← component
+  PerfTab.tsz              ← component
+  Sparkline.tsz            ← component
+  ElementsTab.tsz          ← component
+  WireframeTab.tsz         ← component
 ```
 
-The `--framework` flag writes to `framework/`, `--user` (default) writes to `user/`.
+**Output (never edit):**
+```
+tsz/runtime/compiled/framework/
+  devtools.gen.zig         ← ONE file — all components compiled in
+```
 
-Filename: kebab-to-snake conversion. `inspector-overlay.tsz` → `inspector_overlay.gen.zig`.
+**Command:**
+```bash
+tsz compile-runtime tsz/devtools/DevtoolsRoot.tsz --framework
+# → tsz/runtime/compiled/framework/devtools.gen.zig
+```
+
+**Convention:**
+- `.tsz` = component with JSX
+- `.cls.tsz` = classifier-only file (style definitions, no JSX)
+- `.gen.zig` = compiled output (build artifact)
+
+The `--framework` flag writes to `compiled/framework/`, `--user` (default) writes
+to `compiled/user/`.
 
 ### Step 4: State Slot Namespacing
 
