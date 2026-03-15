@@ -265,6 +265,7 @@ pub const DevtoolsViz = enum {
     sparkline, // Frame-time sparkline from telemetry ring buffer
     wireframe, // Miniature node tree wireframe
     node_tree, // Indented node tree inspector
+    inspector_overlay, // Inspector hover/select highlight — skipped by hit test
 };
 
 // ── Node ────────────────────────────────────────────────────────────────────
@@ -316,6 +317,9 @@ pub const Node = struct {
 
     /// Devtools: built-in visualization type
     devtools_viz: DevtoolsViz = .none,
+
+    /// Canvas: unified canvas type discriminator (e.g., "terminal", "paint", "led-matrix")
+    canvas_type: ?[]const u8 = null,
 
     // Internal: set by parent's flex pass, consumed by layoutNode
     _flex_w: ?f32 = null,
