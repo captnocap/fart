@@ -1,11 +1,11 @@
-// style.cls.tsz — shared classifiers for the dashboard
+// style.cls.tsz — shared classifiers for the build monitor panel
 //
 // Classifiers are the .tsz equivalent of a design system.
 // Define once here, use everywhere via <C.Name>.
 // No inline styles repeated across files.
 
 classifier({
-  Page: { type: 'Box', style: { width: '100%', height: '100%', backgroundColor: '#1a1a2e' } },
+  Panel: { type: 'Box', style: { width: '100%', height: '100%', backgroundColor: '#1a1a2e' } },
   Section: { type: 'Box', style: { padding: 24 } },
   Row: { type: 'Box', style: { flexDirection: 'row', marginTop: 16 } },
   Spacer: { type: 'Box', style: { flexGrow: 1 } },
@@ -14,8 +14,8 @@ classifier({
   Button: { type: 'Pressable', style: { padding: 12, backgroundColor: '#0f3460', borderRadius: 6, marginTop: 8 } },
   Bar: { type: 'Box', style: { height: 28, backgroundColor: '#0a0a16', paddingLeft: 12, paddingRight: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' } },
 
-  Title: { type: 'Text', fontSize: 24, color: '#e94560' },
-  Subtitle: { type: 'Text', fontSize: 12, color: '#555555' },
+  Heading: { type: 'Text', fontSize: 24, color: '#e94560' },
+  Caption: { type: 'Text', fontSize: 12, color: '#555555' },
   Label: { type: 'Text', fontSize: 11, color: '#555555' },
   ButtonText: { type: 'Text', fontSize: 14, color: '#ffffff' },
   BarText: { type: 'Text', fontSize: 11, color: '#4ec9b0' },
