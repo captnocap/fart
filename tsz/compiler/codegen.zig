@@ -2744,14 +2744,17 @@ pub const Generator = struct {
             try fields.appendSlice(self.alloc, arr_name);
 
             // Assign unresolved dynamic texts to this array
+            // Track which child indices are already claimed to avoid double-assignment
+            var claimed: [64]bool = [_]bool{false} ** 64;
             for (0..self.dyn_count) |di| {
                 if (!self.dyn_texts[di].has_ref) {
-                    // Find the child index that has .text = ""
+                    // Find the next child index that has .text = "" and isn't claimed
                     for (child_exprs.items, 0..) |expr, ci| {
-                        if (std.mem.indexOf(u8, expr, ".text = \"\"") != null) {
+                        if (ci < 64 and !claimed[ci] and std.mem.indexOf(u8, expr, ".text = \"\"") != null) {
                             self.dyn_texts[di].arr_name = arr_name;
                             self.dyn_texts[di].arr_index = @intCast(ci);
                             self.dyn_texts[di].has_ref = true;
+                            claimed[ci] = true;
                             break;
                         }
                     }
