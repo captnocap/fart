@@ -4142,13 +4142,58 @@ pub const Generator = struct {
         return left;
     }
 
+    fn isStringExpr(_: *Generator, expr: []const u8) bool {
+        if (expr.len >= 2 and expr[0] == '"') return true;
+        if (std.mem.indexOf(u8, expr, "getSlotString") != null) return true;
+        if (std.mem.indexOf(u8, expr, "std.mem.") != null) return true;
+        if (std.mem.indexOf(u8, expr, "toUpper") != null) return true;
+        if (std.mem.indexOf(u8, expr, "toLower") != null) return true;
+        return false;
+    }
+
     fn emitAdditive(self: *Generator) ![]const u8 {
         var left = try self.emitMultiplicative();
         while (self.curKind() == .plus or self.curKind() == .minus) {
-            const op = self.curText();
+            if (self.curKind() == .minus) {
+                self.advance_token();
+                const right = try self.emitMultiplicative();
+                left = try std.fmt.allocPrint(self.alloc, "({s} - {s})", .{ left, right });
+                continue;
+            }
+            // Plus — check if this is string concatenation
             self.advance_token();
             const right = try self.emitMultiplicative();
-            left = try std.fmt.allocPrint(self.alloc, "({s} {s} {s})", .{ left, op, right });
+            if (self.isStringExpr(left) or self.isStringExpr(right)) {
+                // Collect all + operands (left and right already have first two)
+                var parts = std.ArrayListUnmanaged([]const u8){};
+                try parts.append(self.alloc, left);
+                try parts.append(self.alloc, right);
+                while (self.curKind() == .plus) {
+                    self.advance_token();
+                    const next = try self.emitMultiplicative();
+                    try parts.append(self.alloc, next);
+                }
+                // Build bufPrint format string and args
+                const lbl = self.array_counter;
+                self.array_counter += 1;
+                var fmt_str = std.ArrayListUnmanaged(u8){};
+                var arg_str = std.ArrayListUnmanaged(u8){};
+                for (parts.items) |part| {
+                    if (self.isStringExpr(part)) {
+                        try fmt_str.appendSlice(self.alloc, "{s}");
+                    } else {
+                        try fmt_str.appendSlice(self.alloc, "{d}");
+                    }
+                    if (arg_str.items.len > 0) try arg_str.appendSlice(self.alloc, ", ");
+                    try arg_str.appendSlice(self.alloc, part);
+                }
+                const blk_name = try std.fmt.allocPrint(self.alloc, "blk_{d}", .{lbl});
+                left = try std.fmt.allocPrint(self.alloc,
+                    "({s}: {{ var _cb: [512]u8 = undefined; break :{s} std.fmt.bufPrint(&_cb, \"{s}\", .{{ {s} }}) catch \"\"; }})",
+                    .{ blk_name, blk_name, fmt_str.items, arg_str.items });
+            } else {
+                left = try std.fmt.allocPrint(self.alloc, "({s} + {s})", .{ left, right });
+            }
         }
         return left;
     }
