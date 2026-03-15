@@ -15,7 +15,7 @@ function App() {
 
   return (
     <Box style={{ padding: 32, backgroundColor: '#1e1e2a', width: '100%', height: '100%', flexDirection: 'column', gap: 12 }}>
-      <Text fontSize={24} color="#ffffff">{`Total: ${clamped}`}</Text>
+      <Text fontSize={24} color="#ffffff">{`Total: ${clamped} — Mode: ${mode}`}</Text>
       <Text fontSize={14} color="#888888">{`Items: ${items.length}`}</Text>
       <Pressable onPress={() => {
         switch (mode) {
