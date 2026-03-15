@@ -10,6 +10,7 @@
 //!   tsz add [dir|file.tsz]  Register a .tsz project
 //!   tsz ls                  List registered projects with status
 //!   tsz rm <name>           Unregister a project (kills if running)
+//!   tsz compile-runtime <file.tsz>  Compile to embeddable runtime fragment (.gen.zig)
 //!   tsz gui                 Open GUI dashboard (Phase 2)
 
 const std = @import("std");
@@ -53,10 +54,114 @@ fn getMtime(path: []const u8) i128 {
     return stat.mtime;
 }
 
+// ── Multi-file imports ──────────────────────────────────────────────────
+
+const MAX_IMPORTS = 32;
+
+/// Scan source text for `import { ... } from './path'` statements.
+/// Returns paths as raw strings (stripped of quotes, before .tsz resolution).
+fn findImportPaths(source: []const u8, paths_out: *[MAX_IMPORTS][]const u8) u32 {
+    var count: u32 = 0;
+    var i: usize = 0;
+    while (i < source.len and count < MAX_IMPORTS) {
+        // Find "from " followed by a quote
+        if (i + 6 < source.len and
+            source[i] == 'f' and source[i + 1] == 'r' and source[i + 2] == 'o' and source[i + 3] == 'm' and source[i + 4] == ' ')
+        {
+            var j = i + 5;
+            // Skip whitespace
+            while (j < source.len and (source[j] == ' ' or source[j] == '\t')) j += 1;
+            if (j < source.len and (source[j] == '\'' or source[j] == '"')) {
+                const quote = source[j];
+                j += 1;
+                const path_start = j;
+                while (j < source.len and source[j] != quote and source[j] != '\n') j += 1;
+                if (j < source.len and source[j] == quote) {
+                    paths_out[count] = source[path_start..j];
+                    count += 1;
+                }
+                i = j + 1;
+                continue;
+            }
+        }
+        i += 1;
+    }
+    return count;
+}
+
+/// Resolve an import path relative to the importing file's directory.
+/// './StatusBar' → '/abs/path/to/StatusBar.tsz'
+fn resolveImportPath(alloc: std.mem.Allocator, importer: []const u8, import_path: []const u8) ?[]const u8 {
+    const dir = std.fs.path.dirname(importer) orelse ".";
+    // Add .tsz extension if not present
+    const with_ext = if (std.mem.endsWith(u8, import_path, ".tsz"))
+        import_path
+    else if (std.mem.endsWith(u8, import_path, ".cls"))
+        std.fmt.allocPrint(alloc, "{s}.tsz", .{import_path}) catch return null
+    else
+        std.fmt.allocPrint(alloc, "{s}.tsz", .{import_path}) catch return null;
+
+    return std.fmt.allocPrint(alloc, "{s}/{s}", .{ dir, with_ext }) catch null;
+}
+
+/// Recursively merge imported files into a single source string.
+/// Depth-first: imported files appear before their importers.
+/// Cycle detection via visited set.
+fn mergeImports(
+    alloc: std.mem.Allocator,
+    input_file: []const u8,
+    source: []const u8,
+    visited: *[MAX_IMPORTS][]const u8,
+    visited_count: *u32,
+    merged: *std.ArrayListUnmanaged(u8),
+) void {
+    // Cycle detection
+    for (visited.*[0..visited_count.*]) |v| {
+        if (std.mem.eql(u8, v, input_file)) return;
+    }
+    if (visited_count.* >= MAX_IMPORTS) return;
+    visited.*[visited_count.*] = input_file;
+    visited_count.* += 1;
+
+    // Find imports in this source
+    var paths: [MAX_IMPORTS][]const u8 = undefined;
+    const path_count = findImportPaths(source, &paths);
+
+    // Process each import (depth-first: imports before this file)
+    for (paths[0..path_count]) |raw_path| {
+        const resolved = resolveImportPath(alloc, input_file, raw_path) orelse continue;
+        const imp_source = std.fs.cwd().readFileAlloc(alloc, resolved, 1024 * 1024) catch continue;
+        // Recursively process this file's imports
+        mergeImports(alloc, resolved, imp_source, visited, visited_count, merged);
+    }
+
+    // Append this file's source
+    merged.appendSlice(alloc, source) catch {};
+    merged.append(alloc, '\n') catch {};
+}
+
+/// Read a .tsz file and merge all its imports into a single source string.
+/// Returns the merged source, or the original source if no imports found.
+fn buildMergedSource(alloc: std.mem.Allocator, input_file: []const u8, source: []const u8) []const u8 {
+    var paths: [MAX_IMPORTS][]const u8 = undefined;
+    const path_count = findImportPaths(source, &paths);
+    if (path_count == 0) return source; // fast path: no imports
+
+    var visited: [MAX_IMPORTS][]const u8 = undefined;
+    var visited_count: u32 = 0;
+    var merged: std.ArrayListUnmanaged(u8) = .{};
+
+    mergeImports(alloc, input_file, source, &visited, &visited_count, &merged);
+
+    if (merged.items.len == 0) return source;
+    return merged.items;
+}
+
 // ── Compile ─────────────────────────────────────────────────────────────
 
 // Build mode — set by CLI flags, read by compile()
 var g_release_mode: bool = false;
+var g_framework_mode: bool = false; // --framework flag for compile-runtime
 
 /// Compile a .tsz file: read → tokenize → codegen → write → zig build → copy binary.
 /// Returns true on success, false on failure (prints errors).
@@ -67,10 +172,13 @@ fn compile(alloc: std.mem.Allocator, input_file: []const u8) bool {
     };
     defer alloc.free(source);
 
-    var lex = lexer.Lexer.init(source);
+    // Merge imported files into a single source
+    const merged_source = buildMergedSource(alloc, input_file, source);
+
+    var lex = lexer.Lexer.init(merged_source);
     lex.tokenize();
 
-    var gen = codegen.Generator.init(alloc, &lex, source, input_file);
+    var gen = codegen.Generator.init(alloc, &lex, merged_source, input_file);
     const zig_source = gen.generate() catch |err| {
         std.debug.print("[tsz] Compile error: {}\n", .{err});
         return false;
@@ -401,6 +509,73 @@ fn cmdTest(alloc: std.mem.Allocator, input_file: []const u8) void {
     }
 }
 
+fn cmdCompileRuntime(alloc: std.mem.Allocator, input_file: []const u8) void {
+    const source = std.fs.cwd().readFileAlloc(alloc, input_file, 1024 * 1024) catch |err| {
+        std.debug.print("[tsz] Failed to read {s}: {}\n", .{ input_file, err });
+        std.process.exit(1);
+    };
+    defer alloc.free(source);
+
+    // Merge imported files into a single source
+    const merged_source = buildMergedSource(alloc, input_file, source);
+
+    var lex = lexer.Lexer.init(merged_source);
+    lex.tokenize();
+
+    var gen = codegen.Generator.init(alloc, &lex, merged_source, input_file);
+    gen.mode = .runtime_fragment;
+
+    const zig_source = gen.generate() catch |err| {
+        std.debug.print("[tsz] Compile error: {}\n", .{err});
+        std.process.exit(1);
+    };
+    defer alloc.free(zig_source);
+
+    // Determine output path: kebab-to-snake, .gen.zig extension
+    // Default → user/, --framework → framework/
+    const basename = std.fs.path.basename(input_file);
+    const stem = if (std.mem.endsWith(u8, basename, ".tsz")) basename[0 .. basename.len - 4] else basename;
+
+    // Convert kebab-case and PascalCase to snake_case, lowercase
+    var snake_buf: [256]u8 = undefined;
+    var snake_len: usize = 0;
+    for (stem) |ch| {
+        if (snake_len >= snake_buf.len - 1) break;
+        snake_buf[snake_len] = if (ch == '-') '_' else ch;
+        snake_len += 1;
+    }
+    const snake_name = snake_buf[0..snake_len];
+
+    for (snake_name) |*ch| {
+        if (ch.* >= 'A' and ch.* <= 'Z') ch.* = ch.* + 32;
+    }
+
+    // Ensure output directory exists
+    const out_dir = if (g_framework_mode) "tsz/runtime/compiled/framework" else "tsz/runtime/compiled/user";
+    std.fs.cwd().makePath(out_dir) catch |err| {
+        std.debug.print("[tsz] Failed to create output dir: {}\n", .{err});
+        std.process.exit(1);
+    };
+
+    const out_path = std.fmt.allocPrint(alloc, "{s}/{s}.gen.zig", .{ out_dir, snake_name }) catch {
+        std.debug.print("[tsz] Out of memory\n", .{});
+        std.process.exit(1);
+    };
+    defer alloc.free(out_path);
+
+    const out_file = std.fs.cwd().createFile(out_path, .{}) catch |err| {
+        std.debug.print("[tsz] Failed to write {s}: {}\n", .{ out_path, err });
+        std.process.exit(1);
+    };
+    defer out_file.close();
+    out_file.writeAll(zig_source) catch |err| {
+        std.debug.print("[tsz] Write error: {}\n", .{err});
+        std.process.exit(1);
+    };
+
+    std.debug.print("[tsz] Compiled {s} → {s}\n", .{ basename, out_path });
+}
+
 fn cmdAdd(alloc: std.mem.Allocator, arg: []const u8) void {
     registry.ensureConfigDir();
     var reg = registry.load(alloc);
@@ -610,6 +785,8 @@ pub fn execAction(alloc: std.mem.Allocator, action_name: []const u8, arg: []cons
         cmdInit(alloc, arg);
     } else if (std.mem.eql(u8, action_name, "gui")) {
         try gui.run(alloc);
+    } else if (std.mem.eql(u8, action_name, "compile-runtime")) {
+        cmdCompileRuntime(alloc, arg);
     }
 }
 
@@ -745,10 +922,12 @@ pub fn main() !void {
         return;
     }
 
-    // Check for --release flag anywhere in args
+    // Check for flags anywhere in args
     for (args) |arg| {
         if (std.mem.eql(u8, arg, "--release")) {
             g_release_mode = true;
+        } else if (std.mem.eql(u8, arg, "--framework")) {
+            g_framework_mode = true;
         }
     }
 
