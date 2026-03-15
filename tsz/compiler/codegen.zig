@@ -4639,11 +4639,15 @@ pub const Generator = struct {
                 const arr_slot = self.arraySlotId(state_idx);
                 return try std.fmt.allocPrint(self.alloc, "@as(i64, @intCast(state.getArrayLen({d})))", .{arr_slot});
             }
-            // Object property access: user.name
+            // Object property access: user.name or user?.name
             if (self.isObjectState(name)) |obj_idx| {
                 self.advance_token(); // identifier (e.g., "user")
-                if (self.curKind() == .dot) {
-                    self.advance_token(); // .
+                // Handle both . and ?. (optional chaining — object state is never null, treat same)
+                if (self.curKind() == .dot or self.curKind() == .question) {
+                    if (self.curKind() == .question) {
+                        self.advance_token(); // ?
+                    }
+                    if (self.curKind() == .dot) self.advance_token(); // .
                     const field = self.curText();
                     self.advance_token(); // field name
                     if (self.resolveObjectField(obj_idx, field)) |state_idx| {
@@ -4756,6 +4760,45 @@ pub const Generator = struct {
                             return try std.fmt.allocPrint(self.alloc,
                                 "(blk_{d}: {{ const _src = {s}; var _lb: [256]u8 = undefined; for (_src, 0..) |ch, ci| {{ _lb[ci] = std.ascii.toLower(ch); }} break :blk_{d} _lb[0.._src.len]; }})",
                                 .{ lbl, getter, lbl });
+                        }
+
+                        // .replace(old, new) → inline block with std.mem.replace
+                        if (std.mem.eql(u8, method, "replace")) {
+                            self.advance_token();
+                            if (self.curKind() == .lparen) self.advance_token();
+                            const old_arg = try self.emitStateExpr();
+                            if (self.curKind() == .comma) self.advance_token();
+                            const new_arg = try self.emitStateExpr();
+                            if (self.curKind() == .rparen) self.advance_token();
+                            const lbl = self.array_counter;
+                            self.array_counter += 1;
+                            return try std.fmt.allocPrint(self.alloc,
+                                "(blk_{d}: {{ var _rb: [512]u8 = undefined; const _rn = std.mem.replace(u8, {s}, {s}, {s}, &_rb); break :blk_{d} _rb[0.._rn]; }})",
+                                .{ lbl, getter, old_arg, new_arg, lbl });
+                        }
+
+                        // .split(sep).length → count occurrences + 1
+                        if (std.mem.eql(u8, method, "split")) {
+                            self.advance_token();
+                            if (self.curKind() == .lparen) self.advance_token();
+                            const sep_arg = try self.emitStateExpr();
+                            if (self.curKind() == .rparen) self.advance_token();
+                            // Check if followed by .length
+                            if (self.curKind() == .dot) {
+                                const dot_save = self.pos;
+                                self.advance_token();
+                                if (self.curKind() == .identifier and std.mem.eql(u8, self.curText(), "length")) {
+                                    self.advance_token();
+                                    const lbl = self.array_counter;
+                                    self.array_counter += 1;
+                                    return try std.fmt.allocPrint(self.alloc,
+                                        "@as(i64, blk_{d}: {{ var _cnt: i64 = 1; for ({s}) |ch| {{ if (ch == {s}[0]) _cnt += 1; }} break :blk_{d} _cnt; }})",
+                                        .{ lbl, getter, sep_arg, lbl });
+                                }
+                                self.pos = dot_save;
+                            }
+                            // Bare .split() without .length — return the string as-is (can't return iterator)
+                            return try self.alloc.dupe(u8, getter);
                         }
                     }
                     // Not a known method — rewind dot

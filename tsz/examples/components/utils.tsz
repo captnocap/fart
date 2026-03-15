@@ -1,0 +1,10 @@
+// Shared utility functions
+export function clamp(v, min, max) {
+  if (v < min) return min;
+  if (v > max) return max;
+  return v;
+}
+
+export function double(x) {
+  return x * 2;
+}
