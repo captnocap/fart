@@ -31,6 +31,17 @@ const MAX_DYN_STYLES = 64;
 const MAX_ROUTES = 16;
 const MAX_MAPS = 16;
 const MAX_ARRAY_INIT = 32;
+const MAX_OBJECT_FIELDS = 16;
+const MAX_OBJECTS = 16;
+
+const ObjectStateInfo = struct {
+    getter: []const u8, // "user"
+    setter: []const u8, // "setUser"
+    field_names: [MAX_OBJECT_FIELDS][]const u8,
+    field_types: [MAX_OBJECT_FIELDS]StateType,
+    field_slot_base: u32, // first slot ID for this object
+    field_count: u32,
+};
 
 const RouteInfo = struct {
     path: []const u8,
@@ -231,6 +242,10 @@ pub const Generator = struct {
     state_count: u32,
     has_state: bool,
 
+    // Object state (compile-time field flattening)
+    object_states: [MAX_OBJECTS]ObjectStateInfo,
+    object_count: u32,
+
     // Dynamic text
     dyn_texts: [MAX_DYN_TEXTS]DynText,
     dyn_count: u32,
@@ -333,6 +348,8 @@ pub const Generator = struct {
             .state_slots = undefined,
             .state_count = 0,
             .has_state = false,
+            .object_states = undefined,
+            .object_count = 0,
             .dyn_texts = undefined,
             .dyn_count = 0,
             .last_dyn_id = null,
@@ -505,6 +522,7 @@ pub const Generator = struct {
             } else if (kind == .identifier) {
                 const name = self.lex.get(look).text(self.source);
                 if (self.isState(name) != null) return true;
+                if (self.isObjectState(name) != null) return true;
                 // Inspector getters make style values dynamic
                 const inspector_names = [_][]const u8{ "hasHover", "getHoverX", "getHoverY", "getHoverW", "getHoverH", "hasSelect", "getSelectX", "getSelectY", "getSelectW", "getSelectH", "isInspectorEnabled" };
                 for (inspector_names) |builtin| {
@@ -518,6 +536,30 @@ pub const Generator = struct {
     fn isSetter(self: *Generator, name: []const u8) ?u32 {
         for (0..self.state_count) |i| {
             if (std.mem.eql(u8, self.state_slots[i].setter, name)) return @intCast(i);
+        }
+        return null;
+    }
+
+    fn isObjectState(self: *Generator, name: []const u8) ?u32 {
+        for (0..self.object_count) |i| {
+            if (std.mem.eql(u8, self.object_states[i].getter, name)) return @intCast(i);
+        }
+        return null;
+    }
+
+    fn isObjectSetter(self: *Generator, name: []const u8) ?u32 {
+        for (0..self.object_count) |i| {
+            if (std.mem.eql(u8, self.object_states[i].setter, name)) return @intCast(i);
+        }
+        return null;
+    }
+
+    fn resolveObjectField(self: *Generator, obj_idx: u32, field: []const u8) ?u32 {
+        const obj = &self.object_states[obj_idx];
+        for (0..obj.field_count) |i| {
+            if (std.mem.eql(u8, obj.field_names[i], field)) {
+                return obj.field_slot_base + @as(u32, @intCast(i));
+            }
         }
         return null;
     }
@@ -944,6 +986,82 @@ pub const Generator = struct {
                                     }
                                     if (self.curKind() == .rbracket) self.advance_token();
                                     initial = .{ .array = .{ .values = arr_vals, .count = arr_cnt } };
+                                } else if (self.curKind() == .lbrace) {
+                                    // Object literal: useState({ name: "Alice", age: 30, active: true })
+                                    self.advance_token(); // {
+                                    var obj_field_names: [MAX_OBJECT_FIELDS][]const u8 = undefined;
+                                    var obj_field_types: [MAX_OBJECT_FIELDS]StateType = undefined;
+                                    var obj_field_initials: [MAX_OBJECT_FIELDS]StateInitial = undefined;
+                                    var obj_field_count: u32 = 0;
+
+                                    while (self.curKind() == .identifier and obj_field_count < MAX_OBJECT_FIELDS) {
+                                        obj_field_names[obj_field_count] = self.curText();
+                                        self.advance_token(); // key
+                                        if (self.curKind() == .colon) self.advance_token(); // :
+                                        // Parse value — detect type same as scalar useState
+                                        if (self.curKind() == .number) {
+                                            const num_text = self.curText();
+                                            if (std.mem.indexOf(u8, num_text, ".") != null) {
+                                                obj_field_types[obj_field_count] = .float;
+                                                obj_field_initials[obj_field_count] = .{ .float = std.fmt.parseFloat(f64, num_text) catch 0.0 };
+                                            } else {
+                                                obj_field_types[obj_field_count] = .int;
+                                                obj_field_initials[obj_field_count] = .{ .int = std.fmt.parseInt(i64, num_text, 10) catch 0 };
+                                            }
+                                            self.advance_token();
+                                        } else if (self.curKind() == .string) {
+                                            const raw = self.curText();
+                                            obj_field_types[obj_field_count] = .string;
+                                            obj_field_initials[obj_field_count] = .{ .string = raw[1 .. raw.len - 1] };
+                                            self.advance_token();
+                                        } else if (self.curKind() == .identifier) {
+                                            const val = self.curText();
+                                            if (std.mem.eql(u8, val, "true")) {
+                                                obj_field_types[obj_field_count] = .boolean;
+                                                obj_field_initials[obj_field_count] = .{ .boolean = true };
+                                                self.advance_token();
+                                            } else if (std.mem.eql(u8, val, "false")) {
+                                                obj_field_types[obj_field_count] = .boolean;
+                                                obj_field_initials[obj_field_count] = .{ .boolean = false };
+                                                self.advance_token();
+                                            }
+                                        }
+                                        obj_field_count += 1;
+                                        if (self.curKind() == .comma) self.advance_token();
+                                    }
+                                    if (self.curKind() == .rbrace) self.advance_token(); // }
+
+                                    // Create individual state slots for each field
+                                    const base_slot = self.state_count;
+                                    for (0..obj_field_count) |fi| {
+                                        if (self.state_count < MAX_STATE_SLOTS) {
+                                            self.state_slots[self.state_count] = .{
+                                                .getter = "",
+                                                .setter = "",
+                                                .initial = obj_field_initials[fi],
+                                            };
+                                            self.state_count += 1;
+                                            self.has_state = true;
+                                        }
+                                    }
+
+                                    // Record object metadata
+                                    if (self.object_count < MAX_OBJECTS) {
+                                        self.object_states[self.object_count] = .{
+                                            .getter = getter,
+                                            .setter = setter,
+                                            .field_names = obj_field_names,
+                                            .field_types = obj_field_types,
+                                            .field_slot_base = base_slot,
+                                            .field_count = obj_field_count,
+                                        };
+                                        self.object_count += 1;
+                                    }
+
+                                    // Skip rparen and continue past normal slot creation
+                                    if (self.curKind() == .rparen) self.advance_token();
+                                    if (self.curKind() == .semicolon) self.advance_token();
+                                    continue;
                                 }
                                 // Skip rparen
                                 if (self.curKind() == .rparen) self.advance_token();
@@ -2871,6 +2989,45 @@ pub const Generator = struct {
                                 "state.getSlot({d})", .{rid}));
                         },
                     }
+                } else if (std.mem.indexOf(u8, expr, ".")) |dot_pos| blk: {
+                    // Object property in template: ${user.name}
+                    const obj_name = expr[0..dot_pos];
+                    const field_name = expr[dot_pos + 1 ..];
+                    if (self.isObjectState(obj_name)) |obj_idx| {
+                        if (self.resolveObjectField(obj_idx, field_name)) |state_idx| {
+                            const rid = self.regularSlotId(state_idx);
+                            const ft = self.stateTypeById(state_idx);
+                            switch (ft) {
+                                .string => {
+                                    try fmt.appendSlice(self.alloc, "{s}");
+                                    if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
+                                    try args.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                                        "state.getSlotString({d})", .{rid}));
+                                },
+                                .float => {
+                                    try fmt.appendSlice(self.alloc, "{d}");
+                                    if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
+                                    try args.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                                        "state.getSlotFloat({d})", .{rid}));
+                                },
+                                .boolean => {
+                                    try fmt.appendSlice(self.alloc, "{s}");
+                                    if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
+                                    try args.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                                        "if (state.getSlotBool({d})) \"true\" else \"false\"", .{rid}));
+                                },
+                                else => {
+                                    try fmt.appendSlice(self.alloc, "{d}");
+                                    if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
+                                    try args.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                                        "state.getSlot({d})", .{rid}));
+                                },
+                            }
+                            break :blk;
+                        }
+                    }
+                    // Not an object field — fall through to static text
+                    try fmt.appendSlice(self.alloc, expr);
                 } else if (self.findProp(expr)) |pval| {
                     if (pval.len >= 2 and (pval[0] == '"' or pval[0] == '\'')) {
                         try fmt.appendSlice(self.alloc, pval[1 .. pval.len - 1]);
@@ -3081,6 +3238,47 @@ pub const Generator = struct {
     fn emitHandlerExpr(self: *Generator) ![]const u8 {
         if (self.curKind() == .identifier) {
             const name = self.curText();
+
+            // Check for object setter: setUser({ ...user, age: user.age + 1 })
+            if (self.isObjectSetter(name)) |obj_idx| {
+                self.advance_token(); // skip setter name
+                if (self.curKind() == .lparen) self.advance_token(); // (
+                if (self.curKind() == .lbrace) {
+                    self.advance_token(); // {
+
+                    // Check for spread: ...user
+                    if (self.curKind() == .spread) {
+                        self.advance_token(); // ...
+                        if (self.curKind() == .identifier) self.advance_token(); // spread source
+                        if (self.curKind() == .comma) self.advance_token(); // ,
+                    }
+
+                    // Parse explicit field overrides
+                    var result = std.ArrayListUnmanaged(u8){};
+                    while (self.curKind() == .identifier) {
+                        const field = self.curText();
+                        self.advance_token(); // field name
+                        if (self.curKind() == .colon) self.advance_token(); // :
+                        const value_expr = try self.emitStateExpr();
+                        if (self.resolveObjectField(obj_idx, field)) |state_idx| {
+                            const rid = self.regularSlotId(state_idx);
+                            const ft = self.stateTypeById(state_idx);
+                            const setter_str = switch (ft) {
+                                .string => try std.fmt.allocPrint(self.alloc, "state.setSlotString({d}, {s});", .{ rid, value_expr }),
+                                .float => try std.fmt.allocPrint(self.alloc, "state.setSlotFloat({d}, {s});", .{ rid, value_expr }),
+                                .boolean => try std.fmt.allocPrint(self.alloc, "state.setSlotBool({d}, {s});", .{ rid, value_expr }),
+                                else => try std.fmt.allocPrint(self.alloc, "state.setSlot({d}, {s});", .{ rid, value_expr }),
+                            };
+                            if (result.items.len > 0) try result.appendSlice(self.alloc, "\n    ");
+                            try result.appendSlice(self.alloc, setter_str);
+                        }
+                        if (self.curKind() == .comma) self.advance_token();
+                    }
+                    if (self.curKind() == .rbrace) self.advance_token(); // }
+                    if (self.curKind() == .rparen) self.advance_token(); // )
+                    return try self.alloc.dupe(u8, result.items);
+                }
+            }
 
             // Check for state setter: setCount(...), setItems.push(...), etc.
             if (self.isSetter(name)) |raw_slot_id| {
@@ -3573,6 +3771,25 @@ pub const Generator = struct {
                 // Array getter without .length — return count as i64
                 const arr_slot = self.arraySlotId(state_idx);
                 return try std.fmt.allocPrint(self.alloc, "@as(i64, @intCast(state.getArrayLen({d})))", .{arr_slot});
+            }
+            // Object property access: user.name
+            if (self.isObjectState(name)) |obj_idx| {
+                self.advance_token(); // identifier (e.g., "user")
+                if (self.curKind() == .dot) {
+                    self.advance_token(); // .
+                    const field = self.curText();
+                    self.advance_token(); // field name
+                    if (self.resolveObjectField(obj_idx, field)) |state_idx| {
+                        const rid = self.regularSlotId(state_idx);
+                        const ft = self.stateTypeById(state_idx);
+                        return switch (ft) {
+                            .string => try std.fmt.allocPrint(self.alloc, "state.getSlotString({d})", .{rid}),
+                            .float => try std.fmt.allocPrint(self.alloc, "state.getSlotFloat({d})", .{rid}),
+                            .boolean => try std.fmt.allocPrint(self.alloc, "state.getSlotBool({d})", .{rid}),
+                            else => try std.fmt.allocPrint(self.alloc, "state.getSlot({d})", .{rid}),
+                        };
+                    }
+                }
             }
             // State getter
             if (self.isState(name)) |slot_id| {

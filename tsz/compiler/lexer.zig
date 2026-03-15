@@ -24,6 +24,7 @@ pub const TokenKind = enum {
     colon,
     semicolon,
     dot,
+    spread, // ...
     equals, // =
     arrow, // =>
     plus,
@@ -267,6 +268,13 @@ pub const Lexer = struct {
             if (ch == '|' and self.peekAt(1) == '|') {
                 self.pos += 2;
                 self.emit(.pipe_pipe, start, start + 2);
+                continue;
+            }
+
+            // Spread operator (must check before single-char dot)
+            if (ch == '.' and self.peekAt(1) == '.' and self.peekAt(2) == '.') {
+                self.pos += 3;
+                self.emit(.spread, start, start + 3);
                 continue;
             }
 
