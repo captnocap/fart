@@ -267,6 +267,8 @@ pub const Generator = struct {
     has_routes: bool,
     has_crypto: bool,
     has_panels: bool,
+    panel_imports: [16][]const u8, // panel names imported via `import { x } from '@panels'`
+    panel_import_count: u32,
     has_pty: bool,
     has_inspector: bool,
     last_route_path: ?[]const u8, // temp: Route → Routes communication
@@ -345,6 +347,8 @@ pub const Generator = struct {
             .has_routes = false,
             .has_crypto = false,
             .has_panels = false,
+            .panel_imports = undefined,
+            .panel_import_count = 0,
             .has_pty = false,
             .has_inspector = false,
             .last_route_path = null,
@@ -392,6 +396,56 @@ pub const Generator = struct {
             return error.UnexpectedToken;
         }
         self.advance_token();
+    }
+
+    /// Check if a name was imported as a panel via `import { name } from '@panels'`
+    fn isPanelImport(self: *Generator, name: []const u8) bool {
+        for (self.panel_imports[0..self.panel_import_count]) |p| {
+            if (std.mem.eql(u8, p, name)) return true;
+        }
+        return false;
+    }
+
+    /// Scan token stream for `import { name, ... } from '@panels'` and register panel names.
+    fn collectPanelImports(self: *Generator) void {
+        const saved_pos = self.pos;
+        defer self.pos = saved_pos;
+        self.pos = 0;
+        while (self.pos < self.lex.count and self.curKind() != .eof) {
+            if (self.isIdent("import")) {
+                self.advance_token(); // import
+                if (self.curKind() == .lbrace) {
+                    self.advance_token(); // {
+                    // Collect names
+                    var names: [16][]const u8 = undefined;
+                    var nc: u32 = 0;
+                    while (self.curKind() == .identifier and nc < 16) {
+                        names[nc] = self.curText();
+                        nc += 1;
+                        self.advance_token();
+                        if (self.curKind() == .comma) self.advance_token();
+                    }
+                    if (self.curKind() == .rbrace) self.advance_token(); // }
+                    if (self.isIdent("from")) {
+                        self.advance_token(); // from
+                        if (self.curKind() == .string) {
+                            const raw = self.curText();
+                            const path = raw[1 .. raw.len - 1];
+                            if (std.mem.eql(u8, path, "@panels")) {
+                                // Register these names as panel imports
+                                for (names[0..nc]) |n| {
+                                    if (self.panel_import_count < 16) {
+                                        self.panel_imports[self.panel_import_count] = n;
+                                        self.panel_import_count += 1;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            self.advance_token();
+        }
     }
 
     fn expectIdent(self: *Generator, name: []const u8) !void {
@@ -557,6 +611,9 @@ pub const Generator = struct {
         // Phase 2: Collect declare functions
         self.pos = 0;
         self.collectDeclaredFunctions();
+
+        // Phase 2.5: Collect panel imports (import { x } from '@panels')
+        self.collectPanelImports();
 
         // Phase 3: Collect classifiers
         self.pos = 0;
@@ -3188,19 +3245,15 @@ pub const Generator = struct {
                 return try std.fmt.allocPrint(self.alloc, "std.debug.print(\"{s}\\n\", .{{}});", .{msg});
             }
 
-            // Unknown function call: name() → panel toggle
-            // The name IS the function. If a .gen.zig fragment exists with this ID,
-            // calling it from a handler toggles it.
-            if (self.curKind() == .lparen or
-                (self.pos + 1 < self.lex.count and self.lex.tokens[self.pos + 1].kind == .lparen))
-            {
-                const panel_name = name;
+            // Panel toggle: name() where name was imported via `import { name } from '@panels'`
+            // Requires explicit import — no arbitrary strings, fully traceable.
+            if (self.isPanelImport(name)) {
                 self.advance_token(); // name
                 if (self.curKind() == .lparen) self.advance_token(); // (
                 if (self.curKind() == .rparen) self.advance_token(); // )
                 self.has_panels = true;
                 return try std.fmt.allocPrint(self.alloc,
-                    "panels.toggle(\"{s}\");", .{panel_name});
+                    "panels.toggle(\"{s}\");", .{name});
             }
         }
 
