@@ -108,6 +108,7 @@ var g_rect_pipeline: ?*wgpu.RenderPipeline = null;
 var g_rect_buffer: ?*wgpu.Buffer = null;
 var g_globals_buffer: ?*wgpu.Buffer = null;
 var g_bind_group: ?*wgpu.BindGroup = null;
+var g_bind_group_layout: ?*wgpu.BindGroupLayout = null; // persisted for drain
 
 // CPU-side rect batch
 var g_rects: [MAX_RECTS]RectInstance = undefined;
@@ -117,6 +118,7 @@ var g_rect_count: usize = 0;
 var g_text_pipeline: ?*wgpu.RenderPipeline = null;
 var g_text_buffer: ?*wgpu.Buffer = null;
 var g_text_bind_group: ?*wgpu.BindGroup = null;
+var g_text_bind_group_layout: ?*wgpu.BindGroupLayout = null; // persisted for drain
 var g_atlas_texture: ?*wgpu.Texture = null;
 var g_atlas_view: ?*wgpu.TextureView = null;
 var g_atlas_sampler: ?*wgpu.Sampler = null;
@@ -134,6 +136,14 @@ var g_last_glyph_count: usize = 0;
 // of frames, Vulkan's sub-allocator fragments (~399MB/11h at 60fps).
 var g_prev_frame_hash: u64 = 0;
 var g_prev_dims: [2]u32 = .{ 0, 0 };
+
+// Memory drain — periodically recreate GPU buffers to reclaim fragmented
+// staging allocator pools. Every DRAIN_INTERVAL frames, destroy and rebuild
+// the rect/glyph/globals buffers + their bind groups. This forces wgpu to
+// release the old allocator pools and start fresh. Cost: one frame of buffer
+// recreation every ~10 minutes. Prevents the ~0.6MB/min RSS growth.
+const DRAIN_INTERVAL: u64 = 36000; // ~10 minutes at 60fps
+var g_frame_counter: u64 = 0;
 
 // Atlas packer state
 var g_atlas_row_x: u32 = 0;
@@ -227,12 +237,14 @@ pub fn init(window: *c.SDL_Window) !void {
 
 pub fn deinit() void {
     if (g_text_bind_group) |bg| bg.release();
+    if (g_text_bind_group_layout) |l| l.release();
     if (g_text_buffer) |b| b.release();
     if (g_text_pipeline) |p| p.release();
     if (g_atlas_sampler) |s| s.release();
     if (g_atlas_view) |v| v.release();
     if (g_atlas_texture) |t| t.destroy();
     if (g_bind_group) |bg| bg.release();
+    if (g_bind_group_layout) |l| l.release();
     if (g_globals_buffer) |b| b.release();
     if (g_rect_buffer) |b| b.release();
     if (g_rect_pipeline) |p| p.release();
@@ -250,6 +262,78 @@ pub fn deinit() void {
     g_adapter = null;
     g_surface = null;
     g_instance = null;
+}
+
+/// Drain fragmented GPU memory by recreating buffers + bind groups.
+/// Called automatically every DRAIN_INTERVAL frames from frame().
+fn drainMemory() void {
+    const device = g_device orelse return;
+
+    // Destroy old buffers
+    if (g_bind_group) |bg| bg.release();
+    if (g_globals_buffer) |b| b.release();
+    if (g_rect_buffer) |b| b.release();
+    if (g_text_bind_group) |bg| bg.release();
+    if (g_text_buffer) |b| b.release();
+
+    // Blocking poll to reclaim all pending resources
+    _ = device.poll(true, null);
+
+    // Recreate globals buffer
+    g_globals_buffer = device.createBuffer(&.{
+        .label = wgpu.StringView.fromSlice("globals"),
+        .size = 16,
+        .usage = wgpu.BufferUsages.uniform | wgpu.BufferUsages.copy_dst,
+        .mapped_at_creation = 0,
+    });
+
+    // Recreate rect buffer
+    g_rect_buffer = device.createBuffer(&.{
+        .label = wgpu.StringView.fromSlice("rect_instances"),
+        .size = MAX_RECTS * @sizeOf(RectInstance),
+        .usage = wgpu.BufferUsages.vertex | wgpu.BufferUsages.copy_dst,
+        .mapped_at_creation = 0,
+    });
+
+    // Recreate text/glyph buffer
+    g_text_buffer = device.createBuffer(&.{
+        .label = wgpu.StringView.fromSlice("glyph_instances"),
+        .size = MAX_GLYPHS * @sizeOf(GlyphInstance),
+        .usage = wgpu.BufferUsages.vertex | wgpu.BufferUsages.copy_dst,
+        .mapped_at_creation = 0,
+    });
+
+    // Recreate bind groups (they reference the new buffers)
+    if (g_bind_group_layout) |layout| {
+        g_bind_group = device.createBindGroup(&.{
+            .layout = layout,
+            .entry_count = 1,
+            .entries = @ptrCast(&wgpu.BindGroupEntry{
+                .binding = 0,
+                .buffer = g_globals_buffer,
+                .offset = 0,
+                .size = 8,
+            }),
+        });
+    }
+    if (g_text_bind_group_layout) |layout| {
+        const bind_entries = [_]wgpu.BindGroupEntry{
+            .{ .binding = 0, .buffer = g_globals_buffer, .offset = 0, .size = 8 },
+            .{ .binding = 1, .texture_view = g_atlas_view },
+            .{ .binding = 2, .sampler = g_atlas_sampler },
+        };
+        g_text_bind_group = device.createBindGroup(&.{
+            .layout = layout,
+            .entry_count = bind_entries.len,
+            .entries = &bind_entries,
+        });
+    }
+
+    // Force full redraw on next frame
+    g_prev_frame_hash = 0;
+    g_prev_dims = .{ 0, 0 };
+
+    std.debug.print("[gpu] Memory drain: buffers recreated at frame {d}\n", .{g_frame_counter});
 }
 
 pub fn resize(width: u32, height: u32) void {
@@ -402,6 +486,10 @@ pub fn frame(bg_r: f64, bg_g: f64, bg_b: f64) void {
     const surface = g_surface orelse return;
     const device = g_device orelse return;
     const queue = g_queue orelse return;
+
+    // Periodic memory drain — recreate buffers to reclaim fragmented pools
+    g_frame_counter += 1;
+    if (g_frame_counter % DRAIN_INTERVAL == 0) drainMemory();
 
     // Get current surface texture
     var surface_texture: wgpu.SurfaceTexture = undefined;
@@ -635,7 +723,7 @@ fn initRectPipeline(device: *wgpu.Device) void {
             },
         }),
     }) orelse return;
-    defer bind_group_layout.release();
+    g_bind_group_layout = bind_group_layout; // persist for drain
 
     // Bind group
     g_bind_group = device.createBindGroup(&.{
@@ -757,7 +845,7 @@ fn initTextPipeline(device: *wgpu.Device) void {
         .entry_count = layout_entries.len,
         .entries = &layout_entries,
     }) orelse return;
-    defer bind_group_layout.release();
+    g_text_bind_group_layout = bind_group_layout; // persist for drain
 
     // Bind group with actual resources
     const bind_entries = [_]wgpu.BindGroupEntry{
