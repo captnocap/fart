@@ -613,6 +613,39 @@ fn parseTypeAnnotation(alloc: std.mem.Allocator, lex: *const Lexer, source: []co
         return try std.fmt.allocPrint(alloc, "*{s}", .{inner});
     }
 
+    // const T — type qualifier for const pointers, slices etc.
+    if (tok.kind == .identifier and std.mem.eql(u8, tok.text(source), "const")) {
+        pos.* += 1;
+        const inner = try parseTypeAnnotation(alloc, lex, source, pos);
+        return try std.fmt.allocPrint(alloc, "const {s}", .{inner});
+    }
+
+    // fn (params) RetType — function type
+    if (tok.kind == .identifier and std.mem.eql(u8, tok.text(source), "fn")) {
+        var fn_buf: std.ArrayListUnmanaged(u8) = .{};
+        try fn_buf.appendSlice(alloc, "fn ");
+        pos.* += 1; // skip fn
+        // Collect ( ... )
+        if (pos.* < lex.count and lex.get(pos.*).kind == .lparen) {
+            var pdepth: u32 = 0;
+            while (pos.* < lex.count) {
+                const k = lex.get(pos.*).kind;
+                if (k == .lparen) pdepth += 1;
+                if (k == .rparen) pdepth -= 1;
+                try fn_buf.appendSlice(alloc, lex.get(pos.*).text(source));
+                pos.* += 1;
+                if (pdepth == 0) break;
+            }
+        }
+        // Collect return type
+        if (pos.* < lex.count and lex.get(pos.*).kind == .identifier) {
+            try fn_buf.append(alloc, ' ');
+            try fn_buf.appendSlice(alloc, lex.get(pos.*).text(source));
+            pos.* += 1;
+        }
+        return try alloc.dupe(u8, fn_buf.items);
+    }
+
     // Complex Zig types (function pointers, optionals, etc.) — collect raw
     if (tok.kind != .identifier) {
         var raw: std.ArrayListUnmanaged(u8) = .{};

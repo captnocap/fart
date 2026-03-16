@@ -144,10 +144,26 @@ pub fn emitExpressionTyped(
     const result = try p.parseTernary();
 
     // In condition context, a property access on a nullable field implies != null check.
-    // Only do this for dotted paths (node.text, s.width) — bare locals like is_row
-    // are bools from comparisons, not optionals.
+    // Only do this for fields known to be optional in the layout type system.
+    // Skip for booleans (visible, initialized, active, done, etc.)
     if (context == .condition and isBareAccess(result.text) and std.mem.indexOf(u8, result.text, ".") != null) {
-        return try std.fmt.allocPrint(alloc, "{s} != null", .{result.text});
+        // Only add != null for known optional fields (layout Node/Style fields)
+        if (result.ty == .opt_f32_t or
+            std.mem.endsWith(u8, result.text, ".text") or
+            std.mem.endsWith(u8, result.text, ".image_src") or
+            std.mem.endsWith(u8, result.text, ".input_id") or
+            std.mem.endsWith(u8, result.text, ".placeholder") or
+            std.mem.endsWith(u8, result.text, ".debug_name") or
+            std.mem.endsWith(u8, result.text, ".test_id") or
+            std.mem.endsWith(u8, result.text, ".canvas_type") or
+            std.mem.endsWith(u8, result.text, ".background_color") or
+            std.mem.endsWith(u8, result.text, ".border_color") or
+            std.mem.endsWith(u8, result.text, ".text_color") or
+            std.mem.endsWith(u8, result.text, ".shadow_color") or
+            std.mem.endsWith(u8, result.text, ".gradient_color_end"))
+        {
+            return try std.fmt.allocPrint(alloc, "{s} != null", .{result.text});
+        }
     }
 
     return result.text;
@@ -415,6 +431,20 @@ const Parser = struct {
 
     fn parseComparison(self: *Parser) Error!TypedExpr {
         var left = try self.parseAdditive();
+
+        // Range operator: a..b (two consecutive dots)
+        if (self.curKind() == .dot and self.pos.* + 1 < self.lex.count and
+            self.lex.get(self.pos.* + 1).kind == .dot)
+        {
+            self.advance(); // skip first .
+            self.advance(); // skip second .
+            const right = try self.parseAdditive();
+            return .{
+                .text = try std.fmt.allocPrint(self.alloc, "{s}..{s}", .{ left.text, right.text }),
+                .ty = .unknown,
+            };
+        }
+
         while (true) {
             const op: []const u8 = switch (self.curKind()) {
                 .lt => "<",
@@ -626,7 +656,10 @@ const Parser = struct {
         while (true) {
             switch (self.curKind()) {
                 // Property access: a.b, or anonymous init: a.{ ... }
+                // But NOT range operator: a..b (two consecutive dots)
                 .dot => {
+                    // Check for .. range — if next token is also dot, break and let comparison handle it
+                    if (self.pos.* + 1 < self.lex.count and self.lex.get(self.pos.* + 1).kind == .dot) break;
                     self.advance();
                     // .{ ... } — Zig anonymous struct/tuple literal
                     if (self.curKind() == .lbrace) {
