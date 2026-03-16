@@ -11,6 +11,8 @@
 //!   tsz ls                  List registered projects with status
 //!   tsz rm <name>           Unregister a project (kills if running)
 //!   tsz compile-runtime <file.tsz>  Compile to embeddable runtime fragment (.gen.zig)
+//!       --output <dir>, -o <dir>    Output directory (default: runtime/compiled/user/)
+//!       --framework                  Output to runtime/compiled/framework/ instead
 //!   tsz gui                 Open GUI dashboard (Phase 2)
 
 const std = @import("std");
@@ -163,6 +165,7 @@ fn buildMergedSource(alloc: std.mem.Allocator, input_file: []const u8, source: [
 // Build mode — set by CLI flags, read by compile()
 var g_release_mode: bool = true;
 var g_framework_mode: bool = false; // --framework flag for compile-runtime
+var g_output_path: ?[]const u8 = null; // --output <dir> override for compile-runtime
 
 /// Detect if a tokenized .tsz file is imperative mode (no App function, no JSX).
 fn isImperativeMode(lex: *const lexer.Lexer, source: []const u8) bool {
@@ -608,8 +611,8 @@ fn cmdCompileRuntime(alloc: std.mem.Allocator, input_file: []const u8) void {
         if (ch.* >= 'A' and ch.* <= 'Z') ch.* = ch.* + 32;
     }
 
-    // Ensure output directory exists
-    const out_dir = if (g_framework_mode) "tsz/runtime/compiled/framework" else "tsz/runtime/compiled/user";
+    // Determine output directory: --output overrides default user/framework split
+    const out_dir = g_output_path orelse if (g_framework_mode) "tsz/runtime/compiled/framework" else "tsz/runtime/compiled/user";
     std.fs.cwd().makePath(out_dir) catch |err| {
         std.debug.print("[tsz] Failed to create output dir: {}\n", .{err});
         std.process.exit(1);
@@ -981,19 +984,50 @@ pub fn main() !void {
     }
 
     // Check for flags anywhere in args
-    for (args) |arg| {
+    var i: usize = 0;
+    while (i < args.len) : (i += 1) {
+        const arg = args[i];
         if (std.mem.eql(u8, arg, "--debug")) {
             g_release_mode = false;
         } else if (std.mem.eql(u8, arg, "--framework")) {
             g_framework_mode = true;
+        } else if (std.mem.eql(u8, arg, "--output") or std.mem.eql(u8, arg, "-o")) {
+            if (i + 1 < args.len) {
+                i += 1;
+                g_output_path = args[i];
+            } else {
+                std.debug.print("[tsz] --output requires a directory path\n", .{});
+                std.process.exit(1);
+            }
+        } else if (std.mem.startsWith(u8, arg, "--output=")) {
+            g_output_path = arg["--output=".len..];
+        }
+    }
+
+    // Find the positional argument (skip flags and their values)
+    var positional: ?[]const u8 = null;
+    var j: usize = 2; // skip binary name + command
+    while (j < args.len) : (j += 1) {
+        const a = args[j];
+        if (std.mem.eql(u8, a, "--debug") or std.mem.eql(u8, a, "--framework")) {
+            continue;
+        } else if (std.mem.eql(u8, a, "--output") or std.mem.eql(u8, a, "-o")) {
+            j += 1; // skip the value
+            continue;
+        } else if (std.mem.startsWith(u8, a, "--output=")) {
+            continue;
+        } else if (!std.mem.startsWith(u8, a, "-")) {
+            positional = a;
+            break;
         }
     }
 
     // Project/path actions need an argument
-    if (args.len < 3) {
+    const target_arg = positional orelse {
         printUsage();
         std.process.exit(1);
-    }
+        unreachable;
+    };
 
-    try execAction(alloc, action.name, args[2]);
+    try execAction(alloc, action.name, target_arg);
 }

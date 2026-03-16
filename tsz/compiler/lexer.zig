@@ -65,6 +65,7 @@ pub const TokenKind = enum {
     // Special
     ffi_pragma, // // @ffi <header> [-llib]
     comment, // // ...
+    builtin, // @identifier (Zig builtins like @bitCast, @memcpy, @intCast)
     eof,
 };
 
@@ -346,6 +347,16 @@ pub const Lexer = struct {
             if (single) |kind| {
                 self.pos += 1;
                 self.emit(kind, start, start + 1);
+                continue;
+            }
+
+            // Zig builtins: @identifier
+            if (ch == '@' and self.pos + 1 < self.source.len and isIdentStart(self.source[self.pos + 1])) {
+                self.pos += 1; // skip @
+                while (self.pos < self.source.len and isIdentCont(self.source[self.pos])) {
+                    self.pos += 1;
+                }
+                self.emit(.builtin, start, self.pos);
                 continue;
             }
 

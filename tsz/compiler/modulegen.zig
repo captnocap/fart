@@ -201,7 +201,24 @@ fn emitModuleVars(
         }
 
         // Only process top-level tokens
-        if (brace_depth > 0 or tok.kind != .identifier) {
+        if (brace_depth > 0) {
+            pos += 1;
+            continue;
+        }
+
+        // Top-level builtin call as statement: @memcpy(dst, src);
+        if (tok.kind == .builtin) {
+            if (!has_vars) {
+                try out.appendSlice(alloc, "\n// ── Module state ───────────────────────────────────\n");
+                has_vars = true;
+            }
+            const stmt = try collectExprUntil(alloc, lex, source, &pos, .semicolon);
+            if (pos < lex.count and lex.get(pos).kind == .semicolon) pos += 1;
+            try out.appendSlice(alloc, try std.fmt.allocPrint(alloc, "{s};\n", .{stmt}));
+            continue;
+        }
+
+        if (tok.kind != .identifier) {
             pos += 1;
             continue;
         }
@@ -211,6 +228,7 @@ fn emitModuleVars(
         // Skip declarations handled by other phases
         if (std.mem.eql(u8, text, "enum") or
             std.mem.eql(u8, text, "interface") or
+            std.mem.eql(u8, text, "union") or
             std.mem.eql(u8, text, "type") or
             std.mem.eql(u8, text, "import") or
             std.mem.eql(u8, text, "export") or
@@ -574,10 +592,16 @@ fn collectExprUntil(
         }
 
         if (result.items.len > 0) {
-            // Add space between tokens, but not before/after dots
+            // Add space between tokens, but not in function call syntax
             const prev_last = result.items[result.items.len - 1];
             const cur_text = lex.get(pos.*).text(source);
-            if (prev_last != '.' and (cur_text.len == 0 or cur_text[0] != '.')) {
+            const cur_first = if (cur_text.len > 0) cur_text[0] else @as(u8, 0);
+            const is_dot = prev_last == '.' or cur_first == '.';
+            const is_call = cur_first == '(' and (isIdentChar(prev_last) or prev_last == ')');
+            const is_close = cur_first == ')' or cur_first == ']';
+            const after_open = prev_last == '(' or prev_last == '[';
+            const is_comma = cur_first == ',';
+            if (!is_dot and !is_call and !is_close and !after_open and !is_comma) {
                 try result.append(alloc, ' ');
             }
         }
@@ -633,6 +657,10 @@ fn collectEnumNames(lex: *const Lexer, source: []const u8) void {
         }
         pos += 1;
     }
+}
+
+fn isIdentChar(ch: u8) bool {
+    return (ch >= 'a' and ch <= 'z') or (ch >= 'A' and ch <= 'Z') or (ch >= '0' and ch <= '9') or ch == '_';
 }
 
 fn isNumericLiteral(s: []const u8) bool {

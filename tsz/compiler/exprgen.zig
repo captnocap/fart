@@ -657,8 +657,14 @@ const Parser = struct {
                         continue;
                     }
 
-                    // Regular property — camelCase → snake_case
-                    const snake = try camelToSnake(self.alloc, prop);
+                    // Regular property — camelCase → snake_case for struct fields,
+                    // but NOT for method calls (followed by parens) or std.* chains
+                    const is_method_call = self.curKind() == .lparen;
+                    const is_std_chain = std.mem.startsWith(u8, left.text, "std.");
+                    const snake = if (is_method_call or is_std_chain)
+                        try self.alloc.dupe(u8, prop)
+                    else
+                        try camelToSnake(self.alloc, prop);
                     const full_path = try std.fmt.allocPrint(self.alloc, "{s}.{s}", .{ left.text, snake });
                     // Check VarTypes for full dotted path first (null-narrowed vars like s.width → f32)
                     const field_ty = if (self.var_types) |vt|
@@ -718,6 +724,7 @@ const Parser = struct {
                 },
 
                 // Type assertion: x as number → @as(f32, x)
+                // catch: expr catch return / expr catch |err| { ... } / expr catch value
                 .identifier => {
                     if (std.mem.eql(u8, self.curText(), "as")) {
                         self.advance();
@@ -728,6 +735,45 @@ const Parser = struct {
                             .text = try std.fmt.allocPrint(self.alloc, "@as({s}, {s})", .{ zig_type, left.text }),
                             .ty = mapTsTypeToExprType(type_name),
                         };
+                    } else if (std.mem.eql(u8, self.curText(), "catch")) {
+                        self.advance(); // skip "catch"
+
+                        // catch |err| { ... } — capture variable
+                        if (self.curKind() == .pipe) {
+                            self.advance(); // skip |
+                            const capture_name = self.curText();
+                            self.advance(); // skip name
+                            if (self.curKind() == .pipe) self.advance(); // skip |
+
+                            // Collect the block/expression
+                            const body = try self.parseTernary();
+                            left = .{
+                                .text = try std.fmt.allocPrint(self.alloc, "{s} catch |{s}| {s}", .{ left.text, capture_name, body.text }),
+                                .ty = left.ty,
+                            };
+                        } else if (self.curKind() == .identifier and std.mem.eql(u8, self.curText(), "return")) {
+                            // catch return / catch return <value>
+                            self.advance(); // skip "return"
+                            if (self.curKind() == .semicolon or self.curKind() == .eof or self.curKind() == .rbrace) {
+                                left = .{
+                                    .text = try std.fmt.allocPrint(self.alloc, "{s} catch return", .{left.text}),
+                                    .ty = .void_t,
+                                };
+                            } else {
+                                const ret_val = try self.parseTernary();
+                                left = .{
+                                    .text = try std.fmt.allocPrint(self.alloc, "{s} catch return {s}", .{ left.text, ret_val.text }),
+                                    .ty = left.ty,
+                                };
+                            }
+                        } else {
+                            // catch <expr>
+                            const catch_val = try self.parseTernary();
+                            left = .{
+                                .text = try std.fmt.allocPrint(self.alloc, "{s} catch {s}", .{ left.text, catch_val.text }),
+                                .ty = left.ty,
+                            };
+                        }
                     } else break;
                 },
 
@@ -842,6 +888,16 @@ const Parser = struct {
                     return .{ .text = try self.alloc.dupe(u8, "null"), .ty = .opt_f32_t };
                 }
 
+                // try prefix — passthrough to Zig
+                if (std.mem.eql(u8, text, "try")) {
+                    self.advance();
+                    const inner = try self.parseTernary();
+                    return .{
+                        .text = try std.fmt.allocPrint(self.alloc, "try {s}", .{inner.text}),
+                        .ty = inner.ty,
+                    };
+                }
+
                 // new Array(N) → std.mem.zeroes([N]f32)
                 if (std.mem.eql(u8, text, "new")) {
                     self.advance();
@@ -930,6 +986,45 @@ const Parser = struct {
             .lbracket => {
                 const text = try self.parseArrayLiteral();
                 return .{ .text = text, .ty = .unknown };
+            },
+
+            // Zig builtins: @bitCast(x), @memcpy(dst, src), @intCast(v), etc.
+            .builtin => {
+                const name = self.curText();
+                self.advance();
+                if (self.curKind() == .lparen) {
+                    self.advance(); // consume (
+                    var args = std.ArrayListUnmanaged([]const u8){};
+                    const saved = self.context;
+                    self.context = .argument;
+                    while (self.curKind() != .rparen and self.curKind() != .eof) {
+                        const arg = try self.parseTernary();
+                        try args.append(self.alloc, arg.text);
+                        if (self.curKind() == .comma) self.advance();
+                    }
+                    self.context = saved;
+                    self.expect(.rparen);
+                    const joined = try joinArgs(self.alloc, args.items);
+                    // Infer return type for common builtins
+                    const ret_ty: ExprType = if (std.mem.eql(u8, name, "@floatFromInt") or std.mem.eql(u8, name, "@floatCast"))
+                        .f32_t
+                    else if (std.mem.eql(u8, name, "@intFromFloat") or std.mem.eql(u8, name, "@intCast"))
+                        .usize_t
+                    else if (std.mem.eql(u8, name, "@intFromBool"))
+                        .usize_t
+                    else if (std.mem.eql(u8, name, "@abs") or std.mem.eql(u8, name, "@max") or
+                        std.mem.eql(u8, name, "@min") or std.mem.eql(u8, name, "@floor") or
+                        std.mem.eql(u8, name, "@ceil") or std.mem.eql(u8, name, "@sqrt"))
+                        .f32_t
+                    else
+                        .unknown;
+                    return .{
+                        .text = try std.fmt.allocPrint(self.alloc, "{s}({s})", .{ name, joined }),
+                        .ty = ret_ty,
+                    };
+                }
+                // Bare builtin without parens (e.g., @import used as value)
+                return .{ .text = try self.alloc.dupe(u8, name), .ty = .unknown };
             },
 
             else => {

@@ -60,6 +60,11 @@ pub fn emitTypeDeclarations(alloc: std.mem.Allocator, lex: *const Lexer, source:
                 try out.appendSlice(alloc, decl);
                 try out.append(alloc, '\n');
                 continue;
+            } else if (std.mem.eql(u8, text, "union")) {
+                const decl = try emitUnion(alloc, lex, source, &pos);
+                try out.appendSlice(alloc, decl);
+                try out.append(alloc, '\n');
+                continue;
             } else if (std.mem.eql(u8, text, "type")) {
                 const decl = try emitTypeAlias(alloc, lex, source, &pos);
                 try out.appendSlice(alloc, decl);
@@ -227,6 +232,122 @@ fn emitEnum(alloc: std.mem.Allocator, lex: *const Lexer, source: []const u8, pos
     if (first_variant) |fv| {
         try enums.register(alloc, name, fv);
     }
+
+    return try alloc.dupe(u8, out.items);
+}
+
+// ── Internal: union → union(enum) emission ──────────────────────────
+//
+// union Value {
+//   int: i64;
+//   float: f64;
+//   boolean: boolean;
+//   string: { buf: [256]u8; len: u8 };
+// }
+//
+// → pub const Value = union(enum) {
+//       int: i64,
+//       float: f64,
+//       boolean: bool,
+//       string: struct { buf: [256]u8, len: u8 },
+//   };
+
+fn emitUnion(alloc: std.mem.Allocator, lex: *const Lexer, source: []const u8, pos: *u32) ![]const u8 {
+    pos.* += 1; // skip "union"
+
+    const name_tok = lex.get(pos.*);
+    if (name_tok.kind != .identifier) return error.ExpectedIdentifier;
+    const name = name_tok.text(source);
+    pos.* += 1;
+
+    if (lex.get(pos.*).kind != .lbrace) return error.UnexpectedToken;
+    pos.* += 1;
+
+    var out: std.ArrayListUnmanaged(u8) = .{};
+    try out.appendSlice(alloc, "pub const ");
+    try out.appendSlice(alloc, name);
+    try out.appendSlice(alloc, " = union(enum) {\n");
+
+    while (pos.* < lex.count and lex.get(pos.*).kind != .rbrace) {
+        const tok = lex.get(pos.*);
+
+        // Skip commas and semicolons between variants
+        if (tok.kind == .comma or tok.kind == .semicolon) {
+            pos.* += 1;
+            continue;
+        }
+        if (tok.kind != .identifier) {
+            pos.* += 1;
+            continue;
+        }
+
+        // Variant name
+        const variant_name = tok.text(source);
+        pos.* += 1;
+
+        // Expect : Type
+        if (pos.* < lex.count and lex.get(pos.*).kind == .colon) {
+            pos.* += 1; // skip :
+
+            // Check for inline struct: { ... }
+            if (pos.* < lex.count and lex.get(pos.*).kind == .lbrace) {
+                pos.* += 1; // skip {
+                try out.appendSlice(alloc, "    ");
+                try out.appendSlice(alloc, variant_name);
+                try out.appendSlice(alloc, ": struct { ");
+
+                // Collect struct fields until }
+                var first_field = true;
+                while (pos.* < lex.count and lex.get(pos.*).kind != .rbrace) {
+                    const ftok = lex.get(pos.*);
+                    if (ftok.kind == .semicolon or ftok.kind == .comma) {
+                        pos.* += 1;
+                        continue;
+                    }
+                    if (ftok.kind != .identifier) {
+                        pos.* += 1;
+                        continue;
+                    }
+
+                    const field_name = ftok.text(source);
+                    pos.* += 1;
+
+                    // Expect : Type
+                    if (pos.* < lex.count and lex.get(pos.*).kind == .colon) {
+                        pos.* += 1; // skip :
+                        const field_type = try parseTypeAnnotation(alloc, lex, source, pos);
+                        const zig_type = try mapType(alloc, field_type);
+                        if (!first_field) try out.appendSlice(alloc, ", ");
+                        try out.appendSlice(alloc, field_name);
+                        try out.appendSlice(alloc, ": ");
+                        try out.appendSlice(alloc, zig_type);
+                        first_field = false;
+                    }
+                }
+                if (pos.* < lex.count and lex.get(pos.*).kind == .rbrace) pos.* += 1;
+                try out.appendSlice(alloc, " },\n");
+            } else {
+                // Simple type
+                const type_str = try parseTypeAnnotation(alloc, lex, source, pos);
+                const zig_type = try mapType(alloc, type_str);
+                try out.appendSlice(alloc, "    ");
+                try out.appendSlice(alloc, variant_name);
+                try out.appendSlice(alloc, ": ");
+                try out.appendSlice(alloc, zig_type);
+                try out.appendSlice(alloc, ",\n");
+            }
+        } else {
+            // Variant with no payload (bare enum variant)
+            try out.appendSlice(alloc, "    ");
+            try out.appendSlice(alloc, variant_name);
+            try out.appendSlice(alloc, ",\n");
+        }
+    }
+
+    // skip }
+    if (pos.* < lex.count and lex.get(pos.*).kind == .rbrace) pos.* += 1;
+
+    try out.appendSlice(alloc, "};");
 
     return try alloc.dupe(u8, out.items);
 }
