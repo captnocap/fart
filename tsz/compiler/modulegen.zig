@@ -355,8 +355,9 @@ fn emitFunctions(
             const pub_prefix = if (is_pub) "pub " else "";
 
             // Parse parameters: (name: Type, name: Type | null, ...)
+            const fn_name = try typegen.camelToSnake(alloc, name);
             try out.appendSlice(alloc, try std.fmt.allocPrint(alloc,
-                "\n{s}fn {s}(", .{ pub_prefix, name }));
+                "\n{s}fn {s}(", .{ pub_prefix, fn_name }));
 
             if (pos < lex.count and lex.get(pos).kind == .lparen) {
                 pos += 1; // skip (
