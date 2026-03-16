@@ -3,7 +3,7 @@
 **Rule:** If it's not generating code, it should be generated code.
 Every `.zig` in `runtime/compiled/` needs a `.tsz` source in `runtime/tsz/`.
 
-**Done:** 45 / 52 (87%)
+**Done:** 49 / 52 (94%) — remaining 3 are in progress by other sessions
 
 ---
 
@@ -57,22 +57,27 @@ Every `.zig` in `runtime/compiled/` needs a `.tsz` source in `runtime/tsz/`.
 
 ---
 
-## Need .tsz conversion (7 files)
+## In progress (3 files — claimed by other sessions)
 
-### Rendering / UI
+### Rendering / UI (session 8da3)
 - [ ] text.zig — text rendering (FreeType integration)
 - [ ] gpu_shaders.zig — GPU shader definitions (wgpu)
-
-### Core bootstrap
-- [ ] main.zig — entry point / bootstrap
-- [ ] generated_app.zig — app scaffolding
 - [ ] c.zig — C interop / FFI bindings
 
-### Networking (runtime/compiled/net/) — in progress by other sessions
-- [ ] net/httpserver.zig — HTTP server
-- [ ] net/manager.zig — connection manager
+### Networking (session 59d1)
 - [ ] net/websocket.zig — WebSocket client
-- [ ] net/wsserver.zig — WebSocket server
+
+## Recently completed
+
+- [x] net/httpserver.tsz (session 87c4)
+- [x] net/manager.tsz (session 87c4)
+- [x] net/wsserver.tsz (session 87c4)
+- [x] fs.tsz (session 87c4)
+
+## Not migration candidates (reclassified)
+
+- `main.zig` — standalone Phase 0+1+2 demo, being replaced by compiler-generated app pipeline
+- `generated_app.zig` — ALREADY compiler output (from layout-stress.tsz), not hand-written
 
 ---
 
