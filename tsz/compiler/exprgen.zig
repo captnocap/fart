@@ -772,6 +772,24 @@ const Parser = struct {
                     left = result;
                 },
 
+                // Named struct init: TypeName{ .field = val }
+                .lbrace => {
+                    // Only if the left looks like a type (starts uppercase, or is std.*)
+                    const lt = left.text;
+                    const is_type = (lt.len > 0 and lt[0] >= 'A' and lt[0] <= 'Z') or
+                        std.mem.startsWith(u8, lt, "std.");
+                    if (is_type) {
+                        // parseObjectLiteral returns ".{ ... }" — strip the leading "." for named init
+                        const obj = try self.parseObjectLiteral();
+                        // obj starts with ".{" — we want "{" for named struct init (TypeName{...})
+                        const body = if (obj.len > 1 and obj[0] == '.') obj[1..] else obj;
+                        left = .{
+                            .text = try std.fmt.allocPrint(self.alloc, "{s}{s}", .{ left.text, body }),
+                            .ty = .struct_t,
+                        };
+                    } else break;
+                },
+
                 // Postfix ++
                 .plus => {
                     if (self.pos.* + 1 < self.lex.count and self.lex.get(self.pos.* + 1).kind == .plus) {
@@ -1205,12 +1223,30 @@ const Parser = struct {
         var fields = std.ArrayListUnmanaged([]const u8){};
 
         while (self.curKind() != .rbrace and self.curKind() != .eof) {
-            if (self.curKind() == .identifier) {
+            // Zig-style: .field = value (dot-prefixed field names)
+            if (self.curKind() == .dot and self.pos.* + 1 < self.lex.count and
+                self.lex.get(self.pos.* + 1).kind == .identifier)
+            {
+                self.advance(); // skip .
+                const key = self.curText();
+                self.advance(); // skip field name
+                if (self.curKind() == .equals) {
+                    self.advance(); // skip =
+                    const saved = self.context;
+                    self.context = .argument;
+                    const val = try self.parseTernary();
+                    self.context = saved;
+                    try fields.append(self.alloc, try std.fmt.allocPrint(self.alloc, ".{s} = {s}", .{ key, val.text }));
+                } else {
+                    // .field (shorthand)
+                    try fields.append(self.alloc, try std.fmt.allocPrint(self.alloc, ".{s}", .{key}));
+                }
+            } else if (self.curKind() == .identifier) {
                 const key = self.curText();
                 self.advance();
 
                 if (self.curKind() == .colon) {
-                    // key: value
+                    // key: value (TS-style)
                     self.advance();
                     const saved = self.context;
                     self.context = .argument;

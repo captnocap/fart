@@ -412,7 +412,10 @@ fn emitFunctions(
 
             try out.appendSlice(alloc, ") ");
 
-            // Return type annotation: ): RetType {
+            // Parse return type and optional callconv
+            var ret_str: []const u8 = "void";
+            var callconv_str: ?[]const u8 = null;
+
             if (pos < lex.count and lex.get(pos).kind == .colon) {
                 pos += 1; // skip :
 
@@ -430,14 +433,35 @@ fn emitFunctions(
                 }
 
                 const zig_ret = try typegen.mapType(alloc, ret_type);
-                if (ret_nullable) {
-                    try out.appendSlice(alloc, try std.fmt.allocPrint(alloc, "?{s}", .{zig_ret}));
-                } else {
-                    try out.appendSlice(alloc, zig_ret);
-                }
-            } else {
-                try out.appendSlice(alloc, "void");
+                ret_str = if (ret_nullable)
+                    try std.fmt.allocPrint(alloc, "?{s}", .{zig_ret})
+                else
+                    zig_ret;
             }
+
+            // Check for callconv(...) — emitted before return type in Zig
+            if (pos < lex.count and lex.get(pos).kind == .identifier and
+                std.mem.eql(u8, lex.get(pos).text(source), "callconv"))
+            {
+                pos += 1; // skip callconv
+                var cc_buf: std.ArrayListUnmanaged(u8) = .{};
+                try cc_buf.appendSlice(alloc, "callconv(");
+                if (pos < lex.count and lex.get(pos).kind == .lparen) pos += 1;
+                while (pos < lex.count and lex.get(pos).kind != .rparen) {
+                    try cc_buf.appendSlice(alloc, lex.get(pos).text(source));
+                    pos += 1;
+                }
+                if (pos < lex.count and lex.get(pos).kind == .rparen) pos += 1;
+                try cc_buf.appendSlice(alloc, ")");
+                callconv_str = try alloc.dupe(u8, cc_buf.items);
+            }
+
+            // Emit: callconv(.c) RetType (callconv before return type in Zig)
+            if (callconv_str) |cc| {
+                try out.appendSlice(alloc, cc);
+                try out.append(alloc, ' ');
+            }
+            try out.appendSlice(alloc, ret_str);
 
             try out.appendSlice(alloc, " {\n");
 
