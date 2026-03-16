@@ -1807,8 +1807,15 @@ pub const Generator = struct {
                 const decl = self.array_decls.items[arr_count_before + ii];
                 // Extract the array initializer content after "= [_]Node{ " and before " };"
                 const arr_init = extractArrayInit(decl);
-                // Replace prop value literals with parameter references
+                // Replace &_arr_N cross-references with _inner_K pointers
                 var replaced_init: []const u8 = try self.alloc.dupe(u8, arr_init);
+                for (0..inner_count) |jj| {
+                    const ref_id = arr_id_before + @as(u32, @intCast(jj));
+                    const old_ref = try std.fmt.allocPrint(self.alloc, "&_arr_{d}", .{ref_id});
+                    const new_ref = try std.fmt.allocPrint(self.alloc, "_inner_{d}", .{jj});
+                    replaced_init = try self.replaceAllOccurrences(replaced_init, old_ref, new_ref);
+                }
+                // Replace prop value literals with parameter references
                 for (saved_prop_count..self.prop_stack_count) |pi| {
                     const prop = self.prop_stack[pi];
                     const param_ref = try std.fmt.allocPrint(self.alloc, "_p_{s}", .{prop.name});
