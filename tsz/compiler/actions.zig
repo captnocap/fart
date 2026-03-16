@@ -97,6 +97,14 @@ pub const ALL = [_]Action{
         .show_in_gui = false,
         .icon = "G",
     },
+    .{
+        .name = "compile-runtime",
+        .label = "Compile Runtime",
+        .description = "Compile .tsz to embeddable runtime fragment (.gen.zig)",
+        .target = .project,
+        .show_in_gui = false,
+        .icon = "C",
+    },
 };
 
 /// Find an action by CLI name.

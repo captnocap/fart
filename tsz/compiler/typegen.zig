@@ -64,8 +64,13 @@ pub fn emitTypeDeclarations(alloc: std.mem.Allocator, lex: *const Lexer, source:
     var enums = EnumRegistry{};
 
     var pos: u32 = 0;
+    var brace_depth: u32 = 0;
     while (pos < lex.count) {
         const tok = lex.get(pos);
+        // Track brace depth — only process top-level declarations
+        if (tok.kind == .lbrace) { brace_depth += 1; pos += 1; continue; }
+        if (tok.kind == .rbrace) { if (brace_depth > 0) brace_depth -= 1; pos += 1; continue; }
+        if (brace_depth > 0) { pos += 1; continue; }
         if (tok.kind == .identifier) {
             const text = tok.text(source);
             if (std.mem.eql(u8, text, "enum")) {
@@ -73,8 +78,19 @@ pub fn emitTypeDeclarations(alloc: std.mem.Allocator, lex: *const Lexer, source:
                 try out.appendSlice(alloc, decl);
                 try out.append(alloc, '\n');
                 continue;
+            } else if (std.mem.eql(u8, text, "extern")) {
+                // extern interface → extern struct
+                if (pos + 1 < lex.count and lex.get(pos + 1).kind == .identifier and
+                    std.mem.eql(u8, lex.get(pos + 1).text(source), "interface"))
+                {
+                    pos += 1; // skip 'extern', emitInterface will see 'interface'
+                    const decl = try emitInterface(alloc, lex, source, &pos, &enums, true);
+                    try out.appendSlice(alloc, decl);
+                    try out.append(alloc, '\n');
+                    continue;
+                }
             } else if (std.mem.eql(u8, text, "interface")) {
-                const decl = try emitInterface(alloc, lex, source, &pos, &enums);
+                const decl = try emitInterface(alloc, lex, source, &pos, &enums, false);
                 try out.appendSlice(alloc, decl);
                 try out.append(alloc, '\n');
                 continue;
@@ -378,7 +394,7 @@ fn emitUnion(alloc: std.mem.Allocator, lex: *const Lexer, source: []const u8, po
 
 // ── Internal: interface → struct emission ────────────────────────────
 
-fn emitInterface(alloc: std.mem.Allocator, lex: *const Lexer, source: []const u8, pos: *u32, enums: *const EnumRegistry) ![]const u8 {
+fn emitInterface(alloc: std.mem.Allocator, lex: *const Lexer, source: []const u8, pos: *u32, enums: *const EnumRegistry, is_extern: bool) ![]const u8 {
     pos.* += 1; // skip "interface"
 
     const name_tok = lex.get(pos.*);
@@ -392,7 +408,11 @@ fn emitInterface(alloc: std.mem.Allocator, lex: *const Lexer, source: []const u8
     var out: std.ArrayListUnmanaged(u8) = .{};
     try out.appendSlice(alloc, "pub const ");
     try out.appendSlice(alloc, name);
-    try out.appendSlice(alloc, " = struct {\n");
+    if (is_extern) {
+        try out.appendSlice(alloc, " = extern struct {\n");
+    } else {
+        try out.appendSlice(alloc, " = struct {\n");
+    }
 
     while (pos.* < lex.count and lex.get(pos.*).kind != .rbrace) {
         const tok = lex.get(pos.*);
@@ -588,7 +608,9 @@ fn parseTypeAnnotation(alloc: std.mem.Allocator, lex: *const Lexer, source: []co
         // Parse the element type
         const elem_type = try parseTypeAnnotation(alloc, lex, source, pos);
         const mapped_elem = try mapType(alloc, elem_type);
-        return try std.fmt.allocPrint(alloc, "[{s}]{s}", .{ size_buf.items, mapped_elem });
+        // Space before element type when it starts with 'const' (e.g., [*:0] const u8)
+        const sep = if (std.mem.startsWith(u8, mapped_elem, "const ")) " " else "";
+        return try std.fmt.allocPrint(alloc, "[{s}]{s}{s}", .{ size_buf.items, sep, mapped_elem });
     }
 
     // ?T — optional type prefix
@@ -632,6 +654,16 @@ fn parseTypeAnnotation(alloc: std.mem.Allocator, lex: *const Lexer, source: []co
                 const k = lex.get(pos.*).kind;
                 if (k == .lparen) pdepth += 1;
                 if (k == .rparen) pdepth -= 1;
+                // Smart spacing inside fn params
+                if (fn_buf.items.len > 0) {
+                    const prev = fn_buf.items[fn_buf.items.len - 1];
+                    const cur_t = lex.get(pos.*).text(source);
+                    const cf = if (cur_t.len > 0) cur_t[0] else @as(u8, 0);
+                    const need_sp = (cf >= 'a' and cf <= 'z') or (cf >= 'A' and cf <= 'Z') or cf == '[' or cf == '?';
+                    if (need_sp and prev != '(' and prev != '*' and prev != '?' and prev != '[') {
+                        try fn_buf.append(alloc, ' ');
+                    }
+                }
                 try fn_buf.appendSlice(alloc, lex.get(pos.*).text(source));
                 pos.* += 1;
                 if (pdepth == 0) break;
@@ -741,7 +773,7 @@ fn parseTypeAnnotation(alloc: std.mem.Allocator, lex: *const Lexer, source: []co
                 const prev = raw.items[raw.items.len - 1];
                 const cur = lex.get(pos.*).text(source);
                 const cf = if (cur.len > 0) cur[0] else @as(u8, 0);
-                if (prev != '(' and prev != '*' and cf != ')' and cf != ',') {
+                if (prev != '(' and prev != '*' and cf != ')' and cf != ',' and cf != ':') {
                     try raw.append(alloc, ' ');
                 }
             }
@@ -750,8 +782,19 @@ fn parseTypeAnnotation(alloc: std.mem.Allocator, lex: *const Lexer, source: []co
         }
         return try alloc.dupe(u8, raw.items);
     }
-    const base = tok.text(source);
+    // Read identifier, then consume dotted chain (e.g., c.SDL_Window, wgpu.TextureFormat)
+    var type_buf: std.ArrayListUnmanaged(u8) = .{};
+    try type_buf.appendSlice(alloc, tok.text(source));
     pos.* += 1;
+    while (pos.* + 1 < lex.count and lex.get(pos.*).kind == .dot and
+        lex.get(pos.* + 1).kind == .identifier)
+    {
+        try type_buf.append(alloc, '.');
+        pos.* += 1; // skip .
+        try type_buf.appendSlice(alloc, lex.get(pos.*).text(source));
+        pos.* += 1; // skip identifier
+    }
+    const base = try alloc.dupe(u8, type_buf.items);
 
     // T[] — slice type
     if (pos.* + 1 < lex.count and lex.get(pos.*).kind == .lbracket and lex.get(pos.* + 1).kind == .rbracket) {

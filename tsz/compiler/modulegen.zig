@@ -101,6 +101,23 @@ fn emitImports(
 
     while (pos < lex.count) {
         const tok = lex.get(pos);
+
+        // Skip 'declare' statements entirely — they contain 'import' tokens
+        // that would confuse the import parser below.
+        // Must respect brace depth since @cImport({ @cInclude("..."); }) has
+        // semicolons inside braces.
+        if (tok.kind == .identifier and std.mem.eql(u8, tok.text(source), "declare")) {
+            var brace_depth: u32 = 0;
+            while (pos < lex.count) {
+                const k = lex.get(pos).kind;
+                if (k == .lbrace) brace_depth += 1;
+                if (k == .rbrace) { if (brace_depth > 0) brace_depth -= 1; }
+                if (k == .semicolon and brace_depth == 0) { pos += 1; break; }
+                pos += 1;
+            }
+            continue;
+        }
+
         if (tok.kind != .identifier or !std.mem.eql(u8, tok.text(source), "import")) {
             pos += 1;
             continue;
@@ -113,7 +130,43 @@ fn emitImports(
 
         pos += 1; // skip 'import'
 
-        // Expect {
+        // ── Default import: import wgpu from 'wgpu' ────────────
+        if (pos < lex.count and lex.get(pos).kind == .identifier and
+            !std.mem.eql(u8, lex.get(pos).text(source), "type"))
+        {
+            const next_tok = if (pos + 1 < lex.count) lex.get(pos + 1) else lex.get(pos);
+            if (next_tok.kind == .identifier and std.mem.eql(u8, next_tok.text(source), "from")) {
+                // Default import: import <name> from '<path>'
+                const import_name = lex.get(pos).text(source);
+                pos += 1; // skip name
+                pos += 1; // skip 'from'
+                if (pos >= lex.count or lex.get(pos).kind != .string) {
+                    while (pos < lex.count and lex.get(pos).kind != .semicolon) pos += 1;
+                    if (pos < lex.count) pos += 1;
+                    continue;
+                }
+                const raw_path = lex.get(pos).text(source);
+                pos += 1;
+                if (pos < lex.count and lex.get(pos).kind == .semicolon) pos += 1;
+
+                if (raw_path.len < 3) continue;
+                const path = raw_path[1 .. raw_path.len - 1];
+                // Non-relative path → @import without .zig (package import)
+                const is_relative = std.mem.startsWith(u8, path, "./") or std.mem.startsWith(u8, path, "../");
+                if (is_relative) {
+                    var mod_name: []const u8 = path;
+                    if (std.mem.startsWith(u8, mod_name, "./")) mod_name = mod_name[2..];
+                    try out.appendSlice(alloc, try std.fmt.allocPrint(alloc,
+                        "const {s} = @import(\"{s}.gen.zig\");\n", .{ import_name, mod_name }));
+                } else {
+                    try out.appendSlice(alloc, try std.fmt.allocPrint(alloc,
+                        "const {s} = @import(\"{s}\");\n", .{ import_name, path }));
+                }
+                continue;
+            }
+        }
+
+        // ── Named import: import { X, Y as Z } from './mod' ───
         if (pos >= lex.count or lex.get(pos).kind != .lbrace) {
             while (pos < lex.count and lex.get(pos).kind != .semicolon) pos += 1;
             if (pos < lex.count) pos += 1;
@@ -121,15 +174,34 @@ fn emitImports(
         }
         pos += 1; // skip {
 
-        // Collect imported names
-        var names: [32][]const u8 = undefined;
-        var name_count: u32 = 0;
+        // Collect imported names with optional aliases
+        const ImportEntry = struct { original: []const u8, alias: []const u8 };
+        var entries: [32]ImportEntry = undefined;
+        var entry_count: u32 = 0;
         while (pos < lex.count and lex.get(pos).kind != .rbrace) {
-            if (lex.get(pos).kind == .identifier and name_count < 32) {
-                names[name_count] = lex.get(pos).text(source);
-                name_count += 1;
-            }
+            if (lex.get(pos).kind == .comma) { pos += 1; continue; }
+            if (lex.get(pos).kind != .identifier) { pos += 1; continue; }
+            const original = lex.get(pos).text(source);
             pos += 1;
+            // Check for 'as' alias
+            if (pos < lex.count and lex.get(pos).kind == .identifier and
+                std.mem.eql(u8, lex.get(pos).text(source), "as"))
+            {
+                pos += 1; // skip 'as'
+                if (pos < lex.count and lex.get(pos).kind == .identifier) {
+                    const alias = lex.get(pos).text(source);
+                    pos += 1;
+                    if (entry_count < 32) {
+                        entries[entry_count] = .{ .original = original, .alias = alias };
+                        entry_count += 1;
+                    }
+                }
+            } else {
+                if (entry_count < 32) {
+                    entries[entry_count] = .{ .original = original, .alias = original };
+                    entry_count += 1;
+                }
+            }
         }
         if (pos < lex.count and lex.get(pos).kind == .rbrace) pos += 1; // skip }
 
@@ -158,14 +230,32 @@ fn emitImports(
         if (std.mem.startsWith(u8, mod_name, "./")) mod_name = mod_name[2..];
         if (std.mem.startsWith(u8, mod_name, "../")) mod_name = std.fs.path.basename(mod_name);
 
-        // Emit: const events = @import("events.zig");
-        try out.appendSlice(alloc, try std.fmt.allocPrint(alloc,
-            "const {s} = @import(\"{s}.zig\");\n", .{ mod_name, mod_name }));
+        // Check if any alias conflicts with the module name
+        const is_relative = std.mem.startsWith(u8, path, "./") or std.mem.startsWith(u8, path, "../");
+        const import_path = if (is_relative)
+            try std.fmt.allocPrint(alloc, "\"{s}.zig\"", .{mod_name})
+        else
+            try std.fmt.allocPrint(alloc, "\"{s}\"", .{mod_name});
 
-        // Emit: const EventHandler = events.EventHandler;
-        for (0..name_count) |i| {
+        var has_conflict = false;
+        for (0..entry_count) |i| {
+            if (std.mem.eql(u8, entries[i].alias, mod_name)) { has_conflict = true; break; }
+        }
+
+        // If conflict, emit each import directly without module line
+        if (has_conflict) {
+            for (0..entry_count) |i| {
+                try out.appendSlice(alloc, try std.fmt.allocPrint(alloc,
+                    "const {s} = @import({s}).{s};\n", .{ entries[i].alias, import_path, entries[i].original }));
+            }
+        } else {
+            // Emit module import + named imports
             try out.appendSlice(alloc, try std.fmt.allocPrint(alloc,
-                "const {s} = {s}.{s};\n", .{ names[i], mod_name, names[i] }));
+                "const {s} = @import({s});\n", .{ mod_name, import_path }));
+            for (0..entry_count) |i| {
+                try out.appendSlice(alloc, try std.fmt.allocPrint(alloc,
+                    "const {s} = {s}.{s};\n", .{ entries[i].alias, mod_name, entries[i].original }));
+            }
         }
     }
 }
@@ -203,6 +293,19 @@ fn emitModuleVars(
         // Only process top-level tokens
         if (brace_depth > 0) {
             pos += 1;
+            continue;
+        }
+
+        // Skip 'declare' statements (FFI declarations handled elsewhere)
+        if (tok.kind == .identifier and std.mem.eql(u8, tok.text(source), "declare")) {
+            var d_depth: u32 = 0;
+            while (pos < lex.count) {
+                const k = lex.get(pos).kind;
+                if (k == .lbrace) d_depth += 1;
+                if (k == .rbrace) { if (d_depth > 0) d_depth -= 1; }
+                if (k == .semicolon and d_depth == 0) { pos += 1; break; }
+                pos += 1;
+            }
             continue;
         }
 
@@ -247,7 +350,12 @@ fn emitModuleVars(
         if (std.mem.eql(u8, text, "type") or
             std.mem.eql(u8, text, "import"))
         {
+            // Skip the entire declaration through the semicolon
             pos += 1;
+            while (pos < lex.count and lex.get(pos).kind != .semicolon) {
+                pos += 1;
+            }
+            if (pos < lex.count and lex.get(pos).kind == .semicolon) pos += 1;
             continue;
         }
         // Skip function declarations (name + params + body)
@@ -552,6 +660,13 @@ fn emitFunctions(
             if (pos < lex.count and lex.get(pos).kind == .colon) {
                 pos += 1; // skip :
 
+                // Check for ! prefix (error union return type)
+                var error_union = false;
+                if (pos < lex.count and lex.get(pos).kind == .bang) {
+                    error_union = true;
+                    pos += 1; // skip !
+                }
+
                 // Parse return type (may include | null)
                 const ret_type = try parseTypeAtPos(alloc, lex, source, &pos);
                 var ret_nullable = false;
@@ -566,12 +681,16 @@ fn emitFunctions(
                 }
 
                 const zig_ret = try typegen.mapType(alloc, ret_type);
-                ret_str = if (ret_nullable and isStructTypeName(ret_type))
+                const base_ret = if (ret_nullable and isStructTypeName(ret_type))
                     try std.fmt.allocPrint(alloc, "?*{s}", .{zig_ret})
                 else if (ret_nullable)
                     try std.fmt.allocPrint(alloc, "?{s}", .{zig_ret})
                 else
                     zig_ret;
+                ret_str = if (error_union)
+                    try std.fmt.allocPrint(alloc, "!{s}", .{base_ret})
+                else
+                    base_ret;
             }
 
             // Register function return type for call-site type resolution
@@ -684,12 +803,9 @@ fn emitParams(
             try out.appendSlice(alloc, try std.fmt.allocPrint(alloc, "*{s}", .{zig_type}));
             stmtgen.registerVar(param_name, .ptr_t);
             stmtgen.registerFnPtrParam(fn_name, param_idx);
-        } else if (isStructTypeName(param_type)) {
-            // Other struct params → const pointer (read-only by default)
-            try out.appendSlice(alloc, try std.fmt.allocPrint(alloc, "*const {s}", .{zig_type}));
-            stmtgen.registerVar(param_name, .ptr_t);
-            stmtgen.registerFnPtrParam(fn_name, param_idx);
         } else {
+            // All other types (including structs) → pass by value.
+            // If the .tsz author wants pointer semantics, they write *const Type explicitly.
             try out.appendSlice(alloc, zig_type);
             // Register param type for expression type inference
             const expr_ty: exprgen.ExprType = if (std.mem.eql(u8, zig_type, "f32"))
@@ -851,12 +967,15 @@ fn collectExprUntil(
             const prev_last = result.items[result.items.len - 1];
             const cur_text = lex.get(pos.*).text(source);
             const cur_first = if (cur_text.len > 0) cur_text[0] else @as(u8, 0);
-            const is_dot = prev_last == '.' or cur_first == '.';
+            // Dot suppresses space for member access (a.b), but NOT for
+            // enum literals after operators (== .windows)
+            const is_member_dot = prev_last == '.' or
+                (cur_first == '.' and isIdentChar(prev_last));
             const is_call = cur_first == '(' and (isIdentChar(prev_last) or prev_last == ')');
             const is_close = cur_first == ')' or cur_first == ']';
             const after_open = prev_last == '(' or prev_last == '[';
             const is_comma = cur_first == ',';
-            if (!is_dot and !is_call and !is_close and !after_open and !is_comma) {
+            if (!is_member_dot and !is_call and !is_close and !after_open and !is_comma) {
                 try result.append(alloc, ' ');
             }
         }
