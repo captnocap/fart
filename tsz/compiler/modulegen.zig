@@ -376,7 +376,7 @@ fn emitModuleVars(
 
         if (init_val) |iv| {
             try out.appendSlice(alloc, try std.fmt.allocPrint(alloc,
-                " = {s};\n", .{translateInitValue(iv)}));
+                " = {s};\n", .{translateInitValue(alloc, iv)}));
         } else {
             try out.appendSlice(alloc, " = undefined;\n");
         }
@@ -694,12 +694,19 @@ fn parseTypeAtPos(
     if (std.mem.eql(u8, t, "fn") and pos.* < lex.count and lex.get(pos.*).kind == .lparen) {
         var fn_buf: std.ArrayListUnmanaged(u8) = .{};
         try fn_buf.appendSlice(alloc, "fn ");
-        // Collect ( ... )
+        // Collect ( ... ) with proper spacing
         var pdepth: u32 = 0;
         while (pos.* < lex.count) {
             const k = lex.get(pos.*).kind;
             if (k == .lparen) pdepth += 1;
             if (k == .rparen) pdepth -= 1;
+            // Add space between identifier-like tokens (not after ( or before ) or after *)
+            if (fn_buf.items.len > 0) {
+                const prev = fn_buf.items[fn_buf.items.len - 1];
+                const needs_space = (k == .identifier or k == .star or k == .question) and
+                    prev != '(' and prev != '*' and prev != '?';
+                if (needs_space) try fn_buf.append(alloc, ' ');
+            }
             try fn_buf.appendSlice(alloc, lex.get(pos.*).text(source));
             pos.* += 1;
             if (pdepth == 0) break;
@@ -831,9 +838,14 @@ fn isAllCaps(name: []const u8) bool {
     return name.len > 0;
 }
 
-fn translateInitValue(val: []const u8) []const u8 {
+fn translateInitValue(alloc: std.mem.Allocator, val: []const u8) []const u8 {
     if (std.mem.eql(u8, val, "null")) return "null";
     if (std.mem.eql(u8, val, "true")) return "true";
     if (std.mem.eql(u8, val, "false")) return "false";
+    // Object literal { key: val } → .{ .key = val }
+    if (val.len > 0 and val[0] == '{') {
+        // Convert TS-style { key : val } to Zig .{ .key = val }
+        return std.fmt.allocPrint(alloc, ".{s}", .{val}) catch val;
+    }
     return val;
 }
