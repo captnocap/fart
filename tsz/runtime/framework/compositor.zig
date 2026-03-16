@@ -169,6 +169,18 @@ fn isClipped(sx: f32, sy: f32, sw: f32, sh: f32) bool {
     return (sx + sw <= cr.x or sx >= cr.x + cr.w or sy + sh <= cr.y or sy >= cr.y + cr.h);
 }
 
+/// Clamp a rect to the current clip bounds. Returns null if fully clipped.
+fn clipRect(sx: f32, sy: f32, sw: f32, sh: f32) ?ClipRect {
+    if (clip_depth == 0) return .{ .x = sx, .y = sy, .w = sw, .h = sh };
+    const cr = clip_stack[clip_depth - 1];
+    const cx = @max(sx, cr.x);
+    const cy = @max(sy, cr.y);
+    const cx2 = @min(sx + sw, cr.x + cr.w);
+    const cy2 = @min(sy + sh, cr.y + cr.h);
+    if (cx2 <= cx or cy2 <= cy) return null;
+    return .{ .x = cx, .y = cy, .w = cx2 - cx, .h = cy2 - cy };
+}
+
 // ════════════════════════════════════════════════════════════════════════
 // Tree painting — walks nodes and emits gpu draw commands
 // ════════════════════════════════════════════════════════════════════════
@@ -223,13 +235,15 @@ fn paintNode(node: *Node, scroll_x: f32, scroll_y: f32, parent_opacity: f32) voi
         const bcb = @as(f32, @floatFromInt(bc.b)) / 255.0;
         const bca = @as(f32, @floatFromInt(bc.a)) / 255.0 * effective_opacity;
 
-        gpu.drawRect(
-            screen_x, screen_y, w, h,
-            cr, cg, cb, ca,
-            br,
-            if (bw_val > 0) bw_val else 0,
-            bcr, bcg, bcb, bca,
-        );
+        if (clipRect(screen_x, screen_y, w, h)) |clipped| {
+            gpu.drawRect(
+                clipped.x, clipped.y, clipped.w, clipped.h,
+                cr, cg, cb, ca,
+                br,
+                if (bw_val > 0) bw_val else 0,
+                bcr, bcg, bcb, bca,
+            );
+        }
     } else if (node.style.border_width > 0) {
         // Border only, no background
         const bc = node.style.border_color orelse Color.rgb(255, 255, 255);
@@ -238,22 +252,29 @@ fn paintNode(node: *Node, scroll_x: f32, scroll_y: f32, parent_opacity: f32) voi
         const bcb = @as(f32, @floatFromInt(bc.b)) / 255.0;
         const bca = @as(f32, @floatFromInt(bc.a)) / 255.0 * effective_opacity;
 
-        gpu.drawRect(
-            screen_x, screen_y, w, h,
-            0, 0, 0, 0,
-            node.style.border_radius,
-            node.style.border_width,
-            bcr, bcg, bcb, bca,
-        );
+        if (clipRect(screen_x, screen_y, w, h)) |clipped| {
+            gpu.drawRect(
+                clipped.x, clipped.y, clipped.w, clipped.h,
+                0, 0, 0, 0,
+                node.style.border_radius,
+                node.style.border_width,
+                bcr, bcg, bcb, bca,
+            );
+        }
     }
 
     // ── Text ────────────────────────────────────────────────────
     if (node.text) |txt| {
+        // Skip text entirely if the text area is clipped
         const pad_l = node.style.padLeft();
         const pad_r = node.style.padRight();
         const pad_t = node.style.padTop();
-        const color = node.text_color orelse Color.rgb(255, 255, 255);
         const text_max_w = node.computed.w - pad_l - pad_r;
+        const text_x = screen_x + pad_l;
+        const text_y = screen_y + pad_t;
+        const text_h = h - pad_t - node.style.padBottom();
+        if (clipRect(text_x, text_y, text_max_w, text_h) == null) return;
+        const color = node.text_color orelse Color.rgb(255, 255, 255);
 
         const cr = @as(f32, @floatFromInt(color.r)) / 255.0;
         const cg = @as(f32, @floatFromInt(color.g)) / 255.0;
