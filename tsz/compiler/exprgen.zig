@@ -1072,6 +1072,157 @@ const Parser = struct {
                     return .{ .text = try self.alloc.dupe(u8, "null"), .ty = .opt_f32_t };
                 }
 
+                // switch-expression: switch (val) { case .a: expr; break; ... }
+                if (std.mem.eql(u8, text, "switch")) {
+                    self.advance(); // skip 'switch'
+
+                    // Parse discriminant in parens
+                    self.expect(.lparen);
+                    const disc = try self.parseTernary();
+                    self.expect(.rparen);
+
+                    self.expect(.lbrace);
+
+                    var arms = std.ArrayListUnmanaged([]const u8){};
+                    var result_ty: ExprType = .unknown;
+
+                    while (self.curKind() != .rbrace and self.curKind() != .eof) {
+                        if (self.curKind() == .identifier and std.mem.eql(u8, self.curText(), "case")) {
+                            self.advance(); // skip 'case'
+
+                            // Parse case value (collect until : or |)
+                            var case_val = std.ArrayListUnmanaged(u8){};
+                            while (self.curKind() != .colon and self.curKind() != .pipe and self.curKind() != .eof) {
+                                try case_val.appendSlice(self.alloc, self.curText());
+                                self.advance();
+                            }
+
+                            // Check for |capture|
+                            var arm_capture: ?[]const u8 = null;
+                            if (self.curKind() == .colon) self.advance(); // skip :
+                            if (self.curKind() == .pipe) {
+                                self.advance(); // skip |
+                                arm_capture = self.curText();
+                                self.advance();
+                                if (self.curKind() == .pipe) self.advance(); // skip |
+                            }
+
+                            // Parse arm value expression
+                            const arm_val = try self.parseTernary();
+                            if (result_ty == .unknown) result_ty = arm_val.ty;
+
+                            // Skip break and semicolons
+                            if (self.curKind() == .semicolon) self.advance();
+                            if (self.curKind() == .identifier and std.mem.eql(u8, self.curText(), "break")) {
+                                self.advance();
+                                if (self.curKind() == .semicolon) self.advance();
+                            }
+
+                            // Convert case value to Zig enum
+                            const cv = try self.alloc.dupe(u8, case_val.items);
+                            // Check if it's a number literal
+                            const is_num = cv.len > 0 and (cv[0] >= '0' and cv[0] <= '9');
+                            const zig_case = if (is_num) cv
+                                else if (std.mem.indexOf(u8, cv, ".")) |dot| blk: {
+                                    const variant = cv[dot + 1 ..];
+                                    break :blk try std.fmt.allocPrint(self.alloc, ".{s}", .{variant});
+                                } else try std.fmt.allocPrint(self.alloc, ".{s}", .{cv});
+
+                            if (arm_capture) |cap| {
+                                try arms.append(self.alloc, try std.fmt.allocPrint(self.alloc, "{s} => |{s}| {s}", .{ zig_case, cap, arm_val.text }));
+                            } else {
+                                try arms.append(self.alloc, try std.fmt.allocPrint(self.alloc, "{s} => {s}", .{ zig_case, arm_val.text }));
+                            }
+                        } else if (self.curKind() == .identifier and std.mem.eql(u8, self.curText(), "default")) {
+                            self.advance(); // skip 'default'
+                            if (self.curKind() == .colon) self.advance(); // skip :
+
+                            const arm_val = try self.parseTernary();
+                            if (result_ty == .unknown) result_ty = arm_val.ty;
+
+                            if (self.curKind() == .semicolon) self.advance();
+                            if (self.curKind() == .identifier and std.mem.eql(u8, self.curText(), "break")) {
+                                self.advance();
+                                if (self.curKind() == .semicolon) self.advance();
+                            }
+
+                            try arms.append(self.alloc, try std.fmt.allocPrint(self.alloc, "else => {s}", .{arm_val.text}));
+                        } else {
+                            self.advance(); // skip unknown token
+                        }
+                    }
+                    self.expect(.rbrace);
+
+                    // Build switch expression
+                    var out = std.ArrayListUnmanaged(u8){};
+                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "switch ({s}) {{ ", .{disc.text}));
+                    for (arms.items, 0..) |arm, ai| {
+                        if (ai > 0) try out.appendSlice(self.alloc, ", ");
+                        try out.appendSlice(self.alloc, arm);
+                    }
+                    try out.appendSlice(self.alloc, " }");
+
+                    return .{
+                        .text = try self.alloc.dupe(u8, out.items),
+                        .ty = result_ty,
+                    };
+                }
+
+                // if-expression: if (cond) then_val else else_val
+                // Also handles: if (optional) |capture| then_val else else_val
+                if (std.mem.eql(u8, text, "if")) {
+                    self.advance(); // skip 'if'
+
+                    // Parse condition in parens
+                    self.expect(.lparen);
+                    const cond = try self.parseTernary();
+                    self.expect(.rparen);
+
+                    // Check for |capture|
+                    var capture: ?[]const u8 = null;
+                    if (self.curKind() == .pipe) {
+                        self.advance(); // skip |
+                        capture = self.curText();
+                        self.advance(); // skip name
+                        if (self.curKind() == .pipe) self.advance(); // skip |
+                    }
+
+                    // Parse then-value
+                    const then_val = try self.parseTernary();
+
+                    // Expect 'else'
+                    var else_val: ?[]const u8 = null;
+                    if (self.curKind() == .identifier and std.mem.eql(u8, self.curText(), "else")) {
+                        self.advance(); // skip 'else'
+                        const ev = try self.parseTernary();
+                        else_val = ev.text;
+                    }
+
+                    if (capture) |cap| {
+                        if (else_val) |ev| {
+                            return .{
+                                .text = try std.fmt.allocPrint(self.alloc, "if ({s}) |{s}| {s} else {s}", .{ cond.text, cap, then_val.text, ev }),
+                                .ty = then_val.ty,
+                            };
+                        }
+                        return .{
+                            .text = try std.fmt.allocPrint(self.alloc, "if ({s}) |{s}| {s}", .{ cond.text, cap, then_val.text }),
+                            .ty = then_val.ty,
+                        };
+                    }
+
+                    if (else_val) |ev| {
+                        return .{
+                            .text = try std.fmt.allocPrint(self.alloc, "if ({s}) {s} else {s}", .{ cond.text, then_val.text, ev }),
+                            .ty = then_val.ty,
+                        };
+                    }
+                    return .{
+                        .text = try std.fmt.allocPrint(self.alloc, "if ({s}) {s}", .{ cond.text, then_val.text }),
+                        .ty = then_val.ty,
+                    };
+                }
+
                 // comptime prefix — passthrough to Zig
                 if (std.mem.eql(u8, text, "comptime")) {
                     self.advance();
