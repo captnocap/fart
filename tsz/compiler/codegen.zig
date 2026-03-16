@@ -111,6 +111,8 @@ const CondInfo = struct {
     false_idx: u32,
 };
 
+const MAX_DYN_DEPS = 8; // max state slot dependencies per dynamic binding
+
 const DynText = struct {
     buf_id: u32,
     fmt_string: []const u8,
@@ -118,6 +120,8 @@ const DynText = struct {
     arr_name: []const u8,
     arr_index: u32,
     has_ref: bool,
+    dep_slots: [MAX_DYN_DEPS]u32, // runtime state slot IDs this text depends on
+    dep_count: u32,
 };
 
 const PendingDynStyle = struct {
@@ -2530,6 +2534,8 @@ pub const Generator = struct {
         var is_dynamic_text = false;
         var dyn_fmt: []const u8 = "";
         var dyn_args: []const u8 = "";
+        var text_dep_slots: [MAX_DYN_DEPS]u32 = undefined;
+        var text_dep_count: u32 = 0;
 
         // Save pending anim/dyn_style count — bindings from THIS node's style should
         // survive children processing and be consumed by the PARENT.
@@ -2626,6 +2632,8 @@ pub const Generator = struct {
                             is_dynamic_text = true;
                             dyn_fmt = tl.fmt;
                             dyn_args = tl.args;
+                            text_dep_slots = tl.dep_slots;
+                            text_dep_count = tl.dep_count;
                         } else {
                             text_content = tl.static_text;
                         }
@@ -2725,6 +2733,8 @@ pub const Generator = struct {
                             is_dynamic_text = true;
                             const st = self.stateTypeById(slot_id);
                             const rid = self.regularSlotId(slot_id);
+                            text_dep_slots[0] = rid;
+                            text_dep_count = 1;
                             dyn_fmt = switch (st) {
                                 .string => "{s}",
                                 .float => "{d}",
@@ -2808,6 +2818,8 @@ pub const Generator = struct {
                     .arr_name = "",
                     .arr_index = 0,
                     .has_ref = false,
+                    .dep_slots = text_dep_slots,
+                    .dep_count = text_dep_count,
                 };
                 self.last_dyn_id = self.dyn_count;
                 self.dyn_count += 1;
@@ -3457,6 +3469,8 @@ pub const Generator = struct {
         static_text: []const u8,
         fmt: []const u8,
         args: []const u8,
+        dep_slots: [MAX_DYN_DEPS]u32,
+        dep_count: u32,
     };
 
     fn parseTemplateLiteral(self: *Generator) !TemplateResult {
@@ -3467,12 +3481,14 @@ pub const Generator = struct {
 
         // Check for ${...} patterns
         if (std.mem.indexOf(u8, inner, "${") == null) {
-            return .{ .is_dynamic = false, .static_text = inner, .fmt = "", .args = "" };
+            return .{ .is_dynamic = false, .static_text = inner, .fmt = "", .args = "", .dep_slots = undefined, .dep_count = 0 };
         }
 
         // Parse template parts
         var fmt: std.ArrayListUnmanaged(u8) = .{};
         var args: std.ArrayListUnmanaged(u8) = .{};
+        var dep_slots: [MAX_DYN_DEPS]u32 = undefined;
+        var dep_count: u32 = 0;
         var i: usize = 0;
         while (i < inner.len) {
             if (i + 1 < inner.len and inner[i] == '$' and inner[i + 1] == '{') {
@@ -3492,6 +3508,10 @@ pub const Generator = struct {
                 if (self.isState(expr)) |slot_id| {
                     const st = self.stateTypeById(slot_id);
                     const rid = self.regularSlotId(slot_id);
+                    if (dep_count < MAX_DYN_DEPS) {
+                        dep_slots[dep_count] = rid;
+                        dep_count += 1;
+                    }
                     switch (st) {
                         .string => {
                             try fmt.appendSlice(self.alloc, "{s}");
@@ -3555,6 +3575,10 @@ pub const Generator = struct {
                     if (self.isObjectState(obj_name)) |obj_idx| {
                         if (self.resolveObjectField(obj_idx, field_name)) |state_idx| {
                             const rid = self.regularSlotId(state_idx);
+                            if (dep_count < MAX_DYN_DEPS) {
+                                dep_slots[dep_count] = rid;
+                                dep_count += 1;
+                            }
                             const ft = self.stateTypeById(state_idx);
                             switch (ft) {
                                 .string => {
@@ -3745,9 +3769,11 @@ pub const Generator = struct {
                 .static_text = "",
                 .fmt = try self.alloc.dupe(u8, fmt.items),
                 .args = try self.alloc.dupe(u8, args.items),
+                .dep_slots = dep_slots,
+                .dep_count = dep_count,
             };
         }
-        return .{ .is_dynamic = false, .static_text = inner, .fmt = "", .args = "" };
+        return .{ .is_dynamic = false, .static_text = inner, .fmt = "", .args = "", .dep_slots = undefined, .dep_count = 0 };
     }
 
     // ── Handler body emission ───────────────────────────────────────
@@ -6132,7 +6158,7 @@ pub const Generator = struct {
             }
         }
 
-        // updateDynamicTexts (dedup: same format + args share a buffer)
+        // updateDynamicTexts (dedup: same format + args share a buffer, per-slot dirty guard)
         if (self.dyn_count > 0) {
             try out.appendSlice(self.alloc, "fn updateDynamicTexts() void {\n");
             for (0..self.dyn_count) |i| {
@@ -6150,14 +6176,38 @@ pub const Generator = struct {
                         break;
                     }
                 }
-                if (dedup_source) |src| {
-                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                        "    {s}[{d}].text = _dyn_text_{d};\n",
-                        .{ dt.arr_name, dt.arr_index, src }));
+                // Determine which dep info to use (deduped texts use source's deps)
+                const guard_dt = if (dedup_source) |src| self.dyn_texts[src] else dt;
+                // Emit per-slot dirty guard if deps are tracked
+                if (guard_dt.dep_count > 0) {
+                    try out.appendSlice(self.alloc, "    if (");
+                    for (0..guard_dt.dep_count) |di| {
+                        if (di > 0) try out.appendSlice(self.alloc, " or ");
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            "state.slotDirty({d})", .{guard_dt.dep_slots[di]}));
+                    }
+                    try out.appendSlice(self.alloc, ") {\n");
+                    if (dedup_source) |src| {
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            "        {s}[{d}].text = _dyn_text_{d};\n",
+                            .{ dt.arr_name, dt.arr_index, src }));
+                    } else {
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            "        _dyn_text_{d} = std.fmt.bufPrint(&_dyn_buf_{d}, \"{s}\", .{{ {s} }}) catch \"\";\n        {s}[{d}].text = _dyn_text_{d};\n",
+                            .{ i, i, dt.fmt_string, dt.fmt_args, dt.arr_name, dt.arr_index, i }));
+                    }
+                    try out.appendSlice(self.alloc, "    }\n");
                 } else {
-                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                        "    _dyn_text_{d} = std.fmt.bufPrint(&_dyn_buf_{d}, \"{s}\", .{{ {s} }}) catch \"\";\n    {s}[{d}].text = _dyn_text_{d};\n",
-                        .{ i, i, dt.fmt_string, dt.fmt_args, dt.arr_name, dt.arr_index, i }));
+                    // No dep tracking — always update (fallback for PTY, inspector, etc.)
+                    if (dedup_source) |src| {
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            "    {s}[{d}].text = _dyn_text_{d};\n",
+                            .{ dt.arr_name, dt.arr_index, src }));
+                    } else {
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            "    _dyn_text_{d} = std.fmt.bufPrint(&_dyn_buf_{d}, \"{s}\", .{{ {s} }}) catch \"\";\n    {s}[{d}].text = _dyn_text_{d};\n",
+                            .{ i, i, dt.fmt_string, dt.fmt_args, dt.arr_name, dt.arr_index, i }));
+                    }
                 }
             }
             try out.appendSlice(self.alloc, "}\n\n");
@@ -6715,7 +6765,7 @@ pub const Generator = struct {
             }
         }
 
-        // updateDynamicTexts (dedup: same format + args share a buffer)
+        // updateDynamicTexts (dedup: same format + args share a buffer, per-slot dirty guard)
         if (self.dyn_count > 0) {
             try out.appendSlice(self.alloc, "fn updateDynamicTexts() void {\n");
             for (0..self.dyn_count) |i| {
@@ -6733,14 +6783,38 @@ pub const Generator = struct {
                         break;
                     }
                 }
-                if (dedup_source) |src| {
-                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                        "    {s}[{d}].text = _dyn_text_{d};\n",
-                        .{ dt.arr_name, dt.arr_index, src }));
+                // Determine which dep info to use (deduped texts use source's deps)
+                const guard_dt = if (dedup_source) |src| self.dyn_texts[src] else dt;
+                // Emit per-slot dirty guard if deps are tracked
+                if (guard_dt.dep_count > 0) {
+                    try out.appendSlice(self.alloc, "    if (");
+                    for (0..guard_dt.dep_count) |di| {
+                        if (di > 0) try out.appendSlice(self.alloc, " or ");
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            "state.slotDirty({d})", .{guard_dt.dep_slots[di]}));
+                    }
+                    try out.appendSlice(self.alloc, ") {\n");
+                    if (dedup_source) |src| {
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            "        {s}[{d}].text = _dyn_text_{d};\n",
+                            .{ dt.arr_name, dt.arr_index, src }));
+                    } else {
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            "        _dyn_text_{d} = std.fmt.bufPrint(&_dyn_buf_{d}, \"{s}\", .{{ {s} }}) catch \"\";\n        {s}[{d}].text = _dyn_text_{d};\n",
+                            .{ i, i, dt.fmt_string, dt.fmt_args, dt.arr_name, dt.arr_index, i }));
+                    }
+                    try out.appendSlice(self.alloc, "    }\n");
                 } else {
-                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                        "    _dyn_text_{d} = std.fmt.bufPrint(&_dyn_buf_{d}, \"{s}\", .{{ {s} }}) catch \"\";\n    {s}[{d}].text = _dyn_text_{d};\n",
-                        .{ i, i, dt.fmt_string, dt.fmt_args, dt.arr_name, dt.arr_index, i }));
+                    // No dep tracking — always update (fallback for PTY, inspector, etc.)
+                    if (dedup_source) |src| {
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            "    {s}[{d}].text = _dyn_text_{d};\n",
+                            .{ dt.arr_name, dt.arr_index, src }));
+                    } else {
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            "    _dyn_text_{d} = std.fmt.bufPrint(&_dyn_buf_{d}, \"{s}\", .{{ {s} }}) catch \"\";\n    {s}[{d}].text = _dyn_text_{d};\n",
+                            .{ i, i, dt.fmt_string, dt.fmt_args, dt.arr_name, dt.arr_index, i }));
+                    }
                 }
             }
             try out.appendSlice(self.alloc, "}\n\n");
