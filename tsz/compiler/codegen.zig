@@ -1480,10 +1480,30 @@ pub const Generator = struct {
                         // Check if this is a handler prop (onPress, onChangeText, etc.)
                         const is_handler = attr_name.len > 2 and attr_name[0] == 'o' and attr_name[1] == 'n' and attr_name[2] >= 'A' and attr_name[2] <= 'Z';
                         if (is_handler) {
-                            // Store handler token range — don't try to parse as expression
-                            h_start = self.pos;
-                            try self.skipBalanced();
-                            h_end = self.pos;
+                            // Check if forwarding another handler prop: {propName}
+                            // If so, resolve to the original handler's token range
+                            const peek_id = self.pos + 1;
+                            const peek_rb = self.pos + 2;
+                            if (peek_id < self.lex.count and peek_rb < self.lex.count and
+                                self.lex.tokens[peek_id].kind == .identifier and
+                                self.lex.tokens[peek_rb].kind == .rbrace)
+                            {
+                                const inner_name = self.lex.tokens[peek_id].text(self.source);
+                                if (self.findPropHandler(inner_name)) |orig_range| {
+                                    // Forward the original handler range, not {propName}
+                                    h_start = orig_range.start;
+                                    h_end = orig_range.end;
+                                    try self.skipBalanced();
+                                } else {
+                                    h_start = self.pos;
+                                    try self.skipBalanced();
+                                    h_end = self.pos;
+                                }
+                            } else {
+                                h_start = self.pos;
+                                try self.skipBalanced();
+                                h_end = self.pos;
+                            }
                         } else {
                             self.advance_token(); // {
                             val = try self.emitStateExpr();

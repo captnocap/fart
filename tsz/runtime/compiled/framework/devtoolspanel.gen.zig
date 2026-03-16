@@ -58,11 +58,11 @@ var _dyn_text_8: []const u8 = "";
 
 // ── Generated event handlers ────────────────────────────────────
 fn _handler_press_0() void {
-    
+    state.setSlot(slot_base + 0, 0);
 }
 
 fn _handler_press_1() void {
-    
+    state.setSlot(slot_base + 0, 1);
 }
 
 fn updateDynamicTexts() void {
