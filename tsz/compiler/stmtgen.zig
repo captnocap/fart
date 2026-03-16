@@ -42,6 +42,10 @@ fn typeStrToExprType(ts: []const u8) exprgen.ExprType {
     if (std.mem.eql(u8, ts, "u8")) return .u8_t;
     if (std.mem.eql(u8, ts, "bool")) return .bool_t;
     if (std.mem.startsWith(u8, ts, "?")) return .opt_f32_t;
+    // Slice/array types
+    if (std.mem.indexOf(u8, ts, "[]f32") != null) return .f32_slice_t;
+    if (std.mem.indexOf(u8, ts, "[]usize") != null) return .usize_slice_t;
+    if (std.mem.indexOf(u8, ts, "[]bool") != null) return .bool_slice_t;
     return .unknown;
 }
 
@@ -127,6 +131,8 @@ pub fn emitBlock(
                     if (var_name.len > 0 and narrowed_count < 16) {
                         narrowed_vars[narrowed_count] = var_name;
                         narrowed_count += 1;
+                        // Register as f32 so subsequent expressions know it's unwrapped
+                        registerVar(var_name, .f32_t);
                     }
                 }
             }
@@ -317,8 +323,9 @@ fn emitVarDecl(
             return try std.fmt.allocPrint(alloc, "{s}var {s}: {s} = 0;", .{ ind, snake_name, inferred });
         }
         // Register type from annotation or initializer pattern
-        if (type_ann) |ta| {
-            registerVar(snake_name, typeStrToExprType(ta));
+        const ann_ty = if (type_ann) |ta| typeStrToExprType(ta) else exprgen.ExprType.unknown;
+        if (ann_ty != .unknown) {
+            registerVar(snake_name, ann_ty);
         } else {
             // Infer from initializer: function calls returning f32, struct access, etc.
             const inferred_ty = inferExprType(expr);
@@ -381,6 +388,11 @@ fn emitIf(
     const null_var_count = extractAllNullCheckVars(alloc, cond, &null_vars);
 
     if (null_var_count > 0) {
+        // Register null-narrowed vars as f32 so expressions inside the block
+        // know these are unwrapped floats, not optionals (avoids asF32 wrapping)
+        for (0..null_var_count) |vi| {
+            registerVar(null_vars[vi], .f32_t);
+        }
         // Emit the condition as-is, but add .? to all null-checked vars in the body
         try out.appendSlice(alloc, try std.fmt.allocPrint(alloc, "{s}if ({s}) {{\n", .{ ind, cond }));
         var body: []const u8 = "";
@@ -900,6 +912,12 @@ fn inferExprType(expr: []const u8) exprgen.ExprType {
     }
     // resolveMaybePct returns ?f32
     if (std.mem.startsWith(u8, expr, "resolveMaybePct(")) return .opt_f32_t;
+    // Array allocations → slice types based on element type
+    if (std.mem.indexOf(u8, expr, "zeroes") != null) {
+        if (std.mem.indexOf(u8, expr, "usize") != null) return .usize_slice_t;
+        if (std.mem.indexOf(u8, expr, "bool") != null) return .bool_slice_t;
+        return .f32_slice_t; // default array element type
+    }
     // Arithmetic expressions (contain +, -, *, /) → f32
     if (std.mem.indexOf(u8, expr, " + ") != null or
         std.mem.indexOf(u8, expr, " - ") != null or

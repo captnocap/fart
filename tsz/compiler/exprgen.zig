@@ -43,10 +43,23 @@ pub const ExprType = enum {
     float_lit, // float literal (comptime_float)
     string_t, // string / []const u8
     enum_t, // enum value (.row, .column, etc.)
+    f32_slice_t, // f32 array/slice (childBasis, childGrow, etc.)
+    usize_slice_t, // usize array/slice (absoluteIndices, visibleIndices, etc.)
+    bool_slice_t, // bool array/slice (frozen)
     ptr_t, // pointer type (*Node, etc.)
     struct_t, // struct value
     void_t, // void
     unknown, // can't determine
+
+    /// Element type when indexing into a slice
+    pub fn elementType(self: ExprType) ExprType {
+        return switch (self) {
+            .f32_slice_t => .f32_t,
+            .usize_slice_t => .usize_t,
+            .bool_slice_t => .bool_t,
+            else => .unknown,
+        };
+    }
 
     fn isInt(self: ExprType) bool {
         return self == .usize_t or self == .u16_t or self == .i16_t or self == .u8_t;
@@ -617,9 +630,14 @@ const Parser = struct {
 
                     // Regular property — camelCase → snake_case
                     const snake = try camelToSnake(self.alloc, prop);
-                    const field_ty = resolveFieldType(snake);
+                    const full_path = try std.fmt.allocPrint(self.alloc, "{s}.{s}", .{ left.text, snake });
+                    // Check VarTypes for full dotted path first (null-narrowed vars like s.width → f32)
+                    const field_ty = if (self.var_types) |vt|
+                        (vt.get(full_path) orelse resolveFieldType(snake))
+                    else
+                        resolveFieldType(snake);
                     left = .{
-                        .text = try std.fmt.allocPrint(self.alloc, "{s}.{s}", .{ left.text, snake }),
+                        .text = full_path,
                         .ty = field_ty,
                     };
                 },
@@ -632,9 +650,11 @@ const Parser = struct {
                     const idx = try self.parseTernary();
                     self.context = saved;
                     self.expect(.rbracket);
+                    // Resolve element type from container type
+                    const elem_ty = left.ty.elementType();
                     left = .{
                         .text = try std.fmt.allocPrint(self.alloc, "{s}[@intCast({s})]", .{ left.text, idx.text }),
-                        .ty = .unknown, // array element type depends on container
+                        .ty = elem_ty,
                     };
                 },
 
