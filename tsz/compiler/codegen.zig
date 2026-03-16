@@ -6166,6 +6166,47 @@ pub const Generator = struct {
         try out.appendSlice(self.alloc, "    return &root;\n");
         try out.appendSlice(self.alloc, "}\n");
 
+        // ── Named state accessors (pub getter/setter per useState) ──
+        if (self.has_state and self.state_count > 0) {
+            try out.appendSlice(self.alloc, "\n// ── State accessors ─────────────────────────────────────────\n");
+            for (0..self.state_count) |i| {
+                const slot = self.state_slots[i];
+                const st = std.meta.activeTag(slot.initial);
+                switch (st) {
+                    .int => {
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            "pub fn {s}() i64 {{ return state.getSlot(slot_base + {d}); }}\n" ++
+                            "pub fn {s}(v: i64) void {{ state.setSlot(slot_base + {d}, v); }}\n",
+                            .{ slot.getter, i, slot.setter, i }));
+                    },
+                    .float => {
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            "pub fn {s}() f64 {{ return state.getSlotFloat(slot_base + {d}); }}\n" ++
+                            "pub fn {s}(v: f64) void {{ state.setSlotFloat(slot_base + {d}, v); }}\n",
+                            .{ slot.getter, i, slot.setter, i }));
+                    },
+                    .boolean => {
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            "pub fn {s}() bool {{ return state.getSlotBool(slot_base + {d}); }}\n" ++
+                            "pub fn {s}(v: bool) void {{ state.setSlotBool(slot_base + {d}, v); }}\n",
+                            .{ slot.getter, i, slot.setter, i }));
+                    },
+                    .string => {
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            "pub fn {s}() []const u8 {{ return state.getSlotString(slot_base + {d}); }}\n" ++
+                            "pub fn {s}(v: []const u8) void {{ state.setSlotString(slot_base + {d}, v); }}\n",
+                            .{ slot.getter, i, slot.setter, i }));
+                    },
+                    .array => {
+                        const arr_slot = self.arraySlotId(@intCast(i));
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            "pub fn {s}() []const i64 {{ return state.getArraySlot(slot_base + {d}); }}\n",
+                            .{ slot.getter, arr_slot }));
+                    },
+                }
+            }
+        }
+
         // Post-process: rewrite state slot references to use slot_base offset
         if (self.has_state) {
             const result = try out.toOwnedSlice(self.alloc);
