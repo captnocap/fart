@@ -3,86 +3,76 @@
 **Rule:** If it's not generating code, it should be generated code.
 Every `.zig` in `runtime/compiled/` needs a `.tsz` source in `runtime/tsz/`.
 
-**Done:** 18 / 55 (33%)
+**Done:** 45 / 52 (87%)
 
 ---
 
 ## Done (have .tsz source in runtime/tsz/)
 
+- [x] animate.tsz
+- [x] archive.tsz
+- [x] audit.tsz
 - [x] breakpoint.tsz
+- [x] bsod.tsz
 - [x] canvas.tsz
+- [x] classifier.tsz
 - [x] compositor.tsz
+- [x] crypto.tsz
 - [x] events.tsz
+- [x] framework/inspector/overlay.tsz
+- [x] framework/inspector/panel.tsz
+- [x] fs.tsz
+- [x] fswatch.tsz
 - [x] geometry.tsz
 - [x] gpu.tsz
+- [x] image.tsz
 - [x] input.tsz
 - [x] layout.tsz
+- [x] leaktest.tsz
+- [x] library_index.tsz
+- [x] localstore.tsz
 - [x] mouse.tsz
+- [x] mpv.tsz
+- [x] net/http.tsz
+- [x] net/http_test.tsz
+- [x] net/ring_buffer.tsz
+- [x] net/socks5.tsz
+- [x] net/tor.tsz
 - [x] overlay.tsz
 - [x] panels.tsz
+- [x] privacy.tsz
+- [x] pty.tsz
 - [x] query.tsz
+- [x] router.tsz
+- [x] sqlite.tsz
 - [x] state.tsz
-- [x] audit.tsz
-- [x] classifier.tsz
-- [x] library_index.tsz
 - [x] syntax.tsz
 - [x] telemetry.tsz
+- [x] testassert.tsz
+- [x] testdriver.tsz
+- [x] testharness.tsz
+- [x] vterm.tsz
+- [x] watchdog.tsz
+- [x] windows.tsz
 
 ---
 
-## Need .tsz conversion (37 files)
+## Need .tsz conversion (7 files)
 
 ### Rendering / UI
 - [ ] text.zig — text rendering (FreeType integration)
-- [ ] image.zig — image loading/rendering (stb_image)
 - [ ] gpu_shaders.zig — GPU shader definitions (wgpu)
-- [ ] bsod.zig — crash screen UI
-- [ ] windows.zig — window management (SDL2)
-- [ ] animate.zig — animation system
-- [ ] router.zig — view routing
 
 ### Core bootstrap
 - [ ] main.zig — entry point / bootstrap
 - [ ] generated_app.zig — app scaffolding
 - [ ] c.zig — C interop / FFI bindings
 
-### Data / Storage
-- [ ] sqlite.zig — SQLite bindings
-- [ ] localstore.zig — local storage
-- [ ] fs.zig — filesystem operations
-- [ ] fswatch.zig — file watching
-- [ ] archive.zig — archive handling (tar/zip)
-- [ ] crypto.zig — cryptography
-
-### Media
-- [ ] mpv.zig — media playback (libmpv)
-
-### Networking (runtime/compiled/net/)
-- [ ] net/http.zig — HTTP client
-- [ ] net/http_test.zig — HTTP tests
+### Networking (runtime/compiled/net/) — in progress by other sessions
 - [ ] net/httpserver.zig — HTTP server
 - [ ] net/manager.zig — connection manager
-- [ ] net/ring_buffer.zig — ring buffer
-- [ ] net/socks5.zig — SOCKS5 proxy
-- [ ] net/tor.zig — Tor integration
 - [ ] net/websocket.zig — WebSocket client
 - [ ] net/wsserver.zig — WebSocket server
-
-### System
-- [ ] pty.zig — pseudo-terminal
-- [ ] vterm.zig — virtual terminal emulator
-- [ ] watchdog.zig — process watchdog
-- [ ] privacy.zig — privacy features
-
-### Utilities
-- [ ] leaktest.zig — leak detection
-- [ ] testassert.zig — test assertions
-- [ ] testdriver.zig — test driver
-- [ ] testharness.zig — test harness
-
-### Framework (runtime/compiled/framework/)
-- [ ] framework/inspector/panel.zig — inspector panel
-- [ ] framework/inspector/overlay.zig — inspector overlay
 
 ---
 
