@@ -625,9 +625,18 @@ const Parser = struct {
 
         while (true) {
             switch (self.curKind()) {
-                // Property access: a.b
+                // Property access: a.b, or anonymous init: a.{ ... }
                 .dot => {
                     self.advance();
+                    // .{ ... } — Zig anonymous struct/tuple literal
+                    if (self.curKind() == .lbrace) {
+                        const obj = try self.parseObjectLiteral();
+                        left = .{
+                            .text = try std.fmt.allocPrint(self.alloc, "{s}{s}", .{ left.text, obj }),
+                            .ty = .struct_t,
+                        };
+                        continue;
+                    }
                     if (self.curKind() != .identifier) break;
                     const prop = self.curText();
                     self.advance();
@@ -1041,6 +1050,26 @@ const Parser = struct {
                 };
             },
 
+            // Anonymous struct/tuple literal: .{ x, y } or .{ .field = val }
+            .dot => {
+                if (self.pos.* + 1 < self.lex.count and self.lex.get(self.pos.* + 1).kind == .lbrace) {
+                    self.advance(); // skip .
+                    const obj = try self.parseObjectLiteral();
+                    return .{ .text = obj, .ty = .struct_t };
+                }
+                // Bare .variant (enum literal)
+                self.advance();
+                if (self.curKind() == .identifier) {
+                    const variant = self.curText();
+                    self.advance();
+                    return .{
+                        .text = try std.fmt.allocPrint(self.alloc, ".{s}", .{variant}),
+                        .ty = .enum_t,
+                    };
+                }
+                return .{ .text = try self.alloc.dupe(u8, "."), .ty = .unknown };
+            },
+
             // Address-of: &x → &x (unary prefix)
             .ampersand => {
                 self.advance();
@@ -1166,7 +1195,12 @@ const Parser = struct {
                     try fields.append(self.alloc, try std.fmt.allocPrint(self.alloc, ".{s} = {s}", .{ snake, key }));
                 }
             } else {
-                self.advance();
+                // Positional value (tuple literal): .{ expr, expr }
+                const saved2 = self.context;
+                self.context = .argument;
+                const val = try self.parseTernary();
+                self.context = saved2;
+                try fields.append(self.alloc, val.text);
             }
 
             if (self.curKind() == .comma) self.advance();

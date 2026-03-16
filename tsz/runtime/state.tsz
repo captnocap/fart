@@ -299,7 +299,8 @@ export function saveState() {
         break;
       case .boolean: |v|
         file.writeAll(&.{@as(u8, 2)}) catch return;
-        file.writeAll(&.{v ? @as(u8, 1) : @as(u8, 0)}) catch return;
+        const bval: u8 = v ? 1 : 0;
+        file.writeAll(&.{bval}) catch return;
         break;
       case .string: |s|
         file.writeAll(&.{@as(u8, 3)}) catch return;
