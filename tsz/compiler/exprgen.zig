@@ -543,10 +543,11 @@ const Parser = struct {
             }
         }
 
-        // Fallback: both unknown → use asF32 on both (preserves current behavior for edge cases)
+        // Fallback: both unknown → pass through without wrapping.
+        // Let the Zig compiler handle type checking.
         return .{
-            .text = try std.fmt.allocPrint(self.alloc, "asF32({s}) {s} asF32({s})", .{ left.text, op, right.text }),
-            .ty = .f32_t,
+            .text = try std.fmt.allocPrint(self.alloc, "{s} {s} {s}", .{ left.text, op, right.text }),
+            .ty = .unknown,
         };
     }
 
@@ -586,8 +587,8 @@ const Parser = struct {
             }
         }
 
-        // Fallback: both unknown → use asF32 on both
-        return try std.fmt.allocPrint(self.alloc, "asF32({s}) {s} asF32({s})", .{ left.text, op, right.text });
+        // Fallback: both unknown → pass through without wrapping
+        return try std.fmt.allocPrint(self.alloc, "{s} {s} {s}", .{ left.text, op, right.text });
     }
 
     // ── Precedence 9: Unary (!, -, typeof) ─────────────────────────
@@ -678,19 +679,82 @@ const Parser = struct {
                 },
 
                 // Index access: a[i] → a[@intCast(i)]
+                // Slice access: a[x..y] → a[x..y]
                 .lbracket => {
                     self.advance();
-                    const saved = self.context;
-                    self.context = .value;
-                    const idx = try self.parseTernary();
-                    self.context = saved;
-                    self.expect(.rbracket);
-                    // Resolve element type from container type
-                    const elem_ty = left.ty.elementType();
-                    left = .{
-                        .text = try std.fmt.allocPrint(self.alloc, "{s}[@intCast({s})]", .{ left.text, idx.text }),
-                        .ty = elem_ty,
+
+                    // Look ahead for slice syntax: check if there's a .. before the ]
+                    const is_slice = blk: {
+                        var scan = self.pos.*;
+                        var depth: u32 = 1;
+                        while (scan < self.lex.count) {
+                            const sk = self.lex.get(scan).kind;
+                            if (sk == .lbracket) depth += 1;
+                            if (sk == .rbracket) {
+                                depth -= 1;
+                                if (depth == 0) break;
+                            }
+                            // Two consecutive dots = slice range
+                            if (sk == .dot and scan + 1 < self.lex.count and
+                                self.lex.get(scan + 1).kind == .dot and depth == 1)
+                            {
+                                break :blk true;
+                            }
+                            scan += 1;
+                        }
+                        break :blk false;
                     };
+
+                    if (is_slice) {
+                        // Parse start expression using parsePrimary only (avoid postfix eating ..)
+                        const start_expr = try self.parsePrimary();
+
+                        // Consume ..
+                        if (self.curKind() == .dot) self.advance();
+                        if (self.curKind() == .dot) self.advance();
+
+                        if (self.curKind() == .rbracket) {
+                            // Open-ended slice: a[x..]
+                            self.advance();
+                            left = .{
+                                .text = try std.fmt.allocPrint(self.alloc, "{s}[{s}..]", .{ left.text, start_expr.text }),
+                                .ty = left.ty,
+                            };
+                        } else {
+                            // Range slice: a[x..y]
+                            const end_expr = try self.parsePrimary();
+                            // Allow postfix on end (e.g., a[0..s.len])
+                            var end_final = end_expr;
+                            while (self.curKind() == .dot) {
+                                self.advance();
+                                if (self.curKind() == .identifier) {
+                                    const prop = self.curText();
+                                    self.advance();
+                                    end_final = .{
+                                        .text = try std.fmt.allocPrint(self.alloc, "{s}.{s}", .{ end_final.text, prop }),
+                                        .ty = .unknown,
+                                    };
+                                } else break;
+                            }
+                            self.expect(.rbracket);
+                            left = .{
+                                .text = try std.fmt.allocPrint(self.alloc, "{s}[{s}..{s}]", .{ left.text, start_expr.text, end_final.text }),
+                                .ty = left.ty,
+                            };
+                        }
+                    } else {
+                        const saved = self.context;
+                        self.context = .value;
+                        const idx = try self.parseTernary();
+                        self.context = saved;
+                        self.expect(.rbracket);
+                        // Resolve element type from container type
+                        const elem_ty = left.ty.elementType();
+                        left = .{
+                            .text = try std.fmt.allocPrint(self.alloc, "{s}[@intCast({s})]", .{ left.text, idx.text }),
+                            .ty = elem_ty,
+                        };
+                    }
                 },
 
                 // Function call: a(x, y)
@@ -973,6 +1037,16 @@ const Parser = struct {
                 return .{
                     .text = try std.fmt.allocPrint(self.alloc, "({s})", .{inner.text}),
                     .ty = inner.ty,
+                };
+            },
+
+            // Address-of: &x → &x (unary prefix)
+            .ampersand => {
+                self.advance();
+                const inner = try self.parsePostfix();
+                return .{
+                    .text = try std.fmt.allocPrint(self.alloc, "&{s}", .{inner.text}),
+                    .ty = .ptr_t,
                 };
             },
 

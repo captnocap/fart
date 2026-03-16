@@ -220,6 +220,14 @@ pub fn emitStatement(
         return try std.fmt.allocPrint(alloc, "{s}return {s};", .{ ind, expr });
     }
 
+    // ── defer ─────────────────────────────────────────────────────
+    if (tok.kind == .identifier and std.mem.eql(u8, text, "defer")) {
+        pos.* += 1; // skip 'defer'
+        const expr = try exprgen.emitExpressionTyped(alloc, lex, source, pos, .value, &var_type_table);
+        if (pos.* < lex.count and lex.get(pos.*).kind == .semicolon) pos.* += 1;
+        return try std.fmt.allocPrint(alloc, "{s}defer {s};", .{ ind, expr });
+    }
+
     // ── continue/break ───────────────────────────────────────────
     if (tok.kind == .identifier and std.mem.eql(u8, text, "continue")) {
         pos.* += 1;
@@ -690,7 +698,29 @@ fn emitSwitch(
             const case_str = try alloc.dupe(u8, case_val.items);
             const zig_case = try enumCaseToZig(alloc, case_str);
 
-            try out.appendSlice(alloc, try std.fmt.allocPrint(alloc, "{s}{s} => {{\n", .{ arm_ind, zig_case }));
+            // Check for capture: |v| or |*v|
+            var capture: ?[]const u8 = null;
+            if (peekKind(lex, pos.*) == .pipe) {
+                pos.* += 1; // skip |
+                var cap_buf: std.ArrayListUnmanaged(u8) = .{};
+                // Handle |*s| (pointer capture)
+                if (peekKind(lex, pos.*) == .star) {
+                    try cap_buf.append(alloc, '*');
+                    pos.* += 1;
+                }
+                if (peekKind(lex, pos.*) == .identifier) {
+                    try cap_buf.appendSlice(alloc, peekText(lex, source, pos.*));
+                    pos.* += 1;
+                }
+                if (peekKind(lex, pos.*) == .pipe) pos.* += 1; // skip closing |
+                capture = try alloc.dupe(u8, cap_buf.items);
+            }
+
+            if (capture) |cap| {
+                try out.appendSlice(alloc, try std.fmt.allocPrint(alloc, "{s}{s} => |{s}| {{\n", .{ arm_ind, zig_case, cap }));
+            } else {
+                try out.appendSlice(alloc, try std.fmt.allocPrint(alloc, "{s}{s} => {{\n", .{ arm_ind, zig_case }));
+            }
 
             // Collect arm body until break or next case/default/}
             while (pos.* < lex.count) {

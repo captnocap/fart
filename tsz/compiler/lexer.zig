@@ -219,7 +219,8 @@ pub const Lexer = struct {
             if (ch >= '0' and ch <= '9') {
                 while (self.pos < self.source.len and
                     ((self.source[self.pos] >= '0' and self.source[self.pos] <= '9') or
-                    self.source[self.pos] == '.'))
+                    // Consume '.' as decimal only if not followed by another '.' (range operator)
+                    (self.source[self.pos] == '.' and (self.pos + 1 >= self.source.len or self.source[self.pos + 1] != '.'))))
                 {
                     self.pos += 1;
                 }
