@@ -34,6 +34,13 @@ var g_app_w: f32 = 0;
 var g_app_h: f32 = 0;
 var g_gpu_initialized: bool = false;
 
+// Text selection state — set by generated_app.zig before frame()
+var g_sel_node: ?*Node = null;
+var g_sel_end_node: ?*Node = null;
+var g_sel_start: usize = 0;
+var g_sel_end: usize = 0;
+var g_sel_all: bool = false;
+
 // ════════════════════════════════════════════════════════════════════════
 // Public API
 // ════════════════════════════════════════════════════════════════════════
@@ -73,6 +80,14 @@ pub fn handleResize(width: u32, height: u32) void {
 
 pub fn setHoveredNode(node: ?*Node) void {
     g_hovered_node = node;
+}
+
+pub fn setSelection(sel_node: ?*Node, sel_end_node: ?*Node, sel_start: usize, sel_end: usize, sel_all: bool) void {
+    g_sel_node = sel_node;
+    g_sel_end_node = sel_end_node;
+    g_sel_start = sel_start;
+    g_sel_end = sel_end;
+    g_sel_all = sel_all;
 }
 
 /// Composite the entire tree and present to screen via wgpu.
@@ -202,6 +217,21 @@ fn paintNode(node: *Node, scroll_x: f32, scroll_y: f32, parent_opacity: f32) voi
         const cg = @as(f32, @floatFromInt(color.g)) / 255.0;
         const cb = @as(f32, @floatFromInt(color.b)) / 255.0;
         const ca = @as(f32, @floatFromInt(color.a)) / 255.0 * effective_opacity;
+
+        // Selection highlight — draw before text so highlight is behind
+        const is_selected = (g_sel_node != null and g_sel_end_node != null) and
+            (g_sel_node == node or g_sel_end_node == node or g_sel_all) and
+            (g_sel_start != g_sel_end or g_sel_all);
+        if (is_selected) {
+            const s0 = if (g_sel_all) 0 else @min(g_sel_start, g_sel_end);
+            const s1 = if (g_sel_all) txt.len else @max(g_sel_start, g_sel_end);
+            if (s1 > s0) {
+                // Measure text positions to get highlight rects
+                const tx = screen_x + pad_l;
+                const ty = screen_y + pad_t;
+                gpu.drawSelectionRects(txt, tx, ty, node.font_size, text_max_w, s0, s1);
+            }
+        }
 
         _ = gpu.drawTextWrapped(
             txt,

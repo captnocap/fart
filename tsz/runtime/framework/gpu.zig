@@ -575,6 +575,124 @@ pub fn drawTextWrapped(text: []const u8, x: f32, y: f32, size_px: u16, max_width
     return pen_y - y;
 }
 
+/// Draw selection highlight rectangles for a byte range within wrapped text.
+pub fn drawSelectionRects(text: []const u8, x: f32, y: f32, size_px: u16, max_width: f32, sel_start: usize, sel_end: usize) void {
+    if (g_ft_face == null or sel_start >= sel_end) return;
+
+    if (g_ft_current_size != size_px) {
+        _ = c.FT_Set_Pixel_Sizes(g_ft_face, 0, size_px);
+        g_ft_current_size = size_px;
+    }
+
+    const face = g_ft_face;
+    const line_h: f32 = @as(f32, @floatFromInt(face.*.size.*.metrics.height)) / 64.0;
+
+    // Walk text with same wrapping logic as drawTextWrapped, tracking line positions
+    var pen_x: f32 = 0;
+    var line_start: usize = 0;
+    var last_break: usize = 0;
+    var last_break_pen_x: f32 = 0;
+
+    // Selection highlight color: blue with alpha
+    const sel_r: f32 = 0.2;
+    const sel_g: f32 = 0.4;
+    const sel_b: f32 = 0.8;
+    const sel_a: f32 = 0.4;
+
+    // Simple approach: walk through text char by char, track x positions,
+    // emit a rect for each line segment that overlaps [sel_start, sel_end)
+    var cur_line_y: f32 = y;
+    var cur_x: f32 = 0;
+    var sel_line_start_x: f32 = -1;
+    var in_selection: bool = false;
+    var i: usize = 0;
+    line_start = 0;
+    pen_x = 0;
+
+    while (i < text.len) {
+        const ch = decodeUtf8(text[i..]);
+
+        if (ch.codepoint == '\n') {
+            // End of line — flush selection rect if active
+            if (in_selection and sel_line_start_x >= 0) {
+                drawRect(x + sel_line_start_x, cur_line_y, cur_x - sel_line_start_x, line_h, sel_r, sel_g, sel_b, sel_a, 0, 0, 0, 0, 0, 0);
+            }
+            cur_line_y += line_h;
+            i += ch.len;
+            line_start = i;
+            last_break = i;
+            pen_x = 0;
+            cur_x = 0;
+            last_break_pen_x = 0;
+            if (in_selection) sel_line_start_x = 0;
+            continue;
+        }
+
+        if (ch.codepoint == ' ') {
+            last_break = i;
+            last_break_pen_x = pen_x;
+        }
+
+        var advance: f32 = 0;
+        if (cacheGlyph(ch.codepoint, size_px)) |glyph| {
+            advance = @floatFromInt(glyph.advance);
+        }
+
+        // Check for word wrap
+        if (max_width > 0 and pen_x + advance > max_width and pen_x > 0) {
+            // Flush selection rect for this line
+            if (in_selection and sel_line_start_x >= 0) {
+                drawRect(x + sel_line_start_x, cur_line_y, cur_x - sel_line_start_x, line_h, sel_r, sel_g, sel_b, sel_a, 0, 0, 0, 0, 0, 0);
+            }
+            cur_line_y += line_h;
+
+            if (last_break > line_start) {
+                // Re-measure from line_start to current
+                pen_x = 0;
+                var j: usize = last_break + 1;
+                while (j < i) {
+                    const jch = decodeUtf8(text[j..]);
+                    if (cacheGlyph(jch.codepoint, size_px)) |g| {
+                        pen_x += @floatFromInt(g.advance);
+                    }
+                    j += jch.len;
+                }
+                cur_x = pen_x;
+                line_start = last_break + 1;
+            } else {
+                line_start = i;
+                pen_x = 0;
+                cur_x = 0;
+            }
+            last_break = line_start;
+            last_break_pen_x = 0;
+            if (in_selection) sel_line_start_x = 0;
+        }
+
+        cur_x = pen_x;
+
+        // Check selection transitions
+        if (!in_selection and i >= sel_start and i < sel_end) {
+            in_selection = true;
+            sel_line_start_x = cur_x;
+        }
+        if (in_selection and i >= sel_end) {
+            // End selection
+            drawRect(x + sel_line_start_x, cur_line_y, cur_x - sel_line_start_x, line_h, sel_r, sel_g, sel_b, sel_a, 0, 0, 0, 0, 0, 0);
+            in_selection = false;
+        }
+
+        pen_x += advance;
+        cur_x = pen_x;
+        i += ch.len;
+    }
+
+    // Flush final selection rect
+    if (in_selection and sel_line_start_x >= 0) {
+        drawRect(x + sel_line_start_x, cur_line_y, cur_x - sel_line_start_x, line_h, sel_r, sel_g, sel_b, sel_a, 0, 0, 0, 0, 0, 0);
+    }
+}
+
 /// Render all queued primitives and present.
 pub fn frame(bg_r: f64, bg_g: f64, bg_b: f64) void {
     const surface = g_surface orelse return;

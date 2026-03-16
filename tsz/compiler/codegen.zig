@@ -7922,6 +7922,7 @@ pub const Generator = struct {
         try out.appendSlice(self.alloc, "        telemetry.endLayout();\n");
         try out.appendSlice(self.alloc, "        inspector.updateHover(&root, win_w, win_h);\n");
         try out.appendSlice(self.alloc, "        compositor.setHoveredNode(hovered_node);\n");
+        try out.appendSlice(self.alloc, "        compositor.setSelection(sel_node, sel_end_node, sel_start, sel_end, sel_all);\n");
         try out.appendSlice(self.alloc, "        telemetry.beginPaint();\n");
         try out.appendSlice(self.alloc, "        compositor.frame(&root, win_w, win_h, Color.rgb(24, 24, 32));\n");
         try out.appendSlice(self.alloc, "        telemetry.endPaint();\n");
