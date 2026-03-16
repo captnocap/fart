@@ -552,7 +552,21 @@ fn parseTypeAtPos(
     source: []const u8,
     pos: *u32,
 ) ![]const u8 {
-    _ = alloc;
+    // [N]T — fixed-size array type
+    if (pos.* < lex.count and lex.get(pos.*).kind == .lbracket) {
+        pos.* += 1; // skip [
+        var size_buf: std.ArrayListUnmanaged(u8) = .{};
+        while (pos.* < lex.count and lex.get(pos.*).kind != .rbracket) {
+            try size_buf.appendSlice(alloc, lex.get(pos.*).text(source));
+            pos.* += 1;
+        }
+        if (pos.* < lex.count and lex.get(pos.*).kind == .rbracket) pos.* += 1;
+        // Parse the element type
+        const elem = try parseTypeAtPos(alloc, lex, source, pos);
+        const mapped = try typegen.mapType(alloc, elem);
+        return try std.fmt.allocPrint(alloc, "[{s}]{s}", .{ size_buf.items, mapped });
+    }
+
     if (pos.* >= lex.count or lex.get(pos.*).kind != .identifier) return "unknown";
 
     const t = lex.get(pos.*).text(source);
@@ -565,7 +579,7 @@ fn parseTypeAtPos(
     {
         pos.* += 2; // skip []
         // Return with [] suffix so mapType can handle it
-        return std.fmt.allocPrint(std.heap.page_allocator, "{s}[]", .{t}) catch t;
+        return std.fmt.allocPrint(alloc, "{s}[]", .{t}) catch t;
     }
 
     return t;

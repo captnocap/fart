@@ -15,7 +15,7 @@ export const MAX_ARRAY_LEN = 256;
 const MAX_ARRAY_SLOTS = 16;
 
 export interface ArraySlot {
-  values: i64[];
+  values: [MAX_ARRAY_LEN]i64;
   count: usize;
   dirty: boolean;
 }
@@ -24,7 +24,7 @@ union Value {
   int: i64;
   float: f64;
   boolean: boolean;
-  string: { buf: u8; len: u8 };
+  string: { buf: [STRING_BUF_SIZE]u8; len: u8 };
 }
 
 export interface StateSlot {
@@ -32,9 +32,9 @@ export interface StateSlot {
   dirty: boolean;
 }
 
-let slots: StateSlot[];
+let slots: [MAX_SLOTS]StateSlot;
 let slot_count: usize = 0;
-let array_slots: ArraySlot[];
+let array_slots: [MAX_ARRAY_SLOTS]ArraySlot;
 let array_slot_count: usize = 0;
 let _dirty: boolean = false;
 
@@ -282,7 +282,7 @@ export function saveState() {
   const file = std.fs.createFileAbsolute(STATE_FILE, {}) catch return;
   defer file.close();
 
-  const count_bytes: u8[] = @bitCast(@as(u64, slot_count));
+  const count_bytes: [8]u8 = @bitCast(@as(u64, slot_count));
   file.writeAll(&count_bytes) catch return;
 
   for (let i = 0; i < slot_count; i++) {
@@ -316,13 +316,13 @@ export function loadState(): boolean {
   defer file.close();
   defer std.fs.deleteFileAbsolute(STATE_FILE) catch {};
 
-  let count_bytes: u8[] = undefined;
+  let count_bytes: [8]u8 = undefined;
   _ = file.readAll(&count_bytes) catch return false;
   const saved_count: u64 = @bitCast(count_bytes);
 
   const restore_count = @min(saved_count, slot_count);
   for (let i = 0; i < restore_count; i++) {
-    let tag_byte: u8[] = undefined;
+    let tag_byte: [1]u8 = undefined;
     _ = file.readAll(&tag_byte) catch break;
 
     switch (tag_byte[0]) {

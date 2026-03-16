@@ -314,11 +314,11 @@ fn emitVarDecl(
             }
         }
 
-        // When initializer is null, we must include the type annotation (Zig can't infer from null)
-        if (std.mem.eql(u8, expr, "null")) {
+        // When initializer is null or undefined, we must include the type annotation
+        if (std.mem.eql(u8, expr, "null") or std.mem.eql(u8, expr, "undefined")) {
             if (type_ann) |ta| {
                 registerVar(snake_name, typeStrToExprType(ta));
-                return try std.fmt.allocPrint(alloc, "{s}{s} {s}: {s} = null;", .{ ind, effective_kw, snake_name, ta });
+                return try std.fmt.allocPrint(alloc, "{s}{s} {s}: {s} = {s};", .{ ind, effective_kw, snake_name, ta, expr });
             }
         }
         // When var is initialized with a bare 0 literal, Zig needs an explicit type
@@ -364,11 +364,19 @@ fn emitVarDecl(
 /// Stops at = or ; or , or ) at depth 0.
 fn parseTypeAnnotation(alloc: std.mem.Allocator, lex: *const Lexer, source: []const u8, pos: *u32) std.mem.Allocator.Error![]const u8 {
     var parts: std.ArrayListUnmanaged(u8) = .{};
+    var bracket_depth: u32 = 0;
 
     while (pos.* < lex.count) {
         const kind = peekKind(lex, pos.*);
-        if (kind == .equals or kind == .semicolon or kind == .comma or kind == .rparen or kind == .eof) break;
-        if (parts.items.len > 0) try parts.append(alloc, ' ');
+        if (bracket_depth == 0 and (kind == .equals or kind == .semicolon or kind == .comma or kind == .rparen or kind == .eof)) break;
+        if (kind == .lbracket) bracket_depth += 1;
+        if (kind == .rbracket and bracket_depth > 0) bracket_depth -= 1;
+        // No spaces inside brackets (for [N]T array types), no space after ]
+        if (parts.items.len > 0) {
+            const prev = parts.items[parts.items.len - 1];
+            const skip_space = bracket_depth > 0 or kind == .lbracket or kind == .rbracket or prev == '[' or prev == ']';
+            if (!skip_space) try parts.append(alloc, ' ');
+        }
         try parts.appendSlice(alloc, peekText(lex, source, pos.*));
         pos.* += 1;
     }

@@ -811,8 +811,19 @@ const Parser = struct {
                     } else if (std.mem.eql(u8, self.curText(), "catch")) {
                         self.advance(); // skip "catch"
 
+                        // catch {} — empty catch block (discard error)
+                        if (self.curKind() == .lbrace and self.pos.* + 1 < self.lex.count and
+                            self.lex.get(self.pos.* + 1).kind == .rbrace)
+                        {
+                            self.advance(); // skip {
+                            self.advance(); // skip }
+                            left = .{
+                                .text = try std.fmt.allocPrint(self.alloc, "{s} catch {{}}", .{left.text}),
+                                .ty = left.ty,
+                            };
+                        }
                         // catch |err| { ... } — capture variable
-                        if (self.curKind() == .pipe) {
+                        else if (self.curKind() == .pipe) {
                             self.advance(); // skip |
                             const capture_name = self.curText();
                             self.advance(); // skip name
@@ -956,10 +967,28 @@ const Parser = struct {
                     return .{ .text = try self.alloc.dupe(u8, text), .ty = .bool_t };
                 }
 
-                // null / undefined → null
-                if (std.mem.eql(u8, text, "null") or std.mem.eql(u8, text, "undefined")) {
+                // null → null
+                if (std.mem.eql(u8, text, "null")) {
                     self.advance();
                     return .{ .text = try self.alloc.dupe(u8, "null"), .ty = .opt_f32_t };
+                }
+                // undefined → undefined (Zig uninitialized) in assignment, null elsewhere
+                if (std.mem.eql(u8, text, "undefined")) {
+                    self.advance();
+                    if (self.context == .assignment) {
+                        return .{ .text = try self.alloc.dupe(u8, "undefined"), .ty = .unknown };
+                    }
+                    return .{ .text = try self.alloc.dupe(u8, "null"), .ty = .opt_f32_t };
+                }
+
+                // comptime prefix — passthrough to Zig
+                if (std.mem.eql(u8, text, "comptime")) {
+                    self.advance();
+                    const inner = try self.parseTernary();
+                    return .{
+                        .text = try std.fmt.allocPrint(self.alloc, "comptime {s}", .{inner.text}),
+                        .ty = inner.ty,
+                    };
                 }
 
                 // try prefix — passthrough to Zig

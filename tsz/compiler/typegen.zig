@@ -98,6 +98,11 @@ pub fn mapType(alloc: std.mem.Allocator, tsz_type: []const u8) ![]const u8 {
     if (std.mem.eql(u8, tsz_type, "f64")) return "f64";
     if (std.mem.eql(u8, tsz_type, "usize")) return "usize";
 
+    // [N]T — fixed-size array (already in Zig form from parseTypeAnnotation)
+    if (tsz_type.len > 2 and tsz_type[0] == '[') {
+        return try alloc.dupe(u8, tsz_type);
+    }
+
     // T[] → []T
     if (tsz_type.len > 2 and std.mem.endsWith(u8, tsz_type, "[]")) {
         const base = tsz_type[0 .. tsz_type.len - 2];
@@ -546,11 +551,28 @@ fn emitFnType(alloc: std.mem.Allocator, lex: *const Lexer, source: []const u8, p
 
 fn parseTypeAnnotation(alloc: std.mem.Allocator, lex: *const Lexer, source: []const u8, pos: *u32) ![]const u8 {
     const tok = lex.get(pos.*);
+
+    // [N]T — fixed-size array type (e.g., [256]u8, [MAX_SLOTS]StateSlot)
+    if (tok.kind == .lbracket) {
+        pos.* += 1; // skip [
+        // Collect the size expression (number or identifier constant)
+        var size_buf: std.ArrayListUnmanaged(u8) = .{};
+        while (pos.* < lex.count and lex.get(pos.*).kind != .rbracket) {
+            try size_buf.appendSlice(alloc, lex.get(pos.*).text(source));
+            pos.* += 1;
+        }
+        if (pos.* < lex.count and lex.get(pos.*).kind == .rbracket) pos.* += 1;
+        // Parse the element type
+        const elem_type = try parseTypeAnnotation(alloc, lex, source, pos);
+        const mapped_elem = try mapType(alloc, elem_type);
+        return try std.fmt.allocPrint(alloc, "[{s}]{s}", .{ size_buf.items, mapped_elem });
+    }
+
     if (tok.kind != .identifier) return error.ExpectedIdentifier;
     const base = tok.text(source);
     pos.* += 1;
 
-    // T[] — array type
+    // T[] — slice type
     if (pos.* + 1 < lex.count and lex.get(pos.*).kind == .lbracket and lex.get(pos.* + 1).kind == .rbracket) {
         pos.* += 2;
         return try std.fmt.allocPrint(alloc, "{s}[]", .{base});
