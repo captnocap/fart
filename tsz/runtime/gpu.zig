@@ -125,6 +125,16 @@ var g_atlas_sampler: ?*wgpu.Sampler = null;
 var g_glyphs: [MAX_GLYPHS]GlyphInstance = undefined;
 var g_glyph_count: usize = 0;
 
+// Last-frame counts (captured before reset, for crash diagnostics)
+var g_last_rect_count: usize = 0;
+var g_last_glyph_count: usize = 0;
+
+// Dirty tracking — skip redundant writeBuffer when draw data is unchanged.
+// Each writeBuffer creates staging buffers in wgpu-native; over millions
+// of frames, Vulkan's sub-allocator fragments (~399MB/11h at 60fps).
+var g_prev_frame_hash: u64 = 0;
+var g_prev_dims: [2]u32 = .{ 0, 0 };
+
 // Atlas packer state
 var g_atlas_row_x: u32 = 0;
 var g_atlas_row_y: u32 = 0;
@@ -397,34 +407,65 @@ pub fn frame(bg_r: f64, bg_g: f64, bg_b: f64) void {
     var surface_texture: wgpu.SurfaceTexture = undefined;
     surface.getCurrentTexture(&surface_texture);
     if (surface_texture.status != .success_optimal and surface_texture.status != .success_suboptimal) {
+        if (surface_texture.texture) |t| t.release();
         if (g_width > 0 and g_height > 0) configureSurface(g_width, g_height);
+        g_last_rect_count = g_rect_count;
+        g_last_glyph_count = g_glyph_count;
         g_rect_count = 0;
         return;
     }
 
     const texture = surface_texture.texture orelse return;
+    defer texture.release();
     const view = texture.createView(null) orelse return;
     defer view.release();
 
-    // Update globals uniform (screen size)
-    const globals = [2]f32{ @floatFromInt(g_width), @floatFromInt(g_height) };
-    if (g_globals_buffer) |buf| {
-        queue.writeBuffer(buf, 0, @ptrCast(&globals), @sizeOf(@TypeOf(globals)));
+    // Dirty check: skip ENTIRE render pass if draw data hasn't changed.
+    // This eliminates all per-frame wgpu object creation (CommandEncoder,
+    // RenderPass, staging buffers) on static scenes — preventing the
+    // Vulkan sub-allocator fragmentation that causes RSS growth (~90 bytes/frame)
+    // over millions of cycles. Over 11 hours this adds up to ~400MB.
+    const data_changed = blk: {
+        const hash = frameDataHash(g_rect_count, g_glyph_count);
+        const changed = (g_width != g_prev_dims[0] or g_height != g_prev_dims[1] or hash != g_prev_frame_hash);
+        if (changed) g_prev_frame_hash = hash;
+        break :blk changed;
+    };
+
+    // Static frame: present the previous surface texture without re-rendering.
+    // This skips CommandEncoder + RenderPass + writeBuffer entirely.
+    if (!data_changed) {
+        _ = surface.present();
+        g_last_rect_count = g_rect_count;
+        g_last_glyph_count = g_glyph_count;
+        g_rect_count = 0;
+        g_glyph_count = 0;
+        return;
     }
 
-    // Upload rect instance data
-    if (g_rect_count > 0) {
-        if (g_rect_buffer) |buf| {
-            const byte_size = g_rect_count * @sizeOf(RectInstance);
-            queue.writeBuffer(buf, 0, @ptrCast(&g_rects), byte_size);
+    if (data_changed) {
+        g_prev_dims = .{ g_width, g_height };
+
+        // Update globals uniform (screen size)
+        const globals = [2]f32{ @floatFromInt(g_width), @floatFromInt(g_height) };
+        if (g_globals_buffer) |buf| {
+            queue.writeBuffer(buf, 0, @ptrCast(&globals), @sizeOf(@TypeOf(globals)));
         }
-    }
 
-    // Upload glyph instance data
-    if (g_glyph_count > 0) {
-        if (g_text_buffer) |buf| {
-            const byte_size = g_glyph_count * @sizeOf(GlyphInstance);
-            queue.writeBuffer(buf, 0, @ptrCast(&g_glyphs), byte_size);
+        // Upload rect instance data
+        if (g_rect_count > 0) {
+            if (g_rect_buffer) |buf| {
+                const byte_size = g_rect_count * @sizeOf(RectInstance);
+                queue.writeBuffer(buf, 0, @ptrCast(&g_rects), byte_size);
+            }
+        }
+
+        // Upload glyph instance data
+        if (g_glyph_count > 0) {
+            if (g_text_buffer) |buf| {
+                const byte_size = g_glyph_count * @sizeOf(GlyphInstance);
+                queue.writeBuffer(buf, 0, @ptrCast(&g_glyphs), byte_size);
+            }
         }
     }
 
@@ -483,9 +524,75 @@ pub fn frame(bg_r: f64, bg_g: f64, bg_b: f64) void {
 
     _ = surface.present();
 
-    // Reset batches for next frame
+    // Blocking poll — reclaim all staging buffers and completed command
+    // buffers.  Non-blocking poll(false) left ~2% of staging unreclaimable
+    // per frame; combined with the dirty-check above (which skips writeBuffer
+    // entirely on static frames), this eliminates the RSS growth.
+    _ = device.poll(true, null);
+
+    // Save counts for diagnostics, then reset for next frame
+    g_last_rect_count = g_rect_count;
+    g_last_glyph_count = g_glyph_count;
     g_rect_count = 0;
     g_glyph_count = 0;
+}
+
+/// Diagnostic stats for crash reporting.
+pub const Stats = struct {
+    rect_count: usize,
+    glyph_count: usize,
+    atlas_count: usize,
+    atlas_max: usize,
+    rect_max: usize,
+    glyph_max: usize,
+    atlas_row_y: u32,
+    atlas_size: u32,
+};
+
+pub fn getStats() Stats {
+    return .{
+        .rect_count = g_last_rect_count,
+        .glyph_count = g_last_glyph_count,
+        .atlas_count = g_atlas_count,
+        .atlas_max = MAX_ATLAS_GLYPHS,
+        .rect_max = MAX_RECTS,
+        .glyph_max = MAX_GLYPHS,
+        .atlas_row_y = g_atlas_row_y,
+        .atlas_size = ATLAS_SIZE,
+    };
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// Dirty-check hash — detect unchanged draw data between frames
+// ════════════════════════════════════════════════════════════════════════
+
+/// Fast non-crypto hash over rect + glyph arrays. Both struct sizes are
+/// multiples of 8, so the loop covers all bytes with no remainder.
+fn frameDataHash(rect_count: usize, glyph_count: usize) u64 {
+    var h: u64 = rect_count *% 0x9e3779b97f4a7c15;
+    h ^= glyph_count *% 0x517cc1b727220a95;
+
+    if (rect_count > 0) {
+        const len = rect_count * @sizeOf(RectInstance);
+        const bytes: [*]const u8 = @ptrCast(&g_rects);
+        var i: usize = 0;
+        while (i + 8 <= len) : (i += 8) {
+            h ^= std.mem.readInt(u64, bytes[i..][0..8], .little);
+            h = h *% 0x2127599bf4325c37 +% 0x880355f21e6d1965;
+        }
+    }
+
+    if (glyph_count > 0) {
+        const len = glyph_count * @sizeOf(GlyphInstance);
+        const bytes: [*]const u8 = @ptrCast(&g_glyphs);
+        var i: usize = 0;
+        while (i + 8 <= len) : (i += 8) {
+            h ^= std.mem.readInt(u64, bytes[i..][0..8], .little);
+            h = h *% 0x2127599bf4325c37 +% 0x880355f21e6d1965;
+        }
+    }
+
+    return h;
 }
 
 // ════════════════════════════════════════════════════════════════════════
@@ -727,6 +834,26 @@ fn initTextPipeline(device: *wgpu.Device) void {
 // ════════════════════════════════════════════════════════════════════════
 // Glyph atlas — FreeType rasterization → wgpu texture
 // ════════════════════════════════════════════════════════════════════════
+
+/// Get the advance width of a character at a given font size (for monospace grid).
+pub fn getCharAdvance(codepoint: u32, size_px: u16) f32 {
+    if (cacheGlyph(codepoint, size_px)) |glyph| {
+        return @floatFromInt(glyph.advance);
+    }
+    return @floatFromInt(size_px / 2); // fallback
+}
+
+/// Get the line height (ascent + descent) for a given font size.
+pub fn getLineHeight(size_px: u16) f32 {
+    const face = g_ft_face orelse return @floatFromInt(size_px);
+    if (g_ft_current_size != size_px) {
+        _ = c.FT_Set_Pixel_Sizes(face, 0, size_px);
+        g_ft_current_size = size_px;
+    }
+    const ascender: f32 = @as(f32, @floatFromInt(face.*.size.*.metrics.ascender)) / 64.0;
+    const descender: f32 = @as(f32, @floatFromInt(face.*.size.*.metrics.descender)) / 64.0;
+    return ascender - descender + 2.0; // +2 for line spacing
+}
 
 fn cacheGlyph(codepoint: u32, size_px: u16) ?*const AtlasGlyphInfo {
     // Check cache
