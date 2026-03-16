@@ -6410,15 +6410,15 @@ pub const Generator = struct {
         // Imports — headless modules only need state, not layout/gpu/text
         try out.appendSlice(self.alloc, "const std = @import(\"std\");\n");
         if (!headless) {
-            try out.appendSlice(self.alloc, "const layout = @import(\"../../framework/layout.zig\");\n");
+            try out.appendSlice(self.alloc, "const layout = @import(\"layout.zig\");\n");
             try out.appendSlice(self.alloc, "const Node = layout.Node;\nconst Color = layout.Color;\n");
         }
-        if (self.has_state) try out.appendSlice(self.alloc, "const state = @import(\"../../framework/state.zig\");\n");
+        if (self.has_state) try out.appendSlice(self.alloc, "const state = @import(\"state.zig\");\n");
         // text_mod/TextEngine only needed if fragment calls text functions directly
         // (most fragments don't — the compositor handles text rendering)
-        if (self.has_inspector) try out.appendSlice(self.alloc, "const inspector = @import(\"../../framework/overlay.zig\");\n");
-        if (self.has_overlays) try out.appendSlice(self.alloc, "const overlay_mod = @import(\"../../framework/overlay.zig\");\n");
-        if (self.anim_hook_count > 0) try out.appendSlice(self.alloc, "const animate = @import(\"../../framework/animate.zig\");\n");
+        if (self.has_inspector) try out.appendSlice(self.alloc, "const inspector = @import(\"overlay.zig\");\n");
+        if (self.has_overlays) try out.appendSlice(self.alloc, "const overlay_mod = @import(\"overlay.zig\");\n");
+        if (self.anim_hook_count > 0) try out.appendSlice(self.alloc, "const animate = @import(\"animate.zig\");\n");
 
         // FFI imports
         if (self.ffi_headers.items.len > 0) {

@@ -653,7 +653,7 @@ fn cmdCompileRuntime(alloc: std.mem.Allocator, input_file: []const u8) void {
 
     // Determine output directory: --output overrides default user/framework split
     // Strip trailing slash to avoid double-slash in output path
-    const raw_dir = g_output_path orelse if (g_framework_mode) "tsz/runtime/compiled/framework" else "tsz/runtime/compiled/user";
+    const raw_dir = g_output_path orelse if (g_framework_mode) "tsz/runtime/framework" else "tsz/runtime/modules";
     const out_dir = if (raw_dir.len > 1 and raw_dir[raw_dir.len - 1] == '/') raw_dir[0 .. raw_dir.len - 1] else raw_dir;
     std.fs.cwd().makePath(out_dir) catch |err| {
         std.debug.print("[tsz] Failed to create output dir: {}\n", .{err});
