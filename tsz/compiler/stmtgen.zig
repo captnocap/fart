@@ -956,6 +956,14 @@ fn emitExprStatement(
             }
         }
 
+        // Compound assignment: ^= (XOR-assign)
+        if (op_kind == .caret_eq) {
+            pos.* += 1; // skip ^=
+            const rhs = try exprgen.emitExpressionTyped(alloc, lex, source, pos, .assignment, &var_type_table);
+            if (pos.* < lex.count and lex.get(pos.*).kind == .semicolon) pos.* += 1;
+            return try std.fmt.allocPrint(alloc, "{s}{s} ^= {s};", .{ ind, lhs, rhs });
+        }
+
         // Postfix increment/decrement: i++, i--
         if (op_kind == .plus and pos.* + 1 < lex.count and lex.get(pos.* + 1).kind == .plus) {
             pos.* += 2;

@@ -48,6 +48,11 @@ pub const TokenKind = enum {
     shift_left, // <<
     shift_right, // >>
 
+    // Wrapping arithmetic (Zig)
+    wrap_mul, // *%
+    wrap_add, // +%
+    caret_eq, // ^=
+
     // Logical
     amp_amp, // &&
     pipe_pipe, // ||
@@ -215,14 +220,31 @@ pub const Lexer = struct {
                 continue;
             }
 
-            // Numbers
+            // Numbers (decimal, hex 0x, binary 0b, octal 0o)
             if (ch >= '0' and ch <= '9') {
-                while (self.pos < self.source.len and
-                    ((self.source[self.pos] >= '0' and self.source[self.pos] <= '9') or
-                    // Consume '.' as decimal only if not followed by another '.' (range operator)
-                    (self.source[self.pos] == '.' and (self.pos + 1 >= self.source.len or self.source[self.pos + 1] != '.'))))
+                if (ch == '0' and self.pos + 1 < self.source.len and
+                    (self.source[self.pos + 1] == 'x' or self.source[self.pos + 1] == 'X' or
+                    self.source[self.pos + 1] == 'b' or self.source[self.pos + 1] == 'B' or
+                    self.source[self.pos + 1] == 'o' or self.source[self.pos + 1] == 'O'))
                 {
-                    self.pos += 1;
+                    self.pos += 2; // skip '0' + x/b/o prefix
+                    while (self.pos < self.source.len and
+                        ((self.source[self.pos] >= '0' and self.source[self.pos] <= '9') or
+                        (self.source[self.pos] >= 'a' and self.source[self.pos] <= 'f') or
+                        (self.source[self.pos] >= 'A' and self.source[self.pos] <= 'F') or
+                        self.source[self.pos] == '_'))
+                    {
+                        self.pos += 1;
+                    }
+                } else {
+                    while (self.pos < self.source.len and
+                        ((self.source[self.pos] >= '0' and self.source[self.pos] <= '9') or
+                        self.source[self.pos] == '_' or
+                        // Consume '.' as decimal only if not followed by another '.' (range operator)
+                        (self.source[self.pos] == '.' and (self.pos + 1 >= self.source.len or self.source[self.pos + 1] != '.'))))
+                    {
+                        self.pos += 1;
+                    }
                 }
                 self.emit(.number, start, self.pos);
                 continue;
@@ -263,6 +285,22 @@ pub const Lexer = struct {
             if (ch == '<' and self.peekAt(1) == '/') {
                 self.pos += 2;
                 self.emit(.lt_slash, start, start + 2);
+                continue;
+            }
+            // Wrapping operators: *%, +% (must check before single * and +)
+            if (ch == '*' and self.peekAt(1) == '%') {
+                self.pos += 2;
+                self.emit(.wrap_mul, start, start + 2);
+                continue;
+            }
+            if (ch == '+' and self.peekAt(1) == '%') {
+                self.pos += 2;
+                self.emit(.wrap_add, start, start + 2);
+                continue;
+            }
+            if (ch == '^' and self.peekAt(1) == '=') {
+                self.pos += 2;
+                self.emit(.caret_eq, start, start + 2);
                 continue;
             }
             // >> (must check before >=)
@@ -351,14 +389,26 @@ pub const Lexer = struct {
                 continue;
             }
 
-            // Zig builtins: @identifier
-            if (ch == '@' and self.pos + 1 < self.source.len and isIdentStart(self.source[self.pos + 1])) {
-                self.pos += 1; // skip @
-                while (self.pos < self.source.len and isIdentCont(self.source[self.pos])) {
-                    self.pos += 1;
+            // Zig builtins: @identifier or @"escaped identifier"
+            if (ch == '@' and self.pos + 1 < self.source.len) {
+                if (self.source[self.pos + 1] == '"') {
+                    // @"..." — Zig escaped identifier (e.g., @"2d", @"type")
+                    self.pos += 2; // skip @"
+                    while (self.pos < self.source.len and self.source[self.pos] != '"') {
+                        self.pos += 1;
+                    }
+                    if (self.pos < self.source.len) self.pos += 1; // skip closing "
+                    self.emit(.builtin, start, self.pos);
+                    continue;
                 }
-                self.emit(.builtin, start, self.pos);
-                continue;
+                if (isIdentStart(self.source[self.pos + 1])) {
+                    self.pos += 1; // skip @
+                    while (self.pos < self.source.len and isIdentCont(self.source[self.pos])) {
+                        self.pos += 1;
+                    }
+                    self.emit(.builtin, start, self.pos);
+                    continue;
+                }
             }
 
             // Unknown character — skip

@@ -456,7 +456,7 @@ const Parser = struct {
     // Type-aware: only cast when types mismatch at int/float boundary
 
     fn parseComparison(self: *Parser) Error!TypedExpr {
-        var left = try self.parseAdditive();
+        var left = try self.parseBitwiseOr();
 
         // Range operator: a..b (two consecutive dots)
         if (self.curKind() == .dot and self.pos.* + 1 < self.lex.count and
@@ -464,7 +464,7 @@ const Parser = struct {
         {
             self.advance(); // skip first .
             self.advance(); // skip second .
-            const right = try self.parseAdditive();
+            const right = try self.parseBitwiseOr();
             return .{
                 .text = try std.fmt.allocPrint(self.alloc, "{s}..{s}", .{ left.text, right.text }),
                 .ty = .unknown,
@@ -480,9 +480,66 @@ const Parser = struct {
                 else => break,
             };
             self.advance();
-            const right = try self.parseAdditive();
+            const right = try self.parseBitwiseOr();
             const text = try self.emitBinaryCoerced(left, right, op);
             left = .{ .text = text, .ty = .bool_t };
+        }
+        return left;
+    }
+
+    // ── Precedence 6b: Bitwise OR (|) ──────────────────────────────
+
+    fn parseBitwiseOr(self: *Parser) Error!TypedExpr {
+        var left = try self.parseBitwiseAnd();
+        while (self.curKind() == .pipe) {
+            // Don't consume | if followed by another | (logical OR ||)
+            if (self.pos.* + 1 < self.lex.count and
+                self.lex.get(self.pos.* + 1).kind == .pipe) break;
+            // Don't consume if it's |capture| pattern (|identifier|)
+            if (self.pos.* + 1 < self.lex.count and
+                self.lex.get(self.pos.* + 1).kind == .identifier and
+                self.pos.* + 2 < self.lex.count and
+                self.lex.get(self.pos.* + 2).kind == .pipe) break;
+            self.advance();
+            const right = try self.parseBitwiseAnd();
+            left = .{
+                .text = try std.fmt.allocPrint(self.alloc, "{s} | {s}", .{ left.text, right.text }),
+                .ty = left.ty,
+            };
+        }
+        return left;
+    }
+
+    // ── Precedence 6c: Bitwise AND (&) ──────────────────────────────
+
+    fn parseBitwiseAnd(self: *Parser) Error!TypedExpr {
+        var left = try self.parseShift();
+        while (self.curKind() == .ampersand) {
+            // Don't consume & if followed by another & (logical AND)
+            if (self.pos.* + 1 < self.lex.count and
+                self.lex.get(self.pos.* + 1).kind == .ampersand) break;
+            self.advance();
+            const right = try self.parseShift();
+            left = .{
+                .text = try std.fmt.allocPrint(self.alloc, "{s} & {s}", .{ left.text, right.text }),
+                .ty = left.ty,
+            };
+        }
+        return left;
+    }
+
+    // ── Precedence 6d: Shift (<<, >>) ──────────────────────────────
+
+    fn parseShift(self: *Parser) Error!TypedExpr {
+        var left = try self.parseAdditive();
+        while (self.curKind() == .shift_left or self.curKind() == .shift_right) {
+            const op: []const u8 = if (self.curKind() == .shift_left) "<<" else ">>";
+            self.advance();
+            const right = try self.parseAdditive();
+            left = .{
+                .text = try std.fmt.allocPrint(self.alloc, "{s} {s} {s}", .{ left.text, op, right.text }),
+                .ty = left.ty,
+            };
         }
         return left;
     }
@@ -492,12 +549,13 @@ const Parser = struct {
 
     fn parseAdditive(self: *Parser) Error!TypedExpr {
         var left = try self.parseMultiplicative();
-        while (self.curKind() == .plus or self.curKind() == .minus) {
+        while (self.curKind() == .plus or self.curKind() == .minus or self.curKind() == .wrap_add) {
             // Don't consume + or - if followed by = (compound assignment handled by stmtgen)
-            if (self.pos.* + 1 < self.lex.count and self.lex.get(self.pos.* + 1).kind == .equals) break;
+            if ((self.curKind() == .plus or self.curKind() == .minus) and
+                self.pos.* + 1 < self.lex.count and self.lex.get(self.pos.* + 1).kind == .equals) break;
             // Don't consume if it's ++ or -- (postfix, handled elsewhere)
             if (self.pos.* + 1 < self.lex.count and self.lex.get(self.pos.* + 1).kind == self.curKind()) break;
-            const op: []const u8 = if (self.curKind() == .plus) "+" else "-";
+            const op: []const u8 = if (self.curKind() == .wrap_add) "+%" else if (self.curKind() == .plus) "+" else "-";
             self.advance();
             const right = try self.parseMultiplicative();
             const coerced = try self.emitArithCoerced(left, right, op);
@@ -511,13 +569,15 @@ const Parser = struct {
 
     fn parseMultiplicative(self: *Parser) Error!TypedExpr {
         var left = try self.parseUnary();
-        while (self.curKind() == .star or self.curKind() == .slash or self.curKind() == .percent) {
+        while (self.curKind() == .star or self.curKind() == .slash or self.curKind() == .percent or self.curKind() == .wrap_mul) {
             // Don't consume * / % if followed by = (compound assignment)
-            if (self.pos.* + 1 < self.lex.count and self.lex.get(self.pos.* + 1).kind == .equals) break;
+            if ((self.curKind() == .star or self.curKind() == .slash or self.curKind() == .percent) and
+                self.pos.* + 1 < self.lex.count and self.lex.get(self.pos.* + 1).kind == .equals) break;
             const op: []const u8 = switch (self.curKind()) {
                 .star => "*",
                 .slash => "/",
                 .percent => "%",
+                .wrap_mul => "*%",
                 else => unreachable,
             };
             self.advance();
@@ -705,6 +765,15 @@ const Parser = struct {
                         };
                         continue;
                     }
+                    // .? — Zig optional unwrap
+                    if (self.curKind() == .question) {
+                        self.advance();
+                        left = .{
+                            .text = try std.fmt.allocPrint(self.alloc, "{s}.?", .{left.text}),
+                            .ty = .unknown,
+                        };
+                        continue;
+                    }
                     if (self.curKind() != .identifier) break;
                     const prop = self.curText();
                     self.advance();
@@ -740,13 +809,15 @@ const Parser = struct {
                     const is_method_call = self.curKind() == .lparen;
                     const is_std_chain = std.mem.startsWith(u8, left.text, "std.");
                     const is_c_chain = std.mem.startsWith(u8, left.text, "c.") or std.mem.eql(u8, left.text, "c");
+                    const is_wgpu_chain = std.mem.startsWith(u8, left.text, "wgpu.") or std.mem.eql(u8, left.text, "wgpu");
+                    const is_error_chain = std.mem.startsWith(u8, left.text, "error.");
                     const is_all_caps = blk: {
                         for (prop) |ch| {
                             if (ch >= 'a' and ch <= 'z') break :blk false;
                         }
                         break :blk prop.len > 1;
                     };
-                    const snake = if (is_method_call or is_std_chain or is_c_chain or is_all_caps)
+                    const snake = if (is_method_call or is_std_chain or is_c_chain or is_wgpu_chain or is_error_chain or is_all_caps)
                         try self.alloc.dupe(u8, prop)
                     else
                         try camelToSnake(self.alloc, prop);
@@ -847,9 +918,10 @@ const Parser = struct {
 
                 // Named struct init: TypeName{ .field = val }
                 .lbrace => {
-                    // Only if the left looks like a type (starts uppercase, or is std.*)
+                    // Check if left looks like a type — PascalCase, or pkg.TypeName
                     const lt = left.text;
-                    const is_type = (lt.len > 0 and lt[0] >= 'A' and lt[0] <= 'Z') or
+                    const last_component = if (std.mem.lastIndexOf(u8, lt, ".")) |di| lt[di + 1 ..] else lt;
+                    const is_type = (last_component.len > 0 and last_component[0] >= 'A' and last_component[0] <= 'Z') or
                         std.mem.startsWith(u8, lt, "std.");
                     if (is_type) {
                         // parseObjectLiteral returns ".{ ... }" — strip the leading "." for named init
@@ -1304,8 +1376,10 @@ const Parser = struct {
                 }
 
                 // Regular identifier — keep original name, escape Zig keywords.
+                // Exception: 'error' followed by '.' is the error namespace, not a variable.
                 self.advance();
-                const zig_name = if (typegen.isZigKeyword(text))
+                const is_error_ns = std.mem.eql(u8, text, "error") and self.curKind() == .dot;
+                const zig_name = if (!is_error_ns and typegen.isZigKeyword(text))
                     try std.fmt.allocPrint(self.alloc, "@\"{s}\"", .{text})
                 else
                     try self.alloc.dupe(u8, text);
@@ -1337,13 +1411,22 @@ const Parser = struct {
                     const obj = try self.parseObjectLiteral();
                     return .{ .text = obj, .ty = .struct_t };
                 }
-                // Bare .variant (enum literal)
+                // Bare .variant (enum literal) or .@"escaped" (Zig escaped enum)
                 self.advance();
                 if (self.curKind() == .identifier) {
                     const variant = self.curText();
                     self.advance();
                     return .{
                         .text = try std.fmt.allocPrint(self.alloc, ".{s}", .{variant}),
+                        .ty = .enum_t,
+                    };
+                }
+                if (self.curKind() == .builtin) {
+                    // .@"2d" etc — pass through as-is
+                    const escaped = self.curText();
+                    self.advance();
+                    return .{
+                        .text = try std.fmt.allocPrint(self.alloc, ".{s}", .{escaped}),
                         .ty = .enum_t,
                     };
                 }
