@@ -768,12 +768,9 @@ fn emitParams(
             try out.appendSlice(alloc, try std.fmt.allocPrint(alloc, "*{s}", .{zig_type}));
             stmtgen.registerVar(param_name, .ptr_t);
             stmtgen.registerFnPtrParam(fn_name, param_idx);
-        } else if (isStructTypeName(param_type)) {
-            // Other struct params → const pointer (read-only by default)
-            try out.appendSlice(alloc, try std.fmt.allocPrint(alloc, "*const {s}", .{zig_type}));
-            stmtgen.registerVar(param_name, .ptr_t);
-            stmtgen.registerFnPtrParam(fn_name, param_idx);
         } else {
+            // All other types (including structs) → pass by value.
+            // If the .tsz author wants pointer semantics, they write *const Type explicitly.
             try out.appendSlice(alloc, zig_type);
             // Register param type for expression type inference
             const expr_ty: exprgen.ExprType = if (std.mem.eql(u8, zig_type, "f32"))

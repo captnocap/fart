@@ -259,7 +259,7 @@ pub fn build(b: *std.Build) void {
         const engine_exe = b.addExecutable(.{
             .name = "rjit-engine",
             .root_module = b.createModule(.{
-                .root_source_file = b.path("tsz/runtime/main.zig"),
+                .root_source_file = b.path("tsz/runtime/compiled/main.zig"),
                 .target = target,
                 .optimize = optimize,
             }),
@@ -285,13 +285,13 @@ pub fn build(b: *std.Build) void {
             engine_exe.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/freetype2" });
             engine_exe.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/x86_64-linux-gnu" });
         }
-        engine_exe.root_module.addIncludePath(b.path("tsz/runtime"));
+        engine_exe.root_module.addIncludePath(b.path("tsz/runtime/compiled"));
         engine_exe.root_module.addCSourceFile(.{
-            .file = b.path("tsz/runtime/stb/stb_image_impl.c"),
+            .file = b.path("tsz/runtime/compiled/stb/stb_image_impl.c"),
             .flags = &.{"-O2"},
         });
         engine_exe.root_module.addCSourceFile(.{
-            .file = b.path("tsz/runtime/stb/stb_image_write_impl.c"),
+            .file = b.path("tsz/runtime/compiled/stb/stb_image_write_impl.c"),
             .flags = &.{"-O2"},
         });
 
@@ -315,7 +315,7 @@ pub fn build(b: *std.Build) void {
         const app_exe = b.addExecutable(.{
             .name = "tsz-app",
             .root_module = b.createModule(.{
-                .root_source_file = b.path("tsz/runtime/generated_app.zig"),
+                .root_source_file = b.path("tsz/runtime/compiled/generated_app.zig"),
                 .target = target,
                 .optimize = optimize,
             }),
@@ -342,20 +342,20 @@ pub fn build(b: *std.Build) void {
             app_exe.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/freetype2" });
             app_exe.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/x86_64-linux-gnu" });
         }
-        app_exe.root_module.addIncludePath(b.path("tsz/runtime"));
+        app_exe.root_module.addIncludePath(b.path("tsz/runtime/compiled"));
         app_exe.root_module.addCSourceFile(.{
-            .file = b.path("tsz/runtime/stb/stb_image_impl.c"),
+            .file = b.path("tsz/runtime/compiled/stb/stb_image_impl.c"),
             .flags = &.{"-O2"},
         });
         app_exe.root_module.addCSourceFile(.{
-            .file = b.path("tsz/runtime/stb/stb_image_write_impl.c"),
+            .file = b.path("tsz/runtime/compiled/stb/stb_image_write_impl.c"),
             .flags = &.{"-O2"},
         });
 
         // ── FFI: link extra libraries from ffi_libs.txt ──────────────────
         // The tsz compiler writes one library name per line (e.g. "sqlite3").
         // If the file doesn't exist or is empty, no extra libs are linked.
-        if (std.fs.cwd().openFile("tsz/runtime/ffi_libs.txt", .{})) |file| {
+        if (std.fs.cwd().openFile("tsz/runtime/compiled/ffi_libs.txt", .{})) |file| {
             defer file.close();
             var buf: [4096]u8 = undefined;
             const len = file.readAll(&buf) catch 0;
@@ -407,13 +407,13 @@ pub fn build(b: *std.Build) void {
         } else {
             tsz_exe.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/freetype2" });
         }
-        tsz_exe.root_module.addIncludePath(b.path("tsz/runtime"));
+        tsz_exe.root_module.addIncludePath(b.path("tsz/runtime/compiled"));
         tsz_exe.root_module.addCSourceFile(.{
-            .file = b.path("tsz/runtime/stb/stb_image_impl.c"),
+            .file = b.path("tsz/runtime/compiled/stb/stb_image_impl.c"),
             .flags = &.{"-O2"},
         });
         tsz_exe.root_module.addCSourceFile(.{
-            .file = b.path("tsz/runtime/stb/stb_image_write_impl.c"),
+            .file = b.path("tsz/runtime/compiled/stb/stb_image_write_impl.c"),
             .flags = &.{"-O2"},
         });
 
