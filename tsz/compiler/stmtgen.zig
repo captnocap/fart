@@ -344,10 +344,20 @@ fn emitVarDecl(
                 registerVar(snake_name, expr_ty);
             }
         }
-        // Keep type annotation when initializer is a builtin that needs result type context
-        // (e.g., @bitCast, @splat need the LHS type to resolve)
+        // Keep type annotation when:
+        // 1. Initializer is a builtin (@bitCast, @splat need result type)
+        // 2. Type is an explicit Zig integer/float type (u8, u16, i32, f64, etc.)
+        // 3. Type starts with [ (fixed array)
         if (type_ann) |ta| {
-            if (final_expr.len > 0 and final_expr[0] == '@') {
+            const keep = (final_expr.len > 0 and final_expr[0] == '@') or
+                std.mem.eql(u8, ta, "u8") or std.mem.eql(u8, ta, "u16") or
+                std.mem.eql(u8, ta, "u32") or std.mem.eql(u8, ta, "i8") or
+                std.mem.eql(u8, ta, "i16") or std.mem.eql(u8, ta, "i32") or
+                std.mem.eql(u8, ta, "i64") or std.mem.eql(u8, ta, "f64") or
+                std.mem.eql(u8, ta, "usize") or
+                (ta.len > 0 and ta[0] == '[');
+            if (keep) {
+                registerVar(snake_name, typeStrToExprType(ta));
                 return try std.fmt.allocPrint(alloc, "{s}{s} {s}: {s} = {s};", .{ ind, effective_kw, snake_name, ta, final_expr });
             }
         }

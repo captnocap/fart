@@ -354,6 +354,32 @@ const Parser = struct {
         var left = try self.parseEquality();
         while (self.curKind() == .question_question) {
             self.advance();
+
+            // ?? return / ?? return value / ?? break / ?? continue
+            if (self.curKind() == .identifier) {
+                const kw = self.curText();
+                if (std.mem.eql(u8, kw, "return") or std.mem.eql(u8, kw, "break") or std.mem.eql(u8, kw, "continue")) {
+                    const kw_dup = try self.alloc.dupe(u8, kw);
+                    self.advance();
+                    // Check for return value
+                    if (std.mem.eql(u8, kw_dup, "return") and
+                        self.curKind() != .semicolon and self.curKind() != .eof and self.curKind() != .rbrace)
+                    {
+                        const val = try self.parseTernary();
+                        left = .{
+                            .text = try std.fmt.allocPrint(self.alloc, "{s} orelse {s} {s}", .{ left.text, kw_dup, val.text }),
+                            .ty = .void_t,
+                        };
+                    } else {
+                        left = .{
+                            .text = try std.fmt.allocPrint(self.alloc, "{s} orelse {s}", .{ left.text, kw_dup }),
+                            .ty = .void_t,
+                        };
+                    }
+                    continue;
+                }
+            }
+
             const right = try self.parseEquality();
             // Unwrapping optional: ?f32 orelse f32 → f32
             const result_ty: ExprType = if (left.ty == .opt_f32_t) right.ty else left.ty;
@@ -710,10 +736,17 @@ const Parser = struct {
                     }
 
                     // Regular property — camelCase → snake_case for struct fields,
-                    // but NOT for method calls (followed by parens) or std.* chains
+                    // but NOT for method calls, std.* chains, ALL_CAPS, or c.* chains
                     const is_method_call = self.curKind() == .lparen;
                     const is_std_chain = std.mem.startsWith(u8, left.text, "std.");
-                    const snake = if (is_method_call or is_std_chain)
+                    const is_c_chain = std.mem.startsWith(u8, left.text, "c.") or std.mem.eql(u8, left.text, "c");
+                    const is_all_caps = blk: {
+                        for (prop) |ch| {
+                            if (ch >= 'a' and ch <= 'z') break :blk false;
+                        }
+                        break :blk prop.len > 1;
+                    };
+                    const snake = if (is_method_call or is_std_chain or is_c_chain or is_all_caps)
                         try self.alloc.dupe(u8, prop)
                     else
                         try camelToSnake(self.alloc, prop);
