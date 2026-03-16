@@ -1,24 +1,18 @@
 // Shared mouse state — pure logic module, no UI.
 //
-// Replaces hand-written mouse.zig. State slots expose named accessors:
-//   mouse.mx(), mouse.my()       — current position
-//   mouse.prevX(), mouse.prevY() — previous position
-//   mouse.leftDown(), mouse.rightDown() — button state
-//
-// Writer (main.zig event loop) calls setters:
-//   mouse.setMx(x); mouse.setMy(y);  etc.
+// Compiles to mouse.gen.zig with named accessors:
+//   mouse.mx(), mouse.setMx(v)       — current position
+//   mouse.prevX(), mouse.setPrevX(v)  — previous position
+//   mouse.leftDown(), mouse.setLeftDown(v)  — button state
+//   mouse.rightDown(), mouse.setRightDown(v)
 //
 // Deltas computed by caller: mouse.mx() - mouse.prevX()
 
-function App() {
+function Mouse() {
   const [mx, setMx] = useState(0);
   const [my, setMy] = useState(0);
   const [prevX, setPrevX] = useState(0);
   const [prevY, setPrevY] = useState(0);
   const [leftDown, setLeftDown] = useState(0);
   const [rightDown, setRightDown] = useState(0);
-
-  return (
-    <Box style={{ width: 0, height: 0 }} />
-  );
 }

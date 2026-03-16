@@ -776,9 +776,11 @@ pub const Generator = struct {
         self.collectLocalVars(app_start);
 
         // Phase 6: Find return JSX and generate node tree
+        // If no return statement exists (pure logic module), use empty root
         self.pos = app_start;
         self.findReturnStatement();
-        const root_expr = try self.parseJSXElement();
+        const has_jsx = self.curKind() == .lt; // <Tag means JSX follows
+        const root_expr = if (has_jsx) try self.parseJSXElement() else ".{}";
 
         // Resolve root node's pending dynamic styles (root has no parent to resolve them)
         for (0..self.pending_dyn_style_count) |pi| {
@@ -5838,6 +5840,7 @@ pub const Generator = struct {
 
     fn emitRuntimeFragment(self: *Generator, root_expr: []const u8) ![]const u8 {
         var out: std.ArrayListUnmanaged(u8) = .{};
+        const headless = std.mem.eql(u8, root_expr, ".{}");
 
         // Self-describing header
         const basename = std.fs.path.basename(self.input_file);
@@ -5850,13 +5853,15 @@ pub const Generator = struct {
         try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
             "//! To modify: edit {s} and recompile\n\n", .{basename}));
 
-        // Imports — relative paths (fragment lives in runtime/compiled/framework/)
+        // Imports — headless modules only need state, not layout/gpu/text
         try out.appendSlice(self.alloc, "const std = @import(\"std\");\n");
-        try out.appendSlice(self.alloc, "const layout = @import(\"../../layout.zig\");\n");
-        try out.appendSlice(self.alloc, "const Node = layout.Node;\nconst Style = layout.Style;\nconst Color = layout.Color;\n");
-        try out.appendSlice(self.alloc, "const gpu = @import(\"../../gpu.zig\");\n");
+        if (!headless) {
+            try out.appendSlice(self.alloc, "const layout = @import(\"../../layout.zig\");\n");
+            try out.appendSlice(self.alloc, "const Node = layout.Node;\nconst Style = layout.Style;\nconst Color = layout.Color;\n");
+            try out.appendSlice(self.alloc, "const gpu = @import(\"../../gpu.zig\");\n");
+        }
         if (self.has_state) try out.appendSlice(self.alloc, "const state = @import(\"../../state.zig\");\n");
-        if (self.dyn_count > 0 or self.has_state) {
+        if (!headless and (self.dyn_count > 0 or self.has_state)) {
             try out.appendSlice(self.alloc, "const text_mod = @import(\"../../text.zig\");\n");
             try out.appendSlice(self.alloc, "const TextEngine = text_mod.TextEngine;\n");
         }
@@ -5945,15 +5950,17 @@ pub const Generator = struct {
             }
         }
 
-        // Node tree arrays
-        try out.appendSlice(self.alloc, "// ── Generated node tree ─────────────────────────────────────────\n");
-        for (self.array_decls.items) |decl| {
-            try out.appendSlice(self.alloc, decl);
-            try out.appendSlice(self.alloc, "\n");
+        // Node tree arrays (skipped for headless modules)
+        if (!headless) {
+            try out.appendSlice(self.alloc, "// ── Generated node tree ─────────────────────────────────────────\n");
+            for (self.array_decls.items) |decl| {
+                try out.appendSlice(self.alloc, decl);
+                try out.appendSlice(self.alloc, "\n");
+            }
+            try out.appendSlice(self.alloc, "var root = Node{");
+            try out.appendSlice(self.alloc, root_expr[2..]);
+            try out.appendSlice(self.alloc, ";\n");
         }
-        try out.appendSlice(self.alloc, "var root = Node{");
-        try out.appendSlice(self.alloc, root_expr[2..]);
-        try out.appendSlice(self.alloc, ";\n");
 
         // Dynamic text buffers
         if (self.dyn_count > 0) {
@@ -6161,10 +6168,12 @@ pub const Generator = struct {
         }
         try out.appendSlice(self.alloc, "}\n\n");
 
-        // ── pub fn getRoot() ──
-        try out.appendSlice(self.alloc, "pub fn getRoot() *Node {\n");
-        try out.appendSlice(self.alloc, "    return &root;\n");
-        try out.appendSlice(self.alloc, "}\n");
+        // ── pub fn getRoot() ── (skipped for headless modules)
+        if (!headless) {
+            try out.appendSlice(self.alloc, "pub fn getRoot() *Node {\n");
+            try out.appendSlice(self.alloc, "    return &root;\n");
+            try out.appendSlice(self.alloc, "}\n");
+        }
 
         // ── Named state accessors (pub getter/setter per useState) ──
         if (self.has_state and self.state_count > 0) {

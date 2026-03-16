@@ -7,14 +7,7 @@
 //! To modify: edit mouse.tsz and recompile
 
 const std = @import("std");
-const layout = @import("../../layout.zig");
-const Node = layout.Node;
-const Style = layout.Style;
-const Color = layout.Color;
-const gpu = @import("../../gpu.zig");
 const state = @import("../../state.zig");
-const text_mod = @import("../../text.zig");
-const TextEngine = text_mod.TextEngine;
 
 // ── Panel identity ───────────────────────────────────────────
 pub const PANEL_ID = "mouse";
@@ -23,8 +16,6 @@ pub const PANEL_ID = "mouse";
 var slot_base: usize = 0;
 pub const SLOT_COUNT: usize = 6;
 
-// ── Generated node tree ─────────────────────────────────────────
-var root = Node{ .style = .{ .width = 0, .height = 0 } };
 // ── Public API ──────────────────────────────────────────────────
 
 pub fn init(base: usize) void {
@@ -40,9 +31,6 @@ pub fn init(base: usize) void {
 pub fn tick() void {
 }
 
-pub fn getRoot() *Node {
-    return &root;
-}
 
 // ── State accessors ─────────────────────────────────────────
 pub fn mx() i64 { return state.getSlot(slot_base + 0); }
