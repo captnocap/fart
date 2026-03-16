@@ -19,6 +19,32 @@ const TokenKind = lexer_mod.TokenKind;
 const exprgen = @import("exprgen.zig");
 const typegen = @import("typegen.zig");
 
+// ── Variable type tracking ──────────────────────────────────────────
+// Module-level type table, populated as variables are declared.
+// Reset per function body by modulegen.
+
+var var_type_table: exprgen.VarTypes = .{};
+
+pub fn resetVarTypes() void {
+    var_type_table = .{};
+}
+
+pub fn registerVar(name: []const u8, ty: exprgen.ExprType) void {
+    var_type_table.put(name, ty);
+}
+
+/// Map a Zig type string to ExprType
+fn typeStrToExprType(ts: []const u8) exprgen.ExprType {
+    if (std.mem.eql(u8, ts, "f32")) return .f32_t;
+    if (std.mem.eql(u8, ts, "usize")) return .usize_t;
+    if (std.mem.eql(u8, ts, "u16")) return .u16_t;
+    if (std.mem.eql(u8, ts, "i16")) return .i16_t;
+    if (std.mem.eql(u8, ts, "u8")) return .u8_t;
+    if (std.mem.eql(u8, ts, "bool")) return .bool_t;
+    if (std.mem.startsWith(u8, ts, "?")) return .opt_f32_t;
+    return .unknown;
+}
+
 // ── Helpers ─────────────────────────────────────────────────────────
 
 fn indent(alloc: std.mem.Allocator, level: u32) std.mem.Allocator.Error![]const u8 {
@@ -183,7 +209,7 @@ pub fn emitStatement(
             pos.* += 1;
             return try std.fmt.allocPrint(alloc, "{s}return;", .{ind});
         }
-        const expr = try exprgen.emitExpression(alloc, lex, source, pos, .return_val);
+        const expr = try exprgen.emitExpressionTyped(alloc, lex, source, pos, .return_val, &var_type_table);
         if (pos.* < lex.count and lex.get(pos.*).kind == .semicolon) pos.* += 1;
         return try std.fmt.allocPrint(alloc, "{s}return {s};", .{ ind, expr });
     }
@@ -241,7 +267,7 @@ fn emitVarDecl(
     // = initializer
     if (peekKind(lex, pos.*) == .equals) {
         pos.* += 1; // skip =
-        const expr = try exprgen.emitExpression(alloc, lex, source, pos, .assignment);
+        const expr = try exprgen.emitExpressionTyped(alloc, lex, source, pos, .assignment, &var_type_table);
         if (pos.* < lex.count and lex.get(pos.*).kind == .semicolon) pos.* += 1;
 
         // Use var when: array allocation (TS const allows mutation of contents)
@@ -275,6 +301,7 @@ fn emitVarDecl(
         // When initializer is null, we must include the type annotation (Zig can't infer from null)
         if (std.mem.eql(u8, expr, "null")) {
             if (type_ann) |ta| {
+                registerVar(snake_name, typeStrToExprType(ta));
                 return try std.fmt.allocPrint(alloc, "{s}{s} {s}: {s} = null;", .{ ind, effective_kw, snake_name, ta });
             }
         }
@@ -282,10 +309,20 @@ fn emitVarDecl(
         // (comptime_int can't be var). Use type annotation if available, else infer from name.
         if (std.mem.eql(u8, effective_kw, "var") and std.mem.eql(u8, expr, "0")) {
             if (type_ann) |ta| {
+                registerVar(snake_name, typeStrToExprType(ta));
                 return try std.fmt.allocPrint(alloc, "{s}var {s}: {s} = 0;", .{ ind, snake_name, ta });
             }
             const inferred = inferNumericType(snake_name);
+            registerVar(snake_name, typeStrToExprType(inferred));
             return try std.fmt.allocPrint(alloc, "{s}var {s}: {s} = 0;", .{ ind, snake_name, inferred });
+        }
+        // Register type from annotation or initializer pattern
+        if (type_ann) |ta| {
+            registerVar(snake_name, typeStrToExprType(ta));
+        } else {
+            // Infer from initializer: function calls returning f32, struct access, etc.
+            const inferred_ty = inferExprType(expr);
+            if (inferred_ty != .unknown) registerVar(snake_name, inferred_ty);
         }
         // Skip .tsz type annotations for most initializers (Zig infers correctly).
         // The raw .tsz types (e.g., "number[]") aren't valid Zig.
@@ -296,6 +333,7 @@ fn emitVarDecl(
     // No initializer
     if (pos.* < lex.count and lex.get(pos.*).kind == .semicolon) pos.* += 1;
     if (type_ann) |ta| {
+        registerVar(snake_name, typeStrToExprType(ta));
         return try std.fmt.allocPrint(alloc, "{s}{s} {s}: {s} = undefined;", .{ ind, zig_kw, snake_name, ta });
     }
     return try std.fmt.allocPrint(alloc, "{s}{s} {s} = undefined;", .{ ind, zig_kw, snake_name });
@@ -335,7 +373,7 @@ fn emitIf(
 
     // ( condition )
     if (peekKind(lex, pos.*) == .lparen) pos.* += 1;
-    const cond = try exprgen.emitExpression(alloc, lex, source, pos, .condition);
+    const cond = try exprgen.emitExpressionTyped(alloc, lex, source, pos, .condition, &var_type_table);
     if (peekKind(lex, pos.*) == .rparen) pos.* += 1;
 
     // Extract ALL "X != null" parts from condition (handles compound: "a != null and b != null")
@@ -393,7 +431,7 @@ fn emitIf(
         if (isIdent(lex, source, pos.*, "if")) {
             pos.* += 1; // skip 'if'
             if (peekKind(lex, pos.*) == .lparen) pos.* += 1;
-            const elif_cond = try exprgen.emitExpression(alloc, lex, source, pos, .condition);
+            const elif_cond = try exprgen.emitExpressionTyped(alloc, lex, source, pos, .condition, &var_type_table);
             if (peekKind(lex, pos.*) == .rparen) pos.* += 1;
             try out.appendSlice(alloc, try std.fmt.allocPrint(alloc, " else if ({s}) {{\n", .{elif_cond}));
             if (peekKind(lex, pos.*) == .lbrace) {
@@ -444,7 +482,7 @@ fn emitForOf(
     pos.* += 1; // skip 'of'
 
     // Collection expression (until closing paren)
-    const collection = try exprgen.emitExpression(alloc, lex, source, pos, .value);
+    const collection = try exprgen.emitExpressionTyped(alloc, lex, source, pos, .value, &var_type_table);
     if (peekKind(lex, pos.*) == .rparen) pos.* += 1;
 
     // Body
@@ -475,7 +513,7 @@ fn emitForClassic(
     const init_stmt = try emitStatement(alloc, lex, source, pos, indent_level + 1);
 
     // Condition: i < n
-    const cond = try exprgen.emitExpression(alloc, lex, source, pos, .condition);
+    const cond = try exprgen.emitExpressionTyped(alloc, lex, source, pos, .condition, &var_type_table);
     if (peekKind(lex, pos.*) == .semicolon) pos.* += 1;
 
     // Update: i++ or i += 1
@@ -557,7 +595,7 @@ fn emitWhile(
 
     pos.* += 1; // skip 'while'
     if (peekKind(lex, pos.*) == .lparen) pos.* += 1;
-    const cond = try exprgen.emitExpression(alloc, lex, source, pos, .condition);
+    const cond = try exprgen.emitExpressionTyped(alloc, lex, source, pos, .condition, &var_type_table);
     if (peekKind(lex, pos.*) == .rparen) pos.* += 1;
 
     if (peekKind(lex, pos.*) == .lbrace) {
@@ -606,7 +644,7 @@ fn emitSwitch(
 
     pos.* += 1; // skip 'switch'
     if (peekKind(lex, pos.*) == .lparen) pos.* += 1;
-    const expr = try exprgen.emitExpression(alloc, lex, source, pos, .value);
+    const expr = try exprgen.emitExpressionTyped(alloc, lex, source, pos, .value, &var_type_table);
     if (peekKind(lex, pos.*) == .rparen) pos.* += 1;
 
     try out.appendSlice(alloc, try std.fmt.allocPrint(alloc, "{s}switch ({s}) {{\n", .{ ind, expr }));
@@ -709,7 +747,7 @@ fn emitExprStatement(
     const ind = try indent(alloc, indent_level);
 
     // Parse the left-hand side expression (stops at =, +=, -=, ;)
-    const lhs = try exprgen.emitExpression(alloc, lex, source, pos, .value);
+    const lhs = try exprgen.emitExpressionTyped(alloc, lex, source, pos, .value, &var_type_table);
 
     // Check for assignment operators
     if (pos.* < lex.count) {
@@ -718,7 +756,7 @@ fn emitExprStatement(
         // Simple assignment: =
         if (op_kind == .equals) {
             pos.* += 1; // skip =
-            const rhs = try exprgen.emitExpression(alloc, lex, source, pos, .assignment);
+            const rhs = try exprgen.emitExpressionTyped(alloc, lex, source, pos, .assignment, &var_type_table);
             if (pos.* < lex.count and lex.get(pos.*).kind == .semicolon) pos.* += 1;
             return try std.fmt.allocPrint(alloc, "{s}{s} = {s};", .{ ind, lhs, rhs });
         }
@@ -728,7 +766,7 @@ fn emitExprStatement(
             if (pos.* + 1 < lex.count and lex.get(pos.* + 1).kind == .equals) {
                 const op_ch = peekText(lex, source, pos.*);
                 pos.* += 2; // skip += or -=
-                const rhs = try exprgen.emitExpression(alloc, lex, source, pos, .assignment);
+                const rhs = try exprgen.emitExpressionTyped(alloc, lex, source, pos, .assignment, &var_type_table);
                 if (pos.* < lex.count and lex.get(pos.*).kind == .semicolon) pos.* += 1;
                 return try std.fmt.allocPrint(alloc, "{s}{s} {s}= {s};", .{ ind, lhs, op_ch, rhs });
             }
@@ -844,6 +882,41 @@ fn replaceIdent(alloc: std.mem.Allocator, text: []const u8, old: []const u8, new
 
 fn isIdentChar(ch: u8) bool {
     return (ch >= 'a' and ch <= 'z') or (ch >= 'A' and ch <= 'Z') or (ch >= '0' and ch <= '9') or ch == '_' or ch == '.';
+}
+
+/// Infer ExprType from an initializer expression string.
+/// Recognizes common function calls and patterns.
+fn inferExprType(expr: []const u8) exprgen.ExprType {
+    // Known f32-returning functions: padLeft, padRight, padTop, padBottom,
+    // marLeft, marRight, marTop, marBottom, clampVal, estimateIntrinsic*
+    const f32_fns = [_][]const u8{
+        "padLeft(", "padRight(", "padTop(", "padBottom(",
+        "marLeft(", "marRight(", "marTop(", "marBottom(",
+        "clampVal(", "estimateIntrinsicWidth(", "estimateIntrinsicHeight(",
+        "@abs(", "@max(", "@min(", "@floor(", "@ceil(",
+    };
+    for (f32_fns) |fn_name| {
+        if (std.mem.startsWith(u8, expr, fn_name)) return .f32_t;
+    }
+    // resolveMaybePct returns ?f32
+    if (std.mem.startsWith(u8, expr, "resolveMaybePct(")) return .opt_f32_t;
+    // Arithmetic expressions (contain +, -, *, /) → f32
+    if (std.mem.indexOf(u8, expr, " + ") != null or
+        std.mem.indexOf(u8, expr, " - ") != null or
+        std.mem.indexOf(u8, expr, " * ") != null or
+        std.mem.indexOf(u8, expr, " / ") != null) return .f32_t;
+    // Property access on known f32 fields
+    if (std.mem.indexOf(u8, expr, ".computed.") != null) return .f32_t;
+    // Struct field access (s.padding, s.gap, etc.) → f32
+    if (std.mem.startsWith(u8, expr, "s.") or std.mem.startsWith(u8, expr, "node.style.")) return .f32_t;
+    // Pointer to children element
+    if (std.mem.indexOf(u8, expr, "&node.children[") != null) return .ptr_t;
+    // Boolean comparison
+    if (std.mem.indexOf(u8, expr, " == ") != null or
+        std.mem.indexOf(u8, expr, " != ") != null or
+        std.mem.indexOf(u8, expr, " > ") != null or
+        std.mem.indexOf(u8, expr, " < ") != null) return .bool_t;
+    return .unknown;
 }
 
 /// Infer numeric type from variable name for "var x = 0" patterns.

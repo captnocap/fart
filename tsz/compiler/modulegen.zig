@@ -383,6 +383,9 @@ fn emitFunctions(
             try out.appendSlice(alloc, try std.fmt.allocPrint(alloc,
                 "\n{s}fn {s}(", .{ pub_prefix, name }));
 
+            // Reset var types BEFORE registering params
+            stmtgen.resetVarTypes();
+
             if (pos < lex.count and lex.get(pos).kind == .lparen) {
                 pos += 1; // skip (
                 try emitParams(alloc, lex, source, &pos, out);
@@ -493,11 +496,25 @@ fn emitParams(
 
         if (param_nullable) {
             try out.appendSlice(alloc, try std.fmt.allocPrint(alloc, "?{s}", .{zig_type}));
+            stmtgen.registerVar(param_name, .opt_f32_t);
         } else if (std.mem.eql(u8, param_type, "Node")) {
             // Node params → mutable pointer (layout engine mutates nodes)
             try out.appendSlice(alloc, try std.fmt.allocPrint(alloc, "*{s}", .{zig_type}));
+            stmtgen.registerVar(param_name, .ptr_t);
         } else {
             try out.appendSlice(alloc, zig_type);
+            // Register param type for expression type inference
+            const expr_ty: exprgen.ExprType = if (std.mem.eql(u8, zig_type, "f32"))
+                .f32_t
+            else if (std.mem.eql(u8, zig_type, "usize"))
+                .usize_t
+            else if (std.mem.eql(u8, zig_type, "u16"))
+                .u16_t
+            else if (std.mem.eql(u8, zig_type, "bool"))
+                .bool_t
+            else
+                .unknown;
+            stmtgen.registerVar(param_name, expr_ty);
         }
 
         // Skip comma

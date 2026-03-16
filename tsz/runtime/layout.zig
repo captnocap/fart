@@ -175,7 +175,7 @@ pub fn hitTest(node: *Node, mx: f32, my: f32) ?Node {
         return null;
     }
     var i = node.children.len;
-    while (asF32(i) > asF32(0)) {
+    while (i > 0) {
         i -= 1;
         const hit = &hitTest(node.children[@intCast(i)], mx, my);
         if (hit != null) {
@@ -184,7 +184,7 @@ pub fn hitTest(node: *Node, mx: f32, my: f32) ?Node {
     }
     if (hasHandlers(node.handlers) or node.input_id != null or node.canvas_type != null) {
         const r = node.computed;
-        if (asF32(mx) >= asF32(r.x) and asF32(mx) < asF32(asF32(r.x) + asF32(r.w)) and asF32(my) >= asF32(r.y) and asF32(my) < asF32(asF32(r.y) + asF32(r.h))) {
+        if (mx >= r.x and mx < r.x + r.w and my >= r.y and my < r.y + r.h) {
             return node;
         }
     }
@@ -200,7 +200,7 @@ pub fn hitTestText(node: *Node, mx: f32, my: f32) ?Node {
         return null;
     }
     var i = node.children.len;
-    while (asF32(i) > asF32(0)) {
+    while (i > 0) {
         i -= 1;
         const hit = &hitTestText(node.children[@intCast(i)], mx, my);
         if (hit != null) {
@@ -209,7 +209,7 @@ pub fn hitTestText(node: *Node, mx: f32, my: f32) ?Node {
     }
     if (node.text != null) {
         const r = node.computed;
-        if (asF32(mx) >= asF32(r.x) and asF32(mx) < asF32(asF32(r.x) + asF32(r.w)) and asF32(my) >= asF32(r.y) and asF32(my) < asF32(asF32(r.y) + asF32(r.h))) {
+        if (mx >= r.x and mx < r.x + r.w and my >= r.y and my < r.y + r.h) {
             return node;
         }
     }
@@ -221,11 +221,11 @@ pub fn findScrollContainer(node: *Node, mx: f32, my: f32) ?Node {
         return null;
     }
     const r = node.computed;
-    if (asF32(mx) < asF32(r.x) or asF32(mx) >= asF32(asF32(r.x) + asF32(r.w)) or asF32(my) < asF32(r.y) or asF32(my) >= asF32(asF32(r.y) + asF32(r.h))) {
+    if (mx < r.x or mx >= r.x + r.w or my < r.y or my >= r.y + r.h) {
         return null;
     }
     var i = node.children.len;
-    while (asF32(i) > asF32(0)) {
+    while (i > 0) {
         i -= 1;
         const hit = &findScrollContainer(node.children[@intCast(i)], mx, my);
         if (hit != null) {
@@ -290,7 +290,7 @@ fn resolveMaybePct(val: ?f32, parent: f32) ?f32 {
     if (val == null) {
         return null;
     }
-    if (asF32(val.?) < asF32(0)) {
+    if (val.? < 0) {
         return asF32((-val.?)) * asF32(parent);
     }
     return val.?;
@@ -336,14 +336,14 @@ fn estimateIntrinsicWidth(node: *Node) f32 {
     const isRow = s.flex_direction == .row;
     if (node.text != null) {
         const m = measureNodeText(node);
-        return asF32(asF32(m.width) + asF32(pl)) + asF32(pr);
+        return m.width + pl + pr;
     }
     if (node.image_src != null) {
         const dims = measureNodeImage(node);
-        return asF32(asF32(dims.width) + asF32(pl)) + asF32(pr);
+        return dims.width + pl + pr;
     }
     if (node.children.len == 0) {
-        return asF32(pl) + asF32(pr);
+        return pl + pr;
     }
     var total: f32 = 0;
     var maxCross: f32 = 0;
@@ -356,20 +356,20 @@ fn estimateIntrinsicWidth(node: *Node) f32 {
         const cmL = marLeft(child.style);
         const cmR = marRight(child.style);
         if (isRow) {
-            total += asF32(asF32(cw) + asF32(cmL)) + asF32(cmR);
+            total += cw + cmL + cmR;
             visibleCount += 1;
         } else {
-            const cross = asF32(asF32(cw) + asF32(cmL)) + asF32(cmR);
-            if (asF32(cross) > asF32(maxCross)) {
+            const cross = cw + cmL + cmR;
+            if (cross > maxCross) {
                 maxCross = cross;
             }
         }
     }
     if (isRow) {
-        const gaps = if (asF32(visibleCount) > asF32(1)) asF32(g) * asF32((asF32(visibleCount) - asF32(1))) else 0;
-        return asF32(asF32(asF32(total) + asF32(gaps)) + asF32(pl)) + asF32(pr);
+        const gaps = if (visibleCount > 1) g * @as(f32, @floatFromInt((visibleCount - 1))) else 0;
+        return total + gaps + pl + pr;
     }
-    return asF32(asF32(maxCross) + asF32(pl)) + asF32(pr);
+    return maxCross + pl + pr;
 }
 
 fn estimateIntrinsicHeight(node: *Node, availableWidth: f32) f32 {
@@ -377,7 +377,7 @@ fn estimateIntrinsicHeight(node: *Node, availableWidth: f32) f32 {
     if (s.height != null) {
         return s.height.?;
     }
-    if (s.aspect_ratio != null and asF32(s.aspect_ratio.?) > asF32(0) and s.width != null) {
+    if (s.aspect_ratio != null and s.aspect_ratio.? > 0 and s.width != null) {
         return asF32(s.width.?) / asF32(s.aspect_ratio.?);
     }
     const pt = padTop(s);
@@ -386,20 +386,20 @@ fn estimateIntrinsicHeight(node: *Node, availableWidth: f32) f32 {
     const pr = padRight(s);
     const g = s.gap;
     const isRow = s.flex_direction == .row;
-    const innerW = if (s.width != null) asF32(asF32(s.width.?) - asF32(pl)) - asF32(pr) else if (asF32(availableWidth) > asF32(0)) asF32(asF32(availableWidth) - asF32(pl)) - asF32(pr) else 0;
+    const innerW = if (s.width != null) s.width.? - pl - pr else if (availableWidth > 0) availableWidth - pl - pr else 0;
     if (node.text != null) {
         const m = measureNodeTextW(node, innerW);
-        return asF32(asF32(m.height) + asF32(pt)) + asF32(pb);
+        return m.height + pt + pb;
     }
     if (node.image_src != null) {
         const dims = measureNodeImage(node);
-        return asF32(asF32(dims.height) + asF32(pt)) + asF32(pb);
+        return dims.height + pt + pb;
     }
     if (node.input_id != null) {
-        return asF32(asF32(node.font_size) + asF32(pt)) + asF32(pb);
+        return @as(f32, @floatFromInt(node.font_size)) + pt + pb;
     }
     if (node.children.len == 0) {
-        return asF32(pt) + asF32(pb);
+        return pt + pb;
     }
     var total: f32 = 0;
     var maxCross: f32 = 0;
@@ -412,20 +412,20 @@ fn estimateIntrinsicHeight(node: *Node, availableWidth: f32) f32 {
         const cmT = marTop(child.style);
         const cmB = marBottom(child.style);
         if (!isRow) {
-            total += asF32(asF32(ch) + asF32(cmT)) + asF32(cmB);
+            total += ch + cmT + cmB;
             visibleCount += 1;
         } else {
-            const cross = asF32(asF32(ch) + asF32(cmT)) + asF32(cmB);
-            if (asF32(cross) > asF32(maxCross)) {
+            const cross = ch + cmT + cmB;
+            if (cross > maxCross) {
                 maxCross = cross;
             }
         }
     }
     if (!isRow) {
-        const gaps = if (asF32(visibleCount) > asF32(1)) asF32(g) * asF32((asF32(visibleCount) - asF32(1))) else 0;
-        return asF32(asF32(asF32(total) + asF32(gaps)) + asF32(pt)) + asF32(pb);
+        const gaps = if (visibleCount > 1) g * @as(f32, @floatFromInt((visibleCount - 1))) else 0;
+        return total + gaps + pt + pb;
     }
-    if (s.flex_wrap == .wrap and asF32(innerW) > asF32(0)) {
+    if (s.flex_wrap == .wrap and innerW > 0) {
         var lineMain: f32 = 0;
         var lineCrossMax: f32 = 0;
         var totalCross: f32 = 0;
@@ -441,9 +441,9 @@ fn estimateIntrinsicHeight(node: *Node, availableWidth: f32) f32 {
             const cw = estimateIntrinsicWidth(child);
             const cmL = marLeft(child.style);
             const cmR = marRight(child.style);
-            const itemMain = asF32(asF32(cw) + asF32(cmL)) + asF32(cmR);
-            const gapBefore = if (asF32(itemsOnLine) > asF32(0)) g else 0;
-            if (asF32(itemsOnLine) > asF32(0) and asF32((asF32(asF32(lineMain) + asF32(gapBefore)) + asF32(itemMain))) > asF32(innerW)) {
+            const itemMain = cw + cmL + cmR;
+            const gapBefore = if (itemsOnLine > 0) g else 0;
+            if (itemsOnLine > 0 and (asF32(lineMain) + asF32(gapBefore) + itemMain) > innerW) {
                 totalCross += lineCrossMax;
                 lineCount += 1;
                 lineMain = itemMain;
@@ -452,20 +452,20 @@ fn estimateIntrinsicHeight(node: *Node, availableWidth: f32) f32 {
             } else {
                 lineMain += asF32(gapBefore) + asF32(itemMain);
                 const chCross = asF32(asF32(estimateIntrinsicHeight(child, innerW)) + asF32(marTop(child.style))) + asF32(marBottom(child.style));
-                if (asF32(chCross) > asF32(lineCrossMax)) {
+                if (chCross > lineCrossMax) {
                     lineCrossMax = chCross;
                 }
                 itemsOnLine += 1;
             }
         }
-        if (asF32(itemsOnLine) > asF32(0)) {
+        if (itemsOnLine > 0) {
             totalCross += lineCrossMax;
             lineCount += 1;
         }
-        const lineGaps = if (asF32(lineCount) > asF32(1)) asF32(g) * asF32((asF32(lineCount) - asF32(1))) else 0;
-        return asF32(asF32(asF32(totalCross) + asF32(lineGaps)) + asF32(pt)) + asF32(pb);
+        const lineGaps = if (lineCount > 1) g * @as(f32, @floatFromInt((lineCount - 1))) else 0;
+        return totalCross + lineGaps + pt + pb;
     }
-    return asF32(asF32(maxCross) + asF32(pt)) + asF32(pb);
+    return maxCross + pt + pb;
 }
 
 fn computeMinContentW(node: *Node) f32 {
@@ -478,23 +478,23 @@ fn computeMinContentW(node: *Node) f32 {
     if (node.text != null and measureFn != null) {
         var maxWordW: f32 = 0;
         var i: usize = 0;
-        while (asF32(i) < asF32(node.text.?.len)) {
-            while (asF32(i) < asF32(node.text.?.len) and (node.text.?[@intCast(i)] == ' ' or node.text.?[@intCast(i)] == '\n')) : (i += 1) {}
-            if (asF32(i) >= asF32(node.text.?.len)) {
+        while (i < node.text.?.len) {
+            while (i < node.text.?.len and (node.text.?[@intCast(i)] == ' ' or node.text.?[@intCast(i)] == '\n')) : (i += 1) {}
+            if (i >= node.text.?.len) {
                 break;
             }
             const wordStart = i;
-            while (asF32(i) < asF32(node.text.?.len) and node.text.?[@intCast(i)] != ' ' and node.text.?[@intCast(i)] != '\n') : (i += 1) {}
+            while (i < node.text.?.len and node.text.?[@intCast(i)] != ' ' and node.text.?[@intCast(i)] != '\n') : (i += 1) {}
             const word = node.text.?[@intCast(wordStart)..@intCast(i)];
             const m = measureFn.?(word, node.font_size, 0, node.letter_spacing, node.line_height, node.number_of_lines, false);
-            if (asF32(m.width) > asF32(maxWordW)) {
+            if (m.width > maxWordW) {
                 maxWordW = m.width;
             }
         }
-        return asF32(asF32(maxWordW) + asF32(pl)) + asF32(pr);
+        return maxWordW + pl + pr;
     }
     if (node.children.len == 0) {
-        return asF32(pl) + asF32(pr);
+        return pl + pr;
     }
     const isRow = s.flex_direction == .row;
     const g = s.gap;
@@ -517,15 +517,15 @@ fn computeMinContentW(node: *Node) f32 {
             }
         }
     }
-    if (isRow and asF32(visCount) > asF32(1)) {
-        minW += asF32((asF32(visCount) - asF32(1))) * asF32(g);
+    if (isRow and visCount > 1) {
+        minW += @as(f32, @floatFromInt((visCount - 1))) * g;
     }
-    return asF32(asF32(minW) + asF32(pl)) + asF32(pr);
+    return minW + pl + pr;
 }
 
 pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
     layoutCount += 1;
-    if (asF32(layoutCount) > asF32(LAYOUT_BUDGET)) {
+    if (layoutCount > LAYOUT_BUDGET) {
         return;
     }
     const s = node.style;
@@ -552,12 +552,12 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
     if (h != null) {
         h.? = clampVal(h.?, resolveMaybePct(s.min_height, ph), resolveMaybePct(s.max_height, ph));
     }
-    if (s.aspect_ratio != null and asF32(s.aspect_ratio.?) > asF32(0)) {
+    if (s.aspect_ratio != null and s.aspect_ratio.? > 0) {
         if (s.width != null and s.height == null and h == null) {
             h = asF32(w) / asF32(s.aspect_ratio.?);
         } else if (s.height != null and s.width == null and node._flex_w == null) {
             if (h != null) {
-                w = asF32(h.?) * asF32(s.aspect_ratio.?);
+                w = h.? * s.aspect_ratio.?;
                 w = clampVal(w, resolveMaybePct(s.min_width, pw), resolveMaybePct(s.max_width, pw));
             }
         }
@@ -568,10 +568,10 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
     const pb = padBottom(s);
     const ml = marLeft(s);
     const mt = marTop(s);
-    const x = asF32(px) + asF32(ml);
-    const y = asF32(py) + asF32(mt);
-    const innerW = asF32(asF32(w) - asF32(pl)) - asF32(pr);
-    const innerH = if (h != null) asF32(asF32(h.?) - asF32(pt)) - asF32(pb) else 9999;
+    const x = px + ml;
+    const y = py + mt;
+    const innerW = w - pl - pr;
+    const innerH = if (h != null) asF32(h.?) - asF32(pt) - pb else 9999;
     const isRow = s.flex_direction == .row;
     const gap = s.gap;
     const justify = s.justify_content;
@@ -593,20 +593,20 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
     var absoluteCount: usize = 0;
     {
         var i: usize = 0;
-        while (asF32(i) < asF32(node.children.len)) : (i += 1) {
+        while (i < node.children.len) : (i += 1) {
             const child = &node.children[@intCast(i)];
             if (child.style.display == .none) {
                 child.computed = .{ .x = 0, .y = 0, .w = 0, .h = 0 };
                 continue;
             }
             if (child.style.position == .absolute) {
-                if (asF32(absoluteCount) < asF32(MAX_CHILDREN)) {
+                if (absoluteCount < MAX_CHILDREN) {
                     absoluteIndices[@intCast(absoluteCount)] = i;
                     absoluteCount += 1;
                 }
                 continue;
             }
-            if (asF32(visibleCount) >= asF32(MAX_CHILDREN)) {
+            if (visibleCount >= MAX_CHILDREN) {
                 break;
             }
             const cs = child.style;
@@ -638,17 +638,17 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
     var lineStarts = std.mem.zeroes([MAX_LINES]usize);
     var lineCounts = std.mem.zeroes([MAX_LINES]usize);
     var numLines: usize = 0;
-    if (s.flex_wrap == .wrap and asF32(visibleCount) > asF32(0)) {
+    if (s.flex_wrap == .wrap and visibleCount > 0) {
         var lineMain: f32 = 0;
         var lineStartIdx: usize = 0;
         var itemsOnLine: usize = 0;
         {
             var i: usize = 0;
-            while (asF32(i) < asF32(visibleCount)) : (i += 1) {
+            while (i < visibleCount) : (i += 1) {
                 const itemMain = asF32(asF32(childBasis[@intCast(i)]) + asF32(childMainMarginStart[@intCast(i)])) + asF32(childMainMarginEnd[@intCast(i)]);
-                const gapBefore = if (asF32(itemsOnLine) > asF32(0)) gap else 0;
-                if (asF32(itemsOnLine) > asF32(0) and asF32((asF32(asF32(lineMain) + asF32(gapBefore)) + asF32(itemMain))) > asF32(mainSize)) {
-                    if (asF32(numLines) < asF32(MAX_LINES)) {
+                const gapBefore = if (itemsOnLine > 0) gap else 0;
+                if (itemsOnLine > 0 and asF32((asF32(lineMain) + asF32(gapBefore) + itemMain)) > asF32(mainSize)) {
+                    if (numLines < MAX_LINES) {
                         lineStarts[@intCast(numLines)] = lineStartIdx;
                         lineCounts[@intCast(numLines)] = itemsOnLine;
                         numLines += 1;
@@ -662,7 +662,7 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
                 }
             }
         }
-        if (asF32(itemsOnLine) > asF32(0) and asF32(numLines) < asF32(MAX_LINES)) {
+        if (itemsOnLine > 0 and numLines < MAX_LINES) {
             lineStarts[@intCast(numLines)] = lineStartIdx;
             lineCounts[@intCast(numLines)] = itemsOnLine;
             numLines += 1;
@@ -670,14 +670,14 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
     } else {
         lineStarts[@intCast(0)] = 0;
         lineCounts[@intCast(0)] = visibleCount;
-        numLines = if (asF32(visibleCount) > asF32(0)) 1 else 0;
+        numLines = if (visibleCount > 0) 1 else 0;
     }
     var crossCursor: f32 = 0;
     var contentMainEnd: f32 = 0;
     var contentCrossEnd: f32 = 0;
     {
         var lineIdx: usize = 0;
-        while (asF32(lineIdx) < asF32(numLines)) : (lineIdx += 1) {
+        while (lineIdx < numLines) : (lineIdx += 1) {
             const ls = lineStarts[@intCast(lineIdx)];
             const lc = lineCounts[@intCast(lineIdx)];
             var totalBasis: f32 = 0;
@@ -685,34 +685,34 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
             var totalMainMargin: f32 = 0;
             {
                 var i = ls;
-                while (asF32(i) < asF32(asF32(ls) + asF32(lc))) : (i += 1) {
+                while (@as(f32, @floatFromInt(i)) < asF32(ls) + asF32(lc)) : (i += 1) {
                     totalBasis += childBasis[@intCast(i)];
                     totalMainMargin += asF32(childMainMarginStart[@intCast(i)]) + asF32(childMainMarginEnd[@intCast(i)]);
-                    if (asF32(childGrow[@intCast(i)]) > asF32(0)) {
+                    if (childGrow[@intCast(i)] > 0) {
                         totalFlex += childGrow[@intCast(i)];
                     }
                 }
             }
-            const lineGaps = if (asF32(lc) > asF32(1)) asF32(gap) * asF32((asF32(lc) - asF32(1))) else 0;
-            const freeSpace = asF32(asF32(asF32(mainSize) - asF32(totalBasis)) - asF32(lineGaps)) - asF32(totalMainMargin);
-            if (asF32(freeSpace) > asF32(0) and asF32(totalFlex) > asF32(0)) {
+            const lineGaps = if (lc > 1) gap * (asF32(lc) - asF32(1)) else 0;
+            const freeSpace = asF32(mainSize) - asF32(totalBasis) - lineGaps - totalMainMargin;
+            if (freeSpace > 0 and totalFlex > 0) {
                 var frozen = std.mem.zeroes([MAX_CHILDREN]bool);
                 var savedBasis = std.mem.zeroes([MAX_CHILDREN]f32);
                 {
                     var i = ls;
-                    while (asF32(i) < asF32(asF32(ls) + asF32(lc))) : (i += 1) {
-                        frozen[@intCast(i)] = asF32(childGrow[@intCast(i)]) <= asF32(0);
+                    while (@as(f32, @floatFromInt(i)) < asF32(ls) + asF32(lc)) : (i += 1) {
+                        frozen[@intCast(i)] = childGrow[@intCast(i)] <= 0;
                         savedBasis[@intCast(i)] = childBasis[@intCast(i)];
                     }
                 }
                 var passes: usize = 0;
-                while (asF32(passes) < asF32(10)) {
+                while (passes < 10) {
                     passes += 1;
                     var used: f32 = 0;
                     var activeFlex: f32 = 0;
                     {
                         var i = ls;
-                        while (asF32(i) < asF32(asF32(ls) + asF32(lc))) : (i += 1) {
+                        while (@as(f32, @floatFromInt(i)) < asF32(ls) + asF32(lc)) : (i += 1) {
                             if (frozen[@intCast(i)]) {
                                 used += childBasis[@intCast(i)];
                             } else {
@@ -721,21 +721,21 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
                             }
                         }
                     }
-                    if (asF32(activeFlex) <= asF32(0)) {
+                    if (activeFlex <= 0) {
                         break;
                     }
-                    const space = asF32(asF32(asF32(mainSize) - asF32(used)) - asF32(lineGaps)) - asF32(totalMainMargin);
-                    if (asF32(space) <= asF32(0)) {
+                    const space = asF32(mainSize) - asF32(used) - lineGaps - totalMainMargin;
+                    if (space <= 0) {
                         break;
                     }
                     var anyClamped = false;
                     {
                         var i = ls;
-                        while (asF32(i) < asF32(asF32(ls) + asF32(lc))) : (i += 1) {
+                        while (@as(f32, @floatFromInt(i)) < asF32(ls) + asF32(lc)) : (i += 1) {
                             if (frozen[@intCast(i)]) {
                                 continue;
                             }
-                            childBasis[@intCast(i)] = asF32(savedBasis[@intCast(i)]) + asF32(asF32((asF32(childGrow[@intCast(i)]) / asF32(activeFlex))) * asF32(space));
+                            childBasis[@intCast(i)] = asF32(savedBasis[@intCast(i)]) + asF32((asF32(childGrow[@intCast(i)]) / asF32(activeFlex)) * space);
                             const ci = visibleIndices[@intCast(i)];
                             const csG = &node.children[@intCast(ci)].style;
                             const mn = resolveMaybePct(if (isRow) csG.min_width else csG.min_height, if (isRow) innerW else innerH);
@@ -752,20 +752,20 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
                         break;
                     }
                 }
-            } else if (asF32(freeSpace) < asF32(0)) {
+            } else if (freeSpace < 0) {
                 var totalShrinkScaled: f32 = 0;
                 {
                     var i = ls;
-                    while (asF32(i) < asF32(asF32(ls) + asF32(lc))) : (i += 1) {
+                    while (@as(f32, @floatFromInt(i)) < asF32(ls) + asF32(lc)) : (i += 1) {
                         totalShrinkScaled += asF32(childShrink[@intCast(i)]) * asF32(childBasis[@intCast(i)]);
                     }
                 }
-                if (asF32(totalShrinkScaled) > asF32(0)) {
+                if (totalShrinkScaled > 0) {
                     const shrinkOverflow = -freeSpace;
                     {
                         var i = ls;
-                        while (asF32(i) < asF32(asF32(ls) + asF32(lc))) : (i += 1) {
-                            const amount = asF32((asF32(asF32(childShrink[@intCast(i)]) * asF32(childBasis[@intCast(i)])) / asF32(totalShrinkScaled))) * asF32(shrinkOverflow);
+                        while (@as(f32, @floatFromInt(i)) < asF32(ls) + asF32(lc)) : (i += 1) {
+                            const amount = asF32((asF32(childShrink[@intCast(i)]) * asF32(childBasis[@intCast(i)]) / totalShrinkScaled)) * asF32(shrinkOverflow);
                             childBasis[@intCast(i)] -= amount;
                         }
                     }
@@ -773,7 +773,7 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
                 if (isRow) {
                     {
                         var i = ls;
-                        while (asF32(i) < asF32(asF32(ls) + asF32(lc))) : (i += 1) {
+                        while (@as(f32, @floatFromInt(i)) < asF32(ls) + asF32(lc)) : (i += 1) {
                             const childIdx = visibleIndices[@intCast(i)];
                             const childNode = &node.children[@intCast(childIdx)];
                             if (childNode.style.min_width != null) {
@@ -789,7 +789,7 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
             }
             {
                 var i = ls;
-                while (asF32(i) < asF32(asF32(ls) + asF32(lc))) : (i += 1) {
+                while (@as(f32, @floatFromInt(i)) < asF32(ls) + asF32(lc)) : (i += 1) {
                     const childIdx = visibleIndices[@intCast(i)];
                     const child = &node.children[@intCast(childIdx)];
                     if (child.text == null) {
@@ -801,14 +801,14 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
                         }
                         const finalW = clampVal(childBasis[@intCast(i)], resolveMaybePct(child.style.min_width, innerW), resolveMaybePct(child.style.max_width, innerW));
                         const prevW = childMainSize[@intCast(i)];
-                        if (asF32(@abs(asF32(finalW) - asF32(prevW))) > asF32(0.5)) {
+                        if (@abs(asF32(finalW) - asF32(prevW)) > 0.5) {
                             const cpl = padLeft(child.style);
                             const cpr = padRight(child.style);
                             const cpt = padTop(child.style);
                             const cpb = padBottom(child.style);
-                            const constrainW = asF32(asF32(finalW) - asF32(cpl)) - asF32(cpr);
-                            const m = measureNodeTextW(child, if (asF32(constrainW) > asF32(0)) constrainW else 0);
-                            childCrossSize[@intCast(i)] = clampVal(asF32(asF32(m.height) + asF32(cpt)) + asF32(cpb), resolveMaybePct(child.style.min_height, innerH), resolveMaybePct(child.style.max_height, innerH));
+                            const constrainW = finalW - cpl - cpr;
+                            const m = measureNodeTextW(child, if (constrainW > 0) constrainW else 0);
+                            childCrossSize[@intCast(i)] = clampVal(m.height + cpt + cpb, resolveMaybePct(child.style.min_height, innerH), resolveMaybePct(child.style.max_height, innerH));
                         }
                     } else {
                         const effAlign = resolveAlign(child.style.align_self, @"align");
@@ -817,9 +817,9 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
                         const cpr = padRight(child.style);
                         const cpt = padTop(child.style);
                         const cpb = padBottom(child.style);
-                        const constrainW = asF32(asF32(finalW) - asF32(cpl)) - asF32(cpr);
-                        const m = measureNodeTextW(child, if (asF32(constrainW) > asF32(0)) constrainW else 0);
-                        const newH = clampVal(asF32(asF32(m.height) + asF32(cpt)) + asF32(cpb), resolveMaybePct(child.style.min_height, innerH), resolveMaybePct(child.style.max_height, innerH));
+                        const constrainW = asF32(finalW) - asF32(cpl) - cpr;
+                        const m = measureNodeTextW(child, if (constrainW > 0) constrainW else 0);
+                        const newH = clampVal(m.height + cpt + cpb, resolveMaybePct(child.style.min_height, innerH), resolveMaybePct(child.style.max_height, innerH));
                         if (child.style.height == null) {
                             childBasis[@intCast(i)] = newH;
                             childMainSize[@intCast(i)] = newH;
@@ -831,9 +831,9 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
             var lineCross: f32 = 0;
             {
                 var i = ls;
-                while (asF32(i) < asF32(asF32(ls) + asF32(lc))) : (i += 1) {
+                while (@as(f32, @floatFromInt(i)) < asF32(ls) + asF32(lc)) : (i += 1) {
                     const childCross = asF32(asF32(childCrossSize[@intCast(i)]) + asF32(childCrossMarginStart[@intCast(i)])) + asF32(childCrossMarginEnd[@intCast(i)]);
-                    if (asF32(childCross) > asF32(lineCross)) {
+                    if (childCross > lineCross) {
                         lineCross = childCross;
                     }
                 }
@@ -844,8 +844,8 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
                 } else if (isRow and h == null) {
                     const mh = resolveMaybePct(s.min_height, ph);
                     if (mh != null) {
-                        const minInner = asF32(asF32(mh.?) - asF32(pt)) - asF32(pb);
-                        if (asF32(minInner) > asF32(lineCross)) {
+                        const minInner = asF32(mh.?) - asF32(pt) - pb;
+                        if (minInner > lineCross) {
                             lineCross = minInner;
                         }
                     }
@@ -856,34 +856,34 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
             var usedMain: f32 = 0;
             {
                 var i = ls;
-                while (asF32(i) < asF32(asF32(ls) + asF32(lc))) : (i += 1) {
+                while (@as(f32, @floatFromInt(i)) < asF32(ls) + asF32(lc)) : (i += 1) {
                     usedMain += asF32(asF32(childBasis[@intCast(i)]) + asF32(childMainMarginStart[@intCast(i)])) + asF32(childMainMarginEnd[@intCast(i)]);
                 }
             }
-            const freeMain = asF32(asF32(mainSize) - asF32(usedMain)) - asF32(lineGaps);
+            const freeMain = asF32(mainSize) - asF32(usedMain) - lineGaps;
             var mainOffset: f32 = 0;
             var extraGap: f32 = 0;
             switch (justify) {
                 .center => {
-                    mainOffset = asF32(freeMain) / asF32(2);
+                    mainOffset = freeMain / 2;
                 },
                 .end => {
                     mainOffset = freeMain;
                 },
                 .space_between => {
-                    if (asF32(lc) > asF32(1)) {
-                        extraGap = asF32(freeMain) / asF32((asF32(lc) - asF32(1)));
+                    if (lc > 1) {
+                        extraGap = freeMain / (asF32(lc) - asF32(1));
                     }
                 },
                 .space_around => {
-                    if (asF32(lc) > asF32(0)) {
+                    if (lc > 0) {
                         extraGap = asF32(freeMain) / asF32(lc);
-                        mainOffset = asF32(extraGap) / asF32(2);
+                        mainOffset = extraGap / 2;
                     }
                 },
                 .space_evenly => {
-                    if (asF32(lc) > asF32(0)) {
-                        extraGap = asF32(freeMain) / asF32((asF32(lc) + asF32(1)));
+                    if (lc > 0) {
+                        extraGap = freeMain / (asF32(lc) + asF32(1));
                         mainOffset = extraGap;
                     }
                 },
@@ -893,7 +893,7 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
             var cursor = mainOffset;
             {
                 var i = ls;
-                while (asF32(i) < asF32(asF32(ls) + asF32(lc))) : (i += 1) {
+                while (@as(f32, @floatFromInt(i)) < asF32(ls) + asF32(lc)) : (i += 1) {
                     const childIdx = visibleIndices[@intCast(i)];
                     const child = &node.children[@intCast(childIdx)];
                     var cx: f32 = undefined;
@@ -902,47 +902,47 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
                     var chFinal: f32 = undefined;
                     const effAlign = resolveAlign(child.style.align_self, @"align");
                     if (isRow) {
-                        cx = asF32(asF32(x) + asF32(pl)) + asF32(cursor);
+                        cx = asF32(x + pl) + asF32(cursor);
                         cwFinal = clampVal(childBasis[@intCast(i)], resolveMaybePct(child.style.min_width, innerW), resolveMaybePct(child.style.max_width, innerW));
                         chFinal = childCrossSize[@intCast(i)];
                         const crossAvail = asF32(asF32(lineCross) - asF32(childCrossMarginStart[@intCast(i)])) - asF32(childCrossMarginEnd[@intCast(i)]);
                         switch (effAlign) {
                             .center => {
-                                cy = asF32(asF32(asF32(y) + asF32(pt)) + asF32(crossCursor)) + asF32(asF32((asF32(crossAvail) - asF32(chFinal))) / asF32(2));
+                                cy = y + pt + crossCursor + (crossAvail - chFinal) / 2;
                             },
                             .end => {
-                                cy = asF32(asF32(asF32(asF32(y) + asF32(pt)) + asF32(crossCursor)) + asF32(crossAvail)) - asF32(chFinal);
+                                cy = y + pt + crossCursor + crossAvail - chFinal;
                             },
                             .stretch => {
-                                cy = asF32(asF32(y) + asF32(pt)) + asF32(crossCursor);
+                                cy = y + pt + crossCursor;
                                 if (child.style.height == null) {
                                     chFinal = clampVal(crossAvail, resolveMaybePct(child.style.min_height, innerH), resolveMaybePct(child.style.max_height, innerH));
                                 }
                             },
                             .start => {
-                                cy = asF32(asF32(y) + asF32(pt)) + asF32(crossCursor);
+                                cy = y + pt + crossCursor;
                             },
                         }
                     } else {
-                        cy = asF32(asF32(y) + asF32(pt)) + asF32(cursor);
+                        cy = asF32(y + pt) + asF32(cursor);
                         chFinal = clampVal(childBasis[@intCast(i)], resolveMaybePct(child.style.min_height, innerH), resolveMaybePct(child.style.max_height, innerH));
                         cwFinal = childCrossSize[@intCast(i)];
                         const crossAvail = asF32(asF32(lineCross) - asF32(childCrossMarginStart[@intCast(i)])) - asF32(childCrossMarginEnd[@intCast(i)]);
                         switch (effAlign) {
                             .center => {
-                                cx = asF32(asF32(asF32(x) + asF32(pl)) + asF32(crossCursor)) + asF32(asF32((asF32(crossAvail) - asF32(cwFinal))) / asF32(2));
+                                cx = x + pl + crossCursor + (crossAvail - cwFinal) / 2;
                             },
                             .end => {
-                                cx = asF32(asF32(asF32(asF32(x) + asF32(pl)) + asF32(crossCursor)) + asF32(crossAvail)) - asF32(cwFinal);
+                                cx = x + pl + crossCursor + crossAvail - cwFinal;
                             },
                             .stretch => {
-                                cx = asF32(asF32(x) + asF32(pl)) + asF32(crossCursor);
+                                cx = x + pl + crossCursor;
                                 if (child.style.width == null) {
                                     cwFinal = clampVal(crossAvail, resolveMaybePct(child.style.min_width, innerW), resolveMaybePct(child.style.max_width, innerW));
                                 }
                             },
                             .start => {
-                                cx = asF32(asF32(x) + asF32(pl)) + asF32(crossCursor);
+                                cx = x + pl + crossCursor;
                             },
                         }
                     }
@@ -954,7 +954,7 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
                             child._stretch_h = chFinal;
                         }
                     } else {
-                        if (child.style.height == null and asF32(child.style.flex_grow) > asF32(0)) {
+                        if (child.style.height == null and child.style.flex_grow > 0) {
                             child._stretch_h = chFinal;
                         }
                         if (child.style.width == null and effAlign == .stretch) {
@@ -968,54 +968,54 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
                     child._parent_inner_h = innerH;
                     layoutNode(child, cx, cy, cwFinal, chFinal);
                     const actualMain = if (isRow) child.computed.w else child.computed.h;
-                    cursor += asF32(asF32(asF32(asF32(childMainMarginStart[@intCast(i)]) + asF32(actualMain)) + asF32(childMainMarginEnd[@intCast(i)])) + asF32(gap)) + asF32(extraGap);
+                    cursor += asF32(asF32(childMainMarginStart[@intCast(i)]) + asF32(actualMain)) + asF32(childMainMarginEnd[@intCast(i)]) + gap + extraGap;
                     if (isRow) {
-                        const me = asF32(asF32((asF32(child.computed.x) - asF32(x))) + asF32(child.computed.w)) + asF32(childMainMarginEnd[@intCast(i)]);
-                        const ce = asF32(asF32((asF32(child.computed.y) - asF32(y))) + asF32(child.computed.h)) + asF32(childCrossMarginEnd[@intCast(i)]);
-                        if (asF32(me) > asF32(contentMainEnd)) {
+                        const me = asF32((child.computed.x - x) + child.computed.w) + asF32(childMainMarginEnd[@intCast(i)]);
+                        const ce = asF32((child.computed.y - y) + child.computed.h) + asF32(childCrossMarginEnd[@intCast(i)]);
+                        if (me > contentMainEnd) {
                             contentMainEnd = me;
                         }
-                        if (asF32(ce) > asF32(contentCrossEnd)) {
+                        if (ce > contentCrossEnd) {
                             contentCrossEnd = ce;
                         }
                     } else {
-                        const me = asF32(asF32((asF32(child.computed.y) - asF32(y))) + asF32(child.computed.h)) + asF32(childMainMarginEnd[@intCast(i)]);
-                        const ce = asF32(asF32((asF32(child.computed.x) - asF32(x))) + asF32(child.computed.w)) + asF32(childCrossMarginEnd[@intCast(i)]);
-                        if (asF32(me) > asF32(contentMainEnd)) {
+                        const me = asF32((child.computed.y - y) + child.computed.h) + asF32(childMainMarginEnd[@intCast(i)]);
+                        const ce = asF32((child.computed.x - x) + child.computed.w) + asF32(childCrossMarginEnd[@intCast(i)]);
+                        if (me > contentMainEnd) {
                             contentMainEnd = me;
                         }
-                        if (asF32(ce) > asF32(contentCrossEnd)) {
+                        if (ce > contentCrossEnd) {
                             contentCrossEnd = ce;
                         }
                     }
                 }
             }
-            crossCursor += asF32(lineCross) + asF32((if (asF32(asF32(lineIdx) + asF32(1)) < asF32(numLines)) gap else 0));
+            crossCursor += lineCross + (if (lineIdx + 1 < numLines) gap else 0);
         }
     }
     if (h == null) {
         if (node.input_id != null) {
-            h = asF32(asF32(node.font_size) + asF32(pt)) + asF32(pb);
+            h = @as(f32, @floatFromInt(node.font_size)) + pt + pb;
         } else if (node.text != null) {
             const m = measureNodeTextW(node, innerW);
-            h = asF32(asF32(m.height) + asF32(pt)) + asF32(pb);
+            h = m.height + pt + pb;
         } else if (isRow) {
-            h = asF32(contentCrossEnd) + asF32(pb);
+            h = contentCrossEnd + pb;
         } else {
-            h = asF32(contentMainEnd) + asF32(pb);
+            h = contentMainEnd + pb;
         }
         if (h != null) {
             h.? = clampVal(h.?, resolveMaybePct(s.min_height, ph), resolveMaybePct(s.max_height, ph));
         }
     }
     if (s.overflow == .scroll or s.overflow == .hidden) {
-        const fullContent = if (isRow) asF32(contentCrossEnd) + asF32(pb) else asF32(contentMainEnd) + asF32(pb);
+        const fullContent = if (isRow) contentCrossEnd + pb else contentMainEnd + pb;
         node.content_height = fullContent;
     }
     const resolvedH = h orelse 0;
     {
         var ai: usize = 0;
-        while (asF32(ai) < asF32(absoluteCount)) : (ai += 1) {
+        while (ai < absoluteCount) : (ai += 1) {
             const absIdx = absoluteIndices[@intCast(ai)];
             const absChild = &node.children[@intCast(absIdx)];
             const acs = absChild.style;
@@ -1024,33 +1024,33 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
             if (resolvedW != null) {
                 absW = resolvedW.?;
             } else if (acs.left != null and acs.right != null) {
-                absW = asF32(asF32(innerW) - asF32((acs.left orelse 0))) - asF32((acs.right orelse 0));
+                absW = innerW - (acs.left orelse 0) - (acs.right orelse 0);
             } else {
                 absW = estimateIntrinsicWidth(absChild);
             }
             absW = clampVal(absW, resolveMaybePct(acs.min_width, innerW), resolveMaybePct(acs.max_width, innerW));
-            const absInnerH = asF32(asF32(resolvedH) - asF32(pt)) - asF32(pb);
+            const absInnerH = asF32(resolvedH) - asF32(pt) - pb;
             var absH: f32 = undefined;
             const resolvedAH = resolveMaybePct(acs.height, absInnerH);
             if (resolvedAH != null) {
                 absH = resolvedAH.?;
             } else if (acs.top != null and acs.bottom != null) {
-                absH = asF32(asF32(absInnerH) - asF32((acs.top orelse 0))) - asF32((acs.bottom orelse 0));
+                absH = absInnerH - (acs.top orelse 0) - (acs.bottom orelse 0);
             } else {
                 absH = estimateIntrinsicHeight(absChild, absW);
             }
             absH = clampVal(absH, resolveMaybePct(acs.min_height, absInnerH), resolveMaybePct(acs.max_height, absInnerH));
-            var absX = asF32(x) + asF32(pl);
-            var absY = asF32(y) + asF32(pt);
+            var absX = x + pl;
+            var absY = y + pt;
             if (acs.left != null) {
-                absX = asF32(asF32(x) + asF32(pl)) + asF32(acs.left.?);
+                absX = asF32(x + pl) + asF32(acs.left.?);
             } else if (acs.right != null) {
-                absX = asF32(asF32(asF32(asF32(x) + asF32(pl)) + asF32(innerW)) - asF32(absW)) - asF32(acs.right);
+                absX = asF32(x + pl + innerW - absW) - asF32(acs.right);
             }
             if (acs.top != null) {
-                absY = asF32(asF32(y) + asF32(pt)) + asF32(acs.top.?);
+                absY = asF32(y + pt) + asF32(acs.top.?);
             } else if (acs.bottom != null) {
-                absY = asF32(asF32(asF32(asF32(y) + asF32(pt)) + asF32(absInnerH)) - asF32(absH)) - asF32(acs.bottom);
+                absY = asF32(y + pt + absInnerH - absH) - asF32(acs.bottom);
             }
             absChild._flex_w = absW;
             absChild._stretch_h = absH;

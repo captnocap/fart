@@ -9,6 +9,10 @@
 //!   Math.abs(x)     → @abs(x)
 //!   { x: 0, y: 0 } → .{ .x = 0, .y = 0 }
 //!   cond ? a : b    → if (cond) a else b
+//!
+//! Type-aware arithmetic: tracks ExprType through the expression tree
+//! to emit minimal casts (only at f32/usize boundaries), eliminating
+//! blanket asF32() wrapping.
 
 const std = @import("std");
 const lexer_mod = @import("lexer.zig");
@@ -25,6 +29,75 @@ pub const ExprContext = enum {
     argument, // function call argument (stops at , or ) at depth 0)
 };
 
+// ── Type system ────────────────────────────────────────────────────────
+
+pub const ExprType = enum {
+    f32_t, // known f32
+    usize_t, // known usize (loop vars, .len, counts)
+    u16_t, // known u16 (font_size, number_of_lines)
+    i16_t, // known i16 (z_index)
+    u8_t, // known u8 (Color components, input_id)
+    opt_f32_t, // ?f32 (nullable style properties)
+    bool_t, // boolean result
+    int_lit, // integer literal (comptime_int — coerces to either)
+    float_lit, // float literal (comptime_float)
+    string_t, // string / []const u8
+    enum_t, // enum value (.row, .column, etc.)
+    ptr_t, // pointer type (*Node, etc.)
+    struct_t, // struct value
+    void_t, // void
+    unknown, // can't determine
+
+    fn isInt(self: ExprType) bool {
+        return self == .usize_t or self == .u16_t or self == .i16_t or self == .u8_t;
+    }
+
+    fn isNumericLit(self: ExprType) bool {
+        return self == .int_lit or self == .float_lit;
+    }
+
+    fn isF32Compatible(self: ExprType) bool {
+        return self == .f32_t or self == .float_lit;
+    }
+};
+
+const TypedExpr = struct {
+    text: []const u8,
+    ty: ExprType,
+};
+
+/// Variable type registry — maps variable names to their known types.
+/// Populated by stmtgen when variables are declared.
+pub const VarTypes = struct {
+    names: [MAX_VARS][]const u8 = undefined,
+    types: [MAX_VARS]ExprType = undefined,
+    count: u32 = 0,
+
+    const MAX_VARS = 256;
+
+    pub fn put(self: *VarTypes, name: []const u8, ty: ExprType) void {
+        // Check if already exists — update in place
+        for (0..self.count) |i| {
+            if (std.mem.eql(u8, self.names[i], name)) {
+                self.types[i] = ty;
+                return;
+            }
+        }
+        if (self.count < MAX_VARS) {
+            self.names[self.count] = name;
+            self.types[self.count] = ty;
+            self.count += 1;
+        }
+    }
+
+    pub fn get(self: *const VarTypes, name: []const u8) ?ExprType {
+        for (0..self.count) |i| {
+            if (std.mem.eql(u8, self.names[i], name)) return self.types[i];
+        }
+        return null;
+    }
+};
+
 /// Parse and emit a Zig expression from the current token position.
 /// Advances pos past the consumed tokens.
 /// Stops at context-appropriate terminators (semicolon, comma, closing delimiters).
@@ -35,23 +108,36 @@ pub fn emitExpression(
     pos: *u32,
     context: ExprContext,
 ) ![]const u8 {
+    return emitExpressionTyped(alloc, lex, source, pos, context, null);
+}
+
+/// Type-aware variant that accepts a variable type registry.
+pub fn emitExpressionTyped(
+    alloc: std.mem.Allocator,
+    lex: *const Lexer,
+    source: []const u8,
+    pos: *u32,
+    context: ExprContext,
+    var_types: ?*const VarTypes,
+) ![]const u8 {
     var p = Parser{
         .alloc = alloc,
         .lex = lex,
         .source = source,
         .pos = pos,
         .context = context,
+        .var_types = var_types,
     };
     const result = try p.parseTernary();
 
     // In condition context, a property access on a nullable field implies != null check.
     // Only do this for dotted paths (node.text, s.width) — bare locals like is_row
     // are bools from comparisons, not optionals.
-    if (context == .condition and isBareAccess(result) and std.mem.indexOf(u8, result, ".") != null) {
-        return try std.fmt.allocPrint(alloc, "{s} != null", .{result});
+    if (context == .condition and isBareAccess(result.text) and std.mem.indexOf(u8, result.text, ".") != null) {
+        return try std.fmt.allocPrint(alloc, "{s} != null", .{result.text});
     }
 
-    return result;
+    return result.text;
 }
 
 /// Returns true if the string looks like a bare identifier or property chain
@@ -73,6 +159,7 @@ const Parser = struct {
     source: []const u8,
     pos: *u32,
     context: ExprContext,
+    var_types: ?*const VarTypes = null,
 
     fn cur(self: *Parser) Token {
         return self.lex.get(self.pos.*);
@@ -102,7 +189,7 @@ const Parser = struct {
 
     const Error = std.mem.Allocator.Error;
 
-    fn parseTernary(self: *Parser) Error![]const u8 {
+    fn parseTernary(self: *Parser) Error!TypedExpr {
         const cond = try self.parseLogicalOr();
         if (self.curKind() == .question) {
             self.advance(); // consume ?
@@ -110,84 +197,94 @@ const Parser = struct {
             self.expect(.colon);
             const else_val = try self.parseTernary();
             // If condition is "X != null", add .? to references of X in then branch
-            var final_then = then_val;
-            if (std.mem.endsWith(u8, cond, " != null")) {
-                const var_part = std.mem.trim(u8, cond[0 .. cond.len - " != null".len], " ");
-                if (var_part.len > 0 and std.mem.indexOf(u8, then_val, var_part) != null) {
+            var final_then = then_val.text;
+            if (std.mem.endsWith(u8, cond.text, " != null")) {
+                const var_part = std.mem.trim(u8, cond.text[0 .. cond.text.len - " != null".len], " ");
+                if (var_part.len > 0 and std.mem.indexOf(u8, then_val.text, var_part) != null) {
                     // Replace var_part with var_part.? in then branch
                     const unwrapped = try std.fmt.allocPrint(self.alloc, "{s}.?", .{var_part});
                     var result: std.ArrayListUnmanaged(u8) = .{};
                     var ri: usize = 0;
-                    while (ri <= then_val.len - var_part.len) {
-                        if (std.mem.eql(u8, then_val[ri..][0..var_part.len], var_part)) {
-                            const bk = ri == 0 or !isIdentCharStatic(then_val[ri - 1]);
-                            const ak = ri + var_part.len >= then_val.len or !isIdentCharStatic(then_val[ri + var_part.len]);
+                    while (ri <= then_val.text.len - var_part.len) {
+                        if (std.mem.eql(u8, then_val.text[ri..][0..var_part.len], var_part)) {
+                            const bk = ri == 0 or !isIdentCharStatic(then_val.text[ri - 1]);
+                            const ak = ri + var_part.len >= then_val.text.len or !isIdentCharStatic(then_val.text[ri + var_part.len]);
                             if (bk and ak) {
                                 try result.appendSlice(self.alloc, unwrapped);
                                 ri += var_part.len;
                                 continue;
                             }
                         }
-                        try result.append(self.alloc, then_val[ri]);
+                        try result.append(self.alloc, then_val.text[ri]);
                         ri += 1;
                     }
-                    while (ri < then_val.len) : (ri += 1) try result.append(self.alloc, then_val[ri]);
+                    while (ri < then_val.text.len) : (ri += 1) try result.append(self.alloc, then_val.text[ri]);
                     final_then = try self.alloc.dupe(u8, result.items);
                 }
             }
-            return try std.fmt.allocPrint(self.alloc, "if ({s}) {s} else {s}", .{ cond, final_then, else_val });
+            // Result type: use then branch type (both branches should agree)
+            return .{
+                .text = try std.fmt.allocPrint(self.alloc, "if ({s}) {s} else {s}", .{ cond.text, final_then, else_val.text }),
+                .ty = then_val.ty,
+            };
         }
         return cond;
     }
 
     // ── Precedence 2: Logical OR (|| → or) ─────────────────────────
 
-    fn parseLogicalOr(self: *Parser) Error![]const u8 {
+    fn parseLogicalOr(self: *Parser) Error!TypedExpr {
         var left = try self.parseLogicalAnd();
         while (self.curKind() == .pipe_pipe) {
             self.advance();
             const right = try self.parseLogicalAnd();
-            left = try std.fmt.allocPrint(self.alloc, "{s} or {s}", .{ left, right });
+            left = .{
+                .text = try std.fmt.allocPrint(self.alloc, "{s} or {s}", .{ left.text, right.text }),
+                .ty = .bool_t,
+            };
         }
         return left;
     }
 
     // ── Precedence 3: Logical AND (&& → and) ──────────────────────
 
-    fn parseLogicalAnd(self: *Parser) Error![]const u8 {
+    fn parseLogicalAnd(self: *Parser) Error!TypedExpr {
         var left = try self.parseNullishCoalescing();
         while (self.curKind() == .amp_amp) {
             self.advance();
             var right = try self.parseNullishCoalescing();
             // If left is "X != null", add .? to X references in right side
-            if (std.mem.endsWith(u8, left, " != null")) {
-                const var_part = std.mem.trim(u8, left[0 .. left.len - " != null".len], " ");
+            if (std.mem.endsWith(u8, left.text, " != null")) {
+                const var_part = std.mem.trim(u8, left.text[0 .. left.text.len - " != null".len], " ");
                 if (var_part.len > 0) {
                     const unwrapped = try std.fmt.allocPrint(self.alloc, "{s}.?", .{var_part});
                     // Simple replacement (not word-bounded since var_part may contain dots)
-                    if (std.mem.indexOf(u8, right, var_part) != null) {
+                    if (std.mem.indexOf(u8, right.text, var_part) != null) {
                         var result: std.ArrayListUnmanaged(u8) = .{};
                         var ri: usize = 0;
-                        while (ri <= right.len - var_part.len) {
-                            if (std.mem.eql(u8, right[ri..][0..var_part.len], var_part)) {
+                        while (ri <= right.text.len - var_part.len) {
+                            if (std.mem.eql(u8, right.text[ri..][0..var_part.len], var_part)) {
                                 // Check word boundary
-                                const before_ok = ri == 0 or !isIdentCharStatic(right[ri - 1]);
-                                const after_ok = ri + var_part.len >= right.len or !isIdentCharStatic(right[ri + var_part.len]);
+                                const before_ok = ri == 0 or !isIdentCharStatic(right.text[ri - 1]);
+                                const after_ok = ri + var_part.len >= right.text.len or !isIdentCharStatic(right.text[ri + var_part.len]);
                                 if (before_ok and after_ok) {
                                     try result.appendSlice(self.alloc, unwrapped);
                                     ri += var_part.len;
                                     continue;
                                 }
                             }
-                            try result.append(self.alloc, right[ri]);
+                            try result.append(self.alloc, right.text[ri]);
                             ri += 1;
                         }
-                        while (ri < right.len) : (ri += 1) try result.append(self.alloc, right[ri]);
-                        right = try self.alloc.dupe(u8, result.items);
+                        while (ri < right.text.len) : (ri += 1) try result.append(self.alloc, right.text[ri]);
+                        right = .{ .text = try self.alloc.dupe(u8, result.items), .ty = right.ty };
                     }
                 }
             }
-            left = try std.fmt.allocPrint(self.alloc, "{s} and {s}", .{ left, right });
+            left = .{
+                .text = try std.fmt.allocPrint(self.alloc, "{s} and {s}", .{ left.text, right.text }),
+                .ty = .bool_t,
+            };
         }
         return left;
     }
@@ -198,19 +295,24 @@ const Parser = struct {
 
     // ── Precedence 4: Nullish coalescing (?? → orelse) ─────────────
 
-    fn parseNullishCoalescing(self: *Parser) Error![]const u8 {
+    fn parseNullishCoalescing(self: *Parser) Error!TypedExpr {
         var left = try self.parseEquality();
         while (self.curKind() == .question_question) {
             self.advance();
             const right = try self.parseEquality();
-            left = try std.fmt.allocPrint(self.alloc, "{s} orelse {s}", .{ left, right });
+            // Unwrapping optional: ?f32 orelse f32 → f32
+            const result_ty: ExprType = if (left.ty == .opt_f32_t) right.ty else left.ty;
+            left = .{
+                .text = try std.fmt.allocPrint(self.alloc, "{s} orelse {s}", .{ left.text, right.text }),
+                .ty = result_ty,
+            };
         }
         return left;
     }
 
     // ── Precedence 5: Equality (===, !==) ──────────────────────────
 
-    fn parseEquality(self: *Parser) Error![]const u8 {
+    fn parseEquality(self: *Parser) Error!TypedExpr {
         var left = try self.parseComparison();
         while (self.curKind() == .eq_eq or self.curKind() == .not_eq) {
             const is_eq = self.curKind() == .eq_eq;
@@ -224,7 +326,10 @@ const Parser = struct {
                 if (std.mem.eql(u8, rhs, "null") or std.mem.eql(u8, rhs, "undefined")) {
                     self.advance();
                     const op = if (is_eq) "==" else "!=";
-                    return try std.fmt.allocPrint(self.alloc, "{s} {s} null", .{ left, op });
+                    return .{
+                        .text = try std.fmt.allocPrint(self.alloc, "{s} {s} null", .{ left.text, op }),
+                        .ty = .bool_t,
+                    };
                 }
             }
 
@@ -238,25 +343,38 @@ const Parser = struct {
                     (str_text.len == 4 and str_text[1] == '\\');
                 if (is_single_char) {
                     const op = if (is_eq) "==" else "!=";
-                    return try std.fmt.allocPrint(self.alloc, "{s} {s} {s}", .{ left, op, str_text });
+                    return .{
+                        .text = try std.fmt.allocPrint(self.alloc, "{s} {s} {s}", .{ left.text, op, str_text }),
+                        .ty = .bool_t,
+                    };
                 }
                 if (is_eq) {
-                    return try std.fmt.allocPrint(self.alloc, "std.mem.eql(u8, {s}, {s})", .{ left, str_text });
+                    return .{
+                        .text = try std.fmt.allocPrint(self.alloc, "std.mem.eql(u8, {s}, {s})", .{ left.text, str_text }),
+                        .ty = .bool_t,
+                    };
                 } else {
-                    return try std.fmt.allocPrint(self.alloc, "!std.mem.eql(u8, {s}, {s})", .{ left, str_text });
+                    return .{
+                        .text = try std.fmt.allocPrint(self.alloc, "!std.mem.eql(u8, {s}, {s})", .{ left.text, str_text }),
+                        .ty = .bool_t,
+                    };
                 }
             }
 
             const right = try self.parseComparison();
             const op = if (is_eq) "==" else "!=";
-            left = try std.fmt.allocPrint(self.alloc, "{s} {s} {s}", .{ left, op, right });
+            left = .{
+                .text = try std.fmt.allocPrint(self.alloc, "{s} {s} {s}", .{ left.text, op, right.text }),
+                .ty = .bool_t,
+            };
         }
         return left;
     }
 
     // ── Precedence 6: Comparison (<, >, <=, >=) ────────────────────
+    // Type-aware: only cast when types mismatch at int/float boundary
 
-    fn parseComparison(self: *Parser) Error![]const u8 {
+    fn parseComparison(self: *Parser) Error!TypedExpr {
         var left = try self.parseAdditive();
         while (true) {
             const op: []const u8 = switch (self.curKind()) {
@@ -268,15 +386,16 @@ const Parser = struct {
             };
             self.advance();
             const right = try self.parseAdditive();
-            // Wrap both sides in asF32() to bridge usize/u16/f32 type mismatches
-            left = try std.fmt.allocPrint(self.alloc, "asF32({s}) {s} asF32({s})", .{ left, op, right });
+            const text = try self.emitBinaryCoerced(left, right, op);
+            left = .{ .text = text, .ty = .bool_t };
         }
         return left;
     }
 
     // ── Precedence 7: Additive (+, -) ──────────────────────────────
+    // Type-aware: propagates types, only casts at boundaries
 
-    fn parseAdditive(self: *Parser) Error![]const u8 {
+    fn parseAdditive(self: *Parser) Error!TypedExpr {
         var left = try self.parseMultiplicative();
         while (self.curKind() == .plus or self.curKind() == .minus) {
             // Don't consume + or - if followed by = (compound assignment handled by stmtgen)
@@ -286,15 +405,16 @@ const Parser = struct {
             const op: []const u8 = if (self.curKind() == .plus) "+" else "-";
             self.advance();
             const right = try self.parseMultiplicative();
-            // Wrap both sides in asF32() to bridge usize/u16/f32 type mismatches
-            left = try std.fmt.allocPrint(self.alloc, "asF32({s}) {s} asF32({s})", .{ left, op, right });
+            const coerced = try self.emitArithCoerced(left, right, op);
+            left = coerced;
         }
         return left;
     }
 
     // ── Precedence 8: Multiplicative (*, /, %) ─────────────────────
+    // Type-aware: propagates types, only casts at boundaries
 
-    fn parseMultiplicative(self: *Parser) Error![]const u8 {
+    fn parseMultiplicative(self: *Parser) Error!TypedExpr {
         var left = try self.parseUnary();
         while (self.curKind() == .star or self.curKind() == .slash or self.curKind() == .percent) {
             // Don't consume * / % if followed by = (compound assignment)
@@ -307,35 +427,157 @@ const Parser = struct {
             };
             self.advance();
             const right = try self.parseUnary();
-            // Wrap both sides in asF32() to bridge usize/u16/f32 type mismatches
-            left = try std.fmt.allocPrint(self.alloc, "asF32({s}) {s} asF32({s})", .{ left, op, right });
+            const coerced = try self.emitArithCoerced(left, right, op);
+            left = coerced;
         }
         return left;
     }
 
+    /// Emit a binary arithmetic expression with type-aware coercion.
+    /// Returns a TypedExpr with the result type.
+    fn emitArithCoerced(self: *Parser, left: TypedExpr, right: TypedExpr, op: []const u8) Error!TypedExpr {
+        // Same type → no cast needed
+        if (left.ty == right.ty and left.ty != .unknown) {
+            return .{
+                .text = try std.fmt.allocPrint(self.alloc, "{s} {s} {s}", .{ left.text, op, right.text }),
+                .ty = left.ty,
+            };
+        }
+
+        // One is a comptime literal → coerces to the other's type
+        if (left.ty.isNumericLit() and right.ty != .unknown) {
+            return .{
+                .text = try std.fmt.allocPrint(self.alloc, "{s} {s} {s}", .{ left.text, op, right.text }),
+                .ty = if (right.ty.isNumericLit()) left.ty else right.ty,
+            };
+        }
+        if (right.ty.isNumericLit() and left.ty != .unknown) {
+            return .{
+                .text = try std.fmt.allocPrint(self.alloc, "{s} {s} {s}", .{ left.text, op, right.text }),
+                .ty = left.ty,
+            };
+        }
+
+        // f32 mixed with integer type → cast the integer side
+        if (left.ty.isF32Compatible() and right.ty.isInt()) {
+            return .{
+                .text = try std.fmt.allocPrint(self.alloc, "{s} {s} @as(f32, @floatFromInt({s}))", .{ left.text, op, right.text }),
+                .ty = .f32_t,
+            };
+        }
+        if (left.ty.isInt() and right.ty.isF32Compatible()) {
+            return .{
+                .text = try std.fmt.allocPrint(self.alloc, "@as(f32, @floatFromInt({s})) {s} {s}", .{ left.text, op, right.text }),
+                .ty = .f32_t,
+            };
+        }
+
+        // Optional f32 in arithmetic → fall through to asF32() fallback.
+        // The stmtgen null-narrowing adds .? inside null-guarded blocks,
+        // converting ?f32 to f32 naturally. For unguarded uses, asF32()
+        // handles optionals at runtime (unwraps with orelse 0).
+        if (left.ty == .opt_f32_t or right.ty == .opt_f32_t) {
+            return .{
+                .text = try std.fmt.allocPrint(self.alloc, "asF32({s}) {s} asF32({s})", .{ left.text, op, right.text }),
+                .ty = .f32_t,
+            };
+        }
+
+        // Both int types but different widths → cast narrower to wider
+        if (left.ty.isInt() and right.ty.isInt()) {
+            // Both are integer, but different. Cast to the wider one.
+            // usize is widest, then u16/i16, then u8
+            const wider = if (left.ty == .usize_t or right.ty == .usize_t) ExprType.usize_t else left.ty;
+            if (left.ty == wider) {
+                return .{
+                    .text = try std.fmt.allocPrint(self.alloc, "{s} {s} @as({s}, @intCast({s}))", .{ left.text, op, zigTypeStr(wider), right.text }),
+                    .ty = wider,
+                };
+            } else {
+                return .{
+                    .text = try std.fmt.allocPrint(self.alloc, "@as({s}, @intCast({s})) {s} {s}", .{ zigTypeStr(wider), left.text, op, right.text }),
+                    .ty = wider,
+                };
+            }
+        }
+
+        // Fallback: both unknown → use asF32 on both (preserves current behavior for edge cases)
+        return .{
+            .text = try std.fmt.allocPrint(self.alloc, "asF32({s}) {s} asF32({s})", .{ left.text, op, right.text }),
+            .ty = .f32_t,
+        };
+    }
+
+    /// Emit a binary comparison expression with type-aware coercion.
+    /// Returns the coerced text (result type is always bool).
+    fn emitBinaryCoerced(self: *Parser, left: TypedExpr, right: TypedExpr, op: []const u8) Error![]const u8 {
+        // Same type → no cast
+        if (left.ty == right.ty and left.ty != .unknown) {
+            return try std.fmt.allocPrint(self.alloc, "{s} {s} {s}", .{ left.text, op, right.text });
+        }
+
+        // One is a comptime literal → coerces naturally
+        if (left.ty.isNumericLit() or right.ty.isNumericLit()) {
+            return try std.fmt.allocPrint(self.alloc, "{s} {s} {s}", .{ left.text, op, right.text });
+        }
+
+        // f32 mixed with integer → cast the integer side
+        if (left.ty.isF32Compatible() and right.ty.isInt()) {
+            return try std.fmt.allocPrint(self.alloc, "{s} {s} @as(f32, @floatFromInt({s}))", .{ left.text, op, right.text });
+        }
+        if (left.ty.isInt() and right.ty.isF32Compatible()) {
+            return try std.fmt.allocPrint(self.alloc, "@as(f32, @floatFromInt({s})) {s} {s}", .{ left.text, op, right.text });
+        }
+
+        // Optional f32 in comparison → asF32 fallback (handles ?f32 at runtime)
+        if (left.ty == .opt_f32_t or right.ty == .opt_f32_t) {
+            return try std.fmt.allocPrint(self.alloc, "asF32({s}) {s} asF32({s})", .{ left.text, op, right.text });
+        }
+
+        // Both int but different widths → cast
+        if (left.ty.isInt() and right.ty.isInt()) {
+            const wider = if (left.ty == .usize_t or right.ty == .usize_t) ExprType.usize_t else left.ty;
+            if (left.ty == wider) {
+                return try std.fmt.allocPrint(self.alloc, "{s} {s} @as({s}, @intCast({s}))", .{ left.text, op, zigTypeStr(wider), right.text });
+            } else {
+                return try std.fmt.allocPrint(self.alloc, "@as({s}, @intCast({s})) {s} {s}", .{ zigTypeStr(wider), left.text, op, right.text });
+            }
+        }
+
+        // Fallback: both unknown → use asF32 on both
+        return try std.fmt.allocPrint(self.alloc, "asF32({s}) {s} asF32({s})", .{ left.text, op, right.text });
+    }
+
     // ── Precedence 9: Unary (!, -, typeof) ─────────────────────────
 
-    fn parseUnary(self: *Parser) Error![]const u8 {
+    fn parseUnary(self: *Parser) Error!TypedExpr {
         if (self.curKind() == .bang) {
             self.advance();
             const operand = try self.parseUnary();
-            return try std.fmt.allocPrint(self.alloc, "!{s}", .{operand});
+            return .{
+                .text = try std.fmt.allocPrint(self.alloc, "!{s}", .{operand.text}),
+                .ty = .bool_t,
+            };
         }
         if (self.curKind() == .minus) {
             self.advance();
             const operand = try self.parseUnary();
-            return try std.fmt.allocPrint(self.alloc, "-{s}", .{operand});
+            return .{
+                .text = try std.fmt.allocPrint(self.alloc, "-{s}", .{operand.text}),
+                .ty = operand.ty,
+            };
         }
         if (self.curKind() == .identifier and std.mem.eql(u8, self.curText(), "typeof")) {
             self.advance();
-            return try self.parsePostfix();
+            const operand = try self.parsePostfix();
+            return .{ .text = operand.text, .ty = .string_t };
         }
         return try self.parsePostfix();
     }
 
     // ── Precedence 10: Postfix / Call / Member access ──────────────
 
-    fn parsePostfix(self: *Parser) Error![]const u8 {
+    fn parsePostfix(self: *Parser) Error!TypedExpr {
         var left = try self.parsePrimary();
 
         while (true) {
@@ -347,9 +589,12 @@ const Parser = struct {
                     const prop = self.curText();
                     self.advance();
 
-                    // .length → .len
+                    // .length → .len (always usize)
                     if (std.mem.eql(u8, prop, "length")) {
-                        left = try std.fmt.allocPrint(self.alloc, "{s}.len", .{left});
+                        left = .{
+                            .text = try std.fmt.allocPrint(self.alloc, "{s}.len", .{left.text}),
+                            .ty = .usize_t,
+                        };
                         continue;
                     }
 
@@ -363,13 +608,20 @@ const Parser = struct {
                         const arg_b = try self.parseTernary();
                         self.context = saved;
                         self.expect(.rparen);
-                        left = try std.fmt.allocPrint(self.alloc, "{s}[@intCast({s})..@intCast({s})]", .{ left, arg_a, arg_b });
+                        left = .{
+                            .text = try std.fmt.allocPrint(self.alloc, "{s}[@intCast({s})..@intCast({s})]", .{ left.text, arg_a.text, arg_b.text }),
+                            .ty = left.ty,
+                        };
                         continue;
                     }
 
                     // Regular property — camelCase → snake_case
                     const snake = try camelToSnake(self.alloc, prop);
-                    left = try std.fmt.allocPrint(self.alloc, "{s}.{s}", .{ left, snake });
+                    const field_ty = resolveFieldType(snake);
+                    left = .{
+                        .text = try std.fmt.allocPrint(self.alloc, "{s}.{s}", .{ left.text, snake }),
+                        .ty = field_ty,
+                    };
                 },
 
                 // Index access: a[i] → a[@intCast(i)]
@@ -380,12 +632,16 @@ const Parser = struct {
                     const idx = try self.parseTernary();
                     self.context = saved;
                     self.expect(.rbracket);
-                    left = try std.fmt.allocPrint(self.alloc, "{s}[@intCast({s})]", .{ left, idx });
+                    left = .{
+                        .text = try std.fmt.allocPrint(self.alloc, "{s}[@intCast({s})]", .{ left.text, idx.text }),
+                        .ty = .unknown, // array element type depends on container
+                    };
                 },
 
                 // Function call: a(x, y)
                 .lparen => {
-                    left = try self.parseCallArgs(left);
+                    const result = try self.parseCallArgsTyped(left.text);
+                    left = result;
                 },
 
                 // Postfix ++
@@ -393,11 +649,10 @@ const Parser = struct {
                     if (self.pos.* + 1 < self.lex.count and self.lex.get(self.pos.* + 1).kind == .plus) {
                         self.advance();
                         self.advance();
-                        // Postfix i++ → i += 1 (simplified: old-value semantics not needed in practice)
-                        {
-                            const inc_stmt = try std.fmt.allocPrint(self.alloc, "{s} += 1", .{left});
-                            left = inc_stmt;
-                        }
+                        left = .{
+                            .text = try std.fmt.allocPrint(self.alloc, "{s} += 1", .{left.text}),
+                            .ty = left.ty,
+                        };
                     } else break;
                 },
 
@@ -406,11 +661,10 @@ const Parser = struct {
                     if (self.pos.* + 1 < self.lex.count and self.lex.get(self.pos.* + 1).kind == .minus) {
                         self.advance();
                         self.advance();
-                        // Postfix i-- → i -= 1
-                        {
-                            const dec_stmt = try std.fmt.allocPrint(self.alloc, "{s} -= 1", .{left});
-                            left = dec_stmt;
-                        }
+                        left = .{
+                            .text = try std.fmt.allocPrint(self.alloc, "{s} -= 1", .{left.text}),
+                            .ty = left.ty,
+                        };
                     } else break;
                 },
 
@@ -420,7 +674,11 @@ const Parser = struct {
                         self.advance();
                         const type_name = self.curText();
                         self.advance();
-                        left = try std.fmt.allocPrint(self.alloc, "@as({s}, {s})", .{ mapTsType(type_name), left });
+                        const zig_type = mapTsType(type_name);
+                        left = .{
+                            .text = try std.fmt.allocPrint(self.alloc, "@as({s}, {s})", .{ zig_type, left.text }),
+                            .ty = mapTsTypeToExprType(type_name),
+                        };
                     } else break;
                 },
 
@@ -431,7 +689,7 @@ const Parser = struct {
         return left;
     }
 
-    fn parseCallArgs(self: *Parser, callee: []const u8) Error![]const u8 {
+    fn parseCallArgsTyped(self: *Parser, callee: []const u8) Error!TypedExpr {
         self.advance(); // consume (
 
         var args = std.ArrayListUnmanaged([]const u8){};
@@ -440,7 +698,7 @@ const Parser = struct {
 
         while (self.curKind() != .rparen and self.curKind() != .eof) {
             const arg = try self.parseTernary();
-            try args.append(self.alloc, arg);
+            try args.append(self.alloc, arg.text);
             if (self.curKind() == .comma) self.advance();
         }
         self.context = saved;
@@ -467,21 +725,34 @@ const Parser = struct {
                 null;
 
             if (builtin) |b| {
-                return try std.fmt.allocPrint(self.alloc, "{s}({s})", .{ b, joined });
+                return .{
+                    .text = try std.fmt.allocPrint(self.alloc, "{s}({s})", .{ b, joined }),
+                    .ty = .f32_t, // Math builtins return f32
+                };
             }
         }
 
-        return try std.fmt.allocPrint(self.alloc, "{s}({s})", .{ callee, joined });
+        // Infer return type from known function names
+        const ret_type = resolveCallReturnType(callee);
+        return .{
+            .text = try std.fmt.allocPrint(self.alloc, "{s}({s})", .{ callee, joined }),
+            .ty = ret_type,
+        };
     }
 
     // ── Precedence 11: Primary ─────────────────────────────────────
 
-    fn parsePrimary(self: *Parser) Error![]const u8 {
+    fn parsePrimary(self: *Parser) Error!TypedExpr {
         switch (self.curKind()) {
             .number => {
                 const text = self.curText();
                 self.advance();
-                return try self.alloc.dupe(u8, text);
+                // Determine if integer or float literal
+                const is_float = std.mem.indexOf(u8, text, ".") != null;
+                return .{
+                    .text = try self.alloc.dupe(u8, text),
+                    .ty = if (is_float) .float_lit else .int_lit,
+                };
             },
 
             .string => {
@@ -493,15 +764,18 @@ const Parser = struct {
                     buf[0] = '"';
                     @memcpy(buf[1 .. buf.len - 1], text[1 .. text.len - 1]);
                     buf[buf.len - 1] = '"';
-                    return buf;
+                    return .{ .text = buf, .ty = .string_t };
                 }
-                return try self.alloc.dupe(u8, text);
+                return .{ .text = try self.alloc.dupe(u8, text), .ty = .string_t };
             },
 
             .template_literal => {
                 const text = self.curText();
                 self.advance();
-                return try emitTemplateLiteral(self.alloc, text);
+                return .{
+                    .text = try emitTemplateLiteral(self.alloc, text),
+                    .ty = .string_t,
+                };
             },
 
             .identifier => {
@@ -510,13 +784,13 @@ const Parser = struct {
                 // true / false
                 if (std.mem.eql(u8, text, "true") or std.mem.eql(u8, text, "false")) {
                     self.advance();
-                    return try self.alloc.dupe(u8, text);
+                    return .{ .text = try self.alloc.dupe(u8, text), .ty = .bool_t };
                 }
 
                 // null / undefined → null
                 if (std.mem.eql(u8, text, "null") or std.mem.eql(u8, text, "undefined")) {
                     self.advance();
-                    return try self.alloc.dupe(u8, "null");
+                    return .{ .text = try self.alloc.dupe(u8, "null"), .ty = .opt_f32_t };
                 }
 
                 // new Array(N) → std.mem.zeroes([N]f32)
@@ -528,9 +802,12 @@ const Parser = struct {
                         const size = self.curText();
                         self.advance();
                         self.expect(.rparen);
-                        return try std.fmt.allocPrint(self.alloc, "std.mem.zeroes([{s}]f32)", .{size});
+                        return .{
+                            .text = try std.fmt.allocPrint(self.alloc, "std.mem.zeroes([{s}]f32)", .{size}),
+                            .ty = .unknown,
+                        };
                     }
-                    return try self.alloc.dupe(u8, "new");
+                    return .{ .text = try self.alloc.dupe(u8, "new"), .ty = .unknown };
                 }
 
                 // PascalCase.Variant → .variant (enum access)
@@ -555,21 +832,29 @@ const Parser = struct {
                             const snake = try camelToSnake(self.alloc, variant);
                             // Lowercase the first char for Zig enum convention
                             const lowered = try lowerFirst(self.alloc, snake);
-                            return try std.fmt.allocPrint(self.alloc, ".{s}", .{lowered});
+                            return .{
+                                .text = try std.fmt.allocPrint(self.alloc, ".{s}", .{lowered}),
+                                .ty = .enum_t,
+                            };
                         }
                     }
-                    // PascalCase identifier without enum access — leave as-is (type or namespace)
+                    // PascalCase identifier without enum access — could be type, namespace, or ALL_CAPS const
                     self.advance();
-                    return try self.alloc.dupe(u8, text);
+                    const upper_ty = self.resolveVarType(text);
+                    return .{ .text = try self.alloc.dupe(u8, text), .ty = upper_ty };
                 }
 
                 // Regular identifier — keep original name, escape Zig keywords.
-                // Only struct field access (after '.') gets snake_cased (handled in parseMemberAccess).
                 self.advance();
-                if (typegen.isZigKeyword(text)) {
-                    return try std.fmt.allocPrint(self.alloc, "@\"{s}\"", .{text});
-                }
-                return try self.alloc.dupe(u8, text);
+                const zig_name = if (typegen.isZigKeyword(text))
+                    try std.fmt.allocPrint(self.alloc, "@\"{s}\"", .{text})
+                else
+                    try self.alloc.dupe(u8, text);
+
+                // Look up variable type in the registry
+                const var_ty = self.resolveVarType(text);
+
+                return .{ .text = zig_name, .ty = var_ty };
             },
 
             // Parenthesized expression
@@ -580,24 +865,62 @@ const Parser = struct {
                 const inner = try self.parseTernary();
                 self.context = saved;
                 self.expect(.rparen);
-                return try std.fmt.allocPrint(self.alloc, "({s})", .{inner});
+                return .{
+                    .text = try std.fmt.allocPrint(self.alloc, "({s})", .{inner.text}),
+                    .ty = inner.ty,
+                };
             },
 
             // Object literal: { x: 0, y: 0 } → .{ .x = 0, .y = 0 }
-            .lbrace => return try self.parseObjectLiteral(),
+            .lbrace => {
+                const text = try self.parseObjectLiteral();
+                return .{ .text = text, .ty = .struct_t };
+            },
 
             // Array literal: [a, b, c] → .{ a, b, c }
-            .lbracket => return try self.parseArrayLiteral(),
+            .lbracket => {
+                const text = try self.parseArrayLiteral();
+                return .{ .text = text, .ty = .unknown };
+            },
 
             else => {
                 if (self.curKind() != .eof) {
                     const text = self.curText();
                     self.advance();
-                    return try self.alloc.dupe(u8, text);
+                    return .{ .text = try self.alloc.dupe(u8, text), .ty = .unknown };
                 }
-                return try self.alloc.dupe(u8, "");
+                return .{ .text = try self.alloc.dupe(u8, ""), .ty = .unknown };
             },
         }
+    }
+
+    /// Resolve the type of a variable from the registry or by name heuristics.
+    fn resolveVarType(self: *Parser, name: []const u8) ExprType {
+        // First check the explicit registry
+        if (self.var_types) |vt| {
+            if (vt.get(name)) |ty| return ty;
+        }
+
+        // Heuristic: well-known variable names in layout code
+        // Short loop vars (i, j, k) → usize
+        if (name.len == 1 and name[0] >= 'a' and name[0] <= 'z') {
+            return switch (name[0]) {
+                'i', 'j', 'k', 'n' => .usize_t,
+                else => .unknown,
+            };
+        }
+
+        // camelCase names that suggest counts/indices → usize
+        if (containsAny(name, &.{
+            "count", "Count", "idx", "Idx", "index", "Index",
+            "num", "Num", "Lines", "Items", "Passes",
+            "depth", "Depth", "Len", "Start", "start",
+        })) return .usize_t;
+
+        // ALL_CAPS → usize (constants like LAYOUT_BUDGET)
+        if (isAllCaps(name) and name.len > 1) return .usize_t;
+
+        return .unknown;
     }
 
     fn parseObjectLiteral(self: *Parser) Error![]const u8 {
@@ -617,7 +940,7 @@ const Parser = struct {
                     const val = try self.parseTernary();
                     self.context = saved;
                     const snake = try camelToSnake(self.alloc, key);
-                    try fields.append(self.alloc, try std.fmt.allocPrint(self.alloc, ".{s} = {s}", .{ snake, val }));
+                    try fields.append(self.alloc, try std.fmt.allocPrint(self.alloc, ".{s} = {s}", .{ snake, val.text }));
                 } else {
                     // Shorthand: { r } → .{ .r = r }
                     const snake = try camelToSnake(self.alloc, key);
@@ -641,7 +964,8 @@ const Parser = struct {
         self.context = .argument;
 
         while (self.curKind() != .rbracket and self.curKind() != .eof) {
-            try elems.append(self.alloc, try self.parseTernary());
+            const val = try self.parseTernary();
+            try elems.append(self.alloc, val.text);
             if (self.curKind() == .comma) self.advance();
         }
         self.context = saved;
@@ -650,6 +974,154 @@ const Parser = struct {
         return try std.fmt.allocPrint(self.alloc, ".{{ {s} }}", .{try joinArgs(self.alloc, elems.items)});
     }
 };
+
+// ── Type resolution helpers ────────────────────────────────────────────
+
+/// Resolve the type of a known struct field by its snake_case name.
+fn resolveFieldType(field_name: []const u8) ExprType {
+    // .len → usize
+    if (std.mem.eql(u8, field_name, "len")) return .usize_t;
+
+    // u16 fields
+    if (std.mem.eql(u8, field_name, "font_size") or
+        std.mem.eql(u8, field_name, "number_of_lines"))
+        return .u16_t;
+
+    // i16 fields
+    if (std.mem.eql(u8, field_name, "z_index")) return .i16_t;
+
+    // u8 fields
+    if (std.mem.eql(u8, field_name, "input_id")) return .u8_t;
+
+    // bool fields
+    if (std.mem.eql(u8, field_name, "no_wrap")) return .bool_t;
+
+    // Computed rect fields (always f32)
+    if (std.mem.eql(u8, field_name, "x") or
+        std.mem.eql(u8, field_name, "y") or
+        std.mem.eql(u8, field_name, "w") or
+        std.mem.eql(u8, field_name, "h"))
+        return .f32_t;
+
+    // f32 style fields (non-optional)
+    const f32_fields = [_][]const u8{
+        "flex_grow",       "gap",
+        "padding",         "margin",
+        "border_radius",   "border_width",     "opacity",
+        "rotation",        "scale_x",          "scale_y",
+        "shadow_offset_x", "shadow_offset_y",  "shadow_blur",
+        "letter_spacing",  "line_height",
+        "scroll_x",       "scroll_y",          "content_height",
+        // TextMetrics
+        "width",           "height",            "ascent",
+    };
+    for (f32_fields) |f| {
+        if (std.mem.eql(u8, field_name, f)) return .f32_t;
+    }
+
+    // ?f32 style fields (optional) — these are genuinely optional in the struct.
+    // In arithmetic, they fall through to the asF32() fallback which handles
+    // optionals at runtime. The stmtgen null-narrowing adds .? in null-guarded
+    // blocks, converting them to f32 naturally.
+    const opt_f32_fields = [_][]const u8{
+        "padding_left",    "padding_right",    "padding_top",     "padding_bottom",
+        "margin_left",     "margin_right",     "margin_top",      "margin_bottom",
+        "min_width",       "max_width",        "min_height",      "max_height",
+        "flex_basis",      "flex_shrink",      "aspect_ratio",
+        "top",             "left",             "right",           "bottom",
+        "_flex_w",         "_stretch_h",       "_parent_inner_w", "_parent_inner_h",
+    };
+    for (opt_f32_fields) |f| {
+        if (std.mem.eql(u8, field_name, f)) return .opt_f32_t;
+    }
+
+    // Enum fields
+    const enum_fields = [_][]const u8{
+        "flex_direction", "justify_content", "align_items", "align_self",
+        "flex_wrap",      "position",        "display",     "overflow",
+        "text_align",     "code_language",   "gradient_direction",
+        "devtools_viz",
+    };
+    for (enum_fields) |f| {
+        if (std.mem.eql(u8, field_name, f)) return .enum_t;
+    }
+
+    // String fields
+    if (std.mem.eql(u8, field_name, "text") or
+        std.mem.eql(u8, field_name, "image_src") or
+        std.mem.eql(u8, field_name, "placeholder") or
+        std.mem.eql(u8, field_name, "debug_name") or
+        std.mem.eql(u8, field_name, "test_id") or
+        std.mem.eql(u8, field_name, "canvas_type"))
+        return .string_t;
+
+    // Struct fields
+    if (std.mem.eql(u8, field_name, "style") or
+        std.mem.eql(u8, field_name, "computed") or
+        std.mem.eql(u8, field_name, "handlers") or
+        std.mem.eql(u8, field_name, "background_color") or
+        std.mem.eql(u8, field_name, "border_color") or
+        std.mem.eql(u8, field_name, "text_color") or
+        std.mem.eql(u8, field_name, "gradient_color_end") or
+        std.mem.eql(u8, field_name, "shadow_color"))
+        return .struct_t;
+
+    return .unknown;
+}
+
+/// Resolve the return type of a known function call.
+fn resolveCallReturnType(callee: []const u8) ExprType {
+    // Padding/margin helpers → f32
+    const f32_funcs = [_][]const u8{
+        "pad_left", "pad_right", "pad_top", "pad_bottom",
+        "mar_left", "mar_right", "mar_top", "mar_bottom",
+        "clamp_val",
+        "estimate_intrinsic_width", "estimate_intrinsic_height",
+    };
+    for (f32_funcs) |f| {
+        if (std.mem.eql(u8, callee, f)) return .f32_t;
+    }
+
+    // Nullable return
+    if (std.mem.eql(u8, callee, "resolve_maybe_pct")) return .opt_f32_t;
+
+    // Struct returns
+    if (std.mem.eql(u8, callee, "measure_node_text") or
+        std.mem.eql(u8, callee, "measure_node_text_w") or
+        std.mem.eql(u8, callee, "measure_node_image") or
+        std.mem.eql(u8, callee, "rgb") or
+        std.mem.eql(u8, callee, "rgba"))
+        return .struct_t;
+
+    return .unknown;
+}
+
+/// Map TS type name to ExprType.
+fn mapTsTypeToExprType(ts_type: []const u8) ExprType {
+    if (std.mem.eql(u8, ts_type, "number")) return .f32_t;
+    if (std.mem.eql(u8, ts_type, "u8")) return .u8_t;
+    if (std.mem.eql(u8, ts_type, "u16")) return .u16_t;
+    if (std.mem.eql(u8, ts_type, "i16")) return .i16_t;
+    if (std.mem.eql(u8, ts_type, "i32")) return .usize_t;
+    if (std.mem.eql(u8, ts_type, "u32")) return .usize_t;
+    if (std.mem.eql(u8, ts_type, "boolean")) return .bool_t;
+    if (std.mem.eql(u8, ts_type, "string")) return .string_t;
+    return .unknown;
+}
+
+/// Get the Zig type string for an ExprType (for cast expressions).
+fn zigTypeStr(ty: ExprType) []const u8 {
+    return switch (ty) {
+        .f32_t, .float_lit => "f32",
+        .usize_t => "usize",
+        .u16_t => "u16",
+        .i16_t => "i16",
+        .u8_t => "u8",
+        .bool_t => "bool",
+        .opt_f32_t => "?f32",
+        else => "f32",
+    };
+}
 
 // ── Helpers ────────────────────────────────────────────────────────────
 
@@ -700,6 +1172,22 @@ fn lowerFirst(alloc: std.mem.Allocator, input: []const u8) ![]const u8 {
 pub fn camelToSnake(alloc: std.mem.Allocator, input: []const u8) ![]const u8 {
     // Delegate to typegen's version which handles Zig reserved keyword escaping
     return typegen.camelToSnake(alloc, input);
+}
+
+/// Check if name contains any of the given substrings.
+fn containsAny(name: []const u8, needles: []const []const u8) bool {
+    for (needles) |needle| {
+        if (std.mem.indexOf(u8, name, needle) != null) return true;
+    }
+    return false;
+}
+
+/// Check if a name is all uppercase (A-Z and _).
+fn isAllCaps(name: []const u8) bool {
+    for (name) |c| {
+        if (c >= 'a' and c <= 'z') return false;
+    }
+    return name.len > 0;
 }
 
 /// Convert `template ${expr}` to std.fmt.comptimePrint("template {s}", .{ expr })
@@ -795,9 +1283,9 @@ test "null coalescing with property" {
 }
 
 test "null comparison" {
-    try testExpr("val === null", "(val == null)");
-    try testExpr("val !== null", "(val != null)");
-    try testExpr("x !== undefined", "(x != null)");
+    try testExpr("val === null", "val == null");
+    try testExpr("val !== null", "val != null");
+    try testExpr("x !== undefined", "x != null");
 }
 
 test "object literal" {
@@ -824,19 +1312,44 @@ test "ternary" {
 }
 
 test "logical operators" {
-    try testExpr("a && b", "(a and b)");
-    try testExpr("a || b", "(a or b)");
+    try testExpr("a && b", "a and b");
+    try testExpr("a || b", "a or b");
 }
 
-test "arithmetic" {
-    try testExpr("a + b", "(a + b)");
-    try testExpr("a * b + c", "((a * b) + c)");
-    try testExpr("a + b * c", "(a + (b * c))");
+test "arithmetic with unknown types uses asF32 fallback" {
+    try testExpr("a + b", "asF32(a) + asF32(b)");
+    try testExpr("a * b + c", "asF32(asF32(a) * asF32(b)) + asF32(c)");
 }
 
-test "comparison" {
-    try testExpr("a < b", "(a < b)");
-    try testExpr("a >= b", "(a >= b)");
+test "comparison with unknown types uses asF32 fallback" {
+    try testExpr("a < b", "asF32(a) < asF32(b)");
+    try testExpr("a >= b", "asF32(a) >= asF32(b)");
+}
+
+test "arithmetic with known f32 fields no cast" {
+    // s.width is f32, s.gap is f32 → no cast
+    try testExpr("s.width + s.gap", "s.width + s.gap");
+}
+
+test "comparison with known fields no cast" {
+    // s.gap is f32, both sides same → no cast
+    try testExpr("s.gap > s.padding", "s.gap > s.padding");
+}
+
+test "arithmetic with int literal coercion" {
+    // integer literal coerces to f32 partner
+    try testExpr("s.gap * 2", "s.gap * 2");
+    try testExpr("1 + s.width", "1 + s.width");
+}
+
+test "comparison int literal coercion" {
+    try testExpr("s.gap > 0", "s.gap > 0");
+    try testExpr("node.children.length > 1", "node.children.len > 1");
+}
+
+test "mixed f32 and usize casts correctly" {
+    // .len is usize, s.gap is f32 → cast the usize side
+    try testExpr("s.gap * node.children.length", "s.gap * @as(f32, @floatFromInt(node.children.len))");
 }
 
 test "unary" {
@@ -891,7 +1404,7 @@ test "null and undefined" {
 }
 
 test "parenthesized" {
-    try testExpr("(a + b)", "((a + b))");
+    try testExpr("(a + b)", "(asF32(a) + asF32(b))");
 }
 
 test "function call" {
@@ -908,7 +1421,7 @@ test "template literal simple" {
 }
 
 test "comparison chain with logical" {
-    try testExpr("a < b && b < c", "((a < b) and (b < c))");
+    try testExpr("a < b && b < c", "asF32(a) < asF32(b) and asF32(b) < asF32(c)");
 }
 
 test "slice method" {

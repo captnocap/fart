@@ -8,6 +8,24 @@
 
 const std = @import("std");
 
+inline fn asF32(val: anytype) f32 {
+    return switch (@typeInfo(@TypeOf(val))) {
+        .int, .comptime_int => @floatFromInt(val),
+        .comptime_float => val,
+        .float => if (@TypeOf(val) == f32) val else @floatCast(val),
+        .optional => blk: {
+            const v = val orelse 0;
+            break :blk switch (@typeInfo(@TypeOf(v))) {
+                .int, .comptime_int => @as(f32, @floatFromInt(v)),
+                .comptime_float => @as(f32, v),
+                .float => if (@TypeOf(v) == f32) v else @floatCast(v),
+                else => @compileError("asF32: unsupported optional inner type"),
+            };
+        },
+        else => @compileError("asF32: unsupported type"),
+    };
+}
+
 // ── Imports ────────────────────────────────────────
 const events = @import("events.zig");
 const EventHandler = events.EventHandler;
@@ -26,10 +44,17 @@ pub const CodeLanguage = enum { none, zig, type_script, json, bash, markdown, pl
 pub const GradientDirection = enum { none, vertical, horizontal };
 pub const DevtoolsViz = enum { none, sparkline, wireframe, node_tree, inspector_overlay };
 pub const Color = struct {
-    r: f32 = 0,
-    g: f32 = 0,
-    b: f32 = 0,
-    a: f32 = 0,
+    r: u8 = 0,
+    g: u8 = 0,
+    b: u8 = 0,
+    a: u8 = 0,
+
+    pub fn rgb(r: u8, g: u8, b: u8) Color {
+        return .{ .r = r, .g = g, .b = b, .a = 255 };
+    }
+    pub fn rgba(r: u8, g: u8, b: u8, a: u8) Color {
+        return .{ .r = r, .g = g, .b = b, .a = a };
+    }
 };
 pub const TextMetrics = struct {
     width: f32 = 0,
@@ -53,13 +78,13 @@ pub const Style = struct {
     max_width: ?f32 = null,
     min_height: ?f32 = null,
     max_height: ?f32 = null,
-    flex_direction: FlexDirection = .row,
+    flex_direction: FlexDirection = .column,
     flex_grow: f32 = 0,
     flex_shrink: ?f32 = null,
     flex_basis: ?f32 = null,
     flex_wrap: FlexWrap = .no_wrap,
     justify_content: JustifyContent = .start,
-    align_items: AlignItems = .start,
+    align_items: AlignItems = .stretch,
     align_self: AlignSelf = .auto,
     gap: f32 = 0,
     position: Position = .relative,
@@ -83,38 +108,47 @@ pub const Style = struct {
     text_align: TextAlign = .left,
     background_color: ?Color = null,
     border_radius: f32 = 0,
-    opacity: f32 = 0,
+    opacity: f32 = 1.0,
     rotation: f32 = 0,
-    scale_x: f32 = 0,
-    scale_y: f32 = 0,
+    scale_x: f32 = 1.0,
+    scale_y: f32 = 1.0,
     border_width: f32 = 0,
     border_color: ?Color = null,
-    z_index: f32 = 0,
+    z_index: i16 = 0,
     gradient_color_end: ?Color = null,
     gradient_direction: GradientDirection = .none,
     shadow_offset_x: f32 = 0,
     shadow_offset_y: f32 = 0,
     shadow_blur: f32 = 0,
     shadow_color: ?Color = null,
+
+    pub fn padLeft(self: Style) f32 { return self.padding_left orelse self.padding; }
+    pub fn padRight(self: Style) f32 { return self.padding_right orelse self.padding; }
+    pub fn padTop(self: Style) f32 { return self.padding_top orelse self.padding; }
+    pub fn padBottom(self: Style) f32 { return self.padding_bottom orelse self.padding; }
+    pub fn marLeft(self: Style) f32 { return self.margin_left orelse self.margin; }
+    pub fn marRight(self: Style) f32 { return self.margin_right orelse self.margin; }
+    pub fn marTop(self: Style) f32 { return self.margin_top orelse self.margin; }
+    pub fn marBottom(self: Style) f32 { return self.margin_bottom orelse self.margin; }
 };
 pub const Node = struct {
-    style: Style,
-    children: []Node,
-    computed: LayoutRect,
+    style: Style = .{},
+    children: []Node = &.{},
+    computed: LayoutRect = .{},
     text: ?[]const u8 = null,
-    font_size: f32 = 0,
+    font_size: u16 = 16,
     text_color: ?Color = null,
     letter_spacing: f32 = 0,
     line_height: f32 = 0,
-    number_of_lines: f32 = 0,
+    number_of_lines: u16 = 0,
     no_wrap: bool = false,
     code_language: CodeLanguage = .none,
     image_src: ?[]const u8 = null,
-    input_id: ?f32 = null,
+    input_id: ?u8 = null,
     placeholder: ?[]const u8 = null,
     debug_name: ?[]const u8 = null,
     test_id: ?[]const u8 = null,
-    handlers: EventHandler,
+    handlers: EventHandler = .{},
     scroll_x: f32 = 0,
     scroll_y: f32 = 0,
     content_height: f32 = 0,
@@ -125,224 +159,930 @@ pub const Node = struct {
     _parent_inner_w: ?f32 = null,
     _parent_inner_h: ?f32 = null,
 };
-pub const MeasureTextFn = *const fn (text: []const u8, font_size: f32, max_width: f32, letter_spacing: f32, line_height: f32, max_lines: f32, no_wrap: bool) TextMetrics;
+pub const MeasureTextFn = *const fn (text: []const u8, font_size: u16, max_width: f32, letter_spacing: f32, line_height: f32, max_lines: u16, no_wrap: bool) TextMetrics;
 pub const MeasureImageFn = *const fn (path: []const u8) ImageDims;
 
 // ── Module state ───────────────────────────────────
-var measure_fn: ?MeasureTextFn = null;
-var measure_image_fn: ?MeasureImageFn = null;
+var measureFn: ?MeasureTextFn = null;
+var measureImageFn: ?MeasureImageFn = null;
 const LAYOUT_BUDGET: usize = 100000;
-var layout_count: usize = 0;
+var layoutCount: usize = 0;
 
 // ── Functions ──────────────────────────────────────
 
-fn rgb(r: f32, g: f32, b: f32) Color {
-    // TODO: return { r , g , b , a : 255}
+pub fn hitTest(node: *Node, mx: f32, my: f32) ?Node {
+    if (node.style.display == .none) {
+        return null;
+    }
+    var i = node.children.len;
+    while (i > 0) {
+        i -= 1;
+        const hit = &hitTest(node.children[@intCast(i)], mx, my);
+        if (hit != null) {
+            return hit.?;
+        }
+    }
+    if (hasHandlers(node.handlers) or node.input_id != null or node.canvas_type != null) {
+        const r = node.computed;
+        if (asF32(mx) >= asF32(r.x) and asF32(mx) < asF32(r.x + r.w) and asF32(my) >= asF32(r.y) and asF32(my) < asF32(r.y + r.h)) {
+            return node;
+        }
+    }
+    return null;
 }
 
-fn rgba(r: f32, g: f32, b: f32, a: f32) Color {
-    // TODO: return { r , g , b , a}
+fn hasHandlers(h: EventHandler) bool {
+    return h.on_press != null or h.on_hover_enter != null or h.on_hover_exit != null or h.on_key != null or h.on_change_text != null or h.on_scroll != null or h.on_right_click != null;
+}
+
+pub fn hitTestText(node: *Node, mx: f32, my: f32) ?Node {
+    if (node.style.display == .none) {
+        return null;
+    }
+    var i = node.children.len;
+    while (i > 0) {
+        i -= 1;
+        const hit = &hitTestText(node.children[@intCast(i)], mx, my);
+        if (hit != null) {
+            return hit.?;
+        }
+    }
+    if (node.text != null) {
+        const r = node.computed;
+        if (asF32(mx) >= asF32(r.x) and asF32(mx) < asF32(r.x + r.w) and asF32(my) >= asF32(r.y) and asF32(my) < asF32(r.y + r.h)) {
+            return node;
+        }
+    }
+    return null;
+}
+
+pub fn findScrollContainer(node: *Node, mx: f32, my: f32) ?Node {
+    if (node.style.display == .none) {
+        return null;
+    }
+    const r = node.computed;
+    if (asF32(mx) < asF32(r.x) or asF32(mx) >= asF32(r.x + r.w) or asF32(my) < asF32(r.y) or asF32(my) >= asF32(r.y + r.h)) {
+        return null;
+    }
+    var i = node.children.len;
+    while (i > 0) {
+        i -= 1;
+        const hit = &findScrollContainer(node.children[@intCast(i)], mx, my);
+        if (hit != null) {
+            return hit.?;
+        }
+    }
+    if (node.style.overflow == .scroll) {
+        return node;
+    }
+    return null;
+}
+
+fn rgb(r: u8, g: u8, b: u8) Color {
+    return .{ .r = r, .g = g, .b = b, .a = 255 };
+}
+
+fn rgba(r: u8, g: u8, b: u8, a: u8) Color {
+    return .{ .r = r, .g = g, .b = b, .a = a };
 }
 
 pub fn setMeasureFn(f: ?MeasureTextFn) void {
-    // TODO: measureFn = f
+    measureFn = f;
 }
 
 pub fn setMeasureImageFn(f: ?MeasureImageFn) void {
-    // TODO: measureImageFn = f
+    measureImageFn = f;
 }
 
-fn padLeft(s: *Style) f32 {
-    // TODO: return s . paddingLeft ?? s . padding
+fn padLeft(s: Style) f32 {
+    return s.padding_left orelse s.padding;
 }
 
-fn padRight(s: *Style) f32 {
-    // TODO: return s . paddingRight ?? s . padding
+fn padRight(s: Style) f32 {
+    return s.padding_right orelse s.padding;
 }
 
-fn padTop(s: *Style) f32 {
-    // TODO: return s . paddingTop ?? s . padding
+fn padTop(s: Style) f32 {
+    return s.padding_top orelse s.padding;
 }
 
-fn padBottom(s: *Style) f32 {
-    // TODO: return s . paddingBottom ?? s . padding
+fn padBottom(s: Style) f32 {
+    return s.padding_bottom orelse s.padding;
 }
 
-fn marLeft(s: *Style) f32 {
-    // TODO: return s . marginLeft ?? s . margin
+fn marLeft(s: Style) f32 {
+    return s.margin_left orelse s.margin;
 }
 
-fn marRight(s: *Style) f32 {
-    // TODO: return s . marginRight ?? s . margin
+fn marRight(s: Style) f32 {
+    return s.margin_right orelse s.margin;
 }
 
-fn marTop(s: *Style) f32 {
-    // TODO: return s . marginTop ?? s . margin
+fn marTop(s: Style) f32 {
+    return s.margin_top orelse s.margin;
 }
 
-fn marBottom(s: *Style) f32 {
-    // TODO: return s . marginBottom ?? s . margin
+fn marBottom(s: Style) f32 {
+    return s.margin_bottom orelse s.margin;
 }
 
 fn resolveMaybePct(val: ?f32, parent: f32) ?f32 {
-    // TODO: if ( val == = null ) return null
-    // TODO: if ( val < 0 ) return ( - val ) * parent
-    // TODO: return val
+    if (val == null) {
+        return null;
+    }
+    if (val.? < 0) {
+        return asF32((-val.?)) * asF32(parent);
+    }
+    return val.?;
 }
 
-fn clampVal(val: f32, min_val: ?f32, max_val: ?f32) f32 {
-    // TODO: let v = val
-    // TODO: if ( minVal != = null && v < minVal ) v = minVal
-    // TODO: if ( maxVal != = null && v > maxVal ) v = maxVal
-    // TODO: return v
+fn clampVal(val: f32, minVal: ?f32, maxVal: ?f32) f32 {
+    var v = val;
+    if (minVal != null and asF32(v) < asF32(minVal.?)) {
+        v = minVal.?;
+    }
+    if (maxVal != null and asF32(v) > asF32(maxVal.?)) {
+        v = maxVal.?;
+    }
+    return v;
 }
 
 fn measureNodeImage(node: *Node) ImageDims {
-    // TODO: if ( node . imageSrc != = null && measureImageFn != = null ) { return measureImageFn ( node . imageSrc ) ;}
-    // TODO: return { width : 0 , height : 0}
+    if (node.image_src != null and measureImageFn != null) {
+        return measureImageFn.?(node.image_src.?);
+    }
+    return .{ .width = 0, .height = 0 };
 }
 
 fn measureNodeText(node: *Node) TextMetrics {
-    // TODO: return measureNodeTextW ( node , 0 )
+    return measureNodeTextW(node, 0);
 }
 
-fn measureNodeTextW(node: *Node, max_width: f32) TextMetrics {
-    // TODO: if ( node . text != = null && measureFn != = null ) { return measureFn ( node . text , node . fontSize , maxWidth , node . letterSpacing , node . lineHeight , node . numberOfLines , node . noWrap ) ;}
-    // TODO: return { width : 0 , height : 0 , ascent : 0}
+fn measureNodeTextW(node: *Node, maxWidth: f32) TextMetrics {
+    if (node.text != null and measureFn != null) {
+        return measureFn.?(node.text.?, node.font_size, maxWidth, node.letter_spacing, node.line_height, node.number_of_lines, node.no_wrap);
+    }
+    return .{ .width = 0, .height = 0, .ascent = 0 };
 }
 
 fn estimateIntrinsicWidth(node: *Node) f32 {
-    // TODO: const s = node . style
-    // TODO: if ( s . width != = null ) return s . width
-    // TODO: const pl = padLeft ( s )
-    // TODO: const pr = padRight ( s )
-    // TODO: const g = s . gap
-    // TODO: const isRow = s . flexDirection == = FlexDirection . Row
-    // TODO: if ( node . text != = null ) { const m = measureNodeText ( node ) ; return m . width + pl + pr ;}
-    // TODO: if ( node . imageSrc != = null ) { const dims = measureNodeImage ( node ) ; return dims . width + pl + pr ;}
-    // TODO: if ( node . children . length == = 0 ) return pl + pr
-    // TODO: let total = 0
-    // TODO: let maxCross = 0
-    // TODO: let visibleCount = 0
-    // TODO: for ( const child of node . children ) { if ( child . style . display == = Display . None ) continue ; const cw = estimateIntrinsicWidth ( child ) ; const cmL = marLeft ( child . style ) ; const cmR = marRight ( child . style ) ; if ( isRow ) { total + = cw + cmL + cmR ; visibleCount + = 1 ;} else { const cross = cw + cmL + cmR ; if ( cross > maxCross ) maxCross = cross ;}}
-    // TODO: if ( isRow ) { const gaps = visibleCount > 1 ? g * ( visibleCount - 1 ) : 0 ; return total + gaps + pl + pr ;}
-    // TODO: return maxCross + pl + pr
+    const s = node.style;
+    if (s.width != null) {
+        return s.width.?;
+    }
+    const pl = padLeft(s);
+    const pr = padRight(s);
+    const g = s.gap;
+    const isRow = s.flex_direction == .row;
+    if (node.text != null) {
+        const m = measureNodeText(node);
+        return asF32(asF32(m.width) + asF32(pl)) + asF32(pr);
+    }
+    if (node.image_src != null) {
+        const dims = measureNodeImage(node);
+        return asF32(asF32(dims.width) + asF32(pl)) + asF32(pr);
+    }
+    if (node.children.len == 0) {
+        return asF32(pl) + asF32(pr);
+    }
+    var total: f32 = 0;
+    var maxCross: f32 = 0;
+    var visibleCount: usize = 0;
+    for (node.children) |*child| {
+        if (child.style.display == .none) {
+            continue;
+        }
+        const cw = estimateIntrinsicWidth(child);
+        const cmL = marLeft(child.style);
+        const cmR = marRight(child.style);
+        if (isRow) {
+            total += asF32(asF32(cw) + asF32(cmL)) + asF32(cmR);
+            visibleCount += 1;
+        } else {
+            const cross = asF32(asF32(cw) + asF32(cmL)) + asF32(cmR);
+            if (asF32(cross) > asF32(maxCross)) {
+                maxCross = cross;
+            }
+        }
+    }
+    if (isRow) {
+        const gaps = if (visibleCount > 1) asF32(g) * asF32((visibleCount - 1)) else 0;
+        return asF32(asF32(asF32(total) + asF32(gaps)) + asF32(pl)) + asF32(pr);
+    }
+    return asF32(asF32(maxCross) + asF32(pl)) + asF32(pr);
 }
 
-fn estimateIntrinsicHeight(node: *Node, available_width: f32) f32 {
-    // TODO: const s = node . style
-    // TODO: if ( s . height != = null ) return s . height
-    // TODO: if ( s . aspectRatio != = null && s . aspectRatio > 0 && s . width != = null ) { return s . width / s . aspectRatio ;}
-    // TODO: const pt = padTop ( s )
-    // TODO: const pb = padBottom ( s )
-    // TODO: const pl = padLeft ( s )
-    // TODO: const pr = padRight ( s )
-    // TODO: const g = s . gap
-    // TODO: const isRow = s . flexDirection == = FlexDirection . Row
-    // TODO: const innerW = s . width != = null ? s . width - pl - pr : availableWidth > 0 ? availableWidth - pl - pr : 0
-    // TODO: if ( node . text != = null ) { const m = measureNodeTextW ( node , innerW ) ; return m . height + pt + pb ;}
-    // TODO: if ( node . imageSrc != = null ) { const dims = measureNodeImage ( node ) ; return dims . height + pt + pb ;}
-    // TODO: if ( node . inputId != = null ) { return node . fontSize + pt + pb ;}
-    // TODO: if ( node . children . length == = 0 ) return pt + pb
-    // TODO: let total = 0
-    // TODO: let maxCross = 0
-    // TODO: let visibleCount = 0
-    // TODO: for ( const child of node . children ) { if ( child . style . display == = Display . None ) continue ; const ch = estimateIntrinsicHeight ( child , innerW ) ; const cmT = marTop ( child . style ) ; const cmB = marBottom ( child . style ) ; if ( ! isRow ) { total + = ch + cmT + cmB ; visibleCount + = 1 ;} else { const cross = ch + cmT + cmB ; if ( cross > maxCross ) maxCross = cross ;}}
-    // TODO: if ( ! isRow ) { const gaps = visibleCount > 1 ? g * ( visibleCount - 1 ) : 0 ; return total + gaps + pt + pb ;}
-    // TODO: // Wrapped rows: simulate line-breaking if ( s . flexWrap == = FlexWrap . Wrap && innerW > 0 ) { let lineMain = 0 ; let lineCrossMax = 0 ; let totalCross = 0 ; let itemsOnLine = 0 ; let lineCount = 0 ; for ( const child of node . children ) { if ( child . style . display == = Display . None ) continue ; if ( child . style . position == = Position . Absolute ) continue ; const cw = estimateIntrinsicWidth ( child ) ; const cmL = marLeft ( child . style ) ; const cmR = marRight ( child . style ) ; const itemMain = cw + cmL + cmR ; const gapBefore = itemsOnLine > 0 ? g : 0 ; if ( itemsOnLine > 0 && ( lineMain + gapBefore + itemMain ) > innerW ) { totalCross + = lineCrossMax ; lineCount + = 1 ; lineMain = itemMain ; lineCrossMax = estimateIntrinsicHeight ( child , innerW ) + marTop ( child . style ) + marBottom ( child . style ) ; itemsOnLine = 1 ;} else { lineMain + = gapBefore + itemMain ; const chCross = estimateIntrinsicHeight ( child , innerW ) + marTop ( child . style ) + marBottom ( child . style ) ; if ( chCross > lineCrossMax ) lineCrossMax = chCross ; itemsOnLine + = 1 ;}} if ( itemsOnLine > 0 ) { totalCross + = lineCrossMax ; lineCount + = 1 ;} const lineGaps = lineCount > 1 ? g * ( lineCount - 1 ) : 0 ; return totalCross + lineGaps + pt + pb ;}
-    // TODO: return maxCross + pt + pb
+fn estimateIntrinsicHeight(node: *Node, availableWidth: f32) f32 {
+    const s = node.style;
+    if (s.height != null) {
+        return s.height.?;
+    }
+    if (s.aspect_ratio != null and s.aspect_ratio.? > 0 and s.width != null) {
+        return asF32(s.width.?) / asF32(s.aspect_ratio.?);
+    }
+    const pt = padTop(s);
+    const pb = padBottom(s);
+    const pl = padLeft(s);
+    const pr = padRight(s);
+    const g = s.gap;
+    const isRow = s.flex_direction == .row;
+    const innerW = if (s.width != null) asF32(asF32(s.width.?) - asF32(pl)) - asF32(pr) else if (availableWidth > 0) asF32(asF32(availableWidth) - asF32(pl)) - asF32(pr) else 0;
+    if (node.text != null) {
+        const m = measureNodeTextW(node, innerW);
+        return asF32(asF32(m.height) + asF32(pt)) + asF32(pb);
+    }
+    if (node.image_src != null) {
+        const dims = measureNodeImage(node);
+        return asF32(asF32(dims.height) + asF32(pt)) + asF32(pb);
+    }
+    if (node.input_id != null) {
+        return asF32(asF32(node.font_size) + asF32(pt)) + asF32(pb);
+    }
+    if (node.children.len == 0) {
+        return asF32(pt) + asF32(pb);
+    }
+    var total: f32 = 0;
+    var maxCross: f32 = 0;
+    var visibleCount: usize = 0;
+    for (node.children) |*child| {
+        if (child.style.display == .none) {
+            continue;
+        }
+        const ch = estimateIntrinsicHeight(child, innerW);
+        const cmT = marTop(child.style);
+        const cmB = marBottom(child.style);
+        if (!isRow) {
+            total += asF32(asF32(ch) + asF32(cmT)) + asF32(cmB);
+            visibleCount += 1;
+        } else {
+            const cross = asF32(asF32(ch) + asF32(cmT)) + asF32(cmB);
+            if (asF32(cross) > asF32(maxCross)) {
+                maxCross = cross;
+            }
+        }
+    }
+    if (!isRow) {
+        const gaps = if (visibleCount > 1) asF32(g) * asF32((visibleCount - 1)) else 0;
+        return asF32(asF32(asF32(total) + asF32(gaps)) + asF32(pt)) + asF32(pb);
+    }
+    if (s.flex_wrap == .wrap and innerW > 0) {
+        var lineMain: f32 = 0;
+        var lineCrossMax: f32 = 0;
+        var totalCross: f32 = 0;
+        var itemsOnLine: usize = 0;
+        var lineCount: usize = 0;
+        for (node.children) |*child| {
+            if (child.style.display == .none) {
+                continue;
+            }
+            if (child.style.position == .absolute) {
+                continue;
+            }
+            const cw = estimateIntrinsicWidth(child);
+            const cmL = marLeft(child.style);
+            const cmR = marRight(child.style);
+            const itemMain = asF32(asF32(cw) + asF32(cmL)) + asF32(cmR);
+            const gapBefore = if (itemsOnLine > 0) g else 0;
+            if (itemsOnLine > 0 and asF32((asF32(asF32(lineMain) + asF32(gapBefore)) + asF32(itemMain))) > asF32(innerW)) {
+                totalCross += lineCrossMax;
+                lineCount += 1;
+                lineMain = itemMain;
+                lineCrossMax = asF32(asF32(estimateIntrinsicHeight(child, innerW)) + asF32(marTop(child.style))) + asF32(marBottom(child.style));
+                itemsOnLine = 1;
+            } else {
+                lineMain += asF32(gapBefore) + asF32(itemMain);
+                const chCross = asF32(asF32(estimateIntrinsicHeight(child, innerW)) + asF32(marTop(child.style))) + asF32(marBottom(child.style));
+                if (asF32(chCross) > asF32(lineCrossMax)) {
+                    lineCrossMax = chCross;
+                }
+                itemsOnLine += 1;
+            }
+        }
+        if (itemsOnLine > 0) {
+            totalCross += lineCrossMax;
+            lineCount += 1;
+        }
+        const lineGaps = if (lineCount > 1) asF32(g) * asF32((lineCount - 1)) else 0;
+        return asF32(asF32(asF32(totalCross) + asF32(lineGaps)) + asF32(pt)) + asF32(pb);
+    }
+    return asF32(asF32(maxCross) + asF32(pt)) + asF32(pb);
 }
 
 fn computeMinContentW(node: *Node) f32 {
-    // TODO: const s = node . style
-    // TODO: const pl = padLeft ( s )
-    // TODO: const pr = padRight ( s )
-    // TODO: if ( s . width != = null ) return s . width
-    // TODO: if ( node . text != = null && measureFn != = null ) { let maxWordW = 0 ; let i = 0 ; while ( i < node . text . length ) { while ( i < node . text . length && ( node . text [ i ] == = ' ' || node . text [ i ] == = '\n' ) ) i + + ; if ( i >= node . text . length ) break ; const wordStart = i ; while ( i < node . text . length && node . text [ i ] != = ' ' && node . text [ i ] != = '\n' ) i + + ; const word = node . text . slice ( wordStart , i ) ; const m = measureFn ( word , node . fontSize , 0 , node . letterSpacing , node . lineHeight , node . numberOfLines , false ) ; if ( m . width > maxWordW ) maxWordW = m . width ;} return maxWordW + pl + pr ;}
-    // TODO: if ( node . children . length == = 0 ) return pl + pr
-    // TODO: const isRow = s . flexDirection == = FlexDirection . Row
-    // TODO: const g = s . gap
-    // TODO: let minW = 0
-    // TODO: let visCount = 0
-    // TODO: for ( const child of node . children ) { if ( child . style . display == = Display . None ) continue ; if ( child . style . position == = Position . Absolute ) continue ; const childMin = computeMinContentW ( child ) ; if ( isRow ) { minW + = childMin ; visCount + = 1 ;} else { if ( childMin > minW ) minW = childMin ;}}
-    // TODO: if ( isRow && visCount > 1 ) { minW + = ( visCount - 1 ) * g ;}
-    // TODO: return minW + pl + pr
+    const s = node.style;
+    const pl = padLeft(s);
+    const pr = padRight(s);
+    if (s.width != null) {
+        return s.width.?;
+    }
+    if (node.text != null and measureFn != null) {
+        var maxWordW: f32 = 0;
+        var i: usize = 0;
+        while (i < node.text.?.len) {
+            while (i < node.text.?.len and (node.text.?[@intCast(i)] == ' ' or node.text.?[@intCast(i)] == '\n')) : (i += 1) {}
+            if (i >= node.text.?.len) {
+                break;
+            }
+            const wordStart = i;
+            while (i < node.text.?.len and node.text.?[@intCast(i)] != ' ' and node.text.?[@intCast(i)] != '\n') : (i += 1) {}
+            const word = node.text.?[@intCast(wordStart)..@intCast(i)];
+            const m = measureFn.?(word, node.font_size, 0, node.letter_spacing, node.line_height, node.number_of_lines, false);
+            if (asF32(m.width) > asF32(maxWordW)) {
+                maxWordW = m.width;
+            }
+        }
+        return asF32(asF32(maxWordW) + asF32(pl)) + asF32(pr);
+    }
+    if (node.children.len == 0) {
+        return asF32(pl) + asF32(pr);
+    }
+    const isRow = s.flex_direction == .row;
+    const g = s.gap;
+    var minW: f32 = 0;
+    var visCount: usize = 0;
+    for (node.children) |*child| {
+        if (child.style.display == .none) {
+            continue;
+        }
+        if (child.style.position == .absolute) {
+            continue;
+        }
+        const childMin = computeMinContentW(child);
+        if (isRow) {
+            minW += childMin;
+            visCount += 1;
+        } else {
+            if (asF32(childMin) > asF32(minW)) {
+                minW = childMin;
+            }
+        }
+    }
+    if (isRow and visCount > 1) {
+        minW += asF32((visCount - 1)) * asF32(g);
+    }
+    return asF32(asF32(minW) + asF32(pl)) + asF32(pr);
 }
 
 pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
-    // TODO: layoutCount + = 1
-    // TODO: if ( layoutCount > LAYOUT_BUDGET ) return
-    // TODO: const s = node . style
-    // TODO: if ( s . display == = Display . None ) { node . computed = { x : px , y : py , w : 0 , h : 0} ; return ;}
-    // TODO: // ── Resolve own dimensions ────────────────────────────────────── let w : number
-    // TODO: let h : number | null = null
-    // TODO: if ( node . _flexW != = null ) { w = node . _flexW ; node . _flexW = null ;}
-    // TODO: else { const resolved = resolveMaybePct ( s . width , pw ) ; w = resolved != = null ? resolved : pw ;}
-    // TODO: w = clampVal ( w , resolveMaybePct ( s . minWidth , pw ) , resolveMaybePct ( s . maxWidth , pw ) )
-    // TODO: if ( node . _stretchH != = null ) { h = node . _stretchH ; node . _stretchH = null ;}
-    // TODO: else { h = resolveMaybePct ( s . height , ph ) ;}
-    // TODO: if ( h != = null ) { h = clampVal ( h , resolveMaybePct ( s . minHeight , ph ) , resolveMaybePct ( s . maxHeight , ph ) ) ;}
-    // TODO: // ── Aspect ratio ──────────────────────────────────────────────── if ( s . aspectRatio != = null && s . aspectRatio > 0 ) { if ( s . width != = null && s . height == = null && h == = null ) { h = w / s . aspectRatio ;} else if ( s . height != = null && s . width == = null && node . _flexW == = null ) { if ( h != = null ) { w = h * s . aspectRatio ; w = clampVal ( w , resolveMaybePct ( s . minWidth , pw ) , resolveMaybePct ( s . maxWidth , pw ) ) ;}}}
-    // TODO: // ── Padding & margins ────────────────────────────────────────── const pl = padLeft ( s )
-    // TODO: const pr = padRight ( s )
-    // TODO: const pt = padTop ( s )
-    // TODO: const pb = padBottom ( s )
-    // TODO: const ml = marLeft ( s )
-    // TODO: const mt = marTop ( s )
-    // TODO: const x = px + ml
-    // TODO: const y = py + mt
-    // TODO: const innerW = w - pl - pr
-    // TODO: const innerH = h != = null ? h - pt - pb : 9999
-    // TODO: const isRow = s . flexDirection == = FlexDirection . Row
-    // TODO: const gap = s . gap
-    // TODO: const justify = s . justifyContent
-    // TODO: const align = s . alignItems
-    // TODO: const mainSize = isRow ? innerW : innerH
-    // TODO: // ── Collect visible children ──────────────────────────────────── const MAX_CHILDREN = 512
-    // TODO: const childBasis : number [ ] = new Array ( MAX_CHILDREN )
-    // TODO: const childGrow : number [ ] = new Array ( MAX_CHILDREN )
-    // TODO: const childShrink : number [ ] = new Array ( MAX_CHILDREN )
-    // TODO: const childMainSize : number [ ] = new Array ( MAX_CHILDREN )
-    // TODO: const childCrossSize : number [ ] = new Array ( MAX_CHILDREN )
-    // TODO: const childMainMarginStart : number [ ] = new Array ( MAX_CHILDREN )
-    // TODO: const childMainMarginEnd : number [ ] = new Array ( MAX_CHILDREN )
-    // TODO: const childCrossMarginStart : number [ ] = new Array ( MAX_CHILDREN )
-    // TODO: const childCrossMarginEnd : number [ ] = new Array ( MAX_CHILDREN )
-    // TODO: const visibleIndices : number [ ] = new Array ( MAX_CHILDREN )
-    // TODO: let visibleCount = 0
-    // TODO: const absoluteIndices : number [ ] = new Array ( MAX_CHILDREN )
-    // TODO: let absoluteCount = 0
-    // TODO: for ( let i = 0
-    // TODO: i < node . children . length
-    // TODO: i + + ) { const child = node . children [ i ] ; if ( child . style . display == = Display . None ) { child . computed = { x : 0 , y : 0 , w : 0 , h : 0} ; continue ;} if ( child . style . position == = Position . Absolute ) { if ( absoluteCount < MAX_CHILDREN ) { absoluteIndices [ absoluteCount ] = i ; absoluteCount + = 1 ;} continue ;} if ( visibleCount >= MAX_CHILDREN ) break ; const cs = child . style ; const cw = resolveMaybePct ( cs . width , innerW ) ?? estimateIntrinsicWidth ( child ) ; const chVal = resolveMaybePct ( cs . height , innerH ) ?? estimateIntrinsicHeight ( child , innerW ) ; const cwClamped = clampVal ( cw , resolveMaybePct ( cs . minWidth , innerW ) , resolveMaybePct ( cs . maxWidth , innerW ) ) ; const chClamped = clampVal ( chVal , resolveMaybePct ( cs . minHeight , innerH ) , resolveMaybePct ( cs . maxHeight , innerH ) ) ; const grow = cs . flexGrow ; const shrink = cs . flexShrink ?? 1.0 ; const basis = resolveMaybePct ( cs . flexBasis , isRow ? innerW : innerH ) ?? ( isRow ? cwClamped : chClamped ) ; const cmL = marLeft ( cs ) ; const cmR = marRight ( cs ) ; const cmT = marTop ( cs ) ; const cmB = marBottom ( cs ) ; visibleIndices [ visibleCount ] = i ; childBasis [ visibleCount ] = basis ; childGrow [ visibleCount ] = grow ; childShrink [ visibleCount ] = shrink ; childMainSize [ visibleCount ] = isRow ? cwClamped : chClamped ; childCrossSize [ visibleCount ] = isRow ? chClamped : cwClamped ; childMainMarginStart [ visibleCount ] = isRow ? cmL : cmT ; childMainMarginEnd [ visibleCount ] = isRow ? cmR : cmB ; childCrossMarginStart [ visibleCount ] = isRow ? cmT : cmL ; childCrossMarginEnd [ visibleCount ] = isRow ? cmB : cmR ; visibleCount + = 1 ;}
-    // TODO: // ── Split into flex lines ────────────────────────────────────── const MAX_LINES = 64
-    // TODO: const lineStarts : number [ ] = new Array ( MAX_LINES )
-    // TODO: const lineCounts : number [ ] = new Array ( MAX_LINES )
-    // TODO: let numLines = 0
-    // TODO: if ( s . flexWrap == = FlexWrap . Wrap && visibleCount > 0 ) { let lineMain = 0 ; let lineStartIdx = 0 ; let itemsOnLine = 0 ; for ( let i = 0 ; i < visibleCount ; i + + ) { const itemMain = childBasis [ i ] + childMainMarginStart [ i ] + childMainMarginEnd [ i ] ; const gapBefore = itemsOnLine > 0 ? gap : 0 ; if ( itemsOnLine > 0 && ( lineMain + gapBefore + itemMain ) > mainSize ) { if ( numLines < MAX_LINES ) { lineStarts [ numLines ] = lineStartIdx ; lineCounts [ numLines ] = itemsOnLine ; numLines + = 1 ;} lineStartIdx = i ; lineMain = itemMain ; itemsOnLine = 1 ;} else { lineMain + = gapBefore + itemMain ; itemsOnLine + = 1 ;}} if ( itemsOnLine > 0 && numLines < MAX_LINES ) { lineStarts [ numLines ] = lineStartIdx ; lineCounts [ numLines ] = itemsOnLine ; numLines + = 1 ;}}
-    // TODO: else { lineStarts [ 0 ] = 0 ; lineCounts [ 0 ] = visibleCount ; numLines = visibleCount > 0 ? 1 : 0 ;}
-    // TODO: // ── Process each flex line ───────────────────────────────────── let crossCursor = 0
-    // TODO: let contentMainEnd = 0
-    // TODO: let contentCrossEnd = 0
-    // TODO: for ( let lineIdx = 0
-    // TODO: lineIdx < numLines
-    // TODO: lineIdx + + ) { const ls = lineStarts [ lineIdx ] ; const lc = lineCounts [ lineIdx ] ; // ── Flex distribution ───────────────────────────────────── let totalBasis = 0 ; let totalFlex = 0 ; let totalMainMargin = 0 ; for ( let i = ls ; i < ls + lc ; i + + ) { totalBasis + = childBasis [ i ] ; totalMainMargin + = childMainMarginStart [ i ] + childMainMarginEnd [ i ] ; if ( childGrow [ i ] > 0 ) totalFlex + = childGrow [ i ] ;} const lineGaps = lc > 1 ? gap * ( lc - 1 ) : 0 ; const freeSpace = mainSize - totalBasis - lineGaps - totalMainMargin ; if ( freeSpace > 0 && totalFlex > 0 ) { // Multi-pass flex-grow with min/max clamping (CSS §9.7) const frozen : boolean [ ] = new Array ( MAX_CHILDREN ) ; const savedBasis : number [ ] = new Array ( MAX_CHILDREN ) ; for ( let i = ls ; i < ls + lc ; i + + ) { frozen [ i ] = childGrow [ i ] <= 0 ; savedBasis [ i ] = childBasis [ i ] ;} let passes = 0 ; while ( passes < 10 ) { passes + = 1 ; let used = 0 ; let activeFlex = 0 ; for ( let i = ls ; i < ls + lc ; i + + ) { if ( frozen [ i ] ) { used + = childBasis [ i ] ;} else { used + = savedBasis [ i ] ; activeFlex + = childGrow [ i ] ;}} if ( activeFlex <= 0 ) break ; const space = mainSize - used - lineGaps - totalMainMargin ; if ( space <= 0 ) break ; let anyClamped = false ; for ( let i = ls ; i < ls + lc ; i + + ) { if ( frozen [ i ] ) continue ; childBasis [ i ] = savedBasis [ i ] + ( childGrow [ i ] / activeFlex ) * space ; const ci = visibleIndices [ i ] ; const csG = node . children [ ci ] . style ; const mn = resolveMaybePct ( isRow ? csG . minWidth : csG . minHeight , isRow ? innerW : innerH ) ; const mx = resolveMaybePct ( isRow ? csG . maxWidth : csG . maxHeight , isRow ? innerW : innerH ) ; const clampedVal = clampVal ( childBasis [ i ] , mn , mx ) ; if ( clampedVal != = childBasis [ i ] ) { childBasis [ i ] = clampedVal ; frozen [ i ] = true ; anyClamped = true ;}} if ( ! anyClamped ) break ;}} else if ( freeSpace < 0 ) { let totalShrinkScaled = 0 ; for ( let i = ls ; i < ls + lc ; i + + ) { totalShrinkScaled + = childShrink [ i ] * childBasis [ i ] ;} if ( totalShrinkScaled > 0 ) { const shrinkOverflow = - freeSpace ; for ( let i = ls ; i < ls + lc ; i + + ) { const amount = ( childShrink [ i ] * childBasis [ i ] / totalShrinkScaled ) * shrinkOverflow ; childBasis [ i ] - = amount ;}} // Min-content floor if ( isRow ) { for ( let i = ls ; i < ls + lc ; i + + ) { const childIdx = visibleIndices [ i ] ; const childNode = node . children [ childIdx ] ; if ( childNode . style . minWidth != = null ) continue ; const mcw = computeMinContentW ( childNode ) ; if ( childBasis [ i ] < mcw ) childBasis [ i ] = mcw ;}}} // ── Re-measure text after flex distribution ────────────── for ( let i = ls ; i < ls + lc ; i + + ) { const childIdx = visibleIndices [ i ] ; const child = node . children [ childIdx ] ; if ( child . text == = null ) continue ; if ( isRow ) { if ( child . style . height != = null ) continue ; const finalW = clampVal ( childBasis [ i ] , resolveMaybePct ( child . style . minWidth , innerW ) , resolveMaybePct ( child . style . maxWidth , innerW ) ) ; const prevW = childMainSize [ i ] ; if ( Math . abs ( finalW - prevW ) > 0.5 ) { const cpl = padLeft ( child . style ) ; const cpr = padRight ( child . style ) ; const cpt = padTop ( child . style ) ; const cpb = padBottom ( child . style ) ; const constrainW = finalW - cpl - cpr ; const m = measureNodeTextW ( child , constrainW > 0 ? constrainW : 0 ) ; childCrossSize [ i ] = clampVal ( m . height + cpt + cpb , resolveMaybePct ( child . style . minHeight , innerH ) , resolveMaybePct ( child . style . maxHeight , innerH ) ) ;}} else { const effAlign = resolveAlign ( child . style . alignSelf , align ) ; const finalW = resolveMaybePct ( child . style . width , innerW ) ?? ( effAlign == = AlignItems . Stretch ? innerW : childCrossSize [ i ] ) ; const cpl = padLeft ( child . style ) ; const cpr = padRight ( child . style ) ; const cpt = padTop ( child . style ) ; const cpb = padBottom ( child . style ) ; const constrainW = finalW - cpl - cpr ; const m = measureNodeTextW ( child , constrainW > 0 ? constrainW : 0 ) ; const newH = clampVal ( m . height + cpt + cpb , resolveMaybePct ( child . style . minHeight , innerH ) , resolveMaybePct ( child . style . maxHeight , innerH ) ) ; if ( child . style . height == = null ) { childBasis [ i ] = newH ; childMainSize [ i ] = newH ;} childCrossSize [ i ] = finalW ;}} // ── Line cross size ────────────────────────────────────── let lineCross = 0 ; for ( let i = ls ; i < ls + lc ; i + + ) { const childCross = childCrossSize [ i ] + childCrossMarginStart [ i ] + childCrossMarginEnd [ i ] ; if ( childCross > lineCross ) lineCross = childCross ;} if ( numLines == = 1 ) { if ( isRow && h != = null ) { lineCross = innerH ;} else if ( isRow && h == = null ) { const mh = resolveMaybePct ( s . minHeight , ph ) ; if ( mh != = null ) { const minInner = mh - pt - pb ; if ( minInner > lineCross ) lineCross = minInner ;}} else if ( ! isRow ) { lineCross = innerW ;}} // ── Justify content ────────────────────────────────────── let usedMain = 0 ; for ( let i = ls ; i < ls + lc ; i + + ) { usedMain + = childBasis [ i ] + childMainMarginStart [ i ] + childMainMarginEnd [ i ] ;} const freeMain = mainSize - usedMain - lineGaps ; let mainOffset = 0 ; let extraGap = 0 ; switch ( justify ) { case JustifyContent . Center : mainOffset = freeMain / 2 ; break ; case JustifyContent . End : mainOffset = freeMain ; break ; case JustifyContent . SpaceBetween : if ( lc > 1 ) extraGap = freeMain / ( lc - 1 ) ; break ; case JustifyContent . SpaceAround : if ( lc > 0 ) { extraGap = freeMain / lc ; mainOffset = extraGap / 2 ;} break ; case JustifyContent . SpaceEvenly : if ( lc > 0 ) { extraGap = freeMain / ( lc + 1 ) ; mainOffset = extraGap ;} break ; case JustifyContent . Start : break ;} // ── Position children ──────────────────────────────────── let cursor = mainOffset ; for ( let i = ls ; i < ls + lc ; i + + ) { const childIdx = visibleIndices [ i ] ; const child = node . children [ childIdx ] ; let cx : number ; let cy : number ; let cwFinal : number ; let chFinal : number ; const effAlign = resolveAlign ( child . style . alignSelf , align ) ; if ( isRow ) { cx = x + pl + cursor ; cwFinal = clampVal ( childBasis [ i ] , resolveMaybePct ( child . style . minWidth , innerW ) , resolveMaybePct ( child . style . maxWidth , innerW ) ) ; chFinal = childCrossSize [ i ] ; const crossAvail = lineCross - childCrossMarginStart [ i ] - childCrossMarginEnd [ i ] ; switch ( effAlign ) { case AlignItems . Center : cy = y + pt + crossCursor + ( crossAvail - chFinal ) / 2 ; break ; case AlignItems . End : cy = y + pt + crossCursor + crossAvail - chFinal ; break ; case AlignItems . Stretch : cy = y + pt + crossCursor ; if ( child . style . height == = null ) { chFinal = clampVal ( crossAvail , resolveMaybePct ( child . style . minHeight , innerH ) , resolveMaybePct ( child . style . maxHeight , innerH ) ) ;} break ; case AlignItems . Start : cy = y + pt + crossCursor ; break ;}} else { cy = y + pt + cursor ; chFinal = clampVal ( childBasis [ i ] , resolveMaybePct ( child . style . minHeight , innerH ) , resolveMaybePct ( child . style . maxHeight , innerH ) ) ; cwFinal = childCrossSize [ i ] ; const crossAvail = lineCross - childCrossMarginStart [ i ] - childCrossMarginEnd [ i ] ; switch ( effAlign ) { case AlignItems . Center : cx = x + pl + crossCursor + ( crossAvail - cwFinal ) / 2 ; break ; case AlignItems . End : cx = x + pl + crossCursor + crossAvail - cwFinal ; break ; case AlignItems . Stretch : cx = x + pl + crossCursor ; if ( child . style . width == = null ) { cwFinal = clampVal ( crossAvail , resolveMaybePct ( child . style . minWidth , innerW ) , resolveMaybePct ( child . style . maxWidth , innerW ) ) ;} break ; case AlignItems . Start : cx = x + pl + crossCursor ; break ;}} // Signal flex-adjusted sizes to child if ( isRow ) { if ( child . style . width == = null || cwFinal != = ( child . style . width ?? 0 ) ) { child . _flexW = cwFinal ;} if ( child . style . height == = null && effAlign == = AlignItems . Stretch ) { child . _stretchH = chFinal ;}} else { if ( child . style . height == = null && child . style . flexGrow > 0 ) { child . _stretchH = chFinal ;} if ( child . style . width == = null && effAlign == = AlignItems . Stretch ) { child . _flexW = cwFinal ;}} if ( child . style . textAlign == = TextAlign . Left && s . textAlign != = TextAlign . Left ) { child . style . textAlign = s . textAlign ;} child . _parentInnerW = innerW ; child . _parentInnerH = innerH ; layoutNode ( child , cx , cy , cwFinal , chFinal ) ; const actualMain = isRow ? child . computed . w : child . computed . h ; cursor + = childMainMarginStart [ i ] + actualMain + childMainMarginEnd [ i ] + gap + extraGap ; if ( isRow ) { const me = ( child . computed . x - x ) + child . computed . w + childMainMarginEnd [ i ] ; const ce = ( child . computed . y - y ) + child . computed . h + childCrossMarginEnd [ i ] ; if ( me > contentMainEnd ) contentMainEnd = me ; if ( ce > contentCrossEnd ) contentCrossEnd = ce ;} else { const me = ( child . computed . y - y ) + child . computed . h + childMainMarginEnd [ i ] ; const ce = ( child . computed . x - x ) + child . computed . w + childCrossMarginEnd [ i ] ; if ( me > contentMainEnd ) contentMainEnd = me ; if ( ce > contentCrossEnd ) contentCrossEnd = ce ;}} crossCursor + = lineCross + ( lineIdx + 1 < numLines ? gap : 0 ) ;}
-    // TODO: // ── Auto-height ──────────────────────────────────────────────── if ( h == = null ) { if ( node . inputId != = null ) { h = node . fontSize + pt + pb ;} else if ( node . text != = null ) { const m = measureNodeTextW ( node , innerW ) ; h = m . height + pt + pb ;} else if ( isRow ) { h = contentCrossEnd + pb ;} else { h = contentMainEnd + pb ;} if ( h != = null ) { h = clampVal ( h , resolveMaybePct ( s . minHeight , ph ) , resolveMaybePct ( s . maxHeight , ph ) ) ;}}
-    // TODO: // ── Scroll content extent ────────────────────────────────────── if ( s . overflow == = Overflow . Scroll || s . overflow == = Overflow . Hidden ) { const fullContent = isRow ? contentCrossEnd + pb : contentMainEnd + pb ; node . contentHeight = fullContent ;}
-    // TODO: // ── Absolute children ────────────────────────────────────────── const resolvedH = h ?? 0
-    // TODO: for ( let ai = 0
-    // TODO: ai < absoluteCount
-    // TODO: ai + + ) { const absIdx = absoluteIndices [ ai ] ; const absChild = node . children [ absIdx ] ; const acs = absChild . style ; let absW : number ; const resolvedW = resolveMaybePct ( acs . width , innerW ) ; if ( resolvedW != = null ) { absW = resolvedW ;} else if ( acs . left != = null && acs . right != = null ) { absW = innerW - ( acs . left ?? 0 ) - ( acs . right ?? 0 ) ;} else { absW = estimateIntrinsicWidth ( absChild ) ;} absW = clampVal ( absW , resolveMaybePct ( acs . minWidth , innerW ) , resolveMaybePct ( acs . maxWidth , innerW ) ) ; const absInnerH = resolvedH - pt - pb ; let absH : number ; const resolvedAH = resolveMaybePct ( acs . height , absInnerH ) ; if ( resolvedAH != = null ) { absH = resolvedAH ;} else if ( acs . top != = null && acs . bottom != = null ) { absH = absInnerH - ( acs . top ?? 0 ) - ( acs . bottom ?? 0 ) ;} else { absH = estimateIntrinsicHeight ( absChild , absW ) ;} absH = clampVal ( absH , resolveMaybePct ( acs . minHeight , absInnerH ) , resolveMaybePct ( acs . maxHeight , absInnerH ) ) ; let absX = x + pl ; let absY = y + pt ; if ( acs . left != = null ) { absX = x + pl + acs . left ;} else if ( acs . right != = null ) { absX = x + pl + innerW - absW - acs . right ;} if ( acs . top != = null ) { absY = y + pt + acs . top ;} else if ( acs . bottom != = null ) { absY = y + pt + absInnerH - absH - acs . bottom ;} absChild . _flexW = absW ; absChild . _stretchH = absH ; layoutNode ( absChild , absX , absY , absW , absH ) ;}
-    // TODO: // ── Write computed rect ──────────────────────────────────────── node . computed = { x , y , w , h : resolvedH}
+    layoutCount += 1;
+    if (layoutCount > LAYOUT_BUDGET) {
+        return;
+    }
+    const s = node.style;
+    if (s.display == .none) {
+        node.computed = .{ .x = px, .y = py, .w = 0, .h = 0 };
+        return;
+    }
+    var w: f32 = undefined;
+    var h: ?f32 = null;
+    if (node._flex_w != null) {
+        w = node._flex_w.?;
+        node._flex_w = null;
+    } else {
+        const resolved = resolveMaybePct(s.width, pw);
+        w = if (resolved != null) resolved.? else pw;
+    }
+    w = clampVal(w, resolveMaybePct(s.min_width, pw), resolveMaybePct(s.max_width, pw));
+    if (node._stretch_h != null) {
+        h = node._stretch_h.?;
+        node._stretch_h = null;
+    } else {
+        h = resolveMaybePct(s.height, ph);
+    }
+    if (h != null) {
+        h.? = clampVal(h.?, resolveMaybePct(s.min_height, ph), resolveMaybePct(s.max_height, ph));
+    }
+    if (s.aspect_ratio != null and s.aspect_ratio.? > 0) {
+        if (s.width != null and s.height == null and h == null) {
+            h = asF32(w) / asF32(s.aspect_ratio.?);
+        } else if (s.height != null and s.width == null and node._flex_w == null) {
+            if (h != null) {
+                w = asF32(h.?) * asF32(s.aspect_ratio.?);
+                w = clampVal(w, resolveMaybePct(s.min_width, pw), resolveMaybePct(s.max_width, pw));
+            }
+        }
+    }
+    const pl = padLeft(s);
+    const pr = padRight(s);
+    const pt = padTop(s);
+    const pb = padBottom(s);
+    const ml = marLeft(s);
+    const mt = marTop(s);
+    const x = asF32(px) + asF32(ml);
+    const y = asF32(py) + asF32(mt);
+    const innerW = asF32(asF32(w) - asF32(pl)) - asF32(pr);
+    const innerH = if (h != null) asF32(asF32(h.?) - asF32(pt)) - asF32(pb) else 9999;
+    const isRow = s.flex_direction == .row;
+    const gap = s.gap;
+    const justify = s.justify_content;
+    const @"align" = s.align_items;
+    const mainSize = if (isRow) innerW else innerH;
+    const MAX_CHILDREN = 512;
+    var childBasis = std.mem.zeroes([MAX_CHILDREN]f32);
+    var childGrow = std.mem.zeroes([MAX_CHILDREN]f32);
+    var childShrink = std.mem.zeroes([MAX_CHILDREN]f32);
+    var childMainSize = std.mem.zeroes([MAX_CHILDREN]f32);
+    var childCrossSize = std.mem.zeroes([MAX_CHILDREN]f32);
+    var childMainMarginStart = std.mem.zeroes([MAX_CHILDREN]f32);
+    var childMainMarginEnd = std.mem.zeroes([MAX_CHILDREN]f32);
+    var childCrossMarginStart = std.mem.zeroes([MAX_CHILDREN]f32);
+    var childCrossMarginEnd = std.mem.zeroes([MAX_CHILDREN]f32);
+    var visibleIndices = std.mem.zeroes([MAX_CHILDREN]usize);
+    var visibleCount: usize = 0;
+    var absoluteIndices = std.mem.zeroes([MAX_CHILDREN]usize);
+    var absoluteCount: usize = 0;
+    {
+        var i: usize = 0;
+        while (i < node.children.len) : (i += 1) {
+            const child = &node.children[@intCast(i)];
+            if (child.style.display == .none) {
+                child.computed = .{ .x = 0, .y = 0, .w = 0, .h = 0 };
+                continue;
+            }
+            if (child.style.position == .absolute) {
+                if (absoluteCount < MAX_CHILDREN) {
+                    absoluteIndices[@intCast(absoluteCount)] = i;
+                    absoluteCount += 1;
+                }
+                continue;
+            }
+            if (visibleCount >= MAX_CHILDREN) {
+                break;
+            }
+            const cs = child.style;
+            const cw = resolveMaybePct(cs.width, innerW) orelse estimateIntrinsicWidth(child);
+            const chVal = resolveMaybePct(cs.height, innerH) orelse estimateIntrinsicHeight(child, innerW);
+            const cwClamped = clampVal(cw, resolveMaybePct(cs.min_width, innerW), resolveMaybePct(cs.max_width, innerW));
+            const chClamped = clampVal(chVal, resolveMaybePct(cs.min_height, innerH), resolveMaybePct(cs.max_height, innerH));
+            const grow = cs.flex_grow;
+            const shrink = cs.flex_shrink orelse 1.0;
+            const basis = resolveMaybePct(cs.flex_basis, if (isRow) innerW else innerH) orelse (if (isRow) cwClamped else chClamped);
+            const cmL = marLeft(cs);
+            const cmR = marRight(cs);
+            const cmT = marTop(cs);
+            const cmB = marBottom(cs);
+            visibleIndices[@intCast(visibleCount)] = i;
+            childBasis[@intCast(visibleCount)] = basis;
+            childGrow[@intCast(visibleCount)] = grow;
+            childShrink[@intCast(visibleCount)] = shrink;
+            childMainSize[@intCast(visibleCount)] = if (isRow) cwClamped else chClamped;
+            childCrossSize[@intCast(visibleCount)] = if (isRow) chClamped else cwClamped;
+            childMainMarginStart[@intCast(visibleCount)] = if (isRow) cmL else cmT;
+            childMainMarginEnd[@intCast(visibleCount)] = if (isRow) cmR else cmB;
+            childCrossMarginStart[@intCast(visibleCount)] = if (isRow) cmT else cmL;
+            childCrossMarginEnd[@intCast(visibleCount)] = if (isRow) cmB else cmR;
+            visibleCount += 1;
+        }
+    }
+    const MAX_LINES = 64;
+    var lineStarts = std.mem.zeroes([MAX_LINES]usize);
+    var lineCounts = std.mem.zeroes([MAX_LINES]usize);
+    var numLines: usize = 0;
+    if (s.flex_wrap == .wrap and visibleCount > 0) {
+        var lineMain: f32 = 0;
+        var lineStartIdx: usize = 0;
+        var itemsOnLine: usize = 0;
+        {
+            var i: usize = 0;
+            while (i < visibleCount) : (i += 1) {
+                const itemMain = asF32(asF32(childBasis[@intCast(i)]) + asF32(childMainMarginStart[@intCast(i)])) + asF32(childMainMarginEnd[@intCast(i)]);
+                const gapBefore = if (itemsOnLine > 0) gap else 0;
+                if (itemsOnLine > 0 and asF32((asF32(asF32(lineMain) + asF32(gapBefore)) + asF32(itemMain))) > asF32(mainSize)) {
+                    if (numLines < MAX_LINES) {
+                        lineStarts[@intCast(numLines)] = lineStartIdx;
+                        lineCounts[@intCast(numLines)] = itemsOnLine;
+                        numLines += 1;
+                    }
+                    lineStartIdx = i;
+                    lineMain = itemMain;
+                    itemsOnLine = 1;
+                } else {
+                    lineMain += asF32(gapBefore) + asF32(itemMain);
+                    itemsOnLine += 1;
+                }
+            }
+        }
+        if (itemsOnLine > 0 and numLines < MAX_LINES) {
+            lineStarts[@intCast(numLines)] = lineStartIdx;
+            lineCounts[@intCast(numLines)] = itemsOnLine;
+            numLines += 1;
+        }
+    } else {
+        lineStarts[@intCast(0)] = 0;
+        lineCounts[@intCast(0)] = visibleCount;
+        numLines = if (visibleCount > 0) 1 else 0;
+    }
+    var crossCursor: f32 = 0;
+    var contentMainEnd: f32 = 0;
+    var contentCrossEnd: f32 = 0;
+    {
+        var lineIdx: usize = 0;
+        while (lineIdx < numLines) : (lineIdx += 1) {
+            const ls = lineStarts[@intCast(lineIdx)];
+            const lc = lineCounts[@intCast(lineIdx)];
+            var totalBasis: f32 = 0;
+            var totalFlex: f32 = 0;
+            var totalMainMargin: f32 = 0;
+            {
+                var i = ls;
+                while (@as(f32, @floatFromInt(i)) < asF32(ls) + asF32(lc)) : (i += 1) {
+                    totalBasis += childBasis[@intCast(i)];
+                    totalMainMargin += asF32(childMainMarginStart[@intCast(i)]) + asF32(childMainMarginEnd[@intCast(i)]);
+                    if (childGrow[@intCast(i)] > 0) {
+                        totalFlex += childGrow[@intCast(i)];
+                    }
+                }
+            }
+            const lineGaps = if (lc > 1) asF32(gap) * asF32((asF32(lc) - asF32(1))) else 0;
+            const freeSpace = asF32(asF32(asF32(mainSize) - asF32(totalBasis)) - asF32(lineGaps)) - asF32(totalMainMargin);
+            if (freeSpace > 0 and totalFlex > 0) {
+                var frozen = std.mem.zeroes([MAX_CHILDREN]bool);
+                var savedBasis = std.mem.zeroes([MAX_CHILDREN]f32);
+                {
+                    var i = ls;
+                    while (@as(f32, @floatFromInt(i)) < asF32(ls) + asF32(lc)) : (i += 1) {
+                        frozen[@intCast(i)] = childGrow[@intCast(i)] <= 0;
+                        savedBasis[@intCast(i)] = childBasis[@intCast(i)];
+                    }
+                }
+                var passes: usize = 0;
+                while (passes < 10) {
+                    passes += 1;
+                    var used: f32 = 0;
+                    var activeFlex: f32 = 0;
+                    {
+                        var i = ls;
+                        while (@as(f32, @floatFromInt(i)) < asF32(ls) + asF32(lc)) : (i += 1) {
+                            if (frozen[@intCast(i)]) {
+                                used += childBasis[@intCast(i)];
+                            } else {
+                                used += savedBasis[@intCast(i)];
+                                activeFlex += childGrow[@intCast(i)];
+                            }
+                        }
+                    }
+                    if (activeFlex <= 0) {
+                        break;
+                    }
+                    const space = asF32(asF32(asF32(mainSize) - asF32(used)) - asF32(lineGaps)) - asF32(totalMainMargin);
+                    if (space <= 0) {
+                        break;
+                    }
+                    var anyClamped = false;
+                    {
+                        var i = ls;
+                        while (@as(f32, @floatFromInt(i)) < asF32(ls) + asF32(lc)) : (i += 1) {
+                            if (frozen[@intCast(i)]) {
+                                continue;
+                            }
+                            childBasis[@intCast(i)] = asF32(savedBasis[@intCast(i)]) + asF32(asF32((asF32(childGrow[@intCast(i)]) / asF32(activeFlex))) * asF32(space));
+                            const ci = visibleIndices[@intCast(i)];
+                            const csG = &node.children[@intCast(ci)].style;
+                            const mn = resolveMaybePct(if (isRow) csG.min_width else csG.min_height, if (isRow) innerW else innerH);
+                            const mx = resolveMaybePct(if (isRow) csG.max_width else csG.max_height, if (isRow) innerW else innerH);
+                            const clampedVal = clampVal(childBasis[@intCast(i)], mn, mx);
+                            if (clampedVal != childBasis[@intCast(i)]) {
+                                childBasis[@intCast(i)] = clampedVal;
+                                frozen[@intCast(i)] = true;
+                                anyClamped = true;
+                            }
+                        }
+                    }
+                    if (!anyClamped) {
+                        break;
+                    }
+                }
+            } else if (freeSpace < 0) {
+                var totalShrinkScaled: f32 = 0;
+                {
+                    var i = ls;
+                    while (@as(f32, @floatFromInt(i)) < asF32(ls) + asF32(lc)) : (i += 1) {
+                        totalShrinkScaled += asF32(childShrink[@intCast(i)]) * asF32(childBasis[@intCast(i)]);
+                    }
+                }
+                if (totalShrinkScaled > 0) {
+                    const shrinkOverflow = -freeSpace;
+                    {
+                        var i = ls;
+                        while (@as(f32, @floatFromInt(i)) < asF32(ls) + asF32(lc)) : (i += 1) {
+                            const amount = asF32((asF32(asF32(childShrink[@intCast(i)]) * asF32(childBasis[@intCast(i)])) / asF32(totalShrinkScaled))) * asF32(shrinkOverflow);
+                            childBasis[@intCast(i)] -= amount;
+                        }
+                    }
+                }
+                if (isRow) {
+                    {
+                        var i = ls;
+                        while (@as(f32, @floatFromInt(i)) < asF32(ls) + asF32(lc)) : (i += 1) {
+                            const childIdx = visibleIndices[@intCast(i)];
+                            const childNode = &node.children[@intCast(childIdx)];
+                            if (childNode.style.min_width != null) {
+                                continue;
+                            }
+                            const mcw = computeMinContentW(childNode);
+                            if (asF32(childBasis[@intCast(i)]) < asF32(mcw)) {
+                                childBasis[@intCast(i)] = mcw;
+                            }
+                        }
+                    }
+                }
+            }
+            {
+                var i = ls;
+                while (@as(f32, @floatFromInt(i)) < asF32(ls) + asF32(lc)) : (i += 1) {
+                    const childIdx = visibleIndices[@intCast(i)];
+                    const child = &node.children[@intCast(childIdx)];
+                    if (child.text == null) {
+                        continue;
+                    }
+                    if (isRow) {
+                        if (child.style.height != null) {
+                            continue;
+                        }
+                        const finalW = clampVal(childBasis[@intCast(i)], resolveMaybePct(child.style.min_width, innerW), resolveMaybePct(child.style.max_width, innerW));
+                        const prevW = childMainSize[@intCast(i)];
+                        if (@abs(asF32(finalW) - asF32(prevW)) > 0.5) {
+                            const cpl = padLeft(child.style);
+                            const cpr = padRight(child.style);
+                            const cpt = padTop(child.style);
+                            const cpb = padBottom(child.style);
+                            const constrainW = asF32(asF32(finalW) - asF32(cpl)) - asF32(cpr);
+                            const m = measureNodeTextW(child, if (constrainW > 0) constrainW else 0);
+                            childCrossSize[@intCast(i)] = clampVal(asF32(asF32(m.height) + asF32(cpt)) + asF32(cpb), resolveMaybePct(child.style.min_height, innerH), resolveMaybePct(child.style.max_height, innerH));
+                        }
+                    } else {
+                        const effAlign = resolveAlign(child.style.align_self, @"align");
+                        const finalW = resolveMaybePct(child.style.width, innerW) orelse (if (effAlign == .stretch) innerW else childCrossSize[@intCast(i)]);
+                        const cpl = padLeft(child.style);
+                        const cpr = padRight(child.style);
+                        const cpt = padTop(child.style);
+                        const cpb = padBottom(child.style);
+                        const constrainW = asF32(asF32(finalW) - asF32(cpl)) - asF32(cpr);
+                        const m = measureNodeTextW(child, if (constrainW > 0) constrainW else 0);
+                        const newH = clampVal(asF32(asF32(m.height) + asF32(cpt)) + asF32(cpb), resolveMaybePct(child.style.min_height, innerH), resolveMaybePct(child.style.max_height, innerH));
+                        if (child.style.height == null) {
+                            childBasis[@intCast(i)] = newH;
+                            childMainSize[@intCast(i)] = newH;
+                        }
+                        childCrossSize[@intCast(i)] = finalW;
+                    }
+                }
+            }
+            var lineCross: f32 = 0;
+            {
+                var i = ls;
+                while (@as(f32, @floatFromInt(i)) < asF32(ls) + asF32(lc)) : (i += 1) {
+                    const childCross = asF32(asF32(childCrossSize[@intCast(i)]) + asF32(childCrossMarginStart[@intCast(i)])) + asF32(childCrossMarginEnd[@intCast(i)]);
+                    if (asF32(childCross) > asF32(lineCross)) {
+                        lineCross = childCross;
+                    }
+                }
+            }
+            if (numLines == 1) {
+                if (isRow and h != null) {
+                    lineCross = innerH;
+                } else if (isRow and h == null) {
+                    const mh = resolveMaybePct(s.min_height, ph);
+                    if (mh != null) {
+                        const minInner = asF32(asF32(mh.?) - asF32(pt)) - asF32(pb);
+                        if (asF32(minInner) > asF32(lineCross)) {
+                            lineCross = minInner;
+                        }
+                    }
+                } else if (!isRow) {
+                    lineCross = innerW;
+                }
+            }
+            var usedMain: f32 = 0;
+            {
+                var i = ls;
+                while (@as(f32, @floatFromInt(i)) < asF32(ls) + asF32(lc)) : (i += 1) {
+                    usedMain += asF32(asF32(childBasis[@intCast(i)]) + asF32(childMainMarginStart[@intCast(i)])) + asF32(childMainMarginEnd[@intCast(i)]);
+                }
+            }
+            const freeMain = asF32(asF32(mainSize) - asF32(usedMain)) - asF32(lineGaps);
+            var mainOffset: f32 = 0;
+            var extraGap: f32 = 0;
+            switch (justify) {
+                .center => {
+                    mainOffset = asF32(freeMain) / asF32(2);
+                },
+                .end => {
+                    mainOffset = freeMain;
+                },
+                .space_between => {
+                    if (lc > 1) {
+                        extraGap = asF32(freeMain) / asF32((asF32(lc) - asF32(1)));
+                    }
+                },
+                .space_around => {
+                    if (lc > 0) {
+                        extraGap = asF32(freeMain) / asF32(lc);
+                        mainOffset = asF32(extraGap) / asF32(2);
+                    }
+                },
+                .space_evenly => {
+                    if (lc > 0) {
+                        extraGap = asF32(freeMain) / asF32((asF32(lc) + asF32(1)));
+                        mainOffset = extraGap;
+                    }
+                },
+                .start => {
+                },
+            }
+            var cursor = mainOffset;
+            {
+                var i = ls;
+                while (@as(f32, @floatFromInt(i)) < asF32(ls) + asF32(lc)) : (i += 1) {
+                    const childIdx = visibleIndices[@intCast(i)];
+                    const child = &node.children[@intCast(childIdx)];
+                    var cx: f32 = undefined;
+                    var cy: f32 = undefined;
+                    var cwFinal: f32 = undefined;
+                    var chFinal: f32 = undefined;
+                    const effAlign = resolveAlign(child.style.align_self, @"align");
+                    if (isRow) {
+                        cx = asF32(asF32(x) + asF32(pl)) + asF32(cursor);
+                        cwFinal = clampVal(childBasis[@intCast(i)], resolveMaybePct(child.style.min_width, innerW), resolveMaybePct(child.style.max_width, innerW));
+                        chFinal = childCrossSize[@intCast(i)];
+                        const crossAvail = asF32(asF32(lineCross) - asF32(childCrossMarginStart[@intCast(i)])) - asF32(childCrossMarginEnd[@intCast(i)]);
+                        switch (effAlign) {
+                            .center => {
+                                cy = asF32(asF32(y) + asF32(pt)) + asF32(crossCursor) + (asF32(crossAvail) - asF32(chFinal)) / 2;
+                            },
+                            .end => {
+                                cy = asF32(asF32(asF32(asF32(y) + asF32(pt)) + asF32(crossCursor)) + asF32(crossAvail)) - asF32(chFinal);
+                            },
+                            .stretch => {
+                                cy = asF32(asF32(y) + asF32(pt)) + asF32(crossCursor);
+                                if (child.style.height == null) {
+                                    chFinal = clampVal(crossAvail, resolveMaybePct(child.style.min_height, innerH), resolveMaybePct(child.style.max_height, innerH));
+                                }
+                            },
+                            .start => {
+                                cy = asF32(asF32(y) + asF32(pt)) + asF32(crossCursor);
+                            },
+                        }
+                    } else {
+                        cy = asF32(asF32(y) + asF32(pt)) + asF32(cursor);
+                        chFinal = clampVal(childBasis[@intCast(i)], resolveMaybePct(child.style.min_height, innerH), resolveMaybePct(child.style.max_height, innerH));
+                        cwFinal = childCrossSize[@intCast(i)];
+                        const crossAvail = asF32(asF32(lineCross) - asF32(childCrossMarginStart[@intCast(i)])) - asF32(childCrossMarginEnd[@intCast(i)]);
+                        switch (effAlign) {
+                            .center => {
+                                cx = asF32(asF32(x) + asF32(pl)) + asF32(crossCursor) + (asF32(crossAvail) - asF32(cwFinal)) / 2;
+                            },
+                            .end => {
+                                cx = asF32(asF32(asF32(asF32(x) + asF32(pl)) + asF32(crossCursor)) + asF32(crossAvail)) - asF32(cwFinal);
+                            },
+                            .stretch => {
+                                cx = asF32(asF32(x) + asF32(pl)) + asF32(crossCursor);
+                                if (child.style.width == null) {
+                                    cwFinal = clampVal(crossAvail, resolveMaybePct(child.style.min_width, innerW), resolveMaybePct(child.style.max_width, innerW));
+                                }
+                            },
+                            .start => {
+                                cx = asF32(asF32(x) + asF32(pl)) + asF32(crossCursor);
+                            },
+                        }
+                    }
+                    if (isRow) {
+                        if (child.style.width == null or cwFinal != (child.style.width orelse 0)) {
+                            child._flex_w = cwFinal;
+                        }
+                        if (child.style.height == null and effAlign == .stretch) {
+                            child._stretch_h = chFinal;
+                        }
+                    } else {
+                        if (child.style.height == null and child.style.flex_grow > 0) {
+                            child._stretch_h = chFinal;
+                        }
+                        if (child.style.width == null and effAlign == .stretch) {
+                            child._flex_w = cwFinal;
+                        }
+                    }
+                    if (child.style.text_align == .left and s.text_align != .left) {
+                        child.style.text_align = s.text_align;
+                    }
+                    child._parent_inner_w = innerW;
+                    child._parent_inner_h = innerH;
+                    layoutNode(child, cx, cy, cwFinal, chFinal);
+                    const actualMain = if (isRow) child.computed.w else child.computed.h;
+                    cursor += asF32(asF32(asF32(asF32(childMainMarginStart[@intCast(i)]) + asF32(actualMain)) + asF32(childMainMarginEnd[@intCast(i)])) + asF32(gap)) + asF32(extraGap);
+                    if (isRow) {
+                        const me = asF32((asF32(child.computed.x) - asF32(x)) + child.computed.w) + asF32(childMainMarginEnd[@intCast(i)]);
+                        const ce = asF32((asF32(child.computed.y) - asF32(y)) + child.computed.h) + asF32(childCrossMarginEnd[@intCast(i)]);
+                        if (asF32(me) > asF32(contentMainEnd)) {
+                            contentMainEnd = me;
+                        }
+                        if (asF32(ce) > asF32(contentCrossEnd)) {
+                            contentCrossEnd = ce;
+                        }
+                    } else {
+                        const me = asF32((asF32(child.computed.y) - asF32(y)) + child.computed.h) + asF32(childMainMarginEnd[@intCast(i)]);
+                        const ce = asF32((asF32(child.computed.x) - asF32(x)) + child.computed.w) + asF32(childCrossMarginEnd[@intCast(i)]);
+                        if (asF32(me) > asF32(contentMainEnd)) {
+                            contentMainEnd = me;
+                        }
+                        if (asF32(ce) > asF32(contentCrossEnd)) {
+                            contentCrossEnd = ce;
+                        }
+                    }
+                }
+            }
+            crossCursor += asF32(lineCross) + asF32((if (lineIdx + 1 < numLines) gap else 0));
+        }
+    }
+    if (h == null) {
+        if (node.input_id != null) {
+            h = asF32(asF32(node.font_size) + asF32(pt)) + asF32(pb);
+        } else if (node.text != null) {
+            const m = measureNodeTextW(node, innerW);
+            h = asF32(asF32(m.height) + asF32(pt)) + asF32(pb);
+        } else if (isRow) {
+            h = asF32(contentCrossEnd) + asF32(pb);
+        } else {
+            h = asF32(contentMainEnd) + asF32(pb);
+        }
+        if (h != null) {
+            h.? = clampVal(h.?, resolveMaybePct(s.min_height, ph), resolveMaybePct(s.max_height, ph));
+        }
+    }
+    if (s.overflow == .scroll or s.overflow == .hidden) {
+        const fullContent = if (isRow) asF32(contentCrossEnd) + asF32(pb) else asF32(contentMainEnd) + asF32(pb);
+        node.content_height = fullContent;
+    }
+    const resolvedH = h orelse 0;
+    {
+        var ai: usize = 0;
+        while (asF32(ai) < asF32(absoluteCount)) : (ai += 1) {
+            const absIdx = absoluteIndices[@intCast(ai)];
+            const absChild = &node.children[@intCast(absIdx)];
+            const acs = absChild.style;
+            var absW: f32 = undefined;
+            const resolvedW = resolveMaybePct(acs.width, innerW);
+            if (resolvedW != null) {
+                absW = resolvedW.?;
+            } else if (acs.left != null and acs.right != null) {
+                absW = asF32(innerW) - asF32((acs.left orelse 0)) - (acs.right orelse 0);
+            } else {
+                absW = estimateIntrinsicWidth(absChild);
+            }
+            absW = clampVal(absW, resolveMaybePct(acs.min_width, innerW), resolveMaybePct(acs.max_width, innerW));
+            const absInnerH = asF32(asF32(resolvedH) - asF32(pt)) - asF32(pb);
+            var absH: f32 = undefined;
+            const resolvedAH = resolveMaybePct(acs.height, absInnerH);
+            if (resolvedAH != null) {
+                absH = resolvedAH.?;
+            } else if (acs.top != null and acs.bottom != null) {
+                absH = asF32(absInnerH) - asF32((acs.top orelse 0)) - (acs.bottom orelse 0);
+            } else {
+                absH = estimateIntrinsicHeight(absChild, absW);
+            }
+            absH = clampVal(absH, resolveMaybePct(acs.min_height, absInnerH), resolveMaybePct(acs.max_height, absInnerH));
+            var absX = asF32(x) + asF32(pl);
+            var absY = asF32(y) + asF32(pt);
+            if (acs.left != null) {
+                absX = asF32(asF32(x) + asF32(pl)) + asF32(acs.left.?);
+            } else if (acs.right != null) {
+                absX = asF32(asF32(asF32(asF32(x) + asF32(pl)) + asF32(innerW)) - asF32(absW)) - asF32(acs.right);
+            }
+            if (acs.top != null) {
+                absY = asF32(asF32(y) + asF32(pt)) + asF32(acs.top.?);
+            } else if (acs.bottom != null) {
+                absY = asF32(asF32(asF32(asF32(y) + asF32(pt)) + asF32(absInnerH)) - asF32(absH)) - asF32(acs.bottom);
+            }
+            absChild._flex_w = absW;
+            absChild._stretch_h = absH;
+            layoutNode(absChild, absX, absY, absW, absH);
+        }
+    }
+    node.computed = .{ .x = x, .y = y, .w = w, .h = resolvedH };
 }
 
 fn resolveAlign(self: AlignSelf, parent: AlignItems) AlignItems {
-    // TODO: switch ( self ) { case AlignSelf . Auto : return parent ; case AlignSelf . Start : return AlignItems . Start ; case AlignSelf . Center : return AlignItems . Center ; case AlignSelf . End : return AlignItems . End ; case AlignSelf . Stretch : return AlignItems . Stretch ;}
+    switch (self) {
+        .auto => {
+            return parent;
+        },
+        .start => {
+            return .start;
+        },
+        .center => {
+            return .center;
+        },
+        .end => {
+            return .end;
+        },
+        .stretch => {
+            return .stretch;
+        },
+    }
 }
 
 pub fn layout(root: *Node, x: f32, y: f32, w: f32, h: f32) void {
-    // TODO: layoutCount = 0
-    // TODO: root . _flexW = w
-    // TODO: root . _stretchH = h
-    // TODO: layoutNode ( root , x , y , w , h )
+    layoutCount = 0;
+    root._flex_w = w;
+    root._stretch_h = h;
+    layoutNode(root, x, y, w, h);
 }
