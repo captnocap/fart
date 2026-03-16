@@ -109,7 +109,33 @@ const Parser = struct {
             const then_val = try self.parseTernary();
             self.expect(.colon);
             const else_val = try self.parseTernary();
-            return try std.fmt.allocPrint(self.alloc, "if ({s}) {s} else {s}", .{ cond, then_val, else_val });
+            // If condition is "X != null", add .? to references of X in then branch
+            var final_then = then_val;
+            if (std.mem.endsWith(u8, cond, " != null")) {
+                const var_part = std.mem.trim(u8, cond[0 .. cond.len - " != null".len], " ");
+                if (var_part.len > 0 and std.mem.indexOf(u8, then_val, var_part) != null) {
+                    // Replace var_part with var_part.? in then branch
+                    const unwrapped = try std.fmt.allocPrint(self.alloc, "{s}.?", .{var_part});
+                    var result: std.ArrayListUnmanaged(u8) = .{};
+                    var ri: usize = 0;
+                    while (ri <= then_val.len - var_part.len) {
+                        if (std.mem.eql(u8, then_val[ri..][0..var_part.len], var_part)) {
+                            const bk = ri == 0 or !isIdentCharStatic(then_val[ri - 1]);
+                            const ak = ri + var_part.len >= then_val.len or !isIdentCharStatic(then_val[ri + var_part.len]);
+                            if (bk and ak) {
+                                try result.appendSlice(self.alloc, unwrapped);
+                                ri += var_part.len;
+                                continue;
+                            }
+                        }
+                        try result.append(self.alloc, then_val[ri]);
+                        ri += 1;
+                    }
+                    while (ri < then_val.len) : (ri += 1) try result.append(self.alloc, then_val[ri]);
+                    final_then = try self.alloc.dupe(u8, result.items);
+                }
+            }
+            return try std.fmt.allocPrint(self.alloc, "if ({s}) {s} else {s}", .{ cond, final_then, else_val });
         }
         return cond;
     }
@@ -132,10 +158,42 @@ const Parser = struct {
         var left = try self.parseNullishCoalescing();
         while (self.curKind() == .amp_amp) {
             self.advance();
-            const right = try self.parseNullishCoalescing();
+            var right = try self.parseNullishCoalescing();
+            // If left is "X != null", add .? to X references in right side
+            if (std.mem.endsWith(u8, left, " != null")) {
+                const var_part = std.mem.trim(u8, left[0 .. left.len - " != null".len], " ");
+                if (var_part.len > 0) {
+                    const unwrapped = try std.fmt.allocPrint(self.alloc, "{s}.?", .{var_part});
+                    // Simple replacement (not word-bounded since var_part may contain dots)
+                    if (std.mem.indexOf(u8, right, var_part) != null) {
+                        var result: std.ArrayListUnmanaged(u8) = .{};
+                        var ri: usize = 0;
+                        while (ri <= right.len - var_part.len) {
+                            if (std.mem.eql(u8, right[ri..][0..var_part.len], var_part)) {
+                                // Check word boundary
+                                const before_ok = ri == 0 or !isIdentCharStatic(right[ri - 1]);
+                                const after_ok = ri + var_part.len >= right.len or !isIdentCharStatic(right[ri + var_part.len]);
+                                if (before_ok and after_ok) {
+                                    try result.appendSlice(self.alloc, unwrapped);
+                                    ri += var_part.len;
+                                    continue;
+                                }
+                            }
+                            try result.append(self.alloc, right[ri]);
+                            ri += 1;
+                        }
+                        while (ri < right.len) : (ri += 1) try result.append(self.alloc, right[ri]);
+                        right = try self.alloc.dupe(u8, result.items);
+                    }
+                }
+            }
             left = try std.fmt.allocPrint(self.alloc, "{s} and {s}", .{ left, right });
         }
         return left;
+    }
+
+    fn isIdentCharStatic(ch: u8) bool {
+        return (ch >= 'a' and ch <= 'z') or (ch >= 'A' and ch <= 'Z') or (ch >= '0' and ch <= '9') or ch == '_' or ch == '.';
     }
 
     // ── Precedence 4: Nullish coalescing (?? → orelse) ─────────────

@@ -70,6 +70,9 @@ pub fn emitBlock(
     if (pos.* < lex.count and lex.get(pos.*).kind == .lbrace) pos.* += 1;
 
     var out: std.ArrayListUnmanaged(u8) = .{};
+    // Track variables narrowed by early-return null guards: if (X == null) { return; }
+    var narrowed_vars: [16][]const u8 = undefined;
+    var narrowed_count: usize = 0;
 
     while (pos.* < lex.count) {
         const kind = lex.get(pos.*).kind;
@@ -78,13 +81,45 @@ pub fn emitBlock(
             pos.* += 1;
             break;
         }
-        // Skip comments
         if (kind == .comment) {
             pos.* += 1;
             continue;
         }
 
-        const stmt = try emitStatement(alloc, lex, source, pos, indent_level);
+        var stmt = try emitStatement(alloc, lex, source, pos, indent_level);
+
+        // Detect null-guard-early-return: "if (X == null) {\n        return ...;\n    }"
+        // If found, add X to narrowed set for subsequent statements
+        if (std.mem.indexOf(u8, stmt, "== null) {")) |null_pos| {
+            // Check if the body is just a return
+            if (std.mem.indexOf(u8, stmt, "return") != null) {
+                // Extract variable: walk back from "== null"
+                const before = stmt[0..null_pos];
+                if (std.mem.lastIndexOf(u8, before, "if (")) |if_pos| {
+                    const var_start = if_pos + "if (".len;
+                    const var_name = std.mem.trim(u8, before[var_start..], " ");
+                    if (var_name.len > 0 and narrowed_count < 16) {
+                        narrowed_vars[narrowed_count] = var_name;
+                        narrowed_count += 1;
+                    }
+                }
+            }
+        }
+
+        // Apply .? unwrap for all narrowed variables to this statement
+        if (narrowed_count > 0 and stmt.len > 0) {
+            for (0..narrowed_count) |ni| {
+                const nv = narrowed_vars[ni];
+                // Don't apply to the null-guard statement itself
+                if (std.mem.indexOf(u8, stmt, "== null") != null) continue;
+                const unwrapped = try std.fmt.allocPrint(alloc, "{s}.?", .{nv});
+                stmt = try replaceIdent(alloc, stmt, nv, unwrapped);
+                const bad_pat = try std.fmt.allocPrint(alloc, "{s}.? = null", .{nv});
+                const good_pat = try std.fmt.allocPrint(alloc, "{s} = null", .{nv});
+                stmt = try replaceAll(alloc, stmt, bad_pat, good_pat);
+            }
+        }
+
         if (stmt.len > 0) {
             try out.appendSlice(alloc, stmt);
             try out.append(alloc, '\n');
@@ -209,9 +244,26 @@ fn emitVarDecl(
         const expr = try exprgen.emitExpression(alloc, lex, source, pos, .assignment);
         if (pos.* < lex.count and lex.get(pos.*).kind == .semicolon) pos.* += 1;
 
-        // If initializer is an array/zeroes allocation, use var (TS const allows mutation of contents)
+        // Use var when: array allocation, or child element that gets mutated during layout
+        const is_child_access = std.mem.indexOf(u8, expr, ".children[") != null and
+            (std.mem.eql(u8, snake_name, "child") or std.mem.eql(u8, snake_name, "absChild"));
         const effective_kw = if (std.mem.indexOf(u8, expr, "zeroes") != null or
-            std.mem.indexOf(u8, expr, "[_]") != null) "var" else zig_kw;
+            std.mem.indexOf(u8, expr, "[_]") != null or
+            is_child_access) "var" else zig_kw;
+
+        // Fix array element type: index/count arrays should use usize, not f32
+        var final_expr = expr;
+        if (std.mem.indexOf(u8, expr, "zeroes") != null and std.mem.indexOf(u8, expr, "f32") != null) {
+            const is_index_arr = std.mem.indexOf(u8, snake_name, "Indices") != null or
+                std.mem.indexOf(u8, snake_name, "indices") != null or
+                std.mem.indexOf(u8, snake_name, "Starts") != null or
+                std.mem.indexOf(u8, snake_name, "starts") != null or
+                std.mem.indexOf(u8, snake_name, "Counts") != null or
+                std.mem.indexOf(u8, snake_name, "counts") != null;
+            if (is_index_arr) {
+                final_expr = try replaceAll(alloc, expr, "f32", "usize");
+            }
+        }
 
         // When initializer is null, we must include the type annotation (Zig can't infer from null)
         if (std.mem.eql(u8, expr, "null")) {
@@ -219,8 +271,19 @@ fn emitVarDecl(
                 return try std.fmt.allocPrint(alloc, "{s}{s} {s}: {s} = null;", .{ ind, effective_kw, snake_name, ta });
             }
         }
+        // When var is initialized with a bare 0 literal, Zig needs an explicit type
+        // (comptime_int can't be var). Use type annotation if available, else infer from name.
+        if (std.mem.eql(u8, effective_kw, "var") and std.mem.eql(u8, expr, "0")) {
+            if (type_ann) |ta| {
+                return try std.fmt.allocPrint(alloc, "{s}var {s}: {s} = 0;", .{ ind, snake_name, ta });
+            }
+            const inferred = inferNumericType(snake_name);
+            return try std.fmt.allocPrint(alloc, "{s}var {s}: {s} = 0;", .{ ind, snake_name, inferred });
+        }
+        // Skip .tsz type annotations for most initializers (Zig infers correctly).
+        // The raw .tsz types (e.g., "number[]") aren't valid Zig.
         // Otherwise let Zig infer from the initializer
-        return try std.fmt.allocPrint(alloc, "{s}{s} {s} = {s};", .{ ind, effective_kw, snake_name, expr });
+        return try std.fmt.allocPrint(alloc, "{s}{s} {s} = {s};", .{ ind, effective_kw, snake_name, final_expr });
     }
 
     // No initializer
@@ -268,12 +331,13 @@ fn emitIf(
     const cond = try exprgen.emitExpression(alloc, lex, source, pos, .condition);
     if (peekKind(lex, pos.*) == .rparen) pos.* += 1;
 
-    // Detect "X != null" pattern → Zig payload capture: if (X) |X_val| { body with X_val }
-    const null_check_var = extractNullCheckVar(cond);
+    // Extract ALL "X != null" parts from condition (handles compound: "a != null and b != null")
+    var null_vars: [8][]const u8 = undefined;
+    const null_var_count = extractAllNullCheckVars(alloc, cond, &null_vars);
 
-    if (null_check_var) |nv| {
-        // Null check pattern: emit same condition, but add .? to references in body
-        try out.appendSlice(alloc, try std.fmt.allocPrint(alloc, "{s}if ({s} != null) {{\n", .{ ind, nv }));
+    if (null_var_count > 0) {
+        // Emit the condition as-is, but add .? to all null-checked vars in the body
+        try out.appendSlice(alloc, try std.fmt.allocPrint(alloc, "{s}if ({s}) {{\n", .{ ind, cond }));
         var body: []const u8 = "";
         if (peekKind(lex, pos.*) == .lbrace) {
             body = try emitBlock(alloc, lex, source, pos, indent_level + 1);
@@ -281,16 +345,19 @@ fn emitIf(
             const stmt = try emitStatement(alloc, lex, source, pos, indent_level + 1);
             if (stmt.len > 0) body = stmt;
         }
-        // Add .? unwrap to references of the nullable var inside the body,
-        // but NOT when it's the target of "= null" assignment (assigning null to optional is valid)
-        const unwrapped = try std.fmt.allocPrint(alloc, "{s}.?", .{nv});
-        var replaced = try replaceIdent(alloc, body, nv, unwrapped);
-        // Fix over-replacement: "X.? = null" → "X = null"
-        const bad_pattern = try std.fmt.allocPrint(alloc, "{s}.? = null", .{nv});
-        const good_pattern = try std.fmt.allocPrint(alloc, "{s} = null", .{nv});
-        replaced = try replaceAll(alloc, replaced, bad_pattern, good_pattern);
+        // Add .? unwrap for each null-checked variable
+        var replaced = body;
+        for (0..null_var_count) |vi| {
+            const nv = null_vars[vi];
+            const unwrapped = try std.fmt.allocPrint(alloc, "{s}.?", .{nv});
+            replaced = try replaceIdent(alloc, replaced, nv, unwrapped);
+            // Fix over-replacement: "X.? = null" → "X = null"
+            const bad_pat = try std.fmt.allocPrint(alloc, "{s}.? = null", .{nv});
+            const good_pat = try std.fmt.allocPrint(alloc, "{s} = null", .{nv});
+            replaced = try replaceAll(alloc, replaced, bad_pat, good_pat);
+        }
         try out.appendSlice(alloc, replaced);
-        if (body.len > 0 and body[body.len - 1] != '\n') try out.append(alloc, '\n');
+        if (replaced.len > 0 and replaced[replaced.len - 1] != '\n') try out.append(alloc, '\n');
     } else {
         try out.appendSlice(alloc, try std.fmt.allocPrint(alloc, "{s}if ({s}) {{\n", .{ ind, cond }));
         if (peekKind(lex, pos.*) == .lbrace) {
@@ -707,19 +774,33 @@ fn emitExprFallback(
 
 /// Extract variable name from "X != null" or "X == null" pattern.
 /// Returns the variable/property access string, or null if not a null check.
-fn extractNullCheckVar(cond: []const u8) ?[]const u8 {
-    // Match only simple "X != null" where X is a bare identifier or property chain
-    // (no spaces, no 'or'/'and', no parens — those are compound conditions)
-    if (std.mem.endsWith(u8, cond, " != null")) {
-        const var_part = std.mem.trim(u8, cond[0 .. cond.len - " != null".len], " ");
-        // Verify it's a simple identifier/property chain
-        for (var_part) |ch| {
-            if (!isIdentChar(ch)) return null; // has spaces, operators, etc.
+/// Extract all variables from "X != null" patterns in a condition.
+/// Handles compound: "a != null and b != null and c > 0" → returns [a, b].
+fn extractAllNullCheckVars(alloc: std.mem.Allocator, cond: []const u8, out_vars: *[8][]const u8) usize {
+    _ = alloc;
+    var count: usize = 0;
+    const needle = " != null";
+
+    var search_from: usize = 0;
+    while (search_from < cond.len) {
+        const pos = std.mem.indexOf(u8, cond[search_from..], needle) orelse break;
+        const abs_pos = search_from + pos;
+        // Extract the var part before " != null" — walk backwards to find start
+        var start = abs_pos;
+        while (start > 0) {
+            const ch = cond[start - 1];
+            if (isIdentChar(ch)) {
+                start -= 1;
+            } else break;
         }
-        if (var_part.len == 0) return null;
-        return var_part;
+        const var_part = cond[start..abs_pos];
+        if (var_part.len > 0 and count < 8) {
+            out_vars[count] = var_part;
+            count += 1;
+        }
+        search_from = abs_pos + needle.len;
     }
-    return null;
+    return count;
 }
 
 /// Replace whole-word occurrences of `old` with `new_val` in text.
@@ -749,6 +830,31 @@ fn replaceIdent(alloc: std.mem.Allocator, text: []const u8, old: []const u8, new
 
 fn isIdentChar(ch: u8) bool {
     return (ch >= 'a' and ch <= 'z') or (ch >= 'A' and ch <= 'Z') or (ch >= '0' and ch <= '9') or ch == '_' or ch == '.';
+}
+
+/// Infer numeric type from variable name for "var x = 0" patterns.
+/// Names suggesting counts/indices → usize, otherwise → f32.
+fn inferNumericType(name: []const u8) []const u8 {
+    // Single-letter loop vars → usize
+    if (name.len == 1 and name[0] >= 'a' and name[0] <= 'z') return "usize";
+    // Index/count names → usize
+    const usize_hints = [_][]const u8{
+        "count", "Count", "idx", "Idx", "index", "Index",
+        "num", "Num", "lines", "Lines", "items", "Items",
+        "passes", "Passes", "depth", "Depth", "len", "Len",
+        "Start", "start", "End", "end",
+    };
+    for (usize_hints) |hint| {
+        if (std.mem.indexOf(u8, name, hint) != null) return "usize";
+    }
+    // ALL_CAPS constants → usize
+    var all_upper = true;
+    for (name) |ch| {
+        if (ch >= 'a' and ch <= 'z') { all_upper = false; break; }
+    }
+    if (all_upper and name.len > 1) return "usize";
+    // Everything else (accumulators, offsets, sizes) → f32
+    return "f32";
 }
 
 /// Simple string replacement (all occurrences, not word-bounded).

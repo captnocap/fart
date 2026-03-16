@@ -470,8 +470,8 @@ fn emitParams(
 
         if (param_nullable) {
             try out.appendSlice(alloc, try std.fmt.allocPrint(alloc, "?{s}", .{zig_type}));
-        } else if (isStructTypeName(param_type)) {
-            // Struct params → mutable pointer (layout engine mutates nodes)
+        } else if (std.mem.eql(u8, param_type, "Node")) {
+            // Node params → mutable pointer (layout engine mutates nodes)
             try out.appendSlice(alloc, try std.fmt.allocPrint(alloc, "*{s}", .{zig_type}));
         } else {
             try out.appendSlice(alloc, zig_type);
