@@ -154,7 +154,7 @@ pub fn camelToSnake(alloc: std.mem.Allocator, input: []const u8) ![]const u8 {
     return result;
 }
 
-fn isZigKeyword(name: []const u8) bool {
+pub fn isZigKeyword(name: []const u8) bool {
     const keywords = [_][]const u8{
         "align", "allowzero", "and", "asm", "async", "await",
         "break", "catch", "comptime", "const", "continue",
@@ -303,6 +303,27 @@ fn emitInterface(alloc: std.mem.Allocator, lex: *const Lexer, source: []const u8
     // skip }
     if (pos.* < lex.count and lex.get(pos.*).kind == .rbrace) pos.* += 1;
 
+    // For Style struct: inject padding/margin helper methods (required by runtime callers)
+    if (std.mem.eql(u8, name, "Style")) {
+        try out.appendSlice(alloc,
+            "\n    pub fn padLeft(self: Style) f32 { return self.padding_left orelse self.padding; }\n" ++
+            "    pub fn padRight(self: Style) f32 { return self.padding_right orelse self.padding; }\n" ++
+            "    pub fn padTop(self: Style) f32 { return self.padding_top orelse self.padding; }\n" ++
+            "    pub fn padBottom(self: Style) f32 { return self.padding_bottom orelse self.padding; }\n" ++
+            "    pub fn marLeft(self: Style) f32 { return self.margin_left orelse self.margin; }\n" ++
+            "    pub fn marRight(self: Style) f32 { return self.margin_right orelse self.margin; }\n" ++
+            "    pub fn marTop(self: Style) f32 { return self.margin_top orelse self.margin; }\n" ++
+            "    pub fn marBottom(self: Style) f32 { return self.margin_bottom orelse self.margin; }\n");
+    }
+
+    // For Color struct: inject rgb/rgba methods (required by runtime callers)
+    if (std.mem.eql(u8, name, "Color")) {
+        try out.appendSlice(alloc, "\n    pub fn rgb(r: u8, g: u8, b: u8) Color {\n");
+        try out.appendSlice(alloc, "        return .{ .r = r, .g = g, .b = b, .a = 255 };\n    }\n");
+        try out.appendSlice(alloc, "    pub fn rgba(r: u8, g: u8, b: u8, a: u8) Color {\n");
+        try out.appendSlice(alloc, "        return .{ .r = r, .g = g, .b = b, .a = a };\n    }\n");
+    }
+
     try out.appendSlice(alloc, "};");
 
     return try alloc.dupe(u8, out.items);
@@ -434,14 +455,28 @@ fn parseTypeAnnotation(alloc: std.mem.Allocator, lex: *const Lexer, source: []co
 
 fn defaultForType(enums: *const EnumRegistry, mapped: []const u8) ?[]const u8 {
     if (std.mem.eql(u8, mapped, "f32")) return "0";
+    if (std.mem.eql(u8, mapped, "f64")) return "0";
     if (std.mem.eql(u8, mapped, "i64")) return "0";
     if (std.mem.eql(u8, mapped, "i16")) return "0";
+    if (std.mem.eql(u8, mapped, "i32")) return "0";
+    if (std.mem.eql(u8, mapped, "u8")) return "0";
+    if (std.mem.eql(u8, mapped, "u16")) return "0";
+    if (std.mem.eql(u8, mapped, "u32")) return "0";
     if (std.mem.eql(u8, mapped, "usize")) return "0";
     if (std.mem.eql(u8, mapped, "bool")) return "false";
     if (std.mem.eql(u8, mapped, "[]const u8")) return "\"\"";
 
+    // Slice types (e.g., []Node) → empty slice
+    if (std.mem.startsWith(u8, mapped, "[]")) return "&.{}";
+
     // Known enum → .first_variant
-    return enums.getDefault(mapped);
+    if (enums.getDefault(mapped)) |d| return d;
+
+    // Known struct types → default struct init
+    // (Any PascalCase type that's not a primitive or enum is likely a struct)
+    if (mapped.len > 0 and mapped[0] >= 'A' and mapped[0] <= 'Z') return ".{}";
+
+    return null;
 }
 
 // ── Tests ───────────────────────────────────────────────────────────

@@ -216,8 +216,8 @@ fn emitModuleVars(
         }
 
         const zig_keyword = if (is_const) "const" else "var";
-        // Preserve ALL_CAPS names (e.g., LAYOUT_BUDGET) — they're already idiomatic
-        const snake_name = if (isAllCaps(name)) name else try typegen.camelToSnake(alloc, name);
+        // Keep variable names in original casing to match references in function bodies
+        const snake_name = name;
 
         // Parse optional type annotation: `: Type` or `: Type | null`
         var type_str: ?[]const u8 = null;
@@ -355,9 +355,10 @@ fn emitFunctions(
             const pub_prefix = if (is_pub) "pub " else "";
 
             // Parse parameters: (name: Type, name: Type | null, ...)
-            const fn_name = try typegen.camelToSnake(alloc, name);
+            // Keep function names in original camelCase — matches Zig convention
+            // in the hand-written runtime and avoids caller/callee mismatches
             try out.appendSlice(alloc, try std.fmt.allocPrint(alloc,
-                "\n{s}fn {s}(", .{ pub_prefix, fn_name }));
+                "\n{s}fn {s}(", .{ pub_prefix, name }));
 
             if (pos < lex.count and lex.get(pos).kind == .lparen) {
                 pos += 1; // skip (
@@ -458,9 +459,13 @@ fn emitParams(
         }
 
         const zig_type = try typegen.mapType(alloc, param_type);
-        const snake_param = try typegen.camelToSnake(alloc, param_name);
+        // Keep param names in original casing to match body references
+        const escaped_param = if (typegen.isZigKeyword(param_name))
+            try std.fmt.allocPrint(alloc, "@\"{s}\"", .{param_name})
+        else
+            param_name;
 
-        try out.appendSlice(alloc, snake_param);
+        try out.appendSlice(alloc, escaped_param);
         try out.appendSlice(alloc, ": ");
 
         if (param_nullable) {

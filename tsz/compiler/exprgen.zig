@@ -456,8 +456,7 @@ const Parser = struct {
                     if (self.curKind() == .identifier and std.mem.eql(u8, self.curText(), "Array")) {
                         self.advance();
                         self.expect(.lparen);
-                        const size_raw = self.curText();
-                        const size = try camelToSnake(self.alloc, size_raw);
+                        const size = self.curText();
                         self.advance();
                         self.expect(.rparen);
                         return try std.fmt.allocPrint(self.alloc, "std.mem.zeroes([{s}]f32)", .{size});
@@ -495,9 +494,13 @@ const Parser = struct {
                     return try self.alloc.dupe(u8, text);
                 }
 
-                // Regular identifier — apply camelToSnake for local variables
+                // Regular identifier — keep original name, escape Zig keywords.
+                // Only struct field access (after '.') gets snake_cased (handled in parseMemberAccess).
                 self.advance();
-                return try camelToSnake(self.alloc, text);
+                if (typegen.isZigKeyword(text)) {
+                    return try std.fmt.allocPrint(self.alloc, "@\"{s}\"", .{text});
+                }
+                return try self.alloc.dupe(u8, text);
             },
 
             // Parenthesized expression

@@ -149,8 +149,8 @@ interface Node {
 
 // ─── Function types ──────────────────────────────────────────────────
 
-type MeasureTextFn = (text: string, fontSize: number, maxWidth: number,
-  letterSpacing: number, lineHeight: number, maxLines: number, noWrap: boolean) => TextMetrics;
+type MeasureTextFn = (text: string, fontSize: u16, maxWidth: number,
+  letterSpacing: number, lineHeight: number, maxLines: u16, noWrap: boolean) => TextMetrics;
 
 type MeasureImageFn = (path: string) => ImageDims;
 

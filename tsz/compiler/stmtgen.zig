@@ -189,7 +189,11 @@ fn emitVarDecl(
         return try emitExprFallback(alloc, lex, source, pos, indent_level);
     }
     const name = peekText(lex, source, pos.*);
-    const snake_name = try typegen.camelToSnake(alloc, name);
+    // Keep original casing, but escape Zig reserved keywords
+    const snake_name = if (typegen.isZigKeyword(name))
+        try std.fmt.allocPrint(alloc, "@\"{s}\"", .{name})
+    else
+        name;
     pos.* += 1;
 
     // Optional type annotation: name: Type
@@ -209,9 +213,13 @@ fn emitVarDecl(
         const effective_kw = if (std.mem.indexOf(u8, expr, "zeroes") != null or
             std.mem.indexOf(u8, expr, "[_]") != null) "var" else zig_kw;
 
-        // When there's an initializer, skip the type annotation — let Zig infer.
-        // The .tsz type annotation (e.g., "number[]") doesn't map cleanly and the
-        // initializer already carries the correct Zig type.
+        // When initializer is null, we must include the type annotation (Zig can't infer from null)
+        if (std.mem.eql(u8, expr, "null")) {
+            if (type_ann) |ta| {
+                return try std.fmt.allocPrint(alloc, "{s}{s} {s}: {s} = null;", .{ ind, effective_kw, snake_name, ta });
+            }
+        }
+        // Otherwise let Zig infer from the initializer
         return try std.fmt.allocPrint(alloc, "{s}{s} {s} = {s};", .{ ind, effective_kw, snake_name, expr });
     }
 
@@ -260,17 +268,40 @@ fn emitIf(
     const cond = try exprgen.emitExpression(alloc, lex, source, pos, .condition);
     if (peekKind(lex, pos.*) == .rparen) pos.* += 1;
 
-    // { body } or single statement
-    try out.appendSlice(alloc, try std.fmt.allocPrint(alloc, "{s}if ({s}) {{\n", .{ ind, cond }));
-    if (peekKind(lex, pos.*) == .lbrace) {
-        const body = try emitBlock(alloc, lex, source, pos, indent_level + 1);
-        try out.appendSlice(alloc, body);
+    // Detect "X != null" pattern → Zig payload capture: if (X) |X_val| { body with X_val }
+    const null_check_var = extractNullCheckVar(cond);
+
+    if (null_check_var) |nv| {
+        // Null check pattern: emit same condition, but add .? to references in body
+        try out.appendSlice(alloc, try std.fmt.allocPrint(alloc, "{s}if ({s} != null) {{\n", .{ ind, nv }));
+        var body: []const u8 = "";
+        if (peekKind(lex, pos.*) == .lbrace) {
+            body = try emitBlock(alloc, lex, source, pos, indent_level + 1);
+        } else {
+            const stmt = try emitStatement(alloc, lex, source, pos, indent_level + 1);
+            if (stmt.len > 0) body = stmt;
+        }
+        // Add .? unwrap to references of the nullable var inside the body,
+        // but NOT when it's the target of "= null" assignment (assigning null to optional is valid)
+        const unwrapped = try std.fmt.allocPrint(alloc, "{s}.?", .{nv});
+        var replaced = try replaceIdent(alloc, body, nv, unwrapped);
+        // Fix over-replacement: "X.? = null" → "X = null"
+        const bad_pattern = try std.fmt.allocPrint(alloc, "{s}.? = null", .{nv});
+        const good_pattern = try std.fmt.allocPrint(alloc, "{s} = null", .{nv});
+        replaced = try replaceAll(alloc, replaced, bad_pattern, good_pattern);
+        try out.appendSlice(alloc, replaced);
+        if (body.len > 0 and body[body.len - 1] != '\n') try out.append(alloc, '\n');
     } else {
-        // Single-statement if (no braces)
-        const stmt = try emitStatement(alloc, lex, source, pos, indent_level + 1);
-        if (stmt.len > 0) {
-            try out.appendSlice(alloc, stmt);
-            try out.append(alloc, '\n');
+        try out.appendSlice(alloc, try std.fmt.allocPrint(alloc, "{s}if ({s}) {{\n", .{ ind, cond }));
+        if (peekKind(lex, pos.*) == .lbrace) {
+            const body = try emitBlock(alloc, lex, source, pos, indent_level + 1);
+            try out.appendSlice(alloc, body);
+        } else {
+            const stmt = try emitStatement(alloc, lex, source, pos, indent_level + 1);
+            if (stmt.len > 0) {
+                try out.appendSlice(alloc, stmt);
+                try out.append(alloc, '\n');
+            }
         }
     }
     try out.appendSlice(alloc, try std.fmt.allocPrint(alloc, "{s}}}", .{ind}));
@@ -326,7 +357,7 @@ fn emitForOf(
 
     // Iterator variable name
     const iter_name = peekText(lex, source, pos.*);
-    const snake_iter = try typegen.camelToSnake(alloc, iter_name);
+    const snake_iter = iter_name;
     pos.* += 1; // skip name
 
     pos.* += 1; // skip 'of'
@@ -404,7 +435,7 @@ fn emitForUpdate(alloc: std.mem.Allocator, lex: *const Lexer, source: []const u8
 
         // Handle i++ → i += 1
         if (kind == .identifier) {
-            const name = try typegen.camelToSnake(alloc, text);
+            const name = text;
             pos.* += 1;
             if (peekKind(lex, pos.*) == .plus and pos.* + 1 < lex.count and lex.get(pos.* + 1).kind == .plus) {
                 pos.* += 2; // skip ++
@@ -462,16 +493,14 @@ fn emitWhile(
             const p1 = peekKind(lex, pos.* + 1);
             const p2 = peekKind(lex, pos.* + 2);
             if (p1 == .plus and p2 == .plus) {
-                const snake = try typegen.camelToSnake(alloc, name);
                 pos.* += 3; // skip name++
                 if (peekKind(lex, pos.*) == .semicolon) pos.* += 1;
-                return try std.fmt.allocPrint(alloc, "{s}while ({s}) : ({s} += 1) {{}}", .{ ind, cond, snake });
+                return try std.fmt.allocPrint(alloc, "{s}while ({s}) : ({s} += 1) {{}}", .{ ind, cond, name });
             }
             if (p1 == .minus and p2 == .minus) {
-                const snake = try typegen.camelToSnake(alloc, name);
                 pos.* += 3;
                 if (peekKind(lex, pos.*) == .semicolon) pos.* += 1;
-                return try std.fmt.allocPrint(alloc, "{s}while ({s}) : ({s} -= 1) {{}}", .{ ind, cond, snake });
+                return try std.fmt.allocPrint(alloc, "{s}while ({s}) : ({s} -= 1) {{}}", .{ ind, cond, name });
             }
         }
     }
@@ -672,4 +701,70 @@ fn emitExprFallback(
 
     if (out.items.len == 0) return "";
     return try std.fmt.allocPrint(alloc, "{s}// SKIP: {s}", .{ ind, out.items });
+}
+
+// ── Null check pattern detection ────────────────────────────────────
+
+/// Extract variable name from "X != null" or "X == null" pattern.
+/// Returns the variable/property access string, or null if not a null check.
+fn extractNullCheckVar(cond: []const u8) ?[]const u8 {
+    // Match only simple "X != null" where X is a bare identifier or property chain
+    // (no spaces, no 'or'/'and', no parens — those are compound conditions)
+    if (std.mem.endsWith(u8, cond, " != null")) {
+        const var_part = std.mem.trim(u8, cond[0 .. cond.len - " != null".len], " ");
+        // Verify it's a simple identifier/property chain
+        for (var_part) |ch| {
+            if (!isIdentChar(ch)) return null; // has spaces, operators, etc.
+        }
+        if (var_part.len == 0) return null;
+        return var_part;
+    }
+    return null;
+}
+
+/// Replace whole-word occurrences of `old` with `new_val` in text.
+/// Only replaces when `old` is bordered by non-identifier characters.
+fn replaceIdent(alloc: std.mem.Allocator, text: []const u8, old: []const u8, new_val: []const u8) std.mem.Allocator.Error![]const u8 {
+    if (old.len == 0 or text.len < old.len) return try alloc.dupe(u8, text);
+    var out: std.ArrayListUnmanaged(u8) = .{};
+    var i: usize = 0;
+    while (i <= text.len - old.len) {
+        if (std.mem.eql(u8, text[i..][0..old.len], old)) {
+            // Check word boundaries
+            const before_ok = i == 0 or !isIdentChar(text[i - 1]);
+            const after_ok = i + old.len >= text.len or !isIdentChar(text[i + old.len]);
+            if (before_ok and after_ok) {
+                try out.appendSlice(alloc, new_val);
+                i += old.len;
+                continue;
+            }
+        }
+        try out.append(alloc, text[i]);
+        i += 1;
+    }
+    // Append remaining
+    while (i < text.len) : (i += 1) try out.append(alloc, text[i]);
+    return try alloc.dupe(u8, out.items);
+}
+
+fn isIdentChar(ch: u8) bool {
+    return (ch >= 'a' and ch <= 'z') or (ch >= 'A' and ch <= 'Z') or (ch >= '0' and ch <= '9') or ch == '_' or ch == '.';
+}
+
+/// Simple string replacement (all occurrences, not word-bounded).
+fn replaceAll(alloc: std.mem.Allocator, text: []const u8, needle: []const u8, replacement: []const u8) std.mem.Allocator.Error![]const u8 {
+    if (needle.len == 0 or text.len < needle.len) return try alloc.dupe(u8, text);
+    var out: std.ArrayListUnmanaged(u8) = .{};
+    var i: usize = 0;
+    while (i <= text.len - needle.len) {
+        if (std.mem.eql(u8, text[i..][0..needle.len], needle)) {
+            try out.appendSlice(alloc, replacement);
+            i += needle.len;
+        } else {
+            try out.append(alloc, text[i]);
+            i += 1;
+        }
+    }
+    while (i < text.len) : (i += 1) try out.append(alloc, text[i]);
+    return try alloc.dupe(u8, out.items);
 }
