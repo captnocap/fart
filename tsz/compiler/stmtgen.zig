@@ -239,21 +239,6 @@ pub fn emitStatement(
     const text = tok.text(source);
     const ind = try indent(alloc, indent_level);
 
-    // ── declare (FFI declarations — skip) ──────────────────────
-    if (tok.kind == .identifier and std.mem.eql(u8, text, "declare")) {
-        // Skip the entire declare statement. Must respect brace depth
-        // since @cImport({ @cInclude("..."); }) has semicolons inside braces.
-        var brace_depth: u32 = 0;
-        while (pos.* < lex.count) {
-            const k = lex.get(pos.*).kind;
-            if (k == .lbrace) brace_depth += 1;
-            if (k == .rbrace) { if (brace_depth > 0) brace_depth -= 1; }
-            if (k == .semicolon and brace_depth == 0) { pos.* += 1; break; }
-            pos.* += 1;
-        }
-        return "";
-    }
-
     // ── const/let declarations ───────────────────────────────────
     if (tok.kind == .identifier and (std.mem.eql(u8, text, "const") or std.mem.eql(u8, text, "let"))) {
         return try emitVarDecl(alloc, lex, source, pos, indent_level);
@@ -969,14 +954,6 @@ fn emitExprStatement(
                 if (pos.* < lex.count and lex.get(pos.*).kind == .semicolon) pos.* += 1;
                 return try std.fmt.allocPrint(alloc, "{s}{s} {s}= {s};", .{ ind, lhs, op_ch, rhs });
             }
-        }
-
-        // Compound assignment: ^= (XOR-assign)
-        if (op_kind == .caret_eq) {
-            pos.* += 1; // skip ^=
-            const rhs = try exprgen.emitExpressionTyped(alloc, lex, source, pos, .assignment, &var_type_table);
-            if (pos.* < lex.count and lex.get(pos.*).kind == .semicolon) pos.* += 1;
-            return try std.fmt.allocPrint(alloc, "{s}{s} ^= {s};", .{ ind, lhs, rhs });
         }
 
         // Postfix increment/decrement: i++, i--
