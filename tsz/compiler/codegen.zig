@@ -1793,18 +1793,30 @@ pub const Generator = struct {
     fn inferExprType(self: *Generator, expr: []const u8) StateType {
         _ = self;
         // Ternary that produces strings: (if (...) "x" else "y")
-        // Check if expression contains string literals as ternary branches
         const has_if = std.mem.indexOf(u8, expr, "if (") != null;
         const has_else = std.mem.indexOf(u8, expr, " else ") != null;
         if (has_if and has_else) {
-            // Count double-quote chars — if the branches are strings, there will be quotes
             var dq_count: u32 = 0;
             for (expr) |ch| {
                 if (ch == '"') dq_count += 1;
             }
-            if (dq_count >= 4) return .string; // at least 2 string literals (open+close each)
+            if (dq_count >= 4) return .string;
         }
-        // Direct string getter
+        // Bool checks BEFORE string — .includes()/.indexOf() etc. use getSlotString
+        // internally but produce bool/int, not string
+        if (!has_if) {
+            if (std.mem.indexOf(u8, expr, "getSlotBool") != null) return .boolean;
+            if (std.mem.indexOf(u8, expr, "!= null") != null) return .boolean;
+            const has_gt = std.mem.indexOf(u8, expr, "> ") != null and std.mem.indexOf(u8, expr, ">> ") == null;
+            const has_lt = std.mem.indexOf(u8, expr, "< ") != null and std.mem.indexOf(u8, expr, "<< ") == null;
+            if (std.mem.indexOf(u8, expr, "==") != null or
+                std.mem.indexOf(u8, expr, "!=") != null or
+                has_lt or has_gt) return .boolean;
+        }
+        // Int patterns that happen to contain getSlotString (.length, .indexOf result)
+        if (std.mem.indexOf(u8, expr, ".len)") != null) return .int;
+        if (std.mem.indexOf(u8, expr, "indexOf") != null) return .int;
+        // Direct string getter — only when it IS the string value
         if (std.mem.indexOf(u8, expr, "getSlotString") != null) return .string;
         // String literal
         if (expr.len >= 2 and expr[0] == '"') return .string;
@@ -1813,15 +1825,6 @@ pub const Generator = struct {
             std.mem.indexOf(u8, expr, "getFps") != null or
             std.mem.indexOf(u8, expr, "getLayoutMs") != null or
             std.mem.indexOf(u8, expr, "getPaintMs") != null) return .float;
-        // Bool — only if it's a pure comparison (not a ternary)
-        if (!has_if) {
-            if (std.mem.indexOf(u8, expr, "getSlotBool") != null) return .boolean;
-            // Bare comparisons that aren't inside a ternary
-            if (std.mem.indexOf(u8, expr, "==") != null or
-                std.mem.indexOf(u8, expr, "!=") != null or
-                std.mem.indexOf(u8, expr, "< ") != null or
-                std.mem.indexOf(u8, expr, "> ") != null) return .boolean;
-        }
         return .int;
     }
 
@@ -3843,9 +3846,32 @@ pub const Generator = struct {
                 }
             }
 
-            // Let var assignment: label = expr
+            // Let var assignment: label = expr, bonus += expr, etc.
             if (self.isLetVar(name)) |lv| {
                 const peek1 = self.pos + 1;
+                const peek2 = self.pos + 2;
+                // Compound assignment: bonus += expr, bonus -= expr, etc.
+                if (peek1 < self.lex.count and peek2 < self.lex.count and
+                    self.lex.tokens[peek2].kind == .equals)
+                {
+                    const op_kind = self.lex.tokens[peek1].kind;
+                    const op_str: ?[]const u8 = switch (op_kind) {
+                        .plus => "+",
+                        .minus => "-",
+                        .star => "*",
+                        .slash => "/",
+                        .percent => "%",
+                        else => null,
+                    };
+                    if (op_str) |op| {
+                        self.advance_token(); // skip identifier
+                        self.advance_token(); // skip + - * / %
+                        self.advance_token(); // skip =
+                        const rhs = try self.emitStateExpr();
+                        return try std.fmt.allocPrint(self.alloc, "{s} = ({s} {s} {s});", .{ lv.zig_name, lv.zig_name, op, rhs });
+                    }
+                }
+                // Plain assignment: label = expr
                 if (peek1 < self.lex.count and self.lex.tokens[peek1].kind == .equals) {
                     self.advance_token(); // skip identifier
                     self.advance_token(); // skip =
@@ -4202,7 +4228,9 @@ pub const Generator = struct {
             }
         }
 
-        return try self.alloc.dupe(u8, "std.debug.print(\"[handler]\\n\", .{});");
+        // Safety: always advance to prevent infinite loops in computeBody
+        self.advance_token();
+        return "";
     }
 
     /// Parse if/else if/else chain → Zig if/else chain
@@ -6951,7 +6979,6 @@ pub const Generator = struct {
                 }
             }
         }
-        if (self.let_count > 0) try out.appendSlice(self.alloc, "    computeBody();\n");
         if (self.dyn_count > 0) try out.appendSlice(self.alloc, "    updateDynamicTexts();\n");
         if (self.dyn_style_count > 0) try out.appendSlice(self.alloc, "    updateDynamicStyles();\n");
         if (self.cond_count > 0) try out.appendSlice(self.alloc, "    updateConditionals();\n");
@@ -6982,13 +7009,14 @@ pub const Generator = struct {
                 }
             }
         }
-        // Initial computed array build (before maps, since maps may read from computed arrays)
+        // Initial computed array build (before computeBody and maps)
         if (self.computed_count > 0) {
             for (0..self.computed_count) |ci| {
                 try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
                     "    _rebuildComputed{d}();\n", .{ci}));
             }
         }
+        if (self.let_count > 0) try out.appendSlice(self.alloc, "    computeBody();\n");
         if (self.map_count > 0) {
             for (0..self.map_count) |mi| {
                 try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
@@ -7052,18 +7080,18 @@ pub const Generator = struct {
             }
             if (self.has_state and (self.dyn_count > 0 or self.dyn_style_count > 0 or self.cond_count > 0 or has_watch or self.map_count > 0 or self.let_count > 0 or self.computed_count > 0)) {
                 try out.appendSlice(self.alloc, "        if (state.isDirty()) {\n");
-                if (self.let_count > 0) try out.appendSlice(self.alloc, "            computeBody();\n");
-                if (self.dyn_count > 0) try out.appendSlice(self.alloc, "            updateDynamicTexts();\n");
-                if (self.dyn_style_count > 0) try out.appendSlice(self.alloc, "            updateDynamicStyles();\n");
-                if (self.cond_count > 0) try out.appendSlice(self.alloc, "            updateConditionals();\n");
-                if (self.overlay_count > 0) try out.appendSlice(self.alloc, "            updateOverlays();\n");
-                // Computed arrays must rebuild BEFORE maps (maps may read from computed arrays)
+                // Computed arrays rebuild first — computeBody/texts/maps may reference them
                 if (self.computed_count > 0) {
                     for (0..self.computed_count) |ci| {
                         try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
                             "            _rebuildComputed{d}();\n", .{ci}));
                     }
                 }
+                if (self.let_count > 0) try out.appendSlice(self.alloc, "            computeBody();\n");
+                if (self.dyn_count > 0) try out.appendSlice(self.alloc, "            updateDynamicTexts();\n");
+                if (self.dyn_style_count > 0) try out.appendSlice(self.alloc, "            updateDynamicStyles();\n");
+                if (self.cond_count > 0) try out.appendSlice(self.alloc, "            updateConditionals();\n");
+                if (self.overlay_count > 0) try out.appendSlice(self.alloc, "            updateOverlays();\n");
                 if (self.map_count > 0) {
                     for (0..self.map_count) |mi| {
                         try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
