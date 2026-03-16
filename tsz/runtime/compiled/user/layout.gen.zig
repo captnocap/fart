@@ -177,7 +177,7 @@ pub fn hitTest(node: *Node, mx: f32, my: f32) ?Node {
     var i = node.children.len;
     while (i > 0) {
         i -= 1;
-        const hit = &hitTest(node.children[@intCast(i)], mx, my);
+        const hit = hitTest(node.children[i], mx, my);
         if (hit != null) {
             return hit.?;
         }
@@ -202,7 +202,7 @@ pub fn hitTestText(node: *Node, mx: f32, my: f32) ?Node {
     var i = node.children.len;
     while (i > 0) {
         i -= 1;
-        const hit = &hitTestText(node.children[@intCast(i)], mx, my);
+        const hit = hitTestText(node.children[i], mx, my);
         if (hit != null) {
             return hit.?;
         }
@@ -227,7 +227,7 @@ pub fn findScrollContainer(node: *Node, mx: f32, my: f32) ?Node {
     var i = node.children.len;
     while (i > 0) {
         i -= 1;
-        const hit = &findScrollContainer(node.children[@intCast(i)], mx, my);
+        const hit = findScrollContainer(node.children[i], mx, my);
         if (hit != null) {
             return hit.?;
         }
@@ -348,7 +348,7 @@ fn estimateIntrinsicWidth(node: *Node) f32 {
     var total: f32 = 0;
     var maxCross: f32 = 0;
     var visibleCount: usize = 0;
-    for (node.children) |*child| {
+    for (node.children) |child| {
         if (child.style.display == .none) {
             continue;
         }
@@ -404,7 +404,7 @@ fn estimateIntrinsicHeight(node: *Node, availableWidth: f32) f32 {
     var total: f32 = 0;
     var maxCross: f32 = 0;
     var visibleCount: usize = 0;
-    for (node.children) |*child| {
+    for (node.children) |child| {
         if (child.style.display == .none) {
             continue;
         }
@@ -431,7 +431,7 @@ fn estimateIntrinsicHeight(node: *Node, availableWidth: f32) f32 {
         var totalCross: f32 = 0;
         var itemsOnLine: usize = 0;
         var lineCount: usize = 0;
-        for (node.children) |*child| {
+        for (node.children) |child| {
             if (child.style.display == .none) {
                 continue;
             }
@@ -443,14 +443,14 @@ fn estimateIntrinsicHeight(node: *Node, availableWidth: f32) f32 {
             const cmR = marRight(child.style);
             const itemMain = cw + cmL + cmR;
             const gapBefore = if (itemsOnLine > 0) g else 0;
-            if (itemsOnLine > 0 and (asF32(lineMain) + asF32(gapBefore) + itemMain) > innerW) {
+            if (itemsOnLine > 0 and (lineMain + gapBefore + itemMain) > innerW) {
                 totalCross += lineCrossMax;
                 lineCount += 1;
                 lineMain = itemMain;
                 lineCrossMax = estimateIntrinsicHeight(child, innerW) + marTop(child.style) + marBottom(child.style);
                 itemsOnLine = 1;
             } else {
-                lineMain += asF32(gapBefore) + asF32(itemMain);
+                lineMain += gapBefore + itemMain;
                 const chCross = estimateIntrinsicHeight(child, innerW) + marTop(child.style) + marBottom(child.style);
                 if (chCross > lineCrossMax) {
                     lineCrossMax = chCross;
@@ -479,12 +479,12 @@ fn computeMinContentW(node: *Node) f32 {
         var maxWordW: f32 = 0;
         var i: usize = 0;
         while (i < node.text.?.len) {
-            while (i < node.text.?.len and (node.text.?[@intCast(i)] == ' ' or node.text.?[@intCast(i)] == '\n')) : (i += 1) {}
+            while (i < node.text.?.len and (node.text.?[i] == ' ' or node.text.?[i] == '\n')) : (i += 1) {}
             if (i >= node.text.?.len) {
                 break;
             }
             const wordStart = i;
-            while (i < node.text.?.len and node.text.?[@intCast(i)] != ' ' and node.text.?[@intCast(i)] != '\n') : (i += 1) {}
+            while (i < node.text.?.len and node.text.?[i] != ' ' and node.text.?[i] != '\n') : (i += 1) {}
             const word = node.text.?[@intCast(wordStart)..@intCast(i)];
             const m = measureFn.?(word, node.font_size, 0, node.letter_spacing, node.line_height, node.number_of_lines, false);
             if (m.width > maxWordW) {
@@ -500,7 +500,7 @@ fn computeMinContentW(node: *Node) f32 {
     const g = s.gap;
     var minW: f32 = 0;
     var visCount: usize = 0;
-    for (node.children) |*child| {
+    for (node.children) |child| {
         if (child.style.display == .none) {
             continue;
         }
@@ -512,7 +512,7 @@ fn computeMinContentW(node: *Node) f32 {
             minW += childMin;
             visCount += 1;
         } else {
-            if (asF32(childMin) > asF32(minW)) {
+            if (childMin > minW) {
                 minW = childMin;
             }
         }
@@ -578,30 +578,30 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
     const @"align" = s.align_items;
     const mainSize = if (isRow) innerW else innerH;
     const MAX_CHILDREN = 512;
-    var childBasis = std.mem.zeroes([MAX_CHILDREN]f32);
-    var childGrow = std.mem.zeroes([MAX_CHILDREN]f32);
-    var childShrink = std.mem.zeroes([MAX_CHILDREN]f32);
-    var childMainSize = std.mem.zeroes([MAX_CHILDREN]f32);
-    var childCrossSize = std.mem.zeroes([MAX_CHILDREN]f32);
-    var childMainMarginStart = std.mem.zeroes([MAX_CHILDREN]f32);
-    var childMainMarginEnd = std.mem.zeroes([MAX_CHILDREN]f32);
-    var childCrossMarginStart = std.mem.zeroes([MAX_CHILDREN]f32);
-    var childCrossMarginEnd = std.mem.zeroes([MAX_CHILDREN]f32);
-    var visibleIndices = std.mem.zeroes([MAX_CHILDREN]usize);
+    var childBasis: []f32 = std.mem.zeroes([MAX_CHILDREN]f32);
+    var childGrow: []f32 = std.mem.zeroes([MAX_CHILDREN]f32);
+    var childShrink: []f32 = std.mem.zeroes([MAX_CHILDREN]f32);
+    var childMainSize: []f32 = std.mem.zeroes([MAX_CHILDREN]f32);
+    var childCrossSize: []f32 = std.mem.zeroes([MAX_CHILDREN]f32);
+    var childMainMarginStart: []f32 = std.mem.zeroes([MAX_CHILDREN]f32);
+    var childMainMarginEnd: []f32 = std.mem.zeroes([MAX_CHILDREN]f32);
+    var childCrossMarginStart: []f32 = std.mem.zeroes([MAX_CHILDREN]f32);
+    var childCrossMarginEnd: []f32 = std.mem.zeroes([MAX_CHILDREN]f32);
+    var visibleIndices: []f32 = std.mem.zeroes([MAX_CHILDREN]usize);
     var visibleCount: usize = 0;
-    var absoluteIndices = std.mem.zeroes([MAX_CHILDREN]usize);
+    var absoluteIndices: []f32 = std.mem.zeroes([MAX_CHILDREN]usize);
     var absoluteCount: usize = 0;
     {
         var i: usize = 0;
         while (i < node.children.len) : (i += 1) {
-            const child = &node.children[@intCast(i)];
+            const child = node.children[i];
             if (child.style.display == .none) {
                 child.computed = .{ .x = 0, .y = 0, .w = 0, .h = 0 };
                 continue;
             }
             if (child.style.position == .absolute) {
                 if (absoluteCount < MAX_CHILDREN) {
-                    absoluteIndices[@intCast(absoluteCount)] = i;
+                    absoluteIndices[absoluteCount] = i;
                     absoluteCount += 1;
                 }
                 continue;
@@ -621,22 +621,22 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
             const cmR = marRight(cs);
             const cmT = marTop(cs);
             const cmB = marBottom(cs);
-            visibleIndices[@intCast(visibleCount)] = i;
-            childBasis[@intCast(visibleCount)] = basis;
-            childGrow[@intCast(visibleCount)] = grow;
-            childShrink[@intCast(visibleCount)] = shrink;
-            childMainSize[@intCast(visibleCount)] = if (isRow) cwClamped else chClamped;
-            childCrossSize[@intCast(visibleCount)] = if (isRow) chClamped else cwClamped;
-            childMainMarginStart[@intCast(visibleCount)] = if (isRow) cmL else cmT;
-            childMainMarginEnd[@intCast(visibleCount)] = if (isRow) cmR else cmB;
-            childCrossMarginStart[@intCast(visibleCount)] = if (isRow) cmT else cmL;
-            childCrossMarginEnd[@intCast(visibleCount)] = if (isRow) cmB else cmR;
+            visibleIndices[visibleCount] = i;
+            childBasis[visibleCount] = basis;
+            childGrow[visibleCount] = grow;
+            childShrink[visibleCount] = shrink;
+            childMainSize[visibleCount] = if (isRow) cwClamped else chClamped;
+            childCrossSize[visibleCount] = if (isRow) chClamped else cwClamped;
+            childMainMarginStart[visibleCount] = if (isRow) cmL else cmT;
+            childMainMarginEnd[visibleCount] = if (isRow) cmR else cmB;
+            childCrossMarginStart[visibleCount] = if (isRow) cmT else cmL;
+            childCrossMarginEnd[visibleCount] = if (isRow) cmB else cmR;
             visibleCount += 1;
         }
     }
     const MAX_LINES = 64;
-    var lineStarts = std.mem.zeroes([MAX_LINES]usize);
-    var lineCounts = std.mem.zeroes([MAX_LINES]usize);
+    var lineStarts: []f32 = std.mem.zeroes([MAX_LINES]usize);
+    var lineCounts: []f32 = std.mem.zeroes([MAX_LINES]usize);
     var numLines: usize = 0;
     if (s.flex_wrap == .wrap and visibleCount > 0) {
         var lineMain: f32 = 0;
@@ -645,31 +645,31 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
         {
             var i: usize = 0;
             while (i < visibleCount) : (i += 1) {
-                const itemMain = childBasis[@intCast(i)] + childMainMarginStart[@intCast(i)] + childMainMarginEnd[@intCast(i)];
+                const itemMain = childBasis[i] + childMainMarginStart[i] + childMainMarginEnd[i];
                 const gapBefore = if (itemsOnLine > 0) gap else 0;
-                if (itemsOnLine > 0 and (asF32(lineMain) + asF32(gapBefore) + itemMain) > mainSize) {
+                if (itemsOnLine > 0 and (lineMain + gapBefore + itemMain) > mainSize) {
                     if (numLines < MAX_LINES) {
-                        lineStarts[@intCast(numLines)] = lineStartIdx;
-                        lineCounts[@intCast(numLines)] = itemsOnLine;
+                        lineStarts[numLines] = lineStartIdx;
+                        lineCounts[numLines] = itemsOnLine;
                         numLines += 1;
                     }
                     lineStartIdx = i;
                     lineMain = itemMain;
                     itemsOnLine = 1;
                 } else {
-                    lineMain += asF32(gapBefore) + asF32(itemMain);
+                    lineMain += gapBefore + itemMain;
                     itemsOnLine += 1;
                 }
             }
         }
         if (itemsOnLine > 0 and numLines < MAX_LINES) {
-            lineStarts[@intCast(numLines)] = lineStartIdx;
-            lineCounts[@intCast(numLines)] = itemsOnLine;
+            lineStarts[numLines] = lineStartIdx;
+            lineCounts[numLines] = itemsOnLine;
             numLines += 1;
         }
     } else {
-        lineStarts[@intCast(0)] = 0;
-        lineCounts[@intCast(0)] = visibleCount;
+        lineStarts[0] = 0;
+        lineCounts[0] = visibleCount;
         numLines = if (visibleCount > 0) 1 else 0;
     }
     var crossCursor: f32 = 0;
@@ -678,8 +678,8 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
     {
         var lineIdx: usize = 0;
         while (lineIdx < numLines) : (lineIdx += 1) {
-            const ls = lineStarts[@intCast(lineIdx)];
-            const lc = lineCounts[@intCast(lineIdx)];
+            const ls = lineStarts[lineIdx];
+            const lc = lineCounts[lineIdx];
             var totalBasis: f32 = 0;
             var totalFlex: f32 = 0;
             var totalMainMargin: f32 = 0;
@@ -693,11 +693,11 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
                     }
                 }
             }
-            const lineGaps = if (lc > 1) gap * @as(f32, @floatFromInt((lc - 1))) else 0;
+            const lineGaps = if (lc > 1) gap * (lc - 1) else 0;
             const freeSpace = mainSize - totalBasis - lineGaps - totalMainMargin;
             if (freeSpace > 0 and totalFlex > 0) {
-                var frozen = std.mem.zeroes([MAX_CHILDREN]bool);
-                var savedBasis = std.mem.zeroes([MAX_CHILDREN]f32);
+                var frozen: []bool = std.mem.zeroes([MAX_CHILDREN]bool);
+                var savedBasis: []f32 = std.mem.zeroes([MAX_CHILDREN]f32);
                 {
                     var i = ls;
                     while (i < ls + lc) : (i += 1) {
@@ -737,7 +737,7 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
                             }
                             childBasis[@intCast(i)] = savedBasis[@intCast(i)] + (childGrow[@intCast(i)] / activeFlex) * space;
                             const ci = visibleIndices[@intCast(i)];
-                            const csG = &node.children[@intCast(ci)].style;
+                            const csG = node.children[@intCast(ci)].style;
                             const mn = resolveMaybePct(if (isRow) csG.min_width else csG.min_height, if (isRow) innerW else innerH);
                             const mx = resolveMaybePct(if (isRow) csG.max_width else csG.max_height, if (isRow) innerW else innerH);
                             const clampedVal = clampVal(childBasis[@intCast(i)], mn, mx);
@@ -775,12 +775,12 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
                         var i = ls;
                         while (i < ls + lc) : (i += 1) {
                             const childIdx = visibleIndices[@intCast(i)];
-                            const childNode = &node.children[@intCast(childIdx)];
+                            const childNode = node.children[@intCast(childIdx)];
                             if (childNode.style.min_width != null) {
                                 continue;
                             }
                             const mcw = computeMinContentW(childNode);
-                            if (asF32(childBasis[@intCast(i)]) < asF32(mcw)) {
+                            if (childBasis[@intCast(i)] < mcw) {
                                 childBasis[@intCast(i)] = mcw;
                             }
                         }
@@ -791,7 +791,7 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
                 var i = ls;
                 while (i < ls + lc) : (i += 1) {
                     const childIdx = visibleIndices[@intCast(i)];
-                    const child = &node.children[@intCast(childIdx)];
+                    const child = node.children[@intCast(childIdx)];
                     if (child.text == null) {
                         continue;
                     }
@@ -872,18 +872,18 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
                 },
                 .space_between => {
                     if (lc > 1) {
-                        extraGap = freeMain / @as(f32, @floatFromInt((lc - 1)));
+                        extraGap = freeMain / (lc - 1);
                     }
                 },
                 .space_around => {
                     if (lc > 0) {
-                        extraGap = freeMain / @as(f32, @floatFromInt(lc));
+                        extraGap = freeMain / lc;
                         mainOffset = extraGap / 2;
                     }
                 },
                 .space_evenly => {
                     if (lc > 0) {
-                        extraGap = freeMain / @as(f32, @floatFromInt((lc + 1)));
+                        extraGap = freeMain / (lc + 1);
                         mainOffset = extraGap;
                     }
                 },
@@ -895,7 +895,7 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
                 var i = ls;
                 while (i < ls + lc) : (i += 1) {
                     const childIdx = visibleIndices[@intCast(i)];
-                    const child = &node.children[@intCast(childIdx)];
+                    const child = node.children[@intCast(childIdx)];
                     var cx: f32 = undefined;
                     var cy: f32 = undefined;
                     var cwFinal: f32 = undefined;
@@ -1016,8 +1016,8 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
     {
         var ai: usize = 0;
         while (ai < absoluteCount) : (ai += 1) {
-            const absIdx = absoluteIndices[@intCast(ai)];
-            const absChild = &node.children[@intCast(absIdx)];
+            const absIdx = absoluteIndices[ai];
+            const absChild = node.children[@intCast(absIdx)];
             const acs = absChild.style;
             var absW: f32 = undefined;
             const resolvedW = resolveMaybePct(acs.width, innerW);
