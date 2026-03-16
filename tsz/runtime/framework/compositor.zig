@@ -40,6 +40,8 @@ var g_sel_end_node: ?*Node = null;
 var g_sel_start: usize = 0;
 var g_sel_end: usize = 0;
 var g_sel_all: bool = false;
+// 0 = before selection, 1 = inside selection, 2 = past selection
+var g_sel_walk_state: u8 = 0;
 
 // ════════════════════════════════════════════════════════════════════════
 // Public API
@@ -107,6 +109,7 @@ pub fn frame(root: *Node, win_w: f32, win_h: f32, bg_color: Color) void {
     g_app_root = root;
     g_app_w = win_w;
     g_app_h = win_h;
+    g_sel_walk_state = 0; // Reset selection walk state each frame
 
     // Walk tree and emit draw commands
     paintNode(root, 0, 0, 1.0);
@@ -219,14 +222,52 @@ fn paintNode(node: *Node, scroll_x: f32, scroll_y: f32, parent_opacity: f32) voi
         const ca = @as(f32, @floatFromInt(color.a)) / 255.0 * effective_opacity;
 
         // Selection highlight — draw before text so highlight is behind
-        const is_selected = (g_sel_node != null and g_sel_end_node != null) and
-            (g_sel_node == node or g_sel_end_node == node or g_sel_all) and
-            (g_sel_start != g_sel_end or g_sel_all);
-        if (is_selected) {
-            const s0 = if (g_sel_all) 0 else @min(g_sel_start, g_sel_end);
-            const s1 = if (g_sel_all) txt.len else @max(g_sel_start, g_sel_end);
-            if (s1 > s0) {
-                // Measure text positions to get highlight rects
+        if (g_sel_node != null and g_sel_end_node != null and (g_sel_start != g_sel_end or g_sel_all)) {
+            const is_start_node = (g_sel_node == node);
+            const is_end_node = (g_sel_end_node == node);
+            const is_same_node = (g_sel_node == g_sel_end_node);
+
+            var s0: usize = 0;
+            var s1: usize = txt.len;
+            var should_highlight = false;
+
+            if (g_sel_all) {
+                should_highlight = true;
+            } else if (is_same_node and is_start_node) {
+                // Single-node selection
+                s0 = @min(g_sel_start, g_sel_end);
+                s1 = @max(g_sel_start, g_sel_end);
+                should_highlight = (s1 > s0);
+            } else if (is_start_node or is_end_node) {
+                // First or last boundary node in cross-node selection
+                if (g_sel_walk_state == 0) {
+                    // This is the first boundary we encounter in tree order
+                    if (is_start_node) {
+                        s0 = g_sel_start;
+                        s1 = txt.len;
+                    } else {
+                        s0 = g_sel_end;
+                        s1 = txt.len;
+                    }
+                    g_sel_walk_state = 1;
+                } else if (g_sel_walk_state == 1) {
+                    // This is the second boundary — end of cross-node selection
+                    if (is_end_node) {
+                        s0 = 0;
+                        s1 = g_sel_end;
+                    } else {
+                        s0 = 0;
+                        s1 = g_sel_start;
+                    }
+                    g_sel_walk_state = 2;
+                }
+                should_highlight = (s1 > s0);
+            } else if (g_sel_walk_state == 1) {
+                // Middle node — fully selected
+                should_highlight = true;
+            }
+
+            if (should_highlight and s1 > s0) {
                 const tx = screen_x + pad_l;
                 const ty = screen_y + pad_t;
                 gpu.drawSelectionRects(txt, tx, ty, node.font_size, text_max_w, s0, s1);
