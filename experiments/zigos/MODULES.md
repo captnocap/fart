@@ -41,6 +41,21 @@ pub fn run(config: AppConfig) !void {
 
 The generated app never sees geometry. It just calls `engine.run()`.
 
+## Breakpoints (framework/breakpoint.zig)
+
+Responsive layout tiers matching the Love2D stack: `sm` (0-639px), `md` (640-1023px), `lg` (1024-1439px), `xl` (1440px+).
+
+Updated automatically by the engine on init and window resize. Framework modules and generated apps can query the current breakpoint to adapt layout:
+
+```zig
+const breakpoint = @import("breakpoint.zig");
+
+const bp = breakpoint.current();       // .sm, .md, .lg, .xl
+const w = breakpoint.width();          // current window width as f32
+if (breakpoint.atLeast(.lg)) { ... }   // true if desktop or wider
+const label = breakpoint.name();       // "sm", "md", "lg", "xl"
+```
+
 ## What Goes Where
 
 | Location | What | Example |

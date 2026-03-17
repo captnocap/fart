@@ -650,6 +650,7 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
     const x = px + ml;
     const y = py + mt;
     const innerW = w - pl - pr;
+    const autoHeight = h == null;
     const innerH = if (h != null) h.? - pt - pb else 9999;
     const isRow = s.flex_direction == .row;
     const gap = s.gap;
@@ -942,32 +943,36 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
             const freeMain = mainSize - usedMain - lineGaps;
             var mainOffset: f32 = 0;
             var extraGap: f32 = 0;
-            switch (justify) {
-                .center => {
-                    mainOffset = freeMain / 2;
-                },
-                .end => {
-                    mainOffset = freeMain;
-                },
-                .space_between => {
-                    if (lc > 1) {
-                        extraGap = freeMain / @as(f32, @floatFromInt((lc - 1)));
-                    }
-                },
-                .space_around => {
-                    if (lc > 0) {
-                        extraGap = freeMain / @as(f32, @floatFromInt(lc));
-                        mainOffset = extraGap / 2;
-                    }
-                },
-                .space_evenly => {
-                    if (lc > 0) {
-                        extraGap = freeMain / @as(f32, @floatFromInt((lc + 1)));
-                        mainOffset = extraGap;
-                    }
-                },
-                .start => {
-                },
+            // Don't apply justify offsets when the main axis is auto-sized (h == null for columns).
+            // The 9999 sentinel is not a real size — centering against it produces absurd offsets.
+            const mainAxisAuto = if (isRow) false else autoHeight;
+            if (!mainAxisAuto) {
+                switch (justify) {
+                    .center => {
+                        mainOffset = freeMain / 2;
+                    },
+                    .end => {
+                        mainOffset = freeMain;
+                    },
+                    .space_between => {
+                        if (lc > 1) {
+                            extraGap = freeMain / @as(f32, @floatFromInt((lc - 1)));
+                        }
+                    },
+                    .space_around => {
+                        if (lc > 0) {
+                            extraGap = freeMain / @as(f32, @floatFromInt(lc));
+                            mainOffset = extraGap / 2;
+                        }
+                    },
+                    .space_evenly => {
+                        if (lc > 0) {
+                            extraGap = freeMain / @as(f32, @floatFromInt((lc + 1)));
+                            mainOffset = extraGap;
+                        }
+                    },
+                    .start => {},
+                }
             }
             var cursor = mainOffset;
             {
