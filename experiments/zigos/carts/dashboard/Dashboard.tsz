@@ -1,3 +1,6 @@
+// @ffi <time.h>
+declare function time(t: number): number;
+
 import { Page, Header, Row, Spacer, Title, Status, Alert, Dim, Circle, BigCircle, Pill } from './style.cls';
 import { StatCard } from './StatCard.c';
 import { metrics } from './metrics.script';
@@ -22,6 +25,10 @@ const [diskPct, setDiskPct] = useState(0);
 const [gcPause, setGcPause] = useState(0);
 const [statusText, setStatusText] = useState('Status: HEALTHY');
 const [alertText, setAlertText] = useState('All systems nominal');
+const [fps, setFps] = useState(0);
+const [layoutUs, setLayoutUs] = useState(0);
+const [paintUs, setPaintUs] = useState(0);
+const [tickUs, setTickUs] = useState(0);
 
 function App() {
   return (
@@ -59,16 +66,12 @@ function App() {
         <StatCard label="GC Pause" value={`${gcPause}ms`} color="#3fb950" />
       </C.Row>
 
-      <C.Row>
-        <C.Circle />
-        <C.Circle />
-        <C.Circle />
-        <C.BigCircle />
-        <C.Pill />
-        <C.Circle />
-        <C.Circle />
-        <C.Circle />
-      </C.Row>
+      <Box style={{ flexDirection: 'row', padding: 6, gap: 16, backgroundColor: '#000000', opacity: 0.8 }}>
+        <Text fontSize={11} color="#b4dcb4" noWrap={true}>{`FPS: ${fps}`}</Text>
+        <Text fontSize={11} color="#6e7681" noWrap={true}>{`tick: ${tickUs}us`}</Text>
+        <Text fontSize={11} color="#6e7681" noWrap={true}>{`layout: ${layoutUs}us`}</Text>
+        <Text fontSize={11} color="#6e7681" noWrap={true}>{`paint: ${paintUs}us`}</Text>
+      </Box>
     </C.Page>
   );
 }

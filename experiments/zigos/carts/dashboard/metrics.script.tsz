@@ -41,10 +41,16 @@ function pushMetrics() {
 }
 
 setInterval(function() {
-  _uptime++;
-  setUptime(_uptime);
+  setUptime(time(0));
   pushMetrics();
 }, 1000);
+
+setInterval(function() {
+  setFps(getFps());
+  setLayoutUs(getLayoutUs());
+  setPaintUs(getPaintUs());
+  setTickUs(getTickUs());
+}, 250);
 
 pushMetrics();
 console.log('Dashboard metrics loaded.');

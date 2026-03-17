@@ -2199,6 +2199,28 @@ pub const Generator = struct {
         // Globals
         try out.appendSlice(self.alloc, "\nvar g_text_engine: ?*TextEngine = null;\n\n");
 
+        // FFI host function wrappers (bridge C functions into QuickJS)
+        if (self.ffi_funcs.items.len > 0) {
+            try out.appendSlice(self.alloc, "const qjs = @cImport({ @cDefine(\"_GNU_SOURCE\", \"1\"); @cDefine(\"QUICKJS_NG_BUILD\", \"1\"); @cInclude(\"quickjs.h\"); });\n");
+            try out.appendSlice(self.alloc, "const QJS_UNDEFINED = qjs.JSValue{ .u = .{ .int32 = 0 }, .tag = 3 };\n\n");
+            for (self.ffi_funcs.items) |func_name| {
+                // Generate: fn _ffi_NAME(ctx, this, argc, argv) -> JSValue
+                // Calls ffi.NAME with argv[0..] converted from JS numbers, returns result as JS number
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                    "fn _ffi_{s}(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {{\n" ++
+                    "    var args: [8]c_long = undefined;\n" ++
+                    "    var i: usize = 0;\n" ++
+                    "    while (i < @as(usize, @intCast(@max(0, argc))) and i < 8) : (i += 1) {{\n" ++
+                    "        var v: f64 = 0;\n" ++
+                    "        _ = qjs.JS_ToFloat64(ctx, &v, argv[i]);\n" ++
+                    "        args[i] = @intFromFloat(v);\n" ++
+                    "    }}\n" ++
+                    "    const result = ffi.{s}(args[0]);\n" ++
+                    "    return qjs.JS_NewFloat64(ctx, @floatFromInt(result));\n" ++
+                    "}}\n\n", .{ func_name, func_name }));
+            }
+        }
+
         // Measure callbacks
         try out.appendSlice(self.alloc, "fn measureCallback(t: []const u8, font_size: u16, max_width: f32, letter_spacing: f32, line_height: f32, max_lines: u16, no_wrap: bool) layout.TextMetrics {\n    if (g_text_engine) |te| { return te.measureTextWrappedEx(t, font_size, max_width, letter_spacing, line_height, max_lines, no_wrap); }\n    return .{};\n}\n\n");
         try out.appendSlice(self.alloc, "fn measureImageCallback(_: []const u8) layout.ImageDims {\n    return .{};\n}\n\n");
@@ -2422,14 +2444,22 @@ pub const Generator = struct {
             \\    var win_h: f32 = 800;
             \\
             \\    _initState();
-            \\    qjs_runtime.initVM(JS_LOGIC);
+            \\    qjs_runtime.initVM();
             \\    defer qjs_runtime.deinit();
+            \\
+        );
+        // Register FFI host functions (between initVM and evalScript)
+        for (self.ffi_funcs.items) |func_name| {
+            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                "    qjs_runtime.registerHostFn(\"{s}\", @ptrCast(&_ffi_{s}), 8);\n", .{ func_name, func_name }));
+        }
+        try out.appendSlice(self.alloc,
+            \\    qjs_runtime.evalScript(JS_LOGIC);
             \\    _updateDynamicTexts();
             \\
             \\    var running = true;
             \\    var fps_frames: u32 = 0;
             \\    var fps_last: u32 = c_imports.SDL_GetTicks();
-            \\    var fps_display: u32 = 0;
             \\
             \\    while (running) {
             \\        var event: c_imports.SDL_Event = undefined;
@@ -2450,30 +2480,35 @@ pub const Generator = struct {
             \\            }
             \\        }
             \\
+            \\        const t0 = @import("std").time.microTimestamp();
             \\        qjs_runtime.tick();
+            \\        const t1 = @import("std").time.microTimestamp();
+            \\        qjs_runtime.telemetry_tick_us = @intCast(@max(0, t1 - t0));
             \\
             \\        if (state.isDirty()) {
             \\            _updateDynamicTexts();
             \\            state.clearDirty();
             \\        }
             \\
+            \\        const t2 = @import("std").time.microTimestamp();
             \\        layout.layout(&root, 0, 0, win_w, win_h);
-            \\        gpuPaintNode(&root);
+            \\        const t3 = @import("std").time.microTimestamp();
+            \\        qjs_runtime.telemetry_layout_us = @intCast(@max(0, t3 - t2));
             \\
-            \\        // Telemetry bar
-            \\        gpu.drawRect(0, win_h - 24, win_w, 24, 0, 0, 0, 0.78, 0, 0, 0, 0, 0, 0);
-            \\        {
-            \\            var tbuf: [256]u8 = undefined;
-            \\            const tstr = std.fmt.bufPrint(&tbuf, "FPS: {d}", .{fps_display}) catch "???";
-            \\            _ = gpu.drawTextWrapped(tstr, 8, win_h - 20, 13, win_w - 16, 0.7, 0.86, 0.7, 1.0);
-            \\        }
+            \\        const t4 = @import("std").time.microTimestamp();
+            \\        gpuPaintNode(&root);
+            \\        const t5 = @import("std").time.microTimestamp();
+            \\        qjs_runtime.telemetry_paint_us = @intCast(@max(0, t5 - t4));
             \\
             \\        gpu.frame(0.051, 0.067, 0.090);
             \\
             \\        fps_frames += 1;
             \\        const now = c_imports.SDL_GetTicks();
             \\        if (now - fps_last >= 1000) {
-            \\            fps_display = fps_frames;
+            \\            qjs_runtime.telemetry_fps = fps_frames;
+            \\            std.debug.print("[telemetry] FPS: {d} | tick: {d}us | layout: {d}us | paint: {d}us\n", .{
+            \\                fps_frames, qjs_runtime.telemetry_tick_us, qjs_runtime.telemetry_layout_us, qjs_runtime.telemetry_paint_us,
+            \\            });
             \\            fps_frames = 0;
             \\            fps_last = now;
             \\        }
