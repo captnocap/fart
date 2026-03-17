@@ -134,9 +134,10 @@ const MeasureCacheKey = struct {
 pub const TextEngine = struct {
     library: c.FT_Library,
     face: c.FT_Face,
-    renderer: *c.SDL_Renderer,
+    renderer: ?*c.SDL_Renderer,
     current_size: u16,
     fallback_size: u16,
+    headless: bool = false,
 
     // Fallback fonts for glyphs missing from the primary face
     fallback_faces: [MAX_FALLBACK_FONTS]c.FT_Face,
@@ -197,6 +198,56 @@ pub const TextEngine = struct {
             .library = library,
             .face = face,
             .renderer = renderer,
+            .current_size = 16,
+            .fallback_size = 16,
+            .fallback_faces = fallbacks,
+            .fallback_count = fb_count,
+            .cache_keys = undefined,
+            .cache_vals = undefined,
+            .cache_count = 0,
+            .measure_cache_keys = undefined,
+            .measure_cache_vals = undefined,
+            .measure_cache_valid = [_]bool{false} ** MCACHE_SIZE,
+        };
+    }
+
+    /// Initialize TextEngine for measurement only (no SDL_Renderer needed).
+    /// Use when GPU rendering handles drawing — TextEngine only does FreeType measurement.
+    pub fn initHeadless(font_path: [*:0]const u8) !TextEngine {
+        var library: c.FT_Library = undefined;
+        if (c.FT_Init_FreeType(&library) != 0) return error.FreeTypeInitFailed;
+
+        var face: c.FT_Face = undefined;
+        if (c.FT_New_Face(library, font_path, 0, &face) != 0) return error.FontLoadFailed;
+        _ = c.FT_Set_Pixel_Sizes(face, 0, 16);
+
+        var fallbacks: [MAX_FALLBACK_FONTS]c.FT_Face = undefined;
+        var fb_count: usize = 0;
+        for (FC_FALLBACK_PATTERNS) |pattern| {
+            if (fb_count >= MAX_FALLBACK_FONTS) break;
+            if (fcLoadFace(library, pattern)) |fb_face| {
+                _ = c.FT_Set_Pixel_Sizes(fb_face, 0, 16);
+                fallbacks[fb_count] = fb_face;
+                fb_count += 1;
+            }
+        }
+        if (fb_count < 2) {
+            for (HARDCODED_FALLBACK_PATHS) |fb_path| {
+                if (fb_count >= MAX_FALLBACK_FONTS) break;
+                var fb_face: c.FT_Face = undefined;
+                if (c.FT_New_Face(library, fb_path, 0, &fb_face) == 0) {
+                    _ = c.FT_Set_Pixel_Sizes(fb_face, 0, 16);
+                    fallbacks[fb_count] = fb_face;
+                    fb_count += 1;
+                }
+            }
+        }
+
+        return TextEngine{
+            .library = library,
+            .face = face,
+            .renderer = null,
+            .headless = true,
             .current_size = 16,
             .fallback_size = 16,
             .fallback_faces = fallbacks,
@@ -406,9 +457,13 @@ pub const TextEngine = struct {
                 }
             }
 
-            texture = c.SDL_CreateTextureFromSurface(self.renderer, surface);
-            if (texture) |tex| {
-                _ = c.SDL_SetTextureBlendMode(tex, c.SDL_BLENDMODE_BLEND);
+            if (!self.headless) {
+                if (self.renderer) |r| {
+                    texture = c.SDL_CreateTextureFromSurface(r, surface);
+                    if (texture) |tex| {
+                        _ = c.SDL_SetTextureBlendMode(tex, c.SDL_BLENDMODE_BLEND);
+                    }
+                }
             }
         }
 
@@ -796,7 +851,7 @@ pub const TextEngine = struct {
                         .w = dw,
                         .h = dh,
                     };
-                    _ = c.SDL_RenderCopy(self.renderer, tex, null, &dst);
+                    if (self.renderer) |r| _ = c.SDL_RenderCopy(r, tex, null, &dst);
                 }
                 pen_x += @floatFromInt(g.advance);
                 pen_x += letter_spacing;
@@ -1055,8 +1110,9 @@ pub const TextEngine = struct {
             break :blk w;
         };
 
-        _ = c.SDL_SetRenderDrawBlendMode(self.renderer, c.SDL_BLENDMODE_BLEND);
-        _ = c.SDL_SetRenderDrawColor(self.renderer, highlight_color.r, highlight_color.g, highlight_color.b, highlight_color.a);
+        const r = self.renderer orelse return;
+        _ = c.SDL_SetRenderDrawBlendMode(r, c.SDL_BLENDMODE_BLEND);
+        _ = c.SDL_SetRenderDrawColor(r, highlight_color.r, highlight_color.g, highlight_color.b, highlight_color.a);
 
         for (0..wrap.count) |li| {
             const ls = wrap.line_starts[li];
@@ -1114,7 +1170,7 @@ pub const TextEngine = struct {
                 .w = @intFromFloat(x1 - x0),
                 .h = @intFromFloat(lm.height),
             };
-            _ = c.SDL_RenderFillRect(self.renderer, &rect);
+            if (self.renderer) |rr| _ = c.SDL_RenderFillRect(rr, &rect);
         }
     }
 

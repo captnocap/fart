@@ -1,0 +1,11 @@
+.{
+    .fingerprint = 0x559f3db12a90c089,
+    .name = .zigos,
+    .version = "0.0.0",
+    .dependencies = .{
+        .wgpu_native_zig = .{
+            .path = "../../deps/wgpu_native_zig",
+        },
+    },
+    .paths = .{"."},
+}

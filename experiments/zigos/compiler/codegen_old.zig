@@ -200,26 +200,10 @@ const UtilFunc = struct {
     body_end: u32, // token pos of closing }
 };
 
-/// Prop type tag — resolved at call-site collection time, not inferred from generated code.
-const PropType = enum {
-    string, // label="CPU" → "CPU"
-    color, // color="#3fb950" → Color.rgb(63, 185, 80)
-    number, // count={42} → 42
-    state_int, // value={count} where count is useState(0)
-    state_float, // value={temp} where temp is useState(0.0)
-    state_string, // value={name} where name is useState('')
-    state_bool, // value={active} where active is useState(false)
-    dynamic_text, // value={`${cpu}%`} → DynText with fmt/args/deps
-    expression, // value={a + b} → arbitrary Zig expression
-};
-
 /// Active prop substitution (pushed when entering a component, popped on exit)
-/// For dynamic_text props, `value` holds the raw backtick string (e.g., `${cpu}%`)
-/// which is re-parsed with full state context when used in the component body.
 const PropBinding = struct {
     name: []const u8,
-    value: []const u8, // raw .tsz value (string literal, number, state ref, or backtick template)
-    prop_type: PropType = .string,
+    value: []const u8, // raw .tsz value (string literal, number, state ref)
     handler_start: ?u32 = null, // if this prop is a forwarded handler, token range
     handler_end: ?u32 = null,
 };
@@ -1119,10 +1103,8 @@ pub const Generator = struct {
 
     fn collectStateHooksTopLevel(self: *Generator) void {
         self.pos = 0;
-        // Scan for useState at top level (no function header skip).
-        // Don't stop at 'return' — merged source has component functions with return
-        // before the useState declarations from the entry file.
-        self.scanForUseState(false);
+        // Scan for useState at top level (no function header skip)
+        self.scanForUseState();
     }
 
     fn collectStateHooks(self: *Generator, func_start: u32) void {
@@ -1130,10 +1112,10 @@ pub const Generator = struct {
         // Skip past function header to body
         while (self.pos < self.lex.count and self.curKind() != .lbrace) self.advance_token();
         if (self.curKind() == .lbrace) self.advance_token();
-        self.scanForUseState(true);
+        self.scanForUseState();
     }
 
-    fn scanForUseState(self: *Generator, stop_at_return: bool) void {
+    fn scanForUseState(self: *Generator) void {
         // Scan for: const [getter, setter] = useState(initial)
         while (self.pos < self.lex.count) {
             if (self.isIdent("const") or self.isIdent("let")) {
@@ -1302,7 +1284,7 @@ pub const Generator = struct {
                     }
                 }
             }
-            if (stop_at_return and self.isIdent("return")) break;
+            if (self.isIdent("return")) break;
             self.advance_token();
         }
     }
@@ -1574,49 +1556,6 @@ pub const Generator = struct {
         return null;
     }
 
-    /// Look up a prop binding by name. Returns the full PropBinding (with type info).
-    fn findPropBinding(self: *Generator, name: []const u8) ?*const PropBinding {
-        var i: u32 = self.prop_stack_count;
-        while (i > 0) {
-            i -= 1;
-            if (std.mem.eql(u8, self.prop_stack[i].name, name)) {
-                return &self.prop_stack[i];
-            }
-        }
-        return null;
-    }
-
-    /// Classify a Zig expression string into a PropType based on its shape.
-    fn classifyExpr(self: *Generator, expr: []const u8) PropType {
-        _ = self;
-        if (expr.len >= 2 and (expr[0] == '"' or expr[0] == '\'')) {
-            const inner = expr[1 .. expr.len - 1];
-            if (inner.len > 0 and inner[0] == '#') return .color;
-            return .string;
-        }
-        if (std.mem.startsWith(u8, expr, "state.getSlot(")) return .state_int;
-        if (std.mem.startsWith(u8, expr, "state.getSlotFloat(")) return .state_float;
-        if (std.mem.startsWith(u8, expr, "state.getSlotString(")) return .state_string;
-        if (std.mem.startsWith(u8, expr, "state.getSlotBool(")) return .state_bool;
-        if (expr.len > 0 and expr[0] >= '0' and expr[0] <= '9') return .number;
-        return .expression;
-    }
-
-    /// Map a PropType to its Zig type string for function parameter declarations.
-    fn zigTypeForPropType(pt: PropType) []const u8 {
-        return switch (pt) {
-            .string => "[]const u8",
-            .color => "Color",
-            .number => "u16",
-            .state_int => "i64",
-            .state_float => "f32",
-            .state_string => "[]const u8",
-            .state_bool => "bool",
-            .dynamic_text => "[]const u8",
-            .expression => "i64",
-        };
-    }
-
     /// Look up a forwarded handler prop by name. Returns handler token range if found.
     fn findPropHandler(self: *Generator, name: []const u8) ?struct { start: u32, end: u32 } {
         var i: u32 = self.prop_stack_count;
@@ -1697,14 +1636,11 @@ pub const Generator = struct {
                     var val: []const u8 = "";
                     var h_start: ?u32 = null;
                     var h_end: ?u32 = null;
-                    var prop_type: PropType = .string;
                     if (self.curKind() == .string) {
                         val = self.curText();
                         if (val.len >= 2 and val[0] == '\'') {
                             val = try std.fmt.allocPrint(self.alloc, "\"{s}\"", .{val[1 .. val.len - 1]});
                         }
-                        // Classify string prop (detect colors)
-                        prop_type = self.classifyExpr(val);
                         self.advance_token();
                     } else if (self.curKind() == .lbrace) {
                         // Check if this is a handler prop (onPress, onChangeText, etc.)
@@ -1736,21 +1672,7 @@ pub const Generator = struct {
                             }
                         } else {
                             self.advance_token(); // {
-                            // Check for template literal inside braces: value={`${cpu}%`}
-                            if (self.curKind() == .template_literal) {
-                                // Store raw template literal text for deferred resolution.
-                                // State may not be registered yet at call-site collection time,
-                                // so we defer parsing to the component body where text content
-                                // handling will re-parse the template with full state context.
-                                const tok = self.cur();
-                                const raw = tok.text(self.source);
-                                val = try self.alloc.dupe(u8, raw); // includes backticks
-                                prop_type = .dynamic_text;
-                                self.advance_token(); // consume template_literal
-                            } else {
-                                val = try self.emitStateExpr();
-                                prop_type = self.classifyExpr(val);
-                            }
+                            val = try self.emitStateExpr();
                             if (self.curKind() == .rbrace) self.advance_token(); // }
                         }
                     }
@@ -1761,7 +1683,6 @@ pub const Generator = struct {
                                 self.prop_stack[self.prop_stack_count] = .{
                                     .name = attr_name,
                                     .value = val,
-                                    .prop_type = prop_type,
                                     .handler_start = h_start,
                                     .handler_end = h_end,
                                 };
@@ -1832,16 +1753,12 @@ pub const Generator = struct {
         // init function instead of fully inlining every instance.
         const eligible = comp.usage_count >= 2 and !comp.has_children and !has_caller_children;
         if (eligible) {
-            // Check props don't contain state refs or dynamic text (simple leaf only)
+            // Check props don't contain state refs (simple leaf only)
             var has_state_prop = false;
             for (saved_prop_count..self.prop_stack_count) |pi| {
                 const v = self.prop_stack[pi].value;
-                const pt = self.prop_stack[pi].prop_type;
                 if (std.mem.indexOf(u8, v, "state.") != null) has_state_prop = true;
                 if (self.prop_stack[pi].handler_start != null) has_state_prop = true;
-                // Dynamic text and state-dependent props cannot be function parameters
-                if (pt == .dynamic_text or pt == .state_int or pt == .state_float or
-                    pt == .state_string or pt == .state_bool) has_state_prop = true;
             }
             if (!has_state_prop) {
                 const cf_result = try self.compFuncInline(comp, saved_prop_count);
@@ -1937,8 +1854,8 @@ pub const Generator = struct {
                 try func_src.appendSlice(self.alloc, ", ");
                 try func_src.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
                     "_p_{s}: ", .{prop.name}));
-                // Use explicit type from prop binding (resolved at call-site collection)
-                const param_type = zigTypeForPropType(prop.prop_type);
+                // Infer type from usage in root_expr and array decls
+                const param_type = self.inferPropType(prop, root_expr, self.array_decls.items[arr_count_before..arr_count_after]);
                 try func_src.appendSlice(self.alloc, param_type);
             }
 
@@ -2046,29 +1963,23 @@ pub const Generator = struct {
             try call.appendSlice(self.alloc, "&");
             try call.appendSlice(self.alloc, inst.storage_names[ii]);
         }
-        // Prop values as arguments — type-based dispatch from PropType
+        // Prop values as arguments
         for (saved_prop_count..self.prop_stack_count) |pi| {
             const prop = self.prop_stack[pi];
             try call.appendSlice(self.alloc, ", ");
-            switch (prop.prop_type) {
-                .color => {
-                    // Color prop — convert hex string to Color.rgb(...)
-                    if (prop.value.len >= 2 and (prop.value[0] == '"' or prop.value[0] == '\'')) {
-                        const inner_val = prop.value[1 .. prop.value.len - 1];
-                        const color_expr = try self.parseColorValue(inner_val);
-                        try call.appendSlice(self.alloc, color_expr);
-                    } else {
-                        try call.appendSlice(self.alloc, prop.value);
-                    }
-                },
-                .string, .number, .expression,
-                .state_int, .state_float, .state_string, .state_bool => {
+            // Convert prop value to Zig expression for the call
+            if (prop.value.len >= 2 and prop.value[0] == '"') {
+                const inner_val = prop.value[1 .. prop.value.len - 1];
+                if (inner_val.len > 0 and inner_val[0] == '#') {
+                    // Color prop — convert to Color.rgb(...)
+                    const color_expr = try self.parseColorValue(inner_val);
+                    try call.appendSlice(self.alloc, color_expr);
+                } else {
+                    // String prop — pass as string literal
                     try call.appendSlice(self.alloc, prop.value);
-                },
-                .dynamic_text => {
-                    // Should not reach here — dynamic_text disqualifies from compFuncInline
-                    try call.appendSlice(self.alloc, "\"\"");
-                },
+                }
+            } else {
+                try call.appendSlice(self.alloc, prop.value);
             }
         }
         try call.appendSlice(self.alloc, ")");
@@ -2083,12 +1994,48 @@ pub const Generator = struct {
 
     /// Infer the Zig type for a component prop based on how its value was used
     /// in the generated template code.
-    /// Legacy shim — delegates to explicit prop type. Kept for signature compatibility.
     fn inferPropType(self: *Generator, prop: PropBinding, root_expr: []const u8, array_decls: []const []const u8) []const u8 {
         _ = self;
-        _ = root_expr;
-        _ = array_decls;
-        return zigTypeForPropType(prop.prop_type);
+        // Check if prop value appears near ".background_color = " or ".text_color = " in output
+        const val = prop.value;
+        // If the raw value is a quoted string with #, it's a color
+        if (val.len >= 2 and val[0] == '"') {
+            const inner = val[1 .. val.len - 1];
+            if (inner.len > 0 and inner[0] == '#') {
+                return "Color";
+            }
+        }
+        // Check generated code for context clues
+        for (array_decls) |decl| {
+            if (std.mem.indexOf(u8, decl, ".text_color = ") != null or
+                std.mem.indexOf(u8, decl, ".background_color = ") != null)
+            {
+                // Check if this decl references a color conversion of our prop value
+                if (val.len >= 2 and val[0] == '"') {
+                    // String prop used as text
+                    if (std.mem.indexOf(u8, decl, ".text = ") != null) {
+                        return "[]const u8";
+                    }
+                }
+            }
+        }
+        // Check root expression too
+        if (std.mem.indexOf(u8, root_expr, "background_color") != null and
+            val.len >= 2 and val[0] == '"')
+        {
+            const inner = val[1 .. val.len - 1];
+            if (inner.len > 0 and inner[0] == '#') {
+                return "Color";
+            }
+        }
+        // Default: if quoted string, it's []const u8; if number, u16
+        if (val.len >= 2 and (val[0] == '"' or val[0] == '\'')) {
+            return "[]const u8";
+        }
+        if (val.len > 0 and val[0] >= '0' and val[0] <= '9') {
+            return "u16";
+        }
+        return "[]const u8";
     }
 
     /// Replace all occurrences of `needle` in `haystack` with `replacement`.
@@ -3161,73 +3108,40 @@ pub const Generator = struct {
                     } else if (self.curKind() == .identifier) {
                         // Prop, local var, or state as text content: {text}, {label}, etc.
                         const ident = self.curText();
-                        if (self.findPropBinding(ident)) |binding| {
+                        if (self.findProp(ident)) |val| {
                             self.advance_token();
-                            if (binding.prop_type == .dynamic_text and !self.emit_prop_refs) {
-                                // Dynamic text prop in inline mode — re-parse the stored
-                                // template literal with full state context available now.
-                                // binding.value holds the raw backtick string (e.g., `${cpu}%`)
-                                if (binding.value.len >= 2 and binding.value[0] == '`') {
-                                    const inner = binding.value[1 .. binding.value.len - 1];
-                                    if (std.mem.indexOf(u8, inner, "${") != null) {
-                                        // Parse as template literal using the raw text
-                                        const tmpl = try self.parseTemplateLiteralFromText(inner);
-                                        if (tmpl.is_dynamic) {
-                                            is_dynamic_text = true;
-                                            dyn_fmt = tmpl.fmt;
-                                            dyn_args = tmpl.args;
-                                            for (0..tmpl.dep_count) |di| {
-                                                if (text_dep_count < MAX_DYN_DEPS) {
-                                                    text_dep_slots[text_dep_count] = tmpl.dep_slots[di];
-                                                    text_dep_count += 1;
-                                                }
-                                            }
-                                        } else {
-                                            text_content = tmpl.static_text;
-                                        }
-                                    } else {
-                                        // No interpolation — static text
-                                        text_content = inner;
-                                    }
-                                } else {
-                                    text_content = binding.value;
-                                }
+                            if (std.mem.startsWith(u8, val, "_p_")) {
+                                // Component function mode: prop param ref as text
+                                // Set as raw text expression (no quoting)
+                                text_content = val;
+                                is_prop_text_ref = true;
+                            } else if (val.len >= 2 and (val[0] == '"' or val[0] == '\'')) {
+                                text_content = val[1 .. val.len - 1];
+                            } else if (std.mem.startsWith(u8, val, "state.getSlot(")) {
+                                // Dynamic state reference from prop — create dynamic text
+                                is_dynamic_text = true;
+                                dyn_fmt = "{d}";
+                                dyn_args = val;
+                            } else if (std.mem.startsWith(u8, val, "state.getSlotString(")) {
+                                is_dynamic_text = true;
+                                dyn_fmt = "{s}";
+                                dyn_args = val;
+                            } else if (std.mem.startsWith(u8, val, "state.getSlotFloat(")) {
+                                is_dynamic_text = true;
+                                dyn_fmt = "{d}";
+                                dyn_args = val;
+                            } else if (std.mem.startsWith(u8, val, "state.getSlotBool(")) {
+                                is_dynamic_text = true;
+                                dyn_fmt = "{s}";
+                                dyn_args = try std.fmt.allocPrint(self.alloc,
+                                    "if ({s}) \"true\" else \"false\"", .{val});
+                            } else if (std.mem.indexOf(u8, val, "state.getSlot") != null) {
+                                // Expression containing state ref (e.g. "state.getSlot(0) * 2")
+                                is_dynamic_text = true;
+                                dyn_fmt = "{d}";
+                                dyn_args = val;
                             } else {
-                                // Resolve value: function mode returns _p_name, inline returns concrete
-                                const val = if (self.emit_prop_refs)
-                                    (std.fmt.allocPrint(self.alloc, "_p_{s}", .{ident}) catch "")
-                                else
-                                    binding.value;
-                                if (std.mem.startsWith(u8, val, "_p_")) {
-                                    // Component function mode: prop param ref as text
-                                    text_content = val;
-                                    is_prop_text_ref = true;
-                                } else if (val.len >= 2 and (val[0] == '"' or val[0] == '\'')) {
-                                    text_content = val[1 .. val.len - 1];
-                                } else if (std.mem.startsWith(u8, val, "state.getSlot(")) {
-                                    is_dynamic_text = true;
-                                    dyn_fmt = "{d}";
-                                    dyn_args = val;
-                                } else if (std.mem.startsWith(u8, val, "state.getSlotString(")) {
-                                    is_dynamic_text = true;
-                                    dyn_fmt = "{s}";
-                                    dyn_args = val;
-                                } else if (std.mem.startsWith(u8, val, "state.getSlotFloat(")) {
-                                    is_dynamic_text = true;
-                                    dyn_fmt = "{d}";
-                                    dyn_args = val;
-                                } else if (std.mem.startsWith(u8, val, "state.getSlotBool(")) {
-                                    is_dynamic_text = true;
-                                    dyn_fmt = "{s}";
-                                    dyn_args = try std.fmt.allocPrint(self.alloc,
-                                        "if ({s}) \"true\" else \"false\"", .{val});
-                                } else if (std.mem.indexOf(u8, val, "state.getSlot") != null) {
-                                    is_dynamic_text = true;
-                                    dyn_fmt = "{d}";
-                                    dyn_args = val;
-                                } else {
-                                    text_content = val;
-                                }
+                                text_content = val;
                             }
                         } else if (self.isState(ident)) |slot_id| {
                             self.advance_token();
@@ -4015,12 +3929,6 @@ pub const Generator = struct {
         const raw = tok.text(self.source);
         // Strip backticks
         const inner = raw[1 .. raw.len - 1];
-        return self.parseTemplateLiteralFromText(inner);
-    }
-
-    /// Parse a template literal from pre-stripped inner text (no backticks).
-    /// Used both for token-based parsing and for deferred prop resolution.
-    fn parseTemplateLiteralFromText(self: *Generator, inner: []const u8) !TemplateResult {
 
         // Check for ${...} patterns
         if (std.mem.indexOf(u8, inner, "${") == null) {
@@ -4154,48 +4062,10 @@ pub const Generator = struct {
                     }
                     // Not an object field — fall through to static text
                     try fmt.appendSlice(self.alloc, expr);
-                } else if (self.findPropBinding(expr)) |binding| {
-                    const pval = if (self.emit_prop_refs)
-                        (std.fmt.allocPrint(self.alloc, "_p_{s}", .{expr}) catch "")
-                    else
-                        binding.value;
-                    if (binding.prop_type == .dynamic_text and !self.emit_prop_refs) {
-                        // Dynamic text prop in inline mode — re-parse raw template with state context
-                        if (binding.value.len >= 2 and binding.value[0] == '`') {
-                            const tmpl_inner = binding.value[1 .. binding.value.len - 1];
-                            const tmpl = try self.parseTemplateLiteralFromText(tmpl_inner);
-                            if (tmpl.is_dynamic) {
-                                try fmt.appendSlice(self.alloc, tmpl.fmt);
-                                if (tmpl.args.len > 0) {
-                                    if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
-                                    try args.appendSlice(self.alloc, tmpl.args);
-                                }
-                                for (0..tmpl.dep_count) |di| {
-                                    if (dep_count < MAX_DYN_DEPS) {
-                                        dep_slots[dep_count] = tmpl.dep_slots[di];
-                                        dep_count += 1;
-                                    }
-                                }
-                            } else {
-                                try fmt.appendSlice(self.alloc, tmpl.static_text);
-                            }
-                        } else {
-                            try fmt.appendSlice(self.alloc, binding.value);
-                        }
-                    } else if (pval.len >= 2 and (pval[0] == '"' or pval[0] == '\'')) {
-                        // Static string prop — inline directly into format string
+                } else if (self.findProp(expr)) |pval| {
+                    if (pval.len >= 2 and (pval[0] == '"' or pval[0] == '\'')) {
                         try fmt.appendSlice(self.alloc, pval[1 .. pval.len - 1]);
-                    } else if (std.mem.startsWith(u8, pval, "_p_")) {
-                        // Function mode parameter reference — string in template context
-                        try fmt.appendSlice(self.alloc, "{s}");
-                        if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
-                        try args.appendSlice(self.alloc, pval);
-                    } else if (std.mem.startsWith(u8, pval, "state.getSlotString")) {
-                        try fmt.appendSlice(self.alloc, "{s}");
-                        if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
-                        try args.appendSlice(self.alloc, pval);
                     } else {
-                        // Numeric state getter or expression — use {d}
                         try fmt.appendSlice(self.alloc, "{d}");
                         if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
                         try args.appendSlice(self.alloc, pval);
@@ -5390,19 +5260,6 @@ pub const Generator = struct {
                 }
             }
             return val;
-        }
-        // Template literal in expression context (e.g., prop value: value={`${cpu}%`})
-        if (self.curKind() == .template_literal) {
-            const tmpl = try self.parseTemplateLiteral();
-            self.advance_token(); // consume template_literal token
-            if (!tmpl.is_dynamic) {
-                return try std.fmt.allocPrint(self.alloc, "\"{s}\"", .{tmpl.static_text});
-            }
-            // Dynamic: allocate a buffer and return a bufPrint expression
-            const buf_size = estimateBufSize(tmpl.fmt);
-            const lbl = self.array_counter;
-            self.array_counter += 1;
-            return try std.fmt.allocPrint(self.alloc, "(blk_{d}: {{ var _tb: [{d}]u8 = undefined; break :blk_{d} std.fmt.bufPrint(&_tb, \"{s}\", .{{ {s} }}) catch \"\"; }})", .{ lbl, buf_size, lbl, tmpl.fmt, tmpl.args });
         }
         if (self.curKind() == .identifier) {
             const name = self.curText();
@@ -7459,155 +7316,328 @@ pub const Generator = struct {
             }
             try out.appendSlice(self.alloc, "}\n\n");
 
-            // Main: SDL2 window + wgpu GPU + QuickJS VM
-            try out.appendSlice(self.alloc,
-                \\const qjs_runtime = @import("framework/qjs_runtime.zig");
-                \\const gpu = @import("framework/gpu.zig");
-                \\const c_imports = @import("framework/c.zig").imports;
-                \\
-                \\fn gpuPaintNode(node: *Node) void {
-                \\    if (node.style.display == .none) return;
-                \\    const r = node.computed;
-                \\    if (r.w <= 0 or r.h <= 0) return;
-                \\    if (node.style.background_color) |bg| {
-                \\        if (bg.a > 0) {
-                \\            const bc = node.style.border_color orelse Color.rgb(0, 0, 0);
-                \\            gpu.drawRect(
-                \\                r.x, r.y, r.w, r.h,
-                \\                @as(f32, @floatFromInt(bg.r)) / 255.0,
-                \\                @as(f32, @floatFromInt(bg.g)) / 255.0,
-                \\                @as(f32, @floatFromInt(bg.b)) / 255.0,
-                \\                @as(f32, @floatFromInt(bg.a)) / 255.0,
-                \\                node.style.border_radius,
-                \\                0,
-                \\                @as(f32, @floatFromInt(bc.r)) / 255.0,
-                \\                @as(f32, @floatFromInt(bc.g)) / 255.0,
-                \\                @as(f32, @floatFromInt(bc.b)) / 255.0,
-                \\                @as(f32, @floatFromInt(bc.a)) / 255.0,
-                \\            );
-                \\        }
-                \\    }
-                \\    if (node.text) |t| {
-                \\        if (t.len > 0) {
-                \\            const tc = node.text_color orelse Color.rgb(255, 255, 255);
-                \\            const pl = node.style.padLeft();
-                \\            const pt = node.style.padTop();
-                \\            const pr = node.style.padRight();
-                \\            _ = gpu.drawTextWrapped(
-                \\                t, r.x + pl, r.y + pt, node.font_size, @max(1.0, r.w - pl - pr),
-                \\                @as(f32, @floatFromInt(tc.r)) / 255.0,
-                \\                @as(f32, @floatFromInt(tc.g)) / 255.0,
-                \\                @as(f32, @floatFromInt(tc.b)) / 255.0,
-                \\                @as(f32, @floatFromInt(tc.a)) / 255.0,
-                \\            );
-                \\        }
-                \\    }
-                \\    for (node.children) |*child| gpuPaintNode(child);
-                \\}
-                \\
-                \\pub fn main() !void {
-                \\    if (c_imports.SDL_Init(c_imports.SDL_INIT_VIDEO) != 0) return error.SDLInitFailed;
-                \\    defer c_imports.SDL_Quit();
-                \\
-                \\    const window = c_imports.SDL_CreateWindow("tsz app",
-                \\        c_imports.SDL_WINDOWPOS_CENTERED, c_imports.SDL_WINDOWPOS_CENTERED,
-                \\        1280, 800, c_imports.SDL_WINDOW_SHOWN | c_imports.SDL_WINDOW_RESIZABLE,
-                \\    ) orelse return error.WindowCreateFailed;
-                \\    defer c_imports.SDL_DestroyWindow(window);
-                \\
-                \\    // GPU init — wgpu gets native handle from SDL window
-                \\    gpu.init(window) catch |err| {
-                \\        std.debug.print("wgpu init failed: {}\n", .{err});
-                \\        return error.GPUInitFailed;
-                \\    };
-                \\    defer gpu.deinit();
-                \\
-                \\    // TextEngine for layout measurement (FreeType)
-                \\    const text_engine_mod = @import("framework/text.zig");
-                \\    var te = text_engine_mod.TextEngine.initHeadless("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf") catch
-                \\        text_engine_mod.TextEngine.initHeadless("/System/Library/Fonts/Supplemental/Arial.ttf") catch
-                \\        text_engine_mod.TextEngine.initHeadless("C:/Windows/Fonts/segoeui.ttf") catch
-                \\        return error.FontNotFound;
-                \\    defer te.deinit();
-                \\
-                \\    // Pass FreeType handles to GPU text renderer (glyph atlas)
-                \\    gpu.initText(te.library, te.face, te.fallback_faces, te.fallback_count);
-                \\
-                \\    g_text_engine = &te;
-                \\    layout.setMeasureFn(measureCallback);
-                \\    layout.setMeasureImageFn(measureImageCallback);
-                \\    var win_w: f32 = 1280;
-                \\    var win_h: f32 = 800;
-                \\
-                \\    _initState();
-                \\    qjs_runtime.initVM(JS_LOGIC);
-                \\    defer qjs_runtime.deinit();
-                \\    _updateDynamicTexts();
-                \\
-                \\    var running = true;
-                \\    var fps_frames: u32 = 0;
-                \\    var fps_last: u32 = c_imports.SDL_GetTicks();
-                \\    var fps_display: u32 = 0;
-                \\
-                \\    while (running) {
-                \\        var event: c_imports.SDL_Event = undefined;
-                \\        while (c_imports.SDL_PollEvent(&event) != 0) {
-                \\            switch (event.type) {
-                \\                c_imports.SDL_QUIT => running = false,
-                \\                c_imports.SDL_WINDOWEVENT => {
-                \\                    if (event.window.event == c_imports.SDL_WINDOWEVENT_SIZE_CHANGED) {
-                \\                        win_w = @floatFromInt(event.window.data1);
-                \\                        win_h = @floatFromInt(event.window.data2);
-                \\                        gpu.resize(@intCast(event.window.data1), @intCast(event.window.data2));
-                \\                    }
-                \\                },
-                \\                c_imports.SDL_KEYDOWN => {
-                \\                    if (event.key.keysym.sym == c_imports.SDLK_ESCAPE) running = false;
-                \\                },
-                \\                else => {},
-                \\            }
-                \\        }
-                \\
-                \\        qjs_runtime.tick();
-                \\
-                \\        if (state.isDirty()) {
-                \\            _updateDynamicTexts();
-                \\            state.clearDirty();
-                \\        }
-                \\
-                \\        layout.layout(&root, 0, 0, win_w, win_h);
-                \\        gpuPaintNode(&root);
-                \\
-                \\        // Telemetry bar
-                \\        gpu.drawRect(0, win_h - 24, win_w, 24, 0, 0, 0, 0.78, 0, 0, 0, 0, 0, 0);
-                \\        {
-                \\            var tbuf: [256]u8 = undefined;
-                \\            const tstr = std.fmt.bufPrint(&tbuf, "FPS: {d}", .{fps_display}) catch "???";
-                \\            _ = gpu.drawTextWrapped(tstr, 8, win_h - 20, 13, win_w - 16, 0.7, 0.86, 0.7, 1.0);
-                \\        }
-                \\
-                \\        gpu.frame(0.051, 0.067, 0.090);
-                \\
-                \\        fps_frames += 1;
-                \\        const now = c_imports.SDL_GetTicks();
-                \\        if (now - fps_last >= 1000) {
-                \\            fps_display = fps_frames;
-                \\            fps_frames = 0;
-                \\            fps_last = now;
-                \\        }
-                \\    }
-                \\}
-                \\
-            );
+            // Main: import qjs_runtime and call run()
+            try out.appendSlice(self.alloc, "const qjs_runtime = @import(\"framework/qjs_runtime.zig\");\n\n");
+            try out.appendSlice(self.alloc, "pub fn main() !void {\n");
+            try out.appendSlice(self.alloc, "    try qjs_runtime.run(&root, JS_LOGIC, _initState, _updateDynamicTexts);\n");
+            try out.appendSlice(self.alloc, "}\n");
 
             return try out.toOwnedSlice(self.alloc);
         }
 
-        // Standard mode (compositor/wgpu) removed — only QuickJS script mode supported.
-        return error.NoComputeJS;
+        // ── Standard mode: compositor/wgpu main loop ──
+
+        // Main function
+        try out.appendSlice(self.alloc, @embedFile("main_template.txt"));
+
+        // Window geometry restore
+        {
+            const basename = std.fs.path.basename(self.input_file);
+            const app_name = if (std.mem.endsWith(u8, basename, ".tsz")) basename[0 .. basename.len - 4] else basename;
+            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                "    geometry.init(\"{s}\");\n" ++
+                "    if (geometry.load()) |geom| {{\n" ++
+                "        c.SDL_SetWindowPosition(window, geom.x, geom.y);\n" ++
+                "        c.SDL_SetWindowSize(window, @intCast(geom.width), @intCast(geom.height));\n" ++
+                "        win_w = @floatFromInt(geom.width);\n" ++
+                "        win_h = @floatFromInt(geom.height);\n" ++
+                "        geometry.blockSaves();\n" ++
+                "    }}\n\n", .{app_name}));
+        }
+
+        // State init
+        if (self.has_state) {
+            for (0..self.state_count) |i| {
+                const slot = self.state_slots[i];
+                switch (slot.initial) {
+                    .int => |v| try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                        "    _ = state.createSlot({d});\n", .{v})),
+                    .float => |v| try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                        "    _ = state.createSlotFloat({d});\n", .{v})),
+                    .boolean => |v| try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                        "    _ = state.createSlotBool({});\n", .{v})),
+                    .string => |v| try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                        "    _ = state.createSlotString(\"{s}\");\n", .{v})),
+                    .array => |v| {
+                        try out.appendSlice(self.alloc, "    _ = state.createArraySlot(&[_]i64{ ");
+                        for (0..v.count) |j| {
+                            if (j > 0) try out.appendSlice(self.alloc, ", ");
+                            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "{d}", .{v.values[j]}));
+                        }
+                        try out.appendSlice(self.alloc, " });\n");
+                    },
+                }
+            }
+            // Dev mode: restore state from previous session + install save-on-signal
+            try out.appendSlice(self.alloc, "    _ = state.loadState();\n");
+            try out.appendSlice(self.alloc, "    state.installSignalHandler();\n");
+        }
+        // Register text inputs
+        if (self.input_count > 0) {
+            for (0..self.input_count) |i| {
+                if (i < MAX_INPUTS and self.input_multiline[i]) {
+                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "    input_mod.registerMultiline({d});\n", .{i}));
+                } else {
+                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "    input_mod.register({d});\n", .{i}));
+                }
+            }
+            // Register onChange callbacks
+            for (0..self.input_count) |i| {
+                if (i < MAX_INPUTS) {
+                    if (self.input_change_handlers[i]) |handler_name| {
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            "    input_mod.setOnChange({d}, {s});\n", .{ i, handler_name }));
+                    }
+                }
+            }
+        }
+        if (self.comp_instance_count > 0) try out.appendSlice(self.alloc, "    _initComponents();\n");
+        if (self.dyn_count > 0) try out.appendSlice(self.alloc, "    updateDynamicTexts();\n");
+        if (self.dyn_style_count > 0) try out.appendSlice(self.alloc, "    updateDynamicStyles();\n");
+        if (self.cond_count > 0) try out.appendSlice(self.alloc, "    updateConditionals();\n");
+        if (self.overlay_count > 0) try out.appendSlice(self.alloc, "    updateOverlays();\n");
+        // Init overlays
+        for (0..self.overlay_count) |ov_i| {
+            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "    _initOverlay{d}();\n", .{ov_i}));
+        }
+        // Mark inspector overlay nodes so hit test skips them
+        if (self.has_inspector) {
+            var marked: [MAX_OVERLAYS]u32 = undefined;
+            var marked_count: usize = 0;
+            for (0..self.dyn_style_count) |si| {
+                const ds = self.dyn_styles[si];
+                if (!ds.has_ref) continue;
+                if (std.mem.indexOf(u8, ds.expression, "inspector.") != null) {
+                    var already = false;
+                    for (0..marked_count) |mi| {
+                        if (marked[mi] == ds.arr_index) { already = true; break; }
+                    }
+                    if (!already and marked_count < MAX_OVERLAYS) {
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            "    {s}[{d}].devtools_viz = .inspector_overlay;\n",
+                            .{ ds.arr_name, ds.arr_index }));
+                        marked[marked_count] = ds.arr_index;
+                        marked_count += 1;
+                    }
+                }
+            }
+        }
+        // Initial computed array build (before computeBody and maps)
+        if (self.computed_count > 0) {
+            for (0..self.computed_count) |ci| {
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                    "    _rebuildComputed{d}();\n", .{ci}));
+            }
+        }
+        if (self.let_count > 0) try out.appendSlice(self.alloc, "    computeBody();\n");
+        if (self.map_count > 0) {
+            for (0..self.map_count) |mi| {
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                    "    _rebuildMap{d}();\n", .{mi}));
+            }
+        }
+        if (self.has_routes) {
+            try out.appendSlice(self.alloc, "    router.init(\"/\");\n");
+            try out.appendSlice(self.alloc, "    updateRoutes();\n");
+        }
+
+        // Animation slot creation
+        if (self.anim_hook_count > 0) {
+            try out.appendSlice(self.alloc, "\n    // ── Animation slots ──\n");
+            for (0..self.anim_hook_count) |i| {
+                const hook = self.anim_hooks[i];
+                switch (hook.kind) {
+                    .transition => {
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            "    _ = animate.createAnim({d}, animate.{s});\n",
+                            .{ hook.duration_ms, hook.easing_name }));
+                    },
+                    .spring => {
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            "    _ = animate.createSpring({d}, {d});\n",
+                            .{ hook.stiffness, hook.damping }));
+                    },
+                }
+            }
+        }
+
+        // Mount effects — run once at init
+        for (0..self.effect_count) |i| {
+            if (self.effects[i].kind == .mount) {
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "    _effect_{d}();\n", .{i}));
+            }
+        }
+        // Interval timer init
+        for (0..self.effect_count) |i| {
+            if (self.effects[i].kind == .interval) {
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "    _timer_{d} = c.SDL_GetTicks();\n", .{i}));
+            }
+        }
+
+        // Compositor + window init + main loop
+        try out.appendSlice(self.alloc, "    compositor.init(renderer, &text_engine, &image_cache);\n    defer compositor.deinit();\n");
+        try out.appendSlice(self.alloc, "    defer win_mgr.deinitAll();\n    watchdog.init(512);\n");
+        if (self.has_pty) {
+            try out.appendSlice(self.alloc, "    c.SDL_StartTextInput();\n");
+            try out.appendSlice(self.alloc, "    compositor.setOverlay(\"terminal\", vterm_mod.paintTerminal);\n");
+            try out.appendSlice(self.alloc, "    defer pty_mod.deinit();\n");
+        }
+        try out.appendSlice(self.alloc, "    if (testharness.envEnabled()) testharness.enable();\n\n");
+        try out.appendSlice(self.alloc, @embedFile("loop_template.txt"));
+
+        // State check in loop (with watch effects)
+        {
+            var has_watch = false;
+            for (0..self.effect_count) |i| {
+                if (self.effects[i].kind == .watch) { has_watch = true; break; }
+            }
+            if (self.has_state and (self.dyn_count > 0 or self.dyn_style_count > 0 or self.cond_count > 0 or has_watch or self.map_count > 0 or self.let_count > 0 or self.computed_count > 0)) {
+                try out.appendSlice(self.alloc, "        if (state.isDirty()) {\n");
+                // Computed arrays rebuild first — computeBody/texts/maps may reference them
+                if (self.computed_count > 0) {
+                    for (0..self.computed_count) |ci| {
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            "            _rebuildComputed{d}();\n", .{ci}));
+                    }
+                }
+                if (self.let_count > 0) try out.appendSlice(self.alloc, "            computeBody();\n");
+                if (self.dyn_count > 0) try out.appendSlice(self.alloc, "            updateDynamicTexts();\n");
+                if (self.dyn_style_count > 0) try out.appendSlice(self.alloc, "            updateDynamicStyles();\n");
+                if (self.cond_count > 0) try out.appendSlice(self.alloc, "            updateConditionals();\n");
+                if (self.overlay_count > 0) try out.appendSlice(self.alloc, "            updateOverlays();\n");
+                if (self.map_count > 0) {
+                    for (0..self.map_count) |mi| {
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            "            _rebuildMap{d}();\n", .{mi}));
+                    }
+                }
+                // Watch effects — check per-slot dirty before clearDirty
+                for (0..self.effect_count) |i| {
+                    if (self.effects[i].kind == .watch) {
+                        try out.appendSlice(self.alloc, "            if (");
+                        for (0..self.effects[i].dep_count) |d| {
+                            if (d > 0) try out.appendSlice(self.alloc, " or ");
+                            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "state.slotDirty({d})", .{self.effects[i].dep_slots[d]}));
+                        }
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, ") {{ _effect_{d}(); }}\n", .{i}));
+                    }
+                }
+                try out.appendSlice(self.alloc, "            state.clearDirty();\n");
+                try out.appendSlice(self.alloc, "        }\n");
+            }
+        }
+
+        // Inspector: update styles + conditionals every frame (hover rect changes on mouse move, not state)
+        if (self.has_inspector and self.dyn_style_count > 0) {
+            try out.appendSlice(self.alloc, "        updateDynamicStyles();\n");
+        }
+        if (self.has_inspector and self.cond_count > 0) {
+            try out.appendSlice(self.alloc, "        updateConditionals();\n");
+        }
+        if (self.overlay_count > 0) {
+            try out.appendSlice(self.alloc, "        updateOverlays();\n");
+        }
+
+        // Router dirty check
+        if (self.has_routes) {
+            try out.appendSlice(self.alloc, "        if (router.isDirty()) {\n");
+            try out.appendSlice(self.alloc, "            router.clearDirty();\n");
+            try out.appendSlice(self.alloc, "            updateRoutes();\n");
+            try out.appendSlice(self.alloc, "        }\n");
+        }
+
+        // Every-frame effects
+        for (0..self.effect_count) |i| {
+            if (self.effects[i].kind == .every_frame) {
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "        _effect_{d}();\n", .{i}));
+            }
+        }
+        // Interval effects
+        for (0..self.effect_count) |i| {
+            if (self.effects[i].kind == .interval) {
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                    "        {{\n            const _now = c.SDL_GetTicks();\n            if (_now -% _timer_{d} >= {d}) {{ _timer_{d} = _now; _effect_{d}(); }}\n        }}\n",
+                    .{ i, self.effects[i].interval_ms, i, i }));
+            }
+        }
+
+        // Animation tick + style updates
+        if (self.anim_hook_count > 0) {
+            // Target checks — detect when target value changed, start/retarget animation
+            for (0..self.anim_hook_count) |i| {
+                const hook = self.anim_hooks[i];
+                switch (hook.kind) {
+                    .transition => {
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            "        {{\n            const _target: f32 = @floatCast({s});\n" ++
+                            "            if (_target != animate.getAnimTarget({d})) {{\n" ++
+                            "                animate.startAnim({d}, @floatCast(animate.getAnimValue({d})), _target);\n" ++
+                            "            }}\n        }}\n",
+                            .{ hook.target_expr, i, i, i }));
+                    },
+                    .spring => {
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            "        animate.setSpringTarget({d}, @floatCast({s}));\n",
+                            .{ i, hook.target_expr }));
+                    },
+                }
+            }
+            // Tick all animations
+            var has_transitions = false;
+            var has_springs = false;
+            for (0..self.anim_hook_count) |i| {
+                if (self.anim_hooks[i].kind == .transition) has_transitions = true;
+                if (self.anim_hooks[i].kind == .spring) has_springs = true;
+            }
+            if (has_transitions) try out.appendSlice(self.alloc, "        animate.tickAnims(c.SDL_GetTicks());\n");
+            if (has_springs) try out.appendSlice(self.alloc, "        animate.tickSprings(0.016);\n");
+
+            // Write animated values to node styles
+            for (0..self.anim_binding_count) |bi| {
+                const b = self.anim_bindings[bi];
+                if (b.arr_name.len == 0) continue; // unresolved
+                const getter = if (self.anim_hooks[b.anim_idx].kind == .spring)
+                    "animate.getSpringValue"
+                else
+                    "animate.getAnimValue";
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                    "        {s}[{d}].style.{s} = @floatCast({s}({d}));\n",
+                    .{ b.arr_name, b.arr_index, b.style_field, getter, b.anim_idx }));
+            }
+        }
+
+        // Layout + paint + present
+        try out.appendSlice(self.alloc, "        if (watchdog.check()) {\n            win_mgr.deinitAll();\n            c.SDL_DestroyRenderer(renderer);\n            c.SDL_DestroyWindow(window);\n            watchdog.showCrashScreen();\n            return;\n        }\n");
+        try out.appendSlice(self.alloc, "        mpv_mod.poll();\n");
+        try out.appendSlice(self.alloc, "        telemetry.beginLayout();\n");
+        try out.appendSlice(self.alloc, "        layout.layout(&root, 0, 0, win_w, inspector.getAppHeight(win_h));\n");
+        try out.appendSlice(self.alloc, "        telemetry.endLayout();\n");
+        try out.appendSlice(self.alloc, "        inspector.updateHover(&root, win_w, win_h);\n");
+        try out.appendSlice(self.alloc, "        compositor.setHoveredNode(hovered_node);\n");
+        try out.appendSlice(self.alloc, "        compositor.setSelection(sel_node, sel_end_node, sel_start, sel_end, sel_all);\n");
+        try out.appendSlice(self.alloc, "        telemetry.beginPaint();\n");
+        try out.appendSlice(self.alloc, "        compositor.frame(&root, win_w, win_h, Color.rgb(24, 24, 32));\n");
+        try out.appendSlice(self.alloc, "        telemetry.endPaint();\n");
+        try out.appendSlice(self.alloc, "        win_mgr.layoutAll();\n");
+        try out.appendSlice(self.alloc, "        win_mgr.paintAndPresent(brighten);\n");
+        // Telemetry: count nodes every 30 frames, debug print every 60
+        try out.appendSlice(self.alloc, "        _telem_frame +%= 1;\n");
+        try out.appendSlice(self.alloc, "        if (_telem_frame % 30 == 0) _ = telemetry.countNodes(&root);\n");
+        try out.appendSlice(self.alloc, "        if (_telem_frame % 60 == 0) telemetry.debugPrint();\n");
+
+        // Test harness: after first frame, run tests and exit
+        try out.appendSlice(self.alloc,
+            "        if (testharness.tick()) {\n" ++
+            "            const exit_code = testharness.runAll(&root, renderer);\n" ++
+            "            if (exit_code != 0) std.process.exit(exit_code);\n" ++
+            "            running = false;\n" ++
+            "        }\n");
+
+        try out.appendSlice(self.alloc, "    }\n    geometry.save(window);\n}\n");
+
+        return try out.toOwnedSlice(self.alloc);
     }
 };
-
 
 // ── Style key mappings ──────────────────────────────────────────────────
 

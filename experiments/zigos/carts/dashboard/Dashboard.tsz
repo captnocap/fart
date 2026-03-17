@@ -1,4 +1,4 @@
-import { Page, Header, Row, Spacer, Title, Status, Alert, Dim } from './style.cls';
+import { Page, Header, Row, Spacer, Title, Status, Alert, Dim, Circle, BigCircle, Pill } from './style.cls';
 import { StatCard } from './StatCard.c';
 import { metrics } from './metrics.script';
 
@@ -57,6 +57,17 @@ function App() {
         <StatCard label="Cache Size" value={`${cacheEntries}`} color="#6e7681" />
         <StatCard label="Disk" value={`${diskPct}%`} color="#3fb950" />
         <StatCard label="GC Pause" value={`${gcPause}ms`} color="#3fb950" />
+      </C.Row>
+
+      <C.Row>
+        <C.Circle />
+        <C.Circle />
+        <C.Circle />
+        <C.BigCircle />
+        <C.Pill />
+        <C.Circle />
+        <C.Circle />
+        <C.Circle />
       </C.Row>
     </C.Page>
   );
