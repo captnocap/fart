@@ -11,6 +11,7 @@ const gpu = @import("gpu.zig");
 const qjs_runtime = @import("qjs_runtime.zig");
 const geometry = @import("geometry.zig");
 const selection = @import("selection.zig");
+const breakpoint = @import("breakpoint.zig");
 const log = @import("log.zig");
 
 const Node = layout.Node;
@@ -161,6 +162,7 @@ pub fn run(config: AppConfig) !void {
         c.SDL_WINDOW_SHOWN | c.SDL_WINDOW_RESIZABLE,
     ) orelse return error.WindowCreateFailed;
     defer c.SDL_DestroyWindow(window);
+    c.SDL_SetWindowMinimumSize(window, 320, 240);
 
     if (geometry.load() != null) geometry.blockSaves();
 
@@ -185,6 +187,7 @@ pub fn run(config: AppConfig) !void {
 
     var win_w: f32 = @floatFromInt(init_w);
     var win_h: f32 = @floatFromInt(init_h);
+    breakpoint.update(win_w);
 
     // QuickJS VM
     qjs_runtime.initVM();
@@ -215,6 +218,7 @@ pub fn run(config: AppConfig) !void {
                             win_w = @floatFromInt(event.window.data1);
                             win_h = @floatFromInt(event.window.data2);
                             gpu.resize(@intCast(event.window.data1), @intCast(event.window.data2));
+                            breakpoint.update(win_w);
                             geometry.save(window);
                         },
                         c.SDL_WINDOWEVENT_MOVED => {

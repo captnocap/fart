@@ -1,5 +1,3 @@
-# Symlinks to framework (not owned by this experiment)
-framework/
 stb/
 zig-out/
 .zig-cache/
