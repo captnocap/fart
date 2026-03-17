@@ -1,0 +1,10 @@
+import { Card, Label } from './style.cls';
+
+function StatCard({ label, value, color }) {
+  return (
+    <C.Card>
+      <C.Label>{label}</C.Label>
+      <Text fontSize={22} color={color}>{value}</Text>
+    </C.Card>
+  );
+}

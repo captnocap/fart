@@ -199,6 +199,43 @@ pub fn build(b: *std.Build) void {
     tsz_dash_run_step.dependOn(&tsz_dash_run.step);
 
     // ── Forked TSZ compiler (for compute{} block experiment) ─────
+    // ── App binary (compiled from generated_app.zig by the compiler) ─
+    const app_exe = b.addExecutable(.{
+        .name = "zigos-app",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("generated_app.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    app_exe.root_module.addIncludePath(b.path("../../love2d/quickjs"));
+    app_exe.root_module.addCSourceFiles(.{
+        .root = b.path("../../love2d/quickjs"),
+        .files = &.{ "cutils.c", "dtoa.c", "libregexp.c", "libunicode.c", "quickjs.c", "quickjs-libc.c" },
+        .flags = &.{ "-O2", "-D_GNU_SOURCE", "-DQUICKJS_NG_BUILD" },
+    });
+    app_exe.root_module.addIncludePath(b.path("."));
+    app_exe.root_module.addCSourceFile(.{ .file = b.path("stb/stb_image_impl.c"), .flags = &.{"-O2"} });
+    app_exe.root_module.addCSourceFile(.{ .file = b.path("stb/stb_image_write_impl.c"), .flags = &.{"-O2"} });
+    app_exe.linkLibC();
+    app_exe.linkSystemLibrary("SDL2");
+    app_exe.linkSystemLibrary("freetype");
+    if (os == .linux) {
+        app_exe.linkSystemLibrary("m");
+        app_exe.linkSystemLibrary("pthread");
+        app_exe.linkSystemLibrary("dl");
+        app_exe.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/freetype2" });
+        app_exe.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/x86_64-linux-gnu" });
+    } else if (os == .macos) {
+        app_exe.root_module.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/lib" });
+        app_exe.root_module.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
+        app_exe.root_module.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include/freetype2" });
+    }
+    const app_install = b.addInstallArtifact(app_exe, .{});
+    const app_step = b.step("app", "Build app from generated_app.zig");
+    app_step.dependOn(&app_install.step);
+
+    // ── Forked TSZ compiler ─────────────────────────────────────
     const compiler_exe = b.addExecutable(.{
         .name = "zigos-compiler",
         .root_module = b.createModule(.{

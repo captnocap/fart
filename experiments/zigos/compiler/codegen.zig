@@ -286,7 +286,6 @@ const OverlayInfo = struct {
     arrays_end: u32 = 0,
 };
 
-pub const OutputMode = enum { full_app, runtime_fragment };
 
 pub const Generator = struct {
     alloc: std.mem.Allocator,
@@ -294,7 +293,6 @@ pub const Generator = struct {
     source: []const u8,
     input_file: []const u8,
     pos: u32, // token index
-    mode: OutputMode = .full_app,
 
     // Collected outputs
     array_decls: std.ArrayListUnmanaged([]const u8),
@@ -427,6 +425,10 @@ pub const Generator = struct {
 
     // compute{} block: raw JS source extracted for QuickJS embedding
     compute_js: ?[]const u8 = null,
+
+    // When true, findProp returns "_p_NAME" instead of the concrete value.
+    // Set during component function body generation.
+    emit_prop_refs: bool = false,
 
     // Compile error diagnostics (set by overflow checks, checked before emission)
     compile_error: ?[]const u8,
@@ -857,9 +859,17 @@ pub const Generator = struct {
         self.extractComputeBlock();
 
         // Phase 4: Find App function and collect useState
+        // If <script> block exists, useState may be at top level — scan from 0
+        self.pos = 0;
+        if (self.compute_js != null) {
+            // Scan from token 0 without skipping to brace (useState is at top level)
+            self.collectStateHooksTopLevel();
+        }
         self.pos = 0;
         const app_start = self.findAppFunction() orelse return error.NoAppFunction;
-        self.collectStateHooks(app_start);
+        if (self.compute_js == null) {
+            self.collectStateHooks(app_start);
+        }
 
         // Phase 4b: Count component usage in App body
         self.countComponentUsage(app_start);
@@ -904,10 +914,7 @@ pub const Generator = struct {
         }
 
         // Emit Zig source
-        return switch (self.mode) {
-            .full_app => self.emitZigSource(root_expr),
-            .runtime_fragment => self.emitRuntimeFragment(root_expr),
-        };
+        return self.emitZigSource(root_expr);
     }
 
     /// Parse classifier({...}) blocks.
@@ -1094,12 +1101,21 @@ pub const Generator = struct {
         return app_func orelse last_func;
     }
 
+    fn collectStateHooksTopLevel(self: *Generator) void {
+        self.pos = 0;
+        // Scan for useState at top level (no function header skip)
+        self.scanForUseState();
+    }
+
     fn collectStateHooks(self: *Generator, func_start: u32) void {
         self.pos = func_start;
         // Skip past function header to body
         while (self.pos < self.lex.count and self.curKind() != .lbrace) self.advance_token();
         if (self.curKind() == .lbrace) self.advance_token();
+        self.scanForUseState();
+    }
 
+    fn scanForUseState(self: *Generator) void {
         // Scan for: const [getter, setter] = useState(initial)
         while (self.pos < self.lex.count) {
             if (self.isIdent("const") or self.isIdent("let")) {
@@ -1850,10 +1866,13 @@ pub const Generator = struct {
                     replaced_init = try self.replaceAllOccurrences(replaced_init, old_ref, new_ref);
                 }
                 // Replace prop value literals with parameter references
+                // Skip empty values ("") to avoid catastrophic replacement
                 for (saved_prop_count..self.prop_stack_count) |pi| {
                     const prop = self.prop_stack[pi];
                     const param_ref = try std.fmt.allocPrint(self.alloc, "_p_{s}", .{prop.name});
-                    replaced_init = try self.replaceAllOccurrences(replaced_init, prop.value, param_ref);
+                    if (prop.value.len > 2 or (prop.value.len == 2 and prop.value[0] != '"')) {
+                        replaced_init = try self.replaceAllOccurrences(replaced_init, prop.value, param_ref);
+                    }
                     // Also handle color-converted values: prop value "\"#4ec9b0\"" becomes Color.rgb(78, 201, 176)
                     if (prop.value.len >= 2 and prop.value[0] == '"') {
                         const inner_val = prop.value[1 .. prop.value.len - 1];
@@ -1879,7 +1898,9 @@ pub const Generator = struct {
             for (saved_prop_count..self.prop_stack_count) |pi| {
                 const prop = self.prop_stack[pi];
                 const param_ref = try std.fmt.allocPrint(self.alloc, "_p_{s}", .{prop.name});
-                replaced_root = try self.replaceAllOccurrences(replaced_root, prop.value, param_ref);
+                if (prop.value.len > 2 or (prop.value.len == 2 and prop.value[0] != '"')) {
+                    replaced_root = try self.replaceAllOccurrences(replaced_root, prop.value, param_ref);
+                }
                 if (prop.value.len >= 2 and prop.value[0] == '"') {
                     const inner_val = prop.value[1 .. prop.value.len - 1];
                     if (inner_val.len > 0 and inner_val[0] == '#') {
@@ -5242,6 +5263,13 @@ pub const Generator = struct {
                 self.advance_token();
                 return name;
             }
+            // Component prop resolution — check before state/locals
+            // When inside a component body, prop identifiers resolve to
+            // their bound value (inline mode) or _p_name (function mode)
+            if (self.findProp(name)) |prop_val| {
+                self.advance_token();
+                return prop_val;
+            }
             // typeof → resolve statically to type string
             if (std.mem.eql(u8, name, "typeof")) {
                 self.advance_token(); // skip 'typeof'
@@ -6424,532 +6452,44 @@ pub const Generator = struct {
         prefix: []const u8,
     };
 
-    // ── Runtime fragment emission ─────────────────────────────────────
-
-    fn emitRuntimeFragment(self: *Generator, root_expr: []const u8) ![]const u8 {
-        var out: std.ArrayListUnmanaged(u8) = .{};
-        const headless = std.mem.eql(u8, root_expr, ".{}");
-
-        // Self-describing header
-        const basename = std.fs.path.basename(self.input_file);
-        try out.appendSlice(self.alloc, "//! ──── GENERATED FILE — DO NOT EDIT ────\n//!\n");
-        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-            "//! Source: {s}\n", .{self.input_file}));
-        try out.appendSlice(self.alloc, "//! Generated by: tsz compile-runtime\n");
-        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-            "//!\n//! To regenerate: tsz compile-runtime {s}\n", .{self.input_file}));
-        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-            "//! To modify: edit {s} and recompile\n\n", .{basename}));
-
-        // Imports — headless modules only need state, not layout/gpu/text
-        try out.appendSlice(self.alloc, "const std = @import(\"std\");\n");
-        if (!headless) {
-            try out.appendSlice(self.alloc, "const layout = @import(\"layout.zig\");\n");
-            try out.appendSlice(self.alloc, "const Node = layout.Node;\nconst Color = layout.Color;\n");
-        }
-        if (self.has_state) try out.appendSlice(self.alloc, "const state = @import(\"state.zig\");\n");
-        // text_mod/TextEngine only needed if fragment calls text functions directly
-        // (most fragments don't — the compositor handles text rendering)
-        if (self.has_inspector) try out.appendSlice(self.alloc, "const inspector = @import(\"overlay.zig\");\n");
-        if (self.has_overlays) try out.appendSlice(self.alloc, "const overlay_mod = @import(\"overlay.zig\");\n");
-        if (self.anim_hook_count > 0) try out.appendSlice(self.alloc, "const animate = @import(\"animate.zig\");\n");
-
-        // FFI imports
-        if (self.ffi_headers.items.len > 0) {
-            try out.appendSlice(self.alloc, "const ffi = @cImport({\n");
-            for (self.ffi_headers.items) |h| {
-                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "    @cInclude(\"{s}\");\n", .{h}));
-            }
-            try out.appendSlice(self.alloc, "});\n");
-        }
-
-        // Panel identity — this string is the callable name from .tsz handlers
-        const panel_base = std.fs.path.basename(self.input_file);
-        const stem = if (std.mem.endsWith(u8, panel_base, ".tsz")) panel_base[0 .. panel_base.len - 4] else panel_base;
-        // Lowercase the stem for the panel ID
-        var id_buf: [128]u8 = undefined;
-        var id_len: usize = 0;
-        for (stem) |c| {
-            if (id_len < id_buf.len) {
-                id_buf[id_len] = if (c >= 'A' and c <= 'Z') c + 32 else c;
-                id_len += 1;
-            }
-        }
-        const panel_id = id_buf[0..id_len];
-        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-            "\n// ── Panel identity ───────────────────────────────────────────\n" ++
-            "pub const PANEL_ID = \"{s}\";\n\n", .{panel_id}));
-
-        // State slot base offset
-        try out.appendSlice(self.alloc, "// ── State slots (offset by caller) ──────────────────────────\n");
-        try out.appendSlice(self.alloc, "var slot_base: usize = 0;\n");
-        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-            "pub const SLOT_COUNT: usize = {d};\n\n", .{self.state_count}));
-
-        // Utility functions
-        if (self.util_func_count > 0) {
-            try out.appendSlice(self.alloc, "// ── Utility functions ────────────────────────────────────────────\n");
-            for (0..self.util_func_count) |fi| {
-                const uf = &self.util_funcs[fi];
-                // Emit signature: fn name(p1: i64, p2: i64) i64 {
-                try out.appendSlice(self.alloc, "fn ");
-                try out.appendSlice(self.alloc, uf.name);
-                try out.appendSlice(self.alloc, "(");
-                for (0..uf.param_count) |pi| {
-                    if (pi > 0) try out.appendSlice(self.alloc, ", ");
-                    try out.appendSlice(self.alloc, uf.params[pi]);
-                    try out.appendSlice(self.alloc, ": i64");
-                }
-                try out.appendSlice(self.alloc, ") i64 {\n");
-
-                // Push params as local vars so expression parser resolves them
-                const saved_local_count = self.local_count;
-                for (0..uf.param_count) |pi| {
-                    if (self.local_count < MAX_LOCALS) {
-                        self.local_vars[self.local_count] = .{
-                            .name = uf.params[pi],
-                            .expr = uf.params[pi],
-                            .state_type = .int,
-                        };
-                        self.local_count += 1;
-                    }
-                }
-
-                // Emit body
-                const saved_pos = self.pos;
-                self.pos = uf.body_start;
-                if (self.curKind() == .lbrace) self.advance_token();
-                while (self.curKind() != .rbrace and self.curKind() != .eof and self.pos < uf.body_end) {
-                    const stmt = self.emitHandlerExpr() catch break;
-                    if (stmt.len > 0) {
-                        try out.appendSlice(self.alloc, "    ");
-                        try out.appendSlice(self.alloc, stmt);
-                        try out.appendSlice(self.alloc, "\n");
-                    }
-                    while (self.curKind() == .semicolon) self.advance_token();
-                }
-                self.pos = saved_pos;
-                self.local_count = saved_local_count;
-
-                try out.appendSlice(self.alloc, "}\n\n");
-            }
-        }
-
-        // Node tree arrays (skipped for headless modules)
-        if (!headless) {
-            try out.appendSlice(self.alloc, "// ── Generated node tree ─────────────────────────────────────────\n");
-            for (self.array_decls.items) |decl| {
-                try out.appendSlice(self.alloc, decl);
-                try out.appendSlice(self.alloc, "\n");
-            }
-            try out.appendSlice(self.alloc, "var root = Node{");
-            try out.appendSlice(self.alloc, root_expr[2..]);
-            try out.appendSlice(self.alloc, ";\n");
-        }
-
-        // Dynamic text buffers (sized from format string)
-        if (self.dyn_count > 0) {
-            try out.appendSlice(self.alloc, "\n// ── Dynamic text buffers ─────────────────────────────────────────\n");
-            for (0..self.dyn_count) |i| {
-                const buf_size = estimateBufSize(self.dyn_texts[i].fmt_string);
-                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "var _dyn_buf_{d}: [{d}]u8 = undefined;\nvar _dyn_text_{d}: []const u8 = \"\";\n", .{ i, buf_size, i }));
-            }
-        }
-
-        // Handler functions
-        if (self.handler_decls.items.len > 0) {
-            try out.appendSlice(self.alloc, "\n// ── Generated event handlers ────────────────────────────────────\n");
-            for (self.handler_decls.items) |h| {
-                try out.appendSlice(self.alloc, h);
-                try out.appendSlice(self.alloc, "\n\n");
-            }
-        }
-
-        // Effect timer variables
-        if (self.effect_count > 0) {
-            for (0..self.effect_count) |i| {
-                if (self.effects[i].kind == .interval) {
-                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "var _timer_{d}: u32 = 0;\n", .{i}));
-                }
-            }
-        }
-
-        // Effect functions
-        if (self.effect_count > 0) {
-            try out.appendSlice(self.alloc, "\n// ── Generated effect functions ──────────────────────────────────\n");
-            for (0..self.effect_count) |i| {
-                const body = try self.emitEffectBody(self.effects[i].body_start);
-                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "fn _effect_{d}() void {{\n{s}\n}}\n\n", .{ i, body }));
-            }
-        }
-
-        // updateDynamicTexts (dedup: same format + args share a buffer, per-slot dirty guard)
-        if (self.dyn_count > 0) {
-            try out.appendSlice(self.alloc, "fn updateDynamicTexts() void {\n");
-            for (0..self.dyn_count) |i| {
-                const dt = self.dyn_texts[i];
-                if (!dt.has_ref) continue;
-                // Check if an earlier entry has the same format + args (dedup)
-                var dedup_source: ?u32 = null;
-                for (0..i) |j| {
-                    const prev = self.dyn_texts[j];
-                    if (prev.has_ref and
-                        std.mem.eql(u8, prev.fmt_string, dt.fmt_string) and
-                        std.mem.eql(u8, prev.fmt_args, dt.fmt_args))
+    /// Rewrite setter calls in <script> JS.
+    /// setFoo(val) -> __setState(N, val) / __setStateString(N, val)
+    fn rewriteSetterCalls(self: *Generator, js: []const u8) ![]const u8 {
+        var result: std.ArrayListUnmanaged(u8) = .{};
+        var line_iter = std.mem.splitScalar(u8, js, '\n');
+        var first_line = true;
+        while (line_iter.next()) |line| {
+            const trimmed = std.mem.trim(u8, line, &[_]u8{ ' ', '\t', '\r' });
+            if (std.mem.indexOf(u8, trimmed, "useState(") != null) continue;
+            if (trimmed.len == 0 and first_line) continue;
+            first_line = false;
+            var i: usize = 0;
+            while (i < line.len) {
+                var matched = false;
+                for (0..self.state_count) |si| {
+                    const setter = self.state_slots[si].setter;
+                    if (i + setter.len + 1 <= line.len and
+                        std.mem.eql(u8, line[i .. i + setter.len], setter) and
+                        line[i + setter.len] == '(')
                     {
-                        dedup_source = @intCast(j);
+                        if (i > 0 and isIdentByte(line[i - 1])) break;
+                        const is_string = std.meta.activeTag(self.state_slots[si].initial) == .string;
+                        const fn_name = if (is_string) "__setStateString" else "__setState";
+                        try result.appendSlice(self.alloc, fn_name);
+                        try result.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "({d}, ", .{si}));
+                        i += setter.len + 1;
+                        matched = true;
                         break;
                     }
                 }
-                // Determine which dep info to use (deduped texts use source's deps)
-                const guard_dt = if (dedup_source) |src| self.dyn_texts[src] else dt;
-                // Emit per-slot dirty guard if deps are tracked
-                if (guard_dt.dep_count > 0) {
-                    try out.appendSlice(self.alloc, "    if (");
-                    for (0..guard_dt.dep_count) |di| {
-                        if (di > 0) try out.appendSlice(self.alloc, " or ");
-                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                            "state.slotDirty({d})", .{guard_dt.dep_slots[di]}));
-                    }
-                    try out.appendSlice(self.alloc, ") {\n");
-                    if (dedup_source) |src| {
-                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                            "        {s}[{d}].text = _dyn_text_{d};\n",
-                            .{ dt.arr_name, dt.arr_index, src }));
-                    } else {
-                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                            "        _dyn_text_{d} = std.fmt.bufPrint(&_dyn_buf_{d}, \"{s}\", .{{ {s} }}) catch \"\";\n        {s}[{d}].text = _dyn_text_{d};\n",
-                            .{ i, i, dt.fmt_string, dt.fmt_args, dt.arr_name, dt.arr_index, i }));
-                    }
-                    try out.appendSlice(self.alloc, "    }\n");
-                } else {
-                    // No dep tracking — always update (fallback for PTY, inspector, etc.)
-                    if (dedup_source) |src| {
-                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                            "    {s}[{d}].text = _dyn_text_{d};\n",
-                            .{ dt.arr_name, dt.arr_index, src }));
-                    } else {
-                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                            "    _dyn_text_{d} = std.fmt.bufPrint(&_dyn_buf_{d}, \"{s}\", .{{ {s} }}) catch \"\";\n    {s}[{d}].text = _dyn_text_{d};\n",
-                            .{ i, i, dt.fmt_string, dt.fmt_args, dt.arr_name, dt.arr_index, i }));
-                    }
+                if (!matched) {
+                    try result.append(self.alloc, line[i]);
+                    i += 1;
                 }
             }
-            try out.appendSlice(self.alloc, "}\n\n");
-        }
-
-        // updateDynamicStyles
-        if (self.dyn_style_count > 0) {
-            try out.appendSlice(self.alloc, "fn updateDynamicStyles() void {\n");
-            for (0..self.dyn_style_count) |i| {
-                const ds = self.dyn_styles[i];
-                if (!ds.has_ref) continue;
-                if (std.mem.eql(u8, ds.arr_name, "root")) {
-                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                        "    root.style.{s} = {s};\n",
-                        .{ ds.field, ds.expression }));
-                } else {
-                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                        "    {s}[{d}].style.{s} = {s};\n",
-                        .{ ds.arr_name, ds.arr_index, ds.field, ds.expression }));
-                }
-            }
-            try out.appendSlice(self.alloc, "}\n\n");
-        }
-
-        // updateConditionals
-        if (self.cond_count > 0) {
-            try out.appendSlice(self.alloc, "fn updateConditionals() void {\n");
-            for (0..self.cond_count) |i| {
-                const ci = self.conds[i];
-                if (ci.arr_name.len == 0) continue;
-                switch (ci.kind) {
-                    .show_hide => {
-                        const cond_is_bool = std.mem.indexOf(u8, ci.condition, "==") != null or
-                            std.mem.indexOf(u8, ci.condition, "!=") != null or
-                            std.mem.indexOf(u8, ci.condition, "< ") != null or
-                            std.mem.indexOf(u8, ci.condition, "> ") != null or
-                            std.mem.indexOf(u8, ci.condition, "<=") != null or
-                            std.mem.indexOf(u8, ci.condition, ">=") != null;
-                        if (cond_is_bool) {
-                            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                                "    {s}[{d}].style.display = if ({s}) .flex else .none;\n",
-                                .{ ci.arr_name, ci.true_idx, ci.condition }));
-                        } else {
-                            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                                "    {s}[{d}].style.display = if ({s} != 0) .flex else .none;\n",
-                                .{ ci.arr_name, ci.true_idx, ci.condition }));
-                        }
-                    },
-                    .ternary => {
-                        const cond_is_bool = std.mem.indexOf(u8, ci.condition, "==") != null or
-                            std.mem.indexOf(u8, ci.condition, "!=") != null or
-                            std.mem.indexOf(u8, ci.condition, "< ") != null or
-                            std.mem.indexOf(u8, ci.condition, "> ") != null or
-                            std.mem.indexOf(u8, ci.condition, "<=") != null or
-                            std.mem.indexOf(u8, ci.condition, ">=") != null;
-                        if (cond_is_bool) {
-                            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                                "    if ({s}) {{\n", .{ci.condition}));
-                        } else {
-                            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                                "    if ({s} != 0) {{\n", .{ci.condition}));
-                        }
-                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                            "        {s}[{d}].style.display = .flex;\n", .{ ci.arr_name, ci.true_idx }));
-                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                            "        {s}[{d}].style.display = .none;\n", .{ ci.arr_name, ci.false_idx }));
-                        try out.appendSlice(self.alloc, "    } else {\n");
-                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                            "        {s}[{d}].style.display = .none;\n", .{ ci.arr_name, ci.true_idx }));
-                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                            "        {s}[{d}].style.display = .flex;\n", .{ ci.arr_name, ci.false_idx }));
-                        try out.appendSlice(self.alloc, "    }\n");
-                    },
-                }
-            }
-            try out.appendSlice(self.alloc, "}\n\n");
-        }
-
-        // ── pub fn init(base: usize) ──
-        try out.appendSlice(self.alloc, "// ── Public API ──────────────────────────────────────────────────\n\n");
-        try out.appendSlice(self.alloc, "pub fn init(base: usize) void {\n");
-        try out.appendSlice(self.alloc, "    slot_base = base;\n");
-        if (self.has_state) {
-            // Write typed defaults into the pre-reserved slot range.
-            // Caller does: panel.init(state.reserveSlots(panel.SLOT_COUNT))
-            for (0..self.state_count) |i| {
-                const slot = self.state_slots[i];
-                switch (slot.initial) {
-                    .int => |v| {
-                        if (v != 0) { // reserveSlots already zeros
-                            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                                "    state.setSlot(slot_base + {d}, {d});\n", .{ i, v }));
-                        }
-                    },
-                    .float => |v| try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                        "    state.setSlotFloat(slot_base + {d}, {d});\n", .{ i, v })),
-                    .boolean => |v| {
-                        if (v) { // reserveSlots initializes to 0 (false)
-                            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                                "    state.setSlotBool(slot_base + {d}, true);\n", .{i}));
-                        }
-                    },
-                    .string => |v| {
-                        if (v.len > 0) {
-                            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                                "    state.setSlotString(slot_base + {d}, \"{s}\");\n", .{ i, v }));
-                        }
-                    },
-                    .array => |v| {
-                        try out.appendSlice(self.alloc, "    _ = state.createArraySlot(&[_]i64{ ");
-                        for (0..v.count) |j| {
-                            if (j > 0) try out.appendSlice(self.alloc, ", ");
-                            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "{d}", .{v.values[j]}));
-                        }
-                        try out.appendSlice(self.alloc, " });\n");
-                    },
-                }
-            }
-        }
-        if (self.dyn_count > 0) try out.appendSlice(self.alloc, "    updateDynamicTexts();\n");
-        if (self.dyn_style_count > 0) try out.appendSlice(self.alloc, "    updateDynamicStyles();\n");
-        if (self.cond_count > 0) try out.appendSlice(self.alloc, "    updateConditionals();\n");
-        if (self.computed_count > 0) {
-            for (0..self.computed_count) |ci| {
-                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "    _rebuildComputed{d}();\n", .{ci}));
-            }
-        }
-        // Mount effects
-        for (0..self.effect_count) |i| {
-            if (self.effects[i].kind == .mount) {
-                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "    _effect_{d}();\n", .{i}));
-            }
-        }
-        try out.appendSlice(self.alloc, "}\n\n");
-
-        // ── pub fn tick() ──
-        try out.appendSlice(self.alloc, "pub fn tick() void {\n");
-        // State dirty check
-        if (self.has_state and (self.dyn_count > 0 or self.dyn_style_count > 0 or self.cond_count > 0 or self.computed_count > 0)) {
-            try out.appendSlice(self.alloc, "    if (state.isDirty()) {\n");
-            if (self.dyn_count > 0) try out.appendSlice(self.alloc, "        updateDynamicTexts();\n");
-            if (self.dyn_style_count > 0) try out.appendSlice(self.alloc, "        updateDynamicStyles();\n");
-            if (self.cond_count > 0) try out.appendSlice(self.alloc, "        updateConditionals();\n");
-            if (self.computed_count > 0) {
-                for (0..self.computed_count) |ci| {
-                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "        _rebuildComputed{d}();\n", .{ci}));
-                }
-            }
-            // Watch effects
-            for (0..self.effect_count) |i| {
-                if (self.effects[i].kind == .watch) {
-                    try out.appendSlice(self.alloc, "        if (");
-                    for (0..self.effects[i].dep_count) |d| {
-                        if (d > 0) try out.appendSlice(self.alloc, " or ");
-                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "state.slotDirty(slot_base + {d})", .{self.effects[i].dep_slots[d]}));
-                    }
-                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, ") {{ _effect_{d}(); }}\n", .{i}));
-                }
-            }
-            try out.appendSlice(self.alloc, "    }\n");
-        }
-        // Every-frame effects
-        for (0..self.effect_count) |i| {
-            if (self.effects[i].kind == .every_frame) {
-                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "    _effect_{d}();\n", .{i}));
-            }
-        }
-        // Inspector-driven style updates (hover rect changes on mouse move)
-        if (self.has_inspector and self.dyn_style_count > 0) {
-            try out.appendSlice(self.alloc, "    updateDynamicStyles();\n");
-        }
-        if (self.has_inspector and self.cond_count > 0) {
-            try out.appendSlice(self.alloc, "    updateConditionals();\n");
-        }
-        try out.appendSlice(self.alloc, "}\n\n");
-
-        // ── pub fn getRoot() ── (skipped for headless modules)
-        if (!headless) {
-            try out.appendSlice(self.alloc, "pub fn getRoot() *Node {\n");
-            try out.appendSlice(self.alloc, "    return &root;\n");
-            try out.appendSlice(self.alloc, "}\n");
-        }
-
-        // ── Named state accessors (pub getter/setter per useState) ──
-        if (self.has_state and self.state_count > 0) {
-            try out.appendSlice(self.alloc, "\n// ── State accessors ─────────────────────────────────────────\n");
-            for (0..self.state_count) |i| {
-                const slot = self.state_slots[i];
-                const st = std.meta.activeTag(slot.initial);
-                switch (st) {
-                    .int => {
-                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                            "pub fn {s}() i64 {{ return state.getSlot(slot_base + {d}); }}\n" ++
-                            "pub fn {s}(v: i64) void {{ state.setSlot(slot_base + {d}, v); }}\n",
-                            .{ slot.getter, i, slot.setter, i }));
-                    },
-                    .float => {
-                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                            "pub fn {s}() f64 {{ return state.getSlotFloat(slot_base + {d}); }}\n" ++
-                            "pub fn {s}(v: f64) void {{ state.setSlotFloat(slot_base + {d}, v); }}\n",
-                            .{ slot.getter, i, slot.setter, i }));
-                    },
-                    .boolean => {
-                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                            "pub fn {s}() bool {{ return state.getSlotBool(slot_base + {d}); }}\n" ++
-                            "pub fn {s}(v: bool) void {{ state.setSlotBool(slot_base + {d}, v); }}\n",
-                            .{ slot.getter, i, slot.setter, i }));
-                    },
-                    .string => {
-                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                            "pub fn {s}() []const u8 {{ return state.getSlotString(slot_base + {d}); }}\n" ++
-                            "pub fn {s}(v: []const u8) void {{ state.setSlotString(slot_base + {d}, v); }}\n",
-                            .{ slot.getter, i, slot.setter, i }));
-                    },
-                    .array => {
-                        const arr_slot = self.arraySlotId(@intCast(i));
-                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                            "pub fn {s}() []const i64 {{ return state.getArraySlot(slot_base + {d}); }}\n",
-                            .{ slot.getter, arr_slot }));
-                    },
-                }
-            }
-        }
-
-        // ── Embedded JS logic from compute{} block ──
-        if (self.compute_js) |raw_js| {
-            try out.appendSlice(self.alloc, "\n// ── Embedded JS logic (from compute{} block) ───────────────\n");
-            try out.appendSlice(self.alloc, "pub const JS_LOGIC =\n");
-
-            // Rewrite setter calls: setFoo(val) → __setState(N, val) / __setStateString(N, val)
-            const rewritten = try self.rewriteSetterCalls(raw_js);
-
-            // Emit as Zig multi-line string
-            var line_iter = std.mem.splitScalar(u8, rewritten, '\n');
-            while (line_iter.next()) |line| {
-                try out.appendSlice(self.alloc, "    \\\\");
-                try out.appendSlice(self.alloc, line);
-                try out.appendSlice(self.alloc, "\n");
-            }
-            try out.appendSlice(self.alloc, ";\n");
-        }
-
-        // Post-process: rewrite state slot references to use slot_base offset
-        if (self.has_state) {
-            const result = try out.toOwnedSlice(self.alloc);
-            return try rewriteSlotRefs(self.alloc, result);
-        }
-
-        return try out.toOwnedSlice(self.alloc);
-    }
-
-    /// Rewrite setter calls in compute{} block JS.
-    /// setFoo(val) → __setState(N, val) for int/float/bool
-    /// setFoo(val) → __setStateString(N, val) for string
-    fn rewriteSetterCalls(self: *Generator, js: []const u8) ![]const u8 {
-        var result: std.ArrayListUnmanaged(u8) = .{};
-        var i: usize = 0;
-        while (i < js.len) {
-            var matched = false;
-            for (0..self.state_count) |si| {
-                const setter = self.state_slots[si].setter;
-                if (i + setter.len + 1 <= js.len and
-                    std.mem.eql(u8, js[i .. i + setter.len], setter) and
-                    js[i + setter.len] == '(')
-                {
-                    // Check it's not part of a larger identifier
-                    if (i > 0 and isIdentByte(js[i - 1])) break;
-
-                    const is_string = std.meta.activeTag(self.state_slots[si].initial) == .string;
-                    const fn_name = if (is_string) "__setStateString" else "__setState";
-                    try result.appendSlice(self.alloc, fn_name);
-                    try result.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "({d}, ", .{si}));
-                    i += setter.len + 1; // skip past "setFoo("
-                    matched = true;
-                    break;
-                }
-            }
-            if (!matched) {
-                try result.append(self.alloc, js[i]);
-                i += 1;
-            }
+            try result.append(self.alloc, '\n');
         }
         return try result.toOwnedSlice(self.alloc);
-    }
-
-    /// Rewrite bare state slot IDs to use slot_base offset in fragment mode.
-    /// "state.getSlot(0)" → "state.getSlot(slot_base + 0)"
-    /// "state.setSlot(0," → "state.setSlot(slot_base + 0,"
-    fn rewriteSlotRefs(alloc: std.mem.Allocator, input: []const u8) ![]const u8 {
-        const patterns = [_][]const u8{
-            "state.getSlot(", "state.setSlot(", "state.getSlotString(", "state.setSlotString(",
-            "state.getSlotFloat(", "state.setSlotFloat(", "state.getSlotBool(", "state.setSlotBool(",
-            "state.slotDirty(",
-        };
-
-        var result: std.ArrayListUnmanaged(u8) = .{};
-        var i: usize = 0;
-        while (i < input.len) {
-            var matched = false;
-            for (patterns) |pat| {
-                if (i + pat.len <= input.len and std.mem.eql(u8, input[i .. i + pat.len], pat)) {
-                    try result.appendSlice(alloc, pat);
-                    i += pat.len;
-                    // Check if next char is a digit (bare slot ID, not already "slot_base + ")
-                    if (i < input.len and input[i] >= '0' and input[i] <= '9') {
-                        try result.appendSlice(alloc, "slot_base + ");
-                    }
-                    matched = true;
-                    break;
-                }
-            }
-            if (!matched) {
-                try result.append(alloc, input[i]);
-                i += 1;
-            }
-        }
-        return try result.toOwnedSlice(alloc);
     }
 
     // ── Zig source emission ─────────────────────────────────────────
@@ -6961,38 +6501,40 @@ pub const Generator = struct {
         try out.appendSlice(self.alloc, "//! Generated by tsz compiler (Zig) — do not edit\n//!\n");
         try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "//! Source: {s}\n\n", .{std.fs.path.basename(self.input_file)}));
 
-        // Imports
+        // Imports — minimal set for <script> mode (no compositor/gpu/wgpu)
+        const has_script = self.compute_js != null;
         try out.appendSlice(self.alloc, "const std = @import(\"std\");\n");
         try out.appendSlice(self.alloc, "const c = @import(\"framework/c.zig\").imports;\n");
         try out.appendSlice(self.alloc, "const layout = @import(\"framework/layout.zig\");\n");
         try out.appendSlice(self.alloc, "const text_mod = @import(\"framework/text.zig\");\n");
         try out.appendSlice(self.alloc, "const Node = layout.Node;\nconst Style = layout.Style;\nconst Color = layout.Color;\nconst LayoutRect = layout.LayoutRect;\n");
         try out.appendSlice(self.alloc, "const TextEngine = text_mod.TextEngine;\n");
-        try out.appendSlice(self.alloc, "const image_mod = @import(\"framework/image.zig\");\nconst ImageCache = image_mod.ImageCache;\n");
-        try out.appendSlice(self.alloc, "const events = @import(\"framework/events.zig\");\n");
-        try out.appendSlice(self.alloc, "const mpv_mod = @import(\"framework/mpv.zig\");\n");
-        try out.appendSlice(self.alloc, "const win_mgr = @import(\"framework/windows.zig\");\n");
-        try out.appendSlice(self.alloc, "const watchdog = @import(\"framework/watchdog.zig\");\n");
-        // bsod is a standalone binary — spawned by watchdog, not imported
-        try out.appendSlice(self.alloc, "const leaktest = @import(\"framework/leaktest.zig\");\n");
-        try out.appendSlice(self.alloc, "const input_mod = @import(\"framework/input.zig\");\n");
-        try out.appendSlice(self.alloc, "const geometry = @import(\"framework/geometry.zig\");\n");
-        try out.appendSlice(self.alloc, "const compositor = @import(\"framework/compositor.zig\");\n");
-        try out.appendSlice(self.alloc, "const gpu = @import(\"framework/gpu.zig\");\n");
-        try out.appendSlice(self.alloc, "const telemetry = @import(\"framework/telemetry.zig\");\n");
-        try out.appendSlice(self.alloc, "const overlay_mod = @import(\"framework/overlay.zig\");\n");
-        try out.appendSlice(self.alloc, "const inspector = @import(\"framework/inspector.zig\");\n");
-        if (self.anim_hook_count > 0) try out.appendSlice(self.alloc, "const animate = @import(\"framework/animate.zig\");\n");
-        if (self.has_state) try out.appendSlice(self.alloc, "const state = @import(\"framework/state.zig\");\n");
-        if (self.has_routes) try out.appendSlice(self.alloc, "const router = @import(\"framework/router.zig\");\n");
-        if (self.has_crypto) try out.appendSlice(self.alloc, "const crypto_mod = @import(\"modules/crypto.zig\");\n");
-        if (self.has_panels) try out.appendSlice(self.alloc, "const panels = @import(\"framework/panels.zig\");\n");
-        if (self.has_pty) {
-            try out.appendSlice(self.alloc, "const pty_mod = @import(\"modules/pty.zig\");\n");
-            try out.appendSlice(self.alloc, "const vterm_mod = @import(\"framework/vterm.zig\");\n");
-            try out.appendSlice(self.alloc, "const classifier_mod = @import(\"framework/classifier.zig\");\n");
+        if (!has_script) {
+            try out.appendSlice(self.alloc, "const image_mod = @import(\"framework/image.zig\");\nconst ImageCache = image_mod.ImageCache;\n");
+            try out.appendSlice(self.alloc, "const events = @import(\"framework/events.zig\");\n");
+            try out.appendSlice(self.alloc, "const mpv_mod = @import(\"framework/mpv.zig\");\n");
+            try out.appendSlice(self.alloc, "const win_mgr = @import(\"framework/windows.zig\");\n");
+            try out.appendSlice(self.alloc, "const watchdog = @import(\"framework/watchdog.zig\");\n");
+            try out.appendSlice(self.alloc, "const leaktest = @import(\"framework/leaktest.zig\");\n");
+            try out.appendSlice(self.alloc, "const input_mod = @import(\"framework/input.zig\");\n");
+            try out.appendSlice(self.alloc, "const geometry = @import(\"framework/geometry.zig\");\n");
+            try out.appendSlice(self.alloc, "const compositor = @import(\"framework/compositor.zig\");\n");
+            try out.appendSlice(self.alloc, "const gpu = @import(\"framework/gpu.zig\");\n");
+            try out.appendSlice(self.alloc, "const telemetry = @import(\"framework/telemetry.zig\");\n");
+            try out.appendSlice(self.alloc, "const overlay_mod = @import(\"framework/overlay.zig\");\n");
+            try out.appendSlice(self.alloc, "const inspector = @import(\"framework/inspector.zig\");\n");
+            if (self.anim_hook_count > 0) try out.appendSlice(self.alloc, "const animate = @import(\"framework/animate.zig\");\n");
+            if (self.has_routes) try out.appendSlice(self.alloc, "const router = @import(\"framework/router.zig\");\n");
+            if (self.has_crypto) try out.appendSlice(self.alloc, "const crypto_mod = @import(\"modules/crypto.zig\");\n");
+            if (self.has_panels) try out.appendSlice(self.alloc, "const panels = @import(\"framework/panels.zig\");\n");
+            if (self.has_pty) {
+                try out.appendSlice(self.alloc, "const pty_mod = @import(\"modules/pty.zig\");\n");
+                try out.appendSlice(self.alloc, "const vterm_mod = @import(\"framework/vterm.zig\");\n");
+                try out.appendSlice(self.alloc, "const classifier_mod = @import(\"framework/classifier.zig\");\n");
+            }
+            try out.appendSlice(self.alloc, "const testharness = @import(\"framework/testharness.zig\");\n");
         }
-        try out.appendSlice(self.alloc, "const testharness = @import(\"framework/testharness.zig\");\n");
+        if (self.has_state) try out.appendSlice(self.alloc, "const state = @import(\"framework/state.zig\");\n");
 
         // FFI imports
         if (self.ffi_headers.items.len > 0) {
@@ -7004,14 +6546,18 @@ pub const Generator = struct {
         }
 
         // Globals
-        try out.appendSlice(self.alloc, "\nvar g_text_engine: ?*TextEngine = null;\nvar g_image_cache: ?*ImageCache = null;\nvar _telem_frame: u32 = 0;\n\n");
+        if (has_script) {
+            try out.appendSlice(self.alloc, "\nvar g_text_engine: ?*TextEngine = null;\n\n");
+        } else {
+            try out.appendSlice(self.alloc, "\nvar g_text_engine: ?*TextEngine = null;\nvar g_image_cache: ?*ImageCache = null;\nvar _telem_frame: u32 = 0;\n\n");
+        }
 
         // Measure callbacks
         try out.appendSlice(self.alloc, "fn measureCallback(t: []const u8, font_size: u16, max_width: f32, letter_spacing: f32, line_height: f32, max_lines: u16, no_wrap: bool) layout.TextMetrics {\n    if (g_text_engine) |te| { return te.measureTextWrappedEx(t, font_size, max_width, letter_spacing, line_height, max_lines, no_wrap); }\n    return .{};\n}\n\n");
-        try out.appendSlice(self.alloc, "fn measureImageCallback(img_path: []const u8) layout.ImageDims {\n    if (g_image_cache) |cache| { if (cache.load(img_path)) |img| { return .{ .width = @floatFromInt(img.width), .height = @floatFromInt(img.height) }; } }\n    return .{};\n}\n\n");
+        try out.appendSlice(self.alloc, "fn measureImageCallback(_: []const u8) layout.ImageDims {\n    return .{};\n}\n\n");
 
-        // Utility functions
-        if (self.util_func_count > 0) {
+        // Utility functions (skip in <script> mode — they're JS, not Zig)
+        if (self.util_func_count > 0 and !has_script) {
             try out.appendSlice(self.alloc, "// ── Utility functions ────────────────────────────────────────────\n");
             for (0..self.util_func_count) |fi| {
                 const uf = &self.util_funcs[fi];
@@ -7412,17 +6958,13 @@ pub const Generator = struct {
             try out.appendSlice(self.alloc, "}\n\n");
         }
 
-        // _onTextInput — forwards SDL_TEXTINPUT to input module
-        // PTY text input is handled via _onKeyDown → handleKey (printable ASCII)
-        // to avoid doubling (SDL fires both KEYDOWN and TEXTINPUT for each key)
-        {
+        if (!has_script) {
+            // _onTextInput — forwards SDL_TEXTINPUT to input module
             try out.appendSlice(self.alloc, "fn _onTextInput(text: [*:0]const u8) void {\n");
             try out.appendSlice(self.alloc, "    input_mod.handleTextInput(text);\n");
             try out.appendSlice(self.alloc, "}\n\n");
-        }
 
-        // _onKeyDown — global key dispatch (always called, unlike per-node on_key)
-        {
+            // _onKeyDown — global key dispatch
             try out.appendSlice(self.alloc, "fn _onKeyDown(sym: c_int, mods: u16) void {\n");
             if (self.has_pty) {
                 try out.appendSlice(self.alloc, "    pty_mod.handleKey(sym, mods);\n");
@@ -7720,6 +7262,65 @@ pub const Generator = struct {
             \\
             \\
         );
+
+        // ── <script> mode: QuickJS main loop ──
+        if (has_script) {
+            // Emit JS_LOGIC constant
+            try out.appendSlice(self.alloc, "\n// ── Embedded JS logic ────────────────────────────────────────\n");
+            try out.appendSlice(self.alloc, "const JS_LOGIC =\n");
+            const rewritten = try self.rewriteSetterCalls(self.compute_js.?);
+            var line_iter = std.mem.splitScalar(u8, rewritten, '\n');
+            while (line_iter.next()) |line| {
+                try out.appendSlice(self.alloc, "    \\\\");
+                try out.appendSlice(self.alloc, line);
+                try out.appendSlice(self.alloc, "\n");
+            }
+            try out.appendSlice(self.alloc, ";\n\n");
+
+            // State init function
+            try out.appendSlice(self.alloc, "fn _initState() void {\n");
+            if (self.has_state) {
+                for (0..self.state_count) |i| {
+                    const slot = self.state_slots[i];
+                    switch (slot.initial) {
+                        .int => |v| try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "    _ = state.createSlot({d});\n", .{v})),
+                        .float => |v| try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "    _ = state.createSlotFloat({d});\n", .{v})),
+                        .boolean => |v| try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "    _ = state.createSlotBool({});\n", .{v})),
+                        .string => |v| try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "    _ = state.createSlotString(\"{s}\");\n", .{v})),
+                        .array => |v| {
+                            try out.appendSlice(self.alloc, "    _ = state.createArraySlot(&[_]i64{ ");
+                            for (0..v.count) |j| {
+                                if (j > 0) try out.appendSlice(self.alloc, ", ");
+                                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "{d}", .{v.values[j]}));
+                            }
+                            try out.appendSlice(self.alloc, " });\n");
+                        },
+                    }
+                }
+            }
+            try out.appendSlice(self.alloc, "}\n\n");
+
+            // Dynamic text update function
+            try out.appendSlice(self.alloc, "fn _updateDynamicTexts() void {\n");
+            for (0..self.dyn_count) |di| {
+                const dt = &self.dyn_texts[di];
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                    "    _dyn_text_{d} = std.fmt.bufPrint(&_dyn_buf_{d}, \"{s}\", .{{ {s} }}) catch \"\";\n" ++
+                    "    {s}[{d}].text = _dyn_text_{d};\n",
+                    .{ dt.buf_id, dt.buf_id, dt.fmt_string, dt.fmt_args, dt.arr_name, dt.arr_index, dt.buf_id }));
+            }
+            try out.appendSlice(self.alloc, "}\n\n");
+
+            // Main: import qjs_runtime and call run()
+            try out.appendSlice(self.alloc, "const qjs_runtime = @import(\"framework/qjs_runtime.zig\");\n\n");
+            try out.appendSlice(self.alloc, "pub fn main() !void {\n");
+            try out.appendSlice(self.alloc, "    try qjs_runtime.run(&root, JS_LOGIC, _initState, _updateDynamicTexts);\n");
+            try out.appendSlice(self.alloc, "}\n");
+
+            return try out.toOwnedSlice(self.alloc);
+        }
+
+        // ── Standard mode: compositor/wgpu main loop ──
 
         // Main function
         try out.appendSlice(self.alloc, @embedFile("main_template.txt"));

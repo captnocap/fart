@@ -11,7 +11,7 @@ const layout = @import("framework/layout.zig");
 const text_mod = @import("framework/text.zig");
 const state = @import("framework/state.zig");
 const qjs_mod = @import("src/qjs.zig");
-const dashboard = @import("dashboard.gen.zig");
+const dashboard = @import("dashboardfull.gen.zig");
 
 const Node = layout.Node;
 const Color = layout.Color;

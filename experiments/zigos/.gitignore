@@ -3,3 +3,5 @@ framework/
 stb/
 zig-out/
 .zig-cache/
+generated_app.zig
+telemetry.csv

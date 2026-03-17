@@ -1,115 +1,63 @@
-// Dashboard.tsz — monitoring dashboard authored in TSZ
-// JS logic pushes data via __setState which maps to state.setSlot
+import { Page, Header, Row, Spacer, Title, Status, Alert, Dim } from './style.cls';
+import { StatCard } from './StatCard.c';
+import { metrics } from './metrics.script';
+
+const [uptime, setUptime] = useState(0);
+const [cpu, setCpu] = useState(0);
+const [memUsed, setMemUsed] = useState(0);
+const [memTotal, setMemTotal] = useState(8192);
+const [netIn, setNetIn] = useState(0);
+const [netOut, setNetOut] = useState(0);
+const [requests, setRequests] = useState(0);
+const [errors, setErrors] = useState(0);
+const [avgLatency, setAvgLatency] = useState(0);
+const [p99, setP99] = useState(0);
+const [connections, setConnections] = useState(0);
+const [queueDepth, setQueueDepth] = useState(0);
+const [dbQueries, setDbQueries] = useState(0);
+const [dbAvg, setDbAvg] = useState(0);
+const [cacheHit, setCacheHit] = useState(0);
+const [cacheEntries, setCacheEntries] = useState(0);
+const [diskPct, setDiskPct] = useState(0);
+const [gcPause, setGcPause] = useState(0);
+const [statusText, setStatusText] = useState('Status: HEALTHY');
+const [alertText, setAlertText] = useState('All systems nominal');
 
 function App() {
-  // System metrics
-  const [uptime, setUptime] = useState(0);
-  const [cpu, setCpu] = useState(0);
-  const [memUsed, setMemUsed] = useState(0);
-  const [memTotal, setMemTotal] = useState(8192);
-  const [netIn, setNetIn] = useState(0);
-  const [netOut, setNetOut] = useState(0);
-  const [requests, setRequests] = useState(0);
-  const [errors, setErrors] = useState(0);
-  const [avgLatency, setAvgLatency] = useState(0);
-  const [p99, setP99] = useState(0);
-  const [connections, setConnections] = useState(0);
-  const [queueDepth, setQueueDepth] = useState(0);
-
-  // Infrastructure
-  const [dbQueries, setDbQueries] = useState(0);
-  const [dbAvg, setDbAvg] = useState(0);
-  const [cacheHit, setCacheHit] = useState(0);
-  const [cacheEntries, setCacheEntries] = useState(0);
-  const [diskPct, setDiskPct] = useState(0);
-  const [gcPause, setGcPause] = useState(0);
-
-  // Status
-  const [statusText, setStatusText] = useState('Status: HEALTHY');
-  const [alertText, setAlertText] = useState('All systems nominal');
-
   return (
-    <Box style={{ flexDirection: 'column', gap: 8, padding: 12, backgroundColor: '#0d1117' }}>
-      <Box style={{ flexDirection: 'row', padding: 12, gap: 16, backgroundColor: '#161b22', alignItems: 'center' }}>
-        <Text fontSize={20} color="#e6edf3">ZigOS Dashboard</Text>
-        <Text fontSize={14} color={cpu > 80 ? '#f85149' : cpu > 60 ? '#d2992a' : '#3fb950'}>{statusText}</Text>
-        <Box style={{ flexGrow: 1 }} />
-        <Text fontSize={12} color="#6e7681">{alertText}</Text>
-        <Text fontSize={12} color="#6e7681">{`Uptime: ${uptime}s`}</Text>
-      </Box>
+    <C.Page>
+      <C.Header>
+        <C.Title>ZigOS Dashboard</C.Title>
+        <C.Status>{statusText}</C.Status>
+        <C.Spacer />
+        <C.Alert>{alertText}</C.Alert>
+        <C.Dim>{`Uptime: ${uptime}s`}</C.Dim>
+      </C.Header>
 
-      <Box style={{ flexDirection: 'row', gap: 8 }}>
-        <Box style={{ flexDirection: 'column', padding: 12, gap: 4, backgroundColor: '#161b22', borderRadius: 6, flexGrow: 1 }}>
-          <Text fontSize={11} color="#6e7681">CPU</Text>
-          <Text fontSize={22} color={cpu > 80 ? '#f85149' : cpu > 60 ? '#d2992a' : '#3fb950'}>{`${cpu}%`}</Text>
-        </Box>
-        <Box style={{ flexDirection: 'column', padding: 12, gap: 4, backgroundColor: '#161b22', borderRadius: 6, flexGrow: 1 }}>
-          <Text fontSize={11} color="#6e7681">Memory</Text>
-          <Text fontSize={22} color="#58a6ff">{`${memUsed}/${memTotal} MB`}</Text>
-        </Box>
-        <Box style={{ flexDirection: 'column', padding: 12, gap: 4, backgroundColor: '#161b22', borderRadius: 6, flexGrow: 1 }}>
-          <Text fontSize={11} color="#6e7681">Requests</Text>
-          <Text fontSize={22} color="#e6edf3">{`${requests}`}</Text>
-        </Box>
-        <Box style={{ flexDirection: 'column', padding: 12, gap: 4, backgroundColor: '#161b22', borderRadius: 6, flexGrow: 1 }}>
-          <Text fontSize={11} color="#6e7681">Errors</Text>
-          <Text fontSize={22} color={errors > 100 ? '#f85149' : '#d2992a'}>{`${errors}`}</Text>
-        </Box>
-        <Box style={{ flexDirection: 'column', padding: 12, gap: 4, backgroundColor: '#161b22', borderRadius: 6, flexGrow: 1 }}>
-          <Text fontSize={11} color="#6e7681">Avg Latency</Text>
-          <Text fontSize={22} color="#79c0ff">{`${avgLatency}ms`}</Text>
-        </Box>
-        <Box style={{ flexDirection: 'column', padding: 12, gap: 4, backgroundColor: '#161b22', borderRadius: 6, flexGrow: 1 }}>
-          <Text fontSize={11} color="#6e7681">P99</Text>
-          <Text fontSize={22} color={p99 > 200 ? '#f85149' : '#58a6ff'}>{`${p99}ms`}</Text>
-        </Box>
-      </Box>
+      <C.Row>
+        <StatCard label="CPU" value={`${cpu}%`} color="#3fb950" />
+        <StatCard label="Memory" value={`${memUsed}/${memTotal} MB`} color="#58a6ff" />
+        <StatCard label="Requests" value={`${requests}`} color="#e6edf3" />
+        <StatCard label="Errors" value={`${errors}`} color="#d2992a" />
+        <StatCard label="Avg Latency" value={`${avgLatency}ms`} color="#79c0ff" />
+        <StatCard label="P99" value={`${p99}ms`} color="#58a6ff" />
+      </C.Row>
 
-      <Box style={{ flexDirection: 'row', gap: 8 }}>
-        <Box style={{ flexDirection: 'column', padding: 12, gap: 4, backgroundColor: '#161b22', borderRadius: 6, flexGrow: 1 }}>
-          <Text fontSize={11} color="#6e7681">Connections</Text>
-          <Text fontSize={22} color="#e6edf3">{`${connections}`}</Text>
-        </Box>
-        <Box style={{ flexDirection: 'column', padding: 12, gap: 4, backgroundColor: '#161b22', borderRadius: 6, flexGrow: 1 }}>
-          <Text fontSize={11} color="#6e7681">Queue</Text>
-          <Text fontSize={22} color={queueDepth > 20 ? '#d2992a' : '#3fb950'}>{`${queueDepth}`}</Text>
-        </Box>
-        <Box style={{ flexDirection: 'column', padding: 12, gap: 4, backgroundColor: '#161b22', borderRadius: 6, flexGrow: 1 }}>
-          <Text fontSize={11} color="#6e7681">Net In</Text>
-          <Text fontSize={22} color="#79c0ff">{`${netIn} KB/s`}</Text>
-        </Box>
-        <Box style={{ flexDirection: 'column', padding: 12, gap: 4, backgroundColor: '#161b22', borderRadius: 6, flexGrow: 1 }}>
-          <Text fontSize={11} color="#6e7681">Net Out</Text>
-          <Text fontSize={22} color="#58a6ff">{`${netOut} KB/s`}</Text>
-        </Box>
-        <Box style={{ flexDirection: 'column', padding: 12, gap: 4, backgroundColor: '#161b22', borderRadius: 6, flexGrow: 1 }}>
-          <Text fontSize={11} color="#6e7681">DB Queries</Text>
-          <Text fontSize={22} color="#e6edf3">{`${dbQueries}/s`}</Text>
-        </Box>
-        <Box style={{ flexDirection: 'column', padding: 12, gap: 4, backgroundColor: '#161b22', borderRadius: 6, flexGrow: 1 }}>
-          <Text fontSize={11} color="#6e7681">DB Avg</Text>
-          <Text fontSize={22} color="#79c0ff">{`${dbAvg}ms`}</Text>
-        </Box>
-      </Box>
+      <C.Row>
+        <StatCard label="Connections" value={`${connections}`} color="#e6edf3" />
+        <StatCard label="Queue" value={`${queueDepth}`} color="#3fb950" />
+        <StatCard label="Net In" value={`${netIn} KB/s`} color="#79c0ff" />
+        <StatCard label="Net Out" value={`${netOut} KB/s`} color="#58a6ff" />
+        <StatCard label="DB Queries" value={`${dbQueries}/s`} color="#e6edf3" />
+        <StatCard label="DB Avg" value={`${dbAvg}ms`} color="#79c0ff" />
+      </C.Row>
 
-      <Box style={{ flexDirection: 'row', gap: 8 }}>
-        <Box style={{ flexDirection: 'column', padding: 12, gap: 4, backgroundColor: '#161b22', borderRadius: 6, flexGrow: 1 }}>
-          <Text fontSize={11} color="#6e7681">Cache Hit</Text>
-          <Text fontSize={22} color="#3fb950">{`${cacheHit}%`}</Text>
-        </Box>
-        <Box style={{ flexDirection: 'column', padding: 12, gap: 4, backgroundColor: '#161b22', borderRadius: 6, flexGrow: 1 }}>
-          <Text fontSize={11} color="#6e7681">Cache Size</Text>
-          <Text fontSize={22} color="#6e7681">{`${cacheEntries}`}</Text>
-        </Box>
-        <Box style={{ flexDirection: 'column', padding: 12, gap: 4, backgroundColor: '#161b22', borderRadius: 6, flexGrow: 1 }}>
-          <Text fontSize={11} color="#6e7681">Disk</Text>
-          <Text fontSize={22} color={diskPct > 85 ? '#f85149' : '#3fb950'}>{`${diskPct}%`}</Text>
-        </Box>
-        <Box style={{ flexDirection: 'column', padding: 12, gap: 4, backgroundColor: '#161b22', borderRadius: 6, flexGrow: 1 }}>
-          <Text fontSize={11} color="#6e7681">GC Pause</Text>
-          <Text fontSize={22} color={gcPause > 10 ? '#d2992a' : '#3fb950'}>{`${gcPause}ms`}</Text>
-        </Box>
-      </Box>
-    </Box>
+      <C.Row>
+        <StatCard label="Cache Hit" value={`${cacheHit}%`} color="#3fb950" />
+        <StatCard label="Cache Size" value={`${cacheEntries}`} color="#6e7681" />
+        <StatCard label="Disk" value={`${diskPct}%`} color="#3fb950" />
+        <StatCard label="GC Pause" value={`${gcPause}ms`} color="#3fb950" />
+      </C.Row>
+    </C.Page>
   );
 }
