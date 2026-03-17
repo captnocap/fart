@@ -66,9 +66,9 @@ classifier({
 
   FlexPreview: { type: 'Box', style: { padding: 10, backgroundColor: '#0b1020', borderRadius: 8, gap: 8 } },
   FlexPreviewHeader: { type: 'Text', fontSize: 10, color: '#5c6478' },
-  FlexTrack: { type: 'Box', style: { flexDirection: 'row', gap: 6, height: 52, alignItems: 'stretch' } },
-  FlexItemTree: { type: 'Box', style: { width: 120, backgroundColor: '#18304a', borderRadius: 8, justifyContent: 'center', alignItems: 'center' } },
-  FlexItemDetail: { type: 'Box', style: { flexGrow: 1, flexBasis: 0, backgroundColor: '#20305a', borderRadius: 8, justifyContent: 'center', alignItems: 'center' } },
+  FlexTrack: { type: 'Box', style: { flexDirection: 'row', gap: 6, flexWrap: 'wrap', alignItems: 'stretch' } },
+  FlexItemTree: { type: 'Box', style: { width: 120, height: 52, backgroundColor: '#18304a', borderRadius: 8, justifyContent: 'center', alignItems: 'center' } },
+  FlexItemDetail: { type: 'Box', style: { flexGrow: 1, flexBasis: 150, height: 52, backgroundColor: '#20305a', borderRadius: 8, justifyContent: 'center', alignItems: 'center' } },
   FlexItemLabel: { type: 'Text', fontSize: 11, color: '#dfe5f5' },
 
   PropertyList: { type: 'Box', style: { gap: 1, backgroundColor: '#1c2437', padding: 1, borderRadius: 8 } },
