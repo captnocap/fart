@@ -20,6 +20,26 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
         return emitModuleSource(self, root_expr);
     }
 
+    // ── Binding validation ──
+    // Warn about dynamic texts that were never bound to a parent array
+    for (0..self.dyn_count) |di| {
+        if (!self.dyn_texts[di].has_ref) {
+            std.debug.print("[tsz] warning: dynamic text #{d} (fmt: \"{s}\") was never bound to a node — will not update at runtime\n", .{ di, self.dyn_texts[di].fmt_string });
+        }
+    }
+    // Warn about dynamic styles that were never bound
+    for (0..self.dyn_style_count) |dsi| {
+        if (!self.dyn_styles[dsi].has_ref) {
+            std.debug.print("[tsz] warning: dynamic style '{s}' was never bound to a node — will not update at runtime\n", .{self.dyn_styles[dsi].field});
+        }
+    }
+    // Warn about conditionals that were never bound to a parent array
+    for (0..self.conditional_count) |ci| {
+        if (self.conditionals[ci].arr_name.len == 0) {
+            std.debug.print("[tsz] warning: conditional #{d} (expr: {s}) was never bound to a parent array\n", .{ ci, self.conditionals[ci].cond_expr });
+        }
+    }
+
     // ── App mode: full binary with main loop ──
 
     // Imports
@@ -73,6 +93,26 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
                     "}}\n\n", .{ func_name, func_name, call_args.items }));
             }
         }
+    }
+
+    // State manifest — human-readable slot map for debugging
+    if (self.has_state) {
+        try out.appendSlice(self.alloc, "// ── State manifest ──────────────────────────────────────────────\n");
+        for (0..self.state_count) |i| {
+            const slot = self.state_slots[i];
+            const type_name = switch (std.meta.activeTag(slot.initial)) {
+                .int => "int",
+                .float => "float",
+                .boolean => "bool",
+                .string => "string",
+                .array => "array",
+            };
+            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                "// slot {d}: {s} ({s})\n", .{ i, slot.getter, type_name }));
+        }
+        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+            "comptime {{ if ({d} != {d}) @compileError(\"state slot count mismatch\"); }}\n\n",
+            .{ self.state_count, self.state_count }));
     }
 
     // Node tree

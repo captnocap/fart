@@ -22,6 +22,7 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
         components.setExpectedJSXError(self);
         return error.ExpectedJSX;
     }
+    const jsx_source_offset = self.cur().start; // capture <Tag source position for breadcrumbs
     self.advance_token(); // <
 
     // Fragment: <>...</>
@@ -44,7 +45,10 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
             if (ci > 0) try arr_body.appendSlice(self.alloc, ", ");
             try arr_body.appendSlice(self.alloc, child_expr);
         }
-        try self.array_decls.append(self.alloc, try std.fmt.allocPrint(self.alloc, "var {s} = [_]Node{{ {s} }};", .{ arr_name, arr_body.items }));
+        const frag_loc = self.lineCol(jsx_source_offset);
+        try self.array_decls.append(self.alloc, try std.fmt.allocPrint(self.alloc,
+            "// tsz:{s}:{d} — <>\nvar {s} = [_]Node{{ {s} }};",
+            .{ std.fs.path.basename(self.input_file), frag_loc.line, arr_name, arr_body.items }));
         return try std.fmt.allocPrint(self.alloc, ".{{ .children = &{s} }}", .{arr_name});
     }
 
@@ -111,7 +115,12 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
             if (self.curKind() == .equals) {
                 self.advance_token();
                 if (std.mem.eql(u8, attr_name, "style")) {
-                    style_str = try attrs.parseStyleAttr(self);
+                    const inline_style = try attrs.parseStyleAttr(self);
+                    if (style_str.len > 0 and inline_style.len > 0) {
+                        style_str = try std.fmt.allocPrint(self.alloc, "{s}, {s}", .{ style_str, inline_style });
+                    } else if (inline_style.len > 0) {
+                        style_str = inline_style;
+                    }
                 } else if (std.mem.eql(u8, attr_name, "fontSize")) {
                     font_size = try attrs.parseExprAttr(self);
                 } else if (std.mem.eql(u8, attr_name, "letterSpacing")) {
@@ -468,6 +477,10 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
         self.array_counter += 1;
 
         var arr_content: std.ArrayListUnmanaged(u8) = .{};
+        // Breadcrumb: tsz:file:line — <Tag>
+        const tag_loc = self.lineCol(jsx_source_offset);
+        try arr_content.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+            "// tsz:{s}:{d} — <{s}>\n", .{ std.fs.path.basename(self.input_file), tag_loc.line, tag_name }));
         try arr_content.appendSlice(self.alloc, "var ");
         try arr_content.appendSlice(self.alloc, arr_name);
         try arr_content.appendSlice(self.alloc, " = [_]Node{ ");

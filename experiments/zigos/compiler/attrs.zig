@@ -345,8 +345,12 @@ pub fn parseTemplateLiteralFromText(self: *Generator, inner: []const u8) !codege
                     }
                     break :blk;
                 }
+                // Not an FFI function — embed as static text
+                std.debug.print("[tsz] warning: expression '${{{s}}}' in template literal is not a state variable, prop, or FFI call — embedded as static text\n", .{expr});
                 try fmt.appendSlice(self.alloc, expr);
             } else {
+                // Unknown expression — embed as static text
+                std.debug.print("[tsz] warning: expression '${{{s}}}' in template literal could not be resolved — embedded as static text\n", .{expr});
                 try fmt.appendSlice(self.alloc, expr);
             }
         } else {

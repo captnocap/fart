@@ -47,7 +47,18 @@ pub fn emitHandlerBody(self: *Generator, start: u32) ![]const u8 {
                 };
                 try stmts.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
                     "    {s}({d}, {s});\n", .{ set_fn, rid, val_expr }));
+            } else if (std.mem.eql(u8, name, "const") or std.mem.eql(u8, name, "let") or std.mem.eql(u8, name, "var")) {
+                std.debug.print("[tsz] warning: local variable in handler body — not supported, skipping\n", .{});
+                self.advance_token();
+            } else if (std.mem.eql(u8, name, "if")) {
+                std.debug.print("[tsz] warning: conditional in handler body — not supported, skipping\n", .{});
+                self.advance_token();
+            } else if (std.mem.eql(u8, name, "for") or std.mem.eql(u8, name, "while")) {
+                std.debug.print("[tsz] warning: loop in handler body — not supported, skipping\n", .{});
+                self.advance_token();
             } else {
+                // Unknown identifier — could be a function call we don't recognize
+                std.debug.print("[tsz] warning: unknown statement '{s}' in handler — only setter calls are supported\n", .{name});
                 self.advance_token();
             }
         } else {
