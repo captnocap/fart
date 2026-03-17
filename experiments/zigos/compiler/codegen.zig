@@ -22,6 +22,13 @@ const MAX_DYN_DEPS = 8;
 const MAX_FFI_HEADERS = 32;
 const MAX_FFI_LIBS = 32;
 const MAX_FFI_FUNCS = 128;
+const MAX_ROUTES = 32;
+
+const RouteInfo = struct {
+    path: []const u8,
+    arr_name: []const u8,
+    child_idx: u32,
+};
 
 const PropType = enum {
     string,
@@ -87,6 +94,15 @@ const DynText = struct {
     dep_count: u32,
 };
 
+const MAX_DYN_COLORS = 32;
+
+const DynColor = struct {
+    expression: []const u8,
+    arr_name: []const u8,
+    arr_index: u32,
+    has_ref: bool,
+};
+
 const MAX_FFI_HOOKS = 16;
 
 const FFIHook = struct {
@@ -136,6 +152,10 @@ pub const Generator = struct {
     array_decls: std.ArrayListUnmanaged([]const u8),
     array_counter: u32,
 
+    // Event handler functions
+    handler_decls: std.ArrayListUnmanaged([]const u8),
+    handler_counter: u32,
+
     // State (useState declarations)
     state_slots: [MAX_STATE_SLOTS]StateSlot,
     state_count: u32,
@@ -145,6 +165,10 @@ pub const Generator = struct {
     dyn_texts: [MAX_DYN_TEXTS]DynText,
     dyn_count: u32,
     last_dyn_id: ?u32,
+
+    // Dynamic colors (state-dependent text_color)
+    dyn_colors: [MAX_DYN_COLORS]DynColor,
+    dyn_color_count: u32,
 
     // Classifiers (style.cls.tsz)
     classifier_names: [MAX_CLASSIFIERS][]const u8,
@@ -191,8 +215,18 @@ pub const Generator = struct {
     // Module mode: emit a .gen.zig fragment (function returning Node), not a full app
     is_module: bool = false,
 
+    // When true, string literals in emitStateAtom convert '#hex' to Color.rgb(...)
+    emit_colors_as_rgb: bool = false,
+
     // When true, findProp returns "_p_NAME" instead of concrete value
     emit_prop_refs: bool = false,
+
+    // Routes (<Routes>/<Route path="..." element={...}>)
+    routes: [MAX_ROUTES]RouteInfo,
+    route_count: u32,
+    has_routes: bool,
+    last_route_path: ?[]const u8,
+    routes_bind_from: ?u32,
 
     compile_error: ?[]const u8,
 
@@ -211,12 +245,16 @@ pub const Generator = struct {
             .input_file = input_file,
             .pos = 0,
             .array_decls = .{},
+            .handler_decls = .{},
+            .handler_counter = 0,
             .array_counter = 0,
             .state_slots = undefined,
             .state_count = 0,
             .has_state = false,
             .dyn_texts = undefined,
             .dyn_count = 0,
+            .dyn_colors = undefined,
+            .dyn_color_count = 0,
             .last_dyn_id = null,
             .classifier_names = undefined,
             .classifier_primitives = undefined,
@@ -243,6 +281,11 @@ pub const Generator = struct {
             .comp_instances = undefined,
             .comp_instance_count = 0,
             .comp_instance_counter = [_]u32{0} ** MAX_COMP_FUNCS,
+            .routes = undefined,
+            .route_count = 0,
+            .has_routes = false,
+            .last_route_path = null,
+            .routes_bind_from = null,
             .compile_error = null,
         };
     }
@@ -289,16 +332,12 @@ pub const Generator = struct {
         self.pos = 0;
         self.extractComputeBlock();
 
-        // Phase 6: Collect useState
+        // Phase 6: Collect useState (always scan top-level first, then inside App)
         self.pos = 0;
-        if (self.compute_js != null) {
-            self.collectStateHooksTopLevel();
-        }
+        self.collectStateHooksTopLevel();
         self.pos = 0;
         const app_start = self.findAppFunction() orelse return error.NoAppFunction;
-        if (self.compute_js == null) {
-            self.collectStateHooks(app_start);
-        }
+        self.collectStateHooks(app_start);
 
         // Phase 7: Count component usage in App body
         self.countComponentUsage(app_start);
@@ -404,6 +443,63 @@ pub const Generator = struct {
             }
         }
         return 0;
+    }
+
+    fn isSetter(self: *Generator, name: []const u8) ?u32 {
+        for (0..self.state_count) |i| {
+            if (std.mem.eql(u8, self.state_slots[i].setter, name)) return @intCast(i);
+        }
+        return null;
+    }
+
+    /// Parse a handler body: {() => expr} or {() => { stmts }}
+    /// Emits Zig statements for setter calls. Returns the body string.
+    fn emitHandlerBody(self: *Generator, start: u32) ![]const u8 {
+        const saved_pos = self.pos;
+        self.pos = start;
+        defer self.pos = saved_pos;
+
+        // Skip { () => or { (param) =>
+        if (self.curKind() == .lbrace) self.advance_token();
+        if (self.curKind() == .lparen) self.advance_token();
+        while (self.curKind() == .identifier or self.curKind() == .comma) self.advance_token();
+        if (self.curKind() == .rparen) self.advance_token();
+        if (self.curKind() == .arrow) self.advance_token();
+
+        // Collect statements
+        var stmts: std.ArrayListUnmanaged(u8) = .{};
+        const in_block = self.curKind() == .lbrace;
+        if (in_block) self.advance_token();
+
+        const end_kind: TokenKind = if (in_block) .rbrace else .rbrace; // outer } ends both
+        while (self.curKind() != end_kind and self.curKind() != .eof) {
+            if (self.curKind() == .identifier) {
+                const name = self.curText();
+                if (self.isSetter(name)) |slot_id| {
+                    self.advance_token(); // setter name
+                    if (self.curKind() == .lparen) self.advance_token();
+                    const val_expr = try self.emitStateExpr();
+                    if (self.curKind() == .rparen) self.advance_token();
+                    const rid = self.regularSlotId(slot_id);
+                    const st = self.stateTypeById(slot_id);
+                    const set_fn = switch (st) {
+                        .string => "state.setSlotString",
+                        .float => "state.setSlotFloat",
+                        .boolean => "state.setSlotBool",
+                        else => "state.setSlot",
+                    };
+                    try stmts.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                        "    {s}({d}, {s});\n", .{ set_fn, rid, val_expr }));
+                } else {
+                    self.advance_token();
+                }
+            } else {
+                self.advance_token();
+            }
+            while (self.curKind() == .semicolon) self.advance_token();
+        }
+
+        return try self.alloc.dupe(u8, stmts.items);
     }
 
     fn isFFIFunc(self: *Generator, name: []const u8) bool {
@@ -1524,7 +1620,17 @@ pub const Generator = struct {
             const val = self.curText();
             self.advance_token();
             if (val.len >= 2 and val[0] == '\'') {
-                return try std.fmt.allocPrint(self.alloc, "\"{s}\"", .{val[1 .. val.len - 1]});
+                const inner = val[1 .. val.len - 1];
+                if (self.emit_colors_as_rgb and inner.len > 0 and (inner[0] == '#' or namedColor(inner) != null)) {
+                    return try self.parseColorValue(inner);
+                }
+                return try std.fmt.allocPrint(self.alloc, "\"{s}\"", .{inner});
+            }
+            if (self.emit_colors_as_rgb and val.len >= 2 and val[0] == '"') {
+                const inner = val[1 .. val.len - 1];
+                if (inner.len > 0 and (inner[0] == '#' or namedColor(inner) != null)) {
+                    return try self.parseColorValue(inner);
+                }
             }
             return val;
         }
@@ -1931,6 +2037,15 @@ pub const Generator = struct {
             }
         }
 
+        // Route element — extract path + element attrs
+        if (std.mem.eql(u8, tag_name, "Route")) {
+            return try self.parseRouteElement();
+        }
+
+        // Routes container — mark binding point
+        const is_routes = std.mem.eql(u8, tag_name, "Routes");
+        if (is_routes) self.routes_bind_from = self.route_count;
+
         // Component call
         if (self.findComponent(tag_name)) |comp| {
             return try self.inlineComponent(comp);
@@ -1944,7 +2059,9 @@ pub const Generator = struct {
         var number_of_lines: []const u8 = "";
         var no_wrap: bool = false;
         var color_str: []const u8 = "";
+        var dyn_color_expr: ?[]const u8 = null; // state-dependent color expression
         var src_str: []const u8 = "";
+        var on_press_start: ?u32 = null;
 
         // Pre-populate from classifier
         if (classifier_idx) |idx| {
@@ -1979,9 +2096,20 @@ pub const Generator = struct {
                         try self.skipAttrValue();
                         no_wrap = true;
                     } else if (std.mem.eql(u8, attr_name, "color")) {
-                        color_str = try self.parseStringAttr();
+                        if (self.curKind() == .lbrace) {
+                            self.advance_token(); // {
+                            self.emit_colors_as_rgb = true;
+                            dyn_color_expr = try self.emitStateExpr();
+                            self.emit_colors_as_rgb = false;
+                            if (self.curKind() == .rbrace) self.advance_token();
+                        } else {
+                            color_str = try self.parseStringAttr();
+                        }
                     } else if (std.mem.eql(u8, attr_name, "src")) {
                         src_str = try self.parseStringAttr();
+                    } else if (std.mem.eql(u8, attr_name, "onPress")) {
+                        on_press_start = self.pos;
+                        try self.skipBalanced();
                     } else {
                         try self.skipAttrValue();
                     }
@@ -2204,7 +2332,20 @@ pub const Generator = struct {
         }
 
         // Color
-        if (color_str.len > 0) {
+        if (dyn_color_expr) |expr| {
+            // Dynamic color — emit placeholder, record for runtime update
+            if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
+            try fields.appendSlice(self.alloc, ".text_color = Color.rgb(0, 0, 0)");
+            if (self.dyn_color_count < MAX_DYN_COLORS) {
+                self.dyn_colors[self.dyn_color_count] = .{
+                    .expression = expr,
+                    .arr_name = "",
+                    .arr_index = 0,
+                    .has_ref = false,
+                };
+                self.dyn_color_count += 1;
+            }
+        } else if (color_str.len > 0) {
             if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
             try fields.appendSlice(self.alloc, ".text_color = ");
             if (std.mem.startsWith(u8, color_str, "_p_")) {
@@ -2214,7 +2355,7 @@ pub const Generator = struct {
             }
         }
         // Classifier text_color
-        if (classifier_idx != null and color_str.len == 0) {
+        if (classifier_idx != null and color_str.len == 0 and dyn_color_expr == null) {
             const tp = self.classifier_text_props[classifier_idx.?];
             if (std.mem.indexOf(u8, tp, ".text_color = ")) |tc_pos| {
                 if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
@@ -2232,6 +2373,19 @@ pub const Generator = struct {
                 try fields.appendSlice(self.alloc, src_str);
             }
             try fields.appendSlice(self.alloc, "\"");
+        }
+
+        // onPress handler
+        if (on_press_start) |start| {
+            const handler_name = try std.fmt.allocPrint(self.alloc, "_handler_press_{d}", .{self.handler_counter});
+            self.handler_counter += 1;
+            const body = try self.emitHandlerBody(start);
+            const handler_fn = try std.fmt.allocPrint(self.alloc, "fn {s}() void {{\n{s}}}", .{ handler_name, body });
+            try self.handler_decls.append(self.alloc, handler_fn);
+            if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
+            try fields.appendSlice(self.alloc, ".handlers = .{ .on_press = ");
+            try fields.appendSlice(self.alloc, handler_name);
+            try fields.appendSlice(self.alloc, " }");
         }
 
         // Children array
@@ -2267,6 +2421,19 @@ pub const Generator = struct {
                 }
             }
 
+            // Bind routes — track Route → Routes metadata
+            if (self.last_route_path) |path| {
+                if (self.route_count < MAX_ROUTES) {
+                    self.routes[self.route_count] = .{
+                        .path = path,
+                        .arr_name = arr_name,
+                        .child_idx = @intCast(child_exprs.items.len - 1),
+                    };
+                    self.route_count += 1;
+                }
+                self.last_route_path = null;
+            }
+
             if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
             try fields.appendSlice(self.alloc, ".children = &");
             try fields.appendSlice(self.alloc, arr_name);
@@ -2286,9 +2453,68 @@ pub const Generator = struct {
                     }
                 }
             }
+
+            // Bind dynamic colors
+            for (0..self.dyn_color_count) |dci| {
+                if (!self.dyn_colors[dci].has_ref) {
+                    for (child_exprs.items, 0..) |expr, ci| {
+                        if (std.mem.indexOf(u8, expr, ".text_color = Color.rgb(0, 0, 0)") != null) {
+                            self.dyn_colors[dci].arr_name = arr_name;
+                            self.dyn_colors[dci].arr_index = @intCast(ci);
+                            self.dyn_colors[dci].has_ref = true;
+                            break;
+                        }
+                    }
+                }
+            }
         }
 
         return try std.fmt.allocPrint(self.alloc, ".{{ {s} }}", .{fields.items});
+    }
+
+    // ── Route element parsing ──
+
+    fn parseRouteElement(self: *Generator) anyerror![]const u8 {
+        // Prevent intermediate arrays inside this Route's element from
+        // accidentally binding route metadata — save and null the marker.
+        const saved_bind = self.routes_bind_from;
+        self.routes_bind_from = null;
+        defer self.routes_bind_from = saved_bind;
+
+        var path: []const u8 = "/";
+        var element_expr: []const u8 = ".{}";
+
+        // Parse attributes: path="..." element={<Component />}
+        while (self.curKind() != .gt and self.curKind() != .slash_gt and self.curKind() != .eof) {
+            if (self.curKind() == .identifier) {
+                const attr_name = self.curText();
+                self.advance_token();
+                if (self.curKind() == .equals) {
+                    self.advance_token(); // skip =
+                    if (std.mem.eql(u8, attr_name, "path")) {
+                        path = try self.parseStringAttr();
+                    } else if (std.mem.eql(u8, attr_name, "element")) {
+                        // element={<Component />}
+                        if (self.curKind() == .lbrace) self.advance_token();
+                        element_expr = try self.parseJSXElement();
+                        if (self.curKind() == .rbrace) self.advance_token();
+                    } else {
+                        try self.skipAttrValue();
+                    }
+                }
+            } else {
+                self.advance_token();
+            }
+        }
+
+        // Skip /> or >
+        self.advance_token();
+
+        // Signal to parent Routes
+        self.last_route_path = path;
+        self.has_routes = true;
+
+        return element_expr;
     }
 
     // ── Color parsing ──
@@ -2339,12 +2565,12 @@ pub const Generator = struct {
 
         // Imports
         try out.appendSlice(self.alloc, "const std = @import(\"std\");\n");
-        try out.appendSlice(self.alloc, "const c = @import(\"framework/c.zig\").imports;\n");
         try out.appendSlice(self.alloc, "const layout = @import(\"framework/layout.zig\");\n");
-        try out.appendSlice(self.alloc, "const text_mod = @import(\"framework/text.zig\");\n");
-        try out.appendSlice(self.alloc, "const Node = layout.Node;\nconst Style = layout.Style;\nconst Color = layout.Color;\nconst LayoutRect = layout.LayoutRect;\n");
-        try out.appendSlice(self.alloc, "const TextEngine = text_mod.TextEngine;\n");
+        try out.appendSlice(self.alloc, "const engine = @import(\"framework/engine.zig\");\n");
+        try out.appendSlice(self.alloc, "const Node = layout.Node;\nconst Style = layout.Style;\nconst Color = layout.Color;\n");
         if (self.has_state) try out.appendSlice(self.alloc, "const state = @import(\"framework/state.zig\");\n");
+        if (self.has_routes) try out.appendSlice(self.alloc, "const router = @import(\"framework/router.zig\");\n");
+        if (self.ffi_funcs.items.len > 0) try out.appendSlice(self.alloc, "const qjs_runtime = @import(\"framework/qjs_runtime.zig\");\n");
 
         // FFI imports
         if (self.ffi_headers.items.len > 0) {
@@ -2354,9 +2580,7 @@ pub const Generator = struct {
             }
             try out.appendSlice(self.alloc, "});\n");
         }
-
-        // Globals
-        try out.appendSlice(self.alloc, "\nvar g_text_engine: ?*TextEngine = null;\n\n");
+        try out.appendSlice(self.alloc, "\n");
 
         // FFI host function wrappers (bridge C functions into QuickJS)
         if (self.ffi_funcs.items.len > 0) {
@@ -2394,10 +2618,6 @@ pub const Generator = struct {
             }
         }
 
-        // Measure callbacks
-        try out.appendSlice(self.alloc, "fn measureCallback(t: []const u8, font_size: u16, max_width: f32, letter_spacing: f32, line_height: f32, max_lines: u16, no_wrap: bool) layout.TextMetrics {\n    if (g_text_engine) |te| { return te.measureTextWrappedEx(t, font_size, max_width, letter_spacing, line_height, max_lines, no_wrap); }\n    return .{};\n}\n\n");
-        try out.appendSlice(self.alloc, "fn measureImageCallback(_: []const u8) layout.ImageDims {\n    return .{};\n}\n\n");
-
         // Node tree
         try out.appendSlice(self.alloc, "// ── Generated node tree ─────────────────────────────────────────\n");
         for (self.array_decls.items) |decl| {
@@ -2414,6 +2634,15 @@ pub const Generator = struct {
             for (0..self.dyn_count) |i| {
                 const buf_size = estimateBufSize(self.dyn_texts[i].fmt_string);
                 try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "var _dyn_buf_{d}: [{d}]u8 = undefined;\nvar _dyn_text_{d}: []const u8 = \"\";\n", .{ i, buf_size, i }));
+            }
+        }
+
+        // Event handler functions
+        if (self.handler_decls.items.len > 0) {
+            try out.appendSlice(self.alloc, "\n// ── Event handlers ──────────────────────────────────────────────\n");
+            for (self.handler_decls.items) |h| {
+                try out.appendSlice(self.alloc, h);
+                try out.appendSlice(self.alloc, "\n\n");
             }
         }
 
@@ -2436,64 +2665,11 @@ pub const Generator = struct {
             try out.appendSlice(self.alloc, "}\n\n");
         }
 
-        // Hover + brighten + text selection (needed by generated main)
-        try out.appendSlice(self.alloc, "var hovered_node: ?*Node = null;\n\n");
-        try out.appendSlice(self.alloc, "fn brighten(color: Color) Color {\n    return .{ .r = @min(255, @as(u16, color.r) + 30), .g = @min(255, @as(u16, color.g) + 30), .b = @min(255, @as(u16, color.b) + 30), .a = color.a };\n}\n\n");
-        try out.appendSlice(self.alloc, "var sel_node: ?*Node = null;\nvar sel_end_node: ?*Node = null;\nvar sel_start: usize = 0;\nvar sel_end: usize = 0;\nvar sel_anchor: usize = 0;\nvar sel_dragging: bool = false;\nvar sel_last_click: u32 = 0;\nvar sel_click_count: u32 = 0;\nvar sel_all: bool = false;\nvar sel_paint_state: u8 = 0;\n\n");
-        try out.appendSlice(self.alloc, "fn collectAllText(node: *Node, buf: []u8, pos: usize) usize {\n    var p = pos;\n    if (node.text) |txt| {\n        if (p > 0 and p < buf.len) { buf[p] = '\\n'; p += 1; }\n        const n = @min(txt.len, buf.len - p);\n        if (n > 0) { @memcpy(buf[p..p+n], txt[0..n]); p += n; }\n    }\n    for (node.children) |*child| { p = collectAllText(child, buf, p); }\n    return p;\n}\n\n");
-        try out.appendSlice(self.alloc,
-            \\fn collectSelectedText(node: *Node, buf: []u8, pos: usize, st: *u8) usize {
-            \\    var p = pos;
-            \\    if (node.text) |txt| {
-            \\        const is_start = (sel_node == node);
-            \\        const is_end = (sel_end_node == node);
-            \\        if (is_start and is_end) {
-            \\            const s0 = @min(sel_start, sel_end);
-            \\            const s1 = @max(sel_start, sel_end);
-            \\            if (s1 > s0) {
-            \\                if (p > 0 and p < buf.len) { buf[p] = '\n'; p += 1; }
-            \\                const n = @min(s1 - s0, buf.len - p);
-            \\                if (n > 0) { @memcpy(buf[p..p+n], txt[s0..s0+n]); p += n; }
-            \\            }
-            \\            st.* = 2;
-            \\        } else if (st.* == 0 and (is_start or is_end)) {
-            \\            const byte = if (is_start) sel_start else sel_end;
-            \\            if (byte < txt.len) {
-            \\                if (p > 0 and p < buf.len) { buf[p] = '\n'; p += 1; }
-            \\                const n = @min(txt.len - byte, buf.len - p);
-            \\                if (n > 0) { @memcpy(buf[p..p+n], txt[byte..byte+n]); p += n; }
-            \\            }
-            \\            st.* = 1;
-            \\        } else if (st.* == 1) {
-            \\            if (is_start or is_end) {
-            \\                const byte = if (is_start) sel_start else sel_end;
-            \\                if (byte > 0) {
-            \\                    if (p > 0 and p < buf.len) { buf[p] = '\n'; p += 1; }
-            \\                    const n = @min(byte, buf.len - p);
-            \\                    if (n > 0) { @memcpy(buf[p..p+n], txt[0..n]); p += n; }
-            \\                }
-            \\                st.* = 2;
-            \\            } else {
-            \\                if (p > 0 and p < buf.len) { buf[p] = '\n'; p += 1; }
-            \\                const n = @min(txt.len, buf.len - p);
-            \\                if (n > 0) { @memcpy(buf[p..p+n], txt[0..n]); p += n; }
-            \\            }
-            \\        }
-            \\    }
-            \\    for (node.children) |*child| { p = collectSelectedText(child, buf, p, st); }
-            \\    return p;
-            \\}
-            \\
-            \\
-        );
-
-        // Script mode: JS_LOGIC + _initState + _updateDynamicTexts + main
-        if (self.compute_js == null) return error.NoComputeJS;
-
-        // JS_LOGIC
+        // JS_LOGIC — embed script or empty string if no script
         try out.appendSlice(self.alloc, "\n// ── Embedded JS logic ────────────────────────────────────────\n");
         try out.appendSlice(self.alloc, "const JS_LOGIC =\n");
-        const rewritten = try self.rewriteSetterCalls(self.compute_js.?);
+        const js_source = self.compute_js orelse "";
+        const rewritten = try self.rewriteSetterCalls(js_source);
         var line_iter = std.mem.splitScalar(u8, rewritten, '\n');
         while (line_iter.next()) |line| {
             try out.appendSlice(self.alloc, "    \\\\");
@@ -2534,142 +2710,72 @@ pub const Generator = struct {
                 "    {s}[{d}].text = _dyn_text_{d};\n",
                 .{ dt.buf_id, dt.buf_id, dt.fmt_string, dt.fmt_args, dt.arr_name, dt.arr_index, dt.buf_id }));
         }
+        for (0..self.dyn_color_count) |dci| {
+            const dc = &self.dyn_colors[dci];
+            if (!dc.has_ref) continue;
+            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                "    {s}[{d}].text_color = {s};\n",
+                .{ dc.arr_name, dc.arr_index, dc.expression }));
+        }
         try out.appendSlice(self.alloc, "}\n\n");
 
-        // Main: SDL2 window + wgpu GPU + QuickJS VM
-        try out.appendSlice(self.alloc,
-            \\const qjs_runtime = @import("framework/qjs_runtime.zig");
-            \\const gpu = @import("framework/gpu.zig");
-            \\const c_imports = @import("framework/c.zig").imports;
-            \\
-            \\fn gpuPaintNode(node: *Node) void {
-            \\    if (node.style.display == .none) return;
-            \\    const r = node.computed;
-            \\    if (r.w <= 0 or r.h <= 0) return;
-            \\    if (node.style.background_color) |bg| {
-            \\        if (bg.a > 0) {
-            \\            const bc = node.style.border_color orelse Color.rgb(0, 0, 0);
-            \\            gpu.drawRect(
-            \\                r.x, r.y, r.w, r.h,
-            \\                @as(f32, @floatFromInt(bg.r)) / 255.0,
-            \\                @as(f32, @floatFromInt(bg.g)) / 255.0,
-            \\                @as(f32, @floatFromInt(bg.b)) / 255.0,
-            \\                @as(f32, @floatFromInt(bg.a)) / 255.0,
-            \\                node.style.border_radius,
-            \\                0,
-            \\                @as(f32, @floatFromInt(bc.r)) / 255.0,
-            \\                @as(f32, @floatFromInt(bc.g)) / 255.0,
-            \\                @as(f32, @floatFromInt(bc.b)) / 255.0,
-            \\                @as(f32, @floatFromInt(bc.a)) / 255.0,
-            \\            );
-            \\        }
-            \\    }
-            \\    if (node.text) |t| {
-            \\        if (t.len > 0) {
-            \\            const tc = node.text_color orelse Color.rgb(255, 255, 255);
-            \\            const pl = node.style.padLeft();
-            \\            const pt = node.style.padTop();
-            \\            const pr = node.style.padRight();
-            \\            _ = gpu.drawTextWrapped(
-            \\                t, r.x + pl, r.y + pt, node.font_size, @max(1.0, r.w - pl - pr),
-            \\                @as(f32, @floatFromInt(tc.r)) / 255.0,
-            \\                @as(f32, @floatFromInt(tc.g)) / 255.0,
-            \\                @as(f32, @floatFromInt(tc.b)) / 255.0,
-            \\                @as(f32, @floatFromInt(tc.a)) / 255.0,
-            \\            );
-            \\        }
-            \\    }
-            \\    for (node.children) |*child| gpuPaintNode(child);
-            \\}
-            \\
-            \\pub fn main() !void {
-            \\    if (c_imports.SDL_Init(c_imports.SDL_INIT_VIDEO) != 0) return error.SDLInitFailed;
-            \\    defer c_imports.SDL_Quit();
-            \\
-            \\    const window = c_imports.SDL_CreateWindow("tsz app",
-            \\        c_imports.SDL_WINDOWPOS_CENTERED, c_imports.SDL_WINDOWPOS_CENTERED,
-            \\        1280, 800, c_imports.SDL_WINDOW_SHOWN | c_imports.SDL_WINDOW_RESIZABLE,
-            \\    ) orelse return error.WindowCreateFailed;
-            \\    defer c_imports.SDL_DestroyWindow(window);
-            \\
-            \\    // GPU init — wgpu gets native handle from SDL window
-            \\    gpu.init(window) catch |err| {
-            \\        std.debug.print("wgpu init failed: {}\n", .{err});
-            \\        return error.GPUInitFailed;
-            \\    };
-            \\    defer gpu.deinit();
-            \\
-            \\    // TextEngine for layout measurement (FreeType)
-            \\    const text_engine_mod = @import("framework/text.zig");
-            \\    var te = text_engine_mod.TextEngine.initHeadless("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf") catch
-            \\        text_engine_mod.TextEngine.initHeadless("/System/Library/Fonts/Supplemental/Arial.ttf") catch
-            \\        text_engine_mod.TextEngine.initHeadless("C:/Windows/Fonts/segoeui.ttf") catch
-            \\        return error.FontNotFound;
-            \\    defer te.deinit();
-            \\
-            \\    // Pass FreeType handles to GPU text renderer (glyph atlas)
-            \\    gpu.initText(te.library, te.face, te.fallback_faces, te.fallback_count);
-            \\
-            \\    g_text_engine = &te;
-            \\    layout.setMeasureFn(measureCallback);
-            \\    layout.setMeasureImageFn(measureImageCallback);
-            \\    var win_w: f32 = 1280;
-            \\    var win_h: f32 = 800;
-            \\
-            \\    _initState();
-            \\    qjs_runtime.initVM();
-            \\    defer qjs_runtime.deinit();
-            \\
-        );
-        // Register FFI host functions (between initVM and evalScript)
+        // FFI timer variables (module-level for tick callback)
+        for (0..self.ffi_hook_count) |hi| {
+            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                "var _ffi_timer_{d}: u32 = 0;\n", .{hi}));
+        }
+
+        // updateRoutes — display-toggle routing
+        if (self.route_count > 0) {
+            try out.appendSlice(self.alloc, "fn updateRoutes() void {\n");
+            try out.appendSlice(self.alloc, "    const path = router.currentPath();\n");
+            // Build patterns array
+            try out.appendSlice(self.alloc, "    const patterns = [_][]const u8{ ");
+            for (0..self.route_count) |i| {
+                if (i > 0) try out.appendSlice(self.alloc, ", ");
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "\"{s}\"", .{self.routes[i].path}));
+            }
+            try out.appendSlice(self.alloc, " };\n");
+            try out.appendSlice(self.alloc, "    const best = router.findBestMatch(&patterns, path);\n");
+            // Hide all routes
+            for (0..self.route_count) |i| {
+                const r = self.routes[i];
+                if (r.arr_name.len == 0) continue;
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                    "    {s}[{d}].style.display = .none;\n", .{ r.arr_name, r.child_idx }));
+            }
+            // Show matched route
+            try out.appendSlice(self.alloc, "    if (best) |idx| {\n        switch (idx) {\n");
+            for (0..self.route_count) |i| {
+                const r = self.routes[i];
+                if (r.arr_name.len == 0) continue;
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                    "            {d} => {{ {s}[{d}].style.display = .flex; }},\n", .{ i, r.arr_name, r.child_idx }));
+            }
+            try out.appendSlice(self.alloc, "            else => {},\n        }\n    }\n}\n\n");
+        }
+
+        // _appInit — called once by engine after VM is ready
+        try out.appendSlice(self.alloc, "\nfn _appInit() void {\n    _initState();\n");
+        if (self.comp_instance_count > 0) {
+            try out.appendSlice(self.alloc, "    _initComponents();\n");
+        }
         for (self.ffi_funcs.items) |func_name| {
             try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
                 "    qjs_runtime.registerHostFn(\"{s}\", @ptrCast(&_ffi_{s}), 8);\n", .{ func_name, func_name }));
         }
-        try out.appendSlice(self.alloc,
-            \\    qjs_runtime.evalScript(JS_LOGIC);
-            \\    _updateDynamicTexts();
-            \\
-            \\    var running = true;
-            \\    var fps_frames: u32 = 0;
-            \\    var fps_last: u32 = c_imports.SDL_GetTicks();
-            \\
-        );
-        // useFFI timer variables
-        for (0..self.ffi_hook_count) |hi| {
-            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                "    var _ffi_timer_{d}: u32 = 0;\n", .{hi}));
+        if (self.dyn_count > 0) {
+            try out.appendSlice(self.alloc, "    _updateDynamicTexts();\n");
         }
-        try out.appendSlice(self.alloc,
-            \\
-            \\    while (running) {
-            \\        var event: c_imports.SDL_Event = undefined;
-            \\        while (c_imports.SDL_PollEvent(&event) != 0) {
-            \\            switch (event.type) {
-            \\                c_imports.SDL_QUIT => running = false,
-            \\                c_imports.SDL_WINDOWEVENT => {
-            \\                    if (event.window.event == c_imports.SDL_WINDOWEVENT_SIZE_CHANGED) {
-            \\                        win_w = @floatFromInt(event.window.data1);
-            \\                        win_h = @floatFromInt(event.window.data2);
-            \\                        gpu.resize(@intCast(event.window.data1), @intCast(event.window.data2));
-            \\                    }
-            \\                },
-            \\                c_imports.SDL_KEYDOWN => {
-            \\                    if (event.key.keysym.sym == c_imports.SDLK_ESCAPE) running = false;
-            \\                },
-            \\                else => {},
-            \\            }
-            \\        }
-            \\
-            \\        const t0 = @import("std").time.microTimestamp();
-            \\        qjs_runtime.tick();
-            \\        const t1 = @import("std").time.microTimestamp();
-            \\        qjs_runtime.telemetry_tick_us = @intCast(@max(0, t1 - t0));
-            \\
-        );
-        // useFFI polling — call C functions on interval, write to state slots
+        if (self.has_routes) {
+            try out.appendSlice(self.alloc, "    router.init(\"/\");\n    updateRoutes();\n");
+        }
+        try out.appendSlice(self.alloc, "}\n\n");
+
+        // _appTick — called every frame by engine before layout
+        try out.appendSlice(self.alloc, "fn _appTick(now: u32) void {\n    _ = now;\n");
+        // FFI polling
         if (self.ffi_hook_count > 0) {
-            try out.appendSlice(self.alloc, "        {\n            const _now = c_imports.SDL_GetTicks();\n");
             for (0..self.ffi_hook_count) |hi| {
                 const hook = self.ffi_hooks[hi];
                 const rid = self.regularSlotId(hook.slot_id);
@@ -2690,12 +2796,15 @@ pub const Generator = struct {
                 else
                     try std.fmt.allocPrint(self.alloc, "ffi.{s}(0)", .{hook.ffi_func});
                 try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                    "            if (_now - _ffi_timer_{d} >= {d}) {{ {s}({d}, {s}{s}); _ffi_timer_{d} = _now; }}\n",
+                    "    if (now - _ffi_timer_{d} >= {d}) {{ {s}({d}, {s}{s}); _ffi_timer_{d} = now; }}\n",
                     .{ hi, hook.interval_ms, set_fn, rid, ffi_call, cast, hi }));
             }
-            try out.appendSlice(self.alloc, "        }\n");
         }
-        // Check if any dynamic text is per-frame (no state deps — e.g. FFI calls)
+        // Router dirty check
+        if (self.has_routes) {
+            try out.appendSlice(self.alloc, "    if (router.isDirty()) { updateRoutes(); router.clearDirty(); }\n");
+        }
+        // State dirty check + dynamic text update
         var has_per_frame_text = false;
         for (0..self.dyn_count) |di| {
             if (self.dyn_texts[di].dep_count == 0 and self.dyn_texts[di].has_ref) {
@@ -2704,51 +2813,31 @@ pub const Generator = struct {
             }
         }
         if (has_per_frame_text) {
-            // Per-frame expressions exist — always update texts
-            try out.appendSlice(self.alloc,
-                \\
-                \\        _updateDynamicTexts();
-                \\        if (state.isDirty()) state.clearDirty();
-                \\
-            );
-        } else {
-            try out.appendSlice(self.alloc,
-                \\
-                \\        if (state.isDirty()) {
-                \\            _updateDynamicTexts();
-                \\            state.clearDirty();
-                \\        }
-                \\
-            );
+            try out.appendSlice(self.alloc, "    _updateDynamicTexts();\n");
+            if (self.has_state) try out.appendSlice(self.alloc, "    if (state.isDirty()) state.clearDirty();\n");
+        } else if (self.has_state and self.dyn_count > 0) {
+            try out.appendSlice(self.alloc, "    if (state.isDirty()) { _updateDynamicTexts(); state.clearDirty(); }\n");
+        } else if (self.has_state) {
+            try out.appendSlice(self.alloc, "    if (state.isDirty()) state.clearDirty();\n");
         }
-        try out.appendSlice(self.alloc,
-            \\
-            \\        const t2 = @import("std").time.microTimestamp();
-            \\        layout.layout(&root, 0, 0, win_w, win_h);
-            \\        const t3 = @import("std").time.microTimestamp();
-            \\        qjs_runtime.telemetry_layout_us = @intCast(@max(0, t3 - t2));
-            \\
-            \\        const t4 = @import("std").time.microTimestamp();
-            \\        gpuPaintNode(&root);
-            \\        const t5 = @import("std").time.microTimestamp();
-            \\        qjs_runtime.telemetry_paint_us = @intCast(@max(0, t5 - t4));
-            \\
-            \\        gpu.frame(0.051, 0.067, 0.090);
-            \\
-            \\        fps_frames += 1;
-            \\        const now = c_imports.SDL_GetTicks();
-            \\        if (now - fps_last >= 1000) {
-            \\            qjs_runtime.telemetry_fps = fps_frames;
-            \\            std.debug.print("[telemetry] FPS: {d} | tick: {d}us | layout: {d}us | paint: {d}us\n", .{
-            \\                fps_frames, qjs_runtime.telemetry_tick_us, qjs_runtime.telemetry_layout_us, qjs_runtime.telemetry_paint_us,
-            \\            });
-            \\            fps_frames = 0;
-            \\            fps_last = now;
-            \\        }
-            \\    }
-            \\}
-            \\
-        );
+        try out.appendSlice(self.alloc, "}\n\n");
+
+        // main — thin entry point, engine owns the lifecycle
+        {
+            const basename = std.fs.path.basename(self.input_file);
+            const dot_pos = std.mem.lastIndexOfScalar(u8, basename, '.') orelse basename.len;
+            const app_name = basename[0..dot_pos];
+            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                "pub fn main() !void {{\n" ++
+                "    try engine.run(.{{\n" ++
+                "        .title = \"{s}\",\n" ++
+                "        .root = &root,\n" ++
+                "        .js_logic = JS_LOGIC,\n" ++
+                "        .init = _appInit,\n" ++
+                "        .tick = _appTick,\n" ++
+                "    }});\n" ++
+                "}}\n", .{app_name}));
+        }
 
         return try out.toOwnedSlice(self.alloc);
     }

@@ -173,16 +173,15 @@ var layoutCount: usize = 0;
 
 // ── Functions ──────────────────────────────────────
 
-pub fn hitTest(node: *Node, mx: f32, my: f32) ?Node {
+pub fn hitTest(node: *Node, mx: f32, my: f32) ?*Node {
     if (node.style.display == .none) {
         return null;
     }
     var i = node.children.len;
     while (i > 0) {
         i -= 1;
-        const hit = &hitTest(node.children[@intCast(i)], mx, my);
-        if (hit != null) {
-            return hit.?;
+        if (hitTest(&node.children[i], mx, my)) |hit| {
+            return hit;
         }
     }
     if (hasHandlers(node.handlers) or node.input_id != null or node.canvas_type != null) {

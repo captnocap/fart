@@ -1,0 +1,28 @@
+import { Panel, TabBar, Divider } from './style_cls';
+
+const [activeTab, setActiveTab] = useState(1);
+
+function App() {
+  return (
+    <C.Panel>
+      <C.TabBar>
+        <Pressable onPress={() => setActiveTab(1)}>
+          <Text fontSize={11} color={activeTab == 1 ? '#e0e2ea' : '#73768a'}>Elements</Text>
+        </Pressable>
+        <Pressable onPress={() => setActiveTab(2)}>
+          <Text fontSize={11} color={activeTab == 2 ? '#e0e2ea' : '#73768a'}>Console</Text>
+        </Pressable>
+        <Pressable onPress={() => setActiveTab(3)}>
+          <Text fontSize={11} color={activeTab == 3 ? '#e0e2ea' : '#73768a'}>Network</Text>
+        </Pressable>
+        <Pressable onPress={() => setActiveTab(4)}>
+          <Text fontSize={11} color={activeTab == 4 ? '#e0e2ea' : '#73768a'}>Performance</Text>
+        </Pressable>
+      </C.TabBar>
+      <C.Divider />
+      <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <Text fontSize={48} color="#e0e2ea">{activeTab}</Text>
+      </Box>
+    </C.Panel>
+  );
+}
