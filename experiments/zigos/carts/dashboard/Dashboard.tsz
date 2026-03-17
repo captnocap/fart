@@ -1,13 +1,41 @@
+// ── FFI: link C libraries ──
 // @ffi <time.h>
 // @ffi <clock_shim.h>
 declare function time(t: number): number;
 declare function clock_ms(): number;
 
-import { Page, Header, Row, Spacer, Title, Status, Alert, Dim, Circle, BigCircle, Pill } from './style.cls';
+import { Page, Header, Row, Spacer, Title, Status, Alert, Dim } from './style.cls';
 import { StatCard } from './StatCard.c';
 import { metrics } from './metrics.script';
 
+// ── Three reactive models for FFI data ──
+//
+// 1. useFFI(fn, interval) — Zig polls C on a timer, writes to state.
+//    JS subscribes via the getter. Best for: periodic data that doesn't
+//    need every-frame resolution. Metrics, sensors, battery, system time.
+//    Cost: one C call per interval, one state write, dirty flag propagates.
+//
 const [uptime] = useFFI(time, 1000);
+//
+// 2. JS host function — JS calls the C function through a host bridge.
+//    JS controls when and how often. Best for: event-driven updates,
+//    user-triggered actions, network responses, or when JS logic needs
+//    the return value for computation before writing to state.
+//    Cost: JS→Zig→C→Zig→JS round trip per call.
+//
+//    Example in metrics.script.tsz:
+//      setUptime(time(0));  // JS decides when to call
+//
+// 3. Per-frame expression — ${fn()} in JSX, evaluated every render.
+//    No state slot, no dirty check. Best for: real-time continuous data
+//    where you need the freshest value every frame — audio levels,
+//    accelerometer, frame timestamps, animation clocks.
+//    Cost: one C call per frame. If many per-frame texts exist,
+//    all dynamic texts update every frame (optimization: split update fns).
+//
+//    Used below in the telemetry bar: ${clock_ms()}
+//
+
 const [cpu, setCpu] = useState(0);
 const [memUsed, setMemUsed] = useState(0);
 const [memTotal, setMemTotal] = useState(8192);
