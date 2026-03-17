@@ -19,6 +19,15 @@ const state = @import("state.zig");
 const Color = layout.Color;
 const TextEngine = text_mod.TextEngine;
 
+var g_bsod_te: ?*TextEngine = null;
+
+fn bsodMeasure(t: []const u8, font_size: u16, max_width: f32, letter_spacing: f32, line_height: f32, max_lines: u16, no_wrap: bool) layout.TextMetrics {
+    if (g_bsod_te) |te| {
+        return te.measureTextWrappedEx(t, font_size, max_width, letter_spacing, line_height, max_lines, no_wrap);
+    }
+    return .{};
+}
+
 /// Show the crash screen. Blocks until the user dismisses it.
 /// Call this instead of just exiting — gives the user info about what happened.
 pub fn show(reason: []const u8, detail: []const u8) void {
@@ -79,20 +88,9 @@ pub fn show(reason: []const u8, detail: []const u8) void {
     };
     gpu.initText(te.library, te.face, te.fallback_faces, te.fallback_count);
 
-    // Init layout measure function
-    layout.setMeasureFn(struct {
-        fn measure(t: []const u8, font_size: u16, max_width: f32, letter_spacing: f32, line_height: f32, max_lines: u16, no_wrap: bool) layout.TextMetrics {
-            _ = letter_spacing;
-            _ = line_height;
-            _ = max_lines;
-            _ = no_wrap;
-            // Use gpu text measurement
-            _ = font_size;
-            _ = max_width;
-            _ = t;
-            return .{};
-        }
-    }.measure);
+    // Set up text measurement using the local TextEngine
+    g_bsod_te = &te;
+    layout.setMeasureFn(bsodMeasure);
 
     // Init the generated BSOD UI
     bsod_ui.init(0);
