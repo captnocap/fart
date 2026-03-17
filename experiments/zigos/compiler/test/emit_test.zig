@@ -7,9 +7,12 @@ const Lexer = h.Lexer;
 const Generator = h.Generator;
 
 test "minimal app" {
-    var a = arena(); defer a.deinit(); const al = a.allocator();
+    var a = arena();
+    defer a.deinit();
+    const al = a.allocator();
     const src = "function App() { return <Box /> }";
-    var lex = Lexer.init(src); lex.tokenize();
+    var lex = Lexer.init(src);
+    lex.tokenize();
     var gen = Generator.init(al, &lex, src, "test.tsz");
     const out = try gen.generate();
     try testing.expect(std.mem.indexOf(u8, out, "const std = @import(\"std\")") != null);
@@ -19,9 +22,12 @@ test "minimal app" {
 }
 
 test "app with state" {
-    var a = arena(); defer a.deinit(); const al = a.allocator();
+    var a = arena();
+    defer a.deinit();
+    const al = a.allocator();
     const src = "function App() { const [count, setCount] = useState(0); return <Box><Text>{count}</Text></Box> }";
-    var lex = Lexer.init(src); lex.tokenize();
+    var lex = Lexer.init(src);
+    lex.tokenize();
     var gen = Generator.init(al, &lex, src, "test.tsz");
     const out = try gen.generate();
     try testing.expect(std.mem.indexOf(u8, out, "const state = @import(\"framework/state.zig\")") != null);
@@ -31,18 +37,24 @@ test "app with state" {
 }
 
 test "app with string state" {
-    var a = arena(); defer a.deinit(); const al = a.allocator();
+    var a = arena();
+    defer a.deinit();
+    const al = a.allocator();
     const src = "function App() { const [msg, setMsg] = useState(\"hello\"); return <Box><Text>{msg}</Text></Box> }";
-    var lex = Lexer.init(src); lex.tokenize();
+    var lex = Lexer.init(src);
+    lex.tokenize();
     var gen = Generator.init(al, &lex, src, "test.tsz");
     const out = try gen.generate();
     try testing.expect(std.mem.indexOf(u8, out, "createSlotString(\"hello\")") != null);
 }
 
 test "app with onPress" {
-    var a = arena(); defer a.deinit(); const al = a.allocator();
+    var a = arena();
+    defer a.deinit();
+    const al = a.allocator();
     const src = "function App() { const [n, setN] = useState(0); return <Pressable onPress={() => setN(n + 1)}><Text>{n}</Text></Pressable> }";
-    var lex = Lexer.init(src); lex.tokenize();
+    var lex = Lexer.init(src);
+    lex.tokenize();
     var gen = Generator.init(al, &lex, src, "test.tsz");
     const out = try gen.generate();
     try testing.expect(std.mem.indexOf(u8, out, "fn _handler_press_") != null);
@@ -50,9 +62,12 @@ test "app with onPress" {
 }
 
 test "app with component" {
-    var a = arena(); defer a.deinit(); const al = a.allocator();
+    var a = arena();
+    defer a.deinit();
+    const al = a.allocator();
     const src = "function Greeting({ text }) { return <Text>{text}</Text> }\nfunction App() { return <Box><Greeting text=\"hi\" /></Box> }";
-    var lex = Lexer.init(src); lex.tokenize();
+    var lex = Lexer.init(src);
+    lex.tokenize();
     var gen = Generator.init(al, &lex, src, "test.tsz");
     const out = try gen.generate();
     try testing.expect(std.mem.indexOf(u8, out, "hi") != null);
@@ -60,9 +75,12 @@ test "app with component" {
 }
 
 test "app with FFI" {
-    var a = arena(); defer a.deinit(); const al = a.allocator();
+    var a = arena();
+    defer a.deinit();
+    const al = a.allocator();
     const src = "// @ffi <time.h>\ndeclare function getTime(): number\nfunction App() { return <Text>time</Text> }";
-    var lex = Lexer.init(src); lex.tokenize();
+    var lex = Lexer.init(src);
+    lex.tokenize();
     var gen = Generator.init(al, &lex, src, "test.tsz");
     const out = try gen.generate();
     try testing.expect(std.mem.indexOf(u8, out, "@cImport") != null);
@@ -71,9 +89,12 @@ test "app with FFI" {
 }
 
 test "module mode" {
-    var a = arena(); defer a.deinit(); const al = a.allocator();
+    var a = arena();
+    defer a.deinit();
+    const al = a.allocator();
     const src = "function App() { return <Box><Text>module</Text></Box> }";
-    var lex = Lexer.init(src); lex.tokenize();
+    var lex = Lexer.init(src);
+    lex.tokenize();
     var gen = Generator.init(al, &lex, src, "test.tsz");
     gen.is_module = true;
     const out = try gen.generate();
@@ -96,16 +117,76 @@ fn hasBoundDynText(out: []const u8) bool {
     return std.mem.indexOf(u8, body, "].text = _dyn_text_") != null;
 }
 
+fn countMatches(haystack: []const u8, needle: []const u8) usize {
+    var count: usize = 0;
+    var start: usize = 0;
+    while (std.mem.indexOfPos(u8, haystack, start, needle)) |idx| {
+        count += 1;
+        start = idx + needle.len;
+    }
+    return count;
+}
+
+fn dynTextBindingCount(out: []const u8) usize {
+    const fn_start = std.mem.indexOf(u8, out, "fn _updateDynamicTexts()") orelse return 0;
+    const fn_body = out[fn_start..];
+    const fn_end = std.mem.indexOf(u8, fn_body, "\n}\n") orelse fn_body.len;
+    const body = fn_body[0..fn_end];
+    return countMatches(body, "].text = _dyn_text_");
+}
+
+fn hasConcreteDynTextBinding(out: []const u8, dyn_id: usize) bool {
+    const fn_start = std.mem.indexOf(u8, out, "fn _updateDynamicTexts()") orelse return false;
+    const fn_body = out[fn_start..];
+    const fn_end = std.mem.indexOf(u8, fn_body, "\n}\n") orelse fn_body.len;
+    const body = fn_body[0..fn_end];
+
+    var needle_buf: [64]u8 = undefined;
+    const needle = std.fmt.bufPrint(&needle_buf, "].text = _dyn_text_{d};", .{dyn_id}) catch return false;
+
+    var start: usize = 0;
+    while (std.mem.indexOfPos(u8, body, start, needle)) |idx| {
+        const line_start = std.mem.lastIndexOfScalar(u8, body[0..idx], '\n') orelse 0;
+        const line = body[line_start..idx];
+        if (std.mem.indexOf(u8, line, "_arr_") != null) return true;
+        start = idx + needle.len;
+    }
+    return false;
+}
+
+fn concreteDynTextBindingCount(out: []const u8, dyn_id: usize) usize {
+    const fn_start = std.mem.indexOf(u8, out, "fn _updateDynamicTexts()") orelse return 0;
+    const fn_body = out[fn_start..];
+    const fn_end = std.mem.indexOf(u8, fn_body, "\n}\n") orelse fn_body.len;
+    const body = fn_body[0..fn_end];
+
+    var needle_buf: [64]u8 = undefined;
+    const needle = std.fmt.bufPrint(&needle_buf, "].text = _dyn_text_{d};", .{dyn_id}) catch return 0;
+
+    var count: usize = 0;
+    var start: usize = 0;
+    while (std.mem.indexOfPos(u8, body, start, needle)) |idx| {
+        const line_start = std.mem.lastIndexOfScalar(u8, body[0..idx], '\n') orelse 0;
+        const line = body[line_start..idx];
+        if (std.mem.indexOf(u8, line, "_arr_") != null) count += 1;
+        start = idx + needle.len;
+    }
+    return count;
+}
+
 test "REGRESSION: state var in template literal prop must bind to node" {
     // Dashboard bug: <StatCard value={`${cpu}%`} /> — the dynamic text is
     // created but never BOUND to a node in the array. _updateDynamicTexts
     // updates a buffer but nothing reads it.
-    var a = arena(); defer a.deinit(); const al = a.allocator();
+    var a = arena();
+    defer a.deinit();
+    const al = a.allocator();
     const src =
         "const [cpu, setCpu] = useState(0);\n" ++
         "function Card({ value }) { return <Text>{value}</Text> }\n" ++
         "function App() { return <Card value={`${cpu}%`} /> }";
-    var lex = Lexer.init(src); lex.tokenize();
+    var lex = Lexer.init(src);
+    lex.tokenize();
     var gen = Generator.init(al, &lex, src, "test.tsz");
     const out = try gen.generate();
     // 1. state.getSlot must appear (state resolution works)
@@ -120,14 +201,34 @@ test "REGRESSION: state var in template literal prop must bind to node" {
     try testing.expect(hasBoundDynText(out));
 }
 
+test "STRICT: single-state template prop binds a concrete array target" {
+    var a = arena();
+    defer a.deinit();
+    const al = a.allocator();
+    const src =
+        "const [cpu, setCpu] = useState(0);\n" ++
+        "function Card({ value }) { return <Text>{value}</Text> }\n" ++
+        "function App() { return <Card value={`${cpu}%`} /> }";
+    var lex = Lexer.init(src);
+    lex.tokenize();
+    var gen = Generator.init(al, &lex, src, "test.tsz");
+    const out = try gen.generate();
+    try testing.expect(std.mem.indexOf(u8, out, "state.getSlot(0)") != null);
+    try testing.expect(hasConcreteDynTextBinding(out, 0));
+    try testing.expectEqual(@as(usize, 1), concreteDynTextBindingCount(out, 0));
+}
+
 test "REGRESSION: multi-state template prop must bind" {
-    var a = arena(); defer a.deinit(); const al = a.allocator();
+    var a = arena();
+    defer a.deinit();
+    const al = a.allocator();
     const src =
         "const [memUsed, setMemUsed] = useState(0);\n" ++
         "const [memTotal, setMemTotal] = useState(8192);\n" ++
         "function Card({ value }) { return <Text>{value}</Text> }\n" ++
         "function App() { return <Card value={`${memUsed}/${memTotal} MB`} /> }";
-    var lex = Lexer.init(src); lex.tokenize();
+    var lex = Lexer.init(src);
+    lex.tokenize();
     var gen = Generator.init(al, &lex, src, "test.tsz");
     const out = try gen.generate();
     try testing.expect(std.mem.indexOf(u8, out, "getSlot") != null);
@@ -136,13 +237,35 @@ test "REGRESSION: multi-state template prop must bind" {
     }
 }
 
+test "STRICT: multi-state template prop binds exactly one dynamic text node" {
+    var a = arena();
+    defer a.deinit();
+    const al = a.allocator();
+    const src =
+        "const [memUsed, setMemUsed] = useState(0);\n" ++
+        "const [memTotal, setMemTotal] = useState(8192);\n" ++
+        "function Card({ value }) { return <Text>{value}</Text> }\n" ++
+        "function App() { return <Card value={`${memUsed}/${memTotal} MB`} /> }";
+    var lex = Lexer.init(src);
+    lex.tokenize();
+    var gen = Generator.init(al, &lex, src, "test.tsz");
+    const out = try gen.generate();
+    try testing.expect(std.mem.indexOf(u8, out, "state.getSlot(0)") != null);
+    try testing.expect(std.mem.indexOf(u8, out, "state.getSlot(1)") != null);
+    try testing.expect(hasConcreteDynTextBinding(out, 0));
+    try testing.expectEqual(@as(usize, 1), concreteDynTextBindingCount(out, 0));
+}
+
 test "direct template literal in JSX must bind" {
     // Non-component case: <Text>{`Count: ${count}`}</Text> — should work
-    var a = arena(); defer a.deinit(); const al = a.allocator();
+    var a = arena();
+    defer a.deinit();
+    const al = a.allocator();
     const src =
         "const [count, setCount] = useState(0);\n" ++
         "function App() { return <Box><Text>{`Count: ${count}`}</Text></Box> }";
-    var lex = Lexer.init(src); lex.tokenize();
+    var lex = Lexer.init(src);
+    lex.tokenize();
     var gen = Generator.init(al, &lex, src, "test.tsz");
     const out = try gen.generate();
     try testing.expect(std.mem.indexOf(u8, out, "state.getSlot(") != null);
@@ -151,12 +274,15 @@ test "direct template literal in JSX must bind" {
 }
 
 test "REGRESSION: string state as component prop must bind" {
-    var a = arena(); defer a.deinit(); const al = a.allocator();
+    var a = arena();
+    defer a.deinit();
+    const al = a.allocator();
     const src =
         "const [status, setStatus] = useState(\"healthy\");\n" ++
         "function Badge({ text }) { return <Text>{text}</Text> }\n" ++
         "function App() { return <Box><Badge text={status} /></Box> }";
-    var lex = Lexer.init(src); lex.tokenize();
+    var lex = Lexer.init(src);
+    lex.tokenize();
     var gen = Generator.init(al, &lex, src, "test.tsz");
     const out = try gen.generate();
     if (std.mem.indexOf(u8, out, "state.getSlotString(") == null) {
@@ -164,14 +290,35 @@ test "REGRESSION: string state as component prop must bind" {
     }
 }
 
+test "STRICT: string state component prop binds dynamic text node" {
+    var a = arena();
+    defer a.deinit();
+    const al = a.allocator();
+    const src =
+        "const [status, setStatus] = useState(\"healthy\");\n" ++
+        "function Badge({ text }) { return <Text>{text}</Text> }\n" ++
+        "function App() { return <Box><Badge text={status} /></Box> }";
+    var lex = Lexer.init(src);
+    lex.tokenize();
+    var gen = Generator.init(al, &lex, src, "test.tsz");
+    const out = try gen.generate();
+    try testing.expect(std.mem.indexOf(u8, out, "state.getSlotString(0)") != null);
+    try testing.expect(std.mem.indexOf(u8, out, ".text = \"\"") != null);
+    try testing.expect(hasConcreteDynTextBinding(out, 0));
+    try testing.expectEqual(@as(usize, 1), concreteDynTextBindingCount(out, 0));
+}
+
 test "REGRESSION: useFFI state in template literal must bind" {
-    var a = arena(); defer a.deinit(); const al = a.allocator();
+    var a = arena();
+    defer a.deinit();
+    const al = a.allocator();
     const src =
         "// @ffi <time.h>\n" ++
         "declare function time(t: number): number;\n" ++
         "const [uptime] = useFFI(time, 1000);\n" ++
         "function App() { return <Box><Text>{`Uptime: ${uptime}s`}</Text></Box> }";
-    var lex = Lexer.init(src); lex.tokenize();
+    var lex = Lexer.init(src);
+    lex.tokenize();
     var gen = Generator.init(al, &lex, src, "test.tsz");
     const out = try gen.generate();
     try testing.expect(std.mem.indexOf(u8, out, "state.getSlot") != null);
@@ -180,9 +327,12 @@ test "REGRESSION: useFFI state in template literal must bind" {
 }
 
 test "app with script block" {
-    var a = arena(); defer a.deinit(); const al = a.allocator();
+    var a = arena();
+    defer a.deinit();
+    const al = a.allocator();
     const src = "<script>\nconst x = 42;\n</script>\nfunction App() { return <Text>hello</Text> }";
-    var lex = Lexer.init(src); lex.tokenize();
+    var lex = Lexer.init(src);
+    lex.tokenize();
     var gen = Generator.init(al, &lex, src, "test.tsz");
     const out = try gen.generate();
     try testing.expect(std.mem.indexOf(u8, out, "JS_LOGIC") != null);
