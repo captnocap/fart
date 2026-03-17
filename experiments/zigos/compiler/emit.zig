@@ -20,23 +20,108 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
         return emitModuleSource(self, root_expr);
     }
 
+    // ── Unused state detection ──
+    // Check each state slot for any reference in dynamic texts, styles, handlers, or conditionals
+    if (self.has_state) {
+        for (0..self.state_count) |si| {
+            const slot = self.state_slots[si];
+            var getter_used = false;
+            var setter_used = false;
+
+            // Check dynamic text args for getter references
+            for (0..self.dyn_count) |di| {
+                if (std.mem.indexOf(u8, self.dyn_texts[di].fmt_args, slot.getter) != null) {
+                    getter_used = true;
+                    break;
+                }
+            }
+
+            // Check dynamic style expressions for getter references
+            if (!getter_used) {
+                for (0..self.dyn_style_count) |dsi| {
+                    if (std.mem.indexOf(u8, self.dyn_styles[dsi].expression, slot.getter) != null) {
+                        getter_used = true;
+                        break;
+                    }
+                }
+            }
+
+            // Check conditional expressions for getter references
+            if (!getter_used) {
+                for (0..self.conditional_count) |ci| {
+                    if (std.mem.indexOf(u8, self.conditionals[ci].cond_expr, slot.getter) != null) {
+                        getter_used = true;
+                        break;
+                    }
+                }
+            }
+
+            // Check app conditionals for getter references
+            if (!getter_used) {
+                for (0..self.app_cond_count) |ci| {
+                    if (std.mem.indexOf(u8, self.app_conds[ci].cond_expr, slot.getter) != null) {
+                        getter_used = true;
+                        break;
+                    }
+                }
+            }
+
+            // Check handler bodies for setter references
+            for (self.handler_decls.items) |h| {
+                if (std.mem.indexOf(u8, h, slot.setter) != null) {
+                    setter_used = true;
+                }
+                if (std.mem.indexOf(u8, h, slot.getter) != null) {
+                    getter_used = true;
+                }
+                if (getter_used and setter_used) break;
+            }
+
+            if (!getter_used and !setter_used) {
+                const msg = std.fmt.allocPrint(self.alloc,
+                    "state variable '{s}' (slot {d}) is never read or written — dead state",
+                    .{ slot.getter, si }) catch "unused state variable";
+                self.addWarning(0, msg);
+            } else if (!getter_used) {
+                const msg = std.fmt.allocPrint(self.alloc,
+                    "state variable '{s}' (slot {d}) is written by '{s}' but never read in JSX — value is invisible",
+                    .{ slot.getter, si, slot.setter }) catch "write-only state variable";
+                self.addWarning(0, msg);
+            } else if (!setter_used) {
+                const msg = std.fmt.allocPrint(self.alloc,
+                    "state variable '{s}' (slot {d}) is read in JSX but never written — value will never change",
+                    .{ slot.getter, si }) catch "read-only state variable";
+                self.addWarning(0, msg);
+            }
+        }
+    }
+
     // ── Binding validation ──
     // Warn about dynamic texts that were never bound to a parent array
     for (0..self.dyn_count) |di| {
         if (!self.dyn_texts[di].has_ref) {
-            std.debug.print("[tsz] warning: dynamic text #{d} (fmt: \"{s}\") was never bound to a node — will not update at runtime\n", .{ di, self.dyn_texts[di].fmt_string });
+            const msg = std.fmt.allocPrint(self.alloc,
+                "dynamic text #{d} (fmt: \"{s}\") was never bound to a node — will not update at runtime",
+                .{ di, self.dyn_texts[di].fmt_string }) catch "unbound dynamic text";
+            self.addWarning(0, msg);
         }
     }
     // Warn about dynamic styles that were never bound
     for (0..self.dyn_style_count) |dsi| {
         if (!self.dyn_styles[dsi].has_ref) {
-            std.debug.print("[tsz] warning: dynamic style '{s}' was never bound to a node — will not update at runtime\n", .{self.dyn_styles[dsi].field});
+            const msg = std.fmt.allocPrint(self.alloc,
+                "dynamic style '{s}' was never bound to a node — will not update at runtime",
+                .{self.dyn_styles[dsi].field}) catch "unbound dynamic style";
+            self.addWarning(0, msg);
         }
     }
     // Warn about conditionals that were never bound to a parent array
     for (0..self.conditional_count) |ci| {
         if (self.conditionals[ci].arr_name.len == 0) {
-            std.debug.print("[tsz] warning: conditional #{d} (expr: {s}) was never bound to a parent array\n", .{ ci, self.conditionals[ci].cond_expr });
+            const msg = std.fmt.allocPrint(self.alloc,
+                "conditional #{d} (expr: {s}) was never bound to a parent array",
+                .{ ci, self.conditionals[ci].cond_expr }) catch "unbound conditional";
+            self.addWarning(0, msg);
         }
     }
 
@@ -113,6 +198,39 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
         try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
             "comptime {{ if ({d} != {d}) @compileError(\"state slot count mismatch\"); }}\n\n",
             .{ self.state_count, self.state_count }));
+    }
+
+    // ── @compileError breadcrumbs — catch unresolved bindings at zig build time ──
+    {
+        const basename = std.fs.path.basename(self.input_file);
+        var breadcrumb_count: u32 = 0;
+        for (0..self.dyn_count) |di| {
+            if (!self.dyn_texts[di].has_ref) {
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                    "comptime {{ @compileError(\"{s}: dynamic text #{d} (fmt: '{s}') was never bound — will not update at runtime\"); }}\n",
+                    .{ basename, di, self.dyn_texts[di].fmt_string }));
+                breadcrumb_count += 1;
+            }
+        }
+        for (0..self.dyn_style_count) |dsi| {
+            if (!self.dyn_styles[dsi].has_ref) {
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                    "comptime {{ @compileError(\"{s}: dynamic style '{s}' was never bound — will not update at runtime\"); }}\n",
+                    .{ basename, self.dyn_styles[dsi].field }));
+                breadcrumb_count += 1;
+            }
+        }
+        for (0..self.conditional_count) |ci| {
+            if (self.conditionals[ci].arr_name.len == 0) {
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                    "comptime {{ @compileError(\"{s}: conditional (expr: {s}) was never bound to a parent array\"); }}\n",
+                    .{ basename, self.conditionals[ci].cond_expr }));
+                breadcrumb_count += 1;
+            }
+        }
+        if (breadcrumb_count > 0) {
+            try out.appendSlice(self.alloc, "\n");
+        }
     }
 
     // Node tree
@@ -303,7 +421,10 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
     try out.appendSlice(self.alloc, "}\n\n");
 
     // _appTick
-    try out.appendSlice(self.alloc, "fn _appTick(now: u32) void {\n    _ = now;\n");
+    try out.appendSlice(self.alloc, "fn _appTick(now: u32) void {\n");
+    if (self.ffi_hook_count == 0) {
+        try out.appendSlice(self.alloc, "    _ = now;\n");
+    }
     if (self.ffi_hook_count > 0) {
         for (0..self.ffi_hook_count) |hi| {
             const hook = self.ffi_hooks[hi];

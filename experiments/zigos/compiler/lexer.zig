@@ -156,8 +156,10 @@ pub const Lexer = struct {
             // Comments and FFI pragmas
             if (ch == '/' and self.peekAt(1) == '/') {
                 self.pos += 2;
-                // Check for @ffi pragma
-                self.skipWhitespace();
+                // Check for @ffi pragma — only skip spaces/tabs, NOT newlines
+                while (self.pos < self.source.len and (self.source[self.pos] == ' ' or self.source[self.pos] == '\t')) {
+                    self.pos += 1;
+                }
                 if (self.pos + 4 <= self.source.len and
                     std.mem.eql(u8, self.source[self.pos..][0..4], "@ffi"))
                 {
