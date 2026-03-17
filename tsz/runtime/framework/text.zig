@@ -510,8 +510,11 @@ pub const TextEngine = struct {
         self.setSize(size_px);
         const metrics = self.face.*.size.*.metrics;
         const ascent: f32 = @as(f32, @floatFromInt(metrics.ascender)) / 64.0;
-        const descent: f32 = @as(f32, @floatFromInt(-metrics.descender)) / 64.0;
-        return .{ .ascent = ascent, .height = ascent + descent };
+        // Use FreeType's full line height (ascent + descent + line gap) to match
+        // gpu.zig's line spacing. Using ascent + descent alone clips descenders
+        // by 1-2px because the line gap accounts for glyph overshoot.
+        const height: f32 = @as(f32, @floatFromInt(metrics.height)) / 64.0;
+        return .{ .ascent = ascent, .height = height };
     }
 
     // ── Word wrapping ───────────────────────────────────────────────────

@@ -987,7 +987,7 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
                         const crossAvail = lineCross - childCrossMarginStart[@intCast(i)] - childCrossMarginEnd[@intCast(i)];
                         switch (effAlign) {
                             .center => {
-                                cy = y + pt + crossCursor + (crossAvail - chFinal) / 2;
+                                cy = y + pt + crossCursor + @floor((crossAvail - chFinal) / 2);
                             },
                             .end => {
                                 cy = y + pt + crossCursor + crossAvail - chFinal;
