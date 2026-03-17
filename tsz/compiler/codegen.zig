@@ -6887,7 +6887,7 @@ pub const Generator = struct {
         try out.appendSlice(self.alloc, "const mpv_mod = @import(\"framework/mpv.zig\");\n");
         try out.appendSlice(self.alloc, "const win_mgr = @import(\"framework/windows.zig\");\n");
         try out.appendSlice(self.alloc, "const watchdog = @import(\"framework/watchdog.zig\");\n");
-        try out.appendSlice(self.alloc, "const bsod = @import(\"framework/bsod.zig\");\n");
+        // bsod is a standalone binary — spawned by watchdog, not imported
         try out.appendSlice(self.alloc, "const leaktest = @import(\"framework/leaktest.zig\");\n");
         try out.appendSlice(self.alloc, "const input_mod = @import(\"framework/input.zig\");\n");
         try out.appendSlice(self.alloc, "const geometry = @import(\"framework/geometry.zig\");\n");
@@ -7915,7 +7915,7 @@ pub const Generator = struct {
         }
 
         // Layout + paint + present
-        try out.appendSlice(self.alloc, "        if (watchdog.check()) {\n            win_mgr.deinitAll();\n            c.SDL_DestroyRenderer(renderer);\n            c.SDL_DestroyWindow(window);\n            bsod.show(watchdog.getLastReason(), watchdog.getLastDetail());\n            return;\n        }\n");
+        try out.appendSlice(self.alloc, "        if (watchdog.check()) {\n            win_mgr.deinitAll();\n            c.SDL_DestroyRenderer(renderer);\n            c.SDL_DestroyWindow(window);\n            watchdog.showCrashScreen();\n            return;\n        }\n");
         try out.appendSlice(self.alloc, "        mpv_mod.poll();\n");
         try out.appendSlice(self.alloc, "        telemetry.beginLayout();\n");
         try out.appendSlice(self.alloc, "        layout.layout(&root, 0, 0, win_w, inspector.getAppHeight(win_h));\n");

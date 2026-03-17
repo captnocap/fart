@@ -102,3 +102,42 @@ pub fn getLastReason() []const u8 {
 pub fn getLastDetail() []const u8 {
     return if (last_detail.len > 0) last_detail else "No details available.";
 }
+
+/// Write crash data to /tmp and spawn the BSOD binary.
+/// Called by generated_app.zig when check() returns true.
+pub fn showCrashScreen() void {
+    // Print to terminal as fallback
+    std.debug.print(
+        \\
+        \\  ╔══════════════════════════════════════════════════╗
+        \\  ║  ReactJIT Crashed                                ║
+        \\  ╚══════════════════════════════════════════════════╝
+        \\
+        \\  {s}
+        \\  {s}
+        \\  RSS at crash: {d}MB
+        \\
+    , .{ getLastReason(), getLastDetail(), getRssMb() });
+
+    // Write crash data to /tmp for the BSOD process to read
+    writeCrashFile("/tmp/reactjit-crash-reason", getLastReason());
+    writeCrashFile("/tmp/reactjit-crash-detail", getLastDetail());
+    var rss_buf: [32]u8 = undefined;
+    const rss_str = std.fmt.bufPrint(&rss_buf, "{d}", .{getRssMb()}) catch "?";
+    writeCrashFile("/tmp/reactjit-crash-rss", rss_str);
+
+    // Spawn the BSOD binary as a separate process
+    const argv = [_][]const u8{"tsz/runtime/bin/tsz-bsod"};
+    var child = std.process.Child.init(&argv, std.heap.page_allocator);
+    child.spawn() catch |err| {
+        std.debug.print("[watchdog] Failed to spawn crash window: {}\n", .{err});
+        return;
+    };
+    // Detach — don't wait for the crash window to close
+}
+
+fn writeCrashFile(path: []const u8, data: []const u8) void {
+    const file = std.fs.createFileAbsolute(path, .{}) catch return;
+    defer file.close();
+    _ = file.write(data) catch {};
+}
