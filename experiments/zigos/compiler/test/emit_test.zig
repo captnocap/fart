@@ -107,14 +107,20 @@ test "module mode" {
 // These test actual bugs found in the Dashboard example.
 // ═══════════════════════════════════════════════════════════════════════
 
-// Helper: check if _updateDynamicTexts has a bound node assignment like _arr_X[Y].text = _dyn_text_Z
+// Helper: check if _updateDynamicTexts has a bound node assignment.
+// Accepts both array bindings (_arr_X[Y].text = _dyn_text_Z) and root bindings
+// (root.text = _dyn_text_Z) — the latter is emitted when App returns a bare
+// component that inlines to a single Text node with no parent array.
 fn hasBoundDynText(out: []const u8) bool {
-    // Look for pattern: _arr_N[M].text = _dyn_text_ inside _updateDynamicTexts
     const fn_start = std.mem.indexOf(u8, out, "fn _updateDynamicTexts()") orelse return false;
     const fn_body = out[fn_start..];
     const fn_end = std.mem.indexOf(u8, fn_body, "\n}\n") orelse fn_body.len;
     const body = fn_body[0..fn_end];
-    return std.mem.indexOf(u8, body, "].text = _dyn_text_") != null;
+    // Array binding: _arr_N[M].text = _dyn_text_
+    if (std.mem.indexOf(u8, body, "].text = _dyn_text_") != null) return true;
+    // Root binding: root.text = _dyn_text_
+    if (std.mem.indexOf(u8, body, "root.text = _dyn_text_") != null) return true;
+    return false;
 }
 
 fn countMatches(haystack: []const u8, needle: []const u8) usize {
@@ -132,26 +138,32 @@ fn dynTextBindingCount(out: []const u8) usize {
     const fn_body = out[fn_start..];
     const fn_end = std.mem.indexOf(u8, fn_body, "\n}\n") orelse fn_body.len;
     const body = fn_body[0..fn_end];
-    return countMatches(body, "].text = _dyn_text_");
+    return countMatches(body, "].text = _dyn_text_") + countMatches(body, "root.text = _dyn_text_");
 }
 
+// Check for a concrete dyn text binding for dyn_id — accepts both array bindings
+// (_arr_X[Y].text = _dyn_text_N) and root binding (root.text = _dyn_text_N).
 fn hasConcreteDynTextBinding(out: []const u8, dyn_id: usize) bool {
     const fn_start = std.mem.indexOf(u8, out, "fn _updateDynamicTexts()") orelse return false;
     const fn_body = out[fn_start..];
     const fn_end = std.mem.indexOf(u8, fn_body, "\n}\n") orelse fn_body.len;
     const body = fn_body[0..fn_end];
 
+    // Check array binding: _arr_X[Y].text = _dyn_text_N
     var needle_buf: [64]u8 = undefined;
-    const needle = std.fmt.bufPrint(&needle_buf, "].text = _dyn_text_{d};", .{dyn_id}) catch return false;
-
+    const arr_needle = std.fmt.bufPrint(&needle_buf, "].text = _dyn_text_{d};", .{dyn_id}) catch return false;
     var start: usize = 0;
-    while (std.mem.indexOfPos(u8, body, start, needle)) |idx| {
+    while (std.mem.indexOfPos(u8, body, start, arr_needle)) |idx| {
         const line_start = std.mem.lastIndexOfScalar(u8, body[0..idx], '\n') orelse 0;
         const line = body[line_start..idx];
         if (std.mem.indexOf(u8, line, "_arr_") != null) return true;
-        start = idx + needle.len;
+        start = idx + arr_needle.len;
     }
-    return false;
+
+    // Check root binding: root.text = _dyn_text_N
+    var root_buf: [64]u8 = undefined;
+    const root_needle = std.fmt.bufPrint(&root_buf, "root.text = _dyn_text_{d};", .{dyn_id}) catch return false;
+    return std.mem.indexOf(u8, body, root_needle) != null;
 }
 
 fn concreteDynTextBindingCount(out: []const u8, dyn_id: usize) usize {
@@ -160,17 +172,24 @@ fn concreteDynTextBindingCount(out: []const u8, dyn_id: usize) usize {
     const fn_end = std.mem.indexOf(u8, fn_body, "\n}\n") orelse fn_body.len;
     const body = fn_body[0..fn_end];
 
-    var needle_buf: [64]u8 = undefined;
-    const needle = std.fmt.bufPrint(&needle_buf, "].text = _dyn_text_{d};", .{dyn_id}) catch return 0;
-
     var count: usize = 0;
+
+    // Count array bindings
+    var needle_buf: [64]u8 = undefined;
+    const arr_needle = std.fmt.bufPrint(&needle_buf, "].text = _dyn_text_{d};", .{dyn_id}) catch return 0;
     var start: usize = 0;
-    while (std.mem.indexOfPos(u8, body, start, needle)) |idx| {
+    while (std.mem.indexOfPos(u8, body, start, arr_needle)) |idx| {
         const line_start = std.mem.lastIndexOfScalar(u8, body[0..idx], '\n') orelse 0;
         const line = body[line_start..idx];
         if (std.mem.indexOf(u8, line, "_arr_") != null) count += 1;
-        start = idx + needle.len;
+        start = idx + arr_needle.len;
     }
+
+    // Count root bindings
+    var root_buf: [64]u8 = undefined;
+    const root_needle = std.fmt.bufPrint(&root_buf, "root.text = _dyn_text_{d};", .{dyn_id}) catch return count;
+    count += countMatches(body, root_needle);
+
     return count;
 }
 

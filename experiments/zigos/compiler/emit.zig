@@ -111,6 +111,34 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
         }
     }
 
+    // ── Root binding pass ──
+    // If the root node itself contains `.text = ""` (i.e. App returns a bare component
+    // that inlines to a Text node — no parent array exists), bind unbound dyn texts to root.
+    if (std.mem.indexOf(u8, root_expr, ".text = \"\"") != null) {
+        for (0..self.dyn_count) |di| {
+            if (!self.dyn_texts[di].has_ref) {
+                self.dyn_texts[di].arr_name = ""; // stays empty — sentinel for "root"
+                self.dyn_texts[di].has_ref = true;
+            }
+        }
+    }
+    // Same for dynamic styles on root
+    if (self.dyn_style_count > 0) {
+        for (0..self.dyn_style_count) |dsi| {
+            if (!self.dyn_styles[dsi].has_ref) {
+                // Check if root_expr contains the placeholder for this style
+                const placeholder = if (std.mem.eql(u8, self.dyn_styles[dsi].field, "text_color"))
+                    ".text_color = Color.rgb(0, 0, 0)"
+                else
+                    "";
+                if (placeholder.len > 0 and std.mem.indexOf(u8, root_expr, placeholder) != null) {
+                    self.dyn_styles[dsi].arr_name = "";
+                    self.dyn_styles[dsi].has_ref = true;
+                }
+            }
+        }
+    }
+
     // ── Binding validation ──
     // Warn about dynamic texts that were never bound to a parent array
     for (0..self.dyn_count) |di| {
@@ -335,17 +363,34 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
     try out.appendSlice(self.alloc, "fn _updateDynamicTexts() void {\n");
     for (0..self.dyn_count) |di| {
         const dt = &self.dyn_texts[di];
+        if (!dt.has_ref) continue;
         try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-            "    _dyn_text_{d} = std.fmt.bufPrint(&_dyn_buf_{d}, \"{s}\", .{{ {s} }}) catch \"\";\n" ++
-            "    {s}[{d}].text = _dyn_text_{d};\n",
-            .{ dt.buf_id, dt.buf_id, dt.fmt_string, dt.fmt_args, dt.arr_name, dt.arr_index, dt.buf_id }));
+            "    _dyn_text_{d} = std.fmt.bufPrint(&_dyn_buf_{d}, \"{s}\", .{{ {s} }}) catch \"\";\n",
+            .{ dt.buf_id, dt.buf_id, dt.fmt_string, dt.fmt_args }));
+        // arr_name="" means the text node is root itself (App returns a bare component that
+        // inlines to a single Text — no child array exists, the node IS root)
+        if (dt.arr_name.len == 0) {
+            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                "    root.text = _dyn_text_{d};\n", .{dt.buf_id}));
+        } else {
+            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                "    {s}[{d}].text = _dyn_text_{d};\n",
+                .{ dt.arr_name, dt.arr_index, dt.buf_id }));
+        }
     }
     for (0..self.dyn_style_count) |dsi| {
         const ds = &self.dyn_styles[dsi];
         if (!ds.has_ref) continue;
-        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-            "    {s}[{d}].{s} = {s};\n",
-            .{ ds.arr_name, ds.arr_index, ds.field, ds.expression }));
+        // arr_name="" means style is on root itself
+        if (ds.arr_name.len == 0) {
+            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                "    root.{s} = {s};\n",
+                .{ ds.field, ds.expression }));
+        } else {
+            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                "    {s}[{d}].{s} = {s};\n",
+                .{ ds.arr_name, ds.arr_index, ds.field, ds.expression }));
+        }
     }
     try out.appendSlice(self.alloc, "}\n\n");
 
