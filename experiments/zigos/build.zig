@@ -17,10 +17,10 @@ pub fn build(b: *std.Build) void {
     });
     const wgpu_mod = wgpu_dep.module("wgpu");
 
-    // ── zigos-lite (codegen + layout + rendering, no networking deps) ──
-    const lite_exe = addAppExe(b, target, optimize, wgpu_mod, "zigos-lite", false);
+    // ── zigos-app (codegen + layout + rendering, no networking deps) ──
+    const lite_exe = addAppExe(b, target, optimize, wgpu_mod, "zigos-app", false);
     const lite_install = b.addInstallArtifact(lite_exe, .{});
-    const lite_step = b.step("app", "zigos-lite — codegen + layout + rendering");
+    const lite_step = b.step("app", "zigos-app — codegen + layout + rendering");
     lite_step.dependOn(&lite_install.step);
 
     // ── zigos-full (batteries included — networking, tor, everything) ──
@@ -119,6 +119,7 @@ fn addAppExe(
     // ── Full build extras (networking, tor, etc.) ────────────────
     if (full) {
         exe.linkSystemLibrary("curl");
+        exe.linkSystemLibrary("vterm");
         exe.linkSystemLibrary("archive");
         if (os == .linux) {
             exe.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/x86_64-linux-gnu" });
