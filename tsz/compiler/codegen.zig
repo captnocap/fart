@@ -2725,6 +2725,7 @@ pub const Generator = struct {
         var language_str: []const u8 = "";
         var debug_name_str: []const u8 = "";
         var test_id_str: []const u8 = "";
+        var tooltip_str: []const u8 = "";
         var canvas_type_str: []const u8 = "";
 
         // Pre-populate from classifier defaults
@@ -2788,6 +2789,8 @@ pub const Generator = struct {
                         debug_name_str = try self.parseStringAttr();
                     } else if (std.mem.eql(u8, attr_name, "testId")) {
                         test_id_str = try self.parseStringAttr();
+                    } else if (std.mem.eql(u8, attr_name, "tooltip")) {
+                        tooltip_str = try self.parseStringAttr();
                     } else if (std.mem.eql(u8, attr_name, "type") and is_canvas) {
                         canvas_type_str = try self.parseStringAttr();
                     } else if (std.mem.eql(u8, attr_name, "className")) {
@@ -3241,6 +3244,16 @@ pub const Generator = struct {
             try fields.appendSlice(self.alloc, ".test_id = \"");
             try fields.appendSlice(self.alloc, test_id_str);
             try fields.appendSlice(self.alloc, "\"");
+        }
+
+        // Tooltip
+        if (tooltip_str.len > 0) {
+            if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
+            try fields.appendSlice(self.alloc, ".tooltip = \"");
+            for (tooltip_str) |ch| {
+                if (ch == '"') try fields.appendSlice(self.alloc, "\\\"") else if (ch == '\\') try fields.appendSlice(self.alloc, "\\\\") else try fields.append(self.alloc, ch);
+            }
+            try fields.appendSlice(self.alloc, "\", .hoverable = true");
         }
 
         // Code language (CodeBlock)
@@ -5982,14 +5995,16 @@ pub const Generator = struct {
     }
 
     fn parseLogicalAndJSX(self: *Generator) anyerror!LogicalAndResult {
-        // Parse condition below && precedence (stops at &&)
-        const condition = try self.emitEquality();
+        // Parse condition using full expression parser — supports compound conditions
+        // like `a && b && <JSX>`, `(a || b) && <JSX>`, `!a && <JSX>`.
+        // Uses emitLogicalOrJSX which stops at the render-gate && (the one before <).
+        const condition = try self.emitLogicalOrJSX();
 
         if (self.curKind() != .amp_amp) {
             std.debug.print("[tsz] Expected '&&' at pos {d}\n", .{self.pos});
             return error.ExpectedLogicalAnd;
         }
-        self.advance_token(); // skip &&
+        self.advance_token(); // skip render-gate &&
 
         // Skip optional ( around element
         if (self.curKind() == .lparen) self.advance_token();
@@ -6004,6 +6019,37 @@ pub const Generator = struct {
             .condition = condition,
             .element = element,
         };
+    }
+
+    /// Like emitLogicalOr but for JSX conditional context — delegates to emitLogicalAndJSXExpr.
+    fn emitLogicalOrJSX(self: *Generator) ![]const u8 {
+        var left = try self.emitLogicalAndJSXExpr();
+        while (self.curKind() == .pipe_pipe) {
+            self.advance_token();
+            const right = try self.emitLogicalAndJSXExpr();
+            left = try std.fmt.allocPrint(self.alloc, "({s} or {s})", .{ left, right });
+        }
+        return left;
+    }
+
+    /// Like emitLogicalAnd but stops at the render-gate && (the one followed by < or ().
+    /// This distinguishes `a && b` (compound condition) from `expr && <JSX>`.
+    fn emitLogicalAndJSXExpr(self: *Generator) ![]const u8 {
+        var left = try self.emitBitwiseOr();
+        while (self.curKind() == .amp_amp) {
+            // Peek: if the token after && is < or ( followed by <, this is the render gate — stop
+            const next = if (self.pos + 1 < self.lex.count) self.lex.get(self.pos + 1).kind else .eof;
+            if (next == .lt) break; // && <JSX> — render gate
+            if (next == .lparen) {
+                // Check if it's (< — render gate with parens
+                const next2 = if (self.pos + 2 < self.lex.count) self.lex.get(self.pos + 2).kind else .eof;
+                if (next2 == .lt) break;
+            }
+            self.advance_token();
+            const right = try self.emitBitwiseOr();
+            left = try std.fmt.allocPrint(self.alloc, "({s} and {s})", .{ left, right });
+        }
+        return left;
     }
 
     // ── Map (.map()) parsing ────────────────────────────────────────
@@ -6631,12 +6677,7 @@ pub const Generator = struct {
                 if (ci.arr_name.len == 0) continue;
                 switch (ci.kind) {
                     .show_hide => {
-                        const cond_is_bool = std.mem.indexOf(u8, ci.condition, "==") != null or
-                            std.mem.indexOf(u8, ci.condition, "!=") != null or
-                            std.mem.indexOf(u8, ci.condition, "< ") != null or
-                            std.mem.indexOf(u8, ci.condition, "> ") != null or
-                            std.mem.indexOf(u8, ci.condition, "<=") != null or
-                            std.mem.indexOf(u8, ci.condition, ">=") != null;
+                        const cond_is_bool = condExprIsBool(ci.condition);
                         if (cond_is_bool) {
                             try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
                                 "    {s}[{d}].style.display = if ({s}) .flex else .none;\n",
@@ -6648,12 +6689,7 @@ pub const Generator = struct {
                         }
                     },
                     .ternary => {
-                        const cond_is_bool = std.mem.indexOf(u8, ci.condition, "==") != null or
-                            std.mem.indexOf(u8, ci.condition, "!=") != null or
-                            std.mem.indexOf(u8, ci.condition, "< ") != null or
-                            std.mem.indexOf(u8, ci.condition, "> ") != null or
-                            std.mem.indexOf(u8, ci.condition, "<=") != null or
-                            std.mem.indexOf(u8, ci.condition, ">=") != null;
+                        const cond_is_bool = condExprIsBool(ci.condition);
                         if (cond_is_bool) {
                             try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
                                 "    if ({s}) {{\n", .{ci.condition}));
@@ -7259,14 +7295,7 @@ pub const Generator = struct {
                 if (ci.arr_name.len == 0) continue;
                 switch (ci.kind) {
                     .show_hide => {
-                        const cond_is_bool = std.mem.indexOf(u8, ci.condition, "==") != null or
-                            std.mem.indexOf(u8, ci.condition, "!=") != null or
-                            std.mem.indexOf(u8, ci.condition, "< ") != null or
-                            std.mem.indexOf(u8, ci.condition, "> ") != null or
-                            std.mem.indexOf(u8, ci.condition, "<=") != null or
-                            std.mem.indexOf(u8, ci.condition, ">=") != null or
-                            std.mem.indexOf(u8, ci.condition, "inspector.has") != null or
-                            std.mem.indexOf(u8, ci.condition, "inspector.isEnabled") != null;
+                        const cond_is_bool = condExprIsBool(ci.condition);
                         if (cond_is_bool) {
                             try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
                                 "    {s}[{d}].style.display = if ({s}) .flex else .none;\n",
@@ -7278,14 +7307,7 @@ pub const Generator = struct {
                         }
                     },
                     .ternary => {
-                        const cond_is_bool = std.mem.indexOf(u8, ci.condition, "==") != null or
-                            std.mem.indexOf(u8, ci.condition, "!=") != null or
-                            std.mem.indexOf(u8, ci.condition, "< ") != null or
-                            std.mem.indexOf(u8, ci.condition, "> ") != null or
-                            std.mem.indexOf(u8, ci.condition, "<=") != null or
-                            std.mem.indexOf(u8, ci.condition, ">=") != null or
-                            std.mem.indexOf(u8, ci.condition, "inspector.has") != null or
-                            std.mem.indexOf(u8, ci.condition, "inspector.isEnabled") != null;
+                        const cond_is_bool = condExprIsBool(ci.condition);
                         if (cond_is_bool) {
                             try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
                                 "    if ({s}) {{\n", .{ci.condition}));
@@ -7946,6 +7968,26 @@ pub const Generator = struct {
         return try out.toOwnedSlice(self.alloc);
     }
 };
+
+// ── Condition type detection ────────────────────────────────────────────
+
+/// Returns true if the condition expression is already boolean-typed in Zig.
+/// Used to decide whether to emit `if (cond)` or `if (cond != 0)`.
+/// Detects comparison ops, logical ops (and/or), bool accessors, and negation.
+fn condExprIsBool(cond: []const u8) bool {
+    return std.mem.indexOf(u8, cond, "==") != null or
+        std.mem.indexOf(u8, cond, "!=") != null or
+        std.mem.indexOf(u8, cond, "< ") != null or
+        std.mem.indexOf(u8, cond, "> ") != null or
+        std.mem.indexOf(u8, cond, "<=") != null or
+        std.mem.indexOf(u8, cond, ">=") != null or
+        std.mem.indexOf(u8, cond, " and ") != null or
+        std.mem.indexOf(u8, cond, " or ") != null or
+        std.mem.indexOf(u8, cond, "getSlotBool") != null or
+        std.mem.indexOf(u8, cond, "inspector.has") != null or
+        std.mem.indexOf(u8, cond, "inspector.isEnabled") != null or
+        (cond.len > 0 and cond[0] == '(' and std.mem.indexOf(u8, cond, "!") != null);
+}
 
 // ── Style key mappings ──────────────────────────────────────────────────
 

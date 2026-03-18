@@ -72,28 +72,28 @@ function App() {
       </C.Header>
 
       <C.Row>
-        <StatCard label="CPU" value={`${cpu}%`} color="#3fb950" />
-        <StatCard label="Memory" value={`${memUsed}/${memTotal} MB`} color="#58a6ff" />
-        <StatCard label="Requests" value={`${requests}`} color="#e6edf3" />
-        <StatCard label="Errors" value={`${errors}`} color="#d2992a" />
-        <StatCard label="Avg Latency" value={`${avgLatency}ms`} color="#79c0ff" />
-        <StatCard label="P99" value={`${p99}ms`} color="#58a6ff" />
+        <StatCard label="CPU" value={`${cpu}%`} color="#3fb950" tooltip="Processor utilization across all cores" />
+        <StatCard label="Memory" value={`${memUsed}/${memTotal} MB`} color="#58a6ff" tooltip="Heap memory used vs total available" />
+        <StatCard label="Requests" value={`${requests}`} color="#e6edf3" tooltip="HTTP requests handled this session" />
+        <StatCard label="Errors" value={`${errors}`} color="#d2992a" tooltip="Failed requests (4xx + 5xx)" />
+        <StatCard label="Avg Latency" value={`${avgLatency}ms`} color="#79c0ff" tooltip="Mean response time across all endpoints" />
+        <StatCard label="P99" value={`${p99}ms`} color="#58a6ff" tooltip="99th percentile response time" />
       </C.Row>
 
       <C.Row>
-        <StatCard label="Connections" value={`${connections}`} color="#e6edf3" />
-        <StatCard label="Queue" value={`${queueDepth}`} color="#3fb950" />
-        <StatCard label="Net In" value={`${netIn} KB/s`} color="#79c0ff" />
-        <StatCard label="Net Out" value={`${netOut} KB/s`} color="#58a6ff" />
-        <StatCard label="DB Queries" value={`${dbQueries}/s`} color="#e6edf3" />
-        <StatCard label="DB Avg" value={`${dbAvg}ms`} color="#79c0ff" />
+        <StatCard label="Connections" value={`${connections}`} color="#e6edf3" tooltip="Active TCP connections" />
+        <StatCard label="Queue" value={`${queueDepth}`} color="#3fb950" tooltip="Pending tasks in the work queue" />
+        <StatCard label="Net In" value={`${netIn} KB/s`} color="#79c0ff" tooltip="Inbound network throughput" />
+        <StatCard label="Net Out" value={`${netOut} KB/s`} color="#58a6ff" tooltip="Outbound network throughput" />
+        <StatCard label="DB Queries" value={`${dbQueries}/s`} color="#e6edf3" tooltip="Database queries per second" />
+        <StatCard label="DB Avg" value={`${dbAvg}ms`} color="#79c0ff" tooltip="Average database query latency" />
       </C.Row>
 
       <C.Row>
-        <StatCard label="Cache Hit" value={`${cacheHit}%`} color="#3fb950" />
-        <StatCard label="Cache Size" value={`${cacheEntries}`} color="#6e7681" />
-        <StatCard label="Disk" value={`${diskPct}%`} color="#3fb950" />
-        <StatCard label="GC Pause" value={`${gcPause}ms`} color="#3fb950" />
+        <StatCard label="Cache Hit" value={`${cacheHit}%`} color="#3fb950" tooltip="Cache hit ratio (higher is better)" />
+        <StatCard label="Cache Size" value={`${cacheEntries}`} color="#6e7681" tooltip="Number of entries in the cache" />
+        <StatCard label="Disk" value={`${diskPct}%`} color="#3fb950" tooltip="Disk space utilization" />
+        <StatCard label="GC Pause" value={`${gcPause}ms`} color="#3fb950" tooltip="Longest garbage collection pause" />
       </C.Row>
 
       <Box style={{ flexDirection: 'row', padding: 6, gap: 16, backgroundColor: '#000000', opacity: 0.8 }}>

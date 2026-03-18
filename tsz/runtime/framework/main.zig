@@ -21,6 +21,7 @@ const ImageCache = image_mod.ImageCache;
 const syntax = @import("syntax.zig");
 const ColorSpan = text_mod.ColorSpan;
 const gpu = @import("gpu.zig");
+const tooltip = @import("tooltip.zig");
 
 // ── Global text engine (set during init, used by layout measure callback) ───
 var g_text_engine: ?*TextEngine = null;
@@ -668,6 +669,15 @@ pub fn main() !void {
                         }
                         if (hovered_node) |node| {
                             if (node.handlers.on_hover_enter) |handler| handler();
+                            // Tooltip: show if node carries tooltip text
+                            if (node.tooltip) |tt| {
+                                const r = node.computed;
+                                tooltip.show(tt, r.x, r.y, r.w, r.h);
+                            } else {
+                                tooltip.hide();
+                            }
+                        } else {
+                            tooltip.hide();
                         }
                     }
                 },
@@ -770,6 +780,9 @@ pub fn main() !void {
         gpu.drawTextLine("wgpu", cards_start + (card_w + card_gap) * 2 + 12, card_y + 28, 22, 86.0 / 255.0, 156.0 / 255.0, 214.0 / 255.0, 1.0);
 
         gpu.drawTextLine("One pixel. Then the world.", text_x, bar_y + 48, 12, 80.0 / 255.0, 80.0 / 255.0, 100.0 / 255.0, 1.0);
+
+        // Tooltip overlay (always on top)
+        tooltip.paintOverlay(measureCallback, win_w, win_h);
 
         // Render and present
         gpu.frame(

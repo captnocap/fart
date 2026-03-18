@@ -1,9 +1,9 @@
 import { TreePane, TreeToolbar, TreeToolbarLead, PaneTitle, PaneMeta, TreeViewBar, Divider, TreeBodyChrome, TreeScroll } from './style_cls';
-import { TreeViewTabButton } from './TreeViewTabButton.c';
-import { TreeZigView } from './TreeZigView.c';
-import { TreeHybridView } from './TreeHybridView.c';
-import { TreeJsxView } from './TreeJsxView.c';
-import { TreeMapView } from './TreeMapView.c';
+import { TreeViewTabButton } from './TreeViewTabButton.cmod';
+import { TreeZigView } from './TreeZigView.cmod';
+import { TreeHybridView } from './TreeHybridView.cmod';
+import { TreeJsxView } from './TreeJsxView.cmod';
+import { TreeMapView } from './TreeMapView.cmod';
 
 const [activeTreeView, setActiveTreeView] = useState(1);
 

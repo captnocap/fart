@@ -57,18 +57,18 @@ fn emitTransitionTick(self: *Generator, out: *std.ArrayListUnmanaged(u8), hook: 
     try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
         "        const _cur_{d}: f64 = state.getSlotFloat({d});\n", .{ slot_id, rid }));
     try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-        "        if (_anim_ts_{d} == 0) {\n" ++
+        "        if (_anim_ts_{d} == 0) {{\n" ++
         "            _anim_ts_{d} = now;\n" ++
         "            _anim_from_{d} = _cur_{d};\n" ++
         "            _anim_target_{d} = _target_{d};\n" ++
-        "        }\n",
-        .{ slot_id, slot_id, slot_id, slot_id, slot_id, slot_id, slot_id }));
+        "        }}\n",
+        .{ slot_id, slot_id, slot_id, slot_id, slot_id, slot_id }));
     try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-        "        if (_anim_target_{d} != _target_{d}) {\n" ++
+        "        if (_anim_target_{d} != _target_{d}) {{\n" ++
         "            _anim_ts_{d} = now;\n" ++
         "            _anim_from_{d} = _cur_{d};\n" ++
         "            _anim_target_{d} = _target_{d};\n" ++
-        "        }\n",
+        "        }}\n",
         .{ slot_id, slot_id, slot_id, slot_id, slot_id, slot_id, slot_id }));
 
     if (hook.duration_ms == 0) {
@@ -78,14 +78,14 @@ fn emitTransitionTick(self: *Generator, out: *std.ArrayListUnmanaged(u8), hook: 
             "            _anim_from_{d} = _target_{d};\n" ++
             "            _anim_target_{d} = _target_{d};\n" ++
             "            _anim_ts_{d} = now;\n" ++
-            "        }\n",
+            "        }}\n",
             .{ slot_id, slot_id, rid, slot_id, slot_id, slot_id, slot_id, slot_id, slot_id }));
         try out.appendSlice(self.alloc, "    }\n");
         return;
     }
 
     try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-        "        if (_cur_{d} != _target_{d}) {\n", .{ slot_id, slot_id }));
+        "        if (_cur_{d} != _target_{d}) {{\n", .{ slot_id, slot_id }));
     try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
         "            const _elapsed_{d}: f64 = @as(f64, @floatFromInt(now - _anim_ts_{d}));\n", .{ slot_id, slot_id }));
     try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
@@ -95,17 +95,17 @@ fn emitTransitionTick(self: *Generator, out: *std.ArrayListUnmanaged(u8), hook: 
         "            const _eased_t_{d}: f64 = {s};\n", .{ slot_id, eased_t }));
     try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
         "            const _new_{d}: f64 = _anim_from_{d} + ((_anim_target_{d} - _anim_from_{d}) * _eased_t_{d});\n",
-        .{ slot_id, slot_id, slot_id, slot_id, slot_id, slot_id }));
+        .{ slot_id, slot_id, slot_id, slot_id, slot_id }));
     try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
         "            state.setSlotFloat({d}, _new_{d});\n", .{ rid, slot_id }));
     try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-        "            if (_eased_t_{d} >= 1.0) {\n" ++
+        "            if (_eased_t_{d} >= 1.0) {{\n" ++
         "                state.setSlotFloat({d}, _anim_target_{d});\n" ++
         "                _anim_from_{d} = _anim_target_{d};\n" ++
         "                _anim_ts_{d} = now;\n" ++
-        "            }\n" ++
-        "        }\n",
-        .{ slot_id, rid, slot_id, slot_id, slot_id, slot_id, slot_id }));
+        "            }}\n" ++
+        "        }}\n",
+        .{ slot_id, rid, slot_id, slot_id, slot_id, slot_id }));
     try out.appendSlice(self.alloc, "    }\n");
 }
 
@@ -124,10 +124,10 @@ fn emitSpringTick(self: *Generator, out: *std.ArrayListUnmanaged(u8), hook: code
     try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
         "        const _delta_{d}: f64 = _target_{d} - _cur_{d};\n", .{ slot_id, slot_id, slot_id }));
     try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-        "        if (@abs(_delta_{d}) <= 0.0001 and @abs(_vel_{d}) <= 0.0001) {\n" ++
+        "        if (@abs(_delta_{d}) <= 0.0001 and @abs(_vel_{d}) <= 0.0001) {{\n" ++
         "            state.setSlotFloat({d}, 0.0);\n" ++
         "            if (_cur_{d} != _target_{d}) state.setSlotFloat({d}, _target_{d});\n" ++
-        "        } else {\n",
+        "        }} else {{\n",
         .{ slot_id, slot_id, vel_rid, slot_id, slot_id, rid, slot_id }));
     try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
         "            const _force_{d}: f64 = {d} * _delta_{d} - {d} * _vel_{d};\n",

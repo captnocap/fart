@@ -111,6 +111,21 @@ pub fn hitTestText(node: *Node, mx: f32, my: f32) ?*Node {
 
 /// Find the deepest scroll container under (mx, my).
 /// Any node with overflow scroll or auto (when content overflows) is scrollable.
+/// Find the deepest canvas node under the cursor.
+pub fn findCanvasNode(node: *Node, mx: f32, my: f32) ?*Node {
+    if (node.style.display == .none) return null;
+    const r = node.computed;
+    if (mx < r.x or mx >= r.x + r.w or my < r.y or my >= r.y + r.h) return null;
+    // Canvas nodes don't have children in the paint tree, so check self first
+    if (node.canvas_type != null) return node;
+    var i = node.children.len;
+    while (i > 0) {
+        i -= 1;
+        if (findCanvasNode(&node.children[i], mx, my)) |hit| return hit;
+    }
+    return null;
+}
+
 pub fn findScrollContainer(node: *Node, mx: f32, my: f32) ?*Node {
     if (node.style.display == .none) return null;
 

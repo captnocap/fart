@@ -1,4 +1,5 @@
-import { Panel, TabBar, TabButtonActive, TabLabelActive, TabButton, TabLabel, Divider, StatusBar, StatusLeft, StatusRight, StatusText, StatusTextGood } from './style_cls';
+import { Panel, AppContent, InspectorPane, TabBar, Divider, StatusBar, StatusLeft, StatusRight, StatusText, StatusTextGood, DemoApp, DemoTitle, DemoSubtitle, DemoCard, DemoCardTitle, DemoCardBody, DemoRow, DemoBtn, DemoBtnLabel } from './style_cls';
+import { InspectorTabButton } from './InspectorTabButton.c';
 import { ElementsPage } from './ElementsPage.c';
 import { SourcePage } from './SourcePage.c';
 import { WireframePage } from './WireframePage.c';
@@ -12,50 +13,61 @@ const [activeTab, setActiveTab] = useState(0);
 function App() {
   return (
     <C.Panel>
-      <C.TabBar>
-        <Pressable onPress={() => { setActiveTab(0); navigate('/elements') }}>
-          <Text fontSize={11} color="#edf2ff">Elements</Text>
-        </Pressable>
-        <Pressable onPress={() => { setActiveTab(1); navigate('/source') }}>
-          <Text fontSize={11} color="#72788b">Source</Text>
-        </Pressable>
-        <Pressable onPress={() => { setActiveTab(2); navigate('/wireframe') }}>
-          <Text fontSize={11} color="#72788b">Wireframe</Text>
-        </Pressable>
-        <Pressable onPress={() => { setActiveTab(3); navigate('/perf') }}>
-          <Text fontSize={11} color="#72788b">Perf</Text>
-        </Pressable>
-        <Pressable onPress={() => { setActiveTab(4); navigate('/network') }}>
-          <Text fontSize={11} color="#72788b">Network</Text>
-        </Pressable>
-        <Pressable onPress={() => { setActiveTab(5); navigate('/console') }}>
-          <Text fontSize={11} color="#72788b">Console</Text>
-        </Pressable>
-        <Pressable onPress={() => { setActiveTab(6); navigate('/logs') }}>
-          <Text fontSize={11} color="#72788b">Logs</Text>
-        </Pressable>
-      </C.TabBar>
+      <C.AppContent>
+        <C.DemoApp>
+          <C.DemoTitle>My App</C.DemoTitle>
+          <C.DemoSubtitle>This is where your app renders</C.DemoSubtitle>
+          <C.DemoRow>
+            <C.DemoCard tooltip="Active users in the last 24 hours">
+              <C.DemoCardTitle>Users</C.DemoCardTitle>
+              <C.DemoCardBody>1,247 active</C.DemoCardBody>
+            </C.DemoCard>
+            <C.DemoCard tooltip="Total events processed today">
+              <C.DemoCardTitle>Events</C.DemoCardTitle>
+              <C.DemoCardBody>38,912 today</C.DemoCardBody>
+            </C.DemoCard>
+          </C.DemoRow>
+          <C.DemoCard tooltip="System health overview">
+            <C.DemoCardTitle>Status</C.DemoCardTitle>
+            <C.DemoCardBody>All systems operational. The inspector panel below can inspect this content.</C.DemoCardBody>
+          </C.DemoCard>
+          <C.DemoRow>
+            <C.DemoBtn tooltip="Reload dashboard data"><C.DemoBtnLabel>Refresh</C.DemoBtnLabel></C.DemoBtn>
+            <C.DemoBtn tooltip="Open app configuration"><C.DemoBtnLabel>Settings</C.DemoBtnLabel></C.DemoBtn>
+          </C.DemoRow>
+        </C.DemoApp>
+      </C.AppContent>
       <C.Divider />
-      <Routes>
-        <Route path="/elements" element={<ElementsPage />} />
-        <Route path="/source" element={<SourcePage />} />
-        <Route path="/wireframe" element={<WireframePage />} />
-        <Route path="/perf" element={<PerfPage />} />
-        <Route path="/network" element={<NetworkPage />} />
-        <Route path="/console" element={<ConsolePage />} />
-        <Route path="/logs" element={<LogsPage />} />
-      </Routes>
-      <C.StatusBar>
-        <C.StatusLeft>
-          <C.StatusTextGood>Ready</C.StatusTextGood>
-          <C.StatusText>142 nodes</C.StatusText>
-        </C.StatusLeft>
-        <C.StatusRight>
-          <C.StatusText>4.2 MB</C.StatusText>
-          <C.StatusTextGood>60 fps</C.StatusTextGood>
-          <C.StatusText>810x638</C.StatusText>
-        </C.StatusRight>
-      </C.StatusBar>
+      <C.InspectorPane>
+        <C.TabBar>
+          <InspectorTabButton label="Elements" active={activeTab == 0 ? 1 : 0} onPress={() => setActiveTab(0)} />
+          <InspectorTabButton label="Source" active={activeTab == 1 ? 1 : 0} onPress={() => setActiveTab(1)} />
+          <InspectorTabButton label="Wireframe" active={activeTab == 2 ? 1 : 0} onPress={() => setActiveTab(2)} />
+          <InspectorTabButton label="Perf" active={activeTab == 3 ? 1 : 0} onPress={() => setActiveTab(3)} />
+          <InspectorTabButton label="Network" active={activeTab == 4 ? 1 : 0} onPress={() => setActiveTab(4)} />
+          <InspectorTabButton label="Console" active={activeTab == 5 ? 1 : 0} onPress={() => setActiveTab(5)} />
+          <InspectorTabButton label="Logs" active={activeTab == 6 ? 1 : 0} onPress={() => setActiveTab(6)} />
+        </C.TabBar>
+        <C.Divider />
+        {activeTab == 0 && <ElementsPage />}
+        {activeTab == 1 && <SourcePage />}
+        {activeTab == 2 && <WireframePage />}
+        {activeTab == 3 && <PerfPage />}
+        {activeTab == 4 && <NetworkPage />}
+        {activeTab == 5 && <ConsolePage />}
+        {activeTab == 6 && <LogsPage />}
+        <C.StatusBar>
+          <C.StatusLeft>
+            <C.StatusTextGood>Ready</C.StatusTextGood>
+            <C.StatusText>142 nodes</C.StatusText>
+          </C.StatusLeft>
+          <C.StatusRight>
+            <C.StatusText>4.2 MB</C.StatusText>
+            <C.StatusTextGood>60 fps</C.StatusTextGood>
+            <C.StatusText>810x638</C.StatusText>
+          </C.StatusRight>
+        </C.StatusBar>
+      </C.InspectorPane>
     </C.Panel>
   );
 }
