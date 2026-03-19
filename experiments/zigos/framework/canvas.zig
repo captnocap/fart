@@ -1,45 +1,38 @@
-//! Unified Canvas System — Registry + Lifecycle + Input Dispatch
+//! Unified Canvas System — Built-in zoom/pan camera + optional custom renderers.
 //!
-//! One primitive: <Canvas type="X">. The `type` prop selects the renderer.
-//! Each canvas type implements CanvasRenderer. The runtime handles hit testing,
-//! sizing, events, and lifecycle once. Each type only implements what's unique.
+//! Every <Canvas> gets zoom (scroll wheel) and pan (drag) for free.
+//! Content is composed with <Canvas.Node gx={} gy={} gw={} gh={}> children
+//! which are real framework nodes (Box, Text, etc.) positioned in graph space.
 //!
-//! Registry is static — canvas types register at init time.
+//! Optional: register a custom render_fn for a canvas type to draw procedural
+//! content (connector lines, grids, particles) alongside the framework nodes.
 
 const std = @import("std");
 const gpu = @import("gpu.zig");
 
-// ── Canvas Renderer Interface ───────────────────────────────────────────
+// ── Camera Transform ────────────────────────────────────────────────────
+
+pub const CameraTransform = struct {
+    cx: f32,      // camera center X in graph space
+    cy: f32,      // camera center Y in graph space
+    scale: f32,   // zoom scale factor (1.0 = 1:1)
+};
+
+// ── Built-in camera state (shared by all canvas instances for now) ──────
+
+var cam_x: f32 = 0;
+var cam_y: f32 = 0;
+var cam_zoom: f32 = 1.0;
+
+// ── Canvas Renderer Interface (optional, for custom drawing) ────────────
 
 pub const CanvasRenderer = struct {
-    /// Called once when the canvas node first appears in the tree.
-    init_fn: ?*const fn (props: CanvasProps) void = null,
-    /// Called every frame with delta time.
-    tick_fn: ?*const fn (dt: f32) void = null,
-    /// Called during paint pass with the node's computed bounds.
-    render_fn: *const fn (x: f32, y: f32, w: f32, h: f32) void,
-    /// Called when the canvas node is removed from the tree.
-    destroy_fn: ?*const fn () void = null,
-
-    // Input handlers — optional, called when this canvas has focus/hover
-    handle_key_fn: ?*const fn (sym: c_int, mods: u16) void = null,
-    handle_text_fn: ?*const fn (text: [*:0]const u8) void = null,
-    handle_click_fn: ?*const fn (mx: f32, my: f32) bool = null,
-    handle_scroll_fn: ?*const fn (mx: f32, my: f32, delta: f32) void = null,
-    handle_mouse_fn: ?*const fn (mx: f32, my: f32) void = null,
-    handle_drag_fn: ?*const fn (mx: f32, my: f32, dx: f32, dy: f32) void = null,
+    /// Custom render pass — draws before Canvas.Node children.
+    /// Use for connector lines, grids, overlays, etc.
+    render_fn: *const fn (x: f32, y: f32, w: f32, h: f32, cam: CameraTransform) void,
 };
 
-// ── Canvas Props ────────────────────────────────────────────────────────
-
-/// Props passed through from .tsz to the canvas renderer.
-pub const CanvasProps = struct {
-    canvas_type: []const u8 = "",
-    width: f32 = 0,
-    height: f32 = 0,
-};
-
-// ── Registry ────────────────────────────────────────────────────────────
+// ── Registry (for custom renderers) ─────────────────────────────────────
 
 const MAX_CANVAS_TYPES = 32;
 
@@ -48,15 +41,10 @@ var type_renderers: [MAX_CANVAS_TYPES]CanvasRenderer = undefined;
 var type_count: usize = 0;
 var initialized: bool = false;
 
-/// Register a canvas type renderer. Called at init time.
 pub fn register(name: []const u8, renderer: CanvasRenderer) void {
-    if (type_count >= MAX_CANVAS_TYPES) {
-        std.debug.print("[canvas] Registry full — cannot register '{s}'\n", .{name});
-        return;
-    }
+    if (type_count >= MAX_CANVAS_TYPES) return;
     for (0..type_count) |i| {
         if (std.mem.eql(u8, type_names[i], name)) {
-            std.debug.print("[canvas] Type '{s}' already registered — replacing\n", .{name});
             type_renderers[i] = renderer;
             return;
         }
@@ -66,112 +54,61 @@ pub fn register(name: []const u8, renderer: CanvasRenderer) void {
     type_count += 1;
 }
 
-/// Look up a renderer by type name. Returns null if not registered.
 pub fn get(name: []const u8) ?*const CanvasRenderer {
     for (0..type_count) |i| {
-        if (std.mem.eql(u8, type_names[i], name)) {
-            return &type_renderers[i];
-        }
+        if (std.mem.eql(u8, type_names[i], name)) return &type_renderers[i];
     }
     return null;
 }
 
 // ── Lifecycle ───────────────────────────────────────────────────────────
 
-/// Initialize the canvas system. Register built-in canvas types here.
 pub fn init() void {
     if (initialized) return;
     initialized = true;
-
-    // Placeholder renderer — renders a labeled box for unimplemented canvas types
-    register("placeholder", .{
-        .render_fn = renderPlaceholder,
-    });
-
-    // Built-in canvas types
-    const constraint_graph = @import("canvas_constraint_graph.zig");
-    constraint_graph.register();
-}
-
-pub fn deinit() void {
-    type_count = 0;
-    initialized = false;
-}
-
-/// Tick all active canvas instances. Called once per frame.
-pub fn tickAll(dt: f32) void {
-    _ = dt;
-    // Phase 2: iterate active canvas instances and call tick_fn
+    cam_x = 0;
+    cam_y = 0;
+    cam_zoom = 1.0;
 }
 
 // ── Rendering ───────────────────────────────────────────────────────────
 
-/// Render a canvas node. Called by engine when it encounters a canvas_type node.
+/// Render the canvas background + optional custom render pass.
+/// Called by engine before painting Canvas.Node children.
 pub fn renderCanvas(canvas_type: []const u8, x: f32, y: f32, w: f32, h: f32) void {
+    // Background
+    gpu.drawRect(x, y, w, h, 0.03, 0.05, 0.08, 1.0, 0, 0, 0, 0, 0, 0);
+
+    // Custom render pass (connector lines, etc.)
     if (get(canvas_type)) |renderer| {
-        renderer.render_fn(x, y, w, h);
-    } else {
-        renderUnknownCanvas(canvas_type, x, y, w, h);
+        renderer.render_fn(x, y, w, h, getCameraTransform(x, y, w, h));
     }
 }
 
-/// Dispatch a click event to the canvas renderer.
-pub fn dispatchClick(canvas_type: []const u8, mx: f32, my: f32) bool {
-    if (get(canvas_type)) |renderer| {
-        if (renderer.handle_click_fn) |handler| {
-            return handler(mx, my);
-        }
+/// Get current camera transform for positioning Canvas.Node children.
+pub fn getCameraTransform(_: f32, _: f32, _: f32, _: f32) CameraTransform {
+    return .{ .cx = cam_x, .cy = cam_y, .scale = cam_zoom };
+}
+
+// ── Input handlers (built-in zoom/pan for every canvas) ─────────────────
+
+pub fn handleScroll(mx: f32, my: f32, delta: f32, vp_w: f32, vp_h: f32) void {
+    // Zoom toward cursor — keep the point under cursor fixed
+    const old_gx = cam_x + (mx - vp_w / 2) / cam_zoom;
+    const old_gy = cam_y + (my - vp_h / 2) / cam_zoom;
+
+    const factor: f32 = if (delta > 0) 1.15 else 1.0 / 1.15;
+    cam_zoom = @max(0.05, @min(cam_zoom * factor, 100.0));
+
+    const new_gx = cam_x + (mx - vp_w / 2) / cam_zoom;
+    const new_gy = cam_y + (my - vp_h / 2) / cam_zoom;
+    cam_x += old_gx - new_gx;
+    cam_y += old_gy - new_gy;
+}
+
+pub fn handleDrag(dx: f32, dy: f32) void {
+    if (cam_zoom > 0) {
+        cam_x -= dx / cam_zoom;
+        cam_y -= dy / cam_zoom;
     }
-    return false;
-}
-
-/// Dispatch a scroll event to the canvas renderer (with mouse position for zoom-to-cursor).
-pub fn dispatchScroll(canvas_type: []const u8, mx: f32, my: f32, delta: f32) void {
-    if (get(canvas_type)) |renderer| {
-        if (renderer.handle_scroll_fn) |handler| {
-            handler(mx, my, delta);
-        }
-    }
-}
-
-/// Dispatch a mouse move event to the canvas renderer.
-pub fn dispatchMouse(canvas_type: []const u8, mx: f32, my: f32) void {
-    if (get(canvas_type)) |renderer| {
-        if (renderer.handle_mouse_fn) |handler| {
-            handler(mx, my);
-        }
-    }
-}
-
-/// Dispatch a drag event to the canvas renderer.
-pub fn dispatchDrag(canvas_type: []const u8, mx: f32, my: f32, dx: f32, dy: f32) void {
-    if (get(canvas_type)) |renderer| {
-        if (renderer.handle_drag_fn) |handler| {
-            handler(mx, my, dx, dy);
-        }
-    }
-}
-
-/// Dispatch a key event to the canvas renderer.
-pub fn dispatchKey(canvas_type: []const u8, sym: c_int, mods: u16) void {
-    if (get(canvas_type)) |renderer| {
-        if (renderer.handle_key_fn) |handler| {
-            handler(sym, mods);
-        }
-    }
-}
-
-// ── Built-in Renderers ─────────────────────────────────────────────────
-
-/// Placeholder renderer — a colored box with a label
-fn renderPlaceholder(x: f32, y: f32, w: f32, h: f32) void {
-    gpu.drawRect(x, y, w, h, 0.12, 0.12, 0.16, 1.0, 4.0, 1.0, 0.3, 0.3, 0.4, 1.0);
-    gpu.drawTextLine("Canvas", x + 8, y + 8, 14, 0.5, 0.5, 0.6, 1.0);
-}
-
-/// Unknown canvas type — show error state
-fn renderUnknownCanvas(canvas_type: []const u8, x: f32, y: f32, w: f32, h: f32) void {
-    _ = canvas_type;
-    gpu.drawRect(x, y, w, h, 0.2, 0.08, 0.08, 1.0, 4.0, 1.0, 0.5, 0.15, 0.15, 1.0);
-    gpu.drawTextLine("Unknown canvas", x + 8, y + 8, 12, 0.9, 0.3, 0.3, 1.0);
 }

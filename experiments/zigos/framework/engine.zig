@@ -102,6 +102,32 @@ fn offsetDescendants(node: *Node, dy: f32) void {
     }
 }
 
+/// Recursively offset a node and all descendants by dx/dy.
+fn offsetNodeXY(node: *Node, dx: f32, dy: f32) void {
+    node.computed.x += dx;
+    node.computed.y += dy;
+    for (node.children) |*child| offsetNodeXY(child, dx, dy);
+}
+
+/// Translate Canvas.Node children from flex positions to graph-space positions.
+/// Pure translation only — GPU transform handles zoom/pan.
+fn positionCanvasNodes(parent: *Node, vp: layout.LayoutRect) void {
+    const vp_cx = vp.x + vp.w / 2;
+    const vp_cy = vp.y + vp.h / 2;
+    for (parent.children) |*child| {
+        if (!child.canvas_node) continue;
+        // Target: center of viewport + graph offset
+        const target_x = vp_cx + child.canvas_gx - child.computed.w / 2;
+        const target_y = vp_cy + child.canvas_gy - child.computed.h / 2;
+        const dx = target_x - child.computed.x;
+        const dy = target_y - child.computed.y;
+        child.computed.x = target_x;
+        child.computed.y = target_y;
+        // Move all descendants by the same delta
+        for (child.children) |*gc| offsetNodeXY(gc, dx, dy);
+    }
+}
+
 var g_paint_count: u32 = 0;
 var g_hidden_count: u32 = 0;
 var g_zero_count: u32 = 0;
@@ -213,10 +239,27 @@ fn paintNode(node: *Node) void {
         }
     }
 
-    // Canvas rendering — delegate to canvas system if this node has a canvas_type
+    // Canvas rendering — translate nodes to graph positions, GPU zoom/pan.
     if (node.canvas_type) |ct| {
+        gpu.pushScissor(r.x, r.y, r.w, r.h);
+        // Phase 1: background + optional custom render
         canvas.renderCanvas(ct, r.x, r.y, r.w, r.h);
-        return; // Canvas handles its own content — no children
+        // Phase 2: translate Canvas.Node children to graph-space positions
+        positionCanvasNodes(node, r);
+        // Phase 3: set GPU transform for zoom + pan
+        const cam = canvas.getCameraTransform(r.x, r.y, r.w, r.h);
+        const vp_cx = r.x + r.w / 2;
+        const vp_cy = r.y + r.h / 2;
+        gpu.setTransform(
+            vp_cx, vp_cy,
+            -cam.cx * cam.scale, -cam.cy * cam.scale,
+            cam.scale,
+        );
+        // Phase 4: paint children — positions are graph-space, GPU does zoom/pan
+        for (node.children) |*child| paintNode(child);
+        gpu.resetTransform();
+        gpu.popScissor();
+        return;
     }
 
     // Overflow clipping + scroll offset for scroll/auto/hidden containers
@@ -344,14 +387,11 @@ pub fn run(config: AppConfig) !void {
                         const mx: f32 = @floatFromInt(event.button.x);
                         const my: f32 = @floatFromInt(event.button.y);
                         const events = @import("events.zig");
-                        // Canvas click — route to canvas first
+                        // Canvas drag start
                         if (events.findCanvasNode(config.root, mx, my)) |cn| {
-                            if (cn.canvas_type) |ct| {
-                                _ = canvas.dispatchClick(ct, mx - cn.computed.x, my - cn.computed.y);
-                                canvas_drag_node = cn;
-                                canvas_drag_last_x = mx;
-                                canvas_drag_last_y = my;
-                            }
+                            canvas_drag_node = cn;
+                            canvas_drag_last_x = mx;
+                            canvas_drag_last_y = my;
                         } else if (layout.hitTest(config.root, mx, my)) |hit| {
                             if (hit.input_id) |id| {
                                 input.focus(id);
@@ -372,26 +412,14 @@ pub fn run(config: AppConfig) !void {
                     const mx: f32 = @floatFromInt(event.motion.x);
                     const my: f32 = @floatFromInt(event.motion.y);
                     updateHover(config.root, mx, my);
-                    // Canvas mouse move — for hover detection
-                    {
-                        const events = @import("events.zig");
-                        if (events.findCanvasNode(config.root, mx, my)) |cn| {
-                            if (cn.canvas_type) |ct| {
-                                canvas.dispatchMouse(ct, mx - cn.computed.x, my - cn.computed.y);
-                            }
-                        }
-                    }
                     const dragging_left = (event.motion.state & c.SDL_BUTTON_LMASK) != 0;
                     if (dragging_left and canvas_drag_node != null) {
-                        // Canvas drag — send dx/dy for panning
-                        const cn = canvas_drag_node.?;
-                        if (cn.canvas_type) |ct| {
-                            const dx = mx - canvas_drag_last_x;
-                            const dy = my - canvas_drag_last_y;
-                            canvas.dispatchDrag(ct, mx - cn.computed.x, my - cn.computed.y, dx, dy);
-                            canvas_drag_last_x = mx;
-                            canvas_drag_last_y = my;
-                        }
+                        // Canvas pan — built-in
+                        const dx = mx - canvas_drag_last_x;
+                        const dy = my - canvas_drag_last_y;
+                        canvas.handleDrag(dx, dy);
+                        canvas_drag_last_x = mx;
+                        canvas_drag_last_y = my;
                     } else if (dragging_left) {
                         selection.onMouseDrag(config.root, mx, my);
                     }
@@ -403,57 +431,19 @@ pub fn run(config: AppConfig) !void {
                     }
                 },
                 c.SDL_TEXTINPUT => {
-                    // Route text input to canvas if one is hovered
-                    var canvas_consumed = false;
-                    {
-                        var tmx_i: c_int = undefined;
-                        var tmy_i: c_int = undefined;
-                        _ = c.SDL_GetMouseState(&tmx_i, &tmy_i);
-                        const tmx: f32 = @floatFromInt(tmx_i);
-                        const tmy: f32 = @floatFromInt(tmy_i);
-                        const tevents = @import("events.zig");
-                        if (tevents.findCanvasNode(config.root, tmx, tmy)) |cn| {
-                            if (cn.canvas_type) |ct| {
-                                // Send each char as a key event (printable ASCII)
-                                const ch = event.text.text[0];
-                                if (ch >= 32 and ch < 127) {
-                                    canvas.dispatchKey(ct, @intCast(ch), 0);
-                                    canvas_consumed = true;
-                                }
-                            }
-                        }
-                    }
-                    if (!canvas_consumed) input.handleTextInput(@ptrCast(&event.text.text));
+                    input.handleTextInput(@ptrCast(&event.text.text));
                 },
                 c.SDL_KEYDOWN => {
                     const sym = event.key.keysym.sym;
                     const mod = event.key.keysym.mod;
                     const ctrl = (mod & c.KMOD_CTRL) != 0;
-                    // Route backspace/escape to canvas if hovered
-                    var canvas_key_consumed = false;
-                    if (sym == c.SDLK_BACKSPACE or sym == c.SDLK_ESCAPE) {
-                        var kmx_i: c_int = undefined;
-                        var kmy_i: c_int = undefined;
-                        _ = c.SDL_GetMouseState(&kmx_i, &kmy_i);
-                        const kmx: f32 = @floatFromInt(kmx_i);
-                        const kmy: f32 = @floatFromInt(kmy_i);
-                        const kevents = @import("events.zig");
-                        if (kevents.findCanvasNode(config.root, kmx, kmy)) |cn| {
-                            if (cn.canvas_type) |ct| {
-                                canvas.dispatchKey(ct, sym, @intCast(mod));
-                                canvas_key_consumed = true;
-                            }
-                        }
-                    }
-                    if (!canvas_key_consumed) {
-                        const input_consumed = if (input.getFocusedId() != null)
-                            (if (ctrl) input.handleCtrlKey(sym) else input.handleKey(sym))
-                        else
-                            false;
-                        if (!input_consumed) {
-                            selection.onKeyDown(config.root, sym, mod);
-                            if (sym == c.SDLK_ESCAPE) running = false;
-                        }
+                    const input_consumed = if (input.getFocusedId() != null)
+                        (if (ctrl) input.handleCtrlKey(sym) else input.handleKey(sym))
+                    else
+                        false;
+                    if (!input_consumed) {
+                        selection.onKeyDown(config.root, sym, mod);
+                        if (sym == c.SDLK_ESCAPE) running = false;
                     }
                 },
                 c.SDL_MOUSEWHEEL => {
@@ -463,12 +453,10 @@ pub fn run(config: AppConfig) !void {
                     const mx: f32 = @floatFromInt(mx_i);
                     const my: f32 = @floatFromInt(my_i);
                     const events = @import("events.zig");
-                    // Canvas scroll — route to canvas for zoom
+                    // Canvas zoom — built-in
                     if (events.findCanvasNode(config.root, mx, my)) |cn| {
-                        if (cn.canvas_type) |ct| {
-                            const delta: f32 = @floatFromInt(event.wheel.y);
-                            canvas.dispatchScroll(ct, mx - cn.computed.x, my - cn.computed.y, delta);
-                        }
+                        const delta: f32 = @floatFromInt(event.wheel.y);
+                        canvas.handleScroll(mx - cn.computed.x, my - cn.computed.y, delta, cn.computed.w, cn.computed.h);
                     } else if (events.findScrollContainer(config.root, mx, my)) |scroll_node| {
                         if (event.wheel.y != 0) {
                             scroll_node.scroll_y -= @as(f32, @floatFromInt(event.wheel.y)) * 30.0;

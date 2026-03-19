@@ -103,6 +103,36 @@ var g_format: wgpu.TextureFormat = .bgra8_unorm;
 var g_width: u32 = 0;
 var g_height: u32 = 0;
 
+// Canvas transform — applied in vertex shader to all rects + glyphs.
+// Identity: origin=(0,0), offset=(0,0), scale=1.0
+var g_transform_ox: f32 = 0;  // origin X (scale around this point)
+var g_transform_oy: f32 = 0;  // origin Y
+var g_transform_tx: f32 = 0;  // translate X (after scale)
+var g_transform_ty: f32 = 0;  // translate Y
+var g_transform_scale: f32 = 1.0;
+var g_transform_dirty: bool = false;
+
+/// Set canvas transform. All subsequent draw calls are scaled around (ox,oy)
+/// then translated by (tx,ty). Call with scale=1 to reset.
+pub fn setTransform(ox: f32, oy: f32, tx: f32, ty: f32, scale: f32) void {
+    g_transform_ox = ox;
+    g_transform_oy = oy;
+    g_transform_tx = tx;
+    g_transform_ty = ty;
+    g_transform_scale = scale;
+    g_transform_dirty = true;
+}
+
+/// Reset transform to identity.
+pub fn resetTransform() void {
+    g_transform_ox = 0;
+    g_transform_oy = 0;
+    g_transform_tx = 0;
+    g_transform_ty = 0;
+    g_transform_scale = 1.0;
+    g_transform_dirty = true;
+}
+
 // Rect pipeline
 var g_rect_pipeline: ?*wgpu.RenderPipeline = null;
 var g_rect_buffer: ?*wgpu.Buffer = null;
@@ -405,7 +435,7 @@ fn drainMemory() void {
                 .binding = 0,
                 .buffer = g_globals_buffer,
                 .offset = 0,
-                .size = 8,
+                .size = 16,
             }),
         });
     }
@@ -454,11 +484,16 @@ pub fn drawRect(
     ba: f32,
 ) void {
     if (g_rect_count >= MAX_RECTS) return;
+    // Apply canvas transform if active
+    const tx = if (g_transform_scale != 1.0) (x - g_transform_ox) * g_transform_scale + g_transform_ox + g_transform_tx else x;
+    const ty = if (g_transform_scale != 1.0) (y - g_transform_oy) * g_transform_scale + g_transform_oy + g_transform_ty else y;
+    const tw = if (g_transform_scale != 1.0) w * g_transform_scale else w;
+    const th = if (g_transform_scale != 1.0) h * g_transform_scale else h;
     g_rects[g_rect_count] = .{
-        .pos_x = x,
-        .pos_y = y,
-        .size_w = w,
-        .size_h = h,
+        .pos_x = tx,
+        .pos_y = ty,
+        .size_w = tw,
+        .size_h = th,
         .color_r = r,
         .color_g = g,
         .color_b = b,
@@ -525,18 +560,28 @@ pub fn initText(library: c.FT_Library, face: c.FT_Face, fallbacks: anytype, fall
 pub fn drawTextLine(text: []const u8, x: f32, y: f32, size_px: u16, cr: f32, cg: f32, cb: f32, ca: f32) void {
     if (g_ft_face == null) return;
 
-    // Set FreeType size
-    if (g_ft_current_size != size_px) {
-        _ = c.FT_Set_Pixel_Sizes(g_ft_face, 0, size_px);
-        g_ft_current_size = size_px;
+    const s = g_transform_scale;
+    const has_transform = (s != 1.0);
+
+    // When canvas transform is active, rasterize at scaled size for crisp text.
+    // The glyph is rendered at the final screen size — no texture stretching.
+    const render_size: u16 = if (has_transform)
+        @intFromFloat(@max(4, @min(200, @round(@as(f32, @floatFromInt(size_px)) * s))))
+    else
+        size_px;
+
+    if (g_ft_current_size != render_size) {
+        _ = c.FT_Set_Pixel_Sizes(g_ft_face, 0, render_size);
+        g_ft_current_size = render_size;
     }
 
-    // Get line metrics (ascent) from FreeType
     const face = g_ft_face;
     const ascent: f32 = @as(f32, @floatFromInt(face.*.size.*.metrics.ascender)) / 64.0;
 
-    var pen_x = x;
-    const baseline_y = y + ascent;
+    // Pen position: transform the starting point, then advance in screen space
+    var pen_x: f32 = if (has_transform) (x - g_transform_ox) * s + g_transform_ox + g_transform_tx else x;
+    const start_y: f32 = if (has_transform) (y - g_transform_oy) * s + g_transform_oy + g_transform_ty else y;
+    const baseline_y = start_y + ascent;
 
     var i: usize = 0;
     while (i < text.len) {
@@ -546,11 +591,12 @@ pub fn drawTextLine(text: []const u8, x: f32, y: f32, size_px: u16, cr: f32, cg:
             continue;
         }
 
-        if (cacheGlyph(ch.codepoint, size_px)) |glyph| {
+        if (cacheGlyph(ch.codepoint, render_size)) |glyph| {
             if (glyph.width > 0 and glyph.height > 0) {
                 if (g_glyph_count < MAX_GLYPHS) {
                     const gx = pen_x + @as(f32, @floatFromInt(glyph.bearing_x));
                     const gy = baseline_y - @as(f32, @floatFromInt(glyph.bearing_y));
+                    // Glyph is already at final screen size — no scaling needed
                     g_glyphs[g_glyph_count] = .{
                         .pos_x = gx,
                         .pos_y = gy,
@@ -1053,10 +1099,10 @@ fn initRectPipeline(device: *wgpu.Device) void {
     };
     defer shader_module.release();
 
-    // Globals uniform buffer (screen_size: vec2f = 8 bytes, pad to 16)
+    // Globals uniform buffer: screen_size(8) + transform_offset(8) + transform_scale(4) + pad(12) = 32
     g_globals_buffer = device.createBuffer(&.{
         .label = wgpu.StringView.fromSlice("globals"),
-        .size = 16, // vec2f + padding
+        .size = 16,
         .usage = wgpu.BufferUsages.uniform | wgpu.BufferUsages.copy_dst,
         .mapped_at_creation = 0,
     });
@@ -1092,7 +1138,7 @@ fn initRectPipeline(device: *wgpu.Device) void {
             .binding = 0,
             .buffer = g_globals_buffer,
             .offset = 0,
-            .size = 8,
+            .size = 16,
         }),
     });
 

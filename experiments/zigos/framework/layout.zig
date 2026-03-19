@@ -157,6 +157,12 @@ pub const Node = struct {
     content_width: f32 = 0,
     devtools_viz: DevtoolsViz = .none,
     canvas_type: ?[]const u8 = null,
+    // Canvas.Node fields — position + size in parent canvas's coordinate space
+    canvas_node: bool = false,       // true = this is a Canvas.Node
+    canvas_gx: f32 = 0,             // graph-space X (center)
+    canvas_gy: f32 = 0,             // graph-space Y (center)
+    canvas_gw: f32 = 0,             // graph-space width (0 = auto from content)
+    canvas_gh: f32 = 0,             // graph-space height (0 = auto from content)
     _flex_w: ?f32 = null,
     _stretch_h: ?f32 = null,
     _parent_inner_w: ?f32 = null,
@@ -612,6 +618,18 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
     const s = node.style;
     if (s.display == .none) {
         node.computed = .{ .x = px, .y = py, .w = 0, .h = 0 };
+        return;
+    }
+    // Canvas.Node: use gw/gh as fixed dimensions, lay out children within them.
+    // Position will be overridden by canvas camera at paint time.
+    if (node.canvas_node and (node.canvas_gw > 0 or node.canvas_gh > 0)) {
+        const cw = if (node.canvas_gw > 0) node.canvas_gw else pw;
+        const ch = if (node.canvas_gh > 0) node.canvas_gh else ph;
+        node.computed = .{ .x = px, .y = py, .w = cw, .h = ch };
+        // Lay out children within this fixed size
+        for (node.children) |*child| {
+            layoutNode(child, px, py, cw, ch);
+        }
         return;
     }
     var w: f32 = undefined;

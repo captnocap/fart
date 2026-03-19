@@ -123,6 +123,15 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
     const is_scroll_view = std.mem.eql(u8, tag_name, "ScrollView");
     // Canvas → Box with canvas_type field
     const is_canvas = std.mem.eql(u8, tag_name, "Canvas");
+    // Canvas.Node → Box with canvas_node=true, canvas_gx/gy
+    var is_canvas_node = false;
+    if (is_canvas and self.curKind() == .dot) {
+        self.advance_token(); // skip '.'
+        if (self.curKind() == .identifier and std.mem.eql(u8, self.curText(), "Node")) {
+            self.advance_token(); // skip 'Node'
+            is_canvas_node = true;
+        }
+    }
 
     // Component call
     if (self.compile_error != null) return ".{}";
@@ -144,6 +153,10 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
     var on_change_text_start: ?u32 = null;
     var placeholder_str: []const u8 = "";
     var canvas_type_str: []const u8 = "";
+    var canvas_gx_str: []const u8 = "";
+    var canvas_gy_str: []const u8 = "";
+    var canvas_gw_str: []const u8 = "";
+    var canvas_gh_str: []const u8 = "";
     var tooltip_str: []const u8 = "";
     var hoverable: bool = false;
 
@@ -237,6 +250,14 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
                     try attrs.skipAttrValue(self);
                 } else if (std.mem.eql(u8, attr_name, "type") and is_canvas) {
                     canvas_type_str = try attrs.parseStringAttr(self);
+                } else if (std.mem.eql(u8, attr_name, "gx") and is_canvas_node) {
+                    canvas_gx_str = try parseSignedNum(self);
+                } else if (std.mem.eql(u8, attr_name, "gy") and is_canvas_node) {
+                    canvas_gy_str = try parseSignedNum(self);
+                } else if (std.mem.eql(u8, attr_name, "gw") and is_canvas_node) {
+                    canvas_gw_str = try parseSignedNum(self);
+                } else if (std.mem.eql(u8, attr_name, "gh") and is_canvas_node) {
+                    canvas_gh_str = try parseSignedNum(self);
                 } else {
                     try attrs.skipAttrValue(self);
                 }
@@ -615,11 +636,33 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
     }
 
     // Canvas type
-    if (is_canvas and canvas_type_str.len > 0) {
+    if (is_canvas and !is_canvas_node and canvas_type_str.len > 0) {
         if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
         try fields.appendSlice(self.alloc, ".canvas_type = \"");
         try fields.appendSlice(self.alloc, canvas_type_str);
         try fields.appendSlice(self.alloc, "\"");
+    }
+
+    // Canvas.Node
+    if (is_canvas_node) {
+        if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
+        try fields.appendSlice(self.alloc, ".canvas_node = true");
+        if (canvas_gx_str.len > 0) {
+            try fields.appendSlice(self.alloc, ", .canvas_gx = ");
+            try fields.appendSlice(self.alloc, canvas_gx_str);
+        }
+        if (canvas_gy_str.len > 0) {
+            try fields.appendSlice(self.alloc, ", .canvas_gy = ");
+            try fields.appendSlice(self.alloc, canvas_gy_str);
+        }
+        if (canvas_gw_str.len > 0) {
+            try fields.appendSlice(self.alloc, ", .canvas_gw = ");
+            try fields.appendSlice(self.alloc, canvas_gw_str);
+        }
+        if (canvas_gh_str.len > 0) {
+            try fields.appendSlice(self.alloc, ", .canvas_gh = ");
+            try fields.appendSlice(self.alloc, canvas_gh_str);
+        }
     }
 
     // Hoverable
@@ -1133,6 +1176,18 @@ fn removePropFromStyle(alloc: std.mem.Allocator, style: []const u8, prop_name: [
 
 /// Merge classifier base style with inline override style.
 /// Inline properties win — any property in override is removed from base first.
+/// Parse a signed number from {-200} or {200} — handles negative prefix
+fn parseSignedNum(self: *Generator) ![]const u8 {
+    if (self.curKind() == .lbrace) self.advance_token();
+    var neg = false;
+    if (self.curKind() == .minus) { neg = true; self.advance_token(); }
+    const val = self.curText();
+    self.advance_token();
+    if (self.curKind() == .rbrace) self.advance_token();
+    if (neg) return try std.fmt.allocPrint(self.alloc, "-{s}", .{val});
+    return val;
+}
+
 fn mergeStyles(alloc: std.mem.Allocator, base: []const u8, override: []const u8) ![]const u8 {
     var result = base;
     // Scan override for ".prop_name" at property positions and strip from base
