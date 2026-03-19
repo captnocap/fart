@@ -123,13 +123,20 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
     const is_scroll_view = std.mem.eql(u8, tag_name, "ScrollView");
     // Canvas → Box with canvas_type field
     const is_canvas = std.mem.eql(u8, tag_name, "Canvas");
-    // Canvas.Node → Box with canvas_node=true, canvas_gx/gy
+    // Canvas.Node → canvas_node=true, Canvas.Path → canvas_path=true
     var is_canvas_node = false;
+    var is_canvas_path = false;
     if (is_canvas and self.curKind() == .dot) {
         self.advance_token(); // skip '.'
-        if (self.curKind() == .identifier and std.mem.eql(u8, self.curText(), "Node")) {
-            self.advance_token(); // skip 'Node'
-            is_canvas_node = true;
+        if (self.curKind() == .identifier) {
+            const sub = self.curText();
+            if (std.mem.eql(u8, sub, "Node")) {
+                self.advance_token();
+                is_canvas_node = true;
+            } else if (std.mem.eql(u8, sub, "Path")) {
+                self.advance_token();
+                is_canvas_path = true;
+            }
         }
     }
 
@@ -157,6 +164,12 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
     var canvas_gy_str: []const u8 = "";
     var canvas_gw_str: []const u8 = "";
     var canvas_gh_str: []const u8 = "";
+    var canvas_path_d: []const u8 = "";
+    var canvas_stroke_str: []const u8 = "";
+    var canvas_stroke_w_str: []const u8 = "";
+    var canvas_view_x_str: []const u8 = "";
+    var canvas_view_y_str: []const u8 = "";
+    var canvas_view_zoom_str: []const u8 = "";
     var tooltip_str: []const u8 = "";
     var hoverable: bool = false;
 
@@ -248,8 +261,14 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
                 } else if (std.mem.eql(u8, attr_name, "hoverable")) {
                     hoverable = true;
                     try attrs.skipAttrValue(self);
-                } else if (std.mem.eql(u8, attr_name, "type") and is_canvas) {
+                } else if (std.mem.eql(u8, attr_name, "type") and is_canvas and !is_canvas_node and !is_canvas_path) {
                     canvas_type_str = try attrs.parseStringAttr(self);
+                } else if (std.mem.eql(u8, attr_name, "viewX") and is_canvas and !is_canvas_node and !is_canvas_path) {
+                    canvas_view_x_str = try parseSignedNum(self);
+                } else if (std.mem.eql(u8, attr_name, "viewY") and is_canvas and !is_canvas_node and !is_canvas_path) {
+                    canvas_view_y_str = try parseSignedNum(self);
+                } else if (std.mem.eql(u8, attr_name, "viewZoom") and is_canvas and !is_canvas_node and !is_canvas_path) {
+                    canvas_view_zoom_str = try attrs.parseExprAttr(self);
                 } else if (std.mem.eql(u8, attr_name, "gx") and is_canvas_node) {
                     canvas_gx_str = try parseSignedNum(self);
                 } else if (std.mem.eql(u8, attr_name, "gy") and is_canvas_node) {
@@ -258,6 +277,12 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
                     canvas_gw_str = try parseSignedNum(self);
                 } else if (std.mem.eql(u8, attr_name, "gh") and is_canvas_node) {
                     canvas_gh_str = try parseSignedNum(self);
+                } else if (std.mem.eql(u8, attr_name, "d") and is_canvas_path) {
+                    canvas_path_d = try attrs.parseStringAttr(self);
+                } else if (std.mem.eql(u8, attr_name, "stroke") and is_canvas_path) {
+                    canvas_stroke_str = try attrs.parseStringAttr(self);
+                } else if (std.mem.eql(u8, attr_name, "strokeWidth") and is_canvas_path) {
+                    canvas_stroke_w_str = try attrs.parseExprAttr(self);
                 } else {
                     try attrs.skipAttrValue(self);
                 }
@@ -635,12 +660,31 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
         try fields.appendSlice(self.alloc, "\"");
     }
 
-    // Canvas type
-    if (is_canvas and !is_canvas_node and canvas_type_str.len > 0) {
-        if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
-        try fields.appendSlice(self.alloc, ".canvas_type = \"");
-        try fields.appendSlice(self.alloc, canvas_type_str);
-        try fields.appendSlice(self.alloc, "\"");
+    // Canvas type + view
+    if (is_canvas and !is_canvas_node and !is_canvas_path) {
+        if (canvas_type_str.len > 0) {
+            if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
+            try fields.appendSlice(self.alloc, ".canvas_type = \"");
+            try fields.appendSlice(self.alloc, canvas_type_str);
+            try fields.appendSlice(self.alloc, "\"");
+        }
+        const has_view = canvas_view_x_str.len > 0 or canvas_view_y_str.len > 0 or canvas_view_zoom_str.len > 0;
+        if (has_view) {
+            if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
+            try fields.appendSlice(self.alloc, ".canvas_view_set = true");
+        }
+        if (canvas_view_x_str.len > 0) {
+            try fields.appendSlice(self.alloc, ", .canvas_view_x = ");
+            try fields.appendSlice(self.alloc, canvas_view_x_str);
+        }
+        if (canvas_view_y_str.len > 0) {
+            try fields.appendSlice(self.alloc, ", .canvas_view_y = ");
+            try fields.appendSlice(self.alloc, canvas_view_y_str);
+        }
+        if (canvas_view_zoom_str.len > 0) {
+            try fields.appendSlice(self.alloc, ", .canvas_view_zoom = ");
+            try fields.appendSlice(self.alloc, canvas_view_zoom_str);
+        }
     }
 
     // Canvas.Node
@@ -662,6 +706,31 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
         if (canvas_gh_str.len > 0) {
             try fields.appendSlice(self.alloc, ", .canvas_gh = ");
             try fields.appendSlice(self.alloc, canvas_gh_str);
+        }
+    }
+
+    // Canvas.Path
+    if (is_canvas_path) {
+        if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
+        try fields.appendSlice(self.alloc, ".canvas_path = true");
+        if (canvas_path_d.len > 0) {
+            try fields.appendSlice(self.alloc, ", .canvas_path_d = \"");
+            for (canvas_path_d) |ch| {
+                if (ch == '"') try fields.appendSlice(self.alloc, "\\\"")
+                else if (ch == '\\') try fields.appendSlice(self.alloc, "\\\\")
+                else try fields.append(self.alloc, ch);
+            }
+            try fields.appendSlice(self.alloc, "\"");
+        }
+        if (canvas_stroke_w_str.len > 0) {
+            try fields.appendSlice(self.alloc, ", .canvas_stroke_width = ");
+            try fields.appendSlice(self.alloc, canvas_stroke_w_str);
+        }
+        // Stroke color → text_color field (reuse existing color field)
+        if (canvas_stroke_str.len > 0) {
+            const color = try attrs.parseColorValue(self, canvas_stroke_str);
+            try fields.appendSlice(self.alloc, ", .text_color = ");
+            try fields.appendSlice(self.alloc, color);
         }
     }
 

@@ -110,17 +110,16 @@ var g_transform_oy: f32 = 0;  // origin Y
 var g_transform_tx: f32 = 0;  // translate X (after scale)
 var g_transform_ty: f32 = 0;  // translate Y
 var g_transform_scale: f32 = 1.0;
-var g_transform_dirty: bool = false;
+var g_transform_active: bool = false;
 
-/// Set canvas transform. All subsequent draw calls are scaled around (ox,oy)
-/// then translated by (tx,ty). Call with scale=1 to reset.
+/// Set canvas transform. All subsequent draw calls are transformed.
 pub fn setTransform(ox: f32, oy: f32, tx: f32, ty: f32, scale: f32) void {
     g_transform_ox = ox;
     g_transform_oy = oy;
     g_transform_tx = tx;
     g_transform_ty = ty;
     g_transform_scale = scale;
-    g_transform_dirty = true;
+    g_transform_active = true;
 }
 
 /// Reset transform to identity.
@@ -130,7 +129,7 @@ pub fn resetTransform() void {
     g_transform_tx = 0;
     g_transform_ty = 0;
     g_transform_scale = 1.0;
-    g_transform_dirty = true;
+    g_transform_active = false;
 }
 
 // Rect pipeline
@@ -561,7 +560,7 @@ pub fn drawTextLine(text: []const u8, x: f32, y: f32, size_px: u16, cr: f32, cg:
     if (g_ft_face == null) return;
 
     const s = g_transform_scale;
-    const has_transform = (s != 1.0);
+    const has_transform = g_transform_active;
 
     // When canvas transform is active, rasterize at scaled size for crisp text.
     // The glyph is rendered at the final screen size — no texture stretching.
