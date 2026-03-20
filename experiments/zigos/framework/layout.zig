@@ -660,9 +660,10 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
         }
         return;
     }
-    // Video/Render: fill parent bounds (same as Canvas.Clamp). No children, no fallback.
+    // Video/Render: fill parent bounds, clamped to GPU texture limit (8192).
+    // The proportional fallback can produce ph=9999 which exceeds the GPU max.
     if (node.video_src != null or node.render_src != null) {
-        node.computed = .{ .x = px, .y = py, .w = pw, .h = ph };
+        node.computed = .{ .x = px, .y = py, .w = @min(pw, 8192), .h = @min(ph, 8192) };
         return;
     }
     // Canvas.Node: use gw/gh as fixed dimensions, lay out children within them.
