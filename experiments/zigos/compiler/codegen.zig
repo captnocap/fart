@@ -49,7 +49,7 @@ pub const MAX_ARRAYS = 4096;
 pub const MAX_STATE_SLOTS = 128;
 pub const MAX_DYN_TEXTS = 512;
 pub const MAX_ARRAY_INIT = 64;
-pub const MAX_CLASSIFIERS = 512;
+pub const MAX_CLASSIFIERS = 2048;
 pub const MAX_COMP_FUNCS = 32;
 pub const MAX_COMP_INSTANCES = 128;
 pub const MAX_COMP_INNER = 8;
@@ -67,6 +67,13 @@ pub const MAX_ANIM_HOOKS = 16;
 pub const MAX_UTIL_FUNCS = 32;
 pub const MAX_UTIL_PARAMS = 16;
 pub const MAX_LET_VARS = 32;
+pub const MAX_VARIANTS = 8;
+
+pub const VariantUpdate = struct {
+    arr_name: []const u8,
+    arr_index: u32,
+    classifier_idx: u32,
+};
 pub const MAX_OBJECT_STATE_FIELDS = 16;
 pub const MAX_OBJECT_STATE_VARS = 16;
 
@@ -294,6 +301,17 @@ pub const Generator = struct {
     classifier_styles: [MAX_CLASSIFIERS][]const u8,
     classifier_text_props: [MAX_CLASSIFIERS][]const u8,
     classifier_count: u32,
+
+    // Layout variants (classifier variants: {} blocks)
+    classifier_has_variants: [MAX_CLASSIFIERS]bool,
+    classifier_variant_styles: [MAX_CLASSIFIERS][MAX_VARIANTS][]const u8,
+    classifier_variant_text_props: [MAX_CLASSIFIERS][MAX_VARIANTS][]const u8,
+    variant_names: [MAX_VARIANTS][]const u8,
+    variant_count: u8,
+
+    // Variant update entries (emitted in _updateDynamicTexts)
+    variant_updates: [MAX_DYN_STYLES]VariantUpdate,
+    variant_update_count: u32,
 
     // Local variables (compile-time const substitution)
     local_vars: [MAX_LOCALS]LocalVar,
@@ -523,6 +541,13 @@ pub const Generator = struct {
             .classifier_styles = undefined,
             .classifier_text_props = undefined,
             .classifier_count = 0,
+            .classifier_has_variants = .{false} ** MAX_CLASSIFIERS,
+            .classifier_variant_styles = .{.{""} ** MAX_VARIANTS} ** MAX_CLASSIFIERS,
+            .classifier_variant_text_props = .{.{""} ** MAX_VARIANTS} ** MAX_CLASSIFIERS,
+            .variant_names = .{""} ** MAX_VARIANTS,
+            .variant_count = 0,
+            .variant_updates = undefined,
+            .variant_update_count = 0,
             .ffi_headers = .{},
             .ffi_libs = .{},
             .ffi_funcs = .{},
@@ -653,6 +678,19 @@ pub const Generator = struct {
             if (std.mem.eql(u8, self.classifier_names[i], name)) return @intCast(i);
         }
         return null;
+    }
+
+    /// Look up a variant name, or register it if new. Returns the variant index (1-based; 0 = base style).
+    pub fn findOrAddVariant(self: *Generator, name: []const u8) u8 {
+        for (0..self.variant_count) |i| {
+            if (std.mem.eql(u8, self.variant_names[i], name)) return @intCast(i + 1);
+        }
+        if (self.variant_count < MAX_VARIANTS) {
+            self.variant_names[self.variant_count] = name;
+            self.variant_count += 1;
+            return self.variant_count; // 1-based
+        }
+        return 0; // overflow fallback
     }
 
     pub fn findComponent(self: *Generator, name: []const u8) ?*ComponentInfo {

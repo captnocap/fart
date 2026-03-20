@@ -163,6 +163,62 @@ pub fn collectClassifiers(self: *Generator) void {
                                     } else {
                                         style_str = ".flex_grow = 1";
                                     }
+                                } else if (std.mem.eql(u8, field, "variants")) {
+                                    // variants: { name: { style: {...} }, name2: { style: {...} } }
+                                    if (self.curKind() == .lbrace) self.advance_token();
+                                    while (self.curKind() != .rbrace and self.curKind() != .eof) {
+                                        if (self.curKind() == .identifier) {
+                                            const vname = self.curText();
+                                            const vidx = self.findOrAddVariant(vname);
+                                            self.advance_token();
+                                            if (self.curKind() == .colon) self.advance_token();
+                                            if (self.curKind() == .lbrace) {
+                                                self.advance_token();
+                                                // parse inner fields: style, fontSize, color
+                                                var v_style: []const u8 = "";
+                                                var v_text_props: []const u8 = "";
+                                                while (self.curKind() != .rbrace and self.curKind() != .eof) {
+                                                    if (self.curKind() == .identifier) {
+                                                        const vf = self.curText();
+                                                        self.advance_token();
+                                                        if (self.curKind() == .colon) self.advance_token();
+                                                        if (std.mem.eql(u8, vf, "style")) {
+                                                            v_style = attrs.parseStyleAttr(self) catch "";
+                                                        } else if (std.mem.eql(u8, vf, "fontSize") or std.mem.eql(u8, vf, "size")) {
+                                                            const sz = self.curText();
+                                                            self.advance_token();
+                                                            v_text_props = std.fmt.allocPrint(self.alloc, ".font_size = {s}", .{sz}) catch "";
+                                                        } else if (std.mem.eql(u8, vf, "color")) {
+                                                            const vcol = attrs.parseStringAttrInline(self) catch "";
+                                                            if (vcol.len > 0) {
+                                                                const vczig = attrs.parseColorValue(self, vcol) catch "Color.rgb(255,255,255)";
+                                                                v_text_props = std.fmt.allocPrint(self.alloc, "{s}, .text_color = {s}", .{
+                                                                    if (v_text_props.len > 0) v_text_props else "",
+                                                                    vczig,
+                                                                }) catch "";
+                                                            }
+                                                        } else {
+                                                            self.advance_token();
+                                                        }
+                                                    } else {
+                                                        self.advance_token();
+                                                    }
+                                                    if (self.curKind() == .comma) self.advance_token();
+                                                }
+                                                if (self.curKind() == .rbrace) self.advance_token();
+                                                // Store variant style at [classifier_count][vidx]
+                                                if (self.classifier_count < codegen.MAX_CLASSIFIERS and vidx > 0 and vidx < codegen.MAX_VARIANTS) {
+                                                    self.classifier_variant_styles[self.classifier_count][vidx] = v_style;
+                                                    self.classifier_variant_text_props[self.classifier_count][vidx] = v_text_props;
+                                                    self.classifier_has_variants[self.classifier_count] = true;
+                                                }
+                                            }
+                                        } else {
+                                            self.advance_token();
+                                        }
+                                        if (self.curKind() == .comma) self.advance_token();
+                                    }
+                                    if (self.curKind() == .rbrace) self.advance_token();
                                 } else {
                                     self.advance_token();
                                 }
@@ -179,6 +235,12 @@ pub fn collectClassifiers(self: *Generator) void {
                             self.classifier_primitives[idx] = prim_type;
                             self.classifier_styles[idx] = style_str;
                             self.classifier_text_props[idx] = text_props;
+                            // Copy base style into variant slot 0 if this classifier has variants
+                            if (self.classifier_has_variants[idx]) {
+                                self.classifier_variant_styles[idx][0] = style_str;
+                                self.classifier_variant_text_props[idx][0] = text_props;
+                                self.has_theme = true; // variants need Theme import for activeVariant()
+                            }
                             self.classifier_count += 1;
                         }
                     }
@@ -189,6 +251,7 @@ pub fn collectClassifiers(self: *Generator) void {
             }
             if (self.curKind() == .rbrace) self.advance_token();
             if (self.curKind() == .rparen) self.advance_token();
+            continue;
         }
         self.advance_token();
     }

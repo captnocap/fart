@@ -4180,15 +4180,165 @@ var _arr_2073 = [_]Node{ .{ .style = .{ .width = 36, .height = 20, .border_radiu
 var _arr_2074 = [_]Node{ .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center }, .children = &_arr_2038 }, .{ .style = .{ .flex_direction = .column, .gap = 2 }, .children = &_arr_2069 }, .{ .style = .{ .height = 1, .background_color = Color.rgb(26, 32, 48) } }, .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center }, .children = &_arr_2070 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 12, .padding_left = 8, .padding_right = 8, .padding_top = 8, .padding_bottom = 8, .border_radius = 6 }, .children = &_arr_2073 }, .{ .style = .{ .height = 1, .background_color = Color.rgb(26, 32, 48) } }, .{ .text = "Tip: REACTJIT_DEBUG=tree,layout love love", .font_size = 10, .text_color = Color.rgb(67, 75, 92) }, .{ .text = "Output goes to terminal AND console tab", .font_size = 10, .text_color = Color.rgb(67, 75, 92) } }; // LogsPage
 // tsz:InspectorEmbed.tsz:3803 — <ScrollView>
 var _arr_2075 = [_]Node{ .{ .style = .{ .flex_direction = .column, .padding = 16, .gap = 12 }, .children = &_arr_2074 } }; // LogsPage
-// tsz:InspectorEmbed.tsz:4286 — <Box>
-var _arr_2076 = [_]Node{ .{ .text = "Dirty", .font_size = 10, .text_color = Color.rgb(240, 192, 64) }, .{ .text = "Ready", .font_size = 10, .text_color = Color.rgb(80, 200, 120) }, .{ .text = "", .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } };
-// tsz:InspectorEmbed.tsz:4292 — <Box>
-var _arr_2077 = [_]Node{ .{ .text = "", .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "", .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "", .font_size = 10, .text_color = Color.rgb(80, 200, 120) }, .{ .text = "", .font_size = 10, .text_color = Color.rgb(240, 192, 64) }, .{ .text = "", .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } };
-// tsz:InspectorEmbed.tsz:4285 — <Box>
-var _arr_2078 = [_]Node{ .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 8 }, .children = &_arr_2076 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 12 }, .children = &_arr_2077 } };
+// tsz:InspectorEmbed.tsz:4092 — <Box>
+var _arr_2076 = [_]Node{ .{ .text = "App", .font_size = 14, .text_color = Color.rgb(224, 230, 240) }, .{ .text = "Root", .font_size = 10, .text_color = Color.rgb(20, 184, 166) } }; // ConstraintGraphPage
+// tsz:InspectorEmbed.tsz:4091 — <Canvas>
+var _arr_2077 = [_]Node{ .{ .style = .{ .width = -1, .height = -1, .padding = 8, .background_color = Color.rgb(12, 26, 26), .border_width = 2, .border_color = Color.rgb(20, 184, 166), .border_radius = 5, .align_items = .center, .justify_content = .center }, .children = &_arr_2076 } }; // ConstraintGraphPage
+// tsz:InspectorEmbed.tsz:4098 — <Box>
+var _arr_2078 = [_]Node{ .{ .text = "Router", .font_size = 14, .text_color = Color.rgb(224, 230, 240) }, .{ .text = "Parent", .font_size = 10, .text_color = Color.rgb(168, 85, 247) } }; // ConstraintGraphPage
+// tsz:InspectorEmbed.tsz:4097 — <Canvas>
+var _arr_2079 = [_]Node{ .{ .style = .{ .width = -1, .height = -1, .padding = 8, .background_color = Color.rgb(26, 16, 48), .border_width = 2, .border_color = Color.rgb(168, 85, 247), .border_radius = 5, .align_items = .center, .justify_content = .center }, .children = &_arr_2078 } }; // ConstraintGraphPage
+// tsz:InspectorEmbed.tsz:4104 — <Box>
+var _arr_2080 = [_]Node{ .{ .text = "Shell", .font_size = 14, .text_color = Color.rgb(224, 230, 240) }, .{ .text = "Flex", .font_size = 10, .text_color = Color.rgb(59, 130, 246) } }; // ConstraintGraphPage
+// tsz:InspectorEmbed.tsz:4103 — <Canvas>
+var _arr_2081 = [_]Node{ .{ .style = .{ .width = -1, .height = -1, .padding = 8, .background_color = Color.rgb(12, 18, 32), .border_width = 2, .border_color = Color.rgb(59, 130, 246), .border_radius = 5, .align_items = .center, .justify_content = .center }, .children = &_arr_2080 } }; // ConstraintGraphPage
+// tsz:InspectorEmbed.tsz:4110 — <Box>
+var _arr_2082 = [_]Node{ .{ .text = "ModalStack", .font_size = 14, .text_color = Color.rgb(224, 230, 240) }, .{ .text = "Child", .font_size = 10, .text_color = Color.rgb(249, 115, 22) } }; // ConstraintGraphPage
+// tsz:InspectorEmbed.tsz:4109 — <Canvas>
+var _arr_2083 = [_]Node{ .{ .style = .{ .width = -1, .height = -1, .padding = 8, .background_color = Color.rgb(26, 21, 8), .border_width = 2, .border_color = Color.rgb(249, 115, 22), .border_radius = 5, .align_items = .center, .justify_content = .center }, .children = &_arr_2082 } }; // ConstraintGraphPage
+// tsz:InspectorEmbed.tsz:4116 — <Box>
+var _arr_2084 = [_]Node{ .{ .text = "ConditionalPanel", .font_size = 14, .text_color = Color.rgb(74, 85, 104) }, .{ .text = "Dynamic", .font_size = 10, .text_color = Color.rgb(74, 85, 104) } }; // ConstraintGraphPage
+// tsz:InspectorEmbed.tsz:4115 — <Canvas>
+var _arr_2085 = [_]Node{ .{ .style = .{ .width = -1, .height = -1, .padding = 8, .background_color = Color.rgb(13, 15, 20), .border_width = 1, .border_color = Color.rgb(74, 85, 104), .border_radius = 5, .align_items = .center, .justify_content = .center }, .children = &_arr_2084 } }; // ConstraintGraphPage
+// tsz:InspectorEmbed.tsz:4001 — <Box>
+var _arr_2086 = [_]Node{ .{ .text = "parent", .font_size = 10, .text_color = Color.rgb(74, 85, 104) }, .{ .text = "Router", .font_size = 11, .text_color = Color.rgb(224, 230, 240) } }; // GraphLegend
+// tsz:InspectorEmbed.tsz:4000 — <Pressable>
+var _arr_2087 = [_]Node{ .{ .style = .{ .flex_direction = .row, .gap = 4, .align_items = .center, .padding_left = 8, .padding_right = 8, .padding_top = 3, .padding_bottom = 3, .border_radius = 4, .border_width = 1, .border_color = Color.rgb(26, 31, 46), .background_color = Color.rgb(16, 20, 30) }, .children = &_arr_2086 } }; // GraphLegend
+// tsz:InspectorEmbed.tsz:4007 — <Box>
+var _arr_2088 = [_]Node{ .{ .text = "child", .font_size = 10, .text_color = Color.rgb(74, 85, 104) }, .{ .text = "Overlay", .font_size = 11, .text_color = Color.rgb(224, 230, 240) } }; // GraphLegend
+// tsz:InspectorEmbed.tsz:4006 — <Pressable>
+var _arr_2089 = [_]Node{ .{ .style = .{ .flex_direction = .row, .gap = 4, .align_items = .center, .padding_left = 8, .padding_right = 8, .padding_top = 3, .padding_bottom = 3, .border_radius = 4, .border_width = 1, .border_color = Color.rgb(26, 31, 46), .background_color = Color.rgb(16, 20, 30) }, .children = &_arr_2088 } }; // GraphLegend
+// tsz:InspectorEmbed.tsz:4013 — <Box>
+var _arr_2090 = [_]Node{ .{ .text = "sibling", .font_size = 10, .text_color = Color.rgb(74, 85, 104) }, .{ .text = "Shell", .font_size = 11, .text_color = Color.rgb(224, 230, 240) } }; // GraphLegend
+// tsz:InspectorEmbed.tsz:4012 — <Pressable>
+var _arr_2091 = [_]Node{ .{ .style = .{ .flex_direction = .row, .gap = 4, .align_items = .center, .padding_left = 8, .padding_right = 8, .padding_top = 3, .padding_bottom = 3, .border_radius = 4, .border_width = 1, .border_color = Color.rgb(26, 31, 46), .background_color = Color.rgb(16, 20, 30) }, .children = &_arr_2090 } }; // GraphLegend
+// tsz:InspectorEmbed.tsz:3999 — <Box>
+var _arr_2092 = [_]Node{ .{ .handlers = .{ .on_press = _handler_press_26 }, .children = &_arr_2087 }, .{ .handlers = .{ .on_press = _handler_press_27 }, .children = &_arr_2089 }, .{ .handlers = .{ .on_press = _handler_press_28 }, .children = &_arr_2091 } }; // GraphLegend
+// tsz:InspectorEmbed.tsz:3937 — <Box>
+var _arr_2093 = [_]Node{ .{ .text = "Child", .font_size = 11, .text_color = Color.rgb(249, 115, 22) } }; // GraphNodeInfo
+// tsz:InspectorEmbed.tsz:3935 — <Box>
+var _arr_2094 = [_]Node{ .{ .text = "ModalStack", .font_size = 14, .text_color = Color.rgb(224, 230, 240) }, .{ .style = .{ .padding_left = 7, .padding_right = 7, .padding_top = 2, .padding_bottom = 2, .border_radius = 10, .background_color = Color.rgb(26, 16, 48) }, .children = &_arr_2093 }, .{ .text = "id: 7", .font_size = 11, .text_color = Color.rgb(74, 85, 104) } }; // GraphNodeInfo
+// tsz:InspectorEmbed.tsz:3946 — <Box>
+var _arr_2095 = [_]Node{ .{ .text = "x", .font_size = 11, .text_color = Color.rgb(74, 85, 104) }, .{ .text = "148", .font_size = 11, .text_color = Color.rgb(138, 144, 160) } }; // GraphNodeInfo
+// tsz:InspectorEmbed.tsz:3950 — <Box>
+var _arr_2096 = [_]Node{ .{ .text = "y", .font_size = 11, .text_color = Color.rgb(74, 85, 104) }, .{ .text = "312", .font_size = 11, .text_color = Color.rgb(138, 144, 160) } }; // GraphNodeInfo
+// tsz:InspectorEmbed.tsz:3954 — <Box>
+var _arr_2097 = [_]Node{ .{ .text = "w", .font_size = 11, .text_color = Color.rgb(74, 85, 104) }, .{ .text = "240", .font_size = 11, .text_color = Color.rgb(138, 144, 160) } }; // GraphNodeInfo
+// tsz:InspectorEmbed.tsz:3958 — <Box>
+var _arr_2098 = [_]Node{ .{ .text = "h", .font_size = 11, .text_color = Color.rgb(74, 85, 104) }, .{ .text = "60", .font_size = 11, .text_color = Color.rgb(138, 144, 160) } }; // GraphNodeInfo
+// tsz:InspectorEmbed.tsz:3945 — <Box>
+var _arr_2099 = [_]Node{ .{ .style = .{ .flex_direction = .row, .gap = 4, .align_items = .center }, .children = &_arr_2095 }, .{ .style = .{ .flex_direction = .row, .gap = 4, .align_items = .center }, .children = &_arr_2096 }, .{ .style = .{ .flex_direction = .row, .gap = 4, .align_items = .center }, .children = &_arr_2097 }, .{ .style = .{ .flex_direction = .row, .gap = 4, .align_items = .center }, .children = &_arr_2098 } }; // GraphNodeInfo
+// tsz:InspectorEmbed.tsz:3967 — <Box>
+var _arr_2100 = [_]Node{ .{ .text = "display", .font_size = 11, .text_color = Color.rgb(74, 85, 104) }, .{ .text = "flex", .font_size = 11, .text_color = Color.rgb(168, 85, 247) } }; // GraphNodeInfo
+// tsz:InspectorEmbed.tsz:3971 — <Box>
+var _arr_2101 = [_]Node{ .{ .text = "dir", .font_size = 11, .text_color = Color.rgb(74, 85, 104) }, .{ .text = "column", .font_size = 11, .text_color = Color.rgb(168, 85, 247) } }; // GraphNodeInfo
+// tsz:InspectorEmbed.tsz:3975 — <Box>
+var _arr_2102 = [_]Node{ .{ .text = "grow", .font_size = 11, .text_color = Color.rgb(74, 85, 104) }, .{ .text = "1", .font_size = 11, .text_color = Color.rgb(138, 144, 160) } }; // GraphNodeInfo
+// tsz:InspectorEmbed.tsz:3979 — <Box>
+var _arr_2103 = [_]Node{ .{ .text = "pad", .font_size = 11, .text_color = Color.rgb(74, 85, 104) }, .{ .text = "8 12", .font_size = 11, .text_color = Color.rgb(138, 144, 160) } }; // GraphNodeInfo
+// tsz:InspectorEmbed.tsz:3983 — <Box>
+var _arr_2104 = [_]Node{ .{ .text = "overflow", .font_size = 11, .text_color = Color.rgb(74, 85, 104) }, .{ .text = "hidden", .font_size = 11, .text_color = Color.rgb(138, 144, 160) } }; // GraphNodeInfo
+// tsz:InspectorEmbed.tsz:3966 — <Box>
+var _arr_2105 = [_]Node{ .{ .style = .{ .flex_direction = .row, .gap = 4, .align_items = .center }, .children = &_arr_2100 }, .{ .style = .{ .flex_direction = .row, .gap = 4, .align_items = .center }, .children = &_arr_2101 }, .{ .style = .{ .flex_direction = .row, .gap = 4, .align_items = .center }, .children = &_arr_2102 }, .{ .style = .{ .flex_direction = .row, .gap = 4, .align_items = .center }, .children = &_arr_2103 }, .{ .style = .{ .flex_direction = .row, .gap = 4, .align_items = .center }, .children = &_arr_2104 } }; // GraphNodeInfo
+// tsz:InspectorEmbed.tsz:3934 — <Box>
+var _arr_2106 = [_]Node{ .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 8 }, .children = &_arr_2094 }, .{ .style = .{ .width = 1, .height = 16, .background_color = Color.rgb(26, 31, 46) } }, .{ .style = .{ .flex_direction = .row, .gap = 12 }, .children = &_arr_2099 }, .{ .style = .{ .width = 1, .height = 16, .background_color = Color.rgb(26, 31, 46) } }, .{ .style = .{ .flex_direction = .row, .gap = 12 }, .children = &_arr_2105 } }; // GraphNodeInfo
+// tsz:InspectorEmbed.tsz:3933 — <Box>
+var _arr_2107 = [_]Node{ .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 16, .padding = 8, .padding_left = 12, .padding_right = 12, .flex_wrap = .wrap }, .children = &_arr_2106 } }; // GraphNodeInfo
+// tsz:InspectorEmbed.tsz:4021 — <Box>
+var _arr_2108 = [_]Node{ .{ .style = .{ .flex_grow = 1 }, .font_size = 11, .handlers = .{ .on_change_text = _handler_change_29 }, .input_id = 11, .placeholder = "Filter nodes..." } }; // GraphLegend
+// tsz:InspectorEmbed.tsz:4028 — <Box>
+var _arr_2109 = [_]Node{ .{ .style = .{ .width = 8, .height = 8, .border_radius = 4, .background_color = Color.rgb(20, 184, 166) } }, .{ .text = "Root", .font_size = 11, .text_color = Color.rgb(224, 230, 240) } }; // GraphLegend
+// tsz:InspectorEmbed.tsz:4027 — <Pressable>
+var _arr_2110 = [_]Node{ .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 5, .padding_left = 6, .padding_right = 8, .padding_top = 3, .padding_bottom = 3, .border_radius = 4, .border_width = 1, .border_color = Color.rgb(168, 85, 247), .background_color = Color.rgb(26, 16, 48) }, .children = &_arr_2109 } }; // GraphLegend
+// tsz:InspectorEmbed.tsz:4035 — <Box>
+var _arr_2111 = [_]Node{ .{ .style = .{ .width = 8, .height = 8, .border_radius = 4, .background_color = Color.rgb(168, 85, 247) } }, .{ .text = "Parent", .font_size = 11, .text_color = Color.rgb(224, 230, 240) } }; // GraphLegend
+// tsz:InspectorEmbed.tsz:4034 — <Pressable>
+var _arr_2112 = [_]Node{ .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 5, .padding_left = 6, .padding_right = 8, .padding_top = 3, .padding_bottom = 3, .border_radius = 4, .border_width = 1, .border_color = Color.rgb(168, 85, 247), .background_color = Color.rgb(26, 16, 48) }, .children = &_arr_2111 } }; // GraphLegend
+// tsz:InspectorEmbed.tsz:4042 — <Box>
+var _arr_2113 = [_]Node{ .{ .style = .{ .width = 8, .height = 8, .border_radius = 4, .background_color = Color.rgb(249, 115, 22) } }, .{ .text = "Child", .font_size = 11, .text_color = Color.rgb(224, 230, 240) } }; // GraphLegend
+// tsz:InspectorEmbed.tsz:4041 — <Pressable>
+var _arr_2114 = [_]Node{ .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 5, .padding_left = 6, .padding_right = 8, .padding_top = 3, .padding_bottom = 3, .border_radius = 4, .border_width = 1, .border_color = Color.rgb(168, 85, 247), .background_color = Color.rgb(26, 16, 48) }, .children = &_arr_2113 } }; // GraphLegend
+// tsz:InspectorEmbed.tsz:4049 — <Box>
+var _arr_2115 = [_]Node{ .{ .style = .{ .width = 8, .height = 8, .border_radius = 4, .background_color = Color.rgb(74, 222, 128) } }, .{ .text = "Fixed", .font_size = 11, .text_color = Color.rgb(224, 230, 240) } }; // GraphLegend
+// tsz:InspectorEmbed.tsz:4048 — <Pressable>
+var _arr_2116 = [_]Node{ .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 5, .padding_left = 6, .padding_right = 8, .padding_top = 3, .padding_bottom = 3, .border_radius = 4, .border_width = 1, .border_color = Color.rgb(168, 85, 247), .background_color = Color.rgb(26, 16, 48) }, .children = &_arr_2115 } }; // GraphLegend
+// tsz:InspectorEmbed.tsz:4056 — <Box>
+var _arr_2117 = [_]Node{ .{ .style = .{ .width = 8, .height = 8, .border_radius = 4, .background_color = Color.rgb(59, 130, 246) } }, .{ .text = "Flex", .font_size = 11, .text_color = Color.rgb(224, 230, 240) } }; // GraphLegend
+// tsz:InspectorEmbed.tsz:4055 — <Pressable>
+var _arr_2118 = [_]Node{ .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 5, .padding_left = 6, .padding_right = 8, .padding_top = 3, .padding_bottom = 3, .border_radius = 4, .border_width = 1, .border_color = Color.rgb(168, 85, 247), .background_color = Color.rgb(26, 16, 48) }, .children = &_arr_2117 } }; // GraphLegend
+// tsz:InspectorEmbed.tsz:4063 — <Box>
+var _arr_2119 = [_]Node{ .{ .style = .{ .width = 8, .height = 8, .border_radius = 4, .background_color = Color.rgb(251, 191, 36) } }, .{ .text = "Dynamic", .font_size = 11, .text_color = Color.rgb(224, 230, 240) } }; // GraphLegend
+// tsz:InspectorEmbed.tsz:4062 — <Pressable>
+var _arr_2120 = [_]Node{ .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 5, .padding_left = 6, .padding_right = 8, .padding_top = 3, .padding_bottom = 3, .border_radius = 4, .border_width = 1, .border_color = Color.rgb(168, 85, 247), .background_color = Color.rgb(26, 16, 48) }, .children = &_arr_2119 } }; // GraphLegend
+// tsz:InspectorEmbed.tsz:4072 — <Box>
+var _arr_2121 = [_]Node{ .{ .text = "Flow", .font_size = 11, .text_color = Color.rgb(168, 85, 247) } }; // GraphLegend
+// tsz:InspectorEmbed.tsz:4071 — <Pressable>
+var _arr_2122 = [_]Node{ .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 5, .padding_left = 6, .padding_right = 8, .padding_top = 3, .padding_bottom = 3, .border_radius = 4, .border_width = 1, .border_color = Color.rgb(168, 85, 247), .background_color = Color.rgb(26, 16, 48) }, .children = &_arr_2121 } }; // GraphLegend
+// tsz:InspectorEmbed.tsz:4020 — <Box>
+var _arr_2123 = [_]Node{ .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 6, .background_color = Color.rgb(16, 20, 30), .border_radius = 5, .padding_left = 8, .padding_right = 8, .padding_top = 5, .padding_bottom = 5, .border_width = 1, .border_color = Color.rgb(26, 31, 46), .width = 160 }, .children = &_arr_2108 }, .{ .style = .{ .width = 1, .height = 16, .background_color = Color.rgb(26, 31, 46) } }, .{ .handlers = .{ .on_press = _handler_press_30 }, .children = &_arr_2110 }, .{ .handlers = .{ .on_press = _handler_press_31 }, .children = &_arr_2112 }, .{ .handlers = .{ .on_press = _handler_press_32 }, .children = &_arr_2114 }, .{ .handlers = .{ .on_press = _handler_press_33 }, .children = &_arr_2116 }, .{ .handlers = .{ .on_press = _handler_press_34 }, .children = &_arr_2118 }, .{ .handlers = .{ .on_press = _handler_press_35 }, .children = &_arr_2120 }, .{ .style = .{ .width = 1, .height = 16, .background_color = Color.rgb(26, 31, 46) } }, .{ .handlers = .{ .on_press = _handler_press_36 }, .children = &_arr_2122 } }; // GraphLegend
+// tsz:InspectorEmbed.tsz:3998 — <Box>
+var _arr_2124 = [_]Node{ .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 8, .padding = 6, .padding_left = 12, .padding_right = 12, .background_color = Color.rgb(10, 14, 24), .border_radius = 8, .border_width = 1, .border_color = Color.rgb(26, 31, 46) }, .children = &_arr_2092 }, .{ .style = .{ .flex_direction = .column, .gap = 0, .background_color = Color.rgb(10, 14, 24), .border_radius = 8 }, .children = &_arr_2107 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 12, .padding = 8, .padding_left = 12, .padding_right = 12, .background_color = Color.rgb(10, 14, 24), .border_radius = 8, .border_width = 1, .border_color = Color.rgb(26, 31, 46), .flex_wrap = .wrap }, .children = &_arr_2123 } }; // GraphLegend
+// tsz:InspectorEmbed.tsz:4125 — <Box>
+var _arr_2125 = [_]Node{ .{ .style = .{ .flex_direction = .column, .gap = 6, .align_items = .center }, .children = &_arr_2124 } }; // ConstraintGraphPage
+// tsz:InspectorEmbed.tsz:4123 — <Box>
+var _arr_2126 = [_]Node{ .{ .style = .{ .flex_grow = 1 } }, .{ .style = .{ .flex_direction = .row, .justify_content = .center, .padding_left = 10, .padding_right = 10, .padding_bottom = 10 }, .children = &_arr_2125 } }; // ConstraintGraphPage
+// tsz:InspectorEmbed.tsz:4122 — <Canvas>
+var _arr_2127 = [_]Node{ .{ .style = .{ .flex_direction = .column, .width = -1, .height = -1 }, .children = &_arr_2126 } }; // ConstraintGraphPage
+// tsz:InspectorEmbed.tsz:4085 — <Canvas>
+var _arr_2128 = [_]Node{ .{ .canvas_path = true, .canvas_path_d = "M 0,25 L 0,75", .canvas_stroke_width = 3, .text_color = Color.rgb(20, 184, 166), .canvas_flow_speed = 1 }, .{ .canvas_path = true, .canvas_path_d = "M 0,125 C 0,160 -200,160 -200,175", .canvas_stroke_width = 2, .text_color = Color.rgb(168, 85, 247), .canvas_flow_speed = 1 }, .{ .canvas_path = true, .canvas_path_d = "M 0,125 C 0,160 200,160 200,175", .canvas_stroke_width = 2, .text_color = Color.rgb(249, 115, 22), .canvas_flow_speed = -1 }, .{ .canvas_path = true, .canvas_path_d = "M 200,225 L 200,275", .canvas_stroke_width = 1, .text_color = Color.rgb(74, 85, 104), .canvas_flow_speed = 1 }, .{ .canvas_node = true, .canvas_gx = 0, .canvas_gy = 0, .canvas_gw = 120, .canvas_gh = 50, .children = &_arr_2077 }, .{ .canvas_node = true, .canvas_gx = 0, .canvas_gy = 100, .canvas_gw = 120, .canvas_gh = 50, .children = &_arr_2079 }, .{ .canvas_node = true, .canvas_gx = -200, .canvas_gy = 200, .canvas_gw = 120, .canvas_gh = 50, .children = &_arr_2081 }, .{ .canvas_node = true, .canvas_gx = 200, .canvas_gy = 200, .canvas_gw = 140, .canvas_gh = 50, .children = &_arr_2083 }, .{ .canvas_node = true, .canvas_gx = 200, .canvas_gy = 300, .canvas_gw = 160, .canvas_gh = 50, .children = &_arr_2085 }, .{ .canvas_clamp = true, .children = &_arr_2127 } }; // ConstraintGraphPage
+// tsz:InspectorEmbed.tsz:4143 — <Box>
+var _arr_2129 = [_]Node{ .{ .style = .{ .width = 80, .height = 14, .background_color = Color.rgb(26, 32, 48), .border_radius = 2 } }, .{ .style = .{ .flex_grow = 1 } }, .{ .style = .{ .width = 50, .height = 14, .background_color = Color.rgb(26, 32, 48), .border_radius = 2 } }, .{ .style = .{ .width = 50, .height = 14, .background_color = Color.rgb(26, 32, 48), .border_radius = 2 } } }; // OverlayPage
+// tsz:InspectorEmbed.tsz:4141 — <Box>
+var _arr_2130 = [_]Node{ .{ .text = "Header", .font_size = 8, .text_color = Color.rgb(125, 135, 156) }, .{ .style = .{ .flex_direction = .row, .gap = 4 }, .children = &_arr_2129 } }; // OverlayPage
+// tsz:InspectorEmbed.tsz:4154 — <Box>
+var _arr_2131 = [_]Node{ .{ .text = "Toolbar", .font_size = 7, .text_color = Color.rgb(125, 135, 156) } }; // OverlayPage
+// tsz:InspectorEmbed.tsz:4157 — <Box>
+var _arr_2132 = [_]Node{ .{ .text = "TreeScroll", .font_size = 7, .text_color = Color.rgb(125, 135, 156) }, .{ .style = .{ .height = 14, .background_color = Color.rgb(24, 35, 52), .border_radius = 2 } }, .{ .style = .{ .height = 14, .background_color = Color.rgb(13, 17, 25), .border_radius = 2 } }, .{ .style = .{ .height = 14, .background_color = Color.rgb(13, 17, 25), .border_radius = 2 } }, .{ .style = .{ .height = 14, .background_color = Color.rgb(13, 17, 25), .border_radius = 2 } }, .{ .style = .{ .height = 14, .background_color = Color.rgb(24, 35, 52), .border_radius = 2 } }, .{ .style = .{ .height = 14, .background_color = Color.rgb(13, 17, 25), .border_radius = 2 } } }; // OverlayPage
+// tsz:InspectorEmbed.tsz:4152 — <Box>
+var _arr_2133 = [_]Node{ .{ .text = "TreePane", .font_size = 8, .text_color = Color.rgb(125, 135, 156) }, .{ .style = .{ .height = 24, .border_width = 1, .border_color = Color.rgb(125, 105, 196), .border_radius = 2, .padding = 2, .background_color = Color.rgb(20, 14, 26) }, .children = &_arr_2131 }, .{ .style = .{ .flex_grow = 1, .border_width = 1, .border_color = Color.rgb(125, 105, 196), .border_radius = 2, .padding = 3, .gap = 2, .background_color = Color.rgb(20, 14, 26) }, .children = &_arr_2132 } }; // OverlayPage
+// tsz:InspectorEmbed.tsz:4173 — <Box>
+var _arr_2134 = [_]Node{ .{ .text = "Identity", .font_size = 7, .text_color = Color.rgb(125, 135, 156) }, .{ .style = .{ .height = 10, .width = -0.7, .background_color = Color.rgb(26, 32, 48), .border_radius = 2 } }, .{ .style = .{ .height = 10, .width = -0.5, .background_color = Color.rgb(26, 32, 48), .border_radius = 2 } } }; // OverlayPage
+// tsz:InspectorEmbed.tsz:4183 — <Box>
+var _arr_2135 = [_]Node{ .{ .style = .{ .width = -0.5, .height = -0.5, .border_width = 1, .border_color = Color.rgba(72, 104, 200, 48), .border_radius = 2, .background_color = Color.rgb(15, 20, 32) } } }; // OverlayPage
+// tsz:InspectorEmbed.tsz:4182 — <Box>
+var _arr_2136 = [_]Node{ .{ .style = .{ .width = -0.7, .height = -0.6, .border_width = 1, .border_color = Color.rgba(72, 192, 104, 48), .border_radius = 2, .background_color = Color.rgb(15, 30, 20), .align_items = .center, .justify_content = .center }, .children = &_arr_2135 } }; // OverlayPage
+// tsz:InspectorEmbed.tsz:4180 — <Box>
+var _arr_2137 = [_]Node{ .{ .text = "BoxModel", .font_size = 7, .text_color = Color.rgb(125, 135, 156) }, .{ .style = .{ .flex_grow = 1, .border_width = 1, .border_color = Color.rgba(192, 104, 72, 48), .border_radius = 2, .padding = 3, .align_items = .center, .justify_content = .center, .background_color = Color.rgb(30, 20, 15) }, .children = &_arr_2136 } }; // OverlayPage
+// tsz:InspectorEmbed.tsz:4189 — <Box>
+var _arr_2138 = [_]Node{ .{ .text = "Style", .font_size = 7, .text_color = Color.rgb(125, 135, 156) }, .{ .style = .{ .height = 10, .width = -0.8, .background_color = Color.rgb(26, 32, 48), .border_radius = 2 } }, .{ .style = .{ .height = 10, .width = -0.6, .background_color = Color.rgb(26, 32, 48), .border_radius = 2 } }, .{ .style = .{ .height = 10, .width = -0.7, .background_color = Color.rgb(26, 32, 48), .border_radius = 2 } }, .{ .style = .{ .height = 10, .width = -0.5, .background_color = Color.rgb(26, 32, 48), .border_radius = 2 } } }; // OverlayPage
+// tsz:InspectorEmbed.tsz:4179 — <Box>
+var _arr_2139 = [_]Node{ .{ .style = .{ .flex_grow = 1, .height = 90, .border_width = 1, .border_color = Color.rgb(79, 142, 168), .border_radius = 2, .padding = 3, .gap = 2, .background_color = Color.rgb(10, 18, 24) }, .children = &_arr_2137 }, .{ .style = .{ .flex_grow = 1, .height = 90, .border_width = 1, .border_color = Color.rgb(79, 142, 168), .border_radius = 2, .padding = 3, .gap = 2, .background_color = Color.rgb(10, 18, 24) }, .children = &_arr_2138 } }; // OverlayPage
+// tsz:InspectorEmbed.tsz:4198 — <Box>
+var _arr_2140 = [_]Node{ .{ .text = "Children", .font_size = 7, .text_color = Color.rgb(125, 135, 156) }, .{ .style = .{ .height = 10, .width = -0.6, .background_color = Color.rgb(26, 32, 48), .border_radius = 2 } }, .{ .style = .{ .height = 10, .width = -0.45, .background_color = Color.rgb(26, 32, 48), .border_radius = 2 } } }; // OverlayPage
+// tsz:InspectorEmbed.tsz:4170 — <Box>
+var _arr_2141 = [_]Node{ .{ .text = "DetailPane", .font_size = 8, .text_color = Color.rgb(220, 233, 255) }, .{ .style = .{ .height = 60, .border_width = 1, .border_color = Color.rgb(79, 142, 168), .border_radius = 2, .padding = 3, .gap = 2, .background_color = Color.rgb(10, 18, 24) }, .children = &_arr_2134 }, .{ .style = .{ .flex_direction = .row, .gap = 4 }, .children = &_arr_2139 }, .{ .style = .{ .height = 50, .border_width = 1, .border_color = Color.rgb(79, 142, 168), .border_radius = 2, .padding = 3, .gap = 2, .background_color = Color.rgb(10, 18, 24) }, .children = &_arr_2140 } }; // OverlayPage
+// tsz:InspectorEmbed.tsz:4151 — <Box>
+var _arr_2142 = [_]Node{ .{ .style = .{ .width = 252, .border_width = 1, .border_color = Color.rgb(161, 140, 76), .border_radius = 3, .padding = 4, .gap = 3, .background_color = Color.rgb(20, 16, 8) }, .children = &_arr_2133 }, .{ .style = .{ .width = 1, .background_color = Color.rgb(26, 32, 48) } }, .{ .style = .{ .flex_grow = 1, .border_width = 2, .border_color = Color.rgb(129, 182, 255), .border_radius = 3, .padding = 4, .gap = 4, .background_color = Color.rgba(97, 149, 250, 16) }, .children = &_arr_2141 } }; // OverlayPage
+// tsz:InspectorEmbed.tsz:4206 — <Box>
+var _arr_2143 = [_]Node{ .{ .text = "StatusBar", .font_size = 7, .text_color = Color.rgb(92, 100, 120) } }; // OverlayPage
+// tsz:InspectorEmbed.tsz:4138 — <Box>
+var _arr_2144 = [_]Node{ .{ .text = "Panel", .font_size = 9, .text_color = Color.rgb(125, 135, 156) }, .{ .style = .{ .height = 48, .border_width = 1, .border_color = Color.rgb(79, 140, 114), .border_radius = 3, .padding = 4, .gap = 2, .background_color = Color.rgba(10, 20, 14, 64) }, .children = &_arr_2130 }, .{ .style = .{ .flex_direction = .row, .flex_grow = 1, .gap = 4 }, .children = &_arr_2142 }, .{ .style = .{ .height = 22, .border_width = 1, .border_color = Color.rgba(79, 107, 154, 48), .border_radius = 2, .padding = 2, .background_color = Color.rgb(10, 12, 19) }, .children = &_arr_2143 } }; // OverlayPage
+// tsz:InspectorEmbed.tsz:4137 — <Canvas>
+var _arr_2145 = [_]Node{ .{ .style = .{ .width = -1, .height = -1, .border_width = 2, .border_color = Color.rgb(79, 107, 154), .border_radius = 4, .padding = 6, .gap = 4, .background_color = Color.rgba(9, 13, 21, 128) }, .children = &_arr_2144 } }; // OverlayPage
+// tsz:InspectorEmbed.tsz:4216 — <Box>
+var _arr_2146 = [_]Node{ .{ .style = .{ .width = 8, .height = 8, .border_radius = 4, .background_color = Color.rgb(97, 149, 250) } }, .{ .text = "Select mode", .font_size = 11, .text_color = Color.rgb(224, 230, 240) }, .{ .style = .{ .width = 1, .height = 16, .background_color = Color.rgb(26, 31, 46) } }, .{ .text = "hover to inspect, click to select", .font_size = 11, .text_color = Color.rgb(74, 85, 104) }, .{ .style = .{ .width = 1, .height = 16, .background_color = Color.rgb(26, 31, 46) } }, .{ .text = "DetailPane", .font_size = 11, .text_color = Color.rgb(129, 182, 255) }, .{ .text = "selected", .font_size = 9, .text_color = Color.rgb(74, 85, 104) } }; // OverlayPage
+// tsz:InspectorEmbed.tsz:4215 — <Box>
+var _arr_2147 = [_]Node{ .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 10, .padding = 8, .padding_left = 14, .padding_right = 14, .background_color = Color.rgb(10, 14, 24), .border_radius = 8, .border_width = 1, .border_color = Color.rgb(26, 31, 46) }, .children = &_arr_2146 } }; // OverlayPage
+// tsz:InspectorEmbed.tsz:4213 — <Box>
+var _arr_2148 = [_]Node{ .{ .style = .{ .flex_grow = 1 } }, .{ .style = .{ .flex_direction = .row, .justify_content = .center, .padding_left = 10, .padding_right = 10, .padding_bottom = 10 }, .children = &_arr_2147 } }; // OverlayPage
+// tsz:InspectorEmbed.tsz:4212 — <Canvas>
+var _arr_2149 = [_]Node{ .{ .style = .{ .flex_direction = .column, .width = -1, .height = -1 }, .children = &_arr_2148 } }; // OverlayPage
+// tsz:InspectorEmbed.tsz:4136 — <Canvas>
+var _arr_2150 = [_]Node{ .{ .canvas_node = true, .canvas_gx = 0, .canvas_gy = 0, .canvas_gw = 810, .canvas_gh = 600, .children = &_arr_2145 }, .{ .canvas_clamp = true, .children = &_arr_2149 } }; // OverlayPage
+// tsz:InspectorEmbed.tsz:4288 — <Box>
+var _arr_2151 = [_]Node{ .{ .text = "Dirty", .font_size = 10, .text_color = Color.rgb(240, 192, 64) }, .{ .text = "Ready", .font_size = 10, .text_color = Color.rgb(80, 200, 120) }, .{ .text = "", .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } };
+// tsz:InspectorEmbed.tsz:4294 — <Box>
+var _arr_2152 = [_]Node{ .{ .text = "", .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "", .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "", .font_size = 10, .text_color = Color.rgb(80, 200, 120) }, .{ .text = "", .font_size = 10, .text_color = Color.rgb(240, 192, 64) }, .{ .text = "", .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } };
+// tsz:InspectorEmbed.tsz:4287 — <Box>
+var _arr_2153 = [_]Node{ .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 8 }, .children = &_arr_2151 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 12 }, .children = &_arr_2152 } };
 // tsz:InspectorEmbed.tsz:4265 — <Box>
-var _arr_2079 = [_]Node{ .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 6, .padding = 8, .padding_left = 10, .padding_right = 10, .background_color = Color.rgb(10, 12, 19) }, .children = &_arr_27 }, .{ .style = .{ .height = 1, .background_color = Color.rgb(26, 32, 48) } }, .{ .style = .{ .flex_direction = .row, .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(12, 16, 24) }, .children = &_arr_1674 }, .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(8, 10, 16) }, .children = &_arr_1758 }, .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(6, 8, 16) }, .children = &_arr_1880 }, .{ .style = .{ .overflow = .auto, .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(8, 10, 16) }, .children = &_arr_1924 }, .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(8, 10, 16) }, .children = &_arr_2005 }, .{ .style = .{ .overflow = .auto, .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(8, 10, 16) }, .children = &_arr_2034 }, .{ .style = .{ .overflow = .auto, .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(8, 10, 16) }, .children = &_arr_2075 }, .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center, .height = 22, .padding_left = 10, .padding_right = 10, .background_color = Color.rgb(10, 12, 19), .border_width = 1, .border_color = Color.rgb(26, 32, 48) }, .children = &_arr_2078 } };
-pub var root = Node{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(11, 13, 21) }, .children = &_arr_2079 };
+var _arr_2154 = [_]Node{ .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 6, .padding = 8, .padding_left = 10, .padding_right = 10, .background_color = Color.rgb(10, 12, 19) }, .children = &_arr_27 }, .{ .style = .{ .height = 1, .background_color = Color.rgb(26, 32, 48) } }, .{ .style = .{ .flex_direction = .row, .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(12, 16, 24) }, .children = &_arr_1674 }, .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(8, 10, 16) }, .children = &_arr_1758 }, .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(6, 8, 16) }, .children = &_arr_1880 }, .{ .style = .{ .overflow = .auto, .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(8, 10, 16) }, .children = &_arr_1924 }, .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(8, 10, 16) }, .children = &_arr_2005 }, .{ .style = .{ .overflow = .auto, .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(8, 10, 16) }, .children = &_arr_2034 }, .{ .style = .{ .overflow = .auto, .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(8, 10, 16) }, .children = &_arr_2075 }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0 }, .canvas_type = "canvas", .canvas_view_set = true, .canvas_view_x = 0, .canvas_view_y = 100, .canvas_view_zoom = 1, .children = &_arr_2128 }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0 }, .canvas_type = "canvas", .canvas_view_set = true, .canvas_view_x = 400, .canvas_view_y = 300, .canvas_view_zoom = 0.8, .children = &_arr_2150 }, .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center, .height = 22, .padding_left = 10, .padding_right = 10, .background_color = Color.rgb(10, 12, 19), .border_width = 1, .border_color = Color.rgb(26, 32, 48) }, .children = &_arr_2153 } };
+pub var root = Node{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(11, 13, 21) }, .children = &_arr_2154 };
 
 // ── Dynamic text buffers ─────────────────────────────────────────
 var _dyn_buf_0: [64]u8 = undefined;
@@ -4311,6 +4461,50 @@ fn _handler_press_24() void {
 
 fn _handler_press_25() void {
     state.setSlot(0, 3);
+}
+
+fn _handler_press_26() void {
+    qjs_runtime.callGlobalStr("navTo", "parent");
+}
+
+fn _handler_press_27() void {
+    qjs_runtime.callGlobalStr("navTo", "child");
+}
+
+fn _handler_press_28() void {
+    qjs_runtime.callGlobalStr("navTo", "sibling");
+}
+
+fn _handler_change_29() void {
+    qjs_runtime.callGlobal("onSearchChange");
+}
+
+fn _handler_press_30() void {
+    qjs_runtime.callGlobalStr("toggleFilter", "Root");
+}
+
+fn _handler_press_31() void {
+    qjs_runtime.callGlobalStr("toggleFilter", "Parent");
+}
+
+fn _handler_press_32() void {
+    qjs_runtime.callGlobalStr("toggleFilter", "Child");
+}
+
+fn _handler_press_33() void {
+    qjs_runtime.callGlobalStr("toggleFilter", "Fixed");
+}
+
+fn _handler_press_34() void {
+    qjs_runtime.callGlobalStr("toggleFilter", "Flex");
+}
+
+fn _handler_press_35() void {
+    qjs_runtime.callGlobalStr("toggleFilter", "Dynamic");
+}
+
+fn _handler_press_36() void {
+    qjs_runtime.callGlobal("toggleFlow");
 }
 
 
@@ -4486,21 +4680,21 @@ pub fn _initState() void {
 
 fn _updateDynamicTexts() void {
     _dyn_text_0 = std.fmt.bufPrint(&_dyn_buf_0, "{d} nodes", .{ state.getSlot(3) }) catch "";
-    _arr_2076[2].text = _dyn_text_0;
+    _arr_2151[2].text = _dyn_text_0;
     _dyn_text_1 = std.fmt.bufPrint(&_dyn_buf_1, "{d}r {d}g", .{ state.getSlot(9), state.getSlot(10) }) catch "";
-    _arr_2076[3].text = _dyn_text_1;
+    _arr_2151[3].text = _dyn_text_1;
     _dyn_text_2 = std.fmt.bufPrint(&_dyn_buf_2, "{d}us lay", .{ state.getSlot(7) }) catch "";
-    _arr_2077[0].text = _dyn_text_2;
+    _arr_2152[0].text = _dyn_text_2;
     _dyn_text_3 = std.fmt.bufPrint(&_dyn_buf_3, "{d}us pnt", .{ state.getSlot(8) }) catch "";
-    _arr_2077[1].text = _dyn_text_3;
+    _arr_2152[1].text = _dyn_text_3;
     _dyn_text_4 = std.fmt.bufPrint(&_dyn_buf_4, "{d} fps", .{ state.getSlot(2) }) catch "";
-    _arr_2077[2].text = _dyn_text_4;
+    _arr_2152[2].text = _dyn_text_4;
     _dyn_text_5 = std.fmt.bufPrint(&_dyn_buf_5, "{d} fps", .{ state.getSlot(2) }) catch "";
-    _arr_2077[3].text = _dyn_text_5;
+    _arr_2152[3].text = _dyn_text_5;
     _dyn_text_6 = std.fmt.bufPrint(&_dyn_buf_6, "{d} fps", .{ state.getSlot(2) }) catch "";
-    _arr_2077[4].text = _dyn_text_6;
+    _arr_2152[4].text = _dyn_text_6;
     _dyn_text_7 = std.fmt.bufPrint(&_dyn_buf_7, "{d}x{d}", .{ state.getSlot(4), state.getSlot(5) }) catch "";
-    _arr_2077[5].text = _dyn_text_7;
+    _arr_2152[5].text = _dyn_text_7;
     _arr_54[0].text_color = Color.rgb(143, 171, 239);
     _arr_69[0].text_color = Color.rgb(143, 171, 239);
     _arr_85[0].text_color = Color.rgb(119, 193, 179);
@@ -4622,25 +4816,31 @@ fn _updateConditionals() void {
     _arr_1404[1].style.display = if ((state.getSlot(0) ==  1)) .flex else .none;
     _arr_1404[2].style.display = if ((state.getSlot(0) ==  2)) .flex else .none;
     _arr_1404[3].style.display = if ((state.getSlot(0) ==  3)) .flex else .none;
-    _arr_2079[2].style.display = if ((state.getSlot(1) ==  0)) .flex else .none;
-    _arr_2079[3].style.display = if ((state.getSlot(1) ==  1)) .flex else .none;
-    _arr_2079[4].style.display = if ((state.getSlot(1) ==  2)) .flex else .none;
-    _arr_2079[5].style.display = if ((state.getSlot(1) ==  3)) .flex else .none;
-    _arr_2079[6].style.display = if ((state.getSlot(1) ==  4)) .flex else .none;
-    _arr_2079[7].style.display = if ((state.getSlot(1) ==  5)) .flex else .none;
-    _arr_2079[8].style.display = if ((state.getSlot(1) ==  6)) .flex else .none;
-    _arr_2076[0].style.display = if ((state.getSlot(6) ==  1)) .flex else .none;
-    _arr_2076[1].style.display = if ((state.getSlot(6) ==  0)) .flex else .none;
-    _arr_2077[2].style.display = if ((state.getSlot(2) >=  50)) .flex else .none;
-    _arr_2077[3].style.display = if ((state.getSlot(2) <  50 and state.getSlot(2) >=  30)) .flex else .none;
-    _arr_2077[4].style.display = if ((state.getSlot(2) <  30)) .flex else .none;
-    _arr_2079[2].style.display = if ((state.getSlot(1) == 0)) .flex else .none;
-    _arr_2079[3].style.display = if ((state.getSlot(1) == 1)) .flex else .none;
-    _arr_2079[4].style.display = if ((state.getSlot(1) == 2)) .flex else .none;
-    _arr_2079[5].style.display = if ((state.getSlot(1) == 3)) .flex else .none;
-    _arr_2079[6].style.display = if ((state.getSlot(1) == 4)) .flex else .none;
-    _arr_2079[7].style.display = if ((state.getSlot(1) == 5)) .flex else .none;
-    _arr_2079[8].style.display = if ((state.getSlot(1) == 6)) .flex else .none;
+    _arr_2154[2].style.display = if ((state.getSlot(1) ==  0)) .flex else .none;
+    _arr_2154[3].style.display = if ((state.getSlot(1) ==  1)) .flex else .none;
+    _arr_2154[4].style.display = if ((state.getSlot(1) ==  2)) .flex else .none;
+    _arr_2154[5].style.display = if ((state.getSlot(1) ==  3)) .flex else .none;
+    _arr_2154[6].style.display = if ((state.getSlot(1) ==  4)) .flex else .none;
+    _arr_2154[7].style.display = if ((state.getSlot(1) ==  5)) .flex else .none;
+    _arr_2154[8].style.display = if ((state.getSlot(1) ==  6)) .flex else .none;
+    _arr_2124[0].style.display = if (((state.getSlot(12))) != 0) .flex else .none;
+    _arr_2124[1].style.display = if (((state.getSlot(11))) != 0) .flex else .none;
+    _arr_2154[9].style.display = if ((state.getSlot(1) ==  7)) .flex else .none;
+    _arr_2154[10].style.display = if ((state.getSlot(1) ==  8)) .flex else .none;
+    _arr_2151[0].style.display = if ((state.getSlot(6) ==  1)) .flex else .none;
+    _arr_2151[1].style.display = if ((state.getSlot(6) ==  0)) .flex else .none;
+    _arr_2152[2].style.display = if ((state.getSlot(2) >=  50)) .flex else .none;
+    _arr_2152[3].style.display = if ((state.getSlot(2) <  50 and state.getSlot(2) >=  30)) .flex else .none;
+    _arr_2152[4].style.display = if ((state.getSlot(2) <  30)) .flex else .none;
+    _arr_2154[2].style.display = if ((state.getSlot(1) == 0)) .flex else .none;
+    _arr_2154[3].style.display = if ((state.getSlot(1) == 1)) .flex else .none;
+    _arr_2154[4].style.display = if ((state.getSlot(1) == 2)) .flex else .none;
+    _arr_2154[5].style.display = if ((state.getSlot(1) == 3)) .flex else .none;
+    _arr_2154[6].style.display = if ((state.getSlot(1) == 4)) .flex else .none;
+    _arr_2154[7].style.display = if ((state.getSlot(1) == 5)) .flex else .none;
+    _arr_2154[8].style.display = if ((state.getSlot(1) == 6)) .flex else .none;
+    _arr_2154[9].style.display = if ((state.getSlot(1) == 7)) .flex else .none;
+    _arr_2154[10].style.display = if ((state.getSlot(1) == 8)) .flex else .none;
 }
 
 
@@ -4657,6 +4857,8 @@ pub fn _appInit() void {
     input.register(8);
     input.register(9);
     input.register(10);
+    input.register(11);
+    input.setOnChange(11, _handler_change_29);
     _updateDynamicTexts();
     _updateConditionals();
 }

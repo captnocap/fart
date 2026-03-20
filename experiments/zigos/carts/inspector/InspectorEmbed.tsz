@@ -51,6 +51,8 @@ function App() {
       {activeTab == 4 && <NetworkPage />}
       {activeTab == 5 && <ConsolePage />}
       {activeTab == 6 && <LogsPage />}
+      {activeTab == 7 && <ConstraintGraphPage />}
+      {activeTab == 8 && <OverlayPage />}
       <C.StatusBar>
         <C.StatusLeft>
           {statusDirty == 1 && <C.StatusTextWarn>Dirty</C.StatusTextWarn>}
