@@ -218,6 +218,7 @@ const VideoEntry = struct {
 
 var entries: [MAX_VIDEOS]VideoEntry = [_]VideoEntry{.{}} ** MAX_VIDEOS;
 var entry_count: usize = 0;
+var _dbg_frame: u32 = 0; // debug frame counter (prints every 60 frames)
 
 // ════════════════════════════════════════════════════════════════════════
 // GL context setup (dedicated hidden window for mpv rendering)
@@ -481,8 +482,6 @@ fn loadVideo(src: []const u8) void {
     _ = mpv_fns.set_option_string(handle, "input-default-bindings", "no");
     _ = mpv_fns.set_option_string(handle, "input-vo-keyboard", "no");
     _ = mpv_fns.set_option_string(handle, "pause", "yes");
-    // Disable mpv's internal frame timing — we drive the render loop
-    _ = mpv_fns.set_option_string(handle, "video-timing-offset", "0");
 
     var err = mpv_fns.initialize(handle);
     if (err < 0) {
@@ -597,6 +596,7 @@ fn createRenderContext(handle: ?*anyopaque, out_ctx: *?*anyopaque) RenderMode {
 
 /// Call once per frame before paint.
 pub fn update() void {
+    _dbg_frame +%= 1;
     if (!lib_available) return;
 
     const device = gpu_core.getDevice() orelse return;
@@ -623,6 +623,10 @@ pub fn update() void {
                     if (initVideoResources(e, device, w, h)) {
                         e.status = .ready;
                         std.debug.print("[videos] ready: {s} ({d}x{d}, {s})\n", .{ e.src, w, h, @tagName(e.mode) });
+                        // Force-render first frame immediately (mpv fires RENDER_UPDATE_FRAME
+                        // during loadVideo, before our first update() — we miss it for paused videos)
+                        if (e.mode == .opengl) renderGL(e, queue) else renderSW(e, queue);
+                        std.debug.print("[videos] first frame rendered\n", .{});
                     } else {
                         e.status = .@"error";
                         std.debug.print("[videos] failed to create resources for {s}\n", .{e.src});
@@ -635,7 +639,9 @@ pub fn update() void {
         if (e.status == .ready) {
             if (e.render_ctx) |ctx| {
                 const flags = mpv_fns.render_ctx_update(ctx);
+                if (_dbg_frame % 60 == 0) std.debug.print("[videos:dbg] update: flags=0x{x} entry_count={d} mode={s}\n", .{ flags, entry_count, @tagName(e.mode) });
                 if (flags & MPV_RENDER_UPDATE_FRAME != 0) {
+                    if (_dbg_frame % 60 == 0) std.debug.print("[videos:dbg] NEW FRAME — rendering\n", .{});
                     if (e.mode == .opengl) {
                         renderGL(e, queue);
                     } else {
@@ -754,16 +760,22 @@ fn renderGL(e: *VideoEntry, queue: *wgpu.Queue) void {
         .{ .type = 0, .data = null },
     };
 
+    if (_dbg_frame % 60 == 0) std.debug.print("[videos:dbg] renderGL: fbo={d} {d}x{d} calling mpv_render\n", .{ e.fbo, w, h });
     const err = mpv_fns.render_ctx_render(ctx, &render_params);
-    if (err < 0) return;
+    if (err < 0) {
+        std.debug.print("[videos:dbg] renderGL: mpv_render FAILED err={d}\n", .{err});
+        return;
+    }
     mpv_fns.render_ctx_report_swap(ctx);
 
     // Read back from private FBO to CPU buffer
+    if (_dbg_frame % 60 == 0) std.debug.print("[videos:dbg] renderGL: glReadPixels {d}x{d}\n", .{ w, h });
     gl.bindFramebuffer(GL_READ_FRAMEBUFFER, e.fbo);
     gl.readPixels(0, 0, @intCast(w), @intCast(h), GL_RGBA, GL_UNSIGNED_BYTE, @ptrCast(buf.ptr));
     gl.bindFramebuffer(GL_READ_FRAMEBUFFER, 0);
 
     // Upload to wgpu texture
+    if (_dbg_frame % 60 == 0) std.debug.print("[videos:dbg] renderGL: writeTexture {d}x{d}\n", .{ w, h });
     uploadToWgpu(tex, buf, w, h, queue);
 }
 
@@ -830,39 +842,29 @@ fn uploadToWgpu(tex: *wgpu.Texture, buf: []u8, w: u32, h: u32, queue: *wgpu.Queu
 /// Ensures the video is loaded and queues the textured quad for rendering.
 /// Returns true if a video quad was queued (caller should skip background paint).
 pub fn paintVideo(src: []const u8, x: f32, y: f32, w: f32, h: f32, opacity: f32) bool {
+    if (_dbg_frame % 120 == 1) std.debug.print("[videos:dbg] paintVideo CALLED src_len={d} rect=({d:.0},{d:.0},{d:.0},{d:.0})\n", .{ src.len, x, y, w, h });
     var entry = findEntry(src);
     if (entry == null) {
         loadVideo(src);
         entry = findEntry(src);
     }
-    const e = entry orelse return false;
+    const e = entry orelse {
+        if (_dbg_frame % 60 == 0) std.debug.print("[videos:dbg] paintVideo: no entry for src\n", .{});
+        return false;
+    };
     e.active = true;
 
-    if (e.status != .ready) return false;
-    const bg = e.bind_group orelse return false;
+    if (e.status != .ready) {
+        if (_dbg_frame % 60 == 0) std.debug.print("[videos:dbg] paintVideo: status={s} (not ready)\n", .{@tagName(e.status)});
+        return false;
+    }
+    const bg = e.bind_group orelse {
+        if (_dbg_frame % 60 == 0) std.debug.print("[videos:dbg] paintVideo: no bind_group!\n", .{});
+        return false;
+    };
     if (e.width == 0 or e.height == 0) return false;
 
-    // Aspect-ratio-aware "contain" fit: scale video to fit container, center it
-    const vid_w: f32 = @floatFromInt(e.width);
-    const vid_h: f32 = @floatFromInt(e.height);
-    const vid_aspect = vid_w / vid_h;
-    const box_aspect = w / h;
-
-    var draw_w: f32 = undefined;
-    var draw_h: f32 = undefined;
-    if (vid_aspect > box_aspect) {
-        // Video wider than container — fit to width, letterbox top/bottom
-        draw_w = w;
-        draw_h = w / vid_aspect;
-    } else {
-        // Video taller than container — fit to height, pillarbox left/right
-        draw_h = h;
-        draw_w = h * vid_aspect;
-    }
-    const draw_x = x + (w - draw_w) / 2;
-    const draw_y = y + (h - draw_h) / 2;
-
-    images.queueQuad(draw_x, draw_y, draw_w, draw_h, opacity, bg);
+    images.queueQuad(x, y, w, h, opacity, bg);
     return true;
 }
 
@@ -948,7 +950,7 @@ pub fn getPaused(src: []const u8) bool {
 // ════════════════════════════════════════════════════════════════════════
 
 fn destroyEntry(e: *VideoEntry) void {
-    // Stop playback first to prevent mpv_terminate_destroy from blocking
+    // Stop playback before destruction to prevent mpv_terminate_destroy blocking
     if (e.handle) |h| {
         _ = mpv_fns.set_property_string(h, "pause", "yes");
         var stop_cmd = [_]?[*:0]const u8{ "stop", null };
@@ -1032,11 +1034,7 @@ pub fn videoCount() usize {
     return entry_count;
 }
 
-// ════════════════════════════════════════════════════════════════════════
-// Default keyboard controls — Space, arrows, M
-// ════════════════════════════════════════════════════════════════════════
-
-/// Find any entry that is ready (for keyboard routing).
+/// Find any video that is ready (for keyboard routing).
 fn findAnyReady() ?*VideoEntry {
     for (entries[0..entry_count]) |*e| {
         if (e.status == .ready and e.handle != null) return e;
@@ -1048,44 +1046,41 @@ fn findAnyReady() ?*VideoEntry {
 /// Space: play/pause, Left/Right: seek ±5s, Up/Down: volume ±5, M: mute
 pub fn handleKey(sym: c_int) bool {
     const e = findAnyReady() orelse return false;
-    const src = e.src;
     if (sym == c.SDLK_SPACE) {
         e.paused = !e.paused;
         if (e.handle) |h| _ = mpv_fns.set_property_string(h, "pause", if (e.paused) "yes" else "no");
         return true;
     } else if (sym == c.SDLK_LEFT) {
-        seekRelative(src, -5.0);
+        seekRelative(e, -5.0);
         return true;
     } else if (sym == c.SDLK_RIGHT) {
-        seekRelative(src, 5.0);
+        seekRelative(e, 5.0);
         return true;
     } else if (sym == c.SDLK_UP) {
-        adjustVolume(src, 5);
+        adjustVolume(e, 5);
         return true;
     } else if (sym == c.SDLK_DOWN) {
-        adjustVolume(src, -5);
+        adjustVolume(e, -5);
         return true;
     } else if (sym == c.SDLK_m) {
         e.muted = !e.muted;
-        setMuted(src, e.muted);
+        if (e.handle) |h| _ = mpv_fns.set_property_string(h, "mute", if (e.muted) "yes" else "no");
         return true;
     }
     return false;
 }
 
-fn seekRelative(src: []const u8, delta: f64) void {
-    const e = findEntry(src) orelse return;
+fn seekRelative(e: *VideoEntry, delta: f64) void {
     if (e.handle) |h| {
         var buf: [32]u8 = undefined;
         const s = std.fmt.bufPrint(&buf, "{d:.1}", .{delta}) catch return;
         buf[s.len] = 0;
-        const cmd = [_]?[*:0]const u8{ "seek", buf[0..s.len :0], "relative", null };
+        var cmd = [_]?[*:0]const u8{ "seek", buf[0..s.len :0], "relative", null };
         _ = mpv_fns.command(h, &cmd);
     }
 }
 
-fn adjustVolume(src: []const u8, delta: f64) void {
-    const e = findEntry(src) orelse return;
+fn adjustVolume(e: *VideoEntry, delta: f64) void {
     if (e.handle) |h| {
         const cur = getMpvDouble(h, "volume") orelse 100;
         const nv = @max(0, @min(150, cur + delta));

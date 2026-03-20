@@ -21,6 +21,7 @@ const telemetry = @import("telemetry.zig");
 const devtools = @import("devtools.zig");
 const testharness = @import("testharness.zig");
 const videos = @import("videos.zig");
+const render_surfaces = @import("render_surfaces.zig");
 const filedrop = @import("filedrop.zig");
 
 const input = @import("input.zig");
@@ -249,6 +250,11 @@ noinline fn paintNodeVisuals(node: *Node) void {
         _ = videos.paintVideo(src, r.x, r.y, r.w, r.h, g_paint_opacity);
     }
 
+    // Render surface — screen capture, webcam, VM, etc.
+    if (node.render_src) |src| {
+        _ = render_surfaces.paintSurface(src, r.x, r.y, r.w, r.h, g_paint_opacity);
+    }
+
     selection.paintHighlight(node, r.x, r.y);
 
     if (node.text) |t| {
@@ -408,6 +414,9 @@ pub fn run(config: AppConfig) !void {
     videos.init();
     defer videos.deinit();
 
+    render_surfaces.init();
+    defer render_surfaces.deinit();
+
     // GPU init
     gpu.init(window) catch |err| {
         std.debug.print("wgpu init failed: {}\n", .{err});
@@ -460,7 +469,10 @@ pub fn run(config: AppConfig) !void {
             if (windows.routeEvent(&event)) continue;
 
             switch (event.type) {
-                c.SDL_QUIT => running = false,
+                c.SDL_QUIT => {
+                    std.debug.print("[engine:dbg] SDL_QUIT received — setting running=false\n", .{});
+                    running = false;
+                },
                 c.SDL_WINDOWEVENT => {
                     switch (event.window.event) {
                         c.SDL_WINDOWEVENT_SIZE_CHANGED => {
@@ -677,6 +689,9 @@ pub fn run(config: AppConfig) !void {
 
         // Video update — poll mpv for new frames before paint
         videos.update();
+
+        // Render surfaces update — poll XShm/FFmpeg/VNC for new frames
+        render_surfaces.update();
 
         // Cursor blink — update before paint so cursor state is fresh
         const now_tick = c.SDL_GetTicks();
