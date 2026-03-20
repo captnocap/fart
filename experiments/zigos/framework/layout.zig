@@ -145,6 +145,7 @@ pub const Node = struct {
     code_language: CodeLanguage = .none,
     image_src: ?[]const u8 = null,
     video_src: ?[]const u8 = null,
+    render_src: ?[]const u8 = null,
     input_id: ?u8 = null,
     placeholder: ?[]const u8 = null,
     debug_name: ?[]const u8 = null,
@@ -657,6 +658,11 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
         for (node.children) |*child| {
             layoutNode(child, px, py, pw, ph);
         }
+        return;
+    }
+    // Video/Render: fill parent bounds (same as Canvas.Clamp). No children, no fallback.
+    if (node.video_src != null or node.render_src != null) {
+        node.computed = .{ .x = px, .y = py, .w = pw, .h = ph };
         return;
     }
     // Canvas.Node: use gw/gh as fixed dimensions, lay out children within them.

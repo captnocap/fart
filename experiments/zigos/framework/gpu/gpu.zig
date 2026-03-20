@@ -112,6 +112,14 @@ pub fn getQueue() ?*wgpu.Queue {
     return g_queue;
 }
 
+pub fn getWidth() u32 {
+    return g_width;
+}
+
+pub fn getHeight() u32 {
+    return g_height;
+}
+
 pub fn getFormat() wgpu.TextureFormat {
     return g_format;
 }

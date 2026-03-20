@@ -218,6 +218,7 @@ const VideoEntry = struct {
 };
 
 var entries: [MAX_VIDEOS]VideoEntry = [_]VideoEntry{.{}} ** MAX_VIDEOS;
+var _paint_logged: bool = false;
 var entry_count: usize = 0;
 
 // ════════════════════════════════════════════════════════════════════════
@@ -749,7 +750,7 @@ fn renderGL(e: *VideoEntry, queue: *wgpu.Queue) void {
         .h = @intCast(h),
         .internal_format = 0,
     };
-    var flip_y: c_int = 0; // GL convention (bottom-up) — shader flips UV.y
+    var flip_y: c_int = 1; // mpv outputs top-down; CPU flip cancels shader UV.y flip
     var block_time: c_int = 0; // don't block waiting for display refresh
     var render_params = [_]MpvRenderParam{
         .{ .type = MPV_RENDER_PARAM_OPENGL_FBO, .data = @ptrCast(&mpv_fbo) },
@@ -767,6 +768,25 @@ fn renderGL(e: *VideoEntry, queue: *wgpu.Queue) void {
     gl.bindFramebuffer(GL_READ_FRAMEBUFFER, e.fbo);
     gl.readPixels(0, 0, @intCast(w), @intCast(h), GL_RGBA, GL_UNSIGNED_BYTE, @ptrCast(buf.ptr));
     gl.bindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+
+    // Flip rows vertically — glReadPixels returns bottom-up from the FBO.
+    // The shared image shader has UV Y-flip (1.0 - corner.y), so this CPU flip
+    // cancels it out → correct orientation. Same approach as render_surfaces.zig.
+    const row_bytes: usize = @as(usize, w) * 4;
+    var top: usize = 0;
+    var bot: usize = h - 1;
+    while (top < bot) {
+        const top_off = top * row_bytes;
+        const bot_off = bot * row_bytes;
+        var col: usize = 0;
+        while (col < row_bytes) : (col += 1) {
+            buf[top_off + col] ^= buf[bot_off + col];
+            buf[bot_off + col] ^= buf[top_off + col];
+            buf[top_off + col] ^= buf[bot_off + col];
+        }
+        top += 1;
+        bot -= 1;
+    }
 
     // Upload to wgpu texture
     uploadToWgpu(tex, buf, w, h, queue);
@@ -847,23 +867,29 @@ pub fn paintVideo(src: []const u8, x: f32, y: f32, w: f32, h: f32, opacity: f32)
     const bg = e.bind_group orelse return false;
     if (e.width == 0 or e.height == 0) return false;
 
-    // Aspect-ratio "contain" fit — but only when container has sane dimensions.
-    // Layout can produce h=9999 (proportional fallback for unconstrained containers);
-    // in that case just use video's native aspect to compute height from width.
+    // Clamp container height to window bounds (layout can produce h=9999
+    // from the proportional fallback on unconstrained flex containers).
+    // Then aspect-ratio "contain" fit within the clamped rect.
+    const win_h: f32 = @floatFromInt(gpu_core.getHeight());
+    const ch = @min(h, win_h - y); // visible height from y to bottom of window
     const vid_w: f32 = @floatFromInt(e.width);
     const vid_h: f32 = @floatFromInt(e.height);
     const vid_aspect = vid_w / vid_h;
-    const clamped_h = if (h > w * 4) w / vid_aspect else h; // clamp absurd heights
-    const box_aspect = w / clamped_h;
+    const box_aspect = w / ch;
     var draw_w = w;
-    var draw_h = clamped_h;
+    var draw_h = ch;
     if (vid_aspect > box_aspect) {
         draw_h = w / vid_aspect;
     } else if (vid_aspect < box_aspect) {
-        draw_w = clamped_h * vid_aspect;
+        draw_w = ch * vid_aspect;
     }
     const draw_x = x + (w - draw_w) / 2;
-    const draw_y = y + (clamped_h - draw_h) / 2;
+    const draw_y = y + (ch - draw_h) / 2;
+
+    if (!_paint_logged) {
+        std.debug.print("[videos] paintVideo: rect=({d:.0},{d:.0},{d:.0},{d:.0}) clamped_h={d:.0} vid={d}x{d} draw=({d:.0},{d:.0},{d:.0},{d:.0})\n", .{ x, y, w, h, ch, e.width, e.height, draw_x, draw_y, draw_w, draw_h });
+        _paint_logged = true;
+    }
 
     images.queueQuad(draw_x, draw_y, draw_w, draw_h, opacity, bg);
     return true;
@@ -951,7 +977,7 @@ pub fn getPaused(src: []const u8) bool {
 // ════════════════════════════════════════════════════════════════════════
 
 fn destroyEntry(e: *VideoEntry) void {
-    // Stop playback before destruction to prevent mpv_terminate_destroy blocking
+    std.debug.print("[videos] destroyEntry: stopping playback...\n", .{});
     if (e.handle) |h| {
         _ = mpv_fns.set_property_string(h, "pause", "yes");
         var stop_cmd = [_]?[*:0]const u8{ "stop", null };
@@ -969,7 +995,9 @@ fn destroyEntry(e: *VideoEntry) void {
         gl.deleteFramebuffers(1, &fbo);
         gl.deleteTextures(1, &tex);
     }
+    std.debug.print("[videos] destroyEntry: freeing render ctx...\n", .{});
     if (e.render_ctx) |ctx| mpv_fns.render_ctx_free(ctx);
+    std.debug.print("[videos] destroyEntry: render ctx freed, calling terminate_destroy...\n", .{});
     if (e.handle) |h| mpv_fns.terminate_destroy(h);
     if (e.pixel_buf) |buf| page_alloc.free(buf);
     e.* = .{};
