@@ -384,6 +384,16 @@ pub fn parseTemplateLiteralFromText(self: *Generator, inner: []const u8) !codege
                         try args.appendSlice(self.alloc, lv.expr);
                     },
                 }
+            } else if (self.map_item_param != null and std.mem.eql(u8, expr, self.map_item_param.?)) {
+                // .map() item param — will be rewritten to _item at emit time
+                try fmt.appendSlice(self.alloc, "{d}");
+                if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
+                try args.appendSlice(self.alloc, expr);
+            } else if (self.map_index_param != null and std.mem.eql(u8, expr, self.map_index_param.?)) {
+                // .map() index param — will be rewritten to _i at emit time
+                try fmt.appendSlice(self.alloc, "{d}");
+                if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
+                try args.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "@as(i64, @intCast({s}))", .{expr}));
             } else if (std.mem.indexOf(u8, expr, "(")) |paren_pos| blk: {
                 const func_name = expr[0..paren_pos];
                 if (self.isFFIFunc(func_name)) {

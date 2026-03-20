@@ -586,6 +586,11 @@ fn parseStateInitial(self: *Generator) codegen.StateInitial {
 }
 
 fn appendStateSlot(self: *Generator, getter: []const u8, setter: []const u8, initial: codegen.StateInitial) ?u32 {
+    // Deduplicate — top-level and App-body scans can find the same hook
+    for (0..self.state_count) |i| {
+        if (std.mem.eql(u8, self.state_slots[i].getter, getter)) return @intCast(i);
+    }
+
     if (self.state_count >= codegen.MAX_STATE_SLOTS) {
         self.setError("Too many state slots (limit: 128)");
         return null;
@@ -710,6 +715,114 @@ pub fn scanForUseState(self: *Generator, stop_at_return: bool) void {
     while (self.pos < self.lex.count) {
         if (self.isIdent("const") or self.isIdent("let")) {
             self.advance_token();
+
+            // const filtered = items.filter(item => expr)
+            // const parts = text.split(",")
+            if (self.curKind() == .identifier) {
+                const var_name = self.curText();
+                // Look ahead: identifier = source.filter(  or  identifier = source.split(
+                const look_base = self.pos;
+                if (look_base + 4 < self.lex.count and
+                    self.lex.get(look_base + 1).kind == .equals and
+                    self.lex.get(look_base + 2).kind == .identifier and
+                    self.lex.get(look_base + 3).kind == .dot and
+                    self.lex.get(look_base + 4).kind == .identifier)
+                {
+                    const source_name = self.lex.get(look_base + 2).text(self.source);
+                    const method = self.lex.get(look_base + 4).text(self.source);
+
+                    // .filter(): const filtered = items.filter(item => item > 5)
+                    if (std.mem.eql(u8, method, "filter")) {
+                        if (self.isArrayState(source_name)) |state_idx| {
+                            self.advance_token(); // var_name
+                            self.advance_token(); // =
+                            self.advance_token(); // source_name
+                            self.advance_token(); // .
+                            self.advance_token(); // filter
+                            if (self.curKind() == .lparen) self.advance_token(); // (
+                            if (self.curKind() == .lparen) self.advance_token(); // optional inner (
+                            const param_name = self.curText();
+                            self.advance_token(); // param
+                            if (self.curKind() == .rparen) self.advance_token(); // optional inner )
+                            if (self.curKind() == .arrow) self.advance_token(); // =>
+
+                            // Push param as local var to resolve in predicate
+                            const saved_lc = self.local_count;
+                            if (self.local_count < codegen.MAX_LOCALS) {
+                                self.local_vars[self.local_count] = .{ .name = param_name, .expr = "_item", .state_type = .int };
+                                self.local_count += 1;
+                            }
+                            const pred_expr = handlers.emitStateExpr(self) catch "";
+                            self.local_count = saved_lc;
+
+                            if (self.curKind() == .rparen) self.advance_token(); // closing )
+                            // Deduplicate — top-level and App-body scans can find the same declaration
+                            if (self.isComputedArray(var_name) != null) {
+                                if (self.curKind() == .semicolon) self.advance_token();
+                                continue;
+                            }
+                            if (self.computed_count < codegen.MAX_COMPUTED_ARRAYS) {
+                                self.computed_arrays[self.computed_count] = .{
+                                    .name = var_name,
+                                    .kind = .filter,
+                                    .element_type = .int,
+                                    .source_slot = self.arraySlotId(state_idx),
+                                    .predicate_expr = pred_expr,
+                                    .predicate_param = param_name,
+                                    .separator = "",
+                                };
+                                self.computed_count += 1;
+                            } else {
+                                self.setError("Too many computed arrays (limit: 16)");
+                            }
+                            if (self.curKind() == .semicolon) self.advance_token();
+                            continue;
+                        }
+                    }
+
+                    // .split(): const parts = text.split(",")
+                    if (std.mem.eql(u8, method, "split")) {
+                        if (self.isState(source_name)) |state_idx| {
+                            if (self.stateTypeById(state_idx) == .string) {
+                                self.advance_token(); // var_name
+                                self.advance_token(); // =
+                                self.advance_token(); // source_name
+                                self.advance_token(); // .
+                                self.advance_token(); // split
+                                if (self.curKind() == .lparen) self.advance_token(); // (
+                                var sep: []const u8 = ",";
+                                if (self.curKind() == .string) {
+                                    const raw = self.curText();
+                                    sep = if (raw.len >= 2) raw[1 .. raw.len - 1] else raw;
+                                    self.advance_token();
+                                }
+                                if (self.curKind() == .rparen) self.advance_token(); // )
+                                if (self.isComputedArray(var_name) != null) {
+                                    if (self.curKind() == .semicolon) self.advance_token();
+                                    continue;
+                                }
+                                if (self.computed_count < codegen.MAX_COMPUTED_ARRAYS) {
+                                    self.computed_arrays[self.computed_count] = .{
+                                        .name = var_name,
+                                        .kind = .split,
+                                        .element_type = .string,
+                                        .source_slot = self.regularSlotId(state_idx),
+                                        .predicate_expr = "",
+                                        .predicate_param = "",
+                                        .separator = sep,
+                                    };
+                                    self.computed_count += 1;
+                                } else {
+                                    self.setError("Too many computed arrays (limit: 16)");
+                                }
+                                if (self.curKind() == .semicolon) self.advance_token();
+                                continue;
+                            }
+                        }
+                    }
+                }
+            }
+
             if (self.curKind() == .lbracket) {
                 self.advance_token();
                 if (self.curKind() == .identifier) {

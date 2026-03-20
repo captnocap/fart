@@ -68,6 +68,9 @@ pub const MAX_UTIL_FUNCS = 32;
 pub const MAX_UTIL_PARAMS = 16;
 pub const MAX_LET_VARS = 32;
 pub const MAX_VARIANTS = 8;
+pub const MAX_MAPS = 32;
+pub const MAX_MAP_INNER = 16;
+pub const MAX_COMPUTED_ARRAYS = 16;
 
 pub const VariantUpdate = struct {
     arr_name: []const u8,
@@ -251,6 +254,57 @@ pub const CompInstance = struct {
     parent_idx: u32,
 };
 
+pub const MapInnerNode = struct {
+    font_size: []const u8,
+    text_color: []const u8,
+    text_fmt: []const u8,
+    text_args: []const u8,
+    is_dynamic_text: bool,
+    static_text: []const u8,
+    style: []const u8,
+};
+
+pub const MapInfo = struct {
+    array_slot_id: u32,
+    item_param: []const u8,
+    index_param: ?[]const u8,
+    parent_arr_name: []const u8,
+    child_idx: u32,
+    outer_style: []const u8,
+    outer_font_size: []const u8,
+    outer_text_color: []const u8,
+    inner_nodes: [MAX_MAP_INNER]MapInnerNode,
+    inner_count: u32,
+    is_self_closing: bool,
+    is_text_element: bool,
+    // Computed array source (for filtered.map(), parts.map())
+    is_computed: bool = false,
+    computed_idx: u32 = 0,
+    computed_element_type: StateType = .int,
+};
+
+pub const MapTemplateResult = struct {
+    outer_style: []const u8,
+    outer_font_size: []const u8,
+    outer_text_color: []const u8,
+    inner_nodes: [MAX_MAP_INNER]MapInnerNode,
+    inner_count: u32,
+    is_self_closing: bool,
+    is_text_element: bool,
+};
+
+pub const ComputedArrayKind = enum { filter, split };
+
+pub const ComputedArray = struct {
+    name: []const u8, // .tsz variable name ("filtered", "parts")
+    kind: ComputedArrayKind,
+    element_type: StateType, // .int for filter of int array, .string for split
+    source_slot: u32, // state array slot (filter) or regular string slot (split)
+    predicate_expr: []const u8, // Zig expression for filter predicate (e.g., "_item > 25")
+    predicate_param: []const u8, // lambda param name — for documentation only
+    separator: []const u8, // split separator (e.g., ",")
+};
+
 pub const TemplateResult = struct {
     is_dynamic: bool,
     static_text: []const u8,
@@ -384,6 +438,17 @@ pub const Generator = struct {
     last_route_path: ?[]const u8,
     routes_bind_from: ?u32,
     inline_depth: u32,
+
+    // Computed arrays (.filter(), .split())
+    computed_arrays: [MAX_COMPUTED_ARRAYS]ComputedArray,
+    computed_count: u32,
+
+    // Maps (.map() dynamic lists)
+    maps: [MAX_MAPS]MapInfo,
+    map_count: u32,
+    map_item_param: ?[]const u8,
+    map_index_param: ?[]const u8,
+    map_item_type: ?StateType,
 
     // Conditionals ({expr && <JSX>})
     conditionals: [MAX_CONDITIONALS]ConditionalInfo,
@@ -583,6 +648,13 @@ pub const Generator = struct {
             .last_route_path = null,
             .routes_bind_from = null,
             .inline_depth = 0,
+            .maps = undefined,
+            .computed_arrays = undefined,
+            .computed_count = 0,
+            .map_count = 0,
+            .map_item_param = null,
+            .map_index_param = null,
+            .map_item_type = null,
             .conditionals = undefined,
             .conditional_count = 0,
             .app_conds = undefined,
@@ -738,6 +810,46 @@ pub const Generator = struct {
             if (std.meta.activeTag(self.state_slots[j].initial) != .array) count += 1;
         }
         return count;
+    }
+
+    /// Check if a name is a computed array (.filter() / .split() result).
+    pub fn isComputedArray(self: *Generator, name: []const u8) ?u32 {
+        for (0..self.computed_count) |i| {
+            if (std.mem.eql(u8, self.computed_arrays[i].name, name)) return @intCast(i);
+        }
+        return null;
+    }
+
+    /// Check if a state variable is an array-typed useState.
+    pub fn isArrayState(self: *Generator, name: []const u8) ?u32 {
+        for (0..self.state_count) |i| {
+            if (std.mem.eql(u8, self.state_slots[i].getter, name) and
+                std.meta.activeTag(self.state_slots[i].initial) == .array)
+                return @intCast(i);
+        }
+        return null;
+    }
+
+    /// Convert sequential state index to array slot index (separate from regular slots).
+    pub fn arraySlotId(self: *Generator, state_idx: u32) u32 {
+        var count: u32 = 0;
+        for (0..state_idx) |j| {
+            if (std.meta.activeTag(self.state_slots[j].initial) == .array) count += 1;
+        }
+        return count;
+    }
+
+    /// Look ahead to check if current position is `identifier.map(`.
+    pub fn isMapAhead(self: *Generator) bool {
+        if (self.curKind() != .identifier) return false;
+        var look = self.pos + 1;
+        if (look >= self.lex.count) return false;
+        if (self.lex.get(look).kind != .dot) return false;
+        look += 1;
+        if (look >= self.lex.count) return false;
+        const tok = self.lex.get(look);
+        if (tok.kind != .identifier) return false;
+        return std.mem.eql(u8, tok.text(self.source), "map");
     }
 
     pub fn findProp(self: *Generator, name: []const u8) ?[]const u8 {

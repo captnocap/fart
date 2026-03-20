@@ -53,6 +53,9 @@ fn isKnownIdent(self: *Generator, name: []const u8) bool {
     // FFI functions
     if (self.isFFIFunc(name)) return true;
 
+    // Computed arrays (.filter() / .split() results)
+    if (self.isComputedArray(name) != null) return true;
+
     // Utility functions
     if (self.isUtilFunc(name) != null) return true;
 
@@ -258,8 +261,17 @@ fn validateExpressionIdents(self: *Generator, app_start: u32) void {
                     continue;
                 }
 
-                // Skip .map() patterns
-                if (std.mem.endsWith(u8, ident, "map")) {
+                // Skip .map() / .filter() / .split() patterns
+                if (std.mem.endsWith(u8, ident, "map") or
+                    std.mem.endsWith(u8, ident, "filter") or
+                    std.mem.endsWith(u8, ident, "split"))
+                {
+                    pos += 1;
+                    continue;
+                }
+
+                // Skip ident followed by . (dot access — e.g. items.map, filtered.map)
+                if (pos + 2 < self.lex.count and self.lex.get(pos + 2).kind == .dot) {
                     pos += 1;
                     continue;
                 }

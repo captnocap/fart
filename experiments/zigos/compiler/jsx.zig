@@ -325,6 +325,18 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
             if (self.curKind() == .lt) {
                 const child = try parseJSXElement(self);
                 try child_exprs.append(self.alloc, child);
+                // Bind route metadata per-child (Route sets last_route_path)
+                if (self.last_route_path) |path| {
+                    if (self.route_count < MAX_ROUTES) {
+                        self.routes[self.route_count] = .{
+                            .path = path,
+                            .arr_name = "", // filled in when Routes array is created
+                            .child_idx = @intCast(child_exprs.items.len - 1),
+                        };
+                        self.route_count += 1;
+                    }
+                    self.last_route_path = null;
+                }
             } else if (self.curKind() == .lbrace) {
                 self.advance_token(); // {
 
@@ -340,6 +352,17 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
 
                 // {expr && <JSX>} conditional rendering
                 if (try tryParseConditionalChild(self, &child_exprs)) {
+                    continue;
+                }
+
+                // {items.map((item, index) => <JSX/>)} dynamic list
+                if (self.isMapAhead()) {
+                    const map_result = try parseMapExpression(self);
+                    try child_exprs.append(self.alloc, map_result);
+                    if (self.map_count > 0) {
+                        self.maps[self.map_count - 1].child_idx = @intCast(child_exprs.items.len - 1);
+                    }
+                    if (self.curKind() == .rbrace) self.advance_token();
                     continue;
                 }
 
@@ -838,23 +861,29 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
             }
         }
 
-        // Bind routes
-        if (self.last_route_path) |path| {
-            if (self.route_count < MAX_ROUTES) {
-                self.routes[self.route_count] = .{
-                    .path = path,
-                    .arr_name = arr_name,
-                    .child_idx = @intCast(child_exprs.items.len - 1),
-                };
-                self.route_count += 1;
+        // Bind routes — fill in arr_name for routes registered during children parsing
+        if (self.routes_bind_from) |from| {
+            for (from..self.route_count) |ri| {
+                if (self.routes[ri].arr_name.len == 0) {
+                    self.routes[ri].arr_name = arr_name;
+                }
             }
-            self.last_route_path = null;
+            self.routes_bind_from = null;
         }
 
         // Bind conditionals
         for (cond_base..self.conditional_count) |ci| {
             if (self.conditionals[ci].arr_name.len == 0) {
                 self.conditionals[ci].arr_name = arr_name;
+            }
+        }
+
+        // Bind maps to this array
+        for (0..self.map_count) |mi| {
+            if (self.maps[mi].parent_arr_name.len == 0) {
+                if (self.maps[mi].child_idx < child_exprs.items.len) {
+                    self.maps[mi].parent_arr_name = arr_name;
+                }
             }
         }
 
@@ -1320,6 +1349,309 @@ fn parseSignedNum(self: *Generator) ![]const u8 {
     if (self.curKind() == .rbrace) self.advance_token();
     if (neg) return try std.fmt.allocPrint(self.alloc, "-{s}", .{val});
     return val;
+}
+
+// ── Map (.map()) parsing ────────────────────────────────────────────
+
+/// Parse `items.map((item, index) => (<JSX/>))` and register a MapInfo.
+/// Returns ".{}" as a placeholder node — the real nodes come from the pool at runtime.
+fn parseMapExpression(self: *Generator) anyerror![]const u8 {
+    const array_name = self.curText();
+    const computed_idx = self.isComputedArray(array_name);
+    const state_idx = if (computed_idx == null) self.isArrayState(array_name) else null;
+
+    if (computed_idx == null and state_idx == null) {
+        // Not a known array source — skip past the .map() and return empty
+        self.advance_token(); // identifier
+        return ".{}";
+    }
+
+    self.advance_token(); // identifier (items)
+    self.advance_token(); // .
+    self.advance_token(); // map
+    if (self.curKind() == .lparen) self.advance_token(); // (
+
+    // Parse callback params: (item) or (item, index) or item =>
+    if (self.curKind() == .lparen) self.advance_token(); // (
+    const item_param = self.curText();
+    self.advance_token(); // item
+    var index_param: ?[]const u8 = null;
+    if (self.curKind() == .comma) {
+        self.advance_token(); // ,
+        index_param = self.curText();
+        self.advance_token(); // index
+    }
+    if (self.curKind() == .rparen) self.advance_token(); // )
+    if (self.curKind() == .arrow) self.advance_token(); // =>
+
+    // Skip optional ( around JSX
+    var had_paren = false;
+    if (self.curKind() == .lparen) {
+        self.advance_token();
+        had_paren = true;
+    }
+
+    // Set map context for template literal parsing
+    self.map_item_param = item_param;
+    self.map_index_param = index_param;
+    if (computed_idx) |ci| {
+        self.map_item_type = self.computed_arrays[ci].element_type;
+    }
+
+    // Parse the JSX template
+    const template = try parseMapTemplate(self);
+
+    // Clear map context
+    self.map_item_param = null;
+    self.map_index_param = null;
+    self.map_item_type = null;
+
+    // Skip optional ) after JSX
+    if (had_paren and self.curKind() == .rparen) self.advance_token();
+
+    // Skip ) closing map call
+    if (self.curKind() == .rparen) self.advance_token();
+
+    // Record map info
+    if (self.map_count < codegen.MAX_MAPS) {
+        if (computed_idx) |ci| {
+            self.maps[self.map_count] = .{
+                .array_slot_id = 0,
+                .item_param = item_param,
+                .index_param = index_param,
+                .parent_arr_name = "",
+                .child_idx = 0,
+                .outer_style = template.outer_style,
+                .outer_font_size = template.outer_font_size,
+                .outer_text_color = template.outer_text_color,
+                .inner_nodes = template.inner_nodes,
+                .inner_count = template.inner_count,
+                .is_self_closing = template.is_self_closing,
+                .is_text_element = template.is_text_element,
+                .is_computed = true,
+                .computed_idx = ci,
+                .computed_element_type = self.computed_arrays[ci].element_type,
+            };
+        } else {
+            self.maps[self.map_count] = .{
+                .array_slot_id = self.arraySlotId(state_idx.?),
+                .item_param = item_param,
+                .index_param = index_param,
+                .parent_arr_name = "",
+                .child_idx = 0,
+                .outer_style = template.outer_style,
+                .outer_font_size = template.outer_font_size,
+                .outer_text_color = template.outer_text_color,
+                .inner_nodes = template.inner_nodes,
+                .inner_count = template.inner_count,
+                .is_self_closing = template.is_self_closing,
+                .is_text_element = template.is_text_element,
+            };
+        }
+        self.map_count += 1;
+    } else {
+        self.setError("Too many .map() lists (limit: 32)");
+    }
+
+    return ".{}";
+}
+
+/// Parse the JSX template inside a .map() callback — the outer element and its children.
+fn parseMapTemplate(self: *Generator) anyerror!codegen.MapTemplateResult {
+    if (self.curKind() != .lt) return .{
+        .outer_style = "",
+        .outer_font_size = "",
+        .outer_text_color = "",
+        .inner_nodes = undefined,
+        .inner_count = 0,
+        .is_self_closing = true,
+        .is_text_element = false,
+    };
+    self.advance_token(); // <
+
+    const tag = self.curText();
+    const is_text = std.mem.eql(u8, tag, "Text");
+    self.advance_token(); // tag name
+
+    var style_str: []const u8 = "";
+    var font_size: []const u8 = "";
+    var text_color: []const u8 = "";
+    var is_self_closing = false;
+
+    // Parse attributes
+    while (self.curKind() != .gt and self.curKind() != .slash_gt and self.curKind() != .eof) {
+        if (self.curKind() == .identifier) {
+            const attr = self.curText();
+            self.advance_token();
+            if (self.curKind() == .equals) {
+                self.advance_token(); // =
+                if (std.mem.eql(u8, attr, "style")) {
+                    style_str = try attrs.parseStyleAttr(self);
+                } else if (std.mem.eql(u8, attr, "fontSize")) {
+                    font_size = try attrs.parseExprAttr(self);
+                } else if (std.mem.eql(u8, attr, "color")) {
+                    const hex = try attrs.parseStringAttr(self);
+                    text_color = try attrs.parseColorValue(self, hex);
+                } else {
+                    try attrs.skipAttrValue(self);
+                }
+            }
+        } else {
+            self.advance_token();
+        }
+    }
+
+    if (self.curKind() == .slash_gt) {
+        self.advance_token();
+        is_self_closing = true;
+    } else {
+        if (self.curKind() == .gt) self.advance_token();
+    }
+
+    var inner_nodes: [codegen.MAX_MAP_INNER]codegen.MapInnerNode = undefined;
+    var inner_count: u32 = 0;
+
+    if (!is_self_closing) {
+        while (self.curKind() != .lt_slash and self.curKind() != .eof) {
+            if (self.curKind() == .lt) {
+                const child = try parseMapTemplateChild(self);
+                if (inner_count < codegen.MAX_MAP_INNER) {
+                    inner_nodes[inner_count] = child;
+                    inner_count += 1;
+                }
+            } else if (self.curKind() == .lbrace) {
+                self.advance_token(); // {
+                if (self.curKind() == .template_literal) {
+                    const tl = try attrs.parseTemplateLiteral(self);
+                    self.advance_token(); // template literal token
+                    // Text on the outer element itself (Text element case)
+                    if (is_text and inner_count < codegen.MAX_MAP_INNER) {
+                        inner_nodes[inner_count] = .{
+                            .font_size = font_size,
+                            .text_color = text_color,
+                            .text_fmt = tl.fmt,
+                            .text_args = tl.args,
+                            .is_dynamic_text = tl.is_dynamic,
+                            .static_text = if (!tl.is_dynamic) tl.static_text else "",
+                            .style = "",
+                        };
+                        inner_count += 1;
+                    }
+                }
+                if (self.curKind() == .rbrace) self.advance_token();
+            } else {
+                // Raw text content
+                const raw = attrs.collectTextContent(self);
+                if (raw.len > 0 and is_text and inner_count < codegen.MAX_MAP_INNER) {
+                    inner_nodes[inner_count] = .{
+                        .font_size = font_size,
+                        .text_color = text_color,
+                        .text_fmt = "",
+                        .text_args = "",
+                        .is_dynamic_text = false,
+                        .static_text = raw,
+                        .style = "",
+                    };
+                    inner_count += 1;
+                }
+            }
+        }
+        // Skip closing tag
+        if (self.curKind() == .lt_slash) self.advance_token();
+        if (self.curKind() == .identifier) self.advance_token();
+        if (self.curKind() == .gt) self.advance_token();
+    }
+
+    return .{
+        .outer_style = style_str,
+        .outer_font_size = font_size,
+        .outer_text_color = text_color,
+        .inner_nodes = inner_nodes,
+        .inner_count = inner_count,
+        .is_self_closing = is_self_closing,
+        .is_text_element = is_text,
+    };
+}
+
+/// Parse a single child element inside a .map() template.
+fn parseMapTemplateChild(self: *Generator) anyerror!codegen.MapInnerNode {
+    self.advance_token(); // <
+    self.advance_token(); // tag name
+
+    var font_size: []const u8 = "";
+    var text_color: []const u8 = "";
+    var style_str: []const u8 = "";
+    var is_self_closing = false;
+
+    while (self.curKind() != .gt and self.curKind() != .slash_gt and self.curKind() != .eof) {
+        if (self.curKind() == .identifier) {
+            const attr = self.curText();
+            self.advance_token();
+            if (self.curKind() == .equals) {
+                self.advance_token();
+                if (std.mem.eql(u8, attr, "style")) {
+                    style_str = try attrs.parseStyleAttr(self);
+                } else if (std.mem.eql(u8, attr, "fontSize")) {
+                    font_size = try attrs.parseExprAttr(self);
+                } else if (std.mem.eql(u8, attr, "color")) {
+                    const hex = try attrs.parseStringAttr(self);
+                    text_color = try attrs.parseColorValue(self, hex);
+                } else {
+                    try attrs.skipAttrValue(self);
+                }
+            }
+        } else {
+            self.advance_token();
+        }
+    }
+
+    if (self.curKind() == .slash_gt) {
+        self.advance_token();
+        is_self_closing = true;
+    } else {
+        if (self.curKind() == .gt) self.advance_token();
+    }
+
+    var text_fmt: []const u8 = "";
+    var text_args: []const u8 = "";
+    var is_dynamic_text = false;
+    var static_text: []const u8 = "";
+
+    if (!is_self_closing) {
+        while (self.curKind() != .lt_slash and self.curKind() != .eof) {
+            if (self.curKind() == .lbrace) {
+                self.advance_token(); // {
+                if (self.curKind() == .template_literal) {
+                    const tl = try attrs.parseTemplateLiteral(self);
+                    self.advance_token();
+                    if (tl.is_dynamic) {
+                        is_dynamic_text = true;
+                        text_fmt = tl.fmt;
+                        text_args = tl.args;
+                    } else {
+                        static_text = tl.static_text;
+                    }
+                }
+                if (self.curKind() == .rbrace) self.advance_token();
+            } else if (self.curKind() != .lt_slash) {
+                const raw = attrs.collectTextContent(self);
+                if (raw.len > 0) static_text = raw;
+            }
+        }
+        if (self.curKind() == .lt_slash) self.advance_token();
+        if (self.curKind() == .identifier) self.advance_token();
+        if (self.curKind() == .gt) self.advance_token();
+    }
+
+    return .{
+        .font_size = font_size,
+        .text_color = text_color,
+        .text_fmt = text_fmt,
+        .text_args = text_args,
+        .is_dynamic_text = is_dynamic_text,
+        .static_text = static_text,
+        .style = style_str,
+    };
 }
 
 fn mergeStyles(alloc: std.mem.Allocator, base: []const u8, override: []const u8) ![]const u8 {

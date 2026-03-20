@@ -519,6 +519,58 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
         }
     }
 
+    // Computed arrays (.filter() / .split() results)
+    if (self.computed_count > 0) {
+        try out.appendSlice(self.alloc, "\n// ── Computed arrays ─────────────────────────────────────────────\n");
+        for (0..self.computed_count) |ci| {
+            const ca = self.computed_arrays[ci];
+            switch (ca.kind) {
+                .filter => {
+                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                        "const MAX_COMPUTED_{d}: usize = 256;\n" ++
+                        "var _computed_{d}: [MAX_COMPUTED_{d}]i64 = undefined;\n" ++
+                        "var _computed_{d}_count: usize = 0;\n",
+                        .{ ci, ci, ci, ci }));
+                },
+                .split => {
+                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                        "const MAX_COMPUTED_{d}: usize = 64;\n" ++
+                        "var _computed_{d}: [MAX_COMPUTED_{d}][]const u8 = undefined;\n" ++
+                        "var _computed_{d}_count: usize = 0;\n",
+                        .{ ci, ci, ci, ci }));
+                },
+            }
+        }
+    }
+
+    // Map pools
+    if (self.map_count > 0) {
+        try out.appendSlice(self.alloc, "\n// ── Map pools ───────────────────────────────────────────────────\n");
+        for (0..self.map_count) |mi| {
+            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                "const MAX_MAP_{d}: usize = 256;\n" ++
+                "var _map_pool_{d}: [MAX_MAP_{d}]Node = [_]Node{{.{{}}}} ** MAX_MAP_{d};\n" ++
+                "var _map_count_{d}: usize = 0;\n",
+                .{ mi, mi, mi, mi, mi }));
+            const m = self.maps[mi];
+            if (m.inner_count > 0 and !m.is_self_closing) {
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                    "var _map_inner_{d}: [MAX_MAP_{d}][{d}]Node = undefined;\n",
+                    .{ mi, mi, m.inner_count }));
+            }
+            var has_dyn_text = false;
+            for (0..m.inner_count) |ni| {
+                if (m.inner_nodes[ni].is_dynamic_text) { has_dyn_text = true; break; }
+            }
+            if (has_dyn_text) {
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                    "var _map_text_bufs_{d}: [MAX_MAP_{d}][256]u8 = undefined;\n" ++
+                    "var _map_texts_{d}: [MAX_MAP_{d}][]const u8 = [_][]const u8{{\"\"}} ** MAX_MAP_{d};\n",
+                    .{ mi, mi, mi, mi, mi }));
+            }
+        }
+    }
+
     // Component init functions
     if (self.comp_func_count > 0) {
         try out.appendSlice(self.alloc, "\n// ── Component init functions ────────────────────────────────────\n");
@@ -536,6 +588,183 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
             try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "    {s}[{d}] = {s};\n", .{ inst.parent_arr, inst.parent_idx, inst.init_call }));
         }
         try out.appendSlice(self.alloc, "}\n\n");
+    }
+
+    // Computed array rebuild functions
+    if (self.computed_count > 0) {
+        try out.appendSlice(self.alloc, "\n// ── Computed array rebuild ──────────────────────────────────────\n");
+        for (0..self.computed_count) |ci| {
+            const ca = self.computed_arrays[ci];
+            switch (ca.kind) {
+                .filter => {
+                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                        "fn _rebuildComputed{d}() void {{\n" ++
+                        "    const _src = state.getArraySlot({d});\n" ++
+                        "    _computed_{d}_count = 0;\n" ++
+                        "    for (_src) |_item| {{\n" ++
+                        "        if ({s}) {{\n" ++
+                        "            _computed_{d}[_computed_{d}_count] = _item;\n" ++
+                        "            _computed_{d}_count += 1;\n" ++
+                        "            if (_computed_{d}_count >= MAX_COMPUTED_{d}) break;\n" ++
+                        "        }}\n" ++
+                        "    }}\n" ++
+                        "}}\n\n",
+                        .{ ci, ca.source_slot, ci, ca.predicate_expr, ci, ci, ci, ci, ci }));
+                },
+                .split => {
+                    const sep_char: u8 = if (ca.separator.len > 0) ca.separator[0] else ',';
+                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                        "fn _rebuildComputed{d}() void {{\n" ++
+                        "    const _str = state.getSlotString({d});\n" ++
+                        "    _computed_{d}_count = 0;\n" ++
+                        "    var _iter = std.mem.splitScalar(u8, _str, '{c}');\n" ++
+                        "    while (_iter.next()) |_part| {{\n" ++
+                        "        if (_computed_{d}_count >= MAX_COMPUTED_{d}) break;\n" ++
+                        "        _computed_{d}[_computed_{d}_count] = _part;\n" ++
+                        "        _computed_{d}_count += 1;\n" ++
+                        "    }}\n" ++
+                        "}}\n\n",
+                        .{ ci, ca.source_slot, ci, sep_char, ci, ci, ci, ci, ci }));
+                },
+            }
+        }
+    }
+
+    // Map rebuild functions
+    if (self.map_count > 0) {
+        for (0..self.map_count) |mi| {
+            const m = self.maps[mi];
+            if (m.parent_arr_name.len == 0) continue;
+
+            if (m.is_computed) {
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                    "fn _rebuildMap{d}() void {{\n" ++
+                    "    const items = _computed_{d}[0.._computed_{d}_count];\n" ++
+                    "    _map_count_{d} = @min(items.len, MAX_MAP_{d});\n" ++
+                    "    for (0.._map_count_{d}) |_i| {{\n" ++
+                    "        const _item = items[_i];\n",
+                    .{ mi, m.computed_idx, m.computed_idx, mi, mi, mi }));
+            } else {
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                    "fn _rebuildMap{d}() void {{\n" ++
+                    "    const items = state.getArraySlot({d});\n" ++
+                    "    _map_count_{d} = @min(items.len, MAX_MAP_{d});\n" ++
+                    "    for (0.._map_count_{d}) |_i| {{\n" ++
+                    "        const _item = items[_i];\n",
+                    .{ mi, m.array_slot_id, mi, mi, mi }));
+            }
+
+            // Find dynamic text in inner nodes
+            var has_dyn_text = false;
+            var dyn_ni: u32 = 0;
+            for (0..m.inner_count) |ni| {
+                if (m.inner_nodes[ni].is_dynamic_text) {
+                    has_dyn_text = true;
+                    dyn_ni = @intCast(ni);
+                    break;
+                }
+            }
+
+            if (has_dyn_text) {
+                const inner = m.inner_nodes[dyn_ni];
+                // Rewrite template args: replace item param with _item, index param with _i
+                const rewritten_args = try rewriteMapArgs(self, inner.text_args, m.item_param, m.index_param);
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                    "        _map_texts_{d}[_i] = std.fmt.bufPrint(&_map_text_bufs_{d}[_i], \"{s}\", .{{ {s} }}) catch \"\";\n",
+                    .{ mi, mi, inner.text_fmt, rewritten_args }));
+            }
+
+            // Emit inner children array assignment
+            if (m.inner_count > 0 and !m.is_self_closing) {
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                    "        _map_inner_{d}[_i] = [{d}]Node{{ ", .{ mi, m.inner_count }));
+                for (0..m.inner_count) |ni| {
+                    const inner = m.inner_nodes[ni];
+                    if (ni > 0) try out.appendSlice(self.alloc, ", ");
+                    try out.appendSlice(self.alloc, ".{ ");
+                    var has_field = false;
+                    if (inner.is_dynamic_text) {
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            ".text = _map_texts_{d}[_i]", .{mi}));
+                        has_field = true;
+                    } else if (inner.static_text.len > 0) {
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            ".text = \"{s}\"", .{inner.static_text}));
+                        has_field = true;
+                    }
+                    if (inner.font_size.len > 0) {
+                        if (has_field) try out.appendSlice(self.alloc, ", ");
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            ".font_size = {s}", .{inner.font_size}));
+                        has_field = true;
+                    }
+                    if (inner.text_color.len > 0) {
+                        if (has_field) try out.appendSlice(self.alloc, ", ");
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            ".text_color = {s}", .{inner.text_color}));
+                        has_field = true;
+                    }
+                    if (inner.style.len > 0) {
+                        if (has_field) try out.appendSlice(self.alloc, ", ");
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            ".style = .{{ {s} }}", .{inner.style}));
+                    }
+                    try out.appendSlice(self.alloc, " }");
+                }
+                try out.appendSlice(self.alloc, " };\n");
+            }
+
+            // Emit pool node
+            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                "        _map_pool_{d}[_i] = .{{ ", .{mi}));
+            var has_outer_field = false;
+            if (m.outer_style.len > 0) {
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                    ".style = .{{ {s} }}", .{m.outer_style}));
+                has_outer_field = true;
+            }
+            if (m.is_text_element and m.inner_count > 0) {
+                const inner = m.inner_nodes[0];
+                if (inner.is_dynamic_text) {
+                    if (has_outer_field) try out.appendSlice(self.alloc, ", ");
+                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                        ".text = _map_texts_{d}[_i]", .{mi}));
+                    has_outer_field = true;
+                } else if (inner.static_text.len > 0) {
+                    if (has_outer_field) try out.appendSlice(self.alloc, ", ");
+                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                        ".text = \"{s}\"", .{inner.static_text}));
+                    has_outer_field = true;
+                }
+                if (m.outer_font_size.len > 0) {
+                    if (has_outer_field) try out.appendSlice(self.alloc, ", ");
+                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                        ".font_size = {s}", .{m.outer_font_size}));
+                    has_outer_field = true;
+                }
+                if (m.outer_text_color.len > 0) {
+                    if (has_outer_field) try out.appendSlice(self.alloc, ", ");
+                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                        ".text_color = {s}", .{m.outer_text_color}));
+                    has_outer_field = true;
+                }
+            } else if (m.inner_count > 0 and !m.is_self_closing) {
+                if (has_outer_field) try out.appendSlice(self.alloc, ", ");
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                    ".children = &_map_inner_{d}[_i]", .{mi}));
+            }
+            try out.appendSlice(self.alloc, " };\n");
+
+            // Close for loop
+            try out.appendSlice(self.alloc, "    }\n");
+
+            // Update parent children slice
+            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                "    {s}[{d}].children = _map_pool_{d}[0.._map_count_{d}];\n",
+                .{ m.parent_arr_name, m.child_idx, mi, mi }));
+
+            try out.appendSlice(self.alloc, "}\n\n");
+        }
     }
 
     // JS_LOGIC
@@ -788,6 +1017,18 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
     if (has_any_conds) {
         try out.appendSlice(self.alloc, "    _updateConditionals();\n");
     }
+    if (self.computed_count > 0) {
+        for (0..self.computed_count) |ci| {
+            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                "    _rebuildComputed{d}();\n", .{ci}));
+        }
+    }
+    if (self.map_count > 0) {
+        for (0..self.map_count) |mi| {
+            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                "    _rebuildMap{d}();\n", .{mi}));
+        }
+    }
     // Mount effects — run once at init
     for (0..self.effect_hook_count) |ei| {
         if (self.effect_hooks[ei].kind == .mount) {
@@ -891,8 +1132,9 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
     if (has_per_frame_text) {
         try out.appendSlice(self.alloc, "    _updateDynamicTexts();\n");
         if (has_any_conds) try out.appendSlice(self.alloc, "    _updateConditionals();\n");
+        try emitMapRebuildCalls(self, &out, "    ");
         if (self.has_state) try out.appendSlice(self.alloc, "    if (state.isDirty()) state.clearDirty();\n");
-    } else if (self.has_state and (self.dyn_count > 0 or self.dyn_style_count > 0 or has_any_conds)) {
+    } else if (self.has_state and (self.dyn_count > 0 or self.dyn_style_count > 0 or has_any_conds or self.map_count > 0 or self.computed_count > 0)) {
         try out.appendSlice(self.alloc, "    if (state.isDirty()) { _updateDynamicTexts();");
         if (has_any_conds) try out.appendSlice(self.alloc, " _updateConditionals();");
         // Watch effects — run when watched state slots change
@@ -905,6 +1147,10 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
                     try out.appendSlice(self.alloc, body);
                 }
             }
+        }
+        if (self.map_count > 0) {
+            try out.appendSlice(self.alloc, "\n");
+            try emitMapRebuildCalls(self, &out, "        ");
         }
         try out.appendSlice(self.alloc, " state.clearDirty(); }\n");
     } else if (self.has_state and has_any_conds) {
@@ -998,4 +1244,68 @@ pub fn emitModuleSource(self: *Generator, root_expr: []const u8) ![]const u8 {
     try out.appendSlice(self.alloc, ";\n}\n");
 
     return try out.toOwnedSlice(self.alloc);
+}
+
+// ── Map helpers ──────────────────────────────────────────────────────
+
+/// Emit _rebuildComputedN() + _rebuildMapN() calls (used in _appInit and _appTick).
+fn emitMapRebuildCalls(self: *Generator, out: *std.ArrayListUnmanaged(u8), pad: []const u8) !void {
+    for (0..self.computed_count) |ci| {
+        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+            "{s}_rebuildComputed{d}();\n", .{ pad, ci }));
+    }
+    for (0..self.map_count) |mi| {
+        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+            "{s}_rebuildMap{d}();\n", .{ pad, mi }));
+    }
+}
+
+/// Rewrite template args: replace item/index param names with _item/_i.
+/// E.g. if item_param is "task" and text_args is "@intCast(task)",
+/// we need to emit "@intCast(_item)" so the generated for-loop variable works.
+fn rewriteMapArgs(self: *Generator, text_args: []const u8, item_param: []const u8, index_param: ?[]const u8) ![]const u8 {
+    var result: []const u8 = text_args;
+    // Replace item param with _item
+    if (item_param.len > 0) {
+        result = try replaceIdent(self.alloc, result, item_param, "_item");
+    }
+    // Replace index param with _i
+    if (index_param) |idx| {
+        if (idx.len > 0) {
+            result = try replaceIdent(self.alloc, result, idx, "_i");
+        }
+    }
+    return result;
+}
+
+/// Replace whole-word occurrences of `needle` with `replacement` in `text`.
+/// Only replaces when needle is at a word boundary (not inside an identifier).
+fn replaceIdent(alloc: std.mem.Allocator, text: []const u8, needle: []const u8, replacement: []const u8) ![]const u8 {
+    if (needle.len == 0 or text.len < needle.len) return text;
+    var result: std.ArrayListUnmanaged(u8) = .{};
+    var i: usize = 0;
+    while (i <= text.len - needle.len) {
+        if (std.mem.eql(u8, text[i .. i + needle.len], needle)) {
+            // Check word boundary before
+            const before_ok = i == 0 or !isIdentByte(text[i - 1]);
+            // Check word boundary after
+            const after_ok = (i + needle.len >= text.len) or !isIdentByte(text[i + needle.len]);
+            if (before_ok and after_ok) {
+                try result.appendSlice(alloc, replacement);
+                i += needle.len;
+                continue;
+            }
+        }
+        try result.append(alloc, text[i]);
+        i += 1;
+    }
+    // Append remaining bytes
+    if (i < text.len) {
+        try result.appendSlice(alloc, text[i..]);
+    }
+    return result.items;
+}
+
+fn isIdentByte(ch: u8) bool {
+    return (ch >= 'a' and ch <= 'z') or (ch >= 'A' and ch <= 'Z') or (ch >= '0' and ch <= '9') or ch == '_';
 }
