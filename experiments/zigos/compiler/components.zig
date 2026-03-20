@@ -134,16 +134,14 @@ pub fn inlineComponent(self: *Generator, comp: *codegen.ComponentInfo) anyerror!
             // Component declared {children} — parse caller's children JSX
             has_caller_children = true;
             while (self.curKind() != .eof) {
+                if (self.curKind() == .lt_slash) {
+                    // Closing tag </Comp> — done collecting children
+                    self.advance_token(); // skip lt_slash
+                    if (self.curKind() == .identifier) self.advance_token();
+                    if (self.curKind() == .gt or self.curKind() == .gt_eq) self.advance_token();
+                    break;
+                }
                 if (self.curKind() == .lt) {
-                    const peek = self.pos + 1;
-                    if (peek < self.lex.count and self.lex.get(peek).kind == .slash) {
-                        // Closing tag </Comp> — done collecting children
-                        self.advance_token();
-                        self.advance_token();
-                        if (self.curKind() == .identifier) self.advance_token();
-                        if (self.curKind() == .gt) self.advance_token();
-                        break;
-                    }
                     const child_expr = try jsx.parseJSXElement(self);
                     caller_children.append(self.alloc, child_expr) catch {};
                 } else {
@@ -154,20 +152,16 @@ pub fn inlineComponent(self: *Generator, comp: *codegen.ComponentInfo) anyerror!
             // Component doesn't use {children} — skip everything until </Comp>
             var depth: u32 = 1;
             while (self.pos < self.lex.count and depth > 0) {
-                if (self.curKind() == .lt) {
-                    const peek = self.pos + 1;
-                    if (peek < self.lex.count and self.lex.get(peek).kind == .slash) {
-                        depth -= 1;
-                        if (depth == 0) {
-                            self.advance_token();
-                            self.advance_token();
-                            if (self.curKind() == .identifier) self.advance_token();
-                            if (self.curKind() == .gt) self.advance_token();
-                            break;
-                        }
-                    } else {
-                        depth += 1;
+                if (self.curKind() == .lt_slash) {
+                    depth -= 1;
+                    if (depth == 0) {
+                        self.advance_token(); // skip lt_slash
+                        if (self.curKind() == .identifier) self.advance_token();
+                        if (self.curKind() == .gt or self.curKind() == .gt_eq) self.advance_token();
+                        break;
                     }
+                } else if (self.curKind() == .lt) {
+                    depth += 1;
                 }
                 self.advance_token();
             }

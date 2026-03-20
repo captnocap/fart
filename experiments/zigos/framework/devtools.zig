@@ -2912,1063 +2912,1283 @@ var _arr_1439 = [_]Node{ .{ .text = "margin", .font_size = 9, .text_color = Colo
 var _arr_1440 = [_]Node{ .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 4, .padding_left = 6, .padding_right = 6, .padding_top = 3, .padding_bottom = 3, .border_radius = 4, .background_color = Color.rgb(11, 16, 24), .border_width = 1, .border_color = Color.rgb(26, 32, 48) }, .children = &_arr_1436 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 4, .padding_left = 6, .padding_right = 6, .padding_top = 3, .padding_bottom = 3, .border_radius = 4, .background_color = Color.rgb(11, 16, 24), .border_width = 1, .border_color = Color.rgb(26, 32, 48) }, .children = &_arr_1437 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 4, .padding_left = 6, .padding_right = 6, .padding_top = 3, .padding_bottom = 3, .border_radius = 4, .background_color = Color.rgb(11, 16, 24), .border_width = 1, .border_color = Color.rgb(26, 32, 48) }, .children = &_arr_1438 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 4, .padding_left = 6, .padding_right = 6, .padding_top = 3, .padding_bottom = 3, .border_radius = 4, .background_color = Color.rgb(11, 16, 24), .border_width = 1, .border_color = Color.rgb(26, 32, 48) }, .children = &_arr_1439 } }; // DetailSection
 // tsz:InspectorEmbed.tsz:2498 — <Box>
 var _arr_1441 = [_]Node{ .{ .style = .{ .width = 252, .align_items = .center }, .children = &_arr_1435 }, .{ .style = .{ .flex_direction = .row, .gap = 6, .flex_wrap = .wrap, .justify_content = .center }, .children = &_arr_1440 } }; // DetailSection
-// tsz:InspectorEmbed.tsz:2558 — <Box>
-var _arr_1442 = [_]Node{ .{ .text = "style", .font_size = 11, .text_color = Color.rgb(223, 229, 245) }, .{ .text = "click a field to edit", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } }; // DetailSection
-// tsz:InspectorEmbed.tsz:2324 — <Box>
-var _arr_1443 = [_]Node{ .{ .text = "derived", .font_size = 9, .text_color = Color.rgb(129, 182, 255) } }; // Badge
-// tsz:InspectorEmbed.tsz:2325 — <Box>
-var _arr_1444 = [_]Node{ .{ .text = "derived", .font_size = 9, .text_color = Color.rgb(239, 179, 111) } }; // Badge
-// tsz:InspectorEmbed.tsz:2326 — <Box>
-var _arr_1445 = [_]Node{ .{ .text = "derived", .font_size = 9, .text_color = Color.rgb(154, 163, 184) } }; // Badge
-// tsz:InspectorEmbed.tsz:2323 — <>
-var _arr_1446 = [_]Node{ .{ .style = .{ .padding_left = 6, .padding_right = 6, .padding_top = 3, .padding_bottom = 3, .border_radius = 4, .background_color = Color.rgb(20, 26, 41) }, .children = &_arr_1445 } };
-// tsz:InspectorEmbed.tsz:2458 — <Box>
-var _arr_1447 = [_]Node{ .{ .text = "width", .font_size = 10, .text_color = Color.rgb(154, 163, 184) }, .{ .children = &_arr_1446 } }; // EditableStyleCell
-// tsz:InspectorEmbed.tsz:2457 — <Box>
-var _arr_1448 = [_]Node{ .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center, .gap = 8 }, .children = &_arr_1447 }, .{ .style = .{ .width = -1, .padding_left = 7, .padding_right = 7, .padding_top = 5, .padding_bottom = 5, .background_color = Color.rgb(10, 16, 24), .border_width = 1, .border_color = Color.rgb(32, 43, 63), .border_radius = 4 }, .font_size = 11, .text_color = Color.rgb(238, 242, 255), .input_id = 0, .placeholder = "auto" } }; // EditableStyleCell
-// tsz:InspectorEmbed.tsz:2324 — <Box>
-var _arr_1449 = [_]Node{ .{ .text = "derived", .font_size = 9, .text_color = Color.rgb(129, 182, 255) } }; // Badge
-// tsz:InspectorEmbed.tsz:2325 — <Box>
-var _arr_1450 = [_]Node{ .{ .text = "derived", .font_size = 9, .text_color = Color.rgb(239, 179, 111) } }; // Badge
-// tsz:InspectorEmbed.tsz:2326 — <Box>
-var _arr_1451 = [_]Node{ .{ .text = "derived", .font_size = 9, .text_color = Color.rgb(154, 163, 184) } }; // Badge
-// tsz:InspectorEmbed.tsz:2323 — <>
-var _arr_1452 = [_]Node{ .{ .style = .{ .padding_left = 6, .padding_right = 6, .padding_top = 3, .padding_bottom = 3, .border_radius = 4, .background_color = Color.rgb(20, 26, 41) }, .children = &_arr_1451 } };
-// tsz:InspectorEmbed.tsz:2458 — <Box>
-var _arr_1453 = [_]Node{ .{ .text = "height", .font_size = 10, .text_color = Color.rgb(154, 163, 184) }, .{ .children = &_arr_1452 } }; // EditableStyleCell
-// tsz:InspectorEmbed.tsz:2457 — <Box>
-var _arr_1454 = [_]Node{ .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center, .gap = 8 }, .children = &_arr_1453 }, .{ .style = .{ .width = -1, .padding_left = 7, .padding_right = 7, .padding_top = 5, .padding_bottom = 5, .background_color = Color.rgb(10, 16, 24), .border_width = 1, .border_color = Color.rgb(32, 43, 63), .border_radius = 4 }, .font_size = 11, .text_color = Color.rgb(238, 242, 255), .input_id = 1, .placeholder = "auto" } }; // EditableStyleCell
-// tsz:InspectorEmbed.tsz:2324 — <Box>
-var _arr_1455 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(129, 182, 255) } }; // Badge
-// tsz:InspectorEmbed.tsz:2325 — <Box>
-var _arr_1456 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(239, 179, 111) } }; // Badge
-// tsz:InspectorEmbed.tsz:2326 — <Box>
-var _arr_1457 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(154, 163, 184) } }; // Badge
-// tsz:InspectorEmbed.tsz:2323 — <>
-var _arr_1458 = [_]Node{ .{ .style = .{ .padding_left = 6, .padding_right = 6, .padding_top = 3, .padding_bottom = 3, .border_radius = 4, .background_color = Color.rgb(22, 48, 74) }, .children = &_arr_1455 } };
-// tsz:InspectorEmbed.tsz:2458 — <Box>
-var _arr_1459 = [_]Node{ .{ .text = "flexGrow", .font_size = 10, .text_color = Color.rgb(154, 163, 184) }, .{ .children = &_arr_1458 } }; // EditableStyleCell
-// tsz:InspectorEmbed.tsz:2457 — <Box>
-var _arr_1460 = [_]Node{ .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center, .gap = 8 }, .children = &_arr_1459 }, .{ .style = .{ .width = -1, .padding_left = 7, .padding_right = 7, .padding_top = 5, .padding_bottom = 5, .background_color = Color.rgb(10, 16, 24), .border_width = 1, .border_color = Color.rgb(32, 43, 63), .border_radius = 4 }, .font_size = 11, .text_color = Color.rgb(238, 242, 255), .input_id = 2, .placeholder = "1" } }; // EditableStyleCell
-// tsz:InspectorEmbed.tsz:2564 — <Box>
-var _arr_1461 = [_]Node{ .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 4, .padding = 6, .background_color = Color.rgb(12, 17, 25), .border_width = 1, .border_color = Color.rgb(21, 29, 42), .border_radius = 4 }, .children = &_arr_1448 }, .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 4, .padding = 6, .background_color = Color.rgb(12, 17, 25), .border_width = 1, .border_color = Color.rgb(21, 29, 42), .border_radius = 4 }, .children = &_arr_1454 }, .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 4, .padding = 6, .background_color = Color.rgb(12, 17, 25), .border_width = 1, .border_color = Color.rgb(21, 29, 42), .border_radius = 4 }, .children = &_arr_1460 } }; // DetailSection
-// tsz:InspectorEmbed.tsz:2324 — <Box>
-var _arr_1462 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(129, 182, 255) } }; // Badge
-// tsz:InspectorEmbed.tsz:2325 — <Box>
-var _arr_1463 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(239, 179, 111) } }; // Badge
-// tsz:InspectorEmbed.tsz:2326 — <Box>
-var _arr_1464 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(154, 163, 184) } }; // Badge
-// tsz:InspectorEmbed.tsz:2323 — <>
-var _arr_1465 = [_]Node{ .{ .style = .{ .padding_left = 6, .padding_right = 6, .padding_top = 3, .padding_bottom = 3, .border_radius = 4, .background_color = Color.rgb(22, 48, 74) }, .children = &_arr_1462 } };
-// tsz:InspectorEmbed.tsz:2458 — <Box>
-var _arr_1466 = [_]Node{ .{ .text = "flexBasis", .font_size = 10, .text_color = Color.rgb(154, 163, 184) }, .{ .children = &_arr_1465 } }; // EditableStyleCell
-// tsz:InspectorEmbed.tsz:2457 — <Box>
-var _arr_1467 = [_]Node{ .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center, .gap = 8 }, .children = &_arr_1466 }, .{ .style = .{ .width = -1, .padding_left = 7, .padding_right = 7, .padding_top = 5, .padding_bottom = 5, .background_color = Color.rgb(10, 16, 24), .border_width = 1, .border_color = Color.rgb(32, 43, 63), .border_radius = 4 }, .font_size = 11, .text_color = Color.rgb(238, 242, 255), .input_id = 3, .placeholder = "0" } }; // EditableStyleCell
-// tsz:InspectorEmbed.tsz:2324 — <Box>
-var _arr_1468 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(129, 182, 255) } }; // Badge
-// tsz:InspectorEmbed.tsz:2325 — <Box>
-var _arr_1469 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(239, 179, 111) } }; // Badge
-// tsz:InspectorEmbed.tsz:2326 — <Box>
-var _arr_1470 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(154, 163, 184) } }; // Badge
-// tsz:InspectorEmbed.tsz:2323 — <>
-var _arr_1471 = [_]Node{ .{ .style = .{ .padding_left = 6, .padding_right = 6, .padding_top = 3, .padding_bottom = 3, .border_radius = 4, .background_color = Color.rgb(22, 48, 74) }, .children = &_arr_1468 } };
-// tsz:InspectorEmbed.tsz:2458 — <Box>
-var _arr_1472 = [_]Node{ .{ .text = "overflow", .font_size = 10, .text_color = Color.rgb(154, 163, 184) }, .{ .children = &_arr_1471 } }; // EditableStyleCell
-// tsz:InspectorEmbed.tsz:2457 — <Box>
-var _arr_1473 = [_]Node{ .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center, .gap = 8 }, .children = &_arr_1472 }, .{ .style = .{ .width = -1, .padding_left = 7, .padding_right = 7, .padding_top = 5, .padding_bottom = 5, .background_color = Color.rgb(10, 16, 24), .border_width = 1, .border_color = Color.rgb(32, 43, 63), .border_radius = 4 }, .font_size = 11, .text_color = Color.rgb(238, 242, 255), .input_id = 4, .placeholder = "scroll" } }; // EditableStyleCell
-// tsz:InspectorEmbed.tsz:2324 — <Box>
-var _arr_1474 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(129, 182, 255) } }; // Badge
-// tsz:InspectorEmbed.tsz:2325 — <Box>
-var _arr_1475 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(239, 179, 111) } }; // Badge
-// tsz:InspectorEmbed.tsz:2326 — <Box>
-var _arr_1476 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(154, 163, 184) } }; // Badge
-// tsz:InspectorEmbed.tsz:2323 — <>
-var _arr_1477 = [_]Node{ .{ .style = .{ .padding_left = 6, .padding_right = 6, .padding_top = 3, .padding_bottom = 3, .border_radius = 4, .background_color = Color.rgb(22, 48, 74) }, .children = &_arr_1474 } };
-// tsz:InspectorEmbed.tsz:2458 — <Box>
-var _arr_1478 = [_]Node{ .{ .text = "background", .font_size = 10, .text_color = Color.rgb(154, 163, 184) }, .{ .children = &_arr_1477 } }; // EditableStyleCell
-// tsz:InspectorEmbed.tsz:2457 — <Box>
-var _arr_1479 = [_]Node{ .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center, .gap = 8 }, .children = &_arr_1478 }, .{ .style = .{ .width = -1, .padding_left = 7, .padding_right = 7, .padding_top = 5, .padding_bottom = 5, .background_color = Color.rgb(10, 16, 24), .border_width = 1, .border_color = Color.rgb(32, 43, 63), .border_radius = 4 }, .font_size = 11, .text_color = Color.rgb(238, 242, 255), .input_id = 5, .placeholder = "#0c1018" } }; // EditableStyleCell
-// tsz:InspectorEmbed.tsz:2569 — <Box>
-var _arr_1480 = [_]Node{ .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 4, .padding = 6, .background_color = Color.rgb(12, 17, 25), .border_width = 1, .border_color = Color.rgb(21, 29, 42), .border_radius = 4 }, .children = &_arr_1467 }, .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 4, .padding = 6, .background_color = Color.rgb(12, 17, 25), .border_width = 1, .border_color = Color.rgb(21, 29, 42), .border_radius = 4 }, .children = &_arr_1473 }, .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 4, .padding = 6, .background_color = Color.rgb(12, 17, 25), .border_width = 1, .border_color = Color.rgb(21, 29, 42), .border_radius = 4 }, .children = &_arr_1479 } }; // DetailSection
-// tsz:InspectorEmbed.tsz:2324 — <Box>
-var _arr_1481 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(129, 182, 255) } }; // Badge
-// tsz:InspectorEmbed.tsz:2325 — <Box>
-var _arr_1482 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(239, 179, 111) } }; // Badge
-// tsz:InspectorEmbed.tsz:2326 — <Box>
-var _arr_1483 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(154, 163, 184) } }; // Badge
-// tsz:InspectorEmbed.tsz:2323 — <>
-var _arr_1484 = [_]Node{ .{ .style = .{ .padding_left = 6, .padding_right = 6, .padding_top = 3, .padding_bottom = 3, .border_radius = 4, .background_color = Color.rgb(22, 48, 74) }, .children = &_arr_1481 } };
-// tsz:InspectorEmbed.tsz:2458 — <Box>
-var _arr_1485 = [_]Node{ .{ .text = "border", .font_size = 10, .text_color = Color.rgb(154, 163, 184) }, .{ .children = &_arr_1484 } }; // EditableStyleCell
-// tsz:InspectorEmbed.tsz:2457 — <Box>
-var _arr_1486 = [_]Node{ .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center, .gap = 8 }, .children = &_arr_1485 }, .{ .style = .{ .width = -1, .padding_left = 7, .padding_right = 7, .padding_top = 5, .padding_bottom = 5, .background_color = Color.rgb(10, 16, 24), .border_width = 1, .border_color = Color.rgb(32, 43, 63), .border_radius = 4 }, .font_size = 11, .text_color = Color.rgb(238, 242, 255), .input_id = 6, .placeholder = "#1a2030" } }; // EditableStyleCell
-// tsz:InspectorEmbed.tsz:2324 — <Box>
-var _arr_1487 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(129, 182, 255) } }; // Badge
-// tsz:InspectorEmbed.tsz:2325 — <Box>
-var _arr_1488 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(239, 179, 111) } }; // Badge
-// tsz:InspectorEmbed.tsz:2326 — <Box>
-var _arr_1489 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(154, 163, 184) } }; // Badge
-// tsz:InspectorEmbed.tsz:2323 — <>
-var _arr_1490 = [_]Node{ .{ .style = .{ .padding_left = 6, .padding_right = 6, .padding_top = 3, .padding_bottom = 3, .border_radius = 4, .background_color = Color.rgb(22, 48, 74) }, .children = &_arr_1487 } };
-// tsz:InspectorEmbed.tsz:2458 — <Box>
-var _arr_1491 = [_]Node{ .{ .text = "padTop", .font_size = 10, .text_color = Color.rgb(154, 163, 184) }, .{ .children = &_arr_1490 } }; // EditableStyleCell
-// tsz:InspectorEmbed.tsz:2457 — <Box>
-var _arr_1492 = [_]Node{ .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center, .gap = 8 }, .children = &_arr_1491 }, .{ .style = .{ .width = -1, .padding_left = 7, .padding_right = 7, .padding_top = 5, .padding_bottom = 5, .background_color = Color.rgb(10, 16, 24), .border_width = 1, .border_color = Color.rgb(32, 43, 63), .border_radius = 4 }, .font_size = 11, .text_color = Color.rgb(238, 242, 255), .input_id = 7, .placeholder = "14" } }; // EditableStyleCell
-// tsz:InspectorEmbed.tsz:2324 — <Box>
-var _arr_1493 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(129, 182, 255) } }; // Badge
-// tsz:InspectorEmbed.tsz:2325 — <Box>
-var _arr_1494 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(239, 179, 111) } }; // Badge
-// tsz:InspectorEmbed.tsz:2326 — <Box>
-var _arr_1495 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(154, 163, 184) } }; // Badge
-// tsz:InspectorEmbed.tsz:2323 — <>
-var _arr_1496 = [_]Node{ .{ .style = .{ .padding_left = 6, .padding_right = 6, .padding_top = 3, .padding_bottom = 3, .border_radius = 4, .background_color = Color.rgb(22, 48, 74) }, .children = &_arr_1493 } };
-// tsz:InspectorEmbed.tsz:2458 — <Box>
-var _arr_1497 = [_]Node{ .{ .text = "padRight", .font_size = 10, .text_color = Color.rgb(154, 163, 184) }, .{ .children = &_arr_1496 } }; // EditableStyleCell
-// tsz:InspectorEmbed.tsz:2457 — <Box>
-var _arr_1498 = [_]Node{ .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center, .gap = 8 }, .children = &_arr_1497 }, .{ .style = .{ .width = -1, .padding_left = 7, .padding_right = 7, .padding_top = 5, .padding_bottom = 5, .background_color = Color.rgb(10, 16, 24), .border_width = 1, .border_color = Color.rgb(32, 43, 63), .border_radius = 4 }, .font_size = 11, .text_color = Color.rgb(238, 242, 255), .input_id = 8, .placeholder = "14" } }; // EditableStyleCell
-// tsz:InspectorEmbed.tsz:2574 — <Box>
-var _arr_1499 = [_]Node{ .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 4, .padding = 6, .background_color = Color.rgb(12, 17, 25), .border_width = 1, .border_color = Color.rgb(21, 29, 42), .border_radius = 4 }, .children = &_arr_1486 }, .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 4, .padding = 6, .background_color = Color.rgb(12, 17, 25), .border_width = 1, .border_color = Color.rgb(21, 29, 42), .border_radius = 4 }, .children = &_arr_1492 }, .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 4, .padding = 6, .background_color = Color.rgb(12, 17, 25), .border_width = 1, .border_color = Color.rgb(21, 29, 42), .border_radius = 4 }, .children = &_arr_1498 } }; // DetailSection
-// tsz:InspectorEmbed.tsz:2324 — <Box>
-var _arr_1500 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(129, 182, 255) } }; // Badge
-// tsz:InspectorEmbed.tsz:2325 — <Box>
-var _arr_1501 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(239, 179, 111) } }; // Badge
-// tsz:InspectorEmbed.tsz:2326 — <Box>
-var _arr_1502 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(154, 163, 184) } }; // Badge
-// tsz:InspectorEmbed.tsz:2323 — <>
-var _arr_1503 = [_]Node{ .{ .style = .{ .padding_left = 6, .padding_right = 6, .padding_top = 3, .padding_bottom = 3, .border_radius = 4, .background_color = Color.rgb(22, 48, 74) }, .children = &_arr_1500 } };
-// tsz:InspectorEmbed.tsz:2458 — <Box>
-var _arr_1504 = [_]Node{ .{ .text = "padBottom", .font_size = 10, .text_color = Color.rgb(154, 163, 184) }, .{ .children = &_arr_1503 } }; // EditableStyleCell
-// tsz:InspectorEmbed.tsz:2457 — <Box>
-var _arr_1505 = [_]Node{ .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center, .gap = 8 }, .children = &_arr_1504 }, .{ .style = .{ .width = -1, .padding_left = 7, .padding_right = 7, .padding_top = 5, .padding_bottom = 5, .background_color = Color.rgb(10, 16, 24), .border_width = 1, .border_color = Color.rgb(32, 43, 63), .border_radius = 4 }, .font_size = 11, .text_color = Color.rgb(238, 242, 255), .input_id = 9, .placeholder = "14" } }; // EditableStyleCell
-// tsz:InspectorEmbed.tsz:2324 — <Box>
-var _arr_1506 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(129, 182, 255) } }; // Badge
-// tsz:InspectorEmbed.tsz:2325 — <Box>
-var _arr_1507 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(239, 179, 111) } }; // Badge
-// tsz:InspectorEmbed.tsz:2326 — <Box>
-var _arr_1508 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(154, 163, 184) } }; // Badge
-// tsz:InspectorEmbed.tsz:2323 — <>
-var _arr_1509 = [_]Node{ .{ .style = .{ .padding_left = 6, .padding_right = 6, .padding_top = 3, .padding_bottom = 3, .border_radius = 4, .background_color = Color.rgb(22, 48, 74) }, .children = &_arr_1506 } };
-// tsz:InspectorEmbed.tsz:2458 — <Box>
-var _arr_1510 = [_]Node{ .{ .text = "padLeft", .font_size = 10, .text_color = Color.rgb(154, 163, 184) }, .{ .children = &_arr_1509 } }; // EditableStyleCell
-// tsz:InspectorEmbed.tsz:2457 — <Box>
-var _arr_1511 = [_]Node{ .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center, .gap = 8 }, .children = &_arr_1510 }, .{ .style = .{ .width = -1, .padding_left = 7, .padding_right = 7, .padding_top = 5, .padding_bottom = 5, .background_color = Color.rgb(10, 16, 24), .border_width = 1, .border_color = Color.rgb(32, 43, 63), .border_radius = 4 }, .font_size = 11, .text_color = Color.rgb(238, 242, 255), .input_id = 10, .placeholder = "14" } }; // EditableStyleCell
-// tsz:InspectorEmbed.tsz:2324 — <Box>
-var _arr_1512 = [_]Node{ .{ .text = "editor", .font_size = 9, .text_color = Color.rgb(129, 182, 255) } }; // Badge
-// tsz:InspectorEmbed.tsz:2325 — <Box>
-var _arr_1513 = [_]Node{ .{ .text = "editor", .font_size = 9, .text_color = Color.rgb(239, 179, 111) } }; // Badge
-// tsz:InspectorEmbed.tsz:2326 — <Box>
-var _arr_1514 = [_]Node{ .{ .text = "editor", .font_size = 9, .text_color = Color.rgb(154, 163, 184) } }; // Badge
-// tsz:InspectorEmbed.tsz:2323 — <>
-var _arr_1515 = [_]Node{ .{ .style = .{ .padding_left = 6, .padding_right = 6, .padding_top = 3, .padding_bottom = 3, .border_radius = 4, .background_color = Color.rgb(20, 26, 41) }, .children = &_arr_1514 } };
-// tsz:InspectorEmbed.tsz:2583 — <Box>
-var _arr_1516 = [_]Node{ .{ .text = "add prop", .font_size = 10, .text_color = Color.rgb(154, 163, 184) }, .{ .children = &_arr_1515 } }; // DetailSection
-// tsz:InspectorEmbed.tsz:2587 — <Pressable>
-var _arr_1517 = [_]Node{ .{ .text = "[+ add property]", .font_size = 10, .text_color = Color.rgb(97, 149, 250) } }; // DetailSection
-// tsz:InspectorEmbed.tsz:2582 — <Box>
-var _arr_1518 = [_]Node{ .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center, .gap = 8 }, .children = &_arr_1516 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .padding_top = 4, .padding_bottom = 4 }, .hoverable = true, .children = &_arr_1517 } }; // DetailSection
-// tsz:InspectorEmbed.tsz:2579 — <Box>
-var _arr_1519 = [_]Node{ .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 4, .padding = 6, .background_color = Color.rgb(12, 17, 25), .border_width = 1, .border_color = Color.rgb(21, 29, 42), .border_radius = 4 }, .children = &_arr_1505 }, .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 4, .padding = 6, .background_color = Color.rgb(12, 17, 25), .border_width = 1, .border_color = Color.rgb(21, 29, 42), .border_radius = 4 }, .children = &_arr_1511 }, .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 4, .padding = 6, .background_color = Color.rgb(12, 17, 25), .border_width = 1, .border_color = Color.rgb(21, 29, 42), .border_radius = 4 }, .children = &_arr_1518 } }; // DetailSection
-// tsz:InspectorEmbed.tsz:2563 — <Box>
-var _arr_1520 = [_]Node{ .{ .style = .{ .flex_direction = .row, .gap = 6 }, .children = &_arr_1461 }, .{ .style = .{ .flex_direction = .row, .gap = 6 }, .children = &_arr_1480 }, .{ .style = .{ .flex_direction = .row, .gap = 6 }, .children = &_arr_1499 }, .{ .style = .{ .flex_direction = .row, .gap = 6 }, .children = &_arr_1519 } }; // DetailSection
-// tsz:InspectorEmbed.tsz:2557 — <Box>
-var _arr_1521 = [_]Node{ .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center, .gap = 10 }, .children = &_arr_1442 }, .{ .text = "compact mock editor; type into a field to override the value inline", .font_size = 10, .text_color = Color.rgb(105, 113, 133) }, .{ .style = .{ .flex_direction = .column, .gap = 6 }, .children = &_arr_1520 } }; // DetailSection
-// tsz:InspectorEmbed.tsz:2596 — <Box>
-var _arr_1522 = [_]Node{ .{ .text = "diagnostics", .font_size = 11, .text_color = Color.rgb(223, 229, 245) }, .{ .text = "layout / runtime dump", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } }; // DetailSection
-// tsz:InspectorEmbed.tsz:2387 — <Box>
-var _arr_1523 = [_]Node{ .{ .text = "primitive", .font_size = 11, .text_color = Color.rgb(154, 163, 184) }, .{ .text = "selected node is a scroll surface, not a leaf primitive", .font_size = 10, .text_color = Color.rgb(105, 113, 133) } }; // PropertyRow
-// tsz:InspectorEmbed.tsz:2392 — <Box>
-var _arr_1524 = [_]Node{ .{ .text = "ScrollView", .font_size = 11, .text_color = Color.rgb(129, 182, 255) } }; // PropertyRow
-// tsz:InspectorEmbed.tsz:2396 — <Box>
-var _arr_1525 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(136, 185, 255) } }; // PropertyRow
-// tsz:InspectorEmbed.tsz:2397 — <Box>
-var _arr_1526 = [_]Node{ .{ .text = "derived", .font_size = 9, .text_color = Color.rgb(197, 214, 126) } }; // PropertyRow
-// tsz:InspectorEmbed.tsz:2398 — <Box>
-var _arr_1527 = [_]Node{ .{ .text = "runtime", .font_size = 9, .text_color = Color.rgb(225, 154, 192) } }; // PropertyRow
-// tsz:InspectorEmbed.tsz:2399 — <Box>
-var _arr_1528 = [_]Node{ .{ .text = "default", .font_size = 9, .text_color = Color.rgb(154, 163, 184) } }; // PropertyRow
-// tsz:InspectorEmbed.tsz:2391 — <Box>
-var _arr_1529 = [_]Node{ .{ .style = .{ .padding_left = 6, .padding_right = 6, .padding_top = 3, .padding_bottom = 3, .border_radius = 4, .border_width = 1, .border_color = Color.rgb(27, 36, 54), .background_color = Color.rgb(10, 16, 24) }, .children = &_arr_1524 }, .{ .style = .{ .padding_left = 5, .padding_right = 5, .padding_top = 2, .padding_bottom = 2, .border_radius = 4, .background_color = Color.rgb(39, 24, 34) }, .children = &_arr_1527 } }; // PropertyRow
-// tsz:InspectorEmbed.tsz:2386 — <Pressable>
-var _arr_1530 = [_]Node{ .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 2 }, .children = &_arr_1523 }, .{ .style = .{ .flex_direction = .column, .align_items = .end, .gap = 4 }, .children = &_arr_1529 } }; // PropertyRow
-// tsz:InspectorEmbed.tsz:2387 — <Box>
-var _arr_1531 = [_]Node{ .{ .text = "conditional", .font_size = 11, .text_color = Color.rgb(154, 163, 184) }, .{ .text = "mounted whenever the Elements detail surface is present", .font_size = 10, .text_color = Color.rgb(105, 113, 133) } }; // PropertyRow
-// tsz:InspectorEmbed.tsz:2392 — <Box>
-var _arr_1532 = [_]Node{ .{ .text = "no", .font_size = 11, .text_color = Color.rgb(238, 242, 255) } }; // PropertyRow
-// tsz:InspectorEmbed.tsz:2396 — <Box>
-var _arr_1533 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(136, 185, 255) } }; // PropertyRow
-// tsz:InspectorEmbed.tsz:2397 — <Box>
-var _arr_1534 = [_]Node{ .{ .text = "derived", .font_size = 9, .text_color = Color.rgb(197, 214, 126) } }; // PropertyRow
-// tsz:InspectorEmbed.tsz:2398 — <Box>
-var _arr_1535 = [_]Node{ .{ .text = "runtime", .font_size = 9, .text_color = Color.rgb(225, 154, 192) } }; // PropertyRow
-// tsz:InspectorEmbed.tsz:2399 — <Box>
-var _arr_1536 = [_]Node{ .{ .text = "default", .font_size = 9, .text_color = Color.rgb(154, 163, 184) } }; // PropertyRow
-// tsz:InspectorEmbed.tsz:2391 — <Box>
-var _arr_1537 = [_]Node{ .{ .style = .{ .padding_left = 6, .padding_right = 6, .padding_top = 3, .padding_bottom = 3, .border_radius = 4, .border_width = 1, .border_color = Color.rgb(27, 36, 54), .background_color = Color.rgb(10, 16, 24) }, .children = &_arr_1532 }, .{ .style = .{ .padding_left = 5, .padding_right = 5, .padding_top = 2, .padding_bottom = 2, .border_radius = 4, .background_color = Color.rgb(26, 33, 19) }, .children = &_arr_1534 } }; // PropertyRow
-// tsz:InspectorEmbed.tsz:2386 — <Pressable>
-var _arr_1538 = [_]Node{ .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 2 }, .children = &_arr_1531 }, .{ .style = .{ .flex_direction = .column, .align_items = .end, .gap = 4 }, .children = &_arr_1537 } }; // PropertyRow
-// tsz:InspectorEmbed.tsz:2387 — <Box>
-var _arr_1539 = [_]Node{ .{ .text = "node id", .font_size = 11, .text_color = Color.rgb(154, 163, 184) }, .{ .text = "stable runtime handle for eventual picker targeting", .font_size = 10, .text_color = Color.rgb(105, 113, 133) } }; // PropertyRow
-// tsz:InspectorEmbed.tsz:2392 — <Box>
-var _arr_1540 = [_]Node{ .{ .text = "#42", .font_size = 11, .text_color = Color.rgb(238, 242, 255) } }; // PropertyRow
-// tsz:InspectorEmbed.tsz:2396 — <Box>
-var _arr_1541 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(136, 185, 255) } }; // PropertyRow
-// tsz:InspectorEmbed.tsz:2397 — <Box>
-var _arr_1542 = [_]Node{ .{ .text = "derived", .font_size = 9, .text_color = Color.rgb(197, 214, 126) } }; // PropertyRow
-// tsz:InspectorEmbed.tsz:2398 — <Box>
-var _arr_1543 = [_]Node{ .{ .text = "runtime", .font_size = 9, .text_color = Color.rgb(225, 154, 192) } }; // PropertyRow
-// tsz:InspectorEmbed.tsz:2399 — <Box>
-var _arr_1544 = [_]Node{ .{ .text = "default", .font_size = 9, .text_color = Color.rgb(154, 163, 184) } }; // PropertyRow
-// tsz:InspectorEmbed.tsz:2391 — <Box>
-var _arr_1545 = [_]Node{ .{ .style = .{ .padding_left = 6, .padding_right = 6, .padding_top = 3, .padding_bottom = 3, .border_radius = 4, .border_width = 1, .border_color = Color.rgb(27, 36, 54), .background_color = Color.rgb(10, 16, 24) }, .children = &_arr_1540 }, .{ .style = .{ .padding_left = 5, .padding_right = 5, .padding_top = 2, .padding_bottom = 2, .border_radius = 4, .background_color = Color.rgb(39, 24, 34) }, .children = &_arr_1543 } }; // PropertyRow
-// tsz:InspectorEmbed.tsz:2386 — <Pressable>
-var _arr_1546 = [_]Node{ .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 2 }, .children = &_arr_1539 }, .{ .style = .{ .flex_direction = .column, .align_items = .end, .gap = 4 }, .children = &_arr_1545 } }; // PropertyRow
-// tsz:InspectorEmbed.tsz:2387 — <Box>
-var _arr_1547 = [_]Node{ .{ .text = "source", .font_size = 11, .text_color = Color.rgb(154, 163, 184) }, .{ .text = "mock implementation file backing this selected node", .font_size = 10, .text_color = Color.rgb(105, 113, 133) } }; // PropertyRow
-// tsz:InspectorEmbed.tsz:2392 — <Box>
-var _arr_1548 = [_]Node{ .{ .text = "DetailPane.c.tsz", .font_size = 11, .text_color = Color.rgb(238, 242, 255) } }; // PropertyRow
-// tsz:InspectorEmbed.tsz:2396 — <Box>
-var _arr_1549 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(136, 185, 255) } }; // PropertyRow
-// tsz:InspectorEmbed.tsz:2397 — <Box>
-var _arr_1550 = [_]Node{ .{ .text = "derived", .font_size = 9, .text_color = Color.rgb(197, 214, 126) } }; // PropertyRow
-// tsz:InspectorEmbed.tsz:2398 — <Box>
-var _arr_1551 = [_]Node{ .{ .text = "runtime", .font_size = 9, .text_color = Color.rgb(225, 154, 192) } }; // PropertyRow
-// tsz:InspectorEmbed.tsz:2399 — <Box>
-var _arr_1552 = [_]Node{ .{ .text = "default", .font_size = 9, .text_color = Color.rgb(154, 163, 184) } }; // PropertyRow
-// tsz:InspectorEmbed.tsz:2391 — <Box>
-var _arr_1553 = [_]Node{ .{ .style = .{ .padding_left = 6, .padding_right = 6, .padding_top = 3, .padding_bottom = 3, .border_radius = 4, .border_width = 1, .border_color = Color.rgb(27, 36, 54), .background_color = Color.rgb(10, 16, 24) }, .children = &_arr_1548 }, .{ .style = .{ .padding_left = 5, .padding_right = 5, .padding_top = 2, .padding_bottom = 2, .border_radius = 4, .background_color = Color.rgb(26, 33, 19) }, .children = &_arr_1550 } }; // PropertyRow
-// tsz:InspectorEmbed.tsz:2386 — <Pressable>
-var _arr_1554 = [_]Node{ .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 2 }, .children = &_arr_1547 }, .{ .style = .{ .flex_direction = .column, .align_items = .end, .gap = 4 }, .children = &_arr_1553 } }; // PropertyRow
-// tsz:InspectorEmbed.tsz:2602 — <Box>
-var _arr_1555 = [_]Node{ .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .start, .gap = 12, .padding_left = 8, .padding_right = 8, .padding_top = 7, .padding_bottom = 7, .border_radius = 4, .border_width = 1, .border_color = Color.rgb(21, 29, 42), .background_color = Color.rgb(15, 20, 29) }, .hoverable = true, .children = &_arr_1530 }, .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .start, .gap = 12, .padding_left = 8, .padding_right = 8, .padding_top = 7, .padding_bottom = 7, .border_radius = 4, .border_width = 1, .border_color = Color.rgb(21, 29, 42), .background_color = Color.rgb(15, 20, 29) }, .hoverable = true, .children = &_arr_1538 }, .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .start, .gap = 12, .padding_left = 8, .padding_right = 8, .padding_top = 7, .padding_bottom = 7, .border_radius = 4, .border_width = 1, .border_color = Color.rgb(21, 29, 42), .background_color = Color.rgb(15, 20, 29) }, .hoverable = true, .children = &_arr_1546 }, .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .start, .gap = 12, .padding_left = 8, .padding_right = 8, .padding_top = 7, .padding_bottom = 7, .border_radius = 4, .border_width = 1, .border_color = Color.rgb(21, 29, 42), .background_color = Color.rgb(15, 20, 29) }, .hoverable = true, .children = &_arr_1554 } }; // DiagnosticGroup
-// tsz:InspectorEmbed.tsz:2469 — <Box>
-var _arr_1556 = [_]Node{ .{ .text = "identity", .font_size = 10, .text_color = Color.rgb(105, 113, 133) }, .{ .style = .{ .flex_direction = .column, .gap = 4 }, .children = &_arr_1555 }, .{ .style = .{ .height = 1, .background_color = Color.rgb(26, 32, 48) } }, .{} }; // DiagnosticGroup
-// tsz:InspectorEmbed.tsz:2595 — <Box>
-var _arr_1557 = [_]Node{ .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center, .gap = 10 }, .children = &_arr_1522 }, .{ .style = .{ .flex_direction = .column, .gap = 6 }, .children = &_arr_1556 } }; // DetailSection
-// tsz:InspectorEmbed.tsz:2556 — <Box>
-var _arr_1558 = [_]Node{ .{ .style = .{ .flex_direction = .column, .gap = 8, .flex_grow = 1, .flex_basis = 320, .padding = 10, .background_color = Color.rgb(15, 20, 31), .border_width = 1, .border_color = Color.rgb(21, 27, 41), .border_radius = 4 }, .children = &_arr_1521 }, .{ .style = .{ .flex_direction = .column, .gap = 8, .flex_grow = 1, .flex_basis = 360, .padding = 10, .background_color = Color.rgb(15, 20, 31), .border_width = 1, .border_color = Color.rgb(21, 27, 41), .border_radius = 4 }, .children = &_arr_1557 } }; // DetailSection
 // tsz:InspectorEmbed.tsz:2346 — <Box>
-var _arr_1559 = [_]Node{ .{ .text = "box model", .font_size = 11, .text_color = Color.rgb(223, 229, 245) }, .{ .text = "margin / padding / content", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } }; // DetailSection
+var _arr_1442 = [_]Node{ .{ .text = "box model", .font_size = 11, .text_color = Color.rgb(223, 229, 245) }, .{ .text = "margin / padding / content", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } }; // DetailSection
 // tsz:InspectorEmbed.tsz:2350 — <Box>
-var _arr_1560 = [_]Node{ .{ .style = .{ .padding = 10, .background_color = Color.rgb(15, 20, 31), .border_radius = 4, .border_width = 1, .border_color = Color.rgb(21, 27, 41), .gap = 8, .align_items = .center }, .children = &_arr_1441 }, .{ .style = .{ .flex_direction = .row, .align_items = .start, .gap = 12, .flex_wrap = .wrap, .padding_top = 10, .padding_bottom = 10 }, .children = &_arr_1558 } }; // DetailSection
+var _arr_1443 = [_]Node{ .{ .style = .{ .padding = 10, .background_color = Color.rgb(15, 20, 31), .border_radius = 4, .border_width = 1, .border_color = Color.rgb(21, 27, 41), .gap = 8, .align_items = .center }, .children = &_arr_1441 } }; // DetailSection
 // tsz:InspectorEmbed.tsz:2345 — <Box>
-var _arr_1561 = [_]Node{ .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center, .gap = 8 }, .children = &_arr_1559 }, .{ .style = .{ .flex_direction = .column, .gap = 8 }, .children = &_arr_1560 } }; // DetailSection
+var _arr_1444 = [_]Node{ .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center, .gap = 8 }, .children = &_arr_1442 }, .{ .style = .{ .flex_direction = .column, .gap = 8 }, .children = &_arr_1443 } }; // DetailSection
+// tsz:InspectorEmbed.tsz:2558 — <Box>
+var _arr_1445 = [_]Node{ .{ .text = "style", .font_size = 11, .text_color = Color.rgb(223, 229, 245) }, .{ .text = "click a field to edit", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } }; // DetailPane
+// tsz:InspectorEmbed.tsz:2324 — <Box>
+var _arr_1446 = [_]Node{ .{ .text = "derived", .font_size = 9, .text_color = Color.rgb(129, 182, 255) } }; // Badge
+// tsz:InspectorEmbed.tsz:2325 — <Box>
+var _arr_1447 = [_]Node{ .{ .text = "derived", .font_size = 9, .text_color = Color.rgb(239, 179, 111) } }; // Badge
+// tsz:InspectorEmbed.tsz:2326 — <Box>
+var _arr_1448 = [_]Node{ .{ .text = "derived", .font_size = 9, .text_color = Color.rgb(154, 163, 184) } }; // Badge
+// tsz:InspectorEmbed.tsz:2323 — <>
+var _arr_1449 = [_]Node{ .{ .style = .{ .padding_left = 6, .padding_right = 6, .padding_top = 3, .padding_bottom = 3, .border_radius = 4, .background_color = Color.rgb(20, 26, 41) }, .children = &_arr_1448 } };
+// tsz:InspectorEmbed.tsz:2458 — <Box>
+var _arr_1450 = [_]Node{ .{ .text = "width", .font_size = 10, .text_color = Color.rgb(154, 163, 184) }, .{ .children = &_arr_1449 } }; // EditableStyleCell
+// tsz:InspectorEmbed.tsz:2457 — <Box>
+var _arr_1451 = [_]Node{ .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center, .gap = 8 }, .children = &_arr_1450 }, .{ .style = .{ .width = -1, .padding_left = 7, .padding_right = 7, .padding_top = 5, .padding_bottom = 5, .background_color = Color.rgb(10, 16, 24), .border_width = 1, .border_color = Color.rgb(32, 43, 63), .border_radius = 4 }, .font_size = 11, .text_color = Color.rgb(238, 242, 255), .input_id = 0, .placeholder = "auto" } }; // EditableStyleCell
+// tsz:InspectorEmbed.tsz:2324 — <Box>
+var _arr_1452 = [_]Node{ .{ .text = "derived", .font_size = 9, .text_color = Color.rgb(129, 182, 255) } }; // Badge
+// tsz:InspectorEmbed.tsz:2325 — <Box>
+var _arr_1453 = [_]Node{ .{ .text = "derived", .font_size = 9, .text_color = Color.rgb(239, 179, 111) } }; // Badge
+// tsz:InspectorEmbed.tsz:2326 — <Box>
+var _arr_1454 = [_]Node{ .{ .text = "derived", .font_size = 9, .text_color = Color.rgb(154, 163, 184) } }; // Badge
+// tsz:InspectorEmbed.tsz:2323 — <>
+var _arr_1455 = [_]Node{ .{ .style = .{ .padding_left = 6, .padding_right = 6, .padding_top = 3, .padding_bottom = 3, .border_radius = 4, .background_color = Color.rgb(20, 26, 41) }, .children = &_arr_1454 } };
+// tsz:InspectorEmbed.tsz:2458 — <Box>
+var _arr_1456 = [_]Node{ .{ .text = "height", .font_size = 10, .text_color = Color.rgb(154, 163, 184) }, .{ .children = &_arr_1455 } }; // EditableStyleCell
+// tsz:InspectorEmbed.tsz:2457 — <Box>
+var _arr_1457 = [_]Node{ .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center, .gap = 8 }, .children = &_arr_1456 }, .{ .style = .{ .width = -1, .padding_left = 7, .padding_right = 7, .padding_top = 5, .padding_bottom = 5, .background_color = Color.rgb(10, 16, 24), .border_width = 1, .border_color = Color.rgb(32, 43, 63), .border_radius = 4 }, .font_size = 11, .text_color = Color.rgb(238, 242, 255), .input_id = 1, .placeholder = "auto" } }; // EditableStyleCell
+// tsz:InspectorEmbed.tsz:2324 — <Box>
+var _arr_1458 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(129, 182, 255) } }; // Badge
+// tsz:InspectorEmbed.tsz:2325 — <Box>
+var _arr_1459 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(239, 179, 111) } }; // Badge
+// tsz:InspectorEmbed.tsz:2326 — <Box>
+var _arr_1460 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(154, 163, 184) } }; // Badge
+// tsz:InspectorEmbed.tsz:2323 — <>
+var _arr_1461 = [_]Node{ .{ .style = .{ .padding_left = 6, .padding_right = 6, .padding_top = 3, .padding_bottom = 3, .border_radius = 4, .background_color = Color.rgb(22, 48, 74) }, .children = &_arr_1458 } };
+// tsz:InspectorEmbed.tsz:2458 — <Box>
+var _arr_1462 = [_]Node{ .{ .text = "flexGrow", .font_size = 10, .text_color = Color.rgb(154, 163, 184) }, .{ .children = &_arr_1461 } }; // EditableStyleCell
+// tsz:InspectorEmbed.tsz:2457 — <Box>
+var _arr_1463 = [_]Node{ .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center, .gap = 8 }, .children = &_arr_1462 }, .{ .style = .{ .width = -1, .padding_left = 7, .padding_right = 7, .padding_top = 5, .padding_bottom = 5, .background_color = Color.rgb(10, 16, 24), .border_width = 1, .border_color = Color.rgb(32, 43, 63), .border_radius = 4 }, .font_size = 11, .text_color = Color.rgb(238, 242, 255), .input_id = 2, .placeholder = "1" } }; // EditableStyleCell
+// tsz:InspectorEmbed.tsz:2564 — <Box>
+var _arr_1464 = [_]Node{ .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 4, .padding = 6, .background_color = Color.rgb(12, 17, 25), .border_width = 1, .border_color = Color.rgb(21, 29, 42), .border_radius = 4 }, .children = &_arr_1451 }, .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 4, .padding = 6, .background_color = Color.rgb(12, 17, 25), .border_width = 1, .border_color = Color.rgb(21, 29, 42), .border_radius = 4 }, .children = &_arr_1457 }, .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 4, .padding = 6, .background_color = Color.rgb(12, 17, 25), .border_width = 1, .border_color = Color.rgb(21, 29, 42), .border_radius = 4 }, .children = &_arr_1463 } }; // DetailPane
+// tsz:InspectorEmbed.tsz:2324 — <Box>
+var _arr_1465 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(129, 182, 255) } }; // Badge
+// tsz:InspectorEmbed.tsz:2325 — <Box>
+var _arr_1466 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(239, 179, 111) } }; // Badge
+// tsz:InspectorEmbed.tsz:2326 — <Box>
+var _arr_1467 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(154, 163, 184) } }; // Badge
+// tsz:InspectorEmbed.tsz:2323 — <>
+var _arr_1468 = [_]Node{ .{ .style = .{ .padding_left = 6, .padding_right = 6, .padding_top = 3, .padding_bottom = 3, .border_radius = 4, .background_color = Color.rgb(22, 48, 74) }, .children = &_arr_1465 } };
+// tsz:InspectorEmbed.tsz:2458 — <Box>
+var _arr_1469 = [_]Node{ .{ .text = "flexBasis", .font_size = 10, .text_color = Color.rgb(154, 163, 184) }, .{ .children = &_arr_1468 } }; // EditableStyleCell
+// tsz:InspectorEmbed.tsz:2457 — <Box>
+var _arr_1470 = [_]Node{ .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center, .gap = 8 }, .children = &_arr_1469 }, .{ .style = .{ .width = -1, .padding_left = 7, .padding_right = 7, .padding_top = 5, .padding_bottom = 5, .background_color = Color.rgb(10, 16, 24), .border_width = 1, .border_color = Color.rgb(32, 43, 63), .border_radius = 4 }, .font_size = 11, .text_color = Color.rgb(238, 242, 255), .input_id = 3, .placeholder = "0" } }; // EditableStyleCell
+// tsz:InspectorEmbed.tsz:2324 — <Box>
+var _arr_1471 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(129, 182, 255) } }; // Badge
+// tsz:InspectorEmbed.tsz:2325 — <Box>
+var _arr_1472 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(239, 179, 111) } }; // Badge
+// tsz:InspectorEmbed.tsz:2326 — <Box>
+var _arr_1473 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(154, 163, 184) } }; // Badge
+// tsz:InspectorEmbed.tsz:2323 — <>
+var _arr_1474 = [_]Node{ .{ .style = .{ .padding_left = 6, .padding_right = 6, .padding_top = 3, .padding_bottom = 3, .border_radius = 4, .background_color = Color.rgb(22, 48, 74) }, .children = &_arr_1471 } };
+// tsz:InspectorEmbed.tsz:2458 — <Box>
+var _arr_1475 = [_]Node{ .{ .text = "overflow", .font_size = 10, .text_color = Color.rgb(154, 163, 184) }, .{ .children = &_arr_1474 } }; // EditableStyleCell
+// tsz:InspectorEmbed.tsz:2457 — <Box>
+var _arr_1476 = [_]Node{ .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center, .gap = 8 }, .children = &_arr_1475 }, .{ .style = .{ .width = -1, .padding_left = 7, .padding_right = 7, .padding_top = 5, .padding_bottom = 5, .background_color = Color.rgb(10, 16, 24), .border_width = 1, .border_color = Color.rgb(32, 43, 63), .border_radius = 4 }, .font_size = 11, .text_color = Color.rgb(238, 242, 255), .input_id = 4, .placeholder = "scroll" } }; // EditableStyleCell
+// tsz:InspectorEmbed.tsz:2324 — <Box>
+var _arr_1477 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(129, 182, 255) } }; // Badge
+// tsz:InspectorEmbed.tsz:2325 — <Box>
+var _arr_1478 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(239, 179, 111) } }; // Badge
+// tsz:InspectorEmbed.tsz:2326 — <Box>
+var _arr_1479 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(154, 163, 184) } }; // Badge
+// tsz:InspectorEmbed.tsz:2323 — <>
+var _arr_1480 = [_]Node{ .{ .style = .{ .padding_left = 6, .padding_right = 6, .padding_top = 3, .padding_bottom = 3, .border_radius = 4, .background_color = Color.rgb(22, 48, 74) }, .children = &_arr_1477 } };
+// tsz:InspectorEmbed.tsz:2458 — <Box>
+var _arr_1481 = [_]Node{ .{ .text = "background", .font_size = 10, .text_color = Color.rgb(154, 163, 184) }, .{ .children = &_arr_1480 } }; // EditableStyleCell
+// tsz:InspectorEmbed.tsz:2457 — <Box>
+var _arr_1482 = [_]Node{ .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center, .gap = 8 }, .children = &_arr_1481 }, .{ .style = .{ .width = -1, .padding_left = 7, .padding_right = 7, .padding_top = 5, .padding_bottom = 5, .background_color = Color.rgb(10, 16, 24), .border_width = 1, .border_color = Color.rgb(32, 43, 63), .border_radius = 4 }, .font_size = 11, .text_color = Color.rgb(238, 242, 255), .input_id = 5, .placeholder = "#0c1018" } }; // EditableStyleCell
+// tsz:InspectorEmbed.tsz:2569 — <Box>
+var _arr_1483 = [_]Node{ .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 4, .padding = 6, .background_color = Color.rgb(12, 17, 25), .border_width = 1, .border_color = Color.rgb(21, 29, 42), .border_radius = 4 }, .children = &_arr_1470 }, .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 4, .padding = 6, .background_color = Color.rgb(12, 17, 25), .border_width = 1, .border_color = Color.rgb(21, 29, 42), .border_radius = 4 }, .children = &_arr_1476 }, .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 4, .padding = 6, .background_color = Color.rgb(12, 17, 25), .border_width = 1, .border_color = Color.rgb(21, 29, 42), .border_radius = 4 }, .children = &_arr_1482 } }; // DetailPane
+// tsz:InspectorEmbed.tsz:2324 — <Box>
+var _arr_1484 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(129, 182, 255) } }; // Badge
+// tsz:InspectorEmbed.tsz:2325 — <Box>
+var _arr_1485 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(239, 179, 111) } }; // Badge
+// tsz:InspectorEmbed.tsz:2326 — <Box>
+var _arr_1486 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(154, 163, 184) } }; // Badge
+// tsz:InspectorEmbed.tsz:2323 — <>
+var _arr_1487 = [_]Node{ .{ .style = .{ .padding_left = 6, .padding_right = 6, .padding_top = 3, .padding_bottom = 3, .border_radius = 4, .background_color = Color.rgb(22, 48, 74) }, .children = &_arr_1484 } };
+// tsz:InspectorEmbed.tsz:2458 — <Box>
+var _arr_1488 = [_]Node{ .{ .text = "border", .font_size = 10, .text_color = Color.rgb(154, 163, 184) }, .{ .children = &_arr_1487 } }; // EditableStyleCell
+// tsz:InspectorEmbed.tsz:2457 — <Box>
+var _arr_1489 = [_]Node{ .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center, .gap = 8 }, .children = &_arr_1488 }, .{ .style = .{ .width = -1, .padding_left = 7, .padding_right = 7, .padding_top = 5, .padding_bottom = 5, .background_color = Color.rgb(10, 16, 24), .border_width = 1, .border_color = Color.rgb(32, 43, 63), .border_radius = 4 }, .font_size = 11, .text_color = Color.rgb(238, 242, 255), .input_id = 6, .placeholder = "#1a2030" } }; // EditableStyleCell
+// tsz:InspectorEmbed.tsz:2324 — <Box>
+var _arr_1490 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(129, 182, 255) } }; // Badge
+// tsz:InspectorEmbed.tsz:2325 — <Box>
+var _arr_1491 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(239, 179, 111) } }; // Badge
+// tsz:InspectorEmbed.tsz:2326 — <Box>
+var _arr_1492 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(154, 163, 184) } }; // Badge
+// tsz:InspectorEmbed.tsz:2323 — <>
+var _arr_1493 = [_]Node{ .{ .style = .{ .padding_left = 6, .padding_right = 6, .padding_top = 3, .padding_bottom = 3, .border_radius = 4, .background_color = Color.rgb(22, 48, 74) }, .children = &_arr_1490 } };
+// tsz:InspectorEmbed.tsz:2458 — <Box>
+var _arr_1494 = [_]Node{ .{ .text = "padTop", .font_size = 10, .text_color = Color.rgb(154, 163, 184) }, .{ .children = &_arr_1493 } }; // EditableStyleCell
+// tsz:InspectorEmbed.tsz:2457 — <Box>
+var _arr_1495 = [_]Node{ .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center, .gap = 8 }, .children = &_arr_1494 }, .{ .style = .{ .width = -1, .padding_left = 7, .padding_right = 7, .padding_top = 5, .padding_bottom = 5, .background_color = Color.rgb(10, 16, 24), .border_width = 1, .border_color = Color.rgb(32, 43, 63), .border_radius = 4 }, .font_size = 11, .text_color = Color.rgb(238, 242, 255), .input_id = 7, .placeholder = "14" } }; // EditableStyleCell
+// tsz:InspectorEmbed.tsz:2324 — <Box>
+var _arr_1496 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(129, 182, 255) } }; // Badge
+// tsz:InspectorEmbed.tsz:2325 — <Box>
+var _arr_1497 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(239, 179, 111) } }; // Badge
+// tsz:InspectorEmbed.tsz:2326 — <Box>
+var _arr_1498 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(154, 163, 184) } }; // Badge
+// tsz:InspectorEmbed.tsz:2323 — <>
+var _arr_1499 = [_]Node{ .{ .style = .{ .padding_left = 6, .padding_right = 6, .padding_top = 3, .padding_bottom = 3, .border_radius = 4, .background_color = Color.rgb(22, 48, 74) }, .children = &_arr_1496 } };
+// tsz:InspectorEmbed.tsz:2458 — <Box>
+var _arr_1500 = [_]Node{ .{ .text = "padRight", .font_size = 10, .text_color = Color.rgb(154, 163, 184) }, .{ .children = &_arr_1499 } }; // EditableStyleCell
+// tsz:InspectorEmbed.tsz:2457 — <Box>
+var _arr_1501 = [_]Node{ .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center, .gap = 8 }, .children = &_arr_1500 }, .{ .style = .{ .width = -1, .padding_left = 7, .padding_right = 7, .padding_top = 5, .padding_bottom = 5, .background_color = Color.rgb(10, 16, 24), .border_width = 1, .border_color = Color.rgb(32, 43, 63), .border_radius = 4 }, .font_size = 11, .text_color = Color.rgb(238, 242, 255), .input_id = 8, .placeholder = "14" } }; // EditableStyleCell
+// tsz:InspectorEmbed.tsz:2574 — <Box>
+var _arr_1502 = [_]Node{ .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 4, .padding = 6, .background_color = Color.rgb(12, 17, 25), .border_width = 1, .border_color = Color.rgb(21, 29, 42), .border_radius = 4 }, .children = &_arr_1489 }, .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 4, .padding = 6, .background_color = Color.rgb(12, 17, 25), .border_width = 1, .border_color = Color.rgb(21, 29, 42), .border_radius = 4 }, .children = &_arr_1495 }, .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 4, .padding = 6, .background_color = Color.rgb(12, 17, 25), .border_width = 1, .border_color = Color.rgb(21, 29, 42), .border_radius = 4 }, .children = &_arr_1501 } }; // DetailPane
+// tsz:InspectorEmbed.tsz:2324 — <Box>
+var _arr_1503 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(129, 182, 255) } }; // Badge
+// tsz:InspectorEmbed.tsz:2325 — <Box>
+var _arr_1504 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(239, 179, 111) } }; // Badge
+// tsz:InspectorEmbed.tsz:2326 — <Box>
+var _arr_1505 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(154, 163, 184) } }; // Badge
+// tsz:InspectorEmbed.tsz:2323 — <>
+var _arr_1506 = [_]Node{ .{ .style = .{ .padding_left = 6, .padding_right = 6, .padding_top = 3, .padding_bottom = 3, .border_radius = 4, .background_color = Color.rgb(22, 48, 74) }, .children = &_arr_1503 } };
+// tsz:InspectorEmbed.tsz:2458 — <Box>
+var _arr_1507 = [_]Node{ .{ .text = "padBottom", .font_size = 10, .text_color = Color.rgb(154, 163, 184) }, .{ .children = &_arr_1506 } }; // EditableStyleCell
+// tsz:InspectorEmbed.tsz:2457 — <Box>
+var _arr_1508 = [_]Node{ .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center, .gap = 8 }, .children = &_arr_1507 }, .{ .style = .{ .width = -1, .padding_left = 7, .padding_right = 7, .padding_top = 5, .padding_bottom = 5, .background_color = Color.rgb(10, 16, 24), .border_width = 1, .border_color = Color.rgb(32, 43, 63), .border_radius = 4 }, .font_size = 11, .text_color = Color.rgb(238, 242, 255), .input_id = 9, .placeholder = "14" } }; // EditableStyleCell
+// tsz:InspectorEmbed.tsz:2324 — <Box>
+var _arr_1509 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(129, 182, 255) } }; // Badge
+// tsz:InspectorEmbed.tsz:2325 — <Box>
+var _arr_1510 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(239, 179, 111) } }; // Badge
+// tsz:InspectorEmbed.tsz:2326 — <Box>
+var _arr_1511 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(154, 163, 184) } }; // Badge
+// tsz:InspectorEmbed.tsz:2323 — <>
+var _arr_1512 = [_]Node{ .{ .style = .{ .padding_left = 6, .padding_right = 6, .padding_top = 3, .padding_bottom = 3, .border_radius = 4, .background_color = Color.rgb(22, 48, 74) }, .children = &_arr_1509 } };
+// tsz:InspectorEmbed.tsz:2458 — <Box>
+var _arr_1513 = [_]Node{ .{ .text = "padLeft", .font_size = 10, .text_color = Color.rgb(154, 163, 184) }, .{ .children = &_arr_1512 } }; // EditableStyleCell
+// tsz:InspectorEmbed.tsz:2457 — <Box>
+var _arr_1514 = [_]Node{ .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center, .gap = 8 }, .children = &_arr_1513 }, .{ .style = .{ .width = -1, .padding_left = 7, .padding_right = 7, .padding_top = 5, .padding_bottom = 5, .background_color = Color.rgb(10, 16, 24), .border_width = 1, .border_color = Color.rgb(32, 43, 63), .border_radius = 4 }, .font_size = 11, .text_color = Color.rgb(238, 242, 255), .input_id = 10, .placeholder = "14" } }; // EditableStyleCell
+// tsz:InspectorEmbed.tsz:2324 — <Box>
+var _arr_1515 = [_]Node{ .{ .text = "editor", .font_size = 9, .text_color = Color.rgb(129, 182, 255) } }; // Badge
+// tsz:InspectorEmbed.tsz:2325 — <Box>
+var _arr_1516 = [_]Node{ .{ .text = "editor", .font_size = 9, .text_color = Color.rgb(239, 179, 111) } }; // Badge
+// tsz:InspectorEmbed.tsz:2326 — <Box>
+var _arr_1517 = [_]Node{ .{ .text = "editor", .font_size = 9, .text_color = Color.rgb(154, 163, 184) } }; // Badge
+// tsz:InspectorEmbed.tsz:2323 — <>
+var _arr_1518 = [_]Node{ .{ .style = .{ .padding_left = 6, .padding_right = 6, .padding_top = 3, .padding_bottom = 3, .border_radius = 4, .background_color = Color.rgb(20, 26, 41) }, .children = &_arr_1517 } };
+// tsz:InspectorEmbed.tsz:2583 — <Box>
+var _arr_1519 = [_]Node{ .{ .text = "add prop", .font_size = 10, .text_color = Color.rgb(154, 163, 184) }, .{ .children = &_arr_1518 } }; // DetailPane
+// tsz:InspectorEmbed.tsz:2587 — <Pressable>
+var _arr_1520 = [_]Node{ .{ .text = "[+ add property]", .font_size = 10, .text_color = Color.rgb(97, 149, 250) } }; // DetailPane
+// tsz:InspectorEmbed.tsz:2582 — <Box>
+var _arr_1521 = [_]Node{ .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center, .gap = 8 }, .children = &_arr_1519 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .padding_top = 4, .padding_bottom = 4 }, .hoverable = true, .children = &_arr_1520 } }; // DetailPane
+// tsz:InspectorEmbed.tsz:2579 — <Box>
+var _arr_1522 = [_]Node{ .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 4, .padding = 6, .background_color = Color.rgb(12, 17, 25), .border_width = 1, .border_color = Color.rgb(21, 29, 42), .border_radius = 4 }, .children = &_arr_1508 }, .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 4, .padding = 6, .background_color = Color.rgb(12, 17, 25), .border_width = 1, .border_color = Color.rgb(21, 29, 42), .border_radius = 4 }, .children = &_arr_1514 }, .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 4, .padding = 6, .background_color = Color.rgb(12, 17, 25), .border_width = 1, .border_color = Color.rgb(21, 29, 42), .border_radius = 4 }, .children = &_arr_1521 } }; // DetailPane
+// tsz:InspectorEmbed.tsz:2563 — <Box>
+var _arr_1523 = [_]Node{ .{ .style = .{ .flex_direction = .row, .gap = 6 }, .children = &_arr_1464 }, .{ .style = .{ .flex_direction = .row, .gap = 6 }, .children = &_arr_1483 }, .{ .style = .{ .flex_direction = .row, .gap = 6 }, .children = &_arr_1502 }, .{ .style = .{ .flex_direction = .row, .gap = 6 }, .children = &_arr_1522 } }; // DetailPane
+// tsz:InspectorEmbed.tsz:2557 — <Box>
+var _arr_1524 = [_]Node{ .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center, .gap = 10 }, .children = &_arr_1445 }, .{ .text = "compact mock editor; type into a field to override the value inline", .font_size = 10, .text_color = Color.rgb(105, 113, 133) }, .{ .style = .{ .flex_direction = .column, .gap = 6 }, .children = &_arr_1523 } }; // DetailPane
+// tsz:InspectorEmbed.tsz:2596 — <Box>
+var _arr_1525 = [_]Node{ .{ .text = "diagnostics", .font_size = 11, .text_color = Color.rgb(223, 229, 245) }, .{ .text = "layout / runtime dump", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } }; // DetailPane
+// tsz:InspectorEmbed.tsz:2387 — <Box>
+var _arr_1526 = [_]Node{ .{ .text = "primitive", .font_size = 11, .text_color = Color.rgb(154, 163, 184) }, .{ .text = "selected node is a scroll surface, not a leaf primitive", .font_size = 10, .text_color = Color.rgb(105, 113, 133) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2392 — <Box>
+var _arr_1527 = [_]Node{ .{ .text = "ScrollView", .font_size = 11, .text_color = Color.rgb(129, 182, 255) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2396 — <Box>
+var _arr_1528 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(136, 185, 255) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2397 — <Box>
+var _arr_1529 = [_]Node{ .{ .text = "derived", .font_size = 9, .text_color = Color.rgb(197, 214, 126) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2398 — <Box>
+var _arr_1530 = [_]Node{ .{ .text = "runtime", .font_size = 9, .text_color = Color.rgb(225, 154, 192) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2399 — <Box>
+var _arr_1531 = [_]Node{ .{ .text = "default", .font_size = 9, .text_color = Color.rgb(154, 163, 184) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2391 — <Box>
+var _arr_1532 = [_]Node{ .{ .style = .{ .padding_left = 6, .padding_right = 6, .padding_top = 3, .padding_bottom = 3, .border_radius = 4, .border_width = 1, .border_color = Color.rgb(27, 36, 54), .background_color = Color.rgb(10, 16, 24) }, .children = &_arr_1527 }, .{ .style = .{ .padding_left = 5, .padding_right = 5, .padding_top = 2, .padding_bottom = 2, .border_radius = 4, .background_color = Color.rgb(39, 24, 34) }, .children = &_arr_1530 } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2386 — <Pressable>
+var _arr_1533 = [_]Node{ .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 2 }, .children = &_arr_1526 }, .{ .style = .{ .flex_direction = .column, .align_items = .end, .gap = 4 }, .children = &_arr_1532 } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2387 — <Box>
+var _arr_1534 = [_]Node{ .{ .text = "conditional", .font_size = 11, .text_color = Color.rgb(154, 163, 184) }, .{ .text = "mounted whenever the Elements detail surface is present", .font_size = 10, .text_color = Color.rgb(105, 113, 133) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2392 — <Box>
+var _arr_1535 = [_]Node{ .{ .text = "no", .font_size = 11, .text_color = Color.rgb(238, 242, 255) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2396 — <Box>
+var _arr_1536 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(136, 185, 255) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2397 — <Box>
+var _arr_1537 = [_]Node{ .{ .text = "derived", .font_size = 9, .text_color = Color.rgb(197, 214, 126) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2398 — <Box>
+var _arr_1538 = [_]Node{ .{ .text = "runtime", .font_size = 9, .text_color = Color.rgb(225, 154, 192) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2399 — <Box>
+var _arr_1539 = [_]Node{ .{ .text = "default", .font_size = 9, .text_color = Color.rgb(154, 163, 184) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2391 — <Box>
+var _arr_1540 = [_]Node{ .{ .style = .{ .padding_left = 6, .padding_right = 6, .padding_top = 3, .padding_bottom = 3, .border_radius = 4, .border_width = 1, .border_color = Color.rgb(27, 36, 54), .background_color = Color.rgb(10, 16, 24) }, .children = &_arr_1535 }, .{ .style = .{ .padding_left = 5, .padding_right = 5, .padding_top = 2, .padding_bottom = 2, .border_radius = 4, .background_color = Color.rgb(26, 33, 19) }, .children = &_arr_1537 } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2386 — <Pressable>
+var _arr_1541 = [_]Node{ .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 2 }, .children = &_arr_1534 }, .{ .style = .{ .flex_direction = .column, .align_items = .end, .gap = 4 }, .children = &_arr_1540 } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2387 — <Box>
+var _arr_1542 = [_]Node{ .{ .text = "node id", .font_size = 11, .text_color = Color.rgb(154, 163, 184) }, .{ .text = "stable runtime handle for eventual picker targeting", .font_size = 10, .text_color = Color.rgb(105, 113, 133) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2392 — <Box>
+var _arr_1543 = [_]Node{ .{ .text = "#42", .font_size = 11, .text_color = Color.rgb(238, 242, 255) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2396 — <Box>
+var _arr_1544 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(136, 185, 255) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2397 — <Box>
+var _arr_1545 = [_]Node{ .{ .text = "derived", .font_size = 9, .text_color = Color.rgb(197, 214, 126) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2398 — <Box>
+var _arr_1546 = [_]Node{ .{ .text = "runtime", .font_size = 9, .text_color = Color.rgb(225, 154, 192) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2399 — <Box>
+var _arr_1547 = [_]Node{ .{ .text = "default", .font_size = 9, .text_color = Color.rgb(154, 163, 184) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2391 — <Box>
+var _arr_1548 = [_]Node{ .{ .style = .{ .padding_left = 6, .padding_right = 6, .padding_top = 3, .padding_bottom = 3, .border_radius = 4, .border_width = 1, .border_color = Color.rgb(27, 36, 54), .background_color = Color.rgb(10, 16, 24) }, .children = &_arr_1543 }, .{ .style = .{ .padding_left = 5, .padding_right = 5, .padding_top = 2, .padding_bottom = 2, .border_radius = 4, .background_color = Color.rgb(39, 24, 34) }, .children = &_arr_1546 } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2386 — <Pressable>
+var _arr_1549 = [_]Node{ .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 2 }, .children = &_arr_1542 }, .{ .style = .{ .flex_direction = .column, .align_items = .end, .gap = 4 }, .children = &_arr_1548 } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2387 — <Box>
+var _arr_1550 = [_]Node{ .{ .text = "source", .font_size = 11, .text_color = Color.rgb(154, 163, 184) }, .{ .text = "mock implementation file backing this selected node", .font_size = 10, .text_color = Color.rgb(105, 113, 133) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2392 — <Box>
+var _arr_1551 = [_]Node{ .{ .text = "DetailPane.c.tsz", .font_size = 11, .text_color = Color.rgb(238, 242, 255) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2396 — <Box>
+var _arr_1552 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(136, 185, 255) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2397 — <Box>
+var _arr_1553 = [_]Node{ .{ .text = "derived", .font_size = 9, .text_color = Color.rgb(197, 214, 126) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2398 — <Box>
+var _arr_1554 = [_]Node{ .{ .text = "runtime", .font_size = 9, .text_color = Color.rgb(225, 154, 192) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2399 — <Box>
+var _arr_1555 = [_]Node{ .{ .text = "default", .font_size = 9, .text_color = Color.rgb(154, 163, 184) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2391 — <Box>
+var _arr_1556 = [_]Node{ .{ .style = .{ .padding_left = 6, .padding_right = 6, .padding_top = 3, .padding_bottom = 3, .border_radius = 4, .border_width = 1, .border_color = Color.rgb(27, 36, 54), .background_color = Color.rgb(10, 16, 24) }, .children = &_arr_1551 }, .{ .style = .{ .padding_left = 5, .padding_right = 5, .padding_top = 2, .padding_bottom = 2, .border_radius = 4, .background_color = Color.rgb(26, 33, 19) }, .children = &_arr_1553 } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2386 — <Pressable>
+var _arr_1557 = [_]Node{ .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 2 }, .children = &_arr_1550 }, .{ .style = .{ .flex_direction = .column, .align_items = .end, .gap = 4 }, .children = &_arr_1556 } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2602 — <Box>
+var _arr_1558 = [_]Node{ .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .start, .gap = 12, .padding_left = 8, .padding_right = 8, .padding_top = 7, .padding_bottom = 7, .border_radius = 4, .border_width = 1, .border_color = Color.rgb(21, 29, 42), .background_color = Color.rgb(15, 20, 29) }, .hoverable = true, .children = &_arr_1533 }, .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .start, .gap = 12, .padding_left = 8, .padding_right = 8, .padding_top = 7, .padding_bottom = 7, .border_radius = 4, .border_width = 1, .border_color = Color.rgb(21, 29, 42), .background_color = Color.rgb(15, 20, 29) }, .hoverable = true, .children = &_arr_1541 }, .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .start, .gap = 12, .padding_left = 8, .padding_right = 8, .padding_top = 7, .padding_bottom = 7, .border_radius = 4, .border_width = 1, .border_color = Color.rgb(21, 29, 42), .background_color = Color.rgb(15, 20, 29) }, .hoverable = true, .children = &_arr_1549 }, .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .start, .gap = 12, .padding_left = 8, .padding_right = 8, .padding_top = 7, .padding_bottom = 7, .border_radius = 4, .border_width = 1, .border_color = Color.rgb(21, 29, 42), .background_color = Color.rgb(15, 20, 29) }, .hoverable = true, .children = &_arr_1557 } }; // DiagnosticGroup
+// tsz:InspectorEmbed.tsz:2469 — <Box>
+var _arr_1559 = [_]Node{ .{ .text = "identity", .font_size = 10, .text_color = Color.rgb(105, 113, 133) }, .{ .style = .{ .flex_direction = .column, .gap = 4 }, .children = &_arr_1558 } }; // DiagnosticGroup
+// tsz:InspectorEmbed.tsz:2387 — <Box>
+var _arr_1560 = [_]Node{ .{ .text = "outer box", .font_size = 11, .text_color = Color.rgb(154, 163, 184) }, .{ .text = "content 480 x 572 plus 14px padding on each edge", .font_size = 10, .text_color = Color.rgb(105, 113, 133) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2392 — <Box>
+var _arr_1561 = [_]Node{ .{ .text = "508 x 600", .font_size = 11, .text_color = Color.rgb(129, 182, 255) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2396 — <Box>
+var _arr_1562 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(136, 185, 255) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2397 — <Box>
+var _arr_1563 = [_]Node{ .{ .text = "derived", .font_size = 9, .text_color = Color.rgb(197, 214, 126) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2398 — <Box>
+var _arr_1564 = [_]Node{ .{ .text = "runtime", .font_size = 9, .text_color = Color.rgb(225, 154, 192) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2399 — <Box>
+var _arr_1565 = [_]Node{ .{ .text = "default", .font_size = 9, .text_color = Color.rgb(154, 163, 184) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2391 — <Box>
+var _arr_1566 = [_]Node{ .{ .style = .{ .padding_left = 6, .padding_right = 6, .padding_top = 3, .padding_bottom = 3, .border_radius = 4, .border_width = 1, .border_color = Color.rgb(27, 36, 54), .background_color = Color.rgb(10, 16, 24) }, .children = &_arr_1561 }, .{ .style = .{ .padding_left = 5, .padding_right = 5, .padding_top = 2, .padding_bottom = 2, .border_radius = 4, .background_color = Color.rgb(39, 24, 34) }, .children = &_arr_1564 } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2386 — <Pressable>
+var _arr_1567 = [_]Node{ .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 2 }, .children = &_arr_1560 }, .{ .style = .{ .flex_direction = .column, .align_items = .end, .gap = 4 }, .children = &_arr_1566 } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2387 — <Box>
+var _arr_1568 = [_]Node{ .{ .text = "content box", .font_size = 11, .text_color = Color.rgb(154, 163, 184) }, .{ .text = "scrollable inner region represented in the box model", .font_size = 10, .text_color = Color.rgb(105, 113, 133) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2392 — <Box>
+var _arr_1569 = [_]Node{ .{ .text = "480 x 572", .font_size = 11, .text_color = Color.rgb(238, 242, 255) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2396 — <Box>
+var _arr_1570 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(136, 185, 255) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2397 — <Box>
+var _arr_1571 = [_]Node{ .{ .text = "derived", .font_size = 9, .text_color = Color.rgb(197, 214, 126) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2398 — <Box>
+var _arr_1572 = [_]Node{ .{ .text = "runtime", .font_size = 9, .text_color = Color.rgb(225, 154, 192) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2399 — <Box>
+var _arr_1573 = [_]Node{ .{ .text = "default", .font_size = 9, .text_color = Color.rgb(154, 163, 184) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2391 — <Box>
+var _arr_1574 = [_]Node{ .{ .style = .{ .padding_left = 6, .padding_right = 6, .padding_top = 3, .padding_bottom = 3, .border_radius = 4, .border_width = 1, .border_color = Color.rgb(27, 36, 54), .background_color = Color.rgb(10, 16, 24) }, .children = &_arr_1569 }, .{ .style = .{ .padding_left = 5, .padding_right = 5, .padding_top = 2, .padding_bottom = 2, .border_radius = 4, .background_color = Color.rgb(39, 24, 34) }, .children = &_arr_1572 } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2386 — <Pressable>
+var _arr_1575 = [_]Node{ .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 2 }, .children = &_arr_1568 }, .{ .style = .{ .flex_direction = .column, .align_items = .end, .gap = 4 }, .children = &_arr_1574 } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2387 — <Box>
+var _arr_1576 = [_]Node{ .{ .text = "position", .font_size = 11, .text_color = Color.rgb(154, 163, 184) }, .{ .text = "after the 330px tree pane, divider, and top tab chrome", .font_size = 10, .text_color = Color.rgb(105, 113, 133) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2392 — <Box>
+var _arr_1577 = [_]Node{ .{ .text = "331, 38", .font_size = 11, .text_color = Color.rgb(238, 242, 255) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2396 — <Box>
+var _arr_1578 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(136, 185, 255) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2397 — <Box>
+var _arr_1579 = [_]Node{ .{ .text = "derived", .font_size = 9, .text_color = Color.rgb(197, 214, 126) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2398 — <Box>
+var _arr_1580 = [_]Node{ .{ .text = "runtime", .font_size = 9, .text_color = Color.rgb(225, 154, 192) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2399 — <Box>
+var _arr_1581 = [_]Node{ .{ .text = "default", .font_size = 9, .text_color = Color.rgb(154, 163, 184) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2391 — <Box>
+var _arr_1582 = [_]Node{ .{ .style = .{ .padding_left = 6, .padding_right = 6, .padding_top = 3, .padding_bottom = 3, .border_radius = 4, .border_width = 1, .border_color = Color.rgb(27, 36, 54), .background_color = Color.rgb(10, 16, 24) }, .children = &_arr_1577 }, .{ .style = .{ .padding_left = 5, .padding_right = 5, .padding_top = 2, .padding_bottom = 2, .border_radius = 4, .background_color = Color.rgb(39, 24, 34) }, .children = &_arr_1580 } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2386 — <Pressable>
+var _arr_1583 = [_]Node{ .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 2 }, .children = &_arr_1576 }, .{ .style = .{ .flex_direction = .column, .align_items = .end, .gap = 4 }, .children = &_arr_1582 } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2387 — <Box>
+var _arr_1584 = [_]Node{ .{ .text = "margin", .font_size = 11, .text_color = Color.rgb(154, 163, 184) }, .{ .text = "default outer spacing; no extra offset is applied by style", .font_size = 10, .text_color = Color.rgb(105, 113, 133) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2392 — <Box>
+var _arr_1585 = [_]Node{ .{ .text = "0 / 0 / 0 / 0", .font_size = 11, .text_color = Color.rgb(238, 242, 255) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2396 — <Box>
+var _arr_1586 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(136, 185, 255) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2397 — <Box>
+var _arr_1587 = [_]Node{ .{ .text = "derived", .font_size = 9, .text_color = Color.rgb(197, 214, 126) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2398 — <Box>
+var _arr_1588 = [_]Node{ .{ .text = "runtime", .font_size = 9, .text_color = Color.rgb(225, 154, 192) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2399 — <Box>
+var _arr_1589 = [_]Node{ .{ .text = "default", .font_size = 9, .text_color = Color.rgb(154, 163, 184) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2391 — <Box>
+var _arr_1590 = [_]Node{ .{ .style = .{ .padding_left = 6, .padding_right = 6, .padding_top = 3, .padding_bottom = 3, .border_radius = 4, .border_width = 1, .border_color = Color.rgb(27, 36, 54), .background_color = Color.rgb(10, 16, 24) }, .children = &_arr_1585 }, .{ .style = .{ .padding_left = 5, .padding_right = 5, .padding_top = 2, .padding_bottom = 2, .border_radius = 4, .background_color = Color.rgb(26, 31, 41) }, .children = &_arr_1589 } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2386 — <Pressable>
+var _arr_1591 = [_]Node{ .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 2 }, .children = &_arr_1584 }, .{ .style = .{ .flex_direction = .column, .align_items = .end, .gap = 4 }, .children = &_arr_1590 } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2613 — <Box>
+var _arr_1592 = [_]Node{ .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .start, .gap = 12, .padding_left = 8, .padding_right = 8, .padding_top = 7, .padding_bottom = 7, .border_radius = 4, .border_width = 1, .border_color = Color.rgb(21, 29, 42), .background_color = Color.rgb(15, 20, 29) }, .hoverable = true, .children = &_arr_1567 }, .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .start, .gap = 12, .padding_left = 8, .padding_right = 8, .padding_top = 7, .padding_bottom = 7, .border_radius = 4, .border_width = 1, .border_color = Color.rgb(21, 29, 42), .background_color = Color.rgb(15, 20, 29) }, .hoverable = true, .children = &_arr_1575 }, .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .start, .gap = 12, .padding_left = 8, .padding_right = 8, .padding_top = 7, .padding_bottom = 7, .border_radius = 4, .border_width = 1, .border_color = Color.rgb(21, 29, 42), .background_color = Color.rgb(15, 20, 29) }, .hoverable = true, .children = &_arr_1583 }, .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .start, .gap = 12, .padding_left = 8, .padding_right = 8, .padding_top = 7, .padding_bottom = 7, .border_radius = 4, .border_width = 1, .border_color = Color.rgb(21, 29, 42), .background_color = Color.rgb(15, 20, 29) }, .hoverable = true, .children = &_arr_1591 } }; // DiagnosticGroup
+// tsz:InspectorEmbed.tsz:2469 — <Box>
+var _arr_1593 = [_]Node{ .{ .text = "geometry", .font_size = 10, .text_color = Color.rgb(105, 113, 133) }, .{ .style = .{ .flex_direction = .column, .gap = 4 }, .children = &_arr_1592 } }; // DiagnosticGroup
+// tsz:InspectorEmbed.tsz:2387 — <Box>
+var _arr_1594 = [_]Node{ .{ .text = "width source", .font_size = 11, .text_color = Color.rgb(154, 163, 184) }, .{ .text = "style.width auto -> flexBasis 0 -> flexGrow 1 -> remaining split width", .font_size = 10, .text_color = Color.rgb(105, 113, 133) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2392 — <Box>
+var _arr_1595 = [_]Node{ .{ .text = "flex grow", .font_size = 11, .text_color = Color.rgb(129, 182, 255) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2396 — <Box>
+var _arr_1596 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(136, 185, 255) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2397 — <Box>
+var _arr_1597 = [_]Node{ .{ .text = "derived", .font_size = 9, .text_color = Color.rgb(197, 214, 126) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2398 — <Box>
+var _arr_1598 = [_]Node{ .{ .text = "runtime", .font_size = 9, .text_color = Color.rgb(225, 154, 192) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2399 — <Box>
+var _arr_1599 = [_]Node{ .{ .text = "default", .font_size = 9, .text_color = Color.rgb(154, 163, 184) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2391 — <Box>
+var _arr_1600 = [_]Node{ .{ .style = .{ .padding_left = 6, .padding_right = 6, .padding_top = 3, .padding_bottom = 3, .border_radius = 4, .border_width = 1, .border_color = Color.rgb(27, 36, 54), .background_color = Color.rgb(10, 16, 24) }, .children = &_arr_1595 }, .{ .style = .{ .padding_left = 5, .padding_right = 5, .padding_top = 2, .padding_bottom = 2, .border_radius = 4, .background_color = Color.rgb(26, 33, 19) }, .children = &_arr_1597 } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2386 — <Pressable>
+var _arr_1601 = [_]Node{ .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 2 }, .children = &_arr_1594 }, .{ .style = .{ .flex_direction = .column, .align_items = .end, .gap = 4 }, .children = &_arr_1600 } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2387 — <Box>
+var _arr_1602 = [_]Node{ .{ .text = "height source", .font_size = 11, .text_color = Color.rgb(154, 163, 184) }, .{ .text = "style.height auto -> cross-axis fill from the parent row container", .font_size = 10, .text_color = Color.rgb(105, 113, 133) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2392 — <Box>
+var _arr_1603 = [_]Node{ .{ .text = "stretch", .font_size = 11, .text_color = Color.rgb(129, 182, 255) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2396 — <Box>
+var _arr_1604 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(136, 185, 255) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2397 — <Box>
+var _arr_1605 = [_]Node{ .{ .text = "derived", .font_size = 9, .text_color = Color.rgb(197, 214, 126) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2398 — <Box>
+var _arr_1606 = [_]Node{ .{ .text = "runtime", .font_size = 9, .text_color = Color.rgb(225, 154, 192) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2399 — <Box>
+var _arr_1607 = [_]Node{ .{ .text = "default", .font_size = 9, .text_color = Color.rgb(154, 163, 184) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2391 — <Box>
+var _arr_1608 = [_]Node{ .{ .style = .{ .padding_left = 6, .padding_right = 6, .padding_top = 3, .padding_bottom = 3, .border_radius = 4, .border_width = 1, .border_color = Color.rgb(27, 36, 54), .background_color = Color.rgb(10, 16, 24) }, .children = &_arr_1603 }, .{ .style = .{ .padding_left = 5, .padding_right = 5, .padding_top = 2, .padding_bottom = 2, .border_radius = 4, .background_color = Color.rgb(26, 33, 19) }, .children = &_arr_1605 } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2386 — <Pressable>
+var _arr_1609 = [_]Node{ .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 2 }, .children = &_arr_1602 }, .{ .style = .{ .flex_direction = .column, .align_items = .end, .gap = 4 }, .children = &_arr_1608 } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2387 — <Box>
+var _arr_1610 = [_]Node{ .{ .text = "size class", .font_size = 11, .text_color = Color.rgb(154, 163, 184) }, .{ .text = "this node gets size from the shell layout, not intrinsic content measurement", .font_size = 10, .text_color = Color.rgb(105, 113, 133) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2392 — <Box>
+var _arr_1611 = [_]Node{ .{ .text = "parent-constrained", .font_size = 11, .text_color = Color.rgb(238, 242, 255) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2396 — <Box>
+var _arr_1612 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(136, 185, 255) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2397 — <Box>
+var _arr_1613 = [_]Node{ .{ .text = "derived", .font_size = 9, .text_color = Color.rgb(197, 214, 126) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2398 — <Box>
+var _arr_1614 = [_]Node{ .{ .text = "runtime", .font_size = 9, .text_color = Color.rgb(225, 154, 192) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2399 — <Box>
+var _arr_1615 = [_]Node{ .{ .text = "default", .font_size = 9, .text_color = Color.rgb(154, 163, 184) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2391 — <Box>
+var _arr_1616 = [_]Node{ .{ .style = .{ .padding_left = 6, .padding_right = 6, .padding_top = 3, .padding_bottom = 3, .border_radius = 4, .border_width = 1, .border_color = Color.rgb(27, 36, 54), .background_color = Color.rgb(10, 16, 24) }, .children = &_arr_1611 }, .{ .style = .{ .padding_left = 5, .padding_right = 5, .padding_top = 2, .padding_bottom = 2, .border_radius = 4, .background_color = Color.rgb(26, 33, 19) }, .children = &_arr_1613 } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2386 — <Pressable>
+var _arr_1617 = [_]Node{ .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 2 }, .children = &_arr_1610 }, .{ .style = .{ .flex_direction = .column, .align_items = .end, .gap = 4 }, .children = &_arr_1616 } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2387 — <Box>
+var _arr_1618 = [_]Node{ .{ .text = "scroll owner", .font_size = 11, .text_color = Color.rgb(154, 163, 184) }, .{ .text = "overflow scroll makes this node the vertical scroll container", .font_size = 10, .text_color = Color.rgb(105, 113, 133) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2392 — <Box>
+var _arr_1619 = [_]Node{ .{ .text = "yes", .font_size = 11, .text_color = Color.rgb(238, 242, 255) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2396 — <Box>
+var _arr_1620 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(136, 185, 255) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2397 — <Box>
+var _arr_1621 = [_]Node{ .{ .text = "derived", .font_size = 9, .text_color = Color.rgb(197, 214, 126) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2398 — <Box>
+var _arr_1622 = [_]Node{ .{ .text = "runtime", .font_size = 9, .text_color = Color.rgb(225, 154, 192) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2399 — <Box>
+var _arr_1623 = [_]Node{ .{ .text = "default", .font_size = 9, .text_color = Color.rgb(154, 163, 184) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2391 — <Box>
+var _arr_1624 = [_]Node{ .{ .style = .{ .padding_left = 6, .padding_right = 6, .padding_top = 3, .padding_bottom = 3, .border_radius = 4, .border_width = 1, .border_color = Color.rgb(27, 36, 54), .background_color = Color.rgb(10, 16, 24) }, .children = &_arr_1619 }, .{ .style = .{ .padding_left = 5, .padding_right = 5, .padding_top = 2, .padding_bottom = 2, .border_radius = 4, .background_color = Color.rgb(20, 36, 54) }, .children = &_arr_1620 } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2386 — <Pressable>
+var _arr_1625 = [_]Node{ .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 2 }, .children = &_arr_1618 }, .{ .style = .{ .flex_direction = .column, .align_items = .end, .gap = 4 }, .children = &_arr_1624 } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2624 — <Box>
+var _arr_1626 = [_]Node{ .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .start, .gap = 12, .padding_left = 8, .padding_right = 8, .padding_top = 7, .padding_bottom = 7, .border_radius = 4, .border_width = 1, .border_color = Color.rgb(21, 29, 42), .background_color = Color.rgb(15, 20, 29) }, .hoverable = true, .children = &_arr_1601 }, .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .start, .gap = 12, .padding_left = 8, .padding_right = 8, .padding_top = 7, .padding_bottom = 7, .border_radius = 4, .border_width = 1, .border_color = Color.rgb(21, 29, 42), .background_color = Color.rgb(15, 20, 29) }, .hoverable = true, .children = &_arr_1609 }, .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .start, .gap = 12, .padding_left = 8, .padding_right = 8, .padding_top = 7, .padding_bottom = 7, .border_radius = 4, .border_width = 1, .border_color = Color.rgb(21, 29, 42), .background_color = Color.rgb(15, 20, 29) }, .hoverable = true, .children = &_arr_1617 }, .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .start, .gap = 12, .padding_left = 8, .padding_right = 8, .padding_top = 7, .padding_bottom = 7, .border_radius = 4, .border_width = 1, .border_color = Color.rgb(21, 29, 42), .background_color = Color.rgb(15, 20, 29) }, .hoverable = true, .children = &_arr_1625 } }; // DiagnosticGroup
+// tsz:InspectorEmbed.tsz:2469 — <Box>
+var _arr_1627 = [_]Node{ .{ .text = "sizing", .font_size = 10, .text_color = Color.rgb(105, 113, 133) }, .{ .style = .{ .flex_direction = .column, .gap = 4 }, .children = &_arr_1626 } }; // DiagnosticGroup
+// tsz:InspectorEmbed.tsz:2387 — <Box>
+var _arr_1628 = [_]Node{ .{ .text = "parent", .font_size = 11, .text_color = Color.rgb(154, 163, 184) }, .{ .text = "right-hand child of the Elements split surface", .font_size = 10, .text_color = Color.rgb(105, 113, 133) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2392 — <Box>
+var _arr_1629 = [_]Node{ .{ .text = "<ElementsPage>", .font_size = 11, .text_color = Color.rgb(238, 242, 255) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2396 — <Box>
+var _arr_1630 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(136, 185, 255) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2397 — <Box>
+var _arr_1631 = [_]Node{ .{ .text = "derived", .font_size = 9, .text_color = Color.rgb(197, 214, 126) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2398 — <Box>
+var _arr_1632 = [_]Node{ .{ .text = "runtime", .font_size = 9, .text_color = Color.rgb(225, 154, 192) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2399 — <Box>
+var _arr_1633 = [_]Node{ .{ .text = "default", .font_size = 9, .text_color = Color.rgb(154, 163, 184) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2391 — <Box>
+var _arr_1634 = [_]Node{ .{ .style = .{ .padding_left = 6, .padding_right = 6, .padding_top = 3, .padding_bottom = 3, .border_radius = 4, .border_width = 1, .border_color = Color.rgb(27, 36, 54), .background_color = Color.rgb(10, 16, 24) }, .children = &_arr_1629 }, .{ .style = .{ .padding_left = 5, .padding_right = 5, .padding_top = 2, .padding_bottom = 2, .border_radius = 4, .background_color = Color.rgb(26, 33, 19) }, .children = &_arr_1631 } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2386 — <Pressable>
+var _arr_1635 = [_]Node{ .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 2 }, .children = &_arr_1628 }, .{ .style = .{ .flex_direction = .column, .align_items = .end, .gap = 4 }, .children = &_arr_1634 } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2387 — <Box>
+var _arr_1636 = [_]Node{ .{ .text = "child shell", .font_size = 11, .text_color = Color.rgb(154, 163, 184) }, .{ .text = "single scroll-content stack inside the selected node", .font_size = 10, .text_color = Color.rgb(105, 113, 133) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2392 — <Box>
+var _arr_1637 = [_]Node{ .{ .text = "<DetailStack>", .font_size = 11, .text_color = Color.rgb(238, 242, 255) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2396 — <Box>
+var _arr_1638 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(136, 185, 255) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2397 — <Box>
+var _arr_1639 = [_]Node{ .{ .text = "derived", .font_size = 9, .text_color = Color.rgb(197, 214, 126) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2398 — <Box>
+var _arr_1640 = [_]Node{ .{ .text = "runtime", .font_size = 9, .text_color = Color.rgb(225, 154, 192) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2399 — <Box>
+var _arr_1641 = [_]Node{ .{ .text = "default", .font_size = 9, .text_color = Color.rgb(154, 163, 184) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2391 — <Box>
+var _arr_1642 = [_]Node{ .{ .style = .{ .padding_left = 6, .padding_right = 6, .padding_top = 3, .padding_bottom = 3, .border_radius = 4, .border_width = 1, .border_color = Color.rgb(27, 36, 54), .background_color = Color.rgb(10, 16, 24) }, .children = &_arr_1637 }, .{ .style = .{ .padding_left = 5, .padding_right = 5, .padding_top = 2, .padding_bottom = 2, .border_radius = 4, .background_color = Color.rgb(26, 33, 19) }, .children = &_arr_1639 } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2386 — <Pressable>
+var _arr_1643 = [_]Node{ .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 2 }, .children = &_arr_1636 }, .{ .style = .{ .flex_direction = .column, .align_items = .end, .gap = 4 }, .children = &_arr_1642 } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2387 — <Box>
+var _arr_1644 = [_]Node{ .{ .text = "descendants", .font_size = 11, .text_color = Color.rgb(154, 163, 184) }, .{ .text = "hero header, box model, and the editor/diagnostics split", .font_size = 10, .text_color = Color.rgb(105, 113, 133) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2392 — <Box>
+var _arr_1645 = [_]Node{ .{ .text = "3 major regions", .font_size = 11, .text_color = Color.rgb(238, 242, 255) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2396 — <Box>
+var _arr_1646 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(136, 185, 255) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2397 — <Box>
+var _arr_1647 = [_]Node{ .{ .text = "derived", .font_size = 9, .text_color = Color.rgb(197, 214, 126) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2398 — <Box>
+var _arr_1648 = [_]Node{ .{ .text = "runtime", .font_size = 9, .text_color = Color.rgb(225, 154, 192) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2399 — <Box>
+var _arr_1649 = [_]Node{ .{ .text = "default", .font_size = 9, .text_color = Color.rgb(154, 163, 184) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2391 — <Box>
+var _arr_1650 = [_]Node{ .{ .style = .{ .padding_left = 6, .padding_right = 6, .padding_top = 3, .padding_bottom = 3, .border_radius = 4, .border_width = 1, .border_color = Color.rgb(27, 36, 54), .background_color = Color.rgb(10, 16, 24) }, .children = &_arr_1645 }, .{ .style = .{ .padding_left = 5, .padding_right = 5, .padding_top = 2, .padding_bottom = 2, .border_radius = 4, .background_color = Color.rgb(39, 24, 34) }, .children = &_arr_1648 } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2386 — <Pressable>
+var _arr_1651 = [_]Node{ .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 2 }, .children = &_arr_1644 }, .{ .style = .{ .flex_direction = .column, .align_items = .end, .gap = 4 }, .children = &_arr_1650 } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2387 — <Box>
+var _arr_1652 = [_]Node{ .{ .text = "handlers", .font_size = 11, .text_color = Color.rgb(154, 163, 184) }, .{ .text = "runtime hooks available for scroll and layout telemetry", .font_size = 10, .text_color = Color.rgb(105, 113, 133) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2392 — <Box>
+var _arr_1653 = [_]Node{ .{ .text = "onScroll, onLayout", .font_size = 11, .text_color = Color.rgb(238, 242, 255) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2396 — <Box>
+var _arr_1654 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(136, 185, 255) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2397 — <Box>
+var _arr_1655 = [_]Node{ .{ .text = "derived", .font_size = 9, .text_color = Color.rgb(197, 214, 126) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2398 — <Box>
+var _arr_1656 = [_]Node{ .{ .text = "runtime", .font_size = 9, .text_color = Color.rgb(225, 154, 192) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2399 — <Box>
+var _arr_1657 = [_]Node{ .{ .text = "default", .font_size = 9, .text_color = Color.rgb(154, 163, 184) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2391 — <Box>
+var _arr_1658 = [_]Node{ .{ .style = .{ .padding_left = 6, .padding_right = 6, .padding_top = 3, .padding_bottom = 3, .border_radius = 4, .border_width = 1, .border_color = Color.rgb(27, 36, 54), .background_color = Color.rgb(10, 16, 24) }, .children = &_arr_1653 }, .{ .style = .{ .padding_left = 5, .padding_right = 5, .padding_top = 2, .padding_bottom = 2, .border_radius = 4, .background_color = Color.rgb(39, 24, 34) }, .children = &_arr_1656 } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2386 — <Pressable>
+var _arr_1659 = [_]Node{ .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 2 }, .children = &_arr_1652 }, .{ .style = .{ .flex_direction = .column, .align_items = .end, .gap = 4 }, .children = &_arr_1658 } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2387 — <Box>
+var _arr_1660 = [_]Node{ .{ .text = "render count", .font_size = 11, .text_color = Color.rgb(154, 163, 184) }, .{ .text = "mock reactive count; intended to tick on selection changes", .font_size = 10, .text_color = Color.rgb(105, 113, 133) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2392 — <Box>
+var _arr_1661 = [_]Node{ .{ .text = "8", .font_size = 11, .text_color = Color.rgb(129, 182, 255) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2396 — <Box>
+var _arr_1662 = [_]Node{ .{ .text = "explicit", .font_size = 9, .text_color = Color.rgb(136, 185, 255) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2397 — <Box>
+var _arr_1663 = [_]Node{ .{ .text = "derived", .font_size = 9, .text_color = Color.rgb(197, 214, 126) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2398 — <Box>
+var _arr_1664 = [_]Node{ .{ .text = "runtime", .font_size = 9, .text_color = Color.rgb(225, 154, 192) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2399 — <Box>
+var _arr_1665 = [_]Node{ .{ .text = "default", .font_size = 9, .text_color = Color.rgb(154, 163, 184) } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2391 — <Box>
+var _arr_1666 = [_]Node{ .{ .style = .{ .padding_left = 6, .padding_right = 6, .padding_top = 3, .padding_bottom = 3, .border_radius = 4, .border_width = 1, .border_color = Color.rgb(27, 36, 54), .background_color = Color.rgb(10, 16, 24) }, .children = &_arr_1661 }, .{ .style = .{ .padding_left = 5, .padding_right = 5, .padding_top = 2, .padding_bottom = 2, .border_radius = 4, .background_color = Color.rgb(39, 24, 34) }, .children = &_arr_1664 } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2386 — <Pressable>
+var _arr_1667 = [_]Node{ .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 2 }, .children = &_arr_1660 }, .{ .style = .{ .flex_direction = .column, .align_items = .end, .gap = 4 }, .children = &_arr_1666 } }; // PropertyRow
+// tsz:InspectorEmbed.tsz:2635 — <Box>
+var _arr_1668 = [_]Node{ .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .start, .gap = 12, .padding_left = 8, .padding_right = 8, .padding_top = 7, .padding_bottom = 7, .border_radius = 4, .border_width = 1, .border_color = Color.rgb(21, 29, 42), .background_color = Color.rgb(15, 20, 29) }, .hoverable = true, .children = &_arr_1635 }, .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .start, .gap = 12, .padding_left = 8, .padding_right = 8, .padding_top = 7, .padding_bottom = 7, .border_radius = 4, .border_width = 1, .border_color = Color.rgb(21, 29, 42), .background_color = Color.rgb(15, 20, 29) }, .hoverable = true, .children = &_arr_1643 }, .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .start, .gap = 12, .padding_left = 8, .padding_right = 8, .padding_top = 7, .padding_bottom = 7, .border_radius = 4, .border_width = 1, .border_color = Color.rgb(21, 29, 42), .background_color = Color.rgb(15, 20, 29) }, .hoverable = true, .children = &_arr_1651 }, .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .start, .gap = 12, .padding_left = 8, .padding_right = 8, .padding_top = 7, .padding_bottom = 7, .border_radius = 4, .border_width = 1, .border_color = Color.rgb(21, 29, 42), .background_color = Color.rgb(15, 20, 29) }, .hoverable = true, .children = &_arr_1659 }, .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .start, .gap = 12, .padding_left = 8, .padding_right = 8, .padding_top = 7, .padding_bottom = 7, .border_radius = 4, .border_width = 1, .border_color = Color.rgb(21, 29, 42), .background_color = Color.rgb(15, 20, 29) }, .hoverable = true, .children = &_arr_1667 } }; // DiagnosticGroup
+// tsz:InspectorEmbed.tsz:2469 — <Box>
+var _arr_1669 = [_]Node{ .{ .text = "runtime", .font_size = 10, .text_color = Color.rgb(105, 113, 133) }, .{ .style = .{ .flex_direction = .column, .gap = 4 }, .children = &_arr_1668 } }; // DiagnosticGroup
+// tsz:InspectorEmbed.tsz:2595 — <Box>
+var _arr_1670 = [_]Node{ .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center, .gap = 10 }, .children = &_arr_1525 }, .{ .style = .{ .flex_direction = .column, .gap = 6 }, .children = &_arr_1559 }, .{ .style = .{ .height = 1, .background_color = Color.rgb(26, 32, 48) } }, .{ .style = .{ .flex_direction = .column, .gap = 6 }, .children = &_arr_1593 }, .{ .style = .{ .height = 1, .background_color = Color.rgb(26, 32, 48) } }, .{ .style = .{ .flex_direction = .column, .gap = 6 }, .children = &_arr_1627 }, .{ .style = .{ .height = 1, .background_color = Color.rgb(26, 32, 48) } }, .{ .style = .{ .flex_direction = .column, .gap = 6 }, .children = &_arr_1669 } }; // DetailPane
+// tsz:InspectorEmbed.tsz:2556 — <Box>
+var _arr_1671 = [_]Node{ .{ .style = .{ .flex_direction = .column, .gap = 8, .flex_grow = 1, .flex_basis = 320, .padding = 10, .background_color = Color.rgb(15, 20, 31), .border_width = 1, .border_color = Color.rgb(21, 27, 41), .border_radius = 4 }, .children = &_arr_1524 }, .{ .style = .{ .flex_direction = .column, .gap = 8, .flex_grow = 1, .flex_basis = 360, .padding = 10, .background_color = Color.rgb(15, 20, 31), .border_width = 1, .border_color = Color.rgb(21, 27, 41), .border_radius = 4 }, .children = &_arr_1670 } }; // DetailPane
 // tsz:InspectorEmbed.tsz:2479 — <Box>
-var _arr_1562 = [_]Node{ .{ .style = .{ .padding_top = 10, .padding_bottom = 10, .gap = 6 }, .children = &_arr_1425 }, .{ .style = .{ .padding_top = 10, .padding_bottom = 10, .gap = 8 }, .children = &_arr_1561 } }; // DetailPane
+var _arr_1672 = [_]Node{ .{ .style = .{ .padding_top = 10, .padding_bottom = 10, .gap = 6 }, .children = &_arr_1425 }, .{ .style = .{ .padding_top = 10, .padding_bottom = 10, .gap = 8 }, .children = &_arr_1444 }, .{ .style = .{ .flex_direction = .row, .align_items = .start, .gap = 12, .flex_wrap = .wrap, .padding_top = 10, .padding_bottom = 10 }, .children = &_arr_1671 } }; // DetailPane
 // tsz:InspectorEmbed.tsz:2478 — <ScrollView>
-var _arr_1563 = [_]Node{ .{ .style = .{ .flex_direction = .column, .padding = 10, .gap = 0 }, .children = &_arr_1562 } }; // DetailPane
+var _arr_1673 = [_]Node{ .{ .style = .{ .flex_direction = .column, .padding = 10, .gap = 0 }, .children = &_arr_1672 } }; // DetailPane
 // tsz:InspectorEmbed.tsz:2657 — <Box>
-var _arr_1564 = [_]Node{ .{ .style = .{ .width = 330, .flex_direction = .column, .background_color = Color.rgb(13, 17, 25) }, .children = &_arr_1406 }, .{ .style = .{ .width = 1, .background_color = Color.rgb(26, 32, 48) } }, .{ .style = .{ .overflow = .auto, .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(12, 16, 24) }, .children = &_arr_1563 } }; // ElementsPage
+var _arr_1674 = [_]Node{ .{ .style = .{ .width = 330, .flex_direction = .column, .background_color = Color.rgb(13, 17, 25) }, .children = &_arr_1406 }, .{ .style = .{ .width = 1, .background_color = Color.rgb(26, 32, 48) } }, .{ .style = .{ .overflow = .auto, .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(12, 16, 24) }, .children = &_arr_1673 } }; // ElementsPage
 // tsz:InspectorEmbed.tsz:2677 — <Box>
-var _arr_1565 = [_]Node{ .{ .text = "\\u2316 pick", .font_size = 11, .text_color = Color.rgb(97, 149, 250) }, .{ .style = .{ .width = 1, .height = 16, .background_color = Color.rgb(26, 32, 48) } }, .{ .text = "carts/inspector/", .font_size = 11, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "DetailPane.c.tsz", .font_size = 11, .text_color = Color.rgb(224, 229, 240) }, .{ .text = ":23", .font_size = 11, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "\\u25CF modified", .font_size = 11, .text_color = Color.rgb(240, 160, 64) }, .{ .text = "Ctrl+S to save", .font_size = 11, .text_color = Color.rgb(92, 100, 120) } }; // SourcePage
+var _arr_1675 = [_]Node{ .{ .text = "\\u2316 pick", .font_size = 11, .text_color = Color.rgb(97, 149, 250) }, .{ .style = .{ .width = 1, .height = 16, .background_color = Color.rgb(26, 32, 48) } }, .{ .text = "carts/inspector/", .font_size = 11, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "DetailPane.c.tsz", .font_size = 11, .text_color = Color.rgb(224, 229, 240) }, .{ .text = ":23", .font_size = 11, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "\\u25CF modified", .font_size = 11, .text_color = Color.rgb(240, 160, 64) }, .{ .text = "Ctrl+S to save", .font_size = 11, .text_color = Color.rgb(92, 100, 120) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2691 — <Box>
-var _arr_1566 = [_]Node{ .{ .text = "1", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
+var _arr_1676 = [_]Node{ .{ .text = "1", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2690 — <Box>
-var _arr_1567 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1566 }, .{ .style = .{ .flex_shrink = 0 }, .text = "import", .font_size = 11, .text_color = Color.rgb(198, 120, 221) }, .{ .style = .{ .flex_shrink = 0 }, .text = "{", .font_size = 11, .text_color = Color.rgb(200, 206, 218) } }; // SourcePage
+var _arr_1677 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1676 }, .{ .style = .{ .flex_shrink = 0 }, .text = "import", .font_size = 11, .text_color = Color.rgb(198, 120, 221) }, .{ .style = .{ .flex_shrink = 0 }, .text = "{", .font_size = 11, .text_color = Color.rgb(200, 206, 218) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2697 — <Box>
-var _arr_1568 = [_]Node{ .{ .text = "2", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
+var _arr_1678 = [_]Node{ .{ .text = "2", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2696 — <Box>
-var _arr_1569 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1568 }, .{ .style = .{ .flex_shrink = 0 }, .text = "DetailPaneScroll, DetailStack,", .font_size = 11, .text_color = Color.rgb(200, 206, 218) } }; // SourcePage
+var _arr_1679 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1678 }, .{ .style = .{ .flex_shrink = 0 }, .text = "DetailPaneScroll, DetailStack,", .font_size = 11, .text_color = Color.rgb(200, 206, 218) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2702 — <Box>
-var _arr_1570 = [_]Node{ .{ .text = "3", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
+var _arr_1680 = [_]Node{ .{ .text = "3", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2701 — <Box>
-var _arr_1571 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1570 }, .{ .style = .{ .flex_shrink = 0 }, .text = "HeroCard, HeroRow, HeroTitle, HeroCopy, HeroCode,", .font_size = 11, .text_color = Color.rgb(200, 206, 218) } }; // SourcePage
+var _arr_1681 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1680 }, .{ .style = .{ .flex_shrink = 0 }, .text = "HeroCard, HeroRow, HeroTitle, HeroCopy, HeroCode,", .font_size = 11, .text_color = Color.rgb(200, 206, 218) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2707 — <Box>
-var _arr_1572 = [_]Node{ .{ .text = "4", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
+var _arr_1682 = [_]Node{ .{ .text = "4", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2706 — <Box>
-var _arr_1573 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1572 }, .{ .style = .{ .flex_shrink = 0 }, .text = "MetricGrid, FlexPreview, FlexPreviewHeader,", .font_size = 11, .text_color = Color.rgb(200, 206, 218) } }; // SourcePage
+var _arr_1683 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1682 }, .{ .style = .{ .flex_shrink = 0 }, .text = "MetricGrid, FlexPreview, FlexPreviewHeader,", .font_size = 11, .text_color = Color.rgb(200, 206, 218) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2712 — <Box>
-var _arr_1574 = [_]Node{ .{ .text = "5", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
+var _arr_1684 = [_]Node{ .{ .text = "5", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2711 — <Box>
-var _arr_1575 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1574 }, .{ .style = .{ .flex_shrink = 0 }, .text = "FlexTrack, FlexItemTree, FlexItemDetail, FlexItemLabel,", .font_size = 11, .text_color = Color.rgb(200, 206, 218) } }; // SourcePage
+var _arr_1685 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1684 }, .{ .style = .{ .flex_shrink = 0 }, .text = "FlexTrack, FlexItemTree, FlexItemDetail, FlexItemLabel,", .font_size = 11, .text_color = Color.rgb(200, 206, 218) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2717 — <Box>
-var _arr_1576 = [_]Node{ .{ .text = "6", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
+var _arr_1686 = [_]Node{ .{ .text = "6", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2716 — <Box>
-var _arr_1577 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1576 }, .{ .style = .{ .flex_shrink = 0 }, .text = "PropertyList,", .font_size = 11, .text_color = Color.rgb(200, 206, 218) } }; // SourcePage
+var _arr_1687 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1686 }, .{ .style = .{ .flex_shrink = 0 }, .text = "PropertyList,", .font_size = 11, .text_color = Color.rgb(200, 206, 218) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2722 — <Box>
-var _arr_1578 = [_]Node{ .{ .text = "7", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
+var _arr_1688 = [_]Node{ .{ .text = "7", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2721 — <Box>
-var _arr_1579 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1578 }, .{ .style = .{ .flex_shrink = 0 }, .text = "}", .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "from", .font_size = 11, .text_color = Color.rgb(198, 120, 221) }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "'./style_cls'", .font_size = 11, .text_color = Color.rgb(152, 195, 121) }, .{ .style = .{ .flex_shrink = 0 }, .text = ";", .font_size = 11, .text_color = Color.rgb(200, 206, 218) } }; // SourcePage
+var _arr_1689 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1688 }, .{ .style = .{ .flex_shrink = 0 }, .text = "}", .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "from", .font_size = 11, .text_color = Color.rgb(198, 120, 221) }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "'./style_cls'", .font_size = 11, .text_color = Color.rgb(152, 195, 121) }, .{ .style = .{ .flex_shrink = 0 }, .text = ";", .font_size = 11, .text_color = Color.rgb(200, 206, 218) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2731 — <Box>
-var _arr_1580 = [_]Node{ .{ .text = "8", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
+var _arr_1690 = [_]Node{ .{ .text = "8", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2730 — <Box>
-var _arr_1581 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1580 }, .{ .style = .{ .flex_shrink = 0 }, .text = "import", .font_size = 11, .text_color = Color.rgb(198, 120, 221) }, .{ .style = .{ .flex_shrink = 0 }, .text = "}", .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "from", .font_size = 11, .text_color = Color.rgb(198, 120, 221) }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "'./Badge.c'", .font_size = 11, .text_color = Color.rgb(152, 195, 121) }, .{ .style = .{ .flex_shrink = 0 }, .text = ";", .font_size = 11, .text_color = Color.rgb(200, 206, 218) } }; // SourcePage
+var _arr_1691 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1690 }, .{ .style = .{ .flex_shrink = 0 }, .text = "import", .font_size = 11, .text_color = Color.rgb(198, 120, 221) }, .{ .style = .{ .flex_shrink = 0 }, .text = "}", .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "from", .font_size = 11, .text_color = Color.rgb(198, 120, 221) }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "'./Badge.c'", .font_size = 11, .text_color = Color.rgb(152, 195, 121) }, .{ .style = .{ .flex_shrink = 0 }, .text = ";", .font_size = 11, .text_color = Color.rgb(200, 206, 218) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2741 — <Box>
-var _arr_1582 = [_]Node{ .{ .text = "9", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
+var _arr_1692 = [_]Node{ .{ .text = "9", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2740 — <Box>
-var _arr_1583 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1582 }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) } }; // SourcePage
+var _arr_1693 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1692 }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2746 — <Box>
-var _arr_1584 = [_]Node{ .{ .text = "10", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
+var _arr_1694 = [_]Node{ .{ .text = "10", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2745 — <Box>
-var _arr_1585 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1584 }, .{ .style = .{ .flex_shrink = 0 }, .text = "// Right-hand detail surface for selected node", .font_size = 11, .text_color = Color.rgb(92, 100, 120) } }; // SourcePage
+var _arr_1695 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1694 }, .{ .style = .{ .flex_shrink = 0 }, .text = "// Right-hand detail surface for selected node", .font_size = 11, .text_color = Color.rgb(92, 100, 120) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2751 — <Box>
-var _arr_1586 = [_]Node{ .{ .text = "11", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
+var _arr_1696 = [_]Node{ .{ .text = "11", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2750 — <Box>
-var _arr_1587 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1586 }, .{ .style = .{ .flex_shrink = 0 }, .text = "function", .font_size = 11, .text_color = Color.rgb(198, 120, 221) }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "DetailPane", .font_size = 11, .text_color = Color.rgb(224, 108, 117) }, .{ .style = .{ .flex_shrink = 0 }, .text = "{", .font_size = 11, .text_color = Color.rgb(200, 206, 218) } }; // SourcePage
+var _arr_1697 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1696 }, .{ .style = .{ .flex_shrink = 0 }, .text = "function", .font_size = 11, .text_color = Color.rgb(198, 120, 221) }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "DetailPane", .font_size = 11, .text_color = Color.rgb(224, 108, 117) }, .{ .style = .{ .flex_shrink = 0 }, .text = "{", .font_size = 11, .text_color = Color.rgb(200, 206, 218) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2759 — <Box>
-var _arr_1588 = [_]Node{ .{ .text = "12", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
+var _arr_1698 = [_]Node{ .{ .text = "12", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2758 — <Box>
-var _arr_1589 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1588 }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "return", .font_size = 11, .text_color = Color.rgb(198, 120, 221) }, .{ .style = .{ .flex_shrink = 0 }, .text = "(", .font_size = 11, .text_color = Color.rgb(200, 206, 218) } }; // SourcePage
+var _arr_1699 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1698 }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "return", .font_size = 11, .text_color = Color.rgb(198, 120, 221) }, .{ .style = .{ .flex_shrink = 0 }, .text = "(", .font_size = 11, .text_color = Color.rgb(200, 206, 218) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2766 — <Box>
-var _arr_1590 = [_]Node{ .{ .text = "13", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
+var _arr_1700 = [_]Node{ .{ .text = "13", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2765 — <Box>
-var _arr_1591 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1590 }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "<C.DetailPaneScroll>", .font_size = 11, .text_color = Color.rgb(224, 108, 117) } }; // SourcePage
+var _arr_1701 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1700 }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "<C.DetailPaneScroll>", .font_size = 11, .text_color = Color.rgb(224, 108, 117) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2772 — <Box>
-var _arr_1592 = [_]Node{ .{ .text = "14", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
+var _arr_1702 = [_]Node{ .{ .text = "14", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2771 — <Box>
-var _arr_1593 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1592 }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "<C.DetailStack>", .font_size = 11, .text_color = Color.rgb(224, 108, 117) } }; // SourcePage
+var _arr_1703 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1702 }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "<C.DetailStack>", .font_size = 11, .text_color = Color.rgb(224, 108, 117) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2778 — <Box>
-var _arr_1594 = [_]Node{ .{ .text = "15", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
+var _arr_1704 = [_]Node{ .{ .text = "15", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2777 — <Box>
-var _arr_1595 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1594 }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "<C.HeroCard>", .font_size = 11, .text_color = Color.rgb(224, 108, 117) } }; // SourcePage
+var _arr_1705 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1704 }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "<C.HeroCard>", .font_size = 11, .text_color = Color.rgb(224, 108, 117) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2784 — <Box>
-var _arr_1596 = [_]Node{ .{ .text = "16", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
+var _arr_1706 = [_]Node{ .{ .text = "16", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2783 — <Box>
-var _arr_1597 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1596 }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "<C.HeroRow>", .font_size = 11, .text_color = Color.rgb(224, 108, 117) } }; // SourcePage
+var _arr_1707 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1706 }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "<C.HeroRow>", .font_size = 11, .text_color = Color.rgb(224, 108, 117) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2790 — <Box>
-var _arr_1598 = [_]Node{ .{ .text = "17", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
+var _arr_1708 = [_]Node{ .{ .text = "17", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2789 — <Box>
-var _arr_1599 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1598 }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "<C.HeroTitle>", .font_size = 11, .text_color = Color.rgb(224, 108, 117) }, .{ .style = .{ .flex_shrink = 0 }, .text = "<DetailPane>", .font_size = 11, .text_color = Color.rgb(152, 195, 121) }, .{ .style = .{ .flex_shrink = 0 }, .text = "</C.HeroTitle>", .font_size = 11, .text_color = Color.rgb(224, 108, 117) } }; // SourcePage
+var _arr_1709 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1708 }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "<C.HeroTitle>", .font_size = 11, .text_color = Color.rgb(224, 108, 117) }, .{ .style = .{ .flex_shrink = 0 }, .text = "<DetailPane>", .font_size = 11, .text_color = Color.rgb(152, 195, 121) }, .{ .style = .{ .flex_shrink = 0 }, .text = "</C.HeroTitle>", .font_size = 11, .text_color = Color.rgb(224, 108, 117) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2798 — <Box>
-var _arr_1600 = [_]Node{ .{ .text = "18", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
+var _arr_1710 = [_]Node{ .{ .text = "18", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2797 — <Box>
-var _arr_1601 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1600 }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "<Badge", .font_size = 11, .text_color = Color.rgb(224, 108, 117) }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "label", .font_size = 11, .text_color = Color.rgb(209, 154, 102) }, .{ .style = .{ .flex_shrink = 0 }, .text = "=", .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "\"ScrollView\"", .font_size = 11, .text_color = Color.rgb(152, 195, 121) }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "tone", .font_size = 11, .text_color = Color.rgb(209, 154, 102) }, .{ .style = .{ .flex_shrink = 0 }, .text = "}", .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = " />", .font_size = 11, .text_color = Color.rgb(224, 108, 117) } }; // SourcePage
+var _arr_1711 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1710 }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "<Badge", .font_size = 11, .text_color = Color.rgb(224, 108, 117) }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "label", .font_size = 11, .text_color = Color.rgb(209, 154, 102) }, .{ .style = .{ .flex_shrink = 0 }, .text = "=", .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "\"ScrollView\"", .font_size = 11, .text_color = Color.rgb(152, 195, 121) }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "tone", .font_size = 11, .text_color = Color.rgb(209, 154, 102) }, .{ .style = .{ .flex_shrink = 0 }, .text = "}", .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = " />", .font_size = 11, .text_color = Color.rgb(224, 108, 117) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2812 — <Box>
-var _arr_1602 = [_]Node{ .{ .text = "19", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
+var _arr_1712 = [_]Node{ .{ .text = "19", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2811 — <Box>
-var _arr_1603 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1602 }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "</C.HeroRow>", .font_size = 11, .text_color = Color.rgb(224, 108, 117) } }; // SourcePage
+var _arr_1713 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1712 }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "</C.HeroRow>", .font_size = 11, .text_color = Color.rgb(224, 108, 117) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2818 — <Box>
-var _arr_1604 = [_]Node{ .{ .text = "20", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
+var _arr_1714 = [_]Node{ .{ .text = "20", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2817 — <Box>
-var _arr_1605 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1604 }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "</C.HeroCard>", .font_size = 11, .text_color = Color.rgb(224, 108, 117) } }; // SourcePage
+var _arr_1715 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1714 }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "</C.HeroCard>", .font_size = 11, .text_color = Color.rgb(224, 108, 117) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2824 — <Box>
-var _arr_1606 = [_]Node{ .{ .text = "21", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
+var _arr_1716 = [_]Node{ .{ .text = "21", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2823 — <Box>
-var _arr_1607 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1606 }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "</C.DetailStack>", .font_size = 11, .text_color = Color.rgb(224, 108, 117) } }; // SourcePage
+var _arr_1717 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1716 }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "</C.DetailStack>", .font_size = 11, .text_color = Color.rgb(224, 108, 117) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2830 — <Box>
-var _arr_1608 = [_]Node{ .{ .text = "22", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
+var _arr_1718 = [_]Node{ .{ .text = "22", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2829 — <Box>
-var _arr_1609 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1608 }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "</C.DetailPaneScroll>", .font_size = 11, .text_color = Color.rgb(224, 108, 117) } }; // SourcePage
+var _arr_1719 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1718 }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "</C.DetailPaneScroll>", .font_size = 11, .text_color = Color.rgb(224, 108, 117) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2836 — <Box>
-var _arr_1610 = [_]Node{ .{ .text = "23", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
+var _arr_1720 = [_]Node{ .{ .text = "23", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2835 — <Box>
-var _arr_1611 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1610 }, .{ .style = .{ .flex_shrink = 0 }, .text = ");", .font_size = 11, .text_color = Color.rgb(200, 206, 218) } }; // SourcePage
+var _arr_1721 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1720 }, .{ .style = .{ .flex_shrink = 0 }, .text = ");", .font_size = 11, .text_color = Color.rgb(200, 206, 218) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2841 — <Box>
-var _arr_1612 = [_]Node{ .{ .text = "24", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
+var _arr_1722 = [_]Node{ .{ .text = "24", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2840 — <Box>
-var _arr_1613 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1612 }, .{ .style = .{ .flex_shrink = 0 }, .text = "}", .font_size = 11, .text_color = Color.rgb(200, 206, 218) } }; // SourcePage
+var _arr_1723 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1722 }, .{ .style = .{ .flex_shrink = 0 }, .text = "}", .font_size = 11, .text_color = Color.rgb(200, 206, 218) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2846 — <Box>
-var _arr_1614 = [_]Node{ .{ .text = "25", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
+var _arr_1724 = [_]Node{ .{ .text = "25", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2845 — <Box>
-var _arr_1615 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1614 }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) } }; // SourcePage
+var _arr_1725 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1724 }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2851 — <Box>
-var _arr_1616 = [_]Node{ .{ .text = "26", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
+var _arr_1726 = [_]Node{ .{ .text = "26", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2850 — <Box>
-var _arr_1617 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1616 }, .{ .style = .{ .flex_shrink = 0 }, .text = "// Section with flex diagnostics", .font_size = 11, .text_color = Color.rgb(92, 100, 120) } }; // SourcePage
+var _arr_1727 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1726 }, .{ .style = .{ .flex_shrink = 0 }, .text = "// Section with flex diagnostics", .font_size = 11, .text_color = Color.rgb(92, 100, 120) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2856 — <Box>
-var _arr_1618 = [_]Node{ .{ .text = "27", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
+var _arr_1728 = [_]Node{ .{ .text = "27", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2855 — <Box>
-var _arr_1619 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1618 }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "<DetailSection", .font_size = 11, .text_color = Color.rgb(224, 108, 117) }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "title", .font_size = 11, .text_color = Color.rgb(209, 154, 102) }, .{ .style = .{ .flex_shrink = 0 }, .text = "=", .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "\"Flex Layout\"", .font_size = 11, .text_color = Color.rgb(152, 195, 121) }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "hint", .font_size = 11, .text_color = Color.rgb(209, 154, 102) }, .{ .style = .{ .flex_shrink = 0 }, .text = "=", .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "\"split-view composition\"", .font_size = 11, .text_color = Color.rgb(152, 195, 121) }, .{ .style = .{ .flex_shrink = 0 }, .text = ">", .font_size = 11, .text_color = Color.rgb(224, 108, 117) } }; // SourcePage
+var _arr_1729 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1728 }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "<DetailSection", .font_size = 11, .text_color = Color.rgb(224, 108, 117) }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "title", .font_size = 11, .text_color = Color.rgb(209, 154, 102) }, .{ .style = .{ .flex_shrink = 0 }, .text = "=", .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "\"Flex Layout\"", .font_size = 11, .text_color = Color.rgb(152, 195, 121) }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "hint", .font_size = 11, .text_color = Color.rgb(209, 154, 102) }, .{ .style = .{ .flex_shrink = 0 }, .text = "=", .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "\"split-view composition\"", .font_size = 11, .text_color = Color.rgb(152, 195, 121) }, .{ .style = .{ .flex_shrink = 0 }, .text = ">", .font_size = 11, .text_color = Color.rgb(224, 108, 117) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2871 — <Box>
-var _arr_1620 = [_]Node{ .{ .text = "28", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
+var _arr_1730 = [_]Node{ .{ .text = "28", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2870 — <Box>
-var _arr_1621 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1620 }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "<C.MetricGrid>", .font_size = 11, .text_color = Color.rgb(224, 108, 117) } }; // SourcePage
+var _arr_1731 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1730 }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "<C.MetricGrid>", .font_size = 11, .text_color = Color.rgb(224, 108, 117) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2877 — <Box>
-var _arr_1622 = [_]Node{ .{ .text = "29", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
+var _arr_1732 = [_]Node{ .{ .text = "29", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2876 — <Box>
-var _arr_1623 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1622 }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "<MetricCard", .font_size = 11, .text_color = Color.rgb(224, 108, 117) }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "label", .font_size = 11, .text_color = Color.rgb(209, 154, 102) }, .{ .style = .{ .flex_shrink = 0 }, .text = "=", .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "\"Direction\"", .font_size = 11, .text_color = Color.rgb(152, 195, 121) }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "value", .font_size = 11, .text_color = Color.rgb(209, 154, 102) }, .{ .style = .{ .flex_shrink = 0 }, .text = "=", .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "\"row\"", .font_size = 11, .text_color = Color.rgb(152, 195, 121) }, .{ .style = .{ .flex_shrink = 0 }, .text = " />", .font_size = 11, .text_color = Color.rgb(224, 108, 117) } }; // SourcePage
+var _arr_1733 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1732 }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "<MetricCard", .font_size = 11, .text_color = Color.rgb(224, 108, 117) }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "label", .font_size = 11, .text_color = Color.rgb(209, 154, 102) }, .{ .style = .{ .flex_shrink = 0 }, .text = "=", .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "\"Direction\"", .font_size = 11, .text_color = Color.rgb(152, 195, 121) }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "value", .font_size = 11, .text_color = Color.rgb(209, 154, 102) }, .{ .style = .{ .flex_shrink = 0 }, .text = "=", .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "\"row\"", .font_size = 11, .text_color = Color.rgb(152, 195, 121) }, .{ .style = .{ .flex_shrink = 0 }, .text = " />", .font_size = 11, .text_color = Color.rgb(224, 108, 117) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2892 — <Box>
-var _arr_1624 = [_]Node{ .{ .text = "30", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
+var _arr_1734 = [_]Node{ .{ .text = "30", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2891 — <Box>
-var _arr_1625 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1624 }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "<MetricCard", .font_size = 11, .text_color = Color.rgb(224, 108, 117) }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "label", .font_size = 11, .text_color = Color.rgb(209, 154, 102) }, .{ .style = .{ .flex_shrink = 0 }, .text = "=", .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "\"Tree Width\"", .font_size = 11, .text_color = Color.rgb(152, 195, 121) }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "value", .font_size = 11, .text_color = Color.rgb(209, 154, 102) }, .{ .style = .{ .flex_shrink = 0 }, .text = "=", .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "\"330px\"", .font_size = 11, .text_color = Color.rgb(152, 195, 121) }, .{ .style = .{ .flex_shrink = 0 }, .text = " />", .font_size = 11, .text_color = Color.rgb(224, 108, 117) } }; // SourcePage
+var _arr_1735 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1734 }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "<MetricCard", .font_size = 11, .text_color = Color.rgb(224, 108, 117) }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "label", .font_size = 11, .text_color = Color.rgb(209, 154, 102) }, .{ .style = .{ .flex_shrink = 0 }, .text = "=", .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "\"Tree Width\"", .font_size = 11, .text_color = Color.rgb(152, 195, 121) }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "value", .font_size = 11, .text_color = Color.rgb(209, 154, 102) }, .{ .style = .{ .flex_shrink = 0 }, .text = "=", .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "\"330px\"", .font_size = 11, .text_color = Color.rgb(152, 195, 121) }, .{ .style = .{ .flex_shrink = 0 }, .text = " />", .font_size = 11, .text_color = Color.rgb(224, 108, 117) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2907 — <Box>
-var _arr_1626 = [_]Node{ .{ .text = "31", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
+var _arr_1736 = [_]Node{ .{ .text = "31", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2906 — <Box>
-var _arr_1627 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1626 }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "</C.MetricGrid>", .font_size = 11, .text_color = Color.rgb(224, 108, 117) } }; // SourcePage
+var _arr_1737 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1736 }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "</C.MetricGrid>", .font_size = 11, .text_color = Color.rgb(224, 108, 117) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2913 — <Box>
-var _arr_1628 = [_]Node{ .{ .text = "32", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
+var _arr_1738 = [_]Node{ .{ .text = "32", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2912 — <Box>
-var _arr_1629 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1628 }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "</DetailSection>", .font_size = 11, .text_color = Color.rgb(224, 108, 117) } }; // SourcePage
+var _arr_1739 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1738 }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "</DetailSection>", .font_size = 11, .text_color = Color.rgb(224, 108, 117) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2919 — <Box>
-var _arr_1630 = [_]Node{ .{ .text = "33", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
+var _arr_1740 = [_]Node{ .{ .text = "33", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2918 — <Box>
-var _arr_1631 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1630 }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) } }; // SourcePage
+var _arr_1741 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1740 }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2924 — <Box>
-var _arr_1632 = [_]Node{ .{ .text = "34", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
+var _arr_1742 = [_]Node{ .{ .text = "34", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2923 — <Box>
-var _arr_1633 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1632 }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "<DetailSection", .font_size = 11, .text_color = Color.rgb(224, 108, 117) }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "title", .font_size = 11, .text_color = Color.rgb(209, 154, 102) }, .{ .style = .{ .flex_shrink = 0 }, .text = "=", .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "\"Style Attributes\"", .font_size = 11, .text_color = Color.rgb(152, 195, 121) }, .{ .style = .{ .flex_shrink = 0 }, .text = ">", .font_size = 11, .text_color = Color.rgb(224, 108, 117) } }; // SourcePage
+var _arr_1743 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1742 }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "<DetailSection", .font_size = 11, .text_color = Color.rgb(224, 108, 117) }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "title", .font_size = 11, .text_color = Color.rgb(209, 154, 102) }, .{ .style = .{ .flex_shrink = 0 }, .text = "=", .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "\"Style Attributes\"", .font_size = 11, .text_color = Color.rgb(152, 195, 121) }, .{ .style = .{ .flex_shrink = 0 }, .text = ">", .font_size = 11, .text_color = Color.rgb(224, 108, 117) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2935 — <Box>
-var _arr_1634 = [_]Node{ .{ .text = "35", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
+var _arr_1744 = [_]Node{ .{ .text = "35", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2934 — <Box>
-var _arr_1635 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1634 }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "<C.PropertyList>", .font_size = 11, .text_color = Color.rgb(224, 108, 117) } }; // SourcePage
+var _arr_1745 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1744 }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "<C.PropertyList>", .font_size = 11, .text_color = Color.rgb(224, 108, 117) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2941 — <Box>
-var _arr_1636 = [_]Node{ .{ .text = "36", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
+var _arr_1746 = [_]Node{ .{ .text = "36", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2940 — <Box>
-var _arr_1637 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1636 }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "<PropertyRow", .font_size = 11, .text_color = Color.rgb(224, 108, 117) }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "name", .font_size = 11, .text_color = Color.rgb(209, 154, 102) }, .{ .style = .{ .flex_shrink = 0 }, .text = "=", .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "\"overflow\"", .font_size = 11, .text_color = Color.rgb(152, 195, 121) }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "value", .font_size = 11, .text_color = Color.rgb(209, 154, 102) }, .{ .style = .{ .flex_shrink = 0 }, .text = "=", .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "\"scroll\"", .font_size = 11, .text_color = Color.rgb(152, 195, 121) }, .{ .style = .{ .flex_shrink = 0 }, .text = " />", .font_size = 11, .text_color = Color.rgb(224, 108, 117) } }; // SourcePage
+var _arr_1747 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1746 }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "<PropertyRow", .font_size = 11, .text_color = Color.rgb(224, 108, 117) }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "name", .font_size = 11, .text_color = Color.rgb(209, 154, 102) }, .{ .style = .{ .flex_shrink = 0 }, .text = "=", .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "\"overflow\"", .font_size = 11, .text_color = Color.rgb(152, 195, 121) }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "value", .font_size = 11, .text_color = Color.rgb(209, 154, 102) }, .{ .style = .{ .flex_shrink = 0 }, .text = "=", .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "\"scroll\"", .font_size = 11, .text_color = Color.rgb(152, 195, 121) }, .{ .style = .{ .flex_shrink = 0 }, .text = " />", .font_size = 11, .text_color = Color.rgb(224, 108, 117) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2956 — <Box>
-var _arr_1638 = [_]Node{ .{ .text = "37", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
+var _arr_1748 = [_]Node{ .{ .text = "37", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2955 — <Box>
-var _arr_1639 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1638 }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "<PropertyRow", .font_size = 11, .text_color = Color.rgb(224, 108, 117) }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "name", .font_size = 11, .text_color = Color.rgb(209, 154, 102) }, .{ .style = .{ .flex_shrink = 0 }, .text = "=", .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "\"padding\"", .font_size = 11, .text_color = Color.rgb(152, 195, 121) }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "value", .font_size = 11, .text_color = Color.rgb(209, 154, 102) }, .{ .style = .{ .flex_shrink = 0 }, .text = "=", .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "\"14\"", .font_size = 11, .text_color = Color.rgb(152, 195, 121) }, .{ .style = .{ .flex_shrink = 0 }, .text = " />", .font_size = 11, .text_color = Color.rgb(224, 108, 117) } }; // SourcePage
+var _arr_1749 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1748 }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "<PropertyRow", .font_size = 11, .text_color = Color.rgb(224, 108, 117) }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "name", .font_size = 11, .text_color = Color.rgb(209, 154, 102) }, .{ .style = .{ .flex_shrink = 0 }, .text = "=", .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "\"padding\"", .font_size = 11, .text_color = Color.rgb(152, 195, 121) }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "value", .font_size = 11, .text_color = Color.rgb(209, 154, 102) }, .{ .style = .{ .flex_shrink = 0 }, .text = "=", .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "\"14\"", .font_size = 11, .text_color = Color.rgb(152, 195, 121) }, .{ .style = .{ .flex_shrink = 0 }, .text = " />", .font_size = 11, .text_color = Color.rgb(224, 108, 117) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2971 — <Box>
-var _arr_1640 = [_]Node{ .{ .text = "38", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
+var _arr_1750 = [_]Node{ .{ .text = "38", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2970 — <Box>
-var _arr_1641 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1640 }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "</C.PropertyList>", .font_size = 11, .text_color = Color.rgb(224, 108, 117) } }; // SourcePage
+var _arr_1751 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1750 }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "</C.PropertyList>", .font_size = 11, .text_color = Color.rgb(224, 108, 117) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2977 — <Box>
-var _arr_1642 = [_]Node{ .{ .text = "39", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
+var _arr_1752 = [_]Node{ .{ .text = "39", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2976 — <Box>
-var _arr_1643 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1642 }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "</DetailSection>", .font_size = 11, .text_color = Color.rgb(224, 108, 117) } }; // SourcePage
+var _arr_1753 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1752 }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) }, .{ .style = .{ .flex_shrink = 0 }, .text = "</DetailSection>", .font_size = 11, .text_color = Color.rgb(224, 108, 117) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2983 — <Box>
-var _arr_1644 = [_]Node{ .{ .text = "40", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
+var _arr_1754 = [_]Node{ .{ .text = "40", .font_size = 11, .text_color = Color.rgb(63, 72, 92) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2982 — <Box>
-var _arr_1645 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1644 }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) } }; // SourcePage
+var _arr_1755 = [_]Node{ .{ .style = .{ .width = 36, .padding_right = 10 }, .children = &_arr_1754 }, .{ .style = .{ .flex_shrink = 0 }, .font_size = 11, .text_color = Color.rgb(200, 206, 218) } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2688 — <Box>
-var _arr_1646 = [_]Node{ .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1567 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1569 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1571 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1573 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1575 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1577 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1579 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1581 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1583 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1585 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1587 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1589 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1591 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1593 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1595 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1597 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1599 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1601 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1603 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1605 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1607 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1609 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1611 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1613 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1615 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1617 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1619 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1621 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1623 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1625 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1627 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1629 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1631 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1633 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1635 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1637 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1639 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1641 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1643 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1645 } }; // SourcePage
+var _arr_1756 = [_]Node{ .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1677 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1679 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1681 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1683 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1685 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1687 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1689 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1691 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1693 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1695 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1697 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1699 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1701 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1703 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1705 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1707 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1709 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1711 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1713 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1715 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1717 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1719 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1721 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1723 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1725 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1727 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1729 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1731 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1733 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1735 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1737 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1739 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1741 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1743 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1745 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1747 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1749 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1751 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1753 }, .{ .style = .{ .flex_direction = .row, .padding_top = 1, .padding_bottom = 1 }, .children = &_arr_1755 } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2687 — <ScrollView>
-var _arr_1647 = [_]Node{ .{ .style = .{ .flex_direction = .column, .padding = 8, .gap = 0 }, .children = &_arr_1646 } }; // SourcePage
+var _arr_1757 = [_]Node{ .{ .style = .{ .flex_direction = .column, .padding = 8, .gap = 0 }, .children = &_arr_1756 } }; // SourcePage
 // tsz:InspectorEmbed.tsz:2675 — <Box>
-var _arr_1648 = [_]Node{ .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 10, .padding_left = 10, .padding_right = 10, .padding_top = 7, .padding_bottom = 7, .background_color = Color.rgb(13, 17, 24), .border_width = 1, .border_color = Color.rgb(26, 32, 48) }, .children = &_arr_1565 }, .{ .style = .{ .overflow = .auto, .flex_grow = 1, .flex_basis = 0 }, .children = &_arr_1647 } }; // SourcePage
+var _arr_1758 = [_]Node{ .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 10, .padding_left = 10, .padding_right = 10, .padding_top = 7, .padding_bottom = 7, .background_color = Color.rgb(13, 17, 24), .border_width = 1, .border_color = Color.rgb(26, 32, 48) }, .children = &_arr_1675 }, .{ .style = .{ .overflow = .auto, .flex_grow = 1, .flex_basis = 0 }, .children = &_arr_1757 } }; // SourcePage
 // tsz:InspectorEmbed.tsz:3084 — <Box>
-var _arr_1649 = [_]Node{ .{ .text = "viewport 810 x 638", .font_size = 9, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "fit-scaled scene", .font_size = 9, .text_color = Color.rgb(92, 100, 120) } }; // WireframePage
+var _arr_1759 = [_]Node{ .{ .text = "viewport 810 x 638", .font_size = 9, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "fit-scaled scene", .font_size = 9, .text_color = Color.rgb(92, 100, 120) } }; // WireframePage
 // tsz:InspectorEmbed.tsz:3090 — <Box>
-var _arr_1650 = [_]Node{ .{ .text = "selected: <DetailPane>", .font_size = 9, .text_color = Color.rgb(223, 229, 245) } }; // WireframePage
+var _arr_1760 = [_]Node{ .{ .text = "selected: <DetailPane>", .font_size = 9, .text_color = Color.rgb(223, 229, 245) } }; // WireframePage
 // tsz:InspectorEmbed.tsz:3094 — <Box>
-var _arr_1651 = [_]Node{ .{ .text = "hover: <TreeScroll>", .font_size = 9, .text_color = Color.rgb(223, 229, 245) } }; // WireframePage
+var _arr_1761 = [_]Node{ .{ .text = "hover: <TreeScroll>", .font_size = 9, .text_color = Color.rgb(223, 229, 245) } }; // WireframePage
 // tsz:InspectorEmbed.tsz:3089 — <Box>
-var _arr_1652 = [_]Node{ .{ .style = .{ .padding_left = 6, .padding_right = 6, .padding_top = 3, .padding_bottom = 3, .border_radius = 4, .border_width = 1, .border_color = Color.rgb(49, 85, 124), .background_color = Color.rgb(22, 48, 74) }, .children = &_arr_1650 }, .{ .style = .{ .padding_left = 6, .padding_right = 6, .padding_top = 3, .padding_bottom = 3, .border_radius = 4, .border_width = 1, .border_color = Color.rgb(40, 65, 92), .background_color = Color.rgb(17, 28, 41) }, .children = &_arr_1651 } }; // WireframePage
+var _arr_1762 = [_]Node{ .{ .style = .{ .padding_left = 6, .padding_right = 6, .padding_top = 3, .padding_bottom = 3, .border_radius = 4, .border_width = 1, .border_color = Color.rgb(49, 85, 124), .background_color = Color.rgb(22, 48, 74) }, .children = &_arr_1760 }, .{ .style = .{ .padding_left = 6, .padding_right = 6, .padding_top = 3, .padding_bottom = 3, .border_radius = 4, .border_width = 1, .border_color = Color.rgb(40, 65, 92), .background_color = Color.rgb(17, 28, 41) }, .children = &_arr_1761 } }; // WireframePage
 // tsz:InspectorEmbed.tsz:3083 — <Box>
-var _arr_1653 = [_]Node{ .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 8 }, .children = &_arr_1649 }, .{ .style = .{ .flex_direction = .column, .gap = 4 }, .children = &_arr_1652 } }; // WireframePage
+var _arr_1763 = [_]Node{ .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 8 }, .children = &_arr_1759 }, .{ .style = .{ .flex_direction = .column, .gap = 4 }, .children = &_arr_1762 } }; // WireframePage
 // tsz:InspectorEmbed.tsz:3028 — <Box>
-var _arr_1654 = [_]Node{ .{ .text = "Elements", .font_size = 8, .text_color = Color.rgb(223, 229, 245) } }; // MiniTab
+var _arr_1764 = [_]Node{ .{ .text = "Elements", .font_size = 8, .text_color = Color.rgb(223, 229, 245) } }; // MiniTab
 // tsz:InspectorEmbed.tsz:3031 — <Box>
-var _arr_1655 = [_]Node{ .{ .text = "Elements", .font_size = 8, .text_color = Color.rgb(102, 112, 135) } }; // MiniTab
+var _arr_1765 = [_]Node{ .{ .text = "Elements", .font_size = 8, .text_color = Color.rgb(102, 112, 135) } }; // MiniTab
 // tsz:InspectorEmbed.tsz:3027 — <>
-var _arr_1656 = [_]Node{ .{ .style = .{ .padding_left = 7, .padding_right = 7, .padding_top = 3, .padding_bottom = 3, .border_radius = 3, .background_color = Color.rgb(23, 36, 55), .border_width = 1, .border_color = Color.rgb(41, 64, 92) }, .children = &_arr_1654 } };
+var _arr_1766 = [_]Node{ .{ .style = .{ .padding_left = 7, .padding_right = 7, .padding_top = 3, .padding_bottom = 3, .border_radius = 3, .background_color = Color.rgb(23, 36, 55), .border_width = 1, .border_color = Color.rgb(41, 64, 92) }, .children = &_arr_1764 } };
 // tsz:InspectorEmbed.tsz:3028 — <Box>
-var _arr_1657 = [_]Node{ .{ .text = "Source", .font_size = 8, .text_color = Color.rgb(223, 229, 245) } }; // MiniTab
+var _arr_1767 = [_]Node{ .{ .text = "Source", .font_size = 8, .text_color = Color.rgb(223, 229, 245) } }; // MiniTab
 // tsz:InspectorEmbed.tsz:3031 — <Box>
-var _arr_1658 = [_]Node{ .{ .text = "Source", .font_size = 8, .text_color = Color.rgb(102, 112, 135) } }; // MiniTab
+var _arr_1768 = [_]Node{ .{ .text = "Source", .font_size = 8, .text_color = Color.rgb(102, 112, 135) } }; // MiniTab
 // tsz:InspectorEmbed.tsz:3027 — <>
-var _arr_1659 = [_]Node{ .{ .style = .{ .padding_left = 7, .padding_right = 7, .padding_top = 3, .padding_bottom = 3, .border_radius = 3, .background_color = Color.rgb(11, 16, 24) }, .children = &_arr_1658 } };
+var _arr_1769 = [_]Node{ .{ .style = .{ .padding_left = 7, .padding_right = 7, .padding_top = 3, .padding_bottom = 3, .border_radius = 3, .background_color = Color.rgb(11, 16, 24) }, .children = &_arr_1768 } };
 // tsz:InspectorEmbed.tsz:3028 — <Box>
-var _arr_1660 = [_]Node{ .{ .text = "Wireframe", .font_size = 8, .text_color = Color.rgb(223, 229, 245) } }; // MiniTab
+var _arr_1770 = [_]Node{ .{ .text = "Wireframe", .font_size = 8, .text_color = Color.rgb(223, 229, 245) } }; // MiniTab
 // tsz:InspectorEmbed.tsz:3031 — <Box>
-var _arr_1661 = [_]Node{ .{ .text = "Wireframe", .font_size = 8, .text_color = Color.rgb(102, 112, 135) } }; // MiniTab
+var _arr_1771 = [_]Node{ .{ .text = "Wireframe", .font_size = 8, .text_color = Color.rgb(102, 112, 135) } }; // MiniTab
 // tsz:InspectorEmbed.tsz:3027 — <>
-var _arr_1662 = [_]Node{ .{ .style = .{ .padding_left = 7, .padding_right = 7, .padding_top = 3, .padding_bottom = 3, .border_radius = 3, .background_color = Color.rgb(11, 16, 24) }, .children = &_arr_1661 } };
+var _arr_1772 = [_]Node{ .{ .style = .{ .padding_left = 7, .padding_right = 7, .padding_top = 3, .padding_bottom = 3, .border_radius = 3, .background_color = Color.rgb(11, 16, 24) }, .children = &_arr_1771 } };
 // tsz:InspectorEmbed.tsz:3028 — <Box>
-var _arr_1663 = [_]Node{ .{ .text = "Perf", .font_size = 8, .text_color = Color.rgb(223, 229, 245) } }; // MiniTab
+var _arr_1773 = [_]Node{ .{ .text = "Perf", .font_size = 8, .text_color = Color.rgb(223, 229, 245) } }; // MiniTab
 // tsz:InspectorEmbed.tsz:3031 — <Box>
-var _arr_1664 = [_]Node{ .{ .text = "Perf", .font_size = 8, .text_color = Color.rgb(102, 112, 135) } }; // MiniTab
+var _arr_1774 = [_]Node{ .{ .text = "Perf", .font_size = 8, .text_color = Color.rgb(102, 112, 135) } }; // MiniTab
 // tsz:InspectorEmbed.tsz:3027 — <>
-var _arr_1665 = [_]Node{ .{ .style = .{ .padding_left = 7, .padding_right = 7, .padding_top = 3, .padding_bottom = 3, .border_radius = 3, .background_color = Color.rgb(11, 16, 24) }, .children = &_arr_1664 } };
+var _arr_1775 = [_]Node{ .{ .style = .{ .padding_left = 7, .padding_right = 7, .padding_top = 3, .padding_bottom = 3, .border_radius = 3, .background_color = Color.rgb(11, 16, 24) }, .children = &_arr_1774 } };
 // tsz:InspectorEmbed.tsz:3028 — <Box>
-var _arr_1666 = [_]Node{ .{ .text = "Network", .font_size = 8, .text_color = Color.rgb(223, 229, 245) } }; // MiniTab
+var _arr_1776 = [_]Node{ .{ .text = "Network", .font_size = 8, .text_color = Color.rgb(223, 229, 245) } }; // MiniTab
 // tsz:InspectorEmbed.tsz:3031 — <Box>
-var _arr_1667 = [_]Node{ .{ .text = "Network", .font_size = 8, .text_color = Color.rgb(102, 112, 135) } }; // MiniTab
+var _arr_1777 = [_]Node{ .{ .text = "Network", .font_size = 8, .text_color = Color.rgb(102, 112, 135) } }; // MiniTab
 // tsz:InspectorEmbed.tsz:3027 — <>
-var _arr_1668 = [_]Node{ .{ .style = .{ .padding_left = 7, .padding_right = 7, .padding_top = 3, .padding_bottom = 3, .border_radius = 3, .background_color = Color.rgb(11, 16, 24) }, .children = &_arr_1667 } };
+var _arr_1778 = [_]Node{ .{ .style = .{ .padding_left = 7, .padding_right = 7, .padding_top = 3, .padding_bottom = 3, .border_radius = 3, .background_color = Color.rgb(11, 16, 24) }, .children = &_arr_1777 } };
 // tsz:InspectorEmbed.tsz:3028 — <Box>
-var _arr_1669 = [_]Node{ .{ .text = "Console", .font_size = 8, .text_color = Color.rgb(223, 229, 245) } }; // MiniTab
+var _arr_1779 = [_]Node{ .{ .text = "Console", .font_size = 8, .text_color = Color.rgb(223, 229, 245) } }; // MiniTab
 // tsz:InspectorEmbed.tsz:3031 — <Box>
-var _arr_1670 = [_]Node{ .{ .text = "Console", .font_size = 8, .text_color = Color.rgb(102, 112, 135) } }; // MiniTab
+var _arr_1780 = [_]Node{ .{ .text = "Console", .font_size = 8, .text_color = Color.rgb(102, 112, 135) } }; // MiniTab
 // tsz:InspectorEmbed.tsz:3027 — <>
-var _arr_1671 = [_]Node{ .{ .style = .{ .padding_left = 7, .padding_right = 7, .padding_top = 3, .padding_bottom = 3, .border_radius = 3, .background_color = Color.rgb(11, 16, 24) }, .children = &_arr_1670 } };
+var _arr_1781 = [_]Node{ .{ .style = .{ .padding_left = 7, .padding_right = 7, .padding_top = 3, .padding_bottom = 3, .border_radius = 3, .background_color = Color.rgb(11, 16, 24) }, .children = &_arr_1780 } };
 // tsz:InspectorEmbed.tsz:3028 — <Box>
-var _arr_1672 = [_]Node{ .{ .text = "Logs", .font_size = 8, .text_color = Color.rgb(223, 229, 245) } }; // MiniTab
+var _arr_1782 = [_]Node{ .{ .text = "Logs", .font_size = 8, .text_color = Color.rgb(223, 229, 245) } }; // MiniTab
 // tsz:InspectorEmbed.tsz:3031 — <Box>
-var _arr_1673 = [_]Node{ .{ .text = "Logs", .font_size = 8, .text_color = Color.rgb(102, 112, 135) } }; // MiniTab
+var _arr_1783 = [_]Node{ .{ .text = "Logs", .font_size = 8, .text_color = Color.rgb(102, 112, 135) } }; // MiniTab
 // tsz:InspectorEmbed.tsz:3027 — <>
-var _arr_1674 = [_]Node{ .{ .style = .{ .padding_left = 7, .padding_right = 7, .padding_top = 3, .padding_bottom = 3, .border_radius = 3, .background_color = Color.rgb(11, 16, 24) }, .children = &_arr_1673 } };
+var _arr_1784 = [_]Node{ .{ .style = .{ .padding_left = 7, .padding_right = 7, .padding_top = 3, .padding_bottom = 3, .border_radius = 3, .background_color = Color.rgb(11, 16, 24) }, .children = &_arr_1783 } };
 // tsz:InspectorEmbed.tsz:3100 — <Box>
-var _arr_1675 = [_]Node{ .{ .children = &_arr_1656 }, .{ .children = &_arr_1659 }, .{ .children = &_arr_1662 }, .{ .children = &_arr_1665 }, .{ .children = &_arr_1668 }, .{ .children = &_arr_1671 }, .{ .children = &_arr_1674 } }; // WireframePage
+var _arr_1785 = [_]Node{ .{ .children = &_arr_1766 }, .{ .children = &_arr_1769 }, .{ .children = &_arr_1772 }, .{ .children = &_arr_1775 }, .{ .children = &_arr_1778 }, .{ .children = &_arr_1781 }, .{ .children = &_arr_1784 } }; // WireframePage
 // tsz:InspectorEmbed.tsz:3119 — <Box>
-var _arr_1676 = [_]Node{ .{ .style = .{ .height = 5, .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = 40 } }, .{ .style = .{ .height = 5, .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = 22 } } }; // WireframePage
+var _arr_1786 = [_]Node{ .{ .style = .{ .height = 5, .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = 40 } }, .{ .style = .{ .height = 5, .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = 22 } } }; // WireframePage
 // tsz:InspectorEmbed.tsz:3123 — <Box>
-var _arr_1677 = [_]Node{ .{ .style = .{ .height = 5, .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = 86 } }, .{ .style = .{ .height = 5, .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = 34 } } }; // WireframePage
+var _arr_1787 = [_]Node{ .{ .style = .{ .height = 5, .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = 86 } }, .{ .style = .{ .height = 5, .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = 34 } } }; // WireframePage
 // tsz:InspectorEmbed.tsz:3118 — <Box>
-var _arr_1678 = [_]Node{ .{ .style = .{ .flex_direction = .row, .flex_basis = 0, .gap = 4, .flex_grow = 0 }, .children = &_arr_1676 }, .{ .style = .{ .flex_direction = .row, .flex_basis = 0, .gap = 4, .flex_grow = 0 }, .children = &_arr_1677 } }; // WireframePage
+var _arr_1788 = [_]Node{ .{ .style = .{ .flex_direction = .row, .flex_basis = 0, .gap = 4, .flex_grow = 0 }, .children = &_arr_1786 }, .{ .style = .{ .flex_direction = .row, .flex_basis = 0, .gap = 4, .flex_grow = 0 }, .children = &_arr_1787 } }; // WireframePage
 // tsz:InspectorEmbed.tsz:3028 — <Box>
-var _arr_1679 = [_]Node{ .{ .text = "Zig", .font_size = 8, .text_color = Color.rgb(223, 229, 245) } }; // MiniTab
+var _arr_1789 = [_]Node{ .{ .text = "Zig", .font_size = 8, .text_color = Color.rgb(223, 229, 245) } }; // MiniTab
 // tsz:InspectorEmbed.tsz:3031 — <Box>
-var _arr_1680 = [_]Node{ .{ .text = "Zig", .font_size = 8, .text_color = Color.rgb(102, 112, 135) } }; // MiniTab
+var _arr_1790 = [_]Node{ .{ .text = "Zig", .font_size = 8, .text_color = Color.rgb(102, 112, 135) } }; // MiniTab
 // tsz:InspectorEmbed.tsz:3027 — <>
-var _arr_1681 = [_]Node{ .{ .style = .{ .padding_left = 7, .padding_right = 7, .padding_top = 3, .padding_bottom = 3, .border_radius = 3, .background_color = Color.rgb(23, 36, 55), .border_width = 1, .border_color = Color.rgb(41, 64, 92) }, .children = &_arr_1679 } };
+var _arr_1791 = [_]Node{ .{ .style = .{ .padding_left = 7, .padding_right = 7, .padding_top = 3, .padding_bottom = 3, .border_radius = 3, .background_color = Color.rgb(23, 36, 55), .border_width = 1, .border_color = Color.rgb(41, 64, 92) }, .children = &_arr_1789 } };
 // tsz:InspectorEmbed.tsz:3028 — <Box>
-var _arr_1682 = [_]Node{ .{ .text = "Hybrid", .font_size = 8, .text_color = Color.rgb(223, 229, 245) } }; // MiniTab
+var _arr_1792 = [_]Node{ .{ .text = "Hybrid", .font_size = 8, .text_color = Color.rgb(223, 229, 245) } }; // MiniTab
 // tsz:InspectorEmbed.tsz:3031 — <Box>
-var _arr_1683 = [_]Node{ .{ .text = "Hybrid", .font_size = 8, .text_color = Color.rgb(102, 112, 135) } }; // MiniTab
+var _arr_1793 = [_]Node{ .{ .text = "Hybrid", .font_size = 8, .text_color = Color.rgb(102, 112, 135) } }; // MiniTab
 // tsz:InspectorEmbed.tsz:3027 — <>
-var _arr_1684 = [_]Node{ .{ .style = .{ .padding_left = 7, .padding_right = 7, .padding_top = 3, .padding_bottom = 3, .border_radius = 3, .background_color = Color.rgb(11, 16, 24) }, .children = &_arr_1683 } };
+var _arr_1794 = [_]Node{ .{ .style = .{ .padding_left = 7, .padding_right = 7, .padding_top = 3, .padding_bottom = 3, .border_radius = 3, .background_color = Color.rgb(11, 16, 24) }, .children = &_arr_1793 } };
 // tsz:InspectorEmbed.tsz:3028 — <Box>
-var _arr_1685 = [_]Node{ .{ .text = "JSX", .font_size = 8, .text_color = Color.rgb(223, 229, 245) } }; // MiniTab
+var _arr_1795 = [_]Node{ .{ .text = "JSX", .font_size = 8, .text_color = Color.rgb(223, 229, 245) } }; // MiniTab
 // tsz:InspectorEmbed.tsz:3031 — <Box>
-var _arr_1686 = [_]Node{ .{ .text = "JSX", .font_size = 8, .text_color = Color.rgb(102, 112, 135) } }; // MiniTab
+var _arr_1796 = [_]Node{ .{ .text = "JSX", .font_size = 8, .text_color = Color.rgb(102, 112, 135) } }; // MiniTab
 // tsz:InspectorEmbed.tsz:3027 — <>
-var _arr_1687 = [_]Node{ .{ .style = .{ .padding_left = 7, .padding_right = 7, .padding_top = 3, .padding_bottom = 3, .border_radius = 3, .background_color = Color.rgb(11, 16, 24) }, .children = &_arr_1686 } };
+var _arr_1797 = [_]Node{ .{ .style = .{ .padding_left = 7, .padding_right = 7, .padding_top = 3, .padding_bottom = 3, .border_radius = 3, .background_color = Color.rgb(11, 16, 24) }, .children = &_arr_1796 } };
 // tsz:InspectorEmbed.tsz:3130 — <Box>
-var _arr_1688 = [_]Node{ .{ .children = &_arr_1681 }, .{ .children = &_arr_1684 }, .{ .children = &_arr_1687 } }; // WireframePage
+var _arr_1798 = [_]Node{ .{ .children = &_arr_1791 }, .{ .children = &_arr_1794 }, .{ .children = &_arr_1797 } }; // WireframePage
 // tsz:InspectorEmbed.tsz:3129 — <Box>
-var _arr_1689 = [_]Node{ .{ .style = .{ .flex_direction = .row, .flex_basis = 0, .gap = 4, .flex_grow = 0 }, .children = &_arr_1688 } }; // WireframePage
+var _arr_1799 = [_]Node{ .{ .style = .{ .flex_direction = .row, .flex_basis = 0, .gap = 4, .flex_grow = 0 }, .children = &_arr_1798 } }; // WireframePage
 // tsz:InspectorEmbed.tsz:3043 — <Box>
-var _arr_1690 = [_]Node{ .{ .text = "<Panel>", .font_size = 8, .text_color = Color.rgb(220, 233, 255) } }; // TreeGhostRow
+var _arr_1800 = [_]Node{ .{ .text = "<Panel>", .font_size = 8, .text_color = Color.rgb(220, 233, 255) } }; // TreeGhostRow
 // tsz:InspectorEmbed.tsz:3046 — <Box>
-var _arr_1691 = [_]Node{ .{ .text = "<Panel>", .font_size = 8, .text_color = Color.rgb(125, 135, 156) } }; // TreeGhostRow
+var _arr_1801 = [_]Node{ .{ .text = "<Panel>", .font_size = 8, .text_color = Color.rgb(125, 135, 156) } }; // TreeGhostRow
 // tsz:InspectorEmbed.tsz:3049 — <Box>
-var _arr_1692 = [_]Node{ .{ .text = "<Panel>", .font_size = 8, .text_color = Color.rgb(125, 135, 156) } }; // TreeGhostRow
+var _arr_1802 = [_]Node{ .{ .text = "<Panel>", .font_size = 8, .text_color = Color.rgb(125, 135, 156) } }; // TreeGhostRow
 // tsz:InspectorEmbed.tsz:3040 — <Box>
-var _arr_1693 = [_]Node{ .{ .style = .{ .width = 0, .flex_grow = 0 } }, .{ .style = .{ .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = 8, .height = 5, .flex_grow = 0 } }, .{ .style = .{ .border_width = 1, .border_color = Color.rgb(125, 105, 196), .border_radius = 3, .padding = 3, .gap = 3, .height = 18, .flex_grow = 1, .flex_basis = 0 }, .children = &_arr_1692 } }; // TreeGhostRow
+var _arr_1803 = [_]Node{ .{ .style = .{ .width = 0, .flex_grow = 0 } }, .{ .style = .{ .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = 8, .height = 5, .flex_grow = 0 } }, .{ .style = .{ .border_width = 1, .border_color = Color.rgb(125, 105, 196), .border_radius = 3, .padding = 3, .gap = 3, .height = 18, .flex_grow = 1, .flex_basis = 0 }, .children = &_arr_1802 } }; // TreeGhostRow
 // tsz:InspectorEmbed.tsz:3043 — <Box>
-var _arr_1694 = [_]Node{ .{ .text = "<TabBar>", .font_size = 8, .text_color = Color.rgb(220, 233, 255) } }; // TreeGhostRow
+var _arr_1804 = [_]Node{ .{ .text = "<TabBar>", .font_size = 8, .text_color = Color.rgb(220, 233, 255) } }; // TreeGhostRow
 // tsz:InspectorEmbed.tsz:3046 — <Box>
-var _arr_1695 = [_]Node{ .{ .text = "<TabBar>", .font_size = 8, .text_color = Color.rgb(125, 135, 156) } }; // TreeGhostRow
+var _arr_1805 = [_]Node{ .{ .text = "<TabBar>", .font_size = 8, .text_color = Color.rgb(125, 135, 156) } }; // TreeGhostRow
 // tsz:InspectorEmbed.tsz:3049 — <Box>
-var _arr_1696 = [_]Node{ .{ .text = "<TabBar>", .font_size = 8, .text_color = Color.rgb(125, 135, 156) } }; // TreeGhostRow
+var _arr_1806 = [_]Node{ .{ .text = "<TabBar>", .font_size = 8, .text_color = Color.rgb(125, 135, 156) } }; // TreeGhostRow
 // tsz:InspectorEmbed.tsz:3040 — <Box>
-var _arr_1697 = [_]Node{ .{ .style = .{ .width = 8, .flex_grow = 0 } }, .{ .style = .{ .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = 8, .height = 5, .flex_grow = 0 } }, .{ .style = .{ .border_width = 1, .border_color = Color.rgb(125, 105, 196), .border_radius = 3, .padding = 3, .gap = 3, .height = 18, .flex_grow = 1, .flex_basis = 0 }, .children = &_arr_1696 } }; // TreeGhostRow
+var _arr_1807 = [_]Node{ .{ .style = .{ .width = 8, .flex_grow = 0 } }, .{ .style = .{ .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = 8, .height = 5, .flex_grow = 0 } }, .{ .style = .{ .border_width = 1, .border_color = Color.rgb(125, 105, 196), .border_radius = 3, .padding = 3, .gap = 3, .height = 18, .flex_grow = 1, .flex_basis = 0 }, .children = &_arr_1806 } }; // TreeGhostRow
 // tsz:InspectorEmbed.tsz:3043 — <Box>
-var _arr_1698 = [_]Node{ .{ .text = "<ElementsPage>", .font_size = 8, .text_color = Color.rgb(220, 233, 255) } }; // TreeGhostRow
+var _arr_1808 = [_]Node{ .{ .text = "<ElementsPage>", .font_size = 8, .text_color = Color.rgb(220, 233, 255) } }; // TreeGhostRow
 // tsz:InspectorEmbed.tsz:3046 — <Box>
-var _arr_1699 = [_]Node{ .{ .text = "<ElementsPage>", .font_size = 8, .text_color = Color.rgb(125, 135, 156) } }; // TreeGhostRow
+var _arr_1809 = [_]Node{ .{ .text = "<ElementsPage>", .font_size = 8, .text_color = Color.rgb(125, 135, 156) } }; // TreeGhostRow
 // tsz:InspectorEmbed.tsz:3049 — <Box>
-var _arr_1700 = [_]Node{ .{ .text = "<ElementsPage>", .font_size = 8, .text_color = Color.rgb(125, 135, 156) } }; // TreeGhostRow
+var _arr_1810 = [_]Node{ .{ .text = "<ElementsPage>", .font_size = 8, .text_color = Color.rgb(125, 135, 156) } }; // TreeGhostRow
 // tsz:InspectorEmbed.tsz:3040 — <Box>
-var _arr_1701 = [_]Node{ .{ .style = .{ .width = 8, .flex_grow = 0 } }, .{ .style = .{ .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = 8, .height = 5, .flex_grow = 0 } }, .{ .style = .{ .border_width = 1, .border_color = Color.rgb(76, 114, 152), .border_radius = 3, .padding = 4, .gap = 3, .background_color = Color.rgba(49, 80, 111, 18), .height = 18, .flex_grow = 1, .flex_basis = 0 }, .children = &_arr_1699 } }; // TreeGhostRow
+var _arr_1811 = [_]Node{ .{ .style = .{ .width = 8, .flex_grow = 0 } }, .{ .style = .{ .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = 8, .height = 5, .flex_grow = 0 } }, .{ .style = .{ .border_width = 1, .border_color = Color.rgb(76, 114, 152), .border_radius = 3, .padding = 4, .gap = 3, .background_color = Color.rgba(49, 80, 111, 18), .height = 18, .flex_grow = 1, .flex_basis = 0 }, .children = &_arr_1809 } }; // TreeGhostRow
 // tsz:InspectorEmbed.tsz:3043 — <Box>
-var _arr_1702 = [_]Node{ .{ .text = "<TreePane>", .font_size = 8, .text_color = Color.rgb(220, 233, 255) } }; // TreeGhostRow
+var _arr_1812 = [_]Node{ .{ .text = "<TreePane>", .font_size = 8, .text_color = Color.rgb(220, 233, 255) } }; // TreeGhostRow
 // tsz:InspectorEmbed.tsz:3046 — <Box>
-var _arr_1703 = [_]Node{ .{ .text = "<TreePane>", .font_size = 8, .text_color = Color.rgb(125, 135, 156) } }; // TreeGhostRow
+var _arr_1813 = [_]Node{ .{ .text = "<TreePane>", .font_size = 8, .text_color = Color.rgb(125, 135, 156) } }; // TreeGhostRow
 // tsz:InspectorEmbed.tsz:3049 — <Box>
-var _arr_1704 = [_]Node{ .{ .text = "<TreePane>", .font_size = 8, .text_color = Color.rgb(125, 135, 156) } }; // TreeGhostRow
+var _arr_1814 = [_]Node{ .{ .text = "<TreePane>", .font_size = 8, .text_color = Color.rgb(125, 135, 156) } }; // TreeGhostRow
 // tsz:InspectorEmbed.tsz:3040 — <Box>
-var _arr_1705 = [_]Node{ .{ .style = .{ .width = 16, .flex_grow = 0 } }, .{ .style = .{ .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = 8, .height = 5, .flex_grow = 0 } }, .{ .style = .{ .border_width = 1, .border_color = Color.rgb(125, 105, 196), .border_radius = 3, .padding = 3, .gap = 3, .height = 18, .flex_grow = 1, .flex_basis = 0 }, .children = &_arr_1704 } }; // TreeGhostRow
+var _arr_1815 = [_]Node{ .{ .style = .{ .width = 16, .flex_grow = 0 } }, .{ .style = .{ .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = 8, .height = 5, .flex_grow = 0 } }, .{ .style = .{ .border_width = 1, .border_color = Color.rgb(125, 105, 196), .border_radius = 3, .padding = 3, .gap = 3, .height = 18, .flex_grow = 1, .flex_basis = 0 }, .children = &_arr_1814 } }; // TreeGhostRow
 // tsz:InspectorEmbed.tsz:3043 — <Box>
-var _arr_1706 = [_]Node{ .{ .text = "<ScrollView>", .font_size = 8, .text_color = Color.rgb(220, 233, 255) } }; // TreeGhostRow
+var _arr_1816 = [_]Node{ .{ .text = "<ScrollView>", .font_size = 8, .text_color = Color.rgb(220, 233, 255) } }; // TreeGhostRow
 // tsz:InspectorEmbed.tsz:3046 — <Box>
-var _arr_1707 = [_]Node{ .{ .text = "<ScrollView>", .font_size = 8, .text_color = Color.rgb(125, 135, 156) } }; // TreeGhostRow
+var _arr_1817 = [_]Node{ .{ .text = "<ScrollView>", .font_size = 8, .text_color = Color.rgb(125, 135, 156) } }; // TreeGhostRow
 // tsz:InspectorEmbed.tsz:3049 — <Box>
-var _arr_1708 = [_]Node{ .{ .text = "<ScrollView>", .font_size = 8, .text_color = Color.rgb(125, 135, 156) } }; // TreeGhostRow
+var _arr_1818 = [_]Node{ .{ .text = "<ScrollView>", .font_size = 8, .text_color = Color.rgb(125, 135, 156) } }; // TreeGhostRow
 // tsz:InspectorEmbed.tsz:3040 — <Box>
-var _arr_1709 = [_]Node{ .{ .style = .{ .width = 24, .flex_grow = 0 } }, .{ .style = .{ .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = 8, .height = 5, .flex_grow = 0 } }, .{ .style = .{ .border_width = 1, .border_color = Color.rgb(125, 105, 196), .border_radius = 3, .padding = 3, .gap = 3, .height = 18, .flex_grow = 1, .flex_basis = 0 }, .children = &_arr_1708 } }; // TreeGhostRow
+var _arr_1819 = [_]Node{ .{ .style = .{ .width = 24, .flex_grow = 0 } }, .{ .style = .{ .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = 8, .height = 5, .flex_grow = 0 } }, .{ .style = .{ .border_width = 1, .border_color = Color.rgb(125, 105, 196), .border_radius = 3, .padding = 3, .gap = 3, .height = 18, .flex_grow = 1, .flex_basis = 0 }, .children = &_arr_1818 } }; // TreeGhostRow
 // tsz:InspectorEmbed.tsz:3058 — <Box>
-var _arr_1710 = [_]Node{ .{ .style = .{ .width = 32, .flex_grow = 0 } }, .{ .style = .{ .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = 8, .height = 5, .flex_grow = 0 } }, .{ .style = .{ .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = 84, .height = 4, .flex_grow = 0 } } }; // TreeGhostSpacer
+var _arr_1820 = [_]Node{ .{ .style = .{ .width = 32, .flex_grow = 0 } }, .{ .style = .{ .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = 8, .height = 5, .flex_grow = 0 } }, .{ .style = .{ .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = 84, .height = 4, .flex_grow = 0 } } }; // TreeGhostSpacer
 // tsz:InspectorEmbed.tsz:3043 — <Box>
-var _arr_1711 = [_]Node{ .{ .text = "<DetailPane>", .font_size = 8, .text_color = Color.rgb(220, 233, 255) } }; // TreeGhostRow
+var _arr_1821 = [_]Node{ .{ .text = "<DetailPane>", .font_size = 8, .text_color = Color.rgb(220, 233, 255) } }; // TreeGhostRow
 // tsz:InspectorEmbed.tsz:3046 — <Box>
-var _arr_1712 = [_]Node{ .{ .text = "<DetailPane>", .font_size = 8, .text_color = Color.rgb(125, 135, 156) } }; // TreeGhostRow
+var _arr_1822 = [_]Node{ .{ .text = "<DetailPane>", .font_size = 8, .text_color = Color.rgb(125, 135, 156) } }; // TreeGhostRow
 // tsz:InspectorEmbed.tsz:3049 — <Box>
-var _arr_1713 = [_]Node{ .{ .text = "<DetailPane>", .font_size = 8, .text_color = Color.rgb(125, 135, 156) } }; // TreeGhostRow
+var _arr_1823 = [_]Node{ .{ .text = "<DetailPane>", .font_size = 8, .text_color = Color.rgb(125, 135, 156) } }; // TreeGhostRow
 // tsz:InspectorEmbed.tsz:3040 — <Box>
-var _arr_1714 = [_]Node{ .{ .style = .{ .width = 16, .flex_grow = 0 } }, .{ .style = .{ .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = 8, .height = 5, .flex_grow = 0 } }, .{ .style = .{ .border_width = 2, .border_color = Color.rgb(129, 182, 255), .border_radius = 3, .padding = 4, .gap = 4, .background_color = Color.rgba(97, 149, 250, 20), .height = 20, .flex_grow = 1, .flex_basis = 0 }, .children = &_arr_1711 }, .{ .style = .{ .border_width = 1, .border_color = Color.rgb(125, 105, 196), .border_radius = 3, .padding = 3, .gap = 3, .height = 18, .flex_grow = 1, .flex_basis = 0 }, .children = &_arr_1713 } }; // TreeGhostRow
+var _arr_1824 = [_]Node{ .{ .style = .{ .width = 16, .flex_grow = 0 } }, .{ .style = .{ .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = 8, .height = 5, .flex_grow = 0 } }, .{ .style = .{ .border_width = 2, .border_color = Color.rgb(129, 182, 255), .border_radius = 3, .padding = 4, .gap = 4, .background_color = Color.rgba(97, 149, 250, 20), .height = 20, .flex_grow = 1, .flex_basis = 0 }, .children = &_arr_1821 }, .{ .style = .{ .border_width = 1, .border_color = Color.rgb(125, 105, 196), .border_radius = 3, .padding = 3, .gap = 3, .height = 18, .flex_grow = 1, .flex_basis = 0 }, .children = &_arr_1823 } }; // TreeGhostRow
 // tsz:InspectorEmbed.tsz:3043 — <Box>
-var _arr_1715 = [_]Node{ .{ .text = "<DetailStack>", .font_size = 8, .text_color = Color.rgb(220, 233, 255) } }; // TreeGhostRow
+var _arr_1825 = [_]Node{ .{ .text = "<DetailStack>", .font_size = 8, .text_color = Color.rgb(220, 233, 255) } }; // TreeGhostRow
 // tsz:InspectorEmbed.tsz:3046 — <Box>
-var _arr_1716 = [_]Node{ .{ .text = "<DetailStack>", .font_size = 8, .text_color = Color.rgb(125, 135, 156) } }; // TreeGhostRow
+var _arr_1826 = [_]Node{ .{ .text = "<DetailStack>", .font_size = 8, .text_color = Color.rgb(125, 135, 156) } }; // TreeGhostRow
 // tsz:InspectorEmbed.tsz:3049 — <Box>
-var _arr_1717 = [_]Node{ .{ .text = "<DetailStack>", .font_size = 8, .text_color = Color.rgb(125, 135, 156) } }; // TreeGhostRow
+var _arr_1827 = [_]Node{ .{ .text = "<DetailStack>", .font_size = 8, .text_color = Color.rgb(125, 135, 156) } }; // TreeGhostRow
 // tsz:InspectorEmbed.tsz:3040 — <Box>
-var _arr_1718 = [_]Node{ .{ .style = .{ .width = 24, .flex_grow = 0 } }, .{ .style = .{ .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = 8, .height = 5, .flex_grow = 0 } }, .{ .style = .{ .border_width = 1, .border_color = Color.rgb(125, 105, 196), .border_radius = 3, .padding = 3, .gap = 3, .height = 18, .flex_grow = 1, .flex_basis = 0 }, .children = &_arr_1717 } }; // TreeGhostRow
+var _arr_1828 = [_]Node{ .{ .style = .{ .width = 24, .flex_grow = 0 } }, .{ .style = .{ .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = 8, .height = 5, .flex_grow = 0 } }, .{ .style = .{ .border_width = 1, .border_color = Color.rgb(125, 105, 196), .border_radius = 3, .padding = 3, .gap = 3, .height = 18, .flex_grow = 1, .flex_basis = 0 }, .children = &_arr_1827 } }; // TreeGhostRow
 // tsz:InspectorEmbed.tsz:3043 — <Box>
-var _arr_1719 = [_]Node{ .{ .text = "<DetailSection>", .font_size = 8, .text_color = Color.rgb(220, 233, 255) } }; // TreeGhostRow
+var _arr_1829 = [_]Node{ .{ .text = "<DetailSection>", .font_size = 8, .text_color = Color.rgb(220, 233, 255) } }; // TreeGhostRow
 // tsz:InspectorEmbed.tsz:3046 — <Box>
-var _arr_1720 = [_]Node{ .{ .text = "<DetailSection>", .font_size = 8, .text_color = Color.rgb(125, 135, 156) } }; // TreeGhostRow
+var _arr_1830 = [_]Node{ .{ .text = "<DetailSection>", .font_size = 8, .text_color = Color.rgb(125, 135, 156) } }; // TreeGhostRow
 // tsz:InspectorEmbed.tsz:3049 — <Box>
-var _arr_1721 = [_]Node{ .{ .text = "<DetailSection>", .font_size = 8, .text_color = Color.rgb(125, 135, 156) } }; // TreeGhostRow
+var _arr_1831 = [_]Node{ .{ .text = "<DetailSection>", .font_size = 8, .text_color = Color.rgb(125, 135, 156) } }; // TreeGhostRow
 // tsz:InspectorEmbed.tsz:3040 — <Box>
-var _arr_1722 = [_]Node{ .{ .style = .{ .width = 32, .flex_grow = 0 } }, .{ .style = .{ .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = 8, .height = 5, .flex_grow = 0 } }, .{ .style = .{ .border_width = 1, .border_color = Color.rgb(125, 105, 196), .border_radius = 3, .padding = 3, .gap = 3, .height = 18, .flex_grow = 1, .flex_basis = 0 }, .children = &_arr_1721 } }; // TreeGhostRow
+var _arr_1832 = [_]Node{ .{ .style = .{ .width = 32, .flex_grow = 0 } }, .{ .style = .{ .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = 8, .height = 5, .flex_grow = 0 } }, .{ .style = .{ .border_width = 1, .border_color = Color.rgb(125, 105, 196), .border_radius = 3, .padding = 3, .gap = 3, .height = 18, .flex_grow = 1, .flex_basis = 0 }, .children = &_arr_1831 } }; // TreeGhostRow
 // tsz:InspectorEmbed.tsz:3058 — <Box>
-var _arr_1723 = [_]Node{ .{ .style = .{ .width = 40, .flex_grow = 0 } }, .{ .style = .{ .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = 8, .height = 5, .flex_grow = 0 } }, .{ .style = .{ .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = 96, .height = 4, .flex_grow = 0 } } }; // TreeGhostSpacer
+var _arr_1833 = [_]Node{ .{ .style = .{ .width = 40, .flex_grow = 0 } }, .{ .style = .{ .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = 8, .height = 5, .flex_grow = 0 } }, .{ .style = .{ .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = 96, .height = 4, .flex_grow = 0 } } }; // TreeGhostSpacer
 // tsz:InspectorEmbed.tsz:3137 — <Box>
-var _arr_1724 = [_]Node{ .{ .text = "TreeScroll", .font_size = 8, .text_color = Color.rgb(125, 135, 156) }, .{ .style = .{ .flex_direction = .row, .flex_basis = 0, .flex_grow = 0, .gap = 4 }, .children = &_arr_1693 }, .{ .style = .{ .flex_direction = .row, .flex_basis = 0, .flex_grow = 0, .gap = 4 }, .children = &_arr_1697 }, .{ .style = .{ .flex_direction = .row, .flex_basis = 0, .flex_grow = 0, .gap = 4 }, .children = &_arr_1701 }, .{ .style = .{ .flex_direction = .row, .flex_basis = 0, .flex_grow = 0, .gap = 4 }, .children = &_arr_1705 }, .{ .style = .{ .flex_direction = .row, .flex_basis = 0, .flex_grow = 0, .gap = 4 }, .children = &_arr_1709 }, .{ .style = .{ .flex_direction = .row, .flex_basis = 0, .flex_grow = 0, .gap = 4 }, .children = &_arr_1710 }, .{ .style = .{ .flex_direction = .row, .flex_basis = 0, .flex_grow = 0, .gap = 4 }, .children = &_arr_1714 }, .{ .style = .{ .flex_direction = .row, .flex_basis = 0, .flex_grow = 0, .gap = 4 }, .children = &_arr_1718 }, .{ .style = .{ .flex_direction = .row, .flex_basis = 0, .flex_grow = 0, .gap = 4 }, .children = &_arr_1722 }, .{ .style = .{ .flex_direction = .row, .flex_basis = 0, .flex_grow = 0, .gap = 4 }, .children = &_arr_1723 } }; // WireframePage
+var _arr_1834 = [_]Node{ .{ .text = "TreeScroll", .font_size = 8, .text_color = Color.rgb(125, 135, 156) }, .{ .style = .{ .flex_direction = .row, .flex_basis = 0, .flex_grow = 0, .gap = 4 }, .children = &_arr_1803 }, .{ .style = .{ .flex_direction = .row, .flex_basis = 0, .flex_grow = 0, .gap = 4 }, .children = &_arr_1807 }, .{ .style = .{ .flex_direction = .row, .flex_basis = 0, .flex_grow = 0, .gap = 4 }, .children = &_arr_1811 }, .{ .style = .{ .flex_direction = .row, .flex_basis = 0, .flex_grow = 0, .gap = 4 }, .children = &_arr_1815 }, .{ .style = .{ .flex_direction = .row, .flex_basis = 0, .flex_grow = 0, .gap = 4 }, .children = &_arr_1819 }, .{ .style = .{ .flex_direction = .row, .flex_basis = 0, .flex_grow = 0, .gap = 4 }, .children = &_arr_1820 }, .{ .style = .{ .flex_direction = .row, .flex_basis = 0, .flex_grow = 0, .gap = 4 }, .children = &_arr_1824 }, .{ .style = .{ .flex_direction = .row, .flex_basis = 0, .flex_grow = 0, .gap = 4 }, .children = &_arr_1828 }, .{ .style = .{ .flex_direction = .row, .flex_basis = 0, .flex_grow = 0, .gap = 4 }, .children = &_arr_1832 }, .{ .style = .{ .flex_direction = .row, .flex_basis = 0, .flex_grow = 0, .gap = 4 }, .children = &_arr_1833 } }; // WireframePage
 // tsz:InspectorEmbed.tsz:3115 — <Box>
-var _arr_1725 = [_]Node{ .{ .text = "TreePane", .font_size = 8, .text_color = Color.rgb(125, 135, 156) }, .{ .style = .{ .flex_basis = 0, .border_width = 1, .border_color = Color.rgb(161, 140, 76), .border_radius = 3, .padding = 3, .height = 26, .flex_grow = 0, .gap = 4 }, .children = &_arr_1678 }, .{ .style = .{ .flex_basis = 0, .border_width = 1, .border_color = Color.rgb(161, 140, 76), .border_radius = 3, .padding = 3, .gap = 3, .height = 22, .flex_grow = 0 }, .children = &_arr_1689 }, .{ .style = .{ .border_width = 1, .border_color = Color.rgb(161, 140, 76), .border_radius = 3, .padding = 3, .flex_grow = 1, .flex_basis = 0, .gap = 3 }, .children = &_arr_1724 } }; // WireframePage
+var _arr_1835 = [_]Node{ .{ .text = "TreePane", .font_size = 8, .text_color = Color.rgb(125, 135, 156) }, .{ .style = .{ .flex_basis = 0, .border_width = 1, .border_color = Color.rgb(161, 140, 76), .border_radius = 3, .padding = 3, .height = 26, .flex_grow = 0, .gap = 4 }, .children = &_arr_1788 }, .{ .style = .{ .flex_basis = 0, .border_width = 1, .border_color = Color.rgb(161, 140, 76), .border_radius = 3, .padding = 3, .gap = 3, .height = 22, .flex_grow = 0 }, .children = &_arr_1799 }, .{ .style = .{ .border_width = 1, .border_color = Color.rgb(161, 140, 76), .border_radius = 3, .padding = 3, .flex_grow = 1, .flex_basis = 0, .gap = 3 }, .children = &_arr_1834 } }; // WireframePage
 // tsz:InspectorEmbed.tsz:3158 — <Box>
-var _arr_1726 = [_]Node{ .{ .style = .{ .height = 5, .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = 94 } }, .{ .style = .{ .flex_basis = 0, .border_width = 1, .border_color = Color.rgb(79, 142, 168), .border_radius = 3, .padding = 3, .gap = 2, .height = 12, .width = 56, .flex_grow = 0 } }, .{ .style = .{ .flex_basis = 0, .border_width = 1, .border_color = Color.rgb(79, 142, 168), .border_radius = 3, .padding = 3, .gap = 2, .height = 12, .width = 58, .flex_grow = 0 } }, .{ .style = .{ .flex_basis = 0, .border_width = 1, .border_color = Color.rgb(79, 142, 168), .border_radius = 3, .padding = 3, .gap = 2, .height = 12, .width = 68, .flex_grow = 0 } } }; // WireframePage
+var _arr_1836 = [_]Node{ .{ .style = .{ .height = 5, .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = 94 } }, .{ .style = .{ .flex_basis = 0, .border_width = 1, .border_color = Color.rgb(79, 142, 168), .border_radius = 3, .padding = 3, .gap = 2, .height = 12, .width = 56, .flex_grow = 0 } }, .{ .style = .{ .flex_basis = 0, .border_width = 1, .border_color = Color.rgb(79, 142, 168), .border_radius = 3, .padding = 3, .gap = 2, .height = 12, .width = 58, .flex_grow = 0 } }, .{ .style = .{ .flex_basis = 0, .border_width = 1, .border_color = Color.rgb(79, 142, 168), .border_radius = 3, .padding = 3, .gap = 2, .height = 12, .width = 68, .flex_grow = 0 } } }; // WireframePage
 // tsz:InspectorEmbed.tsz:3166 — <Box>
-var _arr_1727 = [_]Node{ .{ .style = .{ .height = 5, .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = 10 } }, .{ .style = .{ .height = 5, .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = 76 } }, .{ .style = .{ .height = 5, .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = 52 } } }; // WireframePage
+var _arr_1837 = [_]Node{ .{ .style = .{ .height = 5, .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = 10 } }, .{ .style = .{ .height = 5, .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = 76 } }, .{ .style = .{ .height = 5, .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = 52 } } }; // WireframePage
 // tsz:InspectorEmbed.tsz:3157 — <Box>
-var _arr_1728 = [_]Node{ .{ .style = .{ .flex_direction = .row, .flex_basis = 0, .gap = 4, .flex_grow = 0 }, .children = &_arr_1726 }, .{ .style = .{ .height = 5, .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = -0.72 } }, .{ .style = .{ .height = 5, .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = -0.58 } }, .{ .style = .{ .flex_direction = .row, .flex_basis = 0, .gap = 4, .flex_grow = 0 }, .children = &_arr_1727 } }; // WireframePage
+var _arr_1838 = [_]Node{ .{ .style = .{ .flex_direction = .row, .flex_basis = 0, .gap = 4, .flex_grow = 0 }, .children = &_arr_1836 }, .{ .style = .{ .height = 5, .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = -0.72 } }, .{ .style = .{ .height = 5, .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = -0.58 } }, .{ .style = .{ .flex_direction = .row, .flex_basis = 0, .gap = 4, .flex_grow = 0 }, .children = &_arr_1837 } }; // WireframePage
 // tsz:InspectorEmbed.tsz:3177 — <Box>
-var _arr_1729 = [_]Node{ .{ .style = .{ .flex_basis = 0, .border_width = 1, .border_color = Color.rgb(161, 140, 76), .border_radius = 3, .padding = 3, .gap = 3, .width = -0.56, .height = 30, .flex_grow = 0, .align_self = .center } } }; // WireframePage
+var _arr_1839 = [_]Node{ .{ .style = .{ .flex_basis = 0, .border_width = 1, .border_color = Color.rgb(161, 140, 76), .border_radius = 3, .padding = 3, .gap = 3, .width = -0.56, .height = 30, .flex_grow = 0, .align_self = .center } } }; // WireframePage
 // tsz:InspectorEmbed.tsz:3176 — <Box>
-var _arr_1730 = [_]Node{ .{ .style = .{ .flex_basis = 0, .border_width = 1, .border_color = Color.rgb(194, 133, 90), .border_radius = 3, .gap = 2, .width = -0.72, .flex_grow = 0, .align_self = .center, .padding = 6 }, .children = &_arr_1729 } }; // WireframePage
+var _arr_1840 = [_]Node{ .{ .style = .{ .flex_basis = 0, .border_width = 1, .border_color = Color.rgb(194, 133, 90), .border_radius = 3, .gap = 2, .width = -0.72, .flex_grow = 0, .align_self = .center, .padding = 6 }, .children = &_arr_1839 } }; // WireframePage
 // tsz:InspectorEmbed.tsz:3175 — <Box>
-var _arr_1731 = [_]Node{ .{ .style = .{ .flex_basis = 0, .border_width = 1, .border_color = Color.rgb(79, 142, 168), .border_radius = 3, .gap = 2, .width = -0.86, .flex_grow = 0, .align_self = .center, .padding = 6 }, .children = &_arr_1730 } }; // WireframePage
+var _arr_1841 = [_]Node{ .{ .style = .{ .flex_basis = 0, .border_width = 1, .border_color = Color.rgb(79, 142, 168), .border_radius = 3, .gap = 2, .width = -0.86, .flex_grow = 0, .align_self = .center, .padding = 6 }, .children = &_arr_1840 } }; // WireframePage
 // tsz:InspectorEmbed.tsz:3182 — <Box>
-var _arr_1732 = [_]Node{ .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .border_width = 1, .border_color = Color.rgb(79, 142, 168), .border_radius = 3, .padding = 3, .gap = 2, .height = 10 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .border_width = 1, .border_color = Color.rgb(79, 142, 168), .border_radius = 3, .padding = 3, .gap = 2, .height = 10 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .border_width = 1, .border_color = Color.rgb(79, 142, 168), .border_radius = 3, .padding = 3, .gap = 2, .height = 10 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .border_width = 1, .border_color = Color.rgb(79, 142, 168), .border_radius = 3, .padding = 3, .gap = 2, .height = 10 } } }; // WireframePage
+var _arr_1842 = [_]Node{ .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .border_width = 1, .border_color = Color.rgb(79, 142, 168), .border_radius = 3, .padding = 3, .gap = 2, .height = 10 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .border_width = 1, .border_color = Color.rgb(79, 142, 168), .border_radius = 3, .padding = 3, .gap = 2, .height = 10 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .border_width = 1, .border_color = Color.rgb(79, 142, 168), .border_radius = 3, .padding = 3, .gap = 2, .height = 10 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .border_width = 1, .border_color = Color.rgb(79, 142, 168), .border_radius = 3, .padding = 3, .gap = 2, .height = 10 } } }; // WireframePage
 // tsz:InspectorEmbed.tsz:3173 — <Box>
-var _arr_1733 = [_]Node{ .{ .text = "BoxModel", .font_size = 8, .text_color = Color.rgb(125, 135, 156) }, .{ .style = .{ .border_width = 1, .border_color = Color.rgb(125, 105, 196), .border_radius = 3, .gap = 3, .flex_grow = 1, .flex_basis = 0, .padding = 6 }, .children = &_arr_1731 }, .{ .style = .{ .flex_direction = .row, .flex_basis = 0, .gap = 4, .flex_grow = 0 }, .children = &_arr_1732 } }; // WireframePage
+var _arr_1843 = [_]Node{ .{ .text = "BoxModel", .font_size = 8, .text_color = Color.rgb(125, 135, 156) }, .{ .style = .{ .border_width = 1, .border_color = Color.rgb(125, 105, 196), .border_radius = 3, .gap = 3, .flex_grow = 1, .flex_basis = 0, .padding = 6 }, .children = &_arr_1841 }, .{ .style = .{ .flex_direction = .row, .flex_basis = 0, .gap = 4, .flex_grow = 0 }, .children = &_arr_1842 } }; // WireframePage
 // tsz:InspectorEmbed.tsz:3068 — <Box>
-var _arr_1734 = [_]Node{ .{ .text = "width", .font_size = 8, .text_color = Color.rgb(125, 135, 156) }, .{ .style = .{ .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = 24, .height = 4, .flex_grow = 0 } }, .{ .style = .{ .height = 5, .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = -0.74 } } }; // StyleCell
+var _arr_1844 = [_]Node{ .{ .text = "width", .font_size = 8, .text_color = Color.rgb(125, 135, 156) }, .{ .style = .{ .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = 24, .height = 4, .flex_grow = 0 } }, .{ .style = .{ .height = 5, .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = -0.74 } } }; // StyleCell
 // tsz:InspectorEmbed.tsz:3068 — <Box>
-var _arr_1735 = [_]Node{ .{ .text = "height", .font_size = 8, .text_color = Color.rgb(125, 135, 156) }, .{ .style = .{ .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = 24, .height = 4, .flex_grow = 0 } }, .{ .style = .{ .height = 5, .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = -0.74 } } }; // StyleCell
+var _arr_1845 = [_]Node{ .{ .text = "height", .font_size = 8, .text_color = Color.rgb(125, 135, 156) }, .{ .style = .{ .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = 24, .height = 4, .flex_grow = 0 } }, .{ .style = .{ .height = 5, .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = -0.74 } } }; // StyleCell
 // tsz:InspectorEmbed.tsz:3068 — <Box>
-var _arr_1736 = [_]Node{ .{ .text = "grow", .font_size = 8, .text_color = Color.rgb(125, 135, 156) }, .{ .style = .{ .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = 24, .height = 4, .flex_grow = 0 } }, .{ .style = .{ .height = 5, .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = -0.74 } } }; // StyleCell
+var _arr_1846 = [_]Node{ .{ .text = "grow", .font_size = 8, .text_color = Color.rgb(125, 135, 156) }, .{ .style = .{ .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = 24, .height = 4, .flex_grow = 0 } }, .{ .style = .{ .height = 5, .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = -0.74 } } }; // StyleCell
 // tsz:InspectorEmbed.tsz:3193 — <Box>
-var _arr_1737 = [_]Node{ .{ .style = .{ .border_width = 1, .border_color = Color.rgb(79, 142, 168), .border_radius = 3, .padding = 3, .height = 38, .flex_grow = 1, .flex_basis = 0, .gap = 4 }, .children = &_arr_1734 }, .{ .style = .{ .border_width = 1, .border_color = Color.rgb(79, 142, 168), .border_radius = 3, .padding = 3, .height = 38, .flex_grow = 1, .flex_basis = 0, .gap = 4 }, .children = &_arr_1735 }, .{ .style = .{ .border_width = 1, .border_color = Color.rgb(79, 142, 168), .border_radius = 3, .padding = 3, .height = 38, .flex_grow = 1, .flex_basis = 0, .gap = 4 }, .children = &_arr_1736 } }; // WireframePage
+var _arr_1847 = [_]Node{ .{ .style = .{ .border_width = 1, .border_color = Color.rgb(79, 142, 168), .border_radius = 3, .padding = 3, .height = 38, .flex_grow = 1, .flex_basis = 0, .gap = 4 }, .children = &_arr_1844 }, .{ .style = .{ .border_width = 1, .border_color = Color.rgb(79, 142, 168), .border_radius = 3, .padding = 3, .height = 38, .flex_grow = 1, .flex_basis = 0, .gap = 4 }, .children = &_arr_1845 }, .{ .style = .{ .border_width = 1, .border_color = Color.rgb(79, 142, 168), .border_radius = 3, .padding = 3, .height = 38, .flex_grow = 1, .flex_basis = 0, .gap = 4 }, .children = &_arr_1846 } }; // WireframePage
 // tsz:InspectorEmbed.tsz:3068 — <Box>
-var _arr_1738 = [_]Node{ .{ .text = "basis", .font_size = 8, .text_color = Color.rgb(125, 135, 156) }, .{ .style = .{ .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = 24, .height = 4, .flex_grow = 0 } }, .{ .style = .{ .height = 5, .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = -0.74 } } }; // StyleCell
+var _arr_1848 = [_]Node{ .{ .text = "basis", .font_size = 8, .text_color = Color.rgb(125, 135, 156) }, .{ .style = .{ .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = 24, .height = 4, .flex_grow = 0 } }, .{ .style = .{ .height = 5, .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = -0.74 } } }; // StyleCell
 // tsz:InspectorEmbed.tsz:3068 — <Box>
-var _arr_1739 = [_]Node{ .{ .text = "overflow", .font_size = 8, .text_color = Color.rgb(125, 135, 156) }, .{ .style = .{ .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = 24, .height = 4, .flex_grow = 0 } }, .{ .style = .{ .height = 5, .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = -0.74 } } }; // StyleCell
+var _arr_1849 = [_]Node{ .{ .text = "overflow", .font_size = 8, .text_color = Color.rgb(125, 135, 156) }, .{ .style = .{ .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = 24, .height = 4, .flex_grow = 0 } }, .{ .style = .{ .height = 5, .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = -0.74 } } }; // StyleCell
 // tsz:InspectorEmbed.tsz:3068 — <Box>
-var _arr_1740 = [_]Node{ .{ .text = "bg", .font_size = 8, .text_color = Color.rgb(125, 135, 156) }, .{ .style = .{ .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = 24, .height = 4, .flex_grow = 0 } }, .{ .style = .{ .height = 5, .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = -0.74 } } }; // StyleCell
+var _arr_1850 = [_]Node{ .{ .text = "bg", .font_size = 8, .text_color = Color.rgb(125, 135, 156) }, .{ .style = .{ .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = 24, .height = 4, .flex_grow = 0 } }, .{ .style = .{ .height = 5, .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = -0.74 } } }; // StyleCell
 // tsz:InspectorEmbed.tsz:3198 — <Box>
-var _arr_1741 = [_]Node{ .{ .style = .{ .border_width = 1, .border_color = Color.rgb(79, 142, 168), .border_radius = 3, .padding = 3, .height = 38, .flex_grow = 1, .flex_basis = 0, .gap = 4 }, .children = &_arr_1738 }, .{ .style = .{ .border_width = 1, .border_color = Color.rgb(79, 142, 168), .border_radius = 3, .padding = 3, .height = 38, .flex_grow = 1, .flex_basis = 0, .gap = 4 }, .children = &_arr_1739 }, .{ .style = .{ .border_width = 1, .border_color = Color.rgb(79, 142, 168), .border_radius = 3, .padding = 3, .height = 38, .flex_grow = 1, .flex_basis = 0, .gap = 4 }, .children = &_arr_1740 } }; // WireframePage
+var _arr_1851 = [_]Node{ .{ .style = .{ .border_width = 1, .border_color = Color.rgb(79, 142, 168), .border_radius = 3, .padding = 3, .height = 38, .flex_grow = 1, .flex_basis = 0, .gap = 4 }, .children = &_arr_1848 }, .{ .style = .{ .border_width = 1, .border_color = Color.rgb(79, 142, 168), .border_radius = 3, .padding = 3, .height = 38, .flex_grow = 1, .flex_basis = 0, .gap = 4 }, .children = &_arr_1849 }, .{ .style = .{ .border_width = 1, .border_color = Color.rgb(79, 142, 168), .border_radius = 3, .padding = 3, .height = 38, .flex_grow = 1, .flex_basis = 0, .gap = 4 }, .children = &_arr_1850 } }; // WireframePage
 // tsz:InspectorEmbed.tsz:3068 — <Box>
-var _arr_1742 = [_]Node{ .{ .text = "padT", .font_size = 8, .text_color = Color.rgb(125, 135, 156) }, .{ .style = .{ .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = 24, .height = 4, .flex_grow = 0 } }, .{ .style = .{ .height = 5, .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = -0.74 } } }; // StyleCell
+var _arr_1852 = [_]Node{ .{ .text = "padT", .font_size = 8, .text_color = Color.rgb(125, 135, 156) }, .{ .style = .{ .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = 24, .height = 4, .flex_grow = 0 } }, .{ .style = .{ .height = 5, .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = -0.74 } } }; // StyleCell
 // tsz:InspectorEmbed.tsz:3068 — <Box>
-var _arr_1743 = [_]Node{ .{ .text = "padR", .font_size = 8, .text_color = Color.rgb(125, 135, 156) }, .{ .style = .{ .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = 24, .height = 4, .flex_grow = 0 } }, .{ .style = .{ .height = 5, .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = -0.74 } } }; // StyleCell
+var _arr_1853 = [_]Node{ .{ .text = "padR", .font_size = 8, .text_color = Color.rgb(125, 135, 156) }, .{ .style = .{ .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = 24, .height = 4, .flex_grow = 0 } }, .{ .style = .{ .height = 5, .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = -0.74 } } }; // StyleCell
 // tsz:InspectorEmbed.tsz:3068 — <Box>
-var _arr_1744 = [_]Node{ .{ .text = "padB", .font_size = 8, .text_color = Color.rgb(125, 135, 156) }, .{ .style = .{ .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = 24, .height = 4, .flex_grow = 0 } }, .{ .style = .{ .height = 5, .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = -0.74 } } }; // StyleCell
+var _arr_1854 = [_]Node{ .{ .text = "padB", .font_size = 8, .text_color = Color.rgb(125, 135, 156) }, .{ .style = .{ .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = 24, .height = 4, .flex_grow = 0 } }, .{ .style = .{ .height = 5, .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = -0.74 } } }; // StyleCell
 // tsz:InspectorEmbed.tsz:3203 — <Box>
-var _arr_1745 = [_]Node{ .{ .style = .{ .border_width = 1, .border_color = Color.rgb(79, 142, 168), .border_radius = 3, .padding = 3, .height = 38, .flex_grow = 1, .flex_basis = 0, .gap = 4 }, .children = &_arr_1742 }, .{ .style = .{ .border_width = 1, .border_color = Color.rgb(79, 142, 168), .border_radius = 3, .padding = 3, .height = 38, .flex_grow = 1, .flex_basis = 0, .gap = 4 }, .children = &_arr_1743 }, .{ .style = .{ .border_width = 1, .border_color = Color.rgb(79, 142, 168), .border_radius = 3, .padding = 3, .height = 38, .flex_grow = 1, .flex_basis = 0, .gap = 4 }, .children = &_arr_1744 } }; // WireframePage
+var _arr_1855 = [_]Node{ .{ .style = .{ .border_width = 1, .border_color = Color.rgb(79, 142, 168), .border_radius = 3, .padding = 3, .height = 38, .flex_grow = 1, .flex_basis = 0, .gap = 4 }, .children = &_arr_1852 }, .{ .style = .{ .border_width = 1, .border_color = Color.rgb(79, 142, 168), .border_radius = 3, .padding = 3, .height = 38, .flex_grow = 1, .flex_basis = 0, .gap = 4 }, .children = &_arr_1853 }, .{ .style = .{ .border_width = 1, .border_color = Color.rgb(79, 142, 168), .border_radius = 3, .padding = 3, .height = 38, .flex_grow = 1, .flex_basis = 0, .gap = 4 }, .children = &_arr_1854 } }; // WireframePage
 // tsz:InspectorEmbed.tsz:3191 — <Box>
-var _arr_1746 = [_]Node{ .{ .text = "Style", .font_size = 8, .text_color = Color.rgb(125, 135, 156) }, .{ .style = .{ .flex_direction = .row, .flex_basis = 0, .gap = 4, .flex_grow = 0 }, .children = &_arr_1737 }, .{ .style = .{ .flex_direction = .row, .flex_basis = 0, .gap = 4, .flex_grow = 0 }, .children = &_arr_1741 }, .{ .style = .{ .flex_direction = .row, .flex_basis = 0, .gap = 4, .flex_grow = 0 }, .children = &_arr_1745 } }; // WireframePage
+var _arr_1856 = [_]Node{ .{ .text = "Style", .font_size = 8, .text_color = Color.rgb(125, 135, 156) }, .{ .style = .{ .flex_direction = .row, .flex_basis = 0, .gap = 4, .flex_grow = 0 }, .children = &_arr_1847 }, .{ .style = .{ .flex_direction = .row, .flex_basis = 0, .gap = 4, .flex_grow = 0 }, .children = &_arr_1851 }, .{ .style = .{ .flex_direction = .row, .flex_basis = 0, .gap = 4, .flex_grow = 0 }, .children = &_arr_1855 } }; // WireframePage
 // tsz:InspectorEmbed.tsz:3212 — <Box>
-var _arr_1747 = [_]Node{ .{ .text = "identity", .font_size = 8, .text_color = Color.rgb(125, 135, 156) }, .{ .style = .{ .height = 5, .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = -0.82 } } }; // WireframePage
+var _arr_1857 = [_]Node{ .{ .text = "identity", .font_size = 8, .text_color = Color.rgb(125, 135, 156) }, .{ .style = .{ .height = 5, .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = -0.82 } } }; // WireframePage
 // tsz:InspectorEmbed.tsz:3216 — <Box>
-var _arr_1748 = [_]Node{ .{ .text = "geometry", .font_size = 8, .text_color = Color.rgb(125, 135, 156) }, .{ .style = .{ .height = 5, .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = -0.7 } } }; // WireframePage
+var _arr_1858 = [_]Node{ .{ .text = "geometry", .font_size = 8, .text_color = Color.rgb(125, 135, 156) }, .{ .style = .{ .height = 5, .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = -0.7 } } }; // WireframePage
 // tsz:InspectorEmbed.tsz:3220 — <Box>
-var _arr_1749 = [_]Node{ .{ .text = "sizing", .font_size = 8, .text_color = Color.rgb(125, 135, 156) }, .{ .style = .{ .height = 5, .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = -0.76 } } }; // WireframePage
+var _arr_1859 = [_]Node{ .{ .text = "sizing", .font_size = 8, .text_color = Color.rgb(125, 135, 156) }, .{ .style = .{ .height = 5, .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = -0.76 } } }; // WireframePage
 // tsz:InspectorEmbed.tsz:3224 — <Box>
-var _arr_1750 = [_]Node{ .{ .text = "runtime", .font_size = 8, .text_color = Color.rgb(125, 135, 156) }, .{ .style = .{ .height = 5, .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = -0.64 } } }; // WireframePage
+var _arr_1860 = [_]Node{ .{ .text = "runtime", .font_size = 8, .text_color = Color.rgb(125, 135, 156) }, .{ .style = .{ .height = 5, .background_color = Color.rgba(200, 160, 48, 128), .border_radius = 2, .width = -0.64 } } }; // WireframePage
 // tsz:InspectorEmbed.tsz:3210 — <Box>
-var _arr_1751 = [_]Node{ .{ .text = "Diagnostics", .font_size = 8, .text_color = Color.rgb(125, 135, 156) }, .{ .style = .{ .flex_basis = 0, .border_width = 1, .border_color = Color.rgb(79, 142, 168), .border_radius = 3, .padding = 3, .gap = 2, .height = 32, .flex_grow = 0 }, .children = &_arr_1747 }, .{ .style = .{ .flex_basis = 0, .border_width = 1, .border_color = Color.rgb(79, 142, 168), .border_radius = 3, .padding = 3, .gap = 2, .height = 32, .flex_grow = 0 }, .children = &_arr_1748 }, .{ .style = .{ .flex_basis = 0, .border_width = 1, .border_color = Color.rgb(79, 142, 168), .border_radius = 3, .padding = 3, .gap = 2, .height = 32, .flex_grow = 0 }, .children = &_arr_1749 }, .{ .style = .{ .flex_basis = 0, .border_width = 1, .border_color = Color.rgb(79, 142, 168), .border_radius = 3, .padding = 3, .gap = 2, .height = 32, .flex_grow = 0 }, .children = &_arr_1750 } }; // WireframePage
+var _arr_1861 = [_]Node{ .{ .text = "Diagnostics", .font_size = 8, .text_color = Color.rgb(125, 135, 156) }, .{ .style = .{ .flex_basis = 0, .border_width = 1, .border_color = Color.rgb(79, 142, 168), .border_radius = 3, .padding = 3, .gap = 2, .height = 32, .flex_grow = 0 }, .children = &_arr_1857 }, .{ .style = .{ .flex_basis = 0, .border_width = 1, .border_color = Color.rgb(79, 142, 168), .border_radius = 3, .padding = 3, .gap = 2, .height = 32, .flex_grow = 0 }, .children = &_arr_1858 }, .{ .style = .{ .flex_basis = 0, .border_width = 1, .border_color = Color.rgb(79, 142, 168), .border_radius = 3, .padding = 3, .gap = 2, .height = 32, .flex_grow = 0 }, .children = &_arr_1859 }, .{ .style = .{ .flex_basis = 0, .border_width = 1, .border_color = Color.rgb(79, 142, 168), .border_radius = 3, .padding = 3, .gap = 2, .height = 32, .flex_grow = 0 }, .children = &_arr_1860 } }; // WireframePage
 // tsz:InspectorEmbed.tsz:3190 — <Box>
-var _arr_1752 = [_]Node{ .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .border_width = 1, .border_color = Color.rgb(161, 140, 76), .border_radius = 3, .padding = 3, .gap = 3 }, .children = &_arr_1746 }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .border_width = 1, .border_color = Color.rgb(161, 140, 76), .border_radius = 3, .padding = 3, .gap = 3 }, .children = &_arr_1751 } }; // WireframePage
+var _arr_1862 = [_]Node{ .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .border_width = 1, .border_color = Color.rgb(161, 140, 76), .border_radius = 3, .padding = 3, .gap = 3 }, .children = &_arr_1856 }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .border_width = 1, .border_color = Color.rgb(161, 140, 76), .border_radius = 3, .padding = 3, .gap = 3 }, .children = &_arr_1861 } }; // WireframePage
 // tsz:InspectorEmbed.tsz:3154 — <Box>
-var _arr_1753 = [_]Node{ .{ .text = "DetailPane", .font_size = 8, .text_color = Color.rgb(220, 233, 255) }, .{ .style = .{ .flex_basis = 0, .border_width = 1, .border_color = Color.rgb(161, 140, 76), .border_radius = 3, .padding = 3, .height = 68, .flex_grow = 0, .gap = 5 }, .children = &_arr_1728 }, .{ .style = .{ .flex_basis = 0, .border_width = 1, .border_color = Color.rgb(161, 140, 76), .border_radius = 3, .padding = 3, .height = 126, .flex_grow = 0, .gap = 5 }, .children = &_arr_1733 }, .{ .style = .{ .flex_direction = .row, .flex_grow = 1, .flex_basis = 0, .gap = 6 }, .children = &_arr_1752 } }; // WireframePage
+var _arr_1863 = [_]Node{ .{ .text = "DetailPane", .font_size = 8, .text_color = Color.rgb(220, 233, 255) }, .{ .style = .{ .flex_basis = 0, .border_width = 1, .border_color = Color.rgb(161, 140, 76), .border_radius = 3, .padding = 3, .height = 68, .flex_grow = 0, .gap = 5 }, .children = &_arr_1838 }, .{ .style = .{ .flex_basis = 0, .border_width = 1, .border_color = Color.rgb(161, 140, 76), .border_radius = 3, .padding = 3, .height = 126, .flex_grow = 0, .gap = 5 }, .children = &_arr_1843 }, .{ .style = .{ .flex_direction = .row, .flex_grow = 1, .flex_basis = 0, .gap = 6 }, .children = &_arr_1862 } }; // WireframePage
 // tsz:InspectorEmbed.tsz:3114 — <Box>
-var _arr_1754 = [_]Node{ .{ .style = .{ .border_width = 1, .border_color = Color.rgb(79, 140, 114), .border_radius = 3, .padding = 4, .width = 252, .flex_basis = 252, .flex_grow = 0, .gap = 4 }, .children = &_arr_1725 }, .{ .style = .{ .width = 1, .flex_grow = 0, .background_color = Color.rgb(26, 32, 48) } }, .{ .style = .{ .border_width = 2, .border_color = Color.rgb(129, 182, 255), .border_radius = 3, .padding = 4, .background_color = Color.rgba(97, 149, 250, 20), .flex_grow = 1, .flex_basis = 0, .gap = 6 }, .children = &_arr_1753 } }; // WireframePage
+var _arr_1864 = [_]Node{ .{ .style = .{ .border_width = 1, .border_color = Color.rgb(79, 140, 114), .border_radius = 3, .padding = 4, .width = 252, .flex_basis = 252, .flex_grow = 0, .gap = 4 }, .children = &_arr_1835 }, .{ .style = .{ .width = 1, .flex_grow = 0, .background_color = Color.rgb(26, 32, 48) } }, .{ .style = .{ .border_width = 2, .border_color = Color.rgb(129, 182, 255), .border_radius = 3, .padding = 4, .background_color = Color.rgba(97, 149, 250, 20), .flex_grow = 1, .flex_basis = 0, .gap = 6 }, .children = &_arr_1863 } }; // WireframePage
 // tsz:InspectorEmbed.tsz:3239 — <Box>
-var _arr_1755 = [_]Node{ .{ .style = .{ .height = 6, .background_color = Color.rgb(92, 100, 120), .border_radius = 2, .flex_grow = 330 } } }; // WireframePage
+var _arr_1865 = [_]Node{ .{ .style = .{ .height = 6, .background_color = Color.rgb(92, 100, 120), .border_radius = 2, .flex_grow = 330 } } }; // WireframePage
 // tsz:InspectorEmbed.tsz:3237 — <Box>
-var _arr_1756 = [_]Node{ .{ .text = "Tree", .font_size = 9, .text_color = Color.rgb(140, 148, 166) }, .{ .style = .{ .flex_direction = .row, .flex_grow = 1, .flex_basis = 0, .height = 6, .background_color = Color.rgb(20, 26, 41), .border_radius = 2 }, .children = &_arr_1755 }, .{ .text = "330px", .font_size = 9, .text_color = Color.rgb(224, 229, 240) } }; // WireframePage
+var _arr_1866 = [_]Node{ .{ .text = "Tree", .font_size = 9, .text_color = Color.rgb(140, 148, 166) }, .{ .style = .{ .flex_direction = .row, .flex_grow = 1, .flex_basis = 0, .height = 6, .background_color = Color.rgb(20, 26, 41), .border_radius = 2 }, .children = &_arr_1865 }, .{ .text = "330px", .font_size = 9, .text_color = Color.rgb(224, 229, 240) } }; // WireframePage
 // tsz:InspectorEmbed.tsz:3247 — <Box>
-var _arr_1757 = [_]Node{ .{ .style = .{ .height = 6, .background_color = Color.rgb(92, 100, 120), .border_radius = 2, .flex_grow = 0 } }, .{ .style = .{ .height = 6, .background_color = Color.rgb(200, 160, 48), .border_radius = 2, .flex_grow = 480 } } }; // WireframePage
+var _arr_1867 = [_]Node{ .{ .style = .{ .height = 6, .background_color = Color.rgb(92, 100, 120), .border_radius = 2, .flex_grow = 0 } }, .{ .style = .{ .height = 6, .background_color = Color.rgb(200, 160, 48), .border_radius = 2, .flex_grow = 480 } } }; // WireframePage
 // tsz:InspectorEmbed.tsz:3245 — <Box>
-var _arr_1758 = [_]Node{ .{ .text = "Detail", .font_size = 9, .text_color = Color.rgb(140, 148, 166) }, .{ .style = .{ .flex_direction = .row, .flex_grow = 1, .flex_basis = 0, .height = 6, .background_color = Color.rgb(20, 26, 41), .border_radius = 2 }, .children = &_arr_1757 }, .{ .text = "0 + 480px", .font_size = 9, .text_color = Color.rgb(224, 229, 240) } }; // WireframePage
+var _arr_1868 = [_]Node{ .{ .text = "Detail", .font_size = 9, .text_color = Color.rgb(140, 148, 166) }, .{ .style = .{ .flex_direction = .row, .flex_grow = 1, .flex_basis = 0, .height = 6, .background_color = Color.rgb(20, 26, 41), .border_radius = 2 }, .children = &_arr_1867 }, .{ .text = "0 + 480px", .font_size = 9, .text_color = Color.rgb(224, 229, 240) } }; // WireframePage
 // tsz:InspectorEmbed.tsz:3233 — <Box>
-var _arr_1759 = [_]Node{ .{ .text = "ElementsPage (row)", .font_size = 9, .text_color = Color.rgb(223, 229, 245) }, .{ .text = "810px | basis:330+0 | free:480 | 2 items", .font_size = 9, .text_color = Color.rgb(115, 122, 140) }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 6, .height = 18 }, .children = &_arr_1756 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 6, .height = 18 }, .children = &_arr_1758 } }; // WireframePage
+var _arr_1869 = [_]Node{ .{ .text = "ElementsPage (row)", .font_size = 9, .text_color = Color.rgb(223, 229, 245) }, .{ .text = "810px | basis:330+0 | free:480 | 2 items", .font_size = 9, .text_color = Color.rgb(115, 122, 140) }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 6, .height = 18 }, .children = &_arr_1866 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 6, .height = 18 }, .children = &_arr_1868 } }; // WireframePage
 // tsz:InspectorEmbed.tsz:3111 — <Box>
-var _arr_1760 = [_]Node{ .{ .text = "ElementsPage", .font_size = 8, .text_color = Color.rgb(125, 135, 156) }, .{ .style = .{ .flex_direction = .row, .flex_grow = 1, .flex_basis = 0, .gap = 6 }, .children = &_arr_1754 }, .{ .style = .{ .flex_direction = .column, .gap = 4, .padding_left = 10, .padding_right = 10, .padding_top = 8, .padding_bottom = 8, .border_width = 1, .border_color = Color.rgb(38, 53, 77), .border_radius = 4, .background_color = Color.rgba(10, 15, 24, 240), .position = .absolute, .right = 10, .bottom = 10, .width = 208 }, .children = &_arr_1759 } }; // WireframePage
+var _arr_1870 = [_]Node{ .{ .text = "ElementsPage", .font_size = 8, .text_color = Color.rgb(125, 135, 156) }, .{ .style = .{ .flex_direction = .row, .flex_grow = 1, .flex_basis = 0, .gap = 6 }, .children = &_arr_1864 }, .{ .style = .{ .flex_direction = .column, .gap = 4, .padding_left = 10, .padding_right = 10, .padding_top = 8, .padding_bottom = 8, .border_width = 1, .border_color = Color.rgb(38, 53, 77), .border_radius = 4, .background_color = Color.rgba(10, 15, 24, 240), .position = .absolute, .right = 10, .bottom = 10, .width = 208 }, .children = &_arr_1869 } }; // WireframePage
 // tsz:InspectorEmbed.tsz:3256 — <Box>
-var _arr_1761 = [_]Node{ .{ .text = "ready", .font_size = 9, .text_color = Color.rgb(104, 194, 142) }, .{ .text = "142 nodes", .font_size = 9, .text_color = Color.rgb(77, 85, 104) }, .{ .text = "4.2 MB", .font_size = 9, .text_color = Color.rgb(77, 85, 104) }, .{ .text = "60 fps", .font_size = 9, .text_color = Color.rgb(77, 85, 104) } }; // WireframePage
+var _arr_1871 = [_]Node{ .{ .text = "ready", .font_size = 9, .text_color = Color.rgb(104, 194, 142) }, .{ .text = "142 nodes", .font_size = 9, .text_color = Color.rgb(77, 85, 104) }, .{ .text = "4.2 MB", .font_size = 9, .text_color = Color.rgb(77, 85, 104) }, .{ .text = "60 fps", .font_size = 9, .text_color = Color.rgb(77, 85, 104) } }; // WireframePage
 // tsz:InspectorEmbed.tsz:3110 — <Box>
-var _arr_1762 = [_]Node{ .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .border_width = 1, .border_color = Color.rgb(79, 107, 154), .border_radius = 3, .padding = 4, .gap = 6 }, .children = &_arr_1760 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .justify_content = .space_between, .gap = 10 }, .children = &_arr_1761 } }; // WireframePage
+var _arr_1872 = [_]Node{ .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .border_width = 1, .border_color = Color.rgb(79, 107, 154), .border_radius = 3, .padding = 4, .gap = 6 }, .children = &_arr_1870 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .justify_content = .space_between, .gap = 10 }, .children = &_arr_1871 } }; // WireframePage
 // tsz:InspectorEmbed.tsz:3082 — <Box>
-var _arr_1763 = [_]Node{ .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .gap = 10 }, .children = &_arr_1653 }, .{ .style = .{ .height = 28, .flex_direction = .row, .align_items = .center, .gap = 5, .padding_left = 6, .padding_right = 6, .border_width = 1, .border_color = Color.rgb(23, 31, 46), .border_radius = 4, .background_color = Color.rgb(9, 13, 21) }, .children = &_arr_1675 }, .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .padding = 8, .border_width = 1, .border_color = Color.rgb(17, 23, 35), .border_radius = 4, .background_color = Color.rgb(7, 11, 18), .gap = 8 }, .children = &_arr_1762 } }; // WireframePage
+var _arr_1873 = [_]Node{ .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .gap = 10 }, .children = &_arr_1763 }, .{ .style = .{ .height = 28, .flex_direction = .row, .align_items = .center, .gap = 5, .padding_left = 6, .padding_right = 6, .border_width = 1, .border_color = Color.rgb(23, 31, 46), .border_radius = 4, .background_color = Color.rgb(9, 13, 21) }, .children = &_arr_1785 }, .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .padding = 8, .border_width = 1, .border_color = Color.rgb(17, 23, 35), .border_radius = 4, .background_color = Color.rgb(7, 11, 18), .gap = 8 }, .children = &_arr_1872 } }; // WireframePage
 // tsz:InspectorEmbed.tsz:3081 — <Box>
-var _arr_1764 = [_]Node{ .{ .style = .{ .width = -1, .height = -1, .padding = 10, .border_width = 1, .border_color = Color.rgb(38, 49, 73), .border_radius = 4, .background_color = Color.rgb(5, 7, 13), .gap = 8 }, .children = &_arr_1763 } }; // WireframePage
+var _arr_1874 = [_]Node{ .{ .style = .{ .width = -1, .height = -1, .padding = 10, .border_width = 1, .border_color = Color.rgb(38, 49, 73), .border_radius = 4, .background_color = Color.rgb(5, 7, 13), .gap = 8 }, .children = &_arr_1873 } }; // WireframePage
 // tsz:InspectorEmbed.tsz:3080 — <Box>
-var _arr_1765 = [_]Node{ .{ .style = .{ .width = 700, .height = 500, .padding = 12, .border_width = 1, .border_color = Color.rgb(26, 32, 48), .border_radius = 6, .background_color = Color.rgb(9, 13, 21) }, .children = &_arr_1764 } }; // WireframePage
+var _arr_1875 = [_]Node{ .{ .style = .{ .width = 700, .height = 500, .padding = 12, .border_width = 1, .border_color = Color.rgb(26, 32, 48), .border_radius = 6, .background_color = Color.rgb(9, 13, 21) }, .children = &_arr_1874 } }; // WireframePage
 // tsz:InspectorEmbed.tsz:3079 — <Box>
-var _arr_1766 = [_]Node{ .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .align_items = .center, .justify_content = .center, .padding = 14 }, .children = &_arr_1765 } }; // WireframePage
+var _arr_1876 = [_]Node{ .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .align_items = .center, .justify_content = .center, .padding = 14 }, .children = &_arr_1875 } }; // WireframePage
 // tsz:InspectorEmbed.tsz:3270 — <Pressable>
-var _arr_1767 = [_]Node{ .{ .text = "on", .font_size = 10, .text_color = Color.rgb(97, 149, 250) }, .{ .text = "Flex overlay", .font_size = 10, .text_color = Color.rgb(140, 148, 166) } }; // WireframePage
+var _arr_1877 = [_]Node{ .{ .text = "on", .font_size = 10, .text_color = Color.rgb(97, 149, 250) }, .{ .text = "Flex overlay", .font_size = 10, .text_color = Color.rgb(140, 148, 166) } }; // WireframePage
 // tsz:InspectorEmbed.tsz:3269 — <Box>
-var _arr_1768 = [_]Node{ .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 4, .padding_left = 8, .padding_right = 8, .padding_top = 4, .padding_bottom = 4, .border_radius = 4, .background_color = Color.rgb(28, 51, 80), .border_width = 1, .border_color = Color.rgb(42, 74, 112) }, .children = &_arr_1767 }, .{ .text = "whole-layout mini viewport", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } }; // WireframePage
+var _arr_1878 = [_]Node{ .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 4, .padding_left = 8, .padding_right = 8, .padding_top = 4, .padding_bottom = 4, .border_radius = 4, .background_color = Color.rgb(28, 51, 80), .border_width = 1, .border_color = Color.rgb(42, 74, 112) }, .children = &_arr_1877 }, .{ .text = "whole-layout mini viewport", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } }; // WireframePage
 // tsz:InspectorEmbed.tsz:3268 — <Box>
-var _arr_1769 = [_]Node{ .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 10, .flex_grow = 1, .flex_basis = 0 }, .children = &_arr_1768 }, .{ .text = "fit 79%", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } }; // WireframePage
+var _arr_1879 = [_]Node{ .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 10, .flex_grow = 1, .flex_basis = 0 }, .children = &_arr_1878 }, .{ .text = "fit 79%", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } }; // WireframePage
 // tsz:InspectorEmbed.tsz:3078 — <Box>
-var _arr_1770 = [_]Node{ .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(7, 10, 18) }, .children = &_arr_1766 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 12, .padding_left = 10, .padding_right = 10, .padding_top = 6, .padding_bottom = 6, .background_color = Color.rgb(10, 12, 19), .border_width = 1, .border_color = Color.rgb(26, 32, 48) }, .children = &_arr_1769 } }; // WireframePage
+var _arr_1880 = [_]Node{ .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(7, 10, 18) }, .children = &_arr_1876 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 12, .padding_left = 10, .padding_right = 10, .padding_top = 6, .padding_bottom = 6, .background_color = Color.rgb(10, 12, 19), .border_width = 1, .border_color = Color.rgb(26, 32, 48) }, .children = &_arr_1879 } }; // WireframePage
 // tsz:InspectorEmbed.tsz:3305 — <Pressable>
-var _arr_1771 = [_]Node{ .{ .text = "RT", .font_size = 10, .text_color = Color.rgb(237, 242, 255) } }; // PerfPage
+var _arr_1881 = [_]Node{ .{ .text = "RT", .font_size = 10, .text_color = Color.rgb(237, 242, 255) } }; // PerfPage
 // tsz:InspectorEmbed.tsz:3306 — <Pressable>
-var _arr_1772 = [_]Node{ .{ .text = "100ms", .font_size = 10, .text_color = Color.rgb(140, 148, 166) } }; // PerfPage
+var _arr_1882 = [_]Node{ .{ .text = "100ms", .font_size = 10, .text_color = Color.rgb(140, 148, 166) } }; // PerfPage
 // tsz:InspectorEmbed.tsz:3307 — <Pressable>
-var _arr_1773 = [_]Node{ .{ .text = "250ms", .font_size = 10, .text_color = Color.rgb(140, 148, 166) } }; // PerfPage
+var _arr_1883 = [_]Node{ .{ .text = "250ms", .font_size = 10, .text_color = Color.rgb(140, 148, 166) } }; // PerfPage
 // tsz:InspectorEmbed.tsz:3308 — <Pressable>
-var _arr_1774 = [_]Node{ .{ .text = "500ms", .font_size = 10, .text_color = Color.rgb(140, 148, 166) } }; // PerfPage
+var _arr_1884 = [_]Node{ .{ .text = "500ms", .font_size = 10, .text_color = Color.rgb(140, 148, 166) } }; // PerfPage
 // tsz:InspectorEmbed.tsz:3309 — <Pressable>
-var _arr_1775 = [_]Node{ .{ .text = "1s", .font_size = 10, .text_color = Color.rgb(140, 148, 166) } }; // PerfPage
+var _arr_1885 = [_]Node{ .{ .text = "1s", .font_size = 10, .text_color = Color.rgb(140, 148, 166) } }; // PerfPage
 // tsz:InspectorEmbed.tsz:3310 — <Pressable>
-var _arr_1776 = [_]Node{ .{ .text = "2s", .font_size = 10, .text_color = Color.rgb(140, 148, 166) } }; // PerfPage
+var _arr_1886 = [_]Node{ .{ .text = "2s", .font_size = 10, .text_color = Color.rgb(140, 148, 166) } }; // PerfPage
 // tsz:InspectorEmbed.tsz:3304 — <Box>
-var _arr_1777 = [_]Node{ .{ .style = .{ .padding_left = 8, .padding_right = 8, .padding_top = 4, .padding_bottom = 4, .border_radius = 3, .background_color = Color.rgb(28, 51, 80) }, .children = &_arr_1771 }, .{ .style = .{ .padding_left = 8, .padding_right = 8, .padding_top = 4, .padding_bottom = 4, .border_radius = 3 }, .children = &_arr_1772 }, .{ .style = .{ .padding_left = 8, .padding_right = 8, .padding_top = 4, .padding_bottom = 4, .border_radius = 3 }, .children = &_arr_1773 }, .{ .style = .{ .padding_left = 8, .padding_right = 8, .padding_top = 4, .padding_bottom = 4, .border_radius = 3 }, .children = &_arr_1774 }, .{ .style = .{ .padding_left = 8, .padding_right = 8, .padding_top = 4, .padding_bottom = 4, .border_radius = 3 }, .children = &_arr_1775 }, .{ .style = .{ .padding_left = 8, .padding_right = 8, .padding_top = 4, .padding_bottom = 4, .border_radius = 3 }, .children = &_arr_1776 } }; // PerfPage
+var _arr_1887 = [_]Node{ .{ .style = .{ .padding_left = 8, .padding_right = 8, .padding_top = 4, .padding_bottom = 4, .border_radius = 3, .background_color = Color.rgb(28, 51, 80) }, .children = &_arr_1881 }, .{ .style = .{ .padding_left = 8, .padding_right = 8, .padding_top = 4, .padding_bottom = 4, .border_radius = 3 }, .children = &_arr_1882 }, .{ .style = .{ .padding_left = 8, .padding_right = 8, .padding_top = 4, .padding_bottom = 4, .border_radius = 3 }, .children = &_arr_1883 }, .{ .style = .{ .padding_left = 8, .padding_right = 8, .padding_top = 4, .padding_bottom = 4, .border_radius = 3 }, .children = &_arr_1884 }, .{ .style = .{ .padding_left = 8, .padding_right = 8, .padding_top = 4, .padding_bottom = 4, .border_radius = 3 }, .children = &_arr_1885 }, .{ .style = .{ .padding_left = 8, .padding_right = 8, .padding_top = 4, .padding_bottom = 4, .border_radius = 3 }, .children = &_arr_1886 } }; // PerfPage
 // tsz:InspectorEmbed.tsz:3302 — <Box>
-var _arr_1778 = [_]Node{ .{ .text = "Refresh", .font_size = 11, .text_color = Color.rgb(140, 148, 166) }, .{ .style = .{ .flex_direction = .row, .gap = 1, .border_radius = 4, .background_color = Color.rgb(20, 26, 41), .padding = 2 }, .children = &_arr_1777 } }; // PerfPage
+var _arr_1888 = [_]Node{ .{ .text = "Refresh", .font_size = 11, .text_color = Color.rgb(140, 148, 166) }, .{ .style = .{ .flex_direction = .row, .gap = 1, .border_radius = 4, .background_color = Color.rgb(20, 26, 41), .padding = 2 }, .children = &_arr_1887 } }; // PerfPage
 // tsz:InspectorEmbed.tsz:3300 — <Box>
-var _arr_1779 = [_]Node{ .{ .text = "Frame Budget", .font_size = 12, .text_color = Color.rgb(166, 173, 190) }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 8 }, .children = &_arr_1778 } }; // PerfPage
+var _arr_1889 = [_]Node{ .{ .text = "Frame Budget", .font_size = 12, .text_color = Color.rgb(166, 173, 190) }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 8 }, .children = &_arr_1888 } }; // PerfPage
 // tsz:InspectorEmbed.tsz:3315 — <Box>
-var _arr_1780 = [_]Node{ .{ .style = .{ .height = 22, .background_color = Color.rgb(61, 170, 86), .border_radius = 4, .flex_grow = 75 } }, .{ .style = .{ .height = 22, .flex_grow = 25 } } }; // PerfPage
+var _arr_1890 = [_]Node{ .{ .style = .{ .height = 22, .background_color = Color.rgb(61, 170, 86), .border_radius = 4, .flex_grow = 75 } }, .{ .style = .{ .height = 22, .flex_grow = 25 } } }; // PerfPage
 // tsz:InspectorEmbed.tsz:3322 — <Box>
-var _arr_1781 = [_]Node{ .{ .text = "Layout", .font_size = 11, .text_color = Color.rgb(140, 148, 166) }, .{ .text = "2.31ms", .font_size = 11, .text_color = Color.rgb(224, 229, 240) } }; // PerfPage
+var _arr_1891 = [_]Node{ .{ .text = "Layout", .font_size = 11, .text_color = Color.rgb(140, 148, 166) }, .{ .text = "2.31ms", .font_size = 11, .text_color = Color.rgb(224, 229, 240) } }; // PerfPage
 // tsz:InspectorEmbed.tsz:3323 — <Box>
-var _arr_1782 = [_]Node{ .{ .text = "Paint", .font_size = 11, .text_color = Color.rgb(140, 148, 166) }, .{ .text = "1.87ms", .font_size = 11, .text_color = Color.rgb(224, 229, 240) } }; // PerfPage
+var _arr_1892 = [_]Node{ .{ .text = "Paint", .font_size = 11, .text_color = Color.rgb(140, 148, 166) }, .{ .text = "1.87ms", .font_size = 11, .text_color = Color.rgb(224, 229, 240) } }; // PerfPage
 // tsz:InspectorEmbed.tsz:3324 — <Box>
-var _arr_1783 = [_]Node{ .{ .text = "FPS", .font_size = 11, .text_color = Color.rgb(140, 148, 166) }, .{ .text = "60", .font_size = 11, .text_color = Color.rgb(80, 200, 120) } }; // PerfPage
+var _arr_1893 = [_]Node{ .{ .text = "FPS", .font_size = 11, .text_color = Color.rgb(140, 148, 166) }, .{ .text = "60", .font_size = 11, .text_color = Color.rgb(80, 200, 120) } }; // PerfPage
 // tsz:InspectorEmbed.tsz:3325 — <Box>
-var _arr_1784 = [_]Node{ .{ .text = "Nodes", .font_size = 11, .text_color = Color.rgb(140, 148, 166) }, .{ .text = "142", .font_size = 11, .text_color = Color.rgb(224, 229, 240) } }; // PerfPage
+var _arr_1894 = [_]Node{ .{ .text = "Nodes", .font_size = 11, .text_color = Color.rgb(140, 148, 166) }, .{ .text = "142", .font_size = 11, .text_color = Color.rgb(224, 229, 240) } }; // PerfPage
 // tsz:InspectorEmbed.tsz:3321 — <Box>
-var _arr_1785 = [_]Node{ .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 4, .margin_right = 10 }, .children = &_arr_1781 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 4, .margin_right = 10 }, .children = &_arr_1782 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 4, .margin_right = 10 }, .children = &_arr_1783 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 4, .margin_right = 10 }, .children = &_arr_1784 } }; // PerfPage
+var _arr_1895 = [_]Node{ .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 4, .margin_right = 10 }, .children = &_arr_1891 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 4, .margin_right = 10 }, .children = &_arr_1892 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 4, .margin_right = 10 }, .children = &_arr_1893 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 4, .margin_right = 10 }, .children = &_arr_1894 } }; // PerfPage
 // tsz:InspectorEmbed.tsz:3329 — <Box>
-var _arr_1786 = [_]Node{ .{ .text = "Lua Mem", .font_size = 11, .text_color = Color.rgb(140, 148, 166) }, .{ .text = "4.2 MB", .font_size = 11, .text_color = Color.rgb(224, 229, 240) } }; // PerfPage
+var _arr_1896 = [_]Node{ .{ .text = "Lua Mem", .font_size = 11, .text_color = Color.rgb(140, 148, 166) }, .{ .text = "4.2 MB", .font_size = 11, .text_color = Color.rgb(224, 229, 240) } }; // PerfPage
 // tsz:InspectorEmbed.tsz:3330 — <Box>
-var _arr_1787 = [_]Node{ .{ .text = "RSS", .font_size = 11, .text_color = Color.rgb(140, 148, 166) }, .{ .text = "28 MB", .font_size = 11, .text_color = Color.rgb(224, 229, 240) } }; // PerfPage
+var _arr_1897 = [_]Node{ .{ .text = "RSS", .font_size = 11, .text_color = Color.rgb(140, 148, 166) }, .{ .text = "28 MB", .font_size = 11, .text_color = Color.rgb(224, 229, 240) } }; // PerfPage
 // tsz:InspectorEmbed.tsz:3331 — <Box>
-var _arr_1788 = [_]Node{ .{ .text = "Mutations", .font_size = 11, .text_color = Color.rgb(140, 148, 166) }, .{ .text = "3/frame", .font_size = 11, .text_color = Color.rgb(224, 229, 240) } }; // PerfPage
+var _arr_1898 = [_]Node{ .{ .text = "Mutations", .font_size = 11, .text_color = Color.rgb(140, 148, 166) }, .{ .text = "3/frame", .font_size = 11, .text_color = Color.rgb(224, 229, 240) } }; // PerfPage
 // tsz:InspectorEmbed.tsz:3328 — <Box>
-var _arr_1789 = [_]Node{ .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 4, .margin_right = 10 }, .children = &_arr_1786 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 4, .margin_right = 10 }, .children = &_arr_1787 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 4, .margin_right = 10 }, .children = &_arr_1788 }, .{ .text = "(+1 ~2 -0)", .font_size = 10, .text_color = Color.rgb(115, 122, 140) } }; // PerfPage
+var _arr_1899 = [_]Node{ .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 4, .margin_right = 10 }, .children = &_arr_1896 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 4, .margin_right = 10 }, .children = &_arr_1897 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 4, .margin_right = 10 }, .children = &_arr_1898 }, .{ .text = "(+1 ~2 -0)", .font_size = 10, .text_color = Color.rgb(115, 122, 140) } }; // PerfPage
 // tsz:InspectorEmbed.tsz:3336 — <Box>
-var _arr_1790 = [_]Node{ .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 24 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 28 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 22 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 30 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 26 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 20 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 18 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 22 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 32 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 28 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 24 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 20 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 26 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 34 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 30 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 22 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 18 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 24 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 28 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 36 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 32 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 26 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 20 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(200, 160, 48), .border_radius = 1, .height = 48 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 38 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 30 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 24 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 22 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 20 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 26 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(196, 58, 46), .border_radius = 1, .height = 56 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 40 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 28 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 22 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 24 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 20 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 18 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 22 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 26 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 24 } } }; // PerfPage
+var _arr_1900 = [_]Node{ .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 24 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 28 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 22 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 30 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 26 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 20 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 18 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 22 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 32 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 28 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 24 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 20 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 26 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 34 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 30 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 22 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 18 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 24 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 28 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 36 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 32 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 26 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 20 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(200, 160, 48), .border_radius = 1, .height = 48 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 38 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 30 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 24 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 22 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 20 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 26 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(196, 58, 46), .border_radius = 1, .height = 56 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 40 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 28 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 22 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 24 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 20 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 18 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 22 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 26 } }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(74, 122, 212), .border_radius = 1, .height = 24 } } }; // PerfPage
 // tsz:InspectorEmbed.tsz:3385 — <Box>
-var _arr_1791 = [_]Node{ .{ .text = "1.", .font_size = 11, .text_color = Color.rgb(140, 148, 166) }, .{ .text = "ScrollView", .font_size = 11, .text_color = Color.rgb(143, 172, 250) }, .{ .text = "[ScrollViewNode]", .font_size = 10, .text_color = Color.rgb(140, 148, 166) }, .{ .text = "87", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } }; // PerfPage
+var _arr_1901 = [_]Node{ .{ .text = "1.", .font_size = 11, .text_color = Color.rgb(140, 148, 166) }, .{ .text = "ScrollView", .font_size = 11, .text_color = Color.rgb(143, 172, 250) }, .{ .text = "[ScrollViewNode]", .font_size = 10, .text_color = Color.rgb(140, 148, 166) }, .{ .text = "87", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } }; // PerfPage
 // tsz:InspectorEmbed.tsz:3384 — <Box>
-var _arr_1792 = [_]Node{ .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 4 }, .children = &_arr_1791 }, .{ .text = "3.21ms", .font_size = 11, .text_color = Color.rgb(232, 72, 85) } }; // PerfPage
+var _arr_1902 = [_]Node{ .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 4 }, .children = &_arr_1901 }, .{ .text = "3.21ms", .font_size = 11, .text_color = Color.rgb(232, 72, 85) } }; // PerfPage
 // tsz:InspectorEmbed.tsz:3383 — <Box>
-var _arr_1793 = [_]Node{ .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center }, .children = &_arr_1792 }, .{ .text = "320x480  layout:1.44ms  paint:1.77ms  renders:24  handlers:2", .font_size = 10, .text_color = Color.rgb(115, 122, 140) }, .{ .text = "…/carts/inspector/Tree.c.tsz:14", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } }; // PerfPage
+var _arr_1903 = [_]Node{ .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center }, .children = &_arr_1902 }, .{ .text = "320x480  layout:1.44ms  paint:1.77ms  renders:24  handlers:2", .font_size = 10, .text_color = Color.rgb(115, 122, 140) }, .{ .text = "…/carts/inspector/Tree.c.tsz:14", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } }; // PerfPage
 // tsz:InspectorEmbed.tsz:3399 — <Box>
-var _arr_1794 = [_]Node{ .{ .text = "2.", .font_size = 11, .text_color = Color.rgb(140, 148, 166) }, .{ .text = "DetailPane", .font_size = 11, .text_color = Color.rgb(143, 172, 250) }, .{ .text = "[BoxNode]", .font_size = 10, .text_color = Color.rgb(140, 148, 166) }, .{ .text = "42", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } }; // PerfPage
+var _arr_1904 = [_]Node{ .{ .text = "2.", .font_size = 11, .text_color = Color.rgb(140, 148, 166) }, .{ .text = "DetailPane", .font_size = 11, .text_color = Color.rgb(143, 172, 250) }, .{ .text = "[BoxNode]", .font_size = 10, .text_color = Color.rgb(140, 148, 166) }, .{ .text = "42", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } }; // PerfPage
 // tsz:InspectorEmbed.tsz:3398 — <Box>
-var _arr_1795 = [_]Node{ .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 4 }, .children = &_arr_1794 }, .{ .text = "2.85ms", .font_size = 11, .text_color = Color.rgb(240, 192, 64) } }; // PerfPage
+var _arr_1905 = [_]Node{ .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 4 }, .children = &_arr_1904 }, .{ .text = "2.85ms", .font_size = 11, .text_color = Color.rgb(240, 192, 64) } }; // PerfPage
 // tsz:InspectorEmbed.tsz:3397 — <Box>
-var _arr_1796 = [_]Node{ .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center }, .children = &_arr_1795 }, .{ .text = "480x600  layout:1.20ms  paint:1.65ms  renders:8  handlers:0", .font_size = 10, .text_color = Color.rgb(115, 122, 140) }, .{ .text = "…/carts/inspector/DetailPane.c.tsz:23", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } }; // PerfPage
+var _arr_1906 = [_]Node{ .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center }, .children = &_arr_1905 }, .{ .text = "480x600  layout:1.20ms  paint:1.65ms  renders:8  handlers:0", .font_size = 10, .text_color = Color.rgb(115, 122, 140) }, .{ .text = "…/carts/inspector/DetailPane.c.tsz:23", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } }; // PerfPage
 // tsz:InspectorEmbed.tsz:3413 — <Box>
-var _arr_1797 = [_]Node{ .{ .text = "3.", .font_size = 11, .text_color = Color.rgb(140, 148, 166) }, .{ .text = "TreeLine", .font_size = 11, .text_color = Color.rgb(143, 172, 250) }, .{ .text = "[PressableNode]", .font_size = 10, .text_color = Color.rgb(140, 148, 166) }, .{ .text = "103", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } }; // PerfPage
+var _arr_1907 = [_]Node{ .{ .text = "3.", .font_size = 11, .text_color = Color.rgb(140, 148, 166) }, .{ .text = "TreeLine", .font_size = 11, .text_color = Color.rgb(143, 172, 250) }, .{ .text = "[PressableNode]", .font_size = 10, .text_color = Color.rgb(140, 148, 166) }, .{ .text = "103", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } }; // PerfPage
 // tsz:InspectorEmbed.tsz:3412 — <Box>
-var _arr_1798 = [_]Node{ .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 4 }, .children = &_arr_1797 }, .{ .text = "1.94ms", .font_size = 11, .text_color = Color.rgb(240, 192, 64) } }; // PerfPage
+var _arr_1908 = [_]Node{ .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 4 }, .children = &_arr_1907 }, .{ .text = "1.94ms", .font_size = 11, .text_color = Color.rgb(240, 192, 64) } }; // PerfPage
 // tsz:InspectorEmbed.tsz:3411 — <Box>
-var _arr_1799 = [_]Node{ .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center }, .children = &_arr_1798 }, .{ .text = "306x24  layout:0.88ms  paint:1.06ms  renders:12  handlers:1", .font_size = 10, .text_color = Color.rgb(115, 122, 140) }, .{ .text = "…/carts/inspector/TreeLine.c.tsz:8", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } }; // PerfPage
+var _arr_1909 = [_]Node{ .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center }, .children = &_arr_1908 }, .{ .text = "306x24  layout:0.88ms  paint:1.06ms  renders:12  handlers:1", .font_size = 10, .text_color = Color.rgb(115, 122, 140) }, .{ .text = "…/carts/inspector/TreeLine.c.tsz:8", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } }; // PerfPage
 // tsz:InspectorEmbed.tsz:3427 — <Box>
-var _arr_1800 = [_]Node{ .{ .text = "4.", .font_size = 11, .text_color = Color.rgb(140, 148, 166) }, .{ .text = "PropertyRow", .font_size = 11, .text_color = Color.rgb(143, 172, 250) }, .{ .text = "[BoxNode]", .font_size = 10, .text_color = Color.rgb(140, 148, 166) }, .{ .text = "156", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } }; // PerfPage
+var _arr_1910 = [_]Node{ .{ .text = "4.", .font_size = 11, .text_color = Color.rgb(140, 148, 166) }, .{ .text = "PropertyRow", .font_size = 11, .text_color = Color.rgb(143, 172, 250) }, .{ .text = "[BoxNode]", .font_size = 10, .text_color = Color.rgb(140, 148, 166) }, .{ .text = "156", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } }; // PerfPage
 // tsz:InspectorEmbed.tsz:3426 — <Box>
-var _arr_1801 = [_]Node{ .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 4 }, .children = &_arr_1800 }, .{ .text = "0.72ms", .font_size = 11, .text_color = Color.rgb(97, 149, 250) } }; // PerfPage
+var _arr_1911 = [_]Node{ .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 4 }, .children = &_arr_1910 }, .{ .text = "0.72ms", .font_size = 11, .text_color = Color.rgb(97, 149, 250) } }; // PerfPage
 // tsz:InspectorEmbed.tsz:3425 — <Box>
-var _arr_1802 = [_]Node{ .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center }, .children = &_arr_1801 }, .{ .text = "440x32  layout:0.31ms  paint:0.41ms  renders:1  handlers:0", .font_size = 10, .text_color = Color.rgb(115, 122, 140) }, .{ .text = "…/carts/inspector/PropertyRow.c.tsz:4", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } }; // PerfPage
+var _arr_1912 = [_]Node{ .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center }, .children = &_arr_1911 }, .{ .text = "440x32  layout:0.31ms  paint:0.41ms  renders:1  handlers:0", .font_size = 10, .text_color = Color.rgb(115, 122, 140) }, .{ .text = "…/carts/inspector/PropertyRow.c.tsz:4", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } }; // PerfPage
 // tsz:InspectorEmbed.tsz:3441 — <Box>
-var _arr_1803 = [_]Node{ .{ .text = "5.", .font_size = 11, .text_color = Color.rgb(140, 148, 166) }, .{ .text = "Badge", .font_size = 11, .text_color = Color.rgb(143, 172, 250) }, .{ .text = "[BoxNode]", .font_size = 10, .text_color = Color.rgb(140, 148, 166) }, .{ .text = "64", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } }; // PerfPage
+var _arr_1913 = [_]Node{ .{ .text = "5.", .font_size = 11, .text_color = Color.rgb(140, 148, 166) }, .{ .text = "Badge", .font_size = 11, .text_color = Color.rgb(143, 172, 250) }, .{ .text = "[BoxNode]", .font_size = 10, .text_color = Color.rgb(140, 148, 166) }, .{ .text = "64", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } }; // PerfPage
 // tsz:InspectorEmbed.tsz:3440 — <Box>
-var _arr_1804 = [_]Node{ .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 4 }, .children = &_arr_1803 }, .{ .text = "0.38ms", .font_size = 11, .text_color = Color.rgb(97, 149, 250) } }; // PerfPage
+var _arr_1914 = [_]Node{ .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 4 }, .children = &_arr_1913 }, .{ .text = "0.38ms", .font_size = 11, .text_color = Color.rgb(97, 149, 250) } }; // PerfPage
 // tsz:InspectorEmbed.tsz:3439 — <Box>
-var _arr_1805 = [_]Node{ .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center }, .children = &_arr_1804 }, .{ .text = "72x22  layout:0.15ms  paint:0.23ms  renders:1  handlers:0", .font_size = 10, .text_color = Color.rgb(115, 122, 140) }, .{ .text = "…/carts/inspector/Badge.c.tsz:3", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } }; // PerfPage
+var _arr_1915 = [_]Node{ .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center }, .children = &_arr_1914 }, .{ .text = "72x22  layout:0.15ms  paint:0.23ms  renders:1  handlers:0", .font_size = 10, .text_color = Color.rgb(115, 122, 140) }, .{ .text = "…/carts/inspector/Badge.c.tsz:3", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } }; // PerfPage
 // tsz:InspectorEmbed.tsz:3455 — <Box>
-var _arr_1806 = [_]Node{ .{ .text = "6.", .font_size = 11, .text_color = Color.rgb(140, 148, 166) }, .{ .text = "InspectorTabButton", .font_size = 11, .text_color = Color.rgb(143, 172, 250) }, .{ .text = "[PressableNode]", .font_size = 10, .text_color = Color.rgb(140, 148, 166) }, .{ .text = "12", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } }; // PerfPage
+var _arr_1916 = [_]Node{ .{ .text = "6.", .font_size = 11, .text_color = Color.rgb(140, 148, 166) }, .{ .text = "InspectorTabButton", .font_size = 11, .text_color = Color.rgb(143, 172, 250) }, .{ .text = "[PressableNode]", .font_size = 10, .text_color = Color.rgb(140, 148, 166) }, .{ .text = "12", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } }; // PerfPage
 // tsz:InspectorEmbed.tsz:3454 — <Box>
-var _arr_1807 = [_]Node{ .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 4 }, .children = &_arr_1806 }, .{ .text = "0.29ms", .font_size = 11, .text_color = Color.rgb(97, 149, 250) } }; // PerfPage
+var _arr_1917 = [_]Node{ .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 4 }, .children = &_arr_1916 }, .{ .text = "0.29ms", .font_size = 11, .text_color = Color.rgb(97, 149, 250) } }; // PerfPage
 // tsz:InspectorEmbed.tsz:3453 — <Box>
-var _arr_1808 = [_]Node{ .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center }, .children = &_arr_1807 }, .{ .text = "86x28  layout:0.12ms  paint:0.17ms  renders:1  handlers:1", .font_size = 10, .text_color = Color.rgb(115, 122, 140) }, .{ .text = "…/carts/inspector/InspectorTabButton.c.tsz:5", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } }; // PerfPage
+var _arr_1918 = [_]Node{ .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center }, .children = &_arr_1917 }, .{ .text = "86x28  layout:0.12ms  paint:0.17ms  renders:1  handlers:1", .font_size = 10, .text_color = Color.rgb(115, 122, 140) }, .{ .text = "…/carts/inspector/InspectorTabButton.c.tsz:5", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } }; // PerfPage
 // tsz:InspectorEmbed.tsz:3469 — <Box>
-var _arr_1809 = [_]Node{ .{ .text = "7.", .font_size = 11, .text_color = Color.rgb(140, 148, 166) }, .{ .text = "[TextNode]", .font_size = 10, .text_color = Color.rgb(140, 148, 166) }, .{ .text = "201", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } }; // PerfPage
+var _arr_1919 = [_]Node{ .{ .text = "7.", .font_size = 11, .text_color = Color.rgb(140, 148, 166) }, .{ .text = "[TextNode]", .font_size = 10, .text_color = Color.rgb(140, 148, 166) }, .{ .text = "201", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } }; // PerfPage
 // tsz:InspectorEmbed.tsz:3468 — <Box>
-var _arr_1810 = [_]Node{ .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 4 }, .children = &_arr_1809 }, .{ .text = "0.18ms", .font_size = 11, .text_color = Color.rgb(97, 149, 250) } }; // PerfPage
+var _arr_1920 = [_]Node{ .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 4 }, .children = &_arr_1919 }, .{ .text = "0.18ms", .font_size = 11, .text_color = Color.rgb(97, 149, 250) } }; // PerfPage
 // tsz:InspectorEmbed.tsz:3467 — <Box>
-var _arr_1811 = [_]Node{ .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center }, .children = &_arr_1810 }, .{ .text = "120x14  layout:0.08ms  paint:0.10ms  renders:1  handlers:0", .font_size = 10, .text_color = Color.rgb(115, 122, 140) } }; // PerfPage
+var _arr_1921 = [_]Node{ .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center }, .children = &_arr_1920 }, .{ .text = "120x14  layout:0.08ms  paint:0.10ms  renders:1  handlers:0", .font_size = 10, .text_color = Color.rgb(115, 122, 140) } }; // PerfPage
 // tsz:InspectorEmbed.tsz:3381 — <Box>
-var _arr_1812 = [_]Node{ .{ .style = .{ .flex_direction = .column, .padding = 10, .background_color = Color.rgb(16, 21, 35), .border_radius = 8, .gap = 4 }, .children = &_arr_1793 }, .{ .style = .{ .flex_direction = .column, .padding = 10, .background_color = Color.rgb(16, 21, 35), .border_radius = 8, .gap = 4 }, .children = &_arr_1796 }, .{ .style = .{ .flex_direction = .column, .padding = 10, .background_color = Color.rgb(16, 21, 35), .border_radius = 8, .gap = 4 }, .children = &_arr_1799 }, .{ .style = .{ .flex_direction = .column, .padding = 10, .background_color = Color.rgb(16, 21, 35), .border_radius = 8, .gap = 4 }, .children = &_arr_1802 }, .{ .style = .{ .flex_direction = .column, .padding = 10, .background_color = Color.rgb(16, 21, 35), .border_radius = 8, .gap = 4 }, .children = &_arr_1805 }, .{ .style = .{ .flex_direction = .column, .padding = 10, .background_color = Color.rgb(16, 21, 35), .border_radius = 8, .gap = 4 }, .children = &_arr_1808 }, .{ .style = .{ .flex_direction = .column, .padding = 10, .background_color = Color.rgb(16, 21, 35), .border_radius = 8, .gap = 4 }, .children = &_arr_1811 } }; // PerfPage
+var _arr_1922 = [_]Node{ .{ .style = .{ .flex_direction = .column, .padding = 10, .background_color = Color.rgb(16, 21, 35), .border_radius = 8, .gap = 4 }, .children = &_arr_1903 }, .{ .style = .{ .flex_direction = .column, .padding = 10, .background_color = Color.rgb(16, 21, 35), .border_radius = 8, .gap = 4 }, .children = &_arr_1906 }, .{ .style = .{ .flex_direction = .column, .padding = 10, .background_color = Color.rgb(16, 21, 35), .border_radius = 8, .gap = 4 }, .children = &_arr_1909 }, .{ .style = .{ .flex_direction = .column, .padding = 10, .background_color = Color.rgb(16, 21, 35), .border_radius = 8, .gap = 4 }, .children = &_arr_1912 }, .{ .style = .{ .flex_direction = .column, .padding = 10, .background_color = Color.rgb(16, 21, 35), .border_radius = 8, .gap = 4 }, .children = &_arr_1915 }, .{ .style = .{ .flex_direction = .column, .padding = 10, .background_color = Color.rgb(16, 21, 35), .border_radius = 8, .gap = 4 }, .children = &_arr_1918 }, .{ .style = .{ .flex_direction = .column, .padding = 10, .background_color = Color.rgb(16, 21, 35), .border_radius = 8, .gap = 4 }, .children = &_arr_1921 } }; // PerfPage
 // tsz:InspectorEmbed.tsz:3298 — <Box>
-var _arr_1813 = [_]Node{ .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center }, .children = &_arr_1779 }, .{ .style = .{ .flex_direction = .row, .height = 22, .border_radius = 4, .background_color = Color.rgb(20, 26, 41), .overflow = .hidden }, .children = &_arr_1780 }, .{ .text = "12.4ms / 16.6ms  (75%)", .font_size = 11, .text_color = Color.rgb(224, 229, 240) }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 6, .flex_wrap = .wrap }, .children = &_arr_1785 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 6, .flex_wrap = .wrap }, .children = &_arr_1789 }, .{ .text = "Frame Time", .font_size = 12, .text_color = Color.rgb(166, 173, 190) }, .{ .style = .{ .flex_direction = .row, .height = 64, .background_color = Color.rgb(20, 26, 41), .border_radius = 4, .padding = 3, .gap = 1 }, .children = &_arr_1790 }, .{ .text = "16.6ms budget  |  max 20ms scale  |  40 frames", .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "Costliest Nodes (layout + paint time)", .font_size = 12, .text_color = Color.rgb(166, 173, 190) }, .{ .style = .{ .flex_direction = .column, .gap = 2 }, .children = &_arr_1812 } }; // PerfPage
+var _arr_1923 = [_]Node{ .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center }, .children = &_arr_1889 }, .{ .style = .{ .flex_direction = .row, .height = 22, .border_radius = 4, .background_color = Color.rgb(20, 26, 41), .overflow = .hidden }, .children = &_arr_1890 }, .{ .text = "12.4ms / 16.6ms  (75%)", .font_size = 11, .text_color = Color.rgb(224, 229, 240) }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 6, .flex_wrap = .wrap }, .children = &_arr_1895 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 6, .flex_wrap = .wrap }, .children = &_arr_1899 }, .{ .text = "Frame Time", .font_size = 12, .text_color = Color.rgb(166, 173, 190) }, .{ .style = .{ .flex_direction = .row, .height = 64, .background_color = Color.rgb(20, 26, 41), .border_radius = 4, .padding = 3, .gap = 1 }, .children = &_arr_1900 }, .{ .text = "16.6ms budget  |  max 20ms scale  |  40 frames", .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "Costliest Nodes (layout + paint time)", .font_size = 12, .text_color = Color.rgb(166, 173, 190) }, .{ .style = .{ .flex_direction = .column, .gap = 2 }, .children = &_arr_1922 } }; // PerfPage
 // tsz:InspectorEmbed.tsz:3297 — <ScrollView>
-var _arr_1814 = [_]Node{ .{ .style = .{ .flex_direction = .column, .padding = 16, .gap = 14 }, .children = &_arr_1813 } }; // PerfPage
+var _arr_1924 = [_]Node{ .{ .style = .{ .flex_direction = .column, .padding = 16, .gap = 14 }, .children = &_arr_1923 } }; // PerfPage
 // tsz:InspectorEmbed.tsz:3505 — <Pressable>
-var _arr_1815 = [_]Node{ .{ .text = "All", .font_size = 10, .text_color = Color.rgb(237, 242, 255) } }; // NetworkPage
+var _arr_1925 = [_]Node{ .{ .text = "All", .font_size = 10, .text_color = Color.rgb(237, 242, 255) } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3506 — <Pressable>
-var _arr_1816 = [_]Node{ .{ .text = "HTTP", .font_size = 10, .text_color = Color.rgb(140, 148, 166) } }; // NetworkPage
+var _arr_1926 = [_]Node{ .{ .text = "HTTP", .font_size = 10, .text_color = Color.rgb(140, 148, 166) } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3507 — <Pressable>
-var _arr_1817 = [_]Node{ .{ .text = "WS", .font_size = 10, .text_color = Color.rgb(140, 148, 166) } }; // NetworkPage
+var _arr_1927 = [_]Node{ .{ .text = "WS", .font_size = 10, .text_color = Color.rgb(140, 148, 166) } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3508 — <Pressable>
-var _arr_1818 = [_]Node{ .{ .text = "Peer", .font_size = 10, .text_color = Color.rgb(140, 148, 166) } }; // NetworkPage
+var _arr_1928 = [_]Node{ .{ .text = "Peer", .font_size = 10, .text_color = Color.rgb(140, 148, 166) } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3510 — <Pressable>
-var _arr_1819 = [_]Node{ .{ .text = "Any", .font_size = 10, .text_color = Color.rgb(237, 242, 255) } }; // NetworkPage
+var _arr_1929 = [_]Node{ .{ .text = "Any", .font_size = 10, .text_color = Color.rgb(237, 242, 255) } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3511 — <Pressable>
-var _arr_1820 = [_]Node{ .{ .text = "Errors", .font_size = 10, .text_color = Color.rgb(140, 148, 166) } }; // NetworkPage
+var _arr_1930 = [_]Node{ .{ .text = "Errors", .font_size = 10, .text_color = Color.rgb(140, 148, 166) } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3512 — <Pressable>
-var _arr_1821 = [_]Node{ .{ .text = "Blocked", .font_size = 10, .text_color = Color.rgb(140, 148, 166) } }; // NetworkPage
+var _arr_1931 = [_]Node{ .{ .text = "Blocked", .font_size = 10, .text_color = Color.rgb(140, 148, 166) } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3514 — <Pressable>
-var _arr_1822 = [_]Node{ .{ .text = "Clear", .font_size = 10, .text_color = Color.rgb(140, 148, 166) } }; // NetworkPage
+var _arr_1932 = [_]Node{ .{ .text = "Clear", .font_size = 10, .text_color = Color.rgb(140, 148, 166) } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3515 — <Pressable>
-var _arr_1823 = [_]Node{ .{ .text = "Copy curl", .font_size = 10, .text_color = Color.rgb(140, 148, 166) } }; // NetworkPage
+var _arr_1933 = [_]Node{ .{ .text = "Copy curl", .font_size = 10, .text_color = Color.rgb(140, 148, 166) } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3516 — <Pressable>
-var _arr_1824 = [_]Node{ .{ .text = "Export JSON", .font_size = 10, .text_color = Color.rgb(140, 148, 166) } }; // NetworkPage
+var _arr_1934 = [_]Node{ .{ .text = "Export JSON", .font_size = 10, .text_color = Color.rgb(140, 148, 166) } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3504 — <Box>
-var _arr_1825 = [_]Node{ .{ .style = .{ .padding_left = 8, .padding_right = 8, .padding_top = 4, .padding_bottom = 4, .border_radius = 4, .background_color = Color.rgb(28, 51, 80) }, .children = &_arr_1815 }, .{ .style = .{ .padding_left = 8, .padding_right = 8, .padding_top = 4, .padding_bottom = 4, .border_radius = 4, .background_color = Color.rgb(20, 26, 41) }, .children = &_arr_1816 }, .{ .style = .{ .padding_left = 8, .padding_right = 8, .padding_top = 4, .padding_bottom = 4, .border_radius = 4, .background_color = Color.rgb(20, 26, 41) }, .children = &_arr_1817 }, .{ .style = .{ .padding_left = 8, .padding_right = 8, .padding_top = 4, .padding_bottom = 4, .border_radius = 4, .background_color = Color.rgb(20, 26, 41) }, .children = &_arr_1818 }, .{ .style = .{ .width = 1, .height = 16, .background_color = Color.rgb(26, 32, 48) } }, .{ .style = .{ .padding_left = 8, .padding_right = 8, .padding_top = 4, .padding_bottom = 4, .border_radius = 4, .background_color = Color.rgb(28, 51, 80) }, .children = &_arr_1819 }, .{ .style = .{ .padding_left = 8, .padding_right = 8, .padding_top = 4, .padding_bottom = 4, .border_radius = 4, .background_color = Color.rgb(20, 26, 41) }, .children = &_arr_1820 }, .{ .style = .{ .padding_left = 8, .padding_right = 8, .padding_top = 4, .padding_bottom = 4, .border_radius = 4, .background_color = Color.rgb(20, 26, 41) }, .children = &_arr_1821 }, .{ .style = .{ .width = 1, .height = 16, .background_color = Color.rgb(26, 32, 48) } }, .{ .style = .{ .padding_left = 8, .padding_right = 8, .padding_top = 4, .padding_bottom = 4, .border_radius = 4, .background_color = Color.rgb(20, 26, 41) }, .children = &_arr_1822 }, .{ .style = .{ .padding_left = 8, .padding_right = 8, .padding_top = 4, .padding_bottom = 4, .border_radius = 4, .background_color = Color.rgb(20, 26, 41) }, .children = &_arr_1823 }, .{ .style = .{ .padding_left = 8, .padding_right = 8, .padding_top = 4, .padding_bottom = 4, .border_radius = 4, .background_color = Color.rgb(20, 26, 41) }, .children = &_arr_1824 } }; // NetworkPage
+var _arr_1935 = [_]Node{ .{ .style = .{ .padding_left = 8, .padding_right = 8, .padding_top = 4, .padding_bottom = 4, .border_radius = 4, .background_color = Color.rgb(28, 51, 80) }, .children = &_arr_1925 }, .{ .style = .{ .padding_left = 8, .padding_right = 8, .padding_top = 4, .padding_bottom = 4, .border_radius = 4, .background_color = Color.rgb(20, 26, 41) }, .children = &_arr_1926 }, .{ .style = .{ .padding_left = 8, .padding_right = 8, .padding_top = 4, .padding_bottom = 4, .border_radius = 4, .background_color = Color.rgb(20, 26, 41) }, .children = &_arr_1927 }, .{ .style = .{ .padding_left = 8, .padding_right = 8, .padding_top = 4, .padding_bottom = 4, .border_radius = 4, .background_color = Color.rgb(20, 26, 41) }, .children = &_arr_1928 }, .{ .style = .{ .width = 1, .height = 16, .background_color = Color.rgb(26, 32, 48) } }, .{ .style = .{ .padding_left = 8, .padding_right = 8, .padding_top = 4, .padding_bottom = 4, .border_radius = 4, .background_color = Color.rgb(28, 51, 80) }, .children = &_arr_1929 }, .{ .style = .{ .padding_left = 8, .padding_right = 8, .padding_top = 4, .padding_bottom = 4, .border_radius = 4, .background_color = Color.rgb(20, 26, 41) }, .children = &_arr_1930 }, .{ .style = .{ .padding_left = 8, .padding_right = 8, .padding_top = 4, .padding_bottom = 4, .border_radius = 4, .background_color = Color.rgb(20, 26, 41) }, .children = &_arr_1931 }, .{ .style = .{ .width = 1, .height = 16, .background_color = Color.rgb(26, 32, 48) } }, .{ .style = .{ .padding_left = 8, .padding_right = 8, .padding_top = 4, .padding_bottom = 4, .border_radius = 4, .background_color = Color.rgb(20, 26, 41) }, .children = &_arr_1932 }, .{ .style = .{ .padding_left = 8, .padding_right = 8, .padding_top = 4, .padding_bottom = 4, .border_radius = 4, .background_color = Color.rgb(20, 26, 41) }, .children = &_arr_1933 }, .{ .style = .{ .padding_left = 8, .padding_right = 8, .padding_top = 4, .padding_bottom = 4, .border_radius = 4, .background_color = Color.rgb(20, 26, 41) }, .children = &_arr_1934 } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3518 — <Box>
-var _arr_1826 = [_]Node{ .{ .text = "evt/s 12.4", .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "drop/s 0.0", .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "fill 8%", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } }; // NetworkPage
+var _arr_1936 = [_]Node{ .{ .text = "evt/s 12.4", .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "drop/s 0.0", .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "fill 8%", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3503 — <Box>
-var _arr_1827 = [_]Node{ .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 6 }, .children = &_arr_1825 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 12 }, .children = &_arr_1826 } }; // NetworkPage
+var _arr_1937 = [_]Node{ .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 6 }, .children = &_arr_1935 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 12 }, .children = &_arr_1936 } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3526 — <Box>
-var _arr_1828 = [_]Node{ .{ .text = "Time", .font_size = 10, .text_color = Color.rgb(140, 148, 166) } }; // NetworkPage
+var _arr_1938 = [_]Node{ .{ .text = "Time", .font_size = 10, .text_color = Color.rgb(140, 148, 166) } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3527 — <Box>
-var _arr_1829 = [_]Node{ .{ .text = "Flag", .font_size = 10, .text_color = Color.rgb(140, 148, 166) } }; // NetworkPage
+var _arr_1939 = [_]Node{ .{ .text = "Flag", .font_size = 10, .text_color = Color.rgb(140, 148, 166) } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3528 — <Box>
-var _arr_1830 = [_]Node{ .{ .text = "Type", .font_size = 10, .text_color = Color.rgb(140, 148, 166) } }; // NetworkPage
+var _arr_1940 = [_]Node{ .{ .text = "Type", .font_size = 10, .text_color = Color.rgb(140, 148, 166) } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3529 — <Box>
-var _arr_1831 = [_]Node{ .{ .text = "Dir", .font_size = 10, .text_color = Color.rgb(140, 148, 166) } }; // NetworkPage
+var _arr_1941 = [_]Node{ .{ .text = "Dir", .font_size = 10, .text_color = Color.rgb(140, 148, 166) } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3530 — <Box>
-var _arr_1832 = [_]Node{ .{ .text = "Name", .font_size = 10, .text_color = Color.rgb(140, 148, 166) } }; // NetworkPage
+var _arr_1942 = [_]Node{ .{ .text = "Name", .font_size = 10, .text_color = Color.rgb(140, 148, 166) } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3531 — <Box>
-var _arr_1833 = [_]Node{ .{ .text = "Status", .font_size = 10, .text_color = Color.rgb(140, 148, 166) } }; // NetworkPage
+var _arr_1943 = [_]Node{ .{ .text = "Status", .font_size = 10, .text_color = Color.rgb(140, 148, 166) } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3525 — <Box>
-var _arr_1834 = [_]Node{ .{ .style = .{ .width = 54 }, .children = &_arr_1828 }, .{ .style = .{ .width = 48 }, .children = &_arr_1829 }, .{ .style = .{ .width = 44 }, .children = &_arr_1830 }, .{ .style = .{ .width = 36 }, .children = &_arr_1831 }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0 }, .children = &_arr_1832 }, .{ .style = .{ .width = 80 }, .children = &_arr_1833 } }; // NetworkPage
+var _arr_1944 = [_]Node{ .{ .style = .{ .width = 54 }, .children = &_arr_1938 }, .{ .style = .{ .width = 48 }, .children = &_arr_1939 }, .{ .style = .{ .width = 44 }, .children = &_arr_1940 }, .{ .style = .{ .width = 36 }, .children = &_arr_1941 }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0 }, .children = &_arr_1942 }, .{ .style = .{ .width = 80 }, .children = &_arr_1943 } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3538 — <Box>
-var _arr_1835 = [_]Node{ .{ .text = ".482", .font_size = 10, .text_color = Color.rgb(115, 122, 140) } }; // NetworkPage
+var _arr_1945 = [_]Node{ .{ .text = ".482", .font_size = 10, .text_color = Color.rgb(115, 122, 140) } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3540 — <Box>
-var _arr_1836 = [_]Node{ .{ .text = "http", .font_size = 10, .text_color = Color.rgb(115, 122, 140) } }; // NetworkPage
+var _arr_1946 = [_]Node{ .{ .text = "http", .font_size = 10, .text_color = Color.rgb(115, 122, 140) } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3541 — <Box>
-var _arr_1837 = [_]Node{ .{ .text = "out", .font_size = 10, .text_color = Color.rgb(115, 122, 140) } }; // NetworkPage
+var _arr_1947 = [_]Node{ .{ .text = "out", .font_size = 10, .text_color = Color.rgb(115, 122, 140) } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3542 — <Box>
-var _arr_1838 = [_]Node{ .{ .text = "GET api.example.com/v1/users", .font_size = 11, .text_color = Color.rgb(224, 229, 240) } }; // NetworkPage
+var _arr_1948 = [_]Node{ .{ .text = "GET api.example.com/v1/users", .font_size = 11, .text_color = Color.rgb(224, 229, 240) } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3543 — <Box>
-var _arr_1839 = [_]Node{ .{ .text = "200 142ms", .font_size = 10, .text_color = Color.rgb(80, 200, 120) } }; // NetworkPage
+var _arr_1949 = [_]Node{ .{ .text = "200 142ms", .font_size = 10, .text_color = Color.rgb(80, 200, 120) } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3537 — <Pressable>
-var _arr_1840 = [_]Node{ .{ .style = .{ .width = 54 }, .children = &_arr_1835 }, .{ .style = .{ .width = 48 } }, .{ .style = .{ .width = 44 }, .children = &_arr_1836 }, .{ .style = .{ .width = 36 }, .children = &_arr_1837 }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0 }, .children = &_arr_1838 }, .{ .style = .{ .width = 80 }, .children = &_arr_1839 } }; // NetworkPage
+var _arr_1950 = [_]Node{ .{ .style = .{ .width = 54 }, .children = &_arr_1945 }, .{ .style = .{ .width = 48 } }, .{ .style = .{ .width = 44 }, .children = &_arr_1946 }, .{ .style = .{ .width = 36 }, .children = &_arr_1947 }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0 }, .children = &_arr_1948 }, .{ .style = .{ .width = 80 }, .children = &_arr_1949 } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3547 — <Box>
-var _arr_1841 = [_]Node{ .{ .text = ".318", .font_size = 10, .text_color = Color.rgb(115, 122, 140) } }; // NetworkPage
+var _arr_1951 = [_]Node{ .{ .text = ".318", .font_size = 10, .text_color = Color.rgb(115, 122, 140) } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3549 — <Box>
-var _arr_1842 = [_]Node{ .{ .text = "http", .font_size = 10, .text_color = Color.rgb(115, 122, 140) } }; // NetworkPage
+var _arr_1952 = [_]Node{ .{ .text = "http", .font_size = 10, .text_color = Color.rgb(115, 122, 140) } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3550 — <Box>
-var _arr_1843 = [_]Node{ .{ .text = "out", .font_size = 10, .text_color = Color.rgb(115, 122, 140) } }; // NetworkPage
+var _arr_1953 = [_]Node{ .{ .text = "out", .font_size = 10, .text_color = Color.rgb(115, 122, 140) } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3551 — <Box>
-var _arr_1844 = [_]Node{ .{ .text = "POST api.example.com/v1/auth", .font_size = 11, .text_color = Color.rgb(224, 229, 240) } }; // NetworkPage
+var _arr_1954 = [_]Node{ .{ .text = "POST api.example.com/v1/auth", .font_size = 11, .text_color = Color.rgb(224, 229, 240) } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3552 — <Box>
-var _arr_1845 = [_]Node{ .{ .text = "200 89ms", .font_size = 10, .text_color = Color.rgb(80, 200, 120) } }; // NetworkPage
+var _arr_1955 = [_]Node{ .{ .text = "200 89ms", .font_size = 10, .text_color = Color.rgb(80, 200, 120) } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3546 — <Pressable>
-var _arr_1846 = [_]Node{ .{ .style = .{ .width = 54 }, .children = &_arr_1841 }, .{ .style = .{ .width = 48 } }, .{ .style = .{ .width = 44 }, .children = &_arr_1842 }, .{ .style = .{ .width = 36 }, .children = &_arr_1843 }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0 }, .children = &_arr_1844 }, .{ .style = .{ .width = 80 }, .children = &_arr_1845 } }; // NetworkPage
+var _arr_1956 = [_]Node{ .{ .style = .{ .width = 54 }, .children = &_arr_1951 }, .{ .style = .{ .width = 48 } }, .{ .style = .{ .width = 44 }, .children = &_arr_1952 }, .{ .style = .{ .width = 36 }, .children = &_arr_1953 }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0 }, .children = &_arr_1954 }, .{ .style = .{ .width = 80 }, .children = &_arr_1955 } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3556 — <Box>
-var _arr_1847 = [_]Node{ .{ .text = ".204", .font_size = 10, .text_color = Color.rgb(115, 122, 140) } }; // NetworkPage
+var _arr_1957 = [_]Node{ .{ .text = ".204", .font_size = 10, .text_color = Color.rgb(115, 122, 140) } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3558 — <Box>
-var _arr_1848 = [_]Node{ .{ .text = "ERR", .font_size = 9, .text_color = Color.rgb(232, 72, 85) } }; // NetworkPage
+var _arr_1958 = [_]Node{ .{ .text = "ERR", .font_size = 9, .text_color = Color.rgb(232, 72, 85) } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3557 — <Box>
-var _arr_1849 = [_]Node{ .{ .style = .{ .padding_left = 4, .padding_right = 4, .padding_top = 2, .padding_bottom = 2, .border_radius = 3, .background_color = Color.rgb(58, 21, 32) }, .children = &_arr_1848 } }; // NetworkPage
+var _arr_1959 = [_]Node{ .{ .style = .{ .padding_left = 4, .padding_right = 4, .padding_top = 2, .padding_bottom = 2, .border_radius = 3, .background_color = Color.rgb(58, 21, 32) }, .children = &_arr_1958 } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3560 — <Box>
-var _arr_1850 = [_]Node{ .{ .text = "http", .font_size = 10, .text_color = Color.rgb(115, 122, 140) } }; // NetworkPage
+var _arr_1960 = [_]Node{ .{ .text = "http", .font_size = 10, .text_color = Color.rgb(115, 122, 140) } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3561 — <Box>
-var _arr_1851 = [_]Node{ .{ .text = "out", .font_size = 10, .text_color = Color.rgb(115, 122, 140) } }; // NetworkPage
+var _arr_1961 = [_]Node{ .{ .text = "out", .font_size = 10, .text_color = Color.rgb(115, 122, 140) } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3562 — <Box>
-var _arr_1852 = [_]Node{ .{ .text = "GET api.example.com/v1/config", .font_size = 11, .text_color = Color.rgb(224, 229, 240) } }; // NetworkPage
+var _arr_1962 = [_]Node{ .{ .text = "GET api.example.com/v1/config", .font_size = 11, .text_color = Color.rgb(224, 229, 240) } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3563 — <Box>
-var _arr_1853 = [_]Node{ .{ .text = "500 312ms", .font_size = 10, .text_color = Color.rgb(232, 72, 85) } }; // NetworkPage
+var _arr_1963 = [_]Node{ .{ .text = "500 312ms", .font_size = 10, .text_color = Color.rgb(232, 72, 85) } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3555 — <Pressable>
-var _arr_1854 = [_]Node{ .{ .style = .{ .width = 54 }, .children = &_arr_1847 }, .{ .style = .{ .width = 48 }, .children = &_arr_1849 }, .{ .style = .{ .width = 44 }, .children = &_arr_1850 }, .{ .style = .{ .width = 36 }, .children = &_arr_1851 }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0 }, .children = &_arr_1852 }, .{ .style = .{ .width = 80 }, .children = &_arr_1853 } }; // NetworkPage
+var _arr_1964 = [_]Node{ .{ .style = .{ .width = 54 }, .children = &_arr_1957 }, .{ .style = .{ .width = 48 }, .children = &_arr_1959 }, .{ .style = .{ .width = 44 }, .children = &_arr_1960 }, .{ .style = .{ .width = 36 }, .children = &_arr_1961 }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0 }, .children = &_arr_1962 }, .{ .style = .{ .width = 80 }, .children = &_arr_1963 } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3567 — <Box>
-var _arr_1855 = [_]Node{ .{ .text = ".156", .font_size = 10, .text_color = Color.rgb(115, 122, 140) } }; // NetworkPage
+var _arr_1965 = [_]Node{ .{ .text = ".156", .font_size = 10, .text_color = Color.rgb(115, 122, 140) } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3569 — <Box>
-var _arr_1856 = [_]Node{ .{ .text = "ws", .font_size = 10, .text_color = Color.rgb(115, 122, 140) } }; // NetworkPage
+var _arr_1966 = [_]Node{ .{ .text = "ws", .font_size = 10, .text_color = Color.rgb(115, 122, 140) } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3570 — <Box>
-var _arr_1857 = [_]Node{ .{ .text = "out", .font_size = 10, .text_color = Color.rgb(115, 122, 140) } }; // NetworkPage
+var _arr_1967 = [_]Node{ .{ .text = "out", .font_size = 10, .text_color = Color.rgb(115, 122, 140) } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3571 — <Box>
-var _arr_1858 = [_]Node{ .{ .text = "OPEN ws.example.com/events", .font_size = 11, .text_color = Color.rgb(224, 229, 240) } }; // NetworkPage
+var _arr_1968 = [_]Node{ .{ .text = "OPEN ws.example.com/events", .font_size = 11, .text_color = Color.rgb(224, 229, 240) } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3572 — <Box>
-var _arr_1859 = [_]Node{ .{ .text = "ok", .font_size = 10, .text_color = Color.rgb(80, 200, 120) } }; // NetworkPage
+var _arr_1969 = [_]Node{ .{ .text = "ok", .font_size = 10, .text_color = Color.rgb(80, 200, 120) } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3566 — <Pressable>
-var _arr_1860 = [_]Node{ .{ .style = .{ .width = 54 }, .children = &_arr_1855 }, .{ .style = .{ .width = 48 } }, .{ .style = .{ .width = 44 }, .children = &_arr_1856 }, .{ .style = .{ .width = 36 }, .children = &_arr_1857 }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0 }, .children = &_arr_1858 }, .{ .style = .{ .width = 80 }, .children = &_arr_1859 } }; // NetworkPage
+var _arr_1970 = [_]Node{ .{ .style = .{ .width = 54 }, .children = &_arr_1965 }, .{ .style = .{ .width = 48 } }, .{ .style = .{ .width = 44 }, .children = &_arr_1966 }, .{ .style = .{ .width = 36 }, .children = &_arr_1967 }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0 }, .children = &_arr_1968 }, .{ .style = .{ .width = 80 }, .children = &_arr_1969 } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3576 — <Box>
-var _arr_1861 = [_]Node{ .{ .text = ".098", .font_size = 10, .text_color = Color.rgb(115, 122, 140) } }; // NetworkPage
+var _arr_1971 = [_]Node{ .{ .text = ".098", .font_size = 10, .text_color = Color.rgb(115, 122, 140) } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3578 — <Box>
-var _arr_1862 = [_]Node{ .{ .text = "ws", .font_size = 10, .text_color = Color.rgb(115, 122, 140) } }; // NetworkPage
+var _arr_1972 = [_]Node{ .{ .text = "ws", .font_size = 10, .text_color = Color.rgb(115, 122, 140) } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3579 — <Box>
-var _arr_1863 = [_]Node{ .{ .text = "in", .font_size = 10, .text_color = Color.rgb(115, 122, 140) } }; // NetworkPage
+var _arr_1973 = [_]Node{ .{ .text = "in", .font_size = 10, .text_color = Color.rgb(115, 122, 140) } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3580 — <Box>
-var _arr_1864 = [_]Node{ .{ .text = "MSG ws.example.com/events", .font_size = 11, .text_color = Color.rgb(224, 229, 240) } }; // NetworkPage
+var _arr_1974 = [_]Node{ .{ .text = "MSG ws.example.com/events", .font_size = 11, .text_color = Color.rgb(224, 229, 240) } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3581 — <Box>
-var _arr_1865 = [_]Node{ .{ .text = "ok 2ms", .font_size = 10, .text_color = Color.rgb(115, 122, 140) } }; // NetworkPage
+var _arr_1975 = [_]Node{ .{ .text = "ok 2ms", .font_size = 10, .text_color = Color.rgb(115, 122, 140) } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3575 — <Pressable>
-var _arr_1866 = [_]Node{ .{ .style = .{ .width = 54 }, .children = &_arr_1861 }, .{ .style = .{ .width = 48 } }, .{ .style = .{ .width = 44 }, .children = &_arr_1862 }, .{ .style = .{ .width = 36 }, .children = &_arr_1863 }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0 }, .children = &_arr_1864 }, .{ .style = .{ .width = 80 }, .children = &_arr_1865 } }; // NetworkPage
+var _arr_1976 = [_]Node{ .{ .style = .{ .width = 54 }, .children = &_arr_1971 }, .{ .style = .{ .width = 48 } }, .{ .style = .{ .width = 44 }, .children = &_arr_1972 }, .{ .style = .{ .width = 36 }, .children = &_arr_1973 }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0 }, .children = &_arr_1974 }, .{ .style = .{ .width = 80 }, .children = &_arr_1975 } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3585 — <Box>
-var _arr_1867 = [_]Node{ .{ .text = ".071", .font_size = 10, .text_color = Color.rgb(115, 122, 140) } }; // NetworkPage
+var _arr_1977 = [_]Node{ .{ .text = ".071", .font_size = 10, .text_color = Color.rgb(115, 122, 140) } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3587 — <Box>
-var _arr_1868 = [_]Node{ .{ .text = "DROP", .font_size = 9, .text_color = Color.rgb(240, 192, 64) } }; // NetworkPage
+var _arr_1978 = [_]Node{ .{ .text = "DROP", .font_size = 9, .text_color = Color.rgb(240, 192, 64) } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3586 — <Box>
-var _arr_1869 = [_]Node{ .{ .style = .{ .padding_left = 4, .padding_right = 4, .padding_top = 2, .padding_bottom = 2, .border_radius = 3, .background_color = Color.rgb(51, 37, 21) }, .children = &_arr_1868 } }; // NetworkPage
+var _arr_1979 = [_]Node{ .{ .style = .{ .padding_left = 4, .padding_right = 4, .padding_top = 2, .padding_bottom = 2, .border_radius = 3, .background_color = Color.rgb(51, 37, 21) }, .children = &_arr_1978 } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3589 — <Box>
-var _arr_1870 = [_]Node{ .{ .text = "http", .font_size = 10, .text_color = Color.rgb(115, 122, 140) } }; // NetworkPage
+var _arr_1980 = [_]Node{ .{ .text = "http", .font_size = 10, .text_color = Color.rgb(115, 122, 140) } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3590 — <Box>
-var _arr_1871 = [_]Node{ .{ .text = "out", .font_size = 10, .text_color = Color.rgb(115, 122, 140) } }; // NetworkPage
+var _arr_1981 = [_]Node{ .{ .text = "out", .font_size = 10, .text_color = Color.rgb(115, 122, 140) } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3591 — <Box>
-var _arr_1872 = [_]Node{ .{ .text = "GET cdn.example.com/assets/logo.png", .font_size = 11, .text_color = Color.rgb(224, 229, 240) } }; // NetworkPage
+var _arr_1982 = [_]Node{ .{ .text = "GET cdn.example.com/assets/logo.png", .font_size = 11, .text_color = Color.rgb(224, 229, 240) } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3592 — <Box>
-var _arr_1873 = [_]Node{ .{ .text = "dropped", .font_size = 10, .text_color = Color.rgb(240, 192, 64) } }; // NetworkPage
+var _arr_1983 = [_]Node{ .{ .text = "dropped", .font_size = 10, .text_color = Color.rgb(240, 192, 64) } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3584 — <Pressable>
-var _arr_1874 = [_]Node{ .{ .style = .{ .width = 54 }, .children = &_arr_1867 }, .{ .style = .{ .width = 48 }, .children = &_arr_1869 }, .{ .style = .{ .width = 44 }, .children = &_arr_1870 }, .{ .style = .{ .width = 36 }, .children = &_arr_1871 }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0 }, .children = &_arr_1872 }, .{ .style = .{ .width = 80 }, .children = &_arr_1873 } }; // NetworkPage
+var _arr_1984 = [_]Node{ .{ .style = .{ .width = 54 }, .children = &_arr_1977 }, .{ .style = .{ .width = 48 }, .children = &_arr_1979 }, .{ .style = .{ .width = 44 }, .children = &_arr_1980 }, .{ .style = .{ .width = 36 }, .children = &_arr_1981 }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0 }, .children = &_arr_1982 }, .{ .style = .{ .width = 80 }, .children = &_arr_1983 } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3596 — <Box>
-var _arr_1875 = [_]Node{ .{ .text = ".044", .font_size = 10, .text_color = Color.rgb(115, 122, 140) } }; // NetworkPage
+var _arr_1985 = [_]Node{ .{ .text = ".044", .font_size = 10, .text_color = Color.rgb(115, 122, 140) } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3598 — <Box>
-var _arr_1876 = [_]Node{ .{ .text = "peer", .font_size = 10, .text_color = Color.rgb(115, 122, 140) } }; // NetworkPage
+var _arr_1986 = [_]Node{ .{ .text = "peer", .font_size = 10, .text_color = Color.rgb(115, 122, 140) } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3599 — <Box>
-var _arr_1877 = [_]Node{ .{ .text = "in", .font_size = 10, .text_color = Color.rgb(115, 122, 140) } }; // NetworkPage
+var _arr_1987 = [_]Node{ .{ .text = "in", .font_size = 10, .text_color = Color.rgb(115, 122, 140) } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3600 — <Box>
-var _arr_1878 = [_]Node{ .{ .text = "c4a2 HANDSHAKE peer.local:9100", .font_size = 11, .text_color = Color.rgb(224, 229, 240) } }; // NetworkPage
+var _arr_1988 = [_]Node{ .{ .text = "c4a2 HANDSHAKE peer.local:9100", .font_size = 11, .text_color = Color.rgb(224, 229, 240) } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3601 — <Box>
-var _arr_1879 = [_]Node{ .{ .text = "ok 4ms", .font_size = 10, .text_color = Color.rgb(80, 200, 120) } }; // NetworkPage
+var _arr_1989 = [_]Node{ .{ .text = "ok 4ms", .font_size = 10, .text_color = Color.rgb(80, 200, 120) } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3595 — <Pressable>
-var _arr_1880 = [_]Node{ .{ .style = .{ .width = 54 }, .children = &_arr_1875 }, .{ .style = .{ .width = 48 } }, .{ .style = .{ .width = 44 }, .children = &_arr_1876 }, .{ .style = .{ .width = 36 }, .children = &_arr_1877 }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0 }, .children = &_arr_1878 }, .{ .style = .{ .width = 80 }, .children = &_arr_1879 } }; // NetworkPage
+var _arr_1990 = [_]Node{ .{ .style = .{ .width = 54 }, .children = &_arr_1985 }, .{ .style = .{ .width = 48 } }, .{ .style = .{ .width = 44 }, .children = &_arr_1986 }, .{ .style = .{ .width = 36 }, .children = &_arr_1987 }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0 }, .children = &_arr_1988 }, .{ .style = .{ .width = 80 }, .children = &_arr_1989 } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3605 — <Box>
-var _arr_1881 = [_]Node{ .{ .text = ".022", .font_size = 10, .text_color = Color.rgb(115, 122, 140) } }; // NetworkPage
+var _arr_1991 = [_]Node{ .{ .text = ".022", .font_size = 10, .text_color = Color.rgb(115, 122, 140) } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3607 — <Box>
-var _arr_1882 = [_]Node{ .{ .text = "http", .font_size = 10, .text_color = Color.rgb(115, 122, 140) } }; // NetworkPage
+var _arr_1992 = [_]Node{ .{ .text = "http", .font_size = 10, .text_color = Color.rgb(115, 122, 140) } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3608 — <Box>
-var _arr_1883 = [_]Node{ .{ .text = "out", .font_size = 10, .text_color = Color.rgb(115, 122, 140) } }; // NetworkPage
+var _arr_1993 = [_]Node{ .{ .text = "out", .font_size = 10, .text_color = Color.rgb(115, 122, 140) } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3609 — <Box>
-var _arr_1884 = [_]Node{ .{ .text = "PUT api.example.com/v1/users/42", .font_size = 11, .text_color = Color.rgb(224, 229, 240) } }; // NetworkPage
+var _arr_1994 = [_]Node{ .{ .text = "PUT api.example.com/v1/users/42", .font_size = 11, .text_color = Color.rgb(224, 229, 240) } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3610 — <Box>
-var _arr_1885 = [_]Node{ .{ .text = "204 67ms", .font_size = 10, .text_color = Color.rgb(80, 200, 120) } }; // NetworkPage
+var _arr_1995 = [_]Node{ .{ .text = "204 67ms", .font_size = 10, .text_color = Color.rgb(80, 200, 120) } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3604 — <Pressable>
-var _arr_1886 = [_]Node{ .{ .style = .{ .width = 54 }, .children = &_arr_1881 }, .{ .style = .{ .width = 48 } }, .{ .style = .{ .width = 44 }, .children = &_arr_1882 }, .{ .style = .{ .width = 36 }, .children = &_arr_1883 }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0 }, .children = &_arr_1884 }, .{ .style = .{ .width = 80 }, .children = &_arr_1885 } }; // NetworkPage
+var _arr_1996 = [_]Node{ .{ .style = .{ .width = 54 }, .children = &_arr_1991 }, .{ .style = .{ .width = 48 } }, .{ .style = .{ .width = 44 }, .children = &_arr_1992 }, .{ .style = .{ .width = 36 }, .children = &_arr_1993 }, .{ .style = .{ .flex_grow = 1, .flex_basis = 0 }, .children = &_arr_1994 }, .{ .style = .{ .width = 80 }, .children = &_arr_1995 } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3535 — <Box>
-var _arr_1887 = [_]Node{ .{ .style = .{ .flex_direction = .row, .align_items = .center, .padding_left = 10, .padding_right = 10, .padding_top = 5, .padding_bottom = 5, .border_radius = 4, .background_color = Color.rgb(23, 32, 49) }, .children = &_arr_1840 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .padding_left = 10, .padding_right = 10, .padding_top = 5, .padding_bottom = 5, .border_radius = 4 }, .children = &_arr_1846 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .padding_left = 10, .padding_right = 10, .padding_top = 5, .padding_bottom = 5, .border_radius = 4 }, .children = &_arr_1854 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .padding_left = 10, .padding_right = 10, .padding_top = 5, .padding_bottom = 5, .border_radius = 4 }, .children = &_arr_1860 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .padding_left = 10, .padding_right = 10, .padding_top = 5, .padding_bottom = 5, .border_radius = 4 }, .children = &_arr_1866 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .padding_left = 10, .padding_right = 10, .padding_top = 5, .padding_bottom = 5, .border_radius = 4 }, .children = &_arr_1874 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .padding_left = 10, .padding_right = 10, .padding_top = 5, .padding_bottom = 5, .border_radius = 4 }, .children = &_arr_1880 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .padding_left = 10, .padding_right = 10, .padding_top = 5, .padding_bottom = 5, .border_radius = 4 }, .children = &_arr_1886 } }; // NetworkPage
+var _arr_1997 = [_]Node{ .{ .style = .{ .flex_direction = .row, .align_items = .center, .padding_left = 10, .padding_right = 10, .padding_top = 5, .padding_bottom = 5, .border_radius = 4, .background_color = Color.rgb(23, 32, 49) }, .children = &_arr_1950 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .padding_left = 10, .padding_right = 10, .padding_top = 5, .padding_bottom = 5, .border_radius = 4 }, .children = &_arr_1956 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .padding_left = 10, .padding_right = 10, .padding_top = 5, .padding_bottom = 5, .border_radius = 4 }, .children = &_arr_1964 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .padding_left = 10, .padding_right = 10, .padding_top = 5, .padding_bottom = 5, .border_radius = 4 }, .children = &_arr_1970 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .padding_left = 10, .padding_right = 10, .padding_top = 5, .padding_bottom = 5, .border_radius = 4 }, .children = &_arr_1976 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .padding_left = 10, .padding_right = 10, .padding_top = 5, .padding_bottom = 5, .border_radius = 4 }, .children = &_arr_1984 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .padding_left = 10, .padding_right = 10, .padding_top = 5, .padding_bottom = 5, .border_radius = 4 }, .children = &_arr_1990 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .padding_left = 10, .padding_right = 10, .padding_top = 5, .padding_bottom = 5, .border_radius = 4 }, .children = &_arr_1996 } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3534 — <ScrollView>
-var _arr_1888 = [_]Node{ .{ .style = .{ .flex_direction = .column, .gap = 1, .padding = 4 }, .children = &_arr_1887 } }; // NetworkPage
+var _arr_1998 = [_]Node{ .{ .style = .{ .flex_direction = .column, .gap = 1, .padding = 4 }, .children = &_arr_1997 } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3622 — <Box>
-var _arr_1889 = [_]Node{ .{ .style = .{ .height = 8, .background_color = Color.rgb(74, 122, 212), .border_radius = 4, .flex_grow = 75 } } }; // NetworkPage
+var _arr_1999 = [_]Node{ .{ .style = .{ .height = 8, .background_color = Color.rgb(74, 122, 212), .border_radius = 4, .flex_grow = 75 } } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3620 — <Box>
-var _arr_1890 = [_]Node{ .{ .text = "Timeline", .font_size = 10, .text_color = Color.rgb(140, 148, 166) }, .{ .style = .{ .flex_direction = .row, .height = 8, .background_color = Color.rgb(11, 16, 32), .border_radius = 4 }, .children = &_arr_1889 }, .{ .text = "ttfb 38ms  total 142ms", .font_size = 10, .text_color = Color.rgb(115, 122, 140) } }; // NetworkPage
+var _arr_2000 = [_]Node{ .{ .text = "Timeline", .font_size = 10, .text_color = Color.rgb(140, 148, 166) }, .{ .style = .{ .flex_direction = .row, .height = 8, .background_color = Color.rgb(11, 16, 32), .border_radius = 4 }, .children = &_arr_1999 }, .{ .text = "ttfb 38ms  total 142ms", .font_size = 10, .text_color = Color.rgb(115, 122, 140) } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3628 — <Box>
-var _arr_1891 = [_]Node{ .{ .text = "Response", .font_size = 10, .text_color = Color.rgb(140, 148, 166) }, .{ .text = "status 200  application/json  1.2KB", .font_size = 11, .text_color = Color.rgb(224, 229, 240) } }; // NetworkPage
+var _arr_2001 = [_]Node{ .{ .text = "Response", .font_size = 10, .text_color = Color.rgb(140, 148, 166) }, .{ .text = "status 200  application/json  1.2KB", .font_size = 11, .text_color = Color.rgb(224, 229, 240) } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3633 — <Box>
-var _arr_1892 = [_]Node{ .{ .text = "Request Headers", .font_size = 10, .text_color = Color.rgb(140, 148, 166) }, .{ .text = "Accept: application/json", .font_size = 10, .text_color = Color.rgb(115, 122, 140) }, .{ .text = "Authorization: <redacted>", .font_size = 10, .text_color = Color.rgb(115, 122, 140) }, .{ .text = "Content-Type: application/json", .font_size = 10, .text_color = Color.rgb(115, 122, 140) } }; // NetworkPage
+var _arr_2002 = [_]Node{ .{ .text = "Request Headers", .font_size = 10, .text_color = Color.rgb(140, 148, 166) }, .{ .text = "Accept: application/json", .font_size = 10, .text_color = Color.rgb(115, 122, 140) }, .{ .text = "Authorization: <redacted>", .font_size = 10, .text_color = Color.rgb(115, 122, 140) }, .{ .text = "Content-Type: application/json", .font_size = 10, .text_color = Color.rgb(115, 122, 140) } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3640 — <Box>
-var _arr_1893 = [_]Node{ .{ .text = "Response Body", .font_size = 10, .text_color = Color.rgb(140, 148, 166) }, .{ .text = "{ \"users\": [ { \"id\": 42, \"name\": \"Alice\" }, { \"id\": 43, \"name\": \"Bob\" } ], \"total\": 2 }", .font_size = 10, .text_color = Color.rgb(115, 122, 140) } }; // NetworkPage
+var _arr_2003 = [_]Node{ .{ .text = "Response Body", .font_size = 10, .text_color = Color.rgb(140, 148, 166) }, .{ .text = "{ \"users\": [ { \"id\": 42, \"name\": \"Alice\" }, { \"id\": 43, \"name\": \"Bob\" } ], \"total\": 2 }", .font_size = 10, .text_color = Color.rgb(115, 122, 140) } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3616 — <Box>
-var _arr_1894 = [_]Node{ .{ .text = "GET api.example.com/v1/users", .font_size = 12, .text_color = Color.rgb(166, 173, 190) }, .{ .text = "trace http:a1b2c3  event #1  seq 1  origin runtime", .font_size = 10, .text_color = Color.rgb(115, 122, 140) }, .{ .style = .{ .flex_direction = .column, .gap = 3 }, .children = &_arr_1890 }, .{ .style = .{ .flex_direction = .column, .gap = 3 }, .children = &_arr_1891 }, .{ .style = .{ .flex_direction = .column, .gap = 3 }, .children = &_arr_1892 }, .{ .style = .{ .flex_direction = .column, .gap = 3 }, .children = &_arr_1893 } }; // NetworkPage
+var _arr_2004 = [_]Node{ .{ .text = "GET api.example.com/v1/users", .font_size = 12, .text_color = Color.rgb(166, 173, 190) }, .{ .text = "trace http:a1b2c3  event #1  seq 1  origin runtime", .font_size = 10, .text_color = Color.rgb(115, 122, 140) }, .{ .style = .{ .flex_direction = .column, .gap = 3 }, .children = &_arr_2000 }, .{ .style = .{ .flex_direction = .column, .gap = 3 }, .children = &_arr_2001 }, .{ .style = .{ .flex_direction = .column, .gap = 3 }, .children = &_arr_2002 }, .{ .style = .{ .flex_direction = .column, .gap = 3 }, .children = &_arr_2003 } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3501 — <Box>
-var _arr_1895 = [_]Node{ .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 6, .padding_left = 10, .padding_right = 10, .padding_top = 8, .padding_bottom = 8, .background_color = Color.rgb(10, 12, 19), .flex_wrap = .wrap }, .children = &_arr_1827 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .padding_left = 10, .padding_right = 10, .padding_top = 6, .padding_bottom = 6, .background_color = Color.rgb(15, 19, 29), .border_width = 1, .border_color = Color.rgb(26, 32, 48) }, .children = &_arr_1834 }, .{ .style = .{ .overflow = .auto, .flex_grow = 1, .flex_basis = 0 }, .children = &_arr_1888 }, .{ .style = .{ .flex_direction = .column, .padding = 12, .gap = 8, .background_color = Color.rgb(15, 19, 29), .border_width = 1, .border_color = Color.rgb(26, 32, 48), .height = 220 }, .children = &_arr_1894 } }; // NetworkPage
+var _arr_2005 = [_]Node{ .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 6, .padding_left = 10, .padding_right = 10, .padding_top = 8, .padding_bottom = 8, .background_color = Color.rgb(10, 12, 19), .flex_wrap = .wrap }, .children = &_arr_1937 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .padding_left = 10, .padding_right = 10, .padding_top = 6, .padding_bottom = 6, .background_color = Color.rgb(15, 19, 29), .border_width = 1, .border_color = Color.rgb(26, 32, 48) }, .children = &_arr_1944 }, .{ .style = .{ .overflow = .auto, .flex_grow = 1, .flex_basis = 0 }, .children = &_arr_1998 }, .{ .style = .{ .flex_direction = .column, .padding = 12, .gap = 8, .background_color = Color.rgb(15, 19, 29), .border_width = 1, .border_color = Color.rgb(26, 32, 48), .height = 220 }, .children = &_arr_2004 } }; // NetworkPage
 // tsz:InspectorEmbed.tsz:3664 — <Box>
-var _arr_1896 = [_]Node{ .{ .text = "[F:1]", .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "ReactJIT inspector console ready", .font_size = 11, .text_color = Color.rgb(140, 148, 166) } }; // ConsolePage
+var _arr_2006 = [_]Node{ .{ .text = "[F:1]", .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "ReactJIT inspector console ready", .font_size = 11, .text_color = Color.rgb(140, 148, 166) } }; // ConsolePage
 // tsz:InspectorEmbed.tsz:3669 — <Box>
-var _arr_1897 = [_]Node{ .{ .text = "[F:4]", .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "> :help", .font_size = 11, .text_color = Color.rgb(97, 149, 250) } }; // ConsolePage
+var _arr_2007 = [_]Node{ .{ .text = "[F:4]", .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "> :help", .font_size = 11, .text_color = Color.rgb(97, 149, 250) } }; // ConsolePage
 // tsz:InspectorEmbed.tsz:3673 — <Box>
-var _arr_1898 = [_]Node{ .{ .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "Commands:", .font_size = 11, .text_color = Color.rgb(140, 148, 166) } }; // ConsolePage
+var _arr_2008 = [_]Node{ .{ .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "Commands:", .font_size = 11, .text_color = Color.rgb(140, 148, 166) } }; // ConsolePage
 // tsz:InspectorEmbed.tsz:3677 — <Box>
-var _arr_1899 = [_]Node{ .{ .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "  :lua <expr>      evaluate Lua expression", .font_size = 11, .text_color = Color.rgb(140, 148, 166) } }; // ConsolePage
+var _arr_2009 = [_]Node{ .{ .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "  :lua <expr>      evaluate Lua expression", .font_size = 11, .text_color = Color.rgb(140, 148, 166) } }; // ConsolePage
 // tsz:InspectorEmbed.tsz:3681 — <Box>
-var _arr_1900 = [_]Node{ .{ .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "  :log [ch] [on|off]  toggle debug channels", .font_size = 11, .text_color = Color.rgb(140, 148, 166) } }; // ConsolePage
+var _arr_2010 = [_]Node{ .{ .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "  :log [ch] [on|off]  toggle debug channels", .font_size = 11, .text_color = Color.rgb(140, 148, 166) } }; // ConsolePage
 // tsz:InspectorEmbed.tsz:3685 — <Box>
-var _arr_1901 = [_]Node{ .{ .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "  :highlight <id>  pulse-highlight a node", .font_size = 11, .text_color = Color.rgb(140, 148, 166) } }; // ConsolePage
+var _arr_2011 = [_]Node{ .{ .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "  :highlight <id>  pulse-highlight a node", .font_size = 11, .text_color = Color.rgb(140, 148, 166) } }; // ConsolePage
 // tsz:InspectorEmbed.tsz:3689 — <Box>
-var _arr_1902 = [_]Node{ .{ .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "  :watch <expr>    add live watch expression", .font_size = 11, .text_color = Color.rgb(140, 148, 166) } }; // ConsolePage
+var _arr_2012 = [_]Node{ .{ .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "  :watch <expr>    add live watch expression", .font_size = 11, .text_color = Color.rgb(140, 148, 166) } }; // ConsolePage
 // tsz:InspectorEmbed.tsz:3693 — <Box>
-var _arr_1903 = [_]Node{ .{ .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "  :clear           clear console output", .font_size = 11, .text_color = Color.rgb(140, 148, 166) } }; // ConsolePage
+var _arr_2013 = [_]Node{ .{ .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "  :clear           clear console output", .font_size = 11, .text_color = Color.rgb(140, 148, 166) } }; // ConsolePage
 // tsz:InspectorEmbed.tsz:3698 — <Box>
-var _arr_1904 = [_]Node{ .{ .text = "[F:12]", .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "> tree.root.children.length", .font_size = 11, .text_color = Color.rgb(97, 149, 250) } }; // ConsolePage
+var _arr_2014 = [_]Node{ .{ .text = "[F:12]", .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "> tree.root.children.length", .font_size = 11, .text_color = Color.rgb(97, 149, 250) } }; // ConsolePage
 // tsz:InspectorEmbed.tsz:3702 — <Box>
-var _arr_1905 = [_]Node{ .{ .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "4", .font_size = 11, .text_color = Color.rgb(80, 200, 120) } }; // ConsolePage
+var _arr_2015 = [_]Node{ .{ .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "4", .font_size = 11, .text_color = Color.rgb(80, 200, 120) } }; // ConsolePage
 // tsz:InspectorEmbed.tsz:3707 — <Box>
-var _arr_1906 = [_]Node{ .{ .text = "[F:24]", .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "> :lua collectgarbage(\"count\")", .font_size = 11, .text_color = Color.rgb(97, 149, 250) } }; // ConsolePage
+var _arr_2016 = [_]Node{ .{ .text = "[F:24]", .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "> :lua collectgarbage(\"count\")", .font_size = 11, .text_color = Color.rgb(97, 149, 250) } }; // ConsolePage
 // tsz:InspectorEmbed.tsz:3711 — <Box>
-var _arr_1907 = [_]Node{ .{ .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "4312.5", .font_size = 11, .text_color = Color.rgb(80, 200, 120) } }; // ConsolePage
+var _arr_2017 = [_]Node{ .{ .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "4312.5", .font_size = 11, .text_color = Color.rgb(80, 200, 120) } }; // ConsolePage
 // tsz:InspectorEmbed.tsz:3716 — <Box>
-var _arr_1908 = [_]Node{ .{ .text = "[F:36]", .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "> selectedNode.style", .font_size = 11, .text_color = Color.rgb(97, 149, 250) } }; // ConsolePage
+var _arr_2018 = [_]Node{ .{ .text = "[F:36]", .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "> selectedNode.style", .font_size = 11, .text_color = Color.rgb(97, 149, 250) } }; // ConsolePage
 // tsz:InspectorEmbed.tsz:3720 — <Box>
-var _arr_1909 = [_]Node{ .{ .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "{ flexGrow: 1, flexBasis: 0, backgroundColor: \"#0b0f18\", overflow: \"scroll\" }", .font_size = 11, .text_color = Color.rgb(80, 200, 120) } }; // ConsolePage
+var _arr_2019 = [_]Node{ .{ .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "{ flexGrow: 1, flexBasis: 0, backgroundColor: \"#0b0f18\", overflow: \"scroll\" }", .font_size = 11, .text_color = Color.rgb(80, 200, 120) } }; // ConsolePage
 // tsz:InspectorEmbed.tsz:3725 — <Box>
-var _arr_1910 = [_]Node{ .{ .text = "[F:48]", .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "> invalidReference.foo", .font_size = 11, .text_color = Color.rgb(97, 149, 250) } }; // ConsolePage
+var _arr_2020 = [_]Node{ .{ .text = "[F:48]", .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "> invalidReference.foo", .font_size = 11, .text_color = Color.rgb(97, 149, 250) } }; // ConsolePage
 // tsz:InspectorEmbed.tsz:3729 — <Box>
-var _arr_1911 = [_]Node{ .{ .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "ReferenceError: invalidReference is not defined", .font_size = 11, .text_color = Color.rgb(232, 72, 85) } }; // ConsolePage
+var _arr_2021 = [_]Node{ .{ .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "ReferenceError: invalidReference is not defined", .font_size = 11, .text_color = Color.rgb(232, 72, 85) } }; // ConsolePage
 // tsz:InspectorEmbed.tsz:3734 — <Box>
-var _arr_1912 = [_]Node{ .{ .text = "[F:55]", .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "> :log tree on", .font_size = 11, .text_color = Color.rgb(97, 149, 250) } }; // ConsolePage
+var _arr_2022 = [_]Node{ .{ .text = "[F:55]", .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "> :log tree on", .font_size = 11, .text_color = Color.rgb(97, 149, 250) } }; // ConsolePage
 // tsz:InspectorEmbed.tsz:3738 — <Box>
-var _arr_1913 = [_]Node{ .{ .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "channel tree enabled", .font_size = 11, .text_color = Color.rgb(140, 148, 166) } }; // ConsolePage
+var _arr_2023 = [_]Node{ .{ .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "channel tree enabled", .font_size = 11, .text_color = Color.rgb(140, 148, 166) } }; // ConsolePage
 // tsz:InspectorEmbed.tsz:3743 — <Box>
-var _arr_1914 = [_]Node{ .{ .text = "[F:60]", .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "[tree] reconcile: 3 creates, 2 updates, 0 removes", .font_size = 11, .text_color = Color.rgb(240, 192, 64) } }; // ConsolePage
+var _arr_2024 = [_]Node{ .{ .text = "[F:60]", .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "[tree] reconcile: 3 creates, 2 updates, 0 removes", .font_size = 11, .text_color = Color.rgb(240, 192, 64) } }; // ConsolePage
 // tsz:InspectorEmbed.tsz:3748 — <Box>
-var _arr_1915 = [_]Node{ .{ .text = "[F:72]", .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "> :highlight 87", .font_size = 11, .text_color = Color.rgb(97, 149, 250) } }; // ConsolePage
+var _arr_2025 = [_]Node{ .{ .text = "[F:72]", .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "> :highlight 87", .font_size = 11, .text_color = Color.rgb(97, 149, 250) } }; // ConsolePage
 // tsz:InspectorEmbed.tsz:3752 — <Box>
-var _arr_1916 = [_]Node{ .{ .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "highlighting #87 ScrollView (2s)", .font_size = 11, .text_color = Color.rgb(140, 148, 166) } }; // ConsolePage
+var _arr_2026 = [_]Node{ .{ .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "highlighting #87 ScrollView (2s)", .font_size = 11, .text_color = Color.rgb(140, 148, 166) } }; // ConsolePage
 // tsz:InspectorEmbed.tsz:3757 — <Box>
-var _arr_1917 = [_]Node{ .{ .text = "[F:84]", .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "> perf.fps", .font_size = 11, .text_color = Color.rgb(97, 149, 250) } }; // ConsolePage
+var _arr_2027 = [_]Node{ .{ .text = "[F:84]", .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "> perf.fps", .font_size = 11, .text_color = Color.rgb(97, 149, 250) } }; // ConsolePage
 // tsz:InspectorEmbed.tsz:3761 — <Box>
-var _arr_1918 = [_]Node{ .{ .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "60", .font_size = 11, .text_color = Color.rgb(80, 200, 120) } }; // ConsolePage
+var _arr_2028 = [_]Node{ .{ .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "60", .font_size = 11, .text_color = Color.rgb(80, 200, 120) } }; // ConsolePage
 // tsz:InspectorEmbed.tsz:3766 — <Box>
-var _arr_1919 = [_]Node{ .{ .text = "[F:96]", .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "> :watch perf.fps", .font_size = 11, .text_color = Color.rgb(97, 149, 250) } }; // ConsolePage
+var _arr_2029 = [_]Node{ .{ .text = "[F:96]", .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "> :watch perf.fps", .font_size = 11, .text_color = Color.rgb(97, 149, 250) } }; // ConsolePage
 // tsz:InspectorEmbed.tsz:3770 — <Box>
-var _arr_1920 = [_]Node{ .{ .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "watch [1] added: perf.fps", .font_size = 11, .text_color = Color.rgb(140, 148, 166) } }; // ConsolePage
+var _arr_2030 = [_]Node{ .{ .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "watch [1] added: perf.fps", .font_size = 11, .text_color = Color.rgb(140, 148, 166) } }; // ConsolePage
 // tsz:InspectorEmbed.tsz:3660 — <Box>
-var _arr_1921 = [_]Node{ .{ .text = "+ \"`\" + ` close | Tab autocomplete | :help)`}", .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .style = .{ .flex_direction = .row, .gap = 8, .padding_top = 3, .padding_bottom = 3, .padding_left = 4, .padding_right = 4 }, .children = &_arr_1896 }, .{ .style = .{ .flex_direction = .row, .gap = 8, .padding_top = 3, .padding_bottom = 3, .padding_left = 4, .padding_right = 4 }, .children = &_arr_1897 }, .{ .style = .{ .flex_direction = .row, .gap = 8, .padding_top = 3, .padding_bottom = 3, .padding_left = 4, .padding_right = 4 }, .children = &_arr_1898 }, .{ .style = .{ .flex_direction = .row, .gap = 8, .padding_top = 3, .padding_bottom = 3, .padding_left = 4, .padding_right = 4 }, .children = &_arr_1899 }, .{ .style = .{ .flex_direction = .row, .gap = 8, .padding_top = 3, .padding_bottom = 3, .padding_left = 4, .padding_right = 4 }, .children = &_arr_1900 }, .{ .style = .{ .flex_direction = .row, .gap = 8, .padding_top = 3, .padding_bottom = 3, .padding_left = 4, .padding_right = 4 }, .children = &_arr_1901 }, .{ .style = .{ .flex_direction = .row, .gap = 8, .padding_top = 3, .padding_bottom = 3, .padding_left = 4, .padding_right = 4 }, .children = &_arr_1902 }, .{ .style = .{ .flex_direction = .row, .gap = 8, .padding_top = 3, .padding_bottom = 3, .padding_left = 4, .padding_right = 4 }, .children = &_arr_1903 }, .{ .style = .{ .flex_direction = .row, .gap = 8, .padding_top = 3, .padding_bottom = 3, .padding_left = 4, .padding_right = 4 }, .children = &_arr_1904 }, .{ .style = .{ .flex_direction = .row, .gap = 8, .padding_top = 3, .padding_bottom = 3, .padding_left = 4, .padding_right = 4 }, .children = &_arr_1905 }, .{ .style = .{ .flex_direction = .row, .gap = 8, .padding_top = 3, .padding_bottom = 3, .padding_left = 4, .padding_right = 4 }, .children = &_arr_1906 }, .{ .style = .{ .flex_direction = .row, .gap = 8, .padding_top = 3, .padding_bottom = 3, .padding_left = 4, .padding_right = 4 }, .children = &_arr_1907 }, .{ .style = .{ .flex_direction = .row, .gap = 8, .padding_top = 3, .padding_bottom = 3, .padding_left = 4, .padding_right = 4 }, .children = &_arr_1908 }, .{ .style = .{ .flex_direction = .row, .gap = 8, .padding_top = 3, .padding_bottom = 3, .padding_left = 4, .padding_right = 4 }, .children = &_arr_1909 }, .{ .style = .{ .flex_direction = .row, .gap = 8, .padding_top = 3, .padding_bottom = 3, .padding_left = 4, .padding_right = 4 }, .children = &_arr_1910 }, .{ .style = .{ .flex_direction = .row, .gap = 8, .padding_top = 3, .padding_bottom = 3, .padding_left = 4, .padding_right = 4 }, .children = &_arr_1911 }, .{ .style = .{ .flex_direction = .row, .gap = 8, .padding_top = 3, .padding_bottom = 3, .padding_left = 4, .padding_right = 4 }, .children = &_arr_1912 }, .{ .style = .{ .flex_direction = .row, .gap = 8, .padding_top = 3, .padding_bottom = 3, .padding_left = 4, .padding_right = 4 }, .children = &_arr_1913 }, .{ .style = .{ .flex_direction = .row, .gap = 8, .padding_top = 3, .padding_bottom = 3, .padding_left = 4, .padding_right = 4 }, .children = &_arr_1914 }, .{ .style = .{ .flex_direction = .row, .gap = 8, .padding_top = 3, .padding_bottom = 3, .padding_left = 4, .padding_right = 4 }, .children = &_arr_1915 }, .{ .style = .{ .flex_direction = .row, .gap = 8, .padding_top = 3, .padding_bottom = 3, .padding_left = 4, .padding_right = 4 }, .children = &_arr_1916 }, .{ .style = .{ .flex_direction = .row, .gap = 8, .padding_top = 3, .padding_bottom = 3, .padding_left = 4, .padding_right = 4 }, .children = &_arr_1917 }, .{ .style = .{ .flex_direction = .row, .gap = 8, .padding_top = 3, .padding_bottom = 3, .padding_left = 4, .padding_right = 4 }, .children = &_arr_1918 }, .{ .style = .{ .flex_direction = .row, .gap = 8, .padding_top = 3, .padding_bottom = 3, .padding_left = 4, .padding_right = 4 }, .children = &_arr_1919 }, .{ .style = .{ .flex_direction = .row, .gap = 8, .padding_top = 3, .padding_bottom = 3, .padding_left = 4, .padding_right = 4 }, .children = &_arr_1920 } }; // ConsolePage
+var _arr_2031 = [_]Node{ .{ .text = "+ \"`\" + ` close | Tab autocomplete | :help)`}", .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .style = .{ .flex_direction = .row, .gap = 8, .padding_top = 3, .padding_bottom = 3, .padding_left = 4, .padding_right = 4 }, .children = &_arr_2006 }, .{ .style = .{ .flex_direction = .row, .gap = 8, .padding_top = 3, .padding_bottom = 3, .padding_left = 4, .padding_right = 4 }, .children = &_arr_2007 }, .{ .style = .{ .flex_direction = .row, .gap = 8, .padding_top = 3, .padding_bottom = 3, .padding_left = 4, .padding_right = 4 }, .children = &_arr_2008 }, .{ .style = .{ .flex_direction = .row, .gap = 8, .padding_top = 3, .padding_bottom = 3, .padding_left = 4, .padding_right = 4 }, .children = &_arr_2009 }, .{ .style = .{ .flex_direction = .row, .gap = 8, .padding_top = 3, .padding_bottom = 3, .padding_left = 4, .padding_right = 4 }, .children = &_arr_2010 }, .{ .style = .{ .flex_direction = .row, .gap = 8, .padding_top = 3, .padding_bottom = 3, .padding_left = 4, .padding_right = 4 }, .children = &_arr_2011 }, .{ .style = .{ .flex_direction = .row, .gap = 8, .padding_top = 3, .padding_bottom = 3, .padding_left = 4, .padding_right = 4 }, .children = &_arr_2012 }, .{ .style = .{ .flex_direction = .row, .gap = 8, .padding_top = 3, .padding_bottom = 3, .padding_left = 4, .padding_right = 4 }, .children = &_arr_2013 }, .{ .style = .{ .flex_direction = .row, .gap = 8, .padding_top = 3, .padding_bottom = 3, .padding_left = 4, .padding_right = 4 }, .children = &_arr_2014 }, .{ .style = .{ .flex_direction = .row, .gap = 8, .padding_top = 3, .padding_bottom = 3, .padding_left = 4, .padding_right = 4 }, .children = &_arr_2015 }, .{ .style = .{ .flex_direction = .row, .gap = 8, .padding_top = 3, .padding_bottom = 3, .padding_left = 4, .padding_right = 4 }, .children = &_arr_2016 }, .{ .style = .{ .flex_direction = .row, .gap = 8, .padding_top = 3, .padding_bottom = 3, .padding_left = 4, .padding_right = 4 }, .children = &_arr_2017 }, .{ .style = .{ .flex_direction = .row, .gap = 8, .padding_top = 3, .padding_bottom = 3, .padding_left = 4, .padding_right = 4 }, .children = &_arr_2018 }, .{ .style = .{ .flex_direction = .row, .gap = 8, .padding_top = 3, .padding_bottom = 3, .padding_left = 4, .padding_right = 4 }, .children = &_arr_2019 }, .{ .style = .{ .flex_direction = .row, .gap = 8, .padding_top = 3, .padding_bottom = 3, .padding_left = 4, .padding_right = 4 }, .children = &_arr_2020 }, .{ .style = .{ .flex_direction = .row, .gap = 8, .padding_top = 3, .padding_bottom = 3, .padding_left = 4, .padding_right = 4 }, .children = &_arr_2021 }, .{ .style = .{ .flex_direction = .row, .gap = 8, .padding_top = 3, .padding_bottom = 3, .padding_left = 4, .padding_right = 4 }, .children = &_arr_2022 }, .{ .style = .{ .flex_direction = .row, .gap = 8, .padding_top = 3, .padding_bottom = 3, .padding_left = 4, .padding_right = 4 }, .children = &_arr_2023 }, .{ .style = .{ .flex_direction = .row, .gap = 8, .padding_top = 3, .padding_bottom = 3, .padding_left = 4, .padding_right = 4 }, .children = &_arr_2024 }, .{ .style = .{ .flex_direction = .row, .gap = 8, .padding_top = 3, .padding_bottom = 3, .padding_left = 4, .padding_right = 4 }, .children = &_arr_2025 }, .{ .style = .{ .flex_direction = .row, .gap = 8, .padding_top = 3, .padding_bottom = 3, .padding_left = 4, .padding_right = 4 }, .children = &_arr_2026 }, .{ .style = .{ .flex_direction = .row, .gap = 8, .padding_top = 3, .padding_bottom = 3, .padding_left = 4, .padding_right = 4 }, .children = &_arr_2027 }, .{ .style = .{ .flex_direction = .row, .gap = 8, .padding_top = 3, .padding_bottom = 3, .padding_left = 4, .padding_right = 4 }, .children = &_arr_2028 }, .{ .style = .{ .flex_direction = .row, .gap = 8, .padding_top = 3, .padding_bottom = 3, .padding_left = 4, .padding_right = 4 }, .children = &_arr_2029 }, .{ .style = .{ .flex_direction = .row, .gap = 8, .padding_top = 3, .padding_bottom = 3, .padding_left = 4, .padding_right = 4 }, .children = &_arr_2030 } }; // ConsolePage
 // tsz:InspectorEmbed.tsz:3777 — <Box>
-var _arr_1922 = [_]Node{ .{ .text = "[1] perf.fps = 60", .font_size = 10, .text_color = Color.rgb(138, 108, 192) } }; // ConsolePage
+var _arr_2032 = [_]Node{ .{ .text = "[1] perf.fps = 60", .font_size = 10, .text_color = Color.rgb(138, 108, 192) } }; // ConsolePage
 // tsz:InspectorEmbed.tsz:3781 — <Box>
-var _arr_1923 = [_]Node{ .{ .text = "> ", .font_size = 12, .text_color = Color.rgb(97, 149, 250) }, .{ .text = "tree.root.children[0]", .font_size = 12, .text_color = Color.rgb(224, 229, 240) }, .{ .style = .{ .width = 2, .height = 14, .background_color = Color.rgb(224, 229, 240) } } }; // ConsolePage
+var _arr_2033 = [_]Node{ .{ .text = "> ", .font_size = 12, .text_color = Color.rgb(97, 149, 250) }, .{ .text = "tree.root.children[0]", .font_size = 12, .text_color = Color.rgb(224, 229, 240) }, .{ .style = .{ .width = 2, .height = 14, .background_color = Color.rgb(224, 229, 240) } } }; // ConsolePage
 // tsz:InspectorEmbed.tsz:3659 — <ScrollView>
-var _arr_1924 = [_]Node{ .{ .style = .{ .flex_direction = .column, .padding = 12, .gap = 2 }, .children = &_arr_1921 }, .{ .style = .{ .flex_direction = .column, .gap = 2, .padding_left = 12, .padding_right = 12, .padding_top = 6, .padding_bottom = 6, .background_color = Color.rgb(15, 12, 26), .border_width = 1, .border_color = Color.rgb(26, 32, 48) }, .children = &_arr_1922 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 6, .padding_left = 12, .padding_right = 12, .padding_top = 10, .padding_bottom = 10, .background_color = Color.rgb(13, 16, 24), .border_width = 1, .border_color = Color.rgb(26, 32, 48) }, .children = &_arr_1923 } }; // ConsolePage
+var _arr_2034 = [_]Node{ .{ .style = .{ .flex_direction = .column, .padding = 12, .gap = 2 }, .children = &_arr_2031 }, .{ .style = .{ .flex_direction = .column, .gap = 2, .padding_left = 12, .padding_right = 12, .padding_top = 6, .padding_bottom = 6, .background_color = Color.rgb(15, 12, 26), .border_width = 1, .border_color = Color.rgb(26, 32, 48) }, .children = &_arr_2032 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 6, .padding_left = 12, .padding_right = 12, .padding_top = 10, .padding_bottom = 10, .background_color = Color.rgb(13, 16, 24), .border_width = 1, .border_color = Color.rgb(26, 32, 48) }, .children = &_arr_2033 } }; // ConsolePage
 // tsz:InspectorEmbed.tsz:3809 — <Pressable>
-var _arr_1925 = [_]Node{ .{ .text = "All", .font_size = 10, .text_color = Color.rgb(224, 229, 240) } }; // LogsPage
+var _arr_2035 = [_]Node{ .{ .text = "All", .font_size = 10, .text_color = Color.rgb(224, 229, 240) } }; // LogsPage
 // tsz:InspectorEmbed.tsz:3810 — <Pressable>
-var _arr_1926 = [_]Node{ .{ .text = "None", .font_size = 10, .text_color = Color.rgb(224, 229, 240) } }; // LogsPage
+var _arr_2036 = [_]Node{ .{ .text = "None", .font_size = 10, .text_color = Color.rgb(224, 229, 240) } }; // LogsPage
 // tsz:InspectorEmbed.tsz:3808 — <Box>
-var _arr_1927 = [_]Node{ .{ .style = .{ .padding_left = 10, .padding_right = 10, .padding_top = 5, .padding_bottom = 5, .border_radius = 4, .background_color = Color.rgb(20, 26, 41) }, .children = &_arr_1925 }, .{ .style = .{ .padding_left = 10, .padding_right = 10, .padding_top = 5, .padding_bottom = 5, .border_radius = 4, .background_color = Color.rgb(20, 26, 41) }, .children = &_arr_1926 } }; // LogsPage
+var _arr_2037 = [_]Node{ .{ .style = .{ .padding_left = 10, .padding_right = 10, .padding_top = 5, .padding_bottom = 5, .border_radius = 4, .background_color = Color.rgb(20, 26, 41) }, .children = &_arr_2035 }, .{ .style = .{ .padding_left = 10, .padding_right = 10, .padding_top = 5, .padding_bottom = 5, .border_radius = 4, .background_color = Color.rgb(20, 26, 41) }, .children = &_arr_2036 } }; // LogsPage
 // tsz:InspectorEmbed.tsz:3806 — <Box>
-var _arr_1928 = [_]Node{ .{ .text = "Debug Log Channels", .font_size = 13, .text_color = Color.rgb(166, 173, 190) }, .{ .style = .{ .flex_direction = .row, .gap = 6 }, .children = &_arr_1927 } }; // LogsPage
+var _arr_2038 = [_]Node{ .{ .text = "Debug Log Channels", .font_size = 13, .text_color = Color.rgb(166, 173, 190) }, .{ .style = .{ .flex_direction = .row, .gap = 6 }, .children = &_arr_2037 } }; // LogsPage
 // tsz:InspectorEmbed.tsz:3817 — <Box>
-var _arr_1929 = [_]Node{ .{ .style = .{ .width = 14, .height = 14, .border_radius = 7, .background_color = Color.rgb(97, 149, 250) } } }; // LogsPage
+var _arr_2039 = [_]Node{ .{ .style = .{ .width = 14, .height = 14, .border_radius = 7, .background_color = Color.rgb(97, 149, 250) } } }; // LogsPage
 // tsz:InspectorEmbed.tsz:3818 — <Box>
-var _arr_1930 = [_]Node{ .{ .text = "layout", .font_size = 11, .text_color = Color.rgb(94, 196, 212) }, .{ .text = "Flex computation, sizing provenance, constraint propagation", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } }; // LogsPage
+var _arr_2040 = [_]Node{ .{ .text = "layout", .font_size = 11, .text_color = Color.rgb(94, 196, 212) }, .{ .text = "Flex computation, sizing provenance, constraint propagation", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } }; // LogsPage
 // tsz:InspectorEmbed.tsz:3816 — <Box>
-var _arr_1931 = [_]Node{ .{ .style = .{ .width = 36, .height = 20, .border_radius = 10, .background_color = Color.rgb(28, 51, 80), .flex_direction = .row, .align_items = .center, .padding_left = 3, .padding_right = 3 }, .children = &_arr_1929 }, .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 2 }, .children = &_arr_1930 } }; // LogsPage
+var _arr_2041 = [_]Node{ .{ .style = .{ .width = 36, .height = 20, .border_radius = 10, .background_color = Color.rgb(28, 51, 80), .flex_direction = .row, .align_items = .center, .padding_left = 3, .padding_right = 3 }, .children = &_arr_2039 }, .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 2 }, .children = &_arr_2040 } }; // LogsPage
 // tsz:InspectorEmbed.tsz:3825 — <Box>
-var _arr_1932 = [_]Node{ .{ .style = .{ .width = 14, .height = 14, .border_radius = 7, .background_color = Color.rgb(97, 149, 250) } } }; // LogsPage
+var _arr_2042 = [_]Node{ .{ .style = .{ .width = 14, .height = 14, .border_radius = 7, .background_color = Color.rgb(97, 149, 250) } } }; // LogsPage
 // tsz:InspectorEmbed.tsz:3826 — <Box>
-var _arr_1933 = [_]Node{ .{ .text = "tree", .font_size = 11, .text_color = Color.rgb(80, 200, 120) }, .{ .text = "Node creates, updates, removes, tree mutations", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } }; // LogsPage
+var _arr_2043 = [_]Node{ .{ .text = "tree", .font_size = 11, .text_color = Color.rgb(80, 200, 120) }, .{ .text = "Node creates, updates, removes, tree mutations", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } }; // LogsPage
 // tsz:InspectorEmbed.tsz:3824 — <Box>
-var _arr_1934 = [_]Node{ .{ .style = .{ .width = 36, .height = 20, .border_radius = 10, .background_color = Color.rgb(28, 51, 80), .flex_direction = .row, .align_items = .center, .padding_left = 3, .padding_right = 3 }, .children = &_arr_1932 }, .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 2 }, .children = &_arr_1933 } }; // LogsPage
+var _arr_2044 = [_]Node{ .{ .style = .{ .width = 36, .height = 20, .border_radius = 10, .background_color = Color.rgb(28, 51, 80), .flex_direction = .row, .align_items = .center, .padding_left = 3, .padding_right = 3 }, .children = &_arr_2042 }, .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 2 }, .children = &_arr_2043 } }; // LogsPage
 // tsz:InspectorEmbed.tsz:3833 — <Box>
-var _arr_1935 = [_]Node{ .{ .style = .{ .width = 14, .height = 14, .border_radius = 7, .background_color = Color.rgb(92, 100, 120) } } }; // LogsPage
+var _arr_2045 = [_]Node{ .{ .style = .{ .width = 14, .height = 14, .border_radius = 7, .background_color = Color.rgb(92, 100, 120) } } }; // LogsPage
 // tsz:InspectorEmbed.tsz:3834 — <Box>
-var _arr_1936 = [_]Node{ .{ .text = "events", .font_size = 11, .text_color = Color.rgb(140, 148, 166) }, .{ .text = "Press, hover, focus, scroll, and keyboard events", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } }; // LogsPage
+var _arr_2046 = [_]Node{ .{ .text = "events", .font_size = 11, .text_color = Color.rgb(140, 148, 166) }, .{ .text = "Press, hover, focus, scroll, and keyboard events", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } }; // LogsPage
 // tsz:InspectorEmbed.tsz:3832 — <Box>
-var _arr_1937 = [_]Node{ .{ .style = .{ .width = 36, .height = 20, .border_radius = 10, .background_color = Color.rgb(26, 32, 48), .flex_direction = .row, .align_items = .center, .padding_left = 3, .padding_right = 3 }, .children = &_arr_1935 }, .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 2 }, .children = &_arr_1936 } }; // LogsPage
+var _arr_2047 = [_]Node{ .{ .style = .{ .width = 36, .height = 20, .border_radius = 10, .background_color = Color.rgb(26, 32, 48), .flex_direction = .row, .align_items = .center, .padding_left = 3, .padding_right = 3 }, .children = &_arr_2045 }, .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 2 }, .children = &_arr_2046 } }; // LogsPage
 // tsz:InspectorEmbed.tsz:3841 — <Box>
-var _arr_1938 = [_]Node{ .{ .style = .{ .width = 14, .height = 14, .border_radius = 7, .background_color = Color.rgb(92, 100, 120) } } }; // LogsPage
+var _arr_2048 = [_]Node{ .{ .style = .{ .width = 14, .height = 14, .border_radius = 7, .background_color = Color.rgb(92, 100, 120) } } }; // LogsPage
 // tsz:InspectorEmbed.tsz:3842 — <Box>
-var _arr_1939 = [_]Node{ .{ .text = "paint", .font_size = 11, .text_color = Color.rgb(140, 148, 166) }, .{ .text = "Render passes, draw calls, texture uploads, GPU sync", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } }; // LogsPage
+var _arr_2049 = [_]Node{ .{ .text = "paint", .font_size = 11, .text_color = Color.rgb(140, 148, 166) }, .{ .text = "Render passes, draw calls, texture uploads, GPU sync", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } }; // LogsPage
 // tsz:InspectorEmbed.tsz:3840 — <Box>
-var _arr_1940 = [_]Node{ .{ .style = .{ .width = 36, .height = 20, .border_radius = 10, .background_color = Color.rgb(26, 32, 48), .flex_direction = .row, .align_items = .center, .padding_left = 3, .padding_right = 3 }, .children = &_arr_1938 }, .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 2 }, .children = &_arr_1939 } }; // LogsPage
+var _arr_2050 = [_]Node{ .{ .style = .{ .width = 36, .height = 20, .border_radius = 10, .background_color = Color.rgb(26, 32, 48), .flex_direction = .row, .align_items = .center, .padding_left = 3, .padding_right = 3 }, .children = &_arr_2048 }, .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 2 }, .children = &_arr_2049 } }; // LogsPage
 // tsz:InspectorEmbed.tsz:3849 — <Box>
-var _arr_1941 = [_]Node{ .{ .style = .{ .width = 14, .height = 14, .border_radius = 7, .background_color = Color.rgb(97, 149, 250) } } }; // LogsPage
+var _arr_2051 = [_]Node{ .{ .style = .{ .width = 14, .height = 14, .border_radius = 7, .background_color = Color.rgb(97, 149, 250) } } }; // LogsPage
 // tsz:InspectorEmbed.tsz:3850 — <Box>
-var _arr_1942 = [_]Node{ .{ .text = "bridge", .font_size = 11, .text_color = Color.rgb(232, 128, 80) }, .{ .text = "JS-to-Zig FFI calls, message passing, serialization", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } }; // LogsPage
+var _arr_2052 = [_]Node{ .{ .text = "bridge", .font_size = 11, .text_color = Color.rgb(232, 128, 80) }, .{ .text = "JS-to-Zig FFI calls, message passing, serialization", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } }; // LogsPage
 // tsz:InspectorEmbed.tsz:3848 — <Box>
-var _arr_1943 = [_]Node{ .{ .style = .{ .width = 36, .height = 20, .border_radius = 10, .background_color = Color.rgb(28, 51, 80), .flex_direction = .row, .align_items = .center, .padding_left = 3, .padding_right = 3 }, .children = &_arr_1941 }, .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 2 }, .children = &_arr_1942 } }; // LogsPage
+var _arr_2053 = [_]Node{ .{ .style = .{ .width = 36, .height = 20, .border_radius = 10, .background_color = Color.rgb(28, 51, 80), .flex_direction = .row, .align_items = .center, .padding_left = 3, .padding_right = 3 }, .children = &_arr_2051 }, .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 2 }, .children = &_arr_2052 } }; // LogsPage
 // tsz:InspectorEmbed.tsz:3857 — <Box>
-var _arr_1944 = [_]Node{ .{ .style = .{ .width = 14, .height = 14, .border_radius = 7, .background_color = Color.rgb(92, 100, 120) } } }; // LogsPage
+var _arr_2054 = [_]Node{ .{ .style = .{ .width = 14, .height = 14, .border_radius = 7, .background_color = Color.rgb(92, 100, 120) } } }; // LogsPage
 // tsz:InspectorEmbed.tsz:3858 — <Box>
-var _arr_1945 = [_]Node{ .{ .text = "recon", .font_size = 11, .text_color = Color.rgb(140, 148, 166) }, .{ .text = "Reconciler diffs, component lifecycle, fiber work", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } }; // LogsPage
+var _arr_2055 = [_]Node{ .{ .text = "recon", .font_size = 11, .text_color = Color.rgb(140, 148, 166) }, .{ .text = "Reconciler diffs, component lifecycle, fiber work", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } }; // LogsPage
 // tsz:InspectorEmbed.tsz:3856 — <Box>
-var _arr_1946 = [_]Node{ .{ .style = .{ .width = 36, .height = 20, .border_radius = 10, .background_color = Color.rgb(26, 32, 48), .flex_direction = .row, .align_items = .center, .padding_left = 3, .padding_right = 3 }, .children = &_arr_1944 }, .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 2 }, .children = &_arr_1945 } }; // LogsPage
+var _arr_2056 = [_]Node{ .{ .style = .{ .width = 36, .height = 20, .border_radius = 10, .background_color = Color.rgb(26, 32, 48), .flex_direction = .row, .align_items = .center, .padding_left = 3, .padding_right = 3 }, .children = &_arr_2054 }, .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 2 }, .children = &_arr_2055 } }; // LogsPage
 // tsz:InspectorEmbed.tsz:3865 — <Box>
-var _arr_1947 = [_]Node{ .{ .style = .{ .width = 14, .height = 14, .border_radius = 7, .background_color = Color.rgb(92, 100, 120) } } }; // LogsPage
+var _arr_2057 = [_]Node{ .{ .style = .{ .width = 14, .height = 14, .border_radius = 7, .background_color = Color.rgb(92, 100, 120) } } }; // LogsPage
 // tsz:InspectorEmbed.tsz:3866 — <Box>
-var _arr_1948 = [_]Node{ .{ .text = "dispatch", .font_size = 11, .text_color = Color.rgb(140, 148, 166) }, .{ .text = "State updates, effect scheduling, batch boundaries", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } }; // LogsPage
+var _arr_2058 = [_]Node{ .{ .text = "dispatch", .font_size = 11, .text_color = Color.rgb(140, 148, 166) }, .{ .text = "State updates, effect scheduling, batch boundaries", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } }; // LogsPage
 // tsz:InspectorEmbed.tsz:3864 — <Box>
-var _arr_1949 = [_]Node{ .{ .style = .{ .width = 36, .height = 20, .border_radius = 10, .background_color = Color.rgb(26, 32, 48), .flex_direction = .row, .align_items = .center, .padding_left = 3, .padding_right = 3 }, .children = &_arr_1947 }, .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 2 }, .children = &_arr_1948 } }; // LogsPage
+var _arr_2059 = [_]Node{ .{ .style = .{ .width = 36, .height = 20, .border_radius = 10, .background_color = Color.rgb(26, 32, 48), .flex_direction = .row, .align_items = .center, .padding_left = 3, .padding_right = 3 }, .children = &_arr_2057 }, .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 2 }, .children = &_arr_2058 } }; // LogsPage
 // tsz:InspectorEmbed.tsz:3873 — <Box>
-var _arr_1950 = [_]Node{ .{ .style = .{ .width = 14, .height = 14, .border_radius = 7, .background_color = Color.rgb(92, 100, 120) } } }; // LogsPage
+var _arr_2060 = [_]Node{ .{ .style = .{ .width = 14, .height = 14, .border_radius = 7, .background_color = Color.rgb(92, 100, 120) } } }; // LogsPage
 // tsz:InspectorEmbed.tsz:3874 — <Box>
-var _arr_1951 = [_]Node{ .{ .text = "focus", .font_size = 11, .text_color = Color.rgb(140, 148, 166) }, .{ .text = "Focus ring, tab order, accessibility navigation", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } }; // LogsPage
+var _arr_2061 = [_]Node{ .{ .text = "focus", .font_size = 11, .text_color = Color.rgb(140, 148, 166) }, .{ .text = "Focus ring, tab order, accessibility navigation", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } }; // LogsPage
 // tsz:InspectorEmbed.tsz:3872 — <Box>
-var _arr_1952 = [_]Node{ .{ .style = .{ .width = 36, .height = 20, .border_radius = 10, .background_color = Color.rgb(26, 32, 48), .flex_direction = .row, .align_items = .center, .padding_left = 3, .padding_right = 3 }, .children = &_arr_1950 }, .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 2 }, .children = &_arr_1951 } }; // LogsPage
+var _arr_2062 = [_]Node{ .{ .style = .{ .width = 36, .height = 20, .border_radius = 10, .background_color = Color.rgb(26, 32, 48), .flex_direction = .row, .align_items = .center, .padding_left = 3, .padding_right = 3 }, .children = &_arr_2060 }, .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 2 }, .children = &_arr_2061 } }; // LogsPage
 // tsz:InspectorEmbed.tsz:3881 — <Box>
-var _arr_1953 = [_]Node{ .{ .style = .{ .width = 14, .height = 14, .border_radius = 7, .background_color = Color.rgb(92, 100, 120) } } }; // LogsPage
+var _arr_2063 = [_]Node{ .{ .style = .{ .width = 14, .height = 14, .border_radius = 7, .background_color = Color.rgb(92, 100, 120) } } }; // LogsPage
 // tsz:InspectorEmbed.tsz:3882 — <Box>
-var _arr_1954 = [_]Node{ .{ .text = "animate", .font_size = 11, .text_color = Color.rgb(140, 148, 166) }, .{ .text = "Spring physics, easing curves, animation frame budget", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } }; // LogsPage
+var _arr_2064 = [_]Node{ .{ .text = "animate", .font_size = 11, .text_color = Color.rgb(140, 148, 166) }, .{ .text = "Spring physics, easing curves, animation frame budget", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } }; // LogsPage
 // tsz:InspectorEmbed.tsz:3880 — <Box>
-var _arr_1955 = [_]Node{ .{ .style = .{ .width = 36, .height = 20, .border_radius = 10, .background_color = Color.rgb(26, 32, 48), .flex_direction = .row, .align_items = .center, .padding_left = 3, .padding_right = 3 }, .children = &_arr_1953 }, .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 2 }, .children = &_arr_1954 } }; // LogsPage
+var _arr_2065 = [_]Node{ .{ .style = .{ .width = 36, .height = 20, .border_radius = 10, .background_color = Color.rgb(26, 32, 48), .flex_direction = .row, .align_items = .center, .padding_left = 3, .padding_right = 3 }, .children = &_arr_2063 }, .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 2 }, .children = &_arr_2064 } }; // LogsPage
 // tsz:InspectorEmbed.tsz:3889 — <Box>
-var _arr_1956 = [_]Node{ .{ .style = .{ .width = 14, .height = 14, .border_radius = 7, .background_color = Color.rgb(92, 100, 120) } } }; // LogsPage
+var _arr_2066 = [_]Node{ .{ .style = .{ .width = 14, .height = 14, .border_radius = 7, .background_color = Color.rgb(92, 100, 120) } } }; // LogsPage
 // tsz:InspectorEmbed.tsz:3890 — <Box>
-var _arr_1957 = [_]Node{ .{ .text = "capsync", .font_size = 11, .text_color = Color.rgb(140, 148, 166) }, .{ .text = "Capability sync, hot module state preservation", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } }; // LogsPage
+var _arr_2067 = [_]Node{ .{ .text = "capsync", .font_size = 11, .text_color = Color.rgb(140, 148, 166) }, .{ .text = "Capability sync, hot module state preservation", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } }; // LogsPage
 // tsz:InspectorEmbed.tsz:3888 — <Box>
-var _arr_1958 = [_]Node{ .{ .style = .{ .width = 36, .height = 20, .border_radius = 10, .background_color = Color.rgb(26, 32, 48), .flex_direction = .row, .align_items = .center, .padding_left = 3, .padding_right = 3 }, .children = &_arr_1956 }, .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 2 }, .children = &_arr_1957 } }; // LogsPage
+var _arr_2068 = [_]Node{ .{ .style = .{ .width = 36, .height = 20, .border_radius = 10, .background_color = Color.rgb(26, 32, 48), .flex_direction = .row, .align_items = .center, .padding_left = 3, .padding_right = 3 }, .children = &_arr_2066 }, .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 2 }, .children = &_arr_2067 } }; // LogsPage
 // tsz:InspectorEmbed.tsz:3814 — <Box>
-var _arr_1959 = [_]Node{ .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 12, .padding_left = 8, .padding_right = 8, .padding_top = 8, .padding_bottom = 8, .border_radius = 6 }, .children = &_arr_1931 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 12, .padding_left = 8, .padding_right = 8, .padding_top = 8, .padding_bottom = 8, .border_radius = 6 }, .children = &_arr_1934 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 12, .padding_left = 8, .padding_right = 8, .padding_top = 8, .padding_bottom = 8, .border_radius = 6 }, .children = &_arr_1937 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 12, .padding_left = 8, .padding_right = 8, .padding_top = 8, .padding_bottom = 8, .border_radius = 6 }, .children = &_arr_1940 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 12, .padding_left = 8, .padding_right = 8, .padding_top = 8, .padding_bottom = 8, .border_radius = 6 }, .children = &_arr_1943 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 12, .padding_left = 8, .padding_right = 8, .padding_top = 8, .padding_bottom = 8, .border_radius = 6 }, .children = &_arr_1946 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 12, .padding_left = 8, .padding_right = 8, .padding_top = 8, .padding_bottom = 8, .border_radius = 6 }, .children = &_arr_1949 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 12, .padding_left = 8, .padding_right = 8, .padding_top = 8, .padding_bottom = 8, .border_radius = 6 }, .children = &_arr_1952 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 12, .padding_left = 8, .padding_right = 8, .padding_top = 8, .padding_bottom = 8, .border_radius = 6 }, .children = &_arr_1955 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 12, .padding_left = 8, .padding_right = 8, .padding_top = 8, .padding_bottom = 8, .border_radius = 6 }, .children = &_arr_1958 } }; // LogsPage
+var _arr_2069 = [_]Node{ .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 12, .padding_left = 8, .padding_right = 8, .padding_top = 8, .padding_bottom = 8, .border_radius = 6 }, .children = &_arr_2041 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 12, .padding_left = 8, .padding_right = 8, .padding_top = 8, .padding_bottom = 8, .border_radius = 6 }, .children = &_arr_2044 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 12, .padding_left = 8, .padding_right = 8, .padding_top = 8, .padding_bottom = 8, .border_radius = 6 }, .children = &_arr_2047 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 12, .padding_left = 8, .padding_right = 8, .padding_top = 8, .padding_bottom = 8, .border_radius = 6 }, .children = &_arr_2050 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 12, .padding_left = 8, .padding_right = 8, .padding_top = 8, .padding_bottom = 8, .border_radius = 6 }, .children = &_arr_2053 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 12, .padding_left = 8, .padding_right = 8, .padding_top = 8, .padding_bottom = 8, .border_radius = 6 }, .children = &_arr_2056 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 12, .padding_left = 8, .padding_right = 8, .padding_top = 8, .padding_bottom = 8, .border_radius = 6 }, .children = &_arr_2059 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 12, .padding_left = 8, .padding_right = 8, .padding_top = 8, .padding_bottom = 8, .border_radius = 6 }, .children = &_arr_2062 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 12, .padding_left = 8, .padding_right = 8, .padding_top = 8, .padding_bottom = 8, .border_radius = 6 }, .children = &_arr_2065 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 12, .padding_left = 8, .padding_right = 8, .padding_top = 8, .padding_bottom = 8, .border_radius = 6 }, .children = &_arr_2068 } }; // LogsPage
 // tsz:InspectorEmbed.tsz:3900 — <Box>
-var _arr_1960 = [_]Node{ .{ .text = "HMR Settings", .font_size = 13, .text_color = Color.rgb(166, 173, 190) } }; // LogsPage
+var _arr_2070 = [_]Node{ .{ .text = "HMR Settings", .font_size = 13, .text_color = Color.rgb(166, 173, 190) } }; // LogsPage
 // tsz:InspectorEmbed.tsz:3905 — <Box>
-var _arr_1961 = [_]Node{ .{ .style = .{ .width = 14, .height = 14, .border_radius = 7, .background_color = Color.rgb(97, 149, 250) } } }; // LogsPage
+var _arr_2071 = [_]Node{ .{ .style = .{ .width = 14, .height = 14, .border_radius = 7, .background_color = Color.rgb(97, 149, 250) } } }; // LogsPage
 // tsz:InspectorEmbed.tsz:3906 — <Box>
-var _arr_1962 = [_]Node{ .{ .text = "State Preservation", .font_size = 11, .text_color = Color.rgb(94, 196, 212) }, .{ .text = "useState survives hot reload", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } }; // LogsPage
+var _arr_2072 = [_]Node{ .{ .text = "State Preservation", .font_size = 11, .text_color = Color.rgb(94, 196, 212) }, .{ .text = "useState survives hot reload", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } }; // LogsPage
 // tsz:InspectorEmbed.tsz:3904 — <Box>
-var _arr_1963 = [_]Node{ .{ .style = .{ .width = 36, .height = 20, .border_radius = 10, .background_color = Color.rgb(28, 51, 80), .flex_direction = .row, .align_items = .center, .padding_left = 3, .padding_right = 3 }, .children = &_arr_1961 }, .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 2 }, .children = &_arr_1962 } }; // LogsPage
+var _arr_2073 = [_]Node{ .{ .style = .{ .width = 36, .height = 20, .border_radius = 10, .background_color = Color.rgb(28, 51, 80), .flex_direction = .row, .align_items = .center, .padding_left = 3, .padding_right = 3 }, .children = &_arr_2071 }, .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .gap = 2 }, .children = &_arr_2072 } }; // LogsPage
 // tsz:InspectorEmbed.tsz:3804 — <Box>
-var _arr_1964 = [_]Node{ .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center }, .children = &_arr_1928 }, .{ .style = .{ .flex_direction = .column, .gap = 2 }, .children = &_arr_1959 }, .{ .style = .{ .height = 1, .background_color = Color.rgb(26, 32, 48) } }, .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center }, .children = &_arr_1960 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 12, .padding_left = 8, .padding_right = 8, .padding_top = 8, .padding_bottom = 8, .border_radius = 6 }, .children = &_arr_1963 }, .{ .style = .{ .height = 1, .background_color = Color.rgb(26, 32, 48) } }, .{ .text = "Tip: REACTJIT_DEBUG=tree,layout love love", .font_size = 10, .text_color = Color.rgb(67, 75, 92) }, .{ .text = "Output goes to terminal AND console tab", .font_size = 10, .text_color = Color.rgb(67, 75, 92) } }; // LogsPage
+var _arr_2074 = [_]Node{ .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center }, .children = &_arr_2038 }, .{ .style = .{ .flex_direction = .column, .gap = 2 }, .children = &_arr_2069 }, .{ .style = .{ .height = 1, .background_color = Color.rgb(26, 32, 48) } }, .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center }, .children = &_arr_2070 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 12, .padding_left = 8, .padding_right = 8, .padding_top = 8, .padding_bottom = 8, .border_radius = 6 }, .children = &_arr_2073 }, .{ .style = .{ .height = 1, .background_color = Color.rgb(26, 32, 48) } }, .{ .text = "Tip: REACTJIT_DEBUG=tree,layout love love", .font_size = 10, .text_color = Color.rgb(67, 75, 92) }, .{ .text = "Output goes to terminal AND console tab", .font_size = 10, .text_color = Color.rgb(67, 75, 92) } }; // LogsPage
 // tsz:InspectorEmbed.tsz:3803 — <ScrollView>
-var _arr_1965 = [_]Node{ .{ .style = .{ .flex_direction = .column, .padding = 16, .gap = 12 }, .children = &_arr_1964 } }; // LogsPage
+var _arr_2075 = [_]Node{ .{ .style = .{ .flex_direction = .column, .padding = 16, .gap = 12 }, .children = &_arr_2074 } }; // LogsPage
 // tsz:InspectorEmbed.tsz:4286 — <Box>
-var _arr_1966 = [_]Node{ .{ .text = "Dirty", .font_size = 10, .text_color = Color.rgb(240, 192, 64) }, .{ .text = "Ready", .font_size = 10, .text_color = Color.rgb(80, 200, 120) }, .{ .text = "", .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } };
+var _arr_2076 = [_]Node{ .{ .text = "Dirty", .font_size = 10, .text_color = Color.rgb(240, 192, 64) }, .{ .text = "Ready", .font_size = 10, .text_color = Color.rgb(80, 200, 120) }, .{ .text = "", .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } };
 // tsz:InspectorEmbed.tsz:4292 — <Box>
-var _arr_1967 = [_]Node{ .{ .text = "", .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "", .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "", .font_size = 10, .text_color = Color.rgb(80, 200, 120) }, .{ .text = "", .font_size = 10, .text_color = Color.rgb(240, 192, 64) }, .{ .text = "", .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } };
+var _arr_2077 = [_]Node{ .{ .text = "", .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "", .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "", .font_size = 10, .text_color = Color.rgb(80, 200, 120) }, .{ .text = "", .font_size = 10, .text_color = Color.rgb(240, 192, 64) }, .{ .text = "", .font_size = 10, .text_color = Color.rgb(92, 100, 120) }, .{ .text = "", .font_size = 10, .text_color = Color.rgb(92, 100, 120) } };
 // tsz:InspectorEmbed.tsz:4285 — <Box>
-var _arr_1968 = [_]Node{ .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 8 }, .children = &_arr_1966 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 12 }, .children = &_arr_1967 } };
+var _arr_2078 = [_]Node{ .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 8 }, .children = &_arr_2076 }, .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 12 }, .children = &_arr_2077 } };
 // tsz:InspectorEmbed.tsz:4265 — <Box>
-var _arr_1969 = [_]Node{ .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 6, .padding = 8, .padding_left = 10, .padding_right = 10, .background_color = Color.rgb(10, 12, 19) }, .children = &_arr_27 }, .{ .style = .{ .height = 1, .background_color = Color.rgb(26, 32, 48) } }, .{ .style = .{ .flex_direction = .row, .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(12, 16, 24) }, .children = &_arr_1564 }, .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(8, 10, 16) }, .children = &_arr_1648 }, .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(6, 8, 16) }, .children = &_arr_1770 }, .{ .style = .{ .overflow = .auto, .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(8, 10, 16) }, .children = &_arr_1814 }, .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(8, 10, 16) }, .children = &_arr_1895 }, .{ .style = .{ .overflow = .auto, .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(8, 10, 16) }, .children = &_arr_1924 }, .{ .style = .{ .overflow = .auto, .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(8, 10, 16) }, .children = &_arr_1965 }, .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center, .height = 22, .padding_left = 10, .padding_right = 10, .background_color = Color.rgb(10, 12, 19), .border_width = 1, .border_color = Color.rgb(26, 32, 48) }, .children = &_arr_1968 } };
-pub var root = Node{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(11, 13, 21) }, .children = &_arr_1969 };
+var _arr_2079 = [_]Node{ .{ .style = .{ .flex_direction = .row, .align_items = .center, .gap = 6, .padding = 8, .padding_left = 10, .padding_right = 10, .background_color = Color.rgb(10, 12, 19) }, .children = &_arr_27 }, .{ .style = .{ .height = 1, .background_color = Color.rgb(26, 32, 48) } }, .{ .style = .{ .flex_direction = .row, .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(12, 16, 24) }, .children = &_arr_1674 }, .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(8, 10, 16) }, .children = &_arr_1758 }, .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(6, 8, 16) }, .children = &_arr_1880 }, .{ .style = .{ .overflow = .auto, .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(8, 10, 16) }, .children = &_arr_1924 }, .{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(8, 10, 16) }, .children = &_arr_2005 }, .{ .style = .{ .overflow = .auto, .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(8, 10, 16) }, .children = &_arr_2034 }, .{ .style = .{ .overflow = .auto, .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(8, 10, 16) }, .children = &_arr_2075 }, .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .align_items = .center, .height = 22, .padding_left = 10, .padding_right = 10, .background_color = Color.rgb(10, 12, 19), .border_width = 1, .border_color = Color.rgb(26, 32, 48) }, .children = &_arr_2078 } };
+pub var root = Node{ .style = .{ .flex_direction = .column, .flex_grow = 1, .flex_basis = 0, .background_color = Color.rgb(11, 13, 21) }, .children = &_arr_2079 };
 
 // ── Dynamic text buffers ─────────────────────────────────────────
 var _dyn_buf_0: [64]u8 = undefined;
@@ -4266,21 +4486,21 @@ pub fn _initState() void {
 
 fn _updateDynamicTexts() void {
     _dyn_text_0 = std.fmt.bufPrint(&_dyn_buf_0, "{d} nodes", .{ state.getSlot(3) }) catch "";
-    _arr_1966[2].text = _dyn_text_0;
+    _arr_2076[2].text = _dyn_text_0;
     _dyn_text_1 = std.fmt.bufPrint(&_dyn_buf_1, "{d}r {d}g", .{ state.getSlot(9), state.getSlot(10) }) catch "";
-    _arr_1966[3].text = _dyn_text_1;
+    _arr_2076[3].text = _dyn_text_1;
     _dyn_text_2 = std.fmt.bufPrint(&_dyn_buf_2, "{d}us lay", .{ state.getSlot(7) }) catch "";
-    _arr_1967[0].text = _dyn_text_2;
+    _arr_2077[0].text = _dyn_text_2;
     _dyn_text_3 = std.fmt.bufPrint(&_dyn_buf_3, "{d}us pnt", .{ state.getSlot(8) }) catch "";
-    _arr_1967[1].text = _dyn_text_3;
+    _arr_2077[1].text = _dyn_text_3;
     _dyn_text_4 = std.fmt.bufPrint(&_dyn_buf_4, "{d} fps", .{ state.getSlot(2) }) catch "";
-    _arr_1967[2].text = _dyn_text_4;
+    _arr_2077[2].text = _dyn_text_4;
     _dyn_text_5 = std.fmt.bufPrint(&_dyn_buf_5, "{d} fps", .{ state.getSlot(2) }) catch "";
-    _arr_1967[3].text = _dyn_text_5;
+    _arr_2077[3].text = _dyn_text_5;
     _dyn_text_6 = std.fmt.bufPrint(&_dyn_buf_6, "{d} fps", .{ state.getSlot(2) }) catch "";
-    _arr_1967[4].text = _dyn_text_6;
+    _arr_2077[4].text = _dyn_text_6;
     _dyn_text_7 = std.fmt.bufPrint(&_dyn_buf_7, "{d}x{d}", .{ state.getSlot(4), state.getSlot(5) }) catch "";
-    _arr_1967[5].text = _dyn_text_7;
+    _arr_2077[5].text = _dyn_text_7;
     _arr_54[0].text_color = Color.rgb(143, 171, 239);
     _arr_69[0].text_color = Color.rgb(143, 171, 239);
     _arr_85[0].text_color = Color.rgb(119, 193, 179);
@@ -4402,25 +4622,25 @@ fn _updateConditionals() void {
     _arr_1404[1].style.display = if ((state.getSlot(0) ==  1)) .flex else .none;
     _arr_1404[2].style.display = if ((state.getSlot(0) ==  2)) .flex else .none;
     _arr_1404[3].style.display = if ((state.getSlot(0) ==  3)) .flex else .none;
-    _arr_1969[2].style.display = if ((state.getSlot(1) ==  0)) .flex else .none;
-    _arr_1969[3].style.display = if ((state.getSlot(1) ==  1)) .flex else .none;
-    _arr_1969[4].style.display = if ((state.getSlot(1) ==  2)) .flex else .none;
-    _arr_1969[5].style.display = if ((state.getSlot(1) ==  3)) .flex else .none;
-    _arr_1969[6].style.display = if ((state.getSlot(1) ==  4)) .flex else .none;
-    _arr_1969[7].style.display = if ((state.getSlot(1) ==  5)) .flex else .none;
-    _arr_1969[8].style.display = if ((state.getSlot(1) ==  6)) .flex else .none;
-    _arr_1966[0].style.display = if ((state.getSlot(6) ==  1)) .flex else .none;
-    _arr_1966[1].style.display = if ((state.getSlot(6) ==  0)) .flex else .none;
-    _arr_1967[2].style.display = if ((state.getSlot(2) >=  50)) .flex else .none;
-    _arr_1967[3].style.display = if ((state.getSlot(2) <  50 and state.getSlot(2) >=  30)) .flex else .none;
-    _arr_1967[4].style.display = if ((state.getSlot(2) <  30)) .flex else .none;
-    _arr_1969[2].style.display = if ((state.getSlot(1) == 0)) .flex else .none;
-    _arr_1969[3].style.display = if ((state.getSlot(1) == 1)) .flex else .none;
-    _arr_1969[4].style.display = if ((state.getSlot(1) == 2)) .flex else .none;
-    _arr_1969[5].style.display = if ((state.getSlot(1) == 3)) .flex else .none;
-    _arr_1969[6].style.display = if ((state.getSlot(1) == 4)) .flex else .none;
-    _arr_1969[7].style.display = if ((state.getSlot(1) == 5)) .flex else .none;
-    _arr_1969[8].style.display = if ((state.getSlot(1) == 6)) .flex else .none;
+    _arr_2079[2].style.display = if ((state.getSlot(1) ==  0)) .flex else .none;
+    _arr_2079[3].style.display = if ((state.getSlot(1) ==  1)) .flex else .none;
+    _arr_2079[4].style.display = if ((state.getSlot(1) ==  2)) .flex else .none;
+    _arr_2079[5].style.display = if ((state.getSlot(1) ==  3)) .flex else .none;
+    _arr_2079[6].style.display = if ((state.getSlot(1) ==  4)) .flex else .none;
+    _arr_2079[7].style.display = if ((state.getSlot(1) ==  5)) .flex else .none;
+    _arr_2079[8].style.display = if ((state.getSlot(1) ==  6)) .flex else .none;
+    _arr_2076[0].style.display = if ((state.getSlot(6) ==  1)) .flex else .none;
+    _arr_2076[1].style.display = if ((state.getSlot(6) ==  0)) .flex else .none;
+    _arr_2077[2].style.display = if ((state.getSlot(2) >=  50)) .flex else .none;
+    _arr_2077[3].style.display = if ((state.getSlot(2) <  50 and state.getSlot(2) >=  30)) .flex else .none;
+    _arr_2077[4].style.display = if ((state.getSlot(2) <  30)) .flex else .none;
+    _arr_2079[2].style.display = if ((state.getSlot(1) == 0)) .flex else .none;
+    _arr_2079[3].style.display = if ((state.getSlot(1) == 1)) .flex else .none;
+    _arr_2079[4].style.display = if ((state.getSlot(1) == 2)) .flex else .none;
+    _arr_2079[5].style.display = if ((state.getSlot(1) == 3)) .flex else .none;
+    _arr_2079[6].style.display = if ((state.getSlot(1) == 4)) .flex else .none;
+    _arr_2079[7].style.display = if ((state.getSlot(1) == 5)) .flex else .none;
+    _arr_2079[8].style.display = if ((state.getSlot(1) == 6)) .flex else .none;
 }
 
 
