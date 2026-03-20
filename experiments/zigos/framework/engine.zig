@@ -23,6 +23,7 @@ const testharness = @import("testharness.zig");
 const videos = @import("videos.zig");
 const render_surfaces = @import("render_surfaces.zig");
 const filedrop = @import("filedrop.zig");
+const capture = @import("capture.zig");
 
 const input = @import("input.zig");
 const Node = layout.Node;
@@ -417,6 +418,9 @@ pub fn run(config: AppConfig) !void {
     render_surfaces.init();
     defer render_surfaces.deinit();
 
+    capture.init();
+    defer capture.deinit();
+
     // GPU init
     gpu.init(window) catch |err| {
         std.debug.print("wgpu init failed: {}\n", .{err});
@@ -620,6 +624,8 @@ pub fn run(config: AppConfig) !void {
                 c.SDL_KEYDOWN => {
                     const sym = event.key.keysym.sym;
                     const mod = event.key.keysym.mod;
+                    // Capture key (F9 recording toggle)
+                    if (capture.handleKey(sym)) continue;
                     // Render surface key forwarding (before F12 check so F12 still works)
                     if (sym != c.SDLK_F12 and render_surfaces.handleKeyDown(sym)) continue;
                     // F12: toggle devtools
@@ -742,6 +748,11 @@ pub fn run(config: AppConfig) !void {
         qjs_runtime.telemetry_paint_us = @intCast(@max(0, t5 - t4));
 
         gpu.frame(0.051, 0.067, 0.090);
+
+        // Capture — screenshot/recording (fires inside gpu.frame via callback)
+        if (capture.tick(config.root)) {
+            std.process.exit(0); // screenshot captured — clean exit
+        }
 
         // Test harness — run tests after layout+paint, then exit
         if (testharness.tick()) {

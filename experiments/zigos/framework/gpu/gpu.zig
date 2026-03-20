@@ -124,6 +124,99 @@ pub fn getFormat() wgpu.TextureFormat {
     return g_format;
 }
 
+// ════════════════════════════════════════════════════════════════════════
+// Frame capture — wgpu equivalent of love.graphics.captureScreenshot()
+// ════════════════════════════════════════════════════════════════════════
+
+/// Callback receives: pixel data (BGRA8), width, height, stride.
+/// The pixel data is only valid for the duration of the callback.
+pub const CaptureCallback = *const fn (pixels: [*]const u8, w: u32, h: u32, stride: u32) void;
+var g_capture_cb: ?CaptureCallback = null;
+var g_capture_requested: bool = false;
+
+/// Request a single-frame capture. The callback fires during the next frame().
+/// Matches the Love2D pattern: captureScreenshot(callback).
+pub fn captureScreenshot(cb: CaptureCallback) void {
+    g_capture_cb = cb;
+    g_capture_requested = true;
+}
+
+/// Request continuous capture (recording). Callback fires every frame.
+pub fn startCapture(cb: CaptureCallback) void {
+    g_capture_cb = cb;
+    g_capture_requested = true;
+}
+
+pub fn stopCapture() void {
+    g_capture_cb = null;
+    g_capture_requested = false;
+}
+
+pub fn isCapturing() bool {
+    return g_capture_requested;
+}
+
+/// Perform the actual readback. Called inside frame() after queue.submit(),
+/// before surface.present(). Uses a second encoder to copy texture→buffer,
+/// maps synchronously, and delivers pixels to the callback.
+fn performCapture(device: *wgpu.Device, q: *wgpu.Queue, texture: *wgpu.Texture) void {
+    const cb = g_capture_cb orelse return;
+    const w = g_width;
+    const h = g_height;
+    if (w == 0 or h == 0) return;
+
+    // bytes_per_row must be aligned to 256 for wgpu copyTextureToBuffer
+    const unaligned_bpr = w * 4;
+    const bytes_per_row = (unaligned_bpr + 255) & ~@as(u32, 255);
+    const buf_size: u64 = @as(u64, bytes_per_row) * @as(u64, h);
+
+    // Create staging buffer (map_read + copy_dst)
+    const staging = device.createBuffer(&.{
+        .label = wgpu.StringView.fromSlice("capture_staging"),
+        .size = buf_size,
+        .usage = wgpu.BufferUsages.copy_dst | wgpu.BufferUsages.map_read,
+        .mapped_at_creation = 0,
+    }) orelse return;
+    defer staging.release();
+
+    // Copy surface texture → staging buffer
+    const enc = device.createCommandEncoder(&.{}) orelse return;
+    enc.copyTextureToBuffer(
+        &.{ .texture = texture, .mip_level = 0, .origin = .{ .x = 0, .y = 0, .z = 0 }, .aspect = .all },
+        &.{ .layout = .{ .offset = 0, .bytes_per_row = bytes_per_row, .rows_per_image = h }, .buffer = staging },
+        &.{ .width = w, .height = h, .depth_or_array_layers = 1 },
+    );
+    const cmd = enc.finish(null) orelse return;
+    enc.release();
+    q.submit(&.{cmd});
+    cmd.release();
+
+    // Map synchronously — blocking poll until map completes
+    _ = staging.mapAsync(wgpu.MapModes.read, 0, @intCast(buf_size), .{
+        .mode = .allow_process_events,
+        .callback = &captureMapCallback,
+    });
+    _ = device.poll(true, null);
+
+    // Read mapped data
+    const mapped_ptr = staging.getConstMappedRange(0, @intCast(buf_size)) orelse return;
+    const mapped: [*]const u8 = @ptrCast(mapped_ptr);
+
+    // Deliver to callback (pixels are BGRA8, may have row padding)
+    cb(mapped, w, h, bytes_per_row);
+
+    staging.unmap();
+
+    // Single-shot: clear after delivery
+    if (g_capture_cb != null and !g_capture_requested) {
+        // continuous mode — keep callback
+    }
+}
+
+fn captureMapCallback(_: wgpu.MapAsyncStatus, _: wgpu.StringView, _: ?*anyopaque, _: ?*anyopaque) callconv(.c) void {
+    // Nothing to do — we use blocking poll
+}
+
 pub fn getGlobalsBuffer() ?*wgpu.Buffer {
     return g_globals_buffer;
 }
@@ -528,6 +621,11 @@ pub fn frame(bg_r: f64, bg_g: f64, bg_b: f64) void {
     queue.submit(&.{command});
     command.release();
 
+    // Capture hook — readback the rendered frame before present (like Love2D's captureScreenshot)
+    if (g_capture_requested) {
+        performCapture(device, queue, texture_obj);
+    }
+
     _ = surface.present();
 
     // Blocking poll — reclaim all staging buffers
@@ -637,6 +735,7 @@ fn configureSurface(width: u32, height: u32) void {
     const config = wgpu.SurfaceConfiguration{
         .device = device,
         .format = g_format,
+        .usage = wgpu.TextureUsages.render_attachment | wgpu.TextureUsages.copy_src,
         .width = width,
         .height = height,
         .present_mode = .fifo,
