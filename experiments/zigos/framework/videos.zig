@@ -37,6 +37,8 @@ extern fn dlsym(handle: *anyopaque, symbol: [*:0]const u8) ?*anyopaque;
 extern fn dlclose(handle: *anyopaque) c_int;
 
 const RTLD_LAZY: c_int = 0x00001;
+// RTLD_DEEPBIND isolates mpv's internal Lua 5.2 symbols. Linux-only.
+// macOS uses two-level namespaces by default (equivalent isolation).
 const RTLD_DEEPBIND: c_int = if (builtin.os.tag == .linux) 0x00008 else 0;
 
 // ════════════════════════════════════════════════════════════════════════
@@ -58,7 +60,7 @@ const MPV_FORMAT_INT64: c_int = 4;
 const MPV_FORMAT_DOUBLE: c_int = 5;
 
 // ════════════════════════════════════════════════════════════════════════
-// GL constants
+// GL constants (same set as Lua version)
 // ════════════════════════════════════════════════════════════════════════
 
 const GL_FRAMEBUFFER: c_uint = 0x8D40;
@@ -95,7 +97,7 @@ const MpvOpenGLFbo = extern struct {
 };
 
 // ════════════════════════════════════════════════════════════════════════
-// MPV function pointer types
+// MPV function pointer types (loaded from libmpv at runtime)
 // ════════════════════════════════════════════════════════════════════════
 
 const FnCreate = *const fn () callconv(.c) ?*anyopaque;
@@ -115,7 +117,7 @@ const FnRenderCtxFree = *const fn (?*anyopaque) callconv(.c) void;
 const FnRenderCtxReportSwap = *const fn (?*anyopaque) callconv(.c) void;
 
 // ════════════════════════════════════════════════════════════════════════
-// GL function pointer types
+// GL function pointer types (loaded via SDL_GL_GetProcAddress)
 // ════════════════════════════════════════════════════════════════════════
 
 const GlFunctions = struct {
@@ -163,6 +165,7 @@ var mpv_fns: Mpv = .{};
 var lib_available: bool = false;
 var load_attempted: bool = false;
 
+// GL context (shared by all videos — dedicated to mpv, separate from wgpu/Vulkan)
 var gl_window: ?*c.SDL_Window = null;
 var gl_context: c.SDL_GLContext = null;
 var gl: GlFunctions = .{};
@@ -180,22 +183,32 @@ const page_alloc = std.heap.page_allocator;
 pub const VideoStatus = enum { loading, ready, @"error" };
 
 const MAX_VIDEOS = 8;
-const UNLOAD_DEBOUNCE_FRAMES = 180;
+const UNLOAD_DEBOUNCE_FRAMES = 180; // ~3 seconds at 60fps
 
 const VideoEntry = struct {
     src: []const u8 = "",
     active: bool = false,
+
+    // mpv handles
     handle: ?*anyopaque = null,
     render_ctx: ?*anyopaque = null,
+
+    // GL resources (opengl mode only)
     fbo: c_uint = 0,
     fbo_tex: c_uint = 0,
+
+    // CPU pixel buffer (readback target)
     pixel_buf: ?[]u8 = null,
     width: u32 = 0,
     height: u32 = 0,
+
+    // wgpu resources
     texture: ?*wgpu.Texture = null,
     texture_view: ?*wgpu.TextureView = null,
     sampler: ?*wgpu.Sampler = null,
     bind_group: ?*wgpu.BindGroup = null,
+
+    // State
     status: VideoStatus = .loading,
     paused: bool = true,
     muted: bool = false,
@@ -207,9 +220,10 @@ var entries: [MAX_VIDEOS]VideoEntry = [_]VideoEntry{.{}} ** MAX_VIDEOS;
 var entry_count: usize = 0;
 
 // ════════════════════════════════════════════════════════════════════════
-// GL context setup
+// GL context setup (dedicated hidden window for mpv rendering)
 // ════════════════════════════════════════════════════════════════════════
 
+/// mpv's get_proc_address callback — routes to SDL2's GL loader
 fn glGetProcAddr(_: ?*anyopaque, name: [*:0]const u8) callconv(.c) ?*anyopaque {
     return c.SDL_GL_GetProcAddress(name);
 }
@@ -220,10 +234,20 @@ fn loadGlFn(comptime T: type, name: [*:0]const u8) ?T {
 }
 
 fn initGLContext() bool {
-    gl_window = c.SDL_CreateWindow("mpv-gl", c.SDL_WINDOWPOS_UNDEFINED, c.SDL_WINDOWPOS_UNDEFINED, 1, 1, c.SDL_WINDOW_OPENGL | c.SDL_WINDOW_HIDDEN) orelse {
+    // Create hidden SDL2 window with OpenGL support
+    gl_window = c.SDL_CreateWindow(
+        "mpv-gl",
+        c.SDL_WINDOWPOS_UNDEFINED,
+        c.SDL_WINDOWPOS_UNDEFINED,
+        1,
+        1,
+        c.SDL_WINDOW_OPENGL | c.SDL_WINDOW_HIDDEN,
+    ) orelse {
         std.debug.print("[videos] failed to create GL window\n", .{});
         return false;
     };
+
+    // Create GL context
     gl_context = c.SDL_GL_CreateContext(gl_window.?);
     if (gl_context == null) {
         std.debug.print("[videos] failed to create GL context: {s}\n", .{c.SDL_GetError()});
@@ -231,6 +255,8 @@ fn initGLContext() bool {
         gl_window = null;
         return false;
     }
+
+    // Load GL function pointers
     gl.genFramebuffers = loadGlFn(@TypeOf(gl.genFramebuffers), "glGenFramebuffers") orelse return glInitFail("glGenFramebuffers");
     gl.deleteFramebuffers = loadGlFn(@TypeOf(gl.deleteFramebuffers), "glDeleteFramebuffers") orelse return glInitFail("glDeleteFramebuffers");
     gl.bindFramebuffer = loadGlFn(@TypeOf(gl.bindFramebuffer), "glBindFramebuffer") orelse return glInitFail("glBindFramebuffer");
@@ -242,6 +268,7 @@ fn initGLContext() bool {
     gl.texImage2D = loadGlFn(@TypeOf(gl.texImage2D), "glTexImage2D") orelse return glInitFail("glTexImage2D");
     gl.texParameteri = loadGlFn(@TypeOf(gl.texParameteri), "glTexParameteri") orelse return glInitFail("glTexParameteri");
     gl.readPixels = loadGlFn(@TypeOf(gl.readPixels), "glReadPixels") orelse return glInitFail("glReadPixels");
+
     gl_available = true;
     std.debug.print("[videos] GL context ready (dedicated for mpv)\n", .{});
     return true;
@@ -254,16 +281,25 @@ fn glInitFail(name: [*:0]const u8) bool {
 }
 
 fn deinitGLContext() void {
-    if (gl_context != null) { c.SDL_GL_DeleteContext(gl_context); gl_context = null; }
-    if (gl_window) |w| { c.SDL_DestroyWindow(w); gl_window = null; }
+    if (gl_context != null) {
+        c.SDL_GL_DeleteContext(gl_context);
+        gl_context = null;
+    }
+    if (gl_window) |w| {
+        c.SDL_DestroyWindow(w);
+        gl_window = null;
+    }
     gl_available = false;
 }
 
+/// Make the dedicated GL context current for mpv operations.
 fn makeGLCurrent() void {
-    if (gl_window != null and gl_context != null)
+    if (gl_window != null and gl_context != null) {
         _ = c.SDL_GL_MakeCurrent(gl_window.?, gl_context);
+    }
 }
 
+/// Create a private GL FBO + texture for mpv to render into.
 fn createPrivateFBO(w: u32, h: u32) struct { fbo: c_uint, tex: c_uint } {
     var tex: c_uint = 0;
     gl.genTextures(1, &tex);
@@ -272,23 +308,27 @@ fn createPrivateFBO(w: u32, h: u32) struct { fbo: c_uint, tex: c_uint } {
     gl.texParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     gl.texParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     gl.bindTexture(GL_TEXTURE_2D, 0);
+
     var fbo: c_uint = 0;
     gl.genFramebuffers(1, &fbo);
     gl.bindFramebuffer(GL_FRAMEBUFFER, fbo);
     gl.framebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, 0);
+
     const status = gl.checkFramebufferStatus(GL_FRAMEBUFFER);
     gl.bindFramebuffer(GL_FRAMEBUFFER, 0);
+
     if (status != GL_FRAMEBUFFER_COMPLETE) {
         std.debug.print("[videos] private FBO incomplete (status=0x{x})\n", .{status});
         gl.deleteTextures(1, &tex);
         gl.deleteFramebuffers(1, &fbo);
         return .{ .fbo = 0, .tex = 0 };
     }
+
     return .{ .fbo = fbo, .tex = tex };
 }
 
 // ════════════════════════════════════════════════════════════════════════
-// Library loading
+// Library loading (lazy — deferred until first video is requested)
 // ════════════════════════════════════════════════════════════════════════
 
 fn lookupFn(comptime T: type, handle: *anyopaque, name: [*:0]const u8) ?T {
@@ -296,6 +336,7 @@ fn lookupFn(comptime T: type, handle: *anyopaque, name: [*:0]const u8) ?T {
     return @ptrCast(sym);
 }
 
+/// Load libmpv on demand. Safe to call multiple times.
 pub fn loadLibrary() bool {
     if (lib_available) return true;
     if (load_attempted) return false;
@@ -303,6 +344,7 @@ pub fn loadLibrary() bool {
 
     const is_linux = builtin.os.tag == .linux;
     const flags = RTLD_LAZY | RTLD_DEEPBIND;
+
     const paths: []const [*:0]const u8 = if (is_linux)
         &.{ "libmpv.so.2", "libmpv.so" }
     else
@@ -311,9 +353,15 @@ pub fn loadLibrary() bool {
     var handle: ?*anyopaque = null;
     for (paths) |path| {
         handle = dlopen(path, flags);
-        if (handle != null) { std.debug.print("[videos] libmpv loaded from {s}\n", .{std.mem.span(path)}); break; }
+        if (handle != null) {
+            std.debug.print("[videos] libmpv loaded from {s}\n", .{std.mem.span(path)});
+            break;
+        }
     }
-    const h = handle orelse { std.debug.print("[videos] libmpv not available\n", .{}); return false; };
+    const h = handle orelse {
+        std.debug.print("[videos] libmpv not available — install libmpv-dev for video playback\n", .{});
+        return false;
+    };
     lib_handle = h;
 
     mpv_fns.create = lookupFn(FnCreate, h, "mpv_create") orelse return loadFail("mpv_create");
@@ -332,6 +380,7 @@ pub fn loadLibrary() bool {
     mpv_fns.render_ctx_free = lookupFn(FnRenderCtxFree, h, "mpv_render_context_free") orelse return loadFail("mpv_render_context_free");
     mpv_fns.render_ctx_report_swap = lookupFn(FnRenderCtxReportSwap, h, "mpv_render_context_report_swap") orelse return loadFail("mpv_render_context_report_swap");
 
+    // Try to set up GL context (primary path). Fall back to SW if it fails.
     if (initGLContext()) {
         render_mode = .opengl;
         std.debug.print("[videos] render mode: OpenGL (GPU-accelerated)\n", .{});
@@ -351,14 +400,22 @@ fn loadFail(name: [*:0]const u8) bool {
     return false;
 }
 
+/// Fully unload libmpv: destroy all videos, dlclose handle, reset flags.
 pub fn unloadLibrary() void {
     if (!lib_available) return;
-    std.debug.print("[videos] unloadLibrary: tearing down...\n", .{});
+    std.debug.print("[videos] unloadLibrary: tearing down mpv...\n", .{});
+
     clearCache();
     deinitGLContext();
-    if (lib_handle) |h| { _ = dlclose(h); lib_handle = null; }
+
+    if (lib_handle) |h| {
+        _ = dlclose(h);
+        lib_handle = null;
+    }
+
     lib_available = false;
     load_attempted = false;
+    std.debug.print("[videos] unloadLibrary: complete\n", .{});
 }
 
 // ════════════════════════════════════════════════════════════════════════
@@ -390,16 +447,8 @@ fn findEntry(src: []const u8) ?*VideoEntry {
     return null;
 }
 
-/// Find any entry that is ready (for keyboard routing).
-fn findAnyReady() ?*VideoEntry {
-    for (entries[0..entry_count]) |*e| {
-        if (e.status == .ready and e.handle != null) return e;
-    }
-    return null;
-}
-
 // ════════════════════════════════════════════════════════════════════════
-// Video loading
+// Video loading (per-source mpv instances)
 // ════════════════════════════════════════════════════════════════════════
 
 fn loadVideo(src: []const u8) void {
@@ -418,6 +467,7 @@ fn loadVideo(src: []const u8) void {
         return;
     };
 
+    // Configure — same options as the Lua version
     _ = mpv_fns.set_option_string(handle, "vo", "libmpv");
     _ = mpv_fns.set_option_string(handle, "hwdec", if (render_mode == .opengl) "auto" else "no");
     _ = mpv_fns.set_option_string(handle, "load-scripts", "no");
@@ -431,8 +481,7 @@ fn loadVideo(src: []const u8) void {
     _ = mpv_fns.set_option_string(handle, "input-default-bindings", "no");
     _ = mpv_fns.set_option_string(handle, "input-vo-keyboard", "no");
     _ = mpv_fns.set_option_string(handle, "pause", "yes");
-    // FIX #2: Disable mpv's internal frame timing — we drive the render loop.
-    // Without this, mpv_render_context_render blocks to hit its target framerate.
+    // Disable mpv's internal frame timing — we drive the render loop
     _ = mpv_fns.set_option_string(handle, "video-timing-offset", "0");
 
     var err = mpv_fns.initialize(handle);
@@ -444,6 +493,7 @@ fn loadVideo(src: []const u8) void {
         return;
     }
 
+    // Create render context — OpenGL primary, SW fallback
     var render_ctx: ?*anyopaque = null;
     const entry_mode = createRenderContext(handle, &render_ctx);
 
@@ -455,6 +505,7 @@ fn loadVideo(src: []const u8) void {
         return;
     }
 
+    // Load file
     var path_buf: [4096]u8 = undefined;
     if (src.len >= path_buf.len) {
         mpv_fns.render_ctx_free(render_ctx);
@@ -503,41 +554,55 @@ fn loadVideo(src: []const u8) void {
     std.debug.print("[videos] loading: {s} (mode={s})\n", .{ src, @tagName(entry_mode) });
 }
 
+/// Create mpv render context. Tries OpenGL first, falls back to software.
 fn createRenderContext(handle: ?*anyopaque, out_ctx: *?*anyopaque) RenderMode {
+    // Try OpenGL first
     if (gl_available) {
         makeGLCurrent();
-        var gl_init = MpvOpenGLInitParams{ .get_proc_address = &glGetProcAddr };
+        var gl_init = MpvOpenGLInitParams{
+            .get_proc_address = &glGetProcAddr,
+        };
         var api_type_gl: [6:0]u8 = "opengl".*;
         var create_params_gl = [_]MpvRenderParam{
             .{ .type = MPV_RENDER_PARAM_API_TYPE, .data = @ptrCast(&api_type_gl) },
             .{ .type = MPV_RENDER_PARAM_OPENGL_INIT_PARAMS, .data = @ptrCast(&gl_init) },
             .{ .type = 0, .data = null },
         };
+
         const err = mpv_fns.render_ctx_create(out_ctx, handle, &create_params_gl);
-        if (err >= 0 and out_ctx.* != null) return .opengl;
+        if (err >= 0 and out_ctx.* != null) {
+            return .opengl;
+        }
         std.debug.print("[videos] GL render context failed ({s}), trying SW\n", .{std.mem.span(mpv_fns.error_string(err))});
     }
+
+    // Fallback: software renderer
     var api_type_sw: [2:0]u8 = "sw".*;
     var create_params_sw = [_]MpvRenderParam{
         .{ .type = MPV_RENDER_PARAM_API_TYPE, .data = @ptrCast(&api_type_sw) },
         .{ .type = 0, .data = null },
     };
+
     const err = mpv_fns.render_ctx_create(out_ctx, handle, &create_params_sw);
-    if (err >= 0 and out_ctx.* != null) return .software;
+    if (err >= 0 and out_ctx.* != null) {
+        return .software;
+    }
     std.debug.print("[videos] SW render context also failed: {s}\n", .{std.mem.span(mpv_fns.error_string(err))});
     return .software;
 }
 
 // ════════════════════════════════════════════════════════════════════════
-// Per-frame update
+// Per-frame update — poll mpv, render frames, upload to wgpu
 // ════════════════════════════════════════════════════════════════════════
 
+/// Call once per frame before paint.
 pub fn update() void {
     if (!lib_available) return;
 
     const device = gpu_core.getDevice() orelse return;
     const queue = gpu_core.getQueue() orelse return;
 
+    // Make GL context current for all GL-mode videos
     var need_gl = false;
     for (entries[0..entry_count]) |e| {
         if (e.mode == .opengl and e.handle != null) { need_gl = true; break; }
@@ -547,7 +612,7 @@ pub fn update() void {
     for (entries[0..entry_count]) |*e| {
         if (e.handle == null) continue;
 
-        // Phase 1: Init texture + FBO when video dimensions become available
+        // Phase 1: Initialize texture + FBO for newly loaded videos
         if (e.status == .loading and e.texture == null) {
             const w_opt = getMpvInt(e.handle, "video-params/w");
             const h_opt = getMpvInt(e.handle, "video-params/h");
@@ -560,6 +625,7 @@ pub fn update() void {
                         std.debug.print("[videos] ready: {s} ({d}x{d}, {s})\n", .{ e.src, w, h, @tagName(e.mode) });
                     } else {
                         e.status = .@"error";
+                        std.debug.print("[videos] failed to create resources for {s}\n", .{e.src});
                     }
                 }
             }
@@ -570,10 +636,11 @@ pub fn update() void {
             if (e.render_ctx) |ctx| {
                 const flags = mpv_fns.render_ctx_update(ctx);
                 if (flags & MPV_RENDER_UPDATE_FRAME != 0) {
-                    if (e.mode == .opengl)
-                        renderGL(e, queue)
-                    else
+                    if (e.mode == .opengl) {
+                        renderGL(e, queue);
+                    } else {
                         renderSW(e, queue);
+                    }
                 }
             }
         }
@@ -586,7 +653,9 @@ pub fn update() void {
             entries[i].inactive_frames += 1;
             if (entries[i].inactive_frames >= UNLOAD_DEBOUNCE_FRAMES) {
                 destroyEntry(&entries[i]);
-                if (i < entry_count - 1) entries[i] = entries[entry_count - 1];
+                if (i < entry_count - 1) {
+                    entries[i] = entries[entry_count - 1];
+                }
                 entry_count -= 1;
                 continue;
             }
@@ -602,29 +671,63 @@ fn initVideoResources(e: *VideoEntry, device: *wgpu.Device, w: u32, h: u32) bool
     e.width = w;
     e.height = h;
 
+    // Create private GL FBO for OpenGL mode
     if (e.mode == .opengl and gl_available) {
         const fbo_result = createPrivateFBO(w, h);
-        if (fbo_result.fbo == 0) { page_alloc.free(e.pixel_buf.?); e.pixel_buf = null; return false; }
+        if (fbo_result.fbo == 0) {
+            page_alloc.free(e.pixel_buf.?);
+            e.pixel_buf = null;
+            return false;
+        }
         e.fbo = fbo_result.fbo;
         e.fbo_tex = fbo_result.tex;
     }
 
+    // Create wgpu texture (RGBA8)
     e.texture = device.createTexture(&.{
         .label = wgpu.StringView.fromSlice("video_frame"),
         .size = .{ .width = w, .height = h, .depth_or_array_layers = 1 },
-        .mip_level_count = 1, .sample_count = 1, .dimension = .@"2d",
+        .mip_level_count = 1,
+        .sample_count = 1,
+        .dimension = .@"2d",
         .format = .rgba8_unorm,
         .usage = wgpu.TextureUsages.texture_binding | wgpu.TextureUsages.copy_dst,
     }) orelse return false;
 
-    e.texture_view = (e.texture orelse return false).createView(null) orelse { e.texture.?.destroy(); e.texture = null; return false; };
-    e.sampler = device.createSampler(&.{ .address_mode_u = .clamp_to_edge, .address_mode_v = .clamp_to_edge, .mag_filter = .linear, .min_filter = .linear }) orelse { e.texture_view.?.release(); e.texture.?.destroy(); e.texture_view = null; e.texture = null; return false; };
-    e.bind_group = images.createBindGroup(e.texture_view.?, e.sampler.?) orelse { e.sampler.?.release(); e.texture_view.?.release(); e.texture.?.destroy(); e.sampler = null; e.texture_view = null; e.texture = null; return false; };
+    e.texture_view = (e.texture orelse return false).createView(null) orelse {
+        e.texture.?.destroy();
+        e.texture = null;
+        return false;
+    };
+
+    e.sampler = device.createSampler(&.{
+        .address_mode_u = .clamp_to_edge,
+        .address_mode_v = .clamp_to_edge,
+        .mag_filter = .linear,
+        .min_filter = .linear,
+    }) orelse {
+        e.texture_view.?.release();
+        e.texture.?.destroy();
+        e.texture_view = null;
+        e.texture = null;
+        return false;
+    };
+
+    e.bind_group = images.createBindGroup(e.texture_view.?, e.sampler.?) orelse {
+        e.sampler.?.release();
+        e.texture_view.?.release();
+        e.texture.?.destroy();
+        e.sampler = null;
+        e.texture_view = null;
+        e.texture = null;
+        return false;
+    };
+
     return true;
 }
 
 // ════════════════════════════════════════════════════════════════════════
-// Frame rendering — OpenGL path
+// Frame rendering — OpenGL path (GPU-accelerated)
 // ════════════════════════════════════════════════════════════════════════
 
 fn renderGL(e: *VideoEntry, queue: *wgpu.Queue) void {
@@ -635,11 +738,15 @@ fn renderGL(e: *VideoEntry, queue: *wgpu.Queue) void {
     const h = e.height;
     if (e.fbo == 0) return;
 
-    var mpv_fbo = MpvOpenGLFbo{ .fbo = @intCast(e.fbo), .w = @intCast(w), .h = @intCast(h), .internal_format = 0 };
-    var flip_y: c_int = 1;
-    // FIX #2: BLOCK_FOR_TARGET_TIME=0 tells mpv not to block in render()
-    // waiting for the display refresh interval. We drive the frame clock.
-    var block_time: c_int = 0;
+    // mpv renders to private FBO
+    var mpv_fbo = MpvOpenGLFbo{
+        .fbo = @intCast(e.fbo),
+        .w = @intCast(w),
+        .h = @intCast(h),
+        .internal_format = 0,
+    };
+    var flip_y: c_int = 1; // top-down output for wgpu
+    var block_time: c_int = 0; // don't block waiting for display refresh
     var render_params = [_]MpvRenderParam{
         .{ .type = MPV_RENDER_PARAM_OPENGL_FBO, .data = @ptrCast(&mpv_fbo) },
         .{ .type = MPV_RENDER_PARAM_FLIP_Y, .data = @ptrCast(&flip_y) },
@@ -651,15 +758,17 @@ fn renderGL(e: *VideoEntry, queue: *wgpu.Queue) void {
     if (err < 0) return;
     mpv_fns.render_ctx_report_swap(ctx);
 
+    // Read back from private FBO to CPU buffer
     gl.bindFramebuffer(GL_READ_FRAMEBUFFER, e.fbo);
     gl.readPixels(0, 0, @intCast(w), @intCast(h), GL_RGBA, GL_UNSIGNED_BYTE, @ptrCast(buf.ptr));
     gl.bindFramebuffer(GL_READ_FRAMEBUFFER, 0);
 
+    // Upload to wgpu texture
     uploadToWgpu(tex, buf, w, h, queue);
 }
 
 // ════════════════════════════════════════════════════════════════════════
-// Frame rendering — Software fallback
+// Frame rendering — Software fallback (CPU-only)
 // ════════════════════════════════════════════════════════════════════════
 
 fn renderSW(e: *VideoEntry, queue: *wgpu.Queue) void {
@@ -686,26 +795,40 @@ fn renderSW(e: *VideoEntry, queue: *wgpu.Queue) void {
     const err = mpv_fns.render_ctx_render(ctx, &render_params);
     if (err < 0) return;
     mpv_fns.render_ctx_report_swap(ctx);
+
     uploadToWgpu(tex, buf, w, h, queue);
 }
 
+// ════════════════════════════════════════════════════════════════════════
+// Shared: CPU buffer → wgpu texture upload
+// ════════════════════════════════════════════════════════════════════════
+
 fn uploadToWgpu(tex: *wgpu.Texture, buf: []u8, w: u32, h: u32, queue: *wgpu.Queue) void {
     queue.writeTexture(
-        &.{ .texture = tex, .mip_level = 0, .origin = .{ .x = 0, .y = 0, .z = 0 }, .aspect = .all },
+        &.{
+            .texture = tex,
+            .mip_level = 0,
+            .origin = .{ .x = 0, .y = 0, .z = 0 },
+            .aspect = .all,
+        },
         @ptrCast(buf.ptr),
         @as(usize, w) * @as(usize, h) * 4,
-        &.{ .offset = 0, .bytes_per_row = w * 4, .rows_per_image = h },
+        &.{
+            .offset = 0,
+            .bytes_per_row = w * 4,
+            .rows_per_image = h,
+        },
         &.{ .width = w, .height = h, .depth_or_array_layers = 1 },
     );
 }
 
 // ════════════════════════════════════════════════════════════════════════
-// Paint-phase API — FIX #1: aspect-ratio-aware "contain" scaling
+// Paint-phase API (called from engine during node traversal)
 // ════════════════════════════════════════════════════════════════════════
 
 /// Called during paint when a node with video_src is encountered.
-/// Scales the video to fit the container while preserving aspect ratio
-/// (letterboxed / pillarboxed). Returns true if a quad was queued.
+/// Ensures the video is loaded and queues the textured quad for rendering.
+/// Returns true if a video quad was queued (caller should skip background paint).
 pub fn paintVideo(src: []const u8, x: f32, y: f32, w: f32, h: f32, opacity: f32) bool {
     var entry = findEntry(src);
     if (entry == null) {
@@ -728,11 +851,11 @@ pub fn paintVideo(src: []const u8, x: f32, y: f32, w: f32, h: f32, opacity: f32)
     var draw_w: f32 = undefined;
     var draw_h: f32 = undefined;
     if (vid_aspect > box_aspect) {
-        // Video is wider than container — fit to width, letterbox top/bottom
+        // Video wider than container — fit to width, letterbox top/bottom
         draw_w = w;
         draw_h = w / vid_aspect;
     } else {
-        // Video is taller than container — fit to height, pillarbox left/right
+        // Video taller than container — fit to height, pillarbox left/right
         draw_h = h;
         draw_w = h * vid_aspect;
     }
@@ -743,11 +866,13 @@ pub fn paintVideo(src: []const u8, x: f32, y: f32, w: f32, h: f32, opacity: f32)
     return true;
 }
 
+/// Get the status of a video source.
 pub fn getStatus(src: []const u8) ?VideoStatus {
     const e = findEntry(src) orelse return null;
     return e.status;
 }
 
+/// Get the intrinsic dimensions of a video.
 pub fn getDimensions(src: []const u8) ?struct { w: u32, h: u32 } {
     const e = findEntry(src) orelse return null;
     if (e.width > 0 and e.height > 0) return .{ .w = e.width, .h = e.height };
@@ -760,7 +885,10 @@ pub fn getDimensions(src: []const u8) ?struct { w: u32, h: u32 } {
 
 pub fn setPaused(src: []const u8, paused: bool) void {
     const e = findEntry(src) orelse return;
-    if (e.handle) |h| { _ = mpv_fns.set_property_string(h, "pause", if (paused) "yes" else "no"); e.paused = paused; }
+    if (e.handle) |h| {
+        _ = mpv_fns.set_property_string(h, "pause", if (paused) "yes" else "no");
+        e.paused = paused;
+    }
 }
 
 pub fn setVolume(src: []const u8, volume: f32) void {
@@ -775,12 +903,16 @@ pub fn setVolume(src: []const u8, volume: f32) void {
 
 pub fn setMuted(src: []const u8, muted: bool) void {
     const e = findEntry(src) orelse return;
-    if (e.handle) |h| { _ = mpv_fns.set_property_string(h, "mute", if (muted) "yes" else "no"); e.muted = muted; }
+    if (e.handle) |h| {
+        _ = mpv_fns.set_property_string(h, "mute", if (muted) "yes" else "no");
+    }
 }
 
 pub fn setLoop(src: []const u8, loop: bool) void {
     const e = findEntry(src) orelse return;
-    if (e.handle) |h| { _ = mpv_fns.set_property_string(h, "loop-file", if (loop) "inf" else "no"); }
+    if (e.handle) |h| {
+        _ = mpv_fns.set_property_string(h, "loop-file", if (loop) "inf" else "no");
+    }
 }
 
 pub fn seek(src: []const u8, time: f64) void {
@@ -791,29 +923,6 @@ pub fn seek(src: []const u8, time: f64) void {
         buf[time_str.len] = 0;
         const cmd = [_]?[*:0]const u8{ "seek", buf[0..time_str.len :0], "absolute", null };
         _ = mpv_fns.command(h, &cmd);
-    }
-}
-
-pub fn seekRelative(src: []const u8, delta: f64) void {
-    const e = findEntry(src) orelse return;
-    if (e.handle) |h| {
-        var buf: [32]u8 = undefined;
-        const s = std.fmt.bufPrint(&buf, "{d:.1}", .{delta}) catch return;
-        buf[s.len] = 0;
-        const cmd = [_]?[*:0]const u8{ "seek", buf[0..s.len :0], "relative", null };
-        _ = mpv_fns.command(h, &cmd);
-    }
-}
-
-pub fn adjustVolume(src: []const u8, delta: f64) void {
-    const e = findEntry(src) orelse return;
-    if (e.handle) |h| {
-        const cur = getMpvDouble(h, "volume") orelse 100;
-        const nv = @max(0, @min(150, cur + delta));
-        var buf: [32]u8 = undefined;
-        const s = std.fmt.bufPrint(&buf, "{d:.0}", .{nv}) catch return;
-        buf[s.len] = 0;
-        _ = mpv_fns.set_property_string(h, "volume", buf[0..s.len :0]);
     }
 }
 
@@ -835,8 +944,105 @@ pub fn getPaused(src: []const u8) bool {
 }
 
 // ════════════════════════════════════════════════════════════════════════
-// FIX #4: Default keyboard controls — handled by the engine
+// Cleanup
 // ════════════════════════════════════════════════════════════════════════
+
+fn destroyEntry(e: *VideoEntry) void {
+    // Stop playback first to prevent mpv_terminate_destroy from blocking
+    if (e.handle) |h| {
+        _ = mpv_fns.set_property_string(h, "pause", "yes");
+        var stop_cmd = [_]?[*:0]const u8{ "stop", null };
+        _ = mpv_fns.command(h, &stop_cmd);
+    }
+    if (e.bind_group) |bg| bg.release();
+    if (e.sampler) |s| s.release();
+    if (e.texture_view) |v| v.release();
+    if (e.texture) |t| t.destroy();
+    // GL resources (need GL context current)
+    if (e.fbo != 0 and gl_available) {
+        makeGLCurrent();
+        var fbo = e.fbo;
+        var tex = e.fbo_tex;
+        gl.deleteFramebuffers(1, &fbo);
+        gl.deleteTextures(1, &tex);
+    }
+    if (e.render_ctx) |ctx| mpv_fns.render_ctx_free(ctx);
+    if (e.handle) |h| mpv_fns.terminate_destroy(h);
+    if (e.pixel_buf) |buf| page_alloc.free(buf);
+    e.* = .{};
+}
+
+fn clearCache() void {
+    for (entries[0..entry_count]) |*e| {
+        destroyEntry(e);
+    }
+    entry_count = 0;
+}
+
+pub fn deinit() void {
+    unloadLibrary();
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// File drop subscriber — registered via the generic filedrop system
+// ════════════════════════════════════════════════════════════════════════
+
+const filedrop = @import("filedrop.zig");
+const Node = @import("layout.zig").Node;
+
+/// Subscribe to file drop events. Called once at engine startup.
+pub fn init() void {
+    filedrop.subscribe(&onFileDrop);
+}
+
+/// File drop handler — loads dropped file as video, auto-plays.
+/// If libmpv isn't loaded yet, loadLibrary() is called on demand.
+fn onFileDrop(path: []const u8, root: *Node) void {
+    if (!loadLibrary()) return;
+
+    std.debug.print("[videos] file drop: {s}\n", .{path});
+
+    // Destroy all existing videos and load the new one
+    clearCache();
+    loadVideo(path);
+
+    // Auto-play
+    if (findEntry(path)) |e| {
+        if (e.handle) |h| {
+            _ = mpv_fns.set_property_string(h, "pause", "no");
+            e.paused = false;
+        }
+    }
+
+    // Rewrite video_src on all Video nodes so paint picks up the new source
+    patchVideoNodes(root, path);
+}
+
+fn patchVideoNodes(node: *Node, path: []const u8) void {
+    if (node.video_src != null) {
+        node.video_src = path;
+    }
+    for (node.children) |*child| {
+        patchVideoNodes(child, path);
+    }
+}
+
+/// Return count of loaded videos.
+pub fn videoCount() usize {
+    return entry_count;
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// Default keyboard controls — Space, arrows, M
+// ════════════════════════════════════════════════════════════════════════
+
+/// Find any entry that is ready (for keyboard routing).
+fn findAnyReady() ?*VideoEntry {
+    for (entries[0..entry_count]) |*e| {
+        if (e.status == .ready and e.handle != null) return e;
+    }
+    return null;
+}
 
 /// Handle a key press for video playback. Returns true if consumed.
 /// Space: play/pause, Left/Right: seek ±5s, Up/Down: volume ±5, M: mute
@@ -861,76 +1067,31 @@ pub fn handleKey(sym: c_int) bool {
         return true;
     } else if (sym == c.SDLK_m) {
         e.muted = !e.muted;
-        if (e.handle) |h| _ = mpv_fns.set_property_string(h, "mute", if (e.muted) "yes" else "no");
+        setMuted(src, e.muted);
         return true;
     }
     return false;
 }
 
-// ════════════════════════════════════════════════════════════════════════
-// FIX #3: Clean shutdown — stop playback before destruction
-// ════════════════════════════════════════════════════════════════════════
-
-fn destroyEntry(e: *VideoEntry) void {
-    // Stop playback first to prevent mpv_terminate_destroy from blocking
+fn seekRelative(src: []const u8, delta: f64) void {
+    const e = findEntry(src) orelse return;
     if (e.handle) |h| {
-        _ = mpv_fns.set_property_string(h, "pause", "yes");
-        var stop_cmd = [_]?[*:0]const u8{ "stop", null };
-        _ = mpv_fns.command(h, &stop_cmd);
+        var buf: [32]u8 = undefined;
+        const s = std.fmt.bufPrint(&buf, "{d:.1}", .{delta}) catch return;
+        buf[s.len] = 0;
+        const cmd = [_]?[*:0]const u8{ "seek", buf[0..s.len :0], "relative", null };
+        _ = mpv_fns.command(h, &cmd);
     }
-    if (e.bind_group) |bg| bg.release();
-    if (e.sampler) |s| s.release();
-    if (e.texture_view) |v| v.release();
-    if (e.texture) |t| t.destroy();
-    if (e.fbo != 0 and gl_available) {
-        makeGLCurrent();
-        var fbo = e.fbo;
-        var tex = e.fbo_tex;
-        gl.deleteFramebuffers(1, &fbo);
-        gl.deleteTextures(1, &tex);
+}
+
+fn adjustVolume(src: []const u8, delta: f64) void {
+    const e = findEntry(src) orelse return;
+    if (e.handle) |h| {
+        const cur = getMpvDouble(h, "volume") orelse 100;
+        const nv = @max(0, @min(150, cur + delta));
+        var buf: [32]u8 = undefined;
+        const s = std.fmt.bufPrint(&buf, "{d:.0}", .{nv}) catch return;
+        buf[s.len] = 0;
+        _ = mpv_fns.set_property_string(h, "volume", buf[0..s.len :0]);
     }
-    if (e.render_ctx) |ctx| mpv_fns.render_ctx_free(ctx);
-    if (e.handle) |h| mpv_fns.terminate_destroy(h);
-    if (e.pixel_buf) |buf| page_alloc.free(buf);
-    e.* = .{};
-}
-
-fn clearCache() void {
-    for (entries[0..entry_count]) |*e| destroyEntry(e);
-    entry_count = 0;
-}
-
-pub fn deinit() void {
-    unloadLibrary();
-}
-
-// ════════════════════════════════════════════════════════════════════════
-// File drop subscriber
-// ════════════════════════════════════════════════════════════════════════
-
-const filedrop = @import("filedrop.zig");
-const Node = @import("layout.zig").Node;
-
-pub fn init() void {
-    filedrop.subscribe(&onFileDrop);
-}
-
-fn onFileDrop(path: []const u8, root: *Node) void {
-    if (!loadLibrary()) return;
-    std.debug.print("[videos] file drop: {s}\n", .{path});
-    clearCache();
-    loadVideo(path);
-    if (findEntry(path)) |e| {
-        if (e.handle) |h| { _ = mpv_fns.set_property_string(h, "pause", "no"); e.paused = false; }
-    }
-    patchVideoNodes(root, path);
-}
-
-fn patchVideoNodes(node: *Node, path: []const u8) void {
-    if (node.video_src != null) node.video_src = path;
-    for (node.children) |*child| patchVideoNodes(child, path);
-}
-
-pub fn videoCount() usize {
-    return entry_count;
 }
