@@ -474,8 +474,57 @@ pub fn resizeVterm(rows: u16, cols: u16) void {
 // The VTerm struct exposes getCell/getRowText/dirty_rows for the component to read.
 
 pub fn deinit() void {
+    closePty();
     if (g_vterm) |*v| {
         v.deinitVterm();
         g_vterm = null;
+    }
+}
+
+// ── PTY integration — spawn shell, drain to vterm each frame ────────
+
+const pty_mod = @import("pty.zig");
+
+var g_pty: ?pty_mod.Pty = null;
+
+/// Spawn a shell and connect it to the global vterm instance.
+/// If vterm doesn't exist yet, creates one at the given dimensions.
+pub fn spawnShell(shell: [*:0]const u8, rows: u16, cols: u16) void {
+    if (g_pty != null) closePty();
+    if (g_vterm == null) initVterm(rows, cols);
+
+    g_pty = pty_mod.openPty(.{ .shell = shell, .rows = rows, .cols = cols }) catch |err| {
+        std.debug.print("[vterm] spawnShell failed: {}\n", .{err});
+        return;
+    };
+    std.debug.print("[vterm] shell spawned: {s} ({d}x{d})\n", .{ std.mem.span(shell), cols, rows });
+}
+
+/// Drain PTY output → feed to vterm. Call once per frame.
+/// Returns true if new data was received.
+pub fn pollPty() bool {
+    var p = &(g_pty orelse return false);
+    const data = p.readData() orelse return false;
+    if (g_vterm) |*v| v.feedData(data);
+    return true;
+}
+
+/// Send keystrokes to the PTY (keyboard input from the user).
+pub fn writePty(data: []const u8) void {
+    var p = &(g_pty orelse return);
+    _ = p.writeData(data);
+}
+
+/// Check if the shell is still running.
+pub fn ptyAlive() bool {
+    var p = &(g_pty orelse return false);
+    return p.alive();
+}
+
+/// Close the PTY and reap the child.
+pub fn closePty() void {
+    if (g_pty) |*p| {
+        p.closePty();
+        g_pty = null;
     }
 }

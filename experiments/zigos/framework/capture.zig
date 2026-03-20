@@ -35,7 +35,7 @@ const page_alloc = std.heap.page_allocator;
 var ss_enabled: bool = false;
 var ss_captured: bool = false;
 var ss_frame: u32 = 0;
-const SS_WAIT_FRAMES: u32 = 3;
+const SS_WAIT_FRAMES: u32 = 60;
 
 var ss_path_buf: [512]u8 = undefined;
 var ss_path: [*:0]const u8 = "screenshot.png";
