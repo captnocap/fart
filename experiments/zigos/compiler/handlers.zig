@@ -164,6 +164,21 @@ fn emitStatement(
         return;
     }
 
+    // ── 3c. setBreakpoints(md, lg, xl) → breakpoint.setThresholds(md, lg, xl) ──
+    if (std.mem.eql(u8, name, "setBreakpoints")) {
+        self.advance_token();
+        if (self.curKind() == .lparen) self.advance_token();
+        const md_expr = try emitStateExpr(self);
+        if (self.curKind() == .comma) self.advance_token();
+        const lg_expr = try emitStateExpr(self);
+        if (self.curKind() == .comma) self.advance_token();
+        const xl_expr = try emitStateExpr(self);
+        if (self.curKind() == .rparen) self.advance_token();
+        self.has_breakpoints = true;
+        try stmts.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "{s}breakpoint.setThresholds({s}, {s}, {s});\n", .{ pad, md_expr, lg_expr, xl_expr }));
+        return;
+    }
+
     // ── 4. Local variable: const/let/var name = expr ──
     // Pushed to Generator.local_vars for compile-time substitution in emitStateAtom.
     // NOT emitted as Zig code — referenced by name in subsequent expressions.
