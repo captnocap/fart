@@ -882,12 +882,14 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
         for (0..self.dyn_style_count) |dsi| {
             if (!self.dyn_styles[dsi].has_ref) {
                 // Build the placeholder pattern for this field
-                const placeholder = if (std.mem.eql(u8, self.dyn_styles[dsi].field, "text_color"))
+                const field = self.dyn_styles[dsi].field;
+                const placeholder = if (std.mem.eql(u8, field, "text_color"))
                     ".text_color = Color.rgb(0, 0, 0)"
-                else if (std.mem.eql(u8, self.dyn_styles[dsi].field, "canvas_flow_speed"))
+                else if (std.mem.eql(u8, field, "canvas_flow_speed"))
                     ".canvas_flow_speed = 0"
                 else
-                    "";
+                    // Generic numeric style field (width, height, padding, etc.)
+                    std.fmt.allocPrint(self.alloc, ".{s} = 0", .{field}) catch "";
                 if (placeholder.len > 0) {
                     for (child_exprs.items, 0..) |expr, ci| {
                         if (std.mem.indexOf(u8, expr, placeholder) != null) {
@@ -898,6 +900,38 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
                         }
                     }
                 }
+            }
+        }
+
+        // Bind variant updates
+        for (0..self.variant_update_count) |vi| {
+            if (self.variant_updates[vi].arr_name.len == 0) {
+                const marker = std.fmt.allocPrint(self.alloc, "\"__v{d}\"", .{vi}) catch continue;
+                for (child_exprs.items, 0..) |expr, ci| {
+                    if (std.mem.indexOf(u8, expr, marker) != null) {
+                        self.variant_updates[vi].arr_name = arr_name;
+                        self.variant_updates[vi].arr_index = @intCast(ci);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    // Register variant update for variant classifiers
+    if (classifier_idx) |idx| {
+        if (self.classifier_has_variants[idx]) {
+            const vu_idx = self.variant_update_count;
+            if (vu_idx < MAX_DYN_STYLES) {
+                self.variant_updates[vu_idx] = .{
+                    .arr_name = "",
+                    .arr_index = 0,
+                    .classifier_idx = idx,
+                };
+                self.variant_update_count += 1;
+                // Embed marker so binding phase can find this node
+                if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
+                try fields.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, ".debug_name = \"__v{d}\"", .{vu_idx}));
             }
         }
     }

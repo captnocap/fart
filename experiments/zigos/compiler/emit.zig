@@ -279,6 +279,44 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
         }
     }
 
+    // ── Late binding pass for dynamic styles in nested arrays ──
+    // Styles registered during component inlining may not be bound by the parent's
+    // child_exprs scan. Scan ALL emitted arrays to find unbound dynamic styles.
+    for (0..self.dyn_style_count) |dsi| {
+        if (!self.dyn_styles[dsi].has_ref) {
+            const field = self.dyn_styles[dsi].field;
+            const placeholder = std.fmt.allocPrint(self.alloc, ".{s} = 0", .{field}) catch continue;
+            for (self.array_decls.items) |decl| {
+                if (std.mem.indexOf(u8, decl, placeholder)) |_| {
+                    // Extract array name: "var _arr_N = ..."
+                    if (std.mem.indexOf(u8, decl, "var ")) |vs| {
+                        if (std.mem.indexOf(u8, decl[vs + 4 ..], " =")) |es| {
+                            const arr_name = decl[vs + 4 .. vs + 4 + es];
+                            // Find element index: count Node elements before the placeholder
+                            const arr_start = std.mem.indexOf(u8, decl, "[_]Node{ ") orelse continue;
+                            const before_placeholder = decl[arr_start .. std.mem.indexOf(u8, decl, placeholder).?];
+                            var elem_idx: u32 = 0;
+                            var bi: usize = 0;
+                            while (bi < before_placeholder.len) {
+                                if (bi + 3 < before_placeholder.len and
+                                    before_placeholder[bi] == '.' and before_placeholder[bi + 1] == '{' and before_placeholder[bi + 2] == ' ')
+                                {
+                                    elem_idx += 1;
+                                }
+                                bi += 1;
+                            }
+                            if (elem_idx > 0) elem_idx -= 1; // .{ that contains the placeholder is the target
+                            self.dyn_styles[dsi].arr_name = arr_name;
+                            self.dyn_styles[dsi].arr_index = elem_idx;
+                            self.dyn_styles[dsi].has_ref = true;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // ── Binding validation ──
     // Warn about dynamic texts that were never bound to a parent array
     for (0..self.dyn_count) |di| {
@@ -334,6 +372,37 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
         try out.appendSlice(self.alloc, "});\n");
     }
     try out.appendSlice(self.alloc, "\n");
+
+    // Variant style arrays — one array per classifier that has variants
+    if (self.variant_update_count > 0) {
+        try out.appendSlice(self.alloc, "// ── Layout variant styles ───────────────────────────────────────\n");
+        for (0..self.classifier_count) |ci| {
+            if (!self.classifier_has_variants[ci]) continue;
+            const cls_name = self.classifier_names[ci];
+            const total_variants = @as(u32, self.variant_count) + 1; // +1 for base (slot 0)
+            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                "const _cls_{s}_v = [_]Style{{ ", .{cls_name}));
+            for (0..total_variants) |vi| {
+                if (vi > 0) try out.appendSlice(self.alloc, ", ");
+                const vs = self.classifier_variant_styles[ci][vi];
+                if (vs.len > 0) {
+                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                        ".{{ {s} }}", .{vs}));
+                } else {
+                    // Fallback to base style if this variant is not defined for this classifier
+                    const base = self.classifier_variant_styles[ci][0];
+                    if (base.len > 0) {
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            ".{{ {s} }}", .{base}));
+                    } else {
+                        try out.appendSlice(self.alloc, ".{}");
+                    }
+                }
+            }
+            try out.appendSlice(self.alloc, " };\n");
+        }
+        try out.appendSlice(self.alloc, "\n");
+    }
 
     // FFI host function wrappers
     if (self.ffi_funcs.items.len > 0) {
@@ -533,26 +602,47 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
         const needs_int_cast = std.mem.eql(u8, ds.field, "canvas_flow_speed");
         // arr_name="" means style is on root itself
         if (ds.arr_name.len == 0) {
+            const is_root_style = !std.mem.eql(u8, ds.field, "text_color") and
+                !std.mem.eql(u8, ds.field, "canvas_flow_speed") and
+                !std.mem.eql(u8, ds.field, "font_size") and
+                !std.mem.eql(u8, ds.field, "opacity");
+            const root_acc = if (is_root_style) "root.style." else "root.";
             if (needs_int_cast) {
                 try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                    "    root.{s} = @floatFromInt({s});\n",
-                    .{ ds.field, ds.expression }));
+                    "    {s}{s} = @floatFromInt({s});\n",
+                    .{ root_acc, ds.field, ds.expression }));
             } else {
                 try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                    "    root.{s} = {s};\n",
-                    .{ ds.field, ds.expression }));
+                    "    {s}{s} = {s};\n",
+                    .{ root_acc, ds.field, ds.expression }));
             }
         } else {
+            // Style fields (width, height, padding, etc.) live in Node.style
+            // Node-level fields (text_color, canvas_flow_speed) are direct
+            const is_style_field = !std.mem.eql(u8, ds.field, "text_color") and
+                !std.mem.eql(u8, ds.field, "canvas_flow_speed") and
+                !std.mem.eql(u8, ds.field, "font_size") and
+                !std.mem.eql(u8, ds.field, "opacity");
+            const accessor = if (is_style_field) ".style." else ".";
             if (needs_int_cast) {
                 try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                    "    {s}[{d}].{s} = @floatFromInt({s});\n",
-                    .{ ds.arr_name, ds.arr_index, ds.field, ds.expression }));
+                    "    {s}[{d}]{s}{s} = @floatFromInt({s});\n",
+                    .{ ds.arr_name, ds.arr_index, accessor, ds.field, ds.expression }));
             } else {
                 try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                    "    {s}[{d}].{s} = {s};\n",
-                    .{ ds.arr_name, ds.arr_index, ds.field, ds.expression }));
+                    "    {s}[{d}]{s}{s} = {s};\n",
+                    .{ ds.arr_name, ds.arr_index, accessor, ds.field, ds.expression }));
             }
         }
+    }
+    // Variant style assignments — swap entire style block based on active variant
+    for (0..self.variant_update_count) |vi| {
+        const vu = &self.variant_updates[vi];
+        if (vu.arr_name.len == 0) continue;
+        const cls_name = self.classifier_names[vu.classifier_idx];
+        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+            "    {s}[{d}].style = _cls_{s}_v[Theme.activeVariant()];\n",
+            .{ vu.arr_name, vu.arr_index, cls_name }));
     }
     try out.appendSlice(self.alloc, "}\n\n");
 

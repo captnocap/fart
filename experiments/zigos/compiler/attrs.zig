@@ -61,7 +61,15 @@ pub fn parseStyleAttr(self: *Generator) ![]const u8 {
             } else if (mapStyleKey(key)) |zig_key| {
                 if (self.curKind() == .string) {
                     const str_val = try parseStringAttrInline(self);
-                    if (std.mem.endsWith(u8, str_val, "%")) {
+                    if (std.mem.startsWith(u8, str_val, "theme-")) {
+                        if (parseStyleTokenValue(self, str_val[6..])) |expr| {
+                            if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
+                            try fields.appendSlice(self.alloc, ".");
+                            try fields.appendSlice(self.alloc, zig_key);
+                            try fields.appendSlice(self.alloc, " = ");
+                            try fields.appendSlice(self.alloc, expr);
+                        }
+                    } else if (std.mem.endsWith(u8, str_val, "%")) {
                         if (std.fmt.parseFloat(f32, str_val[0 .. str_val.len - 1]) catch null) |pct| {
                             if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
                             try fields.appendSlice(self.alloc, ".");
@@ -82,11 +90,32 @@ pub fn parseStyleAttr(self: *Generator) ![]const u8 {
                         if (self.findProp(val)) |pval| val = pval;
                     }
                     self.advance_token();
-                    if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
-                    try fields.appendSlice(self.alloc, ".");
-                    try fields.appendSlice(self.alloc, zig_key);
-                    try fields.appendSlice(self.alloc, " = ");
-                    try fields.appendSlice(self.alloc, val);
+                    // State getter in a style field → dynamic style binding
+                    if (std.mem.indexOf(u8, val, "state.getSlot") != null or
+                        std.mem.indexOf(u8, val, "state.getSlotFloat") != null)
+                    {
+                        if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
+                        try fields.appendSlice(self.alloc, ".");
+                        try fields.appendSlice(self.alloc, zig_key);
+                        try fields.appendSlice(self.alloc, " = 0");
+                        // Register dynamic style for runtime update
+                        if (self.dyn_style_count < codegen.MAX_DYN_STYLES) {
+                            self.dyn_styles[self.dyn_style_count] = .{
+                                .field = zig_key,
+                                .expression = try std.fmt.allocPrint(self.alloc, "@as(f32, @floatFromInt({s}))", .{val}),
+                                .arr_name = "",
+                                .arr_index = 0,
+                                .has_ref = false,
+                            };
+                            self.dyn_style_count += 1;
+                        }
+                    } else {
+                        if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
+                        try fields.appendSlice(self.alloc, ".");
+                        try fields.appendSlice(self.alloc, zig_key);
+                        try fields.appendSlice(self.alloc, " = ");
+                        try fields.appendSlice(self.alloc, val);
+                    }
                 }
             } else if (mapEnumKey(key)) |mapping| {
                 const val = try parseStringAttrInline(self);
@@ -568,4 +597,32 @@ fn themeTokenField(name: []const u8) ?[]const u8 {
     if (std.mem.eql(u8, name, "success")) return "success";
     if (std.mem.eql(u8, name, "info")) return "info";
     return null;
+}
+
+/// Map camelCase style token name to Zig enum field name.
+/// e.g. "radiusMd" → "radius_md", "spacingSm" → "spacing_sm"
+fn styleTokenField(name: []const u8) ?[]const u8 {
+    if (std.mem.eql(u8, name, "radiusSm")) return "radius_sm";
+    if (std.mem.eql(u8, name, "radiusMd")) return "radius_md";
+    if (std.mem.eql(u8, name, "radiusLg")) return "radius_lg";
+    if (std.mem.eql(u8, name, "spacingSm")) return "spacing_sm";
+    if (std.mem.eql(u8, name, "spacingMd")) return "spacing_md";
+    if (std.mem.eql(u8, name, "spacingLg")) return "spacing_lg";
+    if (std.mem.eql(u8, name, "borderThin")) return "border_thin";
+    if (std.mem.eql(u8, name, "borderMedium")) return "border_medium";
+    if (std.mem.eql(u8, name, "fontSm")) return "font_sm";
+    if (std.mem.eql(u8, name, "fontMd")) return "font_md";
+    if (std.mem.eql(u8, name, "fontLg")) return "font_lg";
+    return null;
+}
+
+/// Parse a style token reference and return the Zig expression.
+/// e.g. "radiusMd" → "Theme.getFloat(.radius_md)"
+fn parseStyleTokenValue(self: *Generator, token_name: []const u8) ?[]const u8 {
+    const field = styleTokenField(token_name) orelse {
+        self.addWarning(0, std.fmt.allocPrint(self.alloc, "Unknown style token: '{s}'", .{token_name}) catch "Unknown style token");
+        return null;
+    };
+    self.has_theme = true;
+    return std.fmt.allocPrint(self.alloc, "Theme.getFloat(.{s})", .{field}) catch null;
 }
