@@ -5,18 +5,18 @@ function App() {
     <C.Page>
       <C.Header>
         <C.Title>PTY Test</C.Title>
-        <C.Subtitle>Terminal emulator via Render surface — click to focus, type to interact</C.Subtitle>
+        <C.Subtitle>Shell via Render surface — click to focus, type to interact</C.Subtitle>
       </C.Header>
 
       <C.TermContainer>
-        <Render src="app:xterm -fa Monospace -fs 11 -geometry 160x40" style={{ flexGrow: 1 }} />
+        <Render src="app:bash" style={{ flexGrow: 1 }} />
       </C.TermContainer>
 
       <C.StatusBar>
         <C.StatusLabel>Backend:</C.StatusLabel>
-        <C.StatusValue>Xvfb + XShm + XTest</C.StatusValue>
-        <C.StatusLabel>PTY:</C.StatusLabel>
-        <C.StatusValue>xterm forkpty → /bin/bash</C.StatusValue>
+        <C.StatusValue>Xvfb + XShm + XTest (appembed)</C.StatusValue>
+        <C.StatusLabel>Shell:</C.StatusLabel>
+        <C.StatusValue>bash (render surface manages PTY)</C.StatusValue>
       </C.StatusBar>
     </C.Page>
   );
