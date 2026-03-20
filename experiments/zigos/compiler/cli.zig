@@ -1,10 +1,13 @@
-//! ZigOS compiler — tsz build <file.tsz>
-//! Compiles .tsz to generated_app.zig, then builds the binary.
+//! ZigOS compiler — tsz build|check <file.tsz>
+//! build: Compiles .tsz to generated_app.zig, then builds the binary.
+//! check: Preflight validation — runs full pipeline without writing output or building.
+//!        Outputs structured PREFLIGHT: lines to stdout for tooling consumption.
 
 const std = @import("std");
 const codegen = @import("codegen.zig");
 const lexer_mod = @import("lexer.zig");
 const lint = @import("lint.zig");
+const modulegen = @import("modulegen.zig");
 
 pub fn main() !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
@@ -14,8 +17,14 @@ pub fn main() !void {
     const args = try std.process.argsAlloc(alloc);
     defer std.process.argsFree(alloc, args);
 
+    // Subcommand routing
+    if (args.len >= 2 and std.mem.eql(u8, args[1], "check")) {
+        runCheck(alloc, args);
+        return;
+    }
+
     if (args.len < 3) {
-        std.debug.print("Usage: zigos-compiler build [--strict] <file.tsz>\n", .{});
+        std.debug.print("Usage: zigos-compiler build|check [--strict] <file.tsz>\n", .{});
         return;
     }
 
@@ -45,6 +54,29 @@ pub fn main() !void {
         return;
     };
     defer alloc.free(source);
+
+    // Imperative compilation: _zscript.tsz → .zig module (no JSX)
+    if (file_kind == .zscript) {
+        var lex = lexer_mod.Lexer.init(source);
+        lex.tokenize();
+        const zig_source = modulegen.generate(alloc, &lex, source, input_path) catch |err| {
+            std.debug.print("[tsz] Compile error (imperative): {}\n", .{err});
+            return;
+        };
+        const basename = std.fs.path.basename(input_path);
+        const stem = basename[0 .. basename.len - "_zscript.tsz".len];
+        const out_path = std.fmt.allocPrint(alloc, "{s}.zig", .{stem}) catch return;
+        {
+            const f = std.fs.cwd().createFile(out_path, .{}) catch |err| {
+                std.debug.print("Error creating {s}: {any}\n", .{ out_path, err });
+                return;
+            };
+            defer f.close();
+            f.writeAll(zig_source) catch return;
+        }
+        std.debug.print("[tsz] Compiled imperative {s} -> {s}\n", .{ basename, out_path });
+        return;
+    }
 
     // Module compilation: .mod.tsz → .gen.zig fragment
     if (file_kind == .module) {
@@ -170,6 +202,7 @@ const FileKind = enum {
     mod_comp,    // _cmod.tsz — module component
     mod_cls,     // _clsmod.tsz — module classifiers
     script,      // _script.tsz — JS logic (entry points only)
+    zscript,     // _zscript.tsz — imperative Zig module (no JSX)
     unknown,
 };
 
@@ -177,6 +210,7 @@ fn classifyFile(path: []const u8) FileKind {
     if (std.mem.endsWith(u8, path, "_clsmod.tsz")) return .mod_cls;
     if (std.mem.endsWith(u8, path, "_cmod.tsz")) return .mod_comp;
     if (std.mem.endsWith(u8, path, "_cls.tsz")) return .app_cls;
+    if (std.mem.endsWith(u8, path, "_zscript.tsz")) return .zscript;
     if (std.mem.endsWith(u8, path, "_script.tsz")) return .script;
     if (std.mem.endsWith(u8, path, "_c.tsz")) return .app_comp;
     if (std.mem.endsWith(u8, path, ".c.tsz")) return .app_comp; // legacy
@@ -345,4 +379,111 @@ fn loadScriptImports(alloc: std.mem.Allocator, input_file: []const u8, source: [
 
     if (js.items.len == 0) return null;
     return js.items;
+}
+
+// ── Preflight check ─────────────────────────────────────────────
+//
+// Runs the full compilation pipeline (lex → lint → codegen phases 1-9)
+// but discards the output. Reports structured PREFLIGHT: lines to stdout
+// for consumption by scripts/preflight.sh and Claude Code hooks.
+//
+// Output format (one per line, to stdout):
+//   PREFLIGHT:DEP:<path>           — each file in the import graph
+//   PREFLIGHT:ERROR:<file>:<line>:<col>:<message>
+//   PREFLIGHT:WARN:<file>:<line>:<col>:<message>
+//   PREFLIGHT:STATUS:OK            — or ERROR as final line
+
+fn runCheck(alloc: std.mem.Allocator, args: []const []const u8) void {
+    // Parse flags
+    var strict_mode = false;
+    var input_idx: usize = 2;
+    while (input_idx < args.len) {
+        if (std.mem.eql(u8, args[input_idx], "--strict")) {
+            strict_mode = true;
+            input_idx += 1;
+        } else break;
+    }
+    if (input_idx >= args.len) {
+        std.debug.print("Usage: zigos-compiler check [--strict] <file.tsz>\n", .{});
+        return;
+    }
+
+    const input_path = args[input_idx];
+    const file_kind = classifyFile(input_path);
+
+    const source = std.fs.cwd().readFileAlloc(alloc, input_path, 4 * 1024 * 1024) catch |err| {
+        std.debug.print("PREFLIGHT:ERROR:{s}:0:0:cannot read file: {}\n", .{ std.fs.path.basename(input_path), err });
+        std.debug.print("PREFLIGHT:STATUS:ERROR\n", .{});
+        return;
+    };
+
+    // Load script imports for app entry points
+    const script_js = if (file_kind != .module) loadScriptImports(alloc, input_path, source) else null;
+
+    // Resolve imports — track full dependency set
+    var deps: [MAX_IMPORTS][]const u8 = undefined;
+    var dep_count: u32 = 0;
+    var merged: std.ArrayListUnmanaged(u8) = .{};
+    mergeImports(alloc, input_path, source, &deps, &dep_count, &merged);
+    const final_source = if (merged.items.len > 0) merged.items else source;
+
+    // Emit dependency list
+    for (deps[0..dep_count]) |dep| {
+        std.debug.print("PREFLIGHT:DEP:{s}\n", .{dep});
+    }
+
+    // Lex
+    var lex = lexer_mod.Lexer.init(final_source);
+    lex.tokenize();
+
+    // Lint
+    var linter = lint.Linter.init(alloc, &lex, final_source);
+    const lint_result = linter.run();
+    var has_error = false;
+    for (lint_result.diagnostics) |d| {
+        const pfx: []const u8 = switch (d.level) {
+            .err => "ERROR",
+            .warn => "WARN",
+            .hint => "HINT",
+        };
+        std.debug.print("PREFLIGHT:{s}:{s}:{d}:{d}:{s}\n", .{
+            pfx, std.fs.path.basename(input_path), d.line, d.col, d.message,
+        });
+        if (d.level == .err) has_error = true;
+    }
+
+    // Codegen — full pipeline, discard generated output
+    var gen = codegen.Generator.init(alloc, &lex, final_source, input_path);
+    gen.strict_mode = strict_mode;
+    if (file_kind == .module) gen.is_module = true;
+    if (script_js) |js| gen.compute_js = js;
+
+    _ = gen.generate() catch {
+        for (gen.errors.items) |e| {
+            std.debug.print("PREFLIGHT:ERROR:{s}:{d}:{d}:{s}\n", .{
+                std.fs.path.basename(input_path), e.line, e.col, e.msg,
+            });
+        }
+        std.debug.print("PREFLIGHT:STATUS:ERROR\n", .{});
+        return;
+    };
+
+    // Collect soft errors and warnings from codegen
+    for (gen.errors.items) |e| {
+        std.debug.print("PREFLIGHT:ERROR:{s}:{d}:{d}:{s}\n", .{
+            std.fs.path.basename(input_path), e.line, e.col, e.msg,
+        });
+        has_error = true;
+    }
+    for (gen.warnings.items) |w| {
+        std.debug.print("PREFLIGHT:WARN:{s}:{d}:{d}:{s}\n", .{
+            std.fs.path.basename(input_path), w.line, w.col, w.msg,
+        });
+    }
+
+    if (has_error) {
+        std.debug.print("PREFLIGHT:STATUS:ERROR\n", .{});
+    } else {
+        std.debug.print("PREFLIGHT:STATUS:OK\n", .{});
+    }
 }
