@@ -781,15 +781,14 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
                     "var _map_inner_{d}: [MAX_MAP_{d}][{d}]Node = undefined;\n",
                     .{ mi, mi, m.inner_count }));
             }
-            var has_dyn_text = false;
+            // Per-inner-node text buffers (one pair per dynamic text node)
             for (0..m.inner_count) |ni| {
-                if (m.inner_nodes[ni].is_dynamic_text) { has_dyn_text = true; break; }
-            }
-            if (has_dyn_text) {
-                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                    "var _map_text_bufs_{d}: [MAX_MAP_{d}][256]u8 = undefined;\n" ++
-                    "var _map_texts_{d}: [MAX_MAP_{d}][]const u8 = [_][]const u8{{\"\"}} ** MAX_MAP_{d};\n",
-                    .{ mi, mi, mi, mi, mi }));
+                if (m.inner_nodes[ni].is_dynamic_text) {
+                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                        "var _map_text_bufs_{d}_{d}: [MAX_MAP_{d}][256]u8 = undefined;\n" ++
+                        "var _map_texts_{d}_{d}: [MAX_MAP_{d}][]const u8 = [_][]const u8{{\"\"}} ** MAX_MAP_{d};\n",
+                        .{ mi, ni, mi, mi, ni, mi, mi }));
+                }
             }
         }
     }
@@ -892,29 +891,19 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
                     .{ mi, m.array_slot_id, mi, mi, mi }));
             }
 
-            // Find dynamic text in inner nodes
-            var has_dyn_text = false;
-            var dyn_ni: u32 = 0;
+            // Emit text assignments for ALL dynamic text inner nodes
             for (0..m.inner_count) |ni| {
-                if (m.inner_nodes[ni].is_dynamic_text) {
-                    has_dyn_text = true;
-                    dyn_ni = @intCast(ni);
-                    break;
-                }
-            }
-
-            if (has_dyn_text) {
-                if (m.is_string_array) {
+                const inner = m.inner_nodes[ni];
+                if (!inner.is_dynamic_text) continue;
+                if (m.is_string_array and ni == 0) {
                     // String array: _item is already []const u8, assign directly
                     try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                        "        _map_texts_{d}[_i] = _item;\n", .{mi}));
+                        "        _map_texts_{d}_{d}[_i] = _item;\n", .{ mi, ni }));
                 } else {
-                    const inner = m.inner_nodes[dyn_ni];
-                    // Rewrite template args: replace item param with _item, index param with _i
                     const rewritten_args = try rewriteMapArgs(self, inner.text_args, m.item_param, m.index_param);
                     try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                        "        _map_texts_{d}[_i] = std.fmt.bufPrint(&_map_text_bufs_{d}[_i], \"{s}\", .{{ {s} }}) catch \"\";\n",
-                        .{ mi, mi, inner.text_fmt, rewritten_args }));
+                        "        _map_texts_{d}_{d}[_i] = std.fmt.bufPrint(&_map_text_bufs_{d}_{d}[_i], \"{s}\", .{{ {s} }}) catch \"\";\n",
+                        .{ mi, ni, mi, ni, inner.text_fmt, rewritten_args }));
                 }
             }
 
@@ -929,7 +918,7 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
                     var has_field = false;
                     if (inner.is_dynamic_text) {
                         try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                            ".text = _map_texts_{d}[_i]", .{mi}));
+                            ".text = _map_texts_{d}_{d}[_i]", .{ mi, ni }));
                         has_field = true;
                     } else if (inner.static_text.len > 0) {
                         try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
@@ -977,7 +966,7 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
                 if (inner.is_dynamic_text) {
                     if (has_outer_field) try out.appendSlice(self.alloc, ", ");
                     try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                        ".text = _map_texts_{d}[_i]", .{mi}));
+                        ".text = _map_texts_{d}_0[_i]", .{mi}));
                     has_outer_field = true;
                 } else if (inner.static_text.len > 0) {
                     if (has_outer_field) try out.appendSlice(self.alloc, ", ");
