@@ -354,7 +354,7 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
     try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "const layout = @import(\"{s}layout.zig\");\n", .{prefix}));
     if (!self.is_embedded) try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "const engine = @import(\"{s}engine.zig\");\n", .{prefix}));
     try out.appendSlice(self.alloc, "const Node = layout.Node;\nconst Style = layout.Style;\nconst Color = layout.Color;\n");
-    if (self.has_state) {
+    if (self.has_state or self.object_array_count > 0) {
         const state_mod = if (self.is_embedded) "devtools_state.zig" else "framework/state.zig";
         try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "const state = @import(\"{s}\");\n", .{state_mod}));
     }
