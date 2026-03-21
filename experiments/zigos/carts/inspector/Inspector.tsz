@@ -7,7 +7,10 @@ import { PerfPage } from './PerfPage.c';
 import { NetworkPage } from './NetworkPage.c';
 import { ConsolePage } from './ConsolePage.c';
 import { LogsPage } from './LogsPage.c';
+import { ConstraintGraphPage } from './ConstraintGraphPage.c';
+import { OverlayPage } from './OverlayPage.c';
 import { telemetry } from './telemetry.script';
+import { graph } from './graph.script';
 import { elements } from './elements.script';
 
 const [activeTab, setActiveTab] = useState(0);
@@ -33,6 +36,10 @@ const [detMB, setDetMB] = useState(0);
 const [detML, setDetML] = useState(0);
 const [detCW, setDetCW] = useState(0);
 const [detCH, setDetCH] = useState(0);
+
+// ── Constraint graph state ──
+const [showInfo, setShowInfo] = useState(0);
+const [showNav, setShowNav] = useState(0);
 
 // ── Status bar telemetry state ──
 const [statusFps, setStatusFps] = useState(0);
@@ -82,6 +89,8 @@ function App() {
           <InspectorTabButton label="Network" active={activeTab == 4 ? 1 : 0} onPress={() => setActiveTab(4)} />
           <InspectorTabButton label="Console" active={activeTab == 5 ? 1 : 0} onPress={() => setActiveTab(5)} />
           <InspectorTabButton label="Logs" active={activeTab == 6 ? 1 : 0} onPress={() => setActiveTab(6)} />
+          <InspectorTabButton label="Graph" active={activeTab == 7 ? 1 : 0} onPress={() => setActiveTab(7)} />
+          <InspectorTabButton label="Overlay" active={activeTab == 8 ? 1 : 0} onPress={() => setActiveTab(8)} />
         </C.TabBar>
         <C.Divider />
         {activeTab == 0 && <ElementsPage />}
@@ -91,6 +100,8 @@ function App() {
         {activeTab == 4 && <NetworkPage />}
         {activeTab == 5 && <ConsolePage />}
         {activeTab == 6 && <LogsPage />}
+        {activeTab == 7 && <ConstraintGraphPage />}
+        {activeTab == 8 && <OverlayPage />}
         <C.StatusBar>
           <C.StatusLeft>
             {statusDirty == 1 && <C.StatusTextWarn>Dirty</C.StatusTextWarn>}
