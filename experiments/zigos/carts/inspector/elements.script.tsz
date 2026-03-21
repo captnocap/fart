@@ -25,9 +25,11 @@ function pollTree() {
   for (var i = _scrollOffset; i < end; i++) {
     var n = __tel_node(i);
     if (n) {
+      var indent = '';
+      for (var d = 0; d < n.depth; d++) indent += '  ';
+      var marker = n.child_count > 0 ? '▸ ' : '  ';
       rows.push({
-        indent: n.depth * 8,
-        caret: n.child_count > 0 ? 1 : 0,
+        caret: indent + marker,
         tag: '<' + n.tag + '>',
         tagColor: tagToColor(n.tag),
         dim: Math.round(n.w) + 'x' + Math.round(n.h),
