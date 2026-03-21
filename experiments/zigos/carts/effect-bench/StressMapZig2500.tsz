@@ -1,0 +1,51 @@
+// Zig map stress test — 2500 items via .map(), telemetry via useEffect
+// Per-frame work (layout, paint, map rebuild) is all compiled Zig.
+// JS only populates initial data — same as StressMap500 but named for comparison.
+
+import { stress_map } from "./stress_map.script";
+
+const [fps, setFps] = useState(0);
+const [tickUs, setTickUs] = useState(0);
+const [layoutUs, setLayoutUs] = useState(0);
+const [paintUs, setPaintUs] = useState(0);
+const [frameCount, setFrameCount] = useState(0);
+const [nodeCount, setNodeCount] = useState(2500);
+
+const [items, setItems] = useState([{ label: '', value: 0, color: 0x58a6ff }]);
+
+function App() {
+  return (
+    <Box style={{ width: "100%", height: "100%", backgroundColor: "#0d1117", padding: 10, gap: 4 }}>
+      <Text fontSize={20} color="#e6edf3">{`Zig Map Stress — ${nodeCount} items (5000+ nodes)`}</Text>
+      <Box style={{ flexDirection: "row", gap: 16 }}>
+        <Box style={{ backgroundColor: "#161b22", padding: 12, borderRadius: 8, flexGrow: 1 }}>
+          <Text fontSize={12} color="#8b949e">FPS</Text>
+          <Text fontSize={24} color="#3fb950">{`${fps}`}</Text>
+        </Box>
+        <Box style={{ backgroundColor: "#161b22", padding: 12, borderRadius: 8, flexGrow: 1 }}>
+          <Text fontSize={12} color="#8b949e">Tick</Text>
+          <Text fontSize={24} color="#f78166">{`${tickUs}us`}</Text>
+        </Box>
+        <Box style={{ backgroundColor: "#161b22", padding: 12, borderRadius: 8, flexGrow: 1 }}>
+          <Text fontSize={12} color="#8b949e">Layout</Text>
+          <Text fontSize={24} color="#d2992a">{`${layoutUs}us`}</Text>
+        </Box>
+        <Box style={{ backgroundColor: "#161b22", padding: 12, borderRadius: 8, flexGrow: 1 }}>
+          <Text fontSize={12} color="#8b949e">Paint</Text>
+          <Text fontSize={24} color="#58a6ff">{`${paintUs}us`}</Text>
+        </Box>
+      </Box>
+      <Box style={{ backgroundColor: "#161b22", padding: 8, borderRadius: 8 }}>
+        <Text fontSize={11} color="#6e7681">{`frames: ${frameCount}`}</Text>
+      </Box>
+      <ScrollView style={{ flexGrow: 1, height: 400 }}>
+        {items.map((item) => (
+          <Box style={{ flexDirection: "row", gap: 4, padding: 3, backgroundColor: "#161b22", borderRadius: 4 }}>
+            <Text fontSize={10} color={item.color}>{item.label}</Text>
+            <Text fontSize={10} color="#6e7681">{item.value}</Text>
+          </Box>
+        ))}
+      </ScrollView>
+    </Box>
+  );
+}

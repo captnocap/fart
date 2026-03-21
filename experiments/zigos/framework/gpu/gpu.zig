@@ -732,13 +732,14 @@ fn configureSurface(width: u32, height: u32) void {
         }
     }
 
+    const vsync_off = if (std.posix.getenv("ZIGOS_VSYNC")) |v| std.mem.eql(u8, v, "0") else false;
     const config = wgpu.SurfaceConfiguration{
         .device = device,
         .format = g_format,
         .usage = wgpu.TextureUsages.render_attachment | wgpu.TextureUsages.copy_src,
         .width = width,
         .height = height,
-        .present_mode = .fifo,
+        .present_mode = if (vsync_off) .immediate else .fifo,
         .alpha_mode = .auto,
     };
     surface.configure(&config);
