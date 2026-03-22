@@ -306,12 +306,17 @@ fn emitStatement(
         const lv_zig = try std.fmt.allocPrint(self.alloc, "_for_{s}_{d}", .{ loop_var_ts, self.array_counter });
         self.array_counter += 1;
 
-        // Push loop var into local_vars so body expressions (and condition) resolve it
+        // Push loop var into local_vars so body expressions (and condition) resolve it.
+        // Inside effect render bodies, register as @floatFromInt so float math works.
         const for_local_base = self.local_count;
+        const lv_expr = if (self.effect_param != null)
+            try std.fmt.allocPrint(self.alloc, "@as(f32, @floatFromInt({s}))", .{lv_zig})
+        else
+            lv_zig;
         if (self.local_count < codegen.MAX_LOCALS) {
             self.local_vars[self.local_count] = .{
                 .name = loop_var_ts,
-                .expr = lv_zig,
+                .expr = lv_expr,
                 .state_type = .int,
             };
             self.local_count += 1;
@@ -823,9 +828,11 @@ pub fn emitStateAtom(self: *Generator) anyerror![]const u8 {
                         const member = self.curText();
                         self.advance_token(); // skip member name
 
-                        // Properties → ctx.property
+                        // Properties → ctx.property (u32 dims get float-casted)
+                        if (std.mem.eql(u8, member, "width") or std.mem.eql(u8, member, "height")) {
+                            return try std.fmt.allocPrint(self.alloc, "@as(f32, @floatFromInt(ctx.{s}))", .{member});
+                        }
                         if (std.mem.eql(u8, member, "time") or std.mem.eql(u8, member, "dt") or
-                            std.mem.eql(u8, member, "width") or std.mem.eql(u8, member, "height") or
                             std.mem.eql(u8, member, "frame") or std.mem.eql(u8, member, "mouse_x") or
                             std.mem.eql(u8, member, "mouse_y") or std.mem.eql(u8, member, "mouse_inside"))
                         {

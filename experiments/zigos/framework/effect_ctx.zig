@@ -48,9 +48,13 @@ pub const EffectContext = struct {
     // ════════════════════════════════════════════════════════════════
 
     /// Write a pixel at (x, y) with RGBA floats in 0..1 range.
-    pub fn setPixel(self: *EffectContext, x: u32, y: u32, r: f32, g: f32, b: f32, a: f32) void {
-        if (x >= self.width or y >= self.height) return;
-        const idx = @as(usize, y) * @as(usize, self.stride) + @as(usize, x) * 4;
+    /// Coords are f32 since for-loop vars get float-casted for math compatibility.
+    pub fn setPixel(self: *EffectContext, x: f32, y: f32, r: f32, g: f32, b: f32, a: f32) void {
+        if (x < 0 or y < 0) return;
+        const ux: u32 = @intFromFloat(x);
+        const uy: u32 = @intFromFloat(y);
+        if (ux >= self.width or uy >= self.height) return;
+        const idx = @as(usize, uy) * @as(usize, self.stride) + @as(usize, ux) * 4;
         self.buf[idx] = @intFromFloat(std.math.clamp(r, 0, 1) * 255);
         self.buf[idx + 1] = @intFromFloat(std.math.clamp(g, 0, 1) * 255);
         self.buf[idx + 2] = @intFromFloat(std.math.clamp(b, 0, 1) * 255);
@@ -68,9 +72,12 @@ pub const EffectContext = struct {
     }
 
     /// Read a pixel at (x, y) → [r, g, b, a] as floats 0..1.
-    pub fn getPixel(self: *const EffectContext, x: u32, y: u32) [4]f32 {
-        if (x >= self.width or y >= self.height) return .{ 0, 0, 0, 0 };
-        const idx = @as(usize, y) * @as(usize, self.stride) + @as(usize, x) * 4;
+    pub fn getPixel(self: *const EffectContext, x: f32, y: f32) [4]f32 {
+        if (x < 0 or y < 0) return .{ 0, 0, 0, 0 };
+        const ux: u32 = @intFromFloat(x);
+        const uy: u32 = @intFromFloat(y);
+        if (ux >= self.width or uy >= self.height) return .{ 0, 0, 0, 0 };
+        const idx = @as(usize, uy) * @as(usize, self.stride) + @as(usize, ux) * 4;
         return .{
             @as(f32, @floatFromInt(self.buf[idx])) / 255.0,
             @as(f32, @floatFromInt(self.buf[idx + 1])) / 255.0,
