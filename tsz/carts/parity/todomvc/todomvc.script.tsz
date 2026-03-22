@@ -32,7 +32,7 @@ function _syncState() {
   }
   setActiveCount(active);
   setCompletedCount(completed);
-  setToggleAllState(active === 0 && _todos.length > 0 ? 1 : 0);
+
 
   // Build filtered display list as {text: "..."} objects for .map()
   // GAP: .map() can only access item.field, not the bare item or ternaries

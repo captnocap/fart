@@ -43,13 +43,13 @@ function App() {
           />
         </C.HeaderRow>
 
-        <ScrollView style={{ flexGrow: 1, maxHeight: 400 }}>
+        <Box style={{ flexDirection: 'column' }}>
           {todos.map((item) => (
-            <C.TodoItem>
-              <Text fontSize={16} color="#4d4d4d" style={{ flexGrow: 1 }}>{item.text}</Text>
-            </C.TodoItem>
+            <Box style={{ padding: 12, paddingLeft: 16, paddingRight: 16 }}>
+              <Text fontSize={18} color="#4d4d4d">{item.text}</Text>
+            </Box>
           ))}
-        </ScrollView>
+        </Box>
 
         <C.FooterRow>
           <C.CountText>{`${activeCount} items left`}</C.CountText>
