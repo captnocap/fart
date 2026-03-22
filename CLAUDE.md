@@ -2,6 +2,23 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+# HARD RULE: DO NOT CHMOD, UNLOCK, OR MODIFY FROZEN DIRECTORIES
+
+The following directories are READ-ONLY and FROZEN:
+- `tsz/`
+- `tsz-gen/`
+- `love2d/`
+
+You may READ these for reference. You may NOT:
+- `chmod` them
+- Write to them
+- Unlock them for any reason
+- Use their compilers or binaries (`./zig-out/bin/tsz` is the OLD compiler — do not use it)
+
+If a file is read-only and you think you need to write to it, YOU ARE IN THE WRONG DIRECTORY. The active codebase is `experiments/zigos/`. The active compiler is `experiments/zigos/zig-out/bin/zigos-compiler`.
+
+If you chmod a frozen file, the supervisor will re-lock it and flag you. Do not work around locks.
+
 # HARD RULE: DO NOT USE EXPLORE IN THIS REPOSITORY
 For feature verification, compiler capability checks, and architecture comparisons in this repo:
 - NEVER invoke the built-in Explore agent.
