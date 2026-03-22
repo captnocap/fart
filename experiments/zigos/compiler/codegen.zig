@@ -941,6 +941,65 @@ pub const Generator = struct {
         return std.mem.eql(u8, tok.text(self.source), "map");
     }
 
+    /// Resolve a compound expression containing map item references.
+    /// E.g., "row.x + row.y + ri + offset" → "_oa0_x[_i] + _oa0_y[_i] + @as(i64, @intCast(_i)) + state.getSlot(N)"
+    /// Scans for identifiers and replaces: item.field → _oa/item, index → _i, state → getter.
+    pub fn resolveCompoundMapExpr(self: *Generator, expr: []const u8) ![]const u8 {
+        var result: std.ArrayListUnmanaged(u8) = .{};
+        var i: usize = 0;
+        while (i < expr.len) {
+            // Skip whitespace and operators
+            if (expr[i] == ' ' or expr[i] == '+' or expr[i] == '-' or expr[i] == '*' or expr[i] == '/' or expr[i] == '(' or expr[i] == ')') {
+                try result.append(self.alloc, expr[i]);
+                i += 1;
+                continue;
+            }
+            // Extract identifier
+            if ((expr[i] >= 'a' and expr[i] <= 'z') or (expr[i] >= 'A' and expr[i] <= 'Z') or expr[i] == '_') {
+                const id_start = i;
+                while (i < expr.len and ((expr[i] >= 'a' and expr[i] <= 'z') or (expr[i] >= 'A' and expr[i] <= 'Z') or
+                    (expr[i] >= '0' and expr[i] <= '9') or expr[i] == '_')) : (i += 1) {}
+                const ident = expr[id_start..i];
+                // Check item.field
+                if (self.map_item_param) |param| {
+                    if (std.mem.eql(u8, ident, param) and i < expr.len and expr[i] == '.') {
+                        i += 1; // skip dot
+                        const f_start = i;
+                        while (i < expr.len and ((expr[i] >= 'a' and expr[i] <= 'z') or (expr[i] >= 'A' and expr[i] <= 'Z') or
+                            (expr[i] >= '0' and expr[i] <= '9') or expr[i] == '_')) : (i += 1) {}
+                        const field = expr[f_start..i];
+                        if (self.map_obj_array_idx) |oa_idx| {
+                            try result.appendSlice(self.alloc, std.fmt.allocPrint(self.alloc, "_oa{d}_{s}[_i]", .{ oa_idx, field }) catch "0");
+                        } else {
+                            try result.appendSlice(self.alloc, std.fmt.allocPrint(self.alloc, "_item.{s}", .{field}) catch "0");
+                        }
+                        continue;
+                    }
+                }
+                // Check index param
+                if (self.map_index_param) |idx_p| {
+                    if (std.mem.eql(u8, ident, idx_p)) {
+                        try result.appendSlice(self.alloc, "@as(i64, @intCast(_i))");
+                        continue;
+                    }
+                }
+                // Check state variable
+                if (self.isState(ident)) |slot_id| {
+                    const rid = self.regularSlotId(slot_id);
+                    try result.appendSlice(self.alloc, std.fmt.allocPrint(self.alloc, "state.getSlot({d})", .{rid}) catch "0");
+                    continue;
+                }
+                // Unknown identifier — pass through
+                try result.appendSlice(self.alloc, ident);
+                continue;
+            }
+            // Numbers and other chars
+            try result.append(self.alloc, expr[i]);
+            i += 1;
+        }
+        return try self.alloc.dupe(u8, result.items);
+    }
+
     pub fn findProp(self: *Generator, name: []const u8) ?[]const u8 {
         var i: u32 = self.prop_stack_count;
         while (i > 0) {

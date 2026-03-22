@@ -551,6 +551,15 @@ pub fn parseTemplateLiteralFromText(self: *Generator, inner: []const u8) !codege
                     "expression '${{{s}}}' in template literal is not a state variable, prop, or FFI call — embedded as static text", .{expr}) catch "unresolved template expression";
                 self.addWarning(0, warn_msg);
                 try fmt.appendSlice(self.alloc, expr);
+            } else if (self.map_item_param != null and
+                std.mem.indexOf(u8, expr, self.map_item_param.?) != null)
+            {
+                // Compound expression with map item references: row.x + row.y + ri + offset
+                // Do textual substitution of item.field → _oa{N}_{field}[_i], index → _i, state → getter
+                const resolved_expr = try self.resolveCompoundMapExpr(expr);
+                try fmt.appendSlice(self.alloc, "{d}");
+                if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
+                try args.appendSlice(self.alloc, resolved_expr);
             } else {
                 // Unknown expression — embed as static text
                 const warn_msg = std.fmt.allocPrint(self.alloc,
