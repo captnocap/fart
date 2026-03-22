@@ -1,7 +1,8 @@
 # Merge Plan: tsz + tsz-gen + experiments/zigos → unified stack
 
-**Status:** WAITING — do not execute until inspector work is complete
+**Status:** COMPLETE — migration executed 2026-03-22. `experiments/zigos/` promoted to `tsz/`. Old stacks archived.
 **Written:** 2026-03-18
+**Completed:** 2026-03-22
 **Context:** Three stacks exist on main that need to become one. The inspector and other active work must finish first.
 
 ## The Three Stacks
@@ -25,7 +26,7 @@ Move `experiments/zigos/` to top-level. This is the engine — it has the best c
 
 ## Phase 2: Full math port (DONE SEPARATELY — needed now for inspector)
 
-Port `love2d/lua/math_utils.lua` (1269 lines, 10 modules) to `experiments/zigos/framework/math.zig`. The tsz-gen version only ported 7/10 modules and skipped:
+Port `love2d/lua/math_utils.lua` (1269 lines, 10 modules) to `tsz/framework/math.zig`. The tsz-gen version only ported 7/10 modules and skipped:
 - **bezier** — curve evaluation, splitting, smoothing (needed for SVG path work)
 - **noise** — Perlin noise 2D/3D, noise fields
 - **fft** — FFT/IFFT

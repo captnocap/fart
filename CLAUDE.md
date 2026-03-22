@@ -5,19 +5,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # HARD RULE: DO NOT CHMOD, UNLOCK, OR MODIFY FROZEN DIRECTORIES
 
 The following directories are READ-ONLY and FROZEN:
-- `tsz/`
-- `tsz-gen/`
-- `love2d/`
+- `archive/` — old compiler iterations (v1 tsz, v2 tsz-gen). Reference only.
+- `love2d/` — Lua reference stack. Read for porting, do not modify.
 
-You may READ these for reference. You may NOT:
-- `chmod` them
-- Write to them
-- Unlock them for any reason
-- Use their compilers or binaries (`./zig-out/bin/tsz` is the OLD compiler — do not use it)
-
-If a file is read-only and you think you need to write to it, YOU ARE IN THE WRONG DIRECTORY. The active codebase is `experiments/zigos/`. The active compiler is `experiments/zigos/zig-out/bin/zigos-compiler`.
-
-If you chmod a frozen file, the supervisor will re-lock it and flag you. Do not work around locks.
+The active codebase is `tsz/`. The active compiler is `tsz/zig-out/bin/zigos-compiler`.
 
 # HARD RULE: DO NOT USE EXPLORE IN THIS REPOSITORY
 For feature verification, compiler capability checks, and architecture comparisons in this repo:
@@ -42,14 +33,13 @@ Why:
 
 ## What This Is
 
-ReactJIT is a rendering framework with **two stacks** that share the same layout engine and primitives:
+ReactJIT is a TS-to-native compiler and UI framework. `.tsz` source (TypeScript + JSX) compiles to Zig, which links against the framework runtime (SDL2 + wgpu + FreeType + QuickJS) to produce native binaries.
 
-- **`love2d/`** — React reconciler → QuickJS → Lua → Love2D (OpenGL 2.1). Full-featured legacy stack. See `love2d/CLAUDE.md`.
-- **`tsz/`** — `.tsz` source → Zig compiler → SDL2 + wgpu + FreeType. Zero-dependency native stack. See `tsz/CLAUDE.md`.
+- **`tsz/`** — The active engine: compiler, framework, carts. See `tsz/CLAUDE.md`.
+- **`love2d/`** — Lua reference stack (React reconciler → QuickJS → Lua → Love2D). Read for porting reference.
+- **`os/`** — CartridgeOS + Exodia (future). App shell and distribution layer.
 
-**The native engine is where the energy is.** The Love2D stack is maintained but not where innovation happens.
-
-**Read the subdirectory CLAUDE.md for whichever stack you're working in.** The stacks have completely different languages, tools, and workflows.
+**All active development happens in `tsz/`.** Read `tsz/CLAUDE.md` before working there.
 
 ### The tsz Rule
 

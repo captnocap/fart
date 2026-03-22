@@ -1,7 +1,6 @@
 //! Lexer for .tsz — tokenizes TypeScript-like syntax + JSX
 //!
-//! Produces a flat array of tokens. Tokens are heap-allocated via page_allocator
-//! so MAX_TOKENS can be large without blowing the stack.
+//! Produces a flat array of tokens. No heap allocation — fixed-size buffer.
 //! Handles: identifiers, numbers, strings, template literals, JSX tags,
 //! comments, FFI pragmas, and all punctuation.
 
@@ -86,21 +85,20 @@ pub const Token = struct {
     }
 };
 
-const MAX_TOKENS = 262144;
+const MAX_TOKENS = 32768;
 
 pub const Lexer = struct {
     source: []const u8,
     pos: u32,
-    tokens: []Token,
+    tokens: [MAX_TOKENS]Token,
     count: u32,
     overflow: bool,
 
     pub fn init(source: []const u8) Lexer {
-        const tokens = std.heap.page_allocator.alloc(Token, MAX_TOKENS) catch @panic("OOM allocating token buffer");
         return .{
             .source = source,
             .pos = 0,
-            .tokens = tokens,
+            .tokens = undefined,
             .count = 0,
             .overflow = false,
         };
@@ -125,10 +123,10 @@ pub const Lexer = struct {
     }
 
     fn emit(self: *Lexer, kind: TokenKind, start: u32, end: u32) void {
-        if (self.count >= self.tokens.len) {
+        if (self.count >= MAX_TOKENS) {
             if (!self.overflow) {
                 self.overflow = true;
-                std.debug.print("[tsz] Token limit exceeded ({d}). Source file is too large for single-pass compilation.\n", .{self.tokens.len});
+                std.debug.print("[tsz] Token limit exceeded ({d}). Source file is too large for single-pass compilation.\n", .{MAX_TOKENS});
             }
             return;
         }
@@ -158,10 +156,8 @@ pub const Lexer = struct {
             // Comments and FFI pragmas
             if (ch == '/' and self.peekAt(1) == '/') {
                 self.pos += 2;
-                // Check for @ffi pragma — only skip spaces/tabs, NOT newlines
-                while (self.pos < self.source.len and (self.source[self.pos] == ' ' or self.source[self.pos] == '\t')) {
-                    self.pos += 1;
-                }
+                // Check for @ffi pragma
+                self.skipWhitespace();
                 if (self.pos + 4 <= self.source.len and
                     std.mem.eql(u8, self.source[self.pos..][0..4], "@ffi"))
                 {
@@ -181,12 +177,7 @@ pub const Lexer = struct {
             }
 
             // String literals
-            // Single quotes are only string delimiters after = : ( [ , { operators.
-            // Inside JSX text content, ' is an apostrophe (e.g., "doesn't").
-            if (ch == '"' or (ch == '\'' and self.count > 0 and switch (self.tokens[self.count - 1].kind) {
-                .equals, .colon, .lparen, .lbracket, .comma, .lbrace, .plus, .minus, .pipe, .ampersand, .question, .lt, .gt, .bang, .semicolon => true,
-                else => false,
-            })) {
+            if (ch == '"' or ch == '\'') {
                 const quote = ch;
                 self.pos += 1;
                 while (self.pos < self.source.len) {

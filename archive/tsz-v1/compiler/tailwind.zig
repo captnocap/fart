@@ -69,7 +69,6 @@ fn parseClass(alloc: std.mem.Allocator, cls: []const u8) ![]const u8 {
     // ── Overflow ──
     if (eql(cls, "overflow-hidden")) return ".overflow = .hidden";
     if (eql(cls, "overflow-scroll")) return ".overflow = .scroll";
-    if (eql(cls, "overflow-auto")) return ".overflow = .auto";
     if (eql(cls, "overflow-visible")) return ".overflow = .visible";
 
     // ── Width/Height ──

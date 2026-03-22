@@ -55,19 +55,19 @@ love2d/llama.cpp/
 # Platform binaries
 love2d/bin/
 
-# ── Zigos stack (experiments/zigos/) ───────────────────
+# ── Zigos stack (tsz/) ─────────────────────────────────
 # Generated Zig output from .tsz compiler
-experiments/zigos/_gen_*.zig
-experiments/zigos/Inspector.gen.zig
-experiments/zigos/generated_app.zig.bak
-experiments/zigos/.tsz-preflight/
-experiments/zigos/root.o
-experiments/zigos/recording.mp4
-experiments/zigos/screenshot.png
-experiments/zigos/screenshots/
-experiments/zigos/carts/autobahn-ws/reports/
-experiments/zigos/carts/http-conformance/reports/
-experiments/zigos/carts/inspector/Inspector.gen.zig
+tsz/_gen_*.zig
+tsz/Inspector.gen.zig
+tsz/generated_app.zig.bak
+tsz/.tsz-preflight/
+tsz/root.o
+tsz/recording.mp4
+tsz/screenshot.png
+tsz/screenshots/
+tsz/carts/autobahn-ws/reports/
+tsz/carts/http-conformance/reports/
+tsz/carts/inspector/Inspector.gen.zig
 
 # ── TSZ stack (tsz/) ────────────────────────────────────
 # Generated app output (compiler writes this)
@@ -99,9 +99,9 @@ love2d/third_party/luajit/
 # Experiments
 love2d/experiments/cuttlefish/*
 !love2d/experiments/cuttlefish/setup.sh
-love2d/experiments/cartridge-os/dev-key.*
-love2d/experiments/cartridge-os/init_pubkey.h
-love2d/experiments/cartridge-os/*.cart
+os/cartridge-os/dev-key.*
+os/cartridge-os/init_pubkey.h
+os/cartridge-os/*.cart
 
 # Local development
 .claude/settings.local.json

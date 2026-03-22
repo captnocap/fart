@@ -6,7 +6,7 @@ Write React. Get a native binary. No runtime, no interpreter, no garbage collect
 app.tsz (TypeScript + JSX)
    |
    v
-zigos-compiler (hand-written Zig, 17K lines)
+tsz compiler (hand-written Zig, 17K lines)
    |
    v
 generated Zig source (layout + GPU paint + events + state)
@@ -36,137 +36,97 @@ That's the entire app. Compiles to a native binary.
 
 ---
 
-## The Stack
+## Three Pillars
 
-### Compiler (`experiments/zigos/compiler/`)
+### `tsz/` — Compiler + Framework (active)
 
-Hand-written lexer + parser + codegen in pure Zig. 23 modules, ~17K lines. Compiles `.tsz` files (TypeScript + JSX) to Zig source that links against the framework.
+The `.tsz` compiler and native rendering framework. A hand-written lexer, parser, and multi-phase codegen in pure Zig compiles TypeScript + JSX into Zig source that links against the framework runtime.
 
-```bash
-cd experiments/zigos
-zig build compiler                                  # Build the compiler
-./zig-out/bin/zigos-compiler build cart.tsz          # Compile + build a cart
-./zig-out/bin/zigos-compiler check cart.tsz          # Compile + validate only
-```
-
-Features:
-- Components with props (`function Card(title, value) { ... }`)
-- `useState` with reactive state slots
-- `useEffect` with interval timers
-- `.map()` on object arrays with item/index capture
-- Conditional rendering (`{x == 1 && <Box>...</Box>}`)
-- Template literals (`` {`${count} items`} ``)
-- Classifiers (`.cls.tsz` — styled component shorthand)
-- Script imports (`.script.tsz` — QuickJS for dynamic data)
-- HTML tag support (`<div>`, `<span>`, `<p>`, `<h1>`-`<h6>` map to primitives)
-- FFI via `@cImport` pragmas
-- 1600-line-per-file enforced limit
-
-### Framework (`experiments/zigos/framework/`)
-
-41 Zig modules. The runtime that compiled apps link against.
-
-- **GPU renderer** — wgpu-based pipeline: SDF text, rounded rects, borders, shadows, images, video
+- **Compiler** — 23 modules, ~17K lines. Components, useState, useEffect, .map(), conditionals, template literals, classifiers, script imports, HTML tags, FFI
+- **GPU renderer** — wgpu pipeline: SDF text, rounded rects, borders, shadows, images, video, 3D (Blinn-Phong), custom effects
 - **Layout engine** — Flexbox (1400 lines), CSS-spec-aligned, WPT-tested
-- **Text** — FreeType rasterizer + SDF glyph atlas + text measurement
-- **Events** — Hit testing, click/hover/scroll, keyboard input, text selection
-- **State** — Compile-time reactive slots, dirty tracking
-- **QuickJS bridge** — JS runtime for dynamic data (object arrays, setInterval, telemetry)
-- **Networking** — HTTP client/server, WebSocket client/server, IPC, SOCKS5, Tor
-- **Multi-window** — SDL2 multi-window, shared state
-- **Inspector** — Built-in devtools (element tree, style inspector, performance profiler)
-- **Canvas** — Graph/node rendering with SVG path support
-- **Video** — libmpv integration via OpenGL render API
+- **Networking** — HTTP client/server, WebSocket client/server, IPC, SOCKS5, Tor — all pure Zig
+- **Physics** — Box2D 2.4.1 integration for 2D rigid body simulation
+- **3D** — Inline 3D viewports with camera, lights, and mesh primitives (box, sphere, plane, cylinder)
+- **Terminal** — PTY terminal emulator with cell-grid rendering
+- **Canvas** — Infinite canvas with zoom/pan/drift, SVG path nodes, graph visualization
+- **Inspector** — Built-in devtools: element tree, style inspector, performance profiler, constraint graph
+- **Transitions** — CSS-style animations with timing and spring physics
 
-### Networking (`framework/net/`)
+### `love2d/` — Lua Reference Stack
 
-Full network stack, all pure Zig:
+The original proof of concept. React reconciler → QuickJS → Lua layout → Love2D painter. Mature, full-featured: 30+ packages, storybook, HMR, test runner, CLI with `rjit convert`, theme system, 3D, audio, terminal emulator. The native engine ports features from here.
 
-| Module | What |
-|--------|------|
-| `http.zig` | HTTP client |
-| `httpserver.zig` | HTTP server |
-| `websocket.zig` | WebSocket client (RFC 6455) |
-| `wsserver.zig` | WebSocket server (multi-client, broadcast) |
-| `ipc.zig` | Inter-process communication |
-| `socks5.zig` | SOCKS5 proxy client |
-| `tor.zig` | Tor integration |
-| `manager.zig` | Connection manager |
+### `os/` — CartridgeOS + Exodia (future)
 
-### Love2D Stack (`love2d/`)
-
-The original proof of concept. React reconciler → QuickJS → Lua layout → Love2D painter. Mature, full-featured: 30+ packages, storybook, HMR, test runner, CLI with `rjit convert` (HTML div-soup → ReactJIT converter), theme system, 3D, audio, terminal emulator, and more. The native engine ports features from here.
+Operating system shell and app distribution layer. CartridgeOS manages windows, permissions, and app lifecycle. Exodia is the network layer for cart distribution and discovery.
 
 ---
 
-## Primitives
+## What Are .tsz Files?
 
-`Box` `Text` `Image` `Pressable` `ScrollView` `TextInput`
+`.tsz` is TypeScript + JSX that compiles to native code. No bundler, no transpiler chain — one compiler, one output.
 
-Also accepts HTML tags: `div` `span` `p` `h1`-`h6` `button` `section` `nav` `header` `footer` `img` `input` — mapped to the above primitives automatically.
+| Extension | What | Example |
+|-----------|------|---------|
+| `.app.tsz` | App → binary | `counter.app.tsz` |
+| `.mod.tsz` | Runtime module → `.gen.zig` | `state.mod.tsz` |
+| `.tsz` | Component import | `Button.tsz` |
+| `.cls.tsz` | Shared styles/classifiers | `styles.cls.tsz` |
+| `.script.tsz` | QuickJS runtime script | `data.script.tsz` |
+| `_c.tsz` | Component module | `Header_c.tsz` |
+| `_cmod.tsz` | Component module (alt) | `Badge_cmod.tsz` |
 
-## Carts
-
-Apps are called "carts." Each is a `.tsz` entry point with optional component files (`_c.tsz`), classifiers (`_cls.tsz`), and scripts (`.script.tsz`).
-
-```
-carts/
-  storybook/          Component catalog + theme demo
-  inspector/          Built-in devtools (element tree, styles, perf)
-  dashboard/          Dashboard demo
-  charts/             Chart library (area, bar, candlestick, pie, radar, ...)
-  effect-bench/       Stress tests (57M+ bridge calls/s, 5000+ node layout)
-  conformance/        Compiler conformance suite (16 tests, SHA256-locked)
-  wpt-flex/           W3C Web Platform Tests for flexbox (50 tests)
-  autobahn-ws/        Autobahn WebSocket conformance harness
-  pty-test/           Terminal emulator
-  constraint-graph/   Constraint graph visualization
-  video-test/         Video playback demo
-```
-
-## Conformance Testing
-
-### Compiler Conformance (`carts/conformance/`)
-
-16 SHA256-locked test files — real React app ports (ecommerce dashboard, admin panel, Jira board) and destructive pattern tests (nested maps, map-inside-component-inside-map, evil kanban, schema form). Files are immutable. Fix the compiler, not the tests.
+## Quick Start
 
 ```bash
-bash carts/conformance/run_conformance.sh
-```
+cd tsz
 
-### WPT Flexbox (`carts/wpt-flex/`)
+# Build the compiler
+zig build compiler
 
-50 tests ported from the W3C Web Platform Tests for CSS Flexbox. Tests use `<div>` tags directly. Covers direction, justify, align, grow, shrink, wrap, gap, padding, margin, nesting, percentage sizing, min/max constraints.
-
-```bash
-bash carts/wpt-flex/run_wpt.sh
-```
-
-### Stress Tests (`carts/effect-bench/`)
-
-- **StressMapBridge** — 57M+ setState calls/s while rendering 5000+ nodes
-- **StressMap500** — Escalating map items (100 → 4096), layout + paint profiling
-- **StressJS500 / StressZig1000** — Bridge throughput benchmarks
-
-```bash
-ZIGOS_VSYNC=0 ./zig-out/bin/StressMapBridge    # Uncapped framerate
-```
-
-## Build
-
-```bash
-cd experiments/zigos
-
-# Build everything
-zig build compiler                    # The .tsz compiler
-zig build app                        # Default app (generated_app.zig)
-
-# Build a specific cart
+# Compile and build a cart
 ./zig-out/bin/zigos-compiler build carts/storybook/Storybook.tsz
 
 # Run it
 ./zig-out/bin/Storybook
 ```
+
+## Primitives
+
+`Box` `Text` `Image` `Pressable` `ScrollView` `TextInput` `TextArea`
+
+Also accepts HTML tags: `div` `span` `p` `h1`-`h6` `button` `section` `nav` `header` `footer` `img` `input` — mapped to primitives automatically.
+
+## Carts
+
+Apps are called "carts." Each is a `.tsz` entry point with optional components, classifiers, and scripts.
+
+```
+carts/
+  storybook/          Component catalog + infinite canvas + theme demo
+  inspector/          Built-in devtools (element tree, styles, perf)
+  dashboard/          Dashboard demo
+  charts/             Chart library (area, bar, candlestick, pie, radar, ...)
+  browser/            In-app web content renderer
+  effect-bench/       Stress tests (57M+ bridge calls/s, 5000+ node layout)
+  conformance/        Compiler conformance suite (16 tests, SHA256-locked)
+  wpt-flex/           W3C Web Platform Tests for flexbox (70 tests)
+  autobahn-ws/        Autobahn WebSocket conformance (202/204 cases pass)
+  http-conformance/   HTTP conformance test harness
+  animations/         Animation and physics demos
+  scene3d-demo/       3D rendering demo
+  pty-test/           Terminal emulator
+  constraint-graph/   Constraint graph visualization
+```
+
+## Conformance
+
+| Suite | Score | What |
+|-------|-------|------|
+| Autobahn WebSocket | 202/204 | RFC 6455 compliance |
+| WPT Flexbox | 70 | W3C CSS flex spec |
+| Compiler | 16 | Real React app ports + destructive pattern tests |
 
 ## Performance
 
@@ -178,6 +138,10 @@ At 4096 mapped items (5139 visible nodes):
 ```
 [telemetry] FPS: 258 | layout: 3268us | paint: 263us | visible: 5139 | bridge: 57671729/s
 ```
+
+## `archive/` Purpose
+
+`archive/` contains `tsz/` (v1) and `tsz-gen/` (v2) — earlier iterations of the compiler and runtime. These are frozen references, not active code. The v1 stack was a hand-written Zig runtime. The v2 stack added `.mod.tsz → .gen.zig` compilation. Both are superseded by the current `tsz/` (v3) which has the multi-phase compiler, QuickJS bridge, inspector, and full networking stack.
 
 ---
 

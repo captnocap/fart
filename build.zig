@@ -182,19 +182,19 @@ pub fn build(b: *std.Build) void {
         });
 
         mod.addCSourceFile(.{
-            .file = b.path("experiments/cartridge-os/init.c"),
+            .file = b.path("os/cartridge-os/init.c"),
             .flags = &.{"-O2"},
         });
         mod.addCSourceFile(.{
-            .file = b.path("experiments/cartridge-os/tweetnacl.c"),
+            .file = b.path("os/cartridge-os/tweetnacl.c"),
             .flags = &.{"-O2"},
         });
         mod.addCSourceFile(.{
-            .file = b.path("experiments/cartridge-os/sha512.c"),
+            .file = b.path("os/cartridge-os/sha512.c"),
             .flags = &.{"-O2"},
         });
 
-        mod.addIncludePath(b.path("experiments/cartridge-os"));
+        mod.addIncludePath(b.path("os/cartridge-os"));
 
         // musl target + linkLibC() = static musl link. No -static flag needed.
         exe.linkLibC();

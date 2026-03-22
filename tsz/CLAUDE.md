@@ -1,102 +1,47 @@
-# tsz/ — Native Stack
+# tsz/ — Active Stack
 
-Zero-dependency native rendering. `.tsz` source → Zig compiler → SDL2 + wgpu + FreeType binary.
-No Node, no npm, no Lua, no QuickJS. The entire toolchain is two binaries.
+This is the active engine. When the user says "the compiler", "the runtime", "layout", "the inspector" — this is it.
 
-## .tsz Syntax
+## Structure
 
-`.tsz` files look like React components but compile directly to native Zig:
-
-```tsx
-// @ffi <time.h>
-declare function time(t: pointer): number;
-
-function App() {
-  const [ts, setTs] = useState(0);
-  return (
-    <Box style={{ padding: 32, backgroundColor: '#1e1e2a' }}>
-      <Text fontSize={24} color="#ffffff">{`Time: ${ts}`}</Text>
-      <Pressable onPress={() => setTs(time(0))} style={{ padding: 16, backgroundColor: '#4ec9b0' }}>
-        <Text fontSize={16} color="#ffffff">Get Time</Text>
-      </Pressable>
-    </Box>
-  );
-}
+```
+compiler/         — .tsz → Zig codegen (lexer, parser, 9-phase pipeline, emit)
+framework/        — Engine core: layout, GPU, events, state, text, windows, canvas
+  gpu/            — wgpu pipelines (rects, text, curves)
+  net/            — Networking (HTTP, WebSocket, SOCKS5, Tor)
+  engine.zig      — Main loop: SDL init, GPU, event loop, paint
+  layout.zig      — Flex layout engine (pixel-perfect, ported from love2d/lua/layout.lua)
+carts/            — Apps built with the framework (inspector, dashboard, constraint-graph, etc.)
+scripts/          — sync-mod.sh (module variant sync), check-file-length.sh
 ```
 
-## Capabilities
+## Build
 
-- **Primitives:** Box, Text, Image, Pressable, ScrollView, TextInput, Window
-- **State:** `useState(initial)` → compile-time state slots, reactive re-render
-- **Events:** `onPress` handlers with hit testing and hover feedback
-- **FFI:** `// @ffi <header.h> -llib` + `declare function` → `@cImport` any C library
-- **Multi-window:** `<Window title="X">` → same-process SDL2 windows, shared state, no IPC
-- **Video:** `playVideo("path")` → native libmpv integration
-- **Images:** `<Image src="photo.png" />` → stb_image decode + SDL texture cache
-- **Scroll:** `<ScrollView>` → overflow clipping + mouse wheel
-- **Watchdog:** 512MB hard limit + 50MB/s leak detection → BSOD crash screen
-- **Component composition:** multi-file imports, prop substitution, children forwarding
-
-## Build Commands
-
-All builds run from the **repo root** (where `build.zig` lives):
-
+From repo root:
 ```bash
-zig build tsz-compiler                         # Build the compiler
-zig build tsz-compiler -Doptimize=ReleaseSmall # Optimized compiler
-./zig-out/bin/tsz build app.tsz                # Compile .tsz → native binary
-./zig-out/bin/tsz run app.tsz                  # Compile and run
-zig build engine-app                           # Build from generated_app.zig directly
-zig build engine-app -Doptimize=ReleaseSmall   # 65KB release binary
-zig build engine                               # Build the standalone runtime
-zig build run-engine                           # Build and run the runtime
+zig build compiler           # Build the .tsz compiler
+zig build app                # Lite build (codegen + layout + rendering)
+zig build app-full           # Full build (+ networking, tor, curl, vterm)
 ```
 
-## Directory Structure
+## File Extensions
 
-```
-compiler/         — The compiler (lexer, parser, codegen) in pure Zig
-  main.zig        — Entry point, CLI (build/run/gui/tray)
-  lexer.zig       — Tokenizer
-  codegen.zig     — .tsz → Zig source emitter
-  engine.zig      — Project manager, registry
-  gui.zig         — SDL2 dashboard window
-  tray.zig        — System tray (GTK3 + libayatana)
-  runner.zig      — Process lifecycle
-  registry.zig    — Project registry
-  actions.zig     — CLI actions
-  process.zig     — Process management
-  tailwind.zig    — Tailwind-style class support
+7 file kinds in two isolated worlds (app and module). Full taxonomy: `compiler/cli.zig:165-227`.
 
-runtime/          — The rendering engine (layout, text, painter, events)
-  main.zig        — Runtime entry point
-  generated_app.zig — Compiler output (the compiled .tsz app)
-  layout.zig      — Flexbox engine (ported from love2d/lua/layout.lua)
-  text.zig        — FreeType glyph rasterizer + cache
-  image.zig       — stb_image loader + SDL texture cache
-  events.zig      — Hit testing + scroll container detection
-  input.zig       — TextInput handling
-  state.zig       — Reactive state slots
-  windows.zig     — Multi-window manager
-  watchdog.zig    — RSS leak guard
-  bsod.zig        — Crash screen
-  breakpoint.zig  — Debug breakpoints
-  mpv.zig         — libmpv video playback
-  c.zig           — Shared @cImport (SDL2, GL, FreeType)
-  leaktest.zig    — Memory leak testing
-  ffi_libs.txt    — Extra libraries for FFI (written by compiler)
+## Debug Tools
 
-examples/         — .tsz demo apps
-```
+See memory file `reference_zigos_debug_toolkit.md`. Key ones:
+- `ZIGOS_LOG=events,state ./app` — runtime logging by category
+- `--strict` — warnings become build errors
+- `--embed` — compile UI into `framework/devtools.zig` for engine integration
 
-## Relationship to Love2D Stack
+## File Length Limit (ENFORCED)
 
-The runtime is a **battle-tested port** of the Love2D Lua layout engine (`love2d/lua/layout.lua` → `runtime/layout.zig`). Same flex algorithm, same sizing tiers, same edge cases. When debugging layout, the Lua version is the reference implementation. Fixes and learnings flow both directions.
+**Max 1600 lines per `.zig` or `.tsz` file.** This is enforced by `scripts/check-file-length.sh` and gated into every build target (`zig build app`, `zig build compiler`, etc.). If a file is over 1600 lines, the build fails. The fix is always to split the file — never to raise the limit.
 
-## Language
+**Do not change the limit. Do not add exceptions. Do not bypass the check.** If you are about to write code that would push a file over 1600 lines, split it first.
 
-Everything is Zig. There is no TypeScript, no Lua, no JavaScript anywhere in this stack. The `.tsz` syntax *looks* like TSX but compiles to Zig structs — React doesn't exist here.
+## See Also
 
-## System Dependencies
-
-SDL2 (windowing/events only), wgpu-native (GPU rendering via Vulkan/Metal/DX12), FreeType, libmpv (optional, for video). GTK3 + libayatana-appindicator3 (for system tray). OpenGL is no longer used.
+- `MODULES.md` — Framework module architecture, logging, windows, breakpoints
+- `MERGE_PLAN.md` (repo root) — Migration plan (completed 2026-03-22)

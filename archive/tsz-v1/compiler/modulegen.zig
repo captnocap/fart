@@ -157,7 +157,7 @@ fn emitImports(
                     var mod_name: []const u8 = path;
                     if (std.mem.startsWith(u8, mod_name, "./")) mod_name = mod_name[2..];
                     try out.appendSlice(alloc, try std.fmt.allocPrint(alloc,
-                        "const {s} = @import(\"{s}.gen.zig\");\n", .{ import_name, mod_name }));
+                        "const {s} = @import(\"{s}.zig\");\n", .{ import_name, mod_name }));
                 } else {
                     try out.appendSlice(alloc, try std.fmt.allocPrint(alloc,
                         "const {s} = @import(\"{s}\");\n", .{ import_name, path }));
