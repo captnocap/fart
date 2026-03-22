@@ -1,0 +1,30 @@
+function App() {
+  return (
+    <div style={{ width: '100%', height: '100%', flexDirection: 'column', padding: 20, gap: 12, backgroundColor: '#1a1a2e' }}>
+      <Text fontSize={18} color="#FFF">WPT: box shadows</Text>
+
+      <Text fontSize={11} color="#CCC">shadowOffsetX/Y + shadowBlur + shadowColor</Text>
+      <div style={{ flexDirection: 'row', gap: 20, padding: 10 }}>
+        <div style={{ width: 80, height: 80, backgroundColor: '#4CAF50', borderRadius: 8, shadowOffsetX: 4, shadowOffsetY: 4, shadowBlur: 8, shadowColor: '#000000' }} />
+        <div style={{ width: 80, height: 80, backgroundColor: '#2196F3', borderRadius: 8, shadowOffsetX: 0, shadowOffsetY: 8, shadowBlur: 16, shadowColor: '#000000' }} />
+        <div style={{ width: 80, height: 80, backgroundColor: '#FF9800', borderRadius: 8, shadowOffsetX: -4, shadowOffsetY: -4, shadowBlur: 12, shadowColor: '#000000' }} />
+      </div>
+
+      <Text fontSize={11} color="#CCC">Large shadow blur — soft glow effect</Text>
+      <div style={{ flexDirection: 'row', gap: 30, padding: 20 }}>
+        <div style={{ width: 60, height: 60, backgroundColor: '#E91E63', borderRadius: 30, shadowOffsetX: 0, shadowOffsetY: 0, shadowBlur: 20, shadowColor: '#E91E63' }} />
+        <div style={{ width: 60, height: 60, backgroundColor: '#00BCD4', borderRadius: 30, shadowOffsetX: 0, shadowOffsetY: 0, shadowBlur: 20, shadowColor: '#00BCD4' }} />
+      </div>
+
+      <Text fontSize={11} color="#CCC">Shadow on cards</Text>
+      <div style={{ flexDirection: 'row', gap: 12 }}>
+        <div style={{ width: 120, height: 80, backgroundColor: '#2C2C2C', borderRadius: 8, padding: 12, shadowOffsetX: 0, shadowOffsetY: 2, shadowBlur: 8, shadowColor: '#000000' }}>
+          <Text color="#FFF" fontSize={11}>Card A</Text>
+        </div>
+        <div style={{ width: 120, height: 80, backgroundColor: '#2C2C2C', borderRadius: 8, padding: 12, shadowOffsetX: 0, shadowOffsetY: 4, shadowBlur: 16, shadowColor: '#000000' }}>
+          <Text color="#FFF" fontSize={11}>Card B</Text>
+        </div>
+      </div>
+    </div>
+  );
+}
