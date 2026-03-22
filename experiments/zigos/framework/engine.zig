@@ -179,8 +179,22 @@ fn paintNode(node: *Node) void {
     const r = node.computed;
     if (r.w <= 0 or r.h <= 0) { g_zero_count += 1; return; }
 
+    // Apply node opacity (cascades to children via g_paint_opacity)
+    const saved_opacity = g_paint_opacity;
+    if (node.style.opacity < 1.0) {
+        g_paint_opacity *= node.style.opacity;
+    }
+    if (g_paint_opacity <= 0) { g_paint_opacity = saved_opacity; return; }
+
     // Paint this node's visuals (background, text, input, selection)
     paintNodeVisuals(node);
+
+    // Background effects — children with effect_background paint behind siblings
+    for (node.children) |*child| {
+        if (child.effect_background and child.effect_render != null) {
+            _ = effects.paintCustomEffect(child.effect_render.?, r.x, r.y, r.w, r.h, g_paint_opacity);
+        }
+    }
 
     // Canvas rendering — separate heavy path
     if (node.canvas_type != null) { paintCanvasContainer(node); return; }
@@ -195,13 +209,14 @@ fn paintNode(node: *Node) void {
     if (is_scroll and node.scroll_y != 0) {
         const sy = node.scroll_y;
         offsetDescendants(node, -sy);
-        for (node.children) |*child| paintNode(child);
+        for (node.children) |*child| if (!child.effect_background) paintNode(child);
         offsetDescendants(node, sy);
     } else {
-        for (node.children) |*child| paintNode(child);
+        for (node.children) |*child| if (!child.effect_background) paintNode(child);
     }
 
     if (is_clipped) gpu.popScissor();
+    g_paint_opacity = saved_opacity;
 }
 
 /// Paint a Canvas.Path node (SVG stroke curves). Separated to keep paintNode frame small.
