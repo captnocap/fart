@@ -1,18 +1,20 @@
 import { Shell, Content, Footer, FooterCrumb, FooterCrumbActive, FooterSep, FooterSpacer, FooterCounter, NavPill, NavPillActive, NavPillLabel, NavPillLabelActive } from './storybook_cls';
 import { Primitives } from './Primitives_c';
 import { ThemeDemo } from './ThemeDemo_c';
+import { HomePage } from './HomePage_c';
 
 const [activeNav, setActiveNav] = useState(0);
 
 function App() {
   return (
     <C.Shell>
-      <C.Content>
+      {activeNav == 0 && <HomePage />}
+      {activeNav != 0 && <C.Content>
         <Routes>
-          <Route path="/" element={<Primitives />} />
+          <Route path="/primitives" element={<Primitives />} />
           <Route path="/theme" element={<ThemeDemo />} />
         </Routes>
-      </C.Content>
+      </C.Content>}
 
       <C.Footer>
         <C.FooterCrumb>Storybook</C.FooterCrumb>

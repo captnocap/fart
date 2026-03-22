@@ -1,0 +1,41 @@
+classifier({
+  Page: { type: 'Box', style: { flexDirection: 'column', width: '100%', height: '100%', backgroundColor: 'theme-bg' } },
+
+  Card: { type: 'Box', style: { flexDirection: 'column', padding: 16, backgroundColor: 'theme-bgElevated', borderRadius: 8, gap: 8 } },
+  CardHeader: { type: 'Box', style: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 } },
+  CardBody: { type: 'Box', style: { flexDirection: 'column', gap: 6 } },
+
+  Row: { type: 'Box', style: { flexDirection: 'row', gap: 8, alignItems: 'center' } },
+  Column: { type: 'Box', style: { flexDirection: 'column', gap: 8 } },
+  Spacer: { type: 'Box', style: { flexGrow: 1 } },
+  Wrap: { type: 'Box', style: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' } },
+
+  Heading: { type: 'Text', fontSize: 18, color: 'theme-text' },
+  Subheading: { type: 'Text', fontSize: 14, color: 'theme-textSecondary' },
+  Body: { type: 'Text', fontSize: 13, color: 'theme-textSecondary' },
+  Label: { type: 'Text', fontSize: 11, color: 'theme-textDim' },
+  Code: { type: 'Text', fontSize: 12, color: 'theme-accent' },
+
+  Divider: { type: 'Box', style: { height: 1, backgroundColor: 'theme-border' } },
+
+  Surface: { type: 'Box', style: { padding: 12, backgroundColor: 'theme-surface', borderRadius: 6 } },
+  SurfaceAlt: { type: 'Box', style: { padding: 12, backgroundColor: 'theme-bgAlt', borderRadius: 6 } },
+
+  Button: { type: 'Pressable', style: { paddingLeft: 14, paddingRight: 14, paddingTop: 8, paddingBottom: 8, borderRadius: 6, backgroundColor: 'theme-primary' } },
+  ButtonLabel: { type: 'Text', fontSize: 12, color: 'theme-bg' },
+  ButtonOutline: { type: 'Pressable', style: { paddingLeft: 14, paddingRight: 14, paddingTop: 8, paddingBottom: 8, borderRadius: 6, borderWidth: 1, borderColor: 'theme-border' } },
+  ButtonOutlineLabel: { type: 'Text', fontSize: 12, color: 'theme-text' },
+
+  BadgeNeutral: { type: 'Box', style: { paddingLeft: 6, paddingRight: 6, paddingTop: 3, paddingBottom: 3, borderRadius: 4, backgroundColor: 'theme-bgElevated' } },
+  BadgeNeutralText: { type: 'Text', fontSize: 9, color: 'theme-textSecondary' },
+  BadgeAccent: { type: 'Box', style: { paddingLeft: 6, paddingRight: 6, paddingTop: 3, paddingBottom: 3, borderRadius: 4, backgroundColor: 'theme-primary' } },
+  BadgeAccentText: { type: 'Text', fontSize: 9, color: 'theme-bg' },
+  BadgeSuccess: { type: 'Box', style: { paddingLeft: 6, paddingRight: 6, paddingTop: 3, paddingBottom: 3, borderRadius: 4, backgroundColor: 'theme-success' } },
+  BadgeSuccessText: { type: 'Text', fontSize: 9, color: 'theme-bg' },
+  BadgeError: { type: 'Box', style: { paddingLeft: 6, paddingRight: 6, paddingTop: 3, paddingBottom: 3, borderRadius: 4, backgroundColor: 'theme-error' } },
+  BadgeErrorText: { type: 'Text', fontSize: 9, color: 'theme-bg' },
+  BadgeWarning: { type: 'Box', style: { paddingLeft: 6, paddingRight: 6, paddingTop: 3, paddingBottom: 3, borderRadius: 4, backgroundColor: 'theme-warning' } },
+  BadgeWarningText: { type: 'Text', fontSize: 9, color: 'theme-bg' },
+  BadgeInfo: { type: 'Box', style: { paddingLeft: 6, paddingRight: 6, paddingTop: 3, paddingBottom: 3, borderRadius: 4, backgroundColor: 'theme-info' } },
+  BadgeInfoText: { type: 'Text', fontSize: 9, color: 'theme-bg' },
+})

@@ -1,0 +1,601 @@
+import { Transitions } from './tiles/Transitions_c';
+import { ThreeDScene } from './tiles/ThreeDScene_c';
+import { ScrollDemo } from './tiles/ScrollDemo_c';
+import { Hyperlinks } from './tiles/Hyperlinks_c';
+import { OpacityDemo } from './tiles/OpacityDemo_c';
+import { TextAreaDemo } from './tiles/TextAreaDemo_c';
+
+<script>
+function hopToTile(idx) {
+  hopTo((idx % 8) * 300 - 1050, 0);
+}
+</script>
+
+const [hpClicks, setHpClicks] = useState(0);
+const [hpTogA, setHpTogA] = useState(1);
+const [hpTogB, setHpTogB] = useState(0);
+
+function HomePage() {
+  return (
+      <Canvas style={{ flexGrow: 1, flexBasis: 0 }} viewX={0} viewY={0} viewZoom={0.7} driftX={-15} driftY={-10}>
+
+        <Canvas.Path d="M -1200,-2000 L -1200,2000" stroke="#1c2333" strokeWidth={1} />
+        <Canvas.Path d="M -900,-2000 L -900,2000" stroke="#1c2333" strokeWidth={1} />
+        <Canvas.Path d="M -600,-2000 L -600,2000" stroke="#1c2333" strokeWidth={1} />
+        <Canvas.Path d="M -300,-2000 L -300,2000" stroke="#1c2333" strokeWidth={1} />
+        <Canvas.Path d="M 0,-2000 L 0,2000" stroke="#1c2333" strokeWidth={1} />
+        <Canvas.Path d="M 300,-2000 L 300,2000" stroke="#1c2333" strokeWidth={1} />
+        <Canvas.Path d="M 600,-2000 L 600,2000" stroke="#1c2333" strokeWidth={1} />
+        <Canvas.Path d="M 900,-2000 L 900,2000" stroke="#1c2333" strokeWidth={1} />
+        <Canvas.Path d="M 1200,-2000 L 1200,2000" stroke="#1c2333" strokeWidth={1} />
+        <Canvas.Path d="M 1500,-2000 L 1500,2000" stroke="#1c2333" strokeWidth={1} />
+
+        <Canvas.Node gx={-1050} gy={-122} gw={260} gh={0}>
+          <Box style={{ backgroundColor: '#0d1117', borderWidth: 1, borderColor: '#1c2333', borderRadius: 8, padding: 12, flexDirection: 'column', gap: 6 }}>
+            <Text fontSize={11} color="#8b949e">Bar Chart</Text>
+            <Box style={{ flexDirection: 'row', alignItems: 'end', gap: 3 }}>
+              <Box style={{ flexGrow: 1, height: 20, backgroundColor: '#238636', borderRadius: 2 }} />
+              <Box style={{ flexGrow: 1, height: 45, backgroundColor: '#238636', borderRadius: 2 }} />
+              <Box style={{ flexGrow: 1, height: 30, backgroundColor: '#238636', borderRadius: 2 }} />
+              <Box style={{ flexGrow: 1, height: 65, backgroundColor: '#238636', borderRadius: 2 }} />
+              <Box style={{ flexGrow: 1, height: 50, backgroundColor: '#3fb950', borderRadius: 2 }} />
+              <Box style={{ flexGrow: 1, height: 80, backgroundColor: '#238636', borderRadius: 2 }} />
+              <Box style={{ flexGrow: 1, height: 55, backgroundColor: '#238636', borderRadius: 2 }} />
+              <Box style={{ flexGrow: 1, height: 90, backgroundColor: '#238636', borderRadius: 2 }} />
+              <Box style={{ flexGrow: 1, height: 70, backgroundColor: '#238636', borderRadius: 2 }} />
+              <Box style={{ flexGrow: 1, height: 100, backgroundColor: '#3fb950', borderRadius: 2 }} />
+            </Box>
+          </Box>
+        </Canvas.Node>
+
+        <Canvas.Node gx={-1050} gy={-630} gw={260} gh={0}>
+          <Box style={{ backgroundColor: '#0d1117', borderWidth: 1, borderColor: '#1c2333', borderRadius: 8, padding: 12, flexDirection: 'column', gap: 4 }}>
+            <Text fontSize={11} color="#8b949e">Toggles</Text>
+            <Box style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
+              <Pressable style={{ width: 36, height: 20, borderRadius: 10 }} onPress={() => { setHpTogA(hpTogA == 0 ? 1 : 0) }}>
+                {hpTogA == 1 && <Box style={{ width: 36, height: 20, backgroundColor: '#238636', borderRadius: 10 }} />}
+                {hpTogA == 0 && <Box style={{ width: 36, height: 20, backgroundColor: '#21262d', borderRadius: 10 }} />}
+              </Pressable>
+              {hpTogA == 1 && <Text fontSize={10} color="#8b949e">On</Text>}
+              {hpTogA == 0 && <Text fontSize={10} color="#484f58">Off</Text>}
+              <Pressable style={{ width: 36, height: 20, borderRadius: 10 }} onPress={() => { setHpTogB(hpTogB == 0 ? 1 : 0) }}>
+                {hpTogB == 1 && <Box style={{ width: 36, height: 20, backgroundColor: '#1f6feb', borderRadius: 10 }} />}
+                {hpTogB == 0 && <Box style={{ width: 36, height: 20, backgroundColor: '#21262d', borderRadius: 10 }} />}
+              </Pressable>
+              {hpTogB == 1 && <Text fontSize={10} color="#8b949e">On</Text>}
+              {hpTogB == 0 && <Text fontSize={10} color="#484f58">Off</Text>}
+            </Box>
+          </Box>
+        </Canvas.Node>
+
+        <Canvas.Node gx={-1050} gy={-528} gw={260} gh={0}>
+          <Box style={{ backgroundColor: '#0d1117', borderWidth: 1, borderColor: '#1c2333', borderRadius: 8, padding: 12, flexDirection: 'column', gap: 4 }}>
+            <Text fontSize={11} color="#8b949e">Progress</Text>
+            <Box style={{ height: 8, backgroundColor: '#21262d', borderRadius: 4 }}>
+              <Box style={{ width: 160, height: 8, backgroundColor: '#238636', borderRadius: 4 }} />
+            </Box>
+            <Box style={{ height: 8, backgroundColor: '#21262d', borderRadius: 4 }}>
+              <Box style={{ width: 100, height: 8, backgroundColor: '#1f6feb', borderRadius: 4 }} />
+            </Box>
+            <Box style={{ height: 8, backgroundColor: '#21262d', borderRadius: 4 }}>
+              <Box style={{ width: 200, height: 8, backgroundColor: '#e3b341', borderRadius: 4 }} />
+            </Box>
+            <Box style={{ height: 8, backgroundColor: '#21262d', borderRadius: 4 }}>
+              <Box style={{ width: 60, height: 8, backgroundColor: '#da3633', borderRadius: 4 }} />
+            </Box>
+          </Box>
+        </Canvas.Node>
+
+        <Canvas.Node gx={-1050} gy={-420} gw={260} gh={0}>
+          <Box style={{ backgroundColor: '#0d1117', borderWidth: 1, borderColor: '#1c2333', borderRadius: 8, padding: 12, flexDirection: 'column', gap: 4 }}>
+            <Text fontSize={11} color="#8b949e">Status Dots</Text>
+            <Box style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
+              <Box style={{ width: 10, height: 10, backgroundColor: '#238636', borderRadius: 5 }} />
+              <Text fontSize={10} color="#8b949e">Online</Text>
+              <Box style={{ width: 10, height: 10, backgroundColor: '#e3b341', borderRadius: 5 }} />
+              <Text fontSize={10} color="#8b949e">Idle</Text>
+              <Box style={{ width: 10, height: 10, backgroundColor: '#da3633', borderRadius: 5 }} />
+              <Text fontSize={10} color="#8b949e">Error</Text>
+            </Box>
+            <Box style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
+              <Box style={{ width: 10, height: 10, backgroundColor: '#484f58', borderRadius: 5 }} />
+              <Text fontSize={10} color="#484f58">Unknown</Text>
+              <Box style={{ width: 10, height: 10, backgroundColor: '#1f6feb', borderRadius: 5 }} />
+              <Text fontSize={10} color="#8b949e">Syncing</Text>
+            </Box>
+          </Box>
+        </Canvas.Node>
+
+        <Canvas.Node gx={-1050} gy={-290} gw={260} gh={0}>
+          <Box style={{ backgroundColor: '#0d1117', borderWidth: 1, borderColor: '#1c2333', borderRadius: 8, padding: 12, flexDirection: 'column', gap: 6 }}>
+            <Text fontSize={11} color="#8b949e">Bar Chart B</Text>
+            <Box style={{ flexDirection: 'row', alignItems: 'end', gap: 3 }}>
+              <Box style={{ flexGrow: 1, height: 90, backgroundColor: '#8b5cf6', borderRadius: 2 }} />
+              <Box style={{ flexGrow: 1, height: 60, backgroundColor: '#7c3aed', borderRadius: 2 }} />
+              <Box style={{ flexGrow: 1, height: 75, backgroundColor: '#8b5cf6', borderRadius: 2 }} />
+              <Box style={{ flexGrow: 1, height: 40, backgroundColor: '#7c3aed', borderRadius: 2 }} />
+              <Box style={{ flexGrow: 1, height: 55, backgroundColor: '#8b5cf6', borderRadius: 2 }} />
+              <Box style={{ flexGrow: 1, height: 85, backgroundColor: '#a78bfa', borderRadius: 2 }} />
+              <Box style={{ flexGrow: 1, height: 30, backgroundColor: '#7c3aed', borderRadius: 2 }} />
+              <Box style={{ flexGrow: 1, height: 70, backgroundColor: '#8b5cf6', borderRadius: 2 }} />
+            </Box>
+          </Box>
+        </Canvas.Node>
+
+        <Canvas.Node gx={-1050} gy={12} gw={260} gh={0}>
+          <Box style={{ backgroundColor: '#0d1117', borderWidth: 1, borderColor: '#1c2333', borderRadius: 8, padding: 12, flexDirection: 'column', gap: 4 }}>
+            <Text fontSize={11} color="#8b949e">Neutral Scale</Text>
+            <Box style={{ flexDirection: 'row', gap: 3 }}>
+              <Box style={{ flexGrow: 1, height: 24, backgroundColor: '#010409', borderRadius: 3 }} />
+              <Box style={{ flexGrow: 1, height: 24, backgroundColor: '#0d1117', borderRadius: 3 }} />
+              <Box style={{ flexGrow: 1, height: 24, backgroundColor: '#161b22', borderRadius: 3 }} />
+              <Box style={{ flexGrow: 1, height: 24, backgroundColor: '#21262d', borderRadius: 3 }} />
+              <Box style={{ flexGrow: 1, height: 24, backgroundColor: '#30363d', borderRadius: 3 }} />
+              <Box style={{ flexGrow: 1, height: 24, backgroundColor: '#484f58', borderRadius: 3 }} />
+              <Box style={{ flexGrow: 1, height: 24, backgroundColor: '#8b949e', borderRadius: 3 }} />
+            </Box>
+          </Box>
+        </Canvas.Node>
+
+        <Canvas.Node gx={-750} gy={-520} gw={260} gh={0}>
+          <Box style={{ backgroundColor: '#0d1117', borderWidth: 1, borderColor: '#1c2333', borderRadius: 8, padding: 12, flexDirection: 'column', gap: 4 }}>
+            <Text fontSize={20} color="#e6edf3">Heading</Text>
+            <Text fontSize={14} color="#c9d1d9">Subheading text</Text>
+            <Text fontSize={12} color="#8b949e">Body paragraph</Text>
+            <Text fontSize={10} color="#484f58">Caption · Meta</Text>
+            <Text fontSize={11} color="#79c0ff">const x = 42</Text>
+          </Box>
+        </Canvas.Node>
+
+        <Canvas.Node gx={-750} gy={-650} gw={260} gh={0}>
+          <Box style={{ backgroundColor: '#0d1117', borderWidth: 1, borderColor: '#1c2333', borderRadius: 8, padding: 12, flexDirection: 'column', gap: 4 }}>
+            <Text fontSize={11} color="#8b949e">Cards</Text>
+            <Box style={{ backgroundColor: '#161b22', borderRadius: 6, padding: 8, flexDirection: 'column', gap: 2 }}>
+              <Text fontSize={12} color="#e6edf3">Layout Engine</Text>
+              <Text fontSize={9} color="#484f58">Pixel-perfect flex</Text>
+            </Box>
+          </Box>
+        </Canvas.Node>
+
+        <Canvas.Node gx={-750} gy={-399} gw={260} gh={0}>
+          <Box style={{ backgroundColor: '#0d1117', borderWidth: 1, borderColor: '#1c2333', borderRadius: 8, padding: 12, flexDirection: 'column', gap: 4 }}>
+            <Text fontSize={11} color="#8b949e">Text Input</Text>
+            <TextInput placeholder="Type here..." fontSize={11} style={{ backgroundColor: '#161b22', borderWidth: 1, borderColor: '#30363d', borderRadius: 5, paddingLeft: 6, paddingRight: 6, paddingTop: 6, paddingBottom: 6 }} />
+          </Box>
+        </Canvas.Node>
+
+        <Canvas.Node gx={-750} gy={-290} gw={260} gh={0}>
+          <Box style={{ backgroundColor: '#0d1117', borderWidth: 1, borderColor: '#1c2333', borderRadius: 8, padding: 12, flexDirection: 'column', gap: 4 }}>
+            <Text fontSize={18} color="#e6edf3">Large Title</Text>
+            <Text fontSize={13} color="#c9d1d9">Medium body text for content areas and descriptions.</Text>
+            <Text fontSize={10} color="#6e7681">Small caption</Text>
+          </Box>
+        </Canvas.Node>
+
+        <Canvas.Node gx={-750} gy={-154} gw={260} gh={0}>
+          <Box style={{ backgroundColor: '#0d1117', borderWidth: 1, borderColor: '#1c2333', borderRadius: 8, padding: 12, flexDirection: 'column', gap: 4 }}>
+            <Text fontSize={11} color="#8b949e">Spacing</Text>
+            <Box style={{ flexDirection: 'column', gap: 3 }}>
+              <Box style={{ height: 4, backgroundColor: '#1f6feb', borderRadius: 2 }} />
+              <Box style={{ height: 8, backgroundColor: '#1f6feb', borderRadius: 2 }} />
+              <Box style={{ height: 12, backgroundColor: '#1f6feb', borderRadius: 2 }} />
+              <Box style={{ height: 16, backgroundColor: '#1f6feb', borderRadius: 2 }} />
+              <Box style={{ height: 24, backgroundColor: '#3b82f6', borderRadius: 2 }} />
+            </Box>
+          </Box>
+        </Canvas.Node>
+
+        <Canvas.Node gx={-750} gy={-24} gw={260} gh={0}>
+          <Box style={{ backgroundColor: '#0d1117', borderWidth: 1, borderColor: '#1c2333', borderRadius: 8, padding: 12, flexDirection: 'column', gap: 6 }}>
+            <Text fontSize={11} color="#8b949e">Borders</Text>
+            <Box style={{ flexDirection: 'row', gap: 6 }}>
+              <Box style={{ width: 40, height: 40, borderWidth: 1, borderColor: '#30363d', borderRadius: 4 }} />
+              <Box style={{ width: 40, height: 40, borderWidth: 2, borderColor: '#1f6feb', borderRadius: 4 }} />
+              <Box style={{ width: 40, height: 40, borderWidth: 2, borderColor: '#238636', borderRadius: 8 }} />
+              <Box style={{ width: 40, height: 40, borderWidth: 2, borderColor: '#da3633', borderRadius: 20 }} />
+            </Box>
+          </Box>
+        </Canvas.Node>
+
+        <Canvas.Node gx={-450} gy={-274} gw={260} gh={0}>
+          <Box style={{ backgroundColor: '#0d1117', borderWidth: 1, borderColor: '#1c2333', borderRadius: 8, padding: 12, flexDirection: 'column', gap: 6 }}>
+            <Text fontSize={11} color="#8b949e">Color Palette</Text>
+            <Box style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap' }}>
+              <Box style={{ width: 32, height: 32, backgroundColor: '#3b82f6', borderRadius: 5 }} />
+              <Box style={{ width: 32, height: 32, backgroundColor: '#8b5cf6', borderRadius: 5 }} />
+              <Box style={{ width: 32, height: 32, backgroundColor: '#14b8a6', borderRadius: 5 }} />
+              <Box style={{ width: 32, height: 32, backgroundColor: '#f97316', borderRadius: 5 }} />
+              <Box style={{ width: 32, height: 32, backgroundColor: '#ef4444', borderRadius: 5 }} />
+              <Box style={{ width: 32, height: 32, backgroundColor: '#eab308', borderRadius: 5 }} />
+              <Box style={{ width: 32, height: 32, backgroundColor: '#22c55e', borderRadius: 5 }} />
+              <Box style={{ width: 32, height: 32, backgroundColor: '#ec4899', borderRadius: 5 }} />
+              <Box style={{ width: 32, height: 32, backgroundColor: '#06b6d4', borderRadius: 5 }} />
+              <Box style={{ width: 32, height: 32, backgroundColor: '#6366f1', borderRadius: 5 }} />
+            </Box>
+          </Box>
+        </Canvas.Node>
+
+        <Canvas.Node gx={-450} gy={-650} gw={260} gh={0}>
+          <Box style={{ backgroundColor: '#0d1117', borderWidth: 1, borderColor: '#1c2333', borderRadius: 8, padding: 12, flexDirection: 'column', gap: 6 }}>
+            <Text fontSize={11} color="#8b949e">Accent Colors</Text>
+            <Box style={{ flexDirection: 'row', gap: 4 }}>
+              <Box style={{ width: 32, height: 32, backgroundColor: '#1f6feb', borderRadius: 5 }} />
+              <Box style={{ width: 32, height: 32, backgroundColor: '#238636', borderRadius: 5 }} />
+              <Box style={{ width: 32, height: 32, backgroundColor: '#da3633', borderRadius: 5 }} />
+              <Box style={{ width: 32, height: 32, backgroundColor: '#e3b341', borderRadius: 5 }} />
+              <Box style={{ width: 32, height: 32, backgroundColor: '#a371f7', borderRadius: 5 }} />
+            </Box>
+          </Box>
+        </Canvas.Node>
+
+        <Canvas.Node gx={-450} gy={-528} gw={260} gh={0}>
+          <Box style={{ backgroundColor: '#0d1117', borderWidth: 1, borderColor: '#1c2333', borderRadius: 8, padding: 12, flexDirection: 'column', gap: 6 }}>
+            <Text fontSize={11} color="#8b949e">Nested Boxes</Text>
+            <Box style={{ flexDirection: 'row', gap: 6 }}>
+              <Box style={{ flexGrow: 1, padding: 8, backgroundColor: '#161b22', borderRadius: 6, flexDirection: 'column', gap: 4 }}>
+                <Box style={{ height: 14, backgroundColor: '#21262d', borderRadius: 3 }} />
+                <Box style={{ height: 14, backgroundColor: '#21262d', borderRadius: 3 }} />
+                <Box style={{ height: 14, backgroundColor: '#21262d', borderRadius: 3 }} />
+              </Box>
+              <Box style={{ flexGrow: 1, padding: 8, backgroundColor: '#161b22', borderRadius: 6, flexDirection: 'column', gap: 4 }}>
+                <Box style={{ height: 14, backgroundColor: '#21262d', borderRadius: 3 }} />
+                <Box style={{ height: 14, backgroundColor: '#21262d', borderRadius: 3 }} />
+                <Box style={{ height: 14, backgroundColor: '#21262d', borderRadius: 3 }} />
+              </Box>
+            </Box>
+          </Box>
+        </Canvas.Node>
+
+        <Canvas.Node gx={-450} gy={-402} gw={260} gh={0}>
+          <Box style={{ backgroundColor: '#0d1117', borderWidth: 1, borderColor: '#1c2333', borderRadius: 8, padding: 12, flexDirection: 'column', gap: 4 }}>
+            <Text fontSize={11} color="#8b949e">Surfaces</Text>
+            <Box style={{ height: 20, backgroundColor: '#010409', borderRadius: 4, padding: 4 }}>
+              <Text fontSize={9} color="#484f58">Base</Text>
+            </Box>
+            <Box style={{ height: 20, backgroundColor: '#161b22', borderRadius: 4, padding: 4 }}>
+              <Text fontSize={9} color="#8b949e">Elevated</Text>
+            </Box>
+          </Box>
+        </Canvas.Node>
+
+        <Canvas.Node gx={-150} gy={-361} gw={260} gh={0}>
+          <Box style={{ backgroundColor: '#0d1117', borderWidth: 1, borderColor: '#1c2333', borderRadius: 8, padding: 12, flexDirection: 'column', gap: 8 }}>
+            <Box style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Text fontSize={11} color="#8b949e">Buttons</Text>
+              <Text fontSize={10} color="#6e7681">{`${hpClicks} clicks`}</Text>
+            </Box>
+            <Box style={{ flexDirection: 'row', gap: 8 }}>
+              <Pressable style={{ paddingLeft: 12, paddingRight: 12, paddingTop: 6, paddingBottom: 6, backgroundColor: '#238636', borderRadius: 6 }} onPress={() => { setHpClicks(hpClicks + 1) }}>
+                <Text fontSize={11} color="#ffffff">Primary</Text>
+              </Pressable>
+              <Pressable style={{ paddingLeft: 12, paddingRight: 12, paddingTop: 6, paddingBottom: 6, borderWidth: 1, borderColor: '#30363d', borderRadius: 6 }} onPress={() => { setHpClicks(hpClicks + 1) }}>
+                <Text fontSize={11} color="#c9d1d9">Outline</Text>
+              </Pressable>
+              <Pressable style={{ paddingLeft: 12, paddingRight: 12, paddingTop: 6, paddingBottom: 6, backgroundColor: '#da3633', borderRadius: 6 }} onPress={() => { setHpClicks(hpClicks + 1) }}>
+                <Text fontSize={11} color="#ffffff">Danger</Text>
+              </Pressable>
+            </Box>
+          </Box>
+        </Canvas.Node>
+
+        <Canvas.Node gx={-150} gy={-660} gw={260} gh={0}>
+          <Box style={{ backgroundColor: '#0d1117', borderWidth: 1, borderColor: '#1c2333', borderRadius: 8, padding: 12, flexDirection: 'column', gap: 6 }}>
+            <Text fontSize={11} color="#8b949e">Action Row</Text>
+            <Box style={{ flexDirection: 'row', gap: 6 }}>
+              <Box style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 5, paddingBottom: 5, backgroundColor: '#238636', borderRadius: 5 }}>
+                <Text fontSize={10} color="#fff">Save</Text>
+              </Box>
+              <Box style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 5, paddingBottom: 5, backgroundColor: '#21262d', borderRadius: 5 }}>
+                <Text fontSize={10} color="#c9d1d9">Cancel</Text>
+              </Box>
+              <Box style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 5, paddingBottom: 5, backgroundColor: '#da3633', borderRadius: 5 }}>
+                <Text fontSize={10} color="#fff">Delete</Text>
+              </Box>
+            </Box>
+          </Box>
+        </Canvas.Node>
+
+        <Canvas.Node gx={-150} gy={-570} gw={260} gh={0}>
+          <Box style={{ backgroundColor: '#0d1117', borderWidth: 1, borderColor: '#1c2333', borderRadius: 8, padding: 12, flexDirection: 'column', gap: 4 }}>
+            <Text fontSize={11} color="#8b949e">Badges</Text>
+            <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+              <Box style={{ paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3, backgroundColor: '#238636', borderRadius: 10 }}>
+                <Text fontSize={9} color="#ffffff">Online</Text>
+              </Box>
+              <Box style={{ paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3, backgroundColor: '#da3633', borderRadius: 10 }}>
+                <Text fontSize={9} color="#ffffff">Error</Text>
+              </Box>
+              <Box style={{ paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3, backgroundColor: '#1f6feb', borderRadius: 10 }}>
+                <Text fontSize={9} color="#ffffff">Info</Text>
+              </Box>
+              <Box style={{ paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3, backgroundColor: '#8b5cf6', borderRadius: 10 }}>
+                <Text fontSize={9} color="#ffffff">v0.15</Text>
+              </Box>
+            </Box>
+          </Box>
+        </Canvas.Node>
+
+        <Canvas.Node gx={-150} gy={-468} gw={260} gh={0}>
+          <Box style={{ backgroundColor: '#0d1117', borderWidth: 1, borderColor: '#1c2333', borderRadius: 8, padding: 12, flexDirection: 'column', gap: 6 }}>
+            <Text fontSize={11} color="#8b949e">Graph Nodes</Text>
+            <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+              <Box style={{ width: 50, height: 26, backgroundColor: '#0c1a1a', borderWidth: 1, borderColor: '#14b8a6', borderRadius: 4, alignItems: 'center', justifyContent: 'center' }}>
+                <Text fontSize={9} color="#14b8a6">App</Text>
+              </Box>
+              <Box style={{ width: 16, height: 2, backgroundColor: '#a855f7' }} />
+              <Box style={{ width: 50, height: 26, backgroundColor: '#1a1030', borderWidth: 1, borderColor: '#a855f7', borderRadius: 4, alignItems: 'center', justifyContent: 'center' }}>
+                <Text fontSize={9} color="#a855f7">Router</Text>
+              </Box>
+              <Box style={{ width: 16, height: 2, backgroundColor: '#f97316' }} />
+              <Box style={{ width: 50, height: 26, backgroundColor: '#1a1508', borderWidth: 1, borderColor: '#f97316', borderRadius: 4, alignItems: 'center', justifyContent: 'center' }}>
+                <Text fontSize={9} color="#f97316">Shell</Text>
+              </Box>
+            </Box>
+            <Box style={{ flexDirection: 'row', gap: 6 }}>
+              <Box style={{ width: 8, height: 8, backgroundColor: '#14b8a6', borderRadius: 4 }} />
+              <Text fontSize={9} color="#484f58">Root</Text>
+              <Box style={{ width: 8, height: 8, backgroundColor: '#a855f7', borderRadius: 4 }} />
+              <Text fontSize={9} color="#484f58">Parent</Text>
+              <Box style={{ width: 8, height: 8, backgroundColor: '#f97316', borderRadius: 4 }} />
+              <Text fontSize={9} color="#484f58">Flex</Text>
+            </Box>
+          </Box>
+        </Canvas.Node>
+
+        <Canvas.Node gx={150} gy={-446} gw={260} gh={0}>
+          <Box style={{ backgroundColor: '#0d1117', borderWidth: 1, borderColor: '#1c2333', borderRadius: 8, padding: 12, flexDirection: 'column', gap: 6 }}>
+            <Text fontSize={11} color="#8b949e">Flex Row</Text>
+            <Box style={{ flexDirection: 'row', gap: 4 }}>
+              <Box style={{ flexGrow: 1, height: 30, backgroundColor: '#1f6feb', borderRadius: 4 }} />
+              <Box style={{ flexGrow: 2, height: 30, backgroundColor: '#1a4b8f', borderRadius: 4 }} />
+              <Box style={{ flexGrow: 1, height: 30, backgroundColor: '#1f6feb', borderRadius: 4 }} />
+            </Box>
+          </Box>
+        </Canvas.Node>
+
+        <Canvas.Node gx={150} gy={-670} gw={260} gh={0}>
+          <Box style={{ backgroundColor: '#0d1117', borderWidth: 1, borderColor: '#1c2333', borderRadius: 8, padding: 12, flexDirection: 'column', gap: 4 }}>
+            <Text fontSize={11} color="#8b949e">Flex Column</Text>
+            <Box style={{ flexDirection: 'column', gap: 3 }}>
+              <Box style={{ height: 16, backgroundColor: '#21262d', borderRadius: 3 }} />
+              <Box style={{ height: 16, backgroundColor: '#161b22', borderRadius: 3 }} />
+              <Box style={{ height: 16, backgroundColor: '#21262d', borderRadius: 3 }} />
+            </Box>
+          </Box>
+        </Canvas.Node>
+
+        <Canvas.Node gx={150} gy={-552} gw={260} gh={0}>
+          <Box style={{ backgroundColor: '#0d1117', borderWidth: 1, borderColor: '#1c2333', borderRadius: 8, padding: 12, flexDirection: 'column', gap: 4 }}>
+            <Text fontSize={11} color="#8b949e">Flex Wrap</Text>
+            <Box style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap' }}>
+              <Box style={{ width: 40, height: 18, backgroundColor: '#30363d', borderRadius: 3 }} />
+              <Box style={{ width: 55, height: 18, backgroundColor: '#30363d', borderRadius: 3 }} />
+              <Box style={{ width: 35, height: 18, backgroundColor: '#30363d', borderRadius: 3 }} />
+              <Box style={{ width: 45, height: 18, backgroundColor: '#30363d', borderRadius: 3 }} />
+              <Box style={{ width: 50, height: 18, backgroundColor: '#30363d', borderRadius: 3 }} />
+            </Box>
+          </Box>
+        </Canvas.Node>
+
+        <Canvas.Node gx={150} gy={-312} gw={260} gh={0}>
+          <Box style={{ backgroundColor: '#0d1117', borderWidth: 1, borderColor: '#1c2333', borderRadius: 8, padding: 12, flexDirection: 'column', gap: 6 }}>
+            <Text fontSize={11} color="#8b949e">Distribution</Text>
+            <Box style={{ flexDirection: 'row', gap: 3, alignItems: 'end' }}>
+              <Box style={{ flexGrow: 1, height: 60, backgroundColor: '#1f6feb', borderRadius: 2 }} />
+              <Box style={{ flexGrow: 1, height: 40, backgroundColor: '#1a4b8f', borderRadius: 2 }} />
+              <Box style={{ flexGrow: 1, height: 80, backgroundColor: '#1f6feb', borderRadius: 2 }} />
+              <Box style={{ flexGrow: 1, height: 50, backgroundColor: '#1a4b8f', borderRadius: 2 }} />
+              <Box style={{ flexGrow: 1, height: 70, backgroundColor: '#1f6feb', borderRadius: 2 }} />
+              <Box style={{ flexGrow: 1, height: 35, backgroundColor: '#1a4b8f', borderRadius: 2 }} />
+              <Box style={{ flexGrow: 1, height: 90, backgroundColor: '#3b82f6', borderRadius: 2 }} />
+            </Box>
+          </Box>
+        </Canvas.Node>
+
+        <Canvas.Node gx={450} gy={-344} gw={260} gh={0}>
+          <Box style={{ backgroundColor: '#0d1117', borderWidth: 1, borderColor: '#1c2333', borderRadius: 8, padding: 12, flexDirection: 'column', gap: 6 }}>
+            <Text fontSize={11} color="#8b949e">Shapes</Text>
+            <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+              <Box style={{ width: 36, height: 36, backgroundColor: '#3b82f6', borderRadius: 0 }} />
+              <Box style={{ width: 36, height: 36, backgroundColor: '#8b5cf6', borderRadius: 6 }} />
+              <Box style={{ width: 36, height: 36, backgroundColor: '#14b8a6', borderRadius: 12 }} />
+              <Box style={{ width: 36, height: 36, backgroundColor: '#f97316', borderRadius: 18 }} />
+            </Box>
+          </Box>
+        </Canvas.Node>
+
+        <Canvas.Node gx={450} gy={-680} gw={260} gh={0}>
+          <Box style={{ backgroundColor: '#0d1117', borderWidth: 1, borderColor: '#1c2333', borderRadius: 8, padding: 12, flexDirection: 'column', gap: 4 }}>
+            <Text fontSize={11} color="#8b949e">Pills</Text>
+            <Box style={{ flexDirection: 'row', gap: 6 }}>
+              <Box style={{ width: 60, height: 24, backgroundColor: '#1f6feb', borderRadius: 12, alignItems: 'center', justifyContent: 'center' }}>
+                <Text fontSize={9} color="#fff">Active</Text>
+              </Box>
+              <Box style={{ width: 60, height: 24, backgroundColor: '#21262d', borderRadius: 12, alignItems: 'center', justifyContent: 'center' }}>
+                <Text fontSize={9} color="#8b949e">Idle</Text>
+              </Box>
+              <Box style={{ width: 60, height: 24, backgroundColor: '#21262d', borderRadius: 12, alignItems: 'center', justifyContent: 'center' }}>
+                <Text fontSize={9} color="#484f58">Off</Text>
+              </Box>
+            </Box>
+          </Box>
+        </Canvas.Node>
+
+        <Canvas.Node gx={450} gy={-572} gw={260} gh={0}>
+          <Box style={{ backgroundColor: '#0d1117', borderWidth: 1, borderColor: '#1c2333', borderRadius: 8, padding: 12, flexDirection: 'column', gap: 4 }}>
+            <Text fontSize={11} color="#8b949e">Input States</Text>
+            <TextInput placeholder="Default state..." fontSize={11} style={{ backgroundColor: '#161b22', borderWidth: 1, borderColor: '#30363d', borderRadius: 5, paddingLeft: 6, paddingRight: 6, paddingTop: 6, paddingBottom: 6 }} />
+            <TextInput placeholder="Another field..." fontSize={11} style={{ backgroundColor: '#161b22', borderWidth: 1, borderColor: '#30363d', borderRadius: 5, paddingLeft: 6, paddingRight: 6, paddingTop: 6, paddingBottom: 6 }} />
+          </Box>
+        </Canvas.Node>
+
+        <Canvas.Node gx={450} gy={-456} gw={260} gh={0}>
+          <Box style={{ backgroundColor: '#0d1117', borderWidth: 1, borderColor: '#1c2333', borderRadius: 8, padding: 12, flexDirection: 'column', gap: 4 }}>
+            <Text fontSize={11} color="#8b949e">Cards B</Text>
+            <Box style={{ backgroundColor: '#161b22', borderRadius: 6, padding: 8, flexDirection: 'column', gap: 2 }}>
+              <Text fontSize={12} color="#e6edf3">GPU Pipeline</Text>
+              <Text fontSize={9} color="#484f58">wgpu batched render</Text>
+            </Box>
+          </Box>
+        </Canvas.Node>
+
+        <Canvas.Node gx={750} gy={-263} gw={260} gh={0}>
+          <Box style={{ backgroundColor: '#0d1117', borderWidth: 1, borderColor: '#1c2333', borderRadius: 8, padding: 12, flexDirection: 'column', gap: 6 }}>
+            <Text fontSize={11} color="#8b949e">Bar Chart C</Text>
+            <Box style={{ flexDirection: 'row', alignItems: 'end', gap: 3 }}>
+              <Box style={{ flexGrow: 1, height: 40, backgroundColor: '#14b8a6', borderRadius: 2 }} />
+              <Box style={{ flexGrow: 1, height: 70, backgroundColor: '#0d9488', borderRadius: 2 }} />
+              <Box style={{ flexGrow: 1, height: 55, backgroundColor: '#14b8a6', borderRadius: 2 }} />
+              <Box style={{ flexGrow: 1, height: 85, backgroundColor: '#2dd4bf', borderRadius: 2 }} />
+              <Box style={{ flexGrow: 1, height: 45, backgroundColor: '#0d9488', borderRadius: 2 }} />
+              <Box style={{ flexGrow: 1, height: 65, backgroundColor: '#14b8a6', borderRadius: 2 }} />
+              <Box style={{ flexGrow: 1, height: 95, backgroundColor: '#2dd4bf', borderRadius: 2 }} />
+            </Box>
+          </Box>
+        </Canvas.Node>
+
+        <Canvas.Node gx={750} gy={-640} gw={260} gh={0}>
+          <Box style={{ backgroundColor: '#0d1117', borderWidth: 1, borderColor: '#1c2333', borderRadius: 8, padding: 12, flexDirection: 'column', gap: 4 }}>
+            <Text fontSize={11} color="#8b949e">Warm Scale</Text>
+            <Box style={{ flexDirection: 'row', gap: 3 }}>
+              <Box style={{ flexGrow: 1, height: 24, backgroundColor: '#7f1d1d', borderRadius: 3 }} />
+              <Box style={{ flexGrow: 1, height: 24, backgroundColor: '#991b1b', borderRadius: 3 }} />
+              <Box style={{ flexGrow: 1, height: 24, backgroundColor: '#b91c1c', borderRadius: 3 }} />
+              <Box style={{ flexGrow: 1, height: 24, backgroundColor: '#dc2626', borderRadius: 3 }} />
+              <Box style={{ flexGrow: 1, height: 24, backgroundColor: '#ef4444', borderRadius: 3 }} />
+              <Box style={{ flexGrow: 1, height: 24, backgroundColor: '#f87171', borderRadius: 3 }} />
+            </Box>
+          </Box>
+        </Canvas.Node>
+
+        <Canvas.Node gx={750} gy={-546} gw={260} gh={0}>
+          <Box style={{ backgroundColor: '#0d1117', borderWidth: 1, borderColor: '#1c2333', borderRadius: 8, padding: 12, flexDirection: 'column', gap: 4 }}>
+            <Text fontSize={11} color="#8b949e">Cool Scale</Text>
+            <Box style={{ flexDirection: 'row', gap: 3 }}>
+              <Box style={{ flexGrow: 1, height: 24, backgroundColor: '#1e3a5f', borderRadius: 3 }} />
+              <Box style={{ flexGrow: 1, height: 24, backgroundColor: '#1e40af', borderRadius: 3 }} />
+              <Box style={{ flexGrow: 1, height: 24, backgroundColor: '#2563eb', borderRadius: 3 }} />
+              <Box style={{ flexGrow: 1, height: 24, backgroundColor: '#3b82f6', borderRadius: 3 }} />
+              <Box style={{ flexGrow: 1, height: 24, backgroundColor: '#60a5fa', borderRadius: 3 }} />
+              <Box style={{ flexGrow: 1, height: 24, backgroundColor: '#93c5fd', borderRadius: 3 }} />
+            </Box>
+          </Box>
+        </Canvas.Node>
+
+        <Canvas.Node gx={750} gy={-422} gw={260} gh={0}>
+          <Box style={{ backgroundColor: '#0d1117', borderWidth: 1, borderColor: '#1c2333', borderRadius: 8, padding: 12, flexDirection: 'column', gap: 6 }}>
+            <Text fontSize={11} color="#8b949e">Elevation</Text>
+            <Box style={{ height: 22, backgroundColor: '#010409', borderRadius: 4, padding: 4 }}>
+              <Text fontSize={9} color="#484f58">Depth 0</Text>
+            </Box>
+            <Box style={{ height: 22, backgroundColor: '#0d1117', borderRadius: 4, padding: 4 }}>
+              <Text fontSize={9} color="#6e7681">Depth 1</Text>
+            </Box>
+            <Box style={{ height: 22, backgroundColor: '#21262d', borderRadius: 4, padding: 4 }}>
+              <Text fontSize={9} color="#c9d1d9">Depth 2</Text>
+            </Box>
+          </Box>
+        </Canvas.Node>
+
+        <Canvas.Node gx={1050} gy={-326} gw={260} gh={0}>
+          <Box style={{ backgroundColor: '#0d1117', borderWidth: 1, borderColor: '#1c2333', borderRadius: 8, padding: 12, flexDirection: 'column', gap: 6 }}>
+            <Text fontSize={11} color="#8b949e">Bar Chart D</Text>
+            <Box style={{ flexDirection: 'row', alignItems: 'end', gap: 3 }}>
+              <Box style={{ flexGrow: 1, height: 50, backgroundColor: '#f97316', borderRadius: 2 }} />
+              <Box style={{ flexGrow: 1, height: 80, backgroundColor: '#ea580c', borderRadius: 2 }} />
+              <Box style={{ flexGrow: 1, height: 35, backgroundColor: '#f97316', borderRadius: 2 }} />
+              <Box style={{ flexGrow: 1, height: 95, backgroundColor: '#fb923c', borderRadius: 2 }} />
+              <Box style={{ flexGrow: 1, height: 60, backgroundColor: '#ea580c', borderRadius: 2 }} />
+              <Box style={{ flexGrow: 1, height: 75, backgroundColor: '#f97316', borderRadius: 2 }} />
+            </Box>
+          </Box>
+        </Canvas.Node>
+
+        <Canvas.Node gx={1050} gy={-640} gw={260} gh={0}>
+          <Box style={{ backgroundColor: '#0d1117', borderWidth: 1, borderColor: '#1c2333', borderRadius: 8, padding: 12, flexDirection: 'column', gap: 4 }}>
+            <Text fontSize={11} color="#8b949e">Tags</Text>
+            <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+              <Box style={{ paddingLeft: 6, paddingRight: 6, paddingTop: 2, paddingBottom: 2, borderWidth: 1, borderColor: '#30363d', borderRadius: 4 }}>
+                <Text fontSize={9} color="#8b949e">react</Text>
+              </Box>
+              <Box style={{ paddingLeft: 6, paddingRight: 6, paddingTop: 2, paddingBottom: 2, borderWidth: 1, borderColor: '#30363d', borderRadius: 4 }}>
+                <Text fontSize={9} color="#8b949e">zig</Text>
+              </Box>
+              <Box style={{ paddingLeft: 6, paddingRight: 6, paddingTop: 2, paddingBottom: 2, borderWidth: 1, borderColor: '#30363d', borderRadius: 4 }}>
+                <Text fontSize={9} color="#8b949e">wgpu</Text>
+              </Box>
+              <Box style={{ paddingLeft: 6, paddingRight: 6, paddingTop: 2, paddingBottom: 2, borderWidth: 1, borderColor: '#30363d', borderRadius: 4 }}>
+                <Text fontSize={9} color="#8b949e">native</Text>
+              </Box>
+            </Box>
+          </Box>
+        </Canvas.Node>
+
+        <Canvas.Node gx={1050} gy={-552} gw={260} gh={0}>
+          <Box style={{ backgroundColor: '#0d1117', borderWidth: 1, borderColor: '#1c2333', borderRadius: 8, padding: 12, flexDirection: 'column', gap: 4 }}>
+            <Text fontSize={11} color="#8b949e">Outline Buttons</Text>
+            <Box style={{ flexDirection: 'row', gap: 6 }}>
+              <Box style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 5, paddingBottom: 5, borderWidth: 1, borderColor: '#30363d', borderRadius: 5 }}>
+                <Text fontSize={10} color="#8b949e">Export</Text>
+              </Box>
+              <Box style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 5, paddingBottom: 5, borderWidth: 1, borderColor: '#30363d', borderRadius: 5 }}>
+                <Text fontSize={10} color="#8b949e">Import</Text>
+              </Box>
+              <Box style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 5, paddingBottom: 5, borderWidth: 1, borderColor: '#30363d', borderRadius: 5 }}>
+                <Text fontSize={10} color="#8b949e">Share</Text>
+              </Box>
+            </Box>
+          </Box>
+        </Canvas.Node>
+
+        <Canvas.Node gx={1050} gy={-458} gw={260} gh={0}>
+          <Box style={{ backgroundColor: '#0d1117', borderWidth: 1, borderColor: '#1c2333', borderRadius: 8, padding: 12, flexDirection: 'column', gap: 4 }}>
+            <Text fontSize={11} color="#8b949e">Purple Scale</Text>
+            <Box style={{ flexDirection: 'row', gap: 3 }}>
+              <Box style={{ flexGrow: 1, height: 24, backgroundColor: '#3b0764', borderRadius: 3 }} />
+              <Box style={{ flexGrow: 1, height: 24, backgroundColor: '#581c87', borderRadius: 3 }} />
+              <Box style={{ flexGrow: 1, height: 24, backgroundColor: '#7c3aed', borderRadius: 3 }} />
+              <Box style={{ flexGrow: 1, height: 24, backgroundColor: '#8b5cf6', borderRadius: 3 }} />
+              <Box style={{ flexGrow: 1, height: 24, backgroundColor: '#a78bfa', borderRadius: 3 }} />
+              <Box style={{ flexGrow: 1, height: 24, backgroundColor: '#c4b5fd', borderRadius: 3 }} />
+            </Box>
+          </Box>
+        </Canvas.Node>
+
+        <Canvas.Node gx={-450} gy={-126} gw={260} gh={0}>
+          <Transitions />
+        </Canvas.Node>
+
+        <Canvas.Node gx={-150} gy={-195} gw={260} gh={0}>
+          <ThreeDScene />
+        </Canvas.Node>
+
+        <Canvas.Node gx={150} gy={-135} gw={260} gh={0}>
+          <ScrollDemo />
+        </Canvas.Node>
+
+        <Canvas.Node gx={450} gy={-219} gw={260} gh={0}>
+          <Hyperlinks />
+        </Canvas.Node>
+
+        <Canvas.Node gx={750} gy={-124} gw={260} gh={0}>
+          <OpacityDemo />
+        </Canvas.Node>
+
+        <Canvas.Node gx={1050} gy={-166} gw={260} gh={0}>
+          <TextAreaDemo />
+        </Canvas.Node>
+
+        <Canvas.Clamp>
+          <Box style={{ flexDirection: 'column', width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
+            <Box style={{ flexDirection: 'column', alignItems: 'center', gap: 8, padding: 32, backgroundColor: '#0d1117e0', borderRadius: 16, borderWidth: 1, borderColor: '#30363d' }}>
+              <Text fontSize={32} color="#e6edf3">reactjit</Text>
+              <Text fontSize={14} color="#8b949e">Native UI from JSX. No runtime. No DOM.</Text>
+              <Text fontSize={11} color="#484f58">scroll to zoom · drag to explore · everything is interactive</Text>
+            </Box>
+          </Box>
+        </Canvas.Clamp>
+
+      </Canvas>
+  );
+}
