@@ -142,7 +142,7 @@ def clean_close(sock):
     except Exception:
         pass
     try:
-        clean_close(sock)
+        sock.close()
     except Exception:
         pass
 
