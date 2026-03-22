@@ -326,6 +326,7 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
     // ── Phase 2: Parse children (between > and </Tag>) ──
     // Collects: child elements, text content, dynamic text {expressions},
     // template literals, conditional rendering {expr && <JSX>}
+    const dyn_bind_start = self.dyn_count; // scope dyn_text binding to this element
     var child_exprs = std.ArrayListUnmanaged([]const u8){}; // child node expressions
     var text_content: ?[]const u8 = null; // static text content for <Text>
     var is_dynamic_text = false; // true if text comes from state/expression
@@ -965,9 +966,10 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
         try fields.appendSlice(self.alloc, ".children = &");
         try fields.appendSlice(self.alloc, arr_name);
 
-        // Bind dynamic texts
+        // Bind dynamic texts — only consider dyn_texts created within this element's scope
+        // (prevents component inlining from cross-binding outer scope texts to inner arrays)
         var claimed: [64]bool = [_]bool{false} ** 64;
-        for (0..self.dyn_count) |di| {
+        for (dyn_bind_start..self.dyn_count) |di| {
             if (!self.dyn_texts[di].has_ref) {
                 for (child_exprs.items, 0..) |expr, ci| {
                     if (ci < 64 and !claimed[ci] and std.mem.indexOf(u8, expr, ".text = \"\"") != null) {
