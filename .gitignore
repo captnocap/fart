@@ -55,6 +55,20 @@ love2d/llama.cpp/
 # Platform binaries
 love2d/bin/
 
+# ── Zigos stack (experiments/zigos/) ───────────────────
+# Generated Zig output from .tsz compiler
+experiments/zigos/_gen_*.zig
+experiments/zigos/Inspector.gen.zig
+experiments/zigos/generated_app.zig.bak
+experiments/zigos/.tsz-preflight/
+experiments/zigos/root.o
+experiments/zigos/recording.mp4
+experiments/zigos/screenshot.png
+experiments/zigos/screenshots/
+experiments/zigos/carts/autobahn-ws/reports/
+experiments/zigos/carts/http-conformance/reports/
+experiments/zigos/carts/inspector/Inspector.gen.zig
+
 # ── TSZ stack (tsz/) ────────────────────────────────────
 # Generated app output (compiler writes this)
 tsz/runtime/generated_app.zig
