@@ -27,8 +27,7 @@ function App() {
         </Pressable>
         <TextInput
           value={currentUrl}
-          onChangeText={(t) => { setCurrentUrl(t) }}
-          fontSize={12}
+                    fontSize={12}
           style={{ flexGrow: 1, backgroundColor: '#292e42', borderRadius: 4, padding: 6, paddingLeft: 10, height: 28 }}
         />
         <Pressable onPress={() => { setLoading(1); setStatusText('Loading...') }} style={{ backgroundColor: '#7aa2f7', borderRadius: 4, padding: 6, paddingLeft: 12, paddingRight: 12 }}>

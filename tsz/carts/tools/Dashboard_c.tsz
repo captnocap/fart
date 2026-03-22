@@ -69,7 +69,7 @@ function Dashboard() {
       ))}
 
       <C.AddProjectRow>
-        <C.AddInput placeholder="path/to/project.tsz" value={addPath} onChangeText={(t) => { setAddPath(t) }} />
+        <C.AddInput placeholder="path/to/project.tsz" value={addPath} />
         <C.AddButton onPress={() => { globalThis._toolsAddProject(addPath); setAddPath('') }}>
           <C.AddButtonLabel>Add Project</C.AddButtonLabel>
         </C.AddButton>

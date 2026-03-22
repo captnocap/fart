@@ -87,7 +87,7 @@ function TestRunner() {
 
       <C.SectionTitle>Script</C.SectionTitle>
       <C.ScriptEditor>
-        <TextArea value={testScript} onChangeText={(t) => { setTestScript(t) }} fontSize={10} style={{ height: 120, backgroundColor: 'theme-surface', borderWidth: 1, borderColor: 'theme-border', borderRadius: 4, paddingLeft: 8, paddingRight: 8, paddingTop: 6, paddingBottom: 6 }} />
+        <TextArea value={testScript}  fontSize={10} style={{ height: 120, backgroundColor: 'theme-surface', borderWidth: 1, borderColor: 'theme-border', borderRadius: 4, paddingLeft: 8, paddingRight: 8, paddingTop: 6, paddingBottom: 6 }} />
       </C.ScriptEditor>
 
       <C.SectionTitle>Results</C.SectionTitle>
