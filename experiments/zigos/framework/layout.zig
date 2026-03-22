@@ -29,12 +29,14 @@ inline fn asF32(val: anytype) f32 {
 // ── Imports ────────────────────────────────────────
 const events = @import("events.zig");
 const EventHandler = events.EventHandler;
+const effect_ctx = @import("effect_ctx.zig");
 
 // ── Type definitions ────────────────────────────────
 pub const FlexDirection = enum { row, column };
 pub const JustifyContent = enum { start, center, end, space_between, space_around, space_evenly };
 pub const AlignItems = enum { start, center, end, stretch };
 pub const AlignSelf = enum { auto, start, center, end, stretch };
+pub const AlignContent = enum { start, center, end, stretch, space_between, space_around, space_evenly };
 pub const FlexWrap = enum { no_wrap, wrap, wrap_reverse };
 pub const Position = enum { relative, absolute };
 pub const Display = enum { flex, none };
@@ -107,6 +109,7 @@ pub const Style = struct {
     flex_wrap: FlexWrap = .no_wrap,
     justify_content: JustifyContent = .start,
     align_items: AlignItems = .stretch,
+    align_content: AlignContent = .stretch,
     align_self: AlignSelf = .auto,
     gap: f32 = 0,
     order: i32 = 0,
@@ -211,6 +214,8 @@ pub const Node = struct {
     canvas_path_d: ?[]const u8 = null, // SVG path data string
     canvas_stroke_width: f32 = 2,
     canvas_flow_speed: f32 = 0,     // 0 = solid, >0 = flow forward, <0 = flow reverse
+    // Effect — user-compiled pixel render callback
+    effect_render: ?effect_ctx.RenderFn = null,
     _flex_w: ?f32 = null,
     _stretch_h: ?f32 = null,
     _parent_inner_w: ?f32 = null,
@@ -436,7 +441,8 @@ fn measureNodeTextW(node: *Node, maxWidth: f32) TextMetrics {
 
     const entry = &textCache[idx];
     if (entry.valid and entry.text_ptr == text_ptr and entry.text_len == text_len and
-        entry.font_size == node.font_size and entry.max_width_bits == mw_bits)
+        entry.font_size == node.font_size and entry.max_width_bits == mw_bits and
+        node.number_of_lines == 0) // skip cache for truncated text
     {
         return entry.result;
     }
@@ -942,7 +948,62 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
             hi -= 1;
         }
     }
-    var crossCursor: f32 = 0;
+    // Pre-compute line cross sizes for align-content distribution
+    var lineCrossSizes: [MAX_LINES]f32 = undefined;
+    var totalLineCross: f32 = 0;
+    {
+        var li: usize = 0;
+        while (li < numLines) : (li += 1) {
+            var lcMax: f32 = 0;
+            const lls = lineStarts[@intCast(li)];
+            const llc = lineCounts[@intCast(li)];
+            var lci = lls;
+            while (lci < lls + llc) : (lci += 1) {
+                const cc = childCrossSize[@intCast(lci)] + childCrossMarginStart[@intCast(lci)] + childCrossMarginEnd[@intCast(lci)];
+                if (cc > lcMax) lcMax = cc;
+            }
+            if (numLines == 1) {
+                if (isRow and h != null) {
+                    lcMax = if (h) |hv| hv - pt - pb else lcMax;
+                } else if (!isRow) {
+                    lcMax = innerW;
+                }
+            }
+            lineCrossSizes[@intCast(li)] = lcMax;
+            totalLineCross += lcMax;
+        }
+    }
+    // align-content: distribute free cross space between wrapped lines
+    const crossSize = if (isRow) (if (h != null) h.? - pt - pb else totalLineCross) else innerW;
+    const crossGaps = if (numLines > 1) gap * @as(f32, @floatFromInt(numLines - 1)) else 0;
+    const freeCross = crossSize - totalLineCross - crossGaps;
+    var crossOffset: f32 = 0;
+    var extraCrossGap: f32 = 0;
+    if (numLines > 1 and freeCross > 0) {
+        switch (s.align_content) {
+            .center => { crossOffset = freeCross / 2; },
+            .end => { crossOffset = freeCross; },
+            .space_between => { extraCrossGap = freeCross / @as(f32, @floatFromInt(numLines - 1)); },
+            .space_around => {
+                extraCrossGap = freeCross / @as(f32, @floatFromInt(numLines));
+                crossOffset = extraCrossGap / 2;
+            },
+            .space_evenly => {
+                extraCrossGap = freeCross / @as(f32, @floatFromInt(numLines + 1));
+                crossOffset = extraCrossGap;
+            },
+            .stretch => {
+                // Distribute extra space equally to each line
+                const perLine = freeCross / @as(f32, @floatFromInt(numLines));
+                var sli: usize = 0;
+                while (sli < numLines) : (sli += 1) {
+                    lineCrossSizes[@intCast(sli)] += perLine;
+                }
+            },
+            .start => {},
+        }
+    }
+    var crossCursor: f32 = crossOffset;
     var contentMainEnd: f32 = 0;
     var contentCrossEnd: f32 = 0;
     {
@@ -1098,31 +1159,7 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
                     }
                 }
             }
-            var lineCross: f32 = 0;
-            {
-                var i = ls;
-                while (i < ls + lc) : (i += 1) {
-                    const childCross = childCrossSize[@intCast(i)] + childCrossMarginStart[@intCast(i)] + childCrossMarginEnd[@intCast(i)];
-                    if (childCross > lineCross) {
-                        lineCross = childCross;
-                    }
-                }
-            }
-            if (numLines == 1) {
-                if (isRow and h != null) {
-                    lineCross = innerH;
-                } else if (isRow and h == null) {
-                    const mh = resolveMaybePct(s.min_height, ph);
-                    if (mh != null) {
-                        const minInner = mh.? - pt - pb;
-                        if (minInner > lineCross) {
-                            lineCross = minInner;
-                        }
-                    }
-                } else if (!isRow) {
-                    lineCross = innerW;
-                }
-            }
+            const lineCross = lineCrossSizes[@intCast(lineIdx)];
             var usedMain: f32 = 0;
             {
                 var i = ls;
@@ -1298,7 +1335,7 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
                     }
                 }
             }
-            crossCursor += lineCross + (if (lineIdx + 1 < numLines) gap else 0);
+            crossCursor += lineCross + (if (lineIdx + 1 < numLines) gap + extraCrossGap else 0);
         }
     }
     if (h == null) {

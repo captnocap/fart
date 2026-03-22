@@ -207,7 +207,7 @@ pub fn drawTextLine(text: []const u8, x: f32, y: f32, size_px: u16, cr: f32, cg:
 }
 
 /// Draw text with word-wrapping at max_width. Returns total height drawn.
-pub fn drawTextWrapped(text: []const u8, x: f32, y: f32, size_px: u16, max_width: f32, cr: f32, cg: f32, cb: f32, ca: f32) f32 {
+pub fn drawTextWrapped(text: []const u8, x: f32, y: f32, size_px: u16, max_width: f32, cr: f32, cg: f32, cb: f32, ca: f32, max_lines: u16) f32 {
     if (g_ft_face == null) return 0;
     if (max_width <= 0) {
         drawTextLine(text, x, y, size_px, cr, cg, cb, ca);
@@ -228,13 +228,16 @@ pub fn drawTextWrapped(text: []const u8, x: f32, y: f32, size_px: u16, max_width
     var last_break: usize = 0;
     var last_break_pen_x: f32 = 0;
     var i: usize = 0;
+    var lines_drawn: u16 = 0;
 
     while (i < text.len) {
+        if (max_lines > 0 and lines_drawn >= max_lines) break;
         const ch = decodeUtf8(text[i..]);
 
         // Explicit newline
         if (ch.codepoint == '\n') {
             drawTextLine(text[line_start..i], x, pen_y, size_px, cr, cg, cb, ca);
+            lines_drawn += 1;
             pen_y += line_h;
             i += ch.len;
             line_start = i;
@@ -260,6 +263,7 @@ pub fn drawTextWrapped(text: []const u8, x: f32, y: f32, size_px: u16, max_width
             // Wrap at last word boundary if possible
             if (last_break > line_start) {
                 drawTextLine(text[line_start..last_break], x, pen_y, size_px, cr, cg, cb, ca);
+                lines_drawn += 1;
                 pen_y += line_h;
                 // Skip the space
                 line_start = last_break + 1;
@@ -279,6 +283,7 @@ pub fn drawTextWrapped(text: []const u8, x: f32, y: f32, size_px: u16, max_width
             } else {
                 // No break point — force break at current position
                 drawTextLine(text[line_start..i], x, pen_y, size_px, cr, cg, cb, ca);
+                lines_drawn += 1;
                 pen_y += line_h;
                 line_start = i;
                 last_break = i;
@@ -291,8 +296,8 @@ pub fn drawTextWrapped(text: []const u8, x: f32, y: f32, size_px: u16, max_width
         i += ch.len;
     }
 
-    // Draw remaining text
-    if (line_start < text.len) {
+    // Draw remaining text (if not truncated)
+    if (line_start < text.len and (max_lines == 0 or lines_drawn < max_lines)) {
         drawTextLine(text[line_start..], x, pen_y, size_px, cr, cg, cb, ca);
         pen_y += line_h;
     }

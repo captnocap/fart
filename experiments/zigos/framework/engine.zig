@@ -279,7 +279,7 @@ noinline fn paintNodeVisuals(node: *Node) void {
             _ = gpu.drawTextWrapped(
                 t, r.x + pl, r.y + pt, node.font_size, @max(1.0, r.w - pl - pr),
                 @as(f32, @floatFromInt(tc.r)) / 255.0, @as(f32, @floatFromInt(tc.g)) / 255.0,
-                @as(f32, @floatFromInt(tc.b)) / 255.0, final_a,
+                @as(f32, @floatFromInt(tc.b)) / 255.0, final_a, node.number_of_lines,
             );
         }
     }
@@ -318,7 +318,7 @@ noinline fn paintTextInput(node: *Node, id: u8) void {
             _ = gpu.drawTextWrapped(
                 t, r.x + pl, r.y + pt, node.font_size, @max(1.0, r.w - pl - pr),
                 @as(f32, @floatFromInt(tc.r)) / 255.0, @as(f32, @floatFromInt(tc.g)) / 255.0,
-                @as(f32, @floatFromInt(tc.b)) / 255.0, @as(f32, @floatFromInt(tc.a)) / 255.0,
+                @as(f32, @floatFromInt(tc.b)) / 255.0, @as(f32, @floatFromInt(tc.a)) / 255.0, 0,
             );
         }
     }

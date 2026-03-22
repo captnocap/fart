@@ -100,7 +100,7 @@ pub fn paintOverlay(measure_fn: layout.MeasureTextFn, win_w: f32, win_h: f32) vo
     gpu.drawRect(tx, ty, box_w, box_h, BG_R, BG_G, BG_B, BG_A, BORDER_RADIUS, 1, BD_R, BD_G, BD_B, BD_A);
 
     // Text
-    _ = gpu.drawTextWrapped(text_ptr, tx + PAD_H, ty + PAD_V, FONT_SIZE, MAX_WIDTH, TX_R, TX_G, TX_B, TX_A);
+    _ = gpu.drawTextWrapped(text_ptr, tx + PAD_H, ty + PAD_V, FONT_SIZE, MAX_WIDTH, TX_R, TX_G, TX_B, TX_A, 0);
 
     gpu.popScissor();
 }
