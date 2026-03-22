@@ -1,0 +1,14 @@
+// Terminal — cell-grid rendering with per-cell colors via libvterm.
+// Spawns a real shell (bash) and renders each character with its own
+// foreground/background color. ANSI escape sequences are handled by libvterm.
+
+function App() {
+  return (
+    <Box style={{ width: "100%", height: "100%", backgroundColor: "#1a1a2e", flexDirection: "column" }}>
+      <Box style={{ padding: 8, backgroundColor: "#16213e" }}>
+        <Text fontSize={14} color="#e2e8f0">Terminal — Cell Grid Renderer</Text>
+      </Box>
+      <Terminal fontSize={13} style={{ flexGrow: 1 }} />
+    </Box>
+  );
+}

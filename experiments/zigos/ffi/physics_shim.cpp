@@ -143,3 +143,71 @@ extern "C" PhysFixture phys_collider_circle(PhysBody body, float radius,
 extern "C" void phys_collider_set_sensor(PhysFixture fixture, int is_sensor) {
     static_cast<b2Fixture*>(fixture)->SetSensor(is_sensor != 0);
 }
+
+// ── Mouse Joint (drag interaction) ─────────────────────────────
+
+#include <box2d/b2_mouse_joint.h>
+
+extern "C" PhysJoint phys_mouse_joint_create(PhysWorld world, PhysBody body,
+                                              float target_x, float target_y, float max_force) {
+    b2World* w = static_cast<b2World*>(world);
+    b2Body* b = static_cast<b2Body*>(body);
+    // MouseJoint needs a ground body as bodyA — use the world's first static body or create one
+    b2Body* ground = nullptr;
+    for (b2Body* bb = w->GetBodyList(); bb; bb = bb->GetNext()) {
+        if (bb->GetType() == b2_staticBody) { ground = bb; break; }
+    }
+    if (!ground) {
+        b2BodyDef gd;
+        gd.type = b2_staticBody;
+        ground = w->CreateBody(&gd);
+    }
+    b2MouseJointDef jd;
+    jd.bodyA = ground;
+    jd.bodyB = b;
+    jd.target.Set(target_x, target_y);
+    jd.maxForce = max_force;
+    jd.stiffness = 5.0f;
+    jd.damping = 0.7f;
+    return static_cast<void*>(w->CreateJoint(&jd));
+}
+
+extern "C" void phys_mouse_joint_set_target(PhysJoint joint, float x, float y) {
+    static_cast<b2MouseJoint*>(joint)->SetTarget(b2Vec2(x, y));
+}
+
+extern "C" void phys_mouse_joint_destroy(PhysJoint joint) {
+    b2Joint* j = static_cast<b2Joint*>(joint);
+    j->GetBodyA()->GetWorld()->DestroyJoint(j);
+}
+
+// ── Point Query ────────────────────────────────────────────────
+
+#include <box2d/b2_world_callbacks.h>
+
+class PointQueryCallback : public b2QueryCallback {
+public:
+    b2Vec2 point;
+    b2Body* found = nullptr;
+
+    bool ReportFixture(b2Fixture* fixture) override {
+        if (fixture->GetBody()->GetType() != b2_dynamicBody) return true; // skip non-dynamic
+        if (fixture->TestPoint(point)) {
+            found = fixture->GetBody();
+            return false; // stop query
+        }
+        return true; // continue
+    }
+};
+
+extern "C" PhysBody phys_query_point(PhysWorld world, float x, float y) {
+    b2World* w = static_cast<b2World*>(world);
+    b2AABB aabb;
+    float d = 0.1f; // small query box around point
+    aabb.lowerBound.Set(x - d, y - d);
+    aabb.upperBound.Set(x + d, y + d);
+    PointQueryCallback cb;
+    cb.point.Set(x, y);
+    w->QueryAABB(&cb, aabb);
+    return static_cast<void*>(cb.found);
+}

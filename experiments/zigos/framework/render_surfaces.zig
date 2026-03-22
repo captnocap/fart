@@ -1019,7 +1019,7 @@ fn finalizeVirtualDisplay(feed: *Feed) void {
     // The Lua version relies on apps specifying their own geometry (e.g. kitty -o initial_window_width=W),
     // but as a fallback we find and resize the first window to fill the display.
     if (feed.app_command) |cmd| {
-        std.debug.print("[rsurface] Launching app into :{d}: {s}\n", .{ display_num, cmd });
+        log.info(.render, "Launching app into :{d}: {s}", .{ display_num, cmd });
 
         // Launch: DISPLAY=:N <command> & sleep 0.5; DISPLAY=:N xdotool search --onlyvisible --name "" windowsize W H windowmove 0 0
         // This launches the app, waits for it to create a window, then resizes it to fill.
@@ -1033,11 +1033,11 @@ fn finalizeVirtualDisplay(feed: *Feed) void {
         app.stdin_behavior = .Ignore;
 
         app.spawn() catch |err| {
-            std.debug.print("[rsurface] App spawn failed: {}\n", .{err});
+            log.info(.render, "App spawn failed: {}", .{err});
             return;
         };
         feed.app_child = app;
-        std.debug.print("[rsurface] App launched into :{d} ({d}x{d})\n", .{ display_num, feed.width, feed.height });
+        log.info(.render, "App launched into :{d} ({d}x{d})", .{ display_num, feed.width, feed.height });
     }
 }
 
@@ -1179,21 +1179,21 @@ fn createFeed(src: []const u8, node_w: f32, node_h: f32) ?*Feed {
                     rh = std.fmt.parseInt(u32, res[xi + 1 ..], 10) catch rh;
                 }
             }
-            std.debug.print("[rsurface] display: creating {d}x{d} virtual display (node={d:.0}x{d:.0})\n", .{ rw, rh, node_w, node_h });
+            log.info(.render, "display: creating {d}x{d} virtual display (node={d:.0}x{d:.0})", .{ rw, rh, node_w, node_h });
             if (!startVirtualDisplay(feed, rw, rh, parsed.command)) setError(feed);
         },
 
         .vm => {
             // QEMU + VNC capture
             const disk = parsed.path orelse {
-                std.debug.print("[rsurface] VM: no disk path in source\n", .{});
+                log.info(.render, "VM: no disk path in source", .{});
                 setError(feed);
                 feed_count += 1;
                 return feed;
             };
-            std.debug.print("[rsurface] VM: creating feed for disk={s}\n", .{disk});
+            log.info(.render, "VM: creating feed for disk={s}", .{disk});
             if (!vm.startVM(feed, disk, 2048, 2)) {
-                std.debug.print("[rsurface] VM: startVM FAILED\n", .{});
+                log.info(.render, "VM: startVM FAILED", .{});
                 setError(feed);
             }
         },
@@ -1300,7 +1300,7 @@ var _upd_dbg: u32 = 0;
 
 pub fn update() void {
     _upd_dbg +%= 1;
-    if (_upd_dbg % 120 == 1 and feed_count > 0) std.debug.print("[rsurface] update: {d} feeds\n", .{feed_count});
+    if (_upd_dbg % 120 == 1 and feed_count > 0) log.info(.render, "update: {d} feeds", .{feed_count});
 
     for (feeds[0..feed_count]) |*feed| {
         switch (feed.status) {
@@ -1312,9 +1312,9 @@ pub fn update() void {
                 }
 
                 if (feed.dirty) {
-                    if (_upd_dbg % 60 == 1) std.debug.print("[rsurface] frame dirty, uploading {d}x{d}\n", .{ feed.width, feed.height });
+                    if (_upd_dbg % 60 == 1) log.info(.render, "frame dirty, uploading {d}x{d}", .{ feed.width, feed.height });
                     if (!ensureTexture(feed)) {
-                        std.debug.print("[rsurface] ensureTexture FAILED\n", .{});
+                        log.info(.render, "ensureTexture FAILED", .{});
                         continue;
                     }
                     uploadPixels(feed);
@@ -1330,7 +1330,7 @@ pub fn update() void {
             },
 
             .starting => {
-                if (_upd_dbg % 60 == 1) std.debug.print("[rsurface] feed starting, backend={s} wait={d}\n", .{ @tagName(feed.backend), feed.startup_wait });
+                if (_upd_dbg % 60 == 1) log.info(.render, "feed starting, backend={s} wait={d}", .{ @tagName(feed.backend), feed.startup_wait });
                 switch (feed.backend) {
                     .display_xshm => finalizeVirtualDisplay(feed),
                     .vnc => vm.finalizeVM(feed),
@@ -1339,7 +1339,7 @@ pub fn update() void {
             },
 
             .connecting => {
-                if (_upd_dbg % 60 == 1) std.debug.print("[rsurface] VNC connecting, state={s}\n", .{@tagName(feed.vnc_state)});
+                if (_upd_dbg % 60 == 1) log.info(.render, "VNC connecting, state={s}", .{@tagName(feed.vnc_state)});
                 vm.updateVnc(feed);
             },
 
@@ -1354,29 +1354,29 @@ var _dbg_frame: u32 = 0;
 
 pub fn paintSurface(src: []const u8, x: f32, y: f32, w: f32, h: f32, opacity: f32) bool {
     _dbg_frame +%= 1;
-    if (_dbg_frame % 60 == 1) std.debug.print("[rsurface] paintSurface called src_len={d} rect=({d:.0},{d:.0},{d:.0},{d:.0})\n", .{ src.len, x, y, w, h });
+    if (_dbg_frame % 60 == 1) log.info(.render, "paintSurface called src_len={d} rect=({d:.0},{d:.0},{d:.0},{d:.0})", .{ src.len, x, y, w, h });
 
     var feed = findFeed(src);
     if (feed == null) {
-        std.debug.print("[rsurface] no feed found, creating for src_len={d}\n", .{src.len});
+        log.info(.render, "no feed found, creating for src_len={d}", .{src.len});
         feed = createFeed(src, w, h);
     }
     const f = feed orelse {
-        std.debug.print("[rsurface] createFeed returned null\n", .{});
+        log.info(.render, "createFeed returned null", .{});
         return false;
     };
     f.active = true;
 
     if (f.status != .ready) {
-        if (_dbg_frame % 60 == 1) std.debug.print("[rsurface] feed not ready, status={s}\n", .{@tagName(f.status)});
+        if (_dbg_frame % 60 == 1) log.info(.render, "feed not ready, status={s}", .{@tagName(f.status)});
         return false;
     }
     const bg = f.bind_group orelse {
-        if (_dbg_frame % 60 == 1) std.debug.print("[rsurface] no bind_group\n", .{});
+        if (_dbg_frame % 60 == 1) log.info(.render, "no bind_group", .{});
         return false;
     };
     if (f.width == 0 or f.height == 0) {
-        std.debug.print("[rsurface] zero dimensions {d}x{d}\n", .{ f.width, f.height });
+        log.info(.render, "zero dimensions {d}x{d}", .{ f.width, f.height });
         return false;
     }
 

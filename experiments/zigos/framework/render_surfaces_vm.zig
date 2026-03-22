@@ -51,7 +51,7 @@ pub fn readU32be(buf: []const u8) u32 {
 pub fn vncRead(sock: posix.socket_t, buf: []u8) usize {
     const n = posix.read(sock, buf) catch |err| {
         if (err != error.WouldBlock) {
-            std.debug.print("[rsurface:vnc] read error: {s}\n", .{@errorName(err)});
+            log.info(.render, "vnc: read error: {s}", .{@errorName(err)});
         }
         return 0;
     };
@@ -87,7 +87,7 @@ pub fn connectVnc(host_str: []const u8, port: u16) ?posix.socket_t {
 /// Drive the VNC handshake state machine. Called each frame.
 pub fn updateVnc(feed: *Feed) void {
     const sock = feed.vnc_socket orelse {
-        std.debug.print("[rsurface:vnc] updateVnc: no socket!\n", .{});
+        log.info(.render, "vnc: updateVnc: no socket", .{});
         return;
     };
 
@@ -99,11 +99,11 @@ pub fn updateVnc(feed: *Feed) void {
             var ver_buf: [12]u8 = undefined;
             const n = vncRead(sock, &ver_buf);
             if (n < 12) {
-                if (n > 0) std.debug.print("[rsurface:vnc] wait_version: got {d}/12 bytes\n", .{n});
+                if (n > 0) log.info(.render, "vnc: wait_version: got {d}/12 bytes", .{n});
                 return;
             }
 
-            std.debug.print("[rsurface:vnc] got server version, sending ours\n", .{});
+            log.info(.render, "vnc: got server version, sending ours", .{});
             _ = vncWrite(sock, "RFB 003.008\n");
             feed.vnc_state = .wait_security_types;
         },
@@ -393,10 +393,9 @@ pub fn startVM(feed: *Feed, disk_path: []const u8, memory: u32, cpus: u32) bool 
     child.stderr_behavior = .Ignore;
     child.stdin_behavior = .Ignore;
 
-    std.debug.print("[rsurface] QEMU spawning: argc={d} kvm={} iso={}\n", .{ argc, has_kvm, is_iso });
+    log.info(.render, "QEMU spawning: argc={d} kvm={} iso={}", .{ argc, has_kvm, is_iso });
 
     child.spawn() catch |err| {
-        std.debug.print("[rsurface] QEMU spawn FAILED: {}\n", .{err});
         log.info(.render, "QEMU spawn failed: {}", .{err});
         return false;
     };
@@ -411,7 +410,6 @@ pub fn startVM(feed: *Feed, disk_path: []const u8, memory: u32, cpus: u32) bool 
     feed.interactive = true;
     feed.startup_wait = 120; // ~2s for QEMU to start
 
-    std.debug.print("[rsurface] QEMU started OK, VNC port={d} display=:{d}\n", .{ vnc_port, vnc_display });
     log.info(.render, "QEMU started (VNC :{d}, {d}MB, {d} CPUs)", .{ vnc_display, memory, cpus });
     return true;
 }
@@ -419,21 +417,21 @@ pub fn startVM(feed: *Feed, disk_path: []const u8, memory: u32, cpus: u32) bool 
 /// Called during update() to connect VNC after QEMU has started.
 pub fn finalizeVM(feed: *Feed) void {
     if (feed.startup_wait > 0) {
-        if (feed.startup_wait % 30 == 0) std.debug.print("[rsurface] finalizeVM: waiting {d} frames for QEMU\n", .{feed.startup_wait});
+        if (feed.startup_wait % 30 == 0) log.info(.render, "finalizeVM: waiting {d} frames for QEMU", .{feed.startup_wait});
         feed.startup_wait -= 1;
         return;
     }
 
-    std.debug.print("[rsurface] finalizeVM: attempting VNC connect to 127.0.0.1:{d}\n", .{feed.vnc_port});
+    log.info(.render, "finalizeVM: VNC connect to 127.0.0.1:{d}", .{feed.vnc_port});
 
     // Try to connect to VNC
     const sock = connectVnc("127.0.0.1", feed.vnc_port) orelse {
-        std.debug.print("[rsurface] finalizeVM: VNC connect failed, retrying in 30 frames\n", .{});
+        log.info(.render, "finalizeVM: VNC connect failed, retrying in 30 frames", .{});
         feed.startup_wait = 30;
         return;
     };
 
-    std.debug.print("[rsurface] finalizeVM: VNC connected! sock={d}\n", .{sock});
+    log.info(.render, "finalizeVM: VNC connected, sock={d}", .{sock});
     feed.vnc_socket = sock;
     feed.vnc_state = .wait_version;
     feed.status = .connecting;

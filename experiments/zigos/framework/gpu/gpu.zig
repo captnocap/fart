@@ -26,6 +26,8 @@ pub const drawCurve = curves.drawCurve;
 pub const drawCubicCurve = curves.drawCubicCurve;
 pub const initText = text.initText;
 pub const getCharAdvance = text.getCharAdvance;
+pub const getCharWidth = text.getCharWidth;
+pub const drawGlyphAt = text.drawGlyphAt;
 pub const getLineHeight = text.getLineHeight;
 
 // Type re-exports

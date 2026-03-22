@@ -59,6 +59,10 @@ var bodies: [MAX_BODIES]Body = [_]Body{.{}} ** MAX_BODIES;
 var body_count: u32 = 0;
 var initialized: bool = false;
 
+// ── Mouse drag state ────────────────────────────────────────────
+var drag_joint: c.PhysJoint = null;
+var drag_body: c.PhysBody = null;
+
 // ── Public API ─────────────────────────────────────────────────
 
 /// Create the physics world with gravity in pixels/s^2.
@@ -161,10 +165,9 @@ pub fn tick(dt: f32) void {
         const by = c.phys_body_get_y(b.handle) * PIXELS_PER_METER;
         const angle = c.phys_body_get_angle(b.handle);
 
-        // Write to node's absolute position style (top/left)
-        node.style.left = bx - b.offset_x;
-        node.style.top = by - b.offset_y;
-        node.style.position = .absolute;
+        // Write directly to computed position (bypass layout — physics runs after layout)
+        node.computed.x = bx - b.offset_x;
+        node.computed.y = by - b.offset_y;
         node.style.rotation = angle;
     }
 }
@@ -233,6 +236,40 @@ pub fn activeCount() u32 {
 
 pub fn isInitialized() bool {
     return initialized;
+}
+
+// ── Mouse drag ──────────────────────────────────────────────────
+
+/// Start dragging: query for a dynamic body at (px, py) in pixels.
+/// If found, creates a mouse joint pulling the body toward the mouse.
+pub fn startDrag(px: f32, py: f32) void {
+    if (!initialized or world == null) return;
+    if (drag_joint != null) return; // already dragging
+    const mx = px / PIXELS_PER_METER;
+    const my = py / PIXELS_PER_METER;
+    const body = c.phys_query_point(world, mx, my);
+    if (body == null) return;
+    // Create mouse joint: max force = 1000 * body mass (estimated)
+    drag_body = body;
+    drag_joint = c.phys_mouse_joint_create(world, body, mx, my, 5000.0);
+}
+
+/// Update drag target position (call while mouse is held).
+pub fn updateDrag(px: f32, py: f32) void {
+    if (drag_joint == null) return;
+    c.phys_mouse_joint_set_target(drag_joint, px / PIXELS_PER_METER, py / PIXELS_PER_METER);
+}
+
+/// Release the dragged body.
+pub fn endDrag() void {
+    if (drag_joint == null) return;
+    c.phys_mouse_joint_destroy(drag_joint);
+    drag_joint = null;
+    drag_body = null;
+}
+
+pub fn isDragging() bool {
+    return drag_joint != null;
 }
 
 // ── Internal ───────────────────────────────────────────────────

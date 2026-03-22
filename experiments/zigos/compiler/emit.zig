@@ -561,8 +561,11 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
         for (0..self.dyn_count) |di| {
             if (!self.dyn_texts[di].has_ref) {
                 try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                    "comptime {{ @compileError(\"{s}: dynamic text #{d} (fmt: '{s}') was never bound — will not update at runtime\"); }}\n",
-                    .{ basename, di, self.dyn_texts[di].fmt_string }));
+                    "comptime {{ @compileError(\"{s}: dynamic text #{d} (fmt: '{s}', args: {s}) was never bound — " ++
+                    "this usually means a state variable is used inside an inlined component where the " ++
+                    "text-to-array binding is lost. Fix: pass state values as component props instead of " ++
+                    "referencing them directly inside the component body.\"); }}\n",
+                    .{ basename, di, self.dyn_texts[di].fmt_string, self.dyn_texts[di].fmt_args }));
                 breadcrumb_count += 1;
             }
         }
@@ -1113,6 +1116,12 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
                         if (has_field) try out.appendSlice(self.alloc, ", ");
                         try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
                             ".text_color = {s}", .{inner.text_color}));
+                        has_field = true;
+                    }
+                    if (inner.dyn_href.len > 0) {
+                        if (has_field) try out.appendSlice(self.alloc, ", ");
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            ".href = {s}", .{inner.dyn_href}));
                         has_field = true;
                     }
                     if (inner.style.len > 0 or (is_nested and m.is_object_array)) {

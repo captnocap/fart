@@ -55,6 +55,18 @@ PhysFixture phys_collider_circle(PhysBody body, float radius,
                                  float density, float friction, float restitution);
 void phys_collider_set_sensor(PhysFixture fixture, int is_sensor);
 
+// ── Mouse Joint (drag interaction) ──────────────────────────────
+typedef void* PhysJoint;
+
+PhysJoint phys_mouse_joint_create(PhysWorld world, PhysBody body,
+                                   float target_x, float target_y, float max_force);
+void phys_mouse_joint_set_target(PhysJoint joint, float x, float y);
+void phys_mouse_joint_destroy(PhysJoint joint);
+
+// ── Query ───────────────────────────────────────────────────────
+// Point query: returns the first dynamic body at (x, y), or NULL.
+PhysBody phys_query_point(PhysWorld world, float x, float y);
+
 #ifdef __cplusplus
 }
 #endif

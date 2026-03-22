@@ -468,6 +468,7 @@ pub fn getCols() u16 {
 
 pub fn resizeVterm(rows: u16, cols: u16) void {
     if (g_vterm) |*v| v.resizeTerminal(rows, cols);
+    if (g_pty) |*p| p.resize(rows, cols);
 }
 
 // Terminal rendering is done by .tsz components (<Terminal>), not hand-painted.
@@ -500,19 +501,31 @@ pub fn spawnShell(shell: [*:0]const u8, rows: u16, cols: u16) void {
     std.debug.print("[vterm] shell spawned: {s} ({d}x{d})\n", .{ std.mem.span(shell), cols, rows });
 }
 
-/// Drain PTY output → feed to vterm. Call once per frame.
-/// Returns true if new data was received.
+/// Drain PTY output → feed to vterm → flush vterm responses back to PTY.
+/// Call once per frame. Returns true if new data was received.
 pub fn pollPty() bool {
     var p = &(g_pty orelse return false);
     const data = p.readData() orelse return false;
-    if (g_vterm) |*v| v.feedData(data);
+    if (g_vterm) |*v| {
+        v.feedData(data);
+        // Drain vterm output responses (device attributes, cursor reports, etc.)
+        // Without this, the shell may hang waiting for responses to queries like \e[c
+        var out_buf: [4096]u8 = undefined;
+        if (v.readOutputData(&out_buf)) |response| {
+            _ = p.writeData(response);
+        }
+    }
     return true;
 }
 
 /// Send keystrokes to the PTY (keyboard input from the user).
 pub fn writePty(data: []const u8) void {
-    var p = &(g_pty orelse return);
-    _ = p.writeData(data);
+    var p = &(g_pty orelse {
+        std.debug.print("[vterm] writePty: no PTY open!\n", .{});
+        return;
+    });
+    const ok = p.writeData(data);
+    std.debug.print("[vterm] writePty: {d} bytes, ok={}\n", .{ data.len, ok });
 }
 
 /// Check if the shell is still running.

@@ -72,7 +72,7 @@ pub fn hitTestHoverable(node: *Node, mx: f32, my: f32) ?*Node {
         if (hitTestHoverable(&node.children[i], mx, my)) |hit| return hit;
     }
 
-    if (hasHandlers(&node.handlers) or node.hoverable or node.input_id != null or node.canvas_type != null) {
+    if (hasHandlers(&node.handlers) or node.hoverable or node.href != null or node.input_id != null or node.canvas_type != null) {
         const r = node.computed;
         if (r.w > 0 and r.h > 0 and mx >= r.x and mx < r.x + r.w and my >= r.y and my < r.y + r.h) {
             return node;

@@ -1,0 +1,147 @@
+// Browser logic — fetch + parse + render HTML
+
+function decodeEntities(s) {
+  return s.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&nbsp;/g, ' ');
+}
+
+function resolveUrl(href, base) {
+  if (!href) return '';
+  if (href.indexOf('://') !== -1) return href;
+  if (href.indexOf('//') === 0) return 'https:' + href;
+  // Parse base URL
+  var m = base.match(/^(https?:\/\/[^\/]+)(\/.*)?$/);
+  if (!m) return href;
+  var origin = m[1];
+  if (href.indexOf('/') === 0) return origin + href;
+  var basePath = m[2] || '/';
+  var lastSlash = basePath.lastIndexOf('/');
+  return origin + basePath.substring(0, lastSlash + 1) + href;
+}
+
+// Parse HTML into flat node array with links
+function parseHtml(html, baseUrl) {
+  var nodes = [];
+
+  // Extract title
+  var titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  if (titleMatch) {
+    setPageTitle(decodeEntities(titleMatch[1]));
+  }
+
+  // Strip script/style/head/svg/noscript
+  html = html.replace(/<script[\s\S]*?<\/script>/gi, '');
+  html = html.replace(/<style[\s\S]*?<\/style>/gi, '');
+  html = html.replace(/<head[\s\S]*?<\/head>/gi, '');
+  html = html.replace(/<svg[\s\S]*?<\/svg>/gi, '');
+  html = html.replace(/<noscript[\s\S]*?<\/noscript>/gi, '');
+
+  // Extract body
+  var bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+  if (bodyMatch) html = bodyMatch[1];
+
+  // Convert block elements to newlines
+  html = html.replace(/<br\s*\/?>/gi, '\n');
+  html = html.replace(/<\/p>/gi, '\n\n');
+  html = html.replace(/<\/div>/gi, '\n');
+  html = html.replace(/<\/li>/gi, '\n');
+  html = html.replace(/<\/h[1-6]>/gi, '\n\n');
+  html = html.replace(/<\/tr>/gi, '\n');
+  html = html.replace(/<hr[^>]*>/gi, '\n---\n');
+
+  // Process links: extract <a href="...">text</a> before stripping tags
+  // Replace <a> tags with a marker: [[LINK:href]]text[[/LINK]]
+  html = html.replace(/<a\s+[^>]*href\s*=\s*["']([^"']*)["'][^>]*>([\s\S]*?)<\/a>/gi, function(match, href, text) {
+    var cleanText = text.replace(/<[^>]+>/g, '').replace(/^\s+|\s+$/g, '');
+    var resolved = resolveUrl(href, baseUrl);
+    return '[[LINK:' + resolved + ']]' + cleanText + '[[/LINK]]';
+  });
+
+  // Strip remaining tags
+  html = html.replace(/<[^>]+>/g, '');
+  html = decodeEntities(html);
+
+  var lines = html.split('\n');
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i].replace(/^\s+|\s+$/g, '');
+    if (line.length === 0) continue;
+
+    // Check for link markers in the line
+    var linkMatch = line.match(/\[\[LINK:(.*?)\]\](.*?)\[\[\/LINK\]\]/);
+    if (linkMatch) {
+      // Split line around link markers
+      var parts = line.split(/\[\[LINK:.*?\]\]|\[\[\/LINK\]\]/);
+      var links = [];
+      var re = /\[\[LINK:(.*?)\]\](.*?)\[\[\/LINK\]\]/g;
+      var m2;
+      while ((m2 = re.exec(line)) !== null) {
+        links.push({ href: m2[1], text: m2[2] });
+      }
+
+      // Output text before first link
+      if (parts[0] && parts[0].replace(/^\s+|\s+$/g, '').length > 0) {
+        nodes.push({ text: parts[0].replace(/^\s+|\s+$/g, ''), color: 0xc0caf5, href: '' });
+      }
+      // Output each link
+      for (var j = 0; j < links.length; j++) {
+        nodes.push({ text: links[j].text, color: 0x7aa2f7, href: links[j].href });
+        // Text between links
+        if (parts[j + 1] && parts[j + 1].replace(/^\s+|\s+$/g, '').length > 0) {
+          nodes.push({ text: parts[j + 1].replace(/^\s+|\s+$/g, ''), color: 0xc0caf5, href: '' });
+        }
+      }
+    } else {
+      nodes.push({ text: line, color: 0xc0caf5, href: '' });
+    }
+  }
+
+  if (nodes.length === 0) {
+    nodes.push({ text: '(empty page)', color: 0x565f89, href: '' });
+  }
+  return nodes;
+}
+
+// Navigate to a URL
+globalThis._browserNavigate = function(url) {
+  if (!url || url.length === 0) url = 'https://wpt.live/';
+  console.log('[browser] navigating to: ' + url);
+  setStatusText('Fetching...');
+  setCurrentUrl(url);
+
+  var html = fetch(url);
+  if (html && html.length > 0) {
+    console.log('[browser] got ' + html.length + ' bytes');
+    setStatusText('Parsing...');
+    var nodes = parseHtml(html, url);
+    setPageContent(nodes);
+    setStatusText(nodes.length + ' lines | ' + html.length + ' bytes');
+  } else {
+    setPageContent([{ text: 'Error: failed to fetch ' + url, color: 0xf7768e, href: '' }]);
+    setStatusText('Fetch failed');
+  }
+};
+
+// Initial welcome content
+setPageContent([
+  { text: 'Welcome to ReactJIT Browser', color: 0xc0caf5, href: '' },
+  { text: 'A web browser built entirely in the zigos rendering engine.', color: 0x9ca3af, href: '' },
+  { text: 'Default URL: https://wpt.live', color: 0x9ca3af, href: '' },
+  { text: '', color: 0x565f89, href: '' },
+  { text: 'Click Go to fetch and render the page.', color: 0x565f89, href: '' }
+]);
+
+// Poll for Go button press (loading state = slot 2)
+var _fetching = false;
+var _lastSeen = 0;
+setInterval(function() {
+  if (_fetching) return;
+  var ld = __getState(2);
+  if (ld === 1 && _lastSeen === 0) {
+    _fetching = true;
+    _lastSeen = 1;
+    var url = __getStateString(0);
+    globalThis._browserNavigate(url);
+    __setState(2, 0);
+    _fetching = false;
+  }
+  _lastSeen = ld;
+}, 200);

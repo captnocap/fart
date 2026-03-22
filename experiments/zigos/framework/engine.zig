@@ -25,7 +25,7 @@ const render_surfaces = @import("render_surfaces.zig");
 const filedrop = @import("filedrop.zig");
 const capture = @import("capture.zig");
 const effects = @import("effects.zig");
-const render3d = @import("gpu/render3d.zig");
+const r3d = @import("gpu/3d.zig");
 const transition = @import("transition.zig");
 const physics2d = @import("physics2d.zig");
 
@@ -45,6 +45,66 @@ var g_prev_tick: u32 = 0;
 
 // ── Physics 2D state ────────────────────────────────────────────────────
 var physics_initialized: bool = false;
+
+// ── Terminal state ──────────────────────────────────────────────────────
+var terminal_initialized: bool = false;
+
+fn findTerminalNode(node: *Node) ?*Node {
+    if (node.terminal) return node;
+    for (node.children) |*child| {
+        if (findTerminalNode(child)) |found| return found;
+    }
+    return null;
+}
+
+/// Route SDL key event to the terminal PTY as ANSI escape sequences.
+fn terminalHandleKey(sym: i32, mod_state: u16) void {
+    const vterm_mod = @import("vterm.zig");
+    const ctrl = (mod_state & @as(u16, c.KMOD_CTRL)) != 0;
+    // Ctrl+letter → raw control character
+    if (ctrl and sym >= 'a' and sym <= 'z') {
+        const buf = [1]u8{@intCast(sym - 'a' + 1)};
+        vterm_mod.writePty(&buf);
+        return;
+    }
+    // Special keys → ANSI escape sequences
+    const seq: ?[]const u8 = switch (sym) {
+        c.SDLK_RETURN => "\r",
+        c.SDLK_BACKSPACE => "\x7f",
+        c.SDLK_TAB => "\t",
+        c.SDLK_ESCAPE => "\x1b",
+        c.SDLK_UP => "\x1b[A",
+        c.SDLK_DOWN => "\x1b[B",
+        c.SDLK_RIGHT => "\x1b[C",
+        c.SDLK_LEFT => "\x1b[D",
+        c.SDLK_HOME => "\x1b[H",
+        c.SDLK_END => "\x1b[F",
+        c.SDLK_DELETE => "\x1b[3~",
+        c.SDLK_PAGEUP => "\x1b[5~",
+        c.SDLK_PAGEDOWN => "\x1b[6~",
+        c.SDLK_INSERT => "\x1b[2~",
+        c.SDLK_F1 => "\x1bOP",
+        c.SDLK_F2 => "\x1bOQ",
+        c.SDLK_F3 => "\x1bOR",
+        c.SDLK_F4 => "\x1bOS",
+        c.SDLK_F5 => "\x1b[15~",
+        c.SDLK_F6 => "\x1b[17~",
+        c.SDLK_F7 => "\x1b[18~",
+        c.SDLK_F8 => "\x1b[19~",
+        c.SDLK_F9 => "\x1b[20~",
+        c.SDLK_F10 => "\x1b[21~",
+        c.SDLK_F11 => "\x1b[23~",
+        else => null,
+    };
+    if (seq) |s| vterm_mod.writePty(s);
+}
+
+fn terminalHandleTextInput(text: [*:0]const u8) void {
+    const vterm_mod = @import("vterm.zig");
+    const slice = std.mem.span(text);
+    std.debug.print("[terminal] textInput: len={d} chars=\"{s}\"\n", .{ slice.len, slice });
+    if (slice.len > 0) vterm_mod.writePty(slice);
+}
 
 /// Walk the node tree to find Physics.World/Body/Collider nodes and set up the simulation.
 fn initPhysicsFromTree(root: *Node) void {
@@ -111,6 +171,9 @@ fn initPhysicsNode(node: *Node) void {
 // ── Hover state ─────────────────────────────────────────────────────────
 
 var hovered_node: ?*Node = null;
+var cursor_hand: ?*c.SDL_Cursor = null;
+var cursor_arrow: ?*c.SDL_Cursor = null;
+var cursor_is_hand: bool = false;
 
 fn updateHover(root: *Node, mx: f32, my: f32) void {
     const events = @import("events.zig");
@@ -132,8 +195,25 @@ fn updateHover(root: *Node, mx: f32, my: f32) void {
         } else {
             tooltip.hide();
         }
+        // Hand cursor for href links
+        if (node.href != null) {
+            if (!cursor_is_hand) {
+                if (cursor_hand == null) cursor_hand = c.SDL_CreateSystemCursor(c.SDL_SYSTEM_CURSOR_HAND);
+                if (cursor_hand) |cur| c.SDL_SetCursor(cur);
+                cursor_is_hand = true;
+            }
+        } else if (cursor_is_hand) {
+            if (cursor_arrow == null) cursor_arrow = c.SDL_CreateSystemCursor(c.SDL_SYSTEM_CURSOR_ARROW);
+            if (cursor_arrow) |cur| c.SDL_SetCursor(cur);
+            cursor_is_hand = false;
+        }
     } else {
         tooltip.hide();
+        if (cursor_is_hand) {
+            if (cursor_arrow == null) cursor_arrow = c.SDL_CreateSystemCursor(c.SDL_SYSTEM_CURSOR_ARROW);
+            if (cursor_arrow) |cur| c.SDL_SetCursor(cur);
+            cursor_is_hand = false;
+        }
     }
 }
 
@@ -166,8 +246,22 @@ pub const AppConfig = struct {
 
 var g_text_engine: ?*TextEngine = null;
 
-/// Open a URL in the system browser.
+/// Open a URL — if the app has a JS _browserNavigate handler, navigate in-app.
+/// Otherwise open in the system browser via xdg-open.
 fn openUrl(url: []const u8) void {
+    log.info(.events, "openUrl: {s}", .{url});
+    // Try in-app navigation first (browser cart defines _browserNavigate in JS)
+    const qjs_rt = @import("qjs_runtime.zig");
+    if (qjs_rt.hasGlobal("_browserNavigate")) {
+        // Null-terminate the URL for callGlobalStr
+        var url_buf: [2048]u8 = undefined;
+        if (url.len < url_buf.len) {
+            @memcpy(url_buf[0..url.len], url);
+            url_buf[url.len] = 0;
+            qjs_rt.callGlobalStr("_browserNavigate", @ptrCast(&url_buf));
+            return;
+        }
+    }
     var cmd_buf: [2048]u8 = undefined;
     const cmd = std.fmt.bufPrint(&cmd_buf, "xdg-open '{s}' &", .{url}) catch return;
     const argv = [_][]const u8{ "sh", "-c", cmd };
@@ -229,6 +323,7 @@ fn positionCanvasNodes(parent: *Node) void {
 var g_paint_count: u32 = 0;
 var g_hidden_count: u32 = 0;
 var g_zero_count: u32 = 0;
+var g_dt_sec: f32 = 0;
 var g_paint_opacity: f32 = 1.0; // global opacity multiplier for dim/highlight
 var g_flow_enabled: bool = true; // per-child flow override for hover mode
 var g_hover_changed: bool = false; // debug flag
@@ -370,12 +465,15 @@ noinline fn paintNodeVisuals(node: *Node) void {
     if (node.effect_render) |render_fn| {
         _ = effects.paintCustomEffect(render_fn, r.x, r.y, r.w, r.h, g_paint_opacity);
     }
-    // Scene3D — 3D viewport rendered offscreen, composited here
+    // 3D.View — 3D viewport rendered offscreen, composited here
     if (node.scene3d) {
-        _ = render3d.render(r.x, r.y, r.w, r.h, g_paint_opacity);
+        _ = r3d.render(node, r.x, r.y, r.w, r.h, g_paint_opacity);
     }
 
     selection.paintHighlight(node, r.x, r.y);
+
+    // Terminal — cell-grid rendering via vterm
+    if (node.terminal) paintTerminal(node);
 
     if (node.text) |t| {
         if (t.len > 0) {
@@ -389,10 +487,11 @@ noinline fn paintNodeVisuals(node: *Node) void {
                 @as(f32, @floatFromInt(tc.r)) / 255.0, @as(f32, @floatFromInt(tc.g)) / 255.0,
                 @as(f32, @floatFromInt(tc.b)) / 255.0, final_a, node.number_of_lines,
             );
-            // Underline for href links
+            // Underline for href links — span text content width, not node width
             if (node.href != null) {
+                const text_w = measureWidthOnly(t, node.font_size);
                 const underline_y = r.y + pt + text_h - 2;
-                gpu.drawRect(r.x + pl, underline_y, r.w - pl - pr, 1,
+                gpu.drawRect(r.x + pl, underline_y, text_w, 1,
                     @as(f32, @floatFromInt(tc.r)) / 255.0, @as(f32, @floatFromInt(tc.g)) / 255.0,
                     @as(f32, @floatFromInt(tc.b)) / 255.0, final_a * 0.6,
                     0, 0, 0, 0, 0, 0);
@@ -450,6 +549,84 @@ noinline fn paintTextInput(node: *Node, id: u8) void {
     }
 }
 
+/// Paint a Terminal node: cell-grid rendering via vterm.
+/// Each cell gets its own fg color; non-default backgrounds get a bg rect.
+/// Uses span-based batching: consecutive cells with the same fg are drawn as one string.
+noinline fn paintTerminal(node: *Node) void {
+    const vterm_mod = @import("vterm.zig");
+    const r = node.computed;
+    const font_size = node.terminal_font_size;
+    const padding: f32 = 4;
+
+    const cell_w = gpu.getCharWidth(font_size);
+    const cell_h = gpu.getLineHeight(font_size);
+    if (cell_w <= 0 or cell_h <= 0) return;
+
+    const avail_w = r.w - padding * 2;
+    const avail_h = r.h - padding * 2;
+    const cols: u16 = @intFromFloat(@max(1, @floor(avail_w / cell_w)));
+    const rows: u16 = @intFromFloat(@max(1, @floor(avail_h / cell_h)));
+
+    // Auto-resize vterm to match layout (only if changed)
+    const vt_rows = vterm_mod.getRows();
+    const vt_cols = vterm_mod.getCols();
+    if (vt_rows != rows or vt_cols != cols) {
+        vterm_mod.resizeVterm(rows, cols);
+    }
+
+    const base_x = r.x + padding;
+    const base_y = r.y + padding;
+
+    // Draw cells row by row
+    var row: u16 = 0;
+    while (row < rows) : (row += 1) {
+        const cy = base_y + @as(f32, @floatFromInt(row)) * cell_h;
+        var col: u16 = 0;
+        while (col < cols) : (col += 1) {
+            const cell = vterm_mod.getCell(row, col);
+            const cx = base_x + @as(f32, @floatFromInt(col)) * cell_w;
+
+            // Background rect (non-default bg only)
+            if (cell.bg) |bg| {
+                const actual_bg = if (cell.reverse) (cell.fg orelse vterm_mod.Color{ .r = 204, .g = 204, .b = 204 }) else bg;
+                gpu.drawRect(cx, cy, cell_w * @as(f32, @floatFromInt(cell.width)), cell_h,
+                    @as(f32, @floatFromInt(actual_bg.r)) / 255.0,
+                    @as(f32, @floatFromInt(actual_bg.g)) / 255.0,
+                    @as(f32, @floatFromInt(actual_bg.b)) / 255.0,
+                    g_paint_opacity, 0, 0, 0, 0, 0, 0);
+            }
+
+            // Foreground glyph — drawn at exact grid position (no FreeType advance)
+            if (cell.char_len > 0 and cell.char_buf[0] != ' ') {
+                const default_fg = vterm_mod.Color{ .r = 204, .g = 204, .b = 204 };
+                const fg = if (cell.reverse) (cell.bg orelse vterm_mod.Color{ .r = 0, .g = 0, .b = 0 }) else (cell.fg orelse default_fg);
+                gpu.drawGlyphAt(
+                    cell.char_buf[0..cell.char_len],
+                    cx, cy, font_size,
+                    @as(f32, @floatFromInt(fg.r)) / 255.0,
+                    @as(f32, @floatFromInt(fg.g)) / 255.0,
+                    @as(f32, @floatFromInt(fg.b)) / 255.0,
+                    g_paint_opacity,
+                );
+            }
+
+            // Skip wide characters (CJK occupies 2 cells)
+            if (cell.width > 1) col += cell.width - 1;
+        }
+    }
+
+    // Cursor
+    if (vterm_mod.getCursorVisible() and g_cursor_visible) {
+        const crow = vterm_mod.getCursorRow();
+        const ccol = vterm_mod.getCursorCol();
+        if (crow < rows and ccol < cols) {
+            const cx = base_x + @as(f32, @floatFromInt(ccol)) * cell_w;
+            const cy_cur = base_y + @as(f32, @floatFromInt(crow)) * cell_h;
+            gpu.drawRect(cx, cy_cur, cell_w, cell_h, 0.8, 0.8, 0.8, 0.7 * g_paint_opacity, 0, 0, 0, 0, 0, 0);
+        }
+    }
+}
+
 /// Paint a Canvas container: transform setup, graph children, HUD layer.
 noinline fn paintCanvasContainer(node: *Node) void {
     const r = node.computed;
@@ -457,6 +634,10 @@ noinline fn paintCanvasContainer(node: *Node) void {
     if (node.canvas_view_set) {
         canvas.setCamera(node.canvas_view_x, node.canvas_view_y, node.canvas_view_zoom);
         node.canvas_view_set = false;
+    }
+    // Apply drift — continuous camera animation (pauses during drag)
+    if (node.canvas_drift_active and canvas_drag_node == null and g_dt_sec > 0) {
+        canvas.handleDrag(-node.canvas_drift_x * g_dt_sec, -node.canvas_drift_y * g_dt_sec);
     }
     gpu.pushScissor(r.x, r.y, r.w, r.h);
     canvas.renderCanvas(ct, r.x, r.y, r.w, r.h);
@@ -536,6 +717,9 @@ pub fn run(config: AppConfig) !void {
     defer c.SDL_DestroyWindow(window);
     defer windows.deinitAll(); // close all secondary windows before SDL_Quit
     c.SDL_SetWindowMinimumSize(window, @intCast(config.min_width), @intCast(config.min_height));
+
+    // Enable text input events (SDL_TEXTINPUT) — required for keyboard input to work
+    c.SDL_StartTextInput();
 
     if (geometry.load() != null) geometry.blockSaves();
 
@@ -633,6 +817,12 @@ pub fn run(config: AppConfig) !void {
                         const rmy: f32 = @floatFromInt(event.button.y);
                         if (render_surfaces.handleMouseDown(rmx, rmy, event.button.button)) continue;
                     }
+                    // Physics drag — try to grab a dynamic body
+                    if (event.button.button == c.SDL_BUTTON_LEFT and physics2d.isInitialized()) {
+                        const pmx: f32 = @floatFromInt(event.button.x);
+                        const pmy: f32 = @floatFromInt(event.button.y);
+                        physics2d.startDrag(pmx, pmy);
+                    }
                     if (event.button.button == c.SDL_BUTTON_LEFT) {
                         const mx: f32 = @floatFromInt(event.button.x);
                         const my: f32 = @floatFromInt(event.button.y);
@@ -687,6 +877,10 @@ pub fn run(config: AppConfig) !void {
                     const my: f32 = @floatFromInt(event.motion.y);
                     // Render surface mouse motion forwarding
                     if (render_surfaces.handleMouseMotion(mx, my)) continue;
+                    // Physics drag update
+                    if (physics2d.isDragging()) {
+                        physics2d.updateDrag(mx, my);
+                    }
                     // TextInput drag selection
                     if (input_drag_active) {
                         const local_x = mx - input_drag_node_x - input_drag_node_pl;
@@ -743,12 +937,18 @@ pub fn run(config: AppConfig) !void {
                         if (render_surfaces.handleMouseUp(rmx, rmy, event.button.button)) continue;
                     }
                     if (event.button.button == c.SDL_BUTTON_LEFT) {
+                        physics2d.endDrag();
                         canvas_drag_node = null;
                         input_drag_active = false;
                         selection.onMouseUp();
                     }
                 },
                 c.SDL_TEXTINPUT => {
+                    // Native terminal gets text first
+                    if (terminal_initialized) {
+                        terminalHandleTextInput(@ptrCast(&event.text.text));
+                        continue;
+                    }
                     // PTY gets text first when active
                     if (qjs_runtime.ptyActive()) {
                         qjs_runtime.ptyHandleTextInput(@ptrCast(&event.text.text));
@@ -763,6 +963,11 @@ pub fn run(config: AppConfig) !void {
                     const mod = event.key.keysym.mod;
                     // Capture key (F9 recording toggle)
                     if (capture.handleKey(sym)) continue;
+                    // Native terminal special key routing
+                    if (terminal_initialized and sym != c.SDLK_F12) {
+                        terminalHandleKey(sym, mod);
+                        continue;
+                    }
                     // PTY special key routing (arrows, enter, backspace, ctrl combos)
                     if (qjs_runtime.ptyActive() and sym != c.SDLK_F12) {
                         qjs_runtime.ptyHandleKeyDown(sym, mod);
@@ -851,16 +1056,23 @@ pub fn run(config: AppConfig) !void {
             _ = transition.tick(dt_t_sec);
         }
 
-        // Physics 2D tick — step world, sync body positions to nodes
+        // Physics 2D init — create world and bodies on first frame (before layout)
         if (!physics_initialized) {
             initPhysicsFromTree(config.root);
             physics_initialized = true;
         }
-        if (physics2d.isInitialized()) {
-            const now_p = c.SDL_GetTicks();
-            const dt_p = now_p -% g_prev_tick;
-            const dt_p_sec = @as(f32, @floatFromInt(dt_p)) / 1000.0;
-            physics2d.tick(dt_p_sec);
+
+        // Terminal tick — init PTY on first frame, poll for output
+        if (!terminal_initialized) {
+            if (findTerminalNode(config.root)) |_| {
+                const vterm_mod = @import("vterm.zig");
+                vterm_mod.spawnShell("bash", 24, 80);
+                terminal_initialized = true;
+            }
+        }
+        if (terminal_initialized) {
+            const vterm_mod = @import("vterm.zig");
+            _ = vterm_mod.pollPty();
         }
 
         // Layout (main window)
@@ -872,6 +1084,15 @@ pub fn run(config: AppConfig) !void {
         }
         const t3 = std.time.microTimestamp();
         qjs_runtime.telemetry_layout_us = @intCast(@max(0, t3 - t2));
+
+        // Physics 2D tick — step world, sync body positions to nodes AFTER layout
+        // (physics overwrites computed.x/y — must happen after layout sets them)
+        if (physics2d.isInitialized()) {
+            const now_p = c.SDL_GetTicks();
+            const dt_p = now_p -% g_prev_tick;
+            const dt_p_sec = @as(f32, @floatFromInt(dt_p)) / 1000.0;
+            physics2d.tick(@min(dt_p_sec, 0.05)); // cap at 50ms to prevent explosion
+        }
 
         // Layout + paint secondary windows (in-process, notifications)
         windows.layoutAll();
@@ -895,9 +1116,10 @@ pub fn run(config: AppConfig) !void {
 
         // Effects update — animate and render all effect instances
         effects.update(dt_sec);
-        render3d.update(dt_sec);
+        r3d.update(dt_sec);
 
         // Paint (main window — wgpu)
+        g_dt_sec = dt_sec;
         selection.resetWalkState();
         const t4 = std.time.microTimestamp();
         paintNode(config.root);

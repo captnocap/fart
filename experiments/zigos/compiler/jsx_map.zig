@@ -478,6 +478,7 @@ fn parseMapTemplateChild(self: *Generator) anyerror!codegen.MapInnerNode {
     var font_size: []const u8 = "";
     var text_color: []const u8 = "";
     var dyn_text_color: []const u8 = "";
+    var dyn_href: []const u8 = "";
     var style_str: []const u8 = "";
     var is_self_closing = false;
 
@@ -535,6 +536,33 @@ fn parseMapTemplateChild(self: *Generator) anyerror!codegen.MapInnerNode {
                     } else {
                         const hex = try attrs.parseStringAttr(self);
                         text_color = try attrs.parseColorValue(self, hex);
+                    }
+                } else if (std.mem.eql(u8, attr, "href")) {
+                    // Dynamic href: href={item.field}
+                    if (self.curKind() == .lbrace and self.map_obj_array_idx != null and self.map_item_param != null) {
+                        const saved_h = self.pos;
+                        self.advance_token(); // {
+                        if (self.curKind() == .identifier and std.mem.eql(u8, self.curText(), self.map_item_param.?)) {
+                            self.advance_token(); // item
+                            if (self.curKind() == .dot) {
+                                self.advance_token(); // .
+                                const field_name = self.curText();
+                                self.advance_token(); // field
+                                if (self.curKind() == .rbrace) self.advance_token(); // }
+                                const oa_idx = self.map_obj_array_idx.?;
+                                dyn_href = try std.fmt.allocPrint(self.alloc,
+                                    "_oa{d}_{s}[_i][0.._oa{d}_{s}_lens[_i]]",
+                                    .{ oa_idx, field_name, oa_idx, field_name });
+                            } else {
+                                self.pos = saved_h;
+                                try attrs.skipAttrValue(self);
+                            }
+                        } else {
+                            self.pos = saved_h;
+                            try attrs.skipAttrValue(self);
+                        }
+                    } else {
+                        try attrs.skipAttrValue(self);
                     }
                 } else {
                     try attrs.skipAttrValue(self);
@@ -690,6 +718,7 @@ fn parseMapTemplateChild(self: *Generator) anyerror!codegen.MapInnerNode {
         .static_text = static_text,
         .style = style_str,
         .dyn_text_color = dyn_text_color,
+        .dyn_href = dyn_href,
         .sub_nodes = sub_nodes,
         .sub_count = sub_count,
     };

@@ -190,7 +190,7 @@ pub const Node = struct {
     content_height: f32 = 0,
     content_width: f32 = 0,
     devtools_viz: DevtoolsViz = .none,
-    // 3D elements — inline in the 2D tree, rendered by gpu/scene3d.zig
+    // 3D elements — inline in the 2D tree, rendered by gpu/3d.zig
     scene3d: bool = false,             // true = contains 3D.* children
     scene3d_mesh: bool = false,        // true = 3D.Mesh
     scene3d_camera: bool = false,      // true = 3D.Camera
@@ -241,6 +241,8 @@ pub const Node = struct {
     physics_fixed_rotation: bool = false,
     physics_bullet: bool = false,
     physics_gravity_scale: f32 = 1.0,
+    terminal: bool = false,           // true = Terminal element (cell-grid rendering via vterm)
+    terminal_font_size: u16 = 13,     // monospace font size for terminal cell grid
     graph_container: bool = false,    // true = Graph element (SVG paths, no pan/zoom)
     canvas_type: ?[]const u8 = null,
     // Canvas viewport — initial camera (center point + zoom)

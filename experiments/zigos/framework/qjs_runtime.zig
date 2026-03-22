@@ -64,6 +64,23 @@ fn hostSetStateString(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [
     return QJS_UNDEFINED;
 }
 
+fn hostGetState(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    if (argc < 1) return QJS_UNDEFINED;
+    var slot_id: i32 = 0;
+    _ = qjs.JS_ToInt32(ctx, &slot_id, argv[0]);
+    if (slot_id < 0 or slot_id >= state.MAX_SLOTS) return QJS_UNDEFINED;
+    return qjs.JS_NewFloat64(null, @floatFromInt(state.getSlot(@intCast(slot_id))));
+}
+
+fn hostGetStateString(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    if (argc < 1) return QJS_UNDEFINED;
+    var slot_id: i32 = 0;
+    _ = qjs.JS_ToInt32(ctx, &slot_id, argv[0]);
+    if (slot_id < 0 or slot_id >= state.MAX_SLOTS) return QJS_UNDEFINED;
+    const s = state.getSlotString(@intCast(slot_id));
+    return qjs.JS_NewStringLen(ctx, s.ptr, @intCast(s.len));
+}
+
 fn hostLog(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
     if (argc < 2) return QJS_UNDEFINED;
     const msg = qjs.JS_ToCString(ctx, argv[1]);
@@ -538,7 +555,45 @@ const polyfill =
     \\  }
     \\  globalThis._timers = globalThis._timers.filter(t => t.interval || now < t.at);
     \\};
+    \\globalThis.fetch = function(url) {
+    \\  const body = __fetch(url);
+    \\  return body;
+    \\};
 ;
+
+// ── HTTP fetch host function ─────────────────────────────────────
+
+fn hostFetch(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    if (argc < 1) return QJS_UNDEFINED;
+    const url_ptr = qjs.JS_ToCString(ctx, argv[0]);
+    if (url_ptr == null) return QJS_UNDEFINED;
+    defer qjs.JS_FreeCString(ctx, url_ptr);
+    const url = std.mem.span(url_ptr);
+    std.debug.print("[fetch] GET {s}\n", .{url});
+
+    // Use curl to fetch the URL synchronously
+    const result = std.process.Child.run(.{
+        .allocator = std.heap.page_allocator,
+        .max_output_bytes = 2 * 1024 * 1024, // 2MB
+        .argv = &[_][]const u8{
+            "curl", "-sL", "--max-time", "10", "--compressed",
+            "-H", "User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36",
+            url,
+        },
+    }) catch |err| {
+        std.debug.print("[fetch] curl failed: {}\n", .{err});
+        return QJS_UNDEFINED;
+    };
+    defer std.heap.page_allocator.free(result.stdout);
+    defer std.heap.page_allocator.free(result.stderr);
+
+    if (result.stdout.len == 0) {
+        std.debug.print("[fetch] empty response\n", .{});
+        return QJS_UNDEFINED;
+    }
+    std.debug.print("[fetch] got {d} bytes\n", .{result.stdout.len});
+    return qjs.JS_NewStringLen(ctx, result.stdout.ptr, @intCast(result.stdout.len));
+}
 
 // ── PTY host functions ───────────────────────────────────────────
 
@@ -667,6 +722,8 @@ pub fn initVM() void {
     defer qjs.JS_FreeValue(ctx, global);
     _ = qjs.JS_SetPropertyStr(ctx, global, "__setState", qjs.JS_NewCFunction(ctx, hostSetState, "__setState", 2));
     _ = qjs.JS_SetPropertyStr(ctx, global, "__setStateString", qjs.JS_NewCFunction(ctx, hostSetStateString, "__setStateString", 2));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__getState", qjs.JS_NewCFunction(ctx, hostGetState, "__getState", 1));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__getStateString", qjs.JS_NewCFunction(ctx, hostGetStateString, "__getStateString", 1));
     _ = qjs.JS_SetPropertyStr(ctx, global, "__hostLog", qjs.JS_NewCFunction(ctx, hostLog, "__hostLog", 2));
     _ = qjs.JS_SetPropertyStr(ctx, global, "getFps", qjs.JS_NewCFunction(ctx, hostGetFps, "getFps", 0));
     _ = qjs.JS_SetPropertyStr(ctx, global, "getLayoutUs", qjs.JS_NewCFunction(ctx, hostGetLayoutUs, "getLayoutUs", 0));
@@ -705,6 +762,9 @@ pub fn initVM() void {
     _ = qjs.JS_SetPropertyStr(ctx, global, "__tel_node", qjs.JS_NewCFunction(ctx, hostTelNode, "__tel_node", 1));
     _ = qjs.JS_SetPropertyStr(ctx, global, "__tel_node_style", qjs.JS_NewCFunction(ctx, hostTelNodeStyle, "__tel_node_style", 1));
     _ = qjs.JS_SetPropertyStr(ctx, global, "__tel_node_box_model", qjs.JS_NewCFunction(ctx, hostTelNodeBoxModel, "__tel_node_box_model", 1));
+
+    // HTTP fetch
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__fetch", qjs.JS_NewCFunction(ctx, hostFetch, "__fetch", 1));
 
     // PTY host functions
     _ = qjs.JS_SetPropertyStr(ctx, global, "__pty_open", qjs.JS_NewCFunction(ctx, hostPtyOpen, "__pty_open", 2));
@@ -759,6 +819,18 @@ pub fn callGlobal(name: [*:0]const u8) void {
             qjs.JS_FreeValue(ctx, r);
         }
     }
+}
+
+/// Check if a global JS function exists.
+pub fn hasGlobal(name: [*:0]const u8) bool {
+    if (g_qjs_ctx) |ctx| {
+        const global = qjs.JS_GetGlobalObject(ctx);
+        defer qjs.JS_FreeValue(ctx, global);
+        const func = qjs.JS_GetPropertyStr(ctx, global, name);
+        defer qjs.JS_FreeValue(ctx, func);
+        return !qjs.JS_IsUndefined(func);
+    }
+    return false;
 }
 
 /// Call a global JS function with one string argument.

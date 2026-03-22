@@ -13,7 +13,7 @@ const TokenKind = codegen.TokenKind;
 const html_tags = @import("html_tags.zig");
 
 const primitives = [_][]const u8{
-    "Box", "Text", "Image", "Video", "Render", "Pressable", "ScrollView", "TextInput", "TextArea", "Canvas", "Effect", "Scene3D",
+    "Box", "Text", "Image", "Video", "Render", "Pressable", "ScrollView", "TextInput", "TextArea", "Canvas", "Effect", "Physics", "Terminal",
 };
 
 const special_tags = [_][]const u8{

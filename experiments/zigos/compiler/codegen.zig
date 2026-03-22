@@ -309,6 +309,7 @@ pub const MapInnerNode = struct {
     static_text: []const u8,
     style: []const u8,
     dyn_text_color: []const u8 = "", // Zig expr for runtime color (e.g., Color.fromHex(...))
+    dyn_href: []const u8 = "", // Zig expr for runtime href (e.g., _oa0_href[_i][0.._oa0_href_lens[_i]])
     sub_nodes: [MAX_MAP_SUB]MapSubNode = undefined,
     sub_count: u32 = 0,
     raw_expr: []const u8 = "", // Pre-built Zig expression from component inline (bypasses field emit)

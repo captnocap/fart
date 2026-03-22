@@ -111,6 +111,7 @@ fn addAppExe(
     exe.linkSystemLibrary("SDL2");
     exe.linkSystemLibrary("freetype");
     exe.linkSystemLibrary("sqlite3");
+    exe.linkSystemLibrary("vterm");
 
     if (os == .linux) {
         exe.linkSystemLibrary("m");
@@ -127,7 +128,6 @@ fn addAppExe(
     // ── Full build extras (networking, tor, etc.) ────────────────
     if (full) {
         exe.linkSystemLibrary("curl");
-        exe.linkSystemLibrary("vterm");
         exe.linkSystemLibrary("archive");
         if (os == .linux) {
             exe.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/x86_64-linux-gnu" });

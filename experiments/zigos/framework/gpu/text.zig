@@ -440,6 +440,53 @@ pub fn getLineHeight(size_px: u16) f32 {
     return ascender - descender + 2.0; // +2 for line spacing
 }
 
+/// Get the advance width of 'M' (monospace cell width) for a given font size.
+pub fn getCharWidth(size_px: u16) f32 {
+    const face = g_ft_face orelse return @as(f32, @floatFromInt(size_px)) * 0.6;
+    if (g_ft_current_size != size_px) {
+        _ = c.FT_Set_Pixel_Sizes(face, 0, size_px);
+        g_ft_current_size = size_px;
+    }
+    // Load 'M' glyph to get its advance width
+    if (c.FT_Load_Char(face, 'M', c.FT_LOAD_DEFAULT) == 0) {
+        return @as(f32, @floatFromInt(face.*.glyph.*.advance.x)) / 64.0;
+    }
+    return @as(f32, @floatFromInt(size_px)) * 0.6; // fallback
+}
+
+/// Draw a single glyph at exact pixel position (for terminal cell-grid rendering).
+/// Unlike drawTextLine, this does NOT use FreeType advance — the caller controls positioning.
+pub fn drawGlyphAt(char_buf: []const u8, x: f32, y: f32, size_px: u16, cr: f32, cg: f32, cb: f32, ca: f32) void {
+    if (g_ft_face == null) return;
+    if (char_buf.len == 0) return;
+    if (g_ft_current_size != size_px) {
+        _ = c.FT_Set_Pixel_Sizes(g_ft_face, 0, size_px);
+        g_ft_current_size = size_px;
+    }
+    const face = g_ft_face;
+    const ascent: f32 = @as(f32, @floatFromInt(face.*.size.*.metrics.ascender)) / 64.0;
+    const ch = decodeUtf8(char_buf);
+    if (cacheGlyph(ch.codepoint, size_px)) |glyph| {
+        if (glyph.width > 0 and glyph.height > 0 and g_glyph_count < MAX_GLYPHS) {
+            g_glyphs[g_glyph_count] = .{
+                .pos_x = x + @as(f32, @floatFromInt(glyph.bearing_x)),
+                .pos_y = y + ascent - @as(f32, @floatFromInt(glyph.bearing_y)),
+                .size_w = @floatFromInt(glyph.width),
+                .size_h = @floatFromInt(glyph.height),
+                .uv_x = glyph.uv_x,
+                .uv_y = glyph.uv_y,
+                .uv_w = glyph.uv_w,
+                .uv_h = glyph.uv_h,
+                .color_r = cr,
+                .color_g = cg,
+                .color_b = cb,
+                .color_a = ca,
+            };
+            g_glyph_count += 1;
+        }
+    }
+}
+
 /// Draw a batch of glyphs in the given instance range.
 pub fn drawBatch(render_pass: *wgpu.RenderPassEncoder, start: u32, end: u32) void {
     if (end <= start) return;
