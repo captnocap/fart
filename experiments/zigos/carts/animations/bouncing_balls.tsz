@@ -1,0 +1,23 @@
+// Bouncing Balls — 2D physics demo
+// A platform at the bottom, balls dropping from the top.
+// Physics bodies drive node positions each frame.
+
+const [count, setCount] = useState(0);
+
+function App() {
+  return (
+    <Box style={{ width: "100%", height: "100%", backgroundColor: "#0c0a09" }}>
+      <Text fontSize={18} color="#e7e5e4" style={{ padding: 12 }}>2D Physics — Bouncing Balls</Text>
+      <Text fontSize={11} color="#78716c" style={{ paddingLeft: 12 }}>{`Bodies: ${count}`}</Text>
+
+      <Box style={{ flexGrow: 1, position: "relative" }}>
+        <Box style={{ position: "absolute", left: 0, bottom: 0, width: "100%", height: 40, backgroundColor: "#44403c", borderRadius: 4 }} />
+        <Box style={{ position: "absolute", left: 200, top: 100, width: 40, height: 40, borderRadius: 20, backgroundColor: "#ef4444" }} />
+        <Box style={{ position: "absolute", left: 350, top: 50, width: 40, height: 40, borderRadius: 20, backgroundColor: "#3b82f6" }} />
+        <Box style={{ position: "absolute", left: 500, top: 150, width: 40, height: 40, borderRadius: 20, backgroundColor: "#22c55e" }} />
+        <Box style={{ position: "absolute", left: 650, top: 80, width: 40, height: 40, borderRadius: 20, backgroundColor: "#f59e0b" }} />
+        <Box style={{ position: "absolute", left: 300, top: 200, width: 40, height: 40, borderRadius: 20, backgroundColor: "#a855f7" }} />
+      </Box>
+    </Box>
+  );
+}

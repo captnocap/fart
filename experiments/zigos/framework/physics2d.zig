@@ -243,3 +243,73 @@ fn allocBody() ?usize {
     }
     return null;
 }
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+test "world create and destroy" {
+    init(0, 980);
+    try std.testing.expect(isInitialized());
+    try std.testing.expectEqual(@as(u32, 0), activeCount());
+    deinit();
+    try std.testing.expect(!isInitialized());
+}
+
+test "create bodies" {
+    init(0, 980);
+    defer deinit();
+
+    const b0 = createBody(.static_body, 400, 580, 0, null);
+    try std.testing.expect(b0 != null);
+    try std.testing.expectEqual(@as(u32, 1), activeCount());
+
+    const b1 = createBody(.dynamic, 400, 100, 0, null);
+    try std.testing.expect(b1 != null);
+    try std.testing.expectEqual(@as(u32, 2), activeCount());
+}
+
+test "add colliders" {
+    init(0, 980);
+    defer deinit();
+
+    const b0 = createBody(.static_body, 400, 580, 0, null).?;
+    addBoxCollider(b0, 800, 40, 0, 0.3, 0.1);
+
+    const b1 = createBody(.dynamic, 400, 100, 0, null).?;
+    addCircleCollider(b1, 20, 1.0, 0.3, 0.6);
+}
+
+test "gravity makes dynamic body fall" {
+    init(0, 980); // gravity down
+    defer deinit();
+
+    // Static floor
+    const floor = createBody(.static_body, 400, 600, 0, null).?;
+    addBoxCollider(floor, 800, 40, 0, 0.3, 0.1);
+
+    // Dynamic ball
+    var ball_node = layout.Node{};
+    const ball = createBody(.dynamic, 400, 100, 0, &ball_node).?;
+    addCircleCollider(ball, 20, 1.0, 0.3, 0.6);
+
+    // Step 60 frames at 60fps
+    for (0..60) |_| {
+        tick(1.0 / 60.0);
+    }
+
+    // Ball should have fallen (top value increased = moved down)
+    const top = ball_node.style.top orelse 0;
+    try std.testing.expect(top > 100); // started at 100, should have fallen
+}
+
+test "destroy body" {
+    init(0, 980);
+    defer deinit();
+
+    const b0 = createBody(.dynamic, 0, 0, 0, null).?;
+    try std.testing.expectEqual(@as(u32, 1), activeCount());
+
+    destroyBody(b0);
+    try std.testing.expectEqual(@as(u32, 0), activeCount());
+}
