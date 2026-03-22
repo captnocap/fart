@@ -223,6 +223,33 @@ fn parseMapTemplate(self: *Generator) anyerror!codegen.MapTemplateResult {
                 }
             } else if (self.curKind() == .lbrace) {
                 self.advance_token(); // {
+                // Try conditional: {cond && <JSX>} → inner_node with display condition
+                {
+                    var cond_subs: [codegen.MAX_MAP_SUB]codegen.MapSubNode = undefined;
+                    var cond_count: u32 = 0;
+                    if (try tryParseMapConditional(self, &cond_subs, &cond_count)) {
+                        for (0..cond_count) |dsi| {
+                            if (inner_count < codegen.MAX_MAP_INNER) {
+                                const sub = cond_subs[dsi];
+                                inner_nodes[inner_count] = .{
+                                    .font_size = sub.font_size,
+                                    .text_color = sub.text_color,
+                                    .text_fmt = sub.text_fmt,
+                                    .text_args = sub.text_args,
+                                    .is_dynamic_text = sub.is_dynamic_text,
+                                    .static_text = sub.static_text,
+                                    .style = if (sub.display_cond.len > 0)
+                                        (std.fmt.allocPrint(self.alloc, "{s}{s}.display = if ({s}) .flex else .none",
+                                            .{ if (sub.style.len > 0) sub.style else "", if (sub.style.len > 0) ", " else "", sub.display_cond }) catch "")
+                                    else
+                                        sub.style,
+                                };
+                                inner_count += 1;
+                            }
+                        }
+                        continue;
+                    }
+                }
                 if (self.curKind() == .template_literal) {
                     const tl = try attrs.parseTemplateLiteral(self);
                     self.advance_token(); // template literal token
