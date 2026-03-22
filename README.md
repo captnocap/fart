@@ -6,7 +6,7 @@ Write React. Get a native binary. No runtime, no interpreter, no garbage collect
 app.tsz (TypeScript + JSX)
    |
    v
-tsz compiler (hand-written Zig, 17K lines)
+tsz compiler (hand-written Zig, 19K lines)
    |
    v
 generated Zig source (layout + GPU paint + events + state)
@@ -42,16 +42,18 @@ That's the entire app. Compiles to a native binary.
 
 The `.tsz` compiler and native rendering framework. A hand-written lexer, parser, and multi-phase codegen in pure Zig compiles TypeScript + JSX into Zig source that links against the framework runtime.
 
-- **Compiler** — 23 modules, ~17K lines. Components, useState, useEffect, .map(), conditionals, template literals, classifiers, script imports, HTML tags, FFI
+- **Compiler** — 23 modules, ~19K lines. Components, useState, useEffect, .map(), conditionals, template literals, classifiers, script imports, HTML tags, FFI
 - **GPU renderer** — wgpu pipeline: SDF text, rounded rects, borders, shadows, images, video, 3D (Blinn-Phong), custom effects
 - **Layout engine** — Flexbox (1400 lines), CSS-spec-aligned, WPT-tested
 - **Networking** — HTTP client/server, WebSocket client/server, IPC, SOCKS5, Tor — all pure Zig
+- **Cryptography** — HMAC-SHA256 (RFC 4231), HKDF-SHA256 (RFC 5869), Shamir Secret Sharing (GF256), XChaCha20-Poly1305 envelope encryption, PII detection + sanitization
 - **Physics** — Box2D 2.4.1 integration for 2D rigid body simulation
 - **3D** — Inline 3D viewports with camera, lights, and mesh primitives (box, sphere, plane, cylinder)
-- **Terminal** — PTY terminal emulator with cell-grid rendering
+- **Terminal** — PTY terminal emulator with cell-grid rendering, scrollback, text selection, copy/paste (Ctrl+Shift+C/V), semantic classifiers
 - **Canvas** — Infinite canvas with zoom/pan/drift, SVG path nodes, graph visualization
 - **Inspector** — Built-in devtools: element tree, style inspector, performance profiler, constraint graph
 - **Transitions** — CSS-style animations with timing and spring physics
+- **Themes** — 19 built-in themes: Dracula, Catppuccin, Nord, Gruvbox, Solarized, Tokyo Night, One Dark, Monokai, GitHub, Rosé Pine, Everforest, Kanagawa, Ayu, Synthwave, Palenight, Material, Night Owl + custom BIOS and Win95 themes
 
 ### `love2d/` — Lua Reference Stack
 
@@ -94,7 +96,7 @@ zig build compiler
 
 ## Primitives
 
-`Box` `Text` `Image` `Pressable` `ScrollView` `TextInput` `TextArea`
+`Box` `Text` `Image` `Pressable` `ScrollView` `TextInput` `TextArea` `Graph`
 
 Also accepts HTML tags: `div` `span` `p` `h1`-`h6` `button` `section` `nav` `header` `footer` `img` `input` — mapped to primitives automatically.
 
@@ -107,18 +109,39 @@ carts/
   storybook/          Component catalog + infinite canvas + theme demo
   inspector/          Built-in devtools (element tree, styles, perf)
   dashboard/          Dashboard demo
-  charts/             Chart library (area, bar, candlestick, pie, radar, ...)
+  charts/             Chart library (area, bar, candlestick, pie, radar, graph, ...)
   browser/            In-app web content renderer
+  terminal/           PTY terminal emulator with scrollback + selection
+  crypto-test/        Cryptography test suite (HMAC, HKDF, Shamir, encryption, PII)
+  scene3d-demo/       3D rendering demo
+  constraint-graph/   Constraint graph visualization
+  animations/         Animation and physics demos
+  effects/            Visual effects demos
   effect-bench/       Stress tests (57M+ bridge calls/s, 5000+ node layout)
   conformance/        Compiler conformance suite (16 tests, SHA256-locked)
   wpt-flex/           W3C Web Platform Tests for flexbox (70 tests)
   autobahn-ws/        Autobahn WebSocket conformance (202/204 cases pass)
   http-conformance/   HTTP conformance test harness
-  animations/         Animation and physics demos
-  scene3d-demo/       3D rendering demo
-  pty-test/           Terminal emulator
-  constraint-graph/   Constraint graph visualization
+  ws-conformance/     WebSocket conformance tests
+  ipc-conformance/    IPC conformance tests
+  socks5-conformance/ SOCKS5 conformance tests
 ```
+
+## Framework Modules
+
+51 modules in the framework runtime:
+
+| Category | Modules |
+|----------|---------|
+| Core | engine, state, events, input, layout, text, geometry, math |
+| Rendering | render_surfaces, render_surfaces_vm, effects, easing, transition, canvas, svg_path |
+| UI | theme, classifier, selection, tooltip, router, query, windows |
+| Terminal | pty, vterm, semantic |
+| Networking | http, httpserver, websocket, wsserver, ipc, socks5, tor |
+| Media | player, videos, recorder, capture |
+| Data | fs, fswatch, sqlite, localstore, archive, crypto, privacy |
+| Dev | devtools, devtools_state, telemetry, log, testharness, testdriver, testassert |
+| System | process, child_engine, qjs_runtime, physics2d, filedrop, breakpoint |
 
 ## Conformance
 
@@ -127,6 +150,7 @@ carts/
 | Autobahn WebSocket | 202/204 | RFC 6455 compliance |
 | WPT Flexbox | 70 | W3C CSS flex spec |
 | Compiler | 16 | Real React app ports + destructive pattern tests |
+| Crypto | 13/13 | HMAC, HKDF, Shamir, encryption, PII detection |
 
 ## Performance
 
