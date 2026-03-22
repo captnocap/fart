@@ -151,9 +151,15 @@ pub fn parseStyleAttr(self: *Generator) ![]const u8 {
                         try fields.appendSlice(self.alloc, " = 0");
                         // Register dynamic style for runtime update
                         if (self.dyn_style_count < codegen.MAX_DYN_STYLES) {
+                            // Ternary branches already have typed values (@as(i64, N) or float);
+                            // non-ternary state.getSlot() returns i64 → needs @floatFromInt
+                            const expr = if (std.mem.startsWith(u8, val, "(if ("))
+                                try std.fmt.allocPrint(self.alloc, "@as(f32, {s})", .{val})
+                            else
+                                try std.fmt.allocPrint(self.alloc, "@as(f32, @floatFromInt({s}))", .{val});
                             self.dyn_styles[self.dyn_style_count] = .{
                                 .field = zig_key,
-                                .expression = try std.fmt.allocPrint(self.alloc, "@as(f32, @floatFromInt({s}))", .{val}),
+                                .expression = expr,
                                 .arr_name = "",
                                 .arr_index = 0,
                                 .has_ref = false,
@@ -360,10 +366,14 @@ pub fn skipStyleValue(self: *Generator) void {
 pub fn consumeStyleValueExpr(self: *Generator) []const u8 {
     var expr: std.ArrayListUnmanaged(u8) = .{};
     var depth: u32 = 0;
+    var in_ternary = false; // tracking JS ternary ? : → Zig if/else
     while (self.curKind() != .eof) {
         const k = self.curKind();
         // Stop at comma or closing brace (unless inside nested parens/braces)
         if (depth == 0 and (k == .comma or k == .rbrace)) break;
+        // Colon at depth 0: if we're in a ternary it's the else separator;
+        // otherwise it's the next key:value pair — stop.
+        if (depth == 0 and k == .colon and !in_ternary) break;
         if (k == .lparen or k == .lbrace) depth += 1;
         if ((k == .rparen or k == .rbrace) and depth > 0) depth -= 1;
         const txt = self.curText();
@@ -412,17 +422,46 @@ pub fn consumeStyleValueExpr(self: *Generator) []const u8 {
                 expr.appendSlice(self.alloc, txt) catch {};
             }
         } else {
+            // JS ternary → Zig if/else: "cond ? a : b" → "(if (cond != 0) a else b)"
+            if (k == .question) {
+                // Wrap everything so far: "(if (" ++ expr ++ " != 0) "
+                var wrapped: std.ArrayListUnmanaged(u8) = .{};
+                wrapped.appendSlice(self.alloc, "(if (") catch {};
+                wrapped.appendSlice(self.alloc, expr.items) catch {};
+                wrapped.appendSlice(self.alloc, " != 0) ") catch {};
+                expr.items.len = 0;
+                expr.appendSlice(self.alloc, wrapped.items) catch {};
+                in_ternary = true;
+                self.advance_token();
+                continue;
+            }
+            if (k == .colon and in_ternary) {
+                expr.appendSlice(self.alloc, " else ") catch {};
+                // Keep in_ternary=true so the else-branch number also gets @as(i64, N)
+                self.advance_token();
+                continue;
+            }
             // Operators need spaces around them for valid Zig
             if (k == .plus or k == .minus or k == .star or k == .slash) {
                 if (expr.items.len > 0 and expr.items[expr.items.len - 1] != ' ')
                     expr.append(self.alloc, ' ') catch {};
                 expr.appendSlice(self.alloc, txt) catch {};
                 expr.append(self.alloc, ' ') catch {};
+            } else if (k == .number and in_ternary) {
+                // Inside ternary: give literals a concrete f32 type
+                // so the outer @as(f32, ...) works through runtime control flow
+                expr.appendSlice(self.alloc, "@as(f32, ") catch {};
+                expr.appendSlice(self.alloc, txt) catch {};
+                expr.appendSlice(self.alloc, ")") catch {};
             } else {
                 expr.appendSlice(self.alloc, txt) catch {};
             }
         }
         self.advance_token();
+    }
+    // Close the outer paren from ternary: "(if (...) a else b)"
+    if (in_ternary or std.mem.startsWith(u8, expr.items, "(if (")) {
+        expr.appendSlice(self.alloc, ")") catch {};
     }
     if (expr.items.len == 0) return "0";
     return expr.items;
