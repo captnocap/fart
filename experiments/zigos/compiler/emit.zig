@@ -1014,6 +1014,11 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
                 for (0..m.inner_count) |ni| {
                     const inner = m.inner_nodes[ni];
                     if (ni > 0) try out.appendSlice(self.alloc, ", ");
+                    // Component inline — use pre-built expression directly
+                    if (inner.raw_expr.len > 0) {
+                        try out.appendSlice(self.alloc, inner.raw_expr);
+                        continue;
+                    }
                     try out.appendSlice(self.alloc, ".{ ");
                     var has_field = false;
                     if (inner.is_dynamic_text) {

@@ -8,6 +8,7 @@ const codegen = @import("codegen.zig");
 const Generator = codegen.Generator;
 const attrs = @import("attrs.zig");
 const handlers = @import("handlers.zig");
+const components = @import("components.zig");
 const html_tags = @import("html_tags.zig");
 
 /// Parse `items.map((item, index) => (<JSX/>))` and register a MapInfo.
@@ -216,10 +217,45 @@ fn parseMapTemplate(self: *Generator) anyerror!codegen.MapTemplateResult {
     if (!is_self_closing) {
         while (self.curKind() != .lt_slash and self.curKind() != .eof) {
             if (self.curKind() == .lt) {
-                const child = try parseMapTemplateChild(self);
-                if (inner_count < codegen.MAX_MAP_INNER) {
-                    inner_nodes[inner_count] = child;
-                    inner_count += 1;
+                // Check if child is a component (uppercase tag) — inline it
+                const peek_tag = if (self.pos + 1 < self.lex.count) self.lex.get(self.pos + 1).text(self.source) else "";
+                if (peek_tag.len > 0 and peek_tag[0] >= 'A' and peek_tag[0] <= 'Z') {
+                    var comp_idx: ?usize = null;
+                    for (0..self.component_count) |ci| {
+                        if (std.mem.eql(u8, self.components[ci].name, peek_tag)) { comp_idx = ci; break; }
+                    }
+                    if (comp_idx) |ci| {
+                        // Component invocation inside map template — inline it
+                        // Advance past < and tag name (inlineComponent expects attrs position)
+                        self.advance_token(); // <
+                        self.advance_token(); // TagName
+                        const comp_expr = try components.inlineComponent(self, &self.components[ci]);
+                        if (inner_count < codegen.MAX_MAP_INNER) {
+                            inner_nodes[inner_count] = .{
+                                .font_size = "",
+                                .text_color = "",
+                                .text_fmt = "",
+                                .text_args = "",
+                                .is_dynamic_text = false,
+                                .static_text = "",
+                                .style = "",
+                                .raw_expr = comp_expr,
+                            };
+                            inner_count += 1;
+                        }
+                    } else {
+                        const child = try parseMapTemplateChild(self);
+                        if (inner_count < codegen.MAX_MAP_INNER) {
+                            inner_nodes[inner_count] = child;
+                            inner_count += 1;
+                        }
+                    }
+                } else {
+                    const child = try parseMapTemplateChild(self);
+                    if (inner_count < codegen.MAX_MAP_INNER) {
+                        inner_nodes[inner_count] = child;
+                        inner_count += 1;
+                    }
                 }
             } else if (self.curKind() == .lbrace) {
                 self.advance_token(); // {
@@ -661,6 +697,12 @@ fn tryParseMapConditional(
                 const rid = self.regularSlotId(slot_id);
                 try cond.appendSlice(self.alloc, std.fmt.allocPrint(self.alloc,
                     "state.getSlot({d})", .{rid}) catch "0");
+                self.advance_token();
+                continue;
+            }
+            // Component prop resolution
+            if (self.findProp(txt)) |prop_val| {
+                try cond.appendSlice(self.alloc, prop_val);
                 self.advance_token();
                 continue;
             }

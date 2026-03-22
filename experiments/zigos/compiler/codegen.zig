@@ -303,6 +303,7 @@ pub const MapInnerNode = struct {
     dyn_text_color: []const u8 = "", // Zig expr for runtime color (e.g., Color.fromHex(...))
     sub_nodes: [MAX_MAP_SUB]MapSubNode = undefined,
     sub_count: u32 = 0,
+    raw_expr: []const u8 = "", // Pre-built Zig expression from component inline (bypasses field emit)
 };
 
 pub const MapInfo = struct {
