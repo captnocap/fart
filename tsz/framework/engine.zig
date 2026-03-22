@@ -19,6 +19,7 @@ const telemetry = @import("telemetry.zig");
 const filedrop = @import("filedrop.zig");
 const input = @import("input.zig");
 const classifier = @import("classifier.zig");
+const semantic = @import("semantic.zig");
 
 // ── Build-option-gated imports (lean tier omits these) ──────────────────
 const build_options = @import("build_options");
@@ -1374,6 +1375,8 @@ pub fn run(config: AppConfig) !void {
                     classifier.classifyAndCache(cls_r, cls_text, cls_rows);
                 }
                 classifier.clearDirty();
+                // Build semantic graph from freshly classified rows
+                semantic.tick(cls_rows);
             }
         }
 
