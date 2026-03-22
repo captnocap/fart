@@ -23,6 +23,7 @@ pub const InputState = struct {
 
 var inputs: [MAX_INPUTS]InputState = [_]InputState{.{}} ** MAX_INPUTS;
 var on_change_callbacks: [MAX_INPUTS]?*const fn () void = [_]?*const fn () void{null} ** MAX_INPUTS;
+var on_submit_callbacks: [MAX_INPUTS]?*const fn () void = [_]?*const fn () void{null} ** MAX_INPUTS;
 var focused_id: ?u8 = null;
 var cursor_blink: f32 = 0;
 var cursor_visible: bool = true;
@@ -59,6 +60,13 @@ pub fn register(id: u8) void {
 pub fn setOnChange(id: u8, callback: *const fn () void) void {
     if (id < MAX_INPUTS) {
         on_change_callbacks[id] = callback;
+    }
+}
+
+/// Set a submit callback for an input. Called on Enter key (single-line only).
+pub fn setOnSubmit(id: u8, callback: *const fn () void) void {
+    if (id < MAX_INPUTS) {
+        on_submit_callbacks[id] = callback;
     }
 }
 
@@ -232,7 +240,12 @@ pub fn handleKey(sym: c_int) bool {
             }
             return true;
         }
-        // Single-line: submit handled externally
+        // Single-line: fire submit callback, then clear input
+        if (on_submit_callbacks[id]) |cb| cb();
+        // Clear the input after submit
+        inp.len = 0;
+        inp.cursor = 0;
+        if (on_change_callbacks[id]) |ccb| ccb();
         return true;
     }
 

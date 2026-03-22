@@ -226,6 +226,7 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
     var src_str: []const u8 = "";
     var on_press_start: ?u32 = null;
     var on_change_text_start: ?u32 = null;
+    var on_submit_start: ?u32 = null;
     var placeholder_str: []const u8 = "";
     var canvas_type_str: []const u8 = "";
     var canvas_gx_str: []const u8 = "";
@@ -340,6 +341,13 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
                 } else if (std.mem.eql(u8, attr_name, "onChangeText")) {
                     if (self.curKind() == .lbrace) {
                         on_change_text_start = self.pos;
+                        try attrs.skipBalanced(self);
+                    } else {
+                        try attrs.skipAttrValue(self);
+                    }
+                } else if (std.mem.eql(u8, attr_name, "onSubmit")) {
+                    if (self.curKind() == .lbrace) {
+                        on_submit_start = self.pos;
                         try attrs.skipBalanced(self);
                     } else {
                         try attrs.skipAttrValue(self);
@@ -1101,6 +1109,27 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
         try fields.appendSlice(self.alloc, " }");
     }
 
+    // onSubmit handler (TextInput — fires on Enter key)
+    var submit_handler_name: []const u8 = "";
+    if (on_submit_start) |start| {
+        const handler_name = try std.fmt.allocPrint(self.alloc, "_handler_submit_{d}", .{self.handler_counter});
+        submit_handler_name = handler_name;
+        self.handler_counter += 1;
+        const body = try handlers.emitHandlerBody(self, start);
+        const handler_fn = try std.fmt.allocPrint(self.alloc, "fn {s}() void {{\n{s}}}", .{ handler_name, body });
+        try self.handler_decls.append(self.alloc, handler_fn);
+        // If on_change_text already set handlers, merge with it
+        if (on_change_text_start != null) {
+            // handlers already has .on_change_text — add .on_submit via separate field
+            // (we'll register via setOnSubmit in _initState instead)
+        } else {
+            if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
+            try fields.appendSlice(self.alloc, ".handlers = .{ .on_submit = ");
+            try fields.appendSlice(self.alloc, handler_name);
+            try fields.appendSlice(self.alloc, " }");
+        }
+    }
+
     // TextInput/TextArea: assign compile-time input_id and emit placeholder
     if (is_text_input) {
         if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
@@ -1109,6 +1138,7 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
         if (iid < 16) {
             self.input_multiline[iid] = is_multiline;
             self.input_change_handler[iid] = change_handler_name;
+            self.input_submit_handler[iid] = submit_handler_name;
         }
         self.input_counter += 1;
         if (placeholder_str.len > 0) {

@@ -17,7 +17,7 @@
 // WORKAROUND: todos stored as flat string array ("✓ title" or "  title")
 // Script manages internal state + formats display strings.
 
-import { todo_add, todo_toggle_all, todo_filter_all, todo_filter_active, todo_filter_completed, todo_clear_completed } from './todomvc_script';
+import { todo_add, todo_toggle_all, todo_filter_all, todo_filter_active, todo_filter_completed, todo_clear_completed } from './todomvc.script';
 import { AppContainer, TodoBox, AppTitle, HeaderRow, TodoItem, FooterRow, CountText, FilterLabel, Spacer, ClearLabel, InfoText } from './todomvc_cls';
 
 const [todos, setTodos] = useState([{ text: '' }]);

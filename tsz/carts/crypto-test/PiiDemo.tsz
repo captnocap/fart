@@ -5,7 +5,7 @@
 // Build: ./zig-out/bin/zigos-compiler build carts/crypto-test/PiiDemo.tsz
 // Run:   ./zig-out/bin/PiiDemo
 
-import { pii_scan } from './pii_demo_script';
+import { pii_scan } from './pii_demo.script';
 import { Page, Title, Subtitle, SectionLabel, ResultBox, RedactedText, MatchRow, Badge, EmailBadge, SsnBadge, CardBadge, PhoneBadge, MatchValue, StatusBar, StatusText } from './pii_demo_cls';
 
 const [redactedText, setRedactedText] = useState('');

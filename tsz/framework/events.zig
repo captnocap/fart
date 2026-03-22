@@ -17,6 +17,7 @@ pub const EventHandler = struct {
     on_hover_exit: ?*const fn () void = null,
     on_key: ?*const fn (key: c_int, mods: u16) void = null,
     on_change_text: ?*const fn () void = null,
+    on_submit: ?*const fn () void = null,
     on_scroll: ?*const fn () void = null,
     on_right_click: ?*const fn (x: f32, y: f32) void = null,
 };
@@ -54,6 +55,7 @@ fn hasHandlers(h: *const EventHandler) bool {
         h.on_hover_exit != null or
         h.on_key != null or
         h.on_change_text != null or
+        h.on_submit != null or
         h.on_scroll != null or
         h.on_right_click != null;
 }

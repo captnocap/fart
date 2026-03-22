@@ -1493,6 +1493,9 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
         if (i < 16 and self.input_change_handler[i].len > 0) {
             try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "    input.setOnChange({d}, {s});\n", .{ i, self.input_change_handler[i] }));
         }
+        if (i < 16 and self.input_submit_handler[i].len > 0) {
+            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "    input.setOnSubmit({d}, {s});\n", .{ i, self.input_submit_handler[i] }));
+        }
     }
     if (self.comp_instance_count > 0) {
         try out.appendSlice(self.alloc, "    _initComponents();\n");

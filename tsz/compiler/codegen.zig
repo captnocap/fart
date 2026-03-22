@@ -557,6 +557,7 @@ pub const Generator = struct {
     input_counter: u32,
     input_multiline: [16]bool,
     input_change_handler: [16][]const u8, // handler function name per input ID
+    input_submit_handler: [16][]const u8, // handler function name per input ID (onSubmit)
 
     compile_error: ?[]const u8,
 
@@ -770,6 +771,7 @@ pub const Generator = struct {
             .input_counter = 0,
             .input_multiline = [_]bool{false} ** 16,
             .input_change_handler = [_][]const u8{""} ** 16,
+            .input_submit_handler = [_][]const u8{""} ** 16,
             .compile_error = null,
             .errors = .{},
             .warnings = .{},
