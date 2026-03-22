@@ -811,10 +811,12 @@ pub fn emitStateAtom(self: *Generator) anyerror![]const u8 {
                 return "_item";
             }
         }
-        // Map index param: i → _i
+        // Map index param: i → _i (or _ci when resolving props for components inside map templates)
         if (self.map_index_param) |idx_p| {
             if (std.mem.eql(u8, name, idx_p)) {
                 self.advance_token();
+                if (self.resolve_map_index_as_parent)
+                    return "@as(i64, @intCast(_ci))";
                 return "@as(i64, @intCast(_i))";
             }
         }

@@ -241,7 +241,19 @@ fn parseMapTemplate(self: *Generator) anyerror!codegen.MapTemplateResult {
                         // Advance past < and tag name (inlineComponent expects attrs position)
                         self.advance_token(); // <
                         self.advance_token(); // TagName
+                        // Resolve map index as _ci in prop expressions (component body may create inner maps)
+                        const mc_before = self.map_count;
+                        const parent_mi: i32 = if (self.map_count > 0) @as(i32, @intCast(self.map_count - 1)) else -1;
+                        self.resolve_map_index_as_parent = true;
                         const comp_expr = try components.inlineComponent(self, &self.components[ci]);
+                        self.resolve_map_index_as_parent = false;
+                        // Mark any maps created during component inlining as nested
+                        if (self.map_count > mc_before and parent_mi >= 0) {
+                            for (mc_before..self.map_count) |nmi| {
+                                self.maps[nmi].parent_map_idx = parent_mi;
+                                self.maps[nmi].parent_inner_idx = inner_count;
+                            }
+                        }
                         if (inner_count < codegen.MAX_MAP_INNER) {
                             inner_nodes[inner_count] = .{
                                 .font_size = "",

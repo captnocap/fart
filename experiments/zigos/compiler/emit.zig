@@ -1117,8 +1117,9 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
                     }
                     if (inner.style.len > 0 or (is_nested and m.is_object_array)) {
                         if (has_field) try out.appendSlice(self.alloc, ", ");
-                        const card_style: []const u8 = if (is_nested and m.is_object_array)
-                            ", .padding = 8, .background_color = Color.rgb(30, 41, 59), .border_radius = 6, .margin_bottom = 4"
+                        // Only add default card style when inner node has no explicit style
+                        const card_style: []const u8 = if (is_nested and m.is_object_array and inner.style.len == 0)
+                            ".padding = 8, .background_color = Color.rgb(30, 41, 59), .border_radius = 6, .margin_bottom = 4"
                         else
                             "";
                         try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,

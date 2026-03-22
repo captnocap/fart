@@ -539,6 +539,7 @@ pub const Generator = struct {
     map_item_param: ?[]const u8,
     map_index_param: ?[]const u8,
     parent_map_index_param: ?[]const u8, // outer map index param for nested maps
+    resolve_map_index_as_parent: bool, // when true, map index resolves to _ci (for component props in map templates)
     map_item_type: ?StateType,
     map_obj_array_idx: ?u32,
 
@@ -758,6 +759,7 @@ pub const Generator = struct {
             .map_item_param = null,
             .map_index_param = null,
             .parent_map_index_param = null,
+            .resolve_map_index_as_parent = false,
             .map_item_type = null,
             .map_obj_array_idx = null,
             .conditionals = undefined,
