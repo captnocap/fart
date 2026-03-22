@@ -1,9 +1,16 @@
 import { Content, SectionTitle, SectionRow, LogPanel, LogHeader, LogHeaderText, LogBody, LogLine, LogLineSuccess, LogLineError, LogLineAccent, LogLineDim, DotRunning, DotStopped, DotCrashed } from './tools_cls';
 import { InspectCard, InspectHeader, InspectName, InspectPid, InspectConnected, InspectDisconnected, InspectButton, InspectButtonLabel, MetricGrid, MetricBox, MetricBoxValue, MetricBoxAccent, MetricBoxLabel, TreePanel, TreeLine, TreeIndent } from './tools_cls';
 import { InspSubTab, InspSubTabActive, InspSubTabText, InspSubTabTextActive, InspSubTabRow, StylePanel, StyleRow, StyleProp, StyleVal, NodeInfo, NodeInfoLabel, NodeInfoValue } from './tools_cls';
+import { TreeNodeRow, TreeNodeRowSelected, TreeNodeIndent, TreeNodeType, TreeNodeName, TreeNodeDim } from './tools_cls';
+import { ConsolePanel, ConsoleOutput, ConsoleLine, ConsoleLineError, ConsoleLineResult, ConsoleInputRow, ConsolePrompt, ConsoleInput, ConsoleSend, ConsoleSendLabel } from './tools_cls';
+import { ConstraintPanel, ConstraintRow, ConstraintNode, ConstraintLabel, ConstraintDim, ConstraintArrow, ConstraintValue } from './tools_cls';
+import { HighlightToggle, HighlightToggleActive, HighlightToggleText, HighlightToggleTextActive, StyleSection, StyleSectionTitle, StyleDivider } from './tools_cls';
 
 const [connectedApp, setConnectedApp] = useState(0);
+const [connectedName, setConnectedName] = useState('');
 const [inspSubTab, setInspSubTab] = useState(0);
+
+// Telemetry state
 const [inspFps, setInspFps] = useState(0);
 const [inspLayout, setInspLayout] = useState(0);
 const [inspPaint, setInspPaint] = useState(0);
@@ -13,18 +20,48 @@ const [inspBridge, setInspBridge] = useState(0);
 const [inspVisible, setInspVisible] = useState(0);
 const [inspHidden, setInspHidden] = useState(0);
 const [streamActive, setStreamActive] = useState(0);
-const [treeText, setTreeText] = useState('');
+
+// Element tree state — flat array of tree nodes (template object tells compiler the shape)
+const [treeNodes, setTreeNodes] = useState([{ id: 0, type: '', name: '', depth: 0, w: 0, h: 0, x: 0, y: 0, children: 0 }]);
 const [selectedNodeId, setSelectedNodeId] = useState(0);
+const [highlightOn, setHighlightOn] = useState(0);
+
+// Selected node style properties
 const [selNodeType, setSelNodeType] = useState('');
+const [selNodeName, setSelNodeName] = useState('');
 const [selNodeW, setSelNodeW] = useState(0);
 const [selNodeH, setSelNodeH] = useState(0);
-const [selPadding, setSelPadding] = useState('');
+const [selNodeX, setSelNodeX] = useState(0);
+const [selNodeY, setSelNodeY] = useState(0);
+const [selPadT, setSelPadT] = useState(0);
+const [selPadR, setSelPadR] = useState(0);
+const [selPadB, setSelPadB] = useState(0);
+const [selPadL, setSelPadL] = useState(0);
+const [selMarT, setSelMarT] = useState(0);
+const [selMarR, setSelMarR] = useState(0);
+const [selMarB, setSelMarB] = useState(0);
+const [selMarL, setSelMarL] = useState(0);
 const [selBg, setSelBg] = useState('');
 const [selFlex, setSelFlex] = useState('');
+const [selGrow, setSelGrow] = useState(0);
+const [selBasis, setSelBasis] = useState(0);
 const [selBorder, setSelBorder] = useState('');
+const [selOverflow, setSelOverflow] = useState('');
+const [selFontSize, setSelFontSize] = useState(0);
+const [selColor, setSelColor] = useState('');
+const [selHasColor, setSelHasColor] = useState(0);
+const [selAlign, setSelAlign] = useState('');
+const [selJustify, setSelJustify] = useState('');
+
+// Console state (template objects for compiler shape inference)
+const [consoleLines, setConsoleLines] = useState([{ text: '', kind: 0 }]);
+const [consoleInput, setConsoleInput] = useState('');
+
+// Constraint graph state
+const [constraints, setConstraints] = useState([{ from: '', fromDim: '', rel: '', to: '', toDim: '', note: '' }]);
 
 <script>
-// Simulated telemetry stream — pushes every 500ms when connected
+// Telemetry stream — polls every 500ms when connected
 setInterval(function() {
   if (connectedApp === 0) return;
   if (streamActive === 0) return;
@@ -38,46 +75,148 @@ setInterval(function() {
   setInspBridge(Math.floor(Math.random() * 5000 + 45000));
 }, 500);
 
-function connectApp(id) {
+// Mock element tree data
+var _mockTree = [
+  { id: 1, type: 'Box', name: 'Shell', depth: 0, w: 1280, h: 800, x: 0, y: 0, children: 3 },
+  { id: 2, type: 'Box', name: 'TitleBar', depth: 1, w: 1280, h: 40, x: 0, y: 0, children: 2 },
+  { id: 3, type: 'Text', name: '"tsz tools"', depth: 2, w: 80, h: 18, x: 16, y: 11, children: 0 },
+  { id: 4, type: 'Text', name: '"v0.1.0"', depth: 2, w: 42, h: 14, x: 1222, y: 13, children: 0 },
+  { id: 5, type: 'Box', name: 'TabRow', depth: 1, w: 1280, h: 36, x: 0, y: 40, children: 4 },
+  { id: 6, type: 'Pressable', name: 'Dashboard', depth: 2, w: 96, h: 36, x: 8, y: 40, children: 1 },
+  { id: 7, type: 'Pressable', name: 'Inspector', depth: 2, w: 88, h: 36, x: 104, y: 40, children: 1 },
+  { id: 8, type: 'Pressable', name: 'Crashes', depth: 2, w: 80, h: 36, x: 192, y: 40, children: 1 },
+  { id: 9, type: 'Pressable', name: 'Tests', depth: 2, w: 72, h: 36, x: 272, y: 40, children: 1 },
+  { id: 10, type: 'ScrollView', name: 'Content', depth: 1, w: 1280, h: 700, x: 0, y: 76, children: 5 },
+  { id: 11, type: 'Box', name: 'ProjectCard', depth: 2, w: 1248, h: 120, x: 16, y: 92, children: 3 },
+  { id: 12, type: 'Box', name: 'Header', depth: 3, w: 1248, h: 24, x: 28, y: 104, children: 2 },
+  { id: 13, type: 'Box', name: 'DotRunning', depth: 4, w: 8, h: 8, x: 28, y: 112, children: 0 },
+  { id: 14, type: 'Text', name: '"Dashboard"', depth: 4, w: 72, h: 16, x: 44, y: 108, children: 0 },
+  { id: 15, type: 'Box', name: 'ActionRow', depth: 3, w: 1248, h: 28, x: 28, y: 192, children: 5 },
+  { id: 16, type: 'Box', name: 'LogPanel', depth: 2, w: 1248, h: 200, x: 16, y: 228, children: 2 },
+  { id: 17, type: 'Box', name: 'StatusBar', depth: 1, w: 1280, h: 24, x: 0, y: 776, children: 4 },
+];
+
+// Mock node style data
+var _mockStyles = {};
+_mockStyles[1] = { type: 'Box', name: 'Shell', w: 1280, h: 800, x: 0, y: 0, padT: 0, padR: 0, padB: 0, padL: 0, marT: 0, marR: 0, marB: 0, marL: 0, bg: '#0d1117', flex: 'column', grow: 0, basis: 0, border: 'none', overflow: 'visible', fontSize: 0, color: '', align: 'stretch', justify: 'flex-start' };
+_mockStyles[2] = { type: 'Box', name: 'TitleBar', w: 1280, h: 40, x: 0, y: 0, padT: 10, padR: 16, padB: 10, padL: 16, marT: 0, marR: 0, marB: 0, marL: 0, bg: '#161b22', flex: 'row', grow: 0, basis: 0, border: '1px #30363d', overflow: 'visible', fontSize: 0, color: '', align: 'center', justify: 'space-between' };
+_mockStyles[10] = { type: 'ScrollView', name: 'Content', w: 1280, h: 700, x: 0, y: 76, padT: 16, padR: 16, padB: 16, padL: 16, marT: 0, marR: 0, marB: 0, marL: 0, bg: '#0d1117', flex: 'column', grow: 1, basis: 0, border: 'none', overflow: 'scroll', fontSize: 0, color: '', align: 'stretch', justify: 'flex-start' };
+_mockStyles[11] = { type: 'Box', name: 'ProjectCard', w: 1248, h: 120, x: 16, y: 92, padT: 12, padR: 12, padB: 12, padL: 12, marT: 0, marR: 0, marB: 0, marL: 0, bg: '#161b22', flex: 'column', grow: 0, basis: 0, border: '1px #30363d', overflow: 'visible', fontSize: 0, color: '', align: 'stretch', justify: 'flex-start' };
+_mockStyles[14] = { type: 'Text', name: '"Dashboard"', w: 72, h: 16, x: 44, y: 108, padT: 0, padR: 0, padB: 0, padL: 0, marT: 0, marR: 0, marB: 0, marL: 0, bg: 'transparent', flex: 'none', grow: 0, basis: 0, border: 'none', overflow: 'visible', fontSize: 13, color: '#e6edf3', align: 'stretch', justify: 'flex-start' };
+_mockStyles[17] = { type: 'Box', name: 'StatusBar', w: 1280, h: 24, x: 0, y: 776, padT: 4, padR: 12, padB: 4, padL: 12, marT: 0, marR: 0, marB: 0, marL: 0, bg: '#161b22', flex: 'row', grow: 0, basis: 0, border: '1px #30363d', overflow: 'visible', fontSize: 0, color: '', align: 'center', justify: 'flex-start' };
+
+// Mock constraint graph
+var _mockConstraints = [
+  { from: 'Shell', fromDim: '1280x800', rel: 'contains', to: 'TitleBar', toDim: '1280x40', note: 'height: fixed 40' },
+  { from: 'Shell', fromDim: '1280x800', rel: 'contains', to: 'TabRow', toDim: '1280x36', note: 'height: fixed 36' },
+  { from: 'Shell', fromDim: '1280x800', rel: 'contains', to: 'Content', toDim: '1280x700', note: 'flexGrow: 1' },
+  { from: 'Shell', fromDim: '1280x800', rel: 'contains', to: 'StatusBar', toDim: '1280x24', note: 'height: fixed 24' },
+  { from: 'Content', fromDim: '1280x700', rel: 'scrolls', to: 'ProjectCard', toDim: '1248x120', note: 'overflow: scroll' },
+];
+
+function connectApp(id, name) {
   setConnectedApp(id);
+  setConnectedName(name);
   setStreamActive(1);
   setInspSubTab(0);
-  // Mock debug.tree response
-  setTreeText('Box (Shell) 1280x800\n  Box (TitleBar) 1280x40\n    Text "tsz tools" 14px\n    Text "v0.1.0" 11px\n  Box (TabRow) 1280x36\n    Pressable (Dashboard) 80x36\n    Pressable (Inspector) 80x36\n    Pressable (Crashes) 72x36\n    Pressable (Tests) 64x36\n  ScrollView (Content) 1280x700\n    Box (ProjectCard) 1248x120\n      Box (Header) 1248x24\n        Box (DotRunning) 8x8\n        Text "Dashboard" 13px\n      Text "tsz/carts/dashboard" 10px\n      Box (ActionRow) 1248x28\n        Pressable (Build) 60x28\n        Pressable (Run) 52x28\n        Pressable (Dev) 50x28\n    Box (ProjectCard) 1248x120\n    Box (LogPanel) 1248x200\n  Box (StatusBar) 1280x24');
-  // Mock node selection
-  setSelectedNodeId(1);
-  setSelNodeType('Box');
-  setSelNodeW(1280);
-  setSelNodeH(800);
-  setSelPadding('0 0 0 0');
-  setSelBg('#0d1117');
-  setSelFlex('column');
-  setSelBorder('none');
+  setTreeNodes(_mockTree);
+  setConstraints(_mockConstraints);
+  setConsoleLines([
+    { text: '// Connected to ' + name + ' (PID ' + (48290 + id) + ')', kind: 0 },
+    { text: '// Type debug commands below. Examples:', kind: 0 },
+    { text: '//   debug.tree         — dump element tree', kind: 0 },
+    { text: '//   debug.node(3)      — inspect node #3', kind: 0 },
+    { text: '//   debug.select(5)    — highlight node #5', kind: 0 },
+    { text: '//   debug.perf         — telemetry snapshot', kind: 0 },
+    { text: '//   debug.state        — dump state slots', kind: 0 },
+  ]);
+  // Select root by default
+  selectNode(1);
 }
 
 function disconnectApp() {
   setConnectedApp(0);
+  setConnectedName('');
   setStreamActive(0);
-  setInspFps(0);
-  setInspLayout(0);
-  setInspPaint(0);
-  setInspNodes(0);
-  setInspVisible(0);
-  setInspHidden(0);
-  setInspRss(0);
-  setInspBridge(0);
-  setTreeText('');
+  setInspFps(0); setInspLayout(0); setInspPaint(0); setInspNodes(0);
+  setInspVisible(0); setInspHidden(0); setInspRss(0); setInspBridge(0);
+  setTreeNodes([]);
   setSelectedNodeId(0);
+  setConstraints([]);
+  setConsoleLines([]);
 }
 
 function selectNode(id) {
   setSelectedNodeId(id);
-  // Mock debug.node(id) responses
-  if (id === 1) { setSelNodeType('Box'); setSelNodeW(1280); setSelNodeH(800); setSelPadding('0 0 0 0'); setSelBg('#0d1117'); setSelFlex('column'); setSelBorder('none'); }
-  if (id === 2) { setSelNodeType('Box'); setSelNodeW(1280); setSelNodeH(40); setSelPadding('10 16 10 16'); setSelBg('#161b22'); setSelFlex('row'); setSelBorder('1px #30363d'); }
-  if (id === 3) { setSelNodeType('Text'); setSelNodeW(80); setSelNodeH(18); setSelPadding('0 0 0 0'); setSelBg('transparent'); setSelFlex('none'); setSelBorder('none'); }
-  if (id === 4) { setSelNodeType('ScrollView'); setSelNodeW(1280); setSelNodeH(700); setSelPadding('16 16 16 16'); setSelBg('#0d1117'); setSelFlex('column'); setSelBorder('none'); }
-  if (id === 5) { setSelNodeType('Pressable'); setSelNodeW(60); setSelNodeH(28); setSelPadding('5 10 5 10'); setSelBg('#1f6feb'); setSelFlex('row'); setSelBorder('none'); }
+  var s = _mockStyles[id];
+  if (s) {
+    setSelNodeType(s.type); setSelNodeName(s.name);
+    setSelNodeW(s.w); setSelNodeH(s.h); setSelNodeX(s.x); setSelNodeY(s.y);
+    setSelPadT(s.padT); setSelPadR(s.padR); setSelPadB(s.padB); setSelPadL(s.padL);
+    setSelMarT(s.marT); setSelMarR(s.marR); setSelMarB(s.marB); setSelMarL(s.marL);
+    setSelBg(s.bg); setSelFlex(s.flex); setSelGrow(s.grow); setSelBasis(s.basis);
+    setSelBorder(s.border); setSelOverflow(s.overflow);
+    setSelFontSize(s.fontSize); setSelColor(s.color);
+    setSelHasColor(s.color.length > 0 ? 1 : 0);
+    setSelAlign(s.align); setSelJustify(s.justify);
+  } else {
+    // Node without detailed mock — fill from tree data
+    var node = null;
+    for (var i = 0; i < _mockTree.length; i++) {
+      if (_mockTree[i].id === id) { node = _mockTree[i]; break; }
+    }
+    if (node) {
+      setSelNodeType(node.type); setSelNodeName(node.name);
+      setSelNodeW(node.w); setSelNodeH(node.h); setSelNodeX(node.x); setSelNodeY(node.y);
+      setSelPadT(0); setSelPadR(0); setSelPadB(0); setSelPadL(0);
+      setSelMarT(0); setSelMarR(0); setSelMarB(0); setSelMarL(0);
+      setSelBg(''); setSelFlex(''); setSelGrow(0); setSelBasis(0);
+      setSelBorder(''); setSelOverflow(''); setSelFontSize(0); setSelColor('');
+      setSelHasColor(0);
+      setSelAlign(''); setSelJustify('');
+    }
+  }
+  // Send highlight command to target app
+  if (highlightOn === 1) {
+    // debug.select(id) — would send over IPC
+  }
+}
+
+function sendConsole() {
+  if (consoleInput.length === 0) return;
+  var cmd = consoleInput;
+  var lines = consoleLines.slice();
+  lines.push({ text: '> ' + cmd, kind: 0 });
+
+  // Mock command responses
+  if (cmd === 'debug.perf') {
+    lines.push({ text: '{ fps: ' + inspFps + ', layout: ' + inspLayout + 'µs, paint: ' + inspPaint + 'µs, nodes: ' + inspNodes + ', rss: ' + inspRss + 'MB }', kind: 2 });
+  } else if (cmd === 'debug.state') {
+    lines.push({ text: '{ slots: 12, dirty: false, arrays: 3 }', kind: 2 });
+  } else if (cmd.indexOf('debug.select') === 0) {
+    lines.push({ text: 'OK — node highlighted', kind: 2 });
+  } else if (cmd === 'debug.tree') {
+    lines.push({ text: 'Box (Shell) 1280x800', kind: 2 });
+    lines.push({ text: '  Box (TitleBar) 1280x40', kind: 2 });
+    lines.push({ text: '  Box (TabRow) 1280x36', kind: 2 });
+    lines.push({ text: '  ScrollView (Content) 1280x700', kind: 2 });
+    lines.push({ text: '  Box (StatusBar) 1280x24', kind: 2 });
+  } else if (cmd.indexOf('debug.node') === 0) {
+    lines.push({ text: '{ type: "Box", name: "Shell", w: 1280, h: 800, flex: "column" }', kind: 2 });
+  } else {
+    lines.push({ text: 'Unknown command: ' + cmd, kind: 1 });
+  }
+
+  setConsoleLines(lines);
+  setConsoleInput('');
+}
+
+function toggleHighlight() {
+  if (highlightOn === 1) {
+    setHighlightOn(0);
+  } else {
+    setHighlightOn(1);
+  }
 }
 </script>
 
@@ -86,7 +225,7 @@ function Inspector() {
     <C.Content>
       <C.SectionRow>
         <C.SectionTitle>Inspector</C.SectionTitle>
-        {connectedApp > 0 && <C.InspectConnected>attached</C.InspectConnected>}
+        {connectedApp > 0 && <C.InspectConnected>{`attached · ${connectedName}`}</C.InspectConnected>}
         {connectedApp == 0 && <C.InspectDisconnected>no connection</C.InspectDisconnected>}
       </C.SectionRow>
 
@@ -100,7 +239,7 @@ function Inspector() {
           </C.SectionRow>
           <C.InspectPid>PID 48291 · :9100</C.InspectPid>
         </C.InspectHeader>
-        <C.InspectButton onPress={() => { connectApp(1) }}><C.InspectButtonLabel>Attach via IPC</C.InspectButtonLabel></C.InspectButton>
+        <C.InspectButton onPress={() => { connectApp(1, 'Dashboard') }}><C.InspectButtonLabel>Attach via IPC</C.InspectButtonLabel></C.InspectButton>
       </C.InspectCard>}
 
       {connectedApp == 0 && <C.InspectCard>
@@ -111,7 +250,7 @@ function Inspector() {
           </C.SectionRow>
           <C.InspectPid>PID 48305 · :9101</C.InspectPid>
         </C.InspectHeader>
-        <C.InspectButton onPress={() => { connectApp(2) }}><C.InspectButtonLabel>Attach via IPC</C.InspectButtonLabel></C.InspectButton>
+        <C.InspectButton onPress={() => { connectApp(2, 'Storybook') }}><C.InspectButtonLabel>Attach via IPC</C.InspectButtonLabel></C.InspectButton>
       </C.InspectCard>}
 
       {connectedApp == 0 && <C.InspectCard>
@@ -125,27 +264,165 @@ function Inspector() {
       </C.InspectCard>}
 
       {connectedApp > 0 && <C.InspSubTabRow>
-        {inspSubTab == 0 && <C.InspSubTabActive onPress={() => { setInspSubTab(0) }}><C.InspSubTabTextActive>Perf</C.InspSubTabTextActive></C.InspSubTabActive>}
-        {inspSubTab != 0 && <C.InspSubTab onPress={() => { setInspSubTab(0) }}><C.InspSubTabText>Perf</C.InspSubTabText></C.InspSubTab>}
-        {inspSubTab == 1 && <C.InspSubTabActive onPress={() => { setInspSubTab(1) }}><C.InspSubTabTextActive>Elements</C.InspSubTabTextActive></C.InspSubTabActive>}
-        {inspSubTab != 1 && <C.InspSubTab onPress={() => { setInspSubTab(1) }}><C.InspSubTabText>Elements</C.InspSubTabText></C.InspSubTab>}
-        {inspSubTab == 2 && <C.InspSubTabActive onPress={() => { setInspSubTab(2) }}><C.InspSubTabTextActive>Style</C.InspSubTabTextActive></C.InspSubTabActive>}
-        {inspSubTab != 2 && <C.InspSubTab onPress={() => { setInspSubTab(2) }}><C.InspSubTabText>Style</C.InspSubTabText></C.InspSubTab>}
+        {inspSubTab == 0 && <C.InspSubTabActive onPress={() => { setInspSubTab(0) }}><C.InspSubTabTextActive>Elements</C.InspSubTabTextActive></C.InspSubTabActive>}
+        {inspSubTab != 0 && <C.InspSubTab onPress={() => { setInspSubTab(0) }}><C.InspSubTabText>Elements</C.InspSubTabText></C.InspSubTab>}
+        {inspSubTab == 1 && <C.InspSubTabActive onPress={() => { setInspSubTab(1) }}><C.InspSubTabTextActive>Style</C.InspSubTabTextActive></C.InspSubTabActive>}
+        {inspSubTab != 1 && <C.InspSubTab onPress={() => { setInspSubTab(1) }}><C.InspSubTabText>Style</C.InspSubTabText></C.InspSubTab>}
+        {inspSubTab == 2 && <C.InspSubTabActive onPress={() => { setInspSubTab(2) }}><C.InspSubTabTextActive>Perf</C.InspSubTabTextActive></C.InspSubTabActive>}
+        {inspSubTab != 2 && <C.InspSubTab onPress={() => { setInspSubTab(2) }}><C.InspSubTabText>Perf</C.InspSubTabText></C.InspSubTab>}
+        {inspSubTab == 3 && <C.InspSubTabActive onPress={() => { setInspSubTab(3) }}><C.InspSubTabTextActive>Console</C.InspSubTabTextActive></C.InspSubTabActive>}
+        {inspSubTab != 3 && <C.InspSubTab onPress={() => { setInspSubTab(3) }}><C.InspSubTabText>Console</C.InspSubTabText></C.InspSubTab>}
+        {inspSubTab == 4 && <C.InspSubTabActive onPress={() => { setInspSubTab(4) }}><C.InspSubTabTextActive>Constraints</C.InspSubTabTextActive></C.InspSubTabActive>}
+        {inspSubTab != 4 && <C.InspSubTab onPress={() => { setInspSubTab(4) }}><C.InspSubTabText>Constraints</C.InspSubTabText></C.InspSubTab>}
         <Box style={{ flexGrow: 1 }} />
+        {highlightOn == 0 && <C.HighlightToggle onPress={() => { toggleHighlight() }}><C.HighlightToggleText>Highlight</C.HighlightToggleText></C.HighlightToggle>}
+        {highlightOn == 1 && <C.HighlightToggleActive onPress={() => { toggleHighlight() }}><C.HighlightToggleTextActive>Highlight</C.HighlightToggleTextActive></C.HighlightToggleActive>}
         <C.InspectButton onPress={() => { disconnectApp() }}><C.InspectButtonLabel>Detach</C.InspectButtonLabel></C.InspectButton>
       </C.InspSubTabRow>}
 
-      {connectedApp > 0 && inspSubTab == 0 && <C.MetricGrid>
+      {connectedApp > 0 && inspSubTab == 0 && <C.SectionRow>
+        <C.SectionTitle>Element Tree</C.SectionTitle>
+        <C.LogLineDim>{`${inspNodes} nodes`}</C.LogLineDim>
+      </C.SectionRow>}
+      {connectedApp > 0 && inspSubTab == 0 && <C.TreePanel>
+        {treeNodes.map((node) => (
+          <Box>
+            {selectedNodeId == node.id && <C.TreeNodeRowSelected onPress={() => { selectNode(node.id) }}>
+              {node.depth == 0 && <C.TreeNodeIndent />}
+              {node.depth == 1 && <C.TreeNodeIndent>  </C.TreeNodeIndent>}
+              {node.depth == 2 && <C.TreeNodeIndent>    </C.TreeNodeIndent>}
+              {node.depth == 3 && <C.TreeNodeIndent>      </C.TreeNodeIndent>}
+              {node.depth == 4 && <C.TreeNodeIndent>        </C.TreeNodeIndent>}
+              <C.TreeNodeType>{node.type}</C.TreeNodeType>
+              <C.TreeNodeName>{node.name}</C.TreeNodeName>
+              <C.TreeNodeDim>{`${node.w}x${node.h}`}</C.TreeNodeDim>
+              {node.children > 0 && <C.TreeNodeDim>{`(${node.children})`}</C.TreeNodeDim>}
+            </C.TreeNodeRowSelected>}
+            {selectedNodeId != node.id && <C.TreeNodeRow onPress={() => { selectNode(node.id) }}>
+              {node.depth == 0 && <C.TreeNodeIndent />}
+              {node.depth == 1 && <C.TreeNodeIndent>  </C.TreeNodeIndent>}
+              {node.depth == 2 && <C.TreeNodeIndent>    </C.TreeNodeIndent>}
+              {node.depth == 3 && <C.TreeNodeIndent>      </C.TreeNodeIndent>}
+              {node.depth == 4 && <C.TreeNodeIndent>        </C.TreeNodeIndent>}
+              <C.TreeNodeType>{node.type}</C.TreeNodeType>
+              <C.TreeNodeName>{node.name}</C.TreeNodeName>
+              <C.TreeNodeDim>{`${node.w}x${node.h}`}</C.TreeNodeDim>
+              {node.children > 0 && <C.TreeNodeDim>{`(${node.children})`}</C.TreeNodeDim>}
+            </C.TreeNodeRow>}
+          </Box>
+        ))}
+      </C.TreePanel>}
+      {connectedApp > 0 && inspSubTab == 0 && selectedNodeId > 0 && <C.NodeInfo>
+        <C.NodeInfoLabel>Selected</C.NodeInfoLabel>
+        <C.NodeInfoValue>{`${selNodeType} (${selNodeName}) #${selectedNodeId} — ${selNodeW}x${selNodeH} @ ${selNodeX},${selNodeY}`}</C.NodeInfoValue>
+      </C.NodeInfo>}
+
+      {connectedApp > 0 && inspSubTab == 1 && <C.SectionTitle>Style Inspector</C.SectionTitle>}
+      {connectedApp > 0 && inspSubTab == 1 && selectedNodeId > 0 && <C.StylePanel>
+        <C.StyleSection>
+          <C.StyleSectionTitle>Identity</C.StyleSectionTitle>
+          <C.StyleRow>
+            <C.StyleProp>type</C.StyleProp>
+            <C.StyleVal>{selNodeType}</C.StyleVal>
+          </C.StyleRow>
+          <C.StyleRow>
+            <C.StyleProp>name</C.StyleProp>
+            <C.StyleVal>{selNodeName}</C.StyleVal>
+          </C.StyleRow>
+          <C.StyleRow>
+            <C.StyleProp>id</C.StyleProp>
+            <C.StyleVal>{`#${selectedNodeId}`}</C.StyleVal>
+          </C.StyleRow>
+        </C.StyleSection>
+
+        <C.StyleDivider />
+
+        <C.StyleSection>
+          <C.StyleSectionTitle>Layout</C.StyleSectionTitle>
+          <C.StyleRow>
+            <C.StyleProp>size</C.StyleProp>
+            <C.StyleVal>{`${selNodeW} x ${selNodeH}`}</C.StyleVal>
+          </C.StyleRow>
+          <C.StyleRow>
+            <C.StyleProp>position</C.StyleProp>
+            <C.StyleVal>{`${selNodeX}, ${selNodeY}`}</C.StyleVal>
+          </C.StyleRow>
+          <C.StyleRow>
+            <C.StyleProp>flexDirection</C.StyleProp>
+            <C.StyleVal>{selFlex}</C.StyleVal>
+          </C.StyleRow>
+          <C.StyleRow>
+            <C.StyleProp>flexGrow</C.StyleProp>
+            <C.StyleVal>{`${selGrow}`}</C.StyleVal>
+          </C.StyleRow>
+          <C.StyleRow>
+            <C.StyleProp>flexBasis</C.StyleProp>
+            <C.StyleVal>{`${selBasis}`}</C.StyleVal>
+          </C.StyleRow>
+          <C.StyleRow>
+            <C.StyleProp>alignItems</C.StyleProp>
+            <C.StyleVal>{selAlign}</C.StyleVal>
+          </C.StyleRow>
+          <C.StyleRow>
+            <C.StyleProp>justifyContent</C.StyleProp>
+            <C.StyleVal>{selJustify}</C.StyleVal>
+          </C.StyleRow>
+          <C.StyleRow>
+            <C.StyleProp>overflow</C.StyleProp>
+            <C.StyleVal>{selOverflow}</C.StyleVal>
+          </C.StyleRow>
+        </C.StyleSection>
+
+        <C.StyleDivider />
+
+        <C.StyleSection>
+          <C.StyleSectionTitle>Box Model</C.StyleSectionTitle>
+          <C.StyleRow>
+            <C.StyleProp>padding</C.StyleProp>
+            <C.StyleVal>{`${selPadT} ${selPadR} ${selPadB} ${selPadL}`}</C.StyleVal>
+          </C.StyleRow>
+          <C.StyleRow>
+            <C.StyleProp>margin</C.StyleProp>
+            <C.StyleVal>{`${selMarT} ${selMarR} ${selMarB} ${selMarL}`}</C.StyleVal>
+          </C.StyleRow>
+          <C.StyleRow>
+            <C.StyleProp>border</C.StyleProp>
+            <C.StyleVal>{selBorder}</C.StyleVal>
+          </C.StyleRow>
+        </C.StyleSection>
+
+        <C.StyleDivider />
+
+        <C.StyleSection>
+          <C.StyleSectionTitle>Visual</C.StyleSectionTitle>
+          <C.StyleRow>
+            <C.StyleProp>backgroundColor</C.StyleProp>
+            <C.StyleVal>{selBg}</C.StyleVal>
+          </C.StyleRow>
+          {selFontSize > 0 && <C.StyleRow>
+            <C.StyleProp>fontSize</C.StyleProp>
+            <C.StyleVal>{`${selFontSize}`}</C.StyleVal>
+          </C.StyleRow>}
+          {selHasColor > 0 && <C.StyleRow>
+            <C.StyleProp>color</C.StyleProp>
+            <C.StyleVal>{selColor}</C.StyleVal>
+          </C.StyleRow>}
+        </C.StyleSection>
+      </C.StylePanel>}
+      {connectedApp > 0 && inspSubTab == 1 && selectedNodeId == 0 && <C.LogLineDim>Select a node in the Elements tab to inspect its styles</C.LogLineDim>}
+
+      {connectedApp > 0 && inspSubTab == 2 && <C.SectionTitle>Performance</C.SectionTitle>}
+      {connectedApp > 0 && inspSubTab == 2 && <C.MetricGrid>
         <C.MetricBox>
           <C.MetricBoxAccent>{`${inspFps}`}</C.MetricBoxAccent>
           <C.MetricBoxLabel>FPS</C.MetricBoxLabel>
         </C.MetricBox>
         <C.MetricBox>
-          <C.MetricBoxValue>{`${inspLayout}µs`}</C.MetricBoxValue>
+          <C.MetricBoxValue>{`${inspLayout}us`}</C.MetricBoxValue>
           <C.MetricBoxLabel>Layout</C.MetricBoxLabel>
         </C.MetricBox>
         <C.MetricBox>
-          <C.MetricBoxValue>{`${inspPaint}µs`}</C.MetricBoxValue>
+          <C.MetricBoxValue>{`${inspPaint}us`}</C.MetricBoxValue>
           <C.MetricBoxLabel>Paint</C.MetricBoxLabel>
         </C.MetricBox>
         <C.MetricBox>
@@ -169,51 +446,62 @@ function Inspector() {
           <C.MetricBoxLabel>Bridge/s</C.MetricBoxLabel>
         </C.MetricBox>
       </C.MetricGrid>}
+      {connectedApp > 0 && inspSubTab == 2 && <C.LogPanel>
+        <C.LogHeader>
+          <C.LogHeaderText>Telemetry Stream</C.LogHeaderText>
+          {streamActive == 1 && <C.LogLineSuccess>live</C.LogLineSuccess>}
+          {streamActive == 0 && <C.LogLineDim>paused</C.LogLineDim>}
+        </C.LogHeader>
+        <C.LogBody style={{ height: 160 }}>
+          <Box style={{ flexDirection: 'column', gap: 1, padding: 4 }}>
+            <C.LogLine>{`[frame] fps=${inspFps} layout=${inspLayout}us paint=${inspPaint}us`}</C.LogLine>
+            <C.LogLine>{`[nodes] total=${inspNodes} visible=${inspVisible} hidden=${inspHidden}`}</C.LogLine>
+            <C.LogLine>{`[mem]   rss=${inspRss}MB bridge=${inspBridge}/s`}</C.LogLine>
+            <C.LogLineDim>--- telemetry updates every 500ms ---</C.LogLineDim>
+          </Box>
+        </C.LogBody>
+      </C.LogPanel>}
 
-      {connectedApp > 0 && inspSubTab == 1 && <C.SectionTitle>Element Tree</C.SectionTitle>}
-      {connectedApp > 0 && inspSubTab == 1 && <C.TreePanel>
-        <C.TreeLine>{treeText}</C.TreeLine>
-      </C.TreePanel>}
-      {connectedApp > 0 && inspSubTab == 1 && <C.SectionRow>
-        <C.InspectButton onPress={() => { selectNode(1) }}><C.InspectButtonLabel>Shell</C.InspectButtonLabel></C.InspectButton>
-        <C.InspectButton onPress={() => { selectNode(2) }}><C.InspectButtonLabel>TitleBar</C.InspectButtonLabel></C.InspectButton>
-        <C.InspectButton onPress={() => { selectNode(3) }}><C.InspectButtonLabel>Text</C.InspectButtonLabel></C.InspectButton>
-        <C.InspectButton onPress={() => { selectNode(4) }}><C.InspectButtonLabel>Content</C.InspectButtonLabel></C.InspectButton>
-        <C.InspectButton onPress={() => { selectNode(5) }}><C.InspectButtonLabel>Pressable</C.InspectButtonLabel></C.InspectButton>
-      </C.SectionRow>}
-      {connectedApp > 0 && inspSubTab == 1 && selectedNodeId > 0 && <C.NodeInfo>
-        <C.NodeInfoLabel>Selected</C.NodeInfoLabel>
-        <C.NodeInfoValue>{`${selNodeType} #${selectedNodeId} — ${selNodeW}x${selNodeH}`}</C.NodeInfoValue>
+      {connectedApp > 0 && inspSubTab == 3 && <C.SectionTitle>Debug Console</C.SectionTitle>}
+      {connectedApp > 0 && inspSubTab == 3 && <C.ConsolePanel>
+        <C.ConsoleOutput style={{ height: 300 }}>
+          {consoleLines.map((line) => (
+            <Box>
+              {line.kind == 0 && <C.ConsoleLine>{line.text}</C.ConsoleLine>}
+              {line.kind == 1 && <C.ConsoleLineError>{line.text}</C.ConsoleLineError>}
+              {line.kind == 2 && <C.ConsoleLineResult>{line.text}</C.ConsoleLineResult>}
+            </Box>
+          ))}
+        </C.ConsoleOutput>
+        <C.ConsoleInputRow>
+          <C.ConsolePrompt>debug&gt;</C.ConsolePrompt>
+          <C.ConsoleInput placeholder="debug.tree, debug.node(id), ..." value={consoleInput} />
+          <C.ConsoleSend onPress={() => { sendConsole() }}><C.ConsoleSendLabel>Run</C.ConsoleSendLabel></C.ConsoleSend>
+        </C.ConsoleInputRow>
+      </C.ConsolePanel>}
+
+      {connectedApp > 0 && inspSubTab == 4 && <C.SectionTitle>Constraint Graph</C.SectionTitle>}
+      {connectedApp > 0 && inspSubTab == 4 && <C.ConstraintPanel>
+        {constraints.map((c) => (
+          <C.ConstraintRow>
+            <C.ConstraintNode>
+              <C.ConstraintLabel>{c.from}</C.ConstraintLabel>
+              <C.ConstraintDim>{c.fromDim}</C.ConstraintDim>
+            </C.ConstraintNode>
+            <C.ConstraintArrow>{`-${c.rel}->`}</C.ConstraintArrow>
+            <C.ConstraintNode>
+              <C.ConstraintLabel>{c.to}</C.ConstraintLabel>
+              <C.ConstraintDim>{c.toDim}</C.ConstraintDim>
+            </C.ConstraintNode>
+            <C.ConstraintValue>{c.note}</C.ConstraintValue>
+          </C.ConstraintRow>
+        ))}
+      </C.ConstraintPanel>}
+      {connectedApp > 0 && inspSubTab == 4 && selectedNodeId > 0 && <C.NodeInfo>
+        <C.NodeInfoLabel>Focus</C.NodeInfoLabel>
+        <C.NodeInfoValue>{`${selNodeType} (${selNodeName}) — ${selNodeW}x${selNodeH}`}</C.NodeInfoValue>
       </C.NodeInfo>}
-
-      {connectedApp > 0 && inspSubTab == 2 && <C.SectionTitle>Style Inspector</C.SectionTitle>}
-      {connectedApp > 0 && inspSubTab == 2 && selectedNodeId > 0 && <C.StylePanel>
-        <C.StyleRow>
-          <C.StyleProp>type</C.StyleProp>
-          <C.StyleVal>{selNodeType}</C.StyleVal>
-        </C.StyleRow>
-        <C.StyleRow>
-          <C.StyleProp>size</C.StyleProp>
-          <C.StyleVal>{`${selNodeW} x ${selNodeH}`}</C.StyleVal>
-        </C.StyleRow>
-        <C.StyleRow>
-          <C.StyleProp>padding</C.StyleProp>
-          <C.StyleVal>{selPadding}</C.StyleVal>
-        </C.StyleRow>
-        <C.StyleRow>
-          <C.StyleProp>backgroundColor</C.StyleProp>
-          <C.StyleVal>{selBg}</C.StyleVal>
-        </C.StyleRow>
-        <C.StyleRow>
-          <C.StyleProp>flexDirection</C.StyleProp>
-          <C.StyleVal>{selFlex}</C.StyleVal>
-        </C.StyleRow>
-        <C.StyleRow>
-          <C.StyleProp>border</C.StyleProp>
-          <C.StyleVal>{selBorder}</C.StyleVal>
-        </C.StyleRow>
-      </C.StylePanel>}
-      {connectedApp > 0 && inspSubTab == 2 && selectedNodeId == 0 && <C.LogLineDim>Select a node in the Elements tab to inspect its styles</C.LogLineDim>}
+      {connectedApp > 0 && inspSubTab == 4 && <C.LogLineDim>Constraints show parent-child sizing relationships in the layout tree</C.LogLineDim>}
     </C.Content>
   );
 }

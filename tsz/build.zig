@@ -116,7 +116,7 @@ fn addAppExe(
         .name = name,
         .root_module = root_mod,
     });
-    exe.stack_size = 16 * 1024 * 1024; // 16MB — devtools tree has ~2000 nodes
+    exe.stack_size = 16 * 1024 * 1024; // 16MB — deep component trees
 
     // ── Always linked (both tiers) ──────────────────────────────
     exe.root_module.addImport("wgpu", wgpu_mod);
