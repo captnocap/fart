@@ -167,6 +167,47 @@ var physics_initialized: bool = false;
 
 // ── Terminal state ──────────────────────────────────────────────────────
 var terminal_initialized: bool = false;
+var term_sel_active: bool = false;
+var term_sel_dragging: bool = false;
+var term_sel_start_row: u16 = 0;
+var term_sel_start_col: u16 = 0;
+var term_sel_end_row: u16 = 0;
+var term_sel_end_col: u16 = 0;
+
+fn termPixelToCell(tn: *Node, mx: f32, my: f32) struct { row: u16, col: u16 } {
+    const r = tn.computed;
+    const font_size = tn.terminal_font_size;
+    const padding: f32 = 4;
+    const cell_w = gpu.getCharWidth(font_size);
+    const cell_h = gpu.getLineHeight(font_size);
+    if (cell_w <= 0 or cell_h <= 0) return .{ .row = 0, .col = 0 };
+    const local_x = @max(0, mx - r.x - padding);
+    const local_y = @max(0, my - r.y - padding);
+    return .{
+        .row = @intFromFloat(@min(@floor(local_y / cell_h), 255)),
+        .col = @intFromFloat(@min(@floor(local_x / cell_w), 255)),
+    };
+}
+
+fn termCellSelected(row: u16, col: u16) bool {
+    if (!term_sel_active) return false;
+    var r0 = term_sel_start_row; var c0 = term_sel_start_col;
+    var r1 = term_sel_end_row; var c1 = term_sel_end_col;
+    if (r0 > r1 or (r0 == r1 and c0 > c1)) {
+        r0 = term_sel_end_row; c0 = term_sel_end_col;
+        r1 = term_sel_start_row; c1 = term_sel_start_col;
+    }
+    if (row < r0 or row > r1) return false;
+    if (r0 == r1) return col >= c0 and col <= c1;
+    if (row == r0) return col >= c0;
+    if (row == r1) return col <= c1;
+    return true;
+}
+
+fn termClearSelection() void {
+    term_sel_active = false;
+    term_sel_dragging = false;
+}
 
 fn findTerminalNode(node: *Node) ?*Node {
     if (node.terminal) return node;
@@ -179,7 +220,8 @@ fn findTerminalNode(node: *Node) ?*Node {
 /// Route SDL key event to the terminal PTY as ANSI escape sequences.
 fn terminalHandleKey(sym: i32, mod_state: u16) void {
     const ctrl = (mod_state & @as(u16, c.KMOD_CTRL)) != 0;
-    vterm_mod.scrollToBottom(); // key input snaps to live view
+    termClearSelection();
+    vterm_mod.scrollToBottom();
     // Ctrl+letter → raw control character
     if (ctrl and sym >= 'a' and sym <= 'z') {
         const buf = [1]u8{@intCast(sym - 'a' + 1)};
@@ -222,7 +264,8 @@ fn terminalHandleTextInput(text: [*:0]const u8) void {
     const slice = std.mem.span(text);
     std.debug.print("[terminal] textInput: len={d} chars=\"{s}\"\n", .{ slice.len, slice });
     if (slice.len > 0) {
-        vterm_mod.scrollToBottom(); // typing snaps to live view
+        termClearSelection();
+        vterm_mod.scrollToBottom();
         vterm_mod.writePty(slice);
     }
 }
@@ -713,6 +756,11 @@ noinline fn paintTerminal(node: *Node) void {
                 vterm_mod.getCell(row - sb_visible, col);
             const cx = base_x + @as(f32, @floatFromInt(col)) * cell_w;
 
+            // Selection highlight
+            if (termCellSelected(row, col)) {
+                gpu.drawRect(cx, cy, cell_w, cell_h, 0.3, 0.45, 0.8, 0.45 * g_paint_opacity, 0, 0, 0, 0, 0, 0);
+            }
+
             // Background rect (non-default bg only)
             if (cell.bg) |bg| {
                 const actual_bg = if (cell.reverse) (cell.fg orelse @TypeOf(cell.fg.?){ .r = 204, .g = 204, .b = 204 }) else bg;
@@ -998,6 +1046,25 @@ pub fn run(config: AppConfig) !void {
                             canvas_drag_node = cn;
                             canvas_drag_last_x = mx;
                             canvas_drag_last_y = my;
+                        } else if (terminal_initialized) {
+                            if (findTerminalNode(config.root)) |tn| {
+                                const tr = tn.computed;
+                                if (mx >= tr.x and mx <= tr.x + tr.w and my >= tr.y and my <= tr.y + tr.h) {
+                                    const cell = termPixelToCell(tn, mx, my);
+                                    term_sel_start_row = cell.row;
+                                    term_sel_start_col = cell.col;
+                                    term_sel_end_row = cell.row;
+                                    term_sel_end_col = cell.col;
+                                    term_sel_active = false;
+                                    term_sel_dragging = true;
+                                } else {
+                                    termClearSelection();
+                                    selection.onMouseDown(config.root, mx, my, c.SDL_GetTicks());
+                                }
+                            } else {
+                                selection.onMouseDown(config.root, mx, my, c.SDL_GetTicks());
+                            }
+                            input.unfocus();
                         } else {
                             input.unfocus();
                             selection.onMouseDown(config.root, mx, my, c.SDL_GetTicks());
@@ -1012,6 +1079,15 @@ pub fn run(config: AppConfig) !void {
                     // Physics drag update
                     if (physics2d.isDragging()) {
                         physics2d.updateDrag(mx, my);
+                    }
+                    // Terminal drag selection
+                    if (term_sel_dragging) {
+                        if (findTerminalNode(config.root)) |tn| {
+                            const cell = termPixelToCell(tn, mx, my);
+                            term_sel_end_row = cell.row;
+                            term_sel_end_col = cell.col;
+                            term_sel_active = (term_sel_start_row != term_sel_end_row or term_sel_start_col != term_sel_end_col);
+                        }
                     }
                     // TextInput drag selection
                     if (input_drag_active) {
@@ -1072,6 +1148,7 @@ pub fn run(config: AppConfig) !void {
                         physics2d.endDrag();
                         canvas_drag_node = null;
                         input_drag_active = false;
+                        term_sel_dragging = false;
                         selection.onMouseUp();
                     }
                 },
@@ -1095,6 +1172,35 @@ pub fn run(config: AppConfig) !void {
                     const mod = event.key.keysym.mod;
                     // Capture key (F9 recording toggle)
                     if (capture.handleKey(sym)) continue;
+                    // Terminal copy/paste: Ctrl+Shift+C/V (not Ctrl+C which is SIGINT)
+                    if (terminal_initialized) {
+                        const t_ctrl = (mod & @as(u16, c.KMOD_CTRL)) != 0;
+                        const t_shift = (mod & @as(u16, c.KMOD_SHIFT)) != 0;
+                        if (t_ctrl and t_shift and sym == c.SDLK_c) {
+                            if (term_sel_active) {
+                                var copy_buf: [8192]u8 = undefined;
+                                const len = vterm_mod.copySelectedText(
+                                    term_sel_start_row, term_sel_start_col,
+                                    term_sel_end_row, term_sel_end_col,
+                                    &copy_buf,
+                                );
+                                if (len > 0 and len < copy_buf.len) {
+                                    copy_buf[len] = 0;
+                                    _ = c.SDL_SetClipboardText(@ptrCast(&copy_buf));
+                                }
+                            }
+                            continue;
+                        }
+                        if (t_ctrl and t_shift and sym == c.SDLK_v) {
+                            const clip = c.SDL_GetClipboardText();
+                            if (clip != null) {
+                                vterm_mod.scrollToBottom();
+                                vterm_mod.writePty(std.mem.span(clip));
+                                c.SDL_free(@ptrCast(clip));
+                            }
+                            continue;
+                        }
+                    }
                     // Native terminal special key routing
                     if (terminal_initialized and sym != c.SDLK_F12) {
                         terminalHandleKey(sym, mod);

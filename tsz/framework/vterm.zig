@@ -649,3 +649,53 @@ pub fn scrollDown(n: u16) void {
 pub fn scrollToBottom() void {
     sb_scroll = 0;
 }
+
+/// Extract text from a rectangular selection region (viewport coordinates).
+/// Handles scrollback vs live rows automatically. Returns bytes written.
+pub fn copySelectedText(
+    start_row: u16, start_col: u16,
+    end_row: u16, end_col: u16,
+    buf: []u8,
+) usize {
+    // Normalize: ensure start before end
+    var r0 = start_row; var c0 = start_col;
+    var r1 = end_row; var c1 = end_col;
+    if (r0 > r1 or (r0 == r1 and c0 > c1)) {
+        r0 = end_row; c0 = end_col;
+        r1 = start_row; c1 = start_col;
+    }
+
+    const sb_vis = sb_scroll;
+    const cols = getCols();
+    var pos: usize = 0;
+
+    var row = r0;
+    while (row <= r1) : (row += 1) {
+        if (row > r0 and pos < buf.len - 1) {
+            buf[pos] = '\n';
+            pos += 1;
+        }
+        const cstart: u16 = if (row == r0) c0 else 0;
+        const cend: u16 = if (row == r1) c1 + 1 else cols;
+
+        var last_nonspace = pos;
+        var col = cstart;
+        while (col < cend and pos < buf.len - 4) : (col += 1) {
+            const cell = if (row < sb_vis)
+                getScrollbackCell(row, col)
+            else
+                getCell(row - sb_vis, col);
+
+            if (cell.char_len > 0) {
+                for (0..cell.char_len) |j| {
+                    if (pos < buf.len) { buf[pos] = cell.char_buf[j]; pos += 1; }
+                }
+                if (cell.char_buf[0] != ' ') last_nonspace = pos;
+            } else {
+                if (pos < buf.len) { buf[pos] = ' '; pos += 1; }
+            }
+        }
+        pos = last_nonspace; // trim trailing spaces
+    }
+    return pos;
+}
