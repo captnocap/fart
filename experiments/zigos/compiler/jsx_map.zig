@@ -7,6 +7,8 @@ const std = @import("std");
 const codegen = @import("codegen.zig");
 const Generator = codegen.Generator;
 const attrs = @import("attrs.zig");
+const handlers = @import("handlers.zig");
+const html_tags = @import("html_tags.zig");
 
 /// Parse `items.map((item, index) => (<JSX/>))` and register a MapInfo.
 /// Returns ".{}" as a placeholder node — the real nodes come from the pool at runtime.
@@ -89,6 +91,7 @@ pub fn parseMapExpression(self: *Generator) anyerror![]const u8 {
                 .is_computed = true,
                 .computed_idx = ci,
                 .computed_element_type = self.computed_arrays[ci].element_type,
+                .handler_body = template.handler_body,
             };
         } else if (obj_arr_idx) |oi| {
             self.maps[self.map_count] = .{
@@ -106,6 +109,7 @@ pub fn parseMapExpression(self: *Generator) anyerror![]const u8 {
                 .is_text_element = template.is_text_element,
                 .is_object_array = true,
                 .object_array_idx = oi,
+                .handler_body = template.handler_body,
             };
         } else {
             const si = state_idx.?;
@@ -125,6 +129,7 @@ pub fn parseMapExpression(self: *Generator) anyerror![]const u8 {
                 .is_text_element = template.is_text_element,
                 .is_string_array = is_str_arr,
                 .string_array_slot_id = if (is_str_arr) self.stringArraySlotId(si) else 0,
+                .handler_body = template.handler_body,
             };
         }
         self.map_count += 1;
@@ -150,6 +155,10 @@ fn parseMapTemplate(self: *Generator) anyerror!codegen.MapTemplateResult {
 
     var tag = self.curText();
     self.advance_token(); // tag name (or "C")
+    // HTML tag → primitive resolution
+    if (html_tags.resolve(tag)) |prim| {
+        tag = prim;
+    }
     // Handle C.Name classifier references
     if (std.mem.eql(u8, tag, "C") and self.curKind() == .dot) {
         self.advance_token(); // .
@@ -164,6 +173,7 @@ fn parseMapTemplate(self: *Generator) anyerror!codegen.MapTemplateResult {
     var style_str: []const u8 = "";
     var font_size: []const u8 = "";
     var text_color: []const u8 = "";
+    var handler_body: []const u8 = "";
     var is_self_closing = false;
 
     // Parse attributes
@@ -180,6 +190,10 @@ fn parseMapTemplate(self: *Generator) anyerror!codegen.MapTemplateResult {
                 } else if (std.mem.eql(u8, attr, "color")) {
                     const hex = try attrs.parseStringAttr(self);
                     text_color = try attrs.parseColorValue(self, hex);
+                } else if (std.mem.eql(u8, attr, "onPress")) {
+                    const start = self.pos;
+                    try attrs.skipAttrValue(self);
+                    handler_body = try handlers.emitHandlerBody(self, start);
                 } else {
                     try attrs.skipAttrValue(self);
                 }
@@ -337,6 +351,7 @@ fn parseMapTemplate(self: *Generator) anyerror!codegen.MapTemplateResult {
         .inner_count = inner_count,
         .is_self_closing = is_self_closing,
         .is_text_element = is_text,
+        .handler_body = handler_body,
     };
 }
 

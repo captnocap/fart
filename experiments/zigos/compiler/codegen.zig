@@ -307,6 +307,8 @@ pub const MapInfo = struct {
     // Object array source (for nodes.map() where nodes is useState([{...}]))
     is_object_array: bool = false,
     object_array_idx: u32 = 0,
+    // onPress handler body (Zig statements with _i for index)
+    handler_body: []const u8 = "",
 };
 
 pub const MapTemplateResult = struct {
@@ -317,6 +319,7 @@ pub const MapTemplateResult = struct {
     inner_count: u32,
     is_self_closing: bool,
     is_text_element: bool,
+    handler_body: []const u8 = "",
 };
 
 pub const ComputedArrayKind = enum { filter, split };

@@ -791,6 +791,29 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
                         .{ mi, ni, mi, mi, ni, mi }));
                 }
             }
+            // Per-map onPress handler (comptime per-index factory + lookup table)
+            if (m.handler_body.len > 0) {
+                const body_uses_i = std.mem.indexOf(u8, m.handler_body, "_i") != null;
+                const i_decl: []const u8 = if (body_uses_i)
+                    "        const _i = _map_ci;\n"
+                else
+                    "        _ = _map_ci;\n";
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                    "fn _mapPress{d}(comptime _map_ci: usize) *const fn () void {{\n" ++
+                    "    return &struct {{ fn handler() void {{\n" ++
+                    "{s}" ++
+                    "{s}" ++
+                    "        state.markDirty();\n" ++
+                    "    }} }}.handler;\n" ++
+                    "}}\n" ++
+                    "const _map_handlers_{d}: [MAX_MAP_{d}]*const fn () void = blk_{d}: {{\n" ++
+                    "    @setEvalBranchQuota(100000);\n" ++
+                    "    var _h: [MAX_MAP_{d}]*const fn () void = undefined;\n" ++
+                    "    for (0..MAX_MAP_{d}) |_ci| {{ _h[_ci] = _mapPress{d}(_ci); }}\n" ++
+                    "    break :blk_{d} _h;\n" ++
+                    "}};\n",
+                    .{ mi, i_decl, m.handler_body, mi, mi, mi, mi, mi, mi, mi }));
+            }
         }
     }
 
@@ -991,6 +1014,10 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
                 if (has_outer_field) try out.appendSlice(self.alloc, ", ");
                 try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
                     ".children = &_map_inner_{d}[_i]", .{mi}));
+            }
+            if (m.handler_body.len > 0) {
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                    ", .handlers = .{{ .on_press = _map_handlers_{d}[_i] }}", .{mi}));
             }
             try out.appendSlice(self.alloc, " };\n");
 

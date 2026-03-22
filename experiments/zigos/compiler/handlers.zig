@@ -726,6 +726,29 @@ pub fn emitStateAtom(self: *Generator) anyerror![]const u8 {
                 }
             }
         }
+        // Map item param: entry.field → _oa{N}_{field}[_i]
+        if (self.map_item_param) |param| {
+            if (std.mem.eql(u8, name, param)) {
+                self.advance_token();
+                if (self.curKind() == .dot) {
+                    self.advance_token(); // .
+                    const field_name = self.curText();
+                    self.advance_token(); // field
+                    if (self.map_obj_array_idx) |oa_idx| {
+                        return try std.fmt.allocPrint(self.alloc, "_oa{d}_{s}[_i]", .{ oa_idx, field_name });
+                    }
+                    return try std.fmt.allocPrint(self.alloc, "_item.{s}", .{field_name});
+                }
+                return "_item";
+            }
+        }
+        // Map index param: i → _i
+        if (self.map_index_param) |idx_p| {
+            if (std.mem.eql(u8, name, idx_p)) {
+                self.advance_token();
+                return "@as(i64, @intCast(_i))";
+            }
+        }
         // State getter
         if (self.isState(name)) |slot_id| {
             self.advance_token();
