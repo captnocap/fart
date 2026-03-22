@@ -946,11 +946,20 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
                     .{ mi, m.string_array_slot_id, mi, mi, mi, m.string_array_slot_id }));
             } else if (m.is_object_array) {
                 // Object array — no _item, fields are accessed via _oa{N}_{field}[_i]
-                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                    "fn _rebuildMap{d}{s} void {{\n" ++
-                    "    _map_count_{d}{s} = @min(_oa{d}_count, MAX_MAP_{d});\n" ++
-                    "    for (0.._map_count_{d}{s}) |_i| {{\n",
-                    .{ mi, fn_params, mi, pool_prefix, m.object_array_idx, mi, mi, pool_prefix }));
+                if (is_nested) {
+                    // Nested: filter by parent index, use _nc as output counter
+                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                        "fn _rebuildMap{d}{s} void {{\n" ++
+                        "    var _nc: usize = 0;\n" ++
+                        "    for (0..@min(_oa{d}_count, MAX_MAP_{d})) |_i| {{\n",
+                        .{ mi, fn_params, m.object_array_idx, mi }));
+                } else {
+                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                        "fn _rebuildMap{d}{s} void {{\n" ++
+                        "    _map_count_{d}{s} = @min(_oa{d}_count, MAX_MAP_{d});\n" ++
+                        "    for (0.._map_count_{d}{s}) |_i| {{\n",
+                        .{ mi, fn_params, mi, pool_prefix, m.object_array_idx, mi, mi, pool_prefix }));
+                }
             } else {
                 try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
                     "fn _rebuildMap{d}() void {{\n" ++
@@ -1040,8 +1049,10 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
 
             // Emit inner children array assignment
             if (m.inner_count > 0 and !m.is_self_closing) {
+                // For nested maps: use _nc as output index (filtered)
+                const out_idx: []const u8 = if (is_nested) "_nc" else "_i";
                 try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                    "        _map_inner_{d}{s}[_i] = [{d}]Node{{ ", .{ mi, pool_prefix, m.inner_count }));
+                    "        _map_inner_{d}{s}[{s}] = [{d}]Node{{ ", .{ mi, pool_prefix, out_idx, m.inner_count }));
                 for (0..m.inner_count) |ni| {
                     const inner = m.inner_nodes[ni];
                     if (ni > 0) try out.appendSlice(self.alloc, ", ");
@@ -1108,8 +1119,9 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
             }
 
             // Emit pool node
+            const out_idx2: []const u8 = if (is_nested) "_nc" else "_i";
             try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                "        _map_pool_{d}{s}[_i] = .{{ ", .{ mi, pool_prefix }));
+                "        _map_pool_{d}{s}[{s}] = .{{ ", .{ mi, pool_prefix, out_idx2 }));
             var has_outer_field = false;
             if (m.outer_style.len > 0) {
                 try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
@@ -1143,17 +1155,25 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
                 }
             } else if (m.inner_count > 0 and !m.is_self_closing) {
                 if (has_outer_field) try out.appendSlice(self.alloc, ", ");
+                const out_idx3: []const u8 = if (is_nested) "_nc" else "_i";
                 try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                    ".children = &_map_inner_{d}{s}[_i]", .{ mi, pool_prefix }));
+                    ".children = &_map_inner_{d}{s}[{s}]", .{ mi, pool_prefix, out_idx3 }));
             }
             if (m.handler_body.len > 0) {
                 try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
                     ", .handlers = .{{ .on_press = _map_handlers_{d}[_i] }}", .{mi}));
             }
             try out.appendSlice(self.alloc, " };\n");
+            if (is_nested) {
+                try out.appendSlice(self.alloc, "        _nc += 1;\n");
+            }
 
             // Close for loop
             try out.appendSlice(self.alloc, "    }\n");
+            if (is_nested) {
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                    "    _map_count_{d}[_ci] = _nc;\n", .{mi}));
+            }
 
             // Update parent children slice (nested maps do this in the chaining loop)
             if (!is_nested) {
