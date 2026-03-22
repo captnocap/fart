@@ -62,6 +62,10 @@ pub fn parseMapExpression(self: *Generator) anyerror![]const u8 {
     }
     self.map_obj_array_idx = obj_arr_idx;
 
+    // Pre-reserve map slot so nested maps can reference this as parent
+    const my_map_idx = self.map_count;
+    self.map_count += 1;
+
     // Parse the JSX template
     const template = try parseMapTemplate(self);
 
@@ -77,10 +81,10 @@ pub fn parseMapExpression(self: *Generator) anyerror![]const u8 {
     // Skip ) closing map call
     if (self.curKind() == .rparen) self.advance_token();
 
-    // Record map info
-    if (self.map_count < codegen.MAX_MAPS) {
+    // Record map info (slot already reserved at my_map_idx)
+    if (my_map_idx < codegen.MAX_MAPS) {
         if (computed_idx) |ci| {
-            self.maps[self.map_count] = .{
+            self.maps[my_map_idx] = .{
                 .array_slot_id = 0,
                 .item_param = item_param,
                 .index_param = index_param,
@@ -99,7 +103,7 @@ pub fn parseMapExpression(self: *Generator) anyerror![]const u8 {
                 .handler_body = template.handler_body,
             };
         } else if (obj_arr_idx) |oi| {
-            self.maps[self.map_count] = .{
+            self.maps[my_map_idx] = .{
                 .array_slot_id = 0,
                 .item_param = item_param,
                 .index_param = index_param,
@@ -119,7 +123,7 @@ pub fn parseMapExpression(self: *Generator) anyerror![]const u8 {
         } else {
             const si = state_idx.?;
             const is_str_arr = std.meta.activeTag(self.state_slots[si].initial) == .string_array;
-            self.maps[self.map_count] = .{
+            self.maps[my_map_idx] = .{
                 .array_slot_id = if (is_str_arr) 0 else self.arraySlotId(si),
                 .item_param = item_param,
                 .index_param = index_param,
@@ -137,7 +141,7 @@ pub fn parseMapExpression(self: *Generator) anyerror![]const u8 {
                 .handler_body = template.handler_body,
             };
         }
-        self.map_count += 1;
+        // map_count already incremented via pre-reservation
     } else {
         self.setError("Too many .map() lists (limit: 32)");
     }
@@ -248,7 +252,15 @@ fn parseMapTemplate(self: *Generator) anyerror!codegen.MapTemplateResult {
                             inner_count += 1;
                         }
                     } else {
+                        const mc2 = self.map_count;
+                        const pmi2: i32 = if (self.map_count > 0) @as(i32, @intCast(self.map_count - 1)) else -1;
                         const child = try parseMapTemplateChild(self);
+                        if (self.map_count > mc2 and pmi2 >= 0) {
+                            for (mc2..self.map_count) |nmi| {
+                                self.maps[nmi].parent_map_idx = pmi2;
+                                self.maps[nmi].parent_inner_idx = inner_count;
+                            }
+                        }
                         if (inner_count < codegen.MAX_MAP_INNER) {
                             inner_nodes[inner_count] = child;
                             inner_count += 1;

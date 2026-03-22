@@ -1447,6 +1447,7 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
     }
     if (self.map_count > 0) {
         for (0..self.map_count) |mi| {
+            if (self.maps[mi].parent_map_idx >= 0) continue; // nested maps
             try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
                 "    _rebuildMap{d}();\n", .{mi}));
         }

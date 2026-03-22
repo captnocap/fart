@@ -16,20 +16,29 @@ pub fn emitMapRebuildCalls(self: *Generator, out: *std.ArrayListUnmanaged(u8), p
         try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
             "{s}_rebuildMap{d}();\n", .{ pad, mi }));
     }
-    // Chain nested map pools to parent inner nodes
+    // Chain nested map pools to parent inner nodes (inline rebuild with 2D pools)
     for (0..self.map_count) |mi| {
         const m = self.maps[mi];
         if (m.parent_map_idx < 0) continue;
         const pmi: u32 = @intCast(m.parent_map_idx);
-        // First rebuild the inner map independently
-        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-            "{s}_rebuildMap{d}();\n", .{ pad, mi }));
-        // Then assign inner pool to each outer item's child
-        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-            "{s}for (0.._map_count_{d}) |_ci| {{\n" ++
-            "{s}    _map_inner_{d}[_ci][{d}].children = _map_pool_{d}[0.._map_count_{d}];\n" ++
-            "{s}}}\n",
-            .{ pad, pmi, pad, pmi, m.parent_inner_idx, mi, mi, pad }));
+        // Inline rebuild: for each outer item, rebuild inner pool and assign
+        if (m.is_object_array) {
+            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                "{s}for (0.._map_count_{d}) |_ci| {{\n" ++
+                "{s}    _map_count_{d}[_ci] = @min(_oa{d}_count, MAX_MAP_{d});\n" ++
+                "{s}    for (0.._map_count_{d}[_ci]) |_i| {{\n" ++
+                "{s}        _map_pool_{d}[_ci][_i] = .{{}};\n" ++
+                "{s}    }}\n" ++
+                "{s}    _map_inner_{d}[_ci][{d}].children = _map_pool_{d}[_ci][0.._map_count_{d}[_ci]];\n" ++
+                "{s}}}\n",
+                .{ pad, pmi,
+                   pad, mi, m.object_array_idx, mi,
+                   pad, mi,
+                   pad, mi,
+                   pad,
+                   pad, pmi, m.parent_inner_idx, mi, mi,
+                   pad }));
+        }
     }
 }
 
