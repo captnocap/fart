@@ -1,4 +1,4 @@
-//! ZigOS Engine — owns the window lifecycle, GPU, text, layout, paint, and event loop.
+//! ReactJIT Engine — owns the window lifecycle, GPU, text, layout, paint, and event loop.
 //!
 //! The generated app provides a node tree + callbacks. The engine handles everything else.
 //! Adding new framework modules (geometry, watchdog, etc.) happens here — no codegen changes needed.
@@ -8,28 +8,147 @@ const c = @import("c.zig").imports;
 const layout = @import("layout.zig");
 const text_mod = @import("text.zig");
 const gpu = @import("gpu/gpu.zig");
-const qjs_runtime = @import("qjs_runtime.zig");
 const geometry = @import("geometry.zig");
 const selection = @import("selection.zig");
 const breakpoint = @import("breakpoint.zig");
 const windows = @import("windows.zig");
-const canvas = @import("canvas.zig");
 const svg_path = @import("svg_path.zig");
 const log = @import("log.zig");
 const tooltip = @import("tooltip.zig");
 const telemetry = @import("telemetry.zig");
-const devtools = @import("devtools.zig");
-const testharness = @import("testharness.zig");
-const videos = @import("videos.zig");
-const render_surfaces = @import("render_surfaces.zig");
 const filedrop = @import("filedrop.zig");
-const capture = @import("capture.zig");
-const effects = @import("effects.zig");
-const r3d = @import("gpu/3d.zig");
-const transition = @import("transition.zig");
-const physics2d = @import("physics2d.zig");
-
 const input = @import("input.zig");
+
+// ── Build-option-gated imports (lean tier omits these) ──────────────────
+const build_options = @import("build_options");
+const HAS_QUICKJS = if (@hasDecl(build_options, "has_quickjs")) build_options.has_quickjs else true;
+const HAS_PHYSICS = if (@hasDecl(build_options, "has_physics")) build_options.has_physics else true;
+const HAS_TERMINAL = if (@hasDecl(build_options, "has_terminal")) build_options.has_terminal else true;
+const HAS_VIDEO = if (@hasDecl(build_options, "has_video")) build_options.has_video else true;
+const HAS_RENDER_SURFACES = if (@hasDecl(build_options, "has_render_surfaces")) build_options.has_render_surfaces else true;
+const HAS_EFFECTS = if (@hasDecl(build_options, "has_effects")) build_options.has_effects else true;
+const HAS_CANVAS = if (@hasDecl(build_options, "has_canvas")) build_options.has_canvas else true;
+const HAS_3D = if (@hasDecl(build_options, "has_3d")) build_options.has_3d else true;
+const HAS_TRANSITIONS = if (@hasDecl(build_options, "has_transitions")) build_options.has_transitions else true;
+
+const qjs_runtime = if (HAS_QUICKJS) @import("qjs_runtime.zig") else struct {
+    pub fn initVM() void {}
+    pub fn deinit() void {}
+    pub fn tick() void {}
+    pub fn evalScript(_: []const u8) void {}
+    pub fn ptyActive() bool { return false; }
+    pub fn ptyHandleTextInput(_: [*:0]const u8) void {}
+    pub fn ptyHandleKeyDown(_: i32, _: u16) void {}
+    pub var telemetry_tick_us: i64 = 0;
+    pub var telemetry_layout_us: i64 = 0;
+    pub var telemetry_paint_us: i64 = 0;
+    pub var telemetry_fps: u32 = 0;
+    pub var telemetry_bridge_calls: u32 = 0;
+    pub var bridge_calls_this_second: u32 = 0;
+};
+const canvas = if (HAS_CANVAS) @import("canvas.zig") else struct {
+    pub const CameraTransform = struct { cx: f32 = 0, cy: f32 = 0, scale: f32 = 1 };
+    pub fn init() void {}
+    pub fn setCamera(_: f32, _: f32, _: f32) void {}
+    pub fn getHoveredNode() ?u16 { return null; }
+    pub fn setHoveredNode(_: ?u16) void {}
+    pub fn getSelectedNode() ?u16 { return null; }
+    pub fn clickNode() void {}
+    pub fn screenToGraph(_: f32, _: f32, _: f32, _: f32) [2]f32 { return .{ 0, 0 }; }
+    pub fn handleDrag(_: f32, _: f32) void {}
+    pub fn handleScroll(_: f32, _: f32, _: f32, _: f32, _: f32) void {}
+    pub fn renderCanvas(_: ?[]const u8, _: f32, _: f32, _: f32, _: f32) void {}
+    pub fn getCameraTransform(_: f32, _: f32, _: f32, _: f32) CameraTransform { return .{}; }
+    pub fn getNodeDim(_: u16) f32 { return 1.0; }
+    pub fn getFlowOverride(_: u16) bool { return true; }
+};
+const devtools = if (HAS_QUICKJS) @import("devtools.zig") else struct {
+    pub var root: layout.Node = .{};
+    pub fn _appInit() void {}
+    pub fn _appTick(_: u32) void {}
+    pub const JS_LOGIC: []const u8 = "";
+};
+const testharness = if (HAS_QUICKJS) @import("testharness.zig") else struct {
+    pub fn envEnabled() bool { return false; }
+    pub fn enable() void {}
+    pub fn tick() bool { return false; }
+    pub fn runAll(_: *Node) u8 { return 0; }
+};
+const videos = if (HAS_VIDEO) @import("videos.zig") else struct {
+    pub fn init() void {}
+    pub fn deinit() void {}
+    pub fn update() void {}
+    pub fn handleKey(_: i32) bool { return false; }
+    pub fn paintVideo(_: ?[]const u8, _: f32, _: f32, _: f32, _: f32, _: f32) bool { return false; }
+};
+const render_surfaces = if (HAS_RENDER_SURFACES) @import("render_surfaces.zig") else struct {
+    pub fn init() void {}
+    pub fn deinit() void {}
+    pub fn update() void {}
+    pub fn handleMouseDown(_: f32, _: f32, _: u8) bool { return false; }
+    pub fn handleMouseUp(_: f32, _: f32, _: u8) bool { return false; }
+    pub fn handleMouseMotion(_: f32, _: f32) bool { return false; }
+    pub fn handleTextInput(_: [*:0]const u8) bool { return false; }
+    pub fn handleKeyDown(_: i32) bool { return false; }
+    pub fn handleKeyUp(_: i32) bool { return false; }
+    pub fn paintSurface(_: ?[]const u8, _: f32, _: f32, _: f32, _: f32, _: f32) bool { return false; }
+};
+const capture = if (HAS_EFFECTS) @import("capture.zig") else struct {
+    pub fn init() void {}
+    pub fn deinit() void {}
+    pub fn handleKey(_: i32) bool { return false; }
+    pub fn tick(_: *Node) bool { return false; }
+};
+const effect_ctx = @import("effect_ctx.zig");
+const effects = if (HAS_EFFECTS) @import("effects.zig") else struct {
+    pub fn init() void {}
+    pub fn deinit() void {}
+    pub fn update(_: f32) void {}
+    pub fn paintEffect(_: ?[]const u8, _: f32, _: f32, _: f32, _: f32, _: f32) bool { return false; }
+    pub fn paintCustomEffect(_: effect_ctx.RenderFn, _: f32, _: f32, _: f32, _: f32, _: f32) bool { return false; }
+};
+const r3d = if (HAS_3D) @import("gpu/3d.zig") else struct {
+    pub fn render(_: *Node, _: f32, _: f32, _: f32, _: f32, _: f32) bool { return false; }
+    pub fn update(_: f32) void {}
+};
+const transition = if (HAS_TRANSITIONS) @import("transition.zig") else struct {
+    pub fn tick(_: f32) bool { return false; }
+};
+const vterm_mod = if (HAS_TERMINAL) @import("vterm.zig") else VtermStub;
+const VtermStub = struct {
+    pub const VtColor = struct { r: u8 = 0, g: u8 = 0, b: u8 = 0 };
+    pub const Cell = struct {
+        char_buf: [4]u8 = .{ 0, 0, 0, 0 }, char_len: u8 = 0, width: u8 = 1,
+        fg: ?VtColor = null, bg: ?VtColor = null, bold: bool = false,
+        italic: bool = false, underline: bool = false, strike: bool = false, reverse: bool = false,
+    };
+    pub fn spawnShell(_: anytype, _: u16, _: u16) void {}
+    pub fn pollPty() bool { return false; }
+    pub fn writePty(_: []const u8) void {}
+    pub fn getCell(_: u16, _: u16) Cell { return .{}; }
+    pub fn getRows() u16 { return 0; }
+    pub fn getCols() u16 { return 0; }
+    pub fn getCursorVisible() bool { return false; }
+    pub fn getCursorRow() u16 { return 0; }
+    pub fn getCursorCol() u16 { return 0; }
+    pub fn resizeVterm(_: u16, _: u16) void {}
+};
+const physics2d = if (HAS_PHYSICS) @import("physics2d.zig") else struct {
+    pub const BodyType = enum(c_int) { static_body = 0, kinematic = 1, dynamic = 2 };
+    pub fn init(_: f32, _: f32) void {}
+    pub fn isInitialized() bool { return false; }
+    pub fn tick(_: f32) void {}
+    pub fn createBody(_: BodyType, _: f32, _: f32, _: f32, _: ?*Node) ?u32 { return null; }
+    pub fn addBoxCollider(_: u32, _: f32, _: f32, _: f32, _: f32, _: f32) void {}
+    pub fn addCircleCollider(_: u32, _: f32, _: f32, _: f32, _: f32) void {}
+    pub fn setFixedRotation(_: u32, _: bool) void {}
+    pub fn setBullet(_: u32, _: bool) void {}
+    pub fn setGravityScale(_: u32, _: f32) void {}
+    pub fn startDrag(_: f32, _: f32) void {}
+    pub fn updateDrag(_: f32, _: f32) void {}
+    pub fn endDrag() void {}
+    pub fn isDragging() bool { return false; }
+};
 const Node = layout.Node;
 const Color = layout.Color;
 const TextEngine = text_mod.TextEngine;
@@ -59,8 +178,8 @@ fn findTerminalNode(node: *Node) ?*Node {
 
 /// Route SDL key event to the terminal PTY as ANSI escape sequences.
 fn terminalHandleKey(sym: i32, mod_state: u16) void {
-    const vterm_mod = @import("vterm.zig");
     const ctrl = (mod_state & @as(u16, c.KMOD_CTRL)) != 0;
+    vterm_mod.scrollToBottom(); // key input snaps to live view
     // Ctrl+letter → raw control character
     if (ctrl and sym >= 'a' and sym <= 'z') {
         const buf = [1]u8{@intCast(sym - 'a' + 1)};
@@ -100,10 +219,12 @@ fn terminalHandleKey(sym: i32, mod_state: u16) void {
 }
 
 fn terminalHandleTextInput(text: [*:0]const u8) void {
-    const vterm_mod = @import("vterm.zig");
     const slice = std.mem.span(text);
     std.debug.print("[terminal] textInput: len={d} chars=\"{s}\"\n", .{ slice.len, slice });
-    if (slice.len > 0) vterm_mod.writePty(slice);
+    if (slice.len > 0) {
+        vterm_mod.scrollToBottom(); // typing snaps to live view
+        vterm_mod.writePty(slice);
+    }
 }
 
 /// Walk the node tree to find Physics.World/Body/Collider nodes and set up the simulation.
@@ -229,7 +350,7 @@ fn brighten(color: Color, amount: u8) Color {
 // ── App interface ────────────────────────────────────────────────────────
 
 pub const AppConfig = struct {
-    title: [*:0]const u8 = "zigos app",
+    title: [*:0]const u8 = "tsz app",
     width: u32 = 1280,
     height: u32 = 800,
     min_width: u32 = 320,
@@ -553,7 +674,6 @@ noinline fn paintTextInput(node: *Node, id: u8) void {
 /// Each cell gets its own fg color; non-default backgrounds get a bg rect.
 /// Uses span-based batching: consecutive cells with the same fg are drawn as one string.
 noinline fn paintTerminal(node: *Node) void {
-    const vterm_mod = @import("vterm.zig");
     const r = node.computed;
     const font_size = node.terminal_font_size;
     const padding: f32 = 4;
@@ -577,18 +697,25 @@ noinline fn paintTerminal(node: *Node) void {
     const base_x = r.x + padding;
     const base_y = r.y + padding;
 
+    // Scrollback: when scrolled up, top rows come from scrollback, rest from live screen
+    const scroll_off = vterm_mod.scrollOffset();
+    const sb_visible: u16 = @min(scroll_off, rows);
+
     // Draw cells row by row
     var row: u16 = 0;
     while (row < rows) : (row += 1) {
         const cy = base_y + @as(f32, @floatFromInt(row)) * cell_h;
         var col: u16 = 0;
         while (col < cols) : (col += 1) {
-            const cell = vterm_mod.getCell(row, col);
+            const cell = if (row < sb_visible)
+                vterm_mod.getScrollbackCell(row, col)
+            else
+                vterm_mod.getCell(row - sb_visible, col);
             const cx = base_x + @as(f32, @floatFromInt(col)) * cell_w;
 
             // Background rect (non-default bg only)
             if (cell.bg) |bg| {
-                const actual_bg = if (cell.reverse) (cell.fg orelse vterm_mod.Color{ .r = 204, .g = 204, .b = 204 }) else bg;
+                const actual_bg = if (cell.reverse) (cell.fg orelse @TypeOf(cell.fg.?){ .r = 204, .g = 204, .b = 204 }) else bg;
                 gpu.drawRect(cx, cy, cell_w * @as(f32, @floatFromInt(cell.width)), cell_h,
                     @as(f32, @floatFromInt(actual_bg.r)) / 255.0,
                     @as(f32, @floatFromInt(actual_bg.g)) / 255.0,
@@ -598,8 +725,8 @@ noinline fn paintTerminal(node: *Node) void {
 
             // Foreground glyph — drawn at exact grid position (no FreeType advance)
             if (cell.char_len > 0 and cell.char_buf[0] != ' ') {
-                const default_fg = vterm_mod.Color{ .r = 204, .g = 204, .b = 204 };
-                const fg = if (cell.reverse) (cell.bg orelse vterm_mod.Color{ .r = 0, .g = 0, .b = 0 }) else (cell.fg orelse default_fg);
+                const default_fg = @TypeOf(cell.fg.?){ .r = 204, .g = 204, .b = 204 };
+                const fg = if (cell.reverse) (cell.bg orelse @TypeOf(cell.bg.?){ .r = 0, .g = 0, .b = 0 }) else (cell.fg orelse default_fg);
                 gpu.drawGlyphAt(
                     cell.char_buf[0..cell.char_len],
                     cx, cy, font_size,
@@ -615,8 +742,13 @@ noinline fn paintTerminal(node: *Node) void {
         }
     }
 
-    // Cursor
-    if (vterm_mod.getCursorVisible() and g_cursor_visible) {
+    // Scrollback indicator — dim bar at top when scrolled up
+    if (scroll_off > 0) {
+        gpu.drawRect(base_x, r.y, avail_w, 2, 0.5, 0.5, 0.8, 0.6 * g_paint_opacity, 0, 0, 0, 0, 0, 0);
+    }
+
+    // Cursor — only show when at live view (not scrolled up)
+    if (scroll_off == 0 and vterm_mod.getCursorVisible() and g_cursor_visible) {
         const crow = vterm_mod.getCursorRow();
         const ccol = vterm_mod.getCursorCol();
         if (crow < rows and ccol < cols) {
@@ -1008,6 +1140,20 @@ pub fn run(config: AppConfig) !void {
                     const mx: f32 = @floatFromInt(mx_i);
                     const my: f32 = @floatFromInt(my_i);
                     const events = @import("events.zig");
+                    // Terminal scrollback — mouse wheel scrolls history
+                    if (terminal_initialized) {
+                        if (findTerminalNode(config.root)) |tn| {
+                            const tr = tn.computed;
+                            if (mx >= tr.x and mx <= tr.x + tr.w and my >= tr.y and my <= tr.y + tr.h) {
+                                if (event.wheel.y > 0) {
+                                    vterm_mod.scrollUp(@intCast(event.wheel.y * 3));
+                                } else if (event.wheel.y < 0) {
+                                    vterm_mod.scrollDown(@intCast(-event.wheel.y * 3));
+                                }
+                                continue;
+                            }
+                        }
+                    }
                     // Canvas zoom — built-in (check devtools first, then app)
                     if ((if (devtools_visible) events.findCanvasNode(&devtools.root, mx, my) else null) orelse events.findCanvasNode(config.root, mx, my)) |cn| {
                         const delta: f32 = @floatFromInt(event.wheel.y);
@@ -1065,13 +1211,13 @@ pub fn run(config: AppConfig) !void {
         // Terminal tick — init PTY on first frame, poll for output
         if (!terminal_initialized) {
             if (findTerminalNode(config.root)) |_| {
-                const vterm_mod = @import("vterm.zig");
+        
                 vterm_mod.spawnShell("bash", 24, 80);
                 terminal_initialized = true;
             }
         }
         if (terminal_initialized) {
-            const vterm_mod = @import("vterm.zig");
+    
             _ = vterm_mod.pollPty();
         }
 

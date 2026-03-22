@@ -379,8 +379,59 @@ fn cb_resize(_: c_int, _: c_int, _: ?*anyopaque) callconv(.c) c_int {
     return 0;
 }
 
-fn cb_sb_pushline(_: c_int, _: [*c]const VTermScreenCell, _: ?*anyopaque) callconv(.c) c_int {
-    return 0;
+fn cb_sb_pushline(cols_count: c_int, cells: [*c]const VTermScreenCell, user: ?*anyopaque) callconv(.c) c_int {
+    const self = getSelf(user) orelse return 0;
+    const ncols: usize = @intCast(@min(cols_count, SB_MAX_COLS));
+
+    // Convert VTermScreenCells to our Cell type and store in ring buffer
+    for (0..ncols) |i| {
+        const vcell = cells[i];
+        var result = Cell{
+            .width = if (vcell.width > 0) vcell.width else 1,
+            .bold = attrBold(vcell.attrs),
+            .italic = attrItalic(vcell.attrs),
+            .underline = attrUnderline(vcell.attrs),
+            .strike = attrStrike(vcell.attrs),
+            .reverse = attrReverse(vcell.attrs),
+        };
+        // UTF-8 encode the codepoint
+        const cp = vcell.chars[0];
+        if (cp > 0) {
+            if (cp < 0x80) {
+                result.char_buf[0] = @intCast(cp);
+                result.char_len = 1;
+            } else if (cp < 0x800) {
+                result.char_buf[0] = @intCast(0xC0 | (cp >> 6));
+                result.char_buf[1] = @intCast(0x80 | (cp & 0x3F));
+                result.char_len = 2;
+            } else if (cp < 0x10000) {
+                result.char_buf[0] = @intCast(0xE0 | (cp >> 12));
+                result.char_buf[1] = @intCast(0x80 | ((cp >> 6) & 0x3F));
+                result.char_buf[2] = @intCast(0x80 | (cp & 0x3F));
+                result.char_len = 3;
+            } else if (cp <= 0x10FFFF) {
+                result.char_buf[0] = @intCast(0xF0 | (cp >> 18));
+                result.char_buf[1] = @intCast(0x80 | ((cp >> 12) & 0x3F));
+                result.char_buf[2] = @intCast(0x80 | ((cp >> 6) & 0x3F));
+                result.char_buf[3] = @intCast(0x80 | (cp & 0x3F));
+                result.char_len = 4;
+            }
+        }
+        // Resolve colors (copy to get mutable pointers for convert_color_to_rgb)
+        var fg_copy = vcell.fg;
+        var bg_copy = vcell.bg;
+        result.fg = resolveColor(self.screen, &fg_copy);
+        result.bg = resolveColor(self.screen, &bg_copy);
+        sb_lines[sb_head][i] = result;
+    }
+    // Clear remaining cols
+    for (ncols..SB_MAX_COLS) |i| sb_lines[sb_head][i] = Cell{};
+    sb_col_count[sb_head] = @intCast(ncols);
+
+    sb_head = (sb_head + 1) % SB_MAX_LINES;
+    if (sb_count < SB_MAX_LINES) sb_count += 1;
+
+    return 0; // return 0: we store for our own scrollback but don't support sb_popline
 }
 
 fn cb_sb_popline(_: c_int, _: [*c]VTermScreenCell, _: ?*anyopaque) callconv(.c) c_int {
@@ -540,4 +591,61 @@ pub fn closePty() void {
         p.closePty();
         g_pty = null;
     }
+}
+
+// ── Scrollback buffer ───────────────────────────────────────────────
+// Ring buffer storing lines that scrolled off the top of the screen.
+// cb_sb_pushline fills this; paintTerminal reads it when scrolled up.
+
+const SB_MAX_LINES: u16 = 500;
+const SB_MAX_COLS: u16 = 200;
+
+var sb_lines: [SB_MAX_LINES][SB_MAX_COLS]Cell = undefined;
+var sb_col_count: [SB_MAX_LINES]u16 = [_]u16{0} ** SB_MAX_LINES;
+var sb_head: u16 = 0; // next write position (ring)
+var sb_count: u16 = 0; // total lines stored (capped at SB_MAX_LINES)
+var sb_scroll: u16 = 0; // scroll offset: 0 = live view, >0 = scrolled up N lines
+
+/// Get a cell from the scrollback buffer.
+/// `sb_row` is display-order: 0 = oldest visible scrollback line when scrolled up.
+/// The caller passes the display row index relative to the scrollback region.
+/// Internally maps to ring buffer position based on current scroll offset.
+pub fn getScrollbackCell(display_row: u16, col: u16) Cell {
+    if (display_row >= sb_scroll or display_row >= sb_count) return Cell{};
+    if (col >= SB_MAX_COLS) return Cell{};
+    // display_row 0 = oldest visible = age sb_scroll
+    // display_row (sb_scroll-1) = newest visible = age 1
+    const age = sb_scroll - display_row;
+    const idx = (sb_head + SB_MAX_LINES - age) % SB_MAX_LINES;
+    if (col >= sb_col_count[idx]) return Cell{};
+    return sb_lines[idx][col];
+}
+
+/// Number of lines in the scrollback buffer.
+pub fn scrollbackCount() u16 {
+    return sb_count;
+}
+
+/// Current scroll offset (0 = at bottom / live view).
+pub fn scrollOffset() u16 {
+    return sb_scroll;
+}
+
+/// Scroll up by N lines (into history).
+pub fn scrollUp(n: u16) void {
+    sb_scroll = @min(sb_scroll + n, sb_count);
+}
+
+/// Scroll down by N lines (toward live view).
+pub fn scrollDown(n: u16) void {
+    if (n >= sb_scroll) {
+        sb_scroll = 0;
+    } else {
+        sb_scroll -= n;
+    }
+}
+
+/// Snap to bottom (live view).
+pub fn scrollToBottom() void {
+    sb_scroll = 0;
 }
