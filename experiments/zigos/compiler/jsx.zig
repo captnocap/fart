@@ -97,6 +97,29 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
     var tag_name = self.curText();
     self.advance_token();
 
+    // 3D namespace: lexer tokenizes <3D.Mesh> as number("3") + ident("D") + dot + ident
+    // Combine into "3D" so the dot-namespace logic below can parse 3D.Mesh/Camera/Light/Group
+    var is_3d = false;
+    var is_3d_mesh = false;
+    var is_3d_camera = false;
+    var is_3d_light = false;
+    var is_3d_group = false;
+    if (std.mem.eql(u8, tag_name, "3") and self.curKind() == .identifier and std.mem.eql(u8, self.curText(), "D")) {
+        self.advance_token(); // skip "D"
+        is_3d = true;
+        tag_name = "Box"; // 3D elements compile to Box nodes with 3D fields
+        if (self.curKind() == .dot) {
+            self.advance_token(); // skip "."
+            if (self.curKind() == .identifier) {
+                const sub = self.curText();
+                if (std.mem.eql(u8, sub, "Mesh")) { self.advance_token(); is_3d_mesh = true; }
+                else if (std.mem.eql(u8, sub, "Camera")) { self.advance_token(); is_3d_camera = true; }
+                else if (std.mem.eql(u8, sub, "Light")) { self.advance_token(); is_3d_light = true; }
+                else if (std.mem.eql(u8, sub, "Group")) { self.advance_token(); is_3d_group = true; }
+            }
+        }
+    }
+
     // HTML tag → primitive resolution (div→Box, span→Text, etc.)
     if (html_tags.resolve(tag_name)) |prim| {
         tag_name = prim;
@@ -200,6 +223,18 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
     var canvas_drift_x_str: []const u8 = "";
     var canvas_drift_y_str: []const u8 = "";
     var tooltip_str: []const u8 = "";
+    // 3D element props
+    var s3d_geometry: []const u8 = "";
+    var s3d_light_type: []const u8 = "";
+    var s3d_color: []const u8 = "";
+    var s3d_fov: []const u8 = "";
+    var s3d_intensity: []const u8 = "";
+    var s3d_radius: []const u8 = "";
+    var s3d_pos: [3][]const u8 = .{ "", "", "" };
+    var s3d_rot: [3][]const u8 = .{ "", "", "" };
+    var s3d_lookat: [3][]const u8 = .{ "", "", "" };
+    var s3d_dir: [3][]const u8 = .{ "", "", "" };
+    var s3d_size: [3][]const u8 = .{ "", "", "" };
     var href_str: []const u8 = "";
     var hoverable: bool = false;
     var on_render_start: ?u32 = null; // <Effect onRender={...}>
@@ -331,6 +366,29 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
                     canvas_stroke_w_str = try attrs.parseExprAttr(self);
                 } else if (std.mem.eql(u8, attr_name, "flowSpeed") and is_canvas_path) {
                     canvas_flow_speed_str = try parseSignedNum(self);
+                // ── 3D element props ──
+                } else if (is_3d and std.mem.eql(u8, attr_name, "geometry")) {
+                    s3d_geometry = try attrs.parseStringAttr(self);
+                } else if (is_3d and std.mem.eql(u8, attr_name, "type")) {
+                    s3d_light_type = try attrs.parseStringAttr(self);
+                } else if (is_3d and std.mem.eql(u8, attr_name, "color")) {
+                    s3d_color = try attrs.parseStringAttr(self);
+                } else if (is_3d and std.mem.eql(u8, attr_name, "fov")) {
+                    s3d_fov = try attrs.parseExprAttr(self);
+                } else if (is_3d and std.mem.eql(u8, attr_name, "intensity")) {
+                    s3d_intensity = try attrs.parseExprAttr(self);
+                } else if (is_3d and std.mem.eql(u8, attr_name, "radius")) {
+                    s3d_radius = try attrs.parseExprAttr(self);
+                } else if (is_3d and std.mem.eql(u8, attr_name, "position")) {
+                    s3d_pos = try parse3DVector(self);
+                } else if (is_3d and std.mem.eql(u8, attr_name, "rotation")) {
+                    s3d_rot = try parse3DVector(self);
+                } else if (is_3d and std.mem.eql(u8, attr_name, "lookAt")) {
+                    s3d_lookat = try parse3DVector(self);
+                } else if (is_3d and std.mem.eql(u8, attr_name, "direction")) {
+                    s3d_dir = try parse3DVector(self);
+                } else if (is_3d and std.mem.eql(u8, attr_name, "size")) {
+                    s3d_size = try parse3DVector(self);
                 } else {
                     try attrs.skipAttrValue(self);
                 }
@@ -605,15 +663,19 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
             }
         }
 
-        // Skip closing tag
+        // Skip closing tag (handles </Tag>, </Canvas.Node>, </3D.Mesh>)
         if (self.curKind() == .lt_slash) {
             self.advance_token();
-            if (self.curKind() == .identifier) {
+            // </3D.Mesh> — number + identifier + dot + identifier
+            if (self.curKind() == .number) {
+                self.advance_token(); // skip "3"
+                if (self.curKind() == .identifier) self.advance_token(); // skip "D"
+            } else if (self.curKind() == .identifier) {
                 self.advance_token();
-                if (self.curKind() == .dot) {
-                    self.advance_token();
-                    if (self.curKind() == .identifier) self.advance_token();
-                }
+            }
+            if (self.curKind() == .dot) {
+                self.advance_token();
+                if (self.curKind() == .identifier) self.advance_token();
             }
             if (self.curKind() == .gt or self.curKind() == .gt_eq) self.advance_token();
         }
@@ -759,10 +821,57 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
         try fields.appendSlice(self.alloc, "\"");
     }
 
-    // Scene3D — 3D viewport flag
+    // Scene3D — 3D viewport flag (activates when tree has 3D.* children)
     if (is_scene3d) {
         if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
         try fields.appendSlice(self.alloc, ".scene3d = true");
+    }
+
+    // 3D element type flags + props
+    if (is_3d) {
+        if (is_3d_mesh) {
+            if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
+            try fields.appendSlice(self.alloc, ".scene3d_mesh = true");
+        }
+        if (is_3d_camera) {
+            if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
+            try fields.appendSlice(self.alloc, ".scene3d_camera = true");
+        }
+        if (is_3d_light) {
+            if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
+            try fields.appendSlice(self.alloc, ".scene3d_light = true");
+        }
+        if (is_3d_group) {
+            if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
+            try fields.appendSlice(self.alloc, ".scene3d_group = true");
+        }
+        // 3D prop fields
+        if (s3d_geometry.len > 0) {
+            try fields.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, ", .scene3d_geometry = \"{s}\"", .{s3d_geometry}));
+        }
+        if (s3d_light_type.len > 0) {
+            try fields.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, ", .scene3d_light_type = \"{s}\"", .{s3d_light_type}));
+        }
+        if (s3d_color.len > 0) {
+            // Parse hex color → r,g,b floats
+            const hex = if (s3d_color.len > 0 and s3d_color[0] == '#') s3d_color[1..] else s3d_color;
+            if (hex.len == 6) {
+                const r_val = std.fmt.parseInt(u8, hex[0..2], 16) catch 200;
+                const g_val = std.fmt.parseInt(u8, hex[2..4], 16) catch 200;
+                const b_val = std.fmt.parseInt(u8, hex[4..6], 16) catch 200;
+                try fields.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                    ", .scene3d_color_r = {d:.3}, .scene3d_color_g = {d:.3}, .scene3d_color_b = {d:.3}",
+                    .{ @as(f32, @floatFromInt(r_val)) / 255.0, @as(f32, @floatFromInt(g_val)) / 255.0, @as(f32, @floatFromInt(b_val)) / 255.0 }));
+            }
+        }
+        if (s3d_pos[0].len > 0) try fields.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, ", .scene3d_pos_x = {s}, .scene3d_pos_y = {s}, .scene3d_pos_z = {s}", .{ s3d_pos[0], s3d_pos[1], s3d_pos[2] }));
+        if (s3d_rot[0].len > 0) try fields.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, ", .scene3d_rot_x = {s}, .scene3d_rot_y = {s}, .scene3d_rot_z = {s}", .{ s3d_rot[0], s3d_rot[1], s3d_rot[2] }));
+        if (s3d_lookat[0].len > 0) try fields.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, ", .scene3d_look_x = {s}, .scene3d_look_y = {s}, .scene3d_look_z = {s}", .{ s3d_lookat[0], s3d_lookat[1], s3d_lookat[2] }));
+        if (s3d_dir[0].len > 0) try fields.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, ", .scene3d_dir_x = {s}, .scene3d_dir_y = {s}, .scene3d_dir_z = {s}", .{ s3d_dir[0], s3d_dir[1], s3d_dir[2] }));
+        if (s3d_size[0].len > 0) try fields.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, ", .scene3d_size_x = {s}, .scene3d_size_y = {s}, .scene3d_size_z = {s}", .{ s3d_size[0], s3d_size[1], s3d_size[2] }));
+        if (s3d_fov.len > 0) try fields.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, ", .scene3d_fov = {s}", .{s3d_fov}));
+        if (s3d_intensity.len > 0) try fields.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, ", .scene3d_intensity = {s}", .{s3d_intensity}));
+        if (s3d_radius.len > 0) try fields.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, ", .scene3d_radius = {s}", .{s3d_radius}));
     }
 
     // onRender callback (Effect element)
@@ -1446,6 +1555,29 @@ pub fn parseRouteElement(self: *Generator) anyerror![]const u8 {
     self.has_routes = true;
 
     return element_expr;
+}
+
+/// Parse {[x, y, z]} — a 3-element numeric array in JSX attribute value.
+/// Returns 3 string expressions. Handles negatives and missing values.
+fn parse3DVector(self: *Generator) ![3][]const u8 {
+    var result: [3][]const u8 = .{ "0", "0", "0" };
+    if (self.curKind() == .lbrace) self.advance_token(); // {
+    if (self.curKind() == .lbracket) self.advance_token(); // [
+    var i: usize = 0;
+    while (i < 3 and self.curKind() != .rbracket and self.curKind() != .rbrace and self.curKind() != .eof) {
+        var neg = false;
+        if (self.curKind() == .minus) { neg = true; self.advance_token(); }
+        if (self.curKind() == .number) {
+            const val = self.curText();
+            self.advance_token();
+            result[i] = if (neg) try std.fmt.allocPrint(self.alloc, "-{s}", .{val}) else val;
+        }
+        i += 1;
+        if (self.curKind() == .comma) self.advance_token();
+    }
+    if (self.curKind() == .rbracket) self.advance_token(); // ]
+    if (self.curKind() == .rbrace) self.advance_token(); // }
+    return result;
 }
 
 fn parseSignedNum(self: *Generator) ![]const u8 {
