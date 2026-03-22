@@ -181,7 +181,12 @@ pub const Lexer = struct {
             }
 
             // String literals
-            if (ch == '"' or ch == '\'') {
+            // Single quotes are only string delimiters after = : ( [ , { operators.
+            // Inside JSX text content, ' is an apostrophe (e.g., "doesn't").
+            if (ch == '"' or (ch == '\'' and self.count > 0 and switch (self.tokens[self.count - 1].kind) {
+                .equals, .colon, .lparen, .lbracket, .comma, .lbrace, .plus, .minus, .pipe, .ampersand, .question, .lt, .gt, .bang, .semicolon => true,
+                else => false,
+            })) {
                 const quote = ch;
                 self.pos += 1;
                 while (self.pos < self.source.len) {
