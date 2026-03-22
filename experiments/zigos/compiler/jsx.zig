@@ -383,7 +383,15 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
                 // {items.map((item, index) => <JSX/>)} dynamic list
                 if (self.isMapAhead()) {
                     const map_result = try jsx_map.parseMapExpression(self);
-                    try child_exprs.append(self.alloc, map_result);
+                    // Make map placeholder inherit parent's layout properties
+                    // so the intermediate node doesn't break flex layout
+                    if (std.mem.eql(u8, map_result, ".{}") and style_str.len > 0) {
+                        const inherited = try std.fmt.allocPrint(self.alloc,
+                            ".{{ .style = .{{ {s} }} }}", .{style_str});
+                        try child_exprs.append(self.alloc, inherited);
+                    } else {
+                        try child_exprs.append(self.alloc, map_result);
+                    }
                     if (self.map_count > 0) {
                         self.maps[self.map_count - 1].child_idx = @intCast(child_exprs.items.len - 1);
                     }
