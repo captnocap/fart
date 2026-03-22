@@ -18,6 +18,7 @@ const tooltip = @import("tooltip.zig");
 const telemetry = @import("telemetry.zig");
 const filedrop = @import("filedrop.zig");
 const input = @import("input.zig");
+const classifier = @import("classifier.zig");
 
 // ── Build-option-gated imports (lean tier omits these) ──────────────────
 const build_options = @import("build_options");
@@ -771,10 +772,20 @@ noinline fn paintTerminal(node: *Node) void {
                     g_paint_opacity, 0, 0, 0, 0, 0, 0);
             }
 
-            // Foreground glyph — drawn at exact grid position (no FreeType advance)
+            // Foreground glyph — semantic color for live rows, cell color for scrollback
             if (cell.char_len > 0 and cell.char_buf[0] != ' ') {
                 const default_fg = @TypeOf(cell.fg.?){ .r = 204, .g = 204, .b = 204 };
-                const fg = if (cell.reverse) (cell.bg orelse @TypeOf(cell.bg.?){ .r = 0, .g = 0, .b = 0 }) else (cell.fg orelse default_fg);
+                const raw_fg = if (cell.reverse) (cell.bg orelse @TypeOf(cell.bg.?){ .r = 0, .g = 0, .b = 0 }) else (cell.fg orelse default_fg);
+                // Use semantic classifier color for live screen rows
+                const fg = if (row >= sb_visible) blk: {
+                    const live_row = row - sb_visible;
+                    const token = classifier.getRowToken(live_row);
+                    if (token != .output and token != .text) {
+                        const tc = classifier.tokenColor(token);
+                        break :blk @TypeOf(raw_fg){ .r = tc.r, .g = tc.g, .b = tc.b };
+                    }
+                    break :blk raw_fg;
+                } else raw_fg;
                 gpu.drawGlyphAt(
                     cell.char_buf[0..cell.char_len],
                     cx, cy, font_size,
@@ -1323,8 +1334,19 @@ pub fn run(config: AppConfig) !void {
             }
         }
         if (terminal_initialized) {
-    
-            _ = vterm_mod.pollPty();
+            if (vterm_mod.pollPty()) {
+                classifier.markDirty();
+            }
+            // Re-classify when damage occurred
+            if (classifier.isDirty()) {
+                const cls_rows = vterm_mod.getRows();
+                var cls_r: u16 = 0;
+                while (cls_r < cls_rows) : (cls_r += 1) {
+                    const cls_text = vterm_mod.getRowText(cls_r);
+                    classifier.classifyAndCache(cls_r, cls_text, cls_rows);
+                }
+                classifier.clearDirty();
+            }
         }
 
         // Layout (main window)
