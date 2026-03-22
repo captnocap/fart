@@ -1,0 +1,93 @@
+import { TileFrame, TileTitle, TileBody, TileLabel, TileRow, TileRowSpread, TileButton, TileButtonLabel, TileCode, CanvasField } from './tile_cls';
+
+const [ax, setAx] = useState(30);
+const [ay, setAy] = useState(15);
+const [bx, setBx] = useState(170);
+const [by, setBy] = useState(15);
+const [cx, setCx] = useState(100);
+const [cy, setCy] = useState(65);
+const [selected, setSelected] = useState(0);
+const [moveCount, setMoveCount] = useState(0);
+
+<script>
+function selectNode(id) {
+  setSelected(id);
+}
+
+function moveSelected(dx, dy) {
+  if (selected === 0) return;
+  if (selected === 1) {
+    var nx = ax + dx;
+    var ny = ay + dy;
+    if (nx < 0) nx = 0;
+    if (nx > 216) nx = 216;
+    if (ny < 0) ny = 0;
+    if (ny > 80) ny = 80;
+    setAx(nx);
+    setAy(ny);
+  }
+  if (selected === 2) {
+    var nx2 = bx + dx;
+    var ny2 = by + dy;
+    if (nx2 < 0) nx2 = 0;
+    if (nx2 > 216) nx2 = 216;
+    if (ny2 < 0) ny2 = 0;
+    if (ny2 > 80) ny2 = 80;
+    setBx(nx2);
+    setBy(ny2);
+  }
+  if (selected === 3) {
+    var nx3 = cx + dx;
+    var ny3 = cy + dy;
+    if (nx3 < 0) nx3 = 0;
+    if (nx3 > 216) nx3 = 216;
+    if (ny3 < 0) ny3 = 0;
+    if (ny3 > 80) ny3 = 80;
+    setCx(nx3);
+    setCy(ny3);
+  }
+  setMoveCount(moveCount + 1);
+}
+</script>
+
+function CanvasTile() {
+  return (
+    <C.TileFrame>
+      <C.TileRowSpread>
+        <C.TileTitle>Canvas Nodes</C.TileTitle>
+        <C.TileLabel>{selected > 0 ? `node ${selected}` : 'tap a node'}</C.TileLabel>
+      </C.TileRowSpread>
+      <C.TileBody>
+        <C.CanvasField>
+          <Graph style={{ width: 236, height: 100 }}>
+            <Graph.Path d={`M ${ax + 10},${ay + 10} L ${bx + 10},${by + 10}`} stroke="theme-border" strokeWidth={2} />
+            <Graph.Path d={`M ${ax + 10},${ay + 10} L ${cx + 10},${cy + 10}`} stroke="theme-border" strokeWidth={2} />
+            <Graph.Path d={`M ${bx + 10},${by + 10} L ${cx + 10},${cy + 10}`} stroke="theme-border" strokeWidth={2} />
+            <Graph.Node x={ax} y={ay} w={20} h={20}>
+              <Pressable onPress={() => { selectNode(1) }}>
+                <Box style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: 'theme-error', borderWidth: selected == 1 ? 2 : 0, borderColor: 'theme-text' }} />
+              </Pressable>
+            </Graph.Node>
+            <Graph.Node x={bx} y={by} w={20} h={20}>
+              <Pressable onPress={() => { selectNode(2) }}>
+                <Box style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: 'theme-primary', borderWidth: selected == 2 ? 2 : 0, borderColor: 'theme-text' }} />
+              </Pressable>
+            </Graph.Node>
+            <Graph.Node x={cx} y={cy} w={20} h={20}>
+              <Pressable onPress={() => { selectNode(3) }}>
+                <Box style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: 'theme-success', borderWidth: selected == 3 ? 2 : 0, borderColor: 'theme-text' }} />
+              </Pressable>
+            </Graph.Node>
+          </Graph>
+        </C.CanvasField>
+        <C.TileRow>
+          <C.TileButton onPress={() => { moveSelected(-15, 0) }}><C.TileButtonLabel>←</C.TileButtonLabel></C.TileButton>
+          <C.TileButton onPress={() => { moveSelected(0, -15) }}><C.TileButtonLabel>↑</C.TileButtonLabel></C.TileButton>
+          <C.TileButton onPress={() => { moveSelected(0, 15) }}><C.TileButtonLabel>↓</C.TileButtonLabel></C.TileButton>
+          <C.TileButton onPress={() => { moveSelected(15, 0) }}><C.TileButtonLabel>→</C.TileButtonLabel></C.TileButton>
+          <C.TileCode>{`${moveCount} moves`}</C.TileCode>
+        </C.TileRow>
+      </C.TileBody>
+    </C.TileFrame>
+  );
+}

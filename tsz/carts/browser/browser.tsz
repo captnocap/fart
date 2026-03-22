@@ -1,4 +1,4 @@
-// WPT Browser — renders real web pages inside the zigos engine
+// WPT Browser — renders real web pages inside the tsz engine
 // Port of love2d/examples/browser/ — default URL: https://wpt.live
 
 import { browser_init } from "./browser.script";
@@ -6,8 +6,10 @@ import { browser_init } from "./browser.script";
 const [currentUrl, setCurrentUrl] = useState('https://wpt.live/');
 const [pageTitle, setPageTitle] = useState('ReactJIT Browser');
 const [loading, setLoading] = useState(0);
-const [pageContent, setPageContent] = useState([{ text: 'Welcome to ReactJIT Browser. Enter a URL above or click Open WPT.', color: 0x9ca3af, href: '' }]);
+const [pageContent, setPageContent] = useState([{ text: 'Welcome to ReactJIT Browser.', color: 0x9ca3af, href: '', isLink: 0 }]);
 const [statusText, setStatusText] = useState('Ready');
+const [navBack, setNavBack] = useState(0);
+const [navFwd, setNavFwd] = useState(0);
 
 function App() {
   return (
@@ -17,15 +19,18 @@ function App() {
       </Box>
 
       <Box style={{ flexDirection: 'row', gap: 6, padding: 8, backgroundColor: '#1f2335', alignItems: 'center' }}>
-        <Pressable onPress={() => { setStatusText('Back') }} style={{ backgroundColor: '#3b4261', borderRadius: 4, padding: 6, paddingLeft: 10, paddingRight: 10 }}>
+        <Pressable onPress={() => { setNavBack(navBack + 1) }} style={{ backgroundColor: '#3b4261', borderRadius: 4, padding: 6, paddingLeft: 10, paddingRight: 10 }}>
           <Text fontSize={14} color="#a9b1d6">←</Text>
         </Pressable>
-        <Pressable onPress={() => { setStatusText('Forward') }} style={{ backgroundColor: '#3b4261', borderRadius: 4, padding: 6, paddingLeft: 10, paddingRight: 10 }}>
+        <Pressable onPress={() => { setNavFwd(navFwd + 1) }} style={{ backgroundColor: '#3b4261', borderRadius: 4, padding: 6, paddingLeft: 10, paddingRight: 10 }}>
           <Text fontSize={14} color="#a9b1d6">→</Text>
         </Pressable>
-        <Box style={{ flexGrow: 1, backgroundColor: '#292e42', borderRadius: 4, padding: 6, paddingLeft: 10 }}>
-          <Text fontSize={12} color="#c0caf5">{currentUrl}</Text>
-        </Box>
+        <TextInput
+          value={currentUrl}
+          onChangeText={(t) => { setCurrentUrl(t) }}
+          fontSize={12}
+          style={{ flexGrow: 1, backgroundColor: '#292e42', borderRadius: 4, padding: 6, paddingLeft: 10, height: 28 }}
+        />
         <Pressable onPress={() => { setLoading(1); setStatusText('Loading...') }} style={{ backgroundColor: '#7aa2f7', borderRadius: 4, padding: 6, paddingLeft: 12, paddingRight: 12 }}>
           <Text fontSize={12} color="#1a1b26">Go</Text>
         </Pressable>
@@ -34,7 +39,8 @@ function App() {
       <ScrollView style={{ flexGrow: 1, backgroundColor: '#1a1b26', padding: 16 }}>
         {pageContent.map((item) => (
           <Box style={{ marginBottom: 4 }}>
-            <Text fontSize={14} color={item.color} href={item.href}>{item.text}</Text>
+            {item.isLink == 1 && <Text fontSize={14} color={item.color} href={item.href}>{item.text}</Text>}
+            {item.isLink == 0 && <Text fontSize={14} color={item.color}>{item.text}</Text>}
           </Box>
         ))}
       </ScrollView>
