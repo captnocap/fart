@@ -1060,6 +1060,18 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
                         try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
                             ".text = \"{s}\"", .{inner.static_text}));
                         has_field = true;
+                    } else if (is_nested and m.is_object_array and ni == 0) {
+                        // Nested map inner node: add first string field as text
+                        const oa = self.object_arrays[m.object_array_idx];
+                        for (0..oa.field_count) |fi| {
+                            if (oa.fields[fi].field_type == .string) {
+                                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                                    ".text = _oa{d}_{s}[_i][0.._oa{d}_{s}_lens[_i]], .font_size = 11, .text_color = Color.rgb(226, 232, 240)",
+                                    .{ m.object_array_idx, oa.fields[fi].name, m.object_array_idx, oa.fields[fi].name }));
+                                has_field = true;
+                                break;
+                            }
+                        }
                     }
                     if (inner.font_size.len > 0) {
                         if (has_field) try out.appendSlice(self.alloc, ", ");
