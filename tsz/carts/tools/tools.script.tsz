@@ -1,0 +1,149 @@
+// Tools script — mock registry data + simulated build actions
+
+// Mock project registry (will read from ~/.tsz/registry.json later)
+var _projects = [
+  { name: 'Storybook', path: 'tsz/carts/storybook/Storybook.tsz', status: 0 },
+  { name: 'Dashboard', path: 'tsz/carts/dashboard/Dashboard.tsz', status: 1 },
+  { name: 'Browser', path: 'tsz/carts/browser/browser.tsz', status: 0 },
+  { name: 'Inspector', path: 'tsz/carts/inspector/Inspector.tsz', status: 2 }
+];
+
+// Status: 0=stopped, 1=running, 2=crashed
+
+// Initialize project list state
+setProjects([
+  { name: 'Storybook', path: 'tsz/carts/storybook/Storybook.tsz', status: 0, statusText: 'stopped' },
+  { name: 'Dashboard', path: 'tsz/carts/dashboard/Dashboard.tsz', status: 1, statusText: 'running' },
+  { name: 'Browser', path: 'tsz/carts/browser/browser.tsz', status: 0, statusText: 'stopped' },
+  { name: 'Inspector', path: 'tsz/carts/inspector/Inspector.tsz', status: 2, statusText: 'crashed' }
+]);
+
+var _logLines = [];
+var _actionQueue = [];
+
+function appendLog(line) {
+  _logLines.push(line);
+  if (_logLines.length > 200) _logLines = _logLines.slice(-200);
+  // Update log state — join last 20 visible lines
+  var visible = _logLines.slice(-20);
+  var combined = visible.join('\n');
+  setLogText(combined);
+  setLogCount(_logLines.length);
+}
+
+function simulateBuild(projectName, projectPath) {
+  appendLog('$ zigos-compiler build ' + projectPath);
+  setActiveProject(projectName);
+  setActionRunning(1);
+
+  // Simulate async build steps
+  setTimeout(function() { appendLog('[1/4] Lexing...'); }, 200);
+  setTimeout(function() { appendLog('[2/4] Parsing...'); }, 500);
+  setTimeout(function() { appendLog('[3/4] Codegen...'); }, 900);
+  setTimeout(function() {
+    appendLog('[4/4] Emit → ' + projectPath.replace('.tsz', '.gen.zig'));
+    appendLog('✓ Build OK — 0.94s');
+    appendLog('');
+    setActionRunning(0);
+  }, 1300);
+}
+
+function simulateRun(projectName, projectPath) {
+  appendLog('$ zig build engine-app && ./zig-out/bin/app');
+  appendLog('Starting ' + projectName + '...');
+  setActiveProject(projectName);
+  setActionRunning(1);
+
+  setTimeout(function() {
+    appendLog('[engine] SDL2 init OK');
+    appendLog('[engine] wgpu adapter: Vulkan');
+    appendLog('[engine] window: 1280x800');
+    appendLog('[engine] ' + projectName + ' running');
+    appendLog('');
+    setActionRunning(0);
+  }, 800);
+}
+
+function simulateTest(projectName) {
+  appendLog('$ tsz test ' + projectName);
+  setActiveProject(projectName);
+  setActionRunning(1);
+
+  setTimeout(function() {
+    appendLog('Running 12 tests...');
+  }, 200);
+  setTimeout(function() {
+    appendLog('  ✓ layout.flex_row');
+    appendLog('  ✓ layout.flex_column');
+    appendLog('  ✓ layout.wrap');
+    appendLog('  ✓ state.useState');
+    appendLog('  ✓ state.setState');
+    appendLog('  ✓ events.hitTest');
+    appendLog('  ✗ events.scroll (expected 120, got 118)');
+    appendLog('  ✓ text.measure');
+    appendLog('  ✓ text.wrap');
+    appendLog('  ✓ gpu.rect');
+    appendLog('  ✓ gpu.text');
+    appendLog('  ✓ gpu.curve');
+    appendLog('');
+    appendLog('11 passed, 1 failed');
+    appendLog('');
+    setActionRunning(0);
+  }, 1200);
+}
+
+function simulateClean(projectName) {
+  appendLog('$ rm -rf zig-cache/ zig-out/ *.gen.zig');
+  appendLog('Cleaned ' + projectName);
+  appendLog('');
+}
+
+function simulateDev(projectName, projectPath) {
+  appendLog('$ tsz dev ' + projectPath);
+  appendLog('Watching for changes...');
+  setActiveProject(projectName);
+  setActionRunning(1);
+
+  setTimeout(function() {
+    appendLog('[dev] initial build OK');
+    appendLog('[dev] serving at http://localhost:8080');
+    appendLog('[dev] watching ' + projectPath);
+    appendLog('');
+    setActionRunning(0);
+  }, 600);
+}
+
+// Action dispatcher — called from UI via state polling
+globalThis._toolsAction = function(action, projectIdx) {
+  var p = _projects[projectIdx];
+  if (!p) return;
+
+  if (action === 'build') simulateBuild(p.name, p.path);
+  else if (action === 'run') simulateRun(p.name, p.path);
+  else if (action === 'test') simulateTest(p.name);
+  else if (action === 'clean') simulateClean(p.name);
+  else if (action === 'dev') simulateDev(p.name, p.path);
+};
+
+globalThis._toolsAddProject = function(path) {
+  if (!path || path.length === 0) return;
+  var name = path.split('/').pop().replace('.tsz', '');
+  _projects.push({ name: name, path: path, status: 0 });
+  // Rebuild project list state
+  var list = [];
+  for (var i = 0; i < _projects.length; i++) {
+    var s = _projects[i].status;
+    var st = s === 1 ? 'running' : (s === 2 ? 'crashed' : 'stopped');
+    list.push({ name: _projects[i].name, path: _projects[i].path, status: s, statusText: st });
+  }
+  setProjects(list);
+  appendLog('Added project: ' + name + ' (' + path + ')');
+  appendLog('');
+};
+
+// Initial log
+appendLog('tsz tools v0.1.0');
+appendLog('4 projects registered');
+appendLog('');
+
+console.log('[tools] script loaded');

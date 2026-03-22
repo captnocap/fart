@@ -1,0 +1,62 @@
+classifier({
+  Shell: { type: 'Box', style: { flexDirection: 'column', width: '100%', height: '100%', backgroundColor: 'theme-bg' } },
+
+  TitleBar: { type: 'Box', style: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingLeft: 16, paddingRight: 16, paddingTop: 10, paddingBottom: 10, backgroundColor: 'theme-bgElevated', borderColor: 'theme-border', borderWidth: 1 } },
+  TitleText: { type: 'Text', fontSize: 14, color: 'theme-text' },
+  TitleDim: { type: 'Text', fontSize: 11, color: 'theme-textDim' },
+
+  TabRow: { type: 'Box', style: { flexDirection: 'row', gap: 0, backgroundColor: 'theme-bgElevated', borderColor: 'theme-border', borderWidth: 1, paddingLeft: 8 } },
+  Tab: { type: 'Pressable', style: { paddingLeft: 16, paddingRight: 16, paddingTop: 8, paddingBottom: 8 } },
+  TabActive: { type: 'Pressable', style: { paddingLeft: 16, paddingRight: 16, paddingTop: 8, paddingBottom: 8, backgroundColor: 'theme-surface' } },
+  TabText: { type: 'Text', fontSize: 12, color: 'theme-textDim' },
+  TabTextActive: { type: 'Text', fontSize: 12, color: 'theme-text' },
+
+  Content: { type: 'Box', style: { flexGrow: 1, flexBasis: 0, flexDirection: 'column', padding: 16, gap: 12 } },
+
+  SectionTitle: { type: 'Text', fontSize: 13, color: 'theme-text' },
+  SectionRow: { type: 'Box', style: { flexDirection: 'row', gap: 8, alignItems: 'center' } },
+
+  ProjectCard: { type: 'Box', style: { flexDirection: 'column', padding: 12, backgroundColor: 'theme-bgElevated', borderRadius: 8, borderWidth: 1, borderColor: 'theme-border', gap: 8 } },
+  ProjectHeader: { type: 'Box', style: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' } },
+  ProjectName: { type: 'Text', fontSize: 13, color: 'theme-text' },
+  ProjectPath: { type: 'Text', fontSize: 10, color: 'theme-textDim' },
+  ProjectStatus: { type: 'Text', fontSize: 10, color: 'theme-success' },
+  ProjectStatusStopped: { type: 'Text', fontSize: 10, color: 'theme-textDim' },
+  ProjectStatusCrashed: { type: 'Text', fontSize: 10, color: 'theme-error' },
+
+  ActionRow: { type: 'Box', style: { flexDirection: 'row', gap: 6, flexWrap: 'wrap' } },
+  ActionBuild: { type: 'Pressable', style: { paddingLeft: 10, paddingRight: 10, paddingTop: 5, paddingBottom: 5, backgroundColor: 'theme-primary', borderRadius: 4 } },
+  ActionRun: { type: 'Pressable', style: { paddingLeft: 10, paddingRight: 10, paddingTop: 5, paddingBottom: 5, backgroundColor: 'theme-success', borderRadius: 4 } },
+  ActionDev: { type: 'Pressable', style: { paddingLeft: 10, paddingRight: 10, paddingTop: 5, paddingBottom: 5, backgroundColor: 'theme-accent', borderRadius: 4 } },
+  ActionTest: { type: 'Pressable', style: { paddingLeft: 10, paddingRight: 10, paddingTop: 5, paddingBottom: 5, backgroundColor: 'theme-warning', borderRadius: 4 } },
+  ActionClean: { type: 'Pressable', style: { paddingLeft: 10, paddingRight: 10, paddingTop: 5, paddingBottom: 5, borderRadius: 4, borderWidth: 1, borderColor: 'theme-border' } },
+  ActionLabel: { type: 'Text', fontSize: 10, color: 'theme-bg' },
+  ActionLabelDim: { type: 'Text', fontSize: 10, color: 'theme-textSecondary' },
+
+  DotRunning: { type: 'Box', style: { width: 8, height: 8, borderRadius: 4, backgroundColor: 'theme-success' } },
+  DotStopped: { type: 'Box', style: { width: 8, height: 8, borderRadius: 4, backgroundColor: 'theme-textDim' } },
+  DotCrashed: { type: 'Box', style: { width: 8, height: 8, borderRadius: 4, backgroundColor: 'theme-error' } },
+
+  LogPanel: { type: 'Box', style: { flexDirection: 'column', backgroundColor: 'theme-surface', borderRadius: 6, borderWidth: 1, borderColor: 'theme-border', gap: 0 } },
+  LogHeader: { type: 'Box', style: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingLeft: 10, paddingRight: 10, paddingTop: 6, paddingBottom: 6, borderColor: 'theme-border', borderWidth: 1, borderRadius: 0 } },
+  LogHeaderText: { type: 'Text', fontSize: 11, color: 'theme-textSecondary' },
+  LogBody: { type: 'ScrollView', style: { flexGrow: 1, flexBasis: 0, padding: 8 } },
+  LogLine: { type: 'Text', fontSize: 10, color: 'theme-textSecondary' },
+  LogLineSuccess: { type: 'Text', fontSize: 10, color: 'theme-success' },
+  LogLineError: { type: 'Text', fontSize: 10, color: 'theme-error' },
+  LogLineWarn: { type: 'Text', fontSize: 10, color: 'theme-warning' },
+  LogLineAccent: { type: 'Text', fontSize: 10, color: 'theme-accent' },
+  LogLineDim: { type: 'Text', fontSize: 10, color: 'theme-textDim' },
+
+  AddProjectRow: { type: 'Box', style: { flexDirection: 'row', gap: 8, alignItems: 'center' } },
+  AddInput: { type: 'TextInput', fontSize: 11, style: { flexGrow: 1, height: 30, backgroundColor: 'theme-surface', borderWidth: 1, borderColor: 'theme-border', borderRadius: 4, paddingLeft: 8, paddingRight: 8 } },
+  AddButton: { type: 'Pressable', style: { paddingLeft: 14, paddingRight: 14, paddingTop: 6, paddingBottom: 6, backgroundColor: 'theme-primary', borderRadius: 4 } },
+  AddButtonLabel: { type: 'Text', fontSize: 11, color: 'theme-bg' },
+
+  StatusBar: { type: 'Box', style: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingLeft: 12, paddingRight: 12, paddingTop: 4, paddingBottom: 4, backgroundColor: 'theme-bgElevated', borderColor: 'theme-border', borderWidth: 1 } },
+  StatusText: { type: 'Text', fontSize: 9, color: 'theme-textDim' },
+  StatusAccent: { type: 'Text', fontSize: 9, color: 'theme-accent' },
+
+  Placeholder: { type: 'Box', style: { flexGrow: 1, flexBasis: 0, alignItems: 'center', justifyContent: 'center' } },
+  PlaceholderText: { type: 'Text', fontSize: 14, color: 'theme-textDim' },
+})
