@@ -574,7 +574,13 @@ pub fn parseTemplateLiteralFromText(self: *Generator, inner: []const u8) !codege
             .dep_count = dep_count,
         };
     }
-    return .{ .is_dynamic = false, .static_text = inner, .fmt = "", .args = "", .dep_slots = undefined, .dep_count = 0 };
+    // If fmt was populated by resolved static interpolations (e.g., ${propValue} → "2,340"),
+    // use the resolved fmt instead of the raw inner which still contains ${...} syntax
+    const resolved = if (fmt.items.len > 0 and !std.mem.eql(u8, fmt.items, inner))
+        try self.alloc.dupe(u8, fmt.items)
+    else
+        inner;
+    return .{ .is_dynamic = false, .static_text = resolved, .fmt = "", .args = "", .dep_slots = undefined, .dep_count = 0 };
 }
 
 // ── Color parsing ──
