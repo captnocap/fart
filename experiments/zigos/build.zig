@@ -100,7 +100,10 @@ fn addAppExe(
     // FFI shims
     exe.root_module.addCSourceFile(.{ .file = b.path("ffi/clock_shim.c"), .flags = &.{"-O2"} });
     exe.root_module.addCSourceFile(.{ .file = b.path("ffi/compute_shim.c"), .flags = &.{"-O2"} });
+    exe.root_module.addCSourceFile(.{ .file = b.path("ffi/physics_shim.cpp"), .flags = &.{"-O2"} });
     exe.root_module.addIncludePath(b.path("ffi"));
+    // Box2D (2D physics)
+    exe.linkSystemLibrary("box2d");
     // wgpu
     exe.root_module.addImport("wgpu", wgpu_mod);
     // System
