@@ -10,6 +10,7 @@ const Generator = codegen.Generator;
 const PropType = codegen.PropType;
 const CompInstance = codegen.CompInstance;
 const jsx = @import("jsx.zig");
+const jsx_map = @import("jsx_map.zig");
 const handlers = @import("handlers.zig");
 const attrs = @import("attrs.zig");
 
@@ -214,8 +215,11 @@ pub fn inlineComponent(self: *Generator, comp: *codegen.ComponentInfo) anyerror!
     } else {
         self.component_children_exprs = null;
     }
-    self.pos = comp.body_pos; // jump to the component's return <JSX> position
-    const result = try jsx.parseJSXElement(self);
+    self.pos = comp.body_pos; // jump to the component's return position
+    const result = if (self.isMapAhead())
+        try jsx_map.parseMapExpression(self) // Component returns .map() directly
+    else
+        try jsx.parseJSXElement(self);
     self.pos = saved_pos; // jump back to caller
     self.prop_stack_count = saved_prop_count; // pop props
     self.component_children_exprs = saved_children;

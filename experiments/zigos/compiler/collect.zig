@@ -456,22 +456,24 @@ pub fn collectComponents(self: *Generator) void {
                     if (self.isIdent("return") and brace_depth == 1) {
                         self.advance_token();
                         if (self.curKind() == .lparen) self.advance_token();
-                        if (self.curKind() == .lt) {
+                        if (self.curKind() == .lt or self.curKind() == .identifier) {
                             if (self.component_count < codegen.MAX_COMPONENTS) {
                                 const body_pos = self.pos;
                                 var has_children = false;
-                                const scan_save = self.pos;
-                                var scan_depth: u32 = 0;
-                                while (self.pos < self.lex.count) {
-                                    if (self.curKind() == .lt) scan_depth += 1;
-                                    if (self.isIdent("children")) {
-                                        has_children = true;
-                                        break;
+                                if (self.curKind() == .lt) {
+                                    const scan_save = self.pos;
+                                    var scan_depth: u32 = 0;
+                                    while (self.pos < self.lex.count) {
+                                        if (self.curKind() == .lt) scan_depth += 1;
+                                        if (self.isIdent("children")) {
+                                            has_children = true;
+                                            break;
+                                        }
+                                        if (self.curKind() == .rbrace and scan_depth == 0) break;
+                                        self.advance_token();
                                     }
-                                    if (self.curKind() == .rbrace and scan_depth == 0) break;
-                                    self.advance_token();
+                                    self.pos = scan_save;
                                 }
-                                self.pos = scan_save;
 
                                 self.components[self.component_count] = .{
                                     .name = name,
