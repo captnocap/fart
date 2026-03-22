@@ -1,6 +1,6 @@
 # ReactJIT
 
-Write React. Get a native binary. No runtime, no interpreter, no garbage collector.
+Write React. Get a native binary. Your UI compiles to native code — no virtual DOM, no reconciler, no garbage collector. QuickJS is embedded for optional `<script>` blocks (dynamic logic, timers, data), but your components, layout, and rendering are all compiled Zig.
 
 ```
 app.tsz (TypeScript + JSX)

@@ -43,6 +43,7 @@ function _syncState() {
     if (_filter === 'completed' && !t.completed) continue;
     var prefix = t.completed ? '\u2713 ' : '  ';
     visible.push({ text: prefix + t.title, color: t.completed ? 0xd9d9d9 : 0x4d4d4d });
+    console.log('[todo] visible item ' + i + ': ' + prefix + t.title);
   }
   setTodos(visible);
 }
