@@ -411,6 +411,7 @@ pub fn collectComponents(self: *Generator) void {
             if (self.curKind() == .lparen) {
                 self.advance_token();
                 if (self.curKind() == .lbrace) {
+                    // Destructured props: function Comp({ a, b, c })
                     self.advance_token();
                     while (self.curKind() != .rbrace and self.curKind() != .eof) {
                         if (self.curKind() == .identifier) {
@@ -423,6 +424,18 @@ pub fn collectComponents(self: *Generator) void {
                         if (self.curKind() == .comma) self.advance_token();
                     }
                     if (self.curKind() == .rbrace) self.advance_token();
+                } else if (self.curKind() == .identifier) {
+                    // Positional props: function Comp(a, b, c)
+                    while (self.curKind() != .rparen and self.curKind() != .eof) {
+                        if (self.curKind() == .identifier) {
+                            if (prop_count < codegen.MAX_COMPONENT_PROPS) {
+                                prop_names[prop_count] = self.curText();
+                                prop_count += 1;
+                            }
+                        }
+                        self.advance_token();
+                        if (self.curKind() == .comma) self.advance_token();
+                    }
                 }
                 var paren_depth: u32 = 1;
                 while (self.pos < self.lex.count and paren_depth > 0) {
