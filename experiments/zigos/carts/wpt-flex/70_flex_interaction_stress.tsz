@@ -2,6 +2,7 @@ function App() {
   return (
     <div style={{ width: '100%', height: '100%', flexDirection: 'column', padding: 10, gap: 6 }}>
       <Text fontSize={18}>WPT: flex property interaction stress</Text>
+      <Text fontSize={10} color="#888">VERIFY: grow+shrink+basis+min+max all interact, nested grow chains distribute correctly</Text>
 
       <Text fontSize={11}>grow + shrink + basis + min + max — all at once</Text>
       <div style={{ flexDirection: 'row', width: 300, height: 40, backgroundColor: '#333' }}>

@@ -2,7 +2,7 @@ function App() {
   return (
     <div style={{ width: '100%', height: '100%', flexDirection: 'column', padding: 10, gap: 6 }}>
       <Text fontSize={18}>Tailwind verification: sizing</Text>
-      <Text fontSize={10} color="#888">w-12=48px, w-24=96px, w-1/2=50%, h-screen=100%</Text>
+      <Text fontSize={10} color="#888">VERIFY: w-8 through w-48 increasing widths, fractional widths, min/max constraints</Text>
 
       <Text fontSize={11}>Fixed widths: w-8(32) w-16(64) w-24(96) w-32(128) w-48(192)</Text>
       <div style={{ flexDirection: 'column', gap: 4, width: 300, backgroundColor: '#333', padding: 4 }}>

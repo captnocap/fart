@@ -2,6 +2,7 @@ function App() {
   return (
     <div style={{ width: '100%', height: '100%', flexDirection: 'column', padding: 10, gap: 8 }}>
       <h1 style={{ fontSize: 18 }}>WPT: position absolute in flex</h1>
+      <Text fontSize={10} color="#888">VERIFY: Absolute child removed from flow, other items fill space, column overlay</Text>
 
       <p style={{ fontSize: 11 }}>Absolute child removed from flow — other items fill space</p>
       <div style={{ flexDirection: 'row', width: 300, height: 80, backgroundColor: '#333', padding: 4, gap: 4 }}>

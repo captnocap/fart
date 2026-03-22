@@ -2,6 +2,7 @@ function App() {
   return (
     <div style={{ width: '100%', height: '100%', flexDirection: 'column', padding: 10, gap: 8 }}>
       <h1 style={{ fontSize: 18 }}>WPT: mixed sizing units</h1>
+      <Text fontSize={10} color="#888">VERIFY: px+%+grow mix correctly, % inside grow parent, column px+%+grow</Text>
 
       <p style={{ fontSize: 11 }}>px + % + grow in same container</p>
       <div style={{ flexDirection: 'row', width: 400, height: 40, backgroundColor: '#333' }}>

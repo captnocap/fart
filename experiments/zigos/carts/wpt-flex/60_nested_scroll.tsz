@@ -2,6 +2,7 @@ function App() {
   return (
     <div style={{ width: '100%', height: '100%', flexDirection: 'column', padding: 10, gap: 8 }}>
       <Text fontSize={18}>WPT: ScrollView</Text>
+      <Text fontSize={10} color="#888">VERIFY: First scroll shows 3 of 6 items, side-by-side scrolls independent, wrapped grid contained</Text>
 
       <Text fontSize={11}>Vertical scroll — content taller than container</Text>
       <ScrollView style={{ width: 200, height: 120, backgroundColor: '#333' }}>

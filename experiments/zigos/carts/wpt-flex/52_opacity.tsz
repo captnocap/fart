@@ -5,6 +5,7 @@ function App() {
       <div style={{ backgroundColor: '#2E7D32', padding: 4, borderRadius: 4 }}>
         <Text color="#FFF" fontSize={12}>PASS — opacity cascades through paint tree via g_paint_opacity</Text>
       </div>
+      <Text fontSize={10} color="#888">VERIFY: opacity 0 invisible, 0.25 faint, 0.5 half transparent, nested children inherit parent opacity</Text>
 
       <Text fontSize={11}>opacity 0, 0.25, 0.5, 0.75, 1.0</Text>
       <div style={{ flexDirection: 'row', gap: 8 }}>

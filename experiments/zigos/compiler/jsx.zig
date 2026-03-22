@@ -139,6 +139,8 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
         std.mem.eql(u8, tag_name, "Sunburst") or std.mem.eql(u8, tag_name, "Cymatics");
     // Effect → Box with effect_render callback (composable user-defined effects)
     const is_custom_effect = std.mem.eql(u8, tag_name, "Effect");
+    // Scene3D → Box with scene3d flag (3D viewport)
+    const is_scene3d = std.mem.eql(u8, tag_name, "Scene3D");
     // Canvas → Box with canvas_type field
     const is_canvas = std.mem.eql(u8, tag_name, "Canvas");
     // Graph → Box with graph_container (SVG paths, no pan/zoom)
@@ -755,6 +757,12 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
         try fields.appendSlice(self.alloc, ".effect_type = \"");
         try fields.appendSlice(self.alloc, tag_name);
         try fields.appendSlice(self.alloc, "\"");
+    }
+
+    // Scene3D — 3D viewport flag
+    if (is_scene3d) {
+        if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
+        try fields.appendSlice(self.alloc, ".scene3d = true");
     }
 
     // onRender callback (Effect element)

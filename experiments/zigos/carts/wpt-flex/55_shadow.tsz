@@ -5,6 +5,7 @@ function App() {
       <div style={{ backgroundColor: '#B71C1C', padding: 4, borderRadius: 4 }}>
         <Text color="#FFF" fontSize={12}>FAIL — NOT IMPLEMENTED: GPU renderer does not paint box shadows</Text>
       </div>
+      <Text fontSize={10} color="#888">VERIFY: Box shadows visible with offset and blur (FAIL if no shadows visible)</Text>
 
       <Text fontSize={11} color="#CCC">shadowOffsetX/Y + shadowBlur + shadowColor</Text>
       <div style={{ flexDirection: 'row', gap: 20, padding: 10 }}>

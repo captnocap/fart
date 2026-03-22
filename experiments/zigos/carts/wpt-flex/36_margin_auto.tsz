@@ -2,6 +2,7 @@ function App() {
   return (
     <div style={{ width: '100%', height: '100%', flexDirection: 'column', padding: 10, gap: 8 }}>
       <Text fontSize={18}>WPT: margin auto in flex</Text>
+      <Text fontSize={10} color="#888">VERIFY: marginLeft:auto pushes right, both auto centers, auto between groups separates</Text>
 
       <Text fontSize={11}>marginLeft auto — pushes item to the right</Text>
       <div style={{ flexDirection: 'row', width: 300, height: 40, backgroundColor: '#333' }}>

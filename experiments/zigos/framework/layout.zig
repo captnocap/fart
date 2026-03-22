@@ -190,6 +190,7 @@ pub const Node = struct {
     content_height: f32 = 0,
     content_width: f32 = 0,
     devtools_viz: DevtoolsViz = .none,
+    scene3d: bool = false,             // true = 3D viewport (renders offscreen, composites)
     graph_container: bool = false,    // true = Graph element (SVG paths, no pan/zoom)
     canvas_type: ?[]const u8 = null,
     // Canvas viewport — initial camera (center point + zoom)

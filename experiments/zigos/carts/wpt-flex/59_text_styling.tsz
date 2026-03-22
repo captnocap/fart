@@ -5,6 +5,7 @@ function App() {
       <div style={{ backgroundColor: '#2E7D32', padding: 4, borderRadius: 4 }}>
         <Text color="#FFF" fontSize={12}>PASS — all text styling including numberOfLines truncation</Text>
       </div>
+      <Text fontSize={10} color="#888">VERIFY: Font sizes scale 8-32, letter spacing widens, text-align left/center/right, numberOfLines truncates</Text>
 
       <Text fontSize={11}>fontSize — 8, 12, 16, 24, 32</Text>
       <div style={{ flexDirection: 'row', gap: 8, alignItems: 'end' }}>

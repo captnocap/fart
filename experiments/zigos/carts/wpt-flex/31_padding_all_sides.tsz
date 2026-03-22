@@ -2,6 +2,7 @@ function App() {
   return (
     <div style={{ width: '100%', height: '100%', flexDirection: 'column', padding: 10, gap: 8 }}>
       <h1 style={{ fontSize: 18 }}>WPT: padding on all sides</h1>
+      <Text fontSize={10} color="#888">VERIFY: Uniform padding insets equally, asymmetric padding visible, nested padding stacks</Text>
 
       <p style={{ fontSize: 11 }}>Uniform padding — insets from all edges equally</p>
       <div style={{ flexDirection: 'row', width: 300, backgroundColor: '#333', padding: 20, gap: 4 }}>

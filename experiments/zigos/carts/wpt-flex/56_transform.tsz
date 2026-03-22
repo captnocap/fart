@@ -5,6 +5,7 @@ function App() {
       <div style={{ backgroundColor: '#2E7D32', padding: 4, borderRadius: 4 }}>
         <Text color="#FFF" fontSize={12}>PASS — rotation/scale applied via GPU vertex shader transform</Text>
       </div>
+      <Text fontSize={10} color="#888">VERIFY: Rotation tilts boxes at 15/45/90 degrees, scaleX/Y stretches/compresses</Text>
 
       <Text fontSize={11}>rotation — 0, 15, 45, 90 degrees</Text>
       <div style={{ flexDirection: 'row', gap: 20, padding: 20 }}>

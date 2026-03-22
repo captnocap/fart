@@ -5,6 +5,7 @@ function App() {
       <div style={{ backgroundColor: '#B71C1C', padding: 4, borderRadius: 4 }}>
         <Text color="#FFF" fontSize={12}>FAIL — borderWidth/borderColor render but per-side border props not supported by renderer</Text>
       </div>
+      <Text fontSize={10} color="#888">VERIFY: Border widths 1/2/4/8 visible, border with background, border+grow</Text>
 
       <Text fontSize={11}>borderWidth + borderColor</Text>
       <div style={{ flexDirection: 'row', gap: 8 }}>

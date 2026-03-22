@@ -4,6 +4,7 @@ function App() {
       <div style={{ flexDirection: 'row', height: 40, backgroundColor: '#161B22', alignItems: 'center', paddingLeft: 12, paddingRight: 12, gap: 12 }}>
         <div style={{ width: 24, height: 24, backgroundColor: '#58A6FF' }} />
         <span style={{ color: '#C9D1D9', fontSize: 13 }}>WPT Full Page Layout</span>
+        <Text fontSize={10} color="#888">VERIFY: Full dashboard with header/sidebar/stats/activity/recent panels</Text>
         <div style={{ flexGrow: 1 }} />
         <div style={{ width: 200, height: 26, backgroundColor: '#21262D' }} />
         <div style={{ width: 24, height: 24, backgroundColor: '#30363D' }} />

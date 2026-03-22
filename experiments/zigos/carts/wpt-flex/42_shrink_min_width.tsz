@@ -2,6 +2,7 @@ function App() {
   return (
     <div style={{ width: '100%', height: '100%', flexDirection: 'column', padding: 10, gap: 8 }}>
       <h1 style={{ fontSize: 18 }}>WPT: flex-shrink blocked by min-width</h1>
+      <Text fontSize={10} color="#888">VERIFY: minWidth prevents shrink below limit, one min+one normal, column minHeight</Text>
 
       <p style={{ fontSize: 11 }}>Items want to shrink but minWidth prevents it</p>
       <div style={{ flexDirection: 'row', width: 200, height: 40, backgroundColor: '#333' }}>

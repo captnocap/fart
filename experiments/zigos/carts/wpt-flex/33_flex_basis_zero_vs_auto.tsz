@@ -2,6 +2,7 @@ function App() {
   return (
     <div style={{ width: '100%', height: '100%', flexDirection: 'column', padding: 10, gap: 8 }}>
       <h1 style={{ fontSize: 18 }}>WPT: flex-basis 0 vs width</h1>
+      <Text fontSize={10} color="#888">VERIFY: basis:0+grow is pure ratio, width+grow uses width as start, basis overrides width</Text>
 
       <p style={{ fontSize: 11 }}>basis:0 + grow — ignores content, pure ratio</p>
       <div style={{ flexDirection: 'row', width: 300, height: 40, backgroundColor: '#333' }}>

@@ -2,6 +2,7 @@ function App() {
   return (
     <div style={{ width: '100%', height: '100%', flexDirection: 'column', padding: 10, gap: 8 }}>
       <Text fontSize={18}>WPT: z-index stacking</Text>
+      <Text fontSize={10} color="#888">VERIFY: Higher z-index renders on top, default z-index paints in DOM order</Text>
 
       <Text fontSize={11}>Overlapping absolute elements — higher zIndex on top</Text>
       <div style={{ width: 200, height: 120, backgroundColor: '#333' }}>

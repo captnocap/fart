@@ -2,7 +2,7 @@ function App() {
   return (
     <div style={{ width: '100%', height: '100%', flexDirection: 'column', padding: 10, gap: 8 }}>
       <Text fontSize={18}>Tailwind verification: layout classes</Text>
-      <Text fontSize={10} color="#888">Each row shows the inline style equivalent of Tailwind classes</Text>
+      <Text fontSize={10} color="#888">VERIFY: Tailwind flex/gap/padding/bg-color matches inline style equivalents</Text>
 
       <Text fontSize={11}>flex gap-4 p-8 bg-gray-900 = flexDirection:row gap:16 padding:32 bg:#111827</Text>
       <div style={{ flexDirection: 'row', gap: 16, padding: 32, backgroundColor: '#111827' }}>

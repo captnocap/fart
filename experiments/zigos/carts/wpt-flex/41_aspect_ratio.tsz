@@ -2,6 +2,7 @@ function App() {
   return (
     <div style={{ width: '100%', height: '100%', flexDirection: 'column', padding: 10, gap: 8 }}>
       <h1 style={{ fontSize: 18 }}>WPT: aspect ratio in flex</h1>
+      <Text fontSize={10} color="#888">VERIFY: width+aspectRatio:1 is square, aspectRatio:2 is wide, height+aspectRatio derives width</Text>
 
       <p style={{ fontSize: 11 }}>width:100 + aspectRatio:1 — should be 100x100 square</p>
       <div style={{ flexDirection: 'row', width: 400, height: 120, backgroundColor: '#333', gap: 8, padding: 4 }}>

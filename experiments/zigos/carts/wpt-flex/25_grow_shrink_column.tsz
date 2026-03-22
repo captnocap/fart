@@ -2,6 +2,7 @@ function App() {
   return (
     <div style={{ width: '100%', height: '100%', flexDirection: 'column', padding: 10, gap: 8 }}>
       <h1 style={{ fontSize: 18 }}>WPT: grow and shrink in column</h1>
+      <Text fontSize={10} color="#888">VERIFY: Column grow shares vertical space 1:2:1, shrink compresses, header+body+footer</Text>
 
       <p style={{ fontSize: 11 }}>Column grow — items share vertical space</p>
       <div style={{ flexDirection: 'column', width: 120, height: 200, backgroundColor: '#333' }}>

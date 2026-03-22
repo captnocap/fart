@@ -2,6 +2,7 @@ function App() {
   return (
     <div style={{ width: '100%', height: '100%', flexDirection: 'column', padding: 10, gap: 8 }}>
       <h1 style={{ fontSize: 18 }}>WPT: wrap multiline height</h1>
+      <Text fontSize={10} color="#888">VERIFY: Wrap auto-sizes height, unequal heights make tallest-per-line, single item per line</Text>
 
       <p style={{ fontSize: 11 }}>Wrap — container height auto-sizes to fit all lines</p>
       <div style={{ flexDirection: 'row', flexWrap: 'wrap', width: 200, backgroundColor: '#333', gap: 4 }}>

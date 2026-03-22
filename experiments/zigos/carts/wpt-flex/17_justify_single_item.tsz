@@ -2,6 +2,7 @@ function App() {
   return (
     <div style={{ width: '100%', height: '100%', flexDirection: 'column', padding: 10, gap: 6 }}>
       <h1 style={{ fontSize: 18 }}>WPT: justify-content with single item</h1>
+      <Text fontSize={10} color="#888">VERIFY: Single item: start=left, center=middle, end=right, space-between=left, space-around/evenly=center</Text>
       <p style={{ fontSize: 11 }}>Edge case: how justify-content behaves with only 1 item</p>
 
       <p style={{ fontSize: 10 }}>start</p>

@@ -2,6 +2,7 @@ function App() {
   return (
     <div style={{ width: '100%', height: '100%', flexDirection: 'column', padding: 10, gap: 8 }}>
       <h1 style={{ fontSize: 18 }}>WPT: column wrap</h1>
+      <Text fontSize={10} color="#888">VERIFY: Column+wrap items flow down then to next column, height determines wrap point</Text>
 
       <p style={{ fontSize: 11 }}>Note: column + wrap is partially supported</p>
       <p style={{ fontSize: 11 }}>Wrap point is determined by container height</p>

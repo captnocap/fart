@@ -2,6 +2,8 @@ function App() {
   return (
     <div style={{ width: '100%', height: '100%', flexDirection: 'column', padding: 10, gap: 6 }}>
       <Text fontSize={18}>WPT: align-content (multi-line cross-axis)</Text>
+      <Text fontSize={10} color="#888">VERIFY: 7 columns showing start/center/end/between/around/evenly/stretch for wrapped lines</Text>
+      <Text fontSize={10} color="#66f">href: https://wpt.live/css/css-flexbox/align-content-001.htm</Text>
 
       <div style={{ flexDirection: 'row', gap: 8 }}>
         <div style={{ flexDirection: 'column' }}>

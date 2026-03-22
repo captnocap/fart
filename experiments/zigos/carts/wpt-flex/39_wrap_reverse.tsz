@@ -2,6 +2,7 @@ function App() {
   return (
     <div style={{ width: '100%', height: '100%', flexDirection: 'column', padding: 10, gap: 8 }}>
       <Text fontSize={18}>WPT: flex-wrap reverse</Text>
+      <Text fontSize={10} color="#888">VERIFY: Normal wrap lines top-to-bottom, wrap-reverse lines bottom-to-top</Text>
 
       <Text fontSize={11}>Normal wrap — lines flow top to bottom</Text>
       <div style={{ flexDirection: 'row', flexWrap: 'wrap', width: 200, backgroundColor: '#333', gap: 4, padding: 4 }}>

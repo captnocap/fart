@@ -2,6 +2,7 @@ function App() {
   return (
     <div style={{ width: '100%', height: '100%', flexDirection: 'column', padding: 10, gap: 8 }}>
       <h1 style={{ fontSize: 18 }}>WPT: flex-grow with padding</h1>
+      <Text fontSize={10} color="#888">VERIFY: Container padding reduces grow space, item padding adds to size</Text>
 
       <p style={{ fontSize: 11 }}>Container padding reduces space for grow</p>
       <div style={{ flexDirection: 'row', width: 300, backgroundColor: '#333', padding: 20 }}>

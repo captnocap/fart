@@ -2,7 +2,7 @@ function App() {
   return (
     <div style={{ width: '100%', height: '100%', flexDirection: 'column', padding: 10, gap: 6, backgroundColor: '#0f172a' }}>
       <Text fontSize={18} color="#FFF">Tailwind verification: colors</Text>
-      <Text fontSize={10} color="#888">TW color palette mapped to exact hex values</Text>
+      <Text fontSize={10} color="#888">VERIFY: Gray scale gradient, brand colors match Tailwind palette hex values</Text>
 
       <Text fontSize={11} color="#CCC">Gray scale: gray-100 through gray-900</Text>
       <div style={{ flexDirection: 'row', gap: 2 }}>

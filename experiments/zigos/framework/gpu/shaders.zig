@@ -439,3 +439,72 @@ pub const image_wgsl =
     \\    return vec4f(color.rgb * alpha, alpha);
     \\}
 ;
+
+/// 3D mesh pipeline: perspective projection + Blinn-Phong lighting.
+/// Vertex: position(vec3f), normal(vec3f), uv(vec2f) = 32 bytes.
+/// Uniforms: MVP, model matrix, lighting, material color.
+pub const scene3d_wgsl =
+    \\// ── Uniforms ───────────────────────────────────────────────────
+    \\struct SceneUniforms {
+    \\    mvp: mat4x4f,
+    \\    model: mat4x4f,
+    \\    light_dir: vec3f,
+    \\    specular_power: f32,
+    \\    light_color: vec3f,
+    \\    _pad1: f32,
+    \\    ambient_color: vec3f,
+    \\    _pad2: f32,
+    \\    camera_pos: vec3f,
+    \\    _pad3: f32,
+    \\    color: vec4f,
+    \\};
+    \\@group(0) @binding(0) var<uniform> u: SceneUniforms;
+    \\
+    \\// ── Vertex I/O ────────────────────────────────────────────────
+    \\struct VertexInput {
+    \\    @location(0) position: vec3f,
+    \\    @location(1) normal: vec3f,
+    \\    @location(2) uv: vec2f,
+    \\};
+    \\
+    \\struct VertexOutput {
+    \\    @builtin(position) clip_pos: vec4f,
+    \\    @location(0) world_pos: vec3f,
+    \\    @location(1) world_normal: vec3f,
+    \\    @location(2) uv: vec2f,
+    \\};
+    \\
+    \\// ── Vertex shader ────────────────────────────────────────────
+    \\@vertex
+    \\fn vs_main(in: VertexInput) -> VertexOutput {
+    \\    var out: VertexOutput;
+    \\    out.clip_pos = u.mvp * vec4f(in.position, 1.0);
+    \\    out.world_pos = (u.model * vec4f(in.position, 1.0)).xyz;
+    \\    out.world_normal = normalize((u.model * vec4f(in.normal, 0.0)).xyz);
+    \\    out.uv = in.uv;
+    \\    return out;
+    \\}
+    \\
+    \\// ── Fragment shader (Blinn-Phong) ────────────────────────────
+    \\@fragment
+    \\fn fs_main(in: VertexOutput) -> @location(0) vec4f {
+    \\    let N = normalize(in.world_normal);
+    \\    let L = normalize(u.light_dir);
+    \\    let V = normalize(u.camera_pos - in.world_pos);
+    \\
+    \\    // Diffuse (Lambert)
+    \\    let diff = max(dot(N, L), 0.0);
+    \\
+    \\    // Specular (Blinn-Phong)
+    \\    let H = normalize(L + V);
+    \\    let spec = pow(max(dot(N, H), 0.0), u.specular_power);
+    \\
+    \\    let base = u.color.rgb;
+    \\    let ambient = u.ambient_color * base;
+    \\    let diffuse = u.light_color * base * diff;
+    \\    let specular = u.light_color * spec * 0.4;
+    \\
+    \\    return vec4f(ambient + diffuse + specular, u.color.a);
+    \\}
+;
+
