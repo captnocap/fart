@@ -25,6 +25,7 @@ const render_surfaces = @import("render_surfaces.zig");
 const filedrop = @import("filedrop.zig");
 const capture = @import("capture.zig");
 const effects = @import("effects.zig");
+const transition = @import("transition.zig");
 
 const input = @import("input.zig");
 const Node = layout.Node;
@@ -257,9 +258,13 @@ noinline fn paintNodeVisuals(node: *Node) void {
         _ = render_surfaces.paintSurface(src, r.x, r.y, r.w, r.h, g_paint_opacity);
     }
 
-    // Effect — generative visual (spirograph, rings, etc.)
+    // Effect — generative visual
     if (node.effect_type) |etype| {
         _ = effects.paintEffect(etype, r.x, r.y, r.w, r.h, g_paint_opacity);
+    }
+    // Custom effect — user-compiled onRender callback
+    if (node.effect_render) |render_fn| {
+        _ = effects.paintCustomEffect(render_fn, r.x, r.y, r.w, r.h, g_paint_opacity);
     }
 
     selection.paintHighlight(node, r.x, r.y);
@@ -718,6 +723,14 @@ pub fn run(config: AppConfig) !void {
         // Devtools tick
         if (devtools_visible and devtools_initialized) {
             devtools._appTick(c.SDL_GetTicks());
+        }
+
+        // Transition tick — interpolate active transitions AFTER style updates, BEFORE layout
+        {
+            const now_t = c.SDL_GetTicks();
+            const dt_t = now_t -% g_prev_tick;
+            const dt_t_sec = @as(f32, @floatFromInt(dt_t)) / 1000.0;
+            _ = transition.tick(dt_t_sec);
         }
 
         // Layout (main window)
