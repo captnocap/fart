@@ -99,6 +99,13 @@ pub const AppConfig = struct {
 
 var g_text_engine: ?*TextEngine = null;
 
+/// Open a URL in the system browser.
+fn openUrl(url: []const u8) void {
+    const argv = [_][]const u8{ "xdg-open", url };
+    var child = std.process.Child.init(&argv, std.heap.page_allocator);
+    _ = child.spawn() catch return;
+}
+
 fn measureCallback(t: []const u8, font_size: u16, max_width: f32, letter_spacing: f32, line_height: f32, max_lines: u16, no_wrap: bool) layout.TextMetrics {
     if (g_text_engine) |te| {
         return te.measureTextWrappedEx(t, font_size, max_width, letter_spacing, line_height, max_lines, no_wrap);
@@ -552,7 +559,7 @@ pub fn run(config: AppConfig) !void {
                         // Hit test devtools first (if visible), then app tree
                         const devtools_hit = if (devtools_visible) layout.hitTest(&devtools.root, mx, my) else null;
                         const hit = devtools_hit orelse layout.hitTest(config.root, mx, my);
-                        const hit_is_interactive = if (hit) |h| (h.input_id != null or h.handlers.on_press != null) else false;
+                        const hit_is_interactive = if (hit) |h| (h.input_id != null or h.handlers.on_press != null or h.href != null) else false;
                         if (hit_is_interactive) {
                             const h = hit.?;
                             if (h.input_id) |id| {
@@ -578,6 +585,8 @@ pub fn run(config: AppConfig) !void {
                             } else if (h.handlers.on_press) |handler| {
                                 input.unfocus();
                                 handler();
+                            } else if (h.href) |url| {
+                                openUrl(url);
                             }
                         } else if ((if (devtools_visible) events.findCanvasNode(&devtools.root, mx, my) else null) orelse events.findCanvasNode(config.root, mx, my)) |cn| {
                             // Canvas click + drag start (only if no HUD element was clicked)

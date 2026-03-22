@@ -290,6 +290,20 @@ pub const Linter = struct {
                         self.emit(self.tok(j).start, .warn, msg);
                     }
 
+                    // transition: { ... } — skip the entire nested config block
+                    if (std.mem.eql(u8, prop, "transition") and j + 1 < self.lex.count and self.kind(j + 1) == .colon) {
+                        j += 2; // skip "transition" and ":"
+                        if (j < self.lex.count and self.kind(j) == .lbrace) {
+                            var depth: u32 = 1;
+                            j += 1;
+                            while (j < self.lex.count and depth > 0) : (j += 1) {
+                                if (self.kind(j) == .lbrace) depth += 1;
+                                if (self.kind(j) == .rbrace) depth -= 1;
+                            }
+                        }
+                        continue;
+                    }
+
                     // Check if it's a known style property
                     if (j + 1 < self.lex.count and self.kind(j + 1) == .colon) {
                         const is_known = attrs.mapStyleKey(prop) != null or
