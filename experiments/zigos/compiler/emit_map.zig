@@ -16,39 +16,20 @@ pub fn emitMapRebuildCalls(self: *Generator, out: *std.ArrayListUnmanaged(u8), p
         try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
             "{s}_rebuildMap{d}();\n", .{ pad, mi }));
     }
-    // Chain nested map pools to parent inner nodes (inline rebuild with 2D pools)
+    // Chain nested map pools: call parameterized rebuild per outer item
     for (0..self.map_count) |mi| {
         const m = self.maps[mi];
         if (m.parent_map_idx < 0) continue;
         const pmi: u32 = @intCast(m.parent_map_idx);
-        // Inline rebuild: for each outer item, rebuild inner pool and assign
-        if (m.is_object_array) {
-            const oa_idx = m.object_array_idx;
-            // Generate the node content for each inner pool item
-            var node_fields: std.ArrayListUnmanaged(u8) = .{};
-            if (m.outer_style.len > 0) {
-                try node_fields.appendSlice(self.alloc, ".style = .{ ");
-                try node_fields.appendSlice(self.alloc, m.outer_style);
-                try node_fields.appendSlice(self.alloc, " }");
-            }
-            const fields_str = if (node_fields.items.len > 0) node_fields.items else "";
-
-            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                "{s}for (0.._map_count_{d}) |_ci| {{\n" ++
-                "{s}    _map_count_{d}[_ci] = @min(_oa{d}_count, MAX_MAP_{d});\n" ++
-                "{s}    for (0.._map_count_{d}[_ci]) |_i| {{\n" ++
-                "{s}        _map_pool_{d}[_ci][_i] = .{{ {s} }};\n" ++
-                "{s}    }}\n" ++
-                "{s}    _map_inner_{d}[_ci][{d}].children = _map_pool_{d}[_ci][0.._map_count_{d}[_ci]];\n" ++
-                "{s}}}\n",
-                .{ pad, pmi,
-                   pad, mi, oa_idx, mi,
-                   pad, mi,
-                   pad, mi, fields_str,
-                   pad,
-                   pad, pmi, m.parent_inner_idx, mi, mi,
-                   pad }));
-        }
+        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+            "{s}for (0.._map_count_{d}) |_ci| {{\n" ++
+            "{s}    _rebuildMap{d}(_ci);\n" ++
+            "{s}    _map_inner_{d}[_ci][{d}].children = _map_pool_{d}[_ci][0.._map_count_{d}[_ci]];\n" ++
+            "{s}}}\n",
+            .{ pad, pmi,
+               pad, mi,
+               pad, pmi, m.parent_inner_idx, mi, mi,
+               pad }));
     }
 }
 
