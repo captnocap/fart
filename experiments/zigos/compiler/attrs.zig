@@ -49,14 +49,22 @@ pub fn parseStyleAttr(self: *Generator) ![]const u8 {
                     try fields.appendSlice(self.alloc, " = ");
                     try fields.appendSlice(self.alloc, color);
                 } else {
-                    // Non-string color (e.g., item.color where color is packed 0xRRGGBB i64)
+                    // Non-string color — could be prop (hex string) or item.field (packed int)
                     const val = consumeStyleValueExpr(self);
                     if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
                     try fields.appendSlice(self.alloc, ".");
                     try fields.appendSlice(self.alloc, color_field);
-                    try fields.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                        " = Color.rgb(@intCast(({s} >> 16) & 0xFF), @intCast(({s} >> 8) & 0xFF), @intCast({s} & 0xFF))",
-                        .{ val, val, val }));
+                    // Check if resolved value is a quoted hex string (from prop)
+                    if (val.len >= 2 and (val[0] == '"' or val[0] == '\'')) {
+                        const inner_hex = val[1 .. val.len - 1];
+                        const color = try parseColorValue(self, inner_hex);
+                        try fields.appendSlice(self.alloc, " = ");
+                        try fields.appendSlice(self.alloc, color);
+                    } else {
+                        try fields.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            " = Color.rgb(@intCast(({s} >> 16) & 0xFF), @intCast(({s} >> 8) & 0xFF), @intCast({s} & 0xFF))",
+                            .{ val, val, val }));
+                    }
                 }
             } else if (mapStyleKeyI16(key)) |zig_key| {
                 const val = consumeStyleValueExpr(self);
@@ -226,6 +234,16 @@ pub fn consumeStyleValueExpr(self: *Generator) []const u8 {
             }
             if (self.findProp(txt)) |resolved| {
                 expr.appendSlice(self.alloc, resolved) catch {};
+            } else if (self.isState(txt)) |slot_id| {
+                const rid = self.regularSlotId(slot_id);
+                const st = self.stateTypeById(slot_id);
+                if (st == .float) {
+                    expr.appendSlice(self.alloc, std.fmt.allocPrint(self.alloc,
+                        "state.getSlotFloat({d})", .{rid}) catch "") catch {};
+                } else {
+                    expr.appendSlice(self.alloc, std.fmt.allocPrint(self.alloc,
+                        "state.getSlot({d})", .{rid}) catch "") catch {};
+                }
             } else {
                 expr.appendSlice(self.alloc, txt) catch {};
             }
