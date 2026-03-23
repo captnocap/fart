@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>CartridgeOS — tsz + QuickJS + Linux in WASM</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0d1117; color: #e6edf3; font-family: monospace; display: flex; flex-direction: column; align-items: center; padding: 20px; gap: 12px; }
+  h1 { font-size: 16px; color: #58a6ff; }
+  .subtitle { font-size: 11px; color: #8b949e; }
+  canvas { border: 1px solid #30363d; border-radius: 4px; }
+  #log { font-size: 12px; white-space: pre-wrap; color: #8b949e; line-height: 1.6; max-width: 800px; width: 100%; max-height: 300px; overflow-y: auto; }
+  .pass { color: #3fb950; } .fail { color: #f85149; } .accent { color: #58a6ff; } .kernel { color: #d2a8ff; }
+  #terminal { width: 800px; height: 180px; background: #161b22; color: #c9d1d9; border: 1px solid #30363d; border-radius: 4px; font-family: monospace; font-size: 12px; padding: 8px; overflow-y: auto; white-space: pre-wrap; }
+  #cmd { width: 800px; background: #0d1117; color: #e6edf3; border: 1px solid #30363d; border-radius: 4px; font-family: monospace; font-size: 13px; padding: 8px; outline: none; }
+  #cmd:focus { border-color: #58a6ff; }
+  .row { display: flex; gap: 8px; align-items: center; width: 800px; }
+  .status { display: flex; gap: 16px; font-size: 11px; width: 800px; }
+  .status span { padding: 2px 8px; border-radius: 3px; }
+  .status .on { background: #238636; color: #fff; }
+  .status .off { background: #30363d; color: #8b949e; }
+  .status .boot { background: #9e6a03; color: #fff; }
+</style>
+</head>
+<body>
+<h1>CartridgeOS</h1>
+<div class="subtitle">tsz + QuickJS + Linux — all running in WASM</div>
+
+<div class="status">
+  <span id="s-tsz" class="off">tsz</span>
+  <span id="s-qjs" class="off">QuickJS</span>
+  <span id="s-linux" class="off">Linux</span>
+</div>
+
+<canvas id="canvas" width="800" height="400"></canvas>
+
+<div id="terminal"></div>
+<input id="cmd" type="text" placeholder="Type a command... (runs in real Linux kernel)" autocomplete="off">
+
+<div id="log"></div>
+
+<script src="v86/libv86.js"></script>
+<script>
+const logEl = document.getElementById('log');
+const termEl = document.getElementById('terminal');
+const cmdEl = document.getElementById('cmd');
+const canvas = document.getElementById('canvas');
+
+function log(msg, cls) {
+  const span = document.createElement('span');
+  span.textContent = msg + '\n';
+  if (cls) span.className = cls;
+  logEl.appendChild(span);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+function termWrite(msg, cls) {
+  const span = document.createElement('span');
+  span.textContent = msg;
+  if (cls) span.className = cls;
+  termEl.appendChild(span);
+  termEl.scrollTop = termEl.scrollHeight;
+}
+function setStatus(id, state) {
+  document.getElementById(id).className = state;
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// Layer 1: tsz runtime (QuickJS + layout + WebGPU) — WASM
+// ══════════════════════════════════════════════════════════════════════
+
+let wasm = null, wasmMemory = null;
+const textDecoder = new TextDecoder();
+
+async function initTsz() {
+  log('Loading tsz-runtime.wasm...');
+  const useWebGPU = !!navigator.gpu;
+  let device, gpuCtx, pipeline, bindGroup, rectBuf, viewportBuf, format;
+
+  if (useWebGPU) {
+    const adapter = await navigator.gpu.requestAdapter();
+    if (adapter) {
+      device = await adapter.requestDevice();
+      gpuCtx = canvas.getContext('webgpu');
+      format = navigator.gpu.getPreferredCanvasFormat();
+      gpuCtx.configure({ device, format, alphaMode: 'premultiplied' });
+      const shaderModule = device.createShaderModule({ code: `
+        struct VSOut { @builtin(position) pos: vec4f, @location(0) color: vec4f };
+        @group(0) @binding(0) var<uniform> viewport: vec2f;
+        @vertex fn vs(@builtin(vertex_index) vi: u32,
+          @location(0) rpos: vec2f, @location(1) rsize: vec2f, @location(2) rcol: vec4f) -> VSOut {
+          let corners = array<vec2f,6>(vec2f(0,0),vec2f(1,0),vec2f(0,1),vec2f(1,0),vec2f(1,1),vec2f(0,1));
+          let px = rpos + corners[vi] * rsize;
+          let ndc = (px / viewport) * 2.0 - 1.0;
+          var out: VSOut; out.pos = vec4f(ndc.x, -ndc.y, 0, 1); out.color = rcol; return out;
+        }
+        @fragment fn fs(in: VSOut) -> @location(0) vec4f { return in.color; }
+      `});
+      const bgl = device.createBindGroupLayout({ entries: [{ binding: 0, visibility: GPUShaderStage.VERTEX, buffer: { type: 'uniform' } }] });
+      pipeline = device.createRenderPipeline({
+        layout: device.createPipelineLayout({ bindGroupLayouts: [bgl] }),
+        vertex: { module: shaderModule, entryPoint: 'vs', buffers: [{ arrayStride: 32, stepMode: 'instance', attributes: [
+          { shaderLocation: 0, offset: 0, format: 'float32x2' },
+          { shaderLocation: 1, offset: 8, format: 'float32x2' },
+          { shaderLocation: 2, offset: 16, format: 'float32x4' },
+        ]}]},
+        fragment: { module: shaderModule, entryPoint: 'fs', targets: [{ format }] },
+        primitive: { topology: 'triangle-list' },
+      });
+      viewportBuf = device.createBuffer({ size: 8, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+      device.queue.writeBuffer(viewportBuf, 0, new Float32Array([canvas.width, canvas.height]));
+      bindGroup = device.createBindGroup({ layout: bgl, entries: [{ binding: 0, resource: { buffer: viewportBuf } }] });
+      rectBuf = device.createBuffer({ size: 4096 * 32, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
+    }
+  }
+  const ctx2d = (!device) ? canvas.getContext('2d') : null;
+
+  // Text overlay
+  const wrapper = document.createElement('div');
+  wrapper.style.cssText = 'position:relative;display:inline-block;';
+  canvas.parentElement.insertBefore(wrapper, canvas);
+  wrapper.appendChild(canvas);
+  const textCanvas = document.createElement('canvas');
+  textCanvas.width = 800; textCanvas.height = 400;
+  textCanvas.style.cssText = 'position:absolute;top:0;left:0;pointer-events:none;';
+  wrapper.appendChild(textCanvas);
+  const tctx = textCanvas.getContext('2d');
+
+  let frameRects = [], frameTexts = [];
+
+  // WASI shim
+  const wasiShim = {
+    fd_write(fd, iovs_ptr, iovs_len, nwritten_ptr) {
+      if (!wasmMemory) return 0;
+      const mem = new DataView(wasmMemory.buffer);
+      let written = 0;
+      for (let i = 0; i < iovs_len; i++) {
+        const ptr = mem.getUint32(iovs_ptr + i * 8, true);
+        const len = mem.getUint32(iovs_ptr + i * 8 + 4, true);
+        written += len;
+      }
+      mem.setUint32(nwritten_ptr, written, true);
+      return 0;
+    },
+    fd_read() { return 8; }, fd_close() { return 0; }, fd_seek() { return 0; },
+    fd_fdstat_get(fd, buf) { if (!wasmMemory) return 8; const m = new DataView(wasmMemory.buffer); m.setUint8(buf, 2); m.setUint16(buf+2,0,true); m.setBigUint64(buf+8,0n,true); m.setBigUint64(buf+16,0n,true); return 0; },
+    fd_prestat_get() { return 8; }, fd_prestat_dir_name() { return 8; },
+    proc_exit() {}, environ_sizes_get(a,b) { if(!wasmMemory)return 0; const m=new DataView(wasmMemory.buffer); m.setUint32(a,0,true); m.setUint32(b,0,true); return 0; },
+    environ_get() { return 0; },
+    args_sizes_get(a,b) { if(!wasmMemory)return 0; const m=new DataView(wasmMemory.buffer); m.setUint32(a,0,true); m.setUint32(b,0,true); return 0; },
+    args_get() { return 0; },
+    clock_time_get(id,p,t) { if(!wasmMemory)return 0; new DataView(wasmMemory.buffer).setBigUint64(t,BigInt(Date.now())*1000000n,true); return 0; },
+    clock_res_get(id,r) { if(!wasmMemory)return 0; new DataView(wasmMemory.buffer).setBigUint64(r,1000000n,true); return 0; },
+    random_get(buf,len) { if(!wasmMemory)return 0; crypto.getRandomValues(new Uint8Array(wasmMemory.buffer,buf,len)); return 0; },
+    path_open(){return 44;}, path_filestat_get(){return 44;}, poll_oneoff(){return 44;}, sched_yield(){return 0;},
+  };
+
+  const importObject = {
+    wasi_snapshot_preview1: wasiShim,
+    env: {
+      gpu_begin_frame: () => { frameRects = []; frameTexts = []; },
+      gpu_draw_rect: (x,y,w,h,r,g,b,a) => { frameRects.push(x,y,w,h,r,g,b,a); },
+      gpu_draw_text: (x,y,ptr,len,size,r,g,b,a) => {
+        if (!wasmMemory) return;
+        frameTexts.push({ x, y, str: textDecoder.decode(new Uint8Array(wasmMemory.buffer, ptr, len)), size, r, g, b, a });
+      },
+      gpu_end_frame: () => {
+        if (device && frameRects.length > 0) {
+          const count = frameRects.length / 8;
+          device.queue.writeBuffer(rectBuf, 0, new Float32Array(frameRects));
+          const enc = device.createCommandEncoder();
+          const pass = enc.beginRenderPass({ colorAttachments: [{ view: gpuCtx.getCurrentTexture().createView(), clearValue: {r:.051,g:.067,b:.09,a:1}, loadOp:'clear', storeOp:'store' }]});
+          pass.setPipeline(pipeline); pass.setBindGroup(0, bindGroup);
+          pass.setVertexBuffer(0, rectBuf); pass.draw(6, count); pass.end();
+          device.queue.submit([enc.finish()]);
+        } else if (ctx2d) {
+          ctx2d.fillStyle = '#0d1117'; ctx2d.fillRect(0,0,800,400);
+          for (let i=0; i<frameRects.length; i+=8) {
+            const [x,y,w,h,r,g,b,a] = frameRects.slice(i,i+8);
+            ctx2d.fillStyle = `rgba(${r*255|0},${g*255|0},${b*255|0},${a})`;
+            ctx2d.fillRect(x,y,w,h);
+          }
+        }
+        tctx.clearRect(0,0,800,400);
+        for (const t of frameTexts) {
+          tctx.font = `${t.size}px monospace`;
+          tctx.fillStyle = `rgba(${t.r*255|0},${t.g*255|0},${t.b*255|0},${t.a})`;
+          tctx.fillText(t.str, t.x, t.y);
+        }
+      },
+      gpu_log: (ptr, len) => { if (wasmMemory) log(textDecoder.decode(new Uint8Array(wasmMemory.buffer, ptr, len)), 'accent'); },
+      gpu_canvas_width: () => canvas.width,
+      gpu_canvas_height: () => canvas.height,
+    },
+  };
+
+  const resp = await fetch('tsz-runtime.wasm');
+  const bytes = await resp.arrayBuffer();
+  const { instance } = await WebAssembly.instantiate(bytes, importObject);
+  wasm = instance.exports;
+  wasmMemory = wasm.memory;
+
+  const rc = wasm.rt_init();
+  if (rc !== 0) { log('rt_init failed: ' + rc, 'fail'); return; }
+  setStatus('s-tsz', 'on');
+  setStatus('s-qjs', 'on');
+  log('tsz + QuickJS ready (' + (bytes.byteLength/1024).toFixed(0) + ' KB)', 'pass');
+
+  // Wire input
+  canvas.addEventListener('mousedown', e => { const r = canvas.getBoundingClientRect(); wasm.rt_mouse_event(e.clientX-r.left, e.clientY-r.top, 1); });
+
+  return { wasm, wasmMemory };
+}
+
+// Helper: eval JS inside QuickJS-in-WASM
+function qjsEval(code) {
+  if (!wasm) return -1;
+  const wrapped = '(function(){\n' + code + '\n})();';
+  const encoded = new TextEncoder().encode(wrapped);
+  const SCRATCH = 1024 * 1024;
+  const mem = new Uint8Array(wasmMemory.buffer);
+  if (SCRATCH + encoded.length + 1 > mem.length) wasm.memory.grow(Math.ceil((SCRATCH + encoded.length + 1 - mem.length) / 65536));
+  const fresh = new Uint8Array(wasmMemory.buffer);
+  fresh.set(encoded, SCRATCH);
+  fresh[SCRATCH + encoded.length] = 0;
+  return wasm.rt_eval(SCRATCH, encoded.length);
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// Layer 2: Linux kernel — v86 x86 emulator in WASM
+// ══════════════════════════════════════════════════════════════════════
+
+let emulator = null;
+let linuxReady = false;
+let serialBuffer = '';
+
+async function initLinux() {
+  log('Booting Linux kernel via v86...', 'kernel');
+  setStatus('s-linux', 'boot');
+
+  emulator = new V86({
+    wasm_path: 'v86/v86.wasm',
+    bios: { url: 'v86/seabios.bin' },
+    vga_bios: { url: 'v86/vgabios.bin' },
+    bzimage: { url: 'vmlinuz' },
+    initrd: { url: 'initrd.cpio.gz' },
+    cmdline: 'rdinit=/init console=ttyS0 loglevel=3',
+    memory_size: 128 * 1024 * 1024,
+    vga_memory_size: 0,
+    autostart: true,
+    disable_keyboard: true,
+    disable_mouse: true,
+    disable_speaker: true,
+    serial_container_xtermjs: null,
+  });
+
+  // Capture serial output (Linux console)
+  emulator.add_listener('serial0-output-byte', function(byte) {
+    const char = String.fromCharCode(byte);
+    serialBuffer += char;
+    if (char === '\n') {
+      const line = serialBuffer.trimEnd();
+      serialBuffer = '';
+      if (line.length > 0) {
+        termWrite(line + '\n', 'kernel');
+        // Detect boot complete
+        if (line.includes('Kernel is running') || line.includes('dropping to shell')) {
+          if (!linuxReady) {
+            linuxReady = true;
+            setStatus('s-linux', 'on');
+            log('Linux kernel booted', 'pass');
+            // Render the UI now that all 3 layers are up
+            renderDashboard();
+          }
+        }
+      }
+    }
+  });
+}
+
+// Send a command to Linux via serial
+function linuxExec(cmd) {
+  if (!emulator || !linuxReady) {
+    termWrite('(kernel not ready)\n', 'fail');
+    return;
+  }
+  emulator.serial0_send(cmd + '\n');
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// Layer 3: Dashboard — tsz renders, Linux provides data
+// ══════════════════════════════════════════════════════════════════════
+
+function renderDashboard() {
+  qjsEval(`
+    Node.reset();
+
+    const root = Node.create();
+    Node.setWidth(root, 800); Node.setHeight(root, 400);
+    Node.setFlexDirection(root, COL);
+    Node.setColor(root, 0.051, 0.067, 0.090, 1);
+
+    // Title bar
+    const titlebar = Node.create();
+    Node.setHeight(titlebar, 36);
+    Node.setFlexDirection(titlebar, ROW);
+    Node.setAlignItems(titlebar, ALIGN_CENTER);
+    Node.setPadding(titlebar, 8, 16, 8, 16);
+    Node.setColor(titlebar, 0.086, 0.106, 0.133, 1);
+    Node.setText(titlebar, 'CartridgeOS');
+    Node.setTextPadding(titlebar, 16, 10);
+
+    // Content
+    const content = Node.create();
+    Node.setFlexGrow(content, 1);
+    Node.setFlexDirection(content, COL);
+    Node.setGap(content, 8);
+    Node.setPadding(content, 16, 16, 16, 16);
+
+    // Info cards
+    const card1 = Node.create();
+    Node.setHeight(card1, 60);
+    Node.setColor(card1, 0.086, 0.106, 0.133, 1);
+    Node.setText(card1, 'tsz — Zig layout + WebGPU rendering');
+    Node.setTextPadding(card1, 12, 12);
+    Node.setTextColor(card1, 0.35, 0.65, 1.0, 1);
+
+    const card2 = Node.create();
+    Node.setHeight(card2, 60);
+    Node.setColor(card2, 0.086, 0.106, 0.133, 1);
+    Node.setText(card2, 'QuickJS — JS runtime inside WASM');
+    Node.setTextPadding(card2, 12, 12);
+    Node.setTextColor(card2, 0.247, 0.725, 0.314, 1);
+
+    const card3 = Node.create();
+    Node.setHeight(card3, 60);
+    Node.setColor(card3, 0.086, 0.106, 0.133, 1);
+    Node.setText(card3, 'Linux — real Alpine kernel via v86');
+    Node.setTextPadding(card3, 12, 12);
+    Node.setTextColor(card3, 0.824, 0.659, 1.0, 1);
+
+    const card4 = Node.create();
+    Node.setFlexGrow(card4, 1);
+    Node.setColor(card4, 0.086, 0.106, 0.133, 1);
+    Node.setText(card4, 'Browser is just a framebuffer + input pipe');
+    Node.setTextPadding(card4, 12, 12);
+    Node.setTextColor(card4, 0.55, 0.58, 0.62, 1);
+
+    // Status bar
+    const statusbar = Node.create();
+    Node.setHeight(statusbar, 24);
+    Node.setColor(statusbar, 0.086, 0.106, 0.133, 1);
+    Node.setText(statusbar, 'tsz | QuickJS | Zig 0.15.2 | Alpine Linux | WASM');
+    Node.setFontSize(statusbar, 9);
+    Node.setTextPadding(statusbar, 12, 7);
+    Node.setTextColor(statusbar, 0.55, 0.58, 0.62, 1);
+
+    Node.addChild(content, card1);
+    Node.addChild(content, card2);
+    Node.addChild(content, card3);
+    Node.addChild(content, card4);
+    Node.addChild(root, titlebar);
+    Node.addChild(root, content);
+    Node.addChild(root, statusbar);
+
+    Layout.compute(root, 800, 400);
+    Render.frame();
+    console.log('All 3 layers running');
+  `);
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// Boot sequence
+// ══════════════════════════════════════════════════════════════════════
+
+cmdEl.addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    const cmd = cmdEl.value.trim();
+    if (cmd) {
+      termWrite('$ ' + cmd + '\n');
+      linuxExec(cmd);
+      cmdEl.value = '';
+    }
+  }
+});
+
+async function boot() {
+  try {
+    await initTsz();
+    // Render initial UI immediately
+    qjsEval(`
+      Node.reset();
+      const root = Node.create();
+      Node.setWidth(root, 800); Node.setHeight(root, 400);
+      Node.setColor(root, 0.051, 0.067, 0.090, 1);
+      Node.setText(root, 'Booting Linux kernel...');
+      Node.setTextPadding(root, 16, 24);
+      Node.setTextColor(root, 0.55, 0.58, 0.62, 1);
+      Layout.compute(root, 800, 400);
+      Render.frame();
+    `);
+    await initLinux();
+  } catch(e) {
+    log('ERROR: ' + e.message, 'fail');
+    log(e.stack, 'fail');
+  }
+}
+
+boot();
+</script>
+</body>
+</html>
