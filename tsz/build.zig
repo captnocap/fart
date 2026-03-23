@@ -70,6 +70,123 @@ pub fn build(b: *std.Build) void {
     const run_compiler_tests = b.addRunArtifact(compiler_tests);
     const test_step = b.step("test", "Run compiler tests");
     test_step.dependOn(&run_compiler_tests.step);
+
+    // ── WASM target — layout engine only, no native deps ──────────
+    const wasm_lib = b.addExecutable(.{
+        .name = "tsz-layout",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("wasm_exports.zig"),
+            .target = b.resolveTargetQuery(.{
+                .cpu_arch = .wasm32,
+                .os_tag = .freestanding,
+            }),
+            .optimize = .ReleaseSmall,
+        }),
+    });
+    wasm_lib.entry = .disabled;
+    wasm_lib.root_module.export_symbol_names = &.{
+        "node_create",
+        "node_reset",
+        "node_set_width",
+        "node_set_height",
+        "node_set_flex_direction",
+        "node_set_flex_grow",
+        "node_set_flex_basis",
+        "node_set_padding",
+        "node_set_margin",
+        "node_set_gap",
+        "node_set_align_items",
+        "node_set_justify_content",
+        "node_set_display",
+        "node_add_child",
+        "layout_compute",
+        "node_get_x",
+        "node_get_y",
+        "node_get_w",
+        "node_get_h",
+        "get_node_count",
+    };
+    const wasm_install = b.addInstallArtifact(wasm_lib, .{});
+    const wasm_step = b.step("wasm", "WASM target — layout engine for browser");
+    wasm_step.dependOn(&wasm_install.step);
+
+    // ── WASM GPU target — WebGPU rect rendering via JS shim ───────
+    const wasm_gpu = b.addExecutable(.{
+        .name = "tsz-gpu",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("wasm_gpu.zig"),
+            .target = b.resolveTargetQuery(.{
+                .cpu_arch = .wasm32,
+                .os_tag = .freestanding,
+            }),
+            .optimize = .ReleaseSmall,
+        }),
+    });
+    wasm_gpu.entry = .disabled;
+    wasm_gpu.root_module.export_symbol_names = &.{
+        "node_create",
+        "node_reset",
+        "node_set_width",
+        "node_set_height",
+        "node_set_flex_direction",
+        "node_set_flex_grow",
+        "node_set_flex_basis",
+        "node_set_padding",
+        "node_set_margin",
+        "node_set_gap",
+        "node_set_align_items",
+        "node_set_justify_content",
+        "node_set_display",
+        "node_set_color",
+        "node_add_child",
+        "layout_compute",
+        "node_get_x",
+        "node_get_y",
+        "node_get_w",
+        "node_get_h",
+        "get_node_count",
+        "render",
+    };
+    const wasm_gpu_install = b.addInstallArtifact(wasm_gpu, .{});
+    const wasm_gpu_step = b.step("wasm-gpu", "WASM GPU target — WebGPU rect rendering");
+    wasm_gpu_step.dependOn(&wasm_gpu_install.step);
+
+    // ── WASM Runtime: QuickJS + layout + WebGPU ─────────────────────────
+    const wasm_rt_mod = b.createModule(.{
+        .root_source_file = b.path("wasm_runtime.zig"),
+        .target = b.resolveTargetQuery(.{
+            .cpu_arch = .wasm32,
+            .os_tag = .wasi,
+        }),
+        .optimize = .ReleaseSmall,
+        .link_libc = true,
+    });
+    wasm_rt_mod.addIncludePath(b.path("../love2d/quickjs"));
+    wasm_rt_mod.addCSourceFiles(.{
+        .root = b.path("../love2d/quickjs"),
+        .files = &.{ "cutils.c", "dtoa.c", "libregexp.c", "libunicode.c", "quickjs.c" },
+        .flags = &.{ "-O2", "-D_GNU_SOURCE", "-DQUICKJS_NG_BUILD", "-D_WASI_EMULATED_SIGNAL" },
+    });
+    const wasm_rt = b.addExecutable(.{
+        .name = "tsz-runtime",
+        .root_module = wasm_rt_mod,
+    });
+    wasm_rt.entry = .disabled;
+    wasm_rt.root_module.export_symbol_names = &.{
+        "rt_init",
+        "rt_eval",
+        "rt_destroy",
+        "rt_mouse_event",
+        "rt_key_event",
+        "node_create",
+        "node_reset",
+        "render",
+        "layout_compute",
+        "get_node_count",
+    };
+    const wasm_rt_install = b.addInstallArtifact(wasm_rt, .{});
+    const wasm_rt_step = b.step("wasm-rt", "WASM Runtime — QuickJS + layout + WebGPU");
+    wasm_rt_step.dependOn(&wasm_rt_install.step);
 }
 
 // ── Distribution tiers ──────────────────────────────────────────────────

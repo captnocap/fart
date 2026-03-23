@@ -1,0 +1,201 @@
+//! CartridgeOS init — PID 1 (Zig, static musl)
+//!
+//! Boots Alpine rootfs, loads virtio-gpu, launches QuickJS.
+//! No display server. No X11. No Wayland. Direct DRM/KMS.
+
+const std = @import("std");
+const linux = std.os.linux;
+
+// ── Syscall helpers ─────────────────────────────────────────────────────
+
+fn mount(source: [*:0]const u8, target: [*:0]const u8, fstype: [*:0]const u8, flags: u32, data: ?[*:0]const u8) void {
+    _ = linux.mount(source, target, fstype, flags, @as(?[*]const u8, if (data) |d| @ptrCast(d) else null));
+}
+
+fn mkdir(path: [*:0]const u8) void {
+    _ = linux.mkdir(path, 0o755);
+}
+
+fn write_all(fd: i32, buf: []const u8) void {
+    var written: usize = 0;
+    while (written < buf.len) {
+        const rc = linux.write(@intCast(fd), buf[written..].ptr, buf[written..].len);
+        if (@as(isize, @bitCast(rc)) <= 0) break;
+        written += rc;
+    }
+}
+
+fn puts(msg: []const u8) void {
+    write_all(1, msg);
+    write_all(1, "\n");
+}
+
+fn open_file(path: [*:0]const u8, flags: u32) i32 {
+    const rc = linux.open(path, flags, 0);
+    return if (@as(isize, @bitCast(rc)) < 0) -1 else @intCast(rc);
+}
+
+fn close_fd(fd: i32) void {
+    _ = linux.close(@intCast(fd));
+}
+
+fn dup2(old: i32, new: i32) void {
+    _ = linux.dup3(@intCast(old), @intCast(new), 0);
+}
+
+fn sleep_us(us: u64) void {
+    const ts = linux.timespec{
+        .sec = @intCast(us / 1_000_000),
+        .nsec = @intCast((us % 1_000_000) * 1000),
+    };
+    _ = linux.nanosleep(&ts, null);
+}
+
+fn access(path: [*:0]const u8) bool {
+    const rc = linux.faccessat(linux.AT.FDCWD, path, linux.F_OK, 0);
+    return @as(isize, @bitCast(rc)) == 0;
+}
+
+fn setenv(key: [*:0]const u8, val: [*:0]const u8) void {
+    // For a static musl binary, we write to /proc/self/environ indirectly
+    // by using execve's envp. We'll accumulate env and pass to execve.
+    _ = key;
+    _ = val;
+}
+
+// ── Fork + exec helper ──────────────────────────────────────────────────
+
+fn run_wait(argv: [*:null]const ?[*:0]const u8) void {
+    const pid_rc = linux.fork();
+    const pid: isize = @bitCast(pid_rc);
+    if (pid == 0) {
+        // child
+        _ = linux.execve(argv[0].?, argv, @ptrCast(std.os.environ.ptr));
+        linux.exit(1);
+    }
+    if (pid > 0) {
+        var status: u32 = 0;
+        _ = linux.wait4(@intCast(pid_rc), &status, 0, null);
+    }
+}
+
+// ── Main ────────────────────────────────────────────────────────────────
+
+pub export fn _start() callconv(.Naked) noreturn {
+    asm volatile ("mov %rsp, %rdi" ++
+        "\n\t" ++ "and $-16, %rsp" ++
+        "\n\t" ++ "call %[main]" ++
+        "\n\t" ++ "mov $60, %rax" ++
+        "\n\t" ++ "xor %rdi, %rdi" ++
+        "\n\t" ++ "syscall"
+        :
+        : [main] "X" (&main),
+    );
+    unreachable;
+}
+
+fn main() void {
+    // ── Mount filesystems ───────────────────────────────────────────────
+    mount("proc", "/proc", "proc", 0, null);
+    mount("sysfs", "/sys", "sysfs", 0, null);
+    mount("devtmpfs", "/dev", "devtmpfs", 0, null);
+
+    // Suppress kernel messages on console
+    const printk_fd = open_file("/proc/sys/kernel/printk", linux.O.WRONLY);
+    if (printk_fd >= 0) {
+        write_all(printk_fd, "1\n");
+        close_fd(printk_fd);
+    }
+
+    // Redirect stdio to console
+    const con = open_file("/dev/console", linux.O.RDWR);
+    if (con >= 0) {
+        dup2(con, 0);
+        dup2(con, 1);
+        dup2(con, 2);
+        if (con > 2) close_fd(con);
+    }
+
+    // ── Busybox applets ─────────────────────────────────────────────────
+    const bb_argv = [_:null]?[*:0]const u8{ "/bin/busybox", "--install", "-s", "/bin", null };
+    run_wait(&bb_argv);
+
+    // ── Banner ──────────────────────────────────────────────────────────
+    puts("");
+    puts("  CartridgeOS v0.2 (Zig + QuickJS)");
+    puts("  no X11, no Wayland, no display server");
+    puts("");
+
+    // ── Load virtio-gpu ─────────────────────────────────────────────────
+    puts("  Loading virtio-gpu driver...");
+    const modprobe_argv = [_:null]?[*:0]const u8{ "/bin/busybox", "modprobe", "virtio-gpu", null };
+    run_wait(&modprobe_argv);
+    sleep_us(1_500_000);
+
+    if (access("/dev/dri/card0")) {
+        puts("  DRM: /dev/dri/card0 ready");
+    } else {
+        puts("  WARNING: /dev/dri/card0 missing");
+    }
+    if (access("/dev/dri/renderD128")) {
+        puts("  DRM: /dev/dri/renderD128 ready");
+    }
+
+    // ── Load input modules ──────────────────────────────────────────────
+    puts("  Loading input modules...");
+    const input_mods = [_][*:0]const u8{ "hid", "hid-generic", "evdev", "mousedev", "psmouse", "virtio_input" };
+    for (input_mods) |mod| {
+        const argv = [_:null]?[*:0]const u8{ "/bin/busybox", "modprobe", mod, null };
+        run_wait(&argv);
+    }
+    sleep_us(300_000);
+
+    // ── Launch QuickJS ──────────────────────────────────────────────────
+    puts("");
+    puts("  Launching QuickJS...");
+    puts("");
+
+    // Environment for DRM/KMS rendering
+    const envp = [_:null]?[*:0]const u8{
+        "SDL_VIDEODRIVER=kmsdrm",
+        "LD_LIBRARY_PATH=/app:/usr/lib:/lib",
+        "LIBGL_DRIVERS_PATH=/usr/lib/dri",
+        "LIBGL_DRIVERS_DIR=/usr/lib/dri",
+        "EGL_PLATFORM=gbm",
+        "MESA_EGL_NO_X11=1",
+        "MESA_LOADER_DRIVER_OVERRIDE=virtio_gpu",
+        "HOME=/tmp",
+        "PATH=/bin:/usr/bin",
+        null,
+    };
+
+    const qjs_argv = [_:null]?[*:0]const u8{ "/usr/bin/qjs", "/app/main.js", null };
+
+    const pid_rc = linux.fork();
+    const pid: isize = @bitCast(pid_rc);
+    if (pid == 0) {
+        _ = linux.execve(qjs_argv[0].?, &qjs_argv, &envp);
+        puts("  [init] execve qjs failed");
+        linux.exit(1);
+    }
+
+    if (pid > 0) {
+        var status: u32 = 0;
+        _ = linux.wait4(@intCast(pid_rc), &status, 0, null);
+        puts("");
+        puts("  [init] QuickJS exited");
+    } else {
+        puts("  [init] fork failed");
+    }
+
+    // ── Fallback shell ──────────────────────────────────────────────────
+    puts("  [init] dropping to shell (Ctrl-D to reboot)");
+    puts("");
+    const sh_argv = [_:null]?[*:0]const u8{ "/bin/sh", null };
+    _ = linux.execve(sh_argv[0].?, &sh_argv, &envp);
+
+    // PID 1 must not exit
+    while (true) {
+        sleep_us(1_000_000);
+    }
+}
