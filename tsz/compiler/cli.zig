@@ -46,6 +46,11 @@ pub fn main() !void {
             cli_convert.run(alloc, args);
             return;
         }
+        if (std.mem.eql(u8, cmd, "dist")) {
+            const cli_dist = @import("cli_dist.zig");
+            cli_dist.run(alloc, args);
+            return;
+        }
     }
 
     if (args.len < 3) {
@@ -181,14 +186,24 @@ pub fn main() !void {
     defer alloc.free(zig_source);
 
     // Resolve tsz root (where build.zig lives) from compiler binary location.
-    // Compiler is at <tsz_root>/zig-out/bin/zigos-compiler — go up 3 levels.
+    // Binary can be at:
+    //   <repo>/bin/tsz           → go up 1 level, then into tsz/
+    //   <repo>/tsz/zig-out/bin/tsz → go up 3 levels
     const tsz_root: ?[]const u8 = blk: {
         var buf: [std.fs.max_path_bytes]u8 = undefined;
         const exe_path = std.fs.selfExePath(&buf) catch break :blk null;
-        var dir = std.fs.path.dirname(exe_path) orelse break :blk null; // bin/
-        dir = std.fs.path.dirname(dir) orelse break :blk null; // zig-out/
-        dir = std.fs.path.dirname(dir) orelse break :blk null; // tsz_root/
-        break :blk std.fmt.allocPrint(alloc, "{s}", .{dir}) catch null;
+        const bin_dir = std.fs.path.dirname(exe_path) orelse break :blk null;
+        const parent = std.fs.path.dirname(bin_dir) orelse break :blk null;
+
+        // Try <parent>/tsz/build.zig (binary at <repo>/bin/tsz)
+        const try1 = std.fmt.allocPrint(alloc, "{s}/tsz", .{parent}) catch break :blk null;
+        if (std.fs.cwd().access(std.fmt.allocPrint(alloc, "{s}/build.zig", .{try1}) catch break :blk null, .{})) |_| {
+            break :blk try1;
+        } else |_| {}
+
+        // Try going up 3 levels (binary at <tsz>/zig-out/bin/tsz)
+        const grandparent = std.fs.path.dirname(parent) orelse break :blk null;
+        break :blk std.fmt.allocPrint(alloc, "{s}", .{grandparent}) catch null;
     };
 
     // Write output — embedded goes to framework/devtools.zig, normal to generated_app.zig
@@ -234,6 +249,14 @@ pub fn main() !void {
         std.debug.print("[tsz] Build failed (exit {d})\n", .{term.Exited});
         return;
     }
+
+    // Package as self-extracting dist binary (replaces raw binary in-place)
+    const cli_dist = @import("cli_dist.zig");
+    const raw_bin = if (tsz_root) |root|
+        std.fmt.allocPrint(alloc, "{s}/zig-out/bin/{s}", .{ root, app_name }) catch return
+    else
+        std.fmt.allocPrint(alloc, "zig-out/bin/{s}", .{app_name}) catch return;
+    cli_dist.packageBinary(alloc, raw_bin, app_name);
     std.debug.print("[tsz] Built -> zig-out/bin/{s}\n", .{app_name});
 }
 

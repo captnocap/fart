@@ -1,9 +1,12 @@
-//! TSZ build — compiler, dist-lean, dist-full
+//! TSZ build
 //!
-//! zig build compiler     — build the .tsz compiler
-//! zig build app          — standard app build (used by compiler, links everything)
-//! zig build dist-lean    — minimal: layout + GPU + SDL2 (no QuickJS/physics/3D/terminal/video)
-//! zig build dist-full    — batteries included: networking, QuickJS, physics, 3D, terminal, video, crypto
+//! zig build tsz            — lean: compiler + layout + GPU + SDL2
+//! zig build tsz-full       — full: compiler + everything (networking, QuickJS, physics, 3D, terminal, video, crypto)
+//! zig build app            — compile generated_app.zig and link against the full engine
+//! zig build test           — run compiler tests
+//! zig build wasm           — WASM layout engine
+//! zig build wasm-gpu       — WASM GPU renderer
+//! zig build wasm-rt        — WASM QuickJS runtime
 
 const std = @import("std");
 
@@ -19,46 +22,26 @@ pub fn build(b: *std.Build) void {
     const wgpu_mod = wgpu_dep.module("wgpu");
 
     // ── User flags ──────────────────────────────────────────────────
-    const no_debug = b.option(bool, "no-debug", "Strip debug server from binary (default for dist builds)") orelse false;
     const sysroot = b.option([]const u8, "sysroot", "Cross-compile sysroot path (e.g., Alpine rootfs with -dev packages)");
 
-    // ── App binary (used by compiler: -Dapp-name=X) ──────────────
-    const app_name = b.option([]const u8, "app-name", "Output binary name (set by compiler)") orelse "zigos-app";
-    const app_exe = addAppExe(b, target, optimize, wgpu_mod, app_name, .full, !no_debug, sysroot);
-    const app_install = b.addInstallArtifact(app_exe, .{});
-    const app_step = b.step("app", "tsz app — codegen + layout + rendering");
-    app_step.dependOn(&app_install.step);
-
-    // ── dist-lean — lean code addict tier ─────────────────────────
-    const lean_exe = addAppExe(b, target, optimize, wgpu_mod, "zigos-lean", .lean, false, sysroot);
+    // ── zigos (lean) — compiler + layout + primitives + GPU ─────────
+    const lean_exe = addEngineExe(b, target, optimize, wgpu_mod, "tsz", .lean, sysroot);
     const lean_install = b.addInstallArtifact(lean_exe, .{});
-    const lean_step = b.step("dist-lean", "Lean tier — layout + GPU + SDL2 only");
+    const lean_step = b.step("tsz", "Lean: compiler + layout + GPU + SDL2");
     lean_step.dependOn(&lean_install.step);
 
-    // ── dist-full — batteries included tier ───────────────────────
-    const full_exe = addAppExe(b, target, optimize, wgpu_mod, "zigos-full", .full, false, sysroot);
+    // ── tsz-full — compiler + everything ────────────────────────────
+    const full_exe = addEngineExe(b, target, optimize, wgpu_mod, "tsz-full", .full, sysroot);
     const full_install = b.addInstallArtifact(full_exe, .{});
-    const full_step = b.step("dist-full", "Full tier — networking, QuickJS, physics, 3D, terminal, video, crypto");
+    const full_step = b.step("tsz-full", "Full: compiler + networking + QuickJS + physics + 3D + terminal + video + crypto");
     full_step.dependOn(&full_install.step);
 
-    // ── Backward compat alias ────────────────────────────────────
-    const full_compat_step = b.step("app-full", "tsz-full (alias for dist-full)");
-    full_compat_step.dependOn(&full_install.step);
-
-    // ── TSZ compiler ─────────────────────────────────────────────
-    const compiler_exe = b.addExecutable(.{
-        .name = "zigos-compiler",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("compiler/cli.zig"),
-            .target = target,
-            .optimize = optimize,
-        }),
-    });
-    compiler_exe.linkLibC();
-    compiler_exe.stack_size = 64 * 1024 * 1024; // 64MB — Generator struct + recursive parseJSXElement frames are large
-    const compiler_install = b.addInstallArtifact(compiler_exe, .{});
-    const compiler_step = b.step("compiler", "Build TSZ compiler");
-    compiler_step.dependOn(&compiler_install.step);
+    // ── App binary (compiled .tsz app) ──────────────────────────────
+    const app_name = b.option([]const u8, "app-name", "Output binary name (set by compiler)") orelse "tsz-app";
+    const app_exe = addAppExe(b, target, optimize, wgpu_mod, app_name, .full, sysroot);
+    const app_install = b.addInstallArtifact(app_exe, .{});
+    const app_step = b.step("app", "Build a compiled .tsz app (links full engine)");
+    app_step.dependOn(&app_install.step);
 
     // ── Compiler tests ───────────────────────────────────────────
     const compiler_tests = b.addTest(.{
@@ -194,7 +177,44 @@ pub fn build(b: *std.Build) void {
 
 const Tier = enum { lean, full };
 
-// ── Shared app executable builder ────────────────────────────────────────
+// ── Engine executable (compiler + runtime) ──────────────────────────────
+//
+// Both zigos and zigos-full include the compiler AND runtime.
+// The compiler is pure Zig (no framework deps). The runtime is the
+// framework (layout, GPU, SDL2, etc.). They're independent modules
+// linked into one binary.
+
+fn addEngineExe(
+    b: *std.Build,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+    _: *std.Build.Module, // wgpu_mod — will be used when runtime is linked
+    name: []const u8,
+    _: Tier, // tier — will be used when runtime is linked
+    _: ?[]const u8, // sysroot — will be used when runtime is linked
+) *std.Build.Step.Compile {
+    // Engine root: compiler/cli.zig for now.
+    // Next step: unified entry point that handles both compile and run.
+    const root_mod = b.createModule(.{
+        .root_source_file = b.path("compiler/cli.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const exe = b.addExecutable(.{
+        .name = name,
+        .root_module = root_mod,
+    });
+    exe.linkLibC();
+    exe.stack_size = 64 * 1024 * 1024; // 64MB — Generator struct + recursive parseJSXElement frames
+
+    return exe;
+}
+
+// ── App executable (compiled .tsz, links framework) ─────────────────────
+//
+// This builds generated_app.zig against the full framework. The engine
+// object files are cached — only the app-specific code recompiles.
 
 fn addAppExe(
     b: *std.Build,
@@ -203,7 +223,6 @@ fn addAppExe(
     wgpu_mod: *std.Build.Module,
     name: []const u8,
     tier: Tier,
-    debug_server: bool,
     sysroot: ?[]const u8,
 ) *std.Build.Step.Compile {
     const os = target.result.os.tag;
@@ -222,7 +241,7 @@ fn addAppExe(
     options.addOption(bool, "has_transitions", !is_lean);
     options.addOption(bool, "has_networking", !is_lean);
     options.addOption(bool, "has_crypto", !is_lean);
-    options.addOption(bool, "has_debug_server", debug_server);
+    options.addOption(bool, "has_debug_server", true); // always available, gated by TSZ_DEBUG=1 at runtime
 
     const root_mod = b.createModule(.{
         .root_source_file = b.path("generated_app.zig"),
@@ -248,16 +267,13 @@ fn addAppExe(
         exe.linkSystemLibrary("pthread");
         exe.linkSystemLibrary("dl");
         if (sysroot) |sr| {
-            // Cross-compile: use sysroot paths (Alpine musl)
             exe.root_module.addIncludePath(.{ .cwd_relative = b.fmt("{s}/usr/include/freetype2", .{sr}) });
             exe.root_module.addIncludePath(.{ .cwd_relative = b.fmt("{s}/usr/include", .{sr}) });
             exe.root_module.addLibraryPath(.{ .cwd_relative = b.fmt("{s}/usr/lib", .{sr}) });
         } else {
-            // Native build: use host system paths
             exe.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/freetype2" });
             exe.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/x86_64-linux-gnu" });
         }
-        // musl compat shim: glibc-built static libs (wgpu-native) need stat64/mmap64 aliases
         if (target.result.abi == .musl) {
             exe.root_module.addCSourceFile(.{ .file = b.path("ffi/musl_compat.c"), .flags = &.{"-O2"} });
         }
@@ -269,33 +285,28 @@ fn addAppExe(
 
     // ── Include paths needed by framework headers (even in lean — for @cImport) ──
     exe.root_module.addIncludePath(b.path("."));
-    exe.root_module.addIncludePath(b.path("../love2d/quickjs")); // quickjs.h (header-only in lean)
-    exe.root_module.addIncludePath(b.path("ffi"));               // physics_shim.h etc
+    exe.root_module.addIncludePath(b.path("../love2d/quickjs"));
+    exe.root_module.addIncludePath(b.path("ffi"));
 
     // ── stb_image (lean keeps image loading for textures) ───────
     exe.root_module.addCSourceFile(.{ .file = b.path("stb/stb_image_impl.c"), .flags = &.{"-O2"} });
 
     // ── Full tier only ──────────────────────────────────────────
     if (!is_lean) {
-        // QuickJS
         exe.root_module.addIncludePath(b.path("../love2d/quickjs"));
         exe.root_module.addCSourceFiles(.{
             .root = b.path("../love2d/quickjs"),
             .files = &.{ "cutils.c", "dtoa.c", "libregexp.c", "libunicode.c", "quickjs.c", "quickjs-libc.c" },
             .flags = &.{ "-O2", "-D_GNU_SOURCE", "-DQUICKJS_NG_BUILD" },
         });
-        // stb_image_write
         exe.root_module.addCSourceFile(.{ .file = b.path("stb/stb_image_write_impl.c"), .flags = &.{"-O2"} });
-        // FFI shims
         exe.root_module.addCSourceFile(.{ .file = b.path("ffi/clock_shim.c"), .flags = &.{"-O2"} });
         exe.root_module.addCSourceFile(.{ .file = b.path("ffi/compute_shim.c"), .flags = &.{"-O2"} });
         exe.root_module.addCSourceFile(.{ .file = b.path("ffi/physics_shim.cpp"), .flags = &.{"-O2"} });
         exe.root_module.addIncludePath(b.path("ffi"));
-        // Libraries
         exe.linkSystemLibrary("box2d");
         exe.linkSystemLibrary("sqlite3");
         exe.linkSystemLibrary("vterm");
-        // Networking
         exe.linkSystemLibrary("curl");
         exe.linkSystemLibrary("archive");
         if (os == .linux) {
