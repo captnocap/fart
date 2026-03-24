@@ -95,7 +95,7 @@ pub fn tokenColor(token: Token) Color {
 
 // ── Classifier mode ─────────────────────────────────────────────────
 
-pub const Mode = enum { none, basic, claude_code };
+pub const Mode = enum { none, basic, claude_code, json };
 
 // ── Classification cache ────────────────────────────────────────────
 
@@ -113,6 +113,21 @@ pub fn setMode(mode: Mode) void {
         active_mode = mode;
         cache_dirty = true;
     }
+}
+
+/// Set a row's token externally (used by JSON-driven classifier in JS).
+pub fn setRowToken(row: u16, token: Token) void {
+    if (row >= MAX_ROWS) return;
+    row_cache[row] = token;
+}
+
+/// Map a token name string to the Token enum. Returns .output for unknown names.
+pub fn tokenFromName(name: []const u8) Token {
+    const fields = @typeInfo(Token).@"enum".fields;
+    inline for (fields) |f| {
+        if (std.mem.eql(u8, name, f.name)) return @enumFromInt(f.value);
+    }
+    return .output;
 }
 
 pub fn markDirty() void {
@@ -138,15 +153,16 @@ pub fn getRowToken(row: u16) Token {
 pub fn classifyAndCache(row: u16, text: []const u8, total_rows: u16) void {
     if (row >= MAX_ROWS) return;
     const prev: Token = if (row > 0) row_cache[row - 1] else .output;
-    var kind = switch (active_mode) {
-        .none => Token.output,
-        .basic => classifyBasic(text, row, total_rows),
-        .claude_code => classifyClaude(text, row, total_rows),
-    };
-    if (active_mode == .none) {
+    // json mode: tokens are set externally by JS, skip Zig classification
+    if (active_mode == .none or active_mode == .json) {
         row_cache[row] = .output;
         return;
     }
+    var kind = switch (active_mode) {
+        .none, .json => unreachable,
+        .basic => classifyBasic(text, row, total_rows),
+        .claude_code => classifyClaude(text, row, total_rows),
+    };
     kind = refineAdjacency(kind, prev, text);
     row_cache[row] = kind;
 }
@@ -411,7 +427,7 @@ fn isUpperLine(s: []const u8) bool {
 
 pub fn isTurnStart(kind: Token) bool {
     return switch (active_mode) {
-        .none => false,
+        .none, .json => false,
         .basic => kind == .command,
         .claude_code => kind == .user_prompt,
     };

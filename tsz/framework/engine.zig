@@ -1570,8 +1570,8 @@ pub fn run(config: AppConfig) !void {
                     }
                 }
             }
-            // Re-classify when damage occurred (skip when mode=none)
-            if (classifier.isDirty() and classifier.getMode() != .none) {
+            // Re-classify when damage occurred (skip when mode=none or json — JS handles json)
+            if (classifier.isDirty() and classifier.getMode() != .none and classifier.getMode() != .json) {
                 const cls_rows = vterm_mod.getRows();
                 var cls_r: u16 = 0;
                 while (cls_r < cls_rows) : (cls_r += 1) {

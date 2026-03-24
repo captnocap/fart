@@ -340,10 +340,11 @@ fn hostSemSetMode(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]q
     if (argc < 1) return QJS_UNDEFINED;
     var mode: i32 = 0;
     _ = qjs.JS_ToInt32(ctx, &mode, argv[0]);
-    // 0=none (no classification), 1=basic, 2=claude_code
+    // 0=none, 1=basic, 2=claude_code, 3=json (JS-driven)
     classifier.setMode(switch (mode) {
         1 => .basic,
         2 => .claude_code,
+        3 => .json,
         else => .none,
     });
     classifier.markDirty();
@@ -383,6 +384,35 @@ fn hostSemExport(ctx: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSVa
     return arr;
 }
 
+// ── JSON-driven classifier bridge ────────────────────────────────
+// These let JS set row tokens directly and trigger the graph build,
+// enabling runtime classifiers loaded from JSON sheets.
+
+fn hostSemSetRowToken(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    if (argc < 2) return QJS_UNDEFINED;
+    var row: i32 = 0;
+    _ = qjs.JS_ToInt32(ctx, &row, argv[0]);
+    if (row < 0) return QJS_UNDEFINED;
+    const name = qjs.JS_ToCString(ctx, argv[1]);
+    if (name == null) return QJS_UNDEFINED;
+    defer qjs.JS_FreeCString(ctx, name);
+    const token = classifier.tokenFromName(std.mem.span(name));
+    classifier.setRowToken(@intCast(row), token);
+    return QJS_UNDEFINED;
+}
+
+fn hostSemVtermRows(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    return qjs.JS_NewFloat64(null, @floatFromInt(vterm_mod.getRows()));
+}
+
+fn hostSemBuildGraph(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    var rows: i32 = 0;
+    if (argc >= 1) _ = qjs.JS_ToInt32(ctx, &rows, argv[0]);
+    if (rows <= 0) rows = @intCast(vterm_mod.getRows());
+    semantic.tick(@intCast(rows));
+    return QJS_UNDEFINED;
+}
+
 /// Single-shot semantic snapshot — the standardized consumer format.
 /// Returns a versioned JS object with state + classified rows + graph.
 /// Consumer calls JSON.stringify(__sem_snapshot()) to get the wire format.
@@ -402,6 +432,7 @@ fn hostSemSnapshot(ctx: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JS
         .none => "none",
         .basic => "basic",
         .claude_code => "claude_code",
+        .json => "json",
     };
     _ = qjs.JS_SetPropertyStr(c2, root, "classifier", qjs.JS_NewStringLen(c2, cls_name.ptr, @intCast(cls_name.len)));
     setF(c2, root, "frame", @floatFromInt(semantic.getFrame()));
@@ -817,6 +848,70 @@ const polyfill =
     \\  const body = __fetch(url);
     \\  return body;
     \\};
+    \\globalThis.__semCls = {
+    \\  sheet: null, prevKind: null,
+    \\  load: function(path) {
+    \\    var json = __fs_readfile(path);
+    \\    if (!json) return false;
+    \\    try { this.sheet = JSON.parse(json); } catch(e) { return false; }
+    \\    __sem_set_mode(3);
+    \\    return true;
+    \\  },
+    \\  _match: function(r, text, trimmed) {
+    \\    var t = r.on === 'trimmed' ? trimmed : text;
+    \\    if (r.match === 'contains') return t.indexOf(r.value) >= 0;
+    \\    if (r.match === 'starts_with') {
+    \\      var s = trimmed;
+    \\      if (r.case === 'insensitive') return s.toLowerCase().indexOf(r.value.toLowerCase()) === 0;
+    \\      return s.indexOf(r.value) === 0;
+    \\    }
+    \\    if (r.match === 'equals') return trimmed === r.value;
+    \\    if (r.match === 'regex') return new RegExp(r.pattern).test(t);
+    \\    return false;
+    \\  },
+    \\  classifyRow: function(text, row, total) {
+    \\    if (!this.sheet) return 'output';
+    \\    var trimmed = text.replace(/^\s+|\s+$/g, '');
+    \\    if (trimmed.length === 0) return this.sheet.default_token || 'output';
+    \\    var rules = this.sheet.rules;
+    \\    for (var i = 0; i < rules.length; i++) {
+    \\      var r = rules[i];
+    \\      if (r.max_row !== undefined && row > r.max_row) continue;
+    \\      if (r.zone === 'bottom_8' && row < total - 8) continue;
+    \\      if (r.max_len && trimmed.length > r.max_len) continue;
+    \\      if (!this._match(r, text, trimmed)) continue;
+    \\      if (r.also && !this._match(r.also, text, trimmed)) continue;
+    \\      if (r.not_contains && text.indexOf(r.not_contains) >= 0) continue;
+    \\      return r.token;
+    \\    }
+    \\    return this.sheet.default_token || 'output';
+    \\  },
+    \\  refine: function(kind, prev, text) {
+    \\    if (!this.sheet || !this.sheet.adjacency) return kind;
+    \\    var adj = this.sheet.adjacency;
+    \\    for (var i = 0; i < adj.length; i++) {
+    \\      var a = adj[i];
+    \\      if (a.when_current && a.when_current !== kind) continue;
+    \\      if (a.when_prev && a.when_prev.indexOf(prev) < 0) continue;
+    \\      if (a.text_contains && text.indexOf(a.text_contains) < 0) continue;
+    \\      return a.promote_to;
+    \\    }
+    \\    return kind;
+    \\  },
+    \\  classifyAll: function() {
+    \\    if (!this.sheet) return;
+    \\    var rows = __sem_vterm_rows();
+    \\    var prev = null;
+    \\    for (var r = 0; r < rows; r++) {
+    \\      var text = __sem_row_text(r);
+    \\      var kind = this.classifyRow(text, r, rows);
+    \\      kind = this.refine(kind, prev, text);
+    \\      __sem_set_row_token(r, kind);
+    \\      prev = kind;
+    \\    }
+    \\    __sem_build_graph(rows);
+    \\  }
+    \\};
 ;
 
 // ── HTTP fetch host function ─────────────────────────────────────
@@ -1157,6 +1252,10 @@ pub fn initVM() void {
     _ = qjs.JS_SetPropertyStr(ctx, global, "__sem_frame", qjs.JS_NewCFunction(ctx, hostSemFrame, "__sem_frame", 0));
     _ = qjs.JS_SetPropertyStr(ctx, global, "__sem_export", qjs.JS_NewCFunction(ctx, hostSemExport, "__sem_export", 0));
     _ = qjs.JS_SetPropertyStr(ctx, global, "__sem_snapshot", qjs.JS_NewCFunction(ctx, hostSemSnapshot, "__sem_snapshot", 0));
+    // JSON-driven classifier bridge
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__sem_set_row_token", qjs.JS_NewCFunction(ctx, hostSemSetRowToken, "__sem_set_row_token", 2));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__sem_vterm_rows", qjs.JS_NewCFunction(ctx, hostSemVtermRows, "__sem_vterm_rows", 0));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__sem_build_graph", qjs.JS_NewCFunction(ctx, hostSemBuildGraph, "__sem_build_graph", 1));
 
     // Filesystem bridge (session discovery for tsz-tools inspector)
     _ = qjs.JS_SetPropertyStr(ctx, global, "__fs_scandir", qjs.JS_NewCFunction(ctx, hostFsScandir, "__fs_scandir", 1));
@@ -1245,6 +1344,16 @@ pub fn callGlobalStr(name: [*:0]const u8, arg: [*:0]const u8) void {
             qjs.JS_FreeValue(ctx, argv[0]);
             qjs.JS_FreeValue(ctx, r);
         }
+    }
+}
+
+/// Evaluate a JS expression string (for multi-arg function calls from map handlers).
+pub fn evalExpr(code: []const u8) void {
+    if (comptime !HAS_QUICKJS) return;
+    if (g_qjs_ctx) |ctx| {
+        if (code.len == 0) return;
+        const r = qjs.JS_Eval(ctx, code.ptr, code.len, "<handler>", 0);
+        qjs.JS_FreeValue(ctx, r);
     }
 }
 
