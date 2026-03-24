@@ -74,6 +74,18 @@ tsz/carts/inspector/Inspector.gen.zig
 tsz/runtime/generated_app.zig
 tsz/runtime/ffi_libs.txt
 
+# ── OS/Web binaries (large, rebuilt from source) ────────
+os/web/initrd.cpio.gz
+os/web/tsz-runtime.wasm
+os/web/vmlinuz
+os/web/v86/
+
+# Root-level build artifact
+generated_app.zig
+
+# Claude ephemeral
+.claude/scheduled_tasks.lock
+
 # ── General ─────────────────────────────────────────────
 # Generated files
 src/generated/content.json
