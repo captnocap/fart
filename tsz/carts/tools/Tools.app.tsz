@@ -31,6 +31,7 @@ function App() {
 
         {activeTab == 3 && <C.TabActive onPress={() => { setActiveTab(3) }}><C.TabTextActive>Tests</C.TabTextActive></C.TabActive>}
         {activeTab != 3 && <C.Tab onPress={() => { setActiveTab(3) }}><C.TabText>Tests</C.TabText></C.Tab>}
+
       </C.TabRow>
 
       {activeTab == 0 && <Dashboard />}

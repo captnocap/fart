@@ -1,14 +1,11 @@
-import { TreeStack, TreeRow, TreeBranchOpen, TreeDim } from './style_cls';
+import { TreeStack } from './style_cls';
+import { TreeLine } from './TreeLine.c';
 
 function TreeHybridView() {
   return (
     <C.TreeStack>
       {treeNodes.map((node) => (
-        <C.TreeRow>
-          <C.TreeBranchOpen>{node.caret}</C.TreeBranchOpen>
-          <Text fontSize={11} color={node.tagColor}>{node.tag}</Text>
-          <C.TreeDim>{node.dim}</C.TreeDim>
-        </C.TreeRow>
+        <TreeLine indent={node.depth * 8} caret={node.hasKids} tag={node.tag} tagColor={node.tagColor} dim={node.dim} />
       ))}
     </C.TreeStack>
   );

@@ -173,4 +173,12 @@ classifier({
   DashToolbarButtonDangerLabel: { type: 'Text', fontSize: 11, color: 'theme-bg' },
   DashToolbarSpacer: { type: 'Box', style: { flexGrow: 1 } },
   DashProjectCount: { type: 'Text', fontSize: 10, color: 'theme-textDim' },
+
+  TrayCard: { type: 'Box', style: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 10, backgroundColor: 'theme-bgElevated', borderRadius: 6, borderWidth: 1, borderColor: 'theme-border' } },
+  TrayAppName: { type: 'Text', fontSize: 12, color: 'theme-text' },
+  TrayAppPid: { type: 'Text', fontSize: 10, color: 'theme-textDim' },
+  TrayAppStatus: { type: 'Text', fontSize: 10, color: 'theme-success' },
+  TrayAppStopped: { type: 'Text', fontSize: 10, color: 'theme-textDim' },
+  TraySection: { type: 'Box', style: { flexDirection: 'column', gap: 6 } },
+  TrayInfo: { type: 'Text', fontSize: 11, color: 'theme-textDim' },
 })
