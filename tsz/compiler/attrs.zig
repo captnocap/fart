@@ -6,6 +6,7 @@
 const std = @import("std");
 const codegen = @import("codegen.zig");
 const Generator = codegen.Generator;
+const emit_map = @import("emit_map.zig");
 
 // ── Style parsing ──
 
@@ -378,13 +379,11 @@ pub fn consumeStyleValueExpr(self: *Generator) []const u8 {
         if ((k == .rparen or k == .rbrace) and depth > 0) depth -= 1;
         const txt = self.curText();
         if (k == .identifier) {
-            // Check map item param: bar.field → _oa{N}_{field}[_i]
+            // Check map item param: bar.field.sub → _oa{N}_{field_sub}[_i]
             if (self.map_item_param != null and std.mem.eql(u8, txt, self.map_item_param.?)) {
                 self.advance_token();
                 if (self.curKind() == .dot) {
-                    self.advance_token(); // skip dot
-                    const field_name = self.curText();
-                    self.advance_token(); // skip field
+                    const field_name = self.consumeCompoundField();
                     if (self.map_obj_array_idx) |oa_idx| {
                         expr.appendSlice(self.alloc, std.fmt.allocPrint(self.alloc,
                             "_oa{d}_{s}[_i]", .{ oa_idx, field_name }) catch "") catch {};
@@ -401,7 +400,7 @@ pub fn consumeStyleValueExpr(self: *Generator) []const u8 {
             // Check map index param: i → _i
             if (self.map_index_param) |idx_p| {
                 if (std.mem.eql(u8, txt, idx_p)) {
-                    expr.appendSlice(self.alloc, "@as(f32, @floatFromInt(_i))") catch {};
+                    expr.appendSlice(self.alloc, "_i") catch {};
                     self.advance_token();
                     continue;
                 }
@@ -462,6 +461,12 @@ pub fn consumeStyleValueExpr(self: *Generator) []const u8 {
                 // so the outer @as(f32, ...) works through runtime control flow
                 expr.appendSlice(self.alloc, "@as(f32, ") catch {};
                 expr.appendSlice(self.alloc, txt) catch {};
+                expr.appendSlice(self.alloc, ")") catch {};
+            } else if (k == .string and txt.len == 9 and txt[1] == '#') {
+                // Hex color string in style expression → convert to typed hex integer
+                // "#1f2937" → @as(u32, 0x1f2937) (concrete type for runtime control flow)
+                expr.appendSlice(self.alloc, "@as(u32, 0x") catch {};
+                expr.appendSlice(self.alloc, txt[2..8]) catch {};
                 expr.appendSlice(self.alloc, ")") catch {};
             } else {
                 expr.appendSlice(self.alloc, txt) catch {};
@@ -797,6 +802,15 @@ pub fn parseTemplateLiteralFromText(self: *Generator, inner: []const u8) !codege
                 try fmt.appendSlice(self.alloc, "{d}");
                 if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
                 try args.appendSlice(self.alloc, resolved_expr);
+            } else if (self.map_index_param != null and
+                std.mem.indexOf(u8, expr, self.map_index_param.?) != null)
+            {
+                // Expression containing map index param: i + 1, i * 2, etc.
+                // Substitute index param → @as(i64, @intCast(_i))
+                const resolved = try emit_map.replaceIdent(self.alloc, expr, self.map_index_param.?, "@as(i64, @intCast(_i))");
+                try fmt.appendSlice(self.alloc, "{d}");
+                if (args.items.len > 0) try args.appendSlice(self.alloc, ", ");
+                try args.appendSlice(self.alloc, resolved);
             } else {
                 // Unknown expression — embed as static text
                 const warn_msg = std.fmt.allocPrint(self.alloc,

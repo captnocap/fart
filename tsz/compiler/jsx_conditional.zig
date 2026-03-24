@@ -226,6 +226,34 @@ pub fn tryParseConditionalChild(self: *Generator, child_exprs: *std.ArrayListUnm
                     continue;
                 }
             }
+            // String literal in condition (e.g., '' or "") — for string state comparisons
+            if (self.curKind() == .string) {
+                const str_text = self.curText();
+                // Empty string comparison: error != '' → state.getSlotString(N).len > 0
+                // error == '' → state.getSlotString(N).len == 0
+                if (str_text.len == 2 and (str_text[0] == '\'' or str_text[0] == '"')) {
+                    // Empty string — rewrite the preceding comparison operator
+                    // Remove trailing " != " or " == " from cond_parts and replace
+                    if (cond_parts.items.len >= 4) {
+                        const tail = cond_parts.items[cond_parts.items.len - 4 ..];
+                        if (std.mem.eql(u8, tail, " != ")) {
+                            cond_parts.items.len -= 4;
+                            try cond_parts.appendSlice(self.alloc, ".len > 0");
+                        } else if (std.mem.eql(u8, tail, " == ")) {
+                            cond_parts.items.len -= 4;
+                            try cond_parts.appendSlice(self.alloc, ".len == 0");
+                        }
+                    }
+                    self.advance_token();
+                    continue;
+                }
+                // Non-empty string: emit as Zig string for comparison is not trivial,
+                // but for now pass through
+                if (cond_parts.items.len > 1) try cond_parts.append(self.alloc, ' ');
+                try cond_parts.appendSlice(self.alloc, str_text);
+                self.advance_token();
+                continue;
+            }
             // Operators — emit Zig equivalents
             if (self.curKind() == .eq_eq) {
                 try cond_parts.appendSlice(self.alloc, " == ");

@@ -842,6 +842,83 @@ fn collectObjectStateHook(self: *Generator, getter: []const u8, setter: []const 
     }
 }
 
+/// Recursively parse object fields, flattening nested objects with underscore-joined names.
+/// e.g. { config: { theme: { bg: 0 } } } → field "config_theme_bg" (int), js_path "config.theme.bg"
+fn parseObjectFields(
+    self: *Generator,
+    fields: *[codegen.MAX_OBJECT_ARRAY_FIELDS]codegen.ObjectArrayField,
+    field_count: *u32,
+    prefix: []const u8,
+    js_prefix: []const u8,
+) void {
+    while (self.curKind() != .rbrace and self.curKind() != .eof) {
+        if (self.curKind() == .identifier) {
+            const raw_name = self.curText();
+            self.advance_token();
+            if (self.curKind() == .colon) self.advance_token();
+
+            // Build compound name: prefix + raw_name (underscore-separated for Zig identifiers)
+            const field_name = if (prefix.len > 0)
+                (std.fmt.allocPrint(self.alloc, "{s}_{s}", .{ prefix, raw_name }) catch raw_name)
+            else
+                raw_name;
+
+            // Build JS path: js_prefix.raw_name (dot-separated for nested property access)
+            const field_js_path = if (js_prefix.len > 0)
+                (std.fmt.allocPrint(self.alloc, "{s}.{s}", .{ js_prefix, raw_name }) catch raw_name)
+            else
+                raw_name;
+
+            if (self.curKind() == .lbrace) {
+                // Nested object — recurse with updated prefix
+                self.advance_token(); // {
+                parseObjectFields(self, fields, field_count, field_name, field_js_path);
+                if (self.curKind() == .rbrace) self.advance_token(); // }
+            } else {
+                // Leaf value — infer type
+                var field_type: codegen.StateType = .int;
+                if (self.curKind() == .number) {
+                    const num_text = self.curText();
+                    if (std.mem.indexOf(u8, num_text, ".") != null) {
+                        field_type = .float;
+                    }
+                    self.advance_token();
+                } else if (self.curKind() == .string) {
+                    field_type = .string;
+                    self.advance_token();
+                } else if (self.curKind() == .identifier) {
+                    const val = self.curText();
+                    if (std.mem.eql(u8, val, "true") or std.mem.eql(u8, val, "false")) {
+                        field_type = .boolean;
+                    }
+                    self.advance_token();
+                } else if (self.curKind() == .minus) {
+                    self.advance_token();
+                    if (self.curKind() == .number) {
+                        const num_text = self.curText();
+                        if (std.mem.indexOf(u8, num_text, ".") != null) field_type = .float;
+                        self.advance_token();
+                    }
+                } else {
+                    self.advance_token();
+                }
+
+                if (field_count.* < codegen.MAX_OBJECT_ARRAY_FIELDS) {
+                    fields[field_count.*] = .{
+                        .name = field_name,
+                        .field_type = field_type,
+                        .js_path = field_js_path,
+                    };
+                    field_count.* += 1;
+                }
+            }
+        } else {
+            self.advance_token();
+        }
+        if (self.curKind() == .comma) self.advance_token();
+    }
+}
+
 /// Parse an object array hook: useState([{ field: value, ... }])
 /// Extracts field names and types from the first object literal in the array.
 /// Does NOT create normal state slots — registers an ObjectArrayInfo instead.
@@ -866,60 +943,8 @@ fn collectObjectArrayHook(self: *Generator, getter: []const u8, setter: []const 
     var fields: [codegen.MAX_OBJECT_ARRAY_FIELDS]codegen.ObjectArrayField = undefined;
     var field_count: u32 = 0;
 
-    // Parse fields from the first object literal
-    while (self.curKind() != .rbrace and self.curKind() != .eof) {
-        if (self.curKind() == .identifier) {
-            const field_name = self.curText();
-            self.advance_token();
-            if (self.curKind() == .colon) self.advance_token();
-
-            // Infer type from initial value
-            var field_type: codegen.StateType = .int;
-            if (self.curKind() == .number) {
-                const num_text = self.curText();
-                if (std.mem.indexOf(u8, num_text, ".") != null) {
-                    field_type = .float;
-                } else {
-                    field_type = .int;
-                }
-                self.advance_token();
-            } else if (self.curKind() == .string) {
-                field_type = .string;
-                self.advance_token();
-            } else if (self.curKind() == .identifier) {
-                const val = self.curText();
-                if (std.mem.eql(u8, val, "true") or std.mem.eql(u8, val, "false")) {
-                    field_type = .boolean;
-                }
-                self.advance_token();
-            } else if (self.curKind() == .minus) {
-                // Negative number
-                self.advance_token();
-                if (self.curKind() == .number) {
-                    const num_text = self.curText();
-                    if (std.mem.indexOf(u8, num_text, ".") != null) {
-                        field_type = .float;
-                    } else {
-                        field_type = .int;
-                    }
-                    self.advance_token();
-                }
-            } else {
-                self.advance_token();
-            }
-
-            if (field_count < codegen.MAX_OBJECT_ARRAY_FIELDS) {
-                fields[field_count] = .{
-                    .name = field_name,
-                    .field_type = field_type,
-                };
-                field_count += 1;
-            }
-        } else {
-            self.advance_token();
-        }
-        if (self.curKind() == .comma) self.advance_token();
-    }
+    // Parse fields from the first object literal (with recursive nesting)
+    parseObjectFields(self, &fields, &field_count, "", "");
     if (self.curKind() == .rbrace) self.advance_token(); // }
 
     // Skip past any remaining objects in the array (we only need the schema from the first)
@@ -1339,10 +1364,12 @@ pub fn findReturnStatement(self: *Generator) void {
 /// Phase 5: Extract JavaScript from <script>...</script> blocks.
 /// This JS gets embedded in the generated Zig as JS_LOGIC and runs in QuickJS.
 /// Scans raw source bytes (not tokens) since <script> content isn't tokenized.
+/// Concatenates ALL <script> blocks (app + imported components) with newlines.
 pub fn extractComputeBlock(self: *Generator) void {
     const src = self.source;
     const open_tag = "<script>";
     const close_tag = "</script>";
+    var parts: std.ArrayListUnmanaged(u8) = .{};
     var i: usize = 0;
     while (i + open_tag.len <= src.len) : (i += 1) {
         if (std.mem.eql(u8, src[i .. i + open_tag.len], open_tag)) {
@@ -1350,11 +1377,18 @@ pub fn extractComputeBlock(self: *Generator) void {
             var j = body_start;
             while (j + close_tag.len <= src.len) : (j += 1) {
                 if (std.mem.eql(u8, src[j .. j + close_tag.len], close_tag)) {
-                    self.compute_js = src[body_start..j];
-                    return;
+                    if (parts.items.len > 0) {
+                        parts.appendSlice(self.alloc, "\n") catch return;
+                    }
+                    parts.appendSlice(self.alloc, src[body_start..j]) catch return;
+                    i = j + close_tag.len;
+                    break;
                 }
             }
         }
+    }
+    if (parts.items.len > 0) {
+        self.compute_js = self.alloc.dupe(u8, parts.items) catch return;
     }
 }
 
@@ -1393,6 +1427,23 @@ pub fn rewriteSetterCalls(self: *Generator, js: []const u8) ![]const u8 {
     var result: std.ArrayListUnmanaged(u8) = .{};
     var line_iter = std.mem.splitScalar(u8, js, '\n');
     var first_line = true;
+    // Emit JS-side mirror variables for object arrays so getters work in script blocks.
+    // e.g. const [items, setItems] = useState([{...}]) →
+    //   var items = [];
+    //   function setItems(v) { items = v; __setObjArr0(v); }
+    for (0..self.object_array_count) |oi| {
+        const oa_getter = self.object_arrays[oi].getter;
+        const oa_setter = self.object_arrays[oi].setter;
+        if (oa_getter.len == 0 or oa_setter.len == 0) continue;
+        try result.appendSlice(self.alloc, "var ");
+        try result.appendSlice(self.alloc, oa_getter);
+        try result.appendSlice(self.alloc, " = [];\n");
+        try result.appendSlice(self.alloc, "function ");
+        try result.appendSlice(self.alloc, oa_setter);
+        try result.appendSlice(self.alloc, "(v) { ");
+        try result.appendSlice(self.alloc, oa_getter);
+        try result.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, " = v; __setObjArr{d}(v); }}\n", .{oi}));
+    }
     while (line_iter.next()) |line| {
         const trimmed = std.mem.trim(u8, line, &[_]u8{ ' ', '\t', '\r' });
         if (std.mem.indexOf(u8, trimmed, "useState(") != null) continue;
@@ -1406,23 +1457,28 @@ pub fn rewriteSetterCalls(self: *Generator, js: []const u8) ![]const u8 {
         }
         var ii: usize = 0;
         while (ii < line.len) {
-            var matched = false;
-            // Check object array setters first (not in state_slots)
-            for (0..self.object_array_count) |oi| {
-                const oa_setter = self.object_arrays[oi].setter;
-                if (oa_setter.len == 0) continue;
-                if (ii + oa_setter.len + 1 <= line.len and
-                    std.mem.eql(u8, line[ii .. ii + oa_setter.len], oa_setter) and
-                    line[ii + oa_setter.len] == '(')
-                {
-                    if (ii > 0 and Generator.isIdentByte(line[ii - 1])) break;
-                    try result.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "__setObjArr{d}(", .{oi}));
-                    ii += oa_setter.len + 1;
-                    matched = true;
-                    break;
+            // Skip string literals — don't rewrite inside quotes
+            if (line[ii] == '\'' or line[ii] == '"') {
+                const quote = line[ii];
+                try result.append(self.alloc, quote);
+                ii += 1;
+                while (ii < line.len and line[ii] != quote) {
+                    if (line[ii] == '\\' and ii + 1 < line.len) {
+                        try result.append(self.alloc, line[ii]);
+                        try result.append(self.alloc, line[ii + 1]);
+                        ii += 2;
+                    } else {
+                        try result.append(self.alloc, line[ii]);
+                        ii += 1;
+                    }
                 }
+                if (ii < line.len) {
+                    try result.append(self.alloc, line[ii]);
+                    ii += 1;
+                }
+                continue;
             }
-            if (matched) continue;
+            var matched = false;
             for (0..self.state_count) |si| {
                 const setter = self.state_slots[si].setter;
                 if (setter.len == 0) continue;
@@ -1444,6 +1500,30 @@ pub fn rewriteSetterCalls(self: *Generator, js: []const u8) ![]const u8 {
                     ii += setter.len + 1;
                     matched = true;
                     break;
+                }
+            }
+            // Rewrite state variable reads: step → __getState(0), name → __getStateString(1)
+            if (!matched) {
+                for (0..self.state_count) |si| {
+                    const getter = self.state_slots[si].getter;
+                    if (getter.len == 0) continue;
+                    if (ii + getter.len <= line.len and
+                        std.mem.eql(u8, line[ii .. ii + getter.len], getter))
+                    {
+                        // Word boundary checks: must not be part of a larger identifier
+                        if (ii > 0 and Generator.isIdentByte(line[ii - 1])) break;
+                        if (ii + getter.len < line.len and Generator.isIdentByte(line[ii + getter.len])) break;
+                        // Skip variable declarations — "var myPid" should not rewrite the declaration
+                        if (ii >= 4 and std.mem.eql(u8, line[ii - 4 .. ii], "var ")) break;
+                        if (ii >= 4 and std.mem.eql(u8, line[ii - 4 .. ii], "let ")) break;
+                        const tag = std.meta.activeTag(self.state_slots[si].initial);
+                        const fn_name = if (tag == .string) "__getStateString" else "__getState";
+                        try result.appendSlice(self.alloc, fn_name);
+                        try result.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "({d})", .{si}));
+                        ii += getter.len;
+                        matched = true;
+                        break;
+                    }
                 }
             }
             if (!matched) {

@@ -166,6 +166,7 @@ pub const ObjectStateVar = struct {
 pub const ObjectArrayField = struct {
     name: []const u8,
     field_type: StateType, // .int, .float, .string, .boolean
+    js_path: []const u8 = "", // dotted JS path for nested access (e.g. "config.theme.bg")
 };
 
 pub const ObjectArrayInfo = struct {
@@ -288,6 +289,20 @@ pub const CompInstance = struct {
 };
 
 pub const MAX_MAP_SUB = 8; // max sub-children per inner node
+pub const MAX_MAP_LEAVES = 4; // max leaf-children per sub-node
+
+pub const MapLeafNode = struct {
+    font_size: []const u8 = "",
+    text_color: []const u8 = "",
+    text_fmt: []const u8 = "",
+    text_args: []const u8 = "",
+    is_dynamic_text: bool = false,
+    static_text: []const u8 = "",
+    style: []const u8 = "",
+    display_cond: []const u8 = "", // Zig condition expr for conditional display
+    handler_body: []const u8 = "", // Zig handler body for Pressable leaf nodes
+    children: []const MapLeafNode = &[_]MapLeafNode{}, // recursive children for arbitrary depth
+};
 
 pub const MapSubNode = struct {
     font_size: []const u8 = "",
@@ -298,6 +313,9 @@ pub const MapSubNode = struct {
     static_text: []const u8 = "",
     style: []const u8 = "",
     display_cond: []const u8 = "", // Zig condition expr for conditional display (empty = always show)
+    leaves: []const MapLeafNode = &[_]MapLeafNode{}, // heap-allocated leaf children
+    leaf_count: u32 = 0,
+    handler_body: []const u8 = "", // Zig handler body for Pressable sub-nodes
 };
 
 pub const MapInnerNode = struct {
@@ -313,6 +331,7 @@ pub const MapInnerNode = struct {
     sub_nodes: [MAX_MAP_SUB]MapSubNode = undefined,
     sub_count: u32 = 0,
     raw_expr: []const u8 = "", // Pre-built Zig expression from component inline (bypasses field emit)
+    handler_body: []const u8 = "", // Zig handler body for Pressable inner nodes
 };
 
 pub const MapInfo = struct {
@@ -1032,11 +1051,17 @@ pub const Generator = struct {
                 // Check item.field
                 if (self.map_item_param) |param| {
                     if (std.mem.eql(u8, ident, param) and i < expr.len and expr[i] == '.') {
-                        i += 1; // skip dot
-                        const f_start = i;
-                        while (i < expr.len and ((expr[i] >= 'a' and expr[i] <= 'z') or (expr[i] >= 'A' and expr[i] <= 'Z') or
-                            (expr[i] >= '0' and expr[i] <= '9') or expr[i] == '_')) : (i += 1) {}
-                        const field = expr[f_start..i];
+                        // Consume multi-level dot chain: item.a.b.c → "a_b_c"
+                        var compound: std.ArrayListUnmanaged(u8) = .{};
+                        while (i < expr.len and expr[i] == '.') {
+                            i += 1; // skip dot
+                            const f_start = i;
+                            while (i < expr.len and ((expr[i] >= 'a' and expr[i] <= 'z') or (expr[i] >= 'A' and expr[i] <= 'Z') or
+                                (expr[i] >= '0' and expr[i] <= '9') or expr[i] == '_')) : (i += 1) {}
+                            if (compound.items.len > 0) try compound.append(self.alloc, '_');
+                            try compound.appendSlice(self.alloc, expr[f_start..i]);
+                        }
+                        const field = compound.items;
                         if (self.map_obj_array_idx) |oa_idx| {
                             try result.appendSlice(self.alloc, std.fmt.allocPrint(self.alloc, "_oa{d}_{s}[_i]", .{ oa_idx, field }) catch "0");
                         } else {
@@ -1143,6 +1168,26 @@ pub const Generator = struct {
         return @max(size, 64);
     }
 
+    /// Consume a multi-level dot chain after the item param has been matched and consumed.
+    /// Expects the current token to be `.` (first dot). Consumes `.field.subfield.leaf`
+    /// and returns the underscore-joined compound name: "field_subfield_leaf".
+    /// Used for nested object array access: user.config.theme.bg → "config_theme_bg"
+    pub fn consumeCompoundField(self: *Generator) []const u8 {
+        if (self.curKind() != .dot) return "";
+        self.advance_token(); // skip first dot
+        var compound = self.curText();
+        self.advance_token(); // skip first field
+        while (self.curKind() == .dot and self.pos + 1 < self.lex.count and
+            self.lex.get(self.pos + 1).kind == .identifier)
+        {
+            self.advance_token(); // .
+            const next_field = self.curText();
+            compound = std.fmt.allocPrint(self.alloc, "{s}_{s}", .{ compound, next_field }) catch compound;
+            self.advance_token(); // field
+        }
+        return compound;
+    }
+
     pub fn isIdentByte(ch: u8) bool {
         return (ch >= 'a' and ch <= 'z') or (ch >= 'A' and ch <= 'Z') or (ch >= '0' and ch <= '9') or ch == '_';
     }
@@ -1150,6 +1195,8 @@ pub const Generator = struct {
     pub fn isStringExpr(_: *Generator, expr: []const u8) bool {
         if (expr.len >= 2 and expr[0] == '"' and expr[expr.len - 1] == '"') return true;
         if (std.mem.startsWith(u8, expr, "state.getSlotString(")) return true;
+        // Object array string field: _oa0_name[_i][0.._oa0_name_lens[_i]]
+        if (std.mem.indexOf(u8, expr, "_lens[") != null) return true;
         return false;
     }
 

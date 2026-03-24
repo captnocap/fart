@@ -366,41 +366,72 @@ fn emitStatement(
         }
     }
 
-    // ── 7. Unknown call — capture first string arg if present, call via QJS bridge ──
+    // ── 7. Unknown call — collect args via emitStateExpr, call via QJS bridge ──
     const call_name = try self.alloc.dupe(u8, name);
     self.advance_token();
-    var first_str_arg: ?[]const u8 = null;
+    var arg_exprs: [8][]const u8 = undefined;
+    var arg_types: [8]enum { int, string } = undefined;
+    var arg_count: u32 = 0;
+    var has_dynamic_args = false;
     if (self.curKind() == .lparen) {
         self.advance_token();
-        // Capture first argument if it's a string literal (strip quotes)
-        if (self.curKind() == .string) {
-            const raw = self.curText();
-            // Strip surrounding quotes: 'Root' → Root, "Root" → Root
-            if (raw.len >= 2 and (raw[0] == '\'' or raw[0] == '"')) {
-                first_str_arg = try self.alloc.dupe(u8, raw[1 .. raw.len - 1]);
-            } else {
-                first_str_arg = try self.alloc.dupe(u8, raw);
+        while (self.curKind() != .rparen and self.curKind() != .eof and arg_count < 8) {
+            const arg_expr = try emitStateExpr(self);
+            // Determine if arg is a string expression
+            const is_str = self.isStringExpr(arg_expr);
+            arg_exprs[arg_count] = arg_expr;
+            arg_types[arg_count] = if (is_str) .string else .int;
+            // Check if any arg references runtime data (_oa, _i, state)
+            if (std.mem.indexOf(u8, arg_expr, "_oa") != null or
+                std.mem.indexOf(u8, arg_expr, "_i") != null or
+                std.mem.indexOf(u8, arg_expr, "state.") != null)
+            {
+                has_dynamic_args = true;
             }
-            self.advance_token();
-        }
-        // Skip remaining args
-        var bd: u32 = 1;
-        while (bd > 0 and self.curKind() != .eof) {
-            if (self.curKind() == .lparen) bd += 1;
-            if (self.curKind() == .rparen) {
-                bd -= 1;
-                if (bd == 0) break;
-            }
-            self.advance_token();
+            arg_count += 1;
+            if (self.curKind() == .comma) self.advance_token();
         }
         if (self.curKind() == .rparen) self.advance_token();
     }
     // If there's a <script> block, assume it's a JS function — call it via QJS bridge
     if (self.compute_js != null) {
-        if (first_str_arg) |arg| {
-            try stmts.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "{s}qjs_runtime.callGlobalStr(\"{s}\", \"{s}\");\n", .{ pad, call_name, arg }));
-        } else {
+        if (arg_count == 0) {
             try stmts.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "{s}qjs_runtime.callGlobal(\"{s}\");\n", .{ pad, call_name }));
+        } else if (arg_count == 1 and !has_dynamic_args and arg_types[0] == .string) {
+            // Simple string arg — strip quotes and use callGlobalStr
+            var stripped = arg_exprs[0];
+            if (stripped.len >= 2 and (stripped[0] == '"')) stripped = stripped[1 .. stripped.len - 1];
+            try stmts.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "{s}qjs_runtime.callGlobalStr(\"{s}\", \"{s}\");\n", .{ pad, call_name, stripped }));
+        } else {
+            // Multi-arg or dynamic args — build JS expression at runtime and eval
+            // Generate: var _eb: [512]u8 = undefined;
+            //           const _ev = std.fmt.bufPrint(&_eb, "func({d}, '{s}')", .{args...}) catch "";
+            //           qjs_runtime.evalExpr(_ev);
+            var js_fmt: std.ArrayListUnmanaged(u8) = .{};
+            var js_args: std.ArrayListUnmanaged(u8) = .{};
+            try js_fmt.appendSlice(self.alloc, call_name);
+            try js_fmt.append(self.alloc, '(');
+            for (0..arg_count) |ai| {
+                if (ai > 0) {
+                    try js_fmt.appendSlice(self.alloc, ", ");
+                    try js_args.appendSlice(self.alloc, ", ");
+                }
+                if (arg_types[ai] == .string) {
+                    try js_fmt.appendSlice(self.alloc, "'{s}'");
+                    try js_args.appendSlice(self.alloc, arg_exprs[ai]);
+                } else {
+                    try js_fmt.appendSlice(self.alloc, "{d}");
+                    try js_args.appendSlice(self.alloc, arg_exprs[ai]);
+                }
+            }
+            try js_fmt.append(self.alloc, ')');
+            try stmts.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                "{s}{{\n" ++
+                "{s}    var _eb: [512]u8 = undefined;\n" ++
+                "{s}    const _ev = std.fmt.bufPrint(&_eb, \"{s}\", .{{ {s} }}) catch \"\";\n" ++
+                "{s}    qjs_runtime.evalExpr(_ev);\n" ++
+                "{s}}}\n",
+                .{ pad, pad, pad, js_fmt.items, js_args.items, pad, pad }));
         }
     } else {
         try stmts.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "{s}// unsupported: {s}(...)\n", .{ pad, call_name }));
@@ -804,6 +835,13 @@ pub fn emitStateAtom(self: *Generator) anyerror![]const u8 {
                     const field_name = self.curText();
                     self.advance_token(); // field
                     if (self.map_obj_array_idx) |oa_idx| {
+                        // Check if this is a string field — needs length slice
+                        const oa = self.object_arrays[oa_idx];
+                        for (0..oa.field_count) |fi| {
+                            if (std.mem.eql(u8, oa.fields[fi].name, field_name) and oa.fields[fi].field_type == .string) {
+                                return try std.fmt.allocPrint(self.alloc, "_oa{d}_{s}[_i][0.._oa{d}_{s}_lens[_i]]", .{ oa_idx, field_name, oa_idx, field_name });
+                            }
+                        }
                         return try std.fmt.allocPrint(self.alloc, "_oa{d}_{s}[_i]", .{ oa_idx, field_name });
                     }
                     return try std.fmt.allocPrint(self.alloc, "_item.{s}", .{field_name});

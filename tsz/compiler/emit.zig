@@ -309,15 +309,23 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
         if (!self.dyn_styles[dsi].has_ref) {
             const field = self.dyn_styles[dsi].field;
             const placeholder = std.fmt.allocPrint(self.alloc, ".{s} = 0", .{field}) catch continue;
+            const color_placeholder = if (self.dyn_styles[dsi].is_color)
+                (std.fmt.allocPrint(self.alloc, ".{s} = Color{{}}", .{field}) catch "")
+            else
+                "";
             for (self.array_decls.items) |decl| {
-                if (std.mem.indexOf(u8, decl, placeholder)) |_| {
+                const found_placeholder = std.mem.indexOf(u8, decl, placeholder) != null or
+                    (color_placeholder.len > 0 and std.mem.indexOf(u8, decl, color_placeholder) != null);
+                if (found_placeholder) {
                     // Extract array name: "var _arr_N = ..."
                     if (std.mem.indexOf(u8, decl, "var ")) |vs| {
                         if (std.mem.indexOf(u8, decl[vs + 4 ..], " =")) |es| {
                             const arr_name = decl[vs + 4 .. vs + 4 + es];
                             // Find element index: count Node elements before the placeholder
                             const arr_start = std.mem.indexOf(u8, decl, "[_]Node{ ") orelse continue;
-                            const before_placeholder = decl[arr_start .. std.mem.indexOf(u8, decl, placeholder).?];
+                            const ph_pos = std.mem.indexOf(u8, decl, placeholder) orelse
+                                (if (color_placeholder.len > 0) std.mem.indexOf(u8, decl, color_placeholder) else null) orelse continue;
+                            const before_placeholder = decl[arr_start..ph_pos];
                             var elem_idx: u32 = 0;
                             var bi: usize = 0;
                             while (bi < before_placeholder.len) {
@@ -755,31 +763,66 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
             // Per-field extraction
             for (0..oa.field_count) |fi| {
                 const f = oa.fields[fi];
+                const js_path = if (f.js_path.len > 0) f.js_path else f.name;
+
+                // Emit nested property access chain: drill down to leaf value _v
+                try out.appendSlice(self.alloc, "        { ");
+                var segments: [16][]const u8 = undefined;
+                var seg_count: u32 = 0;
+                var path_iter = std.mem.splitScalar(u8, js_path, '.');
+                while (path_iter.next()) |seg| {
+                    if (seg_count < 16) { segments[seg_count] = seg; seg_count += 1; }
+                }
+                if (seg_count <= 1) {
+                    // Flat field — direct access
+                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                        "const _v = qjs.JS_GetPropertyStr(c2, elem, \"{s}\");\n", .{js_path}));
+                } else {
+                    // Nested field — drill down through intermediate objects
+                    for (0..seg_count - 1) |si| {
+                        const parent = if (si == 0) "elem" else try std.fmt.allocPrint(self.alloc, "_p{d}", .{si - 1});
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            "const _p{d} = qjs.JS_GetPropertyStr(c2, {s}, \"{s}\");\n        ", .{ si, parent, segments[si] }));
+                    }
+                    const last_parent = try std.fmt.allocPrint(self.alloc, "_p{d}", .{seg_count - 2});
+                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                        "const _v = qjs.JS_GetPropertyStr(c2, {s}, \"{s}\");\n", .{ last_parent, segments[seg_count - 1] }));
+                }
+
+                // Type-specific value extraction from _v
                 switch (f.field_type) {
                     .string => {
                         try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                            "        {{ const _v = qjs.JS_GetPropertyStr(c2, elem, \"{s}\");\n" ++
                             "        const _s = qjs.JS_ToCString(c2, _v);\n" ++
                             "        qjs.JS_FreeValue(c2, _v);\n" ++
                             "        if (_s) |ss| {{ const sl = std.mem.span(ss); const n = @min(sl.len, 255); @memcpy(_oa{d}_{s}[_i][0..n], sl[0..n]); _oa{d}_{s}_lens[_i] = @intCast(n); qjs.JS_FreeCString(c2, _s); }}\n" ++
-                            "        else {{ _oa{d}_{s}_lens[_i] = 0; }} }}\n",
-                            .{ f.name, oi, f.name, oi, f.name, oi, f.name }));
+                            "        else {{ _oa{d}_{s}_lens[_i] = 0; }}\n",
+                            .{ oi, f.name, oi, f.name, oi, f.name }));
                     },
                     .float => {
                         try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                            "        {{ const _v = qjs.JS_GetPropertyStr(c2, elem, \"{s}\");\n" ++
                             "        var _f: f64 = 0; _ = qjs.JS_ToFloat64(c2, &_f, _v);\n" ++
-                            "        qjs.JS_FreeValue(c2, _v); _oa{d}_{s}[_i] = _f; }}\n",
-                            .{ f.name, oi, f.name }));
+                            "        qjs.JS_FreeValue(c2, _v); _oa{d}_{s}[_i] = _f;\n",
+                            .{ oi, f.name }));
                     },
                     else => { // int, boolean
                         try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                            "        {{ const _v = qjs.JS_GetPropertyStr(c2, elem, \"{s}\");\n" ++
                             "        var _n: i64 = 0; _ = qjs.JS_ToInt64(c2, &_n, _v);\n" ++
-                            "        qjs.JS_FreeValue(c2, _v); _oa{d}_{s}[_i] = _n; }}\n",
-                            .{ f.name, oi, f.name }));
+                            "        qjs.JS_FreeValue(c2, _v); _oa{d}_{s}[_i] = _n;\n",
+                            .{ oi, f.name }));
                     },
                 }
+
+                // Free intermediate objects (in reverse order)
+                if (seg_count > 1) {
+                    var ri: u32 = seg_count - 1;
+                    while (ri > 0) {
+                        ri -= 1;
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            "        qjs.JS_FreeValue(c2, _p{d});\n", .{ri}));
+                    }
+                }
+                try out.appendSlice(self.alloc, "        }\n");
             }
 
             try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
@@ -841,13 +884,82 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
                         "var _map_sub_{d}_{d}: [MAX_MAP_{d}][{d}]Node = undefined;\n",
                         .{ mi, ni, mi, inner.sub_count }));
                     for (0..inner.sub_count) |si| {
-                        if (inner.sub_nodes[si].is_dynamic_text) {
+                        const sub = inner.sub_nodes[si];
+                        if (sub.is_dynamic_text) {
                             try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
                                 "var _map_stb_{d}_{d}_{d}: [MAX_MAP_{d}][256]u8 = undefined;\n" ++
                                 "var _map_stx_{d}_{d}_{d}: [MAX_MAP_{d}][]const u8 = undefined;\n",
                                 .{ mi, ni, si, mi, mi, ni, si, mi }));
                         }
+                        // Leaf child arrays for sub-nodes with nested children
+                        if (sub.leaf_count > 0) {
+                            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                                "var _map_leaf_{d}_{d}_{d}: [MAX_MAP_{d}][{d}]Node = undefined;\n",
+                                .{ mi, ni, si, mi, sub.leaf_count }));
+                            for (0..sub.leaf_count) |li| {
+                                if (sub.leaves[li].is_dynamic_text) {
+                                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                                        "var _map_ltb_{d}_{d}_{d}_{d}: [MAX_MAP_{d}][256]u8 = undefined;\n" ++
+                                        "var _map_ltx_{d}_{d}_{d}_{d}: [MAX_MAP_{d}][]const u8 = undefined;\n",
+                                        .{ mi, ni, si, li, mi, mi, ni, si, li, mi }));
+                                }
+                            }
+                        }
+                        // Handler factory for sub-nodes with onPress
+                        if (sub.handler_body.len > 0) {
+                            const body_uses_i = std.mem.indexOf(u8, sub.handler_body, "_i") != null;
+                            const i_decl: []const u8 = if (body_uses_i)
+                                "        const _i = _map_ci;\n"
+                            else
+                                "        _ = _map_ci;\n";
+                            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                                "fn _mapSubPress{d}_{d}_{d}(comptime _map_ci: usize) *const fn () void {{\n" ++
+                                "    return &struct {{ fn handler() void {{\n" ++
+                                "{s}" ++
+                                "{s}" ++
+                                "        state.markDirty();\n" ++
+                                "    }} }}.handler;\n" ++
+                                "}}\n" ++
+                                "const _map_sub_handlers_{d}_{d}_{d}: [MAX_MAP_{d}]*const fn () void = blk_s{d}_{d}_{d}: {{\n" ++
+                                "    @setEvalBranchQuota(100000);\n" ++
+                                "    var _h: [MAX_MAP_{d}]*const fn () void = undefined;\n" ++
+                                "    for (0..MAX_MAP_{d}) |_ci| {{ _h[_ci] = _mapSubPress{d}_{d}_{d}(_ci); }}\n" ++
+                                "    break :blk_s{d}_{d}_{d} _h;\n" ++
+                                "}};\n",
+                                .{ mi, ni, si, i_decl, sub.handler_body,
+                                   mi, ni, si, mi, mi, ni, si,
+                                   mi,
+                                   mi, mi, ni, si,
+                                   mi, ni, si }));
+                        }
                     }
+                }
+                // Handler factory for inner_nodes with onPress
+                if (inner.handler_body.len > 0) {
+                    const body_uses_i2 = std.mem.indexOf(u8, inner.handler_body, "_i") != null;
+                    const i_decl2: []const u8 = if (body_uses_i2)
+                        "        const _i = _map_ci;\n"
+                    else
+                        "        _ = _map_ci;\n";
+                    try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                        "fn _mapInnerPress{d}_{d}(comptime _map_ci: usize) *const fn () void {{\n" ++
+                        "    return &struct {{ fn handler() void {{\n" ++
+                        "{s}" ++
+                        "{s}" ++
+                        "        state.markDirty();\n" ++
+                        "    }} }}.handler;\n" ++
+                        "}}\n" ++
+                        "const _map_inner_handlers_{d}_{d}: [MAX_MAP_{d}]*const fn () void = blk_i{d}_{d}: {{\n" ++
+                        "    @setEvalBranchQuota(100000);\n" ++
+                        "    var _h: [MAX_MAP_{d}]*const fn () void = undefined;\n" ++
+                        "    for (0..MAX_MAP_{d}) |_ci| {{ _h[_ci] = _mapInnerPress{d}_{d}(_ci); }}\n" ++
+                        "    break :blk_i{d}_{d} _h;\n" ++
+                        "}};\n",
+                        .{ mi, ni, i_decl2, inner.handler_body,
+                           mi, ni, mi, mi, ni,
+                           mi,
+                           mi, mi, ni,
+                           mi, ni }));
                 }
             }
             // Per-map onPress handler (comptime per-index factory + lookup table)
@@ -1003,10 +1115,11 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
                 }
             }
 
-            // Emit sub-node text assignments and sub-child arrays
+            // Emit sub-node text assignments, leaf arrays, and sub-child arrays
             for (0..m.inner_count) |ni| {
                 const inner = m.inner_nodes[ni];
                 if (inner.sub_count == 0) continue;
+                // Fill sub-node text buffers
                 for (0..inner.sub_count) |si| {
                     const sub = inner.sub_nodes[si];
                     if (sub.is_dynamic_text) {
@@ -1014,6 +1127,55 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
                         try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
                             "        _map_stx_{d}_{d}_{d}[_i] = std.fmt.bufPrint(&_map_stb_{d}_{d}_{d}[_i], \"{s}\", .{{ {s} }}) catch \"\";\n",
                             .{ mi, ni, si, mi, ni, si, sub.text_fmt, rewritten_args }));
+                    }
+                    // Fill leaf text buffers
+                    for (0..sub.leaf_count) |li| {
+                        const leaf = sub.leaves[li];
+                        if (leaf.is_dynamic_text) {
+                            const rw_args = try emit_map.rewriteMapArgs(self, leaf.text_args, m.item_param, m.index_param);
+                            try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                                "        _map_ltx_{d}_{d}_{d}_{d}[_i] = std.fmt.bufPrint(&_map_ltb_{d}_{d}_{d}_{d}[_i], \"{s}\", .{{ {s} }}) catch \"\";\n",
+                                .{ mi, ni, si, li, mi, ni, si, li, leaf.text_fmt, rw_args }));
+                        }
+                    }
+                    // Build leaf child array for this sub-node
+                    if (sub.leaf_count > 0) {
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            "        _map_leaf_{d}_{d}_{d}[_i] = [{d}]Node{{ ", .{ mi, ni, si, sub.leaf_count }));
+                        for (0..sub.leaf_count) |li| {
+                            const leaf = sub.leaves[li];
+                            if (li > 0) try out.appendSlice(self.alloc, ", ");
+                            try out.appendSlice(self.alloc, ".{ ");
+                            var lf = false;
+                            if (leaf.is_dynamic_text) {
+                                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                                    ".text = _map_ltx_{d}_{d}_{d}_{d}[_i]", .{ mi, ni, si, li }));
+                                lf = true;
+                            } else if (leaf.static_text.len > 0) {
+                                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                                    ".text = \"{s}\"", .{leaf.static_text}));
+                                lf = true;
+                            }
+                            if (leaf.font_size.len > 0) {
+                                if (lf) try out.appendSlice(self.alloc, ", ");
+                                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                                    ".font_size = {s}", .{leaf.font_size}));
+                                lf = true;
+                            }
+                            if (leaf.text_color.len > 0) {
+                                if (lf) try out.appendSlice(self.alloc, ", ");
+                                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                                    ".text_color = {s}", .{leaf.text_color}));
+                                lf = true;
+                            }
+                            if (leaf.style.len > 0) {
+                                if (lf) try out.appendSlice(self.alloc, ", ");
+                                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                                    ".style = .{{ {s} }}", .{leaf.style}));
+                            }
+                            try out.appendSlice(self.alloc, " }");
+                        }
+                        try out.appendSlice(self.alloc, " };\n");
                     }
                 }
                 // Build sub-child array
@@ -1058,6 +1220,20 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
                                 ".display = if ({s}) .flex else .none", .{sub.display_cond}));
                         }
                         try out.appendSlice(self.alloc, " }");
+                        sf = true;
+                    }
+                    // Children pointer for leaf arrays
+                    if (sub.leaf_count > 0) {
+                        if (sf) try out.appendSlice(self.alloc, ", ");
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            ".children = &_map_leaf_{d}_{d}_{d}[_i]", .{ mi, ni, si }));
+                        sf = true;
+                    }
+                    // Handler for Pressable sub-nodes
+                    if (sub.handler_body.len > 0) {
+                        if (sf) try out.appendSlice(self.alloc, ", ");
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            ".handlers = .{{ .on_press = _map_sub_handlers_{d}_{d}_{d}[_i] }}", .{ mi, ni, si }));
                     }
                     try out.appendSlice(self.alloc, " }");
                 }
@@ -1140,6 +1316,13 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
                         if (has_field) try out.appendSlice(self.alloc, ", ");
                         try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
                             ".children = &_map_sub_{d}_{d}[_i]", .{ mi, ni }));
+                        has_field = true;
+                    }
+                    // Handler for Pressable inner nodes
+                    if (inner.handler_body.len > 0) {
+                        if (has_field) try out.appendSlice(self.alloc, ", ");
+                        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                            ".handlers = .{{ .on_press = _map_inner_handlers_{d}_{d}[_i] }}", .{ mi, ni }));
                     }
                     try out.appendSlice(self.alloc, " }");
                 }

@@ -263,6 +263,18 @@ fn validateExpressionIdents(self: *Generator, app_start: u32) void {
                     continue;
                 }
 
+                // Skip if followed by comparison/arithmetic operator (conditional expression, e.g. {i == 0 && ...})
+                if (pos + 2 < self.lex.count) {
+                    const nk = self.lex.get(pos + 2).kind;
+                    if (nk == .eq_eq or nk == .not_eq or nk == .gt or nk == .lt or
+                        nk == .gt_eq or nk == .lt_eq or nk == .percent or
+                        nk == .plus or nk == .minus)
+                    {
+                        pos += 1;
+                        continue;
+                    }
+                }
+
                 // Skip .map() / .filter() / .split() patterns
                 if (std.mem.endsWith(u8, ident, "map") or
                     std.mem.endsWith(u8, ident, "filter") or

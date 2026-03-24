@@ -229,6 +229,10 @@ pub const Linter = struct {
             if (std.mem.eql(u8, name, "onClick") and i + 1 < self.lex.count and self.kind(i + 1) == .equals) {
                 self.emit(self.tok(i).start, .warn, "'onClick' is not supported — use 'onPress' instead");
             }
+            // onContextMenu → onRightClick
+            if (std.mem.eql(u8, name, "onContextMenu") and i + 1 < self.lex.count and self.kind(i + 1) == .equals) {
+                self.emit(self.tok(i).start, .warn, "'onContextMenu' is not supported — use 'onRightClick' instead");
+            }
             // className → style
             if (std.mem.eql(u8, name, "className") and i + 1 < self.lex.count and self.kind(i + 1) == .equals) {
                 self.emit(self.tok(i).start, .warn, "'className' is not supported — use 'style={{...}}' or a classifier instead");

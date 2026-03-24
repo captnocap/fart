@@ -225,6 +225,7 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
     var dyn_color_expr: ?[]const u8 = null;
     var src_str: []const u8 = "";
     var on_press_start: ?u32 = null;
+    var on_right_click_start: ?u32 = null;
     var on_change_text_start: ?u32 = null;
     var on_submit_start: ?u32 = null;
     var placeholder_str: []const u8 = "";
@@ -334,6 +335,14 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
                         }
                     } else {
                         on_press_start = self.pos;
+                        try attrs.skipBalanced(self);
+                    }
+                } else if (std.mem.eql(u8, attr_name, "onRightClick")) {
+                    if (self.curKind() == .lbrace) {
+                        on_right_click_start = self.pos;
+                        try attrs.skipBalanced(self);
+                    } else {
+                        on_right_click_start = self.pos;
                         try attrs.skipBalanced(self);
                     }
                 } else if (std.mem.eql(u8, attr_name, "placeholder")) {
@@ -929,18 +938,43 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
     }
 
     // onPress handler
+    var press_handler_name: []const u8 = "";
     if (on_press_start) |start| {
-        const handler_name = try std.fmt.allocPrint(self.alloc, "_handler_press_{d}", .{self.handler_counter});
+        press_handler_name = try std.fmt.allocPrint(self.alloc, "_handler_press_{d}", .{self.handler_counter});
         self.handler_counter += 1;
         const body = try handlers.emitHandlerBody(self, start);
         if (body.len == 0) {
             self.addWarning(self.lex.get(start).start, "onPress handler body produced no statements — onClick will do nothing at runtime");
         }
-        const handler_fn = try std.fmt.allocPrint(self.alloc, "fn {s}() void {{\n{s}}}", .{ handler_name, body });
+        const handler_fn = try std.fmt.allocPrint(self.alloc, "fn {s}() void {{\n{s}}}", .{ press_handler_name, body });
         try self.handler_decls.append(self.alloc, handler_fn);
+    }
+
+    // onRightClick handler
+    var right_click_handler_name: []const u8 = "";
+    if (on_right_click_start) |start| {
+        right_click_handler_name = try std.fmt.allocPrint(self.alloc, "_handler_rightclick_{d}", .{self.handler_counter});
+        self.handler_counter += 1;
+        const body = try handlers.emitHandlerBody(self, start);
+        const handler_fn = try std.fmt.allocPrint(self.alloc, "fn {s}(_: f32, _: f32) void {{\n{s}}}", .{ right_click_handler_name, body });
+        try self.handler_decls.append(self.alloc, handler_fn);
+    }
+
+    // Emit combined handlers struct (onPress + onRightClick)
+    if (press_handler_name.len > 0 or right_click_handler_name.len > 0) {
         if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
-        try fields.appendSlice(self.alloc, ".handlers = .{ .on_press = ");
-        try fields.appendSlice(self.alloc, handler_name);
+        try fields.appendSlice(self.alloc, ".handlers = .{ ");
+        var handler_need_comma = false;
+        if (press_handler_name.len > 0) {
+            try fields.appendSlice(self.alloc, ".on_press = ");
+            try fields.appendSlice(self.alloc, press_handler_name);
+            handler_need_comma = true;
+        }
+        if (right_click_handler_name.len > 0) {
+            if (handler_need_comma) try fields.appendSlice(self.alloc, ", ");
+            try fields.appendSlice(self.alloc, ".on_right_click = ");
+            try fields.appendSlice(self.alloc, right_click_handler_name);
+        }
         try fields.appendSlice(self.alloc, " }");
     }
 
