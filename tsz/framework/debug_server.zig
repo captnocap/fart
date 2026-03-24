@@ -572,6 +572,8 @@ fn appendPerfFields(buf: []u8, pos: *usize, snap: telemetry.Snapshot) void {
     ap(buf, pos, ",\"glyphs\":"); apInt(buf, pos, @intCast(snap.glyph_count));
     ap(buf, pos, ",\"visible\":"); apInt(buf, pos, @intCast(snap.visible_nodes));
     ap(buf, pos, ",\"total\":"); apInt(buf, pos, @intCast(snap.total_nodes));
+    ap(buf, pos, ",\"window_w\":"); apInt(buf, pos, @intCast(snap.window_w));
+    ap(buf, pos, ",\"window_h\":"); apInt(buf, pos, @intCast(snap.window_h));
 }
 
 // ── Helpers ────────────────────────────────────────────────────────

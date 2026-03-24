@@ -1962,7 +1962,17 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
         const basename = std.fs.path.basename(self.input_file);
         const dot_pos = std.mem.lastIndexOfScalar(u8, basename, '.') orelse basename.len;
         const app_name = basename[0..dot_pos];
+        // Export symbols for dlopen loading by the engine.
+        // The engine binary loads this .so and reads these to configure engine.run().
         try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+            "export fn app_get_root() *Node {{ return &_root; }}\n" ++
+            "export fn app_get_init() ?*const fn () void {{ return _appInit; }}\n" ++
+            "export fn app_get_tick() ?*const fn (u32) void {{ return _appTick; }}\n" ++
+            "export fn app_get_js_logic() [*]const u8 {{ return JS_LOGIC.ptr; }}\n" ++
+            "export fn app_get_js_logic_len() usize {{ return JS_LOGIC.len; }}\n" ++
+            "export fn app_get_title() [*:0]const u8 {{ return \"{s}\"; }}\n" ++
+            "\n" ++
+            "// Standalone mode — when compiled as an executable directly\n" ++
             "pub fn main() !void {{\n" ++
             "    try engine.run(.{{\n" ++
             "        .title = \"{s}\",\n" ++
@@ -1971,7 +1981,7 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
             "        .init = _appInit,\n" ++
             "        .tick = _appTick,\n" ++
             "    }});\n" ++
-            "}}\n", .{app_name}));
+            "}}\n", .{ app_name, app_name }));
     }
 
     return try out.toOwnedSlice(self.alloc);
