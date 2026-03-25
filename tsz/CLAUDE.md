@@ -29,8 +29,16 @@ zig build tsz-full           # Full compiler
 # Build a .tsz app (produces self-extracting portable binary)
 bin/tsz build carts/path/to/app.tsz
 
+# Preferred dev loop
+bin/tsz run dev carts/path/to/app.tsz
+
 # Build from within tsz/ directory
 ./zig-out/bin/tsz build carts/path/to/app.tsz
+
+# Or from inside a cart directory with one app entry
+cd carts/my-cart
+../../zig-out/bin/tsz run dev
+# ../../zig-out/bin/tsz dev works too
 ```
 
 **Old commands are GONE.** Do NOT use:
@@ -40,6 +48,8 @@ bin/tsz build carts/path/to/app.tsz
 - ~~`zigos-compiler`~~ → use `bin/tsz` or `bin/tsz-full`
 
 Output goes to `zig-out/bin/<app-name>` as a self-extracting binary (runs on any x86_64 Linux, zero deps).
+
+For dev mode, if the current directory has exactly one app entry, `tsz run dev` and `tsz dev` infer it automatically. If there are multiple app entries, pass the file explicitly.
 
 ## File Extensions
 

@@ -61,6 +61,17 @@ zig build engine             # Standalone runtime
 zig build all                # Everything
 ```
 
+## TSZ Dev CLI
+
+Prefer the `tsz` CLI over ad hoc run scripts when iterating on native carts.
+
+```bash
+cd tsz/carts/my-cart
+../../zig-out/bin/tsz run dev
+```
+
+`tsz run dev` and `tsz dev` both infer the app entry from the current directory when there is exactly one app file. If there are multiple app entries, pass the file explicitly.
+
 ## One-Liner Design Philosophy
 
 Every capability should be usable in one line by someone who doesn't code. The target user knows their domain (music, art, data, games) but doesn't know internals. An AI should be able to discover and control it without documentation.

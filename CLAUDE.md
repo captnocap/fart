@@ -103,12 +103,19 @@ bin/tsz build carts/path/to/app.tsz
 # Start dev mode (compiles .tsz → .so, launches shell, watches for changes)
 bin/tsz dev carts/path/to/app.tsz
 
+# Or enter the cart directory and let tsz infer the entry file
+cd tsz/carts/my-cart
+../../zig-out/bin/tsz run dev
+# ../../zig-out/bin/tsz dev works too
+
 # The shell stays open. Edit any .tsz file in the cart directory.
 # Changes auto-detect → recompile → hot-reload (186ms, no restart).
 # State (counters, form values, etc.) survives reloads.
 ```
 
 **Single instance:** If a dev shell is already running, `tsz dev` just rebuilds the .so and exits. The running shell auto-reloads. No duplicate windows.
+
+**Entry inference:** When run without a file argument, `tsz run dev` and `tsz dev` use the current directory if it contains exactly one app entry. If there are multiple app files, pass one explicitly.
 
 ### Build targets
 

@@ -22,6 +22,10 @@ pub fn main() !void {
     // Subcommand routing
     if (args.len >= 2) {
         const cmd = args[1];
+        if (std.mem.eql(u8, cmd, "run")) {
+            runCommand(alloc, args);
+            return;
+        }
         if (std.mem.eql(u8, cmd, "check") or std.mem.eql(u8, cmd, "preflight")) {
             runCheck(alloc, args);
             return;
@@ -58,7 +62,7 @@ pub fn main() !void {
     }
 
     if (args.len < 3) {
-        std.debug.print("Usage: tsz build|dev|check|lint|test|init|convert|setup-editor [--strict] <file.tsz>\n", .{});
+        std.debug.print("Usage: tsz build|dev|run|check|lint|test|init|convert|setup-editor [--strict] <file.tsz>\n", .{});
         return;
     }
 
@@ -214,8 +218,7 @@ pub fn main() !void {
     // Resolve paths relative to tsz root so the build system can find them.
     const out_path = if (embed_mode)
         if (tsz_root) |root| std.fmt.allocPrint(alloc, "{s}/framework/devtools.zig", .{root}) catch "framework/devtools.zig" else "framework/devtools.zig"
-    else
-        if (tsz_root) |root| std.fmt.allocPrint(alloc, "{s}/generated_app.zig", .{root}) catch "generated_app.zig" else "generated_app.zig";
+    else if (tsz_root) |root| std.fmt.allocPrint(alloc, "{s}/generated_app.zig", .{root}) catch "generated_app.zig" else "generated_app.zig";
     {
         const f = std.fs.cwd().createFile(out_path, .{}) catch |err| {
             std.debug.print("Error creating {s}: {any}\n", .{ out_path, err });
@@ -267,14 +270,14 @@ pub fn main() !void {
 // ── File type classification ────────────────────────────────────
 
 const FileKind = enum {
-    app,         // .tsz — app entry point
-    app_comp,    // _c.tsz — app component
-    app_cls,     // _cls.tsz — app classifiers
-    module,      // .mod.tsz — runtime module entry point
-    mod_comp,    // _cmod.tsz — module component
-    mod_cls,     // _clsmod.tsz — module classifiers
-    script,      // _script.tsz — JS logic (entry points only)
-    zscript,     // _zscript.tsz — imperative Zig module (no JSX)
+    app, // .tsz — app entry point
+    app_comp, // _c.tsz — app component
+    app_cls, // _cls.tsz — app classifiers
+    module, // .mod.tsz — runtime module entry point
+    mod_comp, // _cmod.tsz — module component
+    mod_cls, // _clsmod.tsz — module classifiers
+    script, // _script.tsz — JS logic (entry points only)
+    zscript, // _zscript.tsz — imperative Zig module (no JSX)
     unknown,
 };
 
@@ -405,9 +408,9 @@ fn resolveImportPath(alloc: std.mem.Allocator, importer: []const u8, import_path
 
     // Try extensions in priority order
     const extensions = [_][]const u8{
-        ".tsz",     "_c.tsz",      "_cls.tsz",    "_script.tsz",
-        ".mod.tsz", "_cmod.tsz",   "_clsmod.tsz",
-        ".c.tsz",   ".cls.tsz",    ".script.tsz", // legacy
+        ".tsz",     "_c.tsz",    "_cls.tsz",    "_script.tsz",
+        ".mod.tsz", "_cmod.tsz", "_clsmod.tsz",
+        ".c.tsz", ".cls.tsz", ".script.tsz", // legacy
     };
     for (extensions) |ext| {
         const candidate = std.fmt.allocPrint(alloc, "{s}/{s}{s}", .{ dir, raw, ext }) catch continue;
@@ -795,13 +798,20 @@ fn runTest(alloc: std.mem.Allocator, args: []const []const u8) void {
 // running shell auto-detects changes and hot-reloads.
 
 fn runDev(alloc: std.mem.Allocator, args: []const []const u8) void {
-    if (args.len < 3) {
-        std.debug.print("Usage: tsz dev <file.tsz>\n", .{});
+    runDevWithUsage(alloc, args, 2, "tsz dev");
+}
+
+fn runDevWithUsage(
+    alloc: std.mem.Allocator,
+    args: []const []const u8,
+    start_idx: usize,
+    usage_name: []const u8,
+) void {
+    const input_path = resolveDevInputPath(alloc, args, start_idx, usage_name);
+    if (input_path == null) {
         return;
     }
-
-    // Find the input file (last non-flag argument)
-    const input_path = args[args.len - 1];
+    const resolved_input_path = input_path.?;
 
     // Resolve tsz root
     const tsz_root: ?[]const u8 = blk: {
@@ -818,10 +828,10 @@ fn runDev(alloc: std.mem.Allocator, args: []const []const u8) void {
     };
 
     // Step 1: Compile .tsz → generated_app.zig
-    if (!devCompileTsz(alloc, input_path, tsz_root)) return;
+    if (!devCompileTsz(alloc, resolved_input_path, tsz_root)) return;
 
     // Step 2: Build the .so
-    const basename = std.fs.path.basename(input_path);
+    const basename = std.fs.path.basename(resolved_input_path);
     const dot_pos = std.mem.lastIndexOfScalar(u8, basename, '.') orelse basename.len;
     const app_name = basename[0..dot_pos];
     const app_name_opt = std.fmt.allocPrint(alloc, "-Dapp-name={s}", .{app_name}) catch return;
@@ -873,7 +883,7 @@ fn runDev(alloc: std.mem.Allocator, args: []const []const u8) void {
     }
 
     std.debug.print("[dev] Launching: {s} {s}\n", .{ shell_path, so_path });
-    std.debug.print("[dev] Watching {s} for changes...\n", .{input_path});
+    std.debug.print("[dev] Watching {s} for changes...\n", .{resolved_input_path});
 
     // Launch dev shell as a child process
     var shell_child = std.process.Child.init(&.{ shell_path, so_path }, alloc);
@@ -893,7 +903,7 @@ fn runDev(alloc: std.mem.Allocator, args: []const []const u8) void {
     } else |_| {}
 
     // Step 6: Watch loop — poll all .tsz files in the cart directory for changes
-    const watch_dir = std.fs.path.dirname(input_path) orelse ".";
+    const watch_dir = std.fs.path.dirname(resolved_input_path) orelse ".";
     var last_max_mtime: i128 = getMaxMtime(alloc, watch_dir);
 
     while (true) {
@@ -915,7 +925,7 @@ fn runDev(alloc: std.mem.Allocator, args: []const []const u8) void {
         std.debug.print("[dev] Change detected, recompiling...\n", .{});
 
         // Recompile .tsz → generated_app.zig
-        if (!devCompileTsz(alloc, input_path, tsz_root)) {
+        if (!devCompileTsz(alloc, resolved_input_path, tsz_root)) {
             std.debug.print("[dev] Compile failed — keeping last working build\n", .{});
             continue;
         }
@@ -928,6 +938,98 @@ fn runDev(alloc: std.mem.Allocator, args: []const []const u8) void {
 
         std.debug.print("[dev] Rebuilt .so — shell will auto-reload\n", .{});
     }
+}
+
+fn runCommand(alloc: std.mem.Allocator, args: []const []const u8) void {
+    if (args.len < 3) {
+        std.debug.print("Usage: tsz run dev [file.tsz]\n", .{});
+        return;
+    }
+
+    const subcmd = args[2];
+    if (std.mem.eql(u8, subcmd, "dev")) {
+        runDevWithUsage(alloc, args, 3, "tsz run dev");
+        return;
+    }
+
+    std.debug.print("Usage: tsz run dev [file.tsz]\n", .{});
+}
+
+fn resolveDevInputPath(
+    alloc: std.mem.Allocator,
+    args: []const []const u8,
+    start_idx: usize,
+    usage_name: []const u8,
+) ?[]const u8 {
+    var idx = start_idx;
+    while (idx < args.len) : (idx += 1) {
+        const arg = args[idx];
+        if (arg.len > 0 and arg[0] == '-') {
+            std.debug.print("Usage: {s} [file.tsz]\n", .{usage_name});
+            return null;
+        }
+        return arg;
+    }
+    return inferAppEntryFromCwd(alloc, usage_name);
+}
+
+fn inferAppEntryFromCwd(alloc: std.mem.Allocator, usage_name: []const u8) ?[]const u8 {
+    var dir = std.fs.cwd().openDir(".", .{ .iterate = true }) catch |err| {
+        std.debug.print("[tsz] Failed to inspect current directory: {}\n", .{err});
+        return null;
+    };
+    defer dir.close();
+
+    const cwd_real = std.fs.cwd().realpathAlloc(alloc, ".") catch ".";
+    const cwd_name = std.fs.path.basename(cwd_real);
+
+    const preferred_names = [_][]const u8{
+        tryAllocPrint(alloc, "{s}.app.tsz", .{cwd_name}) orelse "",
+        tryAllocPrint(alloc, "{s}.tsz", .{cwd_name}) orelse "",
+        "main.app.tsz",
+        "main.tsz",
+        "app.app.tsz",
+        "app.tsz",
+        "index.app.tsz",
+        "index.tsz",
+    };
+
+    var candidates: std.ArrayListUnmanaged([]const u8) = .{};
+    defer candidates.deinit(alloc);
+
+    var it = dir.iterate();
+    while (it.next() catch null) |entry| {
+        if (entry.kind != .file) continue;
+        if (classifyFile(entry.name) != .app) continue;
+        const owned_name = alloc.dupe(u8, entry.name) catch return null;
+        candidates.append(alloc, owned_name) catch return null;
+    }
+
+    if (candidates.items.len == 0) {
+        std.debug.print("[tsz] No app entry found in the current directory.\n", .{});
+        std.debug.print("Usage: {s} [file.tsz]\n", .{usage_name});
+        return null;
+    }
+
+    for (preferred_names) |preferred| {
+        if (preferred.len == 0) continue;
+        for (candidates.items) |candidate| {
+            if (std.mem.eql(u8, candidate, preferred)) return candidate;
+        }
+    }
+
+    if (candidates.items.len == 1) return candidates.items[0];
+
+    std.debug.print("[tsz] Multiple app entries found in the current directory. Pass one explicitly:\n", .{});
+    for (candidates.items) |candidate| {
+        std.debug.print("  {s}\n", .{candidate});
+    }
+    std.debug.print("Usage: {s} [file.tsz]\n", .{usage_name});
+    return null;
+}
+
+fn tryAllocPrint(alloc: std.mem.Allocator, comptime fmt: []const u8, args: anytype) ?[]const u8 {
+    return std.fmt.allocPrint(alloc, fmt, args) catch null;
 }
 
 fn devCompileTsz(alloc: std.mem.Allocator, input_path: []const u8, tsz_root: ?[]const u8) bool {
