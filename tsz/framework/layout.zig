@@ -329,6 +329,15 @@ pub fn hitTest(node: *Node, mx: f32, my: f32) ?*Node {
     while (i > 0) {
         i -= 1;
         if (hitTest(&node.children[i], child_mx, child_my)) |hit| {
+            // If the hit child is interactive, return it directly
+            if (hasHandlers(hit.handlers) or hit.href != null or hit.input_id != null) return hit;
+            // Otherwise, prefer this node if it has handlers (bubble up to Pressable parent)
+            if (hasHandlers(node.handlers) or node.href != null or node.input_id != null) {
+                if (mx >= r.x and mx < r.x + r.w and my >= r.y and my < r.y + r.h) {
+                    return node;
+                }
+            }
+            // No interactive ancestor — return the non-interactive hit (for canvas etc.)
             return hit;
         }
     }
@@ -341,7 +350,7 @@ pub fn hitTest(node: *Node, mx: f32, my: f32) ?*Node {
 }
 
 fn hasHandlers(h: EventHandler) bool {
-    return h.on_press != null or h.on_hover_enter != null or h.on_hover_exit != null or h.on_key != null or h.on_change_text != null or h.on_scroll != null or h.on_right_click != null;
+    return h.on_press != null or h.js_on_press != null or h.on_hover_enter != null or h.on_hover_exit != null or h.on_key != null or h.on_change_text != null or h.on_scroll != null or h.on_right_click != null;
 }
 
 pub fn hitTestText(node: *Node, mx: f32, my: f32) ?Node {
