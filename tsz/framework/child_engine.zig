@@ -447,7 +447,6 @@ fn paintNode(node: *Node) void {
         const cb: f32 = @as(f32, @floatFromInt(col.b)) / 255.0;
         const ca: f32 = @as(f32, @floatFromInt(col.a)) / 255.0;
         const rad: f32 = node.style.border_radius;
-        const bw: f32 = node.style.border_width;
         var br: f32 = 0;
         var bg: f32 = 0;
         var bb: f32 = 0;
@@ -458,14 +457,14 @@ fn paintNode(node: *Node) void {
             bb = @as(f32, @floatFromInt(bc.b)) / 255.0;
             ba = @as(f32, @floatFromInt(bc.a)) / 255.0;
         }
-        gpu.drawRect(r.x, r.y, r.w, r.h, cr, cg, cb, ca, rad, bw, br, bg, bb, ba);
-    } else if (node.style.border_width > 0) {
+        gpu.drawRect(r.x, r.y, r.w, r.h, cr, cg, cb, ca, rad, node.style.brdTop(), node.style.brdRight(), node.style.brdBottom(), node.style.brdLeft(), br, bg, bb, ba);
+    } else if (node.style.brdTop() > 0 or node.style.brdRight() > 0 or node.style.brdBottom() > 0 or node.style.brdLeft() > 0) {
         if (node.style.border_color) |bc| {
             const br: f32 = @as(f32, @floatFromInt(bc.r)) / 255.0;
             const bg: f32 = @as(f32, @floatFromInt(bc.g)) / 255.0;
             const bb: f32 = @as(f32, @floatFromInt(bc.b)) / 255.0;
             const ba: f32 = @as(f32, @floatFromInt(bc.a)) / 255.0;
-            gpu.drawRect(r.x, r.y, r.w, r.h, 0, 0, 0, 0, node.style.border_radius, node.style.border_width, br, bg, bb, ba);
+            gpu.drawRect(r.x, r.y, r.w, r.h, 0, 0, 0, 0, node.style.border_radius, node.style.brdTop(), node.style.brdRight(), node.style.brdBottom(), node.style.brdLeft(), br, bg, bb, ba);
         }
     }
 
@@ -532,7 +531,7 @@ pub fn run() !void {
     }
 
     // SDL init
-    if (c.SDL_Init(c.SDL_INIT_VIDEO) != 0) return error.SDLInitFailed;
+    if (!c.SDL_Init(c.SDL_INIT_VIDEO)) return error.SDLInitFailed;
     defer c.SDL_Quit();
 
     const iw: c_int = @intFromFloat(win_w);
@@ -540,11 +539,9 @@ pub fn run() !void {
 
     const window = c.SDL_CreateWindow(
         "tsz child",
-        c.SDL_WINDOWPOS_CENTERED,
-        c.SDL_WINDOWPOS_CENTERED,
         iw,
         ih,
-        c.SDL_WINDOW_SHOWN | c.SDL_WINDOW_RESIZABLE,
+        c.SDL_WINDOW_RESIZABLE,
     ) orelse return error.WindowCreateFailed;
     defer c.SDL_DestroyWindow(window);
 
@@ -577,46 +574,40 @@ pub fn run() !void {
     while (running) {
         // Poll SDL events
         var event: c.SDL_Event = undefined;
-        while (c.SDL_PollEvent(&event) != 0) {
+        while (c.SDL_PollEvent(&event)) {
             switch (event.type) {
-                c.SDL_QUIT => {
+                c.SDL_EVENT_QUIT => {
                     running = false;
                 },
-                c.SDL_WINDOWEVENT => {
-                    switch (event.window.event) {
-                        c.SDL_WINDOWEVENT_CLOSE => {
-                            if (shutting_down) {
-                                running = false;
-                            } else {
-                                // Ask parent (React's onClose handler decides)
-                                sendWindowEvent(&client, "onClose");
-                            }
-                        },
-                        c.SDL_WINDOWEVENT_SIZE_CHANGED => {
-                            win_w = @floatFromInt(event.window.data1);
-                            win_h = @floatFromInt(event.window.data2);
-                            gpu.resize(@intCast(event.window.data1), @intCast(event.window.data2));
-                            tree_dirty = true;
-                        },
-                        else => {},
+                c.SDL_EVENT_WINDOW_CLOSE_REQUESTED => {
+                    if (shutting_down) {
+                        running = false;
+                    } else {
+                        sendWindowEvent(&client, "onClose");
                     }
                 },
-                c.SDL_MOUSEBUTTONDOWN => {
+                c.SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED => {
+                    var ww: c_int = 0;
+                    var wh: c_int = 0;
+                    _ = c.SDL_GetWindowSize(window, &ww, &wh);
+                    win_w = @floatFromInt(ww);
+                    win_h = @floatFromInt(wh);
+                    gpu.resize(@intCast(ww), @intCast(wh));
+                    tree_dirty = true;
+                },
+                c.SDL_EVENT_MOUSE_BUTTON_DOWN => {
                     if (event.button.button == c.SDL_BUTTON_LEFT) {
-                        sendClickEvent(&client, @floatFromInt(event.button.x), @floatFromInt(event.button.y), 1);
+                        sendClickEvent(&client, event.button.x, event.button.y, 1);
                     }
                 },
-                c.SDL_KEYDOWN => {
-                    sendKeyEvent(&client, event.key.keysym.sym, "keydown");
+                c.SDL_EVENT_KEY_DOWN => {
+                    sendKeyEvent(&client, @intCast(event.key.key), "keydown");
                 },
-                c.SDL_KEYUP => {
-                    sendKeyEvent(&client, event.key.keysym.sym, "keyup");
+                c.SDL_EVENT_KEY_UP => {
+                    sendKeyEvent(&client, @intCast(event.key.key), "keyup");
                 },
-                c.SDL_MOUSEWHEEL => {
-                    var mx: c_int = 0;
-                    var my: c_int = 0;
-                    _ = c.SDL_GetMouseState(&mx, &my);
-                    sendWheelEvent(&client, @floatFromInt(mx), @floatFromInt(my), @floatFromInt(event.wheel.y));
+                c.SDL_EVENT_MOUSE_WHEEL => {
+                    sendWheelEvent(&client, event.wheel.mouse_x, event.wheel.mouse_y, event.wheel.y);
                 },
                 else => {},
             }

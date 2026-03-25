@@ -177,15 +177,15 @@ pub fn onMouseUp() void {
 
 /// Call on SDL_KEYDOWN. Handles Ctrl+A (select all) and Ctrl+C (copy).
 pub fn onKeyDown(root: *Node, sym: c_int, mod: u16) void {
-    const ctrl = (mod & @as(u16, c.KMOD_CTRL)) != 0;
+    const ctrl = (mod & c.SDL_KMOD_CTRL) != 0;
     if (!ctrl) return;
 
-    if (sym == c.SDLK_a) {
+    if (sym == c.SDLK_A) {
         // Ctrl+A — select all text across entire tree
         sel_all = true;
         sel_node = null;
         sel_dragging = false;
-    } else if (sym == c.SDLK_c) {
+    } else if (sym == c.SDLK_C) {
         // Ctrl+C — copy selection to clipboard
         var buf: [4096]u8 = undefined;
         const len = collectSelectedText(root, &buf);

@@ -17,12 +17,29 @@ scripts/          — sync-mod.sh (module variant sync), check-file-length.sh
 
 ## Build
 
-From repo root:
+Two compiler binaries live at `bin/` (repo root):
+- `bin/tsz` — lean compiler (layout + GPU + SDL3)
+- `bin/tsz-full` — full compiler (+ networking, QuickJS, physics, 3D, terminal, video, crypto)
+
 ```bash
-zig build compiler           # Build the .tsz compiler
-zig build app                # Lite build (codegen + layout + rendering)
-zig build app-full           # Full build (+ networking, tor, curl, vterm)
+# Build the compiler itself (from tsz/ directory)
+zig build tsz                # Lean compiler
+zig build tsz-full           # Full compiler
+
+# Build a .tsz app (produces self-extracting portable binary)
+bin/tsz build carts/path/to/app.tsz
+
+# Build from within tsz/ directory
+./zig-out/bin/tsz build carts/path/to/app.tsz
 ```
+
+**Old commands are GONE.** Do NOT use:
+- ~~`zig build compiler`~~ → use `zig build tsz`
+- ~~`zig build app`~~ → use `bin/tsz build <file.tsz>`
+- ~~`zig build app-full`~~ → use `bin/tsz-full build <file.tsz>`
+- ~~`zigos-compiler`~~ → use `bin/tsz` or `bin/tsz-full`
+
+Output goes to `zig-out/bin/<app-name>` as a self-extracting binary (runs on any x86_64 Linux, zero deps).
 
 ## File Extensions
 

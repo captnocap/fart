@@ -134,16 +134,14 @@ fn openInProcess(idx: usize, opts: OpenOptions) ?usize {
     const pos_x = opts.x orelse c.SDL_WINDOWPOS_CENTERED;
     const pos_y = opts.y orelse c.SDL_WINDOWPOS_CENTERED;
 
-    var flags: u32 = c.SDL_WINDOW_SHOWN | c.SDL_WINDOW_RESIZABLE;
+    var flags: u64 = c.SDL_WINDOW_RESIZABLE;
     if (is_notif or opts.borderless) flags |= c.SDL_WINDOW_BORDERLESS;
     if (is_notif or opts.always_on_top) flags |= c.SDL_WINDOW_ALWAYS_ON_TOP;
-    // Notifications should not steal focus
-    if (is_notif) flags = (flags & ~@as(u32, c.SDL_WINDOW_RESIZABLE)) | c.SDL_WINDOW_SKIP_TASKBAR;
+    // Notifications should not steal focus or be resizable
+    if (is_notif) flags = flags & ~@as(u64, c.SDL_WINDOW_RESIZABLE) | c.SDL_WINDOW_HIDDEN;
 
     const window = c.SDL_CreateWindow(
         opts.title,
-        pos_x,
-        pos_y,
         opts.width,
         opts.height,
         flags,
@@ -151,11 +149,14 @@ fn openInProcess(idx: usize, opts: OpenOptions) ?usize {
         log.err(.engine, "windows: SDL_CreateWindow failed", .{});
         return null;
     };
+    // SDL3: position is set after creation
+    _ = c.SDL_SetWindowPosition(window, pos_x, pos_y);
+    // Show the window (was implicit with SDL_WINDOW_SHOWN, now explicit for non-hidden)
+    if (!is_notif) _ = c.SDL_ShowWindow(window);
 
     const renderer = c.SDL_CreateRenderer(
         window,
-        -1,
-        c.SDL_RENDERER_ACCELERATED | c.SDL_RENDERER_PRESENTVSYNC,
+        null,
     ) orelse {
         log.err(.engine, "windows: SDL_CreateRenderer failed", .{});
         c.SDL_DestroyWindow(window);
@@ -267,41 +268,42 @@ pub fn findByWindowId(sdl_window_id: u32) ?usize {
 /// the event belongs to a secondary window and the engine should skip it.
 pub fn routeEvent(event: *c.SDL_Event) bool {
     switch (event.type) {
-        c.SDL_WINDOWEVENT => {
+        c.SDL_EVENT_WINDOW_CLOSE_REQUESTED => {
             const win_id = event.window.windowID;
             const idx = findByWindowId(win_id) orelse return false;
-            switch (event.window.event) {
-                c.SDL_WINDOWEVENT_CLOSE => close(idx),
-                c.SDL_WINDOWEVENT_SIZE_CHANGED => {
-                    slots[idx].win_w = @floatFromInt(event.window.data1);
-                    slots[idx].win_h = @floatFromInt(event.window.data2);
-                },
-                else => {},
+            close(idx);
+            return true;
+        },
+        c.SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED => {
+            const win_id = event.window.windowID;
+            const idx = findByWindowId(win_id) orelse return false;
+            if (slots[idx].window) |w| {
+                var ww: c_int = 0;
+                var wh: c_int = 0;
+                _ = c.SDL_GetWindowSize(w, &ww, &wh);
+                slots[idx].win_w = @floatFromInt(ww);
+                slots[idx].win_h = @floatFromInt(wh);
             }
             return true;
         },
-        c.SDL_MOUSEBUTTONDOWN => {
+        c.SDL_EVENT_MOUSE_BUTTON_DOWN => {
             const win_id = event.button.windowID;
             const idx = findByWindowId(win_id) orelse return false;
             if (event.button.button == c.SDL_BUTTON_LEFT) {
-                handleClick(idx, @floatFromInt(event.button.x), @floatFromInt(event.button.y));
+                handleClick(idx, event.button.x, event.button.y);
             }
             return true;
         },
-        c.SDL_MOUSEMOTION => {
+        c.SDL_EVENT_MOUSE_MOTION => {
             const win_id = event.motion.windowID;
             const idx = findByWindowId(win_id) orelse return false;
-            handleMouseMotion(idx, @floatFromInt(event.motion.x), @floatFromInt(event.motion.y));
+            handleMouseMotion(idx, event.motion.x, event.motion.y);
             return true;
         },
-        c.SDL_MOUSEWHEEL => {
+        c.SDL_EVENT_MOUSE_WHEEL => {
             const win_id = event.wheel.windowID;
             const idx = findByWindowId(win_id) orelse return false;
-            // Get mouse position relative to this window
-            var mx: c_int = 0;
-            var my: c_int = 0;
-            _ = c.SDL_GetMouseState(&mx, &my);
-            handleWheel(idx, @floatFromInt(mx), @floatFromInt(my), @floatFromInt(event.wheel.y));
+            handleWheel(idx, event.wheel.mouse_x, event.wheel.mouse_y, event.wheel.y);
             return true;
         },
         else => return false,
@@ -365,7 +367,7 @@ pub fn layoutAll() void {
 
 /// Paint and present all active in-process windows.
 pub fn paintAndPresent() void {
-    const now = c.SDL_GetTicks();
+    const now: u32 = @truncate(c.SDL_GetTicks());
 
     for (0..MAX_WINDOWS) |i| {
         if (!slots[i].active) continue;
@@ -389,7 +391,7 @@ pub fn paintAndPresent() void {
         // Paint tree
         paintNode(rend, te, root, slots[i].hovered, slots[i].opacity);
 
-        c.SDL_RenderPresent(rend);
+        _ = c.SDL_RenderPresent(rend);
     }
 }
 
@@ -416,10 +418,10 @@ fn paintNodeImpl(
     if (effective_opacity <= 0) return;
 
     const r = node.computed;
-    const ix = @as(i32, @intFromFloat(r.x));
-    const iy = @as(i32, @intFromFloat(r.y));
-    const iw = @as(i32, @intFromFloat(r.w));
-    const ih = @as(i32, @intFromFloat(r.h));
+    const fx = r.x;
+    const fy = r.y;
+    const fw = r.w;
+    const fh = r.h;
 
     // Background
     if (node.style.background_color) |col| {
@@ -427,28 +429,35 @@ fn paintNodeImpl(
         const paint_col = if (is_hov) brightenColor(col) else col;
         const a: u8 = @intFromFloat(@as(f32, @floatFromInt(paint_col.a)) * effective_opacity);
         _ = c.SDL_SetRenderDrawColor(rend, paint_col.r, paint_col.g, paint_col.b, a);
-        var rect = c.SDL_Rect{ .x = ix, .y = iy, .w = iw, .h = ih };
+        var rect = c.SDL_FRect{ .x = fx, .y = fy, .w = fw, .h = fh };
         _ = c.SDL_RenderFillRect(rend, &rect);
     }
 
-    // Border
-    if (node.style.border_width > 0) {
-        const bw = @as(i32, @intFromFloat(node.style.border_width));
+    // Border (per-side widths)
+    const bt = node.style.brdTop();
+    const br_w = node.style.brdRight();
+    const bb_w = node.style.brdBottom();
+    const bl = node.style.brdLeft();
+    if (bt > 0 or br_w > 0 or bb_w > 0 or bl > 0) {
         const bc = node.style.border_color orelse Color.rgb(255, 255, 255);
         const ba: u8 = @intFromFloat(@as(f32, @floatFromInt(bc.a)) * effective_opacity);
         _ = c.SDL_SetRenderDrawColor(rend, bc.r, bc.g, bc.b, ba);
-        // top
-        var top_r = c.SDL_Rect{ .x = ix, .y = iy, .w = iw, .h = bw };
-        _ = c.SDL_RenderFillRect(rend, &top_r);
-        // bottom
-        var bot_r = c.SDL_Rect{ .x = ix, .y = iy + ih - bw, .w = iw, .h = bw };
-        _ = c.SDL_RenderFillRect(rend, &bot_r);
-        // left
-        var left_r = c.SDL_Rect{ .x = ix, .y = iy + bw, .w = bw, .h = ih - bw * 2 };
-        _ = c.SDL_RenderFillRect(rend, &left_r);
-        // right
-        var right_r = c.SDL_Rect{ .x = ix + iw - bw, .y = iy + bw, .w = bw, .h = ih - bw * 2 };
-        _ = c.SDL_RenderFillRect(rend, &right_r);
+        if (bt > 0) {
+            var top_r = c.SDL_FRect{ .x = fx, .y = fy, .w = fw, .h = bt };
+            _ = c.SDL_RenderFillRect(rend, &top_r);
+        }
+        if (bb_w > 0) {
+            var bot_r = c.SDL_FRect{ .x = fx, .y = fy + fh - bb_w, .w = fw, .h = bb_w };
+            _ = c.SDL_RenderFillRect(rend, &bot_r);
+        }
+        if (bl > 0) {
+            var left_r = c.SDL_FRect{ .x = fx, .y = fy + bt, .w = bl, .h = fh - bt - bb_w };
+            _ = c.SDL_RenderFillRect(rend, &left_r);
+        }
+        if (br_w > 0) {
+            var right_r = c.SDL_FRect{ .x = fx + fw - br_w, .y = fy + bt, .w = br_w, .h = fh - bt - bb_w };
+            _ = c.SDL_RenderFillRect(rend, &right_r);
+        }
     }
 
     // Text
@@ -538,15 +547,14 @@ fn tickNotification(idx: usize, now: u32) bool {
 /// Set X11 _NET_WM_WINDOW_TYPE to _NET_WM_WINDOW_TYPE_NOTIFICATION.
 /// This tells the WM: no taskbar entry, no focus steal, float above other windows.
 fn setX11NotificationType(window: *c.SDL_Window) void {
-    var info: c.SDL_SysWMinfo = undefined;
-    c.SDL_VERSION(&info.version);
-    if (c.SDL_GetWindowWMInfo(window, &info) != c.SDL_TRUE) return;
+    const props = c.SDL_GetWindowProperties(window);
 
-    // Only on X11
-    if (info.subsystem != c.SDL_SYSWM_X11) return;
+    // Only on X11 — check if X11 display property exists
+    const display = c.SDL_GetPointerProperty(props, c.SDL_PROP_WINDOW_X11_DISPLAY_POINTER, null);
+    const x11_window_num = c.SDL_GetNumberProperty(props, c.SDL_PROP_WINDOW_X11_WINDOW_NUMBER, 0);
+    if (display == null or x11_window_num == 0) return;
 
-    const display = info.info.x11.display;
-    const x11_window = info.info.x11.window;
+    const x11_window: c_ulong = @intCast(x11_window_num);
 
     const wm_type = x11Atom(display, "_NET_WM_WINDOW_TYPE");
     const notif_type = x11Atom(display, "_NET_WM_WINDOW_TYPE_NOTIFICATION");

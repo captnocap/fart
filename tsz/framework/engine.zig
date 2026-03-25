@@ -297,7 +297,7 @@ fn anyTerminalInitialized() bool {
 /// Route SDL key event to the terminal PTY as ANSI escape sequences.
 fn terminalHandleKey(sym: i32, mod_state: u16) void {
     const ti = g_focused_terminal;
-    const ctrl = (mod_state & @as(u16, c.KMOD_CTRL)) != 0;
+    const ctrl = (mod_state & c.SDL_KMOD_CTRL) != 0;
     termClearSelection();
     vterm_mod.scrollToBottomIdx(ti);
     // Ctrl+letter → raw control character
@@ -480,20 +480,20 @@ fn updateHover(root: *Node, mx: f32, my: f32) void {
         // Hand cursor for href links
         if (node.href != null) {
             if (!cursor_is_hand) {
-                if (cursor_hand == null) cursor_hand = c.SDL_CreateSystemCursor(c.SDL_SYSTEM_CURSOR_HAND);
-                if (cursor_hand) |cur| c.SDL_SetCursor(cur);
+                if (cursor_hand == null) cursor_hand = c.SDL_CreateSystemCursor(c.SDL_SYSTEM_CURSOR_POINTER);
+                if (cursor_hand) |cur| _ = c.SDL_SetCursor(cur);
                 cursor_is_hand = true;
             }
         } else if (cursor_is_hand) {
-            if (cursor_arrow == null) cursor_arrow = c.SDL_CreateSystemCursor(c.SDL_SYSTEM_CURSOR_ARROW);
-            if (cursor_arrow) |cur| c.SDL_SetCursor(cur);
+            if (cursor_arrow == null) cursor_arrow = c.SDL_CreateSystemCursor(c.SDL_SYSTEM_CURSOR_DEFAULT);
+            if (cursor_arrow) |cur| _ = c.SDL_SetCursor(cur);
             cursor_is_hand = false;
         }
     } else {
         tooltip.hide();
         if (cursor_is_hand) {
-            if (cursor_arrow == null) cursor_arrow = c.SDL_CreateSystemCursor(c.SDL_SYSTEM_CURSOR_ARROW);
-            if (cursor_arrow) |cur| c.SDL_SetCursor(cur);
+            if (cursor_arrow == null) cursor_arrow = c.SDL_CreateSystemCursor(c.SDL_SYSTEM_CURSOR_DEFAULT);
+            if (cursor_arrow) |cur| _ = c.SDL_SetCursor(cur);
             cursor_is_hand = false;
         }
     }
@@ -638,7 +638,7 @@ var canvas_dump_frame: u8 = 0;
 /// Produces jagged top/bottom edges — no flat horizontal boundary.
 /// Scans ALL children for each column (tiles may be non-contiguous).
 fn autoStackCanvasColumns(parent: *Node) void {
-    var seed: u32 = @as(u32, @intCast(c.SDL_GetTicks())) *% 2654435761;
+    var seed: u32 = @as(u32, @truncate(c.SDL_GetTicks())) *% 2654435761;
 
     // Collect unique gx values (max 16 columns)
     var columns: [16]f32 = undefined;
@@ -795,7 +795,7 @@ fn paintCanvasPath(node: *Node) callconv(.auto) void {
             @as(f32, @floatFromInt(tc.a)) / 255.0 * g_paint_opacity,
             node.canvas_stroke_width,
             if (g_flow_enabled) node.canvas_flow_speed else 0,
-            c.SDL_GetTicks(),
+            @as(u32, @truncate(c.SDL_GetTicks())),
         );
     }
 }
@@ -1160,7 +1160,7 @@ pub fn run(config_in: AppConfig) !void {
     debug_server.init(config.title);
     defer debug_server.deinit();
 
-    if (c.SDL_Init(c.SDL_INIT_VIDEO) != 0) return error.SDLInitFailed;
+    if (!c.SDL_Init(c.SDL_INIT_VIDEO)) return error.SDLInitFailed;
     defer c.SDL_Quit();
     log.info(.engine, "SDL initialized", .{});
 
@@ -1169,10 +1169,10 @@ pub fn run(config_in: AppConfig) !void {
 
     // Geometry: restore saved window position/size
     geometry.init(std.mem.span(config.title));
-    var init_x: c_int = c.SDL_WINDOWPOS_CENTERED;
-    var init_y: c_int = c.SDL_WINDOWPOS_CENTERED;
     var init_w: c_int = @intCast(config.width);
     var init_h: c_int = @intCast(config.height);
+    var init_x: c_int = c.SDL_WINDOWPOS_CENTERED;
+    var init_y: c_int = c.SDL_WINDOWPOS_CENTERED;
     if (geometry.load()) |g| {
         init_x = g.x;
         init_y = g.y;
@@ -1183,16 +1183,17 @@ pub fn run(config_in: AppConfig) !void {
 
     const window = c.SDL_CreateWindow(
         config.title,
-        init_x, init_y,
         init_w, init_h,
-        c.SDL_WINDOW_SHOWN | c.SDL_WINDOW_RESIZABLE,
+        c.SDL_WINDOW_RESIZABLE,
     ) orelse return error.WindowCreateFailed;
     defer c.SDL_DestroyWindow(window);
     defer windows.deinitAll(); // close all secondary windows before SDL_Quit
-    c.SDL_SetWindowMinimumSize(window, @intCast(config.min_width), @intCast(config.min_height));
+    // SDL3: position is set after creation (not in CreateWindow)
+    _ = c.SDL_SetWindowPosition(window, init_x, init_y);
+    _ = c.SDL_SetWindowMinimumSize(window, @intCast(config.min_width), @intCast(config.min_height));
 
-    // Enable text input events (SDL_TEXTINPUT) — required for keyboard input to work
-    c.SDL_StartTextInput();
+    // Enable text input events (SDL_EVENT_TEXT_INPUT) — required for keyboard input to work
+    _ = c.SDL_StartTextInput(window);
 
     if (geometry.load() != null) geometry.blockSaves();
 
@@ -1246,7 +1247,7 @@ pub fn run(config_in: AppConfig) !void {
     if (config.js_logic.len > 0) qjs_runtime.evalScript(config.js_logic);
 
     // Initial tick — set up dynamic texts after JS is evaluated
-    if (config.tick) |tickFn| tickFn(c.SDL_GetTicks());
+    if (config.tick) |tickFn| tickFn(@truncate(c.SDL_GetTicks()));
 
     // PTY remote control socket
     pty_remote.init();
@@ -1256,7 +1257,7 @@ pub fn run(config_in: AppConfig) !void {
     var running = true;
     var g_carts_scanned = false;
     var fps_frames: u32 = 0;
-    var fps_last: u32 = c.SDL_GetTicks();
+    var fps_last: u64 = c.SDL_GetTicks();
 
     while (running) {
         // Hot-reload: check if the app .so was recompiled
@@ -1273,65 +1274,63 @@ pub fn run(config_in: AppConfig) !void {
                 // Restore preserved state (after init resets to defaults, before tick uses it)
                 if (config.post_reload) |postFn| postFn();
                 if (config.js_logic.len > 0) qjs_runtime.evalScript(config.js_logic);
-                if (config.tick) |tickFn| tickFn(c.SDL_GetTicks());
+                if (config.tick) |tickFn| tickFn(@truncate(c.SDL_GetTicks()));
                 std.debug.print("[hot-reload] App reloaded\n", .{});
             }
         }
 
         var event: c.SDL_Event = undefined;
-        while (c.SDL_PollEvent(&event) != 0) {
+        while (c.SDL_PollEvent(&event)) {
             // Route to secondary windows first — if consumed, skip main window handling
             if (windows.routeEvent(&event)) continue;
 
             switch (event.type) {
-                c.SDL_QUIT => {
-                    std.debug.print("[engine] SDL_QUIT received\n", .{});
+                c.SDL_EVENT_QUIT => {
+                    std.debug.print("[engine] SDL_EVENT_QUIT received\n", .{});
                     running = false;
                 },
-                c.SDL_WINDOWEVENT => {
-                    switch (event.window.event) {
-                        c.SDL_WINDOWEVENT_CLOSE => {
-                            std.debug.print("[engine] SDL_WINDOWEVENT_CLOSE for window {d}\n", .{event.window.windowID});
-                            running = false;
-                        },
-                        c.SDL_WINDOWEVENT_SIZE_CHANGED => {
-                            win_w = @floatFromInt(event.window.data1);
-                            win_h = @floatFromInt(event.window.data2);
-                            gpu.resize(@intCast(event.window.data1), @intCast(event.window.data2));
-                            breakpoint.update(win_w);
-                            geometry.save(window);
-                        },
-                        c.SDL_WINDOWEVENT_MOVED => {
-                            geometry.save(window);
-                        },
-                        else => {},
-                    }
+                c.SDL_EVENT_WINDOW_CLOSE_REQUESTED => {
+                    std.debug.print("[engine] SDL_EVENT_WINDOW_CLOSE_REQUESTED for window {d}\n", .{event.window.windowID});
+                    running = false;
                 },
-                c.SDL_MOUSEBUTTONDOWN => {
+                c.SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED => {
+                    var ww: c_int = 0;
+                    var wh: c_int = 0;
+                    _ = c.SDL_GetWindowSize(window, &ww, &wh);
+                    win_w = @floatFromInt(ww);
+                    win_h = @floatFromInt(wh);
+                    gpu.resize(@intCast(ww), @intCast(wh));
+                    breakpoint.update(win_w);
+                    geometry.save(window);
+                },
+                c.SDL_EVENT_WINDOW_MOVED => {
+                    geometry.save(window);
+                },
+                c.SDL_EVENT_MOUSE_BUTTON_DOWN => {
                     // Render surface input forwarding (VNC mouse) — check first
                     {
-                        const rmx: f32 = @floatFromInt(event.button.x);
-                        const rmy: f32 = @floatFromInt(event.button.y);
+                        const rmx: f32 = event.button.x;
+                        const rmy: f32 = event.button.y;
                         if (render_surfaces.handleMouseDown(rmx, rmy, event.button.button)) continue;
                     }
                     // Physics drag — try to grab a dynamic body
                     if (event.button.button == c.SDL_BUTTON_LEFT and physics2d.isInitialized()) {
-                        const pmx: f32 = @floatFromInt(event.button.x);
-                        const pmy: f32 = @floatFromInt(event.button.y);
+                        const pmx: f32 = event.button.x;
+                        const pmy: f32 = event.button.y;
                         physics2d.startDrag(pmx, pmy);
                     }
                     // Context menu: dismiss on left-click, consume if item was hit
                     if (event.button.button == c.SDL_BUTTON_LEFT and context_menu.isVisible()) {
-                        const cmx: f32 = @floatFromInt(event.button.x);
-                        const cmy: f32 = @floatFromInt(event.button.y);
+                        const cmx: f32 = event.button.x;
+                        const cmy: f32 = event.button.y;
                         if (context_menu.handleClick(cmx, cmy)) continue;
                         // handleClick returns false for outside clicks (and hides the menu)
                         // — fall through to normal left-click handling
                     }
                     // Right-click — context menu items or on_right_click handler
                     if (event.button.button == c.SDL_BUTTON_RIGHT) {
-                        const mx: f32 = @floatFromInt(event.button.x);
-                        const my: f32 = @floatFromInt(event.button.y);
+                        const mx: f32 = event.button.x;
+                        const my: f32 = event.button.y;
                         context_menu.hide(); // dismiss any existing menu first
                         const rc_events = @import("events.zig");
                         if (rc_events.hitTestRightClick(config.root, mx, my)) |h| {
@@ -1343,15 +1342,15 @@ pub fn run(config_in: AppConfig) !void {
                         }
                     }
                     if (event.button.button == c.SDL_BUTTON_LEFT) {
-                        const mx: f32 = @floatFromInt(event.button.x);
-                        const my: f32 = @floatFromInt(event.button.y);
+                        const mx: f32 = event.button.x;
+                        const my: f32 = event.button.y;
                         const events = @import("events.zig");
                         const hit = layout.hitTest(config.root, mx, my);
                         const hit_is_interactive = if (hit) |h| (h.input_id != null or h.handlers.on_press != null or h.href != null) else false;
                         if (hit_is_interactive) {
                             const h = hit.?;
                             if (h.input_id) |id| {
-                                const now_ms = c.SDL_GetTicks();
+                                const now_ms: u32 = @intCast(c.SDL_GetTicks() & 0xFFFFFFFF);
                                 const clicks = input.trackClick(now_ms);
                                 input.focus(id);
                                 const pl = h.style.padLeft();
@@ -1454,15 +1453,15 @@ pub fn run(config_in: AppConfig) !void {
                                 }
                             } else {
                                 termClearSelection();
-                                selection.onMouseDown(config.root, mx, my, c.SDL_GetTicks());
+                                selection.onMouseDown(config.root, mx, my, @intCast(c.SDL_GetTicks() & 0xFFFFFFFF));
                             }
                             input.unfocus();
                         }
                     }
                 },
-                c.SDL_MOUSEMOTION => {
-                    const mx: f32 = @floatFromInt(event.motion.x);
-                    const my: f32 = @floatFromInt(event.motion.y);
+                c.SDL_EVENT_MOUSE_MOTION => {
+                    const mx: f32 = event.motion.x;
+                    const my: f32 = event.motion.y;
                     // Render surface mouse motion forwarding
                     if (render_surfaces.handleMouseMotion(mx, my)) continue;
                     // Physics drag update
@@ -1527,11 +1526,11 @@ pub fn run(config_in: AppConfig) !void {
                         selection.onMouseDrag(config.root, mx, my);
                     }
                 },
-                c.SDL_MOUSEBUTTONUP => {
+                c.SDL_EVENT_MOUSE_BUTTON_UP => {
                     // Render surface mouse up forwarding
                     {
-                        const rmx: f32 = @floatFromInt(event.button.x);
-                        const rmy: f32 = @floatFromInt(event.button.y);
+                        const rmx: f32 = event.button.x;
+                        const rmy: f32 = event.button.y;
                         if (render_surfaces.handleMouseUp(rmx, rmy, event.button.button)) continue;
                     }
                     if (event.button.button == c.SDL_BUTTON_LEFT) {
@@ -1542,31 +1541,33 @@ pub fn run(config_in: AppConfig) !void {
                         selection.onMouseUp();
                     }
                 },
-                c.SDL_TEXTINPUT => {
+                c.SDL_EVENT_TEXT_INPUT => {
+                    // SDL3: event.text.text is a const char* pointer
+                    const text_ptr: [*:0]const u8 = @ptrCast(event.text.text orelse continue);
                     // Native terminal gets text first
                     if (terminals_initialized[g_focused_terminal]) {
-                        terminalHandleTextInput(@ptrCast(&event.text.text));
+                        terminalHandleTextInput(text_ptr);
                         continue;
                     }
                     // PTY gets text first when active
                     if (qjs_runtime.ptyActive()) {
-                        qjs_runtime.ptyHandleTextInput(@ptrCast(&event.text.text));
+                        qjs_runtime.ptyHandleTextInput(text_ptr);
                         continue;
                     }
                     // Render surface text input forwarding
-                    if (render_surfaces.handleTextInput(@ptrCast(&event.text.text))) continue;
-                    input.handleTextInput(@ptrCast(&event.text.text));
+                    if (render_surfaces.handleTextInput(text_ptr)) continue;
+                    input.handleTextInput(text_ptr);
                 },
-                c.SDL_KEYDOWN => {
-                    const sym = event.key.keysym.sym;
-                    const mod = event.key.keysym.mod;
+                c.SDL_EVENT_KEY_DOWN => {
+                    const sym: c_int = @intCast(event.key.key);
+                    const mod = event.key.mod;
                     // Capture key (F9 recording toggle)
                     if (capture.handleKey(sym)) continue;
                     // Terminal copy/paste: Ctrl+Shift+C/V (not Ctrl+C which is SIGINT)
                     if (terminals_initialized[g_focused_terminal]) {
-                        const t_ctrl = (mod & @as(u16, c.KMOD_CTRL)) != 0;
-                        const t_shift = (mod & @as(u16, c.KMOD_SHIFT)) != 0;
-                        if (t_ctrl and t_shift and sym == c.SDLK_c) {
+                        const t_ctrl = (mod & c.SDL_KMOD_CTRL) != 0;
+                        const t_shift = (mod & c.SDL_KMOD_SHIFT) != 0;
+                        if (t_ctrl and t_shift and sym == c.SDLK_C) {
                             if (term_sel_active) {
                                 var copy_buf: [8192]u8 = undefined;
                                 const len = vterm_mod.copySelectedTextIdx(
@@ -1583,7 +1584,7 @@ pub fn run(config_in: AppConfig) !void {
                             continue;
                         }
                         // Ctrl+Shift+D — toggle semantic overlay
-                        if (t_ctrl and t_shift and sym == c.SDLK_d) {
+                        if (t_ctrl and t_shift and sym == c.SDLK_D) {
                             g_semantic_overlay = !g_semantic_overlay;
                             // When overlay turns on, activate basic classifier if none set
                             if (g_semantic_overlay and classifier.getModeIdx(g_focused_terminal) == .none) {
@@ -1593,7 +1594,7 @@ pub fn run(config_in: AppConfig) !void {
                             std.debug.print("[semantic] overlay {s}\n", .{if (g_semantic_overlay) "ON" else "OFF"});
                             continue;
                         }
-                        if (t_ctrl and t_shift and sym == c.SDLK_v) {
+                        if (t_ctrl and t_shift and sym == c.SDLK_V) {
                             const clip = c.SDL_GetClipboardText();
                             if (clip != null) {
                                 vterm_mod.scrollToBottomIdx(g_focused_terminal);
@@ -1616,7 +1617,7 @@ pub fn run(config_in: AppConfig) !void {
                     // Render surface key forwarding
                     if (render_surfaces.handleKeyDown(sym)) continue;
                     {
-                        const ctrl = (mod & c.KMOD_CTRL) != 0;
+                        const ctrl = (mod & c.SDL_KMOD_CTRL) != 0;
                         const input_consumed = if (input.getFocusedId() != null)
                             (if (ctrl) input.handleCtrlKey(sym) else input.handleKey(sym))
                         else
@@ -1626,15 +1627,13 @@ pub fn run(config_in: AppConfig) !void {
                         }
                     }
                 },
-                c.SDL_KEYUP => {
-                    _ = render_surfaces.handleKeyUp(event.key.keysym.sym);
+                c.SDL_EVENT_KEY_UP => {
+                    _ = render_surfaces.handleKeyUp(@intCast(event.key.key));
                 },
-                c.SDL_MOUSEWHEEL => {
-                    var mx_i: c_int = undefined;
-                    var my_i: c_int = undefined;
-                    _ = c.SDL_GetMouseState(&mx_i, &my_i);
-                    const mx: f32 = @floatFromInt(mx_i);
-                    const my: f32 = @floatFromInt(my_i);
+                c.SDL_EVENT_MOUSE_WHEEL => {
+                    // SDL3: mouse_x/mouse_y are in the wheel event itself
+                    const mx: f32 = event.wheel.mouse_x;
+                    const my: f32 = event.wheel.mouse_y;
                     const events = @import("events.zig");
                     // Terminal scrollback — mouse wheel scrolls history (check all terminals)
                     {
@@ -1645,10 +1644,11 @@ pub fn run(config_in: AppConfig) !void {
                             if (findTerminalNodeById(config.root, scroll_ti)) |tn| {
                                 const tr = tn.computed;
                                 if (mx >= tr.x and mx <= tr.x + tr.w and my >= tr.y and my <= tr.y + tr.h) {
-                                    if (event.wheel.y > 0) {
-                                        vterm_mod.scrollUpIdx(scroll_ti, @intCast(event.wheel.y * 3));
-                                    } else if (event.wheel.y < 0) {
-                                        vterm_mod.scrollDownIdx(scroll_ti, @intCast(-event.wheel.y * 3));
+                                    const wheel_y: i32 = @intFromFloat(event.wheel.y);
+                                    if (wheel_y > 0) {
+                                        vterm_mod.scrollUpIdx(scroll_ti, @intCast(wheel_y * 3));
+                                    } else if (wheel_y < 0) {
+                                        vterm_mod.scrollDownIdx(scroll_ti, @intCast(-wheel_y * 3));
                                     }
                                     scroll_handled = true;
                                     break;
@@ -1659,24 +1659,24 @@ pub fn run(config_in: AppConfig) !void {
                     }
                     // Canvas zoom — built-in
                     if (events.findCanvasNode(config.root, mx, my)) |cn| {
-                        const delta: f32 = @floatFromInt(event.wheel.y);
+                        const delta: f32 = event.wheel.y;
                         canvas.handleScroll(mx - cn.computed.x, my - cn.computed.y, delta, cn.computed.w, cn.computed.h);
                     } else if (events.findScrollContainer(config.root, mx, my)) |scroll_node| {
                         if (event.wheel.y != 0) {
-                            scroll_node.scroll_y -= @as(f32, @floatFromInt(event.wheel.y)) * 30.0;
+                            scroll_node.scroll_y -= event.wheel.y * 30.0;
                         }
                         if (event.wheel.x != 0) {
                             const page = @max(scroll_node.computed.h * 0.8, 60.0);
-                            scroll_node.scroll_y -= @as(f32, @floatFromInt(event.wheel.x)) * page;
+                            scroll_node.scroll_y -= event.wheel.x * page;
                         }
                         const max_scroll = @max(0.0, scroll_node.content_height - scroll_node.computed.h);
                         scroll_node.scroll_y = @max(0.0, @min(scroll_node.scroll_y, max_scroll));
                     }
                 },
-                c.SDL_DROPFILE => {
-                    if (event.drop.file) |file_ptr| {
-                        filedrop.dispatch(std.mem.span(file_ptr), config.root);
-                        c.SDL_free(file_ptr);
+                c.SDL_EVENT_DROP_FILE => {
+                    if (event.drop.data) |data_ptr| {
+                        filedrop.dispatch(std.mem.span(data_ptr), config.root);
+                        // SDL3: drop data is managed by SDL, no SDL_free needed
                     }
                 },
                 else => {},
@@ -1690,10 +1690,10 @@ pub fn run(config_in: AppConfig) !void {
         qjs_runtime.telemetry_tick_us = @intCast(@max(0, t1 - t0));
 
         // App tick (FFI polling, state updates, dynamic texts)
-        if (config.tick) |tickFn| tickFn(c.SDL_GetTicks());
+        if (config.tick) |tickFn| tickFn(@truncate(c.SDL_GetTicks()));
 
         // Tick all loaded cartridges + scan for new <Cartridge> nodes (first frame only)
-        if (cart.count() > 0) cart.tickAll(c.SDL_GetTicks());
+        if (cart.count() > 0) cart.tickAll(@truncate(c.SDL_GetTicks()));
         if (!g_carts_scanned) {
             g_carts_scanned = true;
             scanCartridgeNodes(config.root);
@@ -1703,7 +1703,7 @@ pub fn run(config_in: AppConfig) !void {
 
         // Transition tick — interpolate active transitions AFTER style updates, BEFORE layout
         {
-            const now_t = c.SDL_GetTicks();
+            const now_t: u32 = @truncate(c.SDL_GetTicks());
             const dt_t = now_t -% g_prev_tick;
             const dt_t_sec = @as(f32, @floatFromInt(dt_t)) / 1000.0;
             _ = transition.tick(dt_t_sec);
@@ -1772,7 +1772,7 @@ pub fn run(config_in: AppConfig) !void {
         // Physics 2D tick — step world, sync body positions to nodes AFTER layout
         // (physics overwrites computed.x/y — must happen after layout sets them)
         if (physics2d.isInitialized()) {
-            const now_p = c.SDL_GetTicks();
+            const now_p: u32 = @truncate(c.SDL_GetTicks());
             const dt_p = now_p -% g_prev_tick;
             const dt_p_sec = @as(f32, @floatFromInt(dt_p)) / 1000.0;
             physics2d.tick(@min(dt_p_sec, 0.05)); // cap at 50ms to prevent explosion
@@ -1792,7 +1792,7 @@ pub fn run(config_in: AppConfig) !void {
         render_surfaces.update();
 
         // Cursor blink — update before paint so cursor state is fresh
-        const now_tick = c.SDL_GetTicks();
+        const now_tick: u32 = @truncate(c.SDL_GetTicks());
         const dt_ms = now_tick -% g_prev_tick;
         g_prev_tick = now_tick;
         const dt_sec = @as(f32, @floatFromInt(dt_ms)) / 1000.0;
@@ -1874,8 +1874,8 @@ pub fn run(config_in: AppConfig) !void {
 
         // Telemetry (legacy stderr + qjs_runtime vars)
         fps_frames += 1;
-        const now = c.SDL_GetTicks();
-        if (now - fps_last >= 1000) {
+        const now: u64 = c.SDL_GetTicks();
+        if (now -% fps_last >= 1000) {
             qjs_runtime.telemetry_fps = fps_frames;
             const ppf = g_paint_count / @max(fps_frames, 1);
             const hpf = g_hidden_count / @max(fps_frames, 1);

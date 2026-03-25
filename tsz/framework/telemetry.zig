@@ -319,21 +319,25 @@ pub fn collect(args: CollectArgs) void {
     if (args.window) |win| {
         var wx: c_int = 0;
         var wy: c_int = 0;
-        c.SDL_GetWindowPosition(win, &wx, &wy);
+        _ = c.SDL_GetWindowPosition(win, &wx, &wy);
         snap.window_x = wx;
         snap.window_y = wy;
 
         var ww: c_int = 0;
         var wh: c_int = 0;
-        c.SDL_GetWindowSize(win, &ww, &wh);
+        _ = c.SDL_GetWindowSize(win, &ww, &wh);
         snap.window_w = @intCast(@max(0, ww));
         snap.window_h = @intCast(@max(0, wh));
 
-        snap.display_count = @intCast(@max(0, c.SDL_GetNumVideoDisplays()));
-        snap.current_display = @max(0, c.SDL_GetWindowDisplayIndex(win));
+        var n_displays: c_int = 0;
+        const display_ids = c.SDL_GetDisplays(&n_displays);
+        snap.display_count = @intCast(@max(0, n_displays));
+        if (display_ids != null) c.SDL_free(display_ids);
+        const current_disp = c.SDL_GetDisplayForWindow(win);
+        snap.current_display = @intCast(current_disp);
 
         var bounds: c.SDL_Rect = undefined;
-        if (c.SDL_GetDisplayBounds(snap.current_display, &bounds) == 0) {
+        if (c.SDL_GetDisplayBounds(current_disp, &bounds)) {
             snap.display_w = @intCast(@max(0, bounds.w));
             snap.display_h = @intCast(@max(0, bounds.h));
         }

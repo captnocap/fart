@@ -214,6 +214,24 @@ fn hostGetPaintUs(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSVal
 fn hostGetTickUs(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
     return qjs.JS_NewFloat64(null, @floatFromInt(telemetry_tick_us));
 }
+fn hostGetMouseX(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    var mx: f32 = 0;
+    var my: f32 = 0;
+    _ = c.SDL_GetMouseState(&mx, &my);
+    return qjs.JS_NewFloat64(null, @floatCast(mx));
+}
+fn hostGetMouseY(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    var mx: f32 = 0;
+    var my: f32 = 0;
+    _ = c.SDL_GetMouseState(&mx, &my);
+    return qjs.JS_NewFloat64(null, @floatCast(my));
+}
+fn hostGetMouseDown(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    var mx: f32 = 0;
+    var my: f32 = 0;
+    const buttons = c.SDL_GetMouseState(&mx, &my);
+    return qjs.JS_NewFloat64(null, if (buttons & c.SDL_BUTTON_LMASK != 0) 1.0 else 0.0);
+}
 
 // ── Telemetry host functions (build JS objects from unified snapshot) ──
 
@@ -738,6 +756,10 @@ fn hostTelNodeStyle(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c
     // Visual
     setF(c2, obj, "border_radius", sty.border_radius);
     setF(c2, obj, "border_width", sty.border_width);
+    if (sty.border_top_width) |v| setF(c2, obj, "border_top_width", v);
+    if (sty.border_right_width) |v| setF(c2, obj, "border_right_width", v);
+    if (sty.border_bottom_width) |v| setF(c2, obj, "border_bottom_width", v);
+    if (sty.border_left_width) |v| setF(c2, obj, "border_left_width", v);
     setF(c2, obj, "opacity", sty.opacity);
     setF(c2, obj, "z_index", @floatFromInt(sty.z_index));
     setF(c2, obj, "rotation", sty.rotation);
@@ -806,6 +828,10 @@ fn hostTelNodeBoxModel(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: 
     setF(c2, obj, "margin_left", sty.margin_left orelse sty.margin);
 
     setF(c2, obj, "border_width", sty.border_width);
+    setF(c2, obj, "border_top_width", sty.brdTop());
+    setF(c2, obj, "border_right_width", sty.brdRight());
+    setF(c2, obj, "border_bottom_width", sty.brdBottom());
+    setF(c2, obj, "border_left_width", sty.brdLeft());
 
     // Content dimensions
     const pl = sty.padLeft();
@@ -1154,6 +1180,18 @@ fn hostFsWritefile(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]
     return qjs.JS_NewFloat64(null, 0);
 }
 
+/// __fs_deletefile(path) → 0 on success, -1 on error.
+fn hostFsDeletefile(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    const c2 = ctx orelse return QJS_UNDEFINED;
+    if (argc < 1) return qjs.JS_NewFloat64(null, -1);
+    const path_ptr = qjs.JS_ToCString(c2, argv[0]);
+    if (path_ptr == null) return qjs.JS_NewFloat64(null, -1);
+    defer qjs.JS_FreeCString(c2, path_ptr);
+    const path = std.mem.span(path_ptr);
+    std.fs.cwd().deleteFile(path) catch return qjs.JS_NewFloat64(null, -1);
+    return qjs.JS_NewFloat64(null, 0);
+}
+
 /// __exec(cmd) → stdout+stderr as string, or empty string on error.
 /// Runs a shell command synchronously via popen. Captures up to 64KB of output.
 fn hostExec(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
@@ -1200,6 +1238,9 @@ pub fn initVM() void {
     _ = qjs.JS_SetPropertyStr(ctx, global, "getLayoutUs", qjs.JS_NewCFunction(ctx, hostGetLayoutUs, "getLayoutUs", 0));
     _ = qjs.JS_SetPropertyStr(ctx, global, "getPaintUs", qjs.JS_NewCFunction(ctx, hostGetPaintUs, "getPaintUs", 0));
     _ = qjs.JS_SetPropertyStr(ctx, global, "getTickUs", qjs.JS_NewCFunction(ctx, hostGetTickUs, "getTickUs", 0));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "getMouseX", qjs.JS_NewCFunction(ctx, hostGetMouseX, "getMouseX", 0));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "getMouseY", qjs.JS_NewCFunction(ctx, hostGetMouseY, "getMouseY", 0));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "getMouseDown", qjs.JS_NewCFunction(ctx, hostGetMouseDown, "getMouseDown", 0));
     _ = qjs.JS_SetPropertyStr(ctx, global, "heavy_compute", qjs.JS_NewCFunction(ctx, hostHeavyCompute, "heavy_compute", 1));
     _ = qjs.JS_SetPropertyStr(ctx, global, "heavy_compute_timed", qjs.JS_NewCFunction(ctx, hostHeavyComputeTimed, "heavy_compute_timed", 1));
     _ = qjs.JS_SetPropertyStr(ctx, global, "set_compute_n", qjs.JS_NewCFunction(ctx, hostSetComputeN, "set_compute_n", 1));
@@ -1268,6 +1309,7 @@ pub fn initVM() void {
     _ = qjs.JS_SetPropertyStr(ctx, global, "__getpid", qjs.JS_NewCFunction(ctx, hostGetPid, "__getpid", 0));
     _ = qjs.JS_SetPropertyStr(ctx, global, "__getenv", qjs.JS_NewCFunction(ctx, hostGetEnv, "__getenv", 1));
     _ = qjs.JS_SetPropertyStr(ctx, global, "__fs_writefile", qjs.JS_NewCFunction(ctx, hostFsWritefile, "__fs_writefile", 2));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__fs_deletefile", qjs.JS_NewCFunction(ctx, hostFsDeletefile, "__fs_deletefile", 1));
     _ = qjs.JS_SetPropertyStr(ctx, global, "__exec", qjs.JS_NewCFunction(ctx, hostExec, "__exec", 1));
 
     // IPC debug client host functions (external inspector attach)
@@ -1399,11 +1441,11 @@ pub fn paintNode(renderer: *c.SDL_Renderer, te: *TextEngine, node: *Node) void {
     if (node.style.background_color) |bg| {
         if (bg.a > 0) {
             _ = c.SDL_SetRenderDrawColor(renderer, bg.r, bg.g, bg.b, bg.a);
-            var rect = c.SDL_Rect{
-                .x = @intFromFloat(r.x),
-                .y = @intFromFloat(r.y),
-                .w = @intFromFloat(r.w),
-                .h = @intFromFloat(r.h),
+            var rect = c.SDL_FRect{
+                .x = r.x,
+                .y = r.y,
+                .w = r.w,
+                .h = r.h,
             };
             _ = c.SDL_RenderFillRect(renderer, &rect);
         }
@@ -1432,13 +1474,13 @@ fn measureImageCallback(_: []const u8) layout.ImageDims {
 
 pub fn run(root: *Node, js_logic: []const u8, initState: *const fn () void, updateTexts: *const fn () void) !void {
     if (comptime !HAS_QUICKJS) return;
-    if (c.SDL_Init(c.SDL_INIT_VIDEO) != 0) return error.SDLInitFailed;
+    if (!c.SDL_Init(c.SDL_INIT_VIDEO)) return error.SDLInitFailed;
     defer c.SDL_Quit();
 
-    const window = c.SDL_CreateWindow("tsz app", c.SDL_WINDOWPOS_CENTERED, c.SDL_WINDOWPOS_CENTERED, 1280, 800, c.SDL_WINDOW_SHOWN | c.SDL_WINDOW_RESIZABLE) orelse return error.WindowCreateFailed;
+    const window = c.SDL_CreateWindow("tsz app", 1280, 800, c.SDL_WINDOW_RESIZABLE) orelse return error.WindowCreateFailed;
     defer c.SDL_DestroyWindow(window);
 
-    const renderer = c.SDL_CreateRenderer(window, -1, c.SDL_RENDERER_ACCELERATED | c.SDL_RENDERER_PRESENTVSYNC) orelse return error.RendererFailed;
+    const renderer = c.SDL_CreateRenderer(window, null) orelse return error.RendererFailed;
     defer c.SDL_DestroyRenderer(renderer);
     _ = c.SDL_SetRenderDrawBlendMode(renderer, c.SDL_BLENDMODE_BLEND);
 
@@ -1462,7 +1504,7 @@ pub fn run(root: *Node, js_logic: []const u8, initState: *const fn () void, upda
 
     var running = true;
     var fps_frames: u32 = 0;
-    var fps_last: u32 = c.SDL_GetTicks();
+    var fps_last: u64 = c.SDL_GetTicks();
     var fps_display: u32 = 0;
     var tick_us: u64 = 0;
     var layout_us: u64 = 0;
@@ -1470,17 +1512,18 @@ pub fn run(root: *Node, js_logic: []const u8, initState: *const fn () void, upda
 
     while (running) {
         var event: c.SDL_Event = undefined;
-        while (c.SDL_PollEvent(&event) != 0) {
+        while (c.SDL_PollEvent(&event)) {
             switch (event.type) {
-                c.SDL_QUIT => running = false,
-                c.SDL_WINDOWEVENT => {
-                    if (event.window.event == c.SDL_WINDOWEVENT_SIZE_CHANGED) {
-                        win_w = @floatFromInt(event.window.data1);
-                        win_h = @floatFromInt(event.window.data2);
-                    }
+                c.SDL_EVENT_QUIT => running = false,
+                c.SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED => {
+                    var ww: c_int = 0;
+                    var wh: c_int = 0;
+                    _ = c.SDL_GetWindowSize(window, &ww, &wh);
+                    win_w = @floatFromInt(ww);
+                    win_h = @floatFromInt(wh);
                 },
-                c.SDL_KEYDOWN => {
-                    if (event.key.keysym.sym == c.SDLK_ESCAPE) running = false;
+                c.SDL_EVENT_KEY_DOWN => {
+                    if (event.key.key == c.SDLK_ESCAPE) running = false;
                 },
                 else => {},
             }
@@ -1513,7 +1556,7 @@ pub fn run(root: *Node, js_logic: []const u8, initState: *const fn () void, upda
         {
             const bar_y = win_h - 24;
             _ = c.SDL_SetRenderDrawColor(renderer, 0, 0, 0, 200);
-            var bar_rect = c.SDL_Rect{ .x = 0, .y = @intFromFloat(bar_y), .w = @intFromFloat(win_w), .h = 24 };
+            var bar_rect = c.SDL_FRect{ .x = 0, .y = bar_y, .w = win_w, .h = 24 };
             _ = c.SDL_RenderFillRect(renderer, &bar_rect);
             var tbuf: [256]u8 = undefined;
             const tstr = std.fmt.bufPrint(&tbuf, "FPS: {d}  |  tick: {d}us  layout: {d}us  paint: {d}us", .{
@@ -1522,11 +1565,11 @@ pub fn run(root: *Node, js_logic: []const u8, initState: *const fn () void, upda
             text_engine.drawText(tstr, 8, bar_y + 4, 13, Color.rgb(180, 220, 180));
         }
 
-        c.SDL_RenderPresent(renderer);
+        _ = c.SDL_RenderPresent(renderer);
 
         fps_frames += 1;
-        const now = c.SDL_GetTicks();
-        if (now - fps_last >= 1000) {
+        const now: u64 = c.SDL_GetTicks();
+        if (now -% fps_last >= 1000) {
             fps_display = fps_frames;
             fps_frames = 0;
             fps_last = now;

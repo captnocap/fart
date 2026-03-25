@@ -225,22 +225,22 @@ var entry_count: usize = 0;
 // GL context setup (dedicated hidden window for mpv rendering)
 // ════════════════════════════════════════════════════════════════════════
 
-/// mpv's get_proc_address callback — routes to SDL2's GL loader
+/// mpv's get_proc_address callback — routes to SDL3's GL loader
 fn glGetProcAddr(_: ?*anyopaque, name: [*:0]const u8) callconv(.c) ?*anyopaque {
-    return c.SDL_GL_GetProcAddress(name);
+    // SDL3: SDL_GL_GetProcAddress returns SDL_FunctionPointer, cast to void*
+    const fp = c.SDL_GL_GetProcAddress(name) orelse return null;
+    return @ptrFromInt(@intFromPtr(fp));
 }
 
 fn loadGlFn(comptime T: type, name: [*:0]const u8) ?T {
-    const ptr = c.SDL_GL_GetProcAddress(name) orelse return null;
-    return @ptrCast(ptr);
+    const fp = c.SDL_GL_GetProcAddress(name) orelse return null;
+    return @ptrFromInt(@intFromPtr(fp));
 }
 
 fn initGLContext() bool {
-    // Create hidden SDL2 window with OpenGL support
+    // Create hidden SDL3 window with OpenGL support
     gl_window = c.SDL_CreateWindow(
         "mpv-gl",
-        c.SDL_WINDOWPOS_UNDEFINED,
-        c.SDL_WINDOWPOS_UNDEFINED,
         1,
         1,
         c.SDL_WINDOW_OPENGL | c.SDL_WINDOW_HIDDEN,
@@ -285,7 +285,7 @@ fn glInitFail(name: [*:0]const u8) bool {
 
 fn deinitGLContext() void {
     if (gl_context != null) {
-        c.SDL_GL_DeleteContext(gl_context);
+        _ = c.SDL_GL_DestroyContext(gl_context);
         gl_context = null;
     }
     if (gl_window) |w| {
@@ -1099,7 +1099,7 @@ pub fn handleKey(sym: c_int) bool {
     } else if (sym == c.SDLK_DOWN) {
         adjustVolume(e, -5);
         return true;
-    } else if (sym == c.SDLK_m) {
+    } else if (sym == c.SDLK_M) {
         e.muted = !e.muted;
         if (e.handle) |h| _ = mpv_fns.set_property_string(h, "mute", if (e.muted) "yes" else "no");
         return true;

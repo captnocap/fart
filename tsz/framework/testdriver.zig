@@ -10,26 +10,23 @@ const Node = layout.Node;
 const query = @import("query.zig");
 const QueryOpts = query.QueryOpts;
 
-/// Simulate a mouse click at (x, y). Pushes MOUSEBUTTONDOWN + MOUSEBUTTONUP.
+/// Simulate a mouse click at (x, y). Pushes MOUSE_BUTTON_DOWN + MOUSE_BUTTON_UP.
 pub fn click(x: f32, y: f32) void {
-    const ix: c_int = @intFromFloat(x);
-    const iy: c_int = @intFromFloat(y);
-
     var down: c.SDL_Event = std.mem.zeroes(c.SDL_Event);
-    down.type = c.SDL_MOUSEBUTTONDOWN;
-    down.button.x = ix;
-    down.button.y = iy;
+    down.type = c.SDL_EVENT_MOUSE_BUTTON_DOWN;
+    down.button.x = x;
+    down.button.y = y;
     down.button.button = c.SDL_BUTTON_LEFT;
-    down.button.state = c.SDL_PRESSED;
+    down.button.down = true;
     down.button.clicks = 1;
     _ = c.SDL_PushEvent(&down);
 
     var up: c.SDL_Event = std.mem.zeroes(c.SDL_Event);
-    up.type = c.SDL_MOUSEBUTTONUP;
-    up.button.x = ix;
-    up.button.y = iy;
+    up.type = c.SDL_EVENT_MOUSE_BUTTON_UP;
+    up.button.x = x;
+    up.button.y = y;
     up.button.button = c.SDL_BUTTON_LEFT;
-    up.button.state = c.SDL_RELEASED;
+    up.button.down = false;
     up.button.clicks = 1;
     _ = c.SDL_PushEvent(&up);
 }
@@ -46,60 +43,66 @@ pub fn clickNode(root: *Node, opts: QueryOpts) bool {
 /// Simulate a mouse move to (x, y).
 pub fn moveMouse(x: f32, y: f32) void {
     var event: c.SDL_Event = std.mem.zeroes(c.SDL_Event);
-    event.type = c.SDL_MOUSEMOTION;
-    event.motion.x = @intFromFloat(x);
-    event.motion.y = @intFromFloat(y);
+    event.type = c.SDL_EVENT_MOUSE_MOTION;
+    event.motion.x = x;
+    event.motion.y = y;
     _ = c.SDL_PushEvent(&event);
 }
 
 /// Simulate a key press + release.
 pub fn key(sym: c_int) void {
     var down: c.SDL_Event = std.mem.zeroes(c.SDL_Event);
-    down.type = c.SDL_KEYDOWN;
-    down.key.keysym.sym = sym;
-    down.key.state = c.SDL_PRESSED;
+    down.type = c.SDL_EVENT_KEY_DOWN;
+    down.key.key = @intCast(sym);
+    down.key.down = true;
     _ = c.SDL_PushEvent(&down);
 
     var up: c.SDL_Event = std.mem.zeroes(c.SDL_Event);
-    up.type = c.SDL_KEYUP;
-    up.key.keysym.sym = sym;
-    up.key.state = c.SDL_RELEASED;
+    up.type = c.SDL_EVENT_KEY_UP;
+    up.key.key = @intCast(sym);
+    up.key.down = false;
     _ = c.SDL_PushEvent(&up);
 }
 
-/// Simulate typing a string (one SDL_TEXTINPUT event per character).
+/// Simulate typing a string (one SDL_EVENT_TEXT_INPUT event per character).
+/// NOTE: SDL3 text input events use a const char* pointer, so we cannot
+/// easily synthesize them by setting struct fields. For test purposes,
+/// use the key() function with character codes instead, or send text
+/// through the input module directly.
 pub fn typeText(text: []const u8) void {
+    // SDL3 changed text.text to a const char* pointer managed by SDL.
+    // We cannot safely synthesize these events. Instead, directly inject
+    // through the input system.
+    const input = @import("input.zig");
     for (text) |ch| {
-        var event: c.SDL_Event = std.mem.zeroes(c.SDL_Event);
-        event.type = c.SDL_TEXTINPUT;
-        event.text.text[0] = @intCast(ch);
-        event.text.text[1] = 0;
-        _ = c.SDL_PushEvent(&event);
+        var buf: [2]u8 = .{ ch, 0 };
+        input.handleTextInput(@ptrCast(&buf));
     }
 }
 
 /// Simulate a window resize.
 pub fn resize(w: c_int, h: c_int) void {
+    // SDL3: window events are top-level, no sub-event field.
+    // SDL_EVENT_WINDOW_RESIZED carries data in window.data1/data2.
     var event: c.SDL_Event = std.mem.zeroes(c.SDL_Event);
-    event.type = c.SDL_WINDOWEVENT;
-    event.window.event = c.SDL_WINDOWEVENT_SIZE_CHANGED;
+    event.type = c.SDL_EVENT_WINDOW_RESIZED;
     event.window.data1 = w;
     event.window.data2 = h;
     _ = c.SDL_PushEvent(&event);
 }
 
 /// Simulate a mouse wheel scroll.
-pub fn scroll(x: c_int, y: c_int) void {
+pub fn scroll(x_val: f32, y_val: f32) void {
     var event: c.SDL_Event = std.mem.zeroes(c.SDL_Event);
-    event.type = c.SDL_MOUSEWHEEL;
-    event.wheel.x = x;
-    event.wheel.y = y;
+    event.type = c.SDL_EVENT_MOUSE_WHEEL;
+    event.wheel.x = x_val;
+    event.wheel.y = y_val;
     _ = c.SDL_PushEvent(&event);
 }
 
-/// Push a SDL_QUIT event.
+/// Push a SDL_EVENT_QUIT event.
 pub fn quit() void {
     var event: c.SDL_Event = std.mem.zeroes(c.SDL_Event);
-    event.type = c.SDL_QUIT;
+    event.type = c.SDL_EVENT_QUIT;
     _ = c.SDL_PushEvent(&event);
 }

@@ -394,18 +394,8 @@ pub fn init(window: *c.SDL_Window) !void {
     g_instance = wgpu.Instance.create(&desc) orelse return error.WGPUInstanceFailed;
     const instance = g_instance.?;
 
-    // Get native window handle from SDL2
-    var wm_info: c.SDL_SysWMinfo = std.mem.zeroes(c.SDL_SysWMinfo);
-    wm_info.version.major = c.SDL_MAJOR_VERSION;
-    wm_info.version.minor = c.SDL_MINOR_VERSION;
-    wm_info.version.patch = c.SDL_PATCHLEVEL;
-    if (c.SDL_GetWindowWMInfo(window, &wm_info) != c.SDL_TRUE) {
-        std.debug.print("SDL_GetWindowWMInfo failed: {s}\n", .{c.SDL_GetError()});
-        return error.WindowInfoFailed;
-    }
-
-    // Create surface from native window handle
-    g_surface = createSurfaceFromSDL(instance, &wm_info) orelse return error.SurfaceCreateFailed;
+    // Create surface from native window handle (SDL3 properties API)
+    g_surface = createSurfaceFromSDL(instance, window) orelse return error.SurfaceCreateFailed;
     const surface = g_surface.?;
 
     // Request adapter
@@ -433,7 +423,7 @@ pub fn init(window: *c.SDL_Window) !void {
     // Get window size and configure surface
     var w: c_int = 0;
     var h: c_int = 0;
-    c.SDL_GetWindowSize(window, &w, &h);
+    _ = c.SDL_GetWindowSize(window, &w, &h);
     g_width = @intCast(w);
     g_height = @intCast(h);
 
@@ -752,25 +742,31 @@ fn configureSurface(width: u32, height: u32) void {
     surface.configure(&config);
 }
 
-fn createSurfaceFromSDL(instance: *wgpu.Instance, wm_info: *const c.SDL_SysWMinfo) ?*wgpu.Surface {
-    const subsystem = wm_info.subsystem;
+fn createSurfaceFromSDL(instance: *wgpu.Instance, window: *c.SDL_Window) ?*wgpu.Surface {
+    const props = c.SDL_GetWindowProperties(window);
 
-    if (subsystem == c.SDL_SYSWM_X11) {
+    // Try X11 first
+    const x11_display = c.SDL_GetPointerProperty(props, c.SDL_PROP_WINDOW_X11_DISPLAY_POINTER, null);
+    const x11_window = c.SDL_GetNumberProperty(props, c.SDL_PROP_WINDOW_X11_WINDOW_NUMBER, 0);
+    if (x11_display != null and x11_window != 0) {
         const d = wgpu.surfaceDescriptorFromXlibWindow(.{
-            .display = @ptrCast(wm_info.info.x11.display),
-            .window = @intCast(wm_info.info.x11.window),
+            .display = @ptrCast(x11_display),
+            .window = @intCast(x11_window),
         });
         return instance.createSurface(&d);
     }
 
-    if (subsystem == c.SDL_SYSWM_WAYLAND) {
+    // Try Wayland
+    const wl_display = c.SDL_GetPointerProperty(props, c.SDL_PROP_WINDOW_WAYLAND_DISPLAY_POINTER, null);
+    const wl_surface = c.SDL_GetPointerProperty(props, c.SDL_PROP_WINDOW_WAYLAND_SURFACE_POINTER, null);
+    if (wl_display != null and wl_surface != null) {
         const d = wgpu.surfaceDescriptorFromWaylandSurface(.{
-            .display = @ptrCast(wm_info.info.wl.display),
-            .surface = @ptrCast(wm_info.info.wl.surface),
+            .display = @ptrCast(wl_display),
+            .surface = @ptrCast(wl_surface),
         });
         return instance.createSurface(&d);
     }
 
-    std.debug.print("Unsupported windowing subsystem: {d}\n", .{subsystem});
+    std.debug.print("No supported windowing subsystem found (tried X11, Wayland)\n", .{});
     return null;
 }

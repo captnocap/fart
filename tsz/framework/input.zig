@@ -95,7 +95,7 @@ pub fn focus(id: u8) void {
     focused_id = id;
     cursor_blink = 0;
     cursor_visible = true;
-    c.SDL_StartTextInput();
+    // SDL3: text input is started once at engine init (requires window param)
 }
 
 /// Unfocus all inputs. Text input events continue flowing so terminals
@@ -381,7 +381,7 @@ pub fn handleCtrlKey(sym: c_int) bool {
     var inp = &inputs[id];
 
     // Ctrl+A — select all
-    if (sym == c.SDLK_a) {
+    if (sym == c.SDLK_A) {
         inp.sel_start = 0;
         inp.sel_end = inp.len;
         inp.has_selection = true;
@@ -390,7 +390,7 @@ pub fn handleCtrlKey(sym: c_int) bool {
     }
 
     // Ctrl+C — copy selection to clipboard
-    if (sym == c.SDLK_c) {
+    if (sym == c.SDLK_C) {
         if (inp.has_selection) {
             const sel = getSelection(id);
             if (sel.hi > sel.lo) {
@@ -406,7 +406,7 @@ pub fn handleCtrlKey(sym: c_int) bool {
     }
 
     // Ctrl+X — cut selection
-    if (sym == c.SDLK_x) {
+    if (sym == c.SDLK_X) {
         if (inp.has_selection) {
             const sel = getSelection(id);
             if (sel.hi > sel.lo) {
@@ -425,7 +425,7 @@ pub fn handleCtrlKey(sym: c_int) bool {
     }
 
     // Ctrl+V — paste from clipboard
-    if (sym == c.SDLK_v) {
+    if (sym == c.SDLK_V) {
         const clip = c.SDL_GetClipboardText();
         if (clip != null) {
             pushUndo(id, inp);
@@ -439,7 +439,7 @@ pub fn handleCtrlKey(sym: c_int) bool {
     }
 
     // Ctrl+Z — undo
-    if (sym == c.SDLK_z) {
+    if (sym == c.SDLK_Z) {
         pushUndo(id, inp); // save current for redo (simplified)
         popUndo(inp);
         return true;

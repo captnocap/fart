@@ -33,7 +33,7 @@ Why:
 
 ## What This Is
 
-ReactJIT is a TS-to-native compiler and UI framework. `.tsz` source (TypeScript + JSX) compiles to Zig, which links against the framework runtime (SDL2 + wgpu + FreeType + QuickJS) to produce native binaries.
+ReactJIT is a TS-to-native compiler and UI framework. `.tsz` source (TypeScript + JSX) compiles to Zig, which links against the framework runtime (SDL3 + wgpu + FreeType + QuickJS) to produce native binaries.
 
 - **`tsz/`** — The active engine: compiler, framework, carts. See `tsz/CLAUDE.md`.
 - **`love2d/`** — Lua reference stack (React reconciler → QuickJS → Lua → Love2D). Read for porting reference.

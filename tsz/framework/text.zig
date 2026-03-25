@@ -420,15 +420,13 @@ pub const TextEngine = struct {
         var texture: ?*c.SDL_Texture = null;
 
         if (bw > 0 and bh > 0) {
-            const surface = c.SDL_CreateRGBSurfaceWithFormat(
-                0,
+            const surface = c.SDL_CreateSurface(
                 bw,
                 bh,
-                32,
                 c.SDL_PIXELFORMAT_ARGB8888,
             );
             if (surface == null) return null;
-            defer c.SDL_FreeSurface(surface);
+            defer c.SDL_DestroySurface(surface);
 
             const pixels: [*]u8 = @ptrCast(surface.*.pixels);
             const pitch: usize = @intCast(surface.*.pitch);
@@ -848,13 +846,13 @@ pub const TextEngine = struct {
                     const dbx: f32 = @as(f32, @floatFromInt(g.bearing_x)) * g.scale;
                     const dby: f32 = @as(f32, @floatFromInt(g.bearing_y)) * g.scale;
 
-                    var dst = c.SDL_Rect{
-                        .x = @intFromFloat(pen_x + dbx),
-                        .y = @intFromFloat(baseline_y - dby),
-                        .w = dw,
-                        .h = dh,
+                    var dst = c.SDL_FRect{
+                        .x = pen_x + dbx,
+                        .y = baseline_y - dby,
+                        .w = @floatFromInt(dw),
+                        .h = @floatFromInt(dh),
                     };
-                    if (self.renderer) |r| _ = c.SDL_RenderCopy(r, tex, null, &dst);
+                    if (self.renderer) |r| _ = c.SDL_RenderTexture(r, tex, null, &dst);
                 }
                 pen_x += @floatFromInt(g.advance);
                 pen_x += letter_spacing;
@@ -1167,11 +1165,11 @@ pub const TextEngine = struct {
             if (sel_line_end >= line.len) x1 = pen;
             if (sel_line_start == 0 and x0 == 0 and sel_line_end == 0) continue;
 
-            var rect = c.SDL_Rect{
-                .x = @intFromFloat(x + align_offset + x0),
-                .y = @intFromFloat(line_y),
-                .w = @intFromFloat(x1 - x0),
-                .h = @intFromFloat(lm.height),
+            var rect = c.SDL_FRect{
+                .x = x + align_offset + x0,
+                .y = line_y,
+                .w = x1 - x0,
+                .h = lm.height,
             };
             if (self.renderer) |rr| _ = c.SDL_RenderFillRect(rr, &rect);
         }

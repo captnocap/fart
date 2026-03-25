@@ -17,8 +17,8 @@ pub const WindowGeometry = struct {
     height: i32,
 };
 
-const SAVE_BLOCK_MS: u32 = 2000;
-var save_blocked_until: u32 = 0;
+const SAVE_BLOCK_MS: u64 = 2000;
+var save_blocked_until: u64 = 0;
 
 var path_buf: [256]u8 = undefined;
 var path_len: usize = 0;
@@ -46,11 +46,11 @@ pub fn save(window: *c.SDL_Window) void {
 
     var x: c_int = undefined;
     var y: c_int = undefined;
-    c.SDL_GetWindowPosition(window, &x, &y);
+    _ = c.SDL_GetWindowPosition(window, &x, &y);
 
     var w: c_int = undefined;
     var h: c_int = undefined;
-    c.SDL_GetWindowSize(window, &w, &h);
+    _ = c.SDL_GetWindowSize(window, &w, &h);
 
     const geom = WindowGeometry{
         .x = @intCast(x),
@@ -81,14 +81,16 @@ pub fn load() ?WindowGeometry {
     if (g.width > 10000 or g.height > 10000) return null;
 
     // Validate against actual display bounds
-    const num_displays = c.SDL_GetNumVideoDisplays();
-    if (num_displays <= 0) return g; // can't validate, trust it
+    var num_displays: c_int = 0;
+    const displays = c.SDL_GetDisplays(&num_displays);
+    if (displays == null or num_displays <= 0) return g; // can't validate, trust it
+    defer c.SDL_free(displays);
 
     var on_screen = false;
     var i: c_int = 0;
     while (i < num_displays) : (i += 1) {
         var bounds: c.SDL_Rect = undefined;
-        if (c.SDL_GetDisplayBounds(i, &bounds) == 0) {
+        if (c.SDL_GetDisplayBounds(displays[@intCast(i)], &bounds)) {
             const cx = g.x + @divTrunc(g.width, 2);
             const cy = g.y + @divTrunc(g.height, 2);
             if (cx >= bounds.x and cx < bounds.x + bounds.w and

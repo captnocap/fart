@@ -1,6 +1,6 @@
 //! TSZ build
 //!
-//! zig build tsz            — lean: compiler + layout + GPU + SDL2
+//! zig build tsz            — lean: compiler + layout + GPU + SDL3
 //! zig build tsz-full       — full: compiler + everything (networking, QuickJS, physics, 3D, terminal, video, crypto)
 //! zig build app            — compile generated_app.zig and link against the full engine
 //! zig build test           — run compiler tests
@@ -27,7 +27,7 @@ pub fn build(b: *std.Build) void {
     // ── zigos (lean) — compiler + layout + primitives + GPU ─────────
     const lean_exe = addEngineExe(b, target, optimize, wgpu_mod, "tsz", .lean, sysroot);
     const lean_install = b.addInstallArtifact(lean_exe, .{});
-    const lean_step = b.step("tsz", "Lean: compiler + layout + GPU + SDL2");
+    const lean_step = b.step("tsz", "Lean: compiler + layout + GPU + SDL3");
     lean_step.dependOn(&lean_install.step);
 
     // ── tsz-full — compiler + everything ────────────────────────────
@@ -213,7 +213,7 @@ const Tier = enum { lean, full };
 //
 // Both zigos and zigos-full include the compiler AND runtime.
 // The compiler is pure Zig (no framework deps). The runtime is the
-// framework (layout, GPU, SDL2, etc.). They're independent modules
+// framework (layout, GPU, SDL3, etc.). They're independent modules
 // linked into one binary.
 
 fn addEngineExe(
@@ -291,7 +291,7 @@ fn addAppExe(
     // ── Always linked (both tiers) ──────────────────────────────
     exe.root_module.addImport("wgpu", wgpu_mod);
     exe.linkLibC();
-    exe.linkSystemLibrary("SDL2");
+    exe.linkSystemLibrary("SDL3");
     exe.linkSystemLibrary("freetype");
 
     if (os == .linux) {
@@ -449,7 +449,7 @@ fn addDevShellExe(
     // ── Same deps as addAppExe (.full tier) ──────────────────────
     exe.root_module.addImport("wgpu", wgpu_mod);
     exe.linkLibC();
-    exe.linkSystemLibrary("SDL2");
+    exe.linkSystemLibrary("SDL3");
     exe.linkSystemLibrary("freetype");
 
     if (os == .linux) {
