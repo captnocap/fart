@@ -28,18 +28,22 @@ if (audioOk) {
   __audio_set_master_gain(0.5);
 }
 
-function playNote(note) {
-  var freq = 440 * Math.pow(2, (note - 69) / 12);
-  __audio_set_param(1, 1, freq);
-  setCurrentNote(note);
-}
-
+// Watch currentNote state — when it changes, update oscillator frequency
+var _lastNote = 0;
 setInterval(function() {
+  var note = __getState(4);
+  if (note != _lastNote) {
+    _lastNote = note;
+    if (note != 0) {
+      var freq = 440 * Math.pow(2, (note - 69) / 12);
+      __audio_set_param(1, 1, freq);
+    }
+  }
   setFps(getFps());
   setPeakLevel(Math.round(__audio_get_peak_level() * 100));
   setCallbackUs(__audio_get_callback_us());
   setModuleCount(__audio_get_module_count());
-}, 100);
+}, 50);
 </script>
 
 // ── Knob ────────────────────────────────────────────────────────────
@@ -99,17 +103,9 @@ function VUBarOff({ h }) {
 
 // ── Piano Keys ──────────────────────────────────────────────────────
 
-function WKeyActive({ note }) {
-  return (
-    <Pressable onPress={() => { playNote(note); }} style={{ width: 30, height: 96, backgroundColor: '#58a6ff', borderRadius: 3 }}>
-      <Text fontSize={8} color="#ffffff">{`${note}`}</Text>
-    </Pressable>
-  );
-}
-
 function WKey({ note }) {
   return (
-    <Pressable onPress={() => { playNote(note); }} style={{ width: 30, height: 96, backgroundColor: '#e6edf3', borderRadius: 3 }}>
+    <Pressable onPress={() => { setCurrentNote(note) }} style={{ width: 30, height: 96, backgroundColor: '#e6edf3', borderRadius: 3 }}>
       <Text fontSize={8} color="#484f58">{`${note}`}</Text>
     </Pressable>
   );
@@ -117,7 +113,7 @@ function WKey({ note }) {
 
 function BKey({ note }) {
   return (
-    <Pressable onPress={() => { playNote(note); }} style={{ width: 20, height: 56, backgroundColor: '#1a1e24', borderRadius: 3 }}>
+    <Pressable onPress={() => { setCurrentNote(note) }} style={{ width: 20, height: 56, backgroundColor: '#1a1e24', borderRadius: 3 }}>
       <Text fontSize={7} color="#6e7681">{`${note}`}</Text>
     </Pressable>
   );
@@ -127,7 +123,7 @@ function BKey({ note }) {
 
 function Pad({ label, bg, note }) {
   return (
-    <Pressable onPress={() => { playNote(note); }} style={{ width: 60, height: 60, backgroundColor: bg, borderRadius: 6, alignItems: 'center', justifyContent: 'center' }}>
+    <Pressable onPress={() => { setCurrentNote(note) }} style={{ width: 60, height: 60, backgroundColor: bg, borderRadius: 6, alignItems: 'center', justifyContent: 'center' }}>
       <Text fontSize={10} color="#e6edf3">{label}</Text>
     </Pressable>
   );
