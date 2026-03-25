@@ -23,6 +23,7 @@ import { InspectorPage } from './inspector';
 import { ViolationsPage } from './violations';
 import { SearchPage } from './search';
 import { SessionsPage } from './sessions';
+import { GitLogPage } from './gitlog';
 
 const [refreshTick] = useFFI(sv_refresh, 3000);
 
@@ -213,6 +214,8 @@ function App() {
         <Pressable onPress={() => { setActiveTab(7) }}>
           {activeTab == 7 && <C.TabActive><C.TabTextActive>{`Sessions (${sessActiveCount})`}</C.TabTextActive></C.TabActive>}
           {activeTab != 7 && <C.Tab><C.TabText>{`Sessions (${sessActiveCount})`}</C.TabText></C.Tab>}
+          {activeTab == 8 && <C.TabActive><C.TabTextActive>Git</C.TabTextActive></C.TabActive>}
+          {activeTab != 8 && <C.Tab><C.TabText>Git</C.TabText></C.Tab>}
         </Pressable>
       </C.TabBar>
 
@@ -448,6 +451,7 @@ function App() {
         {activeTab == 6 && <SearchPage />}
 
         {activeTab == 7 && <SessionsPage />}
+        {activeTab == 8 && <GitLogPage />}
       </C.TabContent>
     </C.Page>
   );
