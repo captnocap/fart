@@ -8,6 +8,63 @@ const std = @import("std");
 const layout = @import("layout.zig");
 const Node = layout.Node;
 
+// ── Crash isolation — catch SIGSEGV/SIGBUS from hostile cartridges ──
+//
+// Uses sigsetjmp/siglongjmp to recover from crashes inside .so code.
+// When a cartridge segfaults, the signal handler jumps back to the
+// recovery point, and the cartridge is marked as faulted (skipped).
+
+const c = @cImport({
+    @cInclude("setjmp.h");
+    @cInclude("signal.h");
+});
+
+var g_recovery_jmpbuf: c.sigjmp_buf = undefined;
+var g_in_cartridge_call: bool = false;
+var g_fault_caught: bool = false;
+
+/// SIGSEGV/SIGBUS handler — longjmp back to the recovery point
+fn crashHandler(_: c_int) callconv(.c) void {
+    if (g_in_cartridge_call) {
+        g_fault_caught = true;
+        c.siglongjmp(&g_recovery_jmpbuf, 1);
+    }
+    // If not in a cartridge call, this is a real crash — let it die
+    _ = c.raise(c.SIGABRT);
+}
+
+var g_handlers_installed: bool = false;
+
+fn installCrashHandlers() void {
+    if (g_handlers_installed) return;
+    // Use C sigaction directly — more portable across Zig versions
+    var sa: c.struct_sigaction = std.mem.zeroes(c.struct_sigaction);
+    sa.__sigaction_handler = .{ .sa_handler = crashHandler };
+    sa.sa_flags = c.SA_NODEFER;
+    _ = c.sigaction(c.SIGSEGV, &sa, null);
+    _ = c.sigaction(c.SIGBUS, &sa, null);
+    g_handlers_installed = true;
+}
+
+/// Call a function inside crash isolation. Returns true if it completed,
+/// false if it crashed.
+fn safeCall(func: anytype, args: anytype) bool {
+    installCrashHandlers();
+    g_in_cartridge_call = true;
+    g_fault_caught = false;
+
+    if (c.sigsetjmp(&g_recovery_jmpbuf, 1) != 0) {
+        // We got here via longjmp from the crash handler
+        g_in_cartridge_call = false;
+        return false;
+    }
+
+    @call(.auto, func, args);
+
+    g_in_cartridge_call = false;
+    return true;
+}
+
 // ── Exported function pointer types (C ABI from generated app .so) ──
 
 const GetRootFn = *const fn () callconv(.c) *Node;
@@ -56,6 +113,8 @@ pub const Cartridge = struct {
     so_path_len: usize = 0,
     last_mtime: i128 = 0,
     loaded: bool = false,
+    faulted: bool = false,
+    fault_count: u32 = 0,
 
     // State snapshot (per cartridge)
     snapshot: [MAX_SNAP_SLOTS]SlotSnapshot = undefined,
@@ -133,10 +192,29 @@ pub fn setActive(idx: usize) void {
 
 pub fn tickAll(now: u32) void {
     for (0..cart_count) |i| {
-        if (carts[i].loaded) {
-            if (carts[i].tick_fn) |tick| tick(now);
+        if (!carts[i].loaded or carts[i].faulted) continue;
+        if (carts[i].tick_fn) |tick| {
+            if (!safeCall(tick, .{now})) {
+                carts[i].faulted = true;
+                carts[i].fault_count += 1;
+                std.debug.print("[cartridge] CRASH in tick of '{s}' — cartridge disabled (fault #{d})\n", .{
+                    carts[i].titleSlice(), carts[i].fault_count,
+                });
+            }
         }
     }
+}
+
+/// Check if a cartridge is faulted. The shell can display an error state.
+pub fn isFaulted(idx: usize) bool {
+    if (idx >= cart_count) return false;
+    return carts[idx].faulted;
+}
+
+/// Clear fault state (e.g., after a hot-reload fixes the bug)
+pub fn clearFault(idx: usize) void {
+    if (idx >= cart_count) return;
+    carts[idx].faulted = false;
 }
 
 /// Check all cartridges for .so file changes. Returns index of reloaded cartridge, or null.
@@ -155,7 +233,8 @@ pub fn checkReloads() ?usize {
         // Snapshot state
         snapshotState(i);
 
-        // Reload
+        // Reload — clear fault state (the fix might be in this reload)
+        carts[i].faulted = false;
         loadCartridgeLib(i) catch |err| {
             std.debug.print("[cartridge] Reload failed for {s}: {}\n", .{ carts[i].titleSlice(), err });
             continue;
@@ -164,7 +243,11 @@ pub fn checkReloads() ?usize {
         // Restore state
         restoreState(i);
 
-        std.debug.print("[cartridge] Reloaded: {s}\n", .{carts[i].titleSlice()});
+        if (carts[i].faulted) {
+            std.debug.print("[cartridge] Reloaded {s} but init crashed again\n", .{carts[i].titleSlice()});
+        } else {
+            std.debug.print("[cartridge] Reloaded: {s} (fault cleared)\n", .{carts[i].titleSlice()});
+        }
         return i;
     }
     return null;
@@ -220,8 +303,14 @@ fn loadCartridgeLib(idx: usize) !void {
         carts[idx].title_len = tl;
     }
 
-    // Init
-    if (carts[idx].init_fn) |init| init();
+    // Init (crash-isolated — a bad init doesn't kill the host)
+    if (carts[idx].init_fn) |init_fn| {
+        if (!safeCall(init_fn, .{})) {
+            carts[idx].faulted = true;
+            carts[idx].fault_count += 1;
+            std.debug.print("[cartridge] CRASH in init of '{s}' — cartridge disabled\n", .{carts[idx].titleSlice()});
+        }
+    }
 }
 
 fn snapshotState(idx: usize) void {
