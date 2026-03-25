@@ -206,6 +206,125 @@ pub fn build(b: *std.Build) void {
     const wasm_rt_step = b.step("wasm-rt", "WASM Runtime — QuickJS + layout + WebGPU");
     wasm_rt_step.dependOn(&wasm_rt_install.step);
 
+    // ── Web target — full engine compiled to wasm32-emscripten ──────
+    //
+    // Uses the same wgpu Zig types (extern fn wgpu*) but resolved by
+    // emcc/emdawnwebgpu instead of wgpu-native Rust library.
+    // Output: .a static lib, linked by emcc into .wasm + .js.
+    {
+        const emsdk_root = "/home/siah/creative/emsdk";
+        const em_sysroot = emsdk_root ++ "/upstream/emscripten/cache/sysroot";
+        const em_webgpu_include = emsdk_root ++ "/upstream/emscripten/cache/ports/emdawnwebgpu/emdawnwebgpu_pkg/webgpu/include";
+
+        const web_target = b.resolveTargetQuery(.{
+            .cpu_arch = .wasm32,
+            .os_tag = .emscripten,
+        });
+
+        // Web-specific wgpu module — wraps @cImport("webgpu/webgpu.h") with
+        // method-style API matching wgpu_native_zig. Struct layouts come from
+        // emdawnwebgpu's header, guaranteeing ABI correctness.
+        const web_wgpu_mod = b.createModule(.{
+            .root_source_file = b.path("wgpu_web/root.zig"),
+            .target = web_target,
+            .optimize = .ReleaseSmall,
+            .link_libc = true,
+        });
+        web_wgpu_mod.addSystemIncludePath(.{ .cwd_relative = em_sysroot ++ "/include" });
+        web_wgpu_mod.addSystemIncludePath(.{ .cwd_relative = em_webgpu_include });
+
+        const web_mod = b.createModule(.{
+            .root_source_file = b.path("web_main.zig"),
+            .target = web_target,
+            .optimize = .ReleaseSmall,
+            .link_libc = true,
+        });
+        web_mod.addImport("wgpu", web_wgpu_mod);
+
+        // Emscripten sysroot + emdawnwebgpu headers
+        web_mod.addSystemIncludePath(.{ .cwd_relative = em_sysroot ++ "/include" });
+        web_mod.addSystemIncludePath(.{ .cwd_relative = em_webgpu_include });
+
+        // QuickJS (same source as wasm-rt and tsz-full)
+        web_mod.addIncludePath(b.path("../love2d/quickjs"));
+        web_mod.addCSourceFiles(.{
+            .root = b.path("../love2d/quickjs"),
+            .files = &.{ "cutils.c", "dtoa.c", "libregexp.c", "libunicode.c", "quickjs.c" },
+            .flags = &.{ "-O2", "-D_GNU_SOURCE", "-DQUICKJS_NG_BUILD", "-D_WASI_EMULATED_SIGNAL" },
+        });
+
+        // stb_image
+        web_mod.addCSourceFile(.{ .file = b.path("stb/stb_image_impl.c"), .flags = &.{"-O2"} });
+
+        // Framework includes (for @cImport in framework code)
+        web_mod.addIncludePath(b.path("."));
+
+        // TinyEMU x86 emulator (runs pre-compiled cartridges in-browser)
+        web_mod.addIncludePath(b.path("../deps/tinyemu"));
+        web_mod.addCSourceFiles(.{
+            .root = b.path("../deps/tinyemu"),
+            .files = &.{
+                "x86_cpu.c",
+                "x86_machine.c",
+                "machine.c",
+                "cutils.c",
+                "iomem.c",
+                "pci.c",
+                "ide.c",
+                "ps2.c",
+                "pckbd.c",
+                "vga.c",
+                "virtio.c",
+                "softfp.c",
+                "simplefb.c",
+                "json.c",
+                "elf.c",
+                "vmmouse.c",
+                "fs.c",
+                "fs_utils.c",
+            },
+            .flags = &.{ "-O2", "-D_GNU_SOURCE", "-DCONFIG_X86EMU", "-DMAX_XLEN=32" },
+        });
+
+        const web_lib = b.addLibrary(.{
+            .linkage = .static,
+            .name = "tsz-web",
+            .root_module = web_mod,
+        });
+
+        const web_install = b.addInstallArtifact(web_lib, .{});
+
+        // emcc link step: .a → .wasm + .js (resolves wgpu* symbols via emdawnwebgpu)
+        const emcc_exe = emsdk_root ++ "/upstream/emscripten/emcc";
+        const emcc = b.addSystemCommand(&.{
+            emcc_exe,
+            "--use-port=emdawnwebgpu",
+            "-sUSE_FREETYPE=1",
+            "-sASYNCIFY",
+            "-sALLOW_MEMORY_GROWTH",
+            "--preload-file", "../deps/tinyemu/images@/tinyemu",
+            "-sEXPORTED_FUNCTIONS=[\"_web_init\",\"_web_resize\",\"_main\"]",
+            "-sEXPORTED_RUNTIME_METHODS=[\"ccall\",\"cwrap\"]",
+            "-O2",
+            "-o",
+        });
+        const web_out = emcc.addOutputFileArg("tsz-web.js");
+        emcc.addArtifactArg(web_lib);
+        emcc.step.dependOn(&web_install.step);
+
+        // Install the emcc outputs (.js + .wasm) to zig-out/
+        const install_js = b.addInstallFile(web_out, "tsz-web.js");
+        // The .wasm is a sibling of the .js — emcc generates it automatically
+        const web_out_wasm = web_out.dirname().path(b, "tsz-web.wasm");
+        const install_wasm = b.addInstallFile(web_out_wasm, "tsz-web.wasm");
+        install_js.step.dependOn(&emcc.step);
+        install_wasm.step.dependOn(&emcc.step);
+
+        const web_step = b.step("web", "Web target — wasm32-emscripten + WebGPU → .wasm + .js");
+        web_step.dependOn(&install_js.step);
+        web_step.dependOn(&install_wasm.step);
+    }
+
     // ── LuaJIT benchmarks (zluajit) ─────────────────────────────────
     {
         const zluajit_dep = b.dependency("zluajit", .{
@@ -234,6 +353,40 @@ pub fn build(b: *std.Build) void {
 
         const bench_step = b.step("bench-luajit", "Run LuaJIT worker benchmarks (zluajit bindings)");
         bench_step.dependOn(&bench_run.step);
+    }
+
+    // ── QuickJS vs LuaJIT head-to-head benchmark ────────────────────
+    {
+        const vs_mod = b.createModule(.{
+            .root_source_file = b.path("bench_qjs_vs_luajit.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+        });
+
+        // QuickJS (compiled from source, same as tsz-full)
+        vs_mod.addIncludePath(b.path("../love2d/quickjs"));
+        vs_mod.addCSourceFiles(.{
+            .root = b.path("../love2d/quickjs"),
+            .files = &.{ "cutils.c", "dtoa.c", "libregexp.c", "libunicode.c", "quickjs.c" },
+            .flags = &.{ "-O2", "-D_GNU_SOURCE", "-DQUICKJS_NG_BUILD" },
+        });
+
+        // LuaJIT (system library)
+        vs_mod.addIncludePath(.{ .cwd_relative = "/usr/include/luajit-2.1" });
+
+        const vs_exe = b.addExecutable(.{
+            .name = "bench-vs",
+            .root_module = vs_mod,
+        });
+        vs_exe.linkLibC();
+        vs_exe.linkSystemLibrary("luajit-5.1");
+
+        const vs_install = b.addInstallArtifact(vs_exe, .{});
+        const vs_run = b.addRunArtifact(vs_exe);
+        vs_run.step.dependOn(&vs_install.step);
+
+        const vs_step = b.step("bench-vs", "QuickJS vs LuaJIT head-to-head benchmark");
+        vs_step.dependOn(&vs_run.step);
     }
 }
 
