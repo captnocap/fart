@@ -743,11 +743,61 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
     }
 
     // Event handler functions
+    // Track handlers that reference _ci (component-in-map handlers) — these need
+    // comptime factory + lookup table so the map index is available at runtime.
+    var map_ci_handler_names: [64][]const u8 = undefined;
+    var map_ci_handler_count: usize = 0;
     if (self.handler_decls.items.len > 0) {
         try out.appendSlice(self.alloc, "\n// ── Event handlers ──────────────────────────────────────────────\n");
         for (self.handler_decls.items) |h| {
-            try out.appendSlice(self.alloc, h);
-            try out.appendSlice(self.alloc, "\n\n");
+            // Check if handler body references _ci (map index in component context)
+            if (std.mem.indexOf(u8, h, "_ci)") != null or std.mem.indexOf(u8, h, "_ci ") != null or std.mem.indexOf(u8, h, "_ci,") != null) {
+                // Extract handler name: "fn _handler_press_N() void {\n..."
+                const fn_prefix = "fn ";
+                const fn_start = std.mem.indexOf(u8, h, fn_prefix) orelse {
+                    try out.appendSlice(self.alloc, h);
+                    try out.appendSlice(self.alloc, "\n\n");
+                    continue;
+                };
+                const name_start = fn_start + fn_prefix.len;
+                const paren_pos = std.mem.indexOfPos(u8, h, name_start, "(") orelse {
+                    try out.appendSlice(self.alloc, h);
+                    try out.appendSlice(self.alloc, "\n\n");
+                    continue;
+                };
+                const handler_name = h[name_start..paren_pos];
+                // Extract body (between first { and last })
+                const body_start = (std.mem.indexOf(u8, h, "{\n") orelse 0) + 2;
+                const body_end = std.mem.lastIndexOf(u8, h, "}") orelse h.len;
+                const body = h[body_start..body_end];
+
+                // Track this handler name for raw_expr replacement
+                if (map_ci_handler_count < 64) {
+                    map_ci_handler_names[map_ci_handler_count] = handler_name;
+                    map_ci_handler_count += 1;
+                }
+
+                // Emit comptime factory + lookup table
+                try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+                    "fn {s}_factory(comptime _map_ci: usize) *const fn () void {{\n" ++
+                    "    return &struct {{ fn handler() void {{\n" ++
+                    "        const _ci = _map_ci;\n" ++
+                    "{s}" ++
+                    "        state.markDirty();\n" ++
+                    "    }} }}.handler;\n" ++
+                    "}}\n" ++
+                    "const {s}_tbl: [256]*const fn () void = blk: {{\n" ++
+                    "    @setEvalBranchQuota(100000);\n" ++
+                    "    var _h: [256]*const fn () void = undefined;\n" ++
+                    "    for (0..256) |_ci| {{ _h[_ci] = {s}_factory(_ci); }}\n" ++
+                    "    break :blk _h;\n" ++
+                    "}};\n" ++
+                    "const {s} = {s}_tbl[0];\n\n",
+                    .{ handler_name, body, handler_name, handler_name, handler_name, handler_name }));
+            } else {
+                try out.appendSlice(self.alloc, h);
+                try out.appendSlice(self.alloc, "\n\n");
+            }
         }
     }
 
@@ -1438,8 +1488,26 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
                     const inner = m.inner_nodes[ni];
                     if (ni > 0) try out.appendSlice(self.alloc, ", ");
                     // Component inline — use pre-built expression directly
+                    // Replace _ci-dependent handler names with their lookup table versions
                     if (inner.raw_expr.len > 0) {
-                        try out.appendSlice(self.alloc, inner.raw_expr);
+                        var expr = inner.raw_expr;
+                        for (0..map_ci_handler_count) |chi| {
+                            const hname = map_ci_handler_names[chi];
+                            // Replace "= _handler_press_N " or "= _handler_press_N }" with table lookup
+                            const search_pat = try std.fmt.allocPrint(self.alloc, "= {s} ", .{hname});
+                            const replace_pat = try std.fmt.allocPrint(self.alloc, "= {s}_tbl[_i] ", .{hname});
+                            if (std.mem.indexOf(u8, expr, search_pat)) |pos| {
+                                const new_expr = try std.fmt.allocPrint(self.alloc, "{s}{s}{s}", .{ expr[0..pos], replace_pat, expr[pos + search_pat.len ..] });
+                                expr = new_expr;
+                            }
+                            const search_pat2 = try std.fmt.allocPrint(self.alloc, "= {s} }}", .{hname});
+                            const replace_pat2 = try std.fmt.allocPrint(self.alloc, "= {s}_tbl[_i] }}", .{hname});
+                            if (std.mem.indexOf(u8, expr, search_pat2)) |pos| {
+                                const new_expr = try std.fmt.allocPrint(self.alloc, "{s}{s}{s}", .{ expr[0..pos], replace_pat2, expr[pos + search_pat2.len ..] });
+                                expr = new_expr;
+                            }
+                        }
+                        try out.appendSlice(self.alloc, expr);
                         continue;
                     }
                     try out.appendSlice(self.alloc, ".{ ");
