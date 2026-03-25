@@ -397,6 +397,13 @@ pub const winamp = @import("winamp.zig");
 
 pub const glass = @import("glass.zig");
 
+// ── Standalone: Standard themes with custom styles ──────────────────
+
+pub const dracula_full = @import("dracula.zig");
+pub const catppuccin_mocha_full = @import("catppuccin_mocha.zig");
+pub const tokyo_night_full = @import("tokyo_night.zig");
+pub const nord_full = @import("nord.zig");
+
 // ── Registry ─────────────────────────────────────────────────────────
 
 pub const Entry = struct {
@@ -407,22 +414,22 @@ pub const Entry = struct {
 
 /// All standard themes in display order.
 pub const all = [_]Entry{
-    .{ .name = "Catppuccin Mocha", .palette = catppuccin_mocha },
+    .{ .name = "Catppuccin Mocha", .palette = catppuccin_mocha_full.palette, .styles = catppuccin_mocha_full.styles },
     .{ .name = "Catppuccin Macchiato", .palette = catppuccin_macchiato },
     .{ .name = "Catppuccin Frappe", .palette = catppuccin_frappe },
     .{ .name = "Catppuccin Latte", .palette = catppuccin_latte },
-    .{ .name = "Dracula", .palette = dracula },
+    .{ .name = "Dracula", .palette = dracula_full.palette, .styles = dracula_full.styles },
     .{ .name = "Dracula Soft", .palette = dracula_soft },
     .{ .name = "Gruvbox Dark", .palette = gruvbox_dark },
     .{ .name = "Gruvbox Light", .palette = gruvbox_light },
-    .{ .name = "Nord", .palette = nord },
+    .{ .name = "Nord", .palette = nord_full.palette, .styles = nord_full.styles },
     .{ .name = "Nord Light", .palette = nord_light },
     .{ .name = "One Dark", .palette = one_dark },
     .{ .name = "Rose Pine", .palette = rose_pine },
     .{ .name = "Rose Pine Dawn", .palette = rose_pine_dawn },
     .{ .name = "Solarized Dark", .palette = solarized_dark },
     .{ .name = "Solarized Light", .palette = solarized_light },
-    .{ .name = "Tokyo Night", .palette = tokyo_night },
+    .{ .name = "Tokyo Night", .palette = tokyo_night_full.palette, .styles = tokyo_night_full.styles },
     .{ .name = "Tokyo Night Storm", .palette = tokyo_night_storm },
     .{ .name = "BIOS", .palette = bios.palette, .styles = bios.styles },
     .{ .name = "Win95 Vaporwave", .palette = win95.palette, .styles = win95.styles },
