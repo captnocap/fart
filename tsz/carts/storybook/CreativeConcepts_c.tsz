@@ -7,45 +7,9 @@ import { StoryHeader, StoryTitle, StoryDescription, Section, SectionTitle, Secti
 // ── Concept 1: 3D Terminal Workspace ──
 const [termCam, setTermCam] = useState(0);
 
-// ── Concept 2: Supervisor Control Room ──
-const [crMode, setCrMode] = useState('idle');
-const [crTurns, setCrTurns] = useState(0);
-const [crDot, setCrDot] = useState(0x4ade80);
-const [crIncidents, setCrIncidents] = useState(0);
-
 // ── Concept 3: Living Interface ──
 const [lifePhase, setLifePhase] = useState(0);
 const [lifePressCount, setLifePressCount] = useState(0);
-
-<script>
-var _crTick = 0;
-setInterval(function() {
-  _crTick = _crTick + 1;
-  setCrTurns(_crTick);
-  if (_crTick % 7 === 0) {
-    setCrMode('tool_use');
-    setCrDot(0xf97316);
-  } else if (_crTick % 5 === 0) {
-    setCrMode('thinking');
-    setCrDot(0xa78bfa);
-  } else {
-    setCrMode('idle');
-    setCrDot(0x4ade80);
-  }
-  if (_crTick % 11 === 0) {
-    setCrIncidents(crIncidents + 1);
-  }
-}, 1500);
-
-// Living interface evolves based on interaction count
-function evolve() {
-  var n = lifePressCount + 1;
-  setLifePressCount(n);
-  if (n > 8) setLifePhase(3);
-  else if (n > 4) setLifePhase(2);
-  else if (n > 1) setLifePhase(1);
-}
-</script>
 
 function CreativeConcepts() {
   return (
@@ -126,30 +90,30 @@ function CreativeConcepts() {
               <Box style={{ flexDirection: 'row', gap: 8 }}>
                 <Box style={{ flexDirection: 'column', flexGrow: 1, backgroundColor: 'theme-bgAlt', borderRadius: 8, padding: 10, gap: 6 }}>
                   <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-                    <Box style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: crDot }} />
+                    <Box style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#4ade80' }} />
                     <Text fontSize={12} color="theme-text">Worker Alpha</Text>
                     <Box style={{ borderRadius: 4, paddingLeft: 6, paddingRight: 6, paddingTop: 2, paddingBottom: 2, backgroundColor: 'theme-surface' }}>
-                      <Text fontSize={9} color="theme-accent">{crMode}</Text>
+                      <Text fontSize={9} color="theme-accent">idle</Text>
                     </Box>
-                    <Text fontSize={9} color="theme-textDim">{`t:${crTurns}`}</Text>
+                    <Text fontSize={9} color="theme-textDim">t:42</Text>
                   </Box>
                   <Terminal fontSize={9} style={{ height: 120, borderRadius: 4 }} />
                 </Box>
                 <Box style={{ flexDirection: 'column', width: 200, gap: 8 }}>
                   <Box style={{ flexDirection: 'column', backgroundColor: 'theme-bgAlt', borderRadius: 8, padding: 10, gap: 4 }}>
                     <Text fontSize={10} color="theme-textDim">INCIDENTS</Text>
-                    <Text fontSize={24} color="#f85149">{`${crIncidents}`}</Text>
+                    <Text fontSize={24} color="#f85149">3</Text>
                     <Box style={{ height: 2, backgroundColor: '#f85149', borderRadius: 1 }} />
                   </Box>
                   <Box style={{ flexDirection: 'column', backgroundColor: 'theme-bgAlt', borderRadius: 8, padding: 10, gap: 4 }}>
                     <Text fontSize={10} color="theme-textDim">UPTIME</Text>
-                    <Text fontSize={14} color="#3fb950">{`${crTurns}s`}</Text>
+                    <Text fontSize={14} color="#3fb950">42s</Text>
                   </Box>
                   <Box style={{ flexDirection: 'column', backgroundColor: 'theme-bgAlt', borderRadius: 8, padding: 10, gap: 4 }}>
                     <Text fontSize={10} color="theme-textDim">STATUS</Text>
                     <Box style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
-                      <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: crDot }} />
-                      <Text fontSize={12} color="theme-text">{crMode}</Text>
+                      <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#4ade80' }} />
+                      <Text fontSize={12} color="theme-text">idle</Text>
                     </Box>
                   </Box>
                 </Box>
@@ -176,7 +140,7 @@ function CreativeConcepts() {
             </C.CardHeader>
             <C.CardBody>
               <Box style={{ flexDirection: 'column', gap: 8 }}>
-                <Pressable onPress={() => { evolve() }} style={{ alignSelf: 'flexStart', paddingLeft: 16, paddingRight: 16, paddingTop: 8, paddingBottom: 8, borderRadius: 6, backgroundColor: 'theme-primary' }}>
+                <Pressable onPress={() => { setLifePressCount(lifePressCount + 1); setLifePhase(lifePressCount + 1 > 8 ? 3 : lifePressCount + 1 > 4 ? 2 : lifePressCount + 1 > 1 ? 1 : 0) }} style={{ alignSelf: 'flexStart', paddingLeft: 16, paddingRight: 16, paddingTop: 8, paddingBottom: 8, borderRadius: 6, backgroundColor: 'theme-primary' }}>
                   <Text fontSize={12} color="theme-bg">{`Evolve (${lifePressCount})`}</Text>
                 </Pressable>
 
