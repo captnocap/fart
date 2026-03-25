@@ -1,19 +1,26 @@
-//! CartridgeOS — multi-app host shell with hot-reload.
+//! CartridgeOS — persistent multi-app host shell with hot-reload.
 //!
-//! Loads multiple .tsz app .so files as "cartridges" in a tabbed interface.
-//! Each cartridge has its own state, event handlers, and lifecycle.
-//! Cartridges can be hot-reloaded independently — state survives.
+//! Loads .tsz app .so files as "cartridges" in a tabbed interface.
+//! Listens on HTTP port 7778 for new cartridge registrations:
+//!
+//!   curl -X POST localhost:7778/load -d '/path/to/app.so'
+//!   → {"ok":true,"tab":2,"title":"my-app"}
 //!
 //! Usage:
-//!   tsz-dev app1.so app2.so app3.so    — load multiple apps in tabs
-//!   tsz-dev app.so                     — single app (no tab bar)
+//!   tsz-dev app1.so app2.so         — load apps in tabs
+//!   tsz-dev                         — empty shell, waiting for curl
 
 const std = @import("std");
 const layout = @import("layout.zig");
 const engine = @import("engine.zig");
 const cartridge = @import("cartridge.zig");
+const cartpack = @import("cartpack.zig");
 const Node = layout.Node;
 const Color = layout.Color;
+
+// ── Config ──
+
+const LISTEN_PORT = 7778;
 
 // ── Shell UI colors ──
 
@@ -53,7 +60,11 @@ fn switchTo(idx: usize) void {
 }
 
 fn makeHandler(comptime i: usize) *const fn () void {
-    return &struct { fn h() void { switchTo(i); } }.h;
+    return &struct {
+        fn h() void {
+            switchTo(i);
+        }
+    }.h;
 }
 
 const tab_handlers = blk: {
@@ -68,7 +79,6 @@ fn refreshUI() void {
     const n = loaded_count;
     const act = cartridge.activeIndex();
 
-    // Update tab highlights
     for (0..n) |i| {
         tab_buttons[i].style.background_color = if (i == act) TAB_ACTIVE_BG else null;
         tab_text_nodes[i].text_color = if (i == act) TAB_ACTIVE_TEXT else TAB_TEXT;
@@ -78,17 +88,20 @@ fn refreshUI() void {
     }
     tab_bar.children = tab_bar_kids[0..n];
 
-    // Swap content to active cartridge
     if (cartridge.getActiveRoot()) |root| {
         content_child[0] = root.*;
         content_area.children = &content_child;
     }
 
-    // Status text
     var buf: [128]u8 = undefined;
-    if (cartridge.get(act)) |cart| {
-        const s = std.fmt.bufPrint(&buf, "{d} cartridge(s) | active: {s}", .{ n, cart.titleSlice() }) catch "CartridgeOS";
-        // Copy to persistent buffer since buf is stack-local
+    if (n > 0) {
+        if (cartridge.get(act)) |cart| {
+            const s = std.fmt.bufPrint(&buf, "{d} cartridge(s) | active: {s}", .{ n, cart.titleSlice() }) catch "CartridgeOS";
+            @memcpy(g_status_buf[0..s.len], s);
+            g_status_len = s.len;
+        }
+    } else {
+        const s = "CartridgeOS | waiting for apps (curl localhost:7778/load)";
         @memcpy(g_status_buf[0..s.len], s);
         g_status_len = s.len;
     }
@@ -96,7 +109,6 @@ fn refreshUI() void {
     status_child[0] = status_text_node;
     status_bar.children = &status_child;
 
-    // Reassemble root
     shell_kids_multi[0] = tab_bar;
     shell_kids_multi[1] = content_area;
     shell_kids_multi[2] = status_bar;
@@ -106,17 +118,163 @@ fn refreshUI() void {
 var g_status_buf: [128]u8 = undefined;
 var g_status_len: usize = 0;
 
+// ── HTTP listener for cartridge registration ──
+
+var g_listener: ?std.posix.socket_t = null;
+
+fn startListener() void {
+    const addr = std.net.Address.parseIp4("127.0.0.1", LISTEN_PORT) catch return;
+    const sock = std.posix.socket(std.posix.AF.INET, std.posix.SOCK.STREAM | std.posix.SOCK.NONBLOCK, 0) catch return;
+
+    // Allow port reuse
+    const one: [4]u8 = @bitCast(@as(u32, 1));
+    std.posix.setsockopt(sock, std.posix.SOL.SOCKET, std.posix.SO.REUSEADDR, &one) catch {};
+
+    std.posix.bind(sock, &addr.any, addr.getOsSockLen()) catch |err| {
+        std.debug.print("[dev_shell] Failed to bind port {d}: {}\n", .{ LISTEN_PORT, err });
+        std.posix.close(sock);
+        return;
+    };
+    std.posix.listen(sock, 4) catch |err| {
+        std.debug.print("[dev_shell] Failed to listen: {}\n", .{err});
+        std.posix.close(sock);
+        return;
+    };
+    g_listener = sock;
+    std.debug.print("[dev_shell] Listening on http://127.0.0.1:{d}\n", .{LISTEN_PORT});
+}
+
+/// Non-blocking: accept one connection, handle it, close it. Called each tick.
+fn pollListener() void {
+    const sock = g_listener orelse return;
+    var client_addr: std.net.Address = undefined;
+    var addr_len: std.posix.socklen_t = @sizeOf(std.net.Address);
+    const client = std.posix.accept(sock, &client_addr.any, &addr_len, std.posix.SOCK.NONBLOCK) catch return;
+    defer std.posix.close(client);
+
+    // Read the request (small — path fits in 2K)
+    var req_buf: [2048]u8 = undefined;
+    const n = std.posix.read(client, &req_buf) catch return;
+    if (n == 0) return;
+    const req = req_buf[0..n];
+
+    // Route: POST /load-pack or POST /load
+    if (std.mem.startsWith(u8, req, "POST /load-pack")) {
+        handleLoadPack(client, req);
+        return;
+    }
+    if (!std.mem.startsWith(u8, req, "POST /load")) {
+        const resp = "HTTP/1.1 404 Not Found\r\nContent-Length: 24\r\nConnection: close\r\n\r\n{\"error\":\"not found\"}\n";
+        _ = std.posix.write(client, resp) catch {};
+        return;
+    }
+
+    // Extract body (after \r\n\r\n)
+    const body_start = std.mem.indexOf(u8, req, "\r\n\r\n") orelse {
+        const resp = "HTTP/1.1 400 Bad Request\r\nContent-Length: 25\r\nConnection: close\r\n\r\n{\"error\":\"no body\"}\n";
+        _ = std.posix.write(client, resp) catch {};
+        return;
+    };
+    const body = std.mem.trim(u8, req[body_start + 4 ..], &.{ ' ', '\n', '\r', '\t' });
+    if (body.len == 0 or !std.mem.endsWith(u8, body, ".so")) {
+        const resp = "HTTP/1.1 400 Bad Request\r\nContent-Length: 32\r\nConnection: close\r\n\r\n{\"error\":\"need .so path\"}\n";
+        _ = std.posix.write(client, resp) catch {};
+        return;
+    }
+
+    // Load the cartridge
+    const idx = cartridge.load(body) catch |err| {
+        var err_buf: [256]u8 = undefined;
+        const err_body = std.fmt.bufPrint(&err_buf, "{{\"ok\":false,\"error\":\"{}\"}}\n", .{err}) catch "{\"ok\":false}\n";
+        var hdr_buf: [512]u8 = undefined;
+        const hdr = std.fmt.bufPrint(&hdr_buf, "HTTP/1.1 500 Error\r\nContent-Length: {d}\r\nConnection: close\r\n\r\n", .{err_body.len}) catch return;
+        _ = std.posix.write(client, hdr) catch {};
+        _ = std.posix.write(client, err_body) catch {};
+        return;
+    };
+
+    // Wire up tab
+    loaded_count = cartridge.count();
+    if (cartridge.get(idx)) |c| {
+        tab_text_nodes[idx] = .{ .text = c.titleSlice(), .font_size = 12, .text_color = TAB_TEXT };
+        tab_buttons[idx] = .{
+            .style = .{ .padding_left = 12, .padding_right = 12, .padding_top = 6, .padding_bottom = 6, .border_radius = 4 },
+            .handlers = .{ .on_press = tab_handlers[idx] },
+        };
+
+        // Switch to new tab
+        cartridge.setActive(idx);
+        refreshUI();
+
+        // Respond with success
+        var resp_buf: [256]u8 = undefined;
+        const resp_body = std.fmt.bufPrint(&resp_buf, "{{\"ok\":true,\"tab\":{d},\"title\":\"{s}\"}}\n", .{ idx, c.titleSlice() }) catch "{\"ok\":true}\n";
+        var hdr_buf: [512]u8 = undefined;
+        const hdr = std.fmt.bufPrint(&hdr_buf, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {d}\r\nConnection: close\r\n\r\n", .{resp_body.len}) catch return;
+        _ = std.posix.write(client, hdr) catch {};
+        _ = std.posix.write(client, resp_body) catch {};
+
+        std.debug.print("[dev_shell] Loaded new cart via HTTP: {s} (tab {d})\n", .{ c.titleSlice(), idx });
+    }
+}
+
+fn handleLoadPack(client: std.posix.socket_t, req: []const u8) void {
+    const body_start = std.mem.indexOf(u8, req, "\r\n\r\n") orelse {
+        const resp = "HTTP/1.1 400 Bad Request\r\nContent-Length: 25\r\nConnection: close\r\n\r\n{\"error\":\"no body\"}\n";
+        _ = std.posix.write(client, resp) catch {};
+        return;
+    };
+    const pack_path = std.mem.trim(u8, req[body_start + 4 ..], &.{ ' ', '\n', '\r', '\t' });
+    if (pack_path.len == 0 or !std.mem.endsWith(u8, pack_path, ".pack")) {
+        const resp = "HTTP/1.1 400 Bad Request\r\nContent-Length: 34\r\nConnection: close\r\n\r\n{\"error\":\"need .pack path\"}\n";
+        _ = std.posix.write(client, resp) catch {};
+        return;
+    }
+
+    const toc = cartpack.readToc(pack_path) catch {
+        const resp = "HTTP/1.1 500 Error\r\nContent-Length: 36\r\nConnection: close\r\n\r\n{\"ok\":false,\"error\":\"bad pack\"}\n";
+        _ = std.posix.write(client, resp) catch {};
+        return;
+    };
+
+    var tabs_loaded: usize = 0;
+    for (0..toc.count) |i| {
+        var tmp_buf: [256]u8 = undefined;
+        const tmp_path = cartpack.extractEntry(pack_path, &toc.entries[i], &tmp_buf) catch continue;
+
+        const idx = cartridge.load(tmp_path) catch continue;
+        loaded_count = cartridge.count();
+
+        if (cartridge.get(idx)) |c| {
+            tab_text_nodes[idx] = .{ .text = c.titleSlice(), .font_size = 12, .text_color = TAB_TEXT };
+            tab_buttons[idx] = .{
+                .style = .{ .padding_left = 12, .padding_right = 12, .padding_top = 6, .padding_bottom = 6, .border_radius = 4 },
+                .handlers = .{ .on_press = tab_handlers[idx] },
+            };
+        }
+        tabs_loaded += 1;
+    }
+
+    if (tabs_loaded > 0) {
+        cartridge.setActive(cartridge.count() - 1);
+        refreshUI();
+    }
+
+    var resp_buf: [256]u8 = undefined;
+    const resp_body = std.fmt.bufPrint(&resp_buf, "{{\"ok\":true,\"loaded\":{d}}}\n", .{tabs_loaded}) catch "{\"ok\":true}\n";
+    var hdr_buf: [512]u8 = undefined;
+    const hdr = std.fmt.bufPrint(&hdr_buf, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {d}\r\nConnection: close\r\n\r\n", .{resp_body.len}) catch return;
+    _ = std.posix.write(client, hdr) catch {};
+    _ = std.posix.write(client, resp_body) catch {};
+
+    std.debug.print("[dev_shell] Loaded pack: {d} cartridge(s) from {s}\n", .{ tabs_loaded, pack_path });
+}
+
 // ── Engine callbacks ──
 
 fn shellTick(now: u32) void {
     cartridge.tickAll(now);
-
-    // Cross-cartridge sync: counter's count (cart 0 slot 0) → colors' size (cart 1 slot 1)
-    if (loaded_count > 1) {
-        const count = cartridge.getStateInt(0, 0);
-        const new_size = 100 + count * 20; // each click grows the box by 20px
-        cartridge.setStateInt(1, 1, new_size);
-    }
+    pollListener();
 
     // Refresh content (tick may have changed the tree)
     if (cartridge.getActiveRoot()) |root| {
@@ -130,20 +288,21 @@ fn shellCheckReload(config: *engine.AppConfig) bool {
     if (cartridge.checkReloads()) |idx| {
         if (idx == cartridge.activeIndex()) {
             refreshUI();
-            if (loaded_count > 1) {
-                config.root = &shell_root_multi;
-            } else if (cartridge.getActiveRoot()) |root| {
-                config.root = root;
-            }
+            config.root = &shell_root_multi;
         }
+        return true;
+    }
+    const current = cartridge.count();
+    if (current != loaded_count) {
+        loaded_count = current;
+        refreshUI();
+        config.root = &shell_root_multi;
         return true;
     }
     return false;
 }
 
-fn shellPostReload() void {
-    // State already restored by cartridge manager
-}
+fn shellPostReload() void {}
 
 // ── Entry point ──
 
@@ -153,24 +312,16 @@ pub fn main() !void {
     const alloc = arena.allocator();
 
     const args = try std.process.argsAlloc(alloc);
-    if (args.len < 2) {
-        std.debug.print("Usage: tsz-dev <app1.so> [app2.so] ...\n", .{});
-        std.debug.print("\nCartridgeOS — multi-app host with hot-reload.\n", .{});
-        return;
-    }
 
-    for (args[1..]) |so_path| {
-        _ = cartridge.load(so_path) catch |err| {
-            std.debug.print("[cartridge] Failed to load {s}: {}\n", .{ so_path, err });
+    // All non-flag args are .so paths
+    for (args[1..]) |arg| {
+        if (arg.len > 0 and arg[0] == '-') continue;
+        _ = cartridge.load(arg) catch |err| {
+            std.debug.print("[cartridge] Failed to load {s}: {}\n", .{ arg, err });
         };
     }
 
     loaded_count = cartridge.count();
-    if (loaded_count == 0) {
-        std.debug.print("[cartridge] No cartridges loaded\n", .{});
-        return;
-    }
-
     std.debug.print("[cartridge] Loaded {d} cartridge(s)\n", .{loaded_count});
     for (0..loaded_count) |i| {
         if (cartridge.get(i)) |c| {
@@ -178,7 +329,7 @@ pub fn main() !void {
         }
     }
 
-    // Build tab buttons
+    // Build tab buttons for initial carts
     for (0..loaded_count) |i| {
         if (cartridge.get(i)) |c| {
             tab_text_nodes[i] = .{ .text = c.titleSlice(), .font_size = 12, .text_color = TAB_TEXT };
@@ -191,22 +342,20 @@ pub fn main() !void {
 
     refreshUI();
 
-    // Single app: use cartridge root directly. Multi: use shell root with tabs.
-    const config_root: *Node = if (loaded_count > 1)
-        &shell_root_multi
-    else
-        cartridge.getActiveRoot() orelse return;
+    // Start HTTP listener for dynamic cart registration
+    startListener();
 
-    const title: [*:0]const u8 = if (loaded_count > 1) "CartridgeOS" else blk: {
-        if (cartridge.get(0)) |c| {
-            c.title[c.title_len] = 0;
-            break :blk @ptrCast(&c.title);
-        }
-        break :blk "tsz-dev";
-    };
+    // Always use tabbed shell (carts can arrive at any time via HTTP)
+    const config_root: *Node = &shell_root_multi;
+
+    const win_w: u32 = 1280;
+    const win_h: u32 = 800;
+    std.debug.print("[dev_shell] window {d}x{d}\n", .{ win_w, win_h });
 
     try engine.run(.{
-        .title = title,
+        .title = "CartridgeOS",
+        .width = win_w,
+        .height = win_h,
         .root = config_root,
         .tick = shellTick,
         .check_reload = shellCheckReload,

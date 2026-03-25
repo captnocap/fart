@@ -59,6 +59,10 @@ pub fn main() !void {
             runDev(alloc, args);
             return;
         }
+        if (std.mem.eql(u8, cmd, "pack")) {
+            runPack(alloc, args);
+            return;
+        }
     }
 
     if (args.len < 3) {
@@ -807,6 +811,26 @@ fn runDevWithUsage(
     start_idx: usize,
     usage_name: []const u8,
 ) void {
+    // Check if argument is a directory with carts.json (manifest mode)
+    if (start_idx < args.len) {
+        const arg = args[start_idx];
+        // Check for carts.json directly, or directory containing carts.json
+        const manifest_path: ?[]const u8 = blk: {
+            if (std.mem.endsWith(u8, arg, "carts.json")) {
+                if (std.fs.cwd().access(arg, .{})) |_| break :blk arg else |_| {}
+            }
+            // Check if arg is a directory containing carts.json
+            const try_path = std.fmt.allocPrint(alloc, "{s}/carts.json", .{arg}) catch break :blk null;
+            if (std.fs.cwd().access(try_path, .{})) |_| break :blk try_path else |_| {}
+            break :blk null;
+        };
+        if (manifest_path) |_| {
+            // TODO: runDevManifest not yet implemented
+            std.debug.print("[dev] carts.json manifest mode not yet implemented\n", .{});
+            return;
+        }
+    }
+
     const input_path = resolveDevInputPath(alloc, args, start_idx, usage_name);
     if (input_path == null) {
         return;
@@ -859,84 +883,200 @@ fn runDevWithUsage(
     else
         std.fmt.allocPrint(alloc, "zig-out/lib/lib{s}.so", .{lib_name}) catch return;
 
-    // Step 5: Check if a dev shell is already running (PID file)
-    const pid_path = "/tmp/tsz-dev.pid";
-    const existing_pid = blk: {
-        const pid_file = std.fs.openFileAbsolute(pid_path, .{}) catch break :blk null;
-        defer pid_file.close();
-        var pid_buf: [32]u8 = undefined;
-        const n = pid_file.read(&pid_buf) catch break :blk null;
-        if (n == 0) break :blk null;
-        const pid_str = std.mem.trimRight(u8, pid_buf[0..n], &.{ '\n', '\r', ' ', 0 });
-        break :blk std.fmt.parseInt(std.posix.pid_t, pid_str, 10) catch null;
-    };
+    // Step 5: Try to register with a running dev shell via HTTP
+    const abs_so = std.fs.cwd().realpathAlloc(alloc, so_path) catch so_path;
 
-    if (existing_pid) |pid| {
-        // Check if process is still alive (signal 0 = just check, no actual signal sent)
-        if (std.posix.kill(pid, 0)) {
-            // Shell is still running — just rebuild, it'll hot-reload
-            std.debug.print("[dev] Dev shell already running (pid {d}) — rebuilt .so, it will auto-reload\n", .{pid});
+    var owns_shell = false;
+    var shell_pid: std.posix.pid_t = 0;
+
+    if (devRegisterViaHttp(alloc, abs_so)) {
+        // Shell is running, we just registered
+    } else {
+        // No shell running — launch one
+        std.debug.print("[dev] Launching: {s} {s}\n", .{ shell_path, abs_so });
+
+        var shell_child = std.process.Child.init(&.{ shell_path, abs_so }, alloc);
+        shell_child.stderr_behavior = .Inherit;
+        shell_child.stdout_behavior = .Inherit;
+        _ = shell_child.spawn() catch |err| {
+            std.debug.print("[dev] Failed to launch dev shell: {}\n", .{err});
             return;
-        } else |_| {
-            // Process not found or no permission — stale PID file, launch new shell
-        }
+        };
+        shell_pid = @intCast(shell_child.id);
+        owns_shell = true;
+
+        if (std.fs.createFileAbsolute("/tmp/tsz-dev.pid", .{})) |f| {
+            const pid_str = std.fmt.allocPrint(alloc, "{d}", .{shell_pid}) catch "";
+            f.writeAll(pid_str) catch {};
+            f.close();
+        } else |_| {}
     }
 
-    std.debug.print("[dev] Launching: {s} {s}\n", .{ shell_path, so_path });
     std.debug.print("[dev] Watching {s} for changes...\n", .{resolved_input_path});
 
-    // Launch dev shell as a child process
-    var shell_child = std.process.Child.init(&.{ shell_path, so_path }, alloc);
-    shell_child.stderr_behavior = .Inherit;
-    shell_child.stdout_behavior = .Inherit;
-    _ = shell_child.spawn() catch |err| {
-        std.debug.print("[dev] Failed to launch dev shell: {}\n", .{err});
-        return;
-    };
-    const shell_pid = shell_child.id;
-
-    // Write PID file so other sessions know a shell is running
-    if (std.fs.createFileAbsolute(pid_path, .{})) |f| {
-        const pid_str = std.fmt.allocPrint(alloc, "{d}", .{shell_pid}) catch "";
-        f.writeAll(pid_str) catch {};
-        f.close();
-    } else |_| {}
-
-    // Step 6: Watch loop — poll all .tsz files in the cart directory for changes
+    // Step 6: Watch loop — poll .tsz files for changes, rebuild .so
     const watch_dir = std.fs.path.dirname(resolved_input_path) orelse ".";
     var last_max_mtime: i128 = getMaxMtime(alloc, watch_dir);
 
     while (true) {
         std.Thread.sleep(500 * std.time.ns_per_ms);
 
-        // Check if shell process exited (non-blocking waitpid with WNOHANG)
-        const wr = std.posix.waitpid(@intCast(shell_pid), 1); // WNOHANG = 1
-        if (wr.pid != 0) {
-            std.debug.print("[dev] Shell exited\n", .{});
-            std.fs.deleteFileAbsolute("/tmp/tsz-dev.pid") catch {};
-            break;
+        // If we own the shell, check if it exited
+        if (owns_shell) {
+            const wr = std.posix.waitpid(shell_pid, 1); // WNOHANG = 1
+            if (wr.pid != 0) {
+                std.debug.print("[dev] Shell exited\n", .{});
+                std.fs.deleteFileAbsolute("/tmp/tsz-dev.pid") catch {};
+                break;
+            }
         }
 
-        // Check max mtime across all .tsz files in the directory
         const current_max = getMaxMtime(alloc, watch_dir);
         if (current_max == last_max_mtime) continue;
         last_max_mtime = current_max;
 
         std.debug.print("[dev] Change detected, recompiling...\n", .{});
 
-        // Recompile .tsz → generated_app.zig
         if (!devCompileTsz(alloc, resolved_input_path, tsz_root)) {
             std.debug.print("[dev] Compile failed — keeping last working build\n", .{});
             continue;
         }
 
-        // Rebuild .so
         if (!devRunZigBuild(alloc, tsz_root, &.{ "zig", "build", app_name_opt, "app-lib" })) {
             std.debug.print("[dev] .so build failed — keeping last working build\n", .{});
             continue;
         }
 
         std.debug.print("[dev] Rebuilt .so — shell will auto-reload\n", .{});
+    }
+}
+
+/// `tsz pack <output.pack> <file1.so> [file2.so] ...`
+/// `tsz pack <output.pack> <directory/>`  — packs all .so files in the directory
+fn runPack(alloc: std.mem.Allocator, args: []const []const u8) void {
+    if (args.len < 4) {
+        std.debug.print("Usage: tsz pack <output.pack> <file.so|dir/> [file2.so] ...\n", .{});
+        std.debug.print("\nBundle multiple .so cartridges into a single .pack file.\n", .{});
+        return;
+    }
+
+    const out_path = args[2];
+
+    // Collect .so paths — if arg is a directory, scan it for .so files
+    var so_paths: [64][]const u8 = undefined;
+    var so_names: [64][]const u8 = undefined;
+    var so_count: usize = 0;
+
+    for (args[3..]) |arg| {
+        // Check if directory
+        if (std.fs.cwd().openDir(arg, .{ .iterate = true })) |dir_val| {
+            var dir = dir_val;
+            var iter = dir.iterate();
+            while (iter.next() catch null) |entry| {
+                if (entry.kind != .file) continue;
+                if (!std.mem.endsWith(u8, entry.name, ".so")) continue;
+                if (so_count >= 64) break;
+                const full = std.fmt.allocPrint(alloc, "{s}/{s}", .{ arg, entry.name }) catch continue;
+                so_paths[so_count] = full;
+                // Name = basename without lib prefix and -lib.so suffix
+                var name = entry.name;
+                if (std.mem.startsWith(u8, name, "lib")) name = name[3..];
+                if (std.mem.endsWith(u8, name, "-lib.so")) {
+                    so_names[so_count] = std.fmt.allocPrint(alloc, "{s}", .{name[0 .. name.len - 7]}) catch name;
+                } else if (std.mem.endsWith(u8, name, ".so")) {
+                    so_names[so_count] = std.fmt.allocPrint(alloc, "{s}", .{name[0 .. name.len - 3]}) catch name;
+                } else {
+                    so_names[so_count] = std.fmt.allocPrint(alloc, "{s}", .{name}) catch name;
+                }
+                so_count += 1;
+            }
+            dir.close();
+        } else |_| {
+            // It's a file path
+            if (so_count >= 64) continue;
+            so_paths[so_count] = arg;
+            var name = std.fs.path.basename(arg);
+            if (std.mem.startsWith(u8, name, "lib")) name = name[3..];
+            if (std.mem.endsWith(u8, name, "-lib.so")) {
+                so_names[so_count] = std.fmt.allocPrint(alloc, "{s}", .{name[0 .. name.len - 7]}) catch name;
+            } else if (std.mem.endsWith(u8, name, ".so")) {
+                so_names[so_count] = std.fmt.allocPrint(alloc, "{s}", .{name[0 .. name.len - 3]}) catch name;
+            } else {
+                so_names[so_count] = name;
+            }
+            so_count += 1;
+        }
+    }
+
+    if (so_count == 0) {
+        std.debug.print("[pack] No .so files found\n", .{});
+        return;
+    }
+
+    // Create the pack file
+    const MAGIC = "CART";
+    const NAME_LEN = 64;
+    const ENTRY_SIZE = NAME_LEN + 8 + 8;
+    const HEADER_SIZE = 4 + 4;
+
+    // Measure sizes
+    var sizes: [64]u64 = undefined;
+    for (0..so_count) |i| {
+        const stat = std.fs.cwd().statFile(so_paths[i]) catch {
+            std.debug.print("[pack] Can't stat {s}\n", .{so_paths[i]});
+            return;
+        };
+        sizes[i] = stat.size;
+    }
+
+    // Compute offsets
+    const toc_size: u64 = @as(u64, @intCast(so_count)) * ENTRY_SIZE;
+    const data_start: u64 = HEADER_SIZE + toc_size;
+    var offsets: [64]u64 = undefined;
+    var cursor: u64 = data_start;
+    for (0..so_count) |i| {
+        offsets[i] = cursor;
+        cursor += sizes[i];
+    }
+
+    // Write
+    const file = std.fs.cwd().createFile(out_path, .{}) catch {
+        std.debug.print("[pack] Can't create {s}\n", .{out_path});
+        return;
+    };
+    defer file.close();
+
+    file.writeAll(MAGIC) catch return;
+    var count_buf: [4]u8 = undefined;
+    std.mem.writeInt(u32, &count_buf, @intCast(so_count), .little);
+    file.writeAll(&count_buf) catch return;
+
+    for (0..so_count) |i| {
+        var ebuf: [ENTRY_SIZE]u8 = [_]u8{0} ** ENTRY_SIZE;
+        const nl = @min(so_names[i].len, NAME_LEN);
+        @memcpy(ebuf[0..nl], so_names[i][0..nl]);
+        std.mem.writeInt(u64, ebuf[NAME_LEN..][0..8], offsets[i], .little);
+        std.mem.writeInt(u64, ebuf[NAME_LEN + 8 ..][0..8], sizes[i], .little);
+        file.writeAll(&ebuf) catch return;
+    }
+
+    for (0..so_count) |i| {
+        const src = std.fs.cwd().openFile(so_paths[i], .{}) catch continue;
+        defer src.close();
+        var buf: [65536]u8 = undefined;
+        while (true) {
+            const n = src.read(&buf) catch break;
+            if (n == 0) break;
+            file.writeAll(buf[0..n]) catch break;
+        }
+    }
+
+    // Summary
+    const total_mb = @as(f32, @floatFromInt(cursor)) / (1024.0 * 1024.0);
+    std.debug.print("[pack] Created {s} — {d} cartridge(s), {d:.1} MB\n", .{ out_path, so_count, total_mb });
+    for (0..so_count) |i| {
+        const mb = @as(f32, @floatFromInt(sizes[i])) / (1024.0 * 1024.0);
+        std.debug.print("[pack]   {s} ({d:.1} MB)\n", .{ so_names[i], mb });
     }
 }
 
@@ -1089,6 +1229,43 @@ fn devRunZigBuild(alloc: std.mem.Allocator, tsz_root: ?[]const u8, argv: []const
 
 /// Scan a directory for all .tsz files and return the maximum mtime.
 /// Used by the dev watcher to detect changes in any imported file.
+/// Try to register a .so with a running dev shell via HTTP POST to localhost:7778/load.
+/// Returns true if the shell accepted it, false if no shell is reachable.
+fn devRegisterViaHttp(alloc: std.mem.Allocator, so_abs_path: []const u8) bool {
+    const addr = std.net.Address.parseIp4("127.0.0.1", 7778) catch return false;
+    const sock = std.posix.socket(std.posix.AF.INET, std.posix.SOCK.STREAM, 0) catch return false;
+    defer std.posix.close(sock);
+
+    std.posix.connect(sock, &addr.any, addr.getOsSockLen()) catch return false;
+
+    // Send HTTP POST
+    var req_buf: [1024]u8 = undefined;
+    const req = std.fmt.bufPrint(&req_buf, "POST /load HTTP/1.1\r\nHost: 127.0.0.1:7778\r\nContent-Length: {d}\r\nConnection: close\r\n\r\n{s}", .{ so_abs_path.len, so_abs_path }) catch return false;
+    _ = std.posix.write(sock, req) catch return false;
+
+    // Read response
+    var resp_buf: [512]u8 = undefined;
+    const n = std.posix.read(sock, &resp_buf) catch return false;
+    if (n == 0) return false;
+    const resp = resp_buf[0..n];
+
+    // Check for 200
+    if (std.mem.startsWith(u8, resp, "HTTP/1.1 200")) {
+        // Print the JSON body
+        if (std.mem.indexOf(u8, resp, "\r\n\r\n")) |body_start| {
+            const body = resp[body_start + 4 ..];
+            _ = alloc;
+            std.debug.print("[dev] Shell accepted: {s}", .{body});
+        } else {
+            std.debug.print("[dev] Shell accepted cartridge\n", .{});
+        }
+        return true;
+    }
+
+    std.debug.print("[dev] Shell rejected: {s}\n", .{resp});
+    return false;
+}
+
 fn getMaxMtime(alloc: std.mem.Allocator, dir_path: []const u8) i128 {
     _ = alloc;
     var max: i128 = 0;
