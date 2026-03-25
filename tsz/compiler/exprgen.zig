@@ -766,9 +766,18 @@ const Parser = struct {
                         continue;
                     }
 
-                    // .slice(a, b) → [@intCast(a)..@intCast(b)]
+                    // .slice() → full copy, .slice(a, b) → [@intCast(a)..@intCast(b)]
                     if (std.mem.eql(u8, prop, "slice") and self.curKind() == .lparen) {
                         self.advance(); // (
+                        // No-arg .slice() — full array copy
+                        if (self.curKind() == .rparen) {
+                            self.advance(); // )
+                            left = .{
+                                .text = try std.fmt.allocPrint(self.alloc, "{s}[0..]", .{left.text}),
+                                .ty = left.ty,
+                            };
+                            continue;
+                        }
                         const saved = self.context;
                         self.context = .argument;
                         const arg_a = try self.parseTernary();
@@ -1087,13 +1096,27 @@ const Parser = struct {
             .string => {
                 const text = self.curText();
                 self.advance();
-                // Single-quoted → double-quoted
+                // Single-quoted → double-quoted (escape inner double quotes)
                 if (text.len >= 2 and text[0] == '\'') {
-                    var buf = try self.alloc.alloc(u8, text.len);
+                    const inner = text[1 .. text.len - 1];
+                    // Count inner double quotes to size the buffer
+                    var dq_count: usize = 0;
+                    for (inner) |ch| {
+                        if (ch == '"') dq_count += 1;
+                    }
+                    var buf = try self.alloc.alloc(u8, text.len + dq_count);
                     buf[0] = '"';
-                    @memcpy(buf[1 .. buf.len - 1], text[1 .. text.len - 1]);
-                    buf[buf.len - 1] = '"';
-                    return .{ .text = buf, .ty = .string_t };
+                    var wi: usize = 1;
+                    for (inner) |ch| {
+                        if (ch == '"') {
+                            buf[wi] = '\\';
+                            wi += 1;
+                        }
+                        buf[wi] = ch;
+                        wi += 1;
+                    }
+                    buf[wi] = '"';
+                    return .{ .text = buf[0 .. wi + 1], .ty = .string_t };
                 }
                 return .{ .text = try self.alloc.dupe(u8, text), .ty = .string_t };
             },

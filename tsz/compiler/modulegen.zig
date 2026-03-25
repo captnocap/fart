@@ -410,7 +410,7 @@ fn emitModuleVars(
             continue;
         }
 
-        if (!std.mem.eql(u8, text, "let") and !std.mem.eql(u8, text, "const")) {
+        if (!std.mem.eql(u8, text, "let") and !std.mem.eql(u8, text, "const") and !std.mem.eql(u8, text, "var")) {
             pos += 1;
             continue;
         }
@@ -419,7 +419,7 @@ fn emitModuleVars(
         const is_pub = pos > 0 and lex.get(pos - 1).kind == .identifier and
             std.mem.eql(u8, lex.get(pos - 1).text(source), "export");
 
-        // Found a top-level let/const
+        // Found a top-level let/const/var
         const is_const = std.mem.eql(u8, text, "const");
         pos += 1; // skip let/const
 
@@ -992,7 +992,19 @@ fn collectExprUntil(
                 try result.append(alloc, ' ');
             }
         }
-        try result.appendSlice(alloc, lex.get(pos.*).text(source));
+        const tok_text = lex.get(pos.*).text(source);
+        // Convert single-quoted JS strings to double-quoted Zig strings
+        if (kind == .string and tok_text.len >= 2 and tok_text[0] == '\'') {
+            try result.append(alloc, '"');
+            const inner = tok_text[1 .. tok_text.len - 1];
+            for (inner) |ch| {
+                if (ch == '"') try result.append(alloc, '\\');
+                try result.append(alloc, ch);
+            }
+            try result.append(alloc, '"');
+        } else {
+            try result.appendSlice(alloc, tok_text);
+        }
         pos.* += 1;
     }
 
@@ -1067,10 +1079,99 @@ fn translateInitValue(alloc: std.mem.Allocator, val: []const u8) []const u8 {
     if (std.mem.eql(u8, val, "null")) return "null";
     if (std.mem.eql(u8, val, "true")) return "true";
     if (std.mem.eql(u8, val, "false")) return "false";
+    if (std.mem.eql(u8, val, "[]")) return "&[_]i64{}";
     // Object literal { key: val } → .{ .key = val }
     if (val.len > 0 and val[0] == '{') {
-        // Convert TS-style { key : val } to Zig .{ .key = val }
-        return std.fmt.allocPrint(alloc, ".{s}", .{val}) catch val;
+        return translateObjectLiteral(alloc, val) catch val;
     }
+    // Array literal [...] → translate elements
+    if (val.len > 0 and val[0] == '[') {
+        return translateArrayLiteral(alloc, val) catch val;
+    }
+    return val;
+}
+
+/// Convert JS object literal `{ key : val, key2 : val2 }` to Zig `.{ .key = val, .key2 = val2 }`
+fn translateObjectLiteral(alloc: std.mem.Allocator, val: []const u8) ![]const u8 {
+    var out: std.ArrayListUnmanaged(u8) = .{};
+    try out.appendSlice(alloc, ".{");
+    var i: usize = 1; // skip opening {
+    var depth: usize = 0;
+    while (i < val.len) {
+        const ch = val[i];
+        if (ch == '{' or ch == '[') { depth += 1; try out.append(alloc, ch); i += 1; continue; }
+        if (ch == '}' or ch == ']') {
+            if (depth > 0) { depth -= 1; try out.append(alloc, ch); i += 1; continue; }
+            break; // closing }
+        }
+        if (ch == '"' or ch == '\'') {
+            // Copy string literal verbatim
+            const close = std.mem.indexOfScalarPos(u8, val, i + 1, ch) orelse val.len;
+            try out.appendSlice(alloc, val[i .. close + 1]);
+            i = close + 1;
+            continue;
+        }
+        // Detect key : pattern — identifier followed by space+colon at depth 0
+        if (depth == 0 and isIdentChar(ch)) {
+            const key_start = i;
+            while (i < val.len and isIdentChar(val[i])) i += 1;
+            const key = val[key_start..i];
+            // Skip whitespace
+            while (i < val.len and (val[i] == ' ' or val[i] == '\t')) i += 1;
+            if (i < val.len and val[i] == ':') {
+                // It's a key: value pair — emit .key = value
+                try out.append(alloc, '.');
+                try out.appendSlice(alloc, key);
+                try out.appendSlice(alloc, " =");
+                i += 1; // skip colon
+                continue;
+            }
+            // Not a key: pattern — just emit the identifier
+            try out.appendSlice(alloc, key);
+            continue;
+        }
+        try out.append(alloc, ch);
+        i += 1;
+    }
+    try out.append(alloc, '}');
+    return try alloc.dupe(u8, out.items);
+}
+
+/// Convert JS array literal `[elem, elem, ...]` — recursively translate elements
+fn translateArrayLiteral(alloc: std.mem.Allocator, val: []const u8) ![]const u8 {
+    // Check if it's an array of objects: [{...}, {...}]
+    const inner = std.mem.trim(u8, val[1 .. val.len - 1], &[_]u8{ ' ', '\t' });
+    if (inner.len > 0 and inner[0] == '{') {
+        // Array of object literals — translate each element
+        var out: std.ArrayListUnmanaged(u8) = .{};
+        try out.appendSlice(alloc, ".{");
+        var i: usize = 1; // skip [
+        while (i < val.len) {
+            const ch = val[i];
+            if (ch == ']') break;
+            if (ch == '{') {
+                // Find matching }
+                var depth: usize = 1;
+                var j = i + 1;
+                while (j < val.len and depth > 0) {
+                    if (val[j] == '{') depth += 1;
+                    if (val[j] == '}') depth -= 1;
+                    j += 1;
+                }
+                const obj = val[i..j];
+                const translated = try translateObjectLiteral(alloc, obj);
+                try out.appendSlice(alloc, translated);
+                i = j;
+                continue;
+            }
+            if (ch == ',') { try out.appendSlice(alloc, ", "); i += 1; continue; }
+            if (ch == ' ' or ch == '\t' or ch == '\n') { i += 1; continue; }
+            try out.append(alloc, ch);
+            i += 1;
+        }
+        try out.append(alloc, '}');
+        return try alloc.dupe(u8, out.items);
+    }
+    // Simple array — pass through with Zig array syntax
     return val;
 }
