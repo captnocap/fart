@@ -862,11 +862,9 @@ fn runDev(alloc: std.mem.Allocator, args: []const []const u8) void {
     };
     const shell_pid = shell_child.id;
 
-    // Step 6: Watch loop — poll source file, recompile on change
-    var last_mtime: i128 = 0;
-    if (std.fs.cwd().statFile(input_path)) |stat| {
-        last_mtime = stat.mtime;
-    } else |_| {}
+    // Step 6: Watch loop — poll all .tsz files in the cart directory for changes
+    const watch_dir = std.fs.path.dirname(input_path) orelse ".";
+    var last_max_mtime: i128 = getMaxMtime(alloc, watch_dir);
 
     while (true) {
         std.Thread.sleep(500 * std.time.ns_per_ms);
@@ -878,10 +876,10 @@ fn runDev(alloc: std.mem.Allocator, args: []const []const u8) void {
             break;
         }
 
-        // Check source file mtime
-        const stat = std.fs.cwd().statFile(input_path) catch continue;
-        if (stat.mtime == last_mtime) continue;
-        last_mtime = stat.mtime;
+        // Check max mtime across all .tsz files in the directory
+        const current_max = getMaxMtime(alloc, watch_dir);
+        if (current_max == last_max_mtime) continue;
+        last_max_mtime = current_max;
 
         std.debug.print("[dev] Change detected, recompiling...\n", .{});
 
@@ -954,4 +952,24 @@ fn devRunZigBuild(alloc: std.mem.Allocator, tsz_root: ?[]const u8, argv: []const
         return false;
     }
     return true;
+}
+
+/// Scan a directory for all .tsz files and return the maximum mtime.
+/// Used by the dev watcher to detect changes in any imported file.
+fn getMaxMtime(alloc: std.mem.Allocator, dir_path: []const u8) i128 {
+    _ = alloc;
+    var max: i128 = 0;
+    var dir = std.fs.cwd().openDir(dir_path, .{ .iterate = true }) catch return 0;
+    defer dir.close();
+    var it = dir.iterate();
+    while (it.next() catch null) |entry| {
+        if (entry.kind == .file and std.mem.endsWith(u8, entry.name, ".tsz")) {
+            // Build full path for stat
+            var path_buf: [1024]u8 = undefined;
+            const full = std.fmt.bufPrint(&path_buf, "{s}/{s}", .{ dir_path, entry.name }) catch continue;
+            const stat = std.fs.cwd().statFile(full) catch continue;
+            if (stat.mtime > max) max = stat.mtime;
+        }
+    }
+    return max;
 }
