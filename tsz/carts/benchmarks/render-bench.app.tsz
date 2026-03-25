@@ -1,0 +1,124 @@
+// Render Benchmark — measures GPU paint speed
+// Pre-allocates colored boxes in a grid, progressively reveals tiers
+// Ramps every 4 seconds: 50 → 150 → 300 → 500 → 800 visible rects
+//
+// What this measures: gpu/rects.zig batch rendering throughput
+
+from './bench_telemetry_script'
+from './render_ramp_script'
+
+const [tier, setTier] = useState(0);
+const [fps, setFps] = useState(0);
+const [layoutUs, setLayoutUs] = useState(0);
+const [paintUs, setPaintUs] = useState(0);
+const [tickUs, setTickUs] = useState(0);
+const [t0Paint, setT0Paint] = useState(0);
+const [t1Paint, setT1Paint] = useState(0);
+const [t2Paint, setT2Paint] = useState(0);
+const [t3Paint, setT3Paint] = useState(0);
+const [t4Paint, setT4Paint] = useState(0);
+const [rectCount, setRectCount] = useState(0);
+
+useEffect(() => {
+  if (tier == 0) { setRectCount(50); }
+  if (tier == 1) { setRectCount(150); }
+  if (tier == 2) { setRectCount(300); }
+  if (tier == 3) { setRectCount(500); }
+  if (tier == 4) { setRectCount(800); }
+});
+
+function ColorRow({ c1, c2, c3, c4, c5, c6, c7, c8, c9, c10 }) {
+  return (
+    <Box style={{ flexDirection: 'row', gap: 1 }}>
+      <Box style={{ width: 24, height: 24, backgroundColor: c1, borderRadius: 4 }} />
+      <Box style={{ width: 24, height: 24, backgroundColor: c2, borderRadius: 4 }} />
+      <Box style={{ width: 24, height: 24, backgroundColor: c3, borderRadius: 4 }} />
+      <Box style={{ width: 24, height: 24, backgroundColor: c4, borderRadius: 4 }} />
+      <Box style={{ width: 24, height: 24, backgroundColor: c5, borderRadius: 4 }} />
+      <Box style={{ width: 24, height: 24, backgroundColor: c6, borderRadius: 4 }} />
+      <Box style={{ width: 24, height: 24, backgroundColor: c7, borderRadius: 4 }} />
+      <Box style={{ width: 24, height: 24, backgroundColor: c8, borderRadius: 4 }} />
+      <Box style={{ width: 24, height: 24, backgroundColor: c9, borderRadius: 4 }} />
+      <Box style={{ width: 24, height: 24, backgroundColor: c10, borderRadius: 4 }} />
+    </Box>
+  );
+}
+
+function GridBlock() {
+  return (
+    <Box style={{ gap: 1 }}>
+      <ColorRow c1="#ef4444" c2="#f97316" c3="#eab308" c4="#22c55e" c5="#06b6d4" c6="#3b82f6" c7="#8b5cf6" c8="#ec4899" c9="#f43f5e" c10="#14b8a6" />
+      <ColorRow c1="#dc2626" c2="#ea580c" c3="#ca8a04" c4="#16a34a" c5="#0891b2" c6="#2563eb" c7="#7c3aed" c8="#db2777" c9="#e11d48" c10="#0d9488" />
+      <ColorRow c1="#b91c1c" c2="#c2410c" c3="#a16207" c4="#15803d" c5="#0e7490" c6="#1d4ed8" c7="#6d28d9" c8="#be185d" c9="#be123c" c10="#0f766e" />
+      <ColorRow c1="#991b1b" c2="#9a3412" c3="#854d0e" c4="#166534" c5="#155e75" c6="#1e40af" c7="#5b21b6" c8="#9d174d" c9="#9f1239" c10="#115e59" />
+      <ColorRow c1="#7f1d1d" c2="#7c2d12" c3="#713f12" c4="#14532d" c5="#164e63" c6="#1e3a8a" c7="#4c1d95" c8="#831843" c9="#881337" c10="#134e4a" />
+    </Box>
+  );
+}
+
+function ResultRow({ label, value }) {
+  return (
+    <Box style={{ flexDirection: 'row', gap: 8, paddingTop: 2 }}>
+      <Text fontSize={12} color="#8b949e">{label}</Text>
+      <Text fontSize={12} color="#e6edf3">{value}</Text>
+    </Box>
+  );
+}
+
+function App() {
+  return (
+    <Box style={{ width: '100%', height: '100%', backgroundColor: '#0d1117', padding: 16, gap: 12 }}>
+      <Text fontSize={22} color="#e6edf3">Render Benchmark</Text>
+      <Text fontSize={12} color="#8b949e">{`Tier ${tier}/4 — ${rectCount} colored rects — ramps every 4s`}</Text>
+
+      <Box style={{ flexDirection: 'row', gap: 16 }}>
+        <Box style={{ backgroundColor: '#161b22', padding: 12, borderRadius: 8, flexGrow: 1 }}>
+          <Text fontSize={11} color="#8b949e">FPS</Text>
+          <Text fontSize={28} color="#3fb950">{`${fps}`}</Text>
+        </Box>
+        <Box style={{ backgroundColor: '#161b22', padding: 12, borderRadius: 8, flexGrow: 1 }}>
+          <Text fontSize={11} color="#8b949e">Paint</Text>
+          <Text fontSize={28} color="#f78166">{`${paintUs}us`}</Text>
+        </Box>
+        <Box style={{ backgroundColor: '#161b22', padding: 12, borderRadius: 8, flexGrow: 1 }}>
+          <Text fontSize={11} color="#8b949e">Layout</Text>
+          <Text fontSize={28} color="#d2992a">{`${layoutUs}us`}</Text>
+        </Box>
+        <Box style={{ backgroundColor: '#161b22', padding: 12, borderRadius: 8, flexGrow: 1 }}>
+          <Text fontSize={11} color="#8b949e">Rects</Text>
+          <Text fontSize={28} color="#58a6ff">{`${rectCount}`}</Text>
+        </Box>
+      </Box>
+
+      <Box style={{ backgroundColor: '#161b22', padding: 12, borderRadius: 8 }}>
+        <Text fontSize={13} color="#e6edf3">Paint time by tier</Text>
+        <ResultRow label="T0 (50 rects):" value={`${t0Paint}us`} />
+        <ResultRow label="T1 (150 rects):" value={`${t1Paint}us`} />
+        <ResultRow label="T2 (300 rects):" value={`${t2Paint}us`} />
+        <ResultRow label="T3 (500 rects):" value={`${t3Paint}us`} />
+        <ResultRow label="T4 (800 rects):" value={`${t4Paint}us`} />
+      </Box>
+
+      <ScrollView style={{ flexGrow: 1, height: 250 }}>
+        <Box style={{ gap: 4, flexWrap: 'wrap', flexDirection: 'row' }}>
+          <GridBlock />
+          {tier > 0 && <GridBlock />}
+          {tier > 0 && <GridBlock />}
+          {tier > 1 && <GridBlock />}
+          {tier > 1 && <GridBlock />}
+          {tier > 1 && <GridBlock />}
+          {tier > 2 && <GridBlock />}
+          {tier > 2 && <GridBlock />}
+          {tier > 2 && <GridBlock />}
+          {tier > 2 && <GridBlock />}
+          {tier > 3 && <GridBlock />}
+          {tier > 3 && <GridBlock />}
+          {tier > 3 && <GridBlock />}
+          {tier > 3 && <GridBlock />}
+          {tier > 3 && <GridBlock />}
+          {tier > 3 && <GridBlock />}
+        </Box>
+      </ScrollView>
+    </Box>
+  );
+}

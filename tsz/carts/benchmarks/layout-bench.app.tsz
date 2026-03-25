@@ -1,0 +1,148 @@
+// Layout Benchmark — measures flex layout pass speed
+// Pre-allocates 5 tiers of nested boxes (100/250/500/1000/2000 visible)
+// Ramps up visibility every 4 seconds, reports layout_us at each tier
+//
+// What this measures: layout.zig flex pass on increasingly deep/wide trees
+
+from './bench_telemetry_script'
+from './layout_ramp_script'
+
+const [tier, setTier] = useState(0);
+const [fps, setFps] = useState(0);
+const [layoutUs, setLayoutUs] = useState(0);
+const [paintUs, setPaintUs] = useState(0);
+const [tickUs, setTickUs] = useState(0);
+const [t0Layout, setT0Layout] = useState(0);
+const [t1Layout, setT1Layout] = useState(0);
+const [t2Layout, setT2Layout] = useState(0);
+const [t3Layout, setT3Layout] = useState(0);
+const [t4Layout, setT4Layout] = useState(0);
+const [nodeCount, setNodeCount] = useState(0);
+
+useEffect(() => {
+  if (tier == 0) { setNodeCount(100); }
+  if (tier == 1) { setNodeCount(250); }
+  if (tier == 2) { setNodeCount(500); }
+  if (tier == 3) { setNodeCount(1000); }
+  if (tier == 4) { setNodeCount(2000); }
+});
+
+function RowOf10({ color }) {
+  return (
+    <Box style={{ flexDirection: 'row', gap: 2, flexWrap: 'wrap' }}>
+      <Box style={{ width: 16, height: 16, backgroundColor: color, borderRadius: 2 }} />
+      <Box style={{ width: 16, height: 16, backgroundColor: color, borderRadius: 2 }} />
+      <Box style={{ width: 16, height: 16, backgroundColor: color, borderRadius: 2 }} />
+      <Box style={{ width: 16, height: 16, backgroundColor: color, borderRadius: 2 }} />
+      <Box style={{ width: 16, height: 16, backgroundColor: color, borderRadius: 2 }} />
+      <Box style={{ width: 16, height: 16, backgroundColor: color, borderRadius: 2 }} />
+      <Box style={{ width: 16, height: 16, backgroundColor: color, borderRadius: 2 }} />
+      <Box style={{ width: 16, height: 16, backgroundColor: color, borderRadius: 2 }} />
+      <Box style={{ width: 16, height: 16, backgroundColor: color, borderRadius: 2 }} />
+      <Box style={{ width: 16, height: 16, backgroundColor: color, borderRadius: 2 }} />
+    </Box>
+  );
+}
+
+function Block50({ color }) {
+  return (
+    <Box style={{ gap: 2 }}>
+      <RowOf10 color={color} />
+      <RowOf10 color={color} />
+      <RowOf10 color={color} />
+      <RowOf10 color={color} />
+      <RowOf10 color={color} />
+    </Box>
+  );
+}
+
+function ResultRow({ label, value }) {
+  return (
+    <Box style={{ flexDirection: 'row', gap: 8, paddingTop: 2 }}>
+      <Text fontSize={12} color="#8b949e">{label}</Text>
+      <Text fontSize={12} color="#e6edf3">{value}</Text>
+    </Box>
+  );
+}
+
+function App() {
+  return (
+    <Box style={{ width: '100%', height: '100%', backgroundColor: '#0d1117', padding: 16, gap: 12 }}>
+      <Text fontSize={22} color="#e6edf3">Layout Benchmark</Text>
+      <Text fontSize={12} color="#8b949e">{`Tier ${tier}/4 — ${nodeCount} visible nodes — ramps every 4s`}</Text>
+
+      <Box style={{ flexDirection: 'row', gap: 16 }}>
+        <Box style={{ backgroundColor: '#161b22', padding: 12, borderRadius: 8, flexGrow: 1 }}>
+          <Text fontSize={11} color="#8b949e">FPS</Text>
+          <Text fontSize={28} color="#3fb950">{`${fps}`}</Text>
+        </Box>
+        <Box style={{ backgroundColor: '#161b22', padding: 12, borderRadius: 8, flexGrow: 1 }}>
+          <Text fontSize={11} color="#8b949e">Layout</Text>
+          <Text fontSize={28} color="#f78166">{`${layoutUs}us`}</Text>
+        </Box>
+        <Box style={{ backgroundColor: '#161b22', padding: 12, borderRadius: 8, flexGrow: 1 }}>
+          <Text fontSize={11} color="#8b949e">Paint</Text>
+          <Text fontSize={28} color="#d2992a">{`${paintUs}us`}</Text>
+        </Box>
+        <Box style={{ backgroundColor: '#161b22', padding: 12, borderRadius: 8, flexGrow: 1 }}>
+          <Text fontSize={11} color="#8b949e">Nodes</Text>
+          <Text fontSize={28} color="#58a6ff">{`${nodeCount}`}</Text>
+        </Box>
+      </Box>
+
+      <Box style={{ backgroundColor: '#161b22', padding: 12, borderRadius: 8 }}>
+        <Text fontSize={13} color="#e6edf3">Results by tier</Text>
+        <ResultRow label="T0 (100 nodes):" value={`${t0Layout}us`} />
+        <ResultRow label="T1 (250 nodes):" value={`${t1Layout}us`} />
+        <ResultRow label="T2 (500 nodes):" value={`${t2Layout}us`} />
+        <ResultRow label="T3 (1000 nodes):" value={`${t3Layout}us`} />
+        <ResultRow label="T4 (2000 nodes):" value={`${t4Layout}us`} />
+      </Box>
+
+      <ScrollView style={{ flexGrow: 1, height: 300 }}>
+        <Box style={{ gap: 2, flexWrap: 'wrap', flexDirection: 'row' }}>
+          <Block50 color="#1f3a2a" />
+          <Block50 color="#1f3a2a" />
+          {tier > 0 && <Block50 color="#2a3a1f" />}
+          {tier > 0 && <Block50 color="#2a3a1f" />}
+          {tier > 0 && <Block50 color="#2a3a1f" />}
+          {tier > 1 && <Block50 color="#3a2a1f" />}
+          {tier > 1 && <Block50 color="#3a2a1f" />}
+          {tier > 1 && <Block50 color="#3a2a1f" />}
+          {tier > 1 && <Block50 color="#3a2a1f" />}
+          {tier > 1 && <Block50 color="#3a2a1f" />}
+          {tier > 2 && <Block50 color="#2a1f3a" />}
+          {tier > 2 && <Block50 color="#2a1f3a" />}
+          {tier > 2 && <Block50 color="#2a1f3a" />}
+          {tier > 2 && <Block50 color="#2a1f3a" />}
+          {tier > 2 && <Block50 color="#2a1f3a" />}
+          {tier > 2 && <Block50 color="#2a1f3a" />}
+          {tier > 2 && <Block50 color="#2a1f3a" />}
+          {tier > 2 && <Block50 color="#2a1f3a" />}
+          {tier > 2 && <Block50 color="#2a1f3a" />}
+          {tier > 2 && <Block50 color="#2a1f3a" />}
+          {tier > 3 && <Block50 color="#3a1f2a" />}
+          {tier > 3 && <Block50 color="#3a1f2a" />}
+          {tier > 3 && <Block50 color="#3a1f2a" />}
+          {tier > 3 && <Block50 color="#3a1f2a" />}
+          {tier > 3 && <Block50 color="#3a1f2a" />}
+          {tier > 3 && <Block50 color="#3a1f2a" />}
+          {tier > 3 && <Block50 color="#3a1f2a" />}
+          {tier > 3 && <Block50 color="#3a1f2a" />}
+          {tier > 3 && <Block50 color="#3a1f2a" />}
+          {tier > 3 && <Block50 color="#3a1f2a" />}
+          {tier > 3 && <Block50 color="#3a1f2a" />}
+          {tier > 3 && <Block50 color="#3a1f2a" />}
+          {tier > 3 && <Block50 color="#3a1f2a" />}
+          {tier > 3 && <Block50 color="#3a1f2a" />}
+          {tier > 3 && <Block50 color="#3a1f2a" />}
+          {tier > 3 && <Block50 color="#3a1f2a" />}
+          {tier > 3 && <Block50 color="#3a1f2a" />}
+          {tier > 3 && <Block50 color="#3a1f2a" />}
+          {tier > 3 && <Block50 color="#3a1f2a" />}
+          {tier > 3 && <Block50 color="#3a1f2a" />}
+        </Box>
+      </ScrollView>
+    </Box>
+  );
+}

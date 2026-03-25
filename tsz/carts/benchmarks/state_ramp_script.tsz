@@ -1,0 +1,29 @@
+// State bench ramp — escalates tier every 4 seconds
+// Records tick_us at each tier
+
+let _lastRamp = Date.now();
+let _settled = 0;
+
+setInterval(function() {
+  let now = Date.now();
+  let t = getTier();
+  let tu = getTickUs();
+
+  if (now - _lastRamp > 2000 && _settled == 0) {
+    _settled = 1;
+    if (t == 0) { setT0Tick(tu); setSlotsPerFrame(4); }
+    if (t == 1) { setT1Tick(tu); setSlotsPerFrame(8); }
+    if (t == 2) { setT2Tick(tu); setSlotsPerFrame(16); }
+    if (t == 3) { setT3Tick(tu); setSlotsPerFrame(32); }
+    if (t == 4) { setT4Tick(tu); setSlotsPerFrame(64); }
+  }
+
+  if (now - _lastRamp > 4000 && t < 4) {
+    setTier(t + 1);
+    _lastRamp = now;
+    _settled = 0;
+    console.log('State bench: tier ' + (t + 1));
+  }
+}, 500);
+
+console.log('State benchmark loaded. Ramping tiers every 4s.');

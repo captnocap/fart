@@ -1,0 +1,66 @@
+// Script bench — escalating __setState calls per frame
+// Measures raw bridge throughput and setInterval timing precision
+
+let _N = 10;
+let _frames = 0;
+let _lastRamp = Date.now();
+let _settled = 0;
+let _lastTick = Date.now();
+
+function bridgeTick() {
+  let t0 = Date.now();
+
+  // Hammer the bridge: N calls to __setState per frame
+  for (let i = 0; i < _N; i++) {
+    setDummy(i);
+  }
+
+  let elapsed = Date.now() - t0;
+  setBridgeMs(elapsed);
+  _frames++;
+  setFrameCount(_frames);
+  setCallsPerFrame(_N);
+
+  // Measure setInterval drift
+  let now = Date.now();
+  let actual = now - _lastTick;
+  if (actual > 0) {
+    let drift = actual - 16;
+    if (drift < 0) { drift = 0 - drift; }
+    setIntervalDrift(drift);
+  }
+  _lastTick = now;
+}
+
+// Record results after settling
+setInterval(function() {
+  let now = Date.now();
+  let t = getTier();
+
+  if (now - _lastRamp > 2000 && _settled == 0) {
+    _settled = 1;
+    let bms = getBridgeMs();
+    if (t == 0) { setT0Bridge(bms); }
+    if (t == 1) { setT1Bridge(bms); }
+    if (t == 2) { setT2Bridge(bms); }
+    if (t == 3) { setT3Bridge(bms); }
+    if (t == 4) { setT4Bridge(bms); }
+  }
+
+  if (now - _lastRamp > 4000 && t < 4) {
+    setTier(t + 1);
+    _lastRamp = now;
+    _settled = 0;
+    if (t == 0) { _N = 100; }
+    if (t == 1) { _N = 1000; }
+    if (t == 2) { _N = 10000; }
+    if (t == 3) { _N = 50000; }
+    console.log('Script bench: tier ' + (t + 1) + ', N=' + _N);
+  }
+}, 500);
+
+// Run bridge stress every frame (~16ms)
+setInterval(bridgeTick, 16);
+
+bridgeTick();
+console.log('Script benchmark loaded. Starting N=' + _N);

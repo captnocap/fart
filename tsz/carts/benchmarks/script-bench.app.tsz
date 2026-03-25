@@ -1,0 +1,86 @@
+// Script Benchmark — measures QuickJS bridge overhead
+// Escalates __setState calls per frame: 10 → 100 → 1000 → 10000 → 50000
+// Shows where the JS→Zig bridge becomes a bottleneck
+//
+// What this measures: qjs_runtime.zig bridge call throughput + setInterval precision
+
+from './bench_telemetry_script'
+from './script_ramp_script'
+
+const [tier, setTier] = useState(0);
+const [fps, setFps] = useState(0);
+const [layoutUs, setLayoutUs] = useState(0);
+const [paintUs, setPaintUs] = useState(0);
+const [tickUs, setTickUs] = useState(0);
+const [callsPerFrame, setCallsPerFrame] = useState(10);
+const [bridgeMs, setBridgeMs] = useState(0);
+const [frameCount, setFrameCount] = useState(0);
+const [t0Bridge, setT0Bridge] = useState(0);
+const [t1Bridge, setT1Bridge] = useState(0);
+const [t2Bridge, setT2Bridge] = useState(0);
+const [t3Bridge, setT3Bridge] = useState(0);
+const [t4Bridge, setT4Bridge] = useState(0);
+const [intervalDrift, setIntervalDrift] = useState(0);
+const [dummy, setDummy] = useState(0);
+
+function ResultRow({ label, value }) {
+  return (
+    <Box style={{ flexDirection: 'row', gap: 8, paddingTop: 2 }}>
+      <Text fontSize={12} color="#8b949e">{label}</Text>
+      <Text fontSize={12} color="#e6edf3">{value}</Text>
+    </Box>
+  );
+}
+
+function App() {
+  return (
+    <Box style={{ width: '100%', height: '100%', backgroundColor: '#0d1117', padding: 16, gap: 12 }}>
+      <Text fontSize={22} color="#e6edf3">Script Benchmark</Text>
+      <Text fontSize={12} color="#8b949e">{`Tier ${tier}/4 — ${callsPerFrame} __setState calls/frame — ramps every 4s`}</Text>
+
+      <Box style={{ flexDirection: 'row', gap: 16 }}>
+        <Box style={{ backgroundColor: '#161b22', padding: 12, borderRadius: 8, flexGrow: 1 }}>
+          <Text fontSize={11} color="#8b949e">FPS</Text>
+          <Text fontSize={28} color="#3fb950">{`${fps}`}</Text>
+        </Box>
+        <Box style={{ backgroundColor: '#161b22', padding: 12, borderRadius: 8, flexGrow: 1 }}>
+          <Text fontSize={11} color="#8b949e">Bridge</Text>
+          <Text fontSize={28} color="#f78166">{`${bridgeMs}ms`}</Text>
+        </Box>
+        <Box style={{ backgroundColor: '#161b22', padding: 12, borderRadius: 8, flexGrow: 1 }}>
+          <Text fontSize={11} color="#8b949e">Calls/frame</Text>
+          <Text fontSize={28} color="#58a6ff">{`${callsPerFrame}`}</Text>
+        </Box>
+        <Box style={{ backgroundColor: '#161b22', padding: 12, borderRadius: 8, flexGrow: 1 }}>
+          <Text fontSize={11} color="#8b949e">Interval drift</Text>
+          <Text fontSize={28} color="#d2992a">{`${intervalDrift}ms`}</Text>
+        </Box>
+      </Box>
+
+      <Box style={{ backgroundColor: '#161b22', padding: 12, borderRadius: 8 }}>
+        <Text fontSize={13} color="#e6edf3">Bridge time by tier</Text>
+        <ResultRow label="T0 (10 calls):" value={`${t0Bridge}ms`} />
+        <ResultRow label="T1 (100 calls):" value={`${t1Bridge}ms`} />
+        <ResultRow label="T2 (1000 calls):" value={`${t2Bridge}ms`} />
+        <ResultRow label="T3 (10000 calls):" value={`${t3Bridge}ms`} />
+        <ResultRow label="T4 (50000 calls):" value={`${t4Bridge}ms`} />
+      </Box>
+
+      <Box style={{ backgroundColor: '#161b22', padding: 12, borderRadius: 8 }}>
+        <Text fontSize={13} color="#e6edf3">What this tells you</Text>
+        <Text fontSize={11} color="#8b949e">Bridge overhead: time spent crossing JS→Zig per frame</Text>
+        <Text fontSize={11} color="#8b949e">Interval drift: how far setInterval(fn, 16) drifts from 16ms</Text>
+        <Text fontSize={11} color="#8b949e">At 52M calls/s theoretical, the bridge should handle 800K+ calls/frame at 60fps</Text>
+      </Box>
+
+      <Box style={{ backgroundColor: '#161b22', padding: 12, borderRadius: 8 }}>
+        <Box style={{ flexDirection: 'row', gap: 24 }}>
+          <Text fontSize={12} color="#6e7681">{`tick: ${tickUs}us`}</Text>
+          <Text fontSize={12} color="#6e7681">{`layout: ${layoutUs}us`}</Text>
+          <Text fontSize={12} color="#6e7681">{`paint: ${paintUs}us`}</Text>
+          <Text fontSize={12} color="#6e7681">{`frames: ${frameCount}`}</Text>
+        </Box>
+      </Box>
+    </Box>
+  );
+}
