@@ -273,6 +273,7 @@ fn addAppExe(
     options.addOption(bool, "has_transitions", !is_lean);
     options.addOption(bool, "has_networking", !is_lean);
     options.addOption(bool, "has_crypto", !is_lean);
+    options.addOption(bool, "has_blend2d", !is_lean);
     options.addOption(bool, "has_debug_server", true); // always available, gated by TSZ_DEBUG=1 at runtime
 
     const root_mod = b.createModule(.{
@@ -342,6 +343,12 @@ fn addAppExe(
         exe.linkSystemLibrary("vterm");
         exe.linkSystemLibrary("curl");
         exe.linkSystemLibrary("archive");
+
+        // ── Blend2D (2D vector graphics engine) ──
+        exe.root_module.addIncludePath(b.path("../blend2d"));
+        exe.addObjectFile(b.path("../blend2d/build/libblend2d_full.a"));
+        exe.linkLibCpp();
+
         if (os == .linux) {
             if (sysroot) |sr| {
                 exe.root_module.addIncludePath(.{ .cwd_relative = b.fmt("{s}/usr/include", .{sr}) });
@@ -431,6 +438,7 @@ fn addDevShellExe(
     options.addOption(bool, "has_transitions", true);
     options.addOption(bool, "has_networking", true);
     options.addOption(bool, "has_crypto", true);
+    options.addOption(bool, "has_blend2d", true);
     options.addOption(bool, "has_debug_server", true);
 
     const root_mod = b.createModule(.{
@@ -494,6 +502,12 @@ fn addDevShellExe(
     exe.linkSystemLibrary("vterm");
     exe.linkSystemLibrary("curl");
     exe.linkSystemLibrary("archive");
+
+    // ── Blend2D (2D vector graphics engine) ──
+    exe.root_module.addIncludePath(b.path("../blend2d"));
+    exe.addObjectFile(b.path("../blend2d/build/libblend2d_full.a"));
+    exe.linkLibCpp();
+
     if (os == .linux) {
         if (sysroot) |sr| {
             exe.root_module.addIncludePath(.{ .cwd_relative = b.fmt("{s}/usr/include", .{sr}) });
