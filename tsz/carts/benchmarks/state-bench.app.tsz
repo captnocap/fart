@@ -1,183 +1,53 @@
-// State Benchmark — measures state update throughput
-// Uses useEffect to mutate N state slots per frame
-// Ramps: 4 → 8 → 16 → 32 → 64 slots mutated per frame
-// Shows where state dirty-checking becomes the bottleneck
-//
-// What this measures: state.zig setSlot/getSlot + _appTick overhead
+// State Benchmark — state update throughput
+// setInterval calls N setState per tick, increasing N every 4s
+// 10→50→200→1000→5000 setState calls per tick
+// Finds where state mutation overhead kills FPS
 
-from './bench_telemetry_script'
-from './state_ramp_script'
+import { bench } from './state-bench.script';
 
-const [tier, setTier] = useState(0);
 const [fps, setFps] = useState(0);
 const [layoutUs, setLayoutUs] = useState(0);
 const [paintUs, setPaintUs] = useState(0);
 const [tickUs, setTickUs] = useState(0);
-const [slotsPerFrame, setSlotsPerFrame] = useState(4);
-const [t0Tick, setT0Tick] = useState(0);
-const [t1Tick, setT1Tick] = useState(0);
-const [t2Tick, setT2Tick] = useState(0);
-const [t3Tick, setT3Tick] = useState(0);
-const [t4Tick, setT4Tick] = useState(0);
-const [frameCount, setFrameCount] = useState(0);
+const [tier, setTier] = useState(0);
+const [callsPerTick, setCallsPerTick] = useState(10);
+const [counter, setCounter] = useState(0);
+const [bridgeMs, setBridgeMs] = useState(0);
 
-// 64 state slots for the stress test
-const [s0, setS0] = useState(0);
-const [s1, setS1] = useState(0);
-const [s2, setS2] = useState(0);
-const [s3, setS3] = useState(0);
-const [s4, setS4] = useState(0);
-const [s5, setS5] = useState(0);
-const [s6, setS6] = useState(0);
-const [s7, setS7] = useState(0);
-const [s8, setS8] = useState(0);
-const [s9, setS9] = useState(0);
-const [s10, setS10] = useState(0);
-const [s11, setS11] = useState(0);
-const [s12, setS12] = useState(0);
-const [s13, setS13] = useState(0);
-const [s14, setS14] = useState(0);
-const [s15, setS15] = useState(0);
-const [s16, setS16] = useState(0);
-const [s17, setS17] = useState(0);
-const [s18, setS18] = useState(0);
-const [s19, setS19] = useState(0);
-const [s20, setS20] = useState(0);
-const [s21, setS21] = useState(0);
-const [s22, setS22] = useState(0);
-const [s23, setS23] = useState(0);
-const [s24, setS24] = useState(0);
-const [s25, setS25] = useState(0);
-const [s26, setS26] = useState(0);
-const [s27, setS27] = useState(0);
-const [s28, setS28] = useState(0);
-const [s29, setS29] = useState(0);
-const [s30, setS30] = useState(0);
-const [s31, setS31] = useState(0);
-const [s32, setS32] = useState(0);
-const [s33, setS33] = useState(0);
-const [s34, setS34] = useState(0);
-const [s35, setS35] = useState(0);
-const [s36, setS36] = useState(0);
-const [s37, setS37] = useState(0);
-const [s38, setS38] = useState(0);
-const [s39, setS39] = useState(0);
-const [s40, setS40] = useState(0);
-const [s41, setS41] = useState(0);
-const [s42, setS42] = useState(0);
-const [s43, setS43] = useState(0);
-const [s44, setS44] = useState(0);
-const [s45, setS45] = useState(0);
-const [s46, setS46] = useState(0);
-const [s47, setS47] = useState(0);
-const [s48, setS48] = useState(0);
-const [s49, setS49] = useState(0);
-const [s50, setS50] = useState(0);
-const [s51, setS51] = useState(0);
-const [s52, setS52] = useState(0);
-const [s53, setS53] = useState(0);
-const [s54, setS54] = useState(0);
-const [s55, setS55] = useState(0);
-const [s56, setS56] = useState(0);
-const [s57, setS57] = useState(0);
-const [s58, setS58] = useState(0);
-const [s59, setS59] = useState(0);
-const [s60, setS60] = useState(0);
-const [s61, setS61] = useState(0);
-const [s62, setS62] = useState(0);
-const [s63, setS63] = useState(0);
-
-// Always mutate all — tier controls how many have dynamic text bound
-useEffect(() => {
-  setFrameCount(frameCount + 1);
-  setS0(frameCount); setS1(frameCount); setS2(frameCount); setS3(frameCount);
-  if (tier > 0) { setS4(frameCount); setS5(frameCount); setS6(frameCount); setS7(frameCount); }
-  if (tier > 1) {
-    setS8(frameCount); setS9(frameCount); setS10(frameCount); setS11(frameCount);
-    setS12(frameCount); setS13(frameCount); setS14(frameCount); setS15(frameCount);
-  }
-  if (tier > 2) {
-    setS16(frameCount); setS17(frameCount); setS18(frameCount); setS19(frameCount);
-    setS20(frameCount); setS21(frameCount); setS22(frameCount); setS23(frameCount);
-    setS24(frameCount); setS25(frameCount); setS26(frameCount); setS27(frameCount);
-    setS28(frameCount); setS29(frameCount); setS30(frameCount); setS31(frameCount);
-  }
-  if (tier > 3) {
-    setS32(frameCount); setS33(frameCount); setS34(frameCount); setS35(frameCount);
-    setS36(frameCount); setS37(frameCount); setS38(frameCount); setS39(frameCount);
-    setS40(frameCount); setS41(frameCount); setS42(frameCount); setS43(frameCount);
-    setS44(frameCount); setS45(frameCount); setS46(frameCount); setS47(frameCount);
-    setS48(frameCount); setS49(frameCount); setS50(frameCount); setS51(frameCount);
-    setS52(frameCount); setS53(frameCount); setS54(frameCount); setS55(frameCount);
-    setS56(frameCount); setS57(frameCount); setS58(frameCount); setS59(frameCount);
-    setS60(frameCount); setS61(frameCount); setS62(frameCount); setS63(frameCount);
-  }
-});
-
-function ResultRow({ label, value }) {
-  return (
-    <Box style={{ flexDirection: 'row', gap: 8, paddingTop: 2 }}>
-      <Text fontSize={12} color="#8b949e">{label}</Text>
-      <Text fontSize={12} color="#e6edf3">{value}</Text>
-    </Box>
-  );
-}
+const [items, setItems] = useState([{ idx: 0, value: 0, color: 0x58a6ff }]);
 
 function App() {
   return (
-    <Box style={{ width: '100%', height: '100%', backgroundColor: '#0d1117', padding: 16, gap: 12 }}>
-      <Text fontSize={22} color="#e6edf3">State Benchmark</Text>
-      <Text fontSize={12} color="#8b949e">{`Tier ${tier}/4 — ${slotsPerFrame} slots mutated/frame — ramps every 4s`}</Text>
-
-      <Box style={{ flexDirection: 'row', gap: 16 }}>
-        <Box style={{ backgroundColor: '#161b22', padding: 12, borderRadius: 8, flexGrow: 1 }}>
+    <Box style={{ width: '100%', height: '100%', backgroundColor: '#0d1117', padding: 12, gap: 8 }}>
+      <Text fontSize={20} color="#e6edf3">{`State Bench — T${tier} — ${callsPerTick} calls/tick`}</Text>
+      <Box style={{ flexDirection: 'row', gap: 12 }}>
+        <Box style={{ backgroundColor: '#161b22', padding: 10, borderRadius: 8, flexGrow: 1 }}>
           <Text fontSize={11} color="#8b949e">FPS</Text>
           <Text fontSize={28} color="#3fb950">{`${fps}`}</Text>
         </Box>
-        <Box style={{ backgroundColor: '#161b22', padding: 12, borderRadius: 8, flexGrow: 1 }}>
-          <Text fontSize={11} color="#8b949e">Tick</Text>
-          <Text fontSize={28} color="#f78166">{`${tickUs}us`}</Text>
+        <Box style={{ backgroundColor: '#161b22', padding: 10, borderRadius: 8, flexGrow: 1 }}>
+          <Text fontSize={11} color="#8b949e">Bridge</Text>
+          <Text fontSize={28} color="#f78166">{`${bridgeMs}ms`}</Text>
         </Box>
-        <Box style={{ backgroundColor: '#161b22', padding: 12, borderRadius: 8, flexGrow: 1 }}>
-          <Text fontSize={11} color="#8b949e">Slots/frame</Text>
-          <Text fontSize={28} color="#58a6ff">{`${slotsPerFrame}`}</Text>
+        <Box style={{ backgroundColor: '#161b22', padding: 10, borderRadius: 8, flexGrow: 1 }}>
+          <Text fontSize={11} color="#8b949e">Calls/tick</Text>
+          <Text fontSize={28} color="#d2992a">{`${callsPerTick}`}</Text>
         </Box>
-        <Box style={{ backgroundColor: '#161b22', padding: 12, borderRadius: 8, flexGrow: 1 }}>
-          <Text fontSize={11} color="#8b949e">Frames</Text>
-          <Text fontSize={28} color="#d2992a">{`${frameCount}`}</Text>
-        </Box>
-      </Box>
-
-      <Box style={{ backgroundColor: '#161b22', padding: 12, borderRadius: 8 }}>
-        <Text fontSize={13} color="#e6edf3">Tick time by tier</Text>
-        <ResultRow label="T0 (4 slots):" value={`${t0Tick}us`} />
-        <ResultRow label="T1 (8 slots):" value={`${t1Tick}us`} />
-        <ResultRow label="T2 (16 slots):" value={`${t2Tick}us`} />
-        <ResultRow label="T3 (32 slots):" value={`${t3Tick}us`} />
-        <ResultRow label="T4 (64 slots):" value={`${t4Tick}us`} />
-      </Box>
-
-      <Box style={{ backgroundColor: '#161b22', padding: 12, borderRadius: 8 }}>
-        <Text fontSize={13} color="#e6edf3">Live slot values (first 16)</Text>
-        <Box style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap', paddingTop: 4 }}>
-          <Text fontSize={11} color="#58a6ff">{`${s0}`}</Text>
-          <Text fontSize={11} color="#58a6ff">{`${s1}`}</Text>
-          <Text fontSize={11} color="#58a6ff">{`${s2}`}</Text>
-          <Text fontSize={11} color="#58a6ff">{`${s3}`}</Text>
-          <Text fontSize={11} color="#3fb950">{`${s4}`}</Text>
-          <Text fontSize={11} color="#3fb950">{`${s5}`}</Text>
-          <Text fontSize={11} color="#3fb950">{`${s6}`}</Text>
-          <Text fontSize={11} color="#3fb950">{`${s7}`}</Text>
-          <Text fontSize={11} color="#f78166">{`${s8}`}</Text>
-          <Text fontSize={11} color="#f78166">{`${s9}`}</Text>
-          <Text fontSize={11} color="#f78166">{`${s10}`}</Text>
-          <Text fontSize={11} color="#f78166">{`${s11}`}</Text>
-          <Text fontSize={11} color="#d2992a">{`${s12}`}</Text>
-          <Text fontSize={11} color="#d2992a">{`${s13}`}</Text>
-          <Text fontSize={11} color="#d2992a">{`${s14}`}</Text>
-          <Text fontSize={11} color="#d2992a">{`${s15}`}</Text>
+        <Box style={{ backgroundColor: '#161b22', padding: 10, borderRadius: 8, flexGrow: 1 }}>
+          <Text fontSize={11} color="#8b949e">Counter</Text>
+          <Text fontSize={28} color="#58a6ff">{`${counter}`}</Text>
         </Box>
       </Box>
+      <Box style={{ backgroundColor: '#161b22', padding: 8, borderRadius: 8 }}>
+        <Text fontSize={11} color="#6e7681">{`layout: ${layoutUs}us | paint: ${paintUs}us | tick: ${tickUs}us`}</Text>
+      </Box>
+      <ScrollView style={{ flexGrow: 1, height: 400 }}>
+        {items.map((item) => (
+          <Box style={{ flexDirection: 'row', gap: 4, padding: 2, backgroundColor: '#161b22', borderRadius: 2 }}>
+            <Text fontSize={9} color={item.color}>{item.value}</Text>
+          </Box>
+        ))}
+      </ScrollView>
     </Box>
   );
 }

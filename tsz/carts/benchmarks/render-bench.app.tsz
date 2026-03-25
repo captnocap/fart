@@ -1,160 +1,46 @@
-// Render Benchmark — measures GPU paint speed
-// Pre-allocates colored boxes in a grid, progressively reveals tiers
-// Ramps every 4 seconds: 50 → 150 → 300 → 500 → 800 visible rects
-//
-// What this measures: gpu/rects.zig batch rendering throughput
+// Render Benchmark — GPU paint stress test
+// Grows a .map() array every 4s: 100→500→1000→2000→5000
+// Each item is a colored rounded rect — stresses gpu/rects.zig batch renderer
+// Finds where paint time exceeds frame budget
 
-from './bench_telemetry_script'
-from './render_ramp_script'
+import { bench } from './render-bench.script';
 
-const [tier, setTier] = useState(0);
 const [fps, setFps] = useState(0);
 const [layoutUs, setLayoutUs] = useState(0);
 const [paintUs, setPaintUs] = useState(0);
 const [tickUs, setTickUs] = useState(0);
-const [t0Paint, setT0Paint] = useState(0);
-const [t1Paint, setT1Paint] = useState(0);
-const [t2Paint, setT2Paint] = useState(0);
-const [t3Paint, setT3Paint] = useState(0);
-const [t4Paint, setT4Paint] = useState(0);
-const [rectCount, setRectCount] = useState(0);
+const [tier, setTier] = useState(0);
+const [rectCount, setRectCount] = useState(100);
 
-useEffect(() => {
-  if (tier == 0) { setRectCount(50); }
-  if (tier == 1) { setRectCount(150); }
-  if (tier == 2) { setRectCount(300); }
-  if (tier == 3) { setRectCount(500); }
-  if (tier == 4) { setRectCount(800); }
-});
-
-function GridBlock({ color }) {
-  return (
-    <Box style={{ gap: 1 }}>
-      <Box style={{ flexDirection: 'row', gap: 1 }}>
-        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
-        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
-        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
-        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
-        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
-        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
-        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
-        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
-        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
-        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
-      </Box>
-      <Box style={{ flexDirection: 'row', gap: 1 }}>
-        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
-        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
-        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
-        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
-        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
-        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
-        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
-        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
-        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
-        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
-      </Box>
-      <Box style={{ flexDirection: 'row', gap: 1 }}>
-        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
-        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
-        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
-        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
-        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
-        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
-        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
-        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
-        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
-        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
-      </Box>
-      <Box style={{ flexDirection: 'row', gap: 1 }}>
-        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
-        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
-        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
-        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
-        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
-        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
-        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
-        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
-        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
-        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
-      </Box>
-      <Box style={{ flexDirection: 'row', gap: 1 }}>
-        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
-        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
-        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
-        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
-        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
-        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
-        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
-        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
-        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
-        <Box style={{ width: 24, height: 24, backgroundColor: color, borderRadius: 4 }} />
-      </Box>
-    </Box>
-  );
-}
-
-function ResultRow({ label, value }) {
-  return (
-    <Box style={{ flexDirection: 'row', gap: 8, paddingTop: 2 }}>
-      <Text fontSize={12} color="#8b949e">{label}</Text>
-      <Text fontSize={12} color="#e6edf3">{value}</Text>
-    </Box>
-  );
-}
+const [items, setItems] = useState([{ idx: 0, color: 0xef4444 }]);
 
 function App() {
   return (
-    <Box style={{ width: '100%', height: '100%', backgroundColor: '#0d1117', padding: 16, gap: 12 }}>
-      <Text fontSize={22} color="#e6edf3">Render Benchmark</Text>
-      <Text fontSize={12} color="#8b949e">{`Tier ${tier}/4 — ${rectCount} colored rects — ramps every 4s`}</Text>
-
-      <Box style={{ flexDirection: 'row', gap: 16 }}>
-        <Box style={{ backgroundColor: '#161b22', padding: 12, borderRadius: 8, flexGrow: 1 }}>
+    <Box style={{ width: '100%', height: '100%', backgroundColor: '#0d1117', padding: 12, gap: 8 }}>
+      <Text fontSize={20} color="#e6edf3">{`Render Bench — T${tier} — ${rectCount} rects`}</Text>
+      <Box style={{ flexDirection: 'row', gap: 12 }}>
+        <Box style={{ backgroundColor: '#161b22', padding: 10, borderRadius: 8, flexGrow: 1 }}>
           <Text fontSize={11} color="#8b949e">FPS</Text>
           <Text fontSize={28} color="#3fb950">{`${fps}`}</Text>
         </Box>
-        <Box style={{ backgroundColor: '#161b22', padding: 12, borderRadius: 8, flexGrow: 1 }}>
+        <Box style={{ backgroundColor: '#161b22', padding: 10, borderRadius: 8, flexGrow: 1 }}>
           <Text fontSize={11} color="#8b949e">Paint</Text>
           <Text fontSize={28} color="#f78166">{`${paintUs}us`}</Text>
         </Box>
-        <Box style={{ backgroundColor: '#161b22', padding: 12, borderRadius: 8, flexGrow: 1 }}>
+        <Box style={{ backgroundColor: '#161b22', padding: 10, borderRadius: 8, flexGrow: 1 }}>
           <Text fontSize={11} color="#8b949e">Layout</Text>
           <Text fontSize={28} color="#d2992a">{`${layoutUs}us`}</Text>
         </Box>
-        <Box style={{ backgroundColor: '#161b22', padding: 12, borderRadius: 8, flexGrow: 1 }}>
+        <Box style={{ backgroundColor: '#161b22', padding: 10, borderRadius: 8, flexGrow: 1 }}>
           <Text fontSize={11} color="#8b949e">Rects</Text>
           <Text fontSize={28} color="#58a6ff">{`${rectCount}`}</Text>
         </Box>
       </Box>
-
-      <Box style={{ backgroundColor: '#161b22', padding: 12, borderRadius: 8 }}>
-        <Text fontSize={13} color="#e6edf3">Paint time by tier</Text>
-        <ResultRow label="T0 (50 rects):" value={`${t0Paint}us`} />
-        <ResultRow label="T1 (150 rects):" value={`${t1Paint}us`} />
-        <ResultRow label="T2 (300 rects):" value={`${t2Paint}us`} />
-        <ResultRow label="T3 (500 rects):" value={`${t3Paint}us`} />
-        <ResultRow label="T4 (800 rects):" value={`${t4Paint}us`} />
-      </Box>
-
-      <ScrollView style={{ flexGrow: 1, height: 250 }}>
-        <Box style={{ gap: 4, flexWrap: 'wrap', flexDirection: 'row' }}>
-          <GridBlock color="#ef4444" />
-          {tier > 0 && <GridBlock color="#f97316" />}
-          {tier > 0 && <GridBlock color="#eab308" />}
-          {tier > 1 && <GridBlock color="#22c55e" />}
-          {tier > 1 && <GridBlock color="#06b6d4" />}
-          {tier > 1 && <GridBlock color="#3b82f6" />}
-          {tier > 2 && <GridBlock color="#8b5cf6" />}
-          {tier > 2 && <GridBlock color="#ec4899" />}
-          {tier > 2 && <GridBlock color="#14b8a6" />}
-          {tier > 2 && <GridBlock color="#dc2626" />}
-          {tier > 3 && <GridBlock color="#ea580c" />}
-          {tier > 3 && <GridBlock color="#16a34a" />}
-          {tier > 3 && <GridBlock color="#0891b2" />}
-          {tier > 3 && <GridBlock color="#2563eb" />}
-          {tier > 3 && <GridBlock color="#7c3aed" />}
-          {tier > 3 && <GridBlock color="#db2777" />}
+      <ScrollView style={{ flexGrow: 1, height: 500 }}>
+        <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 1 }}>
+          {items.map((item) => (
+            <Box style={{ width: 16, height: 16, backgroundColor: item.color, borderRadius: 4 }} />
+          ))}
         </Box>
       </ScrollView>
     </Box>

@@ -1,9 +1,0 @@
-// Shared telemetry poller for all benchmark carts
-// Reads engine counters at 4Hz and pushes to state
-
-setInterval(function() {
-  setFps(getFps());
-  setLayoutUs(getLayoutUs());
-  setPaintUs(getPaintUs());
-  setTickUs(getTickUs());
-}, 250);
