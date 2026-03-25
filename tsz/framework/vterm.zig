@@ -706,6 +706,66 @@ pub fn copySelectedText(
 // The refactor consolidated to a single terminal, but the engine API
 // still passes a terminal index. These ignore the index and delegate.
 
+pub fn scrollUpIdx(_: u8, n: u16) void {
+    scrollUp(n);
+}
+
+pub fn scrollDownIdx(_: u8, n: u16) void {
+    scrollDown(n);
+}
+
+pub fn spawnShellIdx(_: u8, shell: [*:0]const u8, rows: u16, cols: u16) void {
+    spawnShell(shell, rows, cols);
+}
+
+pub fn resizeVtermIdx(_: u8, rows: u16, cols: u16) void {
+    resizeVterm(rows, cols);
+}
+
+pub fn pollPtyIdx(_: u8) bool {
+    return pollPty();
+}
+
+pub fn ptyAliveIdx(_: u8) bool {
+    return ptyAlive();
+}
+
+pub fn getCellIdx(_: u8, row: u16, col: u16) Cell {
+    return getCell(row, col);
+}
+
+pub fn getColsIdx(_: u8) u16 {
+    return getCols();
+}
+
+pub fn getRowsIdx(_: u8) u16 {
+    return getRows();
+}
+
+pub fn getCursorRowIdx(_: u8) u16 {
+    return getCursorRow();
+}
+
+pub fn getCursorColIdx(_: u8) u16 {
+    return getCursorCol();
+}
+
+pub fn getCursorVisibleIdx(_: u8) bool {
+    return getCursorVisible();
+}
+
+pub fn getRowTextIdx(_: u8, row: u16) []const u8 {
+    return getRowText(row);
+}
+
+pub fn getScrollbackCellIdx(_: u8, display_row: u16, col: u16) Cell {
+    return getScrollbackCell(display_row, col);
+}
+
+pub fn scrollOffsetIdx(_: u8) u16 {
+    return scrollOffset();
+}
+
 pub fn scrollToBottomIdx(_: u8) void {
     scrollToBottom();
 }
