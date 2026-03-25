@@ -64,6 +64,11 @@ comptime {
     _ = @import("luajit_worker.zig");
 }
 
+// Force-reference audio.zig so its export fn symbols are available to the linker.
+comptime {
+    _ = @import("audio.zig");
+}
+
 const qjs_runtime = if (HAS_QUICKJS) @import("qjs_runtime.zig") else struct {
     pub fn initVM() void {}
     pub fn deinit() void {}
@@ -1309,6 +1314,7 @@ pub fn run(config_in: AppConfig) !void {
     // QuickJS VM
     qjs_runtime.initVM();
     defer qjs_runtime.deinit();
+    @import("audio.zig").registerQjsHostFunctions();
 
     // Register window-open bridge so JS can call __openWindow
     qjs_runtime.setOpenWindowFn(struct {
@@ -1981,6 +1987,7 @@ pub fn run(config_in: AppConfig) !void {
             qjs_runtime.telemetry_bridge_calls = qjs_runtime.bridge_calls_this_second;
             qjs_runtime.bridge_calls_this_second = 0;
             @import("luajit_worker.zig").logTelemetry();
+            @import("audio.zig").logTelemetry();
             g_paint_count = 0;
             g_hover_changed = false;
             g_hidden_count = 0;

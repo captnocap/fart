@@ -1,0 +1,105 @@
+// Audio subsystem test — plays a 440Hz sine wave
+// Uses __audio_* host functions registered directly by framework (no @ffi needed)
+
+const [fps, setFps] = useState(0);
+const [tickUs, setTickUs] = useState(0);
+const [moduleCount, setModuleCount] = useState(0);
+const [callbackCount, setCallbackCount] = useState(0);
+const [callbackUs, setCallbackUs] = useState(0);
+const [freq, setFreq] = useState(440);
+const [peakLevel, setPeakLevel] = useState(0);
+
+<script>
+// Module types: oscillator=0, filter=1, amplifier=2, mixer=3, delay=4, envelope=5, lfo=6
+var OSC = 0;
+var FILTER = 1;
+var AMP = 2;
+var MIXER = 3;
+
+// Initialize audio subsystem
+var audioOk = __audio_init();
+console.log('Audio init: ' + (audioOk ? 'OK' : 'FAILED'));
+
+if (audioOk) {
+  // --- Build a simple synth chain: OSC → FILTER → AMP ---
+
+  // Oscillator (id=1): 440Hz saw wave
+  __audio_add_module(1, OSC);
+  __audio_set_param(1, 0, 1);     // waveform: saw
+  __audio_set_param(1, 1, 440);   // frequency: 440Hz
+  __audio_set_param(1, 2, 0);     // detune: 0 cents
+  __audio_set_param(1, 3, 0.7);   // gain: 0.7
+
+  // Low-pass filter (id=2): cutoff 2000Hz
+  __audio_add_module(2, FILTER);
+  __audio_set_param(2, 0, 2000);  // cutoff: 2000Hz
+  __audio_set_param(2, 1, 0.3);   // resonance: 0.3
+  __audio_set_param(2, 2, 0);     // mode: lowpass
+
+  // Amplifier (id=3): final gain
+  __audio_add_module(3, AMP);
+  __audio_set_param(3, 0, 0.8);   // gain: 0.8
+
+  // Connect: OSC audio_out(0) → FILTER audio_in(0)
+  __audio_connect(1, 0, 2, 0);
+  // Connect: FILTER audio_out(1) → AMP audio_in(0)
+  __audio_connect(2, 1, 3, 0);
+
+  __audio_set_master_gain(0.5);
+  console.log('Synth chain: OSC(saw 440Hz) -> FILTER(LP 2kHz) -> AMP(0.8)');
+}
+
+// Telemetry at 4Hz
+setInterval(function() {
+  setFps(getFps());
+  setTickUs(getTickUs());
+  setModuleCount(__audio_get_module_count());
+  setCallbackCount(__audio_get_callback_count());
+  setCallbackUs(__audio_get_callback_us());
+  setPeakLevel(Math.round(__audio_get_peak_level() * 100));
+}, 250);
+</script>
+
+function App() {
+  return (
+    <Box style={{ width: '100%', height: '100%', backgroundColor: '#0d1117', padding: 20, gap: 16 }}>
+      <Text fontSize={24} color="#e6edf3">Audio Engine Test</Text>
+      <Text fontSize={13} color="#8b949e">OSC(saw 440Hz) → Filter(LP 2kHz) → Amp(0.8) → Master</Text>
+
+      <Box style={{ flexDirection: 'row', gap: 16 }}>
+        <Box style={{ backgroundColor: '#161b22', padding: 16, borderRadius: 8, flexGrow: 1 }}>
+          <Text fontSize={12} color="#8b949e">Modules</Text>
+          <Text fontSize={28} color="#f78166">{`${moduleCount}`}</Text>
+        </Box>
+        <Box style={{ backgroundColor: '#161b22', padding: 16, borderRadius: 8, flexGrow: 1 }}>
+          <Text fontSize={12} color="#8b949e">Callbacks</Text>
+          <Text fontSize={28} color="#3fb950">{`${callbackCount}`}</Text>
+        </Box>
+        <Box style={{ backgroundColor: '#161b22', padding: 16, borderRadius: 8, flexGrow: 1 }}>
+          <Text fontSize={12} color="#8b949e">DSP time</Text>
+          <Text fontSize={28} color="#d2992a">{`${callbackUs}us`}</Text>
+        </Box>
+        <Box style={{ backgroundColor: '#161b22', padding: 16, borderRadius: 8, flexGrow: 1 }}>
+          <Text fontSize={12} color="#8b949e">Peak</Text>
+          <Text fontSize={28} color="#58a6ff">{`${peakLevel}%`}</Text>
+        </Box>
+      </Box>
+
+      <Box style={{ backgroundColor: '#161b22', padding: 16, borderRadius: 8 }}>
+        <Text fontSize={14} color="#e6edf3">Engine</Text>
+        <Box style={{ flexDirection: 'row', gap: 24, paddingTop: 8 }}>
+          <Text fontSize={12} color="#3fb950">{`FPS: ${fps}`}</Text>
+          <Text fontSize={12} color="#6e7681">{`tick: ${tickUs}us`}</Text>
+          <Text fontSize={12} color="#6e7681">{`sample rate: 44100Hz`}</Text>
+          <Text fontSize={12} color="#6e7681">{`buffer: 512 samples`}</Text>
+        </Box>
+      </Box>
+
+      <Box style={{ backgroundColor: '#161b22', padding: 16, borderRadius: 8 }}>
+        <Text fontSize={12} color="#8b949e">API: __audio_init, add_module, set_param(f64), connect, note_on/off</Text>
+        <Text fontSize={12} color="#8b949e">Modules: oscillator, filter, amplifier, mixer, delay, envelope, lfo</Text>
+        <Text fontSize={12} color="#8b949e">DSP runs on SDL3 audio callback thread — zero GC, zero alloc</Text>
+      </Box>
+    </Box>
+  );
+}
