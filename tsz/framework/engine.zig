@@ -21,6 +21,8 @@ const filedrop = @import("filedrop.zig");
 const input = @import("input.zig");
 const classifier = @import("classifier.zig");
 const semantic = @import("semantic.zig");
+const pty_remote = @import("pty_remote.zig");
+const crashlog = @import("crashlog.zig");
 
 // ── Build-option-gated imports (lean tier omits these) ──────────────────
 const build_options = @import("build_options");
@@ -129,6 +131,7 @@ const transition = if (HAS_TRANSITIONS) @import("transition.zig") else struct {
 };
 const vterm_mod = if (HAS_TERMINAL) @import("vterm.zig") else VtermStub;
 const VtermStub = struct {
+    pub const MAX_TERMINALS: u8 = 4;
     pub const VtColor = struct { r: u8 = 0, g: u8 = 0, b: u8 = 0 };
     pub const Cell = struct {
         char_buf: [4]u8 = .{ 0, 0, 0, 0 }, char_len: u8 = 0, width: u8 = 1,
@@ -161,6 +164,24 @@ const VtermStub = struct {
     pub fn scrollDown(_: u16) void {}
     pub fn scrollToBottom() void {}
     pub fn copySelectedText(_: u16, _: u16, _: u16, _: u16, _: []u8) usize { return 0; }
+    // Idx variants for multi-terminal support
+    pub fn spawnShellIdx(_: u8, _: anytype, _: u16, _: u16) void {}
+    pub fn pollPtyIdx(_: u8) bool { return false; }
+    pub fn writePtyIdx(_: u8, _: []const u8) void {}
+    pub fn getRowTextIdx(_: u8, _: u16) []const u8 { return ""; }
+    pub fn getCellIdx(_: u8, _: u16, _: u16) Cell { return .{}; }
+    pub fn getRowsIdx(_: u8) u16 { return 0; }
+    pub fn getColsIdx(_: u8) u16 { return 0; }
+    pub fn resizeVtermIdx(_: u8, _: u16, _: u16) void {}
+    pub fn getScrollbackCellIdx(_: u8, _: u16, _: u16) Cell { return .{}; }
+    pub fn scrollOffsetIdx(_: u8) u16 { return 0; }
+    pub fn scrollUpIdx(_: u8, _: u16) void {}
+    pub fn scrollDownIdx(_: u8, _: u16) void {}
+    pub fn scrollToBottomIdx(_: u8) void {}
+    pub fn getCursorRowIdx(_: u8) u16 { return 0; }
+    pub fn getCursorColIdx(_: u8) u16 { return 0; }
+    pub fn getCursorVisibleIdx(_: u8) bool { return false; }
+    pub fn copySelectedTextIdx(_: u8, _: u16, _: u16, _: u16, _: u16, _: []u8) usize { return 0; }
 };
 const physics2d = if (HAS_PHYSICS) @import("physics2d.zig") else struct {
     pub const BodyType = enum(c_int) { static_body = 0, kinematic = 1, dynamic = 2 };
@@ -192,7 +213,10 @@ var g_prev_tick: u32 = 0;
 var physics_initialized: bool = false;
 
 // ── Terminal state ──────────────────────────────────────────────────────
-var terminal_initialized: bool = false;
+const MAX_TERMINALS = vterm_mod.MAX_TERMINALS;
+var terminals_initialized: [MAX_TERMINALS]bool = .{false} ** MAX_TERMINALS;
+var g_semantic_detected_flags: [MAX_TERMINALS]bool = .{false} ** MAX_TERMINALS;
+var g_focused_terminal: u8 = 0;
 var term_sel_active: bool = false;
 var term_sel_dragging: bool = false;
 var term_sel_start_row: u16 = 0;
@@ -243,15 +267,42 @@ fn findTerminalNode(node: *Node) ?*Node {
     return null;
 }
 
+fn findTerminalNodes(node: *Node, count: *u8) void {
+    if (node.terminal) {
+        if (count.* < MAX_TERMINALS) {
+            node.terminal_id = count.*;
+            count.* += 1;
+        }
+        return;
+    }
+    for (node.children) |*child| {
+        findTerminalNodes(child, count);
+    }
+}
+
+fn findTerminalNodeById(node: *Node, id: u8) ?*Node {
+    if (node.terminal and node.terminal_id == id) return node;
+    for (node.children) |*child| {
+        if (findTerminalNodeById(child, id)) |found| return found;
+    }
+    return null;
+}
+
+fn anyTerminalInitialized() bool {
+    for (terminals_initialized) |t| { if (t) return true; }
+    return false;
+}
+
 /// Route SDL key event to the terminal PTY as ANSI escape sequences.
 fn terminalHandleKey(sym: i32, mod_state: u16) void {
+    const ti = g_focused_terminal;
     const ctrl = (mod_state & @as(u16, c.KMOD_CTRL)) != 0;
     termClearSelection();
-    vterm_mod.scrollToBottom();
+    vterm_mod.scrollToBottomIdx(ti);
     // Ctrl+letter → raw control character
     if (ctrl and sym >= 'a' and sym <= 'z') {
         const buf = [1]u8{@intCast(sym - 'a' + 1)};
-        vterm_mod.writePty(&buf);
+        vterm_mod.writePtyIdx(ti, &buf);
         return;
     }
     // Special keys → ANSI escape sequences
@@ -283,16 +334,17 @@ fn terminalHandleKey(sym: i32, mod_state: u16) void {
         c.SDLK_F11 => "\x1b[23~",
         else => null,
     };
-    if (seq) |s| vterm_mod.writePty(s);
+    if (seq) |s| vterm_mod.writePtyIdx(ti, s);
 }
 
 fn terminalHandleTextInput(text: [*:0]const u8) void {
+    const ti = g_focused_terminal;
     const slice = std.mem.span(text);
     std.debug.print("[terminal] textInput: len={d} chars=\"{s}\"\n", .{ slice.len, slice });
     if (slice.len > 0) {
         termClearSelection();
-        vterm_mod.scrollToBottom();
-        vterm_mod.writePty(slice);
+        vterm_mod.scrollToBottomIdx(ti);
+        vterm_mod.writePtyIdx(ti, slice);
     }
 }
 
@@ -430,6 +482,9 @@ pub const AppConfig = struct {
     init: ?*const fn () void = null,
     /// Called every frame before layout. Do FFI polling, state dirty checks, dynamic text updates.
     tick: ?*const fn (now_ms: u32) void = null,
+    /// Hot-reload callback — called at the start of each frame.
+    /// If it returns true, root/init/tick were swapped and the engine re-inits.
+    check_reload: ?*const fn (*AppConfig) bool = null,
 };
 
 // ── Text measurement (framework-owned) ──────────────────────────────────
@@ -621,7 +676,6 @@ var g_paint_opacity: f32 = 1.0; // global opacity multiplier for dim/highlight
 var g_flow_enabled: bool = true; // per-child flow override for hover mode
 var g_hover_changed: bool = false; // debug flag
 var g_semantic_overlay: bool = false; // Ctrl+Shift+D toggles semantic color overlay
-var g_semantic_detected: bool = false; // true once we auto-detected a CLI classifier
 
 // Canvas drag state — tracks which canvas is being dragged for pan
 var canvas_drag_node: ?*Node = null;
@@ -711,7 +765,7 @@ noinline fn paintNodeVisuals(node: *Node) void {
     const is_hovered = (hovered_node == node) and (node.handlers.on_hover_enter != null or node.handlers.on_hover_exit != null or node.hoverable);
 
     if (is_hovered and node.style.background_color == null) {
-        gpu.drawRect(r.x, r.y, r.w, r.h, 0.15, 0.15, 0.22, 0.6, node.style.border_radius, 0, 0, 0, 0, 0);
+        gpu.drawRect(r.x, r.y, r.w, r.h, 0.15, 0.15, 0.22, 0.6, node.style.border_radius, 0, 0, 0, 0, 0, 0, 0, 0);
     }
 
     if (node.style.background_color) |bg_raw| {
@@ -724,7 +778,8 @@ noinline fn paintNodeVisuals(node: *Node) void {
                     r.x, r.y, r.w, r.h,
                     @as(f32, @floatFromInt(bg.r)) / 255.0, @as(f32, @floatFromInt(bg.g)) / 255.0,
                     @as(f32, @floatFromInt(bg.b)) / 255.0, @as(f32, @floatFromInt(bg.a)) / 255.0 * g_paint_opacity,
-                    node.style.border_radius, node.style.border_width,
+                    node.style.border_radius,
+                    node.style.brdTop(), node.style.brdRight(), node.style.brdBottom(), node.style.brdLeft(),
                     @as(f32, @floatFromInt(bc.r)) / 255.0, @as(f32, @floatFromInt(bc.g)) / 255.0,
                     @as(f32, @floatFromInt(bc.b)) / 255.0, @as(f32, @floatFromInt(bc.a)) / 255.0 * g_paint_opacity,
                     node.style.rotation, node.style.scale_x, node.style.scale_y,
@@ -734,7 +789,8 @@ noinline fn paintNodeVisuals(node: *Node) void {
                     r.x, r.y, r.w, r.h,
                     @as(f32, @floatFromInt(bg.r)) / 255.0, @as(f32, @floatFromInt(bg.g)) / 255.0,
                     @as(f32, @floatFromInt(bg.b)) / 255.0, @as(f32, @floatFromInt(bg.a)) / 255.0 * g_paint_opacity,
-                    node.style.border_radius, node.style.border_width,
+                    node.style.border_radius,
+                    node.style.brdTop(), node.style.brdRight(), node.style.brdBottom(), node.style.brdLeft(),
                     @as(f32, @floatFromInt(bc.r)) / 255.0, @as(f32, @floatFromInt(bc.g)) / 255.0,
                     @as(f32, @floatFromInt(bc.b)) / 255.0, @as(f32, @floatFromInt(bc.a)) / 255.0 * g_paint_opacity,
                 );
@@ -768,7 +824,11 @@ noinline fn paintNodeVisuals(node: *Node) void {
     selection.paintHighlight(node, r.x, r.y);
 
     // Terminal — cell-grid rendering via vterm
-    if (node.terminal) paintTerminal(node);
+    if (node.terminal) {
+        crashlog.logFmt("paint:term id={d}", .{node.terminal_id});
+        paintTerminal(node);
+        crashlog.log("paint:term-done");
+    }
 
     if (node.text) |t| {
         if (t.len > 0) {
@@ -789,7 +849,7 @@ noinline fn paintNodeVisuals(node: *Node) void {
                 gpu.drawRect(r.x + pl, underline_y, text_w, 1,
                     @as(f32, @floatFromInt(tc.r)) / 255.0, @as(f32, @floatFromInt(tc.g)) / 255.0,
                     @as(f32, @floatFromInt(tc.b)) / 255.0, final_a * 0.6,
-                    0, 0, 0, 0, 0, 0);
+                    0, 0, 0, 0, 0, 0, 0, 0, 0);
             }
         }
     }
@@ -802,7 +862,7 @@ noinline fn paintTextInput(node: *Node, id: u8) void {
     const r = node.computed;
     if (input.isFocused(id)) {
         const pad: f32 = 4;
-        gpu.drawRect(r.x - pad, r.y - pad, r.w + pad * 2, r.h + pad * 2, 0, 0, 0, 0, 5, 1.5, 0.30, 0.56, 0.92, 0.7);
+        gpu.drawRect(r.x - pad, r.y - pad, r.w + pad * 2, r.h + pad * 2, 0, 0, 0, 0, 5, 1.5, 1.5, 1.5, 1.5, 0.30, 0.56, 0.92, 0.7);
     }
     const typed = input.getText(id);
     const is_placeholder = typed.len == 0;
@@ -840,7 +900,7 @@ noinline fn paintTextInput(node: *Node, id: u8) void {
         const metrics = measureCallback(typed[0..cursor_pos], node.font_size, r.w - pl - node.style.padRight(), 0, 0, 1, true);
         const cx = r.x + pl + metrics.width;
         const ch = r.h - pt - pb;
-        gpu.drawRect(cx, r.y + pt, 2, @max(ch, 4), 1, 1, 1, 0.8, 0, 0, 0, 0, 0, 0);
+        gpu.drawRect(cx, r.y + pt, 2, @max(ch, 4), 1, 1, 1, 0.8, 0, 0, 0, 0, 0, 0, 0, 0, 0);
     }
 }
 
@@ -848,9 +908,16 @@ noinline fn paintTextInput(node: *Node, id: u8) void {
 /// Each cell gets its own fg color; non-default backgrounds get a bg rect.
 /// Uses span-based batching: consecutive cells with the same fg are drawn as one string.
 noinline fn paintTerminal(node: *Node) void {
+    const ti = node.terminal_id;
     const r = node.computed;
     const font_size = node.terminal_font_size;
     const padding: f32 = 4;
+
+    // Sanity check: don't paint if vterm not initialized
+    if (vterm_mod.getRowsIdx(ti) == 0) {
+        crashlog.logFmt("paint:skip id={d} rows=0", .{ti});
+        return;
+    }
 
     const cell_w = gpu.getCharWidth(font_size);
     const cell_h = gpu.getLineHeight(font_size);
@@ -862,17 +929,17 @@ noinline fn paintTerminal(node: *Node) void {
     const rows: u16 = @intFromFloat(@max(1, @floor(avail_h / cell_h)));
 
     // Auto-resize vterm to match layout (only if changed)
-    const vt_rows = vterm_mod.getRows();
-    const vt_cols = vterm_mod.getCols();
+    const vt_rows = vterm_mod.getRowsIdx(ti);
+    const vt_cols = vterm_mod.getColsIdx(ti);
     if (vt_rows != rows or vt_cols != cols) {
-        vterm_mod.resizeVterm(rows, cols);
+        vterm_mod.resizeVtermIdx(ti, rows, cols);
     }
 
     const base_x = r.x + padding;
     const base_y = r.y + padding;
 
     // Scrollback: when scrolled up, top rows come from scrollback, rest from live screen
-    const scroll_off = vterm_mod.scrollOffset();
+    const scroll_off = vterm_mod.scrollOffsetIdx(ti);
     const sb_visible: u16 = @min(scroll_off, rows);
 
     // Draw cells row by row
@@ -882,36 +949,36 @@ noinline fn paintTerminal(node: *Node) void {
 
         // Alternating row background for visual tracking
         if (row % 2 == 1) {
-            gpu.drawRect(base_x, cy, avail_w, cell_h, 1.0, 1.0, 1.0, 0.02 * g_paint_opacity, 0, 0, 0, 0, 0, 0);
+            gpu.drawRect(base_x, cy, avail_w, cell_h, 1.0, 1.0, 1.0, 0.02 * g_paint_opacity, 0, 0, 0, 0, 0, 0, 0, 0, 0);
         }
 
         // Left accent bar: bright for classified tokens, dim for output
         if (row >= sb_visible) {
             const live_r = row - sb_visible;
-            const tok = classifier.getRowToken(live_r);
+            const tok = classifier.getRowTokenIdx(ti, live_r);
             if (tok != .output and tok != .text) {
                 const ac = classifier.tokenColor(tok);
                 gpu.drawRect(r.x, cy, 2, cell_h,
                     @as(f32, @floatFromInt(ac.r)) / 255.0,
                     @as(f32, @floatFromInt(ac.g)) / 255.0,
                     @as(f32, @floatFromInt(ac.b)) / 255.0,
-                    0.9 * g_paint_opacity, 0, 0, 0, 0, 0, 0);
+                    0.9 * g_paint_opacity, 0, 0, 0, 0, 0, 0, 0, 0, 0);
             } else {
-                gpu.drawRect(r.x, cy + cell_h * 0.35, 2, cell_h * 0.3, 0.3, 0.33, 0.4, 0.25 * g_paint_opacity, 0, 0, 0, 0, 0, 0);
+                gpu.drawRect(r.x, cy + cell_h * 0.35, 2, cell_h * 0.3, 0.3, 0.33, 0.4, 0.25 * g_paint_opacity, 0, 0, 0, 0, 0, 0, 0, 0, 0);
             }
         }
 
         var col: u16 = 0;
         while (col < cols) : (col += 1) {
             const cell = if (row < sb_visible)
-                vterm_mod.getScrollbackCell(row, col)
+                vterm_mod.getScrollbackCellIdx(ti, row, col)
             else
-                vterm_mod.getCell(row - sb_visible, col);
+                vterm_mod.getCellIdx(ti, row - sb_visible, col);
             const cx = base_x + @as(f32, @floatFromInt(col)) * cell_w;
 
             // Selection highlight
             if (termCellSelected(row, col)) {
-                gpu.drawRect(cx, cy, cell_w, cell_h, 0.3, 0.45, 0.8, 0.45 * g_paint_opacity, 0, 0, 0, 0, 0, 0);
+                gpu.drawRect(cx, cy, cell_w, cell_h, 0.3, 0.45, 0.8, 0.45 * g_paint_opacity, 0, 0, 0, 0, 0, 0, 0, 0, 0);
             }
 
             // Background rect (non-default bg only)
@@ -921,7 +988,7 @@ noinline fn paintTerminal(node: *Node) void {
                     @as(f32, @floatFromInt(actual_bg.r)) / 255.0,
                     @as(f32, @floatFromInt(actual_bg.g)) / 255.0,
                     @as(f32, @floatFromInt(actual_bg.b)) / 255.0,
-                    g_paint_opacity, 0, 0, 0, 0, 0, 0);
+                    g_paint_opacity, 0, 0, 0, 0, 0, 0, 0, 0, 0);
             }
 
             // Foreground glyph — semantic color for live rows, cell color for scrollback
@@ -931,7 +998,7 @@ noinline fn paintTerminal(node: *Node) void {
                 // Use semantic classifier color for live screen rows (only when overlay active)
                 const fg = if (g_semantic_overlay and row >= sb_visible) blk: {
                     const live_row = row - sb_visible;
-                    const token = classifier.getRowToken(live_row);
+                    const token = classifier.getRowTokenIdx(ti, live_row);
                     if (token != .output and token != .text) {
                         const tc = classifier.tokenColor(token);
                         break :blk @TypeOf(raw_fg){ .r = tc.r, .g = tc.g, .b = tc.b };
@@ -955,17 +1022,17 @@ noinline fn paintTerminal(node: *Node) void {
 
     // Scrollback indicator — dim bar at top when scrolled up
     if (scroll_off > 0) {
-        gpu.drawRect(base_x, r.y, avail_w, 2, 0.5, 0.5, 0.8, 0.6 * g_paint_opacity, 0, 0, 0, 0, 0, 0);
+        gpu.drawRect(base_x, r.y, avail_w, 2, 0.5, 0.5, 0.8, 0.6 * g_paint_opacity, 0, 0, 0, 0, 0, 0, 0, 0, 0);
     }
 
     // Cursor — only show when at live view (not scrolled up)
-    if (scroll_off == 0 and vterm_mod.getCursorVisible() and g_cursor_visible) {
-        const crow = vterm_mod.getCursorRow();
-        const ccol = vterm_mod.getCursorCol();
+    if (scroll_off == 0 and vterm_mod.getCursorVisibleIdx(ti) and g_cursor_visible) {
+        const crow = vterm_mod.getCursorRowIdx(ti);
+        const ccol = vterm_mod.getCursorColIdx(ti);
         if (crow < rows and ccol < cols) {
             const cx = base_x + @as(f32, @floatFromInt(ccol)) * cell_w;
             const cy_cur = base_y + @as(f32, @floatFromInt(crow)) * cell_h;
-            gpu.drawRect(cx, cy_cur, cell_w, cell_h, 0.8, 0.8, 0.8, 0.7 * g_paint_opacity, 0, 0, 0, 0, 0, 0);
+            gpu.drawRect(cx, cy_cur, cell_w, cell_h, 0.8, 0.8, 0.8, 0.7 * g_paint_opacity, 0, 0, 0, 0, 0, 0, 0, 0, 0);
         }
     }
 }
@@ -1001,11 +1068,11 @@ noinline fn paintCanvasContainer(node: *Node) void {
                     if (node_selected) {
                         const hw = child.canvas_gw / 2 + 5;
                         const hh = child.canvas_gh / 2 + 5;
-                        gpu.drawRect(child.canvas_gx - hw, child.canvas_gy - hh, hw * 2, hh * 2, 0.5, 0.4, 1.0, 0.4, 8, 2, 1.0, 1.0, 1.0, 0.5);
+                        gpu.drawRect(child.canvas_gx - hw, child.canvas_gy - hh, hw * 2, hh * 2, 0.5, 0.4, 1.0, 0.4, 8, 2, 2, 2, 2, 1.0, 1.0, 1.0, 0.5);
                     } else if (node_hovered) {
                         const hw = child.canvas_gw / 2 + 4;
                         const hh = child.canvas_gh / 2 + 4;
-                        gpu.drawRect(child.canvas_gx - hw, child.canvas_gy - hh, hw * 2, hh * 2, 0.4, 0.3, 0.9, 0.25, 8, 0, 0, 0, 0, 0);
+                        gpu.drawRect(child.canvas_gx - hw, child.canvas_gy - hh, hw * 2, hh * 2, 0.4, 0.3, 0.9, 0.25, 8, 0, 0, 0, 0, 0, 0, 0, 0);
                     }
                 }
                 g_paint_opacity = canvas.getNodeDim(child_idx);
@@ -1034,7 +1101,19 @@ noinline fn paintCanvasContainer(node: *Node) void {
 
 // ── Engine entry point ──────────────────────────────────────────────────
 
-pub fn run(config: AppConfig) !void {
+pub fn run(config_in: AppConfig) !void {
+    var config = config_in;
+    // Crash log + signal handling for file-explorer launches (no stderr).
+    // Logs to /run/user/<uid>/claude-sessions/supervisor-crash.log
+    crashlog.init();
+    crashlog.log("engine.run: starting");
+
+    // Ignore signals that kill the process when launched without a controlling terminal
+    crashlog.ignoreSignal(13); // SIGPIPE
+    crashlog.ignoreSignal(1);  // SIGHUP
+    crashlog.ignoreSignal(15); // SIGTERM (catch and log instead of die)
+    crashlog.ignoreSignal(20); // SIGTSTP
+
     // Debug server — auto-start if TSZ_DEBUG=1 (before SDL so it works headless)
     debug_server.init(config.title);
     defer debug_server.deinit();
@@ -1127,12 +1206,33 @@ pub fn run(config: AppConfig) !void {
     // Initial tick — set up dynamic texts after JS is evaluated
     if (config.tick) |tickFn| tickFn(c.SDL_GetTicks());
 
+    // PTY remote control socket
+    pty_remote.init();
+    defer pty_remote.deinit();
+
     // Main loop
     var running = true;
     var fps_frames: u32 = 0;
     var fps_last: u32 = c.SDL_GetTicks();
 
     while (running) {
+        // Hot-reload: check if the app .so was recompiled
+        if (config.check_reload) |check| {
+            if (check(&config)) {
+                // Reset stale pointers from the old .so
+                canvas_drag_node = null;
+                input_drag_active = false;
+                term_sel_dragging = false;
+                hovered_node = null;
+                g_hover_changed = true;
+                // Re-init the new app
+                if (config.init) |initFn| initFn();
+                if (config.js_logic.len > 0) qjs_runtime.evalScript(config.js_logic);
+                if (config.tick) |tickFn| tickFn(c.SDL_GetTicks());
+                std.debug.print("[hot-reload] App reloaded\n", .{});
+            }
+        }
+
         var event: c.SDL_Event = undefined;
         while (c.SDL_PollEvent(&event) != 0) {
             // Route to secondary windows first — if consumed, skip main window handling
@@ -1282,10 +1382,23 @@ pub fn run(config: AppConfig) !void {
                                 canvas_drag_last_x = mx;
                                 canvas_drag_last_y = my;
                             }
-                        } else if (terminal_initialized) {
-                            if (findTerminalNode(config.root)) |tn| {
-                                const tr = tn.computed;
-                                if (mx >= tr.x and mx <= tr.x + tr.w and my >= tr.y and my <= tr.y + tr.h) {
+                        } else {
+                            // Check all terminals for click
+                            var clicked_term: ?u8 = null;
+                            var ti2: u8 = 0;
+                            while (ti2 < MAX_TERMINALS) : (ti2 += 1) {
+                                if (!terminals_initialized[ti2]) continue;
+                                if (findTerminalNodeById(config.root, ti2)) |tn| {
+                                    const tr = tn.computed;
+                                    if (mx >= tr.x and mx <= tr.x + tr.w and my >= tr.y and my <= tr.y + tr.h) {
+                                        clicked_term = ti2;
+                                        break;
+                                    }
+                                }
+                            }
+                            if (clicked_term) |tid| {
+                                g_focused_terminal = tid;
+                                if (findTerminalNodeById(config.root, tid)) |tn| {
                                     const cell = termPixelToCell(tn, mx, my);
                                     term_sel_start_row = cell.row;
                                     term_sel_start_col = cell.col;
@@ -1293,17 +1406,12 @@ pub fn run(config: AppConfig) !void {
                                     term_sel_end_col = cell.col;
                                     term_sel_active = false;
                                     term_sel_dragging = true;
-                                } else {
-                                    termClearSelection();
-                                    selection.onMouseDown(config.root, mx, my, c.SDL_GetTicks());
                                 }
                             } else {
+                                termClearSelection();
                                 selection.onMouseDown(config.root, mx, my, c.SDL_GetTicks());
                             }
                             input.unfocus();
-                        } else {
-                            input.unfocus();
-                            selection.onMouseDown(config.root, mx, my, c.SDL_GetTicks());
                         }
                     }
                 },
@@ -1318,7 +1426,7 @@ pub fn run(config: AppConfig) !void {
                     }
                     // Terminal drag selection
                     if (term_sel_dragging) {
-                        if (findTerminalNode(config.root)) |tn| {
+                        if (findTerminalNodeById(config.root, g_focused_terminal)) |tn| {
                             const cell = termPixelToCell(tn, mx, my);
                             term_sel_end_row = cell.row;
                             term_sel_end_col = cell.col;
@@ -1391,7 +1499,7 @@ pub fn run(config: AppConfig) !void {
                 },
                 c.SDL_TEXTINPUT => {
                     // Native terminal gets text first
-                    if (terminal_initialized) {
+                    if (terminals_initialized[g_focused_terminal]) {
                         terminalHandleTextInput(@ptrCast(&event.text.text));
                         continue;
                     }
@@ -1410,13 +1518,14 @@ pub fn run(config: AppConfig) !void {
                     // Capture key (F9 recording toggle)
                     if (capture.handleKey(sym)) continue;
                     // Terminal copy/paste: Ctrl+Shift+C/V (not Ctrl+C which is SIGINT)
-                    if (terminal_initialized) {
+                    if (terminals_initialized[g_focused_terminal]) {
                         const t_ctrl = (mod & @as(u16, c.KMOD_CTRL)) != 0;
                         const t_shift = (mod & @as(u16, c.KMOD_SHIFT)) != 0;
                         if (t_ctrl and t_shift and sym == c.SDLK_c) {
                             if (term_sel_active) {
                                 var copy_buf: [8192]u8 = undefined;
-                                const len = vterm_mod.copySelectedText(
+                                const len = vterm_mod.copySelectedTextIdx(
+                                    g_focused_terminal,
                                     term_sel_start_row, term_sel_start_col,
                                     term_sel_end_row, term_sel_end_col,
                                     &copy_buf,
@@ -1432,9 +1541,9 @@ pub fn run(config: AppConfig) !void {
                         if (t_ctrl and t_shift and sym == c.SDLK_d) {
                             g_semantic_overlay = !g_semantic_overlay;
                             // When overlay turns on, activate basic classifier if none set
-                            if (g_semantic_overlay and classifier.getMode() == .none) {
-                                classifier.setMode(.basic);
-                                classifier.markDirty();
+                            if (g_semantic_overlay and classifier.getModeIdx(g_focused_terminal) == .none) {
+                                classifier.setModeIdx(g_focused_terminal, .basic);
+                                classifier.markDirtyIdx(g_focused_terminal);
                             }
                             std.debug.print("[semantic] overlay {s}\n", .{if (g_semantic_overlay) "ON" else "OFF"});
                             continue;
@@ -1442,15 +1551,15 @@ pub fn run(config: AppConfig) !void {
                         if (t_ctrl and t_shift and sym == c.SDLK_v) {
                             const clip = c.SDL_GetClipboardText();
                             if (clip != null) {
-                                vterm_mod.scrollToBottom();
-                                vterm_mod.writePty(std.mem.span(clip));
+                                vterm_mod.scrollToBottomIdx(g_focused_terminal);
+                                vterm_mod.writePtyIdx(g_focused_terminal, std.mem.span(clip));
                                 c.SDL_free(@ptrCast(clip));
                             }
                             continue;
                         }
                     }
                     // Native terminal special key routing
-                    if (terminal_initialized) {
+                    if (terminals_initialized[g_focused_terminal]) {
                         terminalHandleKey(sym, mod);
                         continue;
                     }
@@ -1482,19 +1591,26 @@ pub fn run(config: AppConfig) !void {
                     const mx: f32 = @floatFromInt(mx_i);
                     const my: f32 = @floatFromInt(my_i);
                     const events = @import("events.zig");
-                    // Terminal scrollback — mouse wheel scrolls history
-                    if (terminal_initialized) {
-                        if (findTerminalNode(config.root)) |tn| {
-                            const tr = tn.computed;
-                            if (mx >= tr.x and mx <= tr.x + tr.w and my >= tr.y and my <= tr.y + tr.h) {
-                                if (event.wheel.y > 0) {
-                                    vterm_mod.scrollUp(@intCast(event.wheel.y * 3));
-                                } else if (event.wheel.y < 0) {
-                                    vterm_mod.scrollDown(@intCast(-event.wheel.y * 3));
+                    // Terminal scrollback — mouse wheel scrolls history (check all terminals)
+                    {
+                        var scroll_ti: u8 = 0;
+                        var scroll_handled = false;
+                        while (scroll_ti < MAX_TERMINALS) : (scroll_ti += 1) {
+                            if (!terminals_initialized[scroll_ti]) continue;
+                            if (findTerminalNodeById(config.root, scroll_ti)) |tn| {
+                                const tr = tn.computed;
+                                if (mx >= tr.x and mx <= tr.x + tr.w and my >= tr.y and my <= tr.y + tr.h) {
+                                    if (event.wheel.y > 0) {
+                                        vterm_mod.scrollUpIdx(scroll_ti, @intCast(event.wheel.y * 3));
+                                    } else if (event.wheel.y < 0) {
+                                        vterm_mod.scrollDownIdx(scroll_ti, @intCast(-event.wheel.y * 3));
+                                    }
+                                    scroll_handled = true;
+                                    break;
                                 }
-                                continue;
                             }
                         }
+                        if (scroll_handled) continue;
                     }
                     // Canvas zoom — built-in
                     if (events.findCanvasNode(config.root, mx, my)) |cn| {
@@ -1547,45 +1663,50 @@ pub fn run(config: AppConfig) !void {
             physics_initialized = true;
         }
 
-        // Terminal tick — init PTY on first frame, poll for output
-        if (!terminal_initialized) {
-            if (findTerminalNode(config.root)) |_| {
-        
-                vterm_mod.spawnShell("bash", 24, 80);
-                terminal_initialized = true;
-            }
-        }
-        if (terminal_initialized) {
-            if (vterm_mod.pollPty()) {
-                classifier.markDirty();
-            }
-            // Auto-detect CLI from banner text (first 6 rows)
-            // When a known CLI is detected, auto-activate its classifier
-            if (!g_semantic_detected) {
-                const detect_rows = @min(vterm_mod.getRows(), 6);
-                var dr: u16 = 0;
-                while (dr < detect_rows) : (dr += 1) {
-                    const dt = vterm_mod.getRowText(dr);
-                    if (dt.len > 0 and std.mem.indexOf(u8, dt, "Claude Code") != null) {
-                        classifier.setMode(.claude_code);
-                        classifier.markDirty();
-                        g_semantic_detected = true;
-                        std.debug.print("[semantic] auto-detected: claude_code\n", .{});
-                        break;
+        // PTY remote control — accept connections, process commands
+        pty_remote.poll();
+
+        // Terminal tick — init PTYs for all Terminal nodes, poll for output
+        {
+            crashlog.log("tick:term-start");
+            var term_count: u8 = 0;
+            findTerminalNodes(config.root, &term_count);
+            var ti: u8 = 0;
+            while (ti < term_count) : (ti += 1) {
+                if (!terminals_initialized[ti]) {
+                    vterm_mod.spawnShellIdx(ti, "bash", 24, 80);
+                    terminals_initialized[ti] = true;
+                }
+                crashlog.log("tick:poll");
+                if (vterm_mod.pollPtyIdx(ti)) {
+                    classifier.markDirtyIdx(ti);
+                }
+                // Auto-detect CLI from banner text (first 6 rows)
+                if (!g_semantic_detected_flags[ti]) {
+                    const detect_rows = @min(vterm_mod.getRowsIdx(ti), 6);
+                    var dr: u16 = 0;
+                    while (dr < detect_rows) : (dr += 1) {
+                        const dt = vterm_mod.getRowTextIdx(ti, dr);
+                        if (dt.len > 0 and std.mem.indexOf(u8, dt, "Claude Code") != null) {
+                            classifier.setModeIdx(ti, .claude_code);
+                            classifier.markDirtyIdx(ti);
+                            g_semantic_detected_flags[ti] = true;
+                            break;
+                        }
                     }
                 }
-            }
-            // Re-classify when damage occurred (skip when mode=none or json — JS handles json)
-            if (classifier.isDirty() and classifier.getMode() != .none and classifier.getMode() != .json) {
-                const cls_rows = vterm_mod.getRows();
-                var cls_r: u16 = 0;
-                while (cls_r < cls_rows) : (cls_r += 1) {
-                    const cls_text = vterm_mod.getRowText(cls_r);
-                    classifier.classifyAndCache(cls_r, cls_text, cls_rows);
+                // Re-classify when damage occurred
+                if (classifier.isDirtyIdx(ti) and classifier.getModeIdx(ti) != .none and classifier.getModeIdx(ti) != .json) {
+                    const cls_rows = vterm_mod.getRowsIdx(ti);
+                    var cls_r: u16 = 0;
+                    while (cls_r < cls_rows) : (cls_r += 1) {
+                        const cls_text = vterm_mod.getRowTextIdx(ti, cls_r);
+                        classifier.classifyAndCacheIdx(ti, cls_r, cls_text, cls_rows);
+                    }
+                    classifier.clearDirtyIdx(ti);
+                    // Only build semantic graph for terminal 0 (primary)
+                    if (ti == 0) semantic.tick(cls_rows);
                 }
-                classifier.clearDirty();
-                // Build semantic graph from freshly classified rows
-                semantic.tick(cls_rows);
             }
         }
 
@@ -1646,15 +1767,15 @@ pub fn run(config: AppConfig) !void {
         // Debug pairing overlay — modal with 6-digit code
         if (debug_server.getPairingCode()) |code| {
             // Semi-transparent backdrop
-            gpu.drawRect(0, 0, win_w, win_h, 0, 0, 0, 0.6, 0, 0, 0, 0, 0, 0);
+            gpu.drawRect(0, 0, win_w, win_h, 0, 0, 0, 0.6, 0, 0, 0, 0, 0, 0, 0, 0, 0);
             // Card background
             const cw: f32 = 320;
             const ch: f32 = 140;
             const cx = (win_w - cw) / 2;
             const cy = (win_h - ch) / 2;
-            gpu.drawRect(cx, cy, cw, ch, 0.12, 0.14, 0.20, 0.95, 12, 0, 0, 0, 0, 0);
+            gpu.drawRect(cx, cy, cw, ch, 0.12, 0.14, 0.20, 0.95, 12, 0, 0, 0, 0, 0, 0, 0, 0);
             // Border
-            gpu.drawRect(cx, cy, cw, ch, 0, 0, 0, 0, 12, 1.5, 0.38, 0.65, 0.98, 0.8);
+            gpu.drawRect(cx, cy, cw, ch, 0, 0, 0, 0, 12, 1.5, 1.5, 1.5, 1.5, 0.38, 0.65, 0.98, 0.8);
             // Title
             _ = gpu.drawTextWrapped("Debug Pairing", cx + 20, cy + 16, 15, cw - 40, 0.89, 0.91, 0.94, 1.0, 0);
             // Code (large)

@@ -408,29 +408,107 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
     // Imports — embedded mode uses framework-relative paths and isolated state
     const prefix = if (self.is_embedded) "" else "framework/";
     try out.appendSlice(self.alloc, "const std = @import(\"std\");\n");
+
+    // Build option: IS_LIB — when true, heavy framework modules are stubbed for .so hot-reload
+    if (!self.is_embedded) {
+        try out.appendSlice(self.alloc,
+            "const build_options = @import(\"build_options\");\n" ++
+            "const IS_LIB = if (@hasDecl(build_options, \"is_lib\")) build_options.is_lib else false;\n" ++
+            "\n");
+    }
+
+    // layout, state, theme — pure Zig, always real imports (no native deps)
     try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "const layout = @import(\"{s}layout.zig\");\n", .{prefix}));
-    if (!self.is_embedded) try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "const engine = @import(\"{s}engine.zig\");\n", .{prefix}));
     try out.appendSlice(self.alloc, "const Node = layout.Node;\nconst Style = layout.Style;\nconst Color = layout.Color;\n");
     if (self.has_state or self.object_array_count > 0) {
         const state_mod = if (self.is_embedded) "devtools_state.zig" else "framework/state.zig";
         try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "const state = @import(\"{s}\");\n", .{state_mod}));
     }
-    if (self.has_routes) try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "const router = @import(\"{s}router.zig\");\n", .{prefix}));
-    if (self.input_counter > 0) try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "const input = @import(\"{s}input.zig\");\n", .{prefix}));
     if (self.has_theme) try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "const Theme = @import(\"{s}theme.zig\");\n", .{prefix}));
-    if (self.has_breakpoints) try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "const breakpoint = @import(\"{s}breakpoint.zig\");\n", .{prefix}));
-    if (hasAnyTransitions(self)) try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "const transition = @import(\"{s}transition.zig\");\n", .{prefix}));
-    if (self.has_effect_render) try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "const effect_ctx = @import(\"{s}effect_ctx.zig\");\n", .{prefix}));
-    if (self.ffi_funcs.items.len > 0 or self.compute_js != null or self.object_array_count > 0) try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "const qjs_runtime = @import(\"{s}qjs_runtime.zig\");\n", .{prefix}));
-    if (self.compute_zig != null) {
-        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "const testharness = @import(\"{s}testharness.zig\");\n", .{prefix}));
-        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "const query = @import(\"{s}query.zig\");\n", .{prefix}));
-        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "const testassert = @import(\"{s}testassert.zig\");\n", .{prefix}));
+
+    // engine — stubbed in .so mode (only used by main)
+    if (!self.is_embedded) try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+        "const engine = if (IS_LIB) struct {{}} else @import(\"{s}engine.zig\");\n", .{prefix}));
+
+    // qjs_runtime — stubbed in .so mode (has native QuickJS deps)
+    if (self.ffi_funcs.items.len > 0 or self.compute_js != null or self.object_array_count > 0) {
+        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+            "const qjs_runtime = if (IS_LIB) struct {{\n" ++
+            "    pub fn callGlobal(_: []const u8) void {{}}\n" ++
+            "    pub fn callGlobalStr(_: []const u8, _: []const u8) void {{}}\n" ++
+            "    pub fn callGlobalInt(_: []const u8, _: i64) void {{}}\n" ++
+            "    pub fn registerHostFn(_: []const u8, _: anytype, _: u8) void {{}}\n" ++
+            "    pub fn evalExpr(_: []const u8) void {{}}\n" ++
+            "}} else @import(\"{s}qjs_runtime.zig\");\n", .{prefix}));
     }
 
-    // FFI imports
+    // input — stubbed in .so mode (has native deps via SDL keycodes)
+    if (self.input_counter > 0) {
+        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+            "const input = if (IS_LIB) struct {{\n" ++
+            "    pub fn register(_: u8) void {{}}\n" ++
+            "    pub fn registerMultiline(_: u8) void {{}}\n" ++
+            "    pub fn setOnChange(_: u8, _: anytype) void {{}}\n" ++
+            "    pub fn setOnSubmit(_: u8, _: anytype) void {{}}\n" ++
+            "    pub fn getText(_: u8) []const u8 {{ return \"\"; }}\n" ++
+            "}} else @import(\"{s}input.zig\");\n", .{prefix}));
+    }
+
+    // router — stubbed in .so mode
+    if (self.has_routes) {
+        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+            "const router = if (IS_LIB) struct {{\n" ++
+            "    pub fn init(_: []const u8) void {{}}\n" ++
+            "    pub fn currentPath() []const u8 {{ return \"/\"; }}\n" ++
+            "    pub fn findBestMatch(_: anytype, _: []const u8) ?usize {{ return null; }}\n" ++
+            "    pub fn isDirty() bool {{ return false; }}\n" ++
+            "    pub fn clearDirty() void {{}}\n" ++
+            "}} else @import(\"{s}router.zig\");\n", .{prefix}));
+    }
+
+    // breakpoint — stubbed in .so mode
+    if (self.has_breakpoints) {
+        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+            "const breakpoint = if (IS_LIB) struct {{\n" ++
+            "    pub const Breakpoint = enum(u8) {{ sm = 0, md = 1, lg = 2, xl = 3 }};\n" ++
+            "    pub fn current() Breakpoint {{ return .sm; }}\n" ++
+            "    pub fn isDirty() bool {{ return false; }}\n" ++
+            "    pub fn clearDirty() void {{}}\n" ++
+            "}} else @import(\"{s}breakpoint.zig\");\n", .{prefix}));
+    }
+
+    // transition — stubbed in .so mode
+    if (hasAnyTransitions(self)) {
+        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+            "const transition = if (IS_LIB) struct {{\n" ++
+            "    pub fn set(_: anytype, _: anytype, _: anytype, _: anytype) void {{}}\n" ++
+            "    pub fn setSpring(_: anytype, _: anytype, _: anytype, _: anytype) void {{}}\n" ++
+            "}} else @import(\"{s}transition.zig\");\n", .{prefix}));
+    }
+
+    // effect_ctx — stubbed in .so mode
+    if (self.has_effect_render) {
+        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+            "const effect_ctx = if (IS_LIB) struct {{}} else @import(\"{s}effect_ctx.zig\");\n", .{prefix}));
+    }
+
+    // testharness/query/testassert — stubbed in .so mode
+    if (self.compute_zig != null) {
+        try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
+            "const testharness = if (IS_LIB) struct {{\n" ++
+            "    pub fn register(_: []const u8, _: anytype) void {{}}\n" ++
+            "}} else @import(\"{s}testharness.zig\");\n" ++
+            "const query = if (IS_LIB) struct {{}} else @import(\"{s}query.zig\");\n" ++
+            "const testassert = if (IS_LIB) struct {{}} else @import(\"{s}testassert.zig\");\n", .{prefix, prefix, prefix}));
+    }
+
+    // FFI imports (guarded by IS_LIB — no C headers available in .so mode)
     if (self.ffi_headers.items.len > 0) {
-        try out.appendSlice(self.alloc, "const ffi = @cImport({\n");
+        if (!self.is_embedded) {
+            try out.appendSlice(self.alloc, "const ffi = if (IS_LIB) struct {} else @cImport({\n");
+        } else {
+            try out.appendSlice(self.alloc, "const ffi = @cImport({\n");
+        }
         for (self.ffi_headers.items) |h| {
             try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, "    @cInclude(\"{s}\");\n", .{h}));
         }
@@ -535,7 +613,15 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
 
     // FFI host function wrappers
     if (self.ffi_funcs.items.len > 0) {
-        try out.appendSlice(self.alloc, "const qjs = @cImport({ @cDefine(\"_GNU_SOURCE\", \"1\"); @cDefine(\"QUICKJS_NG_BUILD\", \"1\"); @cInclude(\"quickjs.h\"); });\n");
+        if (!self.is_embedded) {
+            try out.appendSlice(self.alloc,
+                "const qjs = if (IS_LIB) struct {\n" ++
+                "    pub const JSValue = extern struct { tag: i64 = 3, u: extern union { int32: i32, float64: f64, ptr: ?*anyopaque } = .{ .int32 = 0 } };\n" ++
+                "    pub const JSContext = opaque {};\n" ++
+                "} else @cImport({ @cDefine(\"_GNU_SOURCE\", \"1\"); @cDefine(\"QUICKJS_NG_BUILD\", \"1\"); @cInclude(\"quickjs.h\"); });\n");
+        } else {
+            try out.appendSlice(self.alloc, "const qjs = @cImport({ @cDefine(\"_GNU_SOURCE\", \"1\"); @cDefine(\"QUICKJS_NG_BUILD\", \"1\"); @cInclude(\"quickjs.h\"); });\n");
+        }
         try out.appendSlice(self.alloc, "const QJS_UNDEFINED = qjs.JSValue{ .u = .{ .int32 = 0 }, .tag = 3 };\n\n");
         for (self.ffi_funcs.items) |func_name| {
             const argc = self.ffiArgCount(func_name);
@@ -680,7 +766,15 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
     if (self.object_array_count > 0) {
         // Ensure qjs import exists for the unpack host functions
         if (self.ffi_funcs.items.len == 0) {
-            try out.appendSlice(self.alloc, "const qjs = @cImport({ @cDefine(\"_GNU_SOURCE\", \"1\"); @cDefine(\"QUICKJS_NG_BUILD\", \"1\"); @cInclude(\"quickjs.h\"); });\n");
+            if (!self.is_embedded) {
+                try out.appendSlice(self.alloc,
+                    "const qjs = if (IS_LIB) struct {\n" ++
+                    "    pub const JSValue = extern struct { tag: i64 = 3, u: extern union { int32: i32, float64: f64, ptr: ?*anyopaque } = .{ .int32 = 0 } };\n" ++
+                    "    pub const JSContext = opaque {};\n" ++
+                    "} else @cImport({ @cDefine(\"_GNU_SOURCE\", \"1\"); @cDefine(\"QUICKJS_NG_BUILD\", \"1\"); @cInclude(\"quickjs.h\"); });\n");
+            } else {
+                try out.appendSlice(self.alloc, "const qjs = @cImport({ @cDefine(\"_GNU_SOURCE\", \"1\"); @cDefine(\"QUICKJS_NG_BUILD\", \"1\"); @cInclude(\"quickjs.h\"); });\n");
+            }
             try out.appendSlice(self.alloc, "const QJS_UNDEFINED = qjs.JSValue{ .u = .{ .int32 = 0 }, .tag = 3 };\n");
         }
         try out.appendSlice(self.alloc, "\n// ── Object arrays ───────────────────────────────────────────────\n");
@@ -1964,6 +2058,7 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
         const app_name = basename[0..dot_pos];
         // Export symbols for dlopen loading by the engine.
         // The engine binary loads this .so and reads these to configure engine.run().
+        // Export symbols for dlopen loading by the dev shell.
         try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
             "export fn app_get_root() *Node {{ return &_root; }}\n" ++
             "export fn app_get_init() ?*const fn () void {{ return _appInit; }}\n" ++
@@ -1972,8 +2067,9 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
             "export fn app_get_js_logic_len() usize {{ return JS_LOGIC.len; }}\n" ++
             "export fn app_get_title() [*:0]const u8 {{ return \"{s}\"; }}\n" ++
             "\n" ++
-            "// Standalone mode — when compiled as an executable directly\n" ++
+            "// Standalone mode — when compiled as an executable directly (skipped in .so builds)\n" ++
             "pub fn main() !void {{\n" ++
+            "    if (IS_LIB) return;\n" ++
             "    try engine.run(.{{\n" ++
             "        .title = \"{s}\",\n" ++
             "        .root = &_root,\n" ++

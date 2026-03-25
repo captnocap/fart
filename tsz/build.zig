@@ -43,6 +43,18 @@ pub fn build(b: *std.Build) void {
     const app_step = b.step("app", "Build a compiled .tsz app (links full engine)");
     app_step.dependOn(&app_install.step);
 
+    // ── App shared library (hot-reloadable .so for dev shell) ──────
+    const app_lib = addAppLib(b, target, optimize, app_name);
+    const app_lib_install = b.addInstallArtifact(app_lib, .{});
+    const app_lib_step = b.step("app-lib", "Build .tsz app as a hot-reloadable shared library (.so)");
+    app_lib_step.dependOn(&app_lib_install.step);
+
+    // ── Dev shell (hot-reload host — loads app .so at runtime) ───
+    const dev_shell_exe = addDevShellExe(b, target, optimize, wgpu_mod, sysroot);
+    const dev_shell_install = b.addInstallArtifact(dev_shell_exe, .{});
+    const dev_shell_step = b.step("dev-shell", "Build the hot-reload development shell");
+    dev_shell_step.dependOn(&dev_shell_install.step);
+
     // ── Compiler tests ───────────────────────────────────────────
     const compiler_tests = b.addTest(.{
         .root_module = b.createModule(.{
@@ -302,6 +314,7 @@ fn addAppExe(
         exe.root_module.addCSourceFile(.{ .file = b.path("stb/stb_image_write_impl.c"), .flags = &.{"-O2"} });
         exe.root_module.addCSourceFile(.{ .file = b.path("ffi/clock_shim.c"), .flags = &.{"-O2"} });
         exe.root_module.addCSourceFile(.{ .file = b.path("ffi/compute_shim.c"), .flags = &.{"-O2"} });
+        exe.root_module.addCSourceFile(.{ .file = b.path("ffi/supervisor_shim.c"), .flags = &.{"-O2"} });
         exe.root_module.addCSourceFile(.{ .file = b.path("ffi/physics_shim.cpp"), .flags = &.{"-O2"} });
         exe.root_module.addIncludePath(b.path("ffi"));
         exe.linkSystemLibrary("box2d");
@@ -318,6 +331,157 @@ fn addAppExe(
         } else if (os == .macos) {
             exe.root_module.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
         }
+    }
+
+    return exe;
+}
+
+// ── App shared library (hot-reloadable .so — pure Zig, no native deps) ──
+//
+// Compiles generated_app.zig as a shared library with IS_LIB=true.
+// Heavy framework modules (engine, qjs_runtime, input, etc.) are replaced
+// with no-op stubs at compile time, so the .so has zero native dependencies
+// and compiles near-instantly.
+
+fn addAppLib(
+    b: *std.Build,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+    name: []const u8,
+) *std.Build.Step.Compile {
+    const options = b.addOptions();
+    options.addOption(bool, "is_lib", true);
+    // Stub out all feature flags so conditional imports don't pull in native deps
+    options.addOption(bool, "has_quickjs", false);
+    options.addOption(bool, "has_physics", false);
+    options.addOption(bool, "has_terminal", false);
+    options.addOption(bool, "has_video", false);
+    options.addOption(bool, "has_render_surfaces", false);
+    options.addOption(bool, "has_effects", false);
+    options.addOption(bool, "has_canvas", false);
+    options.addOption(bool, "has_3d", false);
+    options.addOption(bool, "has_transitions", false);
+    options.addOption(bool, "has_networking", false);
+    options.addOption(bool, "has_crypto", false);
+    options.addOption(bool, "has_debug_server", false);
+
+    const lib_name = b.fmt("{s}-lib", .{name});
+
+    const root_mod = b.createModule(.{
+        .root_source_file = b.path("generated_app.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    root_mod.addOptions("build_options", options);
+
+    const lib = b.addLibrary(.{
+        .linkage = .dynamic,
+        .name = lib_name,
+        .root_module = root_mod,
+    });
+    lib.linkLibC();
+
+    return lib;
+}
+
+// ── Dev shell executable (hot-reload host — full framework) ──────────────
+//
+// The dev shell binary contains the entire engine (SDL, wgpu, FreeType, etc.)
+// and loads app code from a .so at runtime via dlopen. It checks the .so's
+// mtime each frame and hot-reloads when it changes.
+
+fn addDevShellExe(
+    b: *std.Build,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+    wgpu_mod: *std.Build.Module,
+    sysroot: ?[]const u8,
+) *std.Build.Step.Compile {
+    const os = target.result.os.tag;
+
+    const options = b.addOptions();
+    options.addOption(bool, "has_quickjs", true);
+    options.addOption(bool, "has_physics", true);
+    options.addOption(bool, "has_terminal", true);
+    options.addOption(bool, "has_video", true);
+    options.addOption(bool, "has_render_surfaces", true);
+    options.addOption(bool, "has_effects", true);
+    options.addOption(bool, "has_canvas", true);
+    options.addOption(bool, "has_3d", true);
+    options.addOption(bool, "has_transitions", true);
+    options.addOption(bool, "has_networking", true);
+    options.addOption(bool, "has_crypto", true);
+    options.addOption(bool, "has_debug_server", true);
+
+    const root_mod = b.createModule(.{
+        .root_source_file = b.path("framework/dev_shell.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    root_mod.addOptions("build_options", options);
+
+    const exe = b.addExecutable(.{
+        .name = "tsz-dev",
+        .root_module = root_mod,
+    });
+    exe.stack_size = 16 * 1024 * 1024;
+
+    // ── Same deps as addAppExe (.full tier) ──────────────────────
+    exe.root_module.addImport("wgpu", wgpu_mod);
+    exe.linkLibC();
+    exe.linkSystemLibrary("SDL2");
+    exe.linkSystemLibrary("freetype");
+
+    if (os == .linux) {
+        exe.linkSystemLibrary("m");
+        exe.linkSystemLibrary("pthread");
+        exe.linkSystemLibrary("dl");
+        if (sysroot) |sr| {
+            exe.root_module.addIncludePath(.{ .cwd_relative = b.fmt("{s}/usr/include/freetype2", .{sr}) });
+            exe.root_module.addIncludePath(.{ .cwd_relative = b.fmt("{s}/usr/include", .{sr}) });
+            exe.root_module.addLibraryPath(.{ .cwd_relative = b.fmt("{s}/usr/lib", .{sr}) });
+        } else {
+            exe.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/freetype2" });
+            exe.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/x86_64-linux-gnu" });
+        }
+    } else if (os == .macos) {
+        exe.root_module.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/lib" });
+        exe.root_module.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
+        exe.root_module.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include/freetype2" });
+    }
+
+    exe.root_module.addIncludePath(b.path("."));
+    exe.root_module.addIncludePath(b.path("../love2d/quickjs"));
+    exe.root_module.addIncludePath(b.path("ffi"));
+
+    // stb_image
+    exe.root_module.addCSourceFile(.{ .file = b.path("stb/stb_image_impl.c"), .flags = &.{"-O2"} });
+
+    // Full tier C sources
+    exe.root_module.addCSourceFiles(.{
+        .root = b.path("../love2d/quickjs"),
+        .files = &.{ "cutils.c", "dtoa.c", "libregexp.c", "libunicode.c", "quickjs.c", "quickjs-libc.c" },
+        .flags = &.{ "-O2", "-D_GNU_SOURCE", "-DQUICKJS_NG_BUILD" },
+    });
+    exe.root_module.addCSourceFile(.{ .file = b.path("stb/stb_image_write_impl.c"), .flags = &.{"-O2"} });
+    exe.root_module.addCSourceFile(.{ .file = b.path("ffi/clock_shim.c"), .flags = &.{"-O2"} });
+    exe.root_module.addCSourceFile(.{ .file = b.path("ffi/compute_shim.c"), .flags = &.{"-O2"} });
+    exe.root_module.addCSourceFile(.{ .file = b.path("ffi/supervisor_shim.c"), .flags = &.{"-O2"} });
+    exe.root_module.addCSourceFile(.{ .file = b.path("ffi/physics_shim.cpp"), .flags = &.{"-O2"} });
+    exe.root_module.addIncludePath(b.path("ffi"));
+    exe.linkSystemLibrary("box2d");
+    exe.linkSystemLibrary("sqlite3");
+    exe.linkSystemLibrary("vterm");
+    exe.linkSystemLibrary("curl");
+    exe.linkSystemLibrary("archive");
+    if (os == .linux) {
+        if (sysroot) |sr| {
+            exe.root_module.addIncludePath(.{ .cwd_relative = b.fmt("{s}/usr/include", .{sr}) });
+        } else {
+            exe.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/x86_64-linux-gnu" });
+        }
+    } else if (os == .macos) {
+        exe.root_module.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
     }
 
     return exe;

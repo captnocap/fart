@@ -51,10 +51,14 @@ pub fn main() !void {
             cli_dist.run(alloc, args);
             return;
         }
+        if (std.mem.eql(u8, cmd, "dev")) {
+            runDev(alloc, args);
+            return;
+        }
     }
 
     if (args.len < 3) {
-        std.debug.print("Usage: tsz build|check|lint|test|init|convert|setup-editor [--strict] <file.tsz>\n", .{});
+        std.debug.print("Usage: tsz build|dev|check|lint|test|init|convert|setup-editor [--strict] <file.tsz>\n", .{});
         return;
     }
 
@@ -781,4 +785,173 @@ fn runTest(alloc: std.mem.Allocator, args: []const []const u8) void {
     } else {
         std.debug.print("[test] TESTS FAILED (exit {d})\n", .{run_term.Exited});
     }
+}
+
+// ── Dev mode: hot-reload development server ──────────────────────────────
+// tsz dev <app.tsz>
+//
+// Compiles the app as a shared library, builds the dev shell (once), and
+// launches it. Watches for source changes and recompiles the .so — the
+// running shell auto-detects changes and hot-reloads.
+
+fn runDev(alloc: std.mem.Allocator, args: []const []const u8) void {
+    if (args.len < 3) {
+        std.debug.print("Usage: tsz dev <file.tsz>\n", .{});
+        return;
+    }
+
+    // Find the input file (last non-flag argument)
+    const input_path = args[args.len - 1];
+
+    // Resolve tsz root
+    const tsz_root: ?[]const u8 = blk: {
+        var buf: [std.fs.max_path_bytes]u8 = undefined;
+        const exe_path = std.fs.selfExePath(&buf) catch break :blk null;
+        const bin_dir = std.fs.path.dirname(exe_path) orelse break :blk null;
+        const parent = std.fs.path.dirname(bin_dir) orelse break :blk null;
+        const try1 = std.fmt.allocPrint(alloc, "{s}/tsz", .{parent}) catch break :blk null;
+        if (std.fs.cwd().access(std.fmt.allocPrint(alloc, "{s}/build.zig", .{try1}) catch break :blk null, .{})) |_| {
+            break :blk try1;
+        } else |_| {}
+        const grandparent = std.fs.path.dirname(parent) orelse break :blk null;
+        break :blk std.fmt.allocPrint(alloc, "{s}", .{grandparent}) catch null;
+    };
+
+    // Step 1: Compile .tsz → generated_app.zig
+    if (!devCompileTsz(alloc, input_path, tsz_root)) return;
+
+    // Step 2: Build the .so
+    const basename = std.fs.path.basename(input_path);
+    const dot_pos = std.mem.lastIndexOfScalar(u8, basename, '.') orelse basename.len;
+    const app_name = basename[0..dot_pos];
+    const app_name_opt = std.fmt.allocPrint(alloc, "-Dapp-name={s}", .{app_name}) catch return;
+
+    std.debug.print("[dev] Building shared library...\n", .{});
+    if (!devRunZigBuild(alloc, tsz_root, &.{ "zig", "build", app_name_opt, "app-lib" })) return;
+
+    // Step 3: Build the dev shell (first time only — cached after that)
+    const shell_path = if (tsz_root) |root|
+        std.fmt.allocPrint(alloc, "{s}/zig-out/bin/tsz-dev", .{root}) catch return
+    else
+        "zig-out/bin/tsz-dev";
+
+    if (std.fs.cwd().access(shell_path, .{})) |_| {
+        std.debug.print("[dev] Dev shell already built\n", .{});
+    } else |_| {
+        std.debug.print("[dev] Building dev shell (first time, may take a while)...\n", .{});
+        if (!devRunZigBuild(alloc, tsz_root, &.{ "zig", "build", "dev-shell" })) return;
+    }
+
+    // Step 4: Resolve .so path
+    const lib_name = std.fmt.allocPrint(alloc, "{s}-lib", .{app_name}) catch return;
+    const so_path = if (tsz_root) |root|
+        std.fmt.allocPrint(alloc, "{s}/zig-out/lib/lib{s}.so", .{ root, lib_name }) catch return
+    else
+        std.fmt.allocPrint(alloc, "zig-out/lib/lib{s}.so", .{lib_name}) catch return;
+
+    std.debug.print("[dev] Launching: {s} {s}\n", .{ shell_path, so_path });
+    std.debug.print("[dev] Watching {s} for changes...\n", .{input_path});
+
+    // Step 5: Launch dev shell as a child process
+    var shell_child = std.process.Child.init(&.{ shell_path, so_path }, alloc);
+    shell_child.stderr_behavior = .Inherit;
+    shell_child.stdout_behavior = .Inherit;
+    _ = shell_child.spawn() catch |err| {
+        std.debug.print("[dev] Failed to launch dev shell: {}\n", .{err});
+        return;
+    };
+    const shell_pid = shell_child.id;
+
+    // Step 6: Watch loop — poll source file, recompile on change
+    var last_mtime: i128 = 0;
+    if (std.fs.cwd().statFile(input_path)) |stat| {
+        last_mtime = stat.mtime;
+    } else |_| {}
+
+    while (true) {
+        std.Thread.sleep(500 * std.time.ns_per_ms);
+
+        // Check if shell process exited (non-blocking waitpid with WNOHANG)
+        const wr = std.posix.waitpid(@intCast(shell_pid), 1); // WNOHANG = 1
+        if (wr.pid != 0) {
+            std.debug.print("[dev] Shell exited\n", .{});
+            break;
+        }
+
+        // Check source file mtime
+        const stat = std.fs.cwd().statFile(input_path) catch continue;
+        if (stat.mtime == last_mtime) continue;
+        last_mtime = stat.mtime;
+
+        std.debug.print("[dev] Change detected, recompiling...\n", .{});
+
+        // Recompile .tsz → generated_app.zig
+        if (!devCompileTsz(alloc, input_path, tsz_root)) {
+            std.debug.print("[dev] Compile failed — keeping last working build\n", .{});
+            continue;
+        }
+
+        // Rebuild .so
+        if (!devRunZigBuild(alloc, tsz_root, &.{ "zig", "build", app_name_opt, "app-lib" })) {
+            std.debug.print("[dev] .so build failed — keeping last working build\n", .{});
+            continue;
+        }
+
+        std.debug.print("[dev] Rebuilt .so — shell will auto-reload\n", .{});
+    }
+}
+
+fn devCompileTsz(alloc: std.mem.Allocator, input_path: []const u8, tsz_root: ?[]const u8) bool {
+    const source = std.fs.cwd().readFileAlloc(alloc, input_path, 4 * 1024 * 1024) catch |err| {
+        std.debug.print("[dev] Error reading {s}: {any}\n", .{ input_path, err });
+        return false;
+    };
+
+    // Resolve imports
+    const final_source = buildMergedSource(alloc, input_path, source);
+    var lex = lexer_mod.Lexer.init(final_source);
+    lex.tokenize();
+
+    var gen = codegen.Generator.init(alloc, &lex, final_source, input_path);
+    const script_js = loadScriptImports(alloc, input_path, source);
+    if (script_js) |js| gen.compute_js = js;
+
+    const zig_source = gen.generate() catch |err| {
+        std.debug.print("[dev] Compile error: {}\n", .{err});
+        gen.printDiagnosticSummary();
+        return false;
+    };
+    gen.printDiagnosticSummary();
+    if (gen.errors.items.len > 0) return false;
+
+    const out_path = if (tsz_root) |root|
+        std.fmt.allocPrint(alloc, "{s}/generated_app.zig", .{root}) catch return false
+    else
+        "generated_app.zig";
+
+    const f = std.fs.cwd().createFile(out_path, .{}) catch |err| {
+        std.debug.print("[dev] Error creating {s}: {any}\n", .{ out_path, err });
+        return false;
+    };
+    defer f.close();
+    f.writeAll(zig_source) catch return false;
+
+    std.debug.print("[dev] Compiled {s} -> {s}\n", .{ std.fs.path.basename(input_path), out_path });
+    return true;
+}
+
+fn devRunZigBuild(alloc: std.mem.Allocator, tsz_root: ?[]const u8, argv: []const []const u8) bool {
+    var child = std.process.Child.init(argv, alloc);
+    if (tsz_root) |root| child.cwd = root;
+    child.stderr_behavior = .Inherit;
+    child.stdout_behavior = .Inherit;
+    const term = child.spawnAndWait() catch |err| {
+        std.debug.print("[dev] Build failed to spawn: {}\n", .{err});
+        return false;
+    };
+    if (term.Exited != 0) {
+        std.debug.print("[dev] Build failed (exit {d})\n", .{term.Exited});
+        return false;
+    }
+    return true;
 }
