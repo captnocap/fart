@@ -403,6 +403,8 @@ pub const dracula_full = @import("dracula.zig");
 pub const catppuccin_mocha_full = @import("catppuccin_mocha.zig");
 pub const tokyo_night_full = @import("tokyo_night.zig");
 pub const nord_full = @import("nord.zig");
+pub const solarized_dark_full = @import("solarized_dark.zig");
+pub const gruvbox_dark_full = @import("gruvbox_dark.zig");
 
 // ── Registry ─────────────────────────────────────────────────────────
 
@@ -420,14 +422,14 @@ pub const all = [_]Entry{
     .{ .name = "Catppuccin Latte", .palette = catppuccin_latte },
     .{ .name = "Dracula", .palette = dracula_full.palette, .styles = dracula_full.styles },
     .{ .name = "Dracula Soft", .palette = dracula_soft },
-    .{ .name = "Gruvbox Dark", .palette = gruvbox_dark },
+    .{ .name = "Gruvbox Dark", .palette = gruvbox_dark_full.palette, .styles = gruvbox_dark_full.styles },
     .{ .name = "Gruvbox Light", .palette = gruvbox_light },
     .{ .name = "Nord", .palette = nord_full.palette, .styles = nord_full.styles },
     .{ .name = "Nord Light", .palette = nord_light },
     .{ .name = "One Dark", .palette = one_dark },
     .{ .name = "Rose Pine", .palette = rose_pine },
     .{ .name = "Rose Pine Dawn", .palette = rose_pine_dawn },
-    .{ .name = "Solarized Dark", .palette = solarized_dark },
+    .{ .name = "Solarized Dark", .palette = solarized_dark_full.palette, .styles = solarized_dark_full.styles },
     .{ .name = "Solarized Light", .palette = solarized_light },
     .{ .name = "Tokyo Night", .palette = tokyo_night_full.palette, .styles = tokyo_night_full.styles },
     .{ .name = "Tokyo Night Storm", .palette = tokyo_night_storm },
