@@ -21,10 +21,11 @@ import { MemoryPage } from './memory';
 import { DevServerPage } from './devserver';
 import { InspectorPage } from './inspector';
 import { ViolationsPage } from './violations';
+import { SearchPage } from './search';
 
 const [refreshTick] = useFFI(sv_refresh, 3000);
 
-// Tab state: 0=tasks, 1=workers, 2=memory, 3=devserver, 4=inspector, 5=violations
+// Tab state: 0=tasks, 1=workers, 2=memory, 3=devserver, 4=inspector, 5=violations, 6=search
 const [activeTab, setActiveTab] = useState(0);
 
 // Splitter
@@ -154,6 +155,15 @@ const [vioDenyCount, setVioDenyCount] = useState(0);
 const [vioPauseCount, setVioPauseCount] = useState(0);
 const [vioFlagCount, setVioFlagCount] = useState(0);
 
+// Search state (used by search.tsz)
+const [srchResults, setSrchResults] = useState([{ msgId: '', role: '', content: '', time: '', project: '', roleColor: 0x8b949e, roleBg: 0x1f2937 }]);
+const [srchResultCount, setSrchResultCount] = useState(0);
+const [srchProjects, setSrchProjects] = useState([{ name: 'all', label: 'All Projects' }]);
+const [srchProjectCount, setSrchProjectCount] = useState(0);
+const [srchFilterIdx, setSrchFilterIdx] = useState(0);
+const [srchTotalMessages, setSrchTotalMessages] = useState(0);
+const [srchTotalSessions, setSrchTotalSessions] = useState(0);
+
 function App() {
   return (
     <C.Page>
@@ -181,6 +191,10 @@ function App() {
         <Pressable onPress={() => { setActiveTab(5) }}>
           {activeTab == 5 && <C.TabActive><C.TabTextActive>{`Violations (${vioOpen})`}</C.TabTextActive></C.TabActive>}
           {activeTab != 5 && <C.Tab><C.TabText>{`Violations (${vioOpen})`}</C.TabText></C.Tab>}
+        </Pressable>
+        <Pressable onPress={() => { setActiveTab(6) }}>
+          {activeTab == 6 && <C.TabActive><C.TabTextActive>{`Search (${srchTotalMessages})`}</C.TabTextActive></C.TabActive>}
+          {activeTab != 6 && <C.Tab><C.TabText>{`Search (${srchTotalMessages})`}</C.TabText></C.Tab>}
         </Pressable>
       </C.TabBar>
 
@@ -412,6 +426,8 @@ function App() {
         {activeTab == 4 && <InspectorPage />}
 
         {activeTab == 5 && <ViolationsPage />}
+
+        {activeTab == 6 && <SearchPage />}
       </C.TabContent>
     </C.Page>
   );
