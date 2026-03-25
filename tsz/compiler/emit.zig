@@ -1062,7 +1062,7 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
                     .{ mi, mi, pmi, mi, mi, pmi, pmi }));
             } else {
                 try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                    "const MAX_MAP_{d}: usize = 256;\n" ++
+                    "const MAX_MAP_{d}: usize = 4096;\n" ++
                     "var _map_pool_{d}: [MAX_MAP_{d}]Node = undefined;\n" ++
                     "var _map_count_{d}: usize = 0;\n",
                     .{ mi, mi, mi, mi }));

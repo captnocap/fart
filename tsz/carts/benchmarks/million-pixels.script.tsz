@@ -1,7 +1,6 @@
 // Million Pixels stress test — finds the rendering pipeline ceiling
-// Escalates cell count every 5s: 64 → 128 → 192 → 256
-// Each cell is a colored 2x2 Box in a flexWrap grid — stresses layout + paint
-// At 256 cells, each is a row of pixels generated from index math
+// Escalates cell count every 5s through aggressive tiers
+// MAX_MAP raised to 4096 — tests layout + paint at scale
 
 declare function setItems(arr: any): void;
 declare function setFps(n: number): void;
@@ -13,10 +12,11 @@ declare function setCellCount(n: number): void;
 declare function setTierLabel(s: string): void;
 
 var tiers = [
-  { count: 64, label: 'T1: 64 cells (warmup)' },
-  { count: 128, label: 'T2: 128 cells' },
-  { count: 192, label: 'T3: 192 cells' },
-  { count: 256, label: 'T4: 256 cells (MAX_MAP limit)' }
+  { count: 256, label: 'T1: 256 cells (old limit)' },
+  { count: 512, label: 'T2: 512 cells' },
+  { count: 1024, label: 'T3: 1024 cells' },
+  { count: 2048, label: 'T4: 2048 cells' },
+  { count: 4096, label: 'T5: 4096 cells (new MAX_MAP)' }
 ];
 var _tier = 0;
 var _lastRamp = Date.now();
@@ -62,7 +62,7 @@ setInterval(function() {
 }, 200);
 
 setInterval(function() {
-  if (Date.now() - _lastRamp > 5000 && 3 > _tier) {
+  if (Date.now() - _lastRamp > 5000 && 4 > _tier) {
     _tier = _tier + 1;
     setTier(_tier);
     setTierLabel(tiers[_tier].label);

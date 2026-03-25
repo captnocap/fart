@@ -1,7 +1,7 @@
 // Million Pixels — rendering pipeline ceiling finder
-// Escalates .map() cell count: 64 → 128 → 192 → 256
+// Escalates .map() cell count: 256 → 512 → 1024 → 2048 → 4096
 // Each cell is a 4x4 HSL-colored box in a flexWrap grid
-// Documents MAX_MAP=256 ceiling; measures FPS/layout/paint at each tier
+// MAX_MAP raised to 4096; measures FPS/layout/paint at each tier
 // Goal: find where layout or paint exceeds 16ms frame budget
 
 import { buildCells } from './million-pixels.script';
@@ -56,7 +56,7 @@ function App() {
       </ScrollView>
 
       <Box style={{ flexDirection: 'row', gap: 8, paddingTop: 4 }}>
-        <Text fontSize={9} color="#52525b">MAX_MAP=256 | Escalates every 5s | r/place style grid</Text>
+        <Text fontSize={9} color="#52525b">MAX_MAP=4096 | Escalates every 5s | r/place style grid</Text>
       </Box>
     </Box>
   );
