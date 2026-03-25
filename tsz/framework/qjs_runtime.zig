@@ -63,6 +63,7 @@ fn hostSetState(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs
     var f: f64 = 0;
     _ = qjs.JS_ToFloat64(ctx, &f, argv[1]);
     state.setSlot(@intCast(slot_id), @intFromFloat(f));
+    state.markDirty();
     bridge_calls_this_second += 1;
     return QJS_UNDEFINED;
 }
@@ -76,6 +77,7 @@ fn hostSetStateString(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [
     if (str == null) return QJS_UNDEFINED;
     defer qjs.JS_FreeCString(ctx, str);
     state.setSlotString(@intCast(slot_id), std.mem.span(str));
+    state.markDirty();
     return QJS_UNDEFINED;
 }
 
@@ -537,6 +539,112 @@ fn setF(ctx: *qjs.JSContext, obj: qjs.JSValue, name: [*:0]const u8, val: f64) vo
 
 fn setB(ctx: *qjs.JSContext, obj: qjs.JSValue, name: [*:0]const u8, val: bool) void {
     setF(ctx, obj, name, if (val) 1.0 else 0.0);
+}
+
+// ── Recording/playback bridge ────────────────────────────────────
+const player_mod = @import("player.zig");
+
+fn hostRecStart(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    const rows = vterm_mod.getRows();
+    const cols = vterm_mod.getCols();
+    vterm_mod.startRecording(rows, cols);
+    std.debug.print("[rec] started ({d}x{d})\n", .{ rows, cols });
+    return QJS_UNDEFINED;
+}
+
+fn hostRecStop(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    vterm_mod.stopRecording();
+    std.debug.print("[rec] stopped\n", .{});
+    return QJS_UNDEFINED;
+}
+
+fn hostRecSave(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    if (argc < 1) return qjs.JS_NewFloat64(null, 0);
+    const path_c = qjs.JS_ToCString(ctx, argv[0]);
+    if (path_c == null) return qjs.JS_NewFloat64(null, 0);
+    defer qjs.JS_FreeCString(ctx, path_c);
+    const path = std.mem.span(path_c);
+    const ok = vterm_mod.saveRecording(path);
+    std.debug.print("[rec] save {s} → {s}\n", .{ path, if (ok) "OK" else "FAIL" });
+    return qjs.JS_NewFloat64(null, if (ok) 1.0 else 0.0);
+}
+
+fn hostRecToggle(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    if (vterm_mod.isRecording()) {
+        vterm_mod.stopRecording();
+    } else {
+        vterm_mod.startRecording(vterm_mod.getRows(), vterm_mod.getCols());
+    }
+    return qjs.JS_NewFloat64(null, if (vterm_mod.isRecording()) 1.0 else 0.0);
+}
+
+fn hostRecIsRecording(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    return qjs.JS_NewFloat64(null, if (vterm_mod.isRecording()) 1.0 else 0.0);
+}
+
+fn hostRecFrameCount(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    return qjs.JS_NewFloat64(null, @floatFromInt(vterm_mod.getRecorder().frame_count));
+}
+
+fn hostPlayLoad(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    // Load from the current recorder's in-memory data
+    const rec = vterm_mod.getRecorder();
+    if (rec.frame_count == 0) return qjs.JS_NewFloat64(null, 0);
+    player_mod.load(rec);
+    return qjs.JS_NewFloat64(null, 1.0);
+}
+
+fn hostPlayPlay(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    player_mod.play();
+    return QJS_UNDEFINED;
+}
+
+fn hostPlayPause(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    player_mod.pause();
+    return QJS_UNDEFINED;
+}
+
+fn hostPlayToggle(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    player_mod.togglePlay();
+    return QJS_UNDEFINED;
+}
+
+fn hostPlayStep(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    player_mod.step();
+    return QJS_UNDEFINED;
+}
+
+fn hostPlaySeek(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    if (argc < 1) return QJS_UNDEFINED;
+    var frac: f64 = 0;
+    _ = qjs.JS_ToFloat64(ctx, &frac, argv[0]);
+    player_mod.seekFraction(@floatCast(frac));
+    return QJS_UNDEFINED;
+}
+
+fn hostPlaySpeed(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    if (argc < 1) return QJS_UNDEFINED;
+    var spd: f64 = 1;
+    _ = qjs.JS_ToFloat64(ctx, &spd, argv[0]);
+    player_mod.setSpeed(@floatCast(spd));
+    return QJS_UNDEFINED;
+}
+
+fn hostPlayState(ctx: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    const c2 = ctx orelse return QJS_UNDEFINED;
+    if (!player_mod.isLoaded()) return QJS_UNDEFINED;
+    const s = player_mod.getState();
+    const obj = qjs.JS_NewObject(c2);
+    setB(c2, obj, "playing", s.playing);
+    setF(c2, obj, "time_us", @floatFromInt(s.time_us));
+    setF(c2, obj, "duration_us", @floatFromInt(s.duration_us));
+    setF(c2, obj, "frame", @floatFromInt(s.frame));
+    setF(c2, obj, "total_frames", @floatFromInt(s.total_frames));
+    setF(c2, obj, "speed", s.speed);
+    setB(c2, obj, "at_end", s.at_end);
+    setB(c2, obj, "at_start", s.at_start);
+    setF(c2, obj, "progress", if (s.duration_us > 0) @as(f64, @floatFromInt(s.time_us)) / @as(f64, @floatFromInt(s.duration_us)) else 0.0);
+    return obj;
 }
 
 fn hostTelFrame(ctx: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
@@ -1228,6 +1336,36 @@ fn hostExec(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSV
     return qjs.JS_NewStringLen(c2, &buf, @intCast(total));
 }
 
+/// Function pointer set by engine to open a window. Avoids importing windows.zig here.
+var g_open_window_fn: ?*const fn ([*:0]const u8, c_int, c_int) void = null;
+
+pub fn setOpenWindowFn(f: *const fn ([*:0]const u8, c_int, c_int) void) void {
+    g_open_window_fn = f;
+}
+
+fn hostOpenWindow(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    const c2 = ctx orelse return QJS_UNDEFINED;
+    if (argc < 3) return QJS_UNDEFINED;
+    const title_ptr = qjs.JS_ToCString(c2, argv[0]);
+    if (title_ptr == null) return QJS_UNDEFINED;
+    defer qjs.JS_FreeCString(c2, title_ptr);
+    var w: i32 = 400;
+    var h: i32 = 400;
+    _ = qjs.JS_ToInt32(c2, &w, argv[1]);
+    _ = qjs.JS_ToInt32(c2, &h, argv[2]);
+
+    if (g_open_window_fn) |openFn| {
+        // Copy title to sentinel-terminated buffer
+        const title_span = std.mem.span(title_ptr);
+        var title_buf: [256:0]u8 = undefined;
+        const copy_len = @min(title_span.len, 255);
+        @memcpy(title_buf[0..copy_len], title_span[0..copy_len]);
+        title_buf[copy_len] = 0;
+        openFn(&title_buf, @intCast(w), @intCast(h));
+    }
+    return QJS_UNDEFINED;
+}
+
 // ── QuickJS lifecycle ───────────────────────────────────────────
 
 pub fn initVM() void {
@@ -1320,6 +1458,22 @@ pub fn initVM() void {
     _ = qjs.JS_SetPropertyStr(ctx, global, "__sem_vterm_rows", qjs.JS_NewCFunction(ctx, hostSemVtermRows, "__sem_vterm_rows", 0));
     _ = qjs.JS_SetPropertyStr(ctx, global, "__sem_build_graph", qjs.JS_NewCFunction(ctx, hostSemBuildGraph, "__sem_build_graph", 1));
 
+    // Recording/playback bridge
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__rec_start", qjs.JS_NewCFunction(ctx, hostRecStart, "__rec_start", 0));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__rec_stop", qjs.JS_NewCFunction(ctx, hostRecStop, "__rec_stop", 0));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__rec_save", qjs.JS_NewCFunction(ctx, hostRecSave, "__rec_save", 1));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__rec_toggle", qjs.JS_NewCFunction(ctx, hostRecToggle, "__rec_toggle", 0));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__rec_is_recording", qjs.JS_NewCFunction(ctx, hostRecIsRecording, "__rec_is_recording", 0));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__rec_frame_count", qjs.JS_NewCFunction(ctx, hostRecFrameCount, "__rec_frame_count", 0));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__play_load", qjs.JS_NewCFunction(ctx, hostPlayLoad, "__play_load", 0));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__play_play", qjs.JS_NewCFunction(ctx, hostPlayPlay, "__play_play", 0));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__play_pause", qjs.JS_NewCFunction(ctx, hostPlayPause, "__play_pause", 0));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__play_toggle", qjs.JS_NewCFunction(ctx, hostPlayToggle, "__play_toggle", 0));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__play_step", qjs.JS_NewCFunction(ctx, hostPlayStep, "__play_step", 0));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__play_seek", qjs.JS_NewCFunction(ctx, hostPlaySeek, "__play_seek", 1));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__play_speed", qjs.JS_NewCFunction(ctx, hostPlaySpeed, "__play_speed", 1));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__play_state", qjs.JS_NewCFunction(ctx, hostPlayState, "__play_state", 0));
+
     // Filesystem bridge (session discovery for tsz-tools inspector)
     _ = qjs.JS_SetPropertyStr(ctx, global, "__fs_scandir", qjs.JS_NewCFunction(ctx, hostFsScandir, "__fs_scandir", 1));
     _ = qjs.JS_SetPropertyStr(ctx, global, "__fs_readfile", qjs.JS_NewCFunction(ctx, hostFsReadfile, "__fs_readfile", 1));
@@ -1328,6 +1482,9 @@ pub fn initVM() void {
     _ = qjs.JS_SetPropertyStr(ctx, global, "__fs_writefile", qjs.JS_NewCFunction(ctx, hostFsWritefile, "__fs_writefile", 2));
     _ = qjs.JS_SetPropertyStr(ctx, global, "__fs_deletefile", qjs.JS_NewCFunction(ctx, hostFsDeletefile, "__fs_deletefile", 1));
     _ = qjs.JS_SetPropertyStr(ctx, global, "__exec", qjs.JS_NewCFunction(ctx, hostExec, "__exec", 1));
+
+    // Window management
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__openWindow", qjs.JS_NewCFunction(ctx, hostOpenWindow, "__openWindow", 3));
 
     // IPC debug client host functions (external inspector attach)
     qjs_ipc.registerAll(@ptrCast(ctx));
@@ -1409,6 +1566,22 @@ pub fn callGlobalStr(name: [*:0]const u8, arg: [*:0]const u8) void {
             var argv = [1]qjs.JSValue{qjs.JS_NewString(ctx, arg)};
             const r = qjs.JS_Call(ctx, func, global, 1, &argv);
             qjs.JS_FreeValue(ctx, argv[0]);
+            qjs.JS_FreeValue(ctx, r);
+        }
+    }
+}
+
+/// Call a global JS function with one integer argument.
+pub fn callGlobalInt(name: [*:0]const u8, arg: i64) void {
+    if (comptime !HAS_QUICKJS) return;
+    if (g_qjs_ctx) |ctx| {
+        const global = qjs.JS_GetGlobalObject(ctx);
+        defer qjs.JS_FreeValue(ctx, global);
+        const func = qjs.JS_GetPropertyStr(ctx, global, name);
+        defer qjs.JS_FreeValue(ctx, func);
+        if (!qjs.JS_IsUndefined(func)) {
+            var argv = [1]qjs.JSValue{qjs.JS_NewInt64(ctx, arg)};
+            const r = qjs.JS_Call(ctx, func, global, 1, &argv);
             qjs.JS_FreeValue(ctx, r);
         }
     }
