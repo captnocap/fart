@@ -30,6 +30,7 @@ inline fn asF32(val: anytype) f32 {
 const events = @import("events.zig");
 const EventHandler = events.EventHandler;
 const effect_ctx = @import("effect_ctx.zig");
+const effect_shader = @import("effect_shader.zig");
 const context_menu = @import("context_menu.zig");
 
 // ── Type definitions ────────────────────────────────
@@ -153,22 +154,58 @@ pub const Style = struct {
     shadow_blur: f32 = 0,
     shadow_color: ?Color = null,
 
-    pub fn padLeft(self: Style) f32 { return self.padding_left orelse self.padding; }
-    pub fn padRight(self: Style) f32 { return self.padding_right orelse self.padding; }
-    pub fn padTop(self: Style) f32 { return self.padding_top orelse self.padding; }
-    pub fn padBottom(self: Style) f32 { return self.padding_bottom orelse self.padding; }
-    pub fn brdTop(self: Style) f32 { return self.border_top_width orelse self.border_width; }
-    pub fn brdRight(self: Style) f32 { return self.border_right_width orelse self.border_width; }
-    pub fn brdBottom(self: Style) f32 { return self.border_bottom_width orelse self.border_width; }
-    pub fn brdLeft(self: Style) f32 { return self.border_left_width orelse self.border_width; }
-    pub fn marLeft(self: Style) f32 { const v = self.margin_left orelse self.margin; return if (std.math.isInf(v)) 0 else v; }
-    pub fn marRight(self: Style) f32 { const v = self.margin_right orelse self.margin; return if (std.math.isInf(v)) 0 else v; }
-    pub fn marTop(self: Style) f32 { const v = self.margin_top orelse self.margin; return if (std.math.isInf(v)) 0 else v; }
-    pub fn marBottom(self: Style) f32 { const v = self.margin_bottom orelse self.margin; return if (std.math.isInf(v)) 0 else v; }
-    pub fn isMarginAutoLeft(self: Style) bool { return if (self.margin_left) |v| std.math.isInf(v) else false; }
-    pub fn isMarginAutoRight(self: Style) bool { return if (self.margin_right) |v| std.math.isInf(v) else false; }
-    pub fn isMarginAutoTop(self: Style) bool { return if (self.margin_top) |v| std.math.isInf(v) else false; }
-    pub fn isMarginAutoBottom(self: Style) bool { return if (self.margin_bottom) |v| std.math.isInf(v) else false; }
+    pub fn padLeft(self: Style) f32 {
+        return self.padding_left orelse self.padding;
+    }
+    pub fn padRight(self: Style) f32 {
+        return self.padding_right orelse self.padding;
+    }
+    pub fn padTop(self: Style) f32 {
+        return self.padding_top orelse self.padding;
+    }
+    pub fn padBottom(self: Style) f32 {
+        return self.padding_bottom orelse self.padding;
+    }
+    pub fn brdTop(self: Style) f32 {
+        return self.border_top_width orelse self.border_width;
+    }
+    pub fn brdRight(self: Style) f32 {
+        return self.border_right_width orelse self.border_width;
+    }
+    pub fn brdBottom(self: Style) f32 {
+        return self.border_bottom_width orelse self.border_width;
+    }
+    pub fn brdLeft(self: Style) f32 {
+        return self.border_left_width orelse self.border_width;
+    }
+    pub fn marLeft(self: Style) f32 {
+        const v = self.margin_left orelse self.margin;
+        return if (std.math.isInf(v)) 0 else v;
+    }
+    pub fn marRight(self: Style) f32 {
+        const v = self.margin_right orelse self.margin;
+        return if (std.math.isInf(v)) 0 else v;
+    }
+    pub fn marTop(self: Style) f32 {
+        const v = self.margin_top orelse self.margin;
+        return if (std.math.isInf(v)) 0 else v;
+    }
+    pub fn marBottom(self: Style) f32 {
+        const v = self.margin_bottom orelse self.margin;
+        return if (std.math.isInf(v)) 0 else v;
+    }
+    pub fn isMarginAutoLeft(self: Style) bool {
+        return if (self.margin_left) |v| std.math.isInf(v) else false;
+    }
+    pub fn isMarginAutoRight(self: Style) bool {
+        return if (self.margin_right) |v| std.math.isInf(v) else false;
+    }
+    pub fn isMarginAutoTop(self: Style) bool {
+        return if (self.margin_top) |v| std.math.isInf(v) else false;
+    }
+    pub fn isMarginAutoBottom(self: Style) bool {
+        return if (self.margin_bottom) |v| std.math.isInf(v) else false;
+    }
 };
 pub const Node = struct {
     style: Style = .{},
@@ -201,12 +238,12 @@ pub const Node = struct {
     content_width: f32 = 0,
     devtools_viz: DevtoolsViz = .none,
     // 3D elements — inline in the 2D tree, rendered by gpu/3d.zig
-    scene3d: bool = false,             // true = contains 3D.* children
-    scene3d_mesh: bool = false,        // true = 3D.Mesh
-    scene3d_camera: bool = false,      // true = 3D.Camera
-    scene3d_light: bool = false,       // true = 3D.Light
-    scene3d_group: bool = false,       // true = 3D.Group
-    scene3d_geometry: ?[]const u8 = null,  // "box", "sphere", "plane", etc.
+    scene3d: bool = false, // true = contains 3D.* children
+    scene3d_mesh: bool = false, // true = 3D.Mesh
+    scene3d_camera: bool = false, // true = 3D.Camera
+    scene3d_light: bool = false, // true = 3D.Light
+    scene3d_group: bool = false, // true = 3D.Group
+    scene3d_geometry: ?[]const u8 = null, // "box", "sphere", "plane", etc.
     scene3d_light_type: ?[]const u8 = null, // "ambient", "directional", "point"
     scene3d_color_r: f32 = 0.8,
     scene3d_color_g: f32 = 0.8,
@@ -220,73 +257,77 @@ pub const Node = struct {
     scene3d_scale_x: f32 = 1,
     scene3d_scale_y: f32 = 1,
     scene3d_scale_z: f32 = 1,
-    scene3d_look_x: f32 = 0,          // Camera lookAt target
+    scene3d_look_x: f32 = 0, // Camera lookAt target
     scene3d_look_y: f32 = 0,
     scene3d_look_z: f32 = 0,
-    scene3d_dir_x: f32 = 0,           // Light direction
+    scene3d_dir_x: f32 = 0, // Light direction
     scene3d_dir_y: f32 = -1,
     scene3d_dir_z: f32 = 0,
-    scene3d_fov: f32 = 60,            // Camera fov in degrees
-    scene3d_intensity: f32 = 1.0,     // Light intensity
-    scene3d_radius: f32 = 0.5,        // Sphere/cylinder radius
-    scene3d_size_x: f32 = 1,          // Box/plane width
-    scene3d_size_y: f32 = 1,          // Box/plane height
-    scene3d_size_z: f32 = 1,          // Box depth
+    scene3d_fov: f32 = 60, // Camera fov in degrees
+    scene3d_intensity: f32 = 1.0, // Light intensity
+    scene3d_radius: f32 = 0.5, // Sphere/cylinder radius
+    scene3d_tube_radius: f32 = 0.25, // Torus tube radius
+    scene3d_size_x: f32 = 1, // Box/plane width
+    scene3d_size_y: f32 = 1, // Box/plane height
+    scene3d_size_z: f32 = 1, // Box depth
+    scene3d_show_grid: bool = false, // Scene3D navigation grid overlay
+    scene3d_show_axes: bool = false, // Scene3D origin axes overlay
     // Physics 2D — inline in the 2D tree, driven by framework/physics2d.zig
-    physics_world: bool = false,       // true = Physics.World container
-    physics_body: bool = false,        // true = Physics.Body (wraps child nodes)
-    physics_collider: bool = false,    // true = Physics.Collider (shape definition, no visual)
-    physics_body_type: u8 = 2,         // 0=static, 1=kinematic, 2=dynamic
-    physics_x: f32 = 0,               // initial body position (pixels)
+    physics_world: bool = false, // true = Physics.World container
+    physics_body: bool = false, // true = Physics.Body (wraps child nodes)
+    physics_collider: bool = false, // true = Physics.Collider (shape definition, no visual)
+    physics_body_type: u8 = 2, // 0=static, 1=kinematic, 2=dynamic
+    physics_x: f32 = 0, // initial body position (pixels)
     physics_y: f32 = 0,
     physics_angle: f32 = 0,
-    physics_gravity_x: f32 = 0,       // world gravity (pixels/s^2)
+    physics_gravity_x: f32 = 0, // world gravity (pixels/s^2)
     physics_gravity_y: f32 = 980,
     physics_density: f32 = 1.0,
     physics_friction: f32 = 0.3,
     physics_restitution: f32 = 0.1,
-    physics_radius: f32 = 0,          // circle collider radius (pixels)
-    physics_shape: u8 = 0,            // 0=rectangle, 1=circle
-    physics_body_idx: i16 = -1,       // runtime: assigned body index from physics2d
+    physics_radius: f32 = 0, // circle collider radius (pixels)
+    physics_shape: u8 = 0, // 0=rectangle, 1=circle
+    physics_body_idx: i16 = -1, // runtime: assigned body index from physics2d
     physics_fixed_rotation: bool = false,
     physics_bullet: bool = false,
     physics_gravity_scale: f32 = 1.0,
     context_menu_items: ?[]const context_menu.MenuItem = null,
-    terminal: bool = false,           // true = Terminal element (cell-grid rendering via vterm)
-    terminal_font_size: u16 = 13,     // monospace font size for terminal cell grid
-    terminal_id: u8 = 0,              // multi-terminal slot index (0..MAX_TERMINALS-1)
-    graph_container: bool = false,    // true = Graph element (SVG paths, no pan/zoom)
+    terminal: bool = false, // true = Terminal element (cell-grid rendering via vterm)
+    terminal_font_size: u16 = 13, // monospace font size for terminal cell grid
+    terminal_id: u8 = 0, // multi-terminal slot index (0..MAX_TERMINALS-1)
+    graph_container: bool = false, // true = Graph element (SVG paths, no pan/zoom)
     canvas_type: ?[]const u8 = null,
     // Canvas viewport — initial camera (center point + zoom)
     canvas_view_x: f32 = 0,
     canvas_view_y: f32 = 0,
     canvas_view_zoom: f32 = 1.0,
-    canvas_view_set: bool = false,  // true = apply on first frame
+    canvas_view_set: bool = false, // true = apply on first frame
     // Canvas viewport drift — continuous camera animation (pixels/second)
-    canvas_drift_x: f32 = 0,        // horizontal drift speed (px/s, negative = left)
-    canvas_drift_y: f32 = 0,        // vertical drift speed (px/s, negative = up)
+    canvas_drift_x: f32 = 0, // horizontal drift speed (px/s, negative = left)
+    canvas_drift_y: f32 = 0, // vertical drift speed (px/s, negative = up)
     canvas_drift_active: bool = false, // true = drift animation is running
     // Per-node theme override (0 = inherit global, 1+ = palette ID from registry)
     theme_id: u8 = 0,
     // Canvas.Node fields — position + size in parent canvas's coordinate space
-    canvas_node: bool = false,       // true = this is a Canvas.Node
-    canvas_gx: f32 = 0,             // graph-space X (center)
-    canvas_gy: f32 = 0,             // graph-space Y (center)
-    canvas_gw: f32 = 0,             // graph-space width (0 = auto from content)
-    canvas_gh: f32 = 0,             // graph-space height (0 = auto from content)
+    canvas_node: bool = false, // true = this is a Canvas.Node
+    canvas_gx: f32 = 0, // graph-space X (center)
+    canvas_gy: f32 = 0, // graph-space Y (center)
+    canvas_gw: f32 = 0, // graph-space width (0 = auto from content)
+    canvas_gh: f32 = 0, // graph-space height (0 = auto from content)
     // Canvas.Path fields — SVG path drawing
-    canvas_clamp: bool = false,      // true = this is a Canvas.Clamp (viewport-pinned)
-    canvas_path: bool = false,       // true = this is a Canvas.Path
+    canvas_clamp: bool = false, // true = this is a Canvas.Clamp (viewport-pinned)
+    canvas_path: bool = false, // true = this is a Canvas.Path
     canvas_path_d: ?[]const u8 = null, // SVG path data string
     canvas_stroke_width: f32 = 2,
     canvas_fill_color: ?Color = null, // fill color for filled SVG paths (via blend2d)
-    canvas_flow_speed: f32 = 0,     // 0 = solid, >0 = flow forward, <0 = flow reverse
+    canvas_flow_speed: f32 = 0, // 0 = solid, >0 = flow forward, <0 = flow reverse
     canvas_fill_effect: ?[]const u8 = null, // effect name to use as polygon fill texture
     // Effect — user-compiled pixel render callback
     effect_render: ?effect_ctx.RenderFn = null,
+    effect_shader: ?effect_shader.GpuShaderDesc = null,
     effect_name: ?[]const u8 = null, // named effect — renders but not drawn, referenced by fillEffect
     effect_background: bool = false, // true = render behind parent's children
-    effect_mask: bool = false,       // true = post-process parent's rendered content
+    effect_mask: bool = false, // true = post-process parent's rendered content
     _flex_w: ?f32 = null,
     _stretch_h: ?f32 = null,
     _parent_inner_w: ?f32 = null,
@@ -329,15 +370,6 @@ pub fn hitTest(node: *Node, mx: f32, my: f32) ?*Node {
     while (i > 0) {
         i -= 1;
         if (hitTest(&node.children[i], child_mx, child_my)) |hit| {
-            // If the hit child is interactive, return it directly
-            if (hasHandlers(hit.handlers) or hit.href != null or hit.input_id != null) return hit;
-            // Otherwise, prefer this node if it has handlers (bubble up to Pressable parent)
-            if (hasHandlers(node.handlers) or node.href != null or node.input_id != null) {
-                if (mx >= r.x and mx < r.x + r.w and my >= r.y and my < r.y + r.h) {
-                    return node;
-                }
-            }
-            // No interactive ancestor — return the non-interactive hit (for canvas etc.)
             return hit;
         }
     }
@@ -350,7 +382,7 @@ pub fn hitTest(node: *Node, mx: f32, my: f32) ?*Node {
 }
 
 fn hasHandlers(h: EventHandler) bool {
-    return h.on_press != null or h.js_on_press != null or h.on_hover_enter != null or h.on_hover_exit != null or h.on_key != null or h.on_change_text != null or h.on_scroll != null or h.on_right_click != null;
+    return h.on_press != null or h.js_on_press != null or h.lua_on_press != null or h.on_hover_enter != null or h.on_hover_exit != null or h.on_key != null or h.on_change_text != null or h.on_scroll != null or h.on_right_click != null;
 }
 
 pub fn hitTestText(node: *Node, mx: f32, my: f32) ?Node {
@@ -932,7 +964,10 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
     if (visibleCount > 1) {
         var hasOrder = false;
         for (0..visibleCount) |i| {
-            if (node.children[visibleIndices[i]].style.order != 0) { hasOrder = true; break; }
+            if (node.children[visibleIndices[i]].style.order != 0) {
+                hasOrder = true;
+                break;
+            }
         }
         if (hasOrder) {
             var si: usize = 1;
@@ -1061,9 +1096,15 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
     var extraCrossGap: f32 = 0;
     if (numLines > 1 and freeCross > 0) {
         switch (s.align_content) {
-            .center => { crossOffset = freeCross / 2; },
-            .end => { crossOffset = freeCross; },
-            .space_between => { extraCrossGap = freeCross / @as(f32, @floatFromInt(numLines - 1)); },
+            .center => {
+                crossOffset = freeCross / 2;
+            },
+            .end => {
+                crossOffset = freeCross;
+            },
+            .space_between => {
+                extraCrossGap = freeCross / @as(f32, @floatFromInt(numLines - 1));
+            },
             .space_around => {
                 extraCrossGap = freeCross / @as(f32, @floatFromInt(numLines));
                 crossOffset = extraCrossGap / 2;

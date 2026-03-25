@@ -1324,6 +1324,10 @@ pub fn run(config_in: AppConfig) !void {
     // QuickJS VM
     qjs_runtime.initVM();
     defer qjs_runtime.deinit();
+
+    // LuaJIT logic VM (main-thread — events, state, conditionals)
+    luajit_runtime.initVM();
+    defer luajit_runtime.deinit();
     @import("audio.zig").registerQjsHostFunctions();
     @import("pty_client.zig").registerQjsHostFunctions();
 
@@ -1404,6 +1408,7 @@ pub fn run(config_in: AppConfig) !void {
                     geometry.save(window);
                 },
                 c.SDL_EVENT_MOUSE_BUTTON_DOWN => {
+                    luajit_runtime.updateMouseButton(true, event.button.button == c.SDL_BUTTON_RIGHT);
                     // Render surface input forwarding (VNC mouse) — check first
                     {
                         const rmx: f32 = event.button.x;
@@ -1443,7 +1448,7 @@ pub fn run(config_in: AppConfig) !void {
                         const my: f32 = event.button.y;
                         const events = @import("events.zig");
                         const hit = layout.hitTest(config.root, mx, my);
-                        const hit_is_interactive = if (hit) |h| (h.input_id != null or h.handlers.on_press != null or h.handlers.js_on_press != null or h.href != null) else false;
+                        const hit_is_interactive = if (hit) |h| (h.input_id != null or h.handlers.on_press != null or h.handlers.js_on_press != null or h.handlers.lua_on_press != null or h.href != null) else false;
                         if (hit_is_interactive) {
                             const h = hit.?;
                             if (h.input_id) |id| {
@@ -1473,6 +1478,13 @@ pub fn run(config_in: AppConfig) !void {
                                 if (h.handlers.js_on_press) |js_expr| {
                                     qjs_runtime.evalExpr(std.mem.span(js_expr));
                                 }
+                                // Also run Lua handler if present
+                                if (h.handlers.lua_on_press) |lua_expr| {
+                                    luajit_runtime.evalExpr(std.mem.span(lua_expr));
+                                }
+                            } else if (h.handlers.lua_on_press) |lua_expr| {
+                                input.unfocus();
+                                luajit_runtime.evalExpr(std.mem.span(lua_expr));
                             } else if (h.handlers.js_on_press) |js_expr| {
                                 input.unfocus();
                                 qjs_runtime.evalExpr(std.mem.span(js_expr));
@@ -1572,6 +1584,7 @@ pub fn run(config_in: AppConfig) !void {
                 c.SDL_EVENT_MOUSE_MOTION => {
                     const mx: f32 = event.motion.x;
                     const my: f32 = event.motion.y;
+                    luajit_runtime.updateMouse(mx, my);
                     // Render surface mouse motion forwarding
                     if (render_surfaces.handleMouseMotion(mx, my)) continue;
                     // Physics drag update
@@ -1637,6 +1650,7 @@ pub fn run(config_in: AppConfig) !void {
                     }
                 },
                 c.SDL_EVENT_MOUSE_BUTTON_UP => {
+                    luajit_runtime.updateMouseButton(false, event.button.button == c.SDL_BUTTON_RIGHT);
                     // Render surface mouse up forwarding
                     {
                         const rmx: f32 = event.button.x;
@@ -1800,6 +1814,9 @@ pub fn run(config_in: AppConfig) !void {
         qjs_runtime.tick();
         const t1 = std.time.microTimestamp();
         qjs_runtime.telemetry_tick_us = @intCast(@max(0, t1 - t0));
+
+        // LuaJIT tick
+        luajit_runtime.tick();
 
         // App tick (FFI polling, state updates, dynamic texts)
         if (config.tick) |tickFn| tickFn(@truncate(c.SDL_GetTicks()));
@@ -1989,6 +2006,7 @@ pub fn run(config_in: AppConfig) !void {
         const now: u64 = c.SDL_GetTicks();
         if (now -% fps_last >= 1000) {
             qjs_runtime.telemetry_fps = fps_frames;
+            luajit_runtime.telemetry_fps = fps_frames;
             const ppf = g_paint_count / @max(fps_frames, 1);
             const hpf = g_hidden_count / @max(fps_frames, 1);
             const zpf = g_zero_count / @max(fps_frames, 1);

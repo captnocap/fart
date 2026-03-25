@@ -20,6 +20,10 @@ pub const EventHandler = struct {
     on_submit: ?*const fn () void = null,
     on_scroll: ?*const fn () void = null,
     on_right_click: ?*const fn (x: f32, y: f32) void = null,
+    /// JS expression to eval on press (used by .so cartridges that can't call QJS directly)
+    js_on_press: ?[*:0]const u8 = null,
+    /// Lua expression to eval on press (LuaJIT logic runtime)
+    lua_on_press: ?[*:0]const u8 = null,
 };
 
 // ── Hit Testing ──────────────────────────────────────────────────────────
@@ -57,7 +61,8 @@ fn hasHandlers(h: *const EventHandler) bool {
         h.on_change_text != null or
         h.on_submit != null or
         h.on_scroll != null or
-        h.on_right_click != null;
+        h.on_right_click != null or
+        h.lua_on_press != null;
 }
 
 // ── Hover Hit Test (any node, not just ones with handlers) ──────────────
