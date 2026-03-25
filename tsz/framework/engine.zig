@@ -807,7 +807,7 @@ noinline fn paintNodeVisuals(node: *Node) void {
     const is_hovered = (hovered_node == node) and (node.handlers.on_hover_enter != null or node.handlers.on_hover_exit != null or node.hoverable);
 
     if (is_hovered and node.style.background_color == null) {
-        gpu.drawRect(r.x, r.y, r.w, r.h, 0.15, 0.15, 0.22, 0.6, node.style.border_radius, 0, 0, 0, 0, 0, 0, 0, 0);
+        gpu.drawRect(r.x, r.y, r.w, r.h, 0.15, 0.15, 0.22, 0.6, node.style.border_radius, 0, 0, 0, 0, 0);
     }
 
     if (node.style.background_color) |bg_raw| {
@@ -820,8 +820,7 @@ noinline fn paintNodeVisuals(node: *Node) void {
                     r.x, r.y, r.w, r.h,
                     @as(f32, @floatFromInt(bg.r)) / 255.0, @as(f32, @floatFromInt(bg.g)) / 255.0,
                     @as(f32, @floatFromInt(bg.b)) / 255.0, @as(f32, @floatFromInt(bg.a)) / 255.0 * g_paint_opacity,
-                    node.style.border_radius,
-                    node.style.brdTop(), node.style.brdRight(), node.style.brdBottom(), node.style.brdLeft(),
+                    node.style.border_radius, node.style.brdTop(),
                     @as(f32, @floatFromInt(bc.r)) / 255.0, @as(f32, @floatFromInt(bc.g)) / 255.0,
                     @as(f32, @floatFromInt(bc.b)) / 255.0, @as(f32, @floatFromInt(bc.a)) / 255.0 * g_paint_opacity,
                     node.style.rotation, node.style.scale_x, node.style.scale_y,
@@ -831,8 +830,7 @@ noinline fn paintNodeVisuals(node: *Node) void {
                     r.x, r.y, r.w, r.h,
                     @as(f32, @floatFromInt(bg.r)) / 255.0, @as(f32, @floatFromInt(bg.g)) / 255.0,
                     @as(f32, @floatFromInt(bg.b)) / 255.0, @as(f32, @floatFromInt(bg.a)) / 255.0 * g_paint_opacity,
-                    node.style.border_radius,
-                    node.style.brdTop(), node.style.brdRight(), node.style.brdBottom(), node.style.brdLeft(),
+                    node.style.border_radius, node.style.brdTop(),
                     @as(f32, @floatFromInt(bc.r)) / 255.0, @as(f32, @floatFromInt(bc.g)) / 255.0,
                     @as(f32, @floatFromInt(bc.b)) / 255.0, @as(f32, @floatFromInt(bc.a)) / 255.0 * g_paint_opacity,
                 );
@@ -891,7 +889,7 @@ noinline fn paintNodeVisuals(node: *Node) void {
                 gpu.drawRect(r.x + pl, underline_y, text_w, 1,
                     @as(f32, @floatFromInt(tc.r)) / 255.0, @as(f32, @floatFromInt(tc.g)) / 255.0,
                     @as(f32, @floatFromInt(tc.b)) / 255.0, final_a * 0.6,
-                    0, 0, 0, 0, 0, 0, 0, 0, 0);
+                    0, 0, 0, 0, 0, 0);
             }
         }
     }
@@ -904,7 +902,7 @@ noinline fn paintTextInput(node: *Node, id: u8) void {
     const r = node.computed;
     if (input.isFocused(id)) {
         const pad: f32 = 4;
-        gpu.drawRect(r.x - pad, r.y - pad, r.w + pad * 2, r.h + pad * 2, 0, 0, 0, 0, 5, 1.5, 1.5, 1.5, 1.5, 0.30, 0.56, 0.92, 0.7);
+        gpu.drawRect(r.x - pad, r.y - pad, r.w + pad * 2, r.h + pad * 2, 0, 0, 0, 0, 5, 1.5, 1.5, 1.5, 1.5, 0.30);
     }
     const typed = input.getText(id);
     const is_placeholder = typed.len == 0;
@@ -942,7 +940,7 @@ noinline fn paintTextInput(node: *Node, id: u8) void {
         const metrics = measureCallback(typed[0..cursor_pos], node.font_size, r.w - pl - node.style.padRight(), 0, 0, 1, true);
         const cx = r.x + pl + metrics.width;
         const ch = r.h - pt - pb;
-        gpu.drawRect(cx, r.y + pt, 2, @max(ch, 4), 1, 1, 1, 0.8, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+        gpu.drawRect(cx, r.y + pt, 2, @max(ch, 4), 1, 1, 1, 0.8, 0, 0, 0, 0, 0, 0);
     }
 }
 
@@ -991,7 +989,7 @@ noinline fn paintTerminal(node: *Node) void {
 
         // Alternating row background for visual tracking
         if (row % 2 == 1) {
-            gpu.drawRect(base_x, cy, avail_w, cell_h, 1.0, 1.0, 1.0, 0.02 * g_paint_opacity, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+            gpu.drawRect(base_x, cy, avail_w, cell_h, 1.0, 1.0, 1.0, 0.02 * g_paint_opacity, 0, 0, 0, 0, 0, 0);
         }
 
         // Left accent bar: bright for classified tokens, dim for output
@@ -1004,9 +1002,9 @@ noinline fn paintTerminal(node: *Node) void {
                     @as(f32, @floatFromInt(ac.r)) / 255.0,
                     @as(f32, @floatFromInt(ac.g)) / 255.0,
                     @as(f32, @floatFromInt(ac.b)) / 255.0,
-                    0.9 * g_paint_opacity, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+                    0.9 * g_paint_opacity, 0, 0, 0, 0, 0, 0);
             } else {
-                gpu.drawRect(r.x, cy + cell_h * 0.35, 2, cell_h * 0.3, 0.3, 0.33, 0.4, 0.25 * g_paint_opacity, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+                gpu.drawRect(r.x, cy + cell_h * 0.35, 2, cell_h * 0.3, 0.3, 0.33, 0.4, 0.25 * g_paint_opacity, 0, 0, 0, 0, 0, 0);
             }
         }
 
@@ -1020,7 +1018,7 @@ noinline fn paintTerminal(node: *Node) void {
 
             // Selection highlight
             if (termCellSelected(row, col)) {
-                gpu.drawRect(cx, cy, cell_w, cell_h, 0.3, 0.45, 0.8, 0.45 * g_paint_opacity, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+                gpu.drawRect(cx, cy, cell_w, cell_h, 0.3, 0.45, 0.8, 0.45 * g_paint_opacity, 0, 0, 0, 0, 0, 0);
             }
 
             // Background rect (non-default bg only)
@@ -1030,7 +1028,7 @@ noinline fn paintTerminal(node: *Node) void {
                     @as(f32, @floatFromInt(actual_bg.r)) / 255.0,
                     @as(f32, @floatFromInt(actual_bg.g)) / 255.0,
                     @as(f32, @floatFromInt(actual_bg.b)) / 255.0,
-                    g_paint_opacity, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+                    g_paint_opacity, 0, 0, 0, 0, 0, 0);
             }
 
             // Foreground glyph — semantic color for live rows, cell color for scrollback
@@ -1064,7 +1062,7 @@ noinline fn paintTerminal(node: *Node) void {
 
     // Scrollback indicator — dim bar at top when scrolled up
     if (scroll_off > 0) {
-        gpu.drawRect(base_x, r.y, avail_w, 2, 0.5, 0.5, 0.8, 0.6 * g_paint_opacity, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+        gpu.drawRect(base_x, r.y, avail_w, 2, 0.5, 0.5, 0.8, 0.6 * g_paint_opacity, 0, 0, 0, 0, 0, 0);
     }
 
     // Cursor — only show when at live view (not scrolled up)
@@ -1074,7 +1072,7 @@ noinline fn paintTerminal(node: *Node) void {
         if (crow < rows and ccol < cols) {
             const cx = base_x + @as(f32, @floatFromInt(ccol)) * cell_w;
             const cy_cur = base_y + @as(f32, @floatFromInt(crow)) * cell_h;
-            gpu.drawRect(cx, cy_cur, cell_w, cell_h, 0.8, 0.8, 0.8, 0.7 * g_paint_opacity, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+            gpu.drawRect(cx, cy_cur, cell_w, cell_h, 0.8, 0.8, 0.8, 0.7 * g_paint_opacity, 0, 0, 0, 0, 0, 0);
         }
     }
 }
@@ -1110,11 +1108,11 @@ noinline fn paintCanvasContainer(node: *Node) void {
                     if (node_selected) {
                         const hw = child.canvas_gw / 2 + 5;
                         const hh = child.canvas_gh / 2 + 5;
-                        gpu.drawRect(child.canvas_gx - hw, child.canvas_gy - hh, hw * 2, hh * 2, 0.5, 0.4, 1.0, 0.4, 8, 2, 2, 2, 2, 1.0, 1.0, 1.0, 0.5);
+                        gpu.drawRect(child.canvas_gx - hw, child.canvas_gy - hh, hw * 2, hh * 2, 0.5, 0.4, 1.0, 0.4, 8, 2, 2, 2, 2, 1.0);
                     } else if (node_hovered) {
                         const hw = child.canvas_gw / 2 + 4;
                         const hh = child.canvas_gh / 2 + 4;
-                        gpu.drawRect(child.canvas_gx - hw, child.canvas_gy - hh, hw * 2, hh * 2, 0.4, 0.3, 0.9, 0.25, 8, 0, 0, 0, 0, 0, 0, 0, 0);
+                        gpu.drawRect(child.canvas_gx - hw, child.canvas_gy - hh, hw * 2, hh * 2, 0.4, 0.3, 0.9, 0.25, 8, 0, 0, 0, 0, 0);
                     }
                 }
                 g_paint_opacity = canvas.getNodeDim(child_idx);
@@ -1819,15 +1817,15 @@ pub fn run(config_in: AppConfig) !void {
         // Debug pairing overlay — modal with 6-digit code
         if (debug_server.getPairingCode()) |code| {
             // Semi-transparent backdrop
-            gpu.drawRect(0, 0, win_w, win_h, 0, 0, 0, 0.6, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+            gpu.drawRect(0, 0, win_w, win_h, 0, 0, 0, 0.6, 0, 0, 0, 0, 0, 0);
             // Card background
             const cw: f32 = 320;
             const ch: f32 = 140;
             const cx = (win_w - cw) / 2;
             const cy = (win_h - ch) / 2;
-            gpu.drawRect(cx, cy, cw, ch, 0.12, 0.14, 0.20, 0.95, 12, 0, 0, 0, 0, 0, 0, 0, 0);
+            gpu.drawRect(cx, cy, cw, ch, 0.12, 0.14, 0.20, 0.95, 12, 0, 0, 0, 0, 0);
             // Border
-            gpu.drawRect(cx, cy, cw, ch, 0, 0, 0, 0, 12, 1.5, 1.5, 1.5, 1.5, 0.38, 0.65, 0.98, 0.8);
+            gpu.drawRect(cx, cy, cw, ch, 0, 0, 0, 0, 12, 1.5, 1.5, 1.5, 1.5, 0.38);
             // Title
             _ = gpu.drawTextWrapped("Debug Pairing", cx + 20, cy + 16, 15, cw - 40, 0.89, 0.91, 0.94, 1.0, 0);
             // Code (large)
