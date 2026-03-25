@@ -22,10 +22,11 @@ import { DevServerPage } from './devserver';
 import { InspectorPage } from './inspector';
 import { ViolationsPage } from './violations';
 import { SearchPage } from './search';
+import { SessionsPage } from './sessions';
 
 const [refreshTick] = useFFI(sv_refresh, 3000);
 
-// Tab state: 0=tasks, 1=workers, 2=memory, 3=devserver, 4=inspector, 5=violations, 6=search
+// Tab state: 0=tasks, 1=workers, 2=memory, 3=devserver, 4=inspector, 5=violations, 6=search, 7=sessions
 const [activeTab, setActiveTab] = useState(0);
 
 // Splitter
@@ -164,6 +165,19 @@ const [srchFilterIdx, setSrchFilterIdx] = useState(0);
 const [srchTotalMessages, setSrchTotalMessages] = useState(0);
 const [srchTotalSessions, setSrchTotalSessions] = useState(0);
 
+// Sessions state (used by sessions.tsz)
+const [sessList, setSessList] = useState([{ sid: '', short: '', status: '', tool: '', file: '', pingAgo: '', editCount: 0, lastEditSummary: '', lastEditFile: '', lastEditTime: '', dotColor: 0x484f58, badgeBg: 0x1f2937, badgeColor: 0x8b949e }]);
+const [sessCount, setSessCount] = useState(0);
+const [sessActiveCount, setSessActiveCount] = useState(0);
+const [sessSelectedIdx, setSessSelectedIdx] = useState(0);
+const [sessDetShort, setSessDetShort] = useState('');
+const [sessDetSid, setSessDetSid] = useState('');
+const [sessDetStatus, setSessDetStatus] = useState('');
+const [sessDetTool, setSessDetTool] = useState('');
+const [sessDetFile, setSessDetFile] = useState('');
+const [sessDetEdits, setSessDetEdits] = useState([{ file: '', summary: '', time: '' }]);
+const [sessDetEditCount, setSessDetEditCount] = useState(0);
+
 function App() {
   return (
     <C.Page>
@@ -195,6 +209,10 @@ function App() {
         <Pressable onPress={() => { setActiveTab(6) }}>
           {activeTab == 6 && <C.TabActive><C.TabTextActive>{`Search (${srchTotalMessages})`}</C.TabTextActive></C.TabActive>}
           {activeTab != 6 && <C.Tab><C.TabText>{`Search (${srchTotalMessages})`}</C.TabText></C.Tab>}
+        </Pressable>
+        <Pressable onPress={() => { setActiveTab(7) }}>
+          {activeTab == 7 && <C.TabActive><C.TabTextActive>{`Sessions (${sessActiveCount})`}</C.TabTextActive></C.TabActive>}
+          {activeTab != 7 && <C.Tab><C.TabText>{`Sessions (${sessActiveCount})`}</C.TabText></C.Tab>}
         </Pressable>
       </C.TabBar>
 
@@ -428,6 +446,8 @@ function App() {
         {activeTab == 5 && <ViolationsPage />}
 
         {activeTab == 6 && <SearchPage />}
+
+        {activeTab == 7 && <SessionsPage />}
       </C.TabContent>
     </C.Page>
   );
