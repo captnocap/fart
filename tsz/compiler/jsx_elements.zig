@@ -79,9 +79,24 @@ pub fn emit3DFields(self: *Generator, fields: *std.ArrayListUnmanaged(u8), props
         }
     }
 
-    if (props.pos[0].len > 0) try fields.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, ", .scene3d_pos_x = {s}, .scene3d_pos_y = {s}, .scene3d_pos_z = {s}", .{ props.pos[0], props.pos[1], props.pos[2] }));
-    if (props.rot[0].len > 0) try fields.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, ", .scene3d_rot_x = {s}, .scene3d_rot_y = {s}, .scene3d_rot_z = {s}", .{ props.rot[0], props.rot[1], props.rot[2] }));
-    if (props.lookat[0].len > 0) try fields.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, ", .scene3d_look_x = {s}, .scene3d_look_y = {s}, .scene3d_look_z = {s}", .{ props.lookat[0], props.lookat[1], props.lookat[2] }));
+    if (props.pos[0].len > 0) {
+        const px = if (std.mem.startsWith(u8, props.pos[0], "state.get")) "0" else props.pos[0];
+        const py = if (std.mem.startsWith(u8, props.pos[1], "state.get")) "0" else props.pos[1];
+        const pz = if (std.mem.startsWith(u8, props.pos[2], "state.get")) "0" else props.pos[2];
+        try fields.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, ", .scene3d_pos_x = {s}, .scene3d_pos_y = {s}, .scene3d_pos_z = {s}", .{ px, py, pz }));
+    }
+    if (props.rot[0].len > 0) {
+        const rx = if (std.mem.startsWith(u8, props.rot[0], "state.get")) "0" else props.rot[0];
+        const ry = if (std.mem.startsWith(u8, props.rot[1], "state.get")) "0" else props.rot[1];
+        const rz = if (std.mem.startsWith(u8, props.rot[2], "state.get")) "0" else props.rot[2];
+        try fields.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, ", .scene3d_rot_x = {s}, .scene3d_rot_y = {s}, .scene3d_rot_z = {s}", .{ rx, ry, rz }));
+    }
+    if (props.lookat[0].len > 0) {
+        const lx = if (std.mem.startsWith(u8, props.lookat[0], "state.get")) "0" else props.lookat[0];
+        const ly = if (std.mem.startsWith(u8, props.lookat[1], "state.get")) "0" else props.lookat[1];
+        const lz = if (std.mem.startsWith(u8, props.lookat[2], "state.get")) "0" else props.lookat[2];
+        try fields.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, ", .scene3d_look_x = {s}, .scene3d_look_y = {s}, .scene3d_look_z = {s}", .{ lx, ly, lz }));
+    }
     if (props.dir[0].len > 0) try fields.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, ", .scene3d_dir_x = {s}, .scene3d_dir_y = {s}, .scene3d_dir_z = {s}", .{ props.dir[0], props.dir[1], props.dir[2] }));
     if (props.size[0].len > 0) try fields.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, ", .scene3d_size_x = {s}, .scene3d_size_y = {s}, .scene3d_size_z = {s}", .{ props.size[0], props.size[1], props.size[2] }));
     if (props.scale[0].len > 0) try fields.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, ", .scene3d_scale_x = {s}, .scene3d_scale_y = {s}, .scene3d_scale_z = {s}", .{ props.scale[0], props.scale[1], props.scale[2] }));

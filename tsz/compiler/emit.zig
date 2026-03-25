@@ -1796,38 +1796,47 @@ pub fn emitZigSource(self: *Generator, root_expr: []const u8) ![]const u8 {
         // state.getSlot() returns i64 → @floatFromInt
         // state.getSlotFloat() returns f64 → @floatCast
         const needs_int_cast = std.mem.eql(u8, ds.field, "canvas_flow_speed");
+        const is_scene3d_field = std.mem.startsWith(u8, ds.field, "scene3d_");
+        // scene3d fields: f32 direct node fields from f64 state.getSlotFloat → need @floatCast
+        const needs_float_cast = is_scene3d_field;
+        const expr = if (needs_float_cast)
+            try std.fmt.allocPrint(self.alloc, "@floatCast({s})", .{ds.expression})
+        else
+            ds.expression;
         // arr_name="" means style is on root itself
         if (ds.arr_name.len == 0) {
             const is_root_style = !std.mem.eql(u8, ds.field, "text_color") and
                 !std.mem.eql(u8, ds.field, "canvas_flow_speed") and
                 !std.mem.eql(u8, ds.field, "font_size") and
-                !std.mem.eql(u8, ds.field, "opacity");
+                !std.mem.eql(u8, ds.field, "opacity") and
+                !is_scene3d_field;
             const root_acc = if (is_root_style) "_root.style." else "_root.";
             if (needs_int_cast) {
                 try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
                     "    {s}{s} = @floatFromInt({s});\n",
-                    .{ root_acc, ds.field, ds.expression }));
+                    .{ root_acc, ds.field, expr }));
             } else {
                 try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
                     "    {s}{s} = {s};\n",
-                    .{ root_acc, ds.field, ds.expression }));
+                    .{ root_acc, ds.field, expr }));
             }
         } else {
             // Style fields (width, height, padding, etc.) live in Node.style
-            // Node-level fields (text_color, canvas_flow_speed) are direct
+            // Node-level fields (text_color, canvas_flow_speed, scene3d_*) are direct
             const is_style_field = !std.mem.eql(u8, ds.field, "text_color") and
                 !std.mem.eql(u8, ds.field, "canvas_flow_speed") and
                 !std.mem.eql(u8, ds.field, "font_size") and
-                !std.mem.eql(u8, ds.field, "opacity");
+                !std.mem.eql(u8, ds.field, "opacity") and
+                !is_scene3d_field;
             const accessor = if (is_style_field) ".style." else ".";
             if (needs_int_cast) {
                 try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
                     "    {s}[{d}]{s}{s} = @floatFromInt({s});\n",
-                    .{ ds.arr_name, ds.arr_index, accessor, ds.field, ds.expression }));
+                    .{ ds.arr_name, ds.arr_index, accessor, ds.field, expr }));
             } else {
                 try out.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
                     "    {s}[{d}]{s}{s} = {s};\n",
-                    .{ ds.arr_name, ds.arr_index, accessor, ds.field, ds.expression }));
+                    .{ ds.arr_name, ds.arr_index, accessor, ds.field, expr }));
             }
         }
     }

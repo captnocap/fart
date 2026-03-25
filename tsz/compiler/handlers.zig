@@ -911,10 +911,23 @@ pub fn emitStateAtom(self: *Generator) anyerror![]const u8 {
                                 return try std.fmt.allocPrint(self.alloc, "@mod({s}, {s})", .{ a, b });
                             }
 
+                            // Two-arg math: e.atan2(y,x) → std.math.atan2(y,x)
+                            if (std.mem.eql(u8, member, "atan2")) {
+                                self.advance_token(); // skip '('
+                                const a = try emitStateExpr(self);
+                                if (self.curKind() == .comma) self.advance_token();
+                                const b = try emitStateExpr(self);
+                                if (self.curKind() == .rparen) self.advance_token();
+                                return try std.fmt.allocPrint(self.alloc, "std.math.atan2({s}, {s})", .{ a, b });
+                            }
+
                             // ctx methods: e.noise(x,y) → ctx.noise(x,y)
                             if (std.mem.eql(u8, member, "noise") or std.mem.eql(u8, member, "lerp") or
                                 std.mem.eql(u8, member, "remap") or std.mem.eql(u8, member, "smoothstep") or
                                 std.mem.eql(u8, member, "dist") or std.mem.eql(u8, member, "getPixel") or
+                                std.mem.eql(u8, member, "getSource") or std.mem.eql(u8, member, "getSourceAlpha") or
+                                std.mem.eql(u8, member, "getSourceR") or std.mem.eql(u8, member, "getSourceG") or
+                                std.mem.eql(u8, member, "getSourceB") or
                                 std.mem.eql(u8, member, "noise3") or std.mem.eql(u8, member, "fbm") or
                                 std.mem.eql(u8, member, "clamp"))
                             {

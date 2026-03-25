@@ -244,6 +244,7 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
     var canvas_gh_str: []const u8 = "";
     var canvas_path_d: []const u8 = "";
     var canvas_stroke_str: []const u8 = "";
+    var canvas_fill_str: []const u8 = "";
     var canvas_stroke_w_str: []const u8 = "";
     var canvas_flow_speed_str: []const u8 = "";
     var canvas_view_x_str: []const u8 = "";
@@ -270,6 +271,8 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
     var on_render_start: ?u32 = null; // <Effect onRender={...}>
     var effect_is_background: bool = false; // <Effect background ...>
     var effect_is_mask: bool = false; // <Effect mask ...>
+    var effect_name_str: []const u8 = ""; // <Effect name="foo">
+    var canvas_fill_effect_str: []const u8 = ""; // <Graph.Path fillEffect="foo">
 
     // Pre-populate from classifier
     if (classifier_idx) |idx| {
@@ -308,7 +311,7 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
                 } else if (std.mem.eql(u8, attr_name, "noWrap")) {
                     try attrs.skipAttrValue(self);
                     no_wrap = true;
-                } else if (std.mem.eql(u8, attr_name, "color")) {
+                } else if (!is_3d and std.mem.eql(u8, attr_name, "color")) {
                     if (self.curKind() == .lbrace) {
                         self.advance_token();
                         self.emit_colors_as_rgb = true;
@@ -376,6 +379,10 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
                     } else {
                         try attrs.skipAttrValue(self);
                     }
+                } else if (std.mem.eql(u8, attr_name, "name") and is_custom_effect) {
+                    effect_name_str = try attrs.parseStringAttr(self);
+                } else if (std.mem.eql(u8, attr_name, "fillEffect") and is_canvas_path) {
+                    canvas_fill_effect_str = try attrs.parseStringAttr(self);
                 } else if (std.mem.eql(u8, attr_name, "tooltip")) {
                     tooltip_str = try attrs.parseStringAttr(self);
                 } else if (std.mem.eql(u8, attr_name, "href")) {
@@ -407,6 +414,8 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
                     canvas_path_d = try attrs.parseStringAttr(self);
                 } else if (std.mem.eql(u8, attr_name, "stroke") and is_canvas_path) {
                     canvas_stroke_str = try attrs.parseStringAttr(self);
+                } else if (std.mem.eql(u8, attr_name, "fill") and is_canvas_path) {
+                    canvas_fill_str = try attrs.parseStringAttr(self);
                 } else if (std.mem.eql(u8, attr_name, "strokeWidth") and is_canvas_path) {
                     canvas_stroke_w_str = try attrs.parseExprAttr(self);
                 } else if (std.mem.eql(u8, attr_name, "flowSpeed") and is_canvas_path) {
@@ -928,6 +937,29 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
         .fov = s3d_fov, .intensity = s3d_intensity, .radius = s3d_radius,
     });
 
+    // Register dynamic 3D vector props as dyn_styles so _updateDynamicTexts updates them at runtime
+    if (is_3d) {
+        const dyn3d_vecs = [_]struct { vals: [3][]const u8, flds: [3][]const u8 }{
+            .{ .vals = s3d_pos,    .flds = .{ "scene3d_pos_x",  "scene3d_pos_y",  "scene3d_pos_z"  } },
+            .{ .vals = s3d_lookat, .flds = .{ "scene3d_look_x", "scene3d_look_y", "scene3d_look_z" } },
+            .{ .vals = s3d_rot,    .flds = .{ "scene3d_rot_x",  "scene3d_rot_y",  "scene3d_rot_z"  } },
+        };
+        for (dyn3d_vecs) |vec| {
+            for (vec.vals, vec.flds) |val, fld| {
+                if (std.mem.startsWith(u8, val, "state.get") and self.dyn_style_count < MAX_DYN_STYLES) {
+                    self.dyn_styles[self.dyn_style_count] = .{
+                        .field = fld,
+                        .expression = val,
+                        .arr_name = "",
+                        .arr_index = 0,
+                        .has_ref = false,
+                    };
+                    self.dyn_style_count += 1;
+                }
+            }
+        }
+    }
+
     // Terminal element fields
     if (is_terminal) {
         if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
@@ -957,6 +989,11 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
         }
         if (effect_is_mask) {
             try fields.appendSlice(self.alloc, ", .effect_mask = true");
+        }
+        if (effect_name_str.len > 0) {
+            try fields.appendSlice(self.alloc, ", .effect_name = \"");
+            try fields.appendSlice(self.alloc, effect_name_str);
+            try fields.appendSlice(self.alloc, "\"");
         }
     }
 
@@ -1131,6 +1168,18 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
             const color = try attrs.parseColorValue(self, canvas_stroke_str);
             try fields.appendSlice(self.alloc, ", .text_color = ");
             try fields.appendSlice(self.alloc, color);
+        }
+        // Fill color → canvas_fill_color field
+        if (canvas_fill_str.len > 0) {
+            const fill_color = try attrs.parseColorValue(self, canvas_fill_str);
+            try fields.appendSlice(self.alloc, ", .canvas_fill_color = ");
+            try fields.appendSlice(self.alloc, fill_color);
+        }
+        // Fill effect → canvas_fill_effect (reference to named effect texture)
+        if (canvas_fill_effect_str.len > 0) {
+            try fields.appendSlice(self.alloc, ", .canvas_fill_effect = \"");
+            try fields.appendSlice(self.alloc, canvas_fill_effect_str);
+            try fields.appendSlice(self.alloc, "\"");
         }
         if (canvas_flow_speed_str.len > 0) {
             if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
@@ -1433,6 +1482,17 @@ fn parse3DVector(self: *Generator) ![3][]const u8 {
             const val = self.curText();
             self.advance_token();
             result[i] = if (neg) try std.fmt.allocPrint(self.alloc, "-{s}", .{val}) else val;
+        } else if (self.curKind() == .identifier) {
+            const ident = self.curText();
+            self.advance_token();
+            if (self.isState(ident)) |slot_id| {
+                const rid = self.regularSlotId(slot_id);
+                const st = self.stateTypeById(slot_id);
+                result[i] = switch (st) {
+                    .float => try std.fmt.allocPrint(self.alloc, "state.getSlotFloat({d})", .{rid}),
+                    else => try std.fmt.allocPrint(self.alloc, "state.getSlot({d})", .{rid}),
+                };
+            }
         }
         i += 1;
         if (self.curKind() == .comma) self.advance_token();
