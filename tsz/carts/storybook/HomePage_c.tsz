@@ -26,6 +26,14 @@ import { TabsTile } from './tiles/TabsTile_c';
 import { StateTile } from './tiles/StateTile_c';
 import { GameTile } from './tiles/GameTile_c';
 import { ColorMixTile } from './tiles/ColorMixTile_c';
+import { InspectorTile } from './tiles/InspectorTile_c';
+import { EffectsTile } from './tiles/EffectsTile_c';
+import { Scene3DTile } from './tiles/Scene3DTile_c';
+import { SplitPaneTile } from './tiles/SplitPaneTile_c';
+import { DataTableTile } from './tiles/DataTableTile_c';
+import { Terminal3DTile } from './tiles/Terminal3DTile_c';
+import { PhysicsDemo } from './tiles/PhysicsDemo_c';
+import { SolarSystem } from './tiles/SolarSystem_c';
 
 const [hpClicks, setHpClicks] = useState(0);
 const [hpTogA, setHpTogA] = useState(1);
@@ -401,6 +409,39 @@ function HomePage() {
             <Text fontSize={11} color="#d79921">Warm frontier</Text>
             <Text fontSize={9} color="#928374">Gruvbox outpost — SW corner</Text>
           </Box>
+        </Canvas.Node>
+
+        {/* ═══ NEW COMPONENT TILES — scattered across the canvas ═══ */}
+        <Canvas.Node gx={600} gy={-350} gw={260} gh={0}>
+          <InspectorTile />
+        </Canvas.Node>
+
+        <Canvas.Node gx={-700} gy={350} gw={260} gh={0}>
+          <EffectsTile />
+        </Canvas.Node>
+
+        <Canvas.Node gx={850} gy={400} gw={260} gh={0}>
+          <Scene3DTile />
+        </Canvas.Node>
+
+        <Canvas.Node gx={-350} gy={500} gw={260} gh={0}>
+          <SplitPaneTile />
+        </Canvas.Node>
+
+        <Canvas.Node gx={250} gy={-550} gw={260} gh={0}>
+          <DataTableTile />
+        </Canvas.Node>
+
+        <Canvas.Node gx={-900} gy={-400} gw={260} gh={0}>
+          <Terminal3DTile />
+        </Canvas.Node>
+
+        <Canvas.Node gx={1100} gy={200} gw={260} gh={0}>
+          <PhysicsDemo />
+        </Canvas.Node>
+
+        <Canvas.Node gx={-500} gy={-600} gw={260} gh={0}>
+          <SolarSystem />
         </Canvas.Node>
 
       </Canvas>
