@@ -1,0 +1,198 @@
+function App() {
+  return (
+    <Box style={{ width: '100%', height: '100%', backgroundColor: '#0d1117', padding: 24 }}>
+      <Text style={{ fontSize: 22, color: '#e6edf3', marginBottom: 8 }}>Polygon Effects</Text>
+      <Text style={{ fontSize: 13, color: '#8b949e', marginBottom: 20 }}>Per-pixel shader effects clipped to polygon geometry via GPU Gouraud interpolation</Text>
+
+      <Effect name="plasma" onRender={(e) => {
+        for (let y = 0; y < e.height; y++) {
+          for (let x = 0; x < e.width; x++) {
+            const fx = x * 0.02;
+            const fy = y * 0.02;
+            const t = e.time;
+            const v1 = e.sin(fx + t);
+            const v2 = e.sin(fy + t * 0.7);
+            const v3 = e.sin(fx + fy + t * 0.5);
+            const v4 = e.sin(e.sqrt(fx * fx + fy * fy) + t);
+            const v = (v1 + v2 + v3 + v4) * 0.25 + 0.5;
+            const r = e.sin(v * 3.14159) * 0.5 + 0.5;
+            const g = e.sin(v * 3.14159 + 2.094) * 0.5 + 0.5;
+            const b = e.sin(v * 3.14159 + 4.189) * 0.5 + 0.5;
+            e.setPixel(x, y, r, g, b, 1.0);
+          }
+        }
+      }} style={{ width: 170, height: 170, position: 'absolute' }} />
+
+      <Effect name="lava" onRender={(e) => {
+        for (let y = 0; y < e.height; y++) {
+          for (let x = 0; x < e.width; x++) {
+            const t = e.time;
+            const fx = x * 0.03;
+            const fy = y * 0.03;
+            const n1 = e.sin(fx * 2.0 + t * 0.8) * e.sin(fy * 1.5 - t * 0.6);
+            const n2 = e.sin(e.sqrt(fx * fx + fy * fy) * 3.0 - t * 1.2);
+            const v = (n1 + n2) * 0.5 + 0.5;
+            const r = v * 1.3;
+            const g = v * v * 0.6;
+            const b = v * v * v * 0.15;
+            e.setPixel(x, y, r, g, b, 1.0);
+          }
+        }
+      }} style={{ width: 170, height: 170, position: 'absolute' }} />
+
+      <Effect name="ocean" onRender={(e) => {
+        for (let y = 0; y < e.height; y++) {
+          for (let x = 0; x < e.width; x++) {
+            const t = e.time;
+            const fx = x * 0.015;
+            const fy = y * 0.015;
+            const wave1 = e.sin(fx * 3.0 + t * 1.2) * 0.3;
+            const wave2 = e.sin(fy * 2.0 - t * 0.9 + fx) * 0.3;
+            const wave3 = e.sin(e.sqrt(fx * fx + fy * fy) * 4.0 + t * 0.7) * 0.2;
+            const v = wave1 + wave2 + wave3 + 0.5;
+            const r = v * 0.1;
+            const g = v * 0.4 + 0.1;
+            const b = v * 0.9 + 0.2;
+            e.setPixel(x, y, r, g, b, 1.0);
+          }
+        }
+      }} style={{ width: 170, height: 170, position: 'absolute' }} />
+
+      <Effect name="pulse" onRender={(e) => {
+        const t = e.time;
+        const beat = e.sin(t * 4.0) * 0.3 + 0.7;
+        for (let y = 0; y < e.height; y++) {
+          for (let x = 0; x < e.width; x++) {
+            const dx = (x - 85) / 85.0;
+            const dy = (y - 85) / 85.0;
+            const d = e.sqrt(dx * dx + dy * dy);
+            const ring = e.sin(d * 12.0 - t * 8.0) * 0.5 + 0.5;
+            const glow = ring * beat;
+            e.setPixel(x, y, glow * 1.2, glow * 0.15, glow * 0.3, 1.0);
+          }
+        }
+      }} style={{ width: 170, height: 170, position: 'absolute' }} />
+
+      <Effect name="aurora" onRender={(e) => {
+        const t = e.time;
+        for (let y = 0; y < e.height; y++) {
+          for (let x = 0; x < e.width; x++) {
+            const fx = x * 0.012;
+            const fy = y * 0.025;
+            const shift = e.sin(fx * 3.0 + t * 0.5) * 0.5;
+            const band = e.sin(fy * 4.0 + shift + t * 0.3) * 0.5 + 0.5;
+            const shimmer = e.sin(fx * 8.0 + fy * 2.0 + t * 2.0) * 0.15 + 0.85;
+            const r = band * 0.2 * shimmer;
+            const g = band * 0.9 * shimmer;
+            const b = (1.0 - band) * 0.7 * shimmer + 0.2;
+            e.setPixel(x, y, r, g, b, 1.0);
+          }
+        }
+      }} style={{ width: 170, height: 170, position: 'absolute' }} />
+
+      <Effect name="spiral" onRender={(e) => {
+        e.fade(0.94);
+        const t = e.time;
+        for (let i = 0; i < 500; i++) {
+          const angle = t * 2.0 + i * 0.05;
+          const radius = i * 0.18 + e.sin(t + i * 0.02) * 5.0;
+          const px = 85 + e.cos(angle) * radius;
+          const py = 85 + e.sin(angle) * radius;
+          const hue = i * 0.006 + t * 0.1;
+          const r = e.sin(hue * 6.283) * 0.5 + 0.5;
+          const g = e.sin(hue * 6.283 + 2.094) * 0.5 + 0.5;
+          const b = e.sin(hue * 6.283 + 4.189) * 0.5 + 0.5;
+          e.setPixel(px, py, r, g, b, 1.0);
+        }
+      }} style={{ width: 170, height: 170, position: 'absolute' }} />
+
+      <Effect name="electric" onRender={(e) => {
+        const t = e.time;
+        for (let y = 0; y < e.height; y++) {
+          for (let x = 0; x < e.width; x++) {
+            const fx = x * 0.04;
+            const fy = y * 0.04;
+            const bolt1 = e.sin(fx * 5.0 + e.sin(fy + t * 3.0) * 2.0) * 0.5 + 0.5;
+            const bolt2 = e.sin(fy * 5.0 + e.sin(fx + t * 2.5) * 2.0) * 0.5 + 0.5;
+            const v = bolt1 * bolt2;
+            const bright = v * v * v;
+            e.setPixel(x, y, bright * 0.4, bright * 0.7, bright * 1.3, 1.0);
+          }
+        }
+      }} style={{ width: 170, height: 170, position: 'absolute' }} />
+
+      <Effect name="matrix" onRender={(e) => {
+        e.fade(0.93);
+        const t = e.time;
+        for (let i = 0; i < 400; i++) {
+          const col = e.floor(e.sin(i * 47.3 + t * 0.05) * 85 + 85);
+          const speed = 40 + e.sin(i * 13.7) * 30 + 30;
+          const row = e.floor(e.sin(i * 91.1) * 85 + 85 + t * speed);
+          const ry = row - e.floor(row / e.height) * e.height;
+          const bright = e.sin(i * 2.3 + t) * 0.3 + 0.7;
+          e.setPixel(col, ry, 0.0, bright, bright * 0.3, 1.0);
+        }
+      }} style={{ width: 170, height: 170, position: 'absolute' }} />
+
+      <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 16 }}>
+
+        <Box style={{ width: 200, height: 230, backgroundColor: '#161b22', borderRadius: 8, padding: 12, alignItems: 'center' }}>
+          <Text style={{ fontSize: 12, color: '#8b949e', marginBottom: 8 }}>Plasma Triangle</Text>
+          <Graph style={{ width: 170, height: 170 }} viewX={0} viewY={0} viewZoom={1}>
+            <Graph.Path d="M 0,-70 L 60,35 L -60,35 Z" fillEffect="plasma" stroke="#ffffff30" strokeWidth={1} />
+          </Graph>
+        </Box>
+
+        <Box style={{ width: 200, height: 230, backgroundColor: '#161b22', borderRadius: 8, padding: 12, alignItems: 'center' }}>
+          <Text style={{ fontSize: 12, color: '#8b949e', marginBottom: 8 }}>Lava Pentagon</Text>
+          <Graph style={{ width: 170, height: 170 }} viewX={0} viewY={0} viewZoom={1}>
+            <Graph.Path d="M 0,-70 L 66.6,-21.6 L 41.1,56.6 L -41.1,56.6 L -66.6,-21.6 Z" fillEffect="lava" stroke="#ffffff30" strokeWidth={1} />
+          </Graph>
+        </Box>
+
+        <Box style={{ width: 200, height: 230, backgroundColor: '#161b22', borderRadius: 8, padding: 12, alignItems: 'center' }}>
+          <Text style={{ fontSize: 12, color: '#8b949e', marginBottom: 8 }}>Ocean Hexagon</Text>
+          <Graph style={{ width: 170, height: 170 }} viewX={0} viewY={0} viewZoom={1}>
+            <Graph.Path d="M 0,-70 L 60.6,-35 L 60.6,35 L 0,70 L -60.6,35 L -60.6,-35 Z" fillEffect="ocean" stroke="#ffffff30" strokeWidth={1} />
+          </Graph>
+        </Box>
+
+        <Box style={{ width: 200, height: 230, backgroundColor: '#161b22', borderRadius: 8, padding: 12, alignItems: 'center' }}>
+          <Text style={{ fontSize: 12, color: '#8b949e', marginBottom: 8 }}>Pulse Heart</Text>
+          <Graph style={{ width: 170, height: 170 }} viewX={0} viewY={0} viewZoom={1}>
+            <Graph.Path d="M 0,30 C -10,20 -50,-10 -50,-30 C -50,-60 -20,-70 0,-40 C 20,-70 50,-60 50,-30 C 50,-10 10,20 0,30 Z" fillEffect="pulse" stroke="#ffffff30" strokeWidth={1} />
+          </Graph>
+        </Box>
+
+        <Box style={{ width: 200, height: 230, backgroundColor: '#161b22', borderRadius: 8, padding: 12, alignItems: 'center' }}>
+          <Text style={{ fontSize: 12, color: '#8b949e', marginBottom: 8 }}>Aurora Star</Text>
+          <Graph style={{ width: 170, height: 170 }} viewX={0} viewY={0} viewZoom={1}>
+            <Graph.Path d="M 0,-70 L 16.2,-21.6 L 66.6,-21.6 L 25.7,8.2 L 41.1,56.6 L 0,26.8 L -41.1,56.6 L -25.7,8.2 L -66.6,-21.6 L -16.2,-21.6 Z" fillEffect="aurora" stroke="#ffffff30" strokeWidth={1} />
+          </Graph>
+        </Box>
+
+        <Box style={{ width: 200, height: 230, backgroundColor: '#161b22', borderRadius: 8, padding: 12, alignItems: 'center' }}>
+          <Text style={{ fontSize: 12, color: '#8b949e', marginBottom: 8 }}>Spiral Octagon</Text>
+          <Graph style={{ width: 170, height: 170 }} viewX={0} viewY={0} viewZoom={1}>
+            <Graph.Path d="M 0,-70 L 49.5,-49.5 L 70,0 L 49.5,49.5 L 0,70 L -49.5,49.5 L -70,0 L -49.5,-49.5 Z" fillEffect="spiral" stroke="#ffffff30" strokeWidth={1} />
+          </Graph>
+        </Box>
+
+        <Box style={{ width: 200, height: 230, backgroundColor: '#161b22', borderRadius: 8, padding: 12, alignItems: 'center' }}>
+          <Text style={{ fontSize: 12, color: '#8b949e', marginBottom: 8 }}>Electric Cross</Text>
+          <Graph style={{ width: 170, height: 170 }} viewX={0} viewY={0} viewZoom={1}>
+            <Graph.Path d="M -18,-55 L 18,-55 L 18,-18 L 55,-18 L 55,18 L 18,18 L 18,55 L -18,55 L -18,18 L -55,18 L -55,-18 L -18,-18 Z" fillEffect="electric" stroke="#ffffff30" strokeWidth={1} />
+          </Graph>
+        </Box>
+
+        <Box style={{ width: 200, height: 230, backgroundColor: '#161b22', borderRadius: 8, padding: 12, alignItems: 'center' }}>
+          <Text style={{ fontSize: 12, color: '#8b949e', marginBottom: 8 }}>Matrix Diamond</Text>
+          <Graph style={{ width: 170, height: 170 }} viewX={0} viewY={0} viewZoom={1}>
+            <Graph.Path d="M 0,-70 L 50,0 L 0,70 L -50,0 Z" fillEffect="matrix" stroke="#ffffff30" strokeWidth={1} />
+          </Graph>
+        </Box>
+
+      </Box>
+    </Box>
+  );
+}

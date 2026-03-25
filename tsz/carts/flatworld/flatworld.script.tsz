@@ -1,0 +1,69 @@
+// Noclip camera + mouse look
+// SDL3 scancodes: W=26 A=4 S=22 D=7 Space=44 LShift=225 Q=20 E=8
+
+let _camX = 5.0;
+let _camY = 4.0;
+let _camZ = 12.0;
+let _yaw  = 200.0;
+let _pitch = -15.0;
+let _prevMx = 0;
+let _prevMy = 0;
+let _mouseInit = false;
+
+const SPEED = 0.15;
+const TURN  = 2.0;
+const MOUSE_SENS = 0.3;
+
+function tick() {
+  const _mx = getMouseX();
+  const _my = getMouseY();
+  const _rmb = getMouseRightDown();
+
+  if (_rmb > 0) {
+    if (_mouseInit) {
+      _yaw += (_mx - _prevMx) * MOUSE_SENS;
+      _pitch -= (_my - _prevMy) * MOUSE_SENS;
+    }
+    _mouseInit = true;
+  } else {
+    _mouseInit = false;
+  }
+  _prevMx = _mx;
+  _prevMy = _my;
+
+  if (isKeyDown(20)) _yaw  -= TURN;
+  if (isKeyDown(8))  _yaw  += TURN;
+  if (isKeyDown(21)) _pitch += TURN;
+  if (isKeyDown(9))  _pitch -= TURN;
+  if (_pitch > 89)  _pitch = 89;
+  if (_pitch < -89) _pitch = -89;
+
+  const _yawRad   = _yaw   * Math.PI / 180;
+  const _pitchRad = _pitch * Math.PI / 180;
+  const _fx = Math.sin(_yawRad) * Math.cos(_pitchRad);
+  const _fy = Math.sin(_pitchRad);
+  const _fz = -Math.cos(_yawRad) * Math.cos(_pitchRad);
+  const _rx = Math.cos(_yawRad);
+  const _rz = Math.sin(_yawRad);
+
+  if (isKeyDown(26)) { _camX += _fx * SPEED; _camY += _fy * SPEED; _camZ += _fz * SPEED; }
+  if (isKeyDown(22)) { _camX -= _fx * SPEED; _camY -= _fy * SPEED; _camZ -= _fz * SPEED; }
+  if (isKeyDown(4))  { _camX -= _rx * SPEED; _camZ -= _rz * SPEED; }
+  if (isKeyDown(7))  { _camX += _rx * SPEED; _camZ += _rz * SPEED; }
+  if (isKeyDown(44))  _camY += SPEED;
+  if (isKeyDown(225)) _camY -= SPEED;
+
+  __setState(0, _camX);
+  __setState(1, _camY);
+  __setState(2, _camZ);
+  __setState(3, _camX + _fx);
+  __setState(4, _camY + _fy);
+  __setState(5, _camZ + _fz);
+  __setState(6, _yaw);
+  __setState(7, _pitch);
+
+  const _anyKey = isKeyDown(26) || isKeyDown(22) || isKeyDown(4) || isKeyDown(7) || isKeyDown(44) || isKeyDown(225) || _rmb > 0;
+  __setState(8, _anyKey ? 1 : 0);
+}
+
+setInterval(tick, 16);
