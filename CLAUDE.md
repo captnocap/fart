@@ -56,9 +56,9 @@ ReactJIT is a TS-to-native compiler and UI framework. `.tsz` source (TypeScript 
 
 ## The Primitives (shared)
 
-`Box`, `Text`, `Image`, `Pressable`, `ScrollView`, `TextInput`
+`Box`, `Text`, `Image`, `Pressable`, `ScrollView`, `TextInput`, `Cartridge`
 
-Everything is composed from these. A dashboard is Boxes and Text. There are no special node types.
+Everything is composed from these. A dashboard is Boxes and Text. `<Cartridge src="app.so">` embeds a dynamically loaded .so app inline.
 
 ## Layout Rules (shared)
 
@@ -80,16 +80,75 @@ The flex layout engine is pixel-perfect and shared between Lua (`love2d/lua/layo
 - Manual pixel budgeting → let flex handle distribution
 - Fixed dimensions where auto-sizing works → let containers shrink-wrap
 
-## Build (root level)
+## Build (tsz stack)
 
-`build.zig` at the repo root compiles all native artifacts:
+Two compiler binaries at `bin/` (repo root): `bin/tsz` (lean) and `bin/tsz-full` (full).
 
 ```bash
-zig build                    # libquickjs + blake3 (Love2D deps)
-zig build tsz-compiler       # .tsz compiler
-zig build engine-app         # Compiled .tsz app
-zig build engine             # Standalone runtime
-zig build all                # Everything
+# Build the compilers (from tsz/ directory)
+cd tsz && zig build tsz          # Lean compiler → bin/tsz
+cd tsz && zig build tsz-full     # Full compiler → bin/tsz-full
+
+# Build a .tsz app (self-extracting portable binary)
+bin/tsz build carts/path/to/app.tsz
+```
+
+**Old commands are GONE:** `zig build compiler`, `zig build app`, `zigos-compiler`, `zigos-app` — all removed. Use `bin/tsz build <file.tsz>`.
+
+## Hot-Reload Dev Mode (PREFERRED FOR ITERATION)
+
+**Use `tsz dev` instead of `tsz build` during development.** It's 63x faster.
+
+```bash
+# Start dev mode (compiles .tsz → .so, launches shell, watches for changes)
+bin/tsz dev carts/path/to/app.tsz
+
+# The shell stays open. Edit any .tsz file in the cart directory.
+# Changes auto-detect → recompile → hot-reload (186ms, no restart).
+# State (counters, form values, etc.) survives reloads.
+```
+
+**Single instance:** If a dev shell is already running, `tsz dev` just rebuilds the .so and exits. The running shell auto-reloads. No duplicate windows.
+
+### Build targets
+
+```bash
+cd tsz
+zig build tsz              # Lean compiler
+zig build tsz-full         # Full compiler
+zig build app              # Full binary (links everything — slow, for production)
+zig build app-lib          # Shared library .so (pure Zig, no native deps — fast, for dev)
+zig build dev-shell        # Dev shell binary (built once, cached)
+zig build -Dcart-source=file.zig -Dcart-name=foo cart  # Custom Zig cartridge .so
+```
+
+### CartridgeOS (multi-app host)
+
+The dev shell can load multiple .so cartridges in a tabbed interface:
+
+```bash
+tsz-dev app1.so app2.so app3.so    # Tabbed multi-app host
+```
+
+Each cartridge has independent state, event handlers, lifecycle. Cross-cartridge state access is available via the shell. Cartridges hot-reload independently.
+
+### `<Cartridge>` component
+
+Any .so can be embedded inline as a component:
+
+```tsx
+<Cartridge src="sidebar.so" style={{ width: 250 }} />
+<Cartridge src="editor.so" style={{ flexGrow: 1 }} />
+```
+
+Any language that can produce a .so with C exports can be a cartridge (Zig, Rust, C, Go). The ABI is 6 functions: `app_get_root`, `app_get_init`, `app_get_tick`, `app_get_title`, `app_state_count`, `app_state_*`.
+
+## Build (Love2D stack)
+
+`build.zig` at the repo root compiles Love2D native deps:
+
+```bash
+zig build                    # libquickjs + blake3
 ```
 
 ## One-Liner Design Philosophy
