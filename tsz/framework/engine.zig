@@ -64,9 +64,18 @@ comptime {
     _ = @import("luajit_worker.zig");
 }
 
+// LuaJIT main-thread runtime — replaces QuickJS for logic (events, state, conditionals).
+// Same API surface as qjs_runtime: initVM, evalScript, evalExpr, tick, callGlobal.
+const luajit_runtime = @import("luajit_runtime.zig");
+
 // Force-reference audio.zig so its export fn symbols are available to the linker.
 comptime {
     _ = @import("audio.zig");
+}
+
+// Force-reference pty_client.zig for unix socket terminal remote control.
+comptime {
+    _ = @import("pty_client.zig");
 }
 
 const qjs_runtime = if (HAS_QUICKJS) @import("qjs_runtime.zig") else struct {
@@ -132,13 +141,13 @@ const capture = if (HAS_EFFECTS) @import("capture.zig") else struct {
     pub fn handleKey(_: i32) bool { return false; }
     pub fn tick(_: *Node) bool { return false; }
 };
-const effect_ctx = @import("effect_ctx.zig");
 const effects = if (HAS_EFFECTS) @import("effects.zig") else struct {
     pub fn init() void {}
     pub fn deinit() void {}
     pub fn update(_: f32) void {}
     pub fn paintEffect(_: ?[]const u8, _: f32, _: f32, _: f32, _: f32, _: f32) bool { return false; }
-    pub fn paintCustomEffect(_: effect_ctx.RenderFn, _: f32, _: f32, _: f32, _: f32, _: f32) bool { return false; }
+    pub fn paintCustomEffect(_: *const Node, _: f32, _: f32, _: f32, _: f32, _: f32) bool { return false; }
+    pub fn paintNamedEffect(_: *const Node, _: []const u8, _: f32, _: f32, _: f32, _: f32) bool { return false; }
 };
 const r3d = if (HAS_3D) @import("gpu/3d.zig") else struct {
     pub fn render(_: *Node, _: f32, _: f32, _: f32, _: f32, _: f32) bool { return false; }
@@ -771,7 +780,7 @@ fn paintNode(node: *Node) void {
     // Background effects — children with effect_background paint behind siblings
     for (node.children) |*child| {
         if (child.effect_background and child.effect_render != null) {
-            _ = effects.paintCustomEffect(child.effect_render.?, r.x, r.y, r.w, r.h, g_paint_opacity);
+            _ = effects.paintCustomEffect(child, r.x, r.y, r.w, r.h, g_paint_opacity);
         }
     }
 
@@ -926,11 +935,12 @@ noinline fn paintNodeVisuals(node: *Node) void {
     }
     // Custom effect — user-compiled onRender callback
     if (node.effect_render) |render_fn| {
+        _ = render_fn;
         if (node.effect_name) |ename| {
             // Named effect: render but don't draw — used as fill source by Graph.Path fillEffect
-            _ = effects.paintNamedEffect(render_fn, ename, r.x, r.y, r.w, r.h);
+            _ = effects.paintNamedEffect(node, ename, r.x, r.y, r.w, r.h);
         } else {
-            _ = effects.paintCustomEffect(render_fn, r.x, r.y, r.w, r.h, g_paint_opacity);
+            _ = effects.paintCustomEffect(node, r.x, r.y, r.w, r.h, g_paint_opacity);
         }
     }
     // 3D.View — 3D viewport rendered offscreen, composited here
@@ -1315,6 +1325,7 @@ pub fn run(config_in: AppConfig) !void {
     qjs_runtime.initVM();
     defer qjs_runtime.deinit();
     @import("audio.zig").registerQjsHostFunctions();
+    @import("pty_client.zig").registerQjsHostFunctions();
 
     // Register window-open bridge so JS can call __openWindow
     qjs_runtime.setOpenWindowFn(struct {
