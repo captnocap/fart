@@ -107,6 +107,7 @@ function resetCtx() {
     stateSlots: [],       // [{getter, setter, initial, type}]
     components: [],       // [{name, propNames, bodyPos}]
     propStack: {},        // {propName: value} — active during component inlining
+    inlineComponent: null, // name of component being inlined (for array comments)
     handlers: [],         // [{name, body}]  body = zig source
     handlerCount: 0,
     dynTexts: [],         // [{bufId, fmtString, fmtArgs, arrName, arrIndex, bufSize}]
@@ -476,10 +477,13 @@ function parseJSXElement(c) {
     // Inline: save state, jump to component body, parse with prop substitution
     const savedPos = c.save();
     const savedProps = ctx.propStack;
+    const savedInline = ctx.inlineComponent;
     ctx.propStack = propValues;
+    ctx.inlineComponent = rawTag;
     c.pos = comp.bodyPos;
     const result = parseJSXElement(c);
     ctx.propStack = savedProps;
+    ctx.inlineComponent = savedInline;
     c.restore(savedPos);
     return result;
   }
@@ -664,7 +668,8 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
     } else {
       ctx.arrayComments.push('');
     }
-    ctx.arrayDecls.push(`var ${arrName} = [_]Node{ ${childExprs} };`);
+    const compSuffix = ctx.inlineComponent ? ` // ${ctx.inlineComponent}` : '';
+    ctx.arrayDecls.push(`var ${arrName} = [_]Node{ ${childExprs} };${compSuffix}`);
     // Bind dynamic texts to this array
     for (let i = 0; i < children.length; i++) {
       if (children[i].dynBufId !== undefined) {
@@ -702,7 +707,10 @@ function emitOutput(rootExpr, file) {
   // State manifest
   if (hasState) {
     out += `// ── State manifest ──────────────────────────────────────────────\n`;
-    ctx.stateSlots.forEach((s, i) => { out += `// slot ${i}: ${s.getter} (${s.type})\n`; });
+    ctx.stateSlots.forEach((s, i) => {
+      const typeLabel = s.type === 'boolean' ? 'bool' : s.type;
+      out += `// slot ${i}: ${s.getter} (${typeLabel})\n`;
+    });
     out += `comptime { if (${ctx.stateSlots.length} != ${ctx.stateSlots.length}) @compileError("state slot count mismatch"); }\n\n`;
   }
 
@@ -723,7 +731,7 @@ function emitOutput(rootExpr, file) {
       out += `var _dyn_buf_${i}: [${bs}]u8 = undefined;\n`;
       out += `var _dyn_text_${i}: []const u8 = "";\n`;
     }
-    out += '\n';
+    if (ctx.handlers.length > 0) out += '\n';
   }
 
   // Handlers
