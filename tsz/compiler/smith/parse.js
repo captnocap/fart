@@ -203,11 +203,24 @@ function tryParseMap(c, oa) {
   const mapInfo = {
     oaIdx: oa.oaIdx, itemParam, indexParam,
     oa, textsInMap: [], innerCount: 0, parentArr: '', childIdx: 0,
+    mapArrayDecls: [], mapArrayComments: [],
   };
   ctx.currentMap = mapInfo;
 
+  // Save array state — arrays created during map template go to mapArrayDecls
+  const savedArrayCounter = ctx.arrayCounter;
+  const savedArrayDecls = ctx.arrayDecls;
+  const savedArrayComments = ctx.arrayComments;
+  ctx.arrayDecls = mapInfo.mapArrayDecls;
+  ctx.arrayComments = mapInfo.mapArrayComments;
+
   // Parse the map template JSX
   const templateNode = parseJSXElement(c);
+
+  // Restore — map arrays are NOT top-level declarations
+  ctx.arrayCounter = savedArrayCounter;
+  ctx.arrayDecls = savedArrayDecls;
+  ctx.arrayComments = savedArrayComments;
 
   ctx.currentMap = savedMapCtx;
 
