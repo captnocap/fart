@@ -75,6 +75,10 @@ function point(cx, cy, scale, angle, x, y) {
   };
 }
 
+function slimPoint(cx, cy, scale, angle, slim, x, y) {
+  return point(cx, cy, scale, angle, x * slim, y);
+}
+
 function pair(p) {
   return p.x + ',' + p.y;
 }
@@ -89,76 +93,74 @@ function circlePath(cx, cy, r) {
     ' A ' + rr + ',' + rr + ' 0 1,0 ' + left + ',' + yy + ' Z';
 }
 
-function localPoint(cx, cy, angle, x, y) {
-  var ca = Math.cos(angle);
-  var sa = Math.sin(angle);
-  return {
-    x: round1(cx + x * ca - y * sa),
-    y: round1(cy + x * sa + y * ca)
-  };
+function dropPath(cx, cy, scale, angle, slim) {
+  var p0 = slimPoint(cx, cy, scale, angle, slim, -0.04, 0.44);
+  var c1 = slimPoint(cx, cy, scale, angle, slim, -0.34, 0.34);
+  var c2 = slimPoint(cx, cy, scale, angle, slim, -0.42, -0.04);
+  var p1 = slimPoint(cx, cy, scale, angle, slim, 0.06, -0.56);
+  var c3 = slimPoint(cx, cy, scale, angle, slim, 0.42, -0.44);
+  var c4 = slimPoint(cx, cy, scale, angle, slim, 0.50, 0.10);
+  var p2 = slimPoint(cx, cy, scale, angle, slim, 0.16, 0.46);
+  var c5 = slimPoint(cx, cy, scale, angle, slim, 0.04, 0.58);
+  var c6 = slimPoint(cx, cy, scale, angle, slim, -0.08, 0.56);
+  return 'M ' + pair(p0) +
+    ' C ' + pair(c1) + ' ' + pair(c2) + ' ' + pair(p1) +
+    ' C ' + pair(c3) + ' ' + pair(c4) + ' ' + pair(p2) +
+    ' C ' + pair(c5) + ' ' + pair(c6) + ' ' + pair(p0) + ' Z';
 }
 
-function clamp01(v) {
-  return Math.max(0, Math.min(1, v));
+function paisleyBody(cx, cy, scale, angle, slim) {
+  var p0 = slimPoint(cx, cy, scale, angle, slim, -0.14, 0.98);
+  var c1 = slimPoint(cx, cy, scale, angle, slim, -0.86, 0.78);
+  var c2 = slimPoint(cx, cy, scale, angle, slim, -0.98, 0.02);
+  var p1 = slimPoint(cx, cy, scale, angle, slim, 0.16, -1.12);
+  var c3 = slimPoint(cx, cy, scale, angle, slim, 0.74, -1.04);
+  var c4 = slimPoint(cx, cy, scale, angle, slim, 1.02, -0.30);
+  var p2 = slimPoint(cx, cy, scale, angle, slim, 0.84, 0.50);
+  var c5 = slimPoint(cx, cy, scale, angle, slim, 0.70, 1.06);
+  var c6 = slimPoint(cx, cy, scale, angle, slim, 0.10, 1.10);
+  var p3 = slimPoint(cx, cy, scale, angle, slim, -0.34, 0.74);
+  var c7 = slimPoint(cx, cy, scale, angle, slim, -0.78, 0.44);
+  var c8 = slimPoint(cx, cy, scale, angle, slim, -0.72, -0.10);
+  var p4 = slimPoint(cx, cy, scale, angle, slim, 0.00, -0.20);
+  var c9 = slimPoint(cx, cy, scale, angle, slim, -0.18, 0.10);
+  var c10 = slimPoint(cx, cy, scale, angle, slim, -0.18, 0.62);
+  return 'M ' + pair(p0) +
+    ' C ' + pair(c1) + ' ' + pair(c2) + ' ' + pair(p1) +
+    ' C ' + pair(c3) + ' ' + pair(c4) + ' ' + pair(p2) +
+    ' C ' + pair(c5) + ' ' + pair(c6) + ' ' + pair(p3) +
+    ' C ' + pair(c7) + ' ' + pair(c8) + ' ' + pair(p4) +
+    ' C ' + pair(c9) + ' ' + pair(c10) + ' ' + pair(p0) + ' Z';
 }
 
-function smoothstep(a, b, x) {
-  var t = clamp01((x - a) / (b - a));
-  return t * t * (3 - 2 * t);
+function paisleyRibbon(cx, cy, scale, angle, slim) {
+  var p0 = slimPoint(cx, cy, scale, angle, slim, -0.10, 0.56);
+  var c1 = slimPoint(cx, cy, scale, angle, slim, 0.18, 0.30);
+  var c2 = slimPoint(cx, cy, scale, angle, slim, 0.42, -0.18);
+  var p1 = slimPoint(cx, cy, scale, angle, slim, 0.20, -0.58);
+  var c3 = slimPoint(cx, cy, scale, angle, slim, 0.00, -0.34);
+  var c4 = slimPoint(cx, cy, scale, angle, slim, -0.12, -0.04);
+  var p2 = slimPoint(cx, cy, scale, angle, slim, 0.08, 0.20);
+  var c5 = slimPoint(cx, cy, scale, angle, slim, 0.22, 0.36);
+  var c6 = slimPoint(cx, cy, scale, angle, slim, 0.36, 0.62);
+  var p3 = slimPoint(cx, cy, scale, angle, slim, 0.14, 0.82);
+  return 'M ' + pair(p0) +
+    ' C ' + pair(c1) + ' ' + pair(c2) + ' ' + pair(p1) +
+    ' C ' + pair(c3) + ' ' + pair(c4) + ' ' + pair(p2) +
+    ' C ' + pair(c5) + ' ' + pair(c6) + ' ' + pair(p3);
 }
 
-function paisleyLocal(theta, scale, hook, slim, toothAmp, toothFreq, toothPhase, curl) {
-  var cardioid = 1.0 + Math.cos(theta);
-  var skew = 1.0 + hook * Math.sin(theta);
-  var florets = 1.0 + toothAmp * Math.sin(theta * toothFreq + toothPhase);
-  var tip = smoothstep(0.52, 0.98, (-Math.cos(theta) + 1.0) * 0.5);
-  var baseR = scale * 0.34 * cardioid * skew * florets;
-  var spiralLift = scale * (0.05 + tip * 0.12);
-  var x = baseR * Math.cos(theta) - scale * (0.22 + tip * 0.08);
-  var y = baseR * Math.sin(theta) * slim;
-
-  x += scale * hook * 0.10 * Math.sin(theta * 0.5);
-  x += scale * curl * tip * 0.18;
-  y += scale * curl * tip * (theta < 0 ? 0.22 : -0.14);
-  y += Math.sin(theta * 2.0) * spiralLift * 0.22;
-
-  return { x: x, y: y };
-}
-
-function paisleyPath(cx, cy, scale, angle, hook, slim, toothAmp, toothFreq, toothPhase, curl, ox, oy, rot, startTheta, endTheta, closed) {
-  var steps = closed ? 88 : 52;
-  var path = '';
-  for (var i = 0; i < steps; i++) {
-    var t = steps <= 1 ? 0 : i / (steps - 1);
-    var theta = startTheta + (endTheta - startTheta) * t;
-    var local = paisleyLocal(theta, scale, hook, slim, toothAmp, toothFreq, toothPhase, curl);
-    var wp = localPoint(cx, cy, angle + rot, local.x + ox * scale, local.y + oy * scale);
-    path += (i === 0 ? 'M ' : ' L ') + pair(wp);
-  }
-  if (closed) path += ' Z';
-  return path;
-}
-
-function paisleyRibbon(cx, cy, scale, angle, slim, curl, ox, oy) {
-  var path = '';
-  for (var i = 0; i < 56; i++) {
-    var t = i / 55.0;
-    var theta = -1.45 + t * 3.85;
-    var radius = scale * (0.09 + 0.18 * t) * Math.exp(t * 0.24);
-    var lx = -0.08 * scale + Math.cos(theta) * radius * 0.78;
-    var ly = -0.12 * scale + Math.sin(theta) * radius * slim * 0.72;
-    ly += scale * curl * 0.04 * Math.sin(t * Math.PI * 3.0);
-    var wp = localPoint(cx, cy, angle + 0.10, lx + ox * scale, ly + oy * scale);
-    path += (i === 0 ? 'M ' : ' L ') + pair(wp);
-  }
-  return path;
-}
-
-function paisleyHalo(cx, cy, scale, angle, hook, slim, toothAmp, toothFreq, toothPhase, curl) {
-  return paisleyPath(
-    cx, cy, scale, angle, hook, slim, toothAmp, toothFreq, toothPhase, curl,
-    -0.04, -0.02, 0.0, -Math.PI * 0.82, Math.PI * 0.66, false
-  );
+function paisleyHalo(cx, cy, scale, angle, slim) {
+  var p0 = slimPoint(cx, cy, scale, angle, slim, -0.42, 0.38);
+  var c1 = slimPoint(cx, cy, scale, angle, slim, -0.70, 0.12);
+  var c2 = slimPoint(cx, cy, scale, angle, slim, -0.46, -0.44);
+  var p1 = slimPoint(cx, cy, scale, angle, slim, 0.02, -0.80);
+  var c3 = slimPoint(cx, cy, scale, angle, slim, 0.26, -0.74);
+  var c4 = slimPoint(cx, cy, scale, angle, slim, 0.60, -0.44);
+  var p2 = slimPoint(cx, cy, scale, angle, slim, 0.56, -0.10);
+  return 'M ' + pair(p0) +
+    ' C ' + pair(c1) + ' ' + pair(c2) + ' ' + pair(p1) +
+    ' C ' + pair(c3) + ' ' + pair(c4) + ' ' + pair(p2);
 }
 
 function generateVines() {
@@ -196,20 +198,17 @@ function generatePaisleys() {
     var scale = 54 + ring * 18 + (i % 3) * 6;
     var angle = orbit + Math.sin(i * 1.37) * 0.42 + 0.72;
     var slim = 0.90 + (i % 4) * 0.05;
-    var hook = 0.34 + lane * 0.05 + ring * 0.03;
-    var toothAmp = 0.020 + (i % 3) * 0.010;
-    var toothFreq = 6 + (i % 4);
-    var toothPhase = i * 0.42;
-    var curl = 0.58 + ring * 0.08;
     var palette = PALETTES[i % PALETTES.length];
-    var eye = point(cx, cy, scale, angle, -0.04, -0.04);
-    var orbitDot = point(cx, cy, scale, angle, 0.18, 0.06);
+    var innerCenter = point(cx, cy, scale, angle, 0.10 * slim, 0.12);
+    var seedCenter = point(cx, cy, scale, angle, 0.18 * slim, -0.24);
+    var eye = point(cx, cy, scale, angle, 0.16 * slim, -0.28);
+    var orbitDot = point(cx, cy, scale, angle, 0.04, 0.22);
     list.push({
-      bodyD: paisleyPath(cx, cy, scale, angle, hook, slim, toothAmp, toothFreq, toothPhase, curl, 0, 0, 0, -Math.PI, Math.PI, true),
-      innerD: paisleyPath(cx, cy, scale * 0.58, angle + 0.10, hook * 1.18, slim * 0.92, toothAmp * 0.7, toothFreq + 1, toothPhase + 0.9, curl * 0.84, -0.02, -0.10, 0, -Math.PI, Math.PI, true),
-      seedD: paisleyPath(cx, cy, scale * 0.28, angle - 0.22, hook * 1.28, slim * 0.88, 0.012, toothFreq + 2, toothPhase + 1.5, curl * 0.72, 0.20, -0.18, 0, -Math.PI, Math.PI, true),
-      ribbonD: paisleyRibbon(cx, cy, scale * 0.96, angle, slim * 0.94, curl, 0.02, -0.06),
-      haloD: paisleyHalo(cx, cy, scale * 1.02, angle, hook * 1.08, slim, toothAmp * 0.85, toothFreq, toothPhase, curl),
+      bodyD: paisleyBody(cx, cy, scale, angle, slim),
+      innerD: dropPath(innerCenter.x, innerCenter.y, scale * 0.42, angle + 0.08, 0.82),
+      seedD: dropPath(seedCenter.x, seedCenter.y, scale * 0.22, angle - 0.18, 0.72),
+      ribbonD: paisleyRibbon(cx, cy, scale * 0.92, angle, slim * 0.95),
+      haloD: paisleyHalo(cx, cy, scale * 0.96, angle, slim),
       dotD: circlePath(eye.x, eye.y, scale * 0.075),
       orbitD: circlePath(orbitDot.x, orbitDot.y, scale * 0.042),
       fillEffect: palette.effect,
