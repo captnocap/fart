@@ -158,7 +158,7 @@ function parseJSXElement(c) {
   // Self-closing: />
   if (c.kind() === TK.slash_gt) {
     c.advance();
-    return buildNode(tag, styleFields, [], handlerRef, nodeFields, rawTag, tagSrcOffset);
+    return buildNode(tag, styleFields, [], handlerRef, nodeFields, tag, tagSrcOffset);
   }
   if (c.kind() === TK.gt) c.advance();
 
@@ -171,7 +171,7 @@ function parseJSXElement(c) {
     if (c.kind() === TK.gt) c.advance();
   }
 
-  return buildNode(tag, styleFields, children, handlerRef, nodeFields, rawTag, tagSrcOffset);
+  return buildNode(tag, styleFields, children, handlerRef, nodeFields, tag, tagSrcOffset);
 }
 
 // ── Map parser ──
