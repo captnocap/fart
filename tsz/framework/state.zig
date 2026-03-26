@@ -10,7 +10,6 @@
 const std = @import("std");
 
 pub const MAX_SLOTS = 256;
-const STRING_BUF_SIZE = 256;
 
 const alloc = std.heap.page_allocator;
 
@@ -93,10 +92,8 @@ pub const Value = union(enum) {
     int: i64,
     float: f64,
     boolean: bool,
-    string: struct {
-        buf: [STRING_BUF_SIZE]u8,
-        len: u8,
-    },
+    // Paths and generated text can easily exceed a tiny inline buffer.
+    string: struct { buf: []u8 },
 };
 
 pub const StateSlot = struct {
@@ -104,9 +101,28 @@ pub const StateSlot = struct {
     dirty: bool,
 };
 
+pub const SlotKind = enum {
+    int,
+    float,
+    boolean,
+    string,
+};
+
 var slots: [MAX_SLOTS]StateSlot = undefined;
 var slot_count: usize = 0;
 var _dirty: bool = false;
+
+fn dupString(src: []const u8) []u8 {
+    return alloc.dupe(u8, src) catch alloc.alloc(u8, 0) catch unreachable;
+}
+
+fn releaseValue(value: *Value) void {
+    switch (value.*) {
+        .string => |s| alloc.free(s.buf),
+        else => {},
+    }
+    value.* = .{ .int = 0 };
+}
 
 /// Reserve a contiguous range of slots, all initialized to int(0).
 pub fn reserveSlots(count: usize) usize {
@@ -159,11 +175,10 @@ pub fn createSlotBool(initial: bool) usize {
 pub fn createSlotString(initial: []const u8) usize {
     const id = slot_count;
     std.debug.assert(id < MAX_SLOTS);
-    var str_val: Value = .{ .string = .{ .buf = [_]u8{0} ** STRING_BUF_SIZE, .len = 0 } };
-    const copy_len: u8 = @intCast(@min(initial.len, STRING_BUF_SIZE));
-    @memcpy(str_val.string.buf[0..copy_len], initial[0..copy_len]);
-    str_val.string.len = copy_len;
-    slots[id] = .{ .value = str_val, .dirty = false };
+    slots[id] = .{
+        .value = .{ .string = .{ .buf = dupString(initial) } },
+        .dirty = false,
+    };
     slot_count += 1;
     return id;
 }
@@ -171,8 +186,18 @@ pub fn createSlotString(initial: []const u8) usize {
 /// Read a string state value. Returns empty string for non-string slots.
 pub fn getSlotString(id: usize) []const u8 {
     return switch (slots[id].value) {
-        .string => |*s| s.buf[0..s.len],
+        .string => |s| s.buf,
         else => "",
+    };
+}
+
+pub fn getSlotKind(id: usize) SlotKind {
+    if (id >= slot_count) return .int;
+    return switch (slots[id].value) {
+        .int => .int,
+        .float => .float,
+        .boolean => .boolean,
+        .string => .string,
     };
 }
 
@@ -180,11 +205,8 @@ pub fn getSlotString(id: usize) []const u8 {
 pub fn setSlotString(id: usize, val: []const u8) void {
     const current = getSlotString(id);
     if (!std.mem.eql(u8, current, val)) {
-        var str_val: Value = .{ .string = .{ .buf = [_]u8{0} ** STRING_BUF_SIZE, .len = 0 } };
-        const copy_len: u8 = @intCast(@min(val.len, STRING_BUF_SIZE));
-        @memcpy(str_val.string.buf[0..copy_len], val[0..copy_len]);
-        str_val.string.len = copy_len;
-        slots[id].value = str_val;
+        releaseValue(&slots[id].value);
+        slots[id].value = .{ .string = .{ .buf = dupString(val) } };
         slots[id].dirty = true;
         _dirty = true;
     }
@@ -216,7 +238,7 @@ pub fn getSlotBool(id: usize) bool {
         .int => |v| v != 0,
         .float => |v| v != 0.0,
         .boolean => |v| v,
-        .string => |s| s.len > 0,
+        .string => |s| s.buf.len > 0,
     };
 }
 
@@ -224,6 +246,7 @@ pub fn getSlotBool(id: usize) bool {
 pub fn setSlot(id: usize, val: i64) void {
     const current = getSlot(id);
     if (current != val) {
+        releaseValue(&slots[id].value);
         slots[id].value = .{ .int = val };
         slots[id].dirty = true;
         _dirty = true;
@@ -234,6 +257,7 @@ pub fn setSlot(id: usize, val: i64) void {
 pub fn setSlotFloat(id: usize, val: f64) void {
     const current = getSlotFloat(id);
     if (current != val) {
+        releaseValue(&slots[id].value);
         slots[id].value = .{ .float = val };
         slots[id].dirty = true;
         _dirty = true;
@@ -244,6 +268,7 @@ pub fn setSlotFloat(id: usize, val: f64) void {
 pub fn setSlotBool(id: usize, val: bool) void {
     const current = getSlotBool(id);
     if (current != val) {
+        releaseValue(&slots[id].value);
         slots[id].value = .{ .boolean = val };
         slots[id].dirty = true;
         _dirty = true;
@@ -282,6 +307,9 @@ pub fn clearDirty() void {
 
 /// Reset all state (for testing or hot-reload).
 pub fn reset() void {
+    for (0..slot_count) |i| {
+        releaseValue(&slots[i].value);
+    }
     slot_count = 0;
     array_slot_count = 0;
     str_array_slot_count = 0;
@@ -391,11 +419,13 @@ pub fn setArrayElement(id: usize, index: usize, value: i64) void {
 // ── State persistence for dev mode hot reload ────────────────────────────
 
 const STATE_FILE = "/tmp/tsz-state.bin";
+const STATE_MAGIC = "TSZ2";
 
 pub fn saveState() void {
     const file = std.fs.createFileAbsolute(STATE_FILE, .{}) catch return;
     defer file.close();
 
+    file.writeAll(STATE_MAGIC) catch return;
     const count_bytes: [8]u8 = @bitCast(@as(u64, slot_count));
     file.writeAll(&count_bytes) catch return;
 
@@ -417,8 +447,9 @@ pub fn saveState() void {
             },
             .string => |s| {
                 file.writeAll(&[_]u8{3}) catch return;
-                file.writeAll(&[_]u8{s.len}) catch return;
-                file.writeAll(s.buf[0..s.len]) catch return;
+                const len_bytes: [4]u8 = @bitCast(@as(u32, @intCast(s.buf.len)));
+                file.writeAll(&len_bytes) catch return;
+                file.writeAll(s.buf) catch return;
             },
         }
     }
@@ -429,6 +460,10 @@ pub fn loadState() bool {
     defer file.close();
     defer std.fs.deleteFileAbsolute(STATE_FILE) catch {};
 
+    var magic: [STATE_MAGIC.len]u8 = undefined;
+    _ = file.readAll(&magic) catch return false;
+    if (!std.mem.eql(u8, &magic, STATE_MAGIC)) return false;
+
     var count_bytes: [8]u8 = undefined;
     _ = file.readAll(&count_bytes) catch return false;
     const saved_count: u64 = @bitCast(count_bytes);
@@ -438,6 +473,7 @@ pub fn loadState() bool {
         var tag_byte: [1]u8 = undefined;
         _ = file.readAll(&tag_byte) catch break;
 
+        releaseValue(&slots[i].value);
         switch (tag_byte[0]) {
             0 => {
                 var val_bytes: [8]u8 = undefined;
@@ -457,12 +493,15 @@ pub fn loadState() bool {
                 slots[i].value = .{ .boolean = bool_byte[0] != 0 };
             },
             3 => {
-                var len_byte: [1]u8 = undefined;
-                _ = file.readAll(&len_byte) catch break;
-                const slen: u8 = len_byte[0];
-                var str_val: Value = .{ .string = .{ .buf = [_]u8{0} ** STRING_BUF_SIZE, .len = slen } };
-                _ = file.read(str_val.string.buf[0..slen]) catch break;
-                slots[i].value = str_val;
+                var len_bytes: [4]u8 = undefined;
+                _ = file.readAll(&len_bytes) catch break;
+                const slen: usize = @intCast(@as(u32, @bitCast(len_bytes)));
+                const buf = alloc.alloc(u8, slen) catch break;
+                _ = file.readAll(buf) catch {
+                    alloc.free(buf);
+                    break;
+                };
+                slots[i].value = .{ .string = .{ .buf = buf } };
             },
             else => break,
         }
@@ -573,4 +612,23 @@ pub fn telemetryArraySlotCount() usize {
 
 pub fn telemetryStringArraySlotCount() usize {
     return str_array_slot_count;
+}
+
+test "string state preserves long values" {
+    const testing = std.testing;
+
+    reset();
+    defer reset();
+
+    var expected: [900]u8 = undefined;
+    for (&expected, 0..) |*ch, i| {
+        ch.* = 'a' + @as(u8, @intCast(i % 26));
+    }
+
+    const id = createSlotString("");
+    setSlotString(id, expected[0..]);
+
+    const actual = getSlotString(id);
+    try testing.expectEqual(expected.len, actual.len);
+    try testing.expect(std.mem.eql(u8, expected[0..], actual));
 }
