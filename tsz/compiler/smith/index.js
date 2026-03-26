@@ -23,8 +23,7 @@ const TK = {
 // ── Rules ──
 
 const styleKeys = {
-  width: 'width', height: 'height',
-  minWidth: 'min_width', maxWidth: 'max_width',
+  width: 'width', height: 'height', minWidth: 'min_width', maxWidth: 'max_width',
   minHeight: 'min_height', maxHeight: 'max_height',
   flexGrow: 'flex_grow', flexShrink: 'flex_shrink', flexBasis: 'flex_basis',
   gap: 'gap', order: 'order',
@@ -41,19 +40,16 @@ const styleKeys = {
 };
 
 const colorKeys = {
-  backgroundColor: 'background_color',
-  borderColor: 'border_color',
-  shadowColor: 'shadow_color',
-  gradientColorEnd: 'gradient_color_end',
+  backgroundColor: 'background_color', borderColor: 'border_color',
+  shadowColor: 'shadow_color', gradientColorEnd: 'gradient_color_end',
 };
 
 const enumKeys = {
   flexDirection:     { field: 'flex_direction', values: { row: '.row', column: '.column' }},
-  justifyContent:    { field: 'justify_content', values: { start: '.start', center: '.center', end: '.end', 'space-between': '.space_between', spaceBetween: '.space_between', 'space-around': '.space_around', spaceAround: '.space_around', 'flex-start': '.start', 'flex-end': '.end' }},
+  justifyContent:    { field: 'justify_content', values: { start: '.start', center: '.center', end: '.end', 'space-between': '.space_between', spaceBetween: '.space_between', 'space-around': '.space_around', 'flex-start': '.start', 'flex-end': '.end' }},
   alignItems:        { field: 'align_items', values: { start: '.start', center: '.center', end: '.end', stretch: '.stretch', 'flex-start': '.start', 'flex-end': '.end' }},
   alignSelf:         { field: 'align_self', values: { auto: '.auto', start: '.start', center: '.center', end: '.end', stretch: '.stretch' }},
-  alignContent:      { field: 'align_content', values: { start: '.start', center: '.center', end: '.end', stretch: '.stretch', 'space-between': '.space_between', 'space-around': '.space_around' }},
-  flexWrap:          { field: 'flex_wrap', values: { nowrap: '.no_wrap', noWrap: '.no_wrap', wrap: '.wrap', 'wrap-reverse': '.wrap_reverse' }},
+  flexWrap:          { field: 'flex_wrap', values: { nowrap: '.no_wrap', noWrap: '.no_wrap', wrap: '.wrap' }},
   position:          { field: 'position', values: { relative: '.relative', absolute: '.absolute' }},
   display:           { field: 'display', values: { flex: '.flex', none: '.none' }},
   textAlign:         { field: 'text_align', values: { left: '.left', center: '.center', right: '.right' }},
@@ -68,8 +64,7 @@ const htmlTags = {
   span: 'Text', p: 'Text', label: 'Text', h1: 'Text', h2: 'Text',
   h3: 'Text', h4: 'Text', h5: 'Text', h6: 'Text', strong: 'Text',
   button: 'Pressable', a: 'Pressable',
-  input: 'TextInput', textarea: 'TextArea',
-  img: 'Image',
+  input: 'TextInput', textarea: 'TextArea', img: 'Image',
 };
 
 const namedColors = {
@@ -89,19 +84,93 @@ function mkCursor(raw, source) {
   const ends = new Array(count);
   for (let i = 0; i < count; i++) {
     const p = lines[i].split(' ');
-    kinds[i] = parseInt(p[0]);
-    starts[i] = parseInt(p[1]);
-    ends[i] = parseInt(p[2]);
+    kinds[i] = parseInt(p[0]); starts[i] = parseInt(p[1]); ends[i] = parseInt(p[2]);
   }
   return {
     kinds, starts, ends, count, source, pos: 0,
-    kind()    { return this.kinds[this.pos]; },
-    text()    { return this.source.slice(this.starts[this.pos], this.ends[this.pos]); },
-    advance() { if (this.pos < this.count) this.pos++; },
-    isIdent(name) { return this.kind() === TK.identifier && this.text() === name; },
-    save()    { return this.pos; },
-    restore(p){ this.pos = p; },
+    kind()      { return this.kinds[this.pos]; },
+    text()      { return this.source.slice(this.starts[this.pos], this.ends[this.pos]); },
+    textAt(i)   { return this.source.slice(this.starts[i], this.ends[i]); },
+    kindAt(i)   { return this.kinds[i]; },
+    advance()   { if (this.pos < this.count) this.pos++; },
+    isIdent(n)  { return this.kind() === TK.identifier && this.text() === n; },
+    save()      { return this.pos; },
+    restore(p)  { this.pos = p; },
   };
+}
+
+// ── Compiler state ──
+
+let ctx = {};
+function resetCtx() {
+  ctx = {
+    stateSlots: [],       // [{getter, setter, initial, type}]
+    handlers: [],         // [{name, body}]  body = zig source
+    handlerCount: 0,
+    dynTexts: [],         // [{bufId, fmtString, fmtArgs, arrName, arrIndex}]
+    dynCount: 0,
+    arrayCounter: 0,
+    arrayDecls: [],       // ["var _arr_N = [_]Node{ ... };"]
+  };
+}
+
+// ── Collection: useState ──
+
+function collectState(c) {
+  const saved = c.save();
+  c.pos = 0;
+  while (c.pos < c.count) {
+    // const [getter, setter] = useState(initial)
+    if (c.isIdent('const') || c.isIdent('let')) {
+      const declPos = c.pos;
+      c.advance();
+      if (c.kind() === TK.lbracket) {
+        c.advance();
+        if (c.kind() === TK.identifier) {
+          const getter = c.text(); c.advance();
+          if (c.kind() === TK.comma) c.advance();
+          if (c.kind() === TK.identifier) {
+            const setter = c.text(); c.advance();
+            if (c.kind() === TK.rbracket) c.advance();
+            if (c.kind() === TK.equals) c.advance();
+            // useState( or React.useState(
+            let isUseState = false;
+            if (c.isIdent('useState')) { isUseState = true; c.advance(); }
+            else if (c.isIdent('React')) {
+              c.advance();
+              if (c.kind() === TK.dot) c.advance();
+              if (c.isIdent('useState')) { isUseState = true; c.advance(); }
+            }
+            if (isUseState && c.kind() === TK.lparen) {
+              c.advance();
+              let initial = 0;
+              let type = 'int';
+              if (c.kind() === TK.number) {
+                const num = c.text();
+                initial = num.includes('.') ? parseFloat(num) : parseInt(num);
+                type = num.includes('.') ? 'float' : 'int';
+                c.advance();
+              } else if (c.kind() === TK.minus) {
+                c.advance();
+                if (c.kind() === TK.number) {
+                  initial = -parseInt(c.text());
+                  c.advance();
+                }
+              } else if (c.isIdent('true')) { initial = true; type = 'boolean'; c.advance(); }
+              else if (c.isIdent('false')) { initial = false; type = 'boolean'; c.advance(); }
+              else if (c.kind() === TK.string) {
+                initial = c.text().slice(1, -1);
+                type = 'string'; c.advance();
+              }
+              ctx.stateSlots.push({ getter, setter, initial, type });
+            }
+          }
+        }
+      }
+    }
+    c.advance();
+  }
+  c.restore(saved);
 }
 
 // ── Color parser ──
@@ -113,16 +182,10 @@ function parseColor(hex) {
   }
   const h = hex.startsWith('#') ? hex.slice(1) : hex;
   if (h.length === 6) {
-    const r = parseInt(h.slice(0,2), 16);
-    const g = parseInt(h.slice(2,4), 16);
-    const b = parseInt(h.slice(4,6), 16);
-    return `Color.rgb(${r}, ${g}, ${b})`;
+    return `Color.rgb(${parseInt(h.slice(0,2),16)}, ${parseInt(h.slice(2,4),16)}, ${parseInt(h.slice(4,6),16)})`;
   }
   if (h.length === 3) {
-    const r = parseInt(h[0], 16) * 17;
-    const g = parseInt(h[1], 16) * 17;
-    const b = parseInt(h[2], 16) * 17;
-    return `Color.rgb(${r}, ${g}, ${b})`;
+    return `Color.rgb(${parseInt(h[0],16)*17}, ${parseInt(h[1],16)*17}, ${parseInt(h[2],16)*17})`;
   }
   return 'Color.rgb(255, 255, 255)';
 }
@@ -130,57 +193,40 @@ function parseColor(hex) {
 // ── Style parser ──
 
 function parseStyleValue(c) {
-  // String value: 'center', '#ff0000', '100%'
   if (c.kind() === TK.string) {
-    const raw = c.text();
-    const val = raw.slice(1, raw.length - 1); // strip quotes
-    c.advance();
-    return { type: 'string', value: val };
+    const raw = c.text(); c.advance();
+    return { type: 'string', value: raw.slice(1, -1) };
   }
-  // Number value: 24, 16, 0.5
   if (c.kind() === TK.number) {
-    const val = c.text();
-    c.advance();
+    const val = c.text(); c.advance();
     return { type: 'number', value: val };
   }
-  // Negative number: - 24
-  if (c.kind() === TK.minus && c.pos + 1 < c.count && c.kinds[c.pos+1] === TK.number) {
-    c.advance();
-    const val = '-' + c.text();
-    c.advance();
+  if (c.kind() === TK.minus && c.pos + 1 < c.count && c.kindAt(c.pos+1) === TK.number) {
+    c.advance(); const val = '-' + c.text(); c.advance();
     return { type: 'number', value: val };
   }
-  // Skip unknown
   c.advance();
   return { type: 'unknown', value: '' };
 }
 
 function parseStyleBlock(c) {
   const fields = [];
-  // Consume opening {{ (style={{}})
   if (c.kind() === TK.lbrace) c.advance();
   if (c.kind() === TK.lbrace) c.advance();
-
   while (c.kind() !== TK.rbrace && c.kind() !== TK.eof) {
     if (c.kind() === TK.identifier || c.kind() === TK.string) {
       let key = c.text();
-      if (c.kind() === TK.string) key = key.slice(1, key.length - 1);
+      if (c.kind() === TK.string) key = key.slice(1, -1);
       c.advance();
       if (c.kind() === TK.colon) c.advance();
       const val = parseStyleValue(c);
-
-      // Map the key
       if (colorKeys[key] && val.type === 'string') {
         fields.push(`.${colorKeys[key]} = ${parseColor(val.value)}`);
       } else if (styleKeys[key]) {
         if (val.type === 'string' && val.value.endsWith('%')) {
-          // Percentage: '100%' → -1 (sentinel for 100%)
           const pct = parseFloat(val.value);
           fields.push(`.${styleKeys[key]} = ${pct === 100 ? -1 : pct / 100}`);
         } else if (val.type === 'number') {
-          fields.push(`.${styleKeys[key]} = ${val.value}`);
-        } else if (val.type === 'string') {
-          // Could be a named value or color
           fields.push(`.${styleKeys[key]} = ${val.value}`);
         }
       } else if (enumKeys[key]) {
@@ -189,48 +235,143 @@ function parseStyleBlock(c) {
           fields.push(`.${e.field} = ${e.values[val.value]}`);
         }
       }
-      // Skip comma
       if (c.kind() === TK.comma) c.advance();
-    } else {
-      c.advance();
-    }
+    } else { c.advance(); }
   }
-  // Consume closing }}
   if (c.kind() === TK.rbrace) c.advance();
   if (c.kind() === TK.rbrace) c.advance();
   return fields;
 }
 
-// ── JSX parser ──
+// ── Handler parser ──
 
-let arrayCounter = 0;
-let arrayDecls = [];
-
-function resolveTag(name) {
-  return htmlTags[name] || name;
+function findSlot(name) {
+  for (let i = 0; i < ctx.stateSlots.length; i++) {
+    if (ctx.stateSlots[i].getter === name || ctx.stateSlots[i].setter === name) return i;
+  }
+  return -1;
 }
 
+function isGetter(name) {
+  return ctx.stateSlots.some(s => s.getter === name);
+}
+
+function isSetter(name) {
+  return ctx.stateSlots.some(s => s.setter === name);
+}
+
+function slotGet(name) {
+  const i = findSlot(name);
+  if (i < 0) return name;
+  const s = ctx.stateSlots[i];
+  if (s.type === 'float') return `state.getSlotFloat(${i})`;
+  if (s.type === 'boolean') return `state.getSlotBool(${i})`;
+  return `state.getSlot(${i})`;
+}
+
+function slotSet(slotIdx) {
+  const s = ctx.stateSlots[slotIdx];
+  if (s.type === 'float') return `state.setSlotFloat`;
+  if (s.type === 'boolean') return `state.setSlotBool`;
+  return `state.setSlot`;
+}
+
+// Parse a handler expression: () => setCount(expr)
+// Returns the Zig body as a string
+function parseHandler(c) {
+  // Skip () =>
+  if (c.kind() === TK.lparen) c.advance();
+  if (c.kind() === TK.rparen) c.advance();
+  if (c.kind() === TK.arrow) c.advance();
+
+  // Parse body — could be { stmts } or single expression
+  let body = '';
+  if (c.kind() === TK.lbrace) {
+    // Block body — not yet supported, skip
+    let depth = 1; c.advance();
+    while (depth > 0 && c.kind() !== TK.eof) {
+      if (c.kind() === TK.lbrace) depth++;
+      if (c.kind() === TK.rbrace) depth--;
+      if (depth > 0) c.advance();
+    }
+    if (c.kind() === TK.rbrace) c.advance();
+    return '// block handler not yet ported\n';
+  }
+
+  // Single expression: setCount(expr)
+  if (c.kind() === TK.identifier && isSetter(c.text())) {
+    const setter = c.text();
+    const slotIdx = findSlot(setter);
+    c.advance();
+    if (c.kind() === TK.lparen) {
+      c.advance();
+      // Parse the value expression until matching )
+      const valExpr = parseValueExpr(c);
+      // Only wrap in parens if expression has operators
+      const needsParens = valExpr.includes(' + ') || valExpr.includes(' - ') || valExpr.includes(' * ') || valExpr.includes(' / ');
+      const wrapped = needsParens ? `(${valExpr})` : valExpr;
+      body = `    ${slotSet(slotIdx)}(${slotIdx}, ${wrapped});\n`;
+      if (c.kind() === TK.rparen) c.advance();
+    }
+  }
+  return body;
+}
+
+// Parse a value expression (inside setter call) until ) at depth 0
+function parseValueExpr(c) {
+  let parts = [];
+  let depth = 0;
+  while (c.kind() !== TK.eof) {
+    if (c.kind() === TK.lparen) { depth++; parts.push('('); c.advance(); continue; }
+    if (c.kind() === TK.rparen) {
+      if (depth === 0) break;
+      depth--; parts.push(')'); c.advance(); continue;
+    }
+    if (c.kind() === TK.identifier) {
+      const name = c.text();
+      if (isGetter(name)) {
+        parts.push(slotGet(name));
+      } else {
+        parts.push(name);
+      }
+      c.advance(); continue;
+    }
+    if (c.kind() === TK.number) { parts.push(c.text()); c.advance(); continue; }
+    if (c.kind() === TK.plus) { parts.push(' + '); c.advance(); continue; }
+    if (c.kind() === TK.minus) { parts.push(' - '); c.advance(); continue; }
+    if (c.kind() === TK.star) { parts.push(' * '); c.advance(); continue; }
+    if (c.kind() === TK.slash) { parts.push(' / '); c.advance(); continue; }
+    if (c.kind() === TK.percent) { parts.push(' % '); c.advance(); continue; }
+    // Default: skip
+    parts.push(c.text());
+    c.advance();
+  }
+  return parts.join('');
+}
+
+// ── JSX parser ──
+
+function resolveTag(name) { return htmlTags[name] || name; }
+
 function parseJSXElement(c) {
-  if (c.kind() !== TK.lt) return '.{}';
-  c.advance(); // consume <
+  if (c.kind() !== TK.lt) return { nodeExpr: '.{}' };
+  c.advance(); // <
 
   // Fragment: <>
   if (c.kind() === TK.gt) {
     c.advance();
     const children = parseChildren(c);
-    // Consume </>
     if (c.kind() === TK.lt_slash) { c.advance(); if (c.kind() === TK.gt) c.advance(); }
-    return buildNode('Box', [], children, null);
+    return buildNode('Box', [], children);
   }
 
   const rawTag = c.text();
   const tag = resolveTag(rawTag);
-  c.advance(); // consume tag name
+  c.advance();
 
   // Parse attributes
   let styleFields = [];
-  let textContent = null;
-  let onPress = null;
+  let handlerRef = null;
 
   while (c.kind() !== TK.gt && c.kind() !== TK.slash_gt && c.kind() !== TK.eof) {
     if (c.kind() === TK.identifier) {
@@ -241,55 +382,41 @@ function parseJSXElement(c) {
         if (attr === 'style') {
           styleFields = parseStyleBlock(c);
         } else if (attr === 'onPress') {
-          // Skip handler for now
           if (c.kind() === TK.lbrace) {
-            let depth = 1; c.advance();
-            while (depth > 0 && c.kind() !== TK.eof) {
-              if (c.kind() === TK.lbrace) depth++;
-              if (c.kind() === TK.rbrace) depth--;
-              if (depth > 0) c.advance();
-            }
-            if (c.kind() === TK.rbrace) c.advance();
+            c.advance(); // {
+            const handlerName = `_handler_press_${ctx.handlerCount}`;
+            const body = parseHandler(c);
+            ctx.handlers.push({ name: handlerName, body });
+            handlerRef = handlerName;
+            ctx.handlerCount++;
+            if (c.kind() === TK.rbrace) c.advance(); // }
           }
         } else {
-          // Skip other attributes
+          // Skip unknown attributes
           if (c.kind() === TK.string) c.advance();
-          else if (c.kind() === TK.lbrace) {
-            let depth = 1; c.advance();
-            while (depth > 0 && c.kind() !== TK.eof) {
-              if (c.kind() === TK.lbrace) depth++;
-              if (c.kind() === TK.rbrace) depth--;
-              if (depth > 0) c.advance();
-            }
-            if (c.kind() === TK.rbrace) c.advance();
-          }
+          else if (c.kind() === TK.lbrace) { skipBraces(c); }
         }
       }
-    } else {
-      c.advance();
-    }
+    } else { c.advance(); }
   }
 
   // Self-closing: />
   if (c.kind() === TK.slash_gt) {
     c.advance();
-    return buildNode(tag, styleFields, [], textContent);
+    return buildNode(tag, styleFields, [], handlerRef);
   }
-
-  // Opening tag closed: >
   if (c.kind() === TK.gt) c.advance();
 
-  // Parse children
   const children = parseChildren(c);
 
-  // Consume closing tag: </Tag>
+  // </Tag>
   if (c.kind() === TK.lt_slash) {
     c.advance();
-    if (c.kind() === TK.identifier) c.advance(); // tag name
+    if (c.kind() === TK.identifier) c.advance();
     if (c.kind() === TK.gt) c.advance();
   }
 
-  return buildNode(tag, styleFields, children, textContent);
+  return buildNode(tag, styleFields, children, handlerRef);
 }
 
 function parseChildren(c) {
@@ -297,139 +424,181 @@ function parseChildren(c) {
   while (c.kind() !== TK.lt_slash && c.kind() !== TK.eof) {
     if (c.kind() === TK.lt) {
       children.push(parseJSXElement(c));
-    } else if (c.kind() === TK.identifier || c.kind() === TK.string || c.kind() === TK.number) {
-      // Text content — collect consecutive text tokens
+    } else if (c.kind() === TK.lbrace) {
+      // {expr} — check if it's a state getter for dynamic text
+      c.advance();
+      if (c.kind() === TK.identifier && isGetter(c.text())) {
+        const getter = c.text();
+        const slotIdx = findSlot(getter);
+        const bufId = ctx.dynCount;
+        const slot = ctx.stateSlots[slotIdx];
+        const fmt = slot.type === 'float' ? '{d:.2}' : '{d}';
+        const args = slotGet(getter);
+        ctx.dynTexts.push({ bufId, fmtString: fmt, fmtArgs: args, arrName: '', arrIndex: 0 });
+        ctx.dynCount++;
+        c.advance();
+        if (c.kind() === TK.rbrace) c.advance();
+        // Placeholder node — text will be set by _updateDynamicTexts
+        children.push({ nodeExpr: '.{ .text = "" }', dynBufId: bufId });
+      } else {
+        // Skip unknown expression
+        let depth = 1;
+        while (depth > 0 && c.kind() !== TK.eof) {
+          if (c.kind() === TK.lbrace) depth++;
+          if (c.kind() === TK.rbrace) depth--;
+          if (depth > 0) c.advance();
+        }
+        if (c.kind() === TK.rbrace) c.advance();
+      }
+    } else if (c.kind() !== TK.rbrace) {
+      // Text content — collect anything that isn't JSX or braces
       let text = '';
-      while (c.kind() !== TK.lt && c.kind() !== TK.lt_slash && c.kind() !== TK.lbrace && c.kind() !== TK.eof) {
+      while (c.kind() !== TK.lt && c.kind() !== TK.lt_slash && c.kind() !== TK.lbrace && c.kind() !== TK.eof && c.kind() !== TK.rbrace) {
         text += c.text();
         c.advance();
-        if (c.kind() === TK.identifier || c.kind() === TK.number) text += ' ';
       }
-      if (text.trim()) {
-        children.push({ nodeExpr: `.{ .text = "${text.trim()}" }` });
-      }
-    } else if (c.kind() === TK.lbrace) {
-      // {expression} — skip for now
-      let depth = 1; c.advance();
-      while (depth > 0 && c.kind() !== TK.eof) {
-        if (c.kind() === TK.lbrace) depth++;
-        if (c.kind() === TK.rbrace) depth--;
-        if (depth > 0) c.advance();
-      }
-      if (c.kind() === TK.rbrace) c.advance();
-    } else {
-      c.advance();
-    }
+      if (text.trim()) children.push({ nodeExpr: `.{ .text = "${text.trim()}" }` });
+    } else { c.advance(); }
   }
   return children;
 }
 
-function buildNode(tag, styleFields, children, textContent) {
-  const parts = [];
-
-  // Style
-  if (styleFields.length > 0) {
-    parts.push(`.style = .{ ${styleFields.join(', ')} }`);
+function skipBraces(c) {
+  let depth = 1; c.advance();
+  while (depth > 0 && c.kind() !== TK.eof) {
+    if (c.kind() === TK.lbrace) depth++;
+    if (c.kind() === TK.rbrace) depth--;
+    if (depth > 0) c.advance();
   }
-
-  // Text content (from children that are just text)
-  if (children.length === 1 && children[0].nodeExpr && children[0].nodeExpr.includes('.text =')) {
-    // Single text child — hoist to parent .text field
-    const textMatch = children[0].nodeExpr.match(/\.text = "(.*)"/);
-    if (textMatch && (tag === 'Text' || tag === 'Pressable')) {
-      parts.push(`.text = "${textMatch[1]}"`);
-      children = [];
-    }
-  }
-
-  // Children array
-  if (children.length > 0) {
-    const arrName = `_arr_${arrayCounter}`;
-    arrayCounter++;
-    const childExprs = children.map(ch => ch.nodeExpr || ch).join(', ');
-    arrayDecls.push(`var ${arrName} = [_]Node{ ${childExprs} };`);
-    parts.push(`.children = &${arrName}`);
-  }
-
-  const expr = `.{ ${parts.join(', ')} }`;
-  return { nodeExpr: expr, isRoot: false };
+  if (c.kind() === TK.rbrace) c.advance();
 }
 
-// ── Main compile function ──
+function buildNode(tag, styleFields, children, handlerRef) {
+  const parts = [];
+  if (styleFields.length > 0) parts.push(`.style = .{ ${styleFields.join(', ')} }`);
 
-function compile() {
-  const source = globalThis.__source;
-  const tokens = globalThis.__tokens;
-  const file = globalThis.__file || 'unknown.tsz';
-  const c = mkCursor(tokens, source);
-
-  // Reset state
-  arrayCounter = 0;
-  arrayDecls = [];
-
-  // Find function App() — scan for 'function' 'App' '('
-  let appStart = -1;
-  for (let i = 0; i < c.count - 2; i++) {
-    if (c.kinds[i] === TK.identifier && source.slice(c.starts[i], c.ends[i]) === 'function' &&
-        c.kinds[i+1] === TK.identifier && c.kinds[i+2] === TK.lparen) {
-      const name = source.slice(c.starts[i+1], c.ends[i+1]);
-      if (name[0] >= 'A' && name[0] <= 'Z') {
-        appStart = i;
+  // Hoist single text child to .text field (static text or dynamic placeholder)
+  if (children.length === 1 && children[0].nodeExpr && children[0].nodeExpr.includes('.text =')) {
+    const m = children[0].nodeExpr.match(/\.text = "(.*)"/);
+    if (m && tag === 'Text') {
+      parts.push(`.text = "${m[1]}"`);
+      // If it's a dynamic text, propagate the dynBufId to this node so the parent can bind it
+      const dynId = children[0].dynBufId;
+      children = [];
+      if (dynId !== undefined) {
+        const expr = `.{ ${parts.join(', ')} }`;
+        return { nodeExpr: expr, dynBufId: dynId };
       }
     }
   }
 
-  if (appStart < 0) {
-    return '// Smith error: no App function found\n';
-  }
+  if (handlerRef) parts.push(`.handlers = .{ .on_press = ${handlerRef} }`);
 
-  // Find return ( ... ) — scan for 'return' '(' '<'
-  c.pos = appStart;
-  while (c.pos < c.count) {
-    if (c.kind() === TK.identifier && c.text() === 'return') {
-      c.advance();
-      if (c.kind() === TK.lparen) c.advance();
-      break;
+  if (children.length > 0) {
+    const arrName = `_arr_${ctx.arrayCounter}`;
+    ctx.arrayCounter++;
+    const childExprs = children.map(ch => ch.nodeExpr || ch).join(', ');
+    ctx.arrayDecls.push(`var ${arrName} = [_]Node{ ${childExprs} };`);
+    // Bind dynamic texts to this array
+    for (let i = 0; i < children.length; i++) {
+      if (children[i].dynBufId !== undefined) {
+        const dt = ctx.dynTexts.find(d => d.bufId === children[i].dynBufId);
+        if (dt) { dt.arrName = arrName; dt.arrIndex = i; }
+      }
     }
-    c.advance();
+    parts.push(`.children = &${arrName}`);
   }
 
-  // Parse JSX
-  const rootResult = parseJSXElement(c);
-  const rootExpr = rootResult.nodeExpr || rootResult;
+  return { nodeExpr: `.{ ${parts.join(', ')} }` };
+}
 
-  // Get app name from filename
+// ── Emit ──
+
+function emitOutput(rootExpr, file) {
   const basename = file.split('/').pop();
-  const appName = basename.replace(/\.tsz$/, '').replace(/\.app$/, '');
+  const appName = basename.replace(/\.tsz$/, '');
+  const hasState = ctx.stateSlots.length > 0;
+  const hasDynText = ctx.dynCount > 0;
+  const prefix = 'framework/';
 
-  // ── Emit ──
   let out = '';
-  out += `//! Generated by Forge+Smith\n`;
-  out += `//! Source: ${basename}\n\n`;
+  // Header
+  out += `//! Generated by Forge+Smith\n//!\n//! Source: ${basename}\n\n`;
   out += `const std = @import("std");\n`;
   out += `const builtin = @import("builtin");\n`;
   out += `const build_options = @import("build_options");\n`;
   out += `const IS_LIB = if (@hasDecl(build_options, "is_lib")) build_options.is_lib else false;\n\n`;
-  out += `const layout = @import("framework/layout.zig");\n`;
+  out += `const layout = @import("${prefix}layout.zig");\n`;
   out += `const Node = layout.Node;\nconst Style = layout.Style;\nconst Color = layout.Color;\n`;
-  out += `const engine = if (IS_LIB) struct {} else if (builtin.os.tag == .emscripten) @import("framework/engine_web.zig") else @import("framework/engine.zig");\n\n`;
+  if (hasState) out += `const state = @import("${prefix}state.zig");\n`;
+  out += `const engine = if (IS_LIB) struct {} else if (builtin.os.tag == .emscripten) @import("${prefix}engine_web.zig") else @import("${prefix}engine.zig");\n\n`;
+
+  // State manifest
+  if (hasState) {
+    out += `// ── State manifest ──────────────────────────────────────────────\n`;
+    ctx.stateSlots.forEach((s, i) => { out += `// slot ${i}: ${s.getter} (${s.type})\n`; });
+    out += `comptime { if (${ctx.stateSlots.length} != ${ctx.stateSlots.length}) @compileError("state slot count mismatch"); }\n\n`;
+  }
 
   // Node tree
   out += `// ── Generated node tree ─────────────────────────────────────────\n`;
-  for (const decl of arrayDecls) {
-    out += decl + '\n';
-  }
-  // rootExpr starts with ".{ " — Node needs no dot before the brace
+  for (const decl of ctx.arrayDecls) out += decl + '\n';
   const nodeInit = rootExpr.startsWith('.') ? rootExpr.slice(1) : rootExpr;
   out += `var _root = Node${nodeInit};\n\n`;
 
-  // Empty logic blocks
-  out += `const JS_LOGIC =\n    \\\\\n;\nconst LUA_LOGIC =\n    \\\\\n;\n\n`;
+  // Dynamic text buffers
+  if (hasDynText) {
+    out += `// ── Dynamic text buffers ─────────────────────────────────────────\n`;
+    for (let i = 0; i < ctx.dynCount; i++) {
+      out += `var _dyn_buf_${i}: [64]u8 = undefined;\n`;
+      out += `var _dyn_text_${i}: []const u8 = "";\n`;
+    }
+    out += '\n';
+  }
 
-  // Functions
-  out += `fn _initState() void {}\nfn _updateDynamicTexts() void {}\n\n`;
-  out += `fn _appInit() void {\n    _initState();\n}\n\n`;
-  out += `fn _appTick(now: u32) void {\n    _ = now;\n}\n\n`;
+  // Handlers
+  if (ctx.handlers.length > 0) {
+    out += `// ── Event handlers ──────────────────────────────────────────────\n`;
+    for (const h of ctx.handlers) {
+      out += `fn ${h.name}() void {\n${h.body}}\n\n`;
+    }
+  }
+
+  // JS/Lua logic
+  out += `const JS_LOGIC =\n    \\\\\n;\n`;
+  out += `const LUA_LOGIC =\n    \\\\\n;\n\n`;
+
+  // _initState
+  out += `fn _initState() void {\n`;
+  for (const s of ctx.stateSlots) {
+    if (s.type === 'int') out += `    _ = state.createSlot(${s.initial});\n`;
+    else if (s.type === 'float') out += `    _ = state.createSlotFloat(${s.initial});\n`;
+    else if (s.type === 'boolean') out += `    _ = state.createSlotBool(${s.initial});\n`;
+    else if (s.type === 'string') out += `    _ = state.createSlotString("${s.initial}");\n`;
+  }
+  out += `}\n\n`;
+
+  // _updateDynamicTexts
+  out += `fn _updateDynamicTexts() void {\n`;
+  for (const dt of ctx.dynTexts) {
+    out += `    _dyn_text_${dt.bufId} = std.fmt.bufPrint(&_dyn_buf_${dt.bufId}, "${dt.fmtString}", .{ ${dt.fmtArgs} }) catch "";\n`;
+    if (dt.arrName) {
+      out += `    ${dt.arrName}[${dt.arrIndex}].text = _dyn_text_${dt.bufId};\n`;
+    } else {
+      out += `    _root.text = _dyn_text_${dt.bufId};\n`;
+    }
+  }
+  out += `}\n\n`;
+
+  // _appInit
+  out += `fn _appInit() void {\n    _initState();\n`;
+  if (hasDynText) out += `    _updateDynamicTexts();\n`;
+  out += `}\n\n`;
+
+  // _appTick
+  out += `fn _appTick(now: u32) void {\n    _ = now;\n`;
+  if (hasState) out += `    if (state.isDirty()) { _updateDynamicTexts(); state.clearDirty(); }\n`;
+  out += `}\n\n`;
 
   // Exports
   out += `export fn app_get_root() *Node { return &_root; }\n`;
@@ -439,11 +608,28 @@ function compile() {
   out += `export fn app_get_js_logic_len() usize { return JS_LOGIC.len; }\n`;
   out += `export fn app_get_lua_logic() [*]const u8 { return LUA_LOGIC.ptr; }\n`;
   out += `export fn app_get_lua_logic_len() usize { return LUA_LOGIC.len; }\n`;
-  out += `export fn app_get_title() [*:0]const u8 { return "${appName}"; }\n`;
-  out += `export fn app_state_count() usize { return 0; }\n\n`;
+  out += `export fn app_get_title() [*:0]const u8 { return "${appName}"; }\n\n`;
+
+  // State exports
+  out += `export fn app_state_count() usize { return ${ctx.stateSlots.length}; }\n`;
+  if (hasState) {
+    const types = ctx.stateSlots.map(s => ({ int: 0, float: 1, boolean: 2, string: 3 }[s.type] || 0));
+    out += `const _slot_types = [_]u8{ ${types.join(', ')} };\n`;
+    out += `export fn app_state_slot_type(id: usize) u8 { if (id < _slot_types.len) return _slot_types[id]; return 0; }\n`;
+    out += `export fn app_state_get_int(id: usize) i64 { return state.getSlot(id); }\n`;
+    out += `export fn app_state_set_int(id: usize, val: i64) void { state.setSlot(id, val); }\n`;
+    out += `export fn app_state_get_float(id: usize) f64 { return state.getSlotFloat(id); }\n`;
+    out += `export fn app_state_set_float(id: usize, val: f64) void { state.setSlotFloat(id, val); }\n`;
+    out += `export fn app_state_get_bool(id: usize) u8 { return if (state.getSlotBool(id)) 1 else 0; }\n`;
+    out += `export fn app_state_set_bool(id: usize, val: u8) void { state.setSlotBool(id, val != 0); }\n`;
+    out += `export fn app_state_get_string_ptr(id: usize) [*]const u8 { return state.getSlotString(id).ptr; }\n`;
+    out += `export fn app_state_get_string_len(id: usize) usize { return state.getSlotString(id).len; }\n`;
+    out += `export fn app_state_set_string(id: usize, ptr: [*]const u8, len: usize) void { state.setSlotString(id, ptr[0..len]); }\n`;
+    out += `export fn app_state_mark_dirty() void { state.markDirty(); }\n`;
+  }
 
   // Main
-  out += `pub fn main() !void {\n`;
+  out += `\npub fn main() !void {\n`;
   out += `    if (IS_LIB) return;\n`;
   out += `    try engine.run(.{\n`;
   out += `        .title = "${appName}",\n`;
@@ -452,8 +638,44 @@ function compile() {
   out += `        .lua_logic = LUA_LOGIC,\n`;
   out += `        .init = _appInit,\n`;
   out += `        .tick = _appTick,\n`;
-  out += `    });\n`;
-  out += `}\n`;
+  out += `    });\n}\n`;
 
   return out;
+}
+
+// ── Entry point ──
+
+function compile() {
+  const source = globalThis.__source;
+  const tokens = globalThis.__tokens;
+  const file = globalThis.__file || 'unknown.tsz';
+  const c = mkCursor(tokens, source);
+
+  resetCtx();
+
+  // Phase 1: Collect state
+  collectState(c);
+
+  // Find App function
+  let appStart = -1;
+  for (let i = 0; i < c.count - 2; i++) {
+    if (c.kindAt(i) === TK.identifier && c.textAt(i) === 'function' &&
+        c.kindAt(i+1) === TK.identifier && c.kindAt(i+2) === TK.lparen) {
+      const name = c.textAt(i+1);
+      if (name[0] >= 'A' && name[0] <= 'Z') appStart = i;
+    }
+  }
+  if (appStart < 0) return '// Smith error: no App function found\n';
+
+  // Find return
+  c.pos = appStart;
+  while (c.pos < c.count) {
+    if (c.isIdent('return')) { c.advance(); if (c.kind() === TK.lparen) c.advance(); break; }
+    c.advance();
+  }
+
+  // Parse JSX
+  const root = parseJSXElement(c);
+
+  return emitOutput(root.nodeExpr, file);
 }
