@@ -24,17 +24,22 @@ pub fn build(b: *std.Build) void {
     // ── User flags ──────────────────────────────────────────────────
     const sysroot = b.option([]const u8, "sysroot", "Cross-compile sysroot path (e.g., Alpine rootfs with -dev packages)");
 
+    // ── File length enforcement (1600 line max) ──────────────────────
+    const file_check = b.addSystemCommand(&.{ "bash", "scripts/check-file-length.sh" });
+
     // ── zigos (lean) — compiler + layout + primitives + GPU ─────────
     const lean_exe = addEngineExe(b, target, optimize, wgpu_mod, "tsz", .lean, sysroot);
     const lean_install = b.addInstallArtifact(lean_exe, .{});
     const lean_step = b.step("tsz", "Lean: compiler + layout + GPU + SDL3");
     lean_step.dependOn(&lean_install.step);
+    lean_step.dependOn(&file_check.step);
 
     // ── tsz-full — compiler + everything ────────────────────────────
     const full_exe = addEngineExe(b, target, optimize, wgpu_mod, "tsz-full", .full, sysroot);
     const full_install = b.addInstallArtifact(full_exe, .{});
     const full_step = b.step("tsz-full", "Full: compiler + networking + QuickJS + physics + 3D + terminal + video + crypto");
     full_step.dependOn(&full_install.step);
+    full_step.dependOn(&file_check.step);
 
     // ── App binary (compiled .tsz app) ──────────────────────────────
     const app_name = b.option([]const u8, "app-name", "Output binary name (set by compiler)") orelse "tsz-app";
@@ -102,6 +107,7 @@ pub fn build(b: *std.Build) void {
         const forge_install = b.addInstallArtifact(forge_exe, .{});
         const forge_step = b.step("forge", "Forge: compiler kernel + QuickJS (hosts Smith JS codegen)");
         forge_step.dependOn(&forge_install.step);
+        forge_step.dependOn(&file_check.step);
     }
 
     // ── Compiler tests ───────────────────────────────────────────
