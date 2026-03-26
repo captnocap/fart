@@ -1,0 +1,103 @@
+// SURFACE CONFORMANCE s05c: Settings — chad tier
+
+from './s00c_manifest_cls'
+
+<page route=settings>
+  <var>
+    section is 'profile'
+    name is 'Siah'
+    email is 'siah@example.com'
+    darkMode is true
+    notifications is true
+    twoFactor is false
+    sections is ['profile', 'appearance', 'notifications', 'security']
+  </var>
+
+  <state>
+    set_section
+    set_name
+    set_email
+    set_darkMode
+    set_notifications
+    set_twoFactor
+  </state>
+
+  <functions>
+    navigate(name):
+      set_section to name
+
+    toggleDarkMode:
+      set_darkMode to !darkMode
+
+    toggleNotifications:
+      set_notifications to !notifications
+
+    toggleTwoFactor:
+      set_twoFactor to !twoFactor
+  </functions>
+
+  return(
+    <C.PageRow>
+      <C.Sidebar>
+        <C.Subtitle>Settings</C.Subtitle>
+        <C.Divider />
+        <For each=sections>
+          {item exact section
+            ? <C.NavItemActive onPress={() => { navigate(item) }}><C.NavLabelActive>{item}</C.NavLabelActive></C.NavItemActive>
+            : <C.NavItem onPress={() => { navigate(item) }}><C.NavLabel>{item}</C.NavLabel></C.NavItem>
+          }
+        </For>
+      </C.Sidebar>
+      <C.Main>
+        {section exact 'profile' ?
+          <C.Col style={{ gap: 16 }}>
+            <C.Subtitle>Profile</C.Subtitle>
+            <C.Col>
+              <C.Label>Name</C.Label>
+              <C.InputWrap><TextInput value={name} onChange=set_name /></C.InputWrap>
+            </C.Col>
+            <C.Col>
+              <C.Label>Email</C.Label>
+              <C.InputWrap><TextInput value={email} onChange=set_email /></C.InputWrap>
+            </C.Col>
+            <C.Btn><C.BtnLabel>Save</C.BtnLabel></C.Btn>
+          </C.Col>
+        : section exact 'appearance' ?
+          <C.Col style={{ gap: 16 }}>
+            <C.Subtitle>Appearance</C.Subtitle>
+            <C.RowSpread>
+              <C.Body>Dark Mode</C.Body>
+              {darkMode
+                ? <C.ToggleOn onPress=toggleDarkMode><C.ToggleKnobOn /></C.ToggleOn>
+                : <C.ToggleOff onPress=toggleDarkMode><C.ToggleKnobOff /></C.ToggleOff>
+              }
+            </C.RowSpread>
+          </C.Col>
+        : section exact 'notifications' ?
+          <C.Col style={{ gap: 16 }}>
+            <C.Subtitle>Notifications</C.Subtitle>
+            <C.RowSpread>
+              <C.Body>Push Notifications</C.Body>
+              {notifications
+                ? <C.ToggleOn onPress=toggleNotifications><C.ToggleKnobOn /></C.ToggleOn>
+                : <C.ToggleOff onPress=toggleNotifications><C.ToggleKnobOff /></C.ToggleOff>
+              }
+            </C.RowSpread>
+          </C.Col>
+        :
+          <C.Col style={{ gap: 16 }}>
+            <C.Subtitle>Security</C.Subtitle>
+            <C.RowSpread>
+              <C.Body>Two-Factor Auth</C.Body>
+              {twoFactor
+                ? <C.ToggleOn onPress=toggleTwoFactor><C.ToggleKnobOn /></C.ToggleOn>
+                : <C.ToggleOff onPress=toggleTwoFactor><C.ToggleKnobOff /></C.ToggleOff>
+              }
+            </C.RowSpread>
+            <C.Btn><C.BtnLabel>Change Password</C.BtnLabel></C.Btn>
+          </C.Col>
+        }
+      </C.Main>
+    </C.PageRow>
+  )
+</page>

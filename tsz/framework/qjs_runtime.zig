@@ -6,12 +6,15 @@
 
 const std = @import("std");
 const build_options = @import("build_options");
-const HAS_QUICKJS = if (@hasDecl(build_options, "has_quickjs")) build_options.has_quickjs else true;
+const qjs_c = @import("qjs_c.zig");
+const HAS_QUICKJS = qjs_c.HAS_QUICKJS;
 
 const c = @import("c.zig").imports;
 const layout = @import("layout.zig");
 const text_mod = @import("text.zig");
 const state = @import("state.zig");
+const jsv = @import("qjs_value.zig");
+const JsVal = jsv.JsVal;
 const pty_mod = if (HAS_QUICKJS) @import("pty.zig") else struct {
     pub const Pty = struct {};
 };
@@ -25,17 +28,9 @@ const Node = layout.Node;
 const Color = layout.Color;
 const TextEngine = text_mod.TextEngine;
 
-// ── QuickJS C bindings (only in full builds) ────────────────────
-const qjs = if (HAS_QUICKJS) @cImport({
-    @cDefine("_GNU_SOURCE", "1");
-    @cDefine("QUICKJS_NG_BUILD", "1");
-    @cInclude("quickjs.h");
-}) else struct {
-    pub const JSValue = extern struct { u: extern union { int32: i32 } = .{ .int32 = 0 }, tag: i64 = 0 };
-    pub const JSRuntime = opaque {};
-    pub const JSContext = opaque {};
-};
-const QJS_UNDEFINED = if (HAS_QUICKJS) (qjs.JSValue{ .u = .{ .int32 = 0 }, .tag = 3 }) else qjs.JSValue{};
+// ── QuickJS C bindings (shared — single @cImport for type identity) ──
+const qjs = qjs_c.qjs;
+const QJS_UNDEFINED = qjs_c.UNDEFINED;
 
 var g_qjs_rt: ?*qjs.JSRuntime = null;
 var g_qjs_ctx: ?*qjs.JSContext = null;
@@ -276,293 +271,8 @@ fn hostIsKeyDown(_: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.
 // ── Telemetry host functions (build JS objects from unified snapshot) ──
 
 const tel = @import("telemetry.zig");
-const semantic = @import("semantic.zig");
-const classifier = @import("classifier.zig");
 const vterm_mod = @import("vterm.zig");
-
-// ── Semantic terminal bridge ─────────────────────────────────────
-// Exposes the semantic graph, classified cache, session state, and
-// per-row token data to .tsz scripts. This is the bridge that turns
-// raw terminal output into structured data any UI can consume.
-//
-// Port of: love2d/lua/capabilities/semantic_terminal.lua
-// Pipeline: PTY → vterm → classifier → semantic graph → JS
-
-fn hostSemState(ctx: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
-    const c2 = ctx orelse return QJS_UNDEFINED;
-    const s = semantic.getState();
-    const obj = qjs.JS_NewObject(c2);
-    setF(c2, obj, "mode", @floatFromInt(@intFromEnum(s.mode)));
-    setB(c2, obj, "streaming", s.streaming);
-    setF(c2, obj, "streaming_kind", @floatFromInt(@intFromEnum(s.streaming_kind)));
-    setB(c2, obj, "awaiting_input", s.awaiting_input);
-    setB(c2, obj, "awaiting_decision", s.awaiting_decision);
-    setB(c2, obj, "modal_open", s.modal_open);
-    setB(c2, obj, "interrupt_pending", s.interrupt_pending);
-    setF(c2, obj, "turn_count", @floatFromInt(s.turn_count));
-    setF(c2, obj, "current_turn_id", @floatFromInt(s.current_turn_id));
-    setF(c2, obj, "node_count", @floatFromInt(s.node_count));
-    setF(c2, obj, "group_count", @floatFromInt(s.group_count));
-    // Mode name as string for convenience
-    const mode_name = @tagName(s.mode);
-    _ = qjs.JS_SetPropertyStr(c2, obj, "mode_name", qjs.JS_NewStringLen(c2, mode_name.ptr, @intCast(mode_name.len)));
-    const sk_name = @tagName(s.streaming_kind);
-    _ = qjs.JS_SetPropertyStr(c2, obj, "streaming_kind_name", qjs.JS_NewStringLen(c2, sk_name.ptr, @intCast(sk_name.len)));
-    return obj;
-}
-
-fn hostSemNodeCount(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
-    return qjs.JS_NewFloat64(null, @floatFromInt(semantic.nodeCount()));
-}
-
-fn hostSemNode(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
-    const c2 = ctx orelse return QJS_UNDEFINED;
-    if (argc < 1) return QJS_UNDEFINED;
-    var idx: i32 = 0;
-    _ = qjs.JS_ToInt32(c2, &idx, argv[0]);
-    if (idx < 0) return QJS_UNDEFINED;
-
-    const node = semantic.getNode(@intCast(idx)) orelse return QJS_UNDEFINED;
-    const obj = qjs.JS_NewObject(c2);
-    const kind_name = @tagName(node.kind);
-    _ = qjs.JS_SetPropertyStr(c2, obj, "kind", qjs.JS_NewStringLen(c2, kind_name.ptr, @intCast(kind_name.len)));
-    const role_name = @tagName(node.role);
-    _ = qjs.JS_SetPropertyStr(c2, obj, "role", qjs.JS_NewStringLen(c2, role_name.ptr, @intCast(role_name.len)));
-    const lane_name = @tagName(node.lane);
-    _ = qjs.JS_SetPropertyStr(c2, obj, "lane", qjs.JS_NewStringLen(c2, lane_name.ptr, @intCast(lane_name.len)));
-    const scope_name = @tagName(node.scope);
-    _ = qjs.JS_SetPropertyStr(c2, obj, "scope", qjs.JS_NewStringLen(c2, scope_name.ptr, @intCast(scope_name.len)));
-    setF(c2, obj, "turn_id", @floatFromInt(node.turn_id));
-    setF(c2, obj, "group_id", @floatFromInt(node.group_id));
-    setF(c2, obj, "row_start", @floatFromInt(node.row_start));
-    setF(c2, obj, "row_end", @floatFromInt(node.row_end));
-    setF(c2, obj, "row_count", @floatFromInt(node.row_count));
-    setF(c2, obj, "children_count", @floatFromInt(node.children_count));
-    setB(c2, obj, "active", node.active);
-    // Row text for the first row of this node
-    if (node.row_count > 0) {
-        const text = vterm_mod.getRowText(node.row_start);
-        _ = qjs.JS_SetPropertyStr(c2, obj, "text", qjs.JS_NewStringLen(c2, text.ptr, @intCast(text.len)));
-    }
-    return obj;
-}
-
-fn hostSemCacheCount(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
-    return qjs.JS_NewFloat64(null, @floatFromInt(semantic.cacheCount()));
-}
-
-fn hostSemCacheEntry(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
-    const c2 = ctx orelse return QJS_UNDEFINED;
-    if (argc < 1) return QJS_UNDEFINED;
-    var idx: i32 = 0;
-    _ = qjs.JS_ToInt32(c2, &idx, argv[0]);
-    if (idx < 0) return QJS_UNDEFINED;
-
-    const entry = semantic.getCacheEntry(@intCast(idx)) orelse return QJS_UNDEFINED;
-    const obj = qjs.JS_NewObject(c2);
-    setF(c2, obj, "row", @floatFromInt(entry.row));
-    const kind_name = @tagName(entry.kind);
-    _ = qjs.JS_SetPropertyStr(c2, obj, "kind", qjs.JS_NewStringLen(c2, kind_name.ptr, @intCast(kind_name.len)));
-    setF(c2, obj, "turn_id", @floatFromInt(entry.turn_id));
-    setF(c2, obj, "group_id", @floatFromInt(entry.group_id));
-    // Include row text
-    const text = vterm_mod.getRowText(entry.row);
-    _ = qjs.JS_SetPropertyStr(c2, obj, "text", qjs.JS_NewStringLen(c2, text.ptr, @intCast(text.len)));
-    return obj;
-}
-
-fn hostSemRowToken(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
-    const c2 = ctx orelse return QJS_UNDEFINED;
-    if (argc < 1) return QJS_UNDEFINED;
-    var row: i32 = 0;
-    _ = qjs.JS_ToInt32(c2, &row, argv[0]);
-    if (row < 0) return QJS_UNDEFINED;
-    const token = classifier.getRowToken(@intCast(row));
-    const name = @tagName(token);
-    return qjs.JS_NewStringLen(c2, name.ptr, @intCast(name.len));
-}
-
-fn hostSemRowText(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
-    const c2 = ctx orelse return QJS_UNDEFINED;
-    if (argc < 1) return QJS_UNDEFINED;
-    var row: i32 = 0;
-    _ = qjs.JS_ToInt32(c2, &row, argv[0]);
-    if (row < 0) return QJS_UNDEFINED;
-    const text = vterm_mod.getRowText(@intCast(row));
-    return qjs.JS_NewStringLen(c2, text.ptr, @intCast(text.len));
-}
-
-fn hostSemTree(ctx: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
-    const c2 = ctx orelse return QJS_UNDEFINED;
-    var buf: [4096]u8 = undefined;
-    const tree = semantic.formatTree(&buf);
-    return qjs.JS_NewStringLen(c2, tree.ptr, @intCast(tree.len));
-}
-
-fn hostSemSetMode(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
-    if (argc < 1) return QJS_UNDEFINED;
-    var mode: i32 = 0;
-    _ = qjs.JS_ToInt32(ctx, &mode, argv[0]);
-    // 0=none, 1=basic, 2=claude_code, 3=json (JS-driven)
-    classifier.setMode(switch (mode) {
-        1 => .basic,
-        2 => .claude_code,
-        3 => .json,
-        else => .none,
-    });
-    classifier.markDirty();
-    return QJS_UNDEFINED;
-}
-
-fn hostSemHasDiff(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
-    return qjs.JS_NewFloat64(null, if (semantic.hasDiff()) 1.0 else 0.0);
-}
-
-fn hostSemFrame(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
-    return qjs.JS_NewFloat64(null, @floatFromInt(semantic.getFrame()));
-}
-
-fn hostSemExport(ctx: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
-    const c2 = ctx orelse return QJS_UNDEFINED;
-    const count = semantic.cacheCount();
-    const arr = qjs.JS_NewArray(c2);
-    var i: u16 = 0;
-    while (i < count) : (i += 1) {
-        const entry = semantic.getCacheEntry(i) orelse continue;
-        const obj = qjs.JS_NewObject(c2);
-        setF(c2, obj, "row", @floatFromInt(entry.row));
-        const kind_name = @tagName(entry.kind);
-        _ = qjs.JS_SetPropertyStr(c2, obj, "kind", qjs.JS_NewStringLen(c2, kind_name.ptr, @intCast(kind_name.len)));
-        setF(c2, obj, "turn_id", @floatFromInt(entry.turn_id));
-        setF(c2, obj, "group_id", @floatFromInt(entry.group_id));
-        const text = vterm_mod.getRowText(entry.row);
-        _ = qjs.JS_SetPropertyStr(c2, obj, "text", qjs.JS_NewStringLen(c2, text.ptr, @intCast(text.len)));
-        // Token color
-        const tc = classifier.tokenColor(entry.kind);
-        var hex_buf: [8]u8 = undefined;
-        const hex = std.fmt.bufPrint(&hex_buf, "#{x:0>2}{x:0>2}{x:0>2}", .{ tc.r, tc.g, tc.b }) catch "#e2e8f0";
-        _ = qjs.JS_SetPropertyStr(c2, obj, "color", qjs.JS_NewStringLen(c2, hex.ptr, @intCast(hex.len)));
-        _ = qjs.JS_SetPropertyUint32(c2, arr, @intCast(i), obj);
-    }
-    return arr;
-}
-
-// ── JSON-driven classifier bridge ────────────────────────────────
-// These let JS set row tokens directly and trigger the graph build,
-// enabling runtime classifiers loaded from JSON sheets.
-
-fn hostSemSetRowToken(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
-    if (argc < 2) return QJS_UNDEFINED;
-    var row: i32 = 0;
-    _ = qjs.JS_ToInt32(ctx, &row, argv[0]);
-    if (row < 0) return QJS_UNDEFINED;
-    const name = qjs.JS_ToCString(ctx, argv[1]);
-    if (name == null) return QJS_UNDEFINED;
-    defer qjs.JS_FreeCString(ctx, name);
-    const token = classifier.tokenFromName(std.mem.span(name));
-    classifier.setRowToken(@intCast(row), token);
-    return QJS_UNDEFINED;
-}
-
-fn hostSemVtermRows(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
-    return qjs.JS_NewFloat64(null, @floatFromInt(vterm_mod.getRows()));
-}
-
-fn hostSemBuildGraph(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
-    var rows: i32 = 0;
-    if (argc >= 1) _ = qjs.JS_ToInt32(ctx, &rows, argv[0]);
-    if (rows <= 0) rows = @intCast(vterm_mod.getRows());
-    semantic.tick(@intCast(rows));
-    return QJS_UNDEFINED;
-}
-
-/// Single-shot semantic snapshot — the standardized consumer format.
-/// Returns a versioned JS object with state + classified rows + graph.
-/// Consumer calls JSON.stringify(__sem_snapshot()) to get the wire format.
-///
-/// Schema (v1):
-///   { version, classifier, frame,
-///     state: { mode, streaming, streaming_kind, awaiting_input, ... },
-///     rows: [ { row, kind, role, lane, turn_id, group_id, text, color } ],
-///     graph: { node_count, turn_count, tree } }
-fn hostSemSnapshot(ctx: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
-    const c2 = ctx orelse return QJS_UNDEFINED;
-    const root = qjs.JS_NewObject(c2);
-
-    // Version + metadata
-    setF(c2, root, "version", 1.0);
-    const cls_name = switch (classifier.getMode()) {
-        .none => "none",
-        .basic => "basic",
-        .claude_code => "claude_code",
-        .json => "json",
-    };
-    _ = qjs.JS_SetPropertyStr(c2, root, "classifier", qjs.JS_NewStringLen(c2, cls_name.ptr, @intCast(cls_name.len)));
-    setF(c2, root, "frame", @floatFromInt(semantic.getFrame()));
-
-    // State
-    const s = semantic.getState();
-    const st = qjs.JS_NewObject(c2);
-    const mode_name = @tagName(s.mode);
-    _ = qjs.JS_SetPropertyStr(c2, st, "mode", qjs.JS_NewStringLen(c2, mode_name.ptr, @intCast(mode_name.len)));
-    setB(c2, st, "streaming", s.streaming);
-    const sk = @tagName(s.streaming_kind);
-    _ = qjs.JS_SetPropertyStr(c2, st, "streaming_kind", qjs.JS_NewStringLen(c2, sk.ptr, @intCast(sk.len)));
-    setB(c2, st, "awaiting_input", s.awaiting_input);
-    setB(c2, st, "awaiting_decision", s.awaiting_decision);
-    setB(c2, st, "modal_open", s.modal_open);
-    setB(c2, st, "interrupt_pending", s.interrupt_pending);
-    setF(c2, st, "turn_count", @floatFromInt(s.turn_count));
-    setF(c2, st, "current_turn_id", @floatFromInt(s.current_turn_id));
-    setF(c2, st, "node_count", @floatFromInt(s.node_count));
-    setF(c2, st, "group_count", @floatFromInt(s.group_count));
-    _ = qjs.JS_SetPropertyStr(c2, root, "state", st);
-
-    // Rows — classified cache with role/lane from the token definitions
-    const count = semantic.cacheCount();
-    const rows = qjs.JS_NewArray(c2);
-    var i: u16 = 0;
-    while (i < count) : (i += 1) {
-        const entry = semantic.getCacheEntry(i) orelse continue;
-        const obj = qjs.JS_NewObject(c2);
-        setF(c2, obj, "row", @floatFromInt(entry.row));
-        const kn = @tagName(entry.kind);
-        _ = qjs.JS_SetPropertyStr(c2, obj, "kind", qjs.JS_NewStringLen(c2, kn.ptr, @intCast(kn.len)));
-        const role = @tagName(semantic.roleOf(entry.kind));
-        _ = qjs.JS_SetPropertyStr(c2, obj, "role", qjs.JS_NewStringLen(c2, role.ptr, @intCast(role.len)));
-        const lane = @tagName(semantic.laneOf(entry.kind));
-        _ = qjs.JS_SetPropertyStr(c2, obj, "lane", qjs.JS_NewStringLen(c2, lane.ptr, @intCast(lane.len)));
-        setF(c2, obj, "turn_id", @floatFromInt(entry.turn_id));
-        setF(c2, obj, "group_id", @floatFromInt(entry.group_id));
-        const text = vterm_mod.getRowText(entry.row);
-        _ = qjs.JS_SetPropertyStr(c2, obj, "text", qjs.JS_NewStringLen(c2, text.ptr, @intCast(text.len)));
-        const tc = classifier.tokenColor(entry.kind);
-        var hb: [8]u8 = undefined;
-        const hx = std.fmt.bufPrint(&hb, "#{x:0>2}{x:0>2}{x:0>2}", .{ tc.r, tc.g, tc.b }) catch "#e2e8f0";
-        _ = qjs.JS_SetPropertyStr(c2, obj, "color", qjs.JS_NewStringLen(c2, hx.ptr, @intCast(hx.len)));
-        _ = qjs.JS_SetPropertyUint32(c2, rows, @intCast(i), obj);
-    }
-    _ = qjs.JS_SetPropertyStr(c2, root, "rows", rows);
-
-    // Graph summary
-    const g = qjs.JS_NewObject(c2);
-    setF(c2, g, "node_count", @floatFromInt(semantic.nodeCount()));
-    setF(c2, g, "turn_count", @floatFromInt(s.turn_count));
-    var tree_buf: [4096]u8 = undefined;
-    const tree = semantic.formatTree(&tree_buf);
-    _ = qjs.JS_SetPropertyStr(c2, g, "tree", qjs.JS_NewStringLen(c2, tree.ptr, @intCast(tree.len)));
-    _ = qjs.JS_SetPropertyStr(c2, root, "graph", g);
-
-    return root;
-}
-
-fn setF(ctx: *qjs.JSContext, obj: qjs.JSValue, name: [*:0]const u8, val: f64) void {
-    _ = qjs.JS_SetPropertyStr(ctx, obj, name, qjs.JS_NewFloat64(ctx, val));
-}
-
-fn setB(ctx: *qjs.JSContext, obj: qjs.JSValue, name: [*:0]const u8, val: bool) void {
-    setF(ctx, obj, name, if (val) 1.0 else 0.0);
-}
+const qjs_semantic = @import("qjs_semantic.zig");
 
 // ── Recording/playback bridge ────────────────────────────────────
 const player_mod = @import("player.zig");
@@ -1403,8 +1113,9 @@ pub fn initVM() void {
     g_qjs_rt = rt;
     g_qjs_ctx = ctx;
 
-    const global = qjs.JS_GetGlobalObject(ctx);
-    defer qjs.JS_FreeValue(ctx, global);
+    const global_v = JsVal.getGlobal(ctx);
+    defer global_v.deinit();
+    const global = global_v.raw();
     _ = qjs.JS_SetPropertyStr(ctx, global, "__setState", qjs.JS_NewCFunction(ctx, hostSetState, "__setState", 2));
     _ = qjs.JS_SetPropertyStr(ctx, global, "__setStateString", qjs.JS_NewCFunction(ctx, hostSetStateString, "__setStateString", 2));
     _ = qjs.JS_SetPropertyStr(ctx, global, "__getState", qjs.JS_NewCFunction(ctx, hostGetState, "__getState", 1));
@@ -1463,23 +1174,7 @@ pub fn initVM() void {
     _ = qjs.JS_SetPropertyStr(ctx, global, "__pty_alive", qjs.JS_NewCFunction(ctx, hostPtyAlive, "__pty_alive", 0));
 
     // Semantic terminal bridge — structured data from CLI output
-    _ = qjs.JS_SetPropertyStr(ctx, global, "__sem_state", qjs.JS_NewCFunction(ctx, hostSemState, "__sem_state", 0));
-    _ = qjs.JS_SetPropertyStr(ctx, global, "__sem_node_count", qjs.JS_NewCFunction(ctx, hostSemNodeCount, "__sem_node_count", 0));
-    _ = qjs.JS_SetPropertyStr(ctx, global, "__sem_node", qjs.JS_NewCFunction(ctx, hostSemNode, "__sem_node", 1));
-    _ = qjs.JS_SetPropertyStr(ctx, global, "__sem_cache_count", qjs.JS_NewCFunction(ctx, hostSemCacheCount, "__sem_cache_count", 0));
-    _ = qjs.JS_SetPropertyStr(ctx, global, "__sem_cache_entry", qjs.JS_NewCFunction(ctx, hostSemCacheEntry, "__sem_cache_entry", 1));
-    _ = qjs.JS_SetPropertyStr(ctx, global, "__sem_row_token", qjs.JS_NewCFunction(ctx, hostSemRowToken, "__sem_row_token", 1));
-    _ = qjs.JS_SetPropertyStr(ctx, global, "__sem_row_text", qjs.JS_NewCFunction(ctx, hostSemRowText, "__sem_row_text", 1));
-    _ = qjs.JS_SetPropertyStr(ctx, global, "__sem_tree", qjs.JS_NewCFunction(ctx, hostSemTree, "__sem_tree", 0));
-    _ = qjs.JS_SetPropertyStr(ctx, global, "__sem_set_mode", qjs.JS_NewCFunction(ctx, hostSemSetMode, "__sem_set_mode", 1));
-    _ = qjs.JS_SetPropertyStr(ctx, global, "__sem_has_diff", qjs.JS_NewCFunction(ctx, hostSemHasDiff, "__sem_has_diff", 0));
-    _ = qjs.JS_SetPropertyStr(ctx, global, "__sem_frame", qjs.JS_NewCFunction(ctx, hostSemFrame, "__sem_frame", 0));
-    _ = qjs.JS_SetPropertyStr(ctx, global, "__sem_export", qjs.JS_NewCFunction(ctx, hostSemExport, "__sem_export", 0));
-    _ = qjs.JS_SetPropertyStr(ctx, global, "__sem_snapshot", qjs.JS_NewCFunction(ctx, hostSemSnapshot, "__sem_snapshot", 0));
-    // JSON-driven classifier bridge
-    _ = qjs.JS_SetPropertyStr(ctx, global, "__sem_set_row_token", qjs.JS_NewCFunction(ctx, hostSemSetRowToken, "__sem_set_row_token", 2));
-    _ = qjs.JS_SetPropertyStr(ctx, global, "__sem_vterm_rows", qjs.JS_NewCFunction(ctx, hostSemVtermRows, "__sem_vterm_rows", 0));
-    _ = qjs.JS_SetPropertyStr(ctx, global, "__sem_build_graph", qjs.JS_NewCFunction(ctx, hostSemBuildGraph, "__sem_build_graph", 1));
+    qjs_semantic.register(ctx, global);
 
     // Recording/playback bridge
     _ = qjs.JS_SetPropertyStr(ctx, global, "__rec_start", qjs.JS_NewCFunction(ctx, hostRecStart, "__rec_start", 0));
@@ -1512,8 +1207,8 @@ pub fn initVM() void {
     // IPC debug client host functions (external inspector attach)
     qjs_ipc.registerAll(@ptrCast(ctx));
 
-    const val = qjs.JS_Eval(ctx, polyfill.ptr, polyfill.len, "<polyfill>", qjs.JS_EVAL_TYPE_GLOBAL);
-    qjs.JS_FreeValue(ctx, val);
+    const val = JsVal.eval(ctx, polyfill, "<polyfill>", qjs.JS_EVAL_TYPE_GLOBAL);
+    val.deinit();
 }
 
 /// Register a native function on the JS global object. Call after initVM, before evalScript.
@@ -1521,12 +1216,11 @@ pub fn initVM() void {
 pub fn registerHostFn(name: [*:0]const u8, func: *const anyopaque, argc: c_int) void {
     if (comptime !HAS_QUICKJS) return;
     if (g_qjs_ctx) |ctx| {
-        const global = qjs.JS_GetGlobalObject(ctx);
-        defer qjs.JS_FreeValue(ctx, global);
-        // JSCFunction is ?*const fn(...) — cast raw pointer through the inner type
+        const global = JsVal.getGlobal(ctx);
+        defer global.deinit();
         const FnType = @typeInfo(@TypeOf(qjs.JS_NewCFunction)).@"fn".params[1].type.?;
         const qjs_fn: FnType = @ptrCast(func);
-        _ = qjs.JS_SetPropertyStr(ctx, global, name, qjs.JS_NewCFunction(ctx, qjs_fn, name, argc));
+        global.setProperty(name, qjs.JS_NewCFunction(ctx, qjs_fn, name, argc));
     }
 }
 
@@ -1534,17 +1228,11 @@ pub fn registerHostFn(name: [*:0]const u8, func: *const anyopaque, argc: c_int) 
 pub fn evalScript(js_logic: []const u8) void {
     if (comptime !HAS_QUICKJS) return;
     if (g_qjs_ctx) |ctx| {
-        const val = qjs.JS_Eval(ctx, js_logic.ptr, js_logic.len, "<app>", qjs.JS_EVAL_TYPE_GLOBAL);
-        if (qjs.JS_IsException(val)) {
-            const exc = qjs.JS_GetException(ctx);
-            const s = qjs.JS_ToCString(ctx, exc);
-            if (s != null) {
-                std.log.err("[JS] {s}", .{std.mem.span(s)});
-                qjs.JS_FreeCString(ctx, s);
-            }
-            qjs.JS_FreeValue(ctx, exc);
+        const val = JsVal.eval(ctx, js_logic, "<app>", qjs.JS_EVAL_TYPE_GLOBAL);
+        defer val.deinit();
+        if (val.isException()) {
+            jsv.logException(ctx);
         }
-        qjs.JS_FreeValue(ctx, val);
     }
 }
 
@@ -1553,13 +1241,12 @@ pub fn evalScript(js_logic: []const u8) void {
 pub fn callGlobal(name: [*:0]const u8) void {
     if (comptime !HAS_QUICKJS) return;
     if (g_qjs_ctx) |ctx| {
-        const global = qjs.JS_GetGlobalObject(ctx);
-        defer qjs.JS_FreeValue(ctx, global);
-        const func = qjs.JS_GetPropertyStr(ctx, global, name);
-        defer qjs.JS_FreeValue(ctx, func);
-        if (!qjs.JS_IsUndefined(func)) {
-            const r = qjs.JS_Call(ctx, func, global, 0, null);
-            qjs.JS_FreeValue(ctx, r);
+        const global = JsVal.getGlobal(ctx);
+        defer global.deinit();
+        const func = global.getProperty(name);
+        defer func.deinit();
+        if (!func.isUndefined()) {
+            if (func.call0(global)) |r| r.deinit() else |_| {}
         }
     }
 }
@@ -1568,11 +1255,11 @@ pub fn callGlobal(name: [*:0]const u8) void {
 pub fn hasGlobal(name: [*:0]const u8) bool {
     if (comptime !HAS_QUICKJS) return false;
     if (g_qjs_ctx) |ctx| {
-        const global = qjs.JS_GetGlobalObject(ctx);
-        defer qjs.JS_FreeValue(ctx, global);
-        const func = qjs.JS_GetPropertyStr(ctx, global, name);
-        defer qjs.JS_FreeValue(ctx, func);
-        return !qjs.JS_IsUndefined(func);
+        const global = JsVal.getGlobal(ctx);
+        defer global.deinit();
+        const func = global.getProperty(name);
+        defer func.deinit();
+        return !func.isUndefined();
     }
     return false;
 }
@@ -1581,15 +1268,14 @@ pub fn hasGlobal(name: [*:0]const u8) bool {
 pub fn callGlobalStr(name: [*:0]const u8, arg: [*:0]const u8) void {
     if (comptime !HAS_QUICKJS) return;
     if (g_qjs_ctx) |ctx| {
-        const global = qjs.JS_GetGlobalObject(ctx);
-        defer qjs.JS_FreeValue(ctx, global);
-        const func = qjs.JS_GetPropertyStr(ctx, global, name);
-        defer qjs.JS_FreeValue(ctx, func);
-        if (!qjs.JS_IsUndefined(func)) {
+        const global = JsVal.getGlobal(ctx);
+        defer global.deinit();
+        const func = global.getProperty(name);
+        defer func.deinit();
+        if (!func.isUndefined()) {
             var argv = [1]qjs.JSValue{qjs.JS_NewString(ctx, arg)};
-            const r = qjs.JS_Call(ctx, func, global, 1, &argv);
-            qjs.JS_FreeValue(ctx, argv[0]);
-            qjs.JS_FreeValue(ctx, r);
+            defer qjs.JS_FreeValue(ctx, argv[0]); // JS_Call does NOT consume args
+            if (func.call(global, 1, &argv)) |r| r.deinit() else |_| {}
         }
     }
 }
@@ -1598,14 +1284,13 @@ pub fn callGlobalStr(name: [*:0]const u8, arg: [*:0]const u8) void {
 pub fn callGlobalInt(name: [*:0]const u8, arg: i64) void {
     if (comptime !HAS_QUICKJS) return;
     if (g_qjs_ctx) |ctx| {
-        const global = qjs.JS_GetGlobalObject(ctx);
-        defer qjs.JS_FreeValue(ctx, global);
-        const func = qjs.JS_GetPropertyStr(ctx, global, name);
-        defer qjs.JS_FreeValue(ctx, func);
-        if (!qjs.JS_IsUndefined(func)) {
+        const global = JsVal.getGlobal(ctx);
+        defer global.deinit();
+        const func = global.getProperty(name);
+        defer func.deinit();
+        if (!func.isUndefined()) {
             var argv = [1]qjs.JSValue{qjs.JS_NewInt64(ctx, arg)};
-            const r = qjs.JS_Call(ctx, func, global, 1, &argv);
-            qjs.JS_FreeValue(ctx, r);
+            if (func.call(global, 1, &argv)) |r| r.deinit() else |_| {}
         }
     }
 }
@@ -1615,30 +1300,23 @@ pub fn evalExpr(code: []const u8) void {
     if (comptime !HAS_QUICKJS) return;
     if (g_qjs_ctx) |ctx| {
         if (code.len == 0) return;
-        const r = qjs.JS_Eval(ctx, code.ptr, code.len, "<handler>", 0);
-        if (qjs.JS_IsException(r)) {
-            const ex = qjs.JS_GetException(ctx);
-            const str = qjs.JS_ToCString(ctx, ex);
-            if (str) |s| {
-                std.debug.print("[evalExpr error] {s}: {s}\n", .{ code, s });
-                qjs.JS_FreeCString(ctx, s);
-            }
-            qjs.JS_FreeValue(ctx, ex);
+        const r = JsVal.eval(ctx, code, "<handler>", 0);
+        defer r.deinit();
+        if (r.isException()) {
+            jsv.logException(ctx);
         }
-        qjs.JS_FreeValue(ctx, r);
     }
 }
 
 pub fn tick() void {
     if (comptime !HAS_QUICKJS) return;
     if (g_qjs_ctx) |ctx| {
-        const global = qjs.JS_GetGlobalObject(ctx);
-        defer qjs.JS_FreeValue(ctx, global);
-        const tick_fn = qjs.JS_GetPropertyStr(ctx, global, "__zigOS_tick");
-        defer qjs.JS_FreeValue(ctx, tick_fn);
-        if (!qjs.JS_IsUndefined(tick_fn)) {
-            const r = qjs.JS_Call(ctx, tick_fn, global, 0, null);
-            qjs.JS_FreeValue(ctx, r);
+        const global = JsVal.getGlobal(ctx);
+        defer global.deinit();
+        const tick_fn = global.getProperty("__zigOS_tick");
+        defer tick_fn.deinit();
+        if (!tick_fn.isUndefined()) {
+            if (tick_fn.call0(global)) |r| r.deinit() else |_| {}
         }
         if (g_qjs_rt) |rt| {
             var ctx2: ?*qjs.JSContext = null;

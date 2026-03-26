@@ -10,6 +10,7 @@ const lint = @import("lint.zig");
 const modulegen = @import("modulegen.zig");
 const cli_init = @import("cli_init.zig");
 const cli_convert = @import("cli_convert.zig");
+const cli_serve = @import("cli_serve.zig");
 
 const zig_local_cache_dir = ".zig-cache";
 const zig_global_cache_dir = ".zig-global-cache";
@@ -119,16 +120,21 @@ pub fn main() !void {
             runPack(alloc, args);
             return;
         }
+        if (std.mem.eql(u8, cmd, "serve")) {
+            cli_serve.run(alloc, args);
+            return;
+        }
     }
 
     if (args.len < 3) {
-        std.debug.print("Usage: tsz build|dev|run|check|lint|test|init|convert|setup-editor [--strict] <file.tsz>\n", .{});
+        std.debug.print("Usage: tsz build|dev|run|check|lint|test|init|convert|serve|setup-editor [--strict] <file.tsz>\n", .{});
         return;
     }
 
     // Parse flags
     var strict_mode = false;
     var embed_mode = false;
+    var web_mode = false;
     var input_idx: usize = 2;
     for (args[2..]) |arg| {
         if (std.mem.eql(u8, arg, "--strict")) {
@@ -136,6 +142,9 @@ pub fn main() !void {
             input_idx += 1;
         } else if (std.mem.eql(u8, arg, "--embed")) {
             embed_mode = true;
+            input_idx += 1;
+        } else if (std.mem.eql(u8, arg, "--web")) {
+            web_mode = true;
             input_idx += 1;
         } else break;
     }
@@ -302,6 +311,66 @@ pub fn main() !void {
     const dot_pos = std.mem.lastIndexOfScalar(u8, basename, '.') orelse basename.len;
     const app_name = basename[0..dot_pos];
     const app_name_opt = try std.fmt.allocPrint(alloc, "-Dapp-name={s}", .{app_name});
+
+    if (web_mode) {
+        std.debug.print("[tsz] Building for web (wasm32-emscripten + WebGPU)...\n", .{});
+        const web_argv = cachedZigBuildArgv(
+            alloc,
+            &.{ "zig", "build", "web" },
+        ) catch |err| {
+            std.debug.print("[tsz] Failed to prepare build args: {}\n", .{err});
+            return;
+        };
+        if (resolveBuildRoot(alloc, tsz_root)) |build_root| ensureZigPackageCacheSeeded(alloc, build_root);
+        var web_child = std.process.Child.init(web_argv, alloc);
+        if (tsz_root) |root| web_child.cwd = root;
+        web_child.stderr_behavior = .Inherit;
+        web_child.stdout_behavior = .Inherit;
+        const web_term = web_child.spawnAndWait() catch |err| {
+            std.debug.print("[tsz] Web build failed to spawn: {}\n", .{err});
+            return;
+        };
+        if (web_term.Exited != 0) {
+            std.debug.print("[tsz] Web build failed (exit {d})\n", .{web_term.Exited});
+            return;
+        }
+
+        // Copy web output to <app-name>-web/ directory next to the source
+        const src_dir = std.fs.path.dirname(input_path) orelse ".";
+        const web_out_dir = std.fmt.allocPrint(alloc, "{s}/{s}-web", .{ src_dir, app_name }) catch return;
+        std.fs.cwd().makePath(web_out_dir) catch {};
+
+        // Copy wasm + js + data from zig-out and web/ to the output dir
+        const root_dir = tsz_root orelse ".";
+        const files_to_copy = [_][2][]const u8{
+            .{ "zig-out/tsz-web.wasm", "tsz-web.wasm" },
+            .{ "zig-out/tsz-web.js", "tsz-web.js" },
+            .{ "web/index.html", "index.html" },
+            .{ "web/font.ttf", "font.ttf" },
+            .{ "web/libv86.js", "libv86.js" },
+            .{ "web/v86.wasm", "v86.wasm" },
+            .{ "web/seabios.bin", "seabios.bin" },
+            .{ "web/vgabios.bin", "vgabios.bin" },
+            .{ "web/alpine-virt.iso", "alpine-virt.iso" },
+        };
+        for (files_to_copy) |pair| {
+            const src_path = std.fmt.allocPrint(alloc, "{s}/{s}", .{ root_dir, pair[0] }) catch continue;
+            const dst_path = std.fmt.allocPrint(alloc, "{s}/{s}", .{ web_out_dir, pair[1] }) catch continue;
+            std.fs.cwd().copyFile(src_path, std.fs.cwd(), dst_path, .{}) catch continue;
+        }
+        // Copy .data file from zig cache
+        {
+            const data_src = std.fmt.allocPrint(alloc, "{s}/zig-out/tsz-web.data", .{root_dir}) catch "";
+            const data_dst = std.fmt.allocPrint(alloc, "{s}/tsz-web.data", .{web_out_dir}) catch "";
+            std.fs.cwd().copyFile(data_src, std.fs.cwd(), data_dst, .{}) catch {
+                // Try finding it in the cache
+            };
+        }
+
+        std.debug.print("[tsz] Web bundle: {s}/\n", .{web_out_dir});
+        std.debug.print("[tsz] Serve with: tsz serve {s}\n", .{web_out_dir});
+        return;
+    }
 
     std.debug.print("[tsz] Building...\n", .{});
     const build_argv = cachedZigBuildArgv(

@@ -1,0 +1,154 @@
+// SURFACE CONFORMANCE s14c: File Browser — chad tier
+// Tree sidebar + file list + breadcrumbs.
+// Fixed 2-level depth — manifest syntax favors flat inline over recursive components.
+
+from './s00c_manifest_cls'
+
+<page route=file_browser>
+  <var>
+    files is [
+      { name: 'Documents', type: 'folder', size: '', date: '2026-03-20', parent: 'Home' },
+      { name: 'Pictures', type: 'folder', size: '', date: '2026-03-18', parent: 'Home' },
+      { name: 'notes.txt', type: 'file', size: '4.2 KB', date: '2026-03-25', parent: 'Home' },
+      { name: 'resume.pdf', type: 'file', size: '128 KB', date: '2026-03-22', parent: 'Documents' },
+      { name: 'budget.csv', type: 'file', size: '12 KB', date: '2026-03-24', parent: 'Documents' },
+      { name: 'README.md', type: 'file', size: '2.1 KB', date: '2026-03-19', parent: 'Documents' },
+      { name: 'photo1.png', type: 'file', size: '3.4 MB', date: '2026-03-15', parent: 'Pictures' },
+      { name: 'photo2.jpg', type: 'file', size: '2.8 MB', date: '2026-03-16', parent: 'Pictures' }
+    ]
+    path is ['Home']
+    selected is ''
+    expanded is ['Home', 'Documents']
+  </var>
+
+  <state>
+    set_path
+    set_selected
+    set_expanded
+  </state>
+
+  <functions>
+    currentDir:
+      path[path.length - 1]
+
+    foldersIn(dir):
+      files.filter(f => f.parent exact dir && f.type exact 'folder')
+
+    itemsIn(dir):
+      files.filter(f => f.parent exact dir && f.type exact 'file')
+
+    filesIn(dir):
+      files.filter(f => f.parent exact dir)
+
+    isExpanded(name):
+      expanded.indexOf(name) !== -1
+
+    toggleExpand(name):
+      isExpanded(name)
+        ? set_expanded to expanded.filter(n => n !== name)
+        : set_expanded to expanded.concat([name])
+
+    navigate(name):
+      set_path to path.concat([name])
+
+    navigateTo(idx):
+      set_path to path.slice(0, idx + 1)
+
+    select(name):
+      set_selected to name
+
+    breadcrumbs:
+      path.map((p, i) => ({ name: p, idx: i, last: i exact path.length - 1 }))
+  </functions>
+
+  return(
+    <C.PageRow>
+      <C.Sidebar>
+        <C.Label>Explorer</C.Label>
+        <C.Divider />
+
+        // Root: Home
+        <C.TreeItem onPress={() => { toggleExpand('Home') }}>
+          <C.TreeIcon>{isExpanded('Home') ? '▾' : '▸'}</C.TreeIcon>
+          <C.TreeLabel>Home</C.TreeLabel>
+        </C.TreeItem>
+
+        {isExpanded('Home') ?
+          <C.Col>
+            // Folders under Home
+            <For each={foldersIn('Home')}>
+              <C.Col>
+                <C.TreeItem onPress={() => { toggleExpand(item.name) }}>
+                  <C.TreeIndent />
+                  <C.TreeIcon>{isExpanded(item.name) ? '▾' : '▸'}</C.TreeIcon>
+                  <C.TreeLabel>{item.name}</C.TreeLabel>
+                </C.TreeItem>
+              </C.Col>
+            </For>
+
+            // Files under expanded Documents
+            {isExpanded('Documents') ?
+              <For each={itemsIn('Documents')}>
+                <C.TreeItem onPress={() => { select(item.name) }}>
+                  <C.TreeIndent /><C.TreeIndent />
+                  {selected exact item.name ? <C.TreeLabelActive>{item.name}</C.TreeLabelActive> : <C.TreeLabel>{item.name}</C.TreeLabel>}
+                </C.TreeItem>
+              </For>
+            : null}
+
+            // Files under expanded Pictures
+            {isExpanded('Pictures') ?
+              <For each={itemsIn('Pictures')}>
+                <C.TreeItem onPress={() => { select(item.name) }}>
+                  <C.TreeIndent /><C.TreeIndent />
+                  {selected exact item.name ? <C.TreeLabelActive>{item.name}</C.TreeLabelActive> : <C.TreeLabel>{item.name}</C.TreeLabel>}
+                </C.TreeItem>
+              </For>
+            : null}
+
+            // Files directly under Home
+            <For each={itemsIn('Home')}>
+              <C.TreeItem onPress={() => { select(item.name) }}>
+                <C.TreeIndent />
+                {selected exact item.name ? <C.TreeLabelActive>{item.name}</C.TreeLabelActive> : <C.TreeLabel>{item.name}</C.TreeLabel>}
+              </C.TreeItem>
+            </For>
+          </C.Col>
+        : null}
+      </C.Sidebar>
+
+      <C.Main>
+        <C.Breadcrumb>
+          <For each={breadcrumbs}>
+            <C.Row>
+              {item.idx > 0 ? <C.BreadcrumbSep>/</C.BreadcrumbSep> : null}
+              <Pressable onPress={() => { navigateTo(item.idx) }}>
+                {item.last ? <C.BreadcrumbActive>{item.name}</C.BreadcrumbActive> : <C.BreadcrumbText>{item.name}</C.BreadcrumbText>}
+              </Pressable>
+            </C.Row>
+          </For>
+        </C.Breadcrumb>
+
+        <C.TableHeader>
+          <C.TableCell><C.TableLabel>Name</C.TableLabel></C.TableCell>
+          <C.TableCellFixed><C.TableLabel>Size</C.TableLabel></C.TableCellFixed>
+          <C.TableCellFixed><C.TableLabel>Date</C.TableLabel></C.TableCellFixed>
+        </C.TableHeader>
+        <For each={filesIn(currentDir)}>
+          <C.TableRow>
+            <C.TableCell>
+              <Pressable onPress={() => { item.type exact 'folder' ? navigate(item.name) : select(item.name) }}>
+                <C.Row>
+                  <C.TreeIcon>{item.type exact 'folder' ? ':folder:' : ':file:'}</C.TreeIcon>
+                  <C.TableText>{item.name}</C.TableText>
+                </C.Row>
+              </Pressable>
+            </C.TableCell>
+            <C.TableCellFixed><C.Hint>{item.size}</C.Hint></C.TableCellFixed>
+            <C.TableCellFixed><C.Hint>{item.date}</C.Hint></C.TableCellFixed>
+          </C.TableRow>
+        </For>
+      </C.Main>
+    </C.PageRow>
+  )
+</page>

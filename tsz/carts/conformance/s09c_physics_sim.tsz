@@ -1,0 +1,55 @@
+// SURFACE CONFORMANCE s09c: Physics Sim — chad tier
+// Physics shorthand: Physics.Wall (static rect), Physics.Ball (dynamic circle).
+// No manual Body/Collider/visual — one line per shape.
+
+from './s00c_manifest_cls'
+
+<page route=physics>
+  <var>
+    paused is false
+    frame is 0
+  </var>
+
+  <state>
+    set_paused
+    set_frame
+  </state>
+
+  <functions>
+    togglePause:
+      set_paused to !paused
+
+    tick:
+      paused ? stop : go
+      set_frame to frame + 1
+  </functions>
+
+  <timer interval=33>
+    tick
+  </timer>
+
+  return(
+    <C.Page>
+      <C.Row>
+        <C.Title>Physics</C.Title>
+        <C.Spacer />
+        {paused ? <C.Btn onPress=togglePause><C.BtnLabel>Play</C.BtnLabel></C.Btn> : <C.BtnGhost onPress=togglePause><C.BtnLabel>Pause</C.BtnLabel></C.BtnGhost>}
+        <C.Hint>{'frame ' + frame}</C.Hint>
+      </C.Row>
+      <C.Arena style={{ flexGrow: 1 }}>
+        <Physics.World gravity={[0, 980]} paused={paused}>
+          <Physics.Wall at={[400, 590]} size={[780, 20]} bounce={0.3} />
+          <Physics.Wall at={[400, 10]} size={[780, 20]} bounce={0.5} />
+          <Physics.Wall at={[10, 300]} size={[20, 580]} bounce={0.5} />
+          <Physics.Wall at={[790, 300]} size={[20, 580]} bounce={0.5} />
+
+          <Physics.Ball at={[200, 80]} radius={22} color="#ef4444" bounce={0.8} />
+          <Physics.Ball at={[350, 40]} radius={18} color="#3b82f6" bounce={0.85} mass={1.2} />
+          <Physics.Ball at={[500, 120]} radius={25} color="#22c55e" bounce={0.75} mass={0.8} />
+          <Physics.Ball at={[650, 60]} radius={16} color="#eab308" bounce={0.9} mass={1.5} />
+          <Physics.Ball at={[300, 160]} radius={20} color="#a855f7" bounce={0.7} />
+        </Physics.World>
+      </C.Arena>
+    </C.Page>
+  )
+</page>

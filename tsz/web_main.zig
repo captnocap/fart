@@ -1,104 +1,177 @@
-//! Web entry point — Emscripten + WebGPU.
+//! Web entry point — renders generated_app.zig node tree through GPU pipeline.
 //!
-//! Build: zig build web
-//!
-//! This is the wasm32-emscripten entry point for the full tsz runtime.
-//! Emscripten provides the WebGPU device (via emdawnwebgpu) and the
-//! requestAnimationFrame loop. The same GPU pipelines, layout engine,
-//! and QuickJS runtime run here as on native — just with a different
-//! init path and main loop.
+//! tsz build --web app.tsz → compiles .tsz → generated_app.zig → this entry point
+//! Same layout engine + GPU pipeline as native. No hand-painted Zig UI.
 
 const std = @import("std");
 const builtin = @import("builtin");
 const layout = @import("framework/layout.zig");
 const gpu = @import("framework/gpu/gpu.zig");
+const text_pipeline = @import("framework/gpu/text.zig");
 const wgpu = @import("wgpu");
+const Node = layout.Node;
+
+// ── Generated app (compiled .tsz → generated_app.zig) ───────────────
+// The generated app exports C ABI functions. We reference them via extern.
+
+extern fn app_get_root() *Node;
+extern fn app_get_init() ?*const fn () void;
+extern fn app_get_tick() ?*const fn (u32) void;
+extern fn app_get_title() [*:0]const u8;
+
+// Force the generated app to be linked (it has the export symbols)
+comptime {
+    _ = @import("generated_app.zig");
+}
 
 // ── Emscripten C API ────────────────────────────────────────────────
 
 const em = @cImport({
     @cInclude("emscripten.h");
     @cInclude("emscripten/html5.h");
-    // emscripten_webgpu_get_device() is declared in webgpu.h (emdawnwebgpu)
     @cInclude("webgpu/webgpu.h");
 });
+
+// ── FreeType (shared with framework) ────────────────────────────────
+
+const c = @import("framework/c.zig").imports;
+
+// ── Logging ─────────────────────────────────────────────────────────
+
+extern "env" fn emscripten_console_log(msg: [*:0]const u8) void;
+fn webLog(comptime fmt_str: []const u8, args: anytype) void {
+    var buf: [512]u8 = undefined;
+    const msg = std.fmt.bufPrint(&buf, fmt_str ++ "\x00", args) catch return;
+    emscripten_console_log(@ptrCast(msg.ptr));
+}
 
 // ── State ───────────────────────────────────────────────────────────
 
 var g_initialized: bool = false;
 var g_width: u32 = 800;
 var g_height: u32 = 600;
+var g_frame_count: u32 = 0;
 
-// Frame loop is driven from JS (requestAnimationFrame → web_frame export)
+// ── Layout + render ─────────────────────────────────────────────────
 
-// ── Exports for JS to call ──────────────────────────────────────────
+fn renderNode(node: *Node) void {
+    if (node.style.display == .none) return;
 
-// Logging to browser console via emscripten
-extern "env" fn emscripten_console_log(msg: [*:0]const u8) void;
-fn webLog(comptime fmt: []const u8, args: anytype) void {
-    var buf: [512]u8 = undefined;
-    const msg = std.fmt.bufPrint(&buf, fmt ++ "\x00", args) catch return;
-    emscripten_console_log(@ptrCast(msg.ptr));
+    const r = node.computed;
+    if (r.w <= 0 or r.h <= 0) return;
+
+    // Background rect
+    if (node.style.background_color) |bg| {
+        if (bg.a > 0) {
+            const bc = node.style.border_color orelse layout.Color.rgb(0, 0, 0);
+            gpu.drawRect(
+                r.x, r.y, r.w, r.h,
+                @as(f32, @floatFromInt(bg.r)) / 255.0, @as(f32, @floatFromInt(bg.g)) / 255.0,
+                @as(f32, @floatFromInt(bg.b)) / 255.0, @as(f32, @floatFromInt(bg.a)) / 255.0,
+                node.style.border_radius, node.style.brdTop(),
+                @as(f32, @floatFromInt(bc.r)) / 255.0, @as(f32, @floatFromInt(bc.g)) / 255.0,
+                @as(f32, @floatFromInt(bc.b)) / 255.0, @as(f32, @floatFromInt(bc.a)) / 255.0,
+            );
+        }
+    }
+
+    // Text
+    if (node.text) |txt| {
+        const fs: u16 = if (node.font_size > 0) node.font_size else 14;
+        const tc = node.text_color orelse layout.Color.rgb(255, 255, 255);
+        gpu.drawTextLine(
+            txt, r.x, r.y, fs,
+            @as(f32, @floatFromInt(tc.r)) / 255.0, @as(f32, @floatFromInt(tc.g)) / 255.0,
+            @as(f32, @floatFromInt(tc.b)) / 255.0, @as(f32, @floatFromInt(tc.a)) / 255.0,
+        );
+    }
+
+    // Children
+    for (node.children) |*child| {
+        renderNode(child);
+    }
 }
 
-/// Called from JS after WebGPU device is acquired.
+// ── Exports ─────────────────────────────────────────────────────────
+
 export fn web_init(width: u32, height: u32) void {
     webLog("web_init({}, {})", .{ width, height });
 
-    // Get WebGPU device from Emscripten's JS-side acquisition
     const raw_device = em.emscripten_webgpu_get_device();
-    webLog("emscripten_webgpu_get_device() = {}", .{@intFromPtr(raw_device)});
     const device: *wgpu.Device = @ptrCast(raw_device orelse {
-        webLog("ERROR: emscripten_webgpu_get_device returned null", .{});
+        webLog("ERROR: no WebGPU device", .{});
         return;
     });
-    webLog("getting queue...", .{});
     const queue = device.getQueue() orelse {
-        webLog("ERROR: device.getQueue() returned null", .{});
+        webLog("ERROR: no queue", .{});
         return;
     };
-    webLog("queue ok, calling gpu.initWeb...", .{});
 
     gpu.initWeb(device, queue, width, height) catch |err| {
-        webLog("ERROR: gpu.initWeb failed: {s}", .{@errorName(err)});
+        webLog("ERROR: gpu.initWeb: {s}", .{@errorName(err)});
         return;
     };
-    webLog("gpu.initWeb succeeded", .{});
+
+    // Init FreeType
+    var library: c.FT_Library = null;
+    if (c.FT_Init_FreeType(&library) != 0) {
+        webLog("ERROR: FT_Init_FreeType", .{});
+        return;
+    }
+    var face: c.FT_Face = null;
+    if (c.FT_New_Face(library, "/font.ttf", 0, &face) != 0) {
+        webLog("ERROR: FT_New_Face", .{});
+        return;
+    }
+    text_pipeline.initText(library, face, @as([*]const c.FT_Face, &.{}), 0);
+    webLog("text pipeline ok", .{});
+
+    // Init the generated app
+    if (app_get_init()) |init_fn| init_fn();
 
     g_width = width;
     g_height = height;
     g_initialized = true;
-    webLog("web_init complete, ready for frames", .{});
-    // rAF loop is driven from JS, not C — see index.html
+    webLog("web_init complete: {s}", .{app_get_title()});
 }
 
-/// Called from JS each frame via requestAnimationFrame.
 export fn web_frame() void {
     if (!g_initialized) return;
+    g_frame_count += 1;
 
-    // Draw test rects
     const w_f: f32 = @floatFromInt(g_width);
     const h_f: f32 = @floatFromInt(g_height);
-    gpu.drawRect(w_f * 0.1, h_f * 0.1, w_f * 0.8, h_f * 0.8, 0.12, 0.14, 0.18, 1.0, 12, 1, 0.34, 0.40, 0.49, 1.0);
-    gpu.drawRect(w_f * 0.1, h_f * 0.1, w_f * 0.8, 4, 0.34, 0.65, 1.0, 1.0, 12, 0, 0, 0, 0, 0);
-    var i: u32 = 0;
-    while (i < 3) : (i += 1) {
-        const fi: f32 = @floatFromInt(i);
-        gpu.drawRect(w_f * 0.15 + fi * (w_f * 0.22), h_f * 0.3, w_f * 0.18, h_f * 0.4, 0.16 + fi * 0.04, 0.18, 0.22, 1.0, 8, 1, 0.25, 0.28, 0.33, 1.0);
-    }
+
+    // Tick the app
+    if (app_get_tick()) |tick_fn| tick_fn(g_frame_count);
+
+    // Get root node and compute layout
+    const root = app_get_root();
+    if (root.style.width == null or root.style.width.? < 0) root.style.width = @floatFromInt(g_width);
+    if (root.style.height == null or root.style.height.? < 0) root.style.height = @floatFromInt(g_height);
+
+    layout.layout(root, 0, 0, w_f, h_f);
+
+    // Render the node tree through GPU
+    renderNode(root);
+
+    // Present
     gpu.frame(0.05, 0.07, 0.09);
 }
 
-/// Called from JS on canvas resize.
 export fn web_resize(width: u32, height: u32) void {
     g_width = width;
     g_height = height;
     gpu.resize(width, height);
 }
 
-// ── Emscripten main (required, can be empty) ────────────────────────
-
-pub fn main() void {
-    // Emscripten main returns immediately. Rendering is driven by
-    // requestAnimationFrame via web_init().
+export fn web_serial_char(byte: u32) void {
+    _ = byte; // TODO: pipe to a terminal component
 }
+
+export fn web_click(x: f32, y: f32) void {
+    _ = x;
+    _ = y; // TODO: hit testing
+}
+
+pub fn main() void {}

@@ -1,0 +1,85 @@
+// SURFACE CONFORMANCE s13c: Music Player — chad tier
+// Transport controls, progress bar, audio module verbs.
+
+from './s00c_manifest_cls'
+from './s00c_manifest_glyphs'
+
+<page route=music_player>
+  <var>
+    playing is false
+    progress is 35
+    shuffle is false
+    repeat is false
+  </var>
+
+  <state>
+    set_playing
+    set_progress
+    set_shuffle
+    set_repeat
+  </state>
+
+  <functions>
+    togglePlay:
+      set_playing to !playing
+
+    toggleShuffle:
+      set_shuffle to !shuffle
+
+    toggleRepeat:
+      set_repeat to !repeat
+
+    prev:
+      set_progress to 0
+
+    next:
+      set_progress to 0
+
+    secs:
+      Math.floor(progress * 2.42)
+
+    elapsed:
+      Math.floor(secs / 60) + ':' + (secs % 60 > 9 ? '' : '0') + (secs % 60)
+  </functions>
+
+  return(
+    <C.Page>
+      <C.Card style={{ alignItems: 'center', gap: 20 }}>
+        <Box style={{ width: 200, height: 200, borderRadius: 12, backgroundColor: '#1e1b4b', alignItems: 'center', justifyContent: 'center' }}>
+          <C.Title style={{ color: '#818cf8' }}>:music:</C.Title>
+        </Box>
+
+        <C.Col style={{ alignItems: 'center' }}>
+          <C.Subtitle>Midnight Drive</C.Subtitle>
+          <C.Label>Neon Circuits</C.Label>
+        </C.Col>
+
+        <Box style={{ width: '100%', gap: 4 }}>
+          <C.Row>
+            <C.ProgressTrack>
+              <C.ProgressFill style={{ width: progress + '%' }} />
+            </C.ProgressTrack>
+          </C.Row>
+          <C.RowSpread>
+            <C.Hint>{elapsed}</C.Hint>
+            <C.Hint>4:02</C.Hint>
+          </C.RowSpread>
+        </Box>
+
+        <C.TransportRow>
+          <C.TransportBtn onPress=toggleShuffle>
+            <C.TransportIcon style={{ color: shuffle ? '#3b82f6' : '#e2e8f0' }}>⇄</C.TransportIcon>
+          </C.TransportBtn>
+          <C.TransportBtn onPress=prev><C.TransportIcon>:skip-prev:</C.TransportIcon></C.TransportBtn>
+          <C.TransportBtnLarge onPress=togglePlay>
+            <C.TransportIcon>{playing ? ':pause:' : ':play:'}</C.TransportIcon>
+          </C.TransportBtnLarge>
+          <C.TransportBtn onPress=next><C.TransportIcon>:skip-next:</C.TransportIcon></C.TransportBtn>
+          <C.TransportBtn onPress=toggleRepeat>
+            <C.TransportIcon style={{ color: repeat ? '#3b82f6' : '#e2e8f0' }}>⟳</C.TransportIcon>
+          </C.TransportBtn>
+        </C.TransportRow>
+      </C.Card>
+    </C.Page>
+  )
+</page>

@@ -416,23 +416,23 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
                 } else if (std.mem.eql(u8, attr_name, "type") and is_canvas and !is_canvas_node and !is_canvas_path) {
                     canvas_type_str = try attrs.parseStringAttr(self);
                 } else if (std.mem.eql(u8, attr_name, "viewX") and (is_canvas or is_graph) and !is_canvas_node and !is_canvas_path) {
-                    canvas_view_x_str = try parseSignedNum(self);
+                    canvas_view_x_str = try jsx_elements.parseSignedNum(self);
                 } else if (std.mem.eql(u8, attr_name, "viewY") and (is_canvas or is_graph) and !is_canvas_node and !is_canvas_path) {
-                    canvas_view_y_str = try parseSignedNum(self);
+                    canvas_view_y_str = try jsx_elements.parseSignedNum(self);
                 } else if (std.mem.eql(u8, attr_name, "viewZoom") and (is_canvas or is_graph) and !is_canvas_node and !is_canvas_path) {
                     canvas_view_zoom_str = try attrs.parseExprAttr(self);
                 } else if (std.mem.eql(u8, attr_name, "driftX") and is_canvas and !is_canvas_node and !is_canvas_path) {
-                    canvas_drift_x_str = try parseSignedNum(self);
+                    canvas_drift_x_str = try jsx_elements.parseSignedNum(self);
                 } else if (std.mem.eql(u8, attr_name, "driftY") and is_canvas and !is_canvas_node and !is_canvas_path) {
-                    canvas_drift_y_str = try parseSignedNum(self);
+                    canvas_drift_y_str = try jsx_elements.parseSignedNum(self);
                 } else if (std.mem.eql(u8, attr_name, "gx") and is_canvas_node) {
-                    canvas_gx_str = try parseSignedNum(self);
+                    canvas_gx_str = try jsx_elements.parseSignedNum(self);
                 } else if (std.mem.eql(u8, attr_name, "gy") and is_canvas_node) {
-                    canvas_gy_str = try parseSignedNum(self);
+                    canvas_gy_str = try jsx_elements.parseSignedNum(self);
                 } else if (std.mem.eql(u8, attr_name, "gw") and is_canvas_node) {
-                    canvas_gw_str = try parseSignedNum(self);
+                    canvas_gw_str = try jsx_elements.parseSignedNum(self);
                 } else if (std.mem.eql(u8, attr_name, "gh") and is_canvas_node) {
-                    canvas_gh_str = try parseSignedNum(self);
+                    canvas_gh_str = try jsx_elements.parseSignedNum(self);
                 } else if (std.mem.eql(u8, attr_name, "d") and is_canvas_path) {
                     canvas_path_d_is_expr = self.curKind() == .lbrace;
                     canvas_path_d = if (canvas_path_d_is_expr) try attrs.parseExprAttr(self) else try attrs.parseStringAttr(self);
@@ -445,7 +445,7 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
                 } else if (std.mem.eql(u8, attr_name, "strokeWidth") and is_canvas_path) {
                     canvas_stroke_w_str = try attrs.parseExprAttr(self);
                 } else if (std.mem.eql(u8, attr_name, "flowSpeed") and is_canvas_path) {
-                    canvas_flow_speed_str = try parseSignedNum(self);
+                    canvas_flow_speed_str = try jsx_elements.parseSignedNum(self);
                     // ── 3D element props ──
                 } else if (is_3d and std.mem.eql(u8, attr_name, "geometry")) {
                     s3d_geometry = try attrs.parseStringAttr(self);
@@ -462,17 +462,17 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
                 } else if (is_3d and std.mem.eql(u8, attr_name, "tubeRadius")) {
                     s3d_tube_radius = try attrs.parseExprAttr(self);
                 } else if (is_3d and std.mem.eql(u8, attr_name, "position")) {
-                    s3d_pos = try parse3DVector(self);
+                    s3d_pos = try jsx_elements.parse3DVector(self);
                 } else if (is_3d and std.mem.eql(u8, attr_name, "rotation")) {
-                    s3d_rot = try parse3DVector(self);
+                    s3d_rot = try jsx_elements.parse3DVector(self);
                 } else if (is_3d and std.mem.eql(u8, attr_name, "lookAt")) {
-                    s3d_lookat = try parse3DVector(self);
+                    s3d_lookat = try jsx_elements.parse3DVector(self);
                 } else if (is_3d and std.mem.eql(u8, attr_name, "direction")) {
-                    s3d_dir = try parse3DVector(self);
+                    s3d_dir = try jsx_elements.parse3DVector(self);
                 } else if (is_3d and std.mem.eql(u8, attr_name, "size")) {
-                    s3d_size = try parse3DVector(self);
+                    s3d_size = try jsx_elements.parse3DVector(self);
                 } else if (is_3d and std.mem.eql(u8, attr_name, "scale")) {
-                    s3d_scale = try parse3DVector(self);
+                    s3d_scale = try jsx_elements.parse3DVector(self);
                     // ── Terminal element props ──
                 } else if (is_terminal and std.mem.eql(u8, attr_name, "fontSize")) {
                     terminal_font_size = try attrs.parseExprAttr(self);
@@ -486,7 +486,7 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
                 } else if (is_physics and std.mem.eql(u8, attr_name, "angle")) {
                     phys_props.angle = try attrs.parseExprAttr(self);
                 } else if (is_physics and std.mem.eql(u8, attr_name, "gravity")) {
-                    const gv = try parse2DVector(self);
+                    const gv = try jsx_elements.parse2DVector(self);
                     phys_props.gravity_x = gv[0];
                     phys_props.gravity_y = gv[1];
                 } else if (is_physics and std.mem.eql(u8, attr_name, "shape")) {
@@ -1534,7 +1534,6 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
 
     return try std.fmt.allocPrint(self.alloc, ".{{ {s} }}", .{fields.items});
 }
-
 fn resolveCanvasStringValue(self: *Generator, value: []const u8, is_expr: bool) ![]const u8 {
     if (!is_expr) return try std.fmt.allocPrint(self.alloc, "\"{f}\"", .{std.zig.fmtString(value)});
     if (std.mem.startsWith(u8, value, "_p_")) return value;
@@ -1560,7 +1559,6 @@ fn resolveCanvasColorValue(self: *Generator, value: []const u8, is_expr: bool) !
 }
 
 // ── Route element ──
-
 /// Parse <Route path="/about" element={<AboutPage />} />
 /// Records the route path and returns the element expression.
 /// The parent <Routes> container binds all routes to a shared array,
@@ -1600,7 +1598,3 @@ pub fn parseRouteElement(self: *Generator) anyerror![]const u8 {
 
     return element_expr;
 }
-
-const parse2DVector = jsx_elements.parse2DVector;
-const parse3DVector = jsx_elements.parse3DVector;
-const parseSignedNum = jsx_elements.parseSignedNum;

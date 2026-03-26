@@ -31,7 +31,7 @@ while IFS= read -r file; do
         echo "OVER LIMIT: $file ($lines lines, max $MAX_LINES)"
         EXIT_CODE=1
     fi
-done < <(find "$ROOT" -type f \( -name "*.zig" -o -name "*.tsz" -o -name "*.js" \) ! -path "*/zig-cache/*" ! -path "*/zig-out/*" ! -path "*/node_modules/*")
+done < <(find "$ROOT" -type f \( -name "*.zig" -o -name "*.tsz" -o -name "*.js" \) ! -path "*/zig-cache/*" ! -path "*/zig-out/*" ! -path "*/node_modules/*" ! -path "*/.zig-global-cache/*")
 
 if [ "$EXIT_CODE" -eq 0 ]; then
     echo "All files under $MAX_LINES lines."

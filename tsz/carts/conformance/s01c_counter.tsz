@@ -1,0 +1,46 @@
+// SURFACE CONFORMANCE s01c: Counter — chad tier
+
+from './s00c_manifest_cls'
+
+<page route=counter>
+  <var>
+    count is 0
+  </var>
+
+  <state>
+    set_count
+  </state>
+
+  <functions>
+    decrement:
+      set_count to count - 1
+
+    reset:
+      set_count to 0
+
+    increment:
+      set_count to count + 1
+
+    hint:
+      count > 0 ? 'positive' : count exact 0 ? 'zero' : 'negative'
+  </functions>
+
+  return(
+    <C.Page>
+      <C.Card>
+        <C.CardHeader>
+          <C.Label>Counter</C.Label>
+          <C.Hint>{hint}</C.Hint>
+        </C.CardHeader>
+        <C.CardCenter>
+          <C.Value>{count}</C.Value>
+        </C.CardCenter>
+        <C.Row>
+          <C.BtnDanger onPress=decrement><C.BtnLabel>-</C.BtnLabel></C.BtnDanger>
+          <C.BtnMuted onPress=reset><C.BtnLabelMuted>Reset</C.BtnLabelMuted></C.BtnMuted>
+          <C.Btn onPress=increment><C.BtnLabel>+</C.BtnLabel></C.Btn>
+        </C.Row>
+      </C.Card>
+    </C.Page>
+  )
+</page>

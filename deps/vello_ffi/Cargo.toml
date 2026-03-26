@@ -1,0 +1,22 @@
+[package]
+name = "vello_ffi"
+version = "0.2.0"
+edition = "2024"
+rust-version = "1.92"
+
+[lib]
+crate-type = ["staticlib"]
+
+[dependencies]
+vello = { version = "0.7.0", default-features = false, features = ["wgpu"] }
+wgpu = { version = "27.0.1", default-features = false, features = ["std", "wgsl", "vulkan"] }
+peniko = { version = "0.6.0", default-features = true }
+kurbo = { version = "0.13.0" }
+futures-intrusive = "0.5.0"
+pollster = "0.4"
+
+[profile.release]
+lto = true
+opt-level = 2
+strip = true
+panic = "abort"

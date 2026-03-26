@@ -1,0 +1,89 @@
+// SURFACE CONFORMANCE s15c: Spreadsheet — chad tier
+// Fixed 4-column grid. Rows iterated via <For>, columns explicit per row.
+
+from './s00c_manifest_cls'
+
+<page route=spreadsheet>
+  <var>
+    rows is [
+      { n: 1, a: 'Item', b: 'Qty', c: 'Price', d: 'Total' },
+      { n: 2, a: 'Widget A', b: '10', c: '24.99', d: '249.90' },
+      { n: 3, a: 'Widget B', b: '5', c: '49.99', d: '249.95' },
+      { n: 4, a: 'Widget C', b: '20', c: '9.99', d: '199.80' },
+      { n: 5, a: 'Widget D', b: '3', c: '149.99', d: '449.97' },
+      { n: 6, a: '', b: '', c: 'Sum:', d: '1149.62' }
+    ]
+    selRow is 0
+    selCol is 0
+    cols is ['A', 'B', 'C', 'D']
+  </var>
+
+  <state>
+    set_selRow
+    set_selCol
+  </state>
+
+  <functions>
+    selectCell(r, c):
+      set_selRow to r
+      set_selCol to c
+
+    cellDisplay:
+      cols[selCol] + (selRow + 1) + ': ' + rows[selRow][cols[selCol].toLowerCase()]
+
+    isSel(r, c):
+      selRow exact r && selCol exact c
+  </functions>
+
+  return(
+    <C.Page>
+      <C.Title>Spreadsheet</C.Title>
+      <C.Card style={{ gap: 0 }}>
+        <C.Well>
+          <C.Mono>{cellDisplay}</C.Mono>
+        </C.Well>
+        <C.Divider />
+        <C.TableHeader>
+          <C.TableCellFixed style={{ width: 40 }}><C.TableLabel>#</C.TableLabel></C.TableCellFixed>
+          <C.TableCell><C.TableLabel>A</C.TableLabel></C.TableCell>
+          <C.TableCell><C.TableLabel>B</C.TableLabel></C.TableCell>
+          <C.TableCell><C.TableLabel>C</C.TableLabel></C.TableCell>
+          <C.TableCell><C.TableLabel>D</C.TableLabel></C.TableCell>
+        </C.TableHeader>
+        <For each=rows>
+          <C.TableRow>
+            <C.TableCellFixed style={{ width: 40 }}><C.Hint>{item.n}</C.Hint></C.TableCellFixed>
+            <C.TableCell>
+              <Pressable onPress={() => { selectCell(item.n - 1, 0) }}>
+                <Box style={{ borderWidth: isSel(item.n - 1, 0) ? 1 : 0, borderColor: '#3b82f6', borderRadius: 2, padding: 2 }}>
+                  <C.TableText>{item.a}</C.TableText>
+                </Box>
+              </Pressable>
+            </C.TableCell>
+            <C.TableCell>
+              <Pressable onPress={() => { selectCell(item.n - 1, 1) }}>
+                <Box style={{ borderWidth: isSel(item.n - 1, 1) ? 1 : 0, borderColor: '#3b82f6', borderRadius: 2, padding: 2 }}>
+                  <C.TableText>{item.b}</C.TableText>
+                </Box>
+              </Pressable>
+            </C.TableCell>
+            <C.TableCell>
+              <Pressable onPress={() => { selectCell(item.n - 1, 2) }}>
+                <Box style={{ borderWidth: isSel(item.n - 1, 2) ? 1 : 0, borderColor: '#3b82f6', borderRadius: 2, padding: 2 }}>
+                  <C.TableText>{item.c}</C.TableText>
+                </Box>
+              </Pressable>
+            </C.TableCell>
+            <C.TableCell>
+              <Pressable onPress={() => { selectCell(item.n - 1, 3) }}>
+                <Box style={{ borderWidth: isSel(item.n - 1, 3) ? 1 : 0, borderColor: '#3b82f6', borderRadius: 2, padding: 2 }}>
+                  <C.TableText>{item.d}</C.TableText>
+                </Box>
+              </Pressable>
+            </C.TableCell>
+          </C.TableRow>
+        </For>
+      </C.Card>
+    </C.Page>
+  )
+</page>

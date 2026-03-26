@@ -1,0 +1,53 @@
+// SURFACE CONFORMANCE s04c: Dashboard — chad tier
+
+from './s00c_manifest_cls'
+
+<page route=dashboard>
+  <var>
+    stats is [
+      { label: 'Revenue', value: '$12,840', change: '+12.5%', up: true },
+      { label: 'Users', value: '3,241', change: '-2.1%', up: false },
+      { label: 'Orders', value: '842', change: '+8.3%', up: true },
+      { label: 'Conversion', value: '3.6%', change: '+0.4%', up: true }
+    ]
+    transactions is [
+      { name: 'Alice Cooper', amount: '$1,200', status: 'completed' },
+      { name: 'Bob Harris', amount: '$840', status: 'pending' },
+      { name: 'Carol Zhang', amount: '$2,100', status: 'completed' },
+      { name: 'Dan Reeves', amount: '$360', status: 'failed' },
+      { name: 'Eve Nakamura', amount: '$950', status: 'pending' }
+    ]
+  </var>
+
+  return(
+    <C.Page>
+      <C.Title>Dashboard</C.Title>
+      <C.Grid4>
+        <For each=stats>
+          <C.Card style={{ flexGrow: 1 }}>
+            <C.StatLabel>{item.label}</C.StatLabel>
+            <C.StatValue>{item.value}</C.StatValue>
+            {item.up ? <C.StatChange>{item.change}</C.StatChange> : <C.StatChangeDown>{item.change}</C.StatChangeDown>}
+          </C.Card>
+        </For>
+      </C.Grid4>
+      <C.Card>
+        <C.Subtitle>Recent Transactions</C.Subtitle>
+        <C.TableHeader>
+          <C.TableCell><C.TableLabel>Name</C.TableLabel></C.TableCell>
+          <C.TableCellFixed><C.TableLabel>Amount</C.TableLabel></C.TableCellFixed>
+          <C.TableCellFixed><C.TableLabel>Status</C.TableLabel></C.TableCellFixed>
+        </C.TableHeader>
+        <For each=transactions>
+          <C.TableRow>
+            <C.TableCell><C.TableText>{item.name}</C.TableText></C.TableCell>
+            <C.TableCellFixed><C.Mono>{item.amount}</C.Mono></C.TableCellFixed>
+            <C.TableCellFixed>
+              {item.status exact 'completed' ? <C.BadgeGreen><C.BadgeText>Completed</C.BadgeText></C.BadgeGreen> : item.status exact 'pending' ? <C.BadgeYellow><C.BadgeText>Pending</C.BadgeText></C.BadgeYellow> : <C.BadgeRed><C.BadgeText>Failed</C.BadgeText></C.BadgeRed>}
+            </C.TableCellFixed>
+          </C.TableRow>
+        </For>
+      </C.Card>
+    </C.Page>
+  )
+</page>
