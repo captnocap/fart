@@ -116,6 +116,8 @@ function resetCtx() {
     dynCount: 0,
     arrayCounter: 0,
     arrayDecls: [],       // ["var _arr_N = [_]Node{ ... };"]
+    objectArrays: [],     // [{fields: [{name, type}], getter, setter}]
+    maps: [],             // [{arrayName, itemParam, indexParam, innerNodes, parentArr, childIdx, textsInMap}]
   };
 }
 
@@ -224,7 +226,41 @@ function collectState(c) {
                 initial = c.text().slice(1, -1);
                 type = 'string'; c.advance();
               }
-              ctx.stateSlots.push({ getter, setter, initial, type });
+              else if (c.kind() === TK.lbracket) {
+                // Object array: useState([{ field: val, ... }])
+                c.advance();
+                if (c.kind() === TK.lbrace) {
+                  const fields = [];
+                  c.advance();
+                  while (c.kind() !== TK.rbrace && c.kind() !== TK.eof) {
+                    if (c.kind() === TK.identifier) {
+                      const fname = c.text(); c.advance();
+                      if (c.kind() === TK.colon) c.advance();
+                      let ftype = 'int';
+                      if (c.kind() === TK.string) { ftype = 'string'; c.advance(); }
+                      else if (c.kind() === TK.number) {
+                        const nv = c.text();
+                        ftype = nv.startsWith('0x') ? 'int' : (nv.includes('.') ? 'float' : 'int');
+                        c.advance();
+                      }
+                      else if (c.isIdent('true') || c.isIdent('false')) { ftype = 'boolean'; c.advance(); }
+                      fields.push({ name: fname, type: ftype });
+                    }
+                    if (c.kind() === TK.comma) c.advance();
+                    else if (c.kind() !== TK.rbrace) c.advance();
+                  }
+                  ctx.objectArrays.push({ fields, getter, setter, oaIdx: ctx.objectArrays.length });
+                  type = 'object_array';
+                  // Skip to closing ])
+                  let depth = 2; // already inside [{
+                  while (depth > 0 && c.kind() !== TK.eof) {
+                    if (c.kind() === TK.lbracket || c.kind() === TK.lbrace) depth++;
+                    if (c.kind() === TK.rbracket || c.kind() === TK.rbrace) depth--;
+                    c.advance();
+                  }
+                }
+              }
+              if (type !== 'object_array') ctx.stateSlots.push({ getter, setter, initial, type });
             }
           }
         }
@@ -591,6 +627,62 @@ function parseJSXElement(c) {
   return buildNode(tag, styleFields, children, handlerRef, nodeFields, rawTag, tagSrcOffset);
 }
 
+// ── Map parser ──
+
+function tryParseMap(c, oa) {
+  const saved = c.save();
+  c.advance(); // skip array name
+  if (c.kind() !== TK.dot) { c.restore(saved); return null; }
+  c.advance(); // skip .
+  if (!c.isIdent('map')) { c.restore(saved); return null; }
+  c.advance(); // skip 'map'
+  if (c.kind() !== TK.lparen) { c.restore(saved); return null; }
+  c.advance(); // skip (
+
+  // Parse params: (item, i) => or (item) =>
+  if (c.kind() !== TK.lparen) { c.restore(saved); return null; }
+  c.advance(); // skip (
+  let itemParam = '_item';
+  let indexParam = '_i';
+  if (c.kind() === TK.identifier) { itemParam = c.text(); c.advance(); }
+  if (c.kind() === TK.comma) { c.advance(); if (c.kind() === TK.identifier) { indexParam = c.text(); c.advance(); } }
+  if (c.kind() === TK.rparen) c.advance(); // skip )
+  if (c.kind() === TK.arrow) c.advance(); // skip =>
+  if (c.kind() === TK.lparen) c.advance(); // skip ( before JSX
+
+  // Push map item context — so {item.label} resolves to _oa0_label[_i]
+  const savedMapCtx = ctx.currentMap;
+  const mapIdx = ctx.maps.length;
+  const mapInfo = {
+    oaIdx: oa.oaIdx, itemParam, indexParam,
+    oa, textsInMap: [], innerCount: 0, parentArr: '', childIdx: 0,
+  };
+  ctx.currentMap = mapInfo;
+
+  // Parse the map template JSX
+  const templateNode = parseJSXElement(c);
+
+  ctx.currentMap = savedMapCtx;
+
+  // Skip closing ))}
+  if (c.kind() === TK.rparen) c.advance(); // )
+  if (c.kind() === TK.rparen) c.advance(); // )
+
+  // Register the map
+  mapInfo.templateExpr = templateNode.nodeExpr;
+  ctx.maps.push(mapInfo);
+
+  // Return a placeholder node — the parent array slot that gets .children set by _rebuildMap
+  return { nodeExpr: `.{ .style = .{ .gap = 8, .width = -1, .height = -1 } }`, mapIdx };
+}
+
+// Check if an identifier is a map item member access (item.field)
+function isMapItemAccess(name) {
+  if (!ctx.currentMap) return null;
+  if (name === ctx.currentMap.itemParam) return ctx.currentMap;
+  return null;
+}
+
 // ── Template literal parser ──
 
 function parseTemplateLiteral(raw) {
@@ -741,6 +833,19 @@ function parseChildren(c) {
       // Try ternary text: {expr == val ? "a" : "b"}
       const ternResult = tryParseTernaryText(c, children);
       if (ternResult) continue;
+      // Map: {items.map((item, i) => (...))}
+      if (c.kind() === TK.identifier) {
+        const maybeArr = c.text();
+        const oa = ctx.objectArrays.find(o => o.getter === maybeArr);
+        if (oa && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.dot) {
+          const mapResult = tryParseMap(c, oa);
+          if (mapResult) {
+            children.push(mapResult);
+            if (c.kind() === TK.rbrace) c.advance();
+            continue;
+          }
+        }
+      }
       // Template literal: {`text ${expr}`}
       if (c.kind() === TK.template_literal) {
         const raw = c.text().slice(1, -1); // strip backticks
@@ -759,6 +864,34 @@ function parseChildren(c) {
           children.push({ nodeExpr: `.{ .text = "${fmt}" }` });
         }
         continue;
+      }
+      // Map item access: {item.field} inside a .map()
+      if (c.kind() === TK.identifier && ctx.currentMap && c.text() === ctx.currentMap.itemParam) {
+        c.advance();
+        if (c.kind() === TK.dot) {
+          c.advance();
+          if (c.kind() === TK.identifier) {
+            const field = c.text();
+            const oa = ctx.currentMap.oa;
+            const oaIdx = oa.oaIdx;
+            const fieldInfo = oa.fields.find(f => f.name === field);
+            c.advance();
+            if (c.kind() === TK.rbrace) c.advance();
+            // Create dynamic text for this map item field
+            const bufId = ctx.dynCount;
+            const fmt = fieldInfo && fieldInfo.type === 'string' ? '{s}' : '{d}';
+            let args;
+            if (fieldInfo && fieldInfo.type === 'string') {
+              args = `_oa${oaIdx}_${field}[_i][0.._oa${oaIdx}_${field}_lens[_i]]`;
+            } else {
+              args = `_oa${oaIdx}_${field}[_i]`;
+            }
+            ctx.dynTexts.push({ bufId, fmtString: fmt, fmtArgs: args, arrName: '', arrIndex: 0, bufSize: 256, inMap: true, mapIdx: ctx.maps.length });
+            ctx.dynCount++;
+            children.push({ nodeExpr: `.{ .text = "" }`, dynBufId: bufId, inMap: true });
+            continue;
+          }
+        }
       }
       // {expr} — check props first, then state getters
       if (c.kind() === TK.identifier && ctx.propStack[c.text()] !== undefined) {
@@ -875,6 +1008,10 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
         const dt = ctx.dynTexts.find(d => d.bufId === children[i].dynBufId);
         if (dt) { dt.arrName = arrName; dt.arrIndex = i; }
       }
+      if (children[i].mapIdx !== undefined) {
+        const m = ctx.maps[children[i].mapIdx];
+        if (m) { m.parentArr = arrName; m.childIdx = i; }
+      }
       if (children[i].condIdx !== undefined) {
         const cond = ctx.conditionals[children[i].condIdx];
         if (cond) { cond.arrName = arrName; cond.trueIdx = i; }
@@ -904,8 +1041,18 @@ function emitOutput(rootExpr, file) {
   out += `const IS_LIB = if (@hasDecl(build_options, "is_lib")) build_options.is_lib else false;\n\n`;
   out += `const layout = @import("${prefix}layout.zig");\n`;
   out += `const Node = layout.Node;\nconst Style = layout.Style;\nconst Color = layout.Color;\n`;
-  if (hasState) out += `const state = @import("${prefix}state.zig");\n`;
-  out += `const engine = if (IS_LIB) struct {} else if (builtin.os.tag == .emscripten) @import("${prefix}engine_web.zig") else @import("${prefix}engine.zig");\n\n`;
+  if (hasState || ctx.objectArrays.length > 0) out += `const state = @import("${prefix}state.zig");\n`;
+  out += `const engine = if (IS_LIB) struct {} else if (builtin.os.tag == .emscripten) @import("${prefix}engine_web.zig") else @import("${prefix}engine.zig");\n`;
+  if (ctx.objectArrays.length > 0) {
+    out += `const qjs_runtime = if (IS_LIB) struct {\n`;
+    out += `    pub fn callGlobal(_: []const u8) void {}\n`;
+    out += `    pub fn callGlobalStr(_: []const u8, _: []const u8) void {}\n`;
+    out += `    pub fn callGlobalInt(_: []const u8, _: i64) void {}\n`;
+    out += `    pub fn registerHostFn(_: []const u8, _: ?*const anyopaque, _: u8) void {}\n`;
+    out += `    pub fn evalExpr(_: []const u8) void {}\n`;
+    out += `} else @import("${prefix}qjs_runtime.zig");\n`;
+  }
+  out += '\n';
 
   // State manifest
   if (hasState) {
@@ -924,7 +1071,218 @@ function emitOutput(rootExpr, file) {
     out += ctx.arrayDecls[i] + '\n';
   }
   const nodeInit = rootExpr.startsWith('.') ? rootExpr.slice(1) : rootExpr;
-  out += `var _root = Node${nodeInit};\n\n`;
+  out += `var _root = Node${nodeInit};\n`;
+
+  // Object array infrastructure
+  if (ctx.objectArrays.length > 0) {
+    // QJS stubs
+    out += `const qjs = if (IS_LIB) struct {
+    pub const JSValue = extern struct { tag: i64 = 3, u: extern union { int32: i32, float64: f64, ptr: ?*anyopaque } = .{ .int32 = 0 } };
+    pub const JSContext = opaque {};
+    pub fn JS_GetPropertyStr(_: ?*const @This().JSContext, _: @This().JSValue, _: [*:0]const u8) @This().JSValue { return .{}; }
+    pub fn JS_GetPropertyUint32(_: ?*const @This().JSContext, _: @This().JSValue, _: u32) @This().JSValue { return .{}; }
+    pub fn JS_ToInt32(_: ?*const @This().JSContext, _: *i32, _: @This().JSValue) i32 { return 0; }
+    pub fn JS_ToInt64(_: ?*const @This().JSContext, _: *i64, _: @This().JSValue) i32 { return 0; }
+    pub fn JS_ToFloat64(_: ?*const @This().JSContext, _: *f64, _: @This().JSValue) i32 { return 0; }
+    pub fn JS_FreeValue(_: ?*const @This().JSContext, _: @This().JSValue) void {}
+    pub fn JS_ToCString(_: ?*const @This().JSContext, _: @This().JSValue) ?[*:0]const u8 { return null; }
+    pub fn JS_FreeCString(_: ?*const @This().JSContext, _: ?[*:0]const u8) void {}
+    pub fn JS_NewFloat64(_: ?*const @This().JSContext, _: f64) @This().JSValue { return .{}; }
+} else @cImport({ @cDefine("_GNU_SOURCE", "1"); @cDefine("QUICKJS_NG_BUILD", "1"); @cInclude("quickjs.h"); });
+const QJS_UNDEFINED = qjs.JSValue{ .u = .{ .int32 = 0 }, .tag = 3 };\n\n`;
+
+    // Object array helpers
+    out += `// ── Object arrays ───────────────────────────────────────────────
+const _oa_alloc = std.heap.page_allocator;
+
+fn _oaDupString(src: []const u8) []const u8 {
+    if (src.len == 0) return &[_]u8{};
+    return _oa_alloc.dupe(u8, src) catch &[_]u8{};
+}
+
+fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
+    if (len_slot.* > 0) _oa_alloc.free(@constCast(slot.*));
+    slot.* = &[_]u8{};
+    len_slot.* = 0;
+}\n\n`;
+
+    // Per-object-array storage + unpack
+    for (const oa of ctx.objectArrays) {
+      const idx = oa.oaIdx;
+      for (const f of oa.fields) {
+        if (f.type === 'string') {
+          out += `var _oa${idx}_${f.name}: [][]const u8 = &[_][]const u8{};\n`;
+          out += `var _oa${idx}_${f.name}_lens: []usize = &[_]usize{};\n`;
+          out += `var _oa${idx}_${f.name}_cap: usize = 0;\n`;
+        } else {
+          out += `var _oa${idx}_${f.name}: []i64 = &[_]i64{};\n`;
+          out += `var _oa${idx}_${f.name}_cap: usize = 0;\n`;
+        }
+      }
+      out += `var _oa${idx}_len: usize = 0;\n`;
+      out += `var _oa${idx}_dirty: bool = false;\n\n`;
+
+      // ensureCapacity
+      out += `fn _oa${idx}_ensureCapacity(needed: usize) void {\n`;
+      const firstField = oa.fields[0];
+      out += `    if (needed <= _oa${idx}_${firstField.name}_cap) return;\n`;
+      out += `    const new_cap = @max(needed, if (_oa${idx}_${firstField.name}_cap == 0) @as(usize, 64) else _oa${idx}_${firstField.name}_cap * 2);\n`;
+      for (const f of oa.fields) {
+        if (f.type === 'string') {
+          out += `    if (_oa${idx}_${f.name}_cap == 0) {\n`;
+          out += `        _oa${idx}_${f.name} = _oa_alloc.alloc([]const u8, new_cap) catch return;\n`;
+          out += `        _oa${idx}_${f.name}_lens = _oa_alloc.alloc(usize, new_cap) catch return;\n`;
+          out += `        for (0..new_cap) |_j| _oa${idx}_${f.name}[_j] = &[_]u8{};\n`;
+          out += `        @memset(_oa${idx}_${f.name}_lens, 0);\n`;
+          out += `    } else {\n`;
+          out += `        const _old_cap = _oa${idx}_${f.name}_cap;\n`;
+          out += `        _oa${idx}_${f.name} = _oa_alloc.realloc(_oa${idx}_${f.name}.ptr[0.._old_cap], new_cap) catch return;\n`;
+          out += `        _oa${idx}_${f.name}_lens = _oa_alloc.realloc(_oa${idx}_${f.name}_lens.ptr[0.._old_cap], new_cap) catch return;\n`;
+          out += `        for (_old_cap..new_cap) |_j| _oa${idx}_${f.name}[_j] = &[_]u8{};\n`;
+          out += `        @memset(_oa${idx}_${f.name}_lens[_old_cap..new_cap], 0);\n`;
+          out += `    }\n`;
+          out += `    _oa${idx}_${f.name}_cap = new_cap;\n`;
+        } else {
+          out += `    if (_oa${idx}_${f.name}_cap == 0) {\n`;
+          out += `        _oa${idx}_${f.name} = _oa_alloc.alloc(i64, new_cap) catch return;\n`;
+          out += `        @memset(_oa${idx}_${f.name}, 0);\n`;
+          out += `    } else {\n`;
+          out += `        _oa${idx}_${f.name} = _oa_alloc.realloc(_oa${idx}_${f.name}.ptr[0.._oa${idx}_${f.name}_cap], new_cap) catch return;\n`;
+          out += `        @memset(_oa${idx}_${f.name}[_oa${idx}_${f.name}_cap..new_cap], 0);\n`;
+          out += `    }\n`;
+          out += `    _oa${idx}_${f.name}_cap = new_cap;\n`;
+        }
+      }
+      out += `}\n\n`;
+
+      // unpack function
+      out += `fn _oa${idx}_unpack(ctx_qjs: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {\n`;
+      out += `    const c2 = ctx_qjs orelse return QJS_UNDEFINED;\n`;
+      out += `    const arr = argv[0];\n`;
+      out += `    const len_val = qjs.JS_GetPropertyStr(c2, arr, "length");\n`;
+      out += `    var arr_len: i32 = 0;\n`;
+      out += `    _ = qjs.JS_ToInt32(c2, &arr_len, len_val);\n`;
+      out += `    qjs.JS_FreeValue(c2, len_val);\n`;
+      out += `    const count: usize = @intCast(@max(0, arr_len));\n`;
+      out += `    _oa${idx}_ensureCapacity(count);\n`;
+      out += `    for (0..count) |_i| {\n`;
+      out += `        const elem = qjs.JS_GetPropertyUint32(c2, arr, @intCast(_i));\n`;
+      for (const f of oa.fields) {
+        if (f.type === 'string') {
+          out += `        { const _v = qjs.JS_GetPropertyStr(c2, elem, "${f.name}");\n`;
+          out += `        const _s = qjs.JS_ToCString(c2, _v);\n`;
+          out += `        qjs.JS_FreeValue(c2, _v);\n`;
+          out += `        _oaFreeString(&_oa${idx}_${f.name}[_i], &_oa${idx}_${f.name}_lens[_i]);\n`;
+          out += `        if (_s) |ss| { const sl = std.mem.span(ss); _oa${idx}_${f.name}[_i] = _oaDupString(sl); _oa${idx}_${f.name}_lens[_i] = _oa${idx}_${f.name}[_i].len; qjs.JS_FreeCString(c2, _s); }\n`;
+          out += `        }\n`;
+        } else {
+          out += `        { const _v = qjs.JS_GetPropertyStr(c2, elem, "${f.name}");\n`;
+          out += `        var _n: i64 = 0; _ = qjs.JS_ToInt64(c2, &_n, _v);\n`;
+          out += `        qjs.JS_FreeValue(c2, _v); _oa${idx}_${f.name}[_i] = _n;\n`;
+          out += `        }\n`;
+        }
+      }
+      out += `        qjs.JS_FreeValue(c2, elem);\n`;
+      out += `    }\n`;
+      // Trim old strings
+      const strFields = oa.fields.filter(f => f.type === 'string');
+      if (strFields.length > 0) {
+        out += `    for (count.._oa${idx}_len) |_trim_i|`;
+        for (const f of strFields) {
+          out += ` _oaFreeString(&_oa${idx}_${f.name}[_trim_i], &_oa${idx}_${f.name}_lens[_trim_i]);`;
+        }
+        out += `\n`;
+      }
+      out += `    _oa${idx}_len = count;\n`;
+      out += `    _oa${idx}_dirty = true;\n`;
+      out += `    state.markDirty();\n`;
+      out += `    return QJS_UNDEFINED;\n`;
+      out += `}\n\n`;
+    }
+  }
+
+  // Map pools
+  if (ctx.maps.length > 0) {
+    out += `\n// ── Map pools ───────────────────────────────────────────────────\n`;
+    for (let mi = 0; mi < ctx.maps.length; mi++) {
+      const m = ctx.maps[mi];
+      out += `const MAX_MAP_${mi}: usize = 4096;\n`;
+      out += `var _map_pool_${mi}: [MAX_MAP_${mi}]Node = undefined;\n`;
+      out += `var _map_count_${mi}: usize = 0;\n`;
+
+      // Count inner nodes from template
+      const innerMatch = m.templateExpr.match(/\.children = &_arr_(\d+)/);
+      const innerArr = innerMatch ? `_arr_${innerMatch[1]}` : null;
+      // Find inner array size by checking arrayDecls
+      let innerCount = 0;
+      if (innerArr) {
+        const decl = ctx.arrayDecls.find(d => d.startsWith(`var ${innerArr}`));
+        if (decl) {
+          innerCount = (decl.match(/\.{/g) || []).length;
+        }
+      }
+      if (innerCount > 0) {
+        out += `var _map_inner_${mi}: [MAX_MAP_${mi}][${innerCount}]Node = undefined;\n`;
+      }
+
+      // Per-item text buffers for dynamic texts inside the map
+      const mapDynTexts = ctx.dynTexts.filter(dt => dt.inMap);
+      let textBufIdx = 0;
+      for (const dt of mapDynTexts) {
+        out += `var _map_text_bufs_${mi}_${textBufIdx}: [MAX_MAP_${mi}][256]u8 = undefined;\n`;
+        out += `var _map_texts_${mi}_${textBufIdx}: [MAX_MAP_${mi}][]const u8 = undefined;\n`;
+        textBufIdx++;
+      }
+
+      // Rebuild function
+      out += `fn _rebuildMap${mi}() void {\n`;
+      out += `    _map_count_${mi} = @min(_oa${m.oaIdx}_len, MAX_MAP_${mi});\n`;
+      out += `    for (0.._map_count_${mi}) |_i| {\n`;
+
+      // Emit per-item text formatting
+      textBufIdx = 0;
+      for (const dt of mapDynTexts) {
+        out += `        _map_texts_${mi}_${textBufIdx}[_i] = std.fmt.bufPrint(&_map_text_bufs_${mi}_${textBufIdx}[_i], "${dt.fmtString}", .{ ${dt.fmtArgs} }) catch "";\n`;
+        textBufIdx++;
+      }
+
+      // Emit inner array + pool node
+      if (innerCount > 0) {
+        // Build inner array items, replacing dynamic text refs
+        let innerItems = [];
+        if (innerArr) {
+          const decl = ctx.arrayDecls.find(d => d.startsWith(`var ${innerArr}`));
+          if (decl) {
+            // Replace _dyn_text references with _map_texts
+            let inner = decl.replace(/var \w+ = \[_\]Node\{ /, '').replace(/ \};.*$/, '');
+            let ti = 0;
+            for (const dt of mapDynTexts) {
+              inner = inner.replace('.text = ""', `.text = _map_texts_${mi}_${ti}[_i]`);
+              ti++;
+            }
+            out += `        _map_inner_${mi}[_i] = [${innerCount}]Node{ ${inner} };\n`;
+          }
+        }
+        // Build pool node from template, replacing children ref
+        let poolNode = m.templateExpr;
+        if (innerArr) {
+          poolNode = poolNode.replace(`&${innerArr}`, `&_map_inner_${mi}[_i]`);
+        }
+        out += `        _map_pool_${mi}[_i] = ${poolNode};\n`;
+      } else {
+        out += `        _map_pool_${mi}[_i] = ${m.templateExpr};\n`;
+      }
+
+      out += `    }\n`;
+      // Bind pool to parent array
+      if (m.parentArr) {
+        out += `    ${m.parentArr}[${m.childIdx}].children = _map_pool_${mi}[0.._map_count_${mi}];\n`;
+      }
+      out += `}\n\n`;
+    }
+  }
+
+  out += '\n';
 
   // Dynamic text buffers
   if (hasDynText) {
@@ -947,7 +1305,15 @@ function emitOutput(rootExpr, file) {
 
   // JS/Lua logic — with section dividers matching reference
   out += `\n// \u2500\u2500 Embedded JS logic \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n`;
-  out += `const JS_LOGIC =\n    \\\\\n;\n`;
+  out += `const JS_LOGIC =\n`;
+  // Generate JS logic with object array setters
+  if (ctx.objectArrays.length > 0) {
+    for (const oa of ctx.objectArrays) {
+      out += `    \\\\var ${oa.getter} = [];\n`;
+      out += `    \\\\function ${oa.setter}(v) { ${oa.getter} = v; __setObjArr${oa.oaIdx}(v); }\n`;
+    }
+  }
+  out += `    \\\\\n;\n`;
   out += `\n// \u2500\u2500 Embedded Lua logic \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n`;
   out += `const LUA_LOGIC =\n    \\\\\n;\n\n`;
 
@@ -997,16 +1363,24 @@ function emitOutput(rootExpr, file) {
 
   // _appInit
   out += `fn _appInit() void {\n    _initState();\n`;
+  for (const oa of ctx.objectArrays) {
+    out += `    qjs_runtime.registerHostFn("__setObjArr${oa.oaIdx}", @ptrCast(&_oa${oa.oaIdx}_unpack), 1);\n`;
+  }
   if (hasDynText) out += `    _updateDynamicTexts();\n`;
   if (hasConds) out += `    _updateConditionals();\n`;
+  for (let mi = 0; mi < ctx.maps.length; mi++) {
+    out += `    _rebuildMap${mi}();\n`;
+  }
   out += `}\n\n`;
 
   // _appTick
   out += `fn _appTick(now: u32) void {\n    _ = now;\n`;
-  if (hasState) {
-    out += `    if (state.isDirty()) {`;
-    out += ` _updateDynamicTexts();`;
-    if (hasConds) out += ` _updateConditionals();`;
+  if (hasState || ctx.objectArrays.length > 0) {
+    out += `    if (state.isDirty()) { _updateDynamicTexts();\n`;
+    for (let mi = 0; mi < ctx.maps.length; mi++) {
+      out += `        _rebuildMap${mi}();\n`;
+    }
+    if (hasConds) out += `        _updateConditionals();\n`;
     out += ` state.clearDirty(); }\n`;
   }
   out += `}\n\n`;
