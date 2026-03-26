@@ -518,10 +518,11 @@ function parseJSXElement(c) {
 
   // Fragment: <>
   if (c.kind() === TK.gt) {
+    const fragOffset = c.starts[c.pos > 0 ? c.pos - 1 : 0];
     c.advance();
     const children = parseChildren(c);
     if (c.kind() === TK.lt_slash) { c.advance(); if (c.kind() === TK.gt) c.advance(); }
-    return buildNode('Box', [], children);
+    return buildNode('Box', [], children, null, null, '>', fragOffset);
   }
 
   const rawTag = c.text();
@@ -621,12 +622,20 @@ function parseJSXElement(c) {
           } else if (c.kind() === TK.number) { nodeFields.push(`.font_size = ${c.text()}`); c.advance(); }
           else if (c.kind() === TK.string) { nodeFields.push(`.font_size = ${c.text().slice(1,-1)}`); c.advance(); }
         } else if (attr === 'color') {
-          // color="#hex" or color={expr} → .text_color = Color.rgb(...)
+          // color="#hex" or color={propName} → .text_color = Color.rgb(...)
           if (c.kind() === TK.string) {
             const val = c.text().slice(1, -1);
             nodeFields.push(`.text_color = ${parseColor(val)}`);
             c.advance();
-          } else if (c.kind() === TK.lbrace) { skipBraces(c); }
+          } else if (c.kind() === TK.lbrace) {
+            c.advance();
+            if (c.kind() === TK.identifier && ctx.propStack[c.text()] !== undefined) {
+              const propVal = ctx.propStack[c.text()];
+              nodeFields.push(`.text_color = ${parseColor(propVal)}`);
+              c.advance();
+            }
+            if (c.kind() === TK.rbrace) c.advance();
+          }
         } else {
           // Skip unknown attributes
           if (c.kind() === TK.string) c.advance();
@@ -839,12 +848,18 @@ function tryParseTernaryText(c, children) {
   if (c.kind() === TK.string) { falseVal = c.text().slice(1, -1); c.advance(); }
   else { c.restore(saved); return false; }
   if (c.kind() === TK.rbrace) c.advance();
-  // For now, emit as dynamic text showing the condition — TODO: proper ternary
-  // This creates a conditional that shows one text or the other
+  // Ternary text: create dynamic text with conditional format
   const condExpr = condParts.join('');
-  const condIdx = ctx.conditionals.length;
-  ctx.conditionals.push({ condExpr, kind: 'ternary', trueVal, falseVal });
-  children.push({ nodeExpr: `.{ .text = "${trueVal}" }`, condIdx });
+  const isComparison = condExpr.includes('==') || condExpr.includes('!=') ||
+    condExpr.includes('>=') || condExpr.includes('<=') ||
+    condExpr.includes(' > ') || condExpr.includes(' < ');
+  const zigCond = isComparison ? `(${condExpr})` : `((${condExpr}) != 0)`;
+  const bufId = ctx.dynCount;
+  // Use Zig if/else to select the string at runtime
+  const fmtArgs = `if ${zigCond} @as([]const u8, "${trueVal}") else @as([]const u8, "${falseVal}")`;
+  ctx.dynTexts.push({ bufId, fmtString: '{s}', fmtArgs, arrName: '', arrIndex: 0, bufSize: 64 });
+  ctx.dynCount++;
+  children.push({ nodeExpr: `.{ .text = "" }`, dynBufId: bufId });
   return true;
 }
 
@@ -1024,7 +1039,8 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
     if (srcTag && srcOffset !== undefined) {
       const line = offsetToLine(globalThis.__source, srcOffset);
       const fname = (globalThis.__file || '').split('/').pop();
-      ctx.arrayComments.push(`// tsz:${fname}:${line} \u2014 <${srcTag}>`);
+      const tagDisplay = srcTag === '>' ? '<>' : `<${srcTag}>`;
+      ctx.arrayComments.push(`// tsz:${fname}:${line} \u2014 ${tagDisplay}`);
     } else {
       ctx.arrayComments.push('');
     }
