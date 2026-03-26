@@ -77,6 +77,33 @@ pub fn build(b: *std.Build) void {
         cart_step.dependOn(&cart_install.step);
     }
 
+    // ── Forge (compiler kernel + QuickJS → runs Smith JS codegen) ──
+    {
+        const forge_mod = b.createModule(.{
+            .root_source_file = b.path("compiler/forge.zig"),
+            .target = target,
+            .optimize = optimize,
+        });
+        const forge_exe = b.addExecutable(.{
+            .name = "forge",
+            .root_module = forge_mod,
+        });
+        forge_exe.linkLibC();
+        forge_exe.root_module.addIncludePath(b.path("../love2d/quickjs"));
+        forge_exe.root_module.addCSourceFiles(.{
+            .root = b.path("../love2d/quickjs"),
+            .files = &.{ "cutils.c", "dtoa.c", "libregexp.c", "libunicode.c", "quickjs.c" },
+            .flags = &.{ "-O2", "-D_GNU_SOURCE", "-DQUICKJS_NG_BUILD" },
+        });
+        if (target.result.os.tag == .linux) {
+            forge_exe.linkSystemLibrary("m");
+            forge_exe.linkSystemLibrary("pthread");
+        }
+        const forge_install = b.addInstallArtifact(forge_exe, .{});
+        const forge_step = b.step("forge", "Forge: compiler kernel + QuickJS (hosts Smith JS codegen)");
+        forge_step.dependOn(&forge_install.step);
+    }
+
     // ── Compiler tests ───────────────────────────────────────────
     const compiler_tests = b.addTest(.{
         .root_module = b.createModule(.{
@@ -233,16 +260,35 @@ pub fn build(b: *std.Build) void {
         web_wgpu_mod.addSystemIncludePath(.{ .cwd_relative = em_sysroot ++ "/include" });
         web_wgpu_mod.addSystemIncludePath(.{ .cwd_relative = em_webgpu_include });
 
+        // Build options for generated_app.zig — engine_web.zig handles the web runtime
+        const web_options = b.addOptions();
+        web_options.addOption(bool, "is_lib", false);
+        web_options.addOption(bool, "has_quickjs", true);
+        web_options.addOption(bool, "has_physics", false);
+        web_options.addOption(bool, "has_terminal", false);
+        web_options.addOption(bool, "has_video", false);
+        web_options.addOption(bool, "has_render_surfaces", false);
+        web_options.addOption(bool, "has_effects", false);
+        web_options.addOption(bool, "has_canvas", false);
+        web_options.addOption(bool, "has_3d", false);
+        web_options.addOption(bool, "has_transitions", false);
+        web_options.addOption(bool, "has_networking", false);
+        web_options.addOption(bool, "has_crypto", false);
+        web_options.addOption(bool, "has_blend2d", false);
+        web_options.addOption(bool, "has_debug_server", false);
+
         const web_mod = b.createModule(.{
-            .root_source_file = b.path("web_main.zig"),
+            .root_source_file = b.path("generated_app.zig"),
             .target = web_target,
             .optimize = .ReleaseSmall,
             .link_libc = true,
         });
         web_mod.addImport("wgpu", web_wgpu_mod);
+        web_mod.addOptions("build_options", web_options);
 
-        // Emscripten sysroot + emdawnwebgpu headers
+        // Emscripten sysroot + emdawnwebgpu + FreeType headers
         web_mod.addSystemIncludePath(.{ .cwd_relative = em_sysroot ++ "/include" });
+        web_mod.addSystemIncludePath(.{ .cwd_relative = em_sysroot ++ "/include/freetype2" });
         web_mod.addSystemIncludePath(.{ .cwd_relative = em_webgpu_include });
 
         // QuickJS (same source as wasm-rt and tsz-full)
@@ -303,16 +349,16 @@ pub fn build(b: *std.Build) void {
             emcc_exe,
             "--use-port=emdawnwebgpu",
             "-sUSE_FREETYPE=1",
-            "-sASYNCIFY",
             "-sALLOW_MEMORY_GROWTH",
-            "--preload-file", "../deps/tinyemu/images@/tinyemu",
-            "-sEXPORTED_FUNCTIONS=[\"_web_init\",\"_web_resize\",\"_web_frame\",\"_main\",\"_malloc\",\"_free\"]",
-            "-sEXPORTED_RUNTIME_METHODS=[\"ccall\",\"cwrap\",\"allocateUTF8\",\"HEAPU8\",\"HEAP32\"]",
+            "--preload-file", "web/font.ttf@/font.ttf",
+            "-sEXPORTED_FUNCTIONS=[\"_main\",\"_malloc\",\"_free\"]",
+            "-sEXPORTED_RUNTIME_METHODS=[\"ccall\",\"cwrap\",\"HEAPU8\",\"HEAP32\"]",
             "-sERROR_ON_UNDEFINED_SYMBOLS=0",
             "-sASSERTIONS=2",
             "-sNO_EXIT_RUNTIME=1",
+            "-sSTACK_SIZE=2097152",
             "-sFETCH",
-            "-O2",
+            "-O1",
             "-o",
         });
         const web_out = emcc.addOutputFileArg("tsz-web.js");
