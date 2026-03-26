@@ -39,9 +39,26 @@ var bridge_last_reset: i64 = 0;
 
 fn hostSetState(L: ?*lua.lua_State) callconv(.c) c_int {
     const slot = lua.lua_tointeger(L, 1);
-    const val = lua.lua_tonumber(L, 2);
     if (slot < 0 or slot >= state.MAX_SLOTS) return 0;
-    state.setSlot(@intCast(slot), @intFromFloat(val));
+    switch (state.getSlotKind(@intCast(slot))) {
+        .string => {
+            var len: usize = 0;
+            const ptr = lua.lua_tolstring(L, 2, &len);
+            if (ptr == null) return 0;
+            const s: []const u8 = @as([*]const u8, @ptrCast(ptr))[0..len];
+            state.setSlotString(@intCast(slot), s);
+        },
+        .float => {
+            const val = lua.lua_tonumber(L, 2);
+            state.setSlotFloat(@intCast(slot), val);
+        },
+        .boolean => {
+            state.setSlotBool(@intCast(slot), lua.lua_toboolean(L, 2) != 0);
+        },
+        .int => {
+            state.setSlot(@intCast(slot), lua.lua_tointeger(L, 2));
+        },
+    }
     state.markDirty();
     bridge_calls_this_second += 1;
     return 0;
@@ -53,7 +70,12 @@ fn hostGetState(L: ?*lua.lua_State) callconv(.c) c_int {
         lua.lua_pushnumber(L, 0);
         return 1;
     }
-    lua.lua_pushnumber(L, @floatFromInt(state.getSlot(@intCast(slot))));
+    switch (state.getSlotKind(@intCast(slot))) {
+        .float => lua.lua_pushnumber(L, state.getSlotFloat(@intCast(slot))),
+        .boolean => lua.lua_pushnumber(L, if (state.getSlotBool(@intCast(slot))) 1 else 0),
+        .int => lua.lua_pushnumber(L, @floatFromInt(state.getSlot(@intCast(slot)))),
+        .string => lua.lua_pushnumber(L, 0),
+    }
     return 1;
 }
 

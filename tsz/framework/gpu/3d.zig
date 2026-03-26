@@ -63,6 +63,9 @@ comptime {
 const MAX_VERTS = 4096;
 var g_geo_buf: [MAX_VERTS]Vertex = undefined;
 
+const UNIFORM_STRIDE: u32 = 256;
+const MAX_DRAW_UNIFORMS: u32 = 512;
+
 fn pushVertex(buf: []Vertex, idx: *usize, pos: [3]f32, normal: [3]f32, uv: [2]f32) bool {
     if (idx.* >= buf.len) return false;
     buf[idx.*] = .{
@@ -322,7 +325,7 @@ pub fn init() void {
     });
     g_uniform_buffer = device.createBuffer(&.{
         .label = wgpu.StringView.fromSlice("render3d_uniforms"),
-        .size = @sizeOf(SceneUniforms),
+        .size = @as(u64, UNIFORM_STRIDE) * @as(u64, MAX_DRAW_UNIFORMS),
         .usage = wgpu.BufferUsages.uniform | wgpu.BufferUsages.copy_dst,
         .mapped_at_creation = 0,
     });
@@ -331,7 +334,7 @@ pub fn init() void {
         .entries = @ptrCast(&wgpu.BindGroupLayoutEntry{
             .binding = 0,
             .visibility = wgpu.ShaderStages.vertex | wgpu.ShaderStages.fragment,
-            .buffer = .{ .type = .uniform, .has_dynamic_offset = 0, .min_binding_size = @sizeOf(SceneUniforms) },
+            .buffer = .{ .type = .uniform, .has_dynamic_offset = 1, .min_binding_size = @sizeOf(SceneUniforms) },
         }),
     }) orelse return;
     g_bind_group = device.createBindGroup(&.{
@@ -554,9 +557,10 @@ fn generateGeometry(spec: MeshSpec) u32 {
     return generateBox(spec.size[0], spec.size[1], spec.size[2]).count;
 }
 
-fn drawMesh(pass: anytype, queue: *wgpu.Queue, vp: math.Mat4, cam_pos: math.Vec3, light_dir: [3]f32, light_color: [3]f32, ambient_color: [3]f32, fog_color: [3]f32, fog_near: f32, fog_far: f32, spec: MeshSpec) void {
+fn drawMesh(pass: anytype, queue: *wgpu.Queue, uniform_index: *u32, vp: math.Mat4, cam_pos: math.Vec3, light_dir: [3]f32, light_color: [3]f32, ambient_color: [3]f32, fog_color: [3]f32, fog_near: f32, fog_far: f32, spec: MeshSpec) void {
     const vert_count = generateGeometry(spec);
     if (vert_count == 0) return;
+    if (uniform_index.* >= MAX_DRAW_UNIFORMS) return;
 
     queue.writeBuffer(g_vertex_buffer.?, 0, @ptrCast(&g_geo_buf), vert_count * @sizeOf(Vertex));
 
@@ -580,18 +584,21 @@ fn drawMesh(pass: anytype, queue: *wgpu.Queue, vp: math.Mat4, cam_pos: math.Vec3
         .fog_near = fog_near,
         .fog_far = fog_far,
     };
-    queue.writeBuffer(g_uniform_buffer.?, 0, @ptrCast(&uniforms), @sizeOf(SceneUniforms));
+    const dynamic_offset = uniform_index.* * UNIFORM_STRIDE;
+    queue.writeBuffer(g_uniform_buffer.?, dynamic_offset, @ptrCast(&uniforms), @sizeOf(SceneUniforms));
+    uniform_index.* += 1;
+    pass.setBindGroup(0, g_bind_group.?, 1, @ptrCast(&dynamic_offset));
     pass.setVertexBuffer(0, g_vertex_buffer.?, 0, vert_count * @sizeOf(Vertex));
     pass.draw(vert_count, 1, 0, 0);
 }
 
-fn drawSceneGuides(pass: anytype, queue: *wgpu.Queue, vp: math.Mat4, cam_pos: math.Vec3, light_dir: [3]f32, light_color: [3]f32, ambient_color: [3]f32, fog_color: [3]f32, fog_near: f32, fog_far: f32, scene_extent: f32, show_grid: bool, show_axes: bool) void {
+fn drawSceneGuides(pass: anytype, queue: *wgpu.Queue, uniform_index: *u32, vp: math.Mat4, cam_pos: math.Vec3, light_dir: [3]f32, light_color: [3]f32, ambient_color: [3]f32, fog_color: [3]f32, fog_near: f32, fog_far: f32, scene_extent: f32, show_grid: bool, show_axes: bool) void {
     if (show_grid) {
         const spacing: f32 = if (scene_extent > 24.0) 2.0 else 1.0;
         const steps: i32 = @intFromFloat(@ceil(std.math.clamp(scene_extent, 12.0, 36.0) / spacing));
         const grid_half = @as(f32, @floatFromInt(steps)) * spacing;
-        const center_x = @floor(cam_pos.x / spacing) * spacing;
-        const center_z = @floor(cam_pos.z / spacing) * spacing;
+        const center_x = @round(cam_pos.x / spacing) * spacing;
+        const center_z = @round(cam_pos.z / spacing) * spacing;
 
         var step: i32 = -steps;
         while (step <= steps) : (step += 1) {
@@ -605,43 +612,70 @@ fn drawSceneGuides(pass: anytype, queue: *wgpu.Queue, vp: math.Mat4, cam_pos: ma
                 std.math.clamp(fog_color[2] + tint, 0.24, 0.72),
                 1.0,
             };
+            const line_x = center_x + offset;
+            const line_z = center_z + offset;
 
-            drawMesh(pass, queue, vp, cam_pos, light_dir, light_color, ambient_color, fog_color, fog_near, fog_far, .{
-                .geometry = "box",
-                .size = .{ thickness, thickness, grid_half * 2.0 },
-                .position = .{ .x = center_x + offset, .y = 0.02, .z = center_z },
-                .color = line_color,
-            });
-            drawMesh(pass, queue, vp, cam_pos, light_dir, light_color, ambient_color, fog_color, fog_near, fog_far, .{
-                .geometry = "box",
-                .size = .{ grid_half * 2.0, thickness, thickness },
-                .position = .{ .x = center_x, .y = 0.02, .z = center_z + offset },
-                .color = line_color,
-            });
+            if (@abs(line_x - cam_pos.x) > spacing * 0.45) {
+                drawMesh(pass, queue, uniform_index, vp, cam_pos, light_dir, light_color, ambient_color, fog_color, fog_near, fog_far, .{
+                    .geometry = "box",
+                    .size = .{ thickness, thickness, grid_half * 2.0 },
+                    .position = .{ .x = line_x, .y = 0.02, .z = center_z },
+                    .color = line_color,
+                });
+            }
+            if (@abs(line_z - cam_pos.z) > spacing * 0.45) {
+                drawMesh(pass, queue, uniform_index, vp, cam_pos, light_dir, light_color, ambient_color, fog_color, fog_near, fog_far, .{
+                    .geometry = "box",
+                    .size = .{ grid_half * 2.0, thickness, thickness },
+                    .position = .{ .x = center_x, .y = 0.02, .z = line_z },
+                    .color = line_color,
+                });
+            }
         }
+
+        // Exact camera-centered bearings: keep the global snapped grid, but draw
+        // one local cross through the camera so "straight ahead" is not biased by floor().
+        const focus_color = [4]f32{
+            std.math.clamp(fog_color[0] + 0.52, 0.28, 0.72),
+            std.math.clamp(fog_color[1] + 0.54, 0.30, 0.76),
+            std.math.clamp(fog_color[2] + 0.58, 0.36, 0.82),
+            1.0,
+        };
+        drawMesh(pass, queue, uniform_index, vp, cam_pos, light_dir, light_color, ambient_color, fog_color, fog_near, fog_far, .{
+            .geometry = "box",
+            .size = .{ 0.05, 0.05, grid_half * 2.0 },
+            .position = .{ .x = cam_pos.x, .y = 0.03, .z = center_z },
+            .color = focus_color,
+        });
+        drawMesh(pass, queue, uniform_index, vp, cam_pos, light_dir, light_color, ambient_color, fog_color, fog_near, fog_far, .{
+            .geometry = "box",
+            .size = .{ grid_half * 2.0, 0.05, 0.05 },
+            .position = .{ .x = center_x, .y = 0.03, .z = cam_pos.z },
+            .color = focus_color,
+        });
     }
 
     if (show_axes) {
         const axis_len = std.math.clamp(scene_extent * 0.18, 2.5, 6.0);
-        drawMesh(pass, queue, vp, cam_pos, light_dir, light_color, ambient_color, fog_color, fog_near, fog_far, .{
+        drawMesh(pass, queue, uniform_index, vp, cam_pos, light_dir, light_color, ambient_color, fog_color, fog_near, fog_far, .{
             .geometry = "box",
             .size = .{ axis_len, 0.07, 0.07 },
             .position = .{ .x = axis_len * 0.5, .y = 0.05, .z = 0 },
             .color = .{ 0.92, 0.28, 0.24, 1.0 },
         });
-        drawMesh(pass, queue, vp, cam_pos, light_dir, light_color, ambient_color, fog_color, fog_near, fog_far, .{
+        drawMesh(pass, queue, uniform_index, vp, cam_pos, light_dir, light_color, ambient_color, fog_color, fog_near, fog_far, .{
             .geometry = "box",
             .size = .{ 0.07, axis_len, 0.07 },
             .position = .{ .x = 0, .y = axis_len * 0.5, .z = 0 },
             .color = .{ 0.28, 0.82, 0.36, 1.0 },
         });
-        drawMesh(pass, queue, vp, cam_pos, light_dir, light_color, ambient_color, fog_color, fog_near, fog_far, .{
+        drawMesh(pass, queue, uniform_index, vp, cam_pos, light_dir, light_color, ambient_color, fog_color, fog_near, fog_far, .{
             .geometry = "box",
             .size = .{ 0.07, 0.07, axis_len },
             .position = .{ .x = 0, .y = 0.05, .z = axis_len * 0.5 },
             .color = .{ 0.28, 0.52, 0.94, 1.0 },
         });
-        drawMesh(pass, queue, vp, cam_pos, light_dir, light_color, ambient_color, fog_color, fog_near, fog_far, .{
+        drawMesh(pass, queue, uniform_index, vp, cam_pos, light_dir, light_color, ambient_color, fog_color, fog_near, fog_far, .{
             .geometry = "box",
             .size = .{ 0.16, 0.16, 0.16 },
             .position = .{ .x = 0, .y = 0.08, .z = 0 },
@@ -754,16 +788,16 @@ pub fn render(node: *Node, x: f32, y: f32, w: f32, h: f32, opacity: f32) bool {
     };
 
     pass.setPipeline(g_pipeline.?);
-    pass.setBindGroup(0, g_bind_group.?, 0, null);
+    var uniform_index: u32 = 0;
 
     // ── Draw each mesh ──
     for (node.children) |*child| {
         if (!child.scene3d_mesh) continue;
-        drawMesh(pass, queue, vp, cam_pos, light_dir, light_color, ambient_color, clear_color, fog_near, fog_far, buildMeshSpec(child));
+        drawMesh(pass, queue, &uniform_index, vp, cam_pos, light_dir, light_color, ambient_color, clear_color, fog_near, fog_far, buildMeshSpec(child));
     }
 
     if (node.scene3d_show_grid or node.scene3d_show_axes) {
-        drawSceneGuides(pass, queue, vp, cam_pos, light_dir, light_color, ambient_color, clear_color, fog_near, fog_far, scene_extent, node.scene3d_show_grid, node.scene3d_show_axes);
+        drawSceneGuides(pass, queue, &uniform_index, vp, cam_pos, light_dir, light_color, ambient_color, clear_color, fog_near, fog_far, scene_extent, node.scene3d_show_grid, node.scene3d_show_axes);
     }
 
     pass.end();

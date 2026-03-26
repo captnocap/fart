@@ -60,9 +60,27 @@ fn hostSetState(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs
     var slot_id: i32 = 0;
     _ = qjs.JS_ToInt32(ctx, &slot_id, argv[0]);
     if (slot_id < 0 or slot_id >= state.MAX_SLOTS) return QJS_UNDEFINED;
-    var f: f64 = 0;
-    _ = qjs.JS_ToFloat64(ctx, &f, argv[1]);
-    state.setSlot(@intCast(slot_id), @intFromFloat(f));
+    switch (state.getSlotKind(@intCast(slot_id))) {
+        .string => {
+            const str = qjs.JS_ToCString(ctx, argv[1]);
+            if (str == null) return QJS_UNDEFINED;
+            defer qjs.JS_FreeCString(ctx, str);
+            state.setSlotString(@intCast(slot_id), std.mem.span(str));
+        },
+        .float => {
+            var f: f64 = 0;
+            _ = qjs.JS_ToFloat64(ctx, &f, argv[1]);
+            state.setSlotFloat(@intCast(slot_id), f);
+        },
+        .boolean => {
+            state.setSlotBool(@intCast(slot_id), qjs.JS_ToBool(ctx, argv[1]) != 0);
+        },
+        .int => {
+            var f: f64 = 0;
+            _ = qjs.JS_ToFloat64(ctx, &f, argv[1]);
+            state.setSlot(@intCast(slot_id), @intFromFloat(f));
+        },
+    }
     state.markDirty();
     bridge_calls_this_second += 1;
     return QJS_UNDEFINED;
@@ -86,7 +104,12 @@ fn hostGetState(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs
     var slot_id: i32 = 0;
     _ = qjs.JS_ToInt32(ctx, &slot_id, argv[0]);
     if (slot_id < 0 or slot_id >= state.MAX_SLOTS) return QJS_UNDEFINED;
-    return qjs.JS_NewFloat64(null, @floatFromInt(state.getSlot(@intCast(slot_id))));
+    return switch (state.getSlotKind(@intCast(slot_id))) {
+        .float => qjs.JS_NewFloat64(null, state.getSlotFloat(@intCast(slot_id))),
+        .boolean => qjs.JS_NewFloat64(null, if (state.getSlotBool(@intCast(slot_id))) 1 else 0),
+        .int => qjs.JS_NewFloat64(null, @floatFromInt(state.getSlot(@intCast(slot_id)))),
+        .string => qjs.JS_NewFloat64(null, 0),
+    };
 }
 
 fn hostGetStateString(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
