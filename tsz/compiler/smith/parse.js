@@ -271,6 +271,7 @@ function tryParseMap(c, oa) {
   ctx.maps.push(mapInfo);
 
   // Return a placeholder node — the parent array slot that gets .children set by _rebuildMap
+  // Map placeholder — gets .children set by _rebuildMap at runtime
   return { nodeExpr: `.{ .style = .{ .gap = 8, .width = -1, .height = -1 } }`, mapIdx };
 }
 
