@@ -12,7 +12,7 @@ const handlers = @import("handlers.zig");
 const components = @import("components.zig");
 const jsx_map = @import("jsx_map.zig");
 const jsx_elements = @import("jsx_elements.zig");
-const html_tags = @import("html_tags.zig");
+const html_tags = @import("rules/html_tags.zig");
 const jsx_conditional = @import("jsx_conditional.zig");
 const effect_shadergen = @import("effect_shadergen.zig");
 

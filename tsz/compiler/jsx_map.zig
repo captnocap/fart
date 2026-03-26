@@ -5,13 +5,13 @@
 
 const std = @import("std");
 const codegen = @import("codegen.zig");
-const surfaces = @import("surfaces.zig");
+const surfaces = @import("rules/surfaces.zig");
 const Generator = codegen.Generator;
 const attrs = @import("attrs.zig");
 const emit_map = @import("emit_map.zig");
 const handlers = @import("handlers.zig");
 const components = @import("components.zig");
-const html_tags = @import("html_tags.zig");
+const html_tags = @import("rules/html_tags.zig");
 const jsx_conditional = @import("jsx_conditional.zig");
 
 /// Parse `items.map((item, index) => (<JSX/>))` and register a MapInfo.

@@ -10,8 +10,8 @@ const std = @import("std");
 const codegen = @import("codegen.zig");
 const Generator = codegen.Generator;
 const TokenKind = codegen.TokenKind;
-const html_tags = @import("html_tags.zig");
-const surfaces = @import("surfaces.zig");
+const html_tags = @import("rules/html_tags.zig");
+const surfaces = @import("rules/surfaces.zig");
 
 const special_tags = [_][]const u8{
     "Route", "Routes", "C",

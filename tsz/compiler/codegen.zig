@@ -32,7 +32,7 @@ const lexer_mod = @import("lexer.zig");
 pub const Token = lexer_mod.Token;
 pub const TokenKind = lexer_mod.TokenKind;
 pub const Lexer = lexer_mod.Lexer;
-pub const tailwind = @import("tailwind.zig");
+pub const tailwind = @import("rules/tailwind.zig");
 
 // Pipeline modules
 const collect = @import("collect.zig");

@@ -1126,91 +1126,43 @@ pub fn parseColorValue(self: *Generator, hex: []const u8) ![]const u8 {
     return "Color.rgb(255, 255, 255)";
 }
 
-// ── Style key mappings ──
+// ── Style key mappings (data-driven from compiler/rules/) ──
+
+const style_keys = @import("rules/style_keys.zig");
+const enum_keys = @import("rules/enum_keys.zig");
+const easing_rules = @import("rules/easing_names.zig");
+const named_colors_rules = @import("rules/named_colors.zig");
+const theme_rules = @import("rules/theme_tokens.zig");
+const lookup = @import("rules/lookup.zig");
 
 const EnumMapping = struct { field: []const u8, prefix: []const u8 };
 
 pub fn mapStyleKey(key: []const u8) ?[]const u8 {
-    const mappings = .{
-        .{ "width", "width" }, .{ "height", "height" },
-        .{ "minWidth", "min_width" }, .{ "maxWidth", "max_width" },
-        .{ "minHeight", "min_height" }, .{ "maxHeight", "max_height" },
-        .{ "flexGrow", "flex_grow" }, .{ "flexShrink", "flex_shrink" }, .{ "flexBasis", "flex_basis" },
-        .{ "gap", "gap" }, .{ "order", "order" },
-        .{ "padding", "padding" }, .{ "paddingLeft", "padding_left" }, .{ "paddingRight", "padding_right" },
-        .{ "paddingTop", "padding_top" }, .{ "paddingBottom", "padding_bottom" },
-        .{ "margin", "margin" }, .{ "marginLeft", "margin_left" }, .{ "marginRight", "margin_right" },
-        .{ "marginTop", "margin_top" }, .{ "marginBottom", "margin_bottom" },
-        .{ "borderRadius", "border_radius" }, .{ "opacity", "opacity" }, .{ "borderWidth", "border_width" },
-        .{ "borderLeftWidth", "border_left_width" }, .{ "borderRightWidth", "border_right_width" },
-        .{ "borderTopWidth", "border_top_width" }, .{ "borderBottomWidth", "border_bottom_width" },
-        .{ "shadowOffsetX", "shadow_offset_x" }, .{ "shadowOffsetY", "shadow_offset_y" }, .{ "shadowBlur", "shadow_blur" },
-        .{ "top", "top" }, .{ "left", "left" }, .{ "right", "right" }, .{ "bottom", "bottom" },
-        .{ "aspectRatio", "aspect_ratio" }, .{ "rotation", "rotation" }, .{ "scaleX", "scale_x" }, .{ "scaleY", "scale_y" },
-    };
-    inline for (mappings) |m| {
-        if (std.mem.eql(u8, key, m[0])) return m[1];
-    }
-    return null;
+    return lookup.map(style_keys.Entry, &style_keys.f32_keys, "css", "zig", key);
 }
 
 pub fn mapStyleKeyI16(key: []const u8) ?[]const u8 {
-    if (std.mem.eql(u8, key, "zIndex")) return "z_index";
-    return null;
+    return lookup.map(style_keys.Entry, &style_keys.i16_keys, "css", "zig", key);
 }
 
 pub fn mapColorKey(key: []const u8) ?[]const u8 {
-    if (std.mem.eql(u8, key, "backgroundColor")) return "background_color";
-    if (std.mem.eql(u8, key, "borderColor")) return "border_color";
-    if (std.mem.eql(u8, key, "shadowColor")) return "shadow_color";
-    if (std.mem.eql(u8, key, "gradientColorEnd")) return "gradient_color_end";
-    return null;
+    return lookup.map(style_keys.Entry, &style_keys.color_keys, "css", "zig", key);
 }
 
 /// Map CSS easing name to transition.EasingType enum field name.
 pub fn mapEasingName(name: []const u8) []const u8 {
-    if (std.mem.eql(u8, name, "linear")) return "linear";
-    if (std.mem.eql(u8, name, "easeIn")) return "ease_in";
-    if (std.mem.eql(u8, name, "easeOut")) return "ease_out";
-    if (std.mem.eql(u8, name, "easeInOut")) return "ease_in_out";
-    if (std.mem.eql(u8, name, "spring")) return "spring";
-    if (std.mem.eql(u8, name, "bounce")) return "bounce";
-    if (std.mem.eql(u8, name, "elastic")) return "elastic";
-    // CSS standard names
-    if (std.mem.eql(u8, name, "ease-in")) return "ease_in";
-    if (std.mem.eql(u8, name, "ease-out")) return "ease_out";
-    if (std.mem.eql(u8, name, "ease-in-out")) return "ease_in_out";
-    return "ease_in_out"; // default
+    return lookup.map(easing_rules.Entry, &easing_rules.easings, "css", "zig", name) orelse easing_rules.default;
 }
 
 pub fn mapEnumKey(key: []const u8) ?EnumMapping {
-    if (std.mem.eql(u8, key, "flexDirection")) return .{ .field = "flex_direction", .prefix = "fd" };
-    if (std.mem.eql(u8, key, "justifyContent")) return .{ .field = "justify_content", .prefix = "jc" };
-    if (std.mem.eql(u8, key, "alignItems")) return .{ .field = "align_items", .prefix = "ai" };
-    if (std.mem.eql(u8, key, "alignSelf")) return .{ .field = "align_self", .prefix = "as" };
-    if (std.mem.eql(u8, key, "alignContent")) return .{ .field = "align_content", .prefix = "ac" };
-    if (std.mem.eql(u8, key, "flexWrap")) return .{ .field = "flex_wrap", .prefix = "fw" };
-    if (std.mem.eql(u8, key, "position")) return .{ .field = "position", .prefix = "pos" };
-    if (std.mem.eql(u8, key, "display")) return .{ .field = "display", .prefix = "d" };
-    if (std.mem.eql(u8, key, "textAlign")) return .{ .field = "text_align", .prefix = "ta" };
-    if (std.mem.eql(u8, key, "overflow")) return .{ .field = "overflow", .prefix = "ov" };
-    if (std.mem.eql(u8, key, "gradientDirection")) return .{ .field = "gradient_direction", .prefix = "gd" };
+    if (lookup.find(enum_keys.EnumKey, &enum_keys.keys, "css", key)) |e| {
+        return .{ .field = e.field, .prefix = e.prefix };
+    }
     return null;
 }
 
 pub fn mapEnumValue(prefix: []const u8, value: []const u8) ?[]const u8 {
-    if (std.mem.eql(u8, prefix, "fd")) { if (std.mem.eql(u8, value, "row")) return ".row"; if (std.mem.eql(u8, value, "column")) return ".column"; }
-    if (std.mem.eql(u8, prefix, "jc")) { if (std.mem.eql(u8, value, "start")) return ".start"; if (std.mem.eql(u8, value, "center")) return ".center"; if (std.mem.eql(u8, value, "end")) return ".end"; if (std.mem.eql(u8, value, "space-between") or std.mem.eql(u8, value, "spaceBetween")) return ".space_between"; if (std.mem.eql(u8, value, "space-around") or std.mem.eql(u8, value, "spaceAround")) return ".space_around"; if (std.mem.eql(u8, value, "space-evenly") or std.mem.eql(u8, value, "spaceEvenly")) return ".space_evenly"; if (std.mem.eql(u8, value, "flex-start") or std.mem.eql(u8, value, "flexStart")) return ".start"; if (std.mem.eql(u8, value, "flex-end") or std.mem.eql(u8, value, "flexEnd")) return ".end"; }
-    if (std.mem.eql(u8, prefix, "ai")) { if (std.mem.eql(u8, value, "start") or std.mem.eql(u8, value, "flexStart") or std.mem.eql(u8, value, "flex-start")) return ".start"; if (std.mem.eql(u8, value, "center")) return ".center"; if (std.mem.eql(u8, value, "end") or std.mem.eql(u8, value, "flexEnd") or std.mem.eql(u8, value, "flex-end")) return ".end"; if (std.mem.eql(u8, value, "stretch")) return ".stretch"; }
-    if (std.mem.eql(u8, prefix, "ac")) { if (std.mem.eql(u8, value, "start") or std.mem.eql(u8, value, "flex-start")) return ".start"; if (std.mem.eql(u8, value, "center")) return ".center"; if (std.mem.eql(u8, value, "end") or std.mem.eql(u8, value, "flex-end")) return ".end"; if (std.mem.eql(u8, value, "stretch")) return ".stretch"; if (std.mem.eql(u8, value, "space-between") or std.mem.eql(u8, value, "spaceBetween")) return ".space_between"; if (std.mem.eql(u8, value, "space-around") or std.mem.eql(u8, value, "spaceAround")) return ".space_around"; if (std.mem.eql(u8, value, "space-evenly") or std.mem.eql(u8, value, "spaceEvenly")) return ".space_evenly"; }
-    if (std.mem.eql(u8, prefix, "d")) { if (std.mem.eql(u8, value, "flex")) return ".flex"; if (std.mem.eql(u8, value, "none")) return ".none"; }
-    if (std.mem.eql(u8, prefix, "ta")) { if (std.mem.eql(u8, value, "left")) return ".left"; if (std.mem.eql(u8, value, "center")) return ".center"; if (std.mem.eql(u8, value, "right")) return ".right"; }
-    if (std.mem.eql(u8, prefix, "as")) { if (std.mem.eql(u8, value, "auto")) return ".auto"; if (std.mem.eql(u8, value, "start") or std.mem.eql(u8, value, "flexStart") or std.mem.eql(u8, value, "flex-start")) return ".start"; if (std.mem.eql(u8, value, "center")) return ".center"; if (std.mem.eql(u8, value, "end") or std.mem.eql(u8, value, "flexEnd") or std.mem.eql(u8, value, "flex-end")) return ".end"; if (std.mem.eql(u8, value, "stretch")) return ".stretch"; }
-    if (std.mem.eql(u8, prefix, "fw")) { if (std.mem.eql(u8, value, "nowrap") or std.mem.eql(u8, value, "noWrap")) return ".no_wrap"; if (std.mem.eql(u8, value, "wrap")) return ".wrap"; if (std.mem.eql(u8, value, "wrap-reverse") or std.mem.eql(u8, value, "wrapReverse")) return ".wrap_reverse"; }
-    if (std.mem.eql(u8, prefix, "pos")) { if (std.mem.eql(u8, value, "relative")) return ".relative"; if (std.mem.eql(u8, value, "absolute")) return ".absolute"; }
-    if (std.mem.eql(u8, prefix, "ov")) { if (std.mem.eql(u8, value, "visible")) return ".visible"; if (std.mem.eql(u8, value, "hidden")) return ".hidden"; if (std.mem.eql(u8, value, "scroll")) return ".scroll"; }
-    if (std.mem.eql(u8, prefix, "gd")) { if (std.mem.eql(u8, value, "vertical")) return ".vertical"; if (std.mem.eql(u8, value, "horizontal")) return ".horizontal"; if (std.mem.eql(u8, value, "none")) return ".none"; }
-    return null;
+    return enum_keys.findValue(prefix, value);
 }
 
 // ── CSS normalization helpers ──
@@ -1234,61 +1186,24 @@ pub fn parseCSSValue(value: []const u8) ?f32 {
 }
 
 pub fn namedColor(name: []const u8) ?[3]u8 {
-    if (std.mem.eql(u8, name, "black")) return .{ 0, 0, 0 };
-    if (std.mem.eql(u8, name, "white")) return .{ 255, 255, 255 };
-    if (std.mem.eql(u8, name, "red")) return .{ 255, 0, 0 };
-    if (std.mem.eql(u8, name, "green")) return .{ 0, 128, 0 };
-    if (std.mem.eql(u8, name, "blue")) return .{ 0, 0, 255 };
-    if (std.mem.eql(u8, name, "yellow")) return .{ 255, 255, 0 };
-    if (std.mem.eql(u8, name, "cyan")) return .{ 0, 255, 255 };
-    if (std.mem.eql(u8, name, "magenta")) return .{ 255, 0, 255 };
-    if (std.mem.eql(u8, name, "gray")) return .{ 128, 128, 128 };
-    if (std.mem.eql(u8, name, "grey")) return .{ 128, 128, 128 };
-    if (std.mem.eql(u8, name, "silver")) return .{ 192, 192, 192 };
-    if (std.mem.eql(u8, name, "orange")) return .{ 255, 165, 0 };
-    if (std.mem.eql(u8, name, "transparent")) return .{ 0, 0, 0 };
+    if (lookup.find(named_colors_rules.Entry, &named_colors_rules.colors, "name", name)) |c| {
+        return .{ c.r, c.g, c.b };
+    }
     return null;
 }
 
 /// Map camelCase theme token name to Zig enum field name.
 /// e.g. "bgAlt" → "bg_alt", "textSecondary" → "text_secondary", "error" → "@\"error\""
 fn themeTokenField(name: []const u8) ?[]const u8 {
-    if (std.mem.eql(u8, name, "bg")) return "bg";
-    if (std.mem.eql(u8, name, "bgAlt")) return "bg_alt";
-    if (std.mem.eql(u8, name, "bgElevated")) return "bg_elevated";
-    if (std.mem.eql(u8, name, "surface")) return "surface";
-    if (std.mem.eql(u8, name, "surfaceHover")) return "surface_hover";
-    if (std.mem.eql(u8, name, "border")) return "border";
-    if (std.mem.eql(u8, name, "borderFocus")) return "border_focus";
-    if (std.mem.eql(u8, name, "text")) return "text";
-    if (std.mem.eql(u8, name, "textSecondary")) return "text_secondary";
-    if (std.mem.eql(u8, name, "textDim")) return "text_dim";
-    if (std.mem.eql(u8, name, "primary")) return "primary";
-    if (std.mem.eql(u8, name, "primaryHover")) return "primary_hover";
-    if (std.mem.eql(u8, name, "primaryPressed")) return "primary_pressed";
-    if (std.mem.eql(u8, name, "accent")) return "accent";
-    if (std.mem.eql(u8, name, "error")) return "@\"error\"";
-    if (std.mem.eql(u8, name, "warning")) return "warning";
-    if (std.mem.eql(u8, name, "success")) return "success";
-    if (std.mem.eql(u8, name, "info")) return "info";
-    return null;
+    const Entry = theme_rules.Entry;
+    return lookup.map(Entry, &theme_rules.theme_tokens, "css", "zig", name);
 }
 
 /// Map camelCase style token name to Zig enum field name.
 /// e.g. "radiusMd" → "radius_md", "spacingSm" → "spacing_sm"
 fn styleTokenField(name: []const u8) ?[]const u8 {
-    if (std.mem.eql(u8, name, "radiusSm")) return "radius_sm";
-    if (std.mem.eql(u8, name, "radiusMd")) return "radius_md";
-    if (std.mem.eql(u8, name, "radiusLg")) return "radius_lg";
-    if (std.mem.eql(u8, name, "spacingSm")) return "spacing_sm";
-    if (std.mem.eql(u8, name, "spacingMd")) return "spacing_md";
-    if (std.mem.eql(u8, name, "spacingLg")) return "spacing_lg";
-    if (std.mem.eql(u8, name, "borderThin")) return "border_thin";
-    if (std.mem.eql(u8, name, "borderMedium")) return "border_medium";
-    if (std.mem.eql(u8, name, "fontSm")) return "font_sm";
-    if (std.mem.eql(u8, name, "fontMd")) return "font_md";
-    if (std.mem.eql(u8, name, "fontLg")) return "font_lg";
-    return null;
+    const Entry = theme_rules.Entry;
+    return lookup.map(Entry, &theme_rules.style_tokens, "css", "zig", name);
 }
 
 /// Parse a style token reference and return the Zig expression.
