@@ -59,10 +59,20 @@ function parseJSXElement(c) {
     }
 
     // Inline: save state, jump to component body, parse with prop substitution
+    // Component arrays always go to top-level (even inside map templates)
     const savedPos = c.save();
     const savedProps = ctx.propStack;
     const savedInline = ctx.inlineComponent;
     const savedChildren = ctx.componentChildren;
+    const savedMapCtx = ctx.currentMap;
+    const savedArrayDecls = ctx.arrayDecls;
+    const savedArrayComments = ctx.arrayComments;
+    if (ctx.currentMap) {
+      // Restore to top-level arrays during component inlining
+      // Keep currentMap active so item member access (n.title) resolves
+      ctx.arrayDecls = ctx.currentMap._topArrayDecls || ctx.arrayDecls;
+      ctx.arrayComments = ctx.currentMap._topArrayComments || ctx.arrayComments;
+    }
     ctx.propStack = propValues;
     ctx.inlineComponent = rawTag;
     ctx.componentChildren = compChildren;
@@ -71,6 +81,9 @@ function parseJSXElement(c) {
     ctx.propStack = savedProps;
     ctx.inlineComponent = savedInline;
     ctx.componentChildren = savedChildren;
+    ctx.currentMap = savedMapCtx;
+    ctx.arrayDecls = savedArrayDecls;
+    ctx.arrayComments = savedArrayComments;
     c.restore(savedPos);
     return result;
   }
@@ -208,9 +221,12 @@ function tryParseMap(c, oa) {
   ctx.currentMap = mapInfo;
 
   // Save array state — arrays created during map template go to mapArrayDecls
+  // But save top-level refs so component inlining can restore to them
   const savedArrayCounter = ctx.arrayCounter;
   const savedArrayDecls = ctx.arrayDecls;
   const savedArrayComments = ctx.arrayComments;
+  mapInfo._topArrayDecls = savedArrayDecls;
+  mapInfo._topArrayComments = savedArrayComments;
   ctx.arrayDecls = mapInfo.mapArrayDecls;
   ctx.arrayComments = mapInfo.mapArrayComments;
 
