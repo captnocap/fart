@@ -1,6 +1,6 @@
 //! jsx_conditional.zig — Conditional child parsing for JSX elements.
 //!
-//! Handles {expr && <JSX>} patterns inside JSX children.
+//! Handles {expr && <JSX>} and {expr ? <A/> : <B/>} patterns inside JSX children.
 //! Two modes:
 //!   - Compile-time: if expr is a prop (no state), evaluate truthiness at compile time
 //!     and either include or exclude the child entirely.
@@ -307,4 +307,169 @@ pub fn tryParseConditionalChild(self: *Generator, child_exprs: *std.ArrayListUnm
 
     self.pos = saved_pos;
     return false;
+}
+
+/// Find the position of the outermost `?` token before the closing `}`,
+/// but only if the token after `?` (skipping `(`) is `<` (JSX start).
+/// Returns the position of the `?` token, or null if not a ternary JSX pattern.
+fn findTernaryQuestion(self: *Generator) ?u32 {
+    var look = self.pos;
+    var paren_depth: u32 = 0;
+    var brace_depth: u32 = 0;
+    while (look < self.lex.count) {
+        const kind = self.lex.get(look).kind;
+        switch (kind) {
+            .lbrace => brace_depth += 1,
+            .rbrace => {
+                if (brace_depth == 0) return null;
+                brace_depth -= 1;
+            },
+            .lparen => paren_depth += 1,
+            .rparen => { if (paren_depth > 0) paren_depth -= 1; },
+            .question => {
+                if (paren_depth == 0 and brace_depth == 0) {
+                    // Check that after ? (skip parens), next token is < for JSX
+                    var after = look + 1;
+                    while (after < self.lex.count and self.lex.get(after).kind == .lparen) after += 1;
+                    if (after < self.lex.count and self.lex.get(after).kind == .lt) return look;
+                    return null;
+                }
+            },
+            .eof => return null,
+            else => {},
+        }
+        look += 1;
+    }
+    return null;
+}
+
+/// Try to parse a {cond ? <ThenJSX> : <ElseJSX>} ternary child.
+/// Returns true if it was a ternary (consumed tokens), false if not.
+/// Both branches are added as children; a ConditionalInfo with kind=.ternary
+/// records which child indices to show/hide on state changes.
+pub fn tryParseTernaryChild(self: *Generator, child_exprs: *std.ArrayListUnmanaged([]const u8)) anyerror!bool {
+    const q_pos = findTernaryQuestion(self) orelse return false;
+
+    // Build condition from tokens before ?
+    var cond_parts: std.ArrayListUnmanaged(u8) = .{};
+    const saved_pos = self.pos;
+    while (self.pos < q_pos) {
+        const k = self.curKind();
+        const txt = self.curText();
+        if (k == .identifier) {
+            // Object state field: obj.field
+            if (self.pos + 2 < q_pos and
+                self.lex.get(self.pos + 1).kind == .dot and
+                self.lex.get(self.pos + 2).kind == .identifier)
+            {
+                const field_name = self.lex.get(self.pos + 2).text(self.source);
+                if (self.resolveObjectStateField(txt, field_name)) |field| {
+                    const rid = self.regularSlotId(field.slot_id);
+                    const accessor = switch (field.state_type) {
+                        .string => try std.fmt.allocPrint(self.alloc, "state.getSlotString({d})", .{rid}),
+                        .float => try std.fmt.allocPrint(self.alloc, "state.getSlotFloat({d})", .{rid}),
+                        .boolean => try std.fmt.allocPrint(self.alloc, "state.getSlotBool({d})", .{rid}),
+                        else => try std.fmt.allocPrint(self.alloc, "state.getSlot({d})", .{rid}),
+                    };
+                    try cond_parts.appendSlice(self.alloc, accessor);
+                    self.advance_token(); self.advance_token(); self.advance_token();
+                    continue;
+                }
+            }
+            // Regular state variable
+            if (self.isState(txt)) |slot_id| {
+                const rid = self.regularSlotId(slot_id);
+                const st = self.stateTypeById(slot_id);
+                const accessor = switch (st) {
+                    .string => try std.fmt.allocPrint(self.alloc, "state.getSlotString({d})", .{rid}),
+                    .float => try std.fmt.allocPrint(self.alloc, "state.getSlotFloat({d})", .{rid}),
+                    .boolean => try std.fmt.allocPrint(self.alloc, "state.getSlotBool({d})", .{rid}),
+                    else => try std.fmt.allocPrint(self.alloc, "state.getSlot({d})", .{rid}),
+                };
+                try cond_parts.appendSlice(self.alloc, accessor);
+                self.advance_token();
+                continue;
+            }
+            // Prop value
+            if (self.findProp(txt)) |pval| {
+                try cond_parts.appendSlice(self.alloc, pval);
+                self.advance_token();
+                continue;
+            }
+            try cond_parts.appendSlice(self.alloc, txt);
+            self.advance_token();
+            continue;
+        }
+        // Operators
+        if (k == .eq_eq) { try cond_parts.appendSlice(self.alloc, " == "); }
+        else if (k == .not_eq) { try cond_parts.appendSlice(self.alloc, " != "); }
+        else if (k == .gt) { try cond_parts.appendSlice(self.alloc, " > "); }
+        else if (k == .lt) { try cond_parts.appendSlice(self.alloc, " < "); }
+        else if (k == .gt_eq) { try cond_parts.appendSlice(self.alloc, " >= "); }
+        else if (k == .lt_eq) { try cond_parts.appendSlice(self.alloc, " <= "); }
+        else if (k == .amp_amp) { try cond_parts.appendSlice(self.alloc, " and "); }
+        else if (k == .pipe_pipe) { try cond_parts.appendSlice(self.alloc, " or "); }
+        else if (k == .bang) { try cond_parts.appendSlice(self.alloc, "!"); }
+        else if (k == .lparen) { try cond_parts.appendSlice(self.alloc, "("); }
+        else if (k == .rparen) { try cond_parts.appendSlice(self.alloc, ")"); }
+        else { try cond_parts.appendSlice(self.alloc, txt); }
+        self.advance_token();
+    }
+
+    if (cond_parts.items.len == 0) {
+        self.pos = saved_pos;
+        return false;
+    }
+
+    self.advance_token(); // consume ?
+
+    // Skip optional ( wrapping the then-branch
+    if (self.curKind() == .lparen) self.advance_token();
+
+    // Parse then-branch JSX
+    if (self.curKind() != .lt) {
+        self.pos = saved_pos;
+        return false;
+    }
+    const then_expr = try jsx.parseJSXElement(self);
+    try child_exprs.append(self.alloc, then_expr);
+    const true_idx: u32 = @intCast(child_exprs.items.len - 1);
+
+    // Skip optional ) after then-branch
+    if (self.curKind() == .rparen) self.advance_token();
+
+    // Skip :
+    if (self.curKind() == .colon) self.advance_token();
+
+    // Skip optional ( wrapping the else-branch
+    if (self.curKind() == .lparen) self.advance_token();
+
+    // Parse else-branch JSX
+    if (self.curKind() != .lt) {
+        self.pos = saved_pos;
+        return false;
+    }
+    const else_expr = try jsx.parseJSXElement(self);
+    try child_exprs.append(self.alloc, else_expr);
+    const false_idx: u32 = @intCast(child_exprs.items.len - 1);
+
+    // Skip optional ) after else-branch
+    if (self.curKind() == .rparen) self.advance_token();
+
+    // Skip closing }
+    if (self.curKind() == .rbrace) self.advance_token();
+
+    // Register ternary conditional — arr_name filled in by parent
+    if (self.conditional_count < MAX_CONDITIONALS) {
+        self.conditionals[self.conditional_count] = .{
+            .kind = .ternary,
+            .cond_expr = try self.alloc.dupe(u8, cond_parts.items),
+            .arr_name = "",
+            .true_idx = true_idx,
+            .false_idx = false_idx,
+        };
+        self.conditional_count += 1;
+    }
+
+    return true;
 }

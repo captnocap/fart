@@ -457,6 +457,10 @@ pub const scene3d_wgsl =
     \\    camera_pos: vec3f,
     \\    _pad3: f32,
     \\    color: vec4f,
+    \\    fog_color: vec3f,
+    \\    fog_near: f32,
+    \\    fog_far: f32,
+    \\    _pad4: vec4f,
     \\};
     \\@group(0) @binding(0) var<uniform> u: SceneUniforms;
     \\
@@ -503,8 +507,11 @@ pub const scene3d_wgsl =
     \\    let ambient = u.ambient_color * base;
     \\    let diffuse = u.light_color * base * diff;
     \\    let specular = u.light_color * spec * 0.4;
+    \\    let lit = ambient + diffuse + specular;
+    \\    let fog_t = smoothstep(u.fog_near, u.fog_far, distance(u.camera_pos, in.world_pos));
+    \\    let final_rgb = mix(lit, u.fog_color, fog_t);
     \\
-    \\    return vec4f(ambient + diffuse + specular, u.color.a);
+    \\    return vec4f(final_rgb, u.color.a);
     \\}
 ;
 
@@ -567,4 +574,3 @@ pub const poly_wgsl =
     \\    return vec4f(in.color.rgb * in.color.a, in.color.a);
     \\}
 ;
-

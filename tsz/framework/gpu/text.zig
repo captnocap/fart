@@ -77,6 +77,60 @@ var g_glyphs: [MAX_GLYPHS]GlyphInstance = undefined;
 var g_glyph_count: usize = 0;
 var g_last_glyph_count: usize = 0;
 
+// Inline glyph slot recording — filled by drawTextWrapped/drawTextLine,
+// read by engine.paintNode to render polygons into text slots.
+const node_layout = @import("../layout.zig");
+pub const MAX_RECORDED_SLOTS = node_layout.MAX_INLINE_SLOTS;
+pub var g_inline_slots: [MAX_RECORDED_SLOTS]node_layout.InlineSlot = [_]node_layout.InlineSlot{.{}} ** MAX_RECORDED_SLOTS;
+pub var g_inline_slot_count: u8 = 0;
+
+pub fn resetInlineSlots() void {
+    g_inline_slot_count = 0;
+}
+
+// Active text effect — when set, glyph colors are sampled from effect pixel buffer
+var g_text_effect_pixels: ?[*]const u8 = null;
+var g_text_effect_w: u32 = 0;
+var g_text_effect_h: u32 = 0;
+var g_text_effect_sx: f32 = 0; // screen-space origin of effect texture
+var g_text_effect_sy: f32 = 0;
+
+pub fn setTextEffect(pixels: ?[*]const u8, w: u32, h: u32, sx: f32, sy: f32) void {
+    g_text_effect_pixels = pixels;
+    g_text_effect_w = w;
+    g_text_effect_h = h;
+    g_text_effect_sx = sx;
+    g_text_effect_sy = sy;
+}
+
+pub fn clearTextEffect() void {
+    g_text_effect_pixels = null;
+}
+
+/// Sample RGB from the active text effect at a screen position.
+/// Uses screen position modulo effect size to tile the effect across text.
+fn sampleTextEffect(screen_x: f32, screen_y: f32) ?[3]f32 {
+    const pixels = g_text_effect_pixels orelse return null;
+    const w = g_text_effect_w;
+    const h = g_text_effect_h;
+    if (w == 0 or h == 0) return null;
+    const wf = @as(f32, @floatFromInt(w));
+    const hf = @as(f32, @floatFromInt(h));
+    // Tile: use screen position modulo effect texture size
+    var ux = @mod(screen_x, wf);
+    var vy = @mod(screen_y, hf);
+    if (ux < 0) ux += wf;
+    if (vy < 0) vy += hf;
+    const ui: u32 = @min(@as(u32, @intFromFloat(ux)), w - 1);
+    const vi: u32 = @min(@as(u32, @intFromFloat(vy)), h - 1);
+    const idx = (vi * w + ui) * 4;
+    return .{
+        @as(f32, @floatFromInt(pixels[idx])) / 255.0,
+        @as(f32, @floatFromInt(pixels[idx + 1])) / 255.0,
+        @as(f32, @floatFromInt(pixels[idx + 2])) / 255.0,
+    };
+}
+
 // Atlas packer state
 var g_atlas_row_x: u32 = 0;
 var g_atlas_row_y: u32 = 0;
@@ -172,6 +226,20 @@ pub fn drawTextLine(text: []const u8, x: f32, y: f32, size_px: u16, cr: f32, cg:
 
     var i: usize = 0;
     while (i < text.len) {
+        // Inline glyph sentinel — record slot position, advance by fontSize
+        if (text[i] == 0x01) {
+            if (g_inline_slot_count < MAX_RECORDED_SLOTS) {
+                const slot_size: f32 = @floatFromInt(size_px);
+                g_inline_slots[g_inline_slot_count] = .{
+                    .x = pen_x, .y = start_y, .size = slot_size,
+                    .glyph_index = g_inline_slot_count,
+                };
+                g_inline_slot_count += 1;
+            }
+            pen_x += @floatFromInt(size_px);
+            i += 1;
+            continue;
+        }
         const ch = decodeUtf8(text[i..]);
         if (ch.codepoint == '\n') {
             i += ch.len;
@@ -183,6 +251,8 @@ pub fn drawTextLine(text: []const u8, x: f32, y: f32, size_px: u16, cr: f32, cg:
                 if (g_glyph_count < MAX_GLYPHS) {
                     const gx = pen_x + @as(f32, @floatFromInt(glyph.bearing_x));
                     const gy = baseline_y - @as(f32, @floatFromInt(glyph.bearing_y));
+                    // Sample effect color at glyph center if text effect is active
+                    const ecol = sampleTextEffect(gx + @as(f32, @floatFromInt(glyph.width)) / 2, gy + @as(f32, @floatFromInt(glyph.height)) / 2);
                     g_glyphs[g_glyph_count] = .{
                         .pos_x = gx,
                         .pos_y = gy,
@@ -192,9 +262,9 @@ pub fn drawTextLine(text: []const u8, x: f32, y: f32, size_px: u16, cr: f32, cg:
                         .uv_y = glyph.uv_y,
                         .uv_w = glyph.uv_w,
                         .uv_h = glyph.uv_h,
-                        .color_r = cr,
-                        .color_g = cg,
-                        .color_b = cb,
+                        .color_r = if (ecol) |e| e[0] else cr,
+                        .color_g = if (ecol) |e| e[1] else cg,
+                        .color_b = if (ecol) |e| e[2] else cb,
                         .color_a = ca,
                     };
                     g_glyph_count += 1;
@@ -232,6 +302,31 @@ pub fn drawTextWrapped(text: []const u8, x: f32, y: f32, size_px: u16, max_width
 
     while (i < text.len) {
         if (max_lines > 0 and lines_drawn >= max_lines) break;
+        // Inline glyph sentinel — treat as non-wrappable char with fontSize advance
+        if (text[i] == 0x01) {
+            const advance: f32 = @floatFromInt(size_px);
+            if (pen_x + advance > max_width and pen_x > 0) {
+                if (last_break > line_start) {
+                    drawTextLine(text[line_start..last_break], x, pen_y, size_px, cr, cg, cb, ca);
+                    lines_drawn += 1;
+                    pen_y += line_h;
+                    line_start = last_break + 1;
+                    pen_x = 0;
+                    var j: usize = line_start;
+                    while (j < i) {
+                        if (text[j] == 0x01) { pen_x += @floatFromInt(size_px); j += 1; continue; }
+                        const jch = decodeUtf8(text[j..]);
+                        if (cacheGlyph(jch.codepoint, size_px)) |g| pen_x += @floatFromInt(g.advance);
+                        j += jch.len;
+                    }
+                    last_break = line_start;
+                    last_break_pen_x = 0;
+                }
+            }
+            pen_x += advance;
+            i += 1;
+            continue;
+        }
         const ch = decodeUtf8(text[i..]);
 
         // Explicit newline
@@ -272,10 +367,9 @@ pub fn drawTextWrapped(text: []const u8, x: f32, y: f32, size_px: u16, max_width
                 pen_x = 0;
                 var j: usize = line_start;
                 while (j < i) {
+                    if (text[j] == 0x01) { pen_x += @floatFromInt(size_px); j += 1; continue; }
                     const jch = decodeUtf8(text[j..]);
-                    if (cacheGlyph(jch.codepoint, size_px)) |g| {
-                        pen_x += @floatFromInt(g.advance);
-                    }
+                    if (cacheGlyph(jch.codepoint, size_px)) |g| pen_x += @floatFromInt(g.advance);
                     j += jch.len;
                 }
                 last_break = line_start;
@@ -572,7 +666,7 @@ pub fn reset() void {
 
 /// Hash the current glyph instance data for dirty checking.
 pub fn hashData() u64 {
-    var h: u64 = g_glyph_count *% 0x517cc1b727220a95;
+    var h: u64 = @as(u64, g_glyph_count) *% 0x517cc1b727220a95;
     if (g_glyph_count > 0) {
         const len = g_glyph_count * @sizeOf(GlyphInstance);
         const bytes: [*]const u8 = @ptrCast(&g_glyphs);

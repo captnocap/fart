@@ -329,7 +329,7 @@ pub fn reset() void {
 
 /// Hash the current rect instance data for dirty checking.
 pub fn hashData() u64 {
-    var h: u64 = g_rect_count *% 0x9e3779b97f4a7c15;
+    var h: u64 = @as(u64, g_rect_count) *% 0x9e3779b97f4a7c15;
     if (g_rect_count > 0) {
         const len = g_rect_count * @sizeOf(RectInstance);
         const bytes: [*]const u8 = @ptrCast(&g_rects);

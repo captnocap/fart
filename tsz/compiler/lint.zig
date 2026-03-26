@@ -726,8 +726,19 @@ pub const Linter = struct {
     /// skipped and their JSX content leaks through as bare text.
     fn checkMultiReturn(self: *Linter) void {
         var i: u32 = 0;
+        var in_script = false;
         while (i < self.lex.count) : (i += 1) {
             if (self.kind(i) == .eof) break;
+            // Track <script> blocks — functions inside are JS helpers, not components
+            if (self.kind(i) == .lt and i + 1 < self.lex.count and self.isIdent(i + 1, "script")) {
+                in_script = true;
+                continue;
+            }
+            if (self.kind(i) == .lt_slash and i + 1 < self.lex.count and self.isIdent(i + 1, "script")) {
+                in_script = false;
+                continue;
+            }
+            if (in_script) continue;
             // Find: function Name(
             if (!self.isIdent(i, "function")) continue;
             if (i + 1 >= self.lex.count or self.kind(i + 1) != .identifier) continue;

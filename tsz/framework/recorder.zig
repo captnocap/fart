@@ -83,22 +83,21 @@ pub const Recorder = struct {
     pub fn save(self: *const Recorder, path: []const u8) bool {
         const file = std.fs.cwd().createFile(path, .{}) catch return false;
         defer file.close();
-        const w = file.writer();
 
         // Header
-        w.writeAll(MAGIC) catch return false;
-        w.writeByte(VERSION) catch return false;
-        w.writeInt(u16, self.rows, .little) catch return false;
-        w.writeInt(u16, self.cols, .little) catch return false;
-        w.writeInt(u32, self.frame_count, .little) catch return false;
+        file.writeAll(MAGIC) catch return false;
+        file.writeAll(&[1]u8{VERSION}) catch return false;
+        file.writeAll(std.mem.asBytes(&std.mem.nativeToLittle(u16, self.rows))) catch return false;
+        file.writeAll(std.mem.asBytes(&std.mem.nativeToLittle(u16, self.cols))) catch return false;
+        file.writeAll(std.mem.asBytes(&std.mem.nativeToLittle(u32, self.frame_count))) catch return false;
 
         // Frames
         var i: u32 = 0;
         while (i < self.frame_count) : (i += 1) {
             const f = self.frames[i];
-            w.writeInt(u64, f.timestamp_us, .little) catch return false;
-            w.writeInt(u32, f.data_len, .little) catch return false;
-            w.writeAll(self.data_buf[f.data_offset .. f.data_offset + f.data_len]) catch return false;
+            file.writeAll(std.mem.asBytes(&std.mem.nativeToLittle(u64, f.timestamp_us))) catch return false;
+            file.writeAll(std.mem.asBytes(&std.mem.nativeToLittle(u32, f.data_len))) catch return false;
+            file.writeAll(self.data_buf[f.data_offset .. f.data_offset + f.data_len]) catch return false;
         }
         return true;
     }

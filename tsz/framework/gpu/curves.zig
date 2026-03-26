@@ -330,7 +330,7 @@ pub fn reset() void {
 
 /// Hash the current curve instance data for dirty checking.
 pub fn hashData() u64 {
-    var h: u64 = g_curve_count *% 0x6a09e667f3bcc908;
+    var h: u64 = @as(u64, g_curve_count) *% 0x6a09e667f3bcc908;
     if (g_curve_count > 0) {
         const len = g_curve_count * @sizeOf(CurveInstance);
         const bytes: [*]const u8 = @ptrCast(&g_curves);

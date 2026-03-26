@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>tsz — WebGPU</title>
+<style>
+  * { margin: 0; padding: 0; }
+  body { background: #0d1117; display: flex; align-items: center; justify-content: center; height: 100vh; }
+  canvas { border: 1px solid #30363d; border-radius: 4px; }
+  #status { position: fixed; top: 10px; left: 10px; color: #8b949e; font: 12px monospace; }
+</style>
+</head>
+<body>
+<div id="status">Initializing WebGPU...</div>
+<canvas id="canvas" width="800" height="600"></canvas>
+
+<script>
+const statusEl = document.getElementById('status');
+const canvas = document.getElementById('canvas');
+
+async function init() {
+  // Check WebGPU support
+  if (!navigator.gpu) {
+    statusEl.textContent = 'WebGPU not supported in this browser.';
+    return;
+  }
+
+  // Request adapter + device
+  const adapter = await navigator.gpu.requestAdapter();
+  if (!adapter) {
+    statusEl.textContent = 'No WebGPU adapter found.';
+    return;
+  }
+
+  const device = await adapter.requestDevice();
+  statusEl.textContent = 'WebGPU device acquired. Loading wasm...';
+
+  // Configure canvas context
+  const context = canvas.getContext('webgpu');
+  const format = navigator.gpu.getPreferredCanvasFormat();
+  context.configure({ device, format, alphaMode: 'opaque' });
+
+  // Load the Emscripten module
+  // emdawnwebgpu needs the device set before module init
+  const Module = {
+    canvas: canvas,
+    preinitializedWebGPUDevice: device,
+    onRuntimeInitialized: function() {
+      statusEl.textContent = 'WASM loaded. Calling web_init()...';
+      // Call our exported init function
+      Module.ccall('web_init', null, ['number', 'number'], [canvas.width, canvas.height]);
+      statusEl.textContent = 'tsz running (' + canvas.width + 'x' + canvas.height + ')';
+    }
+  };
+
+  // Handle resize
+  window.addEventListener('resize', () => {
+    canvas.width = Math.min(window.innerWidth - 40, 1200);
+    canvas.height = Math.min(window.innerHeight - 40, 900);
+    context.configure({ device, format, alphaMode: 'opaque' });
+    if (Module._web_resize) {
+      Module._web_resize(canvas.width, canvas.height);
+    }
+  });
+
+  // Load the JS glue (it picks up the Module global)
+  window.Module = Module;
+  const script = document.createElement('script');
+  script.src = 'tsz-web.js';
+  document.body.appendChild(script);
+}
+
+init().catch(e => {
+  statusEl.textContent = 'Error: ' + e.message;
+  console.error(e);
+});
+</script>
+</body>
+</html>

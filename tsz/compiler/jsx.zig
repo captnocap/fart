@@ -14,6 +14,7 @@ const jsx_map = @import("jsx_map.zig");
 const jsx_elements = @import("jsx_elements.zig");
 const html_tags = @import("html_tags.zig");
 const jsx_conditional = @import("jsx_conditional.zig");
+const effect_shadergen = @import("effect_shadergen.zig");
 
 const MAX_DYN_TEXTS = codegen.MAX_DYN_TEXTS;
 const MAX_DYN_DEPS = codegen.MAX_DYN_DEPS;
@@ -121,11 +122,22 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
             self.advance_token(); // skip "."
             if (self.curKind() == .identifier) {
                 const sub = self.curText();
-                if (std.mem.eql(u8, sub, "Mesh")) { self.advance_token(); is_3d_mesh = true; }
-                else if (std.mem.eql(u8, sub, "Camera")) { self.advance_token(); is_3d_camera = true; }
-                else if (std.mem.eql(u8, sub, "Light")) { self.advance_token(); is_3d_light = true; }
-                else if (std.mem.eql(u8, sub, "Group")) { self.advance_token(); is_3d_group = true; }
-                else if (std.mem.eql(u8, sub, "View")) { self.advance_token(); is_3d_view = true; }
+                if (std.mem.eql(u8, sub, "Mesh")) {
+                    self.advance_token();
+                    is_3d_mesh = true;
+                } else if (std.mem.eql(u8, sub, "Camera")) {
+                    self.advance_token();
+                    is_3d_camera = true;
+                } else if (std.mem.eql(u8, sub, "Light")) {
+                    self.advance_token();
+                    is_3d_light = true;
+                } else if (std.mem.eql(u8, sub, "Group")) {
+                    self.advance_token();
+                    is_3d_group = true;
+                } else if (std.mem.eql(u8, sub, "View")) {
+                    self.advance_token();
+                    is_3d_view = true;
+                }
             }
         }
     }
@@ -260,6 +272,9 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
     var s3d_fov: []const u8 = "";
     var s3d_intensity: []const u8 = "";
     var s3d_radius: []const u8 = "";
+    var s3d_tube_radius: []const u8 = "";
+    var s3d_show_grid: bool = false;
+    var s3d_show_axes: bool = false;
     var s3d_pos: [3][]const u8 = .{ "", "", "" };
     var s3d_rot: [3][]const u8 = .{ "", "", "" };
     var s3d_lookat: [3][]const u8 = .{ "", "", "" };
@@ -273,6 +288,7 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
     var effect_is_mask: bool = false; // <Effect mask ...>
     var effect_name_str: []const u8 = ""; // <Effect name="foo">
     var canvas_fill_effect_str: []const u8 = ""; // <Graph.Path fillEffect="foo">
+    var text_effect_str: []const u8 = ""; // <Text textEffect="foo">
 
     // Pre-populate from classifier
     if (classifier_idx) |idx| {
@@ -311,6 +327,8 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
                 } else if (std.mem.eql(u8, attr_name, "noWrap")) {
                     try attrs.skipAttrValue(self);
                     no_wrap = true;
+                } else if (std.mem.eql(u8, attr_name, "textEffect")) {
+                    text_effect_str = try attrs.parseStringAttr(self);
                 } else if (!is_3d and std.mem.eql(u8, attr_name, "color")) {
                     if (self.curKind() == .lbrace) {
                         self.advance_token();
@@ -420,7 +438,7 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
                     canvas_stroke_w_str = try attrs.parseExprAttr(self);
                 } else if (std.mem.eql(u8, attr_name, "flowSpeed") and is_canvas_path) {
                     canvas_flow_speed_str = try parseSignedNum(self);
-                // ── 3D element props ──
+                    // ── 3D element props ──
                 } else if (is_3d and std.mem.eql(u8, attr_name, "geometry")) {
                     s3d_geometry = try attrs.parseStringAttr(self);
                 } else if (is_3d and std.mem.eql(u8, attr_name, "type")) {
@@ -433,6 +451,8 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
                     s3d_intensity = try attrs.parseExprAttr(self);
                 } else if (is_3d and std.mem.eql(u8, attr_name, "radius")) {
                     s3d_radius = try attrs.parseExprAttr(self);
+                } else if (is_3d and std.mem.eql(u8, attr_name, "tubeRadius")) {
+                    s3d_tube_radius = try attrs.parseExprAttr(self);
                 } else if (is_3d and std.mem.eql(u8, attr_name, "position")) {
                     s3d_pos = try parse3DVector(self);
                 } else if (is_3d and std.mem.eql(u8, attr_name, "rotation")) {
@@ -445,10 +465,10 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
                     s3d_size = try parse3DVector(self);
                 } else if (is_3d and std.mem.eql(u8, attr_name, "scale")) {
                     s3d_scale = try parse3DVector(self);
-                // ── Terminal element props ──
+                    // ── Terminal element props ──
                 } else if (is_terminal and std.mem.eql(u8, attr_name, "fontSize")) {
                     terminal_font_size = try attrs.parseExprAttr(self);
-                // ── Physics element props ──
+                    // ── Physics element props ──
                 } else if (is_physics and std.mem.eql(u8, attr_name, "type")) {
                     phys_props.body_type = try attrs.parseStringAttr(self);
                 } else if (is_physics and std.mem.eql(u8, attr_name, "x")) {
@@ -476,9 +496,11 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
                 } else if (is_physics and std.mem.eql(u8, attr_name, "restitution")) {
                     phys_props.restitution = try attrs.parseExprAttr(self);
                 } else if (is_physics and std.mem.eql(u8, attr_name, "fixedRotation")) {
-                    phys_props.fixed_rotation = true; try attrs.skipAttrValue(self);
+                    phys_props.fixed_rotation = true;
+                    try attrs.skipAttrValue(self);
                 } else if (is_physics and std.mem.eql(u8, attr_name, "bullet")) {
-                    phys_props.bullet = true; try attrs.skipAttrValue(self);
+                    phys_props.bullet = true;
+                    try attrs.skipAttrValue(self);
                 } else if (is_physics and std.mem.eql(u8, attr_name, "gravityScale")) {
                     phys_props.gravity_scale = try attrs.parseExprAttr(self);
                 } else {
@@ -490,6 +512,10 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
                     effect_is_background = true;
                 } else if (is_custom_effect and std.mem.eql(u8, attr_name, "mask")) {
                     effect_is_mask = true;
+                } else if (is_scene3d and std.mem.eql(u8, attr_name, "showGrid")) {
+                    s3d_show_grid = true;
+                } else if (is_scene3d and std.mem.eql(u8, attr_name, "showAxes")) {
+                    s3d_show_axes = true;
                 }
             }
         } else {
@@ -509,6 +535,9 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
     var dyn_args: []const u8 = ""; // args for dynamic text: "state.getSlot(0)"
     var text_dep_slots: [MAX_DYN_DEPS]u32 = undefined; // which state slots this text depends on
     var text_dep_count: u32 = 0;
+    // Inline glyphs (<Glyph> inside <Text>)
+    var inline_glyph_exprs: std.ArrayListUnmanaged([]const u8) = .{};
+    var text_builder: std.ArrayListUnmanaged(u8) = .{}; // accumulates text + \x01 sentinels
 
     const cond_base = self.conditional_count; // track conditionals added by this element's children
 
@@ -522,6 +551,11 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
 
         while (self.curKind() != .lt_slash and self.curKind() != .eof) {
             if (self.curKind() == .lt) {
+                // <Glyph d="..." fill="#color" /> — inline polygon in text
+                if (self.pos + 1 < self.lex.count and self.lex.get(self.pos + 1).kind == .identifier and std.mem.eql(u8, self.lex.get(self.pos + 1).text(self.source), "Glyph")) {
+                    try inline_glyph_exprs.append(self.alloc, try jsx_elements.parseInlineGlyph(self, &text_builder));
+                    continue;
+                }
                 const child = try parseJSXElement(self);
                 try child_exprs.append(self.alloc, child);
                 // Bind route metadata per-child (Route sets last_route_path)
@@ -556,6 +590,13 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
                     continue;
                 }
 
+                // {expr ? <A/> : <B/>} ternary conditional rendering
+                if (try jsx_conditional.tryParseTernaryChild(self, &child_exprs)) {
+                    // Bind the ternary conditional's arr_name to the current parent
+                    // (will be filled in after the parent array is named)
+                    continue;
+                }
+
                 // {expr && <JSX>} conditional rendering
                 if (try jsx_conditional.tryParseConditionalChild(self, &child_exprs)) {
                     continue;
@@ -577,7 +618,9 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
                                 var depth_p: u32 = 0;
                                 while (end < style_str.len) : (end += 1) {
                                     if (style_str[end] == '(') depth_p += 1;
-                                    if (style_str[end] == ')') { if (depth_p > 0) depth_p -= 1; }
+                                    if (style_str[end] == ')') {
+                                        if (depth_p > 0) depth_p -= 1;
+                                    }
                                     if (style_str[end] == ',' and depth_p == 0) break;
                                 }
                                 if (layout_props.items.len > 0) layout_props.appendSlice(self.alloc, ", ") catch {};
@@ -585,8 +628,7 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
                             }
                         }
                         if (layout_props.items.len > 0) {
-                            const inherited = try std.fmt.allocPrint(self.alloc,
-                                ".{{ .style = .{{ {s} }} }}", .{layout_props.items});
+                            const inherited = try std.fmt.allocPrint(self.alloc, ".{{ .style = .{{ {s} }} }}", .{layout_props.items});
                             try child_exprs.append(self.alloc, inherited);
                         } else {
                             try child_exprs.append(self.alloc, map_result);
@@ -756,7 +798,13 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
                 if (self.curKind() == .rbrace) self.advance_token();
             } else if (self.curKind() != .lt and self.curKind() != .lt_slash and self.curKind() != .eof) {
                 const raw = attrs.collectTextContent(self);
-                if (raw.len > 0) text_content = raw;
+                if (raw.len > 0) {
+                    if (inline_glyph_exprs.items.len > 0) {
+                        try text_builder.appendSlice(self.alloc, raw);
+                    } else {
+                        text_content = raw;
+                    }
+                }
             } else {
                 self.advance_token();
             }
@@ -814,6 +862,19 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
             self.last_dyn_id = self.dyn_count;
             self.dyn_count += 1;
         }
+    } else if (inline_glyph_exprs.items.len > 0) {
+        // Text with inline glyphs — merge text_content + text_builder (contains \x01 sentinels)
+        if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
+        try fields.appendSlice(self.alloc, ".text = \"");
+        if (text_content) |tc| try jsx_elements.emitEscapedText(&fields, self.alloc, tc);
+        try jsx_elements.emitEscapedText(&fields, self.alloc, text_builder.items);
+        try fields.appendSlice(self.alloc, "\"");
+        try fields.appendSlice(self.alloc, ", .inline_glyphs = &[_]layout.InlineGlyph{ ");
+        for (inline_glyph_exprs.items, 0..) |gexpr, gi| {
+            if (gi > 0) try fields.appendSlice(self.alloc, ", ");
+            try fields.appendSlice(self.alloc, gexpr);
+        }
+        try fields.appendSlice(self.alloc, " }");
     } else if (text_content) |tc| {
         if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
         if (is_prop_text_ref) {
@@ -821,17 +882,7 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
             try fields.appendSlice(self.alloc, tc);
         } else {
             try fields.appendSlice(self.alloc, ".text = \"");
-            for (tc) |ch| {
-                if (ch == '"') {
-                    try fields.appendSlice(self.alloc, "\\\"");
-                } else if (ch == '\\') {
-                    try fields.appendSlice(self.alloc, "\\\\");
-                } else if (ch == '\n') {
-                    try fields.appendSlice(self.alloc, "\\n");
-                } else {
-                    try fields.append(self.alloc, ch);
-                }
-            }
+            try jsx_elements.emitEscapedText(&fields, self.alloc, tc);
             try fields.appendSlice(self.alloc, "\"");
         }
     }
@@ -894,6 +945,14 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
         }
     }
 
+    // Text effect (per-glyph coloring from named effect)
+    if (text_effect_str.len > 0) {
+        if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
+        try fields.appendSlice(self.alloc, ".text_effect = \"");
+        try fields.appendSlice(self.alloc, text_effect_str);
+        try fields.appendSlice(self.alloc, "\"");
+    }
+
     // Image / Video / Render / Cartridge src
     if (src_str.len > 0) {
         if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
@@ -930,19 +989,35 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
 
     // 3D element fields (delegated to jsx_elements.zig)
     try jsx_elements.emit3DFields(self, &fields, .{
-        .is_scene3d = is_scene3d, .is_3d = is_3d, .is_3d_mesh = is_3d_mesh,
-        .is_3d_camera = is_3d_camera, .is_3d_light = is_3d_light, .is_3d_group = is_3d_group,
-        .geometry = s3d_geometry, .light_type = s3d_light_type, .color = s3d_color,
-        .pos = s3d_pos, .rot = s3d_rot, .lookat = s3d_lookat, .dir = s3d_dir, .size = s3d_size, .scale = s3d_scale,
-        .fov = s3d_fov, .intensity = s3d_intensity, .radius = s3d_radius,
+        .is_scene3d = is_scene3d,
+        .is_3d = is_3d,
+        .is_3d_mesh = is_3d_mesh,
+        .is_3d_camera = is_3d_camera,
+        .is_3d_light = is_3d_light,
+        .is_3d_group = is_3d_group,
+        .geometry = s3d_geometry,
+        .light_type = s3d_light_type,
+        .color = s3d_color,
+        .pos = s3d_pos,
+        .rot = s3d_rot,
+        .lookat = s3d_lookat,
+        .dir = s3d_dir,
+        .size = s3d_size,
+        .scale = s3d_scale,
+        .fov = s3d_fov,
+        .intensity = s3d_intensity,
+        .radius = s3d_radius,
+        .tube_radius = s3d_tube_radius,
+        .show_grid = s3d_show_grid,
+        .show_axes = s3d_show_axes,
     });
 
     // Register dynamic 3D vector props as dyn_styles so _updateDynamicTexts updates them at runtime
     if (is_3d) {
         const dyn3d_vecs = [_]struct { vals: [3][]const u8, flds: [3][]const u8 }{
-            .{ .vals = s3d_pos,    .flds = .{ "scene3d_pos_x",  "scene3d_pos_y",  "scene3d_pos_z"  } },
+            .{ .vals = s3d_pos, .flds = .{ "scene3d_pos_x", "scene3d_pos_y", "scene3d_pos_z" } },
             .{ .vals = s3d_lookat, .flds = .{ "scene3d_look_x", "scene3d_look_y", "scene3d_look_z" } },
-            .{ .vals = s3d_rot,    .flds = .{ "scene3d_rot_x",  "scene3d_rot_y",  "scene3d_rot_z"  } },
+            .{ .vals = s3d_rot, .flds = .{ "scene3d_rot_x", "scene3d_rot_y", "scene3d_rot_z" } },
         };
         for (dyn3d_vecs) |vec| {
             for (vec.vals, vec.flds) |val, fld| {
@@ -965,8 +1040,7 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
         if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
         try fields.appendSlice(self.alloc, ".terminal = true");
         if (terminal_font_size.len > 0) {
-            try fields.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc,
-                ", .terminal_font_size = {s}", .{terminal_font_size}));
+            try fields.appendSlice(self.alloc, try std.fmt.allocPrint(self.alloc, ", .terminal_font_size = {s}", .{terminal_font_size}));
         }
     }
 
@@ -980,6 +1054,16 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
         const body = try handlers.emitEffectRenderBody(self, start);
         const render_fn = try std.fmt.allocPrint(self.alloc, "fn {s}(ctx: *effect_ctx.EffectContext) void {{\n{s}}}", .{ render_name, body });
         try self.handler_decls.append(self.alloc, render_fn);
+        if (try effect_shadergen.tryGenerate(self, start)) |shader| {
+            const shader_name = try std.fmt.allocPrint(self.alloc, "_effect_shader_{d}", .{self.handler_counter});
+            self.handler_counter += 1;
+            const shader_decl = try std.fmt.allocPrint(self.alloc, "const {s} = effect_shader.GpuShaderDesc{{ .wgsl = \"{f}\" }};\n", .{ shader_name, std.zig.fmtString(shader.wgsl) });
+            try self.effect_shader_decls.append(self.alloc, shader_decl);
+            self.has_effect_shader = true;
+            if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
+            try fields.appendSlice(self.alloc, ".effect_shader = ");
+            try fields.appendSlice(self.alloc, shader_name);
+        }
         if (fields.items.len > 0) try fields.appendSlice(self.alloc, ", ");
         try fields.appendSlice(self.alloc, ".effect_render = ");
         try fields.appendSlice(self.alloc, render_name);
@@ -1153,9 +1237,7 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
         if (canvas_path_d.len > 0) {
             try fields.appendSlice(self.alloc, ", .canvas_path_d = \"");
             for (canvas_path_d) |ch| {
-                if (ch == '"') try fields.appendSlice(self.alloc, "\\\"")
-                else if (ch == '\\') try fields.appendSlice(self.alloc, "\\\\")
-                else try fields.append(self.alloc, ch);
+                if (ch == '"') try fields.appendSlice(self.alloc, "\\\"") else if (ch == '\\') try fields.appendSlice(self.alloc, "\\\\") else try fields.append(self.alloc, ch);
             }
             try fields.appendSlice(self.alloc, "\"");
         }
@@ -1344,6 +1426,12 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
         }
 
         // Bind dynamic styles (color, opacity, etc.)
+        // Track claimed (arr_name, field, ci) tuples so two siblings with the same
+        // placeholder field (e.g. both Pressables with background_color = Color{})
+        // bind to distinct child indices instead of both landing on ci=0.
+        const MAX_STYLE_CLAIMED = 128;
+        var style_claimed_arr: [MAX_STYLE_CLAIMED][3][]const u8 = undefined;
+        var style_claimed_count: usize = 0;
         for (0..self.dyn_style_count) |dsi| {
             if (!self.dyn_styles[dsi].has_ref) {
                 // Build the placeholder pattern for this field
@@ -1352,15 +1440,38 @@ pub fn parseJSXElement(self: *Generator) ![]const u8 {
                     ".text_color = Color.rgb(0, 0, 0)"
                 else if (std.mem.eql(u8, field, "canvas_flow_speed"))
                     ".canvas_flow_speed = 0"
+                else if (std.mem.eql(u8, field, "background_color") or
+                    std.mem.eql(u8, field, "border_color") or
+                    std.mem.eql(u8, field, "shadow_color") or
+                    std.mem.eql(u8, field, "gradient_color_end"))
+                    // Color fields are initialized as Color{} (not 0)
+                    std.fmt.allocPrint(self.alloc, ".{s} = Color{{}}", .{field}) catch ""
                 else
                     // Generic numeric style field (width, height, padding, etc.)
                     std.fmt.allocPrint(self.alloc, ".{s} = 0", .{field}) catch "";
                 if (placeholder.len > 0) {
                     for (child_exprs.items, 0..) |expr, ci| {
                         if (std.mem.indexOf(u8, expr, placeholder) != null) {
+                            // Check if this (arr_name, field, ci) was already claimed
+                            const ci_str = std.fmt.allocPrint(self.alloc, "{d}", .{ci}) catch "";
+                            var already_claimed = false;
+                            for (0..style_claimed_count) |sci| {
+                                if (std.mem.eql(u8, style_claimed_arr[sci][0], arr_name) and
+                                    std.mem.eql(u8, style_claimed_arr[sci][1], field) and
+                                    std.mem.eql(u8, style_claimed_arr[sci][2], ci_str))
+                                {
+                                    already_claimed = true;
+                                    break;
+                                }
+                            }
+                            if (already_claimed) continue;
                             self.dyn_styles[dsi].arr_name = arr_name;
                             self.dyn_styles[dsi].arr_index = @intCast(ci);
                             self.dyn_styles[dsi].has_ref = true;
+                            if (style_claimed_count < MAX_STYLE_CLAIMED) {
+                                style_claimed_arr[style_claimed_count] = .{ arr_name, field, ci_str };
+                                style_claimed_count += 1;
+                            }
                             break;
                         }
                     }
@@ -1446,69 +1557,6 @@ pub fn parseRouteElement(self: *Generator) anyerror![]const u8 {
     return element_expr;
 }
 
-/// Parse {[x, y, z]} — a 3-element numeric array in JSX attribute value.
-/// Returns 3 string expressions. Handles negatives and missing values.
-/// Parse {[x, y]} — a 2-element numeric array (for physics gravity etc).
-fn parse2DVector(self: *Generator) ![2][]const u8 {
-    var result: [2][]const u8 = .{ "0", "0" };
-    if (self.curKind() == .lbrace) self.advance_token();
-    if (self.curKind() == .lbracket) self.advance_token();
-    var i: usize = 0;
-    while (i < 2 and self.curKind() != .rbracket and self.curKind() != .rbrace and self.curKind() != .eof) {
-        var neg = false;
-        if (self.curKind() == .minus) { neg = true; self.advance_token(); }
-        if (self.curKind() == .number) {
-            const val = self.curText();
-            self.advance_token();
-            result[i] = if (neg) try std.fmt.allocPrint(self.alloc, "-{s}", .{val}) else val;
-        }
-        i += 1;
-        if (self.curKind() == .comma) self.advance_token();
-    }
-    if (self.curKind() == .rbracket) self.advance_token();
-    if (self.curKind() == .rbrace) self.advance_token();
-    return result;
-}
-
-fn parse3DVector(self: *Generator) ![3][]const u8 {
-    var result: [3][]const u8 = .{ "0", "0", "0" };
-    if (self.curKind() == .lbrace) self.advance_token(); // {
-    if (self.curKind() == .lbracket) self.advance_token(); // [
-    var i: usize = 0;
-    while (i < 3 and self.curKind() != .rbracket and self.curKind() != .rbrace and self.curKind() != .eof) {
-        var neg = false;
-        if (self.curKind() == .minus) { neg = true; self.advance_token(); }
-        if (self.curKind() == .number) {
-            const val = self.curText();
-            self.advance_token();
-            result[i] = if (neg) try std.fmt.allocPrint(self.alloc, "-{s}", .{val}) else val;
-        } else if (self.curKind() == .identifier) {
-            const ident = self.curText();
-            self.advance_token();
-            if (self.isState(ident)) |slot_id| {
-                const rid = self.regularSlotId(slot_id);
-                const st = self.stateTypeById(slot_id);
-                result[i] = switch (st) {
-                    .float => try std.fmt.allocPrint(self.alloc, "state.getSlotFloat({d})", .{rid}),
-                    else => try std.fmt.allocPrint(self.alloc, "state.getSlot({d})", .{rid}),
-                };
-            }
-        }
-        i += 1;
-        if (self.curKind() == .comma) self.advance_token();
-    }
-    if (self.curKind() == .rbracket) self.advance_token(); // ]
-    if (self.curKind() == .rbrace) self.advance_token(); // }
-    return result;
-}
-
-fn parseSignedNum(self: *Generator) ![]const u8 {
-    if (self.curKind() == .lbrace) self.advance_token();
-    var neg = false;
-    if (self.curKind() == .minus) { neg = true; self.advance_token(); }
-    const val = self.curText();
-    self.advance_token();
-    if (self.curKind() == .rbrace) self.advance_token();
-    if (neg) return try std.fmt.allocPrint(self.alloc, "-{s}", .{val});
-    return val;
-}
+const parse2DVector = jsx_elements.parse2DVector;
+const parse3DVector = jsx_elements.parse3DVector;
+const parseSignedNum = jsx_elements.parseSignedNum;

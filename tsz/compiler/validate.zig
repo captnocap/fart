@@ -13,7 +13,7 @@ const TokenKind = codegen.TokenKind;
 const html_tags = @import("html_tags.zig");
 
 const primitives = [_][]const u8{
-    "Box", "Text", "Image", "Video", "Render", "Pressable", "ScrollView", "TextInput", "TextArea", "Canvas", "Effect", "Physics", "Terminal", "Graph", "Cartridge", "Scene3D",
+    "Box", "Text", "Image", "Video", "Render", "Pressable", "ScrollView", "TextInput", "TextArea", "Canvas", "Effect", "Physics", "Terminal", "Graph", "Cartridge", "Scene3D", "Glyph",
 };
 
 const special_tags = [_][]const u8{
@@ -145,6 +145,19 @@ fn validateComponentProps(self: *Generator, app_start: u32) void {
                         const ak = self.lex.get(attr_pos).kind;
                         if (ak == .gt or ak == .slash_gt or ak == .eof) break;
 
+                        // Skip brace-delimited expressions (spread syntax, etc.)
+                        if (ak == .lbrace) {
+                            var brace_depth: u32 = 1;
+                            attr_pos += 1;
+                            while (attr_pos < self.lex.count and brace_depth > 0) {
+                                const bk = self.lex.get(attr_pos).kind;
+                                if (bk == .lbrace) brace_depth += 1
+                                else if (bk == .rbrace) brace_depth -= 1
+                                else if (bk == .eof) break;
+                                attr_pos += 1;
+                            }
+                            continue;
+                        }
                         if (ak == .identifier) {
                             const attr_name = self.lex.get(attr_pos).text(self.source);
                             // Check if followed by = (it's a prop assignment)
@@ -164,6 +177,21 @@ fn validateComponentProps(self: *Generator, app_start: u32) void {
                                     const msg = std.fmt.allocPrint(self.alloc, "Unknown prop '{s}' on <{s}> — component declares: {s}", .{ attr_name, tag, formatPropList(self, comp) }) catch "Unknown prop on component";
                                     self.setErrorAt(self.lex.get(attr_pos).start, msg);
                                 }
+                                // Skip over the prop value expression to avoid entering nested JSX
+                                attr_pos += 2; // skip past identifier and =
+                                if (attr_pos < self.lex.count and self.lex.get(attr_pos).kind == .lbrace) {
+                                    var brace_depth: u32 = 1;
+                                    attr_pos += 1;
+                                    while (attr_pos < self.lex.count and brace_depth > 0) {
+                                        const bk = self.lex.get(attr_pos).kind;
+                                        if (bk == .lbrace) brace_depth += 1
+                                        else if (bk == .rbrace) brace_depth -= 1
+                                        else if (bk == .eof) break;
+                                        attr_pos += 1;
+                                    }
+                                    continue; // attr_pos is now past the closing }
+                                }
+                                continue;
                             }
                         }
                         attr_pos += 1;

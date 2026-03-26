@@ -1,5 +1,6 @@
 stb/
 zig-out/
 .zig-cache/
+.zig-global-cache/
 generated_app.zig
 telemetry.csv

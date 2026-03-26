@@ -18,9 +18,14 @@ const Node = layout.Node;
 // ════════════════════════════════════════════════════════════════════════
 
 const Vertex = extern struct {
-    px: f32, py: f32, pz: f32,
-    nx: f32, ny: f32, nz: f32,
-    u: f32, v: f32,
+    px: f32,
+    py: f32,
+    pz: f32,
+    nx: f32,
+    ny: f32,
+    nz: f32,
+    u: f32,
+    v: f32,
 };
 
 // ════════════════════════════════════════════════════════════════════════
@@ -39,6 +44,10 @@ const SceneUniforms = extern struct {
     camera_pos: [3]f32,
     _pad3: f32 = 0,
     color: [4]f32,
+    fog_color: [3]f32,
+    fog_near: f32,
+    fog_far: f32,
+    _pad4: [4]f32 = .{ 0, 0, 0, 0 },
 };
 
 // ════════════════════════════════════════════════════════════════════════
@@ -48,18 +57,47 @@ const SceneUniforms = extern struct {
 const MAX_VERTS = 4096;
 var g_geo_buf: [MAX_VERTS]Vertex = undefined;
 
+fn pushVertex(buf: []Vertex, idx: *usize, pos: [3]f32, normal: [3]f32, uv: [2]f32) bool {
+    if (idx.* >= buf.len) return false;
+    buf[idx.*] = .{
+        .px = pos[0],
+        .py = pos[1],
+        .pz = pos[2],
+        .nx = normal[0],
+        .ny = normal[1],
+        .nz = normal[2],
+        .u = uv[0],
+        .v = uv[1],
+    };
+    idx.* += 1;
+    return true;
+}
+
+fn addTri(buf: []Vertex, idx: *usize, a: [3]f32, na: [3]f32, uva: [2]f32, b: [3]f32, nb: [3]f32, uvb: [2]f32, c: [3]f32, nc: [3]f32, uvc: [2]f32) bool {
+    return pushVertex(buf, idx, a, na, uva) and
+        pushVertex(buf, idx, b, nb, uvb) and
+        pushVertex(buf, idx, c, nc, uvc);
+}
+
+fn addTriFlat(buf: []Vertex, idx: *usize, a: [3]f32, b: [3]f32, c: [3]f32, n: [3]f32) bool {
+    return addTri(buf, idx, a, n, .{ 0, 0 }, b, n, .{ 1, 0 }, c, n, .{ 1, 1 });
+}
+
 fn addFace(buf: []Vertex, idx: *usize, v1: [3]f32, v2: [3]f32, v3: [3]f32, v4: [3]f32, n: [3]f32) void {
     const corners = [4][3]f32{ v1, v2, v3, v4 };
     const uvs = [4][2]f32{ .{ 0, 0 }, .{ 1, 0 }, .{ 1, 1 }, .{ 0, 1 } };
     const tri = [6]u8{ 0, 1, 2, 0, 2, 3 };
     for (tri) |ti| {
-        buf[idx.*] = .{
-            .px = corners[ti][0], .py = corners[ti][1], .pz = corners[ti][2],
-            .nx = n[0], .ny = n[1], .nz = n[2],
-            .u = uvs[ti][0], .v = uvs[ti][1],
-        };
-        idx.* += 1;
+        _ = pushVertex(buf, idx, corners[ti], n, uvs[ti]);
     }
+}
+
+fn toArr(v: math.Vec3) [3]f32 {
+    return .{ v.x, v.y, v.z };
+}
+
+fn normal3(x: f32, y: f32, z: f32) [3]f32 {
+    return toArr(math.v3normalize(.{ .x = x, .y = y, .z = z }));
 }
 
 fn generateBox(sx: f32, sy: f32, sz: f32) struct { count: u32 } {
@@ -145,15 +183,91 @@ fn generateCylinder(radius: f32, height: f32, segments: u32) struct { count: u32
         const s1 = @sin(a1);
         const c2 = @cos(a2);
         const s2 = @sin(a2);
-        if (idx + 6 > MAX_VERTS) break;
-        // Side quad
-        addFace(&g_geo_buf, &idx,
-            .{ radius * c1, -hy, radius * s1 }, .{ radius * c2, -hy, radius * s2 },
-            .{ radius * c2, hy, radius * s2 }, .{ radius * c1, hy, radius * s1 },
-            .{ c1, 0, s1 });
+        const a = .{ radius * c1, -hy, radius * s1 };
+        const b = .{ radius * c2, -hy, radius * s2 };
+        const c = .{ radius * c2, hy, radius * s2 };
+        const d = .{ radius * c1, hy, radius * s1 };
+        const n1 = .{ c1, 0, s1 };
+        const n2 = .{ c2, 0, s2 };
+        if (!addTri(&g_geo_buf, &idx, a, n1, .{ 0, 0 }, d, n1, .{ 0, 1 }, c, n2, .{ 1, 1 })) break;
+        if (!addTri(&g_geo_buf, &idx, a, n1, .{ 0, 0 }, c, n2, .{ 1, 1 }, b, n2, .{ 1, 0 })) break;
+        if (!addTriFlat(&g_geo_buf, &idx, .{ 0, hy, 0 }, b, a, .{ 0, 1, 0 })) break;
+        if (!addTriFlat(&g_geo_buf, &idx, .{ 0, -hy, 0 }, a, b, .{ 0, -1, 0 })) break;
     }
     return .{ .count = @intCast(idx) };
 }
+
+fn generateCone(radius: f32, height: f32, segments: u32) struct { count: u32 } {
+    var idx: usize = 0;
+    const pi = std.math.pi;
+    const hy = height * 0.5;
+    const slope = if (@abs(height) > 0.001) radius / height else 1.0;
+    const apex = [3]f32{ 0, hy, 0 };
+    var j: u32 = 0;
+    while (j < segments) : (j += 1) {
+        const a1 = 2 * pi * @as(f32, @floatFromInt(j)) / @as(f32, @floatFromInt(segments));
+        const a2 = 2 * pi * @as(f32, @floatFromInt(j + 1)) / @as(f32, @floatFromInt(segments));
+        const mid = (a1 + a2) * 0.5;
+        const c1 = @cos(a1);
+        const s1 = @sin(a1);
+        const c2 = @cos(a2);
+        const s2 = @sin(a2);
+        const a = .{ radius * c1, -hy, radius * s1 };
+        const b = .{ radius * c2, -hy, radius * s2 };
+        const n1 = normal3(c1, slope, s1);
+        const n2 = normal3(c2, slope, s2);
+        const na = normal3(@cos(mid), slope, @sin(mid));
+        if (!addTri(&g_geo_buf, &idx, a, n1, .{ 0, 0 }, apex, na, .{ 0.5, 1 }, b, n2, .{ 1, 0 })) break;
+        if (!addTriFlat(&g_geo_buf, &idx, .{ 0, -hy, 0 }, a, b, .{ 0, -1, 0 })) break;
+    }
+    return .{ .count = @intCast(idx) };
+}
+
+fn generateTorus(radius: f32, tube_radius: f32, segments: u32, sides: u32) struct { count: u32 } {
+    var idx: usize = 0;
+    const pi = std.math.pi;
+    const torus = struct {
+        fn pos(r: f32, tr: f32, u: f32, v: f32) [3]f32 {
+            const ring = r + tr * @cos(v);
+            return .{ ring * @cos(u), tr * @sin(v), ring * @sin(u) };
+        }
+        fn normal(u: f32, v: f32) [3]f32 {
+            return .{ @cos(u) * @cos(v), @sin(v), @sin(u) * @cos(v) };
+        }
+    };
+    var i: u32 = 0;
+    while (i < segments) : (i += 1) {
+        const u_angle_1 = 2 * pi * @as(f32, @floatFromInt(i)) / @as(f32, @floatFromInt(segments));
+        const u_angle_2 = 2 * pi * @as(f32, @floatFromInt(i + 1)) / @as(f32, @floatFromInt(segments));
+        var j: u32 = 0;
+        while (j < sides) : (j += 1) {
+            const v1 = 2 * pi * @as(f32, @floatFromInt(j)) / @as(f32, @floatFromInt(sides));
+            const v2 = 2 * pi * @as(f32, @floatFromInt(j + 1)) / @as(f32, @floatFromInt(sides));
+            const a = torus.pos(radius, tube_radius, u_angle_1, v1);
+            const b = torus.pos(radius, tube_radius, u_angle_2, v1);
+            const c = torus.pos(radius, tube_radius, u_angle_2, v2);
+            const d = torus.pos(radius, tube_radius, u_angle_1, v2);
+            const na = torus.normal(u_angle_1, v1);
+            const nb = torus.normal(u_angle_2, v1);
+            const nc = torus.normal(u_angle_2, v2);
+            const nd = torus.normal(u_angle_1, v2);
+            if (!addTri(&g_geo_buf, &idx, a, na, .{ 0, 0 }, d, nd, .{ 0, 1 }, c, nc, .{ 1, 1 })) return .{ .count = @intCast(idx) };
+            if (!addTri(&g_geo_buf, &idx, a, na, .{ 0, 0 }, c, nc, .{ 1, 1 }, b, nb, .{ 1, 0 })) return .{ .count = @intCast(idx) };
+        }
+    }
+    return .{ .count = @intCast(idx) };
+}
+
+const MeshSpec = struct {
+    geometry: []const u8 = "box",
+    size: [3]f32 = .{ 1, 1, 1 },
+    radius: f32 = 0.5,
+    tube_radius: f32 = 0.25,
+    position: math.Vec3 = .{},
+    rotation: math.Vec3 = .{},
+    scale: math.Vec3 = .{ .x = 1, .y = 1, .z = 1 },
+    color: [4]f32 = .{ 0.8, 0.8, 0.8, 1.0 },
+};
 
 // ════════════════════════════════════════════════════════════════════════
 // Pipeline state
@@ -211,14 +325,17 @@ pub fn init() void {
         .entries = @ptrCast(&wgpu.BindGroupLayoutEntry{
             .binding = 0,
             .visibility = wgpu.ShaderStages.vertex | wgpu.ShaderStages.fragment,
-            .buffer = .{ .@"type" = .uniform, .has_dynamic_offset = 0, .min_binding_size = @sizeOf(SceneUniforms) },
+            .buffer = .{ .type = .uniform, .has_dynamic_offset = 0, .min_binding_size = @sizeOf(SceneUniforms) },
         }),
     }) orelse return;
     g_bind_group = device.createBindGroup(&.{
         .layout = g_bind_group_layout.?,
         .entry_count = 1,
         .entries = @ptrCast(&wgpu.BindGroupEntry{
-            .binding = 0, .buffer = g_uniform_buffer.?, .offset = 0, .size = @sizeOf(SceneUniforms),
+            .binding = 0,
+            .buffer = g_uniform_buffer.?,
+            .offset = 0,
+            .size = @sizeOf(SceneUniforms),
         }),
     });
     const pipeline_layout = device.createPipelineLayout(&.{
@@ -232,31 +349,42 @@ pub fn init() void {
         .{ .format = .float32x2, .offset = 24, .shader_location = 2 },
     };
     const vert_layout = wgpu.VertexBufferLayout{
-        .step_mode = .vertex, .array_stride = @sizeOf(Vertex),
-        .attribute_count = vert_attrs.len, .attributes = &vert_attrs,
+        .step_mode = .vertex,
+        .array_stride = @sizeOf(Vertex),
+        .attribute_count = vert_attrs.len,
+        .attributes = &vert_attrs,
     };
     const color_target = wgpu.ColorTargetState{
-        .format = .rgba8_unorm, .blend = &wgpu.BlendState.premultiplied_alpha_blending,
+        .format = .rgba8_unorm,
+        .blend = &wgpu.BlendState.premultiplied_alpha_blending,
         .write_mask = wgpu.ColorWriteMasks.all,
     };
     const frag = wgpu.FragmentState{
-        .module = shader_module, .entry_point = wgpu.StringView.fromSlice("fs_main"),
-        .target_count = 1, .targets = @ptrCast(&color_target),
+        .module = shader_module,
+        .entry_point = wgpu.StringView.fromSlice("fs_main"),
+        .target_count = 1,
+        .targets = @ptrCast(&color_target),
     };
     const depth_stencil = wgpu.DepthStencilState{
-        .format = .depth24_plus, .depth_write_enabled = .true, .depth_compare = .less,
-        .stencil_front = .{}, .stencil_back = .{},
+        .format = .depth24_plus,
+        .depth_write_enabled = .true,
+        .depth_compare = .less,
+        .stencil_front = .{},
+        .stencil_back = .{},
     };
     g_pipeline = device.createRenderPipeline(&.{
         .layout = pipeline_layout,
-        .vertex = .{ .module = shader_module, .entry_point = wgpu.StringView.fromSlice("vs_main"),
-            .buffer_count = 1, .buffers = @ptrCast(&vert_layout) },
+        .vertex = .{ .module = shader_module, .entry_point = wgpu.StringView.fromSlice("vs_main"), .buffer_count = 1, .buffers = @ptrCast(&vert_layout) },
         .primitive = .{ .topology = .triangle_list, .cull_mode = .back, .front_face = .ccw },
-        .depth_stencil = &depth_stencil, .multisample = .{}, .fragment = &frag,
+        .depth_stencil = &depth_stencil,
+        .multisample = .{},
+        .fragment = &frag,
     });
     g_sampler = device.createSampler(&.{
-        .address_mode_u = .clamp_to_edge, .address_mode_v = .clamp_to_edge,
-        .mag_filter = .linear, .min_filter = .linear,
+        .address_mode_u = .clamp_to_edge,
+        .address_mode_v = .clamp_to_edge,
+        .mag_filter = .linear,
+        .min_filter = .linear,
     });
     g_initialized = g_pipeline != null;
 }
@@ -318,27 +446,202 @@ fn ensureRenderTarget(w: u32, h: u32) bool {
     g_color_texture = device.createTexture(&.{
         .label = wgpu.StringView.fromSlice("r3d_color"),
         .size = .{ .width = w, .height = h, .depth_or_array_layers = 1 },
-        .mip_level_count = 1, .sample_count = 1, .dimension = .@"2d", .format = .rgba8_unorm,
+        .mip_level_count = 1,
+        .sample_count = 1,
+        .dimension = .@"2d",
+        .format = .rgba8_unorm,
         .usage = wgpu.TextureUsages.render_attachment | wgpu.TextureUsages.texture_binding,
     }) orelse return false;
     g_color_view = g_color_texture.?.createView(&.{
-        .format = .rgba8_unorm, .dimension = .@"2d",
-        .base_mip_level = 0, .mip_level_count = 1, .base_array_layer = 0, .array_layer_count = 1, .aspect = .all,
+        .format = .rgba8_unorm,
+        .dimension = .@"2d",
+        .base_mip_level = 0,
+        .mip_level_count = 1,
+        .base_array_layer = 0,
+        .array_layer_count = 1,
+        .aspect = .all,
     }) orelse return false;
     g_depth_texture = device.createTexture(&.{
         .label = wgpu.StringView.fromSlice("r3d_depth"),
         .size = .{ .width = w, .height = h, .depth_or_array_layers = 1 },
-        .mip_level_count = 1, .sample_count = 1, .dimension = .@"2d", .format = .depth24_plus,
+        .mip_level_count = 1,
+        .sample_count = 1,
+        .dimension = .@"2d",
+        .format = .depth24_plus,
         .usage = wgpu.TextureUsages.render_attachment,
     }) orelse return false;
     g_depth_view = g_depth_texture.?.createView(&.{
-        .format = .depth24_plus, .dimension = .@"2d",
-        .base_mip_level = 0, .mip_level_count = 1, .base_array_layer = 0, .array_layer_count = 1, .aspect = .all,
+        .format = .depth24_plus,
+        .dimension = .@"2d",
+        .base_mip_level = 0,
+        .mip_level_count = 1,
+        .base_array_layer = 0,
+        .array_layer_count = 1,
+        .aspect = .all,
     }) orelse return false;
     if (g_sampler) |sampler| g_composite_bind_group = images.createBindGroup(g_color_view.?, sampler);
     g_rt_width = w;
     g_rt_height = h;
     return true;
+}
+
+fn max3(a: f32, b: f32, c: f32) f32 {
+    return @max(a, @max(b, c));
+}
+
+fn estimateMeshRadius(node: *const Node) f32 {
+    const sx = @abs(node.scene3d_scale_x);
+    const sy = @abs(node.scene3d_scale_y);
+    const sz = @abs(node.scene3d_scale_z);
+    const geo = node.scene3d_geometry orelse "box";
+    if (std.mem.eql(u8, geo, "sphere")) {
+        return node.scene3d_radius * max3(sx, sy, sz);
+    }
+    if (std.mem.eql(u8, geo, "plane")) {
+        const hx = node.scene3d_size_x * sx * 0.5;
+        const hz = node.scene3d_size_z * sz * 0.5;
+        return @sqrt(hx * hx + hz * hz);
+    }
+    if (std.mem.eql(u8, geo, "cylinder") or std.mem.eql(u8, geo, "cone")) {
+        const r = node.scene3d_radius * @max(sx, sz);
+        const hy = node.scene3d_size_y * sy * 0.5;
+        return @sqrt(r * r + hy * hy);
+    }
+    if (std.mem.eql(u8, geo, "torus")) {
+        return (node.scene3d_radius + node.scene3d_tube_radius) * @max(sx, sz);
+    }
+    const hx = node.scene3d_size_x * sx * 0.5;
+    const hy = node.scene3d_size_y * sy * 0.5;
+    const hz = node.scene3d_size_z * sz * 0.5;
+    return @sqrt(hx * hx + hy * hy + hz * hz);
+}
+
+fn buildMeshSpec(node: *const Node) MeshSpec {
+    return .{
+        .geometry = node.scene3d_geometry orelse "box",
+        .size = .{ node.scene3d_size_x, node.scene3d_size_y, node.scene3d_size_z },
+        .radius = node.scene3d_radius,
+        .tube_radius = node.scene3d_tube_radius,
+        .position = .{ .x = node.scene3d_pos_x, .y = node.scene3d_pos_y, .z = node.scene3d_pos_z },
+        .rotation = .{ .x = node.scene3d_rot_x, .y = node.scene3d_rot_y, .z = node.scene3d_rot_z },
+        .scale = .{ .x = node.scene3d_scale_x, .y = node.scene3d_scale_y, .z = node.scene3d_scale_z },
+        .color = .{ node.scene3d_color_r, node.scene3d_color_g, node.scene3d_color_b, 1.0 },
+    };
+}
+
+fn generateGeometry(spec: MeshSpec) u32 {
+    if (std.mem.eql(u8, spec.geometry, "sphere")) {
+        return generateSphere(spec.radius, 24, 16).count;
+    }
+    if (std.mem.eql(u8, spec.geometry, "plane")) {
+        return generatePlane(spec.size[0], spec.size[2]).count;
+    }
+    if (std.mem.eql(u8, spec.geometry, "cylinder")) {
+        return generateCylinder(spec.radius, spec.size[1], 24).count;
+    }
+    if (std.mem.eql(u8, spec.geometry, "cone")) {
+        return generateCone(spec.radius, spec.size[1], 24).count;
+    }
+    if (std.mem.eql(u8, spec.geometry, "torus")) {
+        return generateTorus(spec.radius, spec.tube_radius, 24, 16).count;
+    }
+    return generateBox(spec.size[0], spec.size[1], spec.size[2]).count;
+}
+
+fn drawMesh(pass: anytype, queue: *wgpu.Queue, vp: math.Mat4, cam_pos: math.Vec3, light_dir: [3]f32, light_color: [3]f32, ambient_color: [3]f32, fog_color: [3]f32, fog_near: f32, fog_far: f32, spec: MeshSpec) void {
+    const vert_count = generateGeometry(spec);
+    if (vert_count == 0) return;
+
+    queue.writeBuffer(g_vertex_buffer.?, 0, @ptrCast(&g_geo_buf), vert_count * @sizeOf(Vertex));
+
+    const deg2rad = std.math.pi / 180.0;
+    var model = math.m4scale(math.m4identity(), spec.scale);
+    model = math.m4multiply(math.m4rotateZ(math.m4identity(), spec.rotation.z * deg2rad), model);
+    model = math.m4multiply(math.m4rotateX(math.m4identity(), spec.rotation.x * deg2rad), model);
+    model = math.m4multiply(math.m4rotateY(math.m4identity(), spec.rotation.y * deg2rad), model);
+    model = math.m4multiply(math.m4translate(math.m4identity(), spec.position), model);
+
+    const uniforms = SceneUniforms{
+        .mvp = math.m4transpose(math.m4multiply(vp, model)),
+        .model = math.m4transpose(model),
+        .light_dir = light_dir,
+        .specular_power = 64.0,
+        .light_color = light_color,
+        .ambient_color = ambient_color,
+        .camera_pos = .{ cam_pos.x, cam_pos.y, cam_pos.z },
+        .color = spec.color,
+        .fog_color = fog_color,
+        .fog_near = fog_near,
+        .fog_far = fog_far,
+    };
+    queue.writeBuffer(g_uniform_buffer.?, 0, @ptrCast(&uniforms), @sizeOf(SceneUniforms));
+    pass.setVertexBuffer(0, g_vertex_buffer.?, 0, vert_count * @sizeOf(Vertex));
+    pass.draw(vert_count, 1, 0, 0);
+}
+
+fn drawSceneGuides(pass: anytype, queue: *wgpu.Queue, vp: math.Mat4, cam_pos: math.Vec3, light_dir: [3]f32, light_color: [3]f32, ambient_color: [3]f32, fog_color: [3]f32, fog_near: f32, fog_far: f32, scene_extent: f32, show_grid: bool, show_axes: bool) void {
+    if (show_grid) {
+        const spacing: f32 = if (scene_extent > 24.0) 2.0 else 1.0;
+        const steps: i32 = @intFromFloat(@ceil(std.math.clamp(scene_extent, 12.0, 36.0) / spacing));
+        const grid_half = @as(f32, @floatFromInt(steps)) * spacing;
+        const center_x = @floor(cam_pos.x / spacing) * spacing;
+        const center_z = @floor(cam_pos.z / spacing) * spacing;
+
+        var step: i32 = -steps;
+        while (step <= steps) : (step += 1) {
+            const offset = @as(f32, @floatFromInt(step)) * spacing;
+            const is_major = @mod(@abs(step), 5) == 0;
+            const thickness: f32 = if (is_major) 0.06 else 0.025;
+            const tint: f32 = if (is_major) 0.42 else 0.22;
+            const line_color = [4]f32{
+                std.math.clamp(fog_color[0] + tint, 0.18, 0.62),
+                std.math.clamp(fog_color[1] + tint, 0.20, 0.66),
+                std.math.clamp(fog_color[2] + tint, 0.24, 0.72),
+                1.0,
+            };
+
+            drawMesh(pass, queue, vp, cam_pos, light_dir, light_color, ambient_color, fog_color, fog_near, fog_far, .{
+                .geometry = "box",
+                .size = .{ thickness, thickness, grid_half * 2.0 },
+                .position = .{ .x = center_x + offset, .y = 0.02, .z = center_z },
+                .color = line_color,
+            });
+            drawMesh(pass, queue, vp, cam_pos, light_dir, light_color, ambient_color, fog_color, fog_near, fog_far, .{
+                .geometry = "box",
+                .size = .{ grid_half * 2.0, thickness, thickness },
+                .position = .{ .x = center_x, .y = 0.02, .z = center_z + offset },
+                .color = line_color,
+            });
+        }
+    }
+
+    if (show_axes) {
+        const axis_len = std.math.clamp(scene_extent * 0.18, 2.5, 6.0);
+        drawMesh(pass, queue, vp, cam_pos, light_dir, light_color, ambient_color, fog_color, fog_near, fog_far, .{
+            .geometry = "box",
+            .size = .{ axis_len, 0.07, 0.07 },
+            .position = .{ .x = axis_len * 0.5, .y = 0.05, .z = 0 },
+            .color = .{ 0.92, 0.28, 0.24, 1.0 },
+        });
+        drawMesh(pass, queue, vp, cam_pos, light_dir, light_color, ambient_color, fog_color, fog_near, fog_far, .{
+            .geometry = "box",
+            .size = .{ 0.07, axis_len, 0.07 },
+            .position = .{ .x = 0, .y = axis_len * 0.5, .z = 0 },
+            .color = .{ 0.28, 0.82, 0.36, 1.0 },
+        });
+        drawMesh(pass, queue, vp, cam_pos, light_dir, light_color, ambient_color, fog_color, fog_near, fog_far, .{
+            .geometry = "box",
+            .size = .{ 0.07, 0.07, axis_len },
+            .position = .{ .x = 0, .y = 0.05, .z = axis_len * 0.5 },
+            .color = .{ 0.28, 0.52, 0.94, 1.0 },
+        });
+        drawMesh(pass, queue, vp, cam_pos, light_dir, light_color, ambient_color, fog_color, fog_near, fog_far, .{
+            .geometry = "box",
+            .size = .{ 0.16, 0.16, 0.16 },
+            .position = .{ .x = 0, .y = 0.08, .z = 0 },
+            .color = .{ 0.94, 0.94, 0.96, 1.0 },
+        });
+    }
 }
 
 // ════════════════════════════════════════════════════════════════════════
@@ -364,6 +667,14 @@ pub fn render(node: *Node, x: f32, y: f32, w: f32, h: f32, opacity: f32) bool {
     var ambient_color: [3]f32 = .{ 0.15, 0.15, 0.2 };
     var light_dir: [3]f32 = .{ 0.577, 0.577, 0.577 };
     var light_color: [3]f32 = .{ 1.0, 0.95, 0.9 };
+    var clear_color: [3]f32 = .{ 0.05, 0.05, 0.08 };
+    if (node.style.background_color) |bg| {
+        clear_color = .{
+            @as(f32, @floatFromInt(bg.r)) / 255.0,
+            @as(f32, @floatFromInt(bg.g)) / 255.0,
+            @as(f32, @floatFromInt(bg.b)) / 255.0,
+        };
+    }
 
     for (node.children) |*child| {
         if (child.scene3d_camera) {
@@ -390,6 +701,19 @@ pub fn render(node: *Node, x: f32, y: f32, w: f32, h: f32, opacity: f32) bool {
         }
     }
 
+    const focus_dist = math.v3distance(cam_pos, cam_look);
+    var scene_extent: f32 = @max(8.0, focus_dist);
+    for (node.children) |*child| {
+        if (!child.scene3d_mesh) continue;
+        const center = math.Vec3{ .x = child.scene3d_pos_x, .y = child.scene3d_pos_y, .z = child.scene3d_pos_z };
+        scene_extent = @max(scene_extent, math.v3distance(center, cam_look) + estimateMeshRadius(child));
+    }
+    if (node.scene3d_show_grid or node.scene3d_show_axes) {
+        scene_extent = @max(scene_extent, focus_dist * 1.8);
+    }
+    const fog_near = @max(6.0, focus_dist * 0.9);
+    const fog_far = @max(fog_near + 12.0, fog_near + scene_extent * 1.5);
+
     // ── Build view + projection ──
     const aspect = w / @max(h, 1);
     const fov_rad = cam_fov * std.math.pi / 180.0;
@@ -404,15 +728,24 @@ pub fn render(node: *Node, x: f32, y: f32, w: f32, h: f32, opacity: f32) bool {
     const pass = encoder.beginRenderPass(&.{
         .color_attachment_count = 1,
         .color_attachments = @ptrCast(&wgpu.ColorAttachment{
-            .view = color_view, .load_op = .clear, .store_op = .store,
-            .clear_value = .{ .r = 0.05, .g = 0.05, .b = 0.08, .a = 1.0 },
+            .view = color_view,
+            .load_op = .clear,
+            .store_op = .store,
+            .clear_value = .{ .r = clear_color[0], .g = clear_color[1], .b = clear_color[2], .a = 1.0 },
         }),
         .depth_stencil_attachment = &wgpu.DepthStencilAttachment{
-            .view = depth_view, .depth_load_op = .clear, .depth_store_op = .store,
-            .depth_clear_value = 1.0, .stencil_load_op = .clear, .stencil_store_op = .store,
+            .view = depth_view,
+            .depth_load_op = .clear,
+            .depth_store_op = .store,
+            .depth_clear_value = 1.0,
+            .stencil_load_op = .clear,
+            .stencil_store_op = .store,
             .stencil_clear_value = 0,
         },
-    }) orelse { encoder.release(); return false; };
+    }) orelse {
+        encoder.release();
+        return false;
+    };
 
     pass.setPipeline(g_pipeline.?);
     pass.setBindGroup(0, g_bind_group.?, 0, null);
@@ -420,55 +753,19 @@ pub fn render(node: *Node, x: f32, y: f32, w: f32, h: f32, opacity: f32) bool {
     // ── Draw each mesh ──
     for (node.children) |*child| {
         if (!child.scene3d_mesh) continue;
+        drawMesh(pass, queue, vp, cam_pos, light_dir, light_color, ambient_color, clear_color, fog_near, fog_far, buildMeshSpec(child));
+    }
 
-        // Generate geometry
-        const geo_name = child.scene3d_geometry orelse "box";
-        var vert_count: u32 = 0;
-        if (std.mem.eql(u8, geo_name, "sphere")) {
-            vert_count = generateSphere(child.scene3d_radius, 24, 16).count;
-        } else if (std.mem.eql(u8, geo_name, "plane")) {
-            vert_count = generatePlane(child.scene3d_size_x, child.scene3d_size_z).count;
-        } else if (std.mem.eql(u8, geo_name, "cylinder")) {
-            vert_count = generateCylinder(child.scene3d_radius, child.scene3d_size_y, 24).count;
-        } else {
-            vert_count = generateBox(child.scene3d_size_x, child.scene3d_size_y, child.scene3d_size_z).count;
-        }
-
-        if (vert_count == 0) continue;
-
-        // Upload vertices
-        queue.writeBuffer(g_vertex_buffer.?, 0, @ptrCast(&g_geo_buf), vert_count * @sizeOf(Vertex));
-
-        // Build model matrix: T * Ry * Rx * Rz * S
-        const deg2rad = std.math.pi / 180.0;
-        var model = math.m4scale(math.m4identity(), .{ .x = child.scene3d_scale_x, .y = child.scene3d_scale_y, .z = child.scene3d_scale_z });
-        model = math.m4multiply(math.m4rotateZ(math.m4identity(), child.scene3d_rot_z * deg2rad), model);
-        model = math.m4multiply(math.m4rotateX(math.m4identity(), child.scene3d_rot_x * deg2rad), model);
-        model = math.m4multiply(math.m4rotateY(math.m4identity(), child.scene3d_rot_y * deg2rad), model);
-        model = math.m4multiply(math.m4translate(math.m4identity(), .{ .x = child.scene3d_pos_x, .y = child.scene3d_pos_y, .z = child.scene3d_pos_z }), model);
-
-        const mvp = math.m4multiply(vp, model);
-
-        // Write uniforms
-        const uniforms = SceneUniforms{
-            .mvp = math.m4transpose(mvp),
-            .model = math.m4transpose(model),
-            .light_dir = light_dir,
-            .specular_power = 64.0,
-            .light_color = light_color,
-            .ambient_color = ambient_color,
-            .camera_pos = .{ cam_pos.x, cam_pos.y, cam_pos.z },
-            .color = .{ child.scene3d_color_r, child.scene3d_color_g, child.scene3d_color_b, 1.0 },
-        };
-        queue.writeBuffer(g_uniform_buffer.?, 0, @ptrCast(&uniforms), @sizeOf(SceneUniforms));
-
-        pass.setVertexBuffer(0, g_vertex_buffer.?, 0, vert_count * @sizeOf(Vertex));
-        pass.draw(vert_count, 1, 0, 0);
+    if (node.scene3d_show_grid or node.scene3d_show_axes) {
+        drawSceneGuides(pass, queue, vp, cam_pos, light_dir, light_color, ambient_color, clear_color, fog_near, fog_far, scene_extent, node.scene3d_show_grid, node.scene3d_show_axes);
     }
 
     pass.end();
     pass.release();
-    const command = encoder.finish(&.{ .label = wgpu.StringView.fromSlice("r3d_cmd") }) orelse { encoder.release(); return false; };
+    const command = encoder.finish(&.{ .label = wgpu.StringView.fromSlice("r3d_cmd") }) orelse {
+        encoder.release();
+        return false;
+    };
     encoder.release();
     queue.submit(&.{command});
     command.release();

@@ -4,15 +4,50 @@
 let _camX = 5.0;
 let _camY = 4.0;
 let _camZ = 12.0;
-let _yaw  = 200.0;
-let _pitch = -15.0;
+let _yaw  = 337.4;
+let _pitch = -17.1;
 let _prevMx = 0;
 let _prevMy = 0;
 let _mouseInit = false;
 
-const SPEED = 0.15;
+const SPEED = 0.18;
 const TURN  = 2.0;
 const MOUSE_SENS = 0.3;
+const RADAR_RANGE = 24.0;
+const TARGET_X = -2.0;
+const TARGET_Y = 1.2;
+const TARGET_Z = 1.0;
+const LANDMARKS = [
+  { x: 0.0, z: 0.0 },
+  { x: TARGET_X, z: TARGET_Z },
+  { x: 2.0, z: -1.0 },
+  { x: 8.0, z: 0.0 },
+  { x: -8.0, z: 0.0 },
+  { x: 0.0, z: 8.0 },
+  { x: 0.0, z: -8.0 },
+];
+
+function buildRadar(fx, fz) {
+  const center = 55;
+  const span = 44;
+  const arrow = 18;
+  const endX = center + fx * arrow;
+  const endY = center + fz * arrow;
+  let blips = '';
+
+  for (const landmark of LANDMARKS) {
+    const dx = landmark.x - _camX;
+    const dz = landmark.z - _camZ;
+    if (Math.sqrt(dx * dx + dz * dz) > RADAR_RANGE) continue;
+    const px = center + (dx / RADAR_RANGE) * span;
+    const py = center + (dz / RADAR_RANGE) * span;
+    blips += ` M ${(px - 2).toFixed(1)},${py.toFixed(1)} L ${(px + 2).toFixed(1)},${py.toFixed(1)}`;
+    blips += ` M ${px.toFixed(1)},${(py - 2).toFixed(1)} L ${px.toFixed(1)},${(py + 2).toFixed(1)}`;
+  }
+
+  __setState(9, `M ${center},${center} L ${endX.toFixed(1)},${endY.toFixed(1)}`);
+  __setState(10, blips);
+}
 
 function tick() {
   const _mx = getMouseX();
@@ -64,6 +99,18 @@ function tick() {
 
   const _anyKey = isKeyDown(26) || isKeyDown(22) || isKeyDown(4) || isKeyDown(7) || isKeyDown(44) || isKeyDown(225) || _rmb > 0;
   __setState(8, _anyKey ? 1 : 0);
+
+  buildRadar(_fx, _fz);
+  const headingDirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+  let normYaw = _yaw % 360;
+  if (normYaw < 0) normYaw += 360;
+  const headingIndex = Math.floor((normYaw + 22.5) / 45) % 8;
+  __setState(11, headingDirs[headingIndex]);
+
+  const _tdx = TARGET_X - _camX;
+  const _tdy = TARGET_Y - _camY;
+  const _tdz = TARGET_Z - _camZ;
+  __setState(12, Math.floor(Math.sqrt(_tdx * _tdx + _tdy * _tdy + _tdz * _tdz) * 10) / 10);
 }
 
 setInterval(tick, 16);

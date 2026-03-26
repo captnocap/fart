@@ -118,6 +118,21 @@ test "parseExprAttr braced" {
     try testing.expectEqualStrings("42", try attrs.parseExprAttr(&gen));
 }
 
+test "parseExprAttr braced map item field access" {
+    var a = arena(); defer a.deinit();
+    const src = "{token.zoom}";
+    var lex = Lexer.init(src); lex.tokenize();
+    var gen = Generator.init(a.allocator(), &lex, src, "test.tsz");
+    gen.map_item_param = "token";
+    gen.map_obj_array_idx = 0;
+    gen.object_arrays[0] = undefined;
+    gen.object_arrays[0].getter = "tokens";
+    gen.object_arrays[0].setter = "setTokens";
+    gen.object_arrays[0].field_count = 1;
+    gen.object_arrays[0].fields[0] = .{ .name = "zoom", .field_type = .float };
+    try testing.expectEqualStrings("_oa0_zoom[_i]", try attrs.parseExprAttr(&gen));
+}
+
 test "parseStyleAttr" {
     var a = arena(); defer a.deinit();
     const src = "{{ width: 100, height: 50 }}";

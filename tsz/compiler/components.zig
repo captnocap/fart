@@ -54,9 +54,9 @@ pub fn inlineComponent(self: *Generator, comp: *codegen.ComponentInfo) anyerror!
         return ".{}";
     }
 
-    // Save context — we're about to push props and change the "current component"
+    // Save context — prop collection must run in the caller's scope so
+    // map-item expressions like token.label are preserved at the call site.
     const saved_component = self.current_inline_component;
-    self.current_inline_component = comp.name;
     defer self.current_inline_component = saved_component;
 
     // ── Phase 1: Collect prop values from the call site ──
@@ -117,6 +117,16 @@ pub fn inlineComponent(self: *Generator, comp: *codegen.ComponentInfo) anyerror!
                     }
                 }
             }
+        } else if (self.curKind() == .lbrace) {
+            // Skip JSX prop spread: {...identifier} or other brace expressions
+            var brace_d: u32 = 1;
+            self.advance_token(); // skip {
+            while (self.curKind() != .eof and brace_d > 0) {
+                if (self.curKind() == .lbrace) brace_d += 1;
+                if (self.curKind() == .rbrace) brace_d -= 1;
+                if (brace_d > 0) self.advance_token();
+            }
+            if (self.curKind() == .rbrace) self.advance_token();
         } else {
             self.advance_token();
         }
@@ -168,6 +178,10 @@ pub fn inlineComponent(self: *Generator, comp: *codegen.ComponentInfo) anyerror!
             }
         }
     }
+
+    // Body parsing starts here; recursion guards and unresolved prop fallback
+    // should apply inside the component template, not while reading call-site props.
+    self.current_inline_component = comp.name;
 
     // ── Phase 3: Try multi-use leaf optimization ──
     // If this component is used 2+ times and has no children or state-dependent props,
@@ -274,6 +288,8 @@ pub fn inlineComponent(self: *Generator, comp: *codegen.ComponentInfo) anyerror!
         }
     }
 
+    const pre_dyn_style_count = self.dyn_style_count;
+    const pre_dyn_text_count = self.dyn_count;
     self.pos = comp.body_pos; // jump to the component's return position
     const result = if (self.isMapAhead())
         try jsx_map.parseMapExpression(self) // Component returns .map() directly
@@ -281,6 +297,18 @@ pub fn inlineComponent(self: *Generator, comp: *codegen.ComponentInfo) anyerror!
         try jsx.parseJSXElement(self);
     self.pos = saved_pos; // jump back to caller
     self.prop_stack_count = saved_prop_count; // pop props
+    // Claim dyn_styles and dyn_texts created during component inline when inside a map context
+    // (they reference _i which doesn't exist at file scope — suppress "never bound" errors)
+    if (self.map_item_param != null) {
+        var dsi = pre_dyn_style_count;
+        while (dsi < self.dyn_style_count) : (dsi += 1) {
+            self.dyn_styles[dsi].map_claimed = true;
+        }
+        var dti = pre_dyn_text_count;
+        while (dti < self.dyn_count) : (dti += 1) {
+            self.dyn_texts[dti].map_claimed = true;
+        }
+    }
     self.state_remap_count = saved_remap_count; // pop state remaps
     self.component_children_exprs = saved_children;
     return result;

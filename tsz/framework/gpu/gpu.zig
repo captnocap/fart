@@ -6,8 +6,13 @@
 //! native window handle from SDL to create its surface.
 
 const std = @import("std");
+const builtin = @import("builtin");
 const wgpu = @import("wgpu");
-const c = @import("../c.zig").imports;
+
+const is_web = builtin.cpu.arch == .wasm32;
+
+// SDL only needed on native for window handle + surface creation
+const c = if (!is_web) @import("../c.zig").imports else struct {};
 const rects = @import("rects.zig");
 const text = @import("text.zig");
 const curves = @import("curves.zig");
@@ -33,6 +38,12 @@ pub const getCharAdvance = text.getCharAdvance;
 pub const getCharWidth = text.getCharWidth;
 pub const drawGlyphAt = text.drawGlyphAt;
 pub const getLineHeight = text.getLineHeight;
+const layout_types = @import("../layout.zig");
+pub const resetInlineSlots = text.resetInlineSlots;
+pub const setTextEffect = text.setTextEffect;
+pub const clearTextEffect = text.clearTextEffect;
+pub fn getInlineSlotCount() u8 { return text.g_inline_slot_count; }
+pub fn getInlineSlots() *const [text.MAX_RECORDED_SLOTS]layout_types.InlineSlot { return &text.g_inline_slots; }
 
 // Type re-exports
 pub const RectInstance = rects.RectInstance;
@@ -355,8 +366,8 @@ fn drainMemory() void {
     // Destroy old globals buffer
     if (g_globals_buffer) |b| b.release();
 
-    // Blocking poll to reclaim all pending resources
-    _ = device.poll(true, null);
+    // Blocking poll to reclaim all pending resources (not available on web)
+    if (!is_web) _ = device.poll(true, null);
 
     // Recreate globals buffer
     g_globals_buffer = device.createBuffer(&.{
@@ -386,7 +397,61 @@ fn drainMemory() void {
 // Public API
 // ════════════════════════════════════════════════════════════════════════
 
-pub fn init(window: *c.SDL_Window) !void {
+/// Web init — device provided by emscripten, surface from canvas.
+/// Uses the C webgpu.h API directly for surface creation (emscripten-specific).
+pub fn initWeb(device: *wgpu.Device, queue: *wgpu.Queue, width: u32, height: u32) !void {
+    g_device = device;
+    g_queue = queue;
+    g_width = width;
+    g_height = height;
+
+    // Create instance + surface from HTML canvas (web only)
+    if (is_web) {
+        g_instance = wgpu.Instance.create(null) orelse return error.WGPUInstanceFailed;
+        const instance = g_instance.?;
+        g_surface = createCanvasSurface(instance) orelse return error.SurfaceCreateFailed;
+    }
+
+    // Configure surface (same as native path)
+    configureSurface(width, height);
+
+    g_globals_buffer = device.createBuffer(&.{
+        .label = wgpu.StringView.fromSlice("globals"),
+        .size = 16,
+        .usage = wgpu.BufferUsages.uniform | wgpu.BufferUsages.copy_dst,
+        .mapped_at_creation = 0,
+    });
+
+    const globals_buffer = g_globals_buffer orelse return error.BufferCreateFailed;
+
+    rects.initPipeline(device, globals_buffer);
+    curves.initPipeline(device, globals_buffer);
+    polys.initPipeline(device, globals_buffer);
+    images.initPipeline(device, globals_buffer);
+}
+
+// ── Web-specific surface creation (uses wgpu_web module's C types) ──
+
+fn createCanvasSurface(instance: *wgpu.Instance) ?*wgpu.Surface {
+    if (!is_web) return null;
+    const wc = wgpu.c; // emdawnwebgpu C types
+    const canvas_source = wc.WGPUEmscriptenSurfaceSourceCanvasHTMLSelector{
+        .chain = .{
+            .next = null,
+            .sType = wc.WGPUSType_EmscriptenSurfaceSourceCanvasHTMLSelector,
+        },
+        .selector = .{ .data = "#canvas", .length = 7 },
+    };
+    const surface_desc = wc.WGPUSurfaceDescriptor{
+        .nextInChain = @ptrCast(@constCast(&canvas_source.chain)),
+        .label = .{ .data = "web-canvas", .length = 10 },
+    };
+    return @ptrCast(wc.wgpuInstanceCreateSurface(@ptrCast(instance), &surface_desc));
+}
+
+pub fn init(window: if (is_web) *anyopaque else *c.SDL_Window) !void {
+    if (is_web) @compileError("Use initWeb() on wasm32 targets");
+
     // Create wgpu instance with Vulkan backend only
     var extras = wgpu.InstanceExtras{
         .backends = wgpu.InstanceBackends.vulkan,
@@ -552,10 +617,11 @@ pub fn frame(bg_r: f64, bg_g: f64, bg_b: f64) void {
         .clear_value = .{ .r = bg_r, .g = bg_g, .b = bg_b, .a = 1.0 },
     };
 
-    const render_pass = encoder.beginRenderPass(&.{
+    const rp_desc = wgpu.RenderPassDescriptor{
         .color_attachment_count = 1,
         .color_attachments = @ptrCast(&color_attachment),
-    }) orelse return;
+    };
+    const render_pass = encoder.beginRenderPass(&rp_desc) orelse return;
 
     const total_rects: u32 = @intCast(rects.count());
     const total_glyphs: u32 = @intCast(text.count());
@@ -636,14 +702,16 @@ pub fn frame(bg_r: f64, bg_g: f64, bg_b: f64) void {
     command.release();
 
     // Capture hook — readback the rendered frame before present (like Love2D's captureScreenshot)
-    if (g_capture_requested) {
+    // Sync readback requires device.poll() — not available on web.
+    if (!is_web and g_capture_requested) {
         performCapture(device, queue, texture_obj);
     }
 
-    _ = surface.present();
-
-    // Blocking poll — reclaim all staging buffers
-    _ = device.poll(true, null);
+    if (!is_web) {
+        _ = surface.present();
+        // Blocking poll — reclaim all staging buffers
+        _ = device.poll(true, null);
+    }
 
     // Release deferred 3D render targets (must happen after images.drawAll, before reset)
     scene3d.frameCleanup();
@@ -731,6 +799,7 @@ pub fn telemetryFrameCounter() u64 {
 // ════════════════════════════════════════════════════════════════════════
 
 fn configureSurface(width: u32, height: u32) void {
+    if (is_web) return; // Browser manages the canvas swapchain
     const surface = g_surface orelse return;
     const device = g_device orelse return;
     const adapter = g_adapter orelse return;
@@ -750,7 +819,7 @@ fn configureSurface(width: u32, height: u32) void {
         }
     }
 
-    const vsync_off = if (std.posix.getenv("ZIGOS_VSYNC")) |v| std.mem.eql(u8, v, "0") else false;
+    const vsync_off = if (is_web) false else if (std.posix.getenv("ZIGOS_VSYNC")) |v| std.mem.eql(u8, v, "0") else false;
     const config = wgpu.SurfaceConfiguration{
         .device = device,
         .format = g_format,

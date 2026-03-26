@@ -7,6 +7,7 @@ const std = @import("std");
 const codegen = @import("codegen.zig");
 const Generator = codegen.Generator;
 const attrs = @import("attrs.zig");
+const emit_map = @import("emit_map.zig");
 const handlers = @import("handlers.zig");
 const components = @import("components.zig");
 const html_tags = @import("html_tags.zig");
@@ -31,6 +32,31 @@ pub fn parseMapExpression(self: *Generator) anyerror![]const u8 {
 
     self.advance_token(); // identifier (items)
     self.advance_token(); // .
+
+    // Skip chained methods before .map(): .filter(...).sort(...).slice(...)
+    while (self.curKind() == .identifier) {
+        const method_name = self.curText();
+        if (std.mem.eql(u8, method_name, "map")) break;
+        if (std.mem.eql(u8, method_name, "filter") or
+            std.mem.eql(u8, method_name, "sort") or
+            std.mem.eql(u8, method_name, "slice"))
+        {
+            self.advance_token(); // method name
+            if (self.curKind() == .lparen) {
+                // Skip balanced parens
+                var depth: u32 = 1;
+                self.advance_token(); // (
+                while (self.curKind() != .eof and depth > 0) {
+                    if (self.curKind() == .lparen) depth += 1;
+                    if (self.curKind() == .rparen) depth -= 1;
+                    if (depth > 0) self.advance_token();
+                }
+                if (self.curKind() == .rparen) self.advance_token(); // )
+            }
+            if (self.curKind() == .dot) self.advance_token(); // .
+        } else break;
+    }
+
     self.advance_token(); // map
     if (self.curKind() == .lparen) self.advance_token(); // (
 
@@ -264,7 +290,19 @@ fn parseMapTemplate(self: *Generator) anyerror!codegen.MapTemplateResult {
             if (self.curKind() == .equals) {
                 self.advance_token(); // =
                 if (std.mem.eql(u8, attr, "style")) {
+                    const pre_dyn_count_outer = self.dyn_style_count;
                     style_str = try attrs.parseStyleAttr(self);
+                    // Claim dyn_styles from the outer/pool element (background_color, border_color)
+                    if (self.map_index_param != null or self.map_item_param != null) {
+                        var dsi_o = pre_dyn_count_outer;
+                        while (dsi_o < self.dyn_style_count) : (dsi_o += 1) {
+                            if (std.mem.eql(u8, self.dyn_styles[dsi_o].field, "background_color") or
+                                std.mem.eql(u8, self.dyn_styles[dsi_o].field, "border_color"))
+                            {
+                                self.dyn_styles[dsi_o].map_claimed = true;
+                            }
+                        }
+                    }
                 } else if (std.mem.eql(u8, attr, "fontSize")) {
                     font_size = try attrs.parseExprAttr(self);
                 } else if (std.mem.eql(u8, attr, "color")) {
@@ -519,7 +557,14 @@ fn parseMapTemplate(self: *Generator) anyerror!codegen.MapTemplateResult {
 /// Parse a single child element inside a .map() template.
 fn parseMapTemplateChild(self: *Generator) anyerror!codegen.MapInnerNode {
     self.advance_token(); // <
-    self.advance_token(); // tag name (or "C")
+    var tag: []const u8 = "";
+    if (self.curKind() == .identifier) {
+        tag = self.curText();
+        self.advance_token();
+    }
+    if (std.mem.eql(u8, tag, "Graph")) {
+        return try parseMapGraphNode(self);
+    }
     // Handle C.Name classifier references
     var inner_cls_idx: ?u32 = null;
     if (self.curKind() == .dot) {
@@ -537,6 +582,7 @@ fn parseMapTemplateChild(self: *Generator) anyerror!codegen.MapInnerNode {
     var dyn_text_color: []const u8 = "";
     var dyn_href: []const u8 = "";
     var dyn_background_color: []const u8 = "";
+    var dyn_border_color: []const u8 = "";
     var handler_body: []const u8 = "";
     var style_str: []const u8 = if (inner_cls_idx) |ci| self.classifier_styles[ci] else "";
     var is_self_closing = false;
@@ -565,7 +611,7 @@ fn parseMapTemplateChild(self: *Generator) anyerror!codegen.MapInnerNode {
                 if (std.mem.eql(u8, attr, "style")) {
                     const pre_dyn_count = self.dyn_style_count;
                     style_str = try attrs.parseStyleAttr(self);
-                    // Claim any background_color DynStyle added inside this map context.
+                    // Claim any background_color/border_color DynStyle added inside this map context.
                     // Such expressions reference _i and must be emitted inline in _rebuildMap.
                     if (self.map_index_param != null or self.map_item_param != null) {
                         var dsi = pre_dyn_count;
@@ -573,7 +619,9 @@ fn parseMapTemplateChild(self: *Generator) anyerror!codegen.MapInnerNode {
                             if (std.mem.eql(u8, self.dyn_styles[dsi].field, "background_color")) {
                                 dyn_background_color = self.dyn_styles[dsi].expression;
                                 self.dyn_styles[dsi].map_claimed = true;
-                                break;
+                            } else if (std.mem.eql(u8, self.dyn_styles[dsi].field, "border_color")) {
+                                dyn_border_color = self.dyn_styles[dsi].expression;
+                                self.dyn_styles[dsi].map_claimed = true;
                             }
                         }
                     }
@@ -876,9 +924,232 @@ fn parseMapTemplateChild(self: *Generator) anyerror!codegen.MapInnerNode {
         .dyn_text_color = dyn_text_color,
         .dyn_href = dyn_href,
         .dyn_background_color = dyn_background_color,
+        .dyn_border_color = dyn_border_color,
         .sub_nodes = sub_nodes,
         .sub_count = sub_count,
         .handler_body = handler_body,
+    };
+}
+
+fn resolveMapStringValue(self: *Generator, value: []const u8, is_expr: bool) ![]const u8 {
+    if (!is_expr) {
+        return try std.fmt.allocPrint(self.alloc, "\"{f}\"", .{std.zig.fmtString(value)});
+    }
+
+    if (self.map_item_param) |param| {
+        if (std.mem.startsWith(u8, value, param) and value.len > param.len and value[param.len] == '.') {
+            const field_name = value[param.len + 1 ..];
+            if (self.map_obj_array_idx) |oa_idx| {
+                return try std.fmt.allocPrint(self.alloc,
+                    "_oa{d}_{s}[_i][0.._oa{d}_{s}_lens[_i]]",
+                    .{ oa_idx, field_name, oa_idx, field_name });
+            }
+            return try std.fmt.allocPrint(self.alloc, "_item.{s}", .{field_name});
+        }
+    }
+
+    // Handle already-resolved _oa references (from parseExprAttr): add slice bounds
+    if (std.mem.startsWith(u8, value, "_oa") and std.mem.endsWith(u8, value, "[_i]")) {
+        // Extract field part: "_oa{N}_{field}[_i]" → "_oa{N}_{field}"
+        const base = value[0 .. value.len - 4]; // strip "[_i]"
+        return try std.fmt.allocPrint(self.alloc,
+            "{s}[_i][0..{s}_lens[_i]]",
+            .{ base, base });
+    }
+
+    // Handle already-resolved _oa references (from parseExprAttr): add slice bounds
+    if (std.mem.startsWith(u8, value, "_oa") and std.mem.endsWith(u8, value, "[_i]")) {
+        const base = value[0 .. value.len - 4]; // strip "[_i]"
+        return try std.fmt.allocPrint(self.alloc,
+            "{s}[_i][0..{s}_lens[_i]]",
+            .{ base, base });
+    }
+
+    if (self.map_item_param != null or self.map_index_param != null) {
+        return try emit_map.rewriteMapArgs(self, value, self.map_item_param orelse "", self.map_index_param);
+    }
+
+    return value;
+}
+
+fn resolveMapColorValue(self: *Generator, value: []const u8, is_expr: bool) ![]const u8 {
+    if (!is_expr) return attrs.parseColorValue(self, value);
+
+    if (self.map_item_param) |param| {
+        if (std.mem.startsWith(u8, value, param) and value.len > param.len and value[param.len] == '.') {
+            const field_name = value[param.len + 1 ..];
+            if (self.map_obj_array_idx) |oa_idx| {
+                const oa = self.object_arrays[oa_idx];
+                for (0..oa.field_count) |fi| {
+                    if (std.mem.eql(u8, oa.fields[fi].name, field_name)) {
+                        return switch (oa.fields[fi].field_type) {
+                            .string => std.fmt.allocPrint(self.alloc,
+                                "Color.fromHex(_oa{d}_{s}[_i][0.._oa{d}_{s}_lens[_i]])",
+                                .{ oa_idx, field_name, oa_idx, field_name }),
+                            else => blk: {
+                                const arr_expr = try std.fmt.allocPrint(self.alloc, "_oa{d}_{s}[_i]", .{ oa_idx, field_name });
+                                break :blk std.fmt.allocPrint(self.alloc,
+                                    "Color.rgb(@intCast(({s} >> 16) & 0xFF), @intCast(({s} >> 8) & 0xFF), @intCast({s} & 0xFF))",
+                                    .{ arr_expr, arr_expr, arr_expr });
+                            },
+                        };
+                    }
+                }
+            }
+            return try std.fmt.allocPrint(self.alloc, "Color.fromHex(_item.{s})", .{field_name});
+        }
+    }
+
+    // Handle already-resolved _oa references (from parseExprAttr): wrap in Color.fromHex
+    if (std.mem.startsWith(u8, value, "_oa") and std.mem.endsWith(u8, value, "[_i]")) {
+        const base = value[0 .. value.len - 4]; // strip "[_i]"
+        return try std.fmt.allocPrint(self.alloc,
+            "Color.fromHex({s}[_i][0..{s}_lens[_i]])",
+            .{ base, base });
+    }
+
+    if (self.map_item_param != null or self.map_index_param != null) {
+        return try emit_map.rewriteMapArgs(self, value, self.map_item_param orelse "", self.map_index_param);
+    }
+
+    return value;
+}
+
+fn parseMapGraphNode(self: *Generator) anyerror!codegen.MapInnerNode {
+    var style_str: []const u8 = "";
+    var view_x: []const u8 = "0";
+    var view_y: []const u8 = "0";
+    var view_zoom: []const u8 = "1";
+    var is_self_closing = false;
+
+    while (self.curKind() != .gt and self.curKind() != .slash_gt and self.curKind() != .eof) {
+        if (self.curKind() == .identifier) {
+            const attr = self.curText();
+            self.advance_token();
+            if (self.curKind() == .equals) {
+                self.advance_token();
+                if (std.mem.eql(u8, attr, "style")) {
+                    style_str = try attrs.parseStyleAttr(self);
+                } else if (std.mem.eql(u8, attr, "viewX")) {
+                    view_x = try attrs.parseExprAttr(self);
+                } else if (std.mem.eql(u8, attr, "viewY")) {
+                    view_y = try attrs.parseExprAttr(self);
+                } else if (std.mem.eql(u8, attr, "viewZoom")) {
+                    view_zoom = try attrs.parseExprAttr(self);
+                } else {
+                    try attrs.skipAttrValue(self);
+                }
+            }
+        } else {
+            self.advance_token();
+        }
+    }
+
+    if (self.curKind() == .slash_gt) {
+        self.advance_token();
+        is_self_closing = true;
+    } else if (self.curKind() == .gt) {
+        self.advance_token();
+    }
+
+    var path_d: []const u8 = "";
+    var path_fill: []const u8 = "";
+    var path_stroke: []const u8 = "";
+    var path_fill_effect: []const u8 = "";
+    var path_stroke_width: []const u8 = "1";
+    var path_d_is_expr = false;
+    var path_fill_is_expr = false;
+    var path_stroke_is_expr = false;
+    var path_fill_effect_is_expr = false;
+
+    if (!is_self_closing) {
+        while (self.curKind() != .lt_slash and self.curKind() != .eof) {
+            if (self.curKind() == .lt) {
+                self.advance_token(); // <
+                if (self.curKind() == .identifier and std.mem.eql(u8, self.curText(), "Graph")) {
+                    self.advance_token(); // Graph
+                    if (self.curKind() == .dot) self.advance_token(); // .
+                    if (self.curKind() == .identifier and std.mem.eql(u8, self.curText(), "Path")) {
+                        self.advance_token(); // Path
+                        while (self.curKind() != .gt and self.curKind() != .slash_gt and self.curKind() != .eof) {
+                            if (self.curKind() == .identifier) {
+                                const attr = self.curText();
+                                self.advance_token();
+                                if (self.curKind() == .equals) {
+                                    self.advance_token();
+                                    if (std.mem.eql(u8, attr, "d")) {
+                                        path_d_is_expr = self.curKind() == .lbrace;
+                                        path_d = if (path_d_is_expr) try attrs.parseExprAttr(self) else try attrs.parseStringAttr(self);
+                                    } else if (std.mem.eql(u8, attr, "fill")) {
+                                        path_fill_is_expr = self.curKind() == .lbrace;
+                                        path_fill = if (path_fill_is_expr) try attrs.parseExprAttr(self) else try attrs.parseStringAttr(self);
+                                    } else if (std.mem.eql(u8, attr, "stroke")) {
+                                        path_stroke_is_expr = self.curKind() == .lbrace;
+                                        path_stroke = if (path_stroke_is_expr) try attrs.parseExprAttr(self) else try attrs.parseStringAttr(self);
+                                    } else if (std.mem.eql(u8, attr, "fillEffect")) {
+                                        path_fill_effect_is_expr = self.curKind() == .lbrace;
+                                        path_fill_effect = if (path_fill_effect_is_expr) try attrs.parseExprAttr(self) else try attrs.parseStringAttr(self);
+                                    } else if (std.mem.eql(u8, attr, "strokeWidth")) {
+                                        path_stroke_width = try attrs.parseExprAttr(self);
+                                    } else {
+                                        try attrs.skipAttrValue(self);
+                                    }
+                                }
+                            } else {
+                                self.advance_token();
+                            }
+                        }
+                        if (self.curKind() == .slash_gt) self.advance_token() else if (self.curKind() == .gt) self.advance_token();
+                        continue;
+                    }
+                }
+            }
+            self.advance_token();
+        }
+
+        if (self.curKind() == .lt_slash) self.advance_token();
+        if (self.curKind() == .identifier) self.advance_token();
+        if (self.curKind() == .gt) self.advance_token();
+    }
+
+    const path_d_expr = try resolveMapStringValue(self, path_d, path_d_is_expr);
+    const fill_expr = if (path_fill.len > 0) try resolveMapColorValue(self, path_fill, path_fill_is_expr) else "Color{}";
+    const stroke_expr = if (path_stroke.len > 0) try resolveMapColorValue(self, path_stroke, path_stroke_is_expr) else "Color.rgb(255, 255, 255)";
+    const fill_effect_field = if (path_fill_effect.len > 0)
+        try std.fmt.allocPrint(self.alloc, ", .canvas_fill_effect = {s}",
+            .{try resolveMapStringValue(self, path_fill_effect, path_fill_effect_is_expr)})
+    else
+        "";
+    // Wrap view props in @floatCast if they're f64 object-array accesses (node fields are f32)
+    const view_x_expr = if (std.mem.indexOf(u8, view_x, "_oa") != null)
+        try std.fmt.allocPrint(self.alloc, "@floatCast({s})", .{view_x})
+    else
+        view_x;
+    const view_y_expr = if (std.mem.indexOf(u8, view_y, "_oa") != null)
+        try std.fmt.allocPrint(self.alloc, "@floatCast({s})", .{view_y})
+    else
+        view_y;
+    const view_zoom_expr = if (std.mem.indexOf(u8, view_zoom, "_oa") != null)
+        try std.fmt.allocPrint(self.alloc, "@floatCast({s})", .{view_zoom})
+    else
+        view_zoom;
+    // Wrap stroke width: object-array integer fields are i64, node field is f32
+    const stroke_width_expr = if (std.mem.indexOf(u8, path_stroke_width, "_oa") != null)
+        try std.fmt.allocPrint(self.alloc, "@floatFromInt({s})", .{path_stroke_width})
+    else
+        path_stroke_width;
+    const raw_expr = try std.fmt.allocPrint(self.alloc,
+        ".{{ .style = .{{ {s} }}, .graph_container = true, .canvas_view_set = true, .canvas_view_x = {s}, .canvas_view_y = {s}, .canvas_view_zoom = {s}, .children = @constCast(&[_]Node{{ .{{ .canvas_path = true, .canvas_path_d = {s}{s}, .canvas_fill_color = {s}, .canvas_stroke_width = {s}, .text_color = {s} }} }}) }}",
+        .{ style_str, view_x_expr, view_y_expr, view_zoom_expr, path_d_expr, fill_effect_field, fill_expr, stroke_width_expr, stroke_expr });
+    return .{
+        .font_size = "",
+        .text_color = "",
+        .text_fmt = "",
+        .text_args = "",
+        .is_dynamic_text = false,
+        .static_text = "",
+        .style = "",
+        .raw_expr = raw_expr,
     };
 }
 
@@ -1249,6 +1520,7 @@ fn parseMapSubElement(self: *Generator) anyerror!codegen.MapSubNode {
     }
 
     // Parse attributes
+    var sub_dyn_bg: []const u8 = "";
     while (self.curKind() != .gt and self.curKind() != .slash_gt and self.curKind() != .eof) {
         if (self.curKind() == .identifier) {
             const a = self.curText();
@@ -1256,7 +1528,19 @@ fn parseMapSubElement(self: *Generator) anyerror!codegen.MapSubNode {
             if (self.curKind() == .equals) {
                 self.advance_token();
                 if (std.mem.eql(u8, a, "style")) {
+                    const pre_dyn_count = self.dyn_style_count;
                     sub_style = try attrs.parseStyleAttr(self);
+                    // Claim any background_color DynStyle added inside this map sub-element.
+                    if (self.map_index_param != null or self.map_item_param != null) {
+                        var dsi = pre_dyn_count;
+                        while (dsi < self.dyn_style_count) : (dsi += 1) {
+                            if (std.mem.eql(u8, self.dyn_styles[dsi].field, "background_color")) {
+                                sub_dyn_bg = self.dyn_styles[dsi].expression;
+                                self.dyn_styles[dsi].map_claimed = true;
+                                break;
+                            }
+                        }
+                    }
                 } else if (std.mem.eql(u8, a, "fontSize")) {
                     sub_font = try attrs.parseExprAttr(self);
                 } else if (std.mem.eql(u8, a, "color")) {
@@ -1277,7 +1561,7 @@ fn parseMapSubElement(self: *Generator) anyerror!codegen.MapSubNode {
 
     if (self.curKind() == .slash_gt) {
         self.advance_token();
-        return .{ .style = sub_style, .font_size = sub_font, .text_color = sub_color, .handler_body = sub_handler };
+        return .{ .style = sub_style, .font_size = sub_font, .text_color = sub_color, .handler_body = sub_handler, .dyn_background_color = sub_dyn_bg };
     }
     if (self.curKind() == .gt) self.advance_token();
 
@@ -1348,6 +1632,7 @@ fn parseMapSubElement(self: *Generator) anyerror!codegen.MapSubNode {
         .static_text = sub_static,
         .style = sub_style,
         .handler_body = sub_handler,
+        .dyn_background_color = sub_dyn_bg,
         .leaves = if (leaf_count > 0) (self.alloc.dupe(codegen.MapLeafNode, leaves[0..leaf_count]) catch &[_]codegen.MapLeafNode{}) else &[_]codegen.MapLeafNode{},
         .leaf_count = leaf_count,
     };

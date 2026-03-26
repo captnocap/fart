@@ -87,6 +87,26 @@ pub const TextMetrics = struct {
     height: f32 = 0,
     ascent: f32 = 0,
 };
+
+/// Descriptor for an inline glyph (polygon/3D embedded in text).
+pub const InlineGlyph = struct {
+    d: []const u8, // SVG path data
+    fill: Color = Color.rgb(255, 255, 255),
+    fill_effect: ?[]const u8 = null, // named effect for textured fill
+    stroke: Color = Color.rgba(0, 0, 0, 0),
+    stroke_width: f32 = 0,
+    scale: f32 = 1.0, // multiplier on fontSize
+};
+
+/// Computed position for an inline glyph slot within rendered text.
+pub const InlineSlot = struct {
+    x: f32 = 0,
+    y: f32 = 0,
+    size: f32 = 0, // slot width/height (square)
+    glyph_index: u8 = 0,
+};
+
+pub const MAX_INLINE_SLOTS = 8;
 pub const ImageDims = struct {
     width: f32 = 0,
     height: f32 = 0,
@@ -322,6 +342,11 @@ pub const Node = struct {
     canvas_fill_color: ?Color = null, // fill color for filled SVG paths (via blend2d)
     canvas_flow_speed: f32 = 0, // 0 = solid, >0 = flow forward, <0 = flow reverse
     canvas_fill_effect: ?[]const u8 = null, // effect name to use as polygon fill texture
+    text_effect: ?[]const u8 = null, // effect name for per-glyph text coloring
+    // Inline glyphs — polygons/3D embedded in text (emoji-like)
+    inline_glyphs: ?[]const InlineGlyph = null,
+    inline_slots: [MAX_INLINE_SLOTS]InlineSlot = [_]InlineSlot{.{}} ** MAX_INLINE_SLOTS,
+    inline_slot_count: u8 = 0,
     // Effect — user-compiled pixel render callback
     effect_render: ?effect_ctx.RenderFn = null,
     effect_shader: ?effect_shader.GpuShaderDesc = null,

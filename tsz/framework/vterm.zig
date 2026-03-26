@@ -8,6 +8,33 @@
 //! read dirty_rows/getCell/getRowText and render via Box+Text primitives.
 
 const std = @import("std");
+const rec_mod = @import("recorder.zig");
+
+// ── Session recording — taps into pollPty data stream ──────────────
+var g_recorder: rec_mod.Recorder = .{};
+var g_recording_active: bool = false;
+
+pub fn startRecording(rows: u16, cols: u16) void {
+    g_recorder.start(rows, cols);
+    g_recording_active = true;
+}
+
+pub fn stopRecording() void {
+    g_recorder.stop();
+    g_recording_active = false;
+}
+
+pub fn saveRecording(path: []const u8) bool {
+    return g_recorder.save(path);
+}
+
+pub fn isRecording() bool {
+    return g_recording_active;
+}
+
+pub fn getRecorder() *const rec_mod.Recorder {
+    return &g_recorder;
+}
 
 // ── Manual libvterm type declarations ───────────────────────────────
 // (Zig's @cImport can't handle C bitfield structs, so we declare manually)
@@ -559,6 +586,8 @@ pub fn spawnShell(shell: [*:0]const u8, rows: u16, cols: u16) void {
 pub fn pollPty() bool {
     var p = &(g_pty orelse return false);
     const data = p.readData() orelse return false;
+    // Tap: capture raw PTY data for session recording
+    if (g_recording_active) g_recorder.capture(data);
     if (g_vterm) |*v| {
         v.feedData(data);
         // Drain vterm output responses (device attributes, cursor reports, etc.)

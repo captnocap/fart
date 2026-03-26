@@ -148,6 +148,8 @@ const effects = if (HAS_EFFECTS) @import("effects.zig") else struct {
     pub fn paintEffect(_: ?[]const u8, _: f32, _: f32, _: f32, _: f32, _: f32) bool { return false; }
     pub fn paintCustomEffect(_: *const Node, _: f32, _: f32, _: f32, _: f32, _: f32) bool { return false; }
     pub fn paintNamedEffect(_: *const Node, _: []const u8, _: f32, _: f32, _: f32, _: f32) bool { return false; }
+    pub const EffectFillInfo = struct { pixel_buf: [*]const u8, width: u32, height: u32, screen_x: f32, screen_y: f32 };
+    pub fn getEffectFill(_: []const u8) ?EffectFillInfo { return null; }
 };
 const r3d = if (HAS_3D) @import("gpu/3d.zig") else struct {
     pub fn render(_: *Node, _: f32, _: f32, _: f32, _: f32, _: f32) bool { return false; }
@@ -965,11 +967,25 @@ noinline fn paintNodeVisuals(node: *Node) void {
             const pt = node.style.padTop();
             const pr = node.style.padRight();
             const final_a = @as(f32, @floatFromInt(tc.a)) / 255.0 * g_paint_opacity;
+            gpu.resetInlineSlots();
+            // Set up text effect if present
+            if (node.text_effect) |ename| {
+                if (effects.getEffectFill(ename)) |info| {
+                    gpu.setTextEffect(info.pixel_buf, info.width, info.height, info.screen_x, info.screen_y);
+                } else {
+                    std.debug.print("textEffect '{s}' not found\n", .{ename});
+                }
+            }
             const text_h = gpu.drawTextWrapped(
                 t, r.x + pl, r.y + pt, node.font_size, @max(1.0, r.w - pl - pr),
                 @as(f32, @floatFromInt(tc.r)) / 255.0, @as(f32, @floatFromInt(tc.g)) / 255.0,
                 @as(f32, @floatFromInt(tc.b)) / 255.0, final_a, node.number_of_lines,
             );
+            // Render inline glyphs into recorded slot positions
+            if (node.inline_glyphs) |glyphs| {
+                paintInlineGlyphs(glyphs, node.font_size);
+            }
+            if (node.text_effect != null) gpu.clearTextEffect();
             // Underline for href links — span text content width, not node width
             if (node.href != null) {
                 const text_w = measureWidthOnly(t, node.font_size);
@@ -983,6 +999,71 @@ noinline fn paintNodeVisuals(node: *Node) void {
     }
 
     if (node.input_id) |id| paintTextInput(node, id);
+}
+
+/// Render inline glyphs (polygons embedded in text) at their recorded slot positions.
+fn paintInlineGlyphs(glyphs: []const layout.InlineGlyph, font_size: u16) void {
+    @setRuntimeSafety(false);
+    const slot_count = gpu.getInlineSlotCount();
+    const slots = gpu.getInlineSlots();
+    var gi: usize = 0;
+    while (gi < slot_count and gi < glyphs.len) : (gi += 1) {
+        const slot = slots[gi];
+        const glyph = glyphs[gi];
+        const slot_size = slot.size * glyph.scale;
+        if (slot_size <= 0) continue;
+        const path = svg_path.parsePath(glyph.d);
+        if (path.subpath_count == 0) continue;
+        // Compute path bounding box
+        var min_x: f32 = 1e9;
+        var min_y: f32 = 1e9;
+        var max_x: f32 = -1e9;
+        var max_y: f32 = -1e9;
+        for (0..path.subpath_count) |si| {
+            const sp = &path.subpaths[si];
+            var pi: u32 = 0;
+            while (pi + 1 < sp.count) : (pi += 2) {
+                if (sp.points[pi] < min_x) min_x = sp.points[pi];
+                if (sp.points[pi + 1] < min_y) min_y = sp.points[pi + 1];
+                if (sp.points[pi] > max_x) max_x = sp.points[pi];
+                if (sp.points[pi + 1] > max_y) max_y = sp.points[pi + 1];
+            }
+        }
+        const pw = max_x - min_x;
+        const ph = max_y - min_y;
+        if (pw <= 0 or ph <= 0) continue;
+        // Scale to fit slot, centered
+        const scale = @min(slot_size / pw, slot_size / ph);
+        const cx_path = (min_x + max_x) / 2;
+        const cy_path = (min_y + max_y) / 2;
+        const cx_slot = slot.x + slot_size / 2;
+        const cy_slot = slot.y + @as(f32, @floatFromInt(font_size)) / 2;
+        // Transform: translate path center to slot center, scale around slot center
+        gpu.setTransform(cx_path, cy_path, cx_slot - cx_path * scale, cy_slot - cy_path * scale, scale);
+        // Fill: effect texture or flat color
+        var used_effect = false;
+        if (glyph.fill_effect) |ename| {
+            if (effects.getEffectFill(ename)) |info| {
+                svg_path.drawFillFromEffect(&path, info.pixel_buf, info.width, info.height, min_x, min_y, pw, ph);
+                used_effect = true;
+            }
+        }
+        if (!used_effect) {
+            const fc = glyph.fill;
+            svg_path.drawFill(&path,
+                @as(f32, @floatFromInt(fc.r)) / 255.0, @as(f32, @floatFromInt(fc.g)) / 255.0,
+                @as(f32, @floatFromInt(fc.b)) / 255.0, @as(f32, @floatFromInt(fc.a)) / 255.0 * g_paint_opacity);
+        }
+        // Stroke
+        if (glyph.stroke_width > 0 and glyph.stroke.a > 0) {
+            const sc = glyph.stroke;
+            svg_path.drawStrokeCurves(&path,
+                @as(f32, @floatFromInt(sc.r)) / 255.0, @as(f32, @floatFromInt(sc.g)) / 255.0,
+                @as(f32, @floatFromInt(sc.b)) / 255.0, @as(f32, @floatFromInt(sc.a)) / 255.0 * g_paint_opacity,
+                glyph.stroke_width, 0, 0);
+        }
+        gpu.resetTransform();
+    }
 }
 
 /// Paint TextInput: typed text, placeholder, selection highlight, blinking cursor.

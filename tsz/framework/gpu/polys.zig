@@ -285,7 +285,7 @@ pub fn reset() void {
 
 /// Hash the current triangle instance data for dirty checking.
 pub fn hashData() u64 {
-    var h: u64 = g_tri_count *% 0xbb67ae8584caa73b;
+    var h: u64 = @as(u64, g_tri_count) *% 0xbb67ae8584caa73b;
     if (g_tri_count > 0) {
         const len = g_tri_count * @sizeOf(TriInstance);
         const bytes: [*]const u8 = @ptrCast(&g_tris);

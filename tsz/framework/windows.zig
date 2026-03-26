@@ -190,7 +190,7 @@ fn openInProcess(idx: usize, opts: OpenOptions) ?usize {
         .win_h = @floatFromInt(opts.height),
         .bg_color = opts.bg_color,
         .auto_dismiss_ms = if (is_notif) opts.auto_dismiss_ms else 0,
-        .created_at = c.SDL_GetTicks(),
+        .created_at = @truncate(c.SDL_GetTicks()),
         .opacity = if (is_notif) 0.0 else 1.0, // notifications fade in
     };
     slot_count += 1;

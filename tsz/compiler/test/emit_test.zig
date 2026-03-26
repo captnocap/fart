@@ -525,8 +525,8 @@ test "STRICT: Effect onRender supports mutable locals and single-statement else-
     lex.tokenize();
     var gen = Generator.init(al, &lex, src, "test.tsz");
     const out = try gen.generate();
-    try testing.expect(std.mem.indexOf(u8, out, "var threshold = 0.0;") != null);
-    try testing.expect(std.mem.indexOf(u8, out, "var hueBias = 0.05;") != null);
+    try testing.expect(std.mem.indexOf(u8, out, "var threshold: f32 = 0.0;") != null);
+    try testing.expect(std.mem.indexOf(u8, out, "var hueBias: f32 = 0.05;") != null);
     try testing.expect(std.mem.indexOf(u8, out, "threshold = 0.00;") != null);
     try testing.expect(std.mem.indexOf(u8, out, "threshold = 0.50;") != null);
     try testing.expect(std.mem.indexOf(u8, out, "threshold = 0.12;") != null);
@@ -536,6 +536,28 @@ test "STRICT: Effect onRender supports mutable locals and single-statement else-
     try testing.expect(std.mem.indexOf(u8, out, "// unsupported: else(") == null);
     try testing.expect(std.mem.indexOf(u8, out, "// unsupported: threshold(") == null);
     try testing.expect(std.mem.indexOf(u8, out, "// unsupported: hueBias(") == null);
+}
+
+test "STRICT: component props inside map object arrays preserve member expressions" {
+    var a = arena();
+    defer a.deinit();
+    const al = a.allocator();
+    const src =
+        "const [tokens, setTokens] = useState([{ label: '24 px', zoom: 0.24, d: 'M 0,-52 L 45,-26 L 45,26 L 0,52 L -45,26 L -45,-26 Z', fillEffect: 'plasma' }]);" ++
+        "function Card({ label, zoom, d, fillEffect }) { return <Box><Text>{label}</Text><Graph style={{ width: 120, height: 120 }} viewX={0} viewY={0} viewZoom={zoom}><Graph.Path d={d} fillEffect={fillEffect} stroke=\"#ffffff55\" strokeWidth={2} /></Graph></Box> }" ++
+        "function App() { return <Box>{tokens.map((token) => (<Card label={token.label} zoom={token.zoom} d={token.d} fillEffect={token.fillEffect} />))}</Box> }";
+    var lex = Lexer.init(src);
+    lex.tokenize();
+    var gen = Generator.init(al, &lex, src, "test.tsz");
+    const out = try gen.generate();
+    try testing.expect(std.mem.indexOf(u8, out, "_oa0_label[_i][0.._oa0_label_lens[_i]]") != null);
+    try testing.expect(std.mem.indexOf(u8, out, ".canvas_view_zoom = _oa0_zoom[_i]") != null);
+    try testing.expect(std.mem.indexOf(u8, out, ".canvas_path_d = _oa0_d[_i][0.._oa0_d_lens[_i]]") != null);
+    try testing.expect(std.mem.indexOf(u8, out, ".canvas_fill_effect = _oa0_fillEffect[_i][0.._oa0_fillEffect_lens[_i]]") != null);
+    try testing.expect(std.mem.indexOf(u8, out, ".text = \"0\"") == null);
+    try testing.expect(std.mem.indexOf(u8, out, ".canvas_view_zoom = 0") == null);
+    try testing.expect(std.mem.indexOf(u8, out, ".canvas_path_d = \"0\"") == null);
+    try testing.expect(std.mem.indexOf(u8, out, ".canvas_fill_effect = \"0\"") == null);
 }
 
 test "app with script block" {

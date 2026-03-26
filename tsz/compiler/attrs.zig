@@ -370,6 +370,8 @@ pub fn consumeStyleValueExpr(self: *Generator) []const u8 {
     var in_ternary = false; // tracking JS ternary ? : → Zig if/else
     var last_was_string_slot = false; // true immediately after emitting getSlotString(N)
     var in_string_cmp = false; // true between == and its string RHS, inside std.mem.eql rewrite
+    var skip_rparen: u32 = 0; // grouping parens stripped from nested ternary conditions (else-branch only)
+    var then_branch_start: usize = 0; // position in expr where the then-branch begins
     while (self.curKind() != .eof) {
         const k = self.curKind();
         // Stop at comma or closing brace (unless inside nested parens/braces)
@@ -397,12 +399,22 @@ pub fn consumeStyleValueExpr(self: *Generator) []const u8 {
                     // Bare item param without field access
                     expr.appendSlice(self.alloc, "_item") catch {};
                 }
+                // Close std.mem.eql() if this was the RHS of a string comparison
+                if (in_string_cmp) {
+                    expr.appendSlice(self.alloc, ")") catch {};
+                    in_string_cmp = false;
+                }
                 continue;
             }
             // Check map index param: i → _i
             if (self.map_index_param) |idx_p| {
                 if (std.mem.eql(u8, txt, idx_p)) {
-                    expr.appendSlice(self.alloc, "_i") catch {};
+                    // Inside component inline: _i doesn't exist at file scope
+                    if (self.current_inline_component != null) {
+                        expr.appendSlice(self.alloc, "0") catch {};
+                    } else {
+                        expr.appendSlice(self.alloc, "_i") catch {};
+                    }
                     self.advance_token();
                     continue;
                 }
@@ -478,12 +490,23 @@ pub fn consumeStyleValueExpr(self: *Generator) []const u8 {
             }
             // JS ternary → Zig if/else: "cond ? a : b" → "(if (cond != 0) a else b)"
             if (k == .question) {
+                // Close any pending string comparison before wrapping in if()
+                if (in_string_cmp) {
+                    expr.appendSlice(self.alloc, ")") catch {};
+                    in_string_cmp = false;
+                }
                 if (in_ternary) {
-                    // Nested ternary: only the tail after last " else " is the new condition.
-                    // Transform "...prefix else cond" + "?" → "...prefix else if (cond) "
-                    const last_else = std.mem.lastIndexOf(u8, expr.items, " else ") orelse 0;
-                    const cond_start = last_else + 6; // " else ".len == 6
-                    const cond = expr.items[cond_start..];
+                    // Nested ternary: determine if nesting is in then-branch or else-branch
+                    const last_else = std.mem.lastIndexOf(u8, expr.items, " else ");
+                    const in_else_branch = last_else != null;
+                    const cond_start = if (last_else) |le| le + 6 else then_branch_start;
+                    const raw_cond = expr.items[cond_start..];
+                    // Strip leading ( from TSX grouping paren around nested ternary
+                    const has_group_paren = raw_cond.len > 0 and raw_cond[0] == '(';
+                    const cond = if (has_group_paren) raw_cond[1..] else raw_cond;
+                    // Only skip the matching ) for else-branch (chained else if).
+                    // For then-branch, the ) closes the inner (if ...) sub-expression.
+                    if (has_group_paren and in_else_branch) skip_rparen += 1;
                     const cond_is_bool = std.mem.indexOf(u8, cond, "==") != null or
                         std.mem.indexOf(u8, cond, "!=") != null or
                         std.mem.indexOf(u8, cond, ">=") != null or
@@ -492,11 +515,14 @@ pub fn consumeStyleValueExpr(self: *Generator) []const u8 {
                         std.mem.indexOf(u8, cond, " < ") != null or
                         std.mem.indexOf(u8, cond, "std.mem.eql") != null;
                     const cond_copy = self.alloc.dupe(u8, cond) catch cond;
-                    expr.items.len = last_else;
-                    if (cond_is_bool) {
+                    if (in_else_branch) {
+                        // Else-branch: chained else if
+                        expr.items.len = last_else.?;
                         expr.appendSlice(self.alloc, " else if (") catch {};
                     } else {
-                        expr.appendSlice(self.alloc, " else if (") catch {};
+                        // Then-branch: nested (if ...) sub-expression
+                        expr.items.len = then_branch_start;
+                        expr.appendSlice(self.alloc, "(if (") catch {};
                     }
                     expr.appendSlice(self.alloc, cond_copy) catch {};
                     if (cond_is_bool) {
@@ -524,6 +550,7 @@ pub fn consumeStyleValueExpr(self: *Generator) []const u8 {
                     expr.items.len = 0;
                     expr.appendSlice(self.alloc, wrapped.items) catch {};
                     in_ternary = true;
+                    then_branch_start = expr.items.len;
                 }
                 self.advance_token();
                 continue;
@@ -577,6 +604,9 @@ pub fn consumeStyleValueExpr(self: *Generator) []const u8 {
                 expr.appendSlice(self.alloc, "@as(u32, 0x") catch {};
                 expr.appendSlice(self.alloc, txt[2..8]) catch {};
                 expr.appendSlice(self.alloc, ")") catch {};
+            } else if (k == .rparen and skip_rparen > 0) {
+                // Skip TSX grouping ) that matched a ( stripped from nested ternary condition
+                skip_rparen -= 1;
             } else {
                 expr.appendSlice(self.alloc, txt) catch {};
             }
@@ -647,8 +677,7 @@ pub fn parseStringAttrInline(self: *Generator) ![]const u8 {
 pub fn parseExprAttr(self: *Generator) ![]const u8 {
     if (self.curKind() == .lbrace) {
         self.advance_token();
-        const val = self.curText();
-        self.advance_token();
+        const val = consumeStyleValueExpr(self);
         if (self.curKind() == .rbrace) self.advance_token();
         return val;
     }
@@ -933,6 +962,9 @@ pub fn parseTemplateLiteralFromText(self: *Generator, inner: []const u8) !codege
                     self.addWarning(0, warn_msg);
                     try fmt.appendSlice(self.alloc, expr);
                 }
+            } else if (expr.len > 0 and (expr[0] >= '0' and expr[0] <= '9' or expr[0] == '-')) {
+                // Numeric literal (e.g., ${7}, ${-5}) — embed as static text
+                try fmt.appendSlice(self.alloc, expr);
             } else {
                 // Unknown expression — embed as static text
                 const warn_msg = std.fmt.allocPrint(self.alloc,
@@ -1110,6 +1142,8 @@ pub fn mapStyleKey(key: []const u8) ?[]const u8 {
         .{ "margin", "margin" }, .{ "marginLeft", "margin_left" }, .{ "marginRight", "margin_right" },
         .{ "marginTop", "margin_top" }, .{ "marginBottom", "margin_bottom" },
         .{ "borderRadius", "border_radius" }, .{ "opacity", "opacity" }, .{ "borderWidth", "border_width" },
+        .{ "borderLeftWidth", "border_left_width" }, .{ "borderRightWidth", "border_right_width" },
+        .{ "borderTopWidth", "border_top_width" }, .{ "borderBottomWidth", "border_bottom_width" },
         .{ "shadowOffsetX", "shadow_offset_x" }, .{ "shadowOffsetY", "shadow_offset_y" }, .{ "shadowBlur", "shadow_blur" },
         .{ "top", "top" }, .{ "left", "left" }, .{ "right", "right" }, .{ "bottom", "bottom" },
         .{ "aspectRatio", "aspect_ratio" }, .{ "rotation", "rotation" }, .{ "scaleX", "scale_x" }, .{ "scaleY", "scale_y" },

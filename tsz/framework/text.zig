@@ -575,6 +575,11 @@ pub const TextEngine = struct {
             const word_start = i;
             var word_width: f32 = 0;
             while (i < text.len and text[i] != ' ' and text[i] != '\n') {
+                if (text[i] == 0x01) {
+                    word_width += @floatFromInt(size_px);
+                    i += 1;
+                    continue;
+                }
                 const ch = decodeUtf8(text[i..]);
                 word_width += self.cpAdvance(ch.codepoint, size_px);
                 i += ch.len;
@@ -618,6 +623,13 @@ pub const TextEngine = struct {
         var char_count: usize = 0;
         var i: usize = 0;
         while (i < text.len) {
+            // Inline glyph sentinel — occupies fontSize×fontSize square
+            if (text[i] == 0x01) {
+                width += @floatFromInt(size_px);
+                char_count += 1;
+                i += 1;
+                continue;
+            }
             const ch = decodeUtf8(text[i..]);
             if (self.rasterizeGlyph(ch.codepoint, size_px)) |g| {
                 width += @floatFromInt(g.advance);
@@ -740,6 +752,7 @@ pub const TextEngine = struct {
             var word_w: f32 = 0;
             var char_count: usize = 0;
             while (i < text.len and text[i] != ' ' and text[i] != '\n') {
+                if (text[i] == 0x01) { word_w += @floatFromInt(size_px); char_count += 1; i += 1; continue; }
                 const ch = decodeUtf8(text[i..]);
                 word_w += self.cpAdvance(ch.codepoint, size_px);
                 char_count += 1;

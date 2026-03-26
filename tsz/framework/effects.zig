@@ -585,32 +585,14 @@ pub fn update(dt: f32) void {
             }
         }
 
-        // Custom render path: call user function with EffectContext
-        if (inst.render_fn) |render| {
-            if (inst.backend != .cpu) continue;
-            if (inst.width == 0 or inst.height == 0) continue;
-            const buf = inst.pixel_buf orelse continue;
+        // Custom render path: skip here — rendering + upload happens in
+        // paintCustomEffect → renderCpuNow during the paint phase.
+        // Doing it here too causes a use-after-destroy: update() writes to
+        // the texture, then paintCustomEffect() destroys it on resize,
+        // and the buffered writeTexture hits a dead texture at queue.submit().
+        if (inst.render_fn != null) continue;
 
-            var ctx = EffectContext{
-                .buf = buf.ptr,
-                .width = inst.width,
-                .height = inst.height,
-                .stride = inst.width * 4,
-                .time = inst.time,
-                .dt = dt,
-                .mouse_x = g_mouse_x - inst.screen_x,
-                .mouse_y = g_mouse_y - inst.screen_y,
-                .mouse_inside = (g_mouse_x - inst.screen_x) >= 0 and
-                    (g_mouse_x - inst.screen_x) <= @as(f32, @floatFromInt(inst.width)) and
-                    (g_mouse_y - inst.screen_y) >= 0 and
-                    (g_mouse_y - inst.screen_y) <= @as(f32, @floatFromInt(inst.height)),
-                .frame = inst.frame_count,
-            };
-            render(&ctx);
-            inst.dirty = true;
-        }
-
-        // Upload to GPU
+        // Upload to GPU (registry path only)
         if (inst.dirty) {
             if (inst.ensureTarget(false)) inst.upload();
         }
