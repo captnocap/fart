@@ -1618,7 +1618,7 @@ fn appendLuaExpr(alloc: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8), exp
     }
 }
 
-/// Append a JS line with Lua fixes: strip semicolons, fix operators
+/// Append a JS line with Lua fixes: strip semicolons, fix operators, rewrite JS-isms
 fn appendLuaLine(alloc: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8), line: []const u8) void {
     var clean = line;
     // Strip trailing semicolons
@@ -1626,8 +1626,159 @@ fn appendLuaLine(alloc: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8), lin
         clean = clean[0 .. clean.len - 1];
     }
     clean = std.mem.trimRight(u8, clean, &[_]u8{ ' ', '\t' });
-    appendLuaExpr(alloc, out, clean);
+
+    // Rewrite JS method calls to __tsl.* before operator fixes
+    const rewritten = rewriteJsMethodCalls(alloc, clean);
+    appendLuaExpr(alloc, out, rewritten);
     out.append(alloc, '\n') catch {};
+}
+
+/// Rewrite JS method calls to __tsl.* equivalents:
+///   arr.push(val)    → __tsl.push(arr, val)
+///   arr.map(fn)      → __tsl.map(arr, fn)
+///   arr.filter(fn)   → __tsl.filter(arr, fn)
+///   arr.find(fn)     → __tsl.find(arr, fn)
+///   arr.forEach(fn)  → __tsl.forEach(arr, fn)
+///   arr.indexOf(val) → __tsl.indexOf(arr, val)
+///   arr.includes(val)→ __tsl.includes(arr, val)
+///   arr.join(sep)    → __tsl.join(arr, sep)
+///   arr.slice(a,b)   → __tsl.slice(arr, a, b)
+///   arr.length       → #arr
+///   str.trim()       → __tsl.trim(str)
+///   str.split(sep)   → __tsl.split(str, sep)
+///   x ? a : b        → (x and a or b)  [simple cases only]
+fn rewriteJsMethodCalls(alloc: std.mem.Allocator, line: []const u8) []const u8 {
+    var result: std.ArrayListUnmanaged(u8) = .{};
+    var i: usize = 0;
+
+    while (i < line.len) {
+        // Skip string literals
+        if (line[i] == '\'' or line[i] == '"') {
+            const quote = line[i];
+            result.append(alloc, quote) catch {};
+            i += 1;
+            while (i < line.len and line[i] != quote) {
+                if (line[i] == '\\' and i + 1 < line.len) {
+                    result.append(alloc, line[i]) catch {};
+                    result.append(alloc, line[i + 1]) catch {};
+                    i += 2;
+                } else {
+                    result.append(alloc, line[i]) catch {};
+                    i += 1;
+                }
+            }
+            if (i < line.len) {
+                result.append(alloc, line[i]) catch {};
+                i += 1;
+            }
+            continue;
+        }
+
+        // Check for .method( patterns
+        if (line[i] == '.' and i > 0 and i + 1 < line.len) {
+            const methods = [_]struct { js: []const u8, tsl: []const u8 }{
+                .{ .js = "push(", .tsl = "push" },
+                .{ .js = "map(", .tsl = "map" },
+                .{ .js = "filter(", .tsl = "filter" },
+                .{ .js = "find(", .tsl = "find" },
+                .{ .js = "forEach(", .tsl = "forEach" },
+                .{ .js = "indexOf(", .tsl = "indexOf" },
+                .{ .js = "includes(", .tsl = "includes" },
+                .{ .js = "join(", .tsl = "join" },
+                .{ .js = "slice(", .tsl = "slice" },
+                .{ .js = "reduce(", .tsl = "reduce" },
+                .{ .js = "trim(", .tsl = "trim" },
+                .{ .js = "split(", .tsl = "split" },
+                .{ .js = "startsWith(", .tsl = "startsWith" },
+                .{ .js = "endsWith(", .tsl = "endsWith" },
+                .{ .js = "toUpperCase(", .tsl = "toUpperCase" },
+                .{ .js = "toLowerCase(", .tsl = "toLowerCase" },
+            };
+
+            var matched_method = false;
+            for (methods) |m| {
+                if (i + 1 + m.js.len <= line.len and
+                    std.mem.eql(u8, line[i + 1 .. i + 1 + m.js.len], m.js))
+                {
+                    // Extract the receiver — last identifier before the dot
+                    const id_end = result.items.len;
+                    var id_start = id_end;
+                    // Walk back past closing parens/brackets for chained calls
+                    while (id_start > 0 and isIdentByte(result.items[id_start - 1])) {
+                        id_start -= 1;
+                    }
+                    const receiver = if (id_start < id_end)
+                        alloc.dupe(u8, result.items[id_start..id_end]) catch ""
+                    else
+                        alloc.dupe(u8, result.items) catch "";
+                    const prefix = if (id_start < id_end) id_start else 0;
+                    result.items.len = prefix;
+                    result.appendSlice(alloc, "__tsl.") catch {};
+                    result.appendSlice(alloc, m.tsl) catch {};
+                    result.append(alloc, '(') catch {};
+                    result.appendSlice(alloc, receiver) catch {};
+                    result.appendSlice(alloc, ", ") catch {};
+                    i += 1 + m.js.len; // skip .method(
+                    matched_method = true;
+                    break;
+                }
+            }
+            if (matched_method) continue;
+
+            // .length → #identifier (only the last identifier before the dot)
+            if (i + 7 <= line.len and std.mem.eql(u8, line[i + 1 .. i + 7], "length")) {
+                if (i + 7 >= line.len or !isIdentByte(line[i + 7])) {
+                    // Find the start of the identifier before the dot
+                    const id_end_l = result.items.len;
+                    var id_start_l = id_end_l;
+                    while (id_start_l > 0 and isIdentByte(result.items[id_start_l - 1])) {
+                        id_start_l -= 1;
+                    }
+                    if (id_start_l < id_end_l) {
+                        const ident = alloc.dupe(u8, result.items[id_start_l..id_end_l]) catch "";
+                        result.items.len = id_start_l;
+                        result.append(alloc, '#') catch {};
+                        result.appendSlice(alloc, ident) catch {};
+                    }
+                    i += 7; // skip .length
+                    continue;
+                }
+            }
+        }
+
+        // Simple ternary: x ? a : b → (x and a or b)
+        // Only handle when ? is surrounded by spaces (avoid ?. optional chaining)
+        if (line[i] == '?' and i > 0 and i + 1 < line.len and
+            line[i - 1] == ' ' and line[i + 1] == ' ')
+        {
+            result.appendSlice(alloc, "and ") catch {};
+            i += 2; // skip ? and space
+            continue;
+        }
+
+        // : in ternary context (after we've seen "and") → or
+        // This is imprecise but handles simple x ? a : b cases
+        if (line[i] == ':' and i > 0 and i + 1 < line.len and
+            line[i - 1] == ' ' and line[i + 1] == ' ')
+        {
+            // Check if we're inside what looks like a ternary (has "and" before this)
+            if (std.mem.indexOf(u8, result.items, " and ") != null) {
+                result.appendSlice(alloc, "or ") catch {};
+                i += 2; // skip : and space
+                continue;
+            }
+        }
+
+        result.append(alloc, line[i]) catch {};
+        i += 1;
+    }
+
+    if (result.items.len == 0) return line;
+    return result.items;
+}
+
+fn isIdentByte(ch: u8) bool {
+    return (ch >= 'a' and ch <= 'z') or (ch >= 'A' and ch <= 'Z') or (ch >= '0' and ch <= '9') or ch == '_';
 }
 
 fn scanTagContent(alloc: std.mem.Allocator, src: []const u8, open_tag: []const u8, close_tag: []const u8, parts: *std.ArrayListUnmanaged(u8)) void {
