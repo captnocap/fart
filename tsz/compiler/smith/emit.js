@@ -347,7 +347,7 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
         cond.condExpr.includes('>=') || cond.condExpr.includes('<=') ||
         cond.condExpr.includes(' > ') || cond.condExpr.includes(' < ') ||
         cond.condExpr.includes('getBool');
-      const wrapped = isComparison ? `(${cond.condExpr})` : `((${cond.condExpr}) != 0)`;
+      const wrapped = isComparison ? `((${cond.condExpr}))` : `((${cond.condExpr}) != 0)`;
       if (cond.kind === 'show_hide') {
         out += `    ${cond.arrName}[${cond.trueIdx}].style.display = if ${wrapped} .flex else .none;\n`;
       }

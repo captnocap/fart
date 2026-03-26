@@ -491,16 +491,14 @@ function parseChildren(c) {
         if (c.kind() === TK.rbrace) c.advance();
       }
     } else if (c.kind() !== TK.rbrace) {
-      // Text content — collect anything that isn't JSX or braces, preserve spaces
-      let text = '';
-      let lastEnd = 0;
+      // Text content — use raw source between first and last token to preserve apostrophes etc
+      const textStart = c.starts[c.pos];
+      let textEnd = textStart;
       while (c.kind() !== TK.lt && c.kind() !== TK.lt_slash && c.kind() !== TK.lbrace && c.kind() !== TK.eof && c.kind() !== TK.rbrace) {
-        // Add space if there was whitespace between tokens in source
-        if (text.length > 0 && c.starts[c.pos] > lastEnd) text += ' ';
-        text += c.text();
-        lastEnd = c.ends[c.pos];
+        textEnd = c.ends[c.pos];
         c.advance();
       }
+      const text = c._byteSlice(textStart, textEnd).trim();
       if (text.trim()) children.push({ nodeExpr: `.{ .text = "${text.trim()}" }` });
     } else { c.advance(); }
   }
