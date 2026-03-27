@@ -66,6 +66,40 @@ function parseStyleValue(c) {
   return { type: 'unknown', value: '' };
 }
 
+// Parse a ternary branch value — handles parens wrapping nested ternaries
+// Returns { type, value } like parseStyleValue, OR { type: 'zig_expr', zigExpr } for nested ternary
+function parseTernaryBranch(c, key) {
+  const hasParen = c.kind() === TK.lparen;
+  if (hasParen) c.advance();
+  const val = parseStyleValue(c);
+  // Check for nested ternary: val == N ? ... : ...
+  if ((c.kind() === TK.eq_eq || c.kind() === TK.not_eq || c.kind() === TK.gt || c.kind() === TK.lt || c.kind() === TK.gt_eq || c.kind() === TK.lt_eq) && val.zigExpr) {
+    const op = c.kind() === TK.eq_eq ? '==' : c.kind() === TK.not_eq ? '!=' : c.text();
+    c.advance();
+    if (op === '==' && c.kind() === TK.equals) c.advance();
+    let rhs = '';
+    if (c.kind() === TK.number) { rhs = c.text(); c.advance(); }
+    else if (c.kind() === TK.identifier) { const n = c.text(); c.advance(); rhs = isGetter(n) ? slotGet(n) : n; }
+    if (c.kind() === TK.question) {
+      c.advance();
+      const tv = parseTernaryBranch(c, key);
+      if (c.kind() === TK.colon) c.advance();
+      const fv = parseTernaryBranch(c, key);
+      if (hasParen && c.kind() === TK.rparen) c.advance();
+      const cond = `(${val.zigExpr} ${op} ${rhs})`;
+      if (colorKeys[key] && tv.type === 'string' && fv.type === 'string') {
+        return { type: 'zig_expr', zigExpr: `if ${cond} ${parseColor(tv.value)} else ${parseColor(fv.value)}` };
+      }
+      // Nested zig exprs
+      const tvExpr = tv.zigExpr || (tv.type === 'string' ? parseColor(tv.value) : tv.value);
+      const fvExpr = fv.zigExpr || (fv.type === 'string' ? parseColor(fv.value) : fv.value);
+      return { type: 'zig_expr', zigExpr: `if ${cond} ${tvExpr} else ${fvExpr}` };
+    }
+  }
+  if (hasParen && c.kind() === TK.rparen) c.advance();
+  return val;
+}
+
 function parseStyleBlock(c) {
   const fields = [];
   if (c.kind() === TK.lbrace) c.advance();
@@ -76,7 +110,52 @@ function parseStyleBlock(c) {
       if (c.kind() === TK.string) key = key.slice(1, -1);
       c.advance();
       if (c.kind() === TK.colon) c.advance();
-      const val = parseStyleValue(c);
+      let val = parseStyleValue(c);
+      // Ternary in style value: expr == N ? valA : valB
+      if ((c.kind() === TK.eq_eq || c.kind() === TK.not_eq || c.kind() === TK.gt || c.kind() === TK.lt || c.kind() === TK.gt_eq || c.kind() === TK.lt_eq) && val.zigExpr) {
+        const op = c.kind() === TK.eq_eq ? '==' : c.kind() === TK.not_eq ? '!=' : c.text();
+        c.advance();
+        // Handle === (eq_eq + eq) → ==
+        if (op === '==' && c.kind() === TK.equals) c.advance();
+        let rhs = '';
+        if (c.kind() === TK.number) { rhs = c.text(); c.advance(); }
+        else if (c.kind() === TK.minus && c.pos+1 < c.count && c.kindAt(c.pos+1) === TK.number) { c.advance(); rhs = '-' + c.text(); c.advance(); }
+        else if (c.kind() === TK.string) { rhs = `"${c.text().slice(1,-1)}"`; c.advance(); }
+        else if (c.kind() === TK.identifier) { const n = c.text(); c.advance(); rhs = isGetter(n) ? slotGet(n) : n; }
+        if (c.kind() === TK.question) {
+          c.advance(); // skip ?
+          const trueVal = parseTernaryBranch(c, key);
+          if (c.kind() === TK.colon) c.advance();
+          const falseVal = parseTernaryBranch(c, key);
+          const cond = `(${val.zigExpr} ${op} ${rhs})`;
+          // Resolve branch expressions: string→parseColor, zig_expr→zigExpr, number→value
+          const resolveColorBranch = (v) => v.type === 'zig_expr' ? v.zigExpr : v.type === 'string' ? parseColor(v.value) : v.type === 'number' ? parseColor(v.value) : 'Color{}';
+          const resolveNumBranch = (v) => v.type === 'zig_expr' ? v.zigExpr : v.value;
+          if (colorKeys[key] && (trueVal.type === 'string' || trueVal.type === 'zig_expr' || trueVal.type === 'number') && (falseVal.type === 'string' || falseVal.type === 'zig_expr' || falseVal.type === 'number')) {
+            // Ternary color depends on runtime state — use placeholder + dynamic update
+            const colorExpr = `if ${cond} ${resolveColorBranch(trueVal)} else ${resolveColorBranch(falseVal)}`;
+            fields.push(`.${colorKeys[key]} = Color{}`);
+            if (!ctx.dynStyles) ctx.dynStyles = [];
+            ctx.dynStyles.push({ field: colorKeys[key], expression: colorExpr, arrName: '', arrIndex: -1, isColor: true });
+            if (c.kind() === TK.comma) c.advance();
+            continue;
+          } else if (styleKeys[key] && trueVal.type === 'number' && falseVal.type === 'number') {
+            // Ternary numeric style — also needs runtime
+            fields.push(`.${styleKeys[key]} = 0`);
+            if (!ctx.dynStyles) ctx.dynStyles = [];
+            ctx.dynStyles.push({ field: styleKeys[key], expression: `if ${cond} @as(f32, ${trueVal.value}) else @as(f32, ${falseVal.value})`, arrName: '', arrIndex: -1 });
+            if (c.kind() === TK.comma) c.advance();
+            continue;
+          } else if (enumKeys[key]) {
+            const e = enumKeys[key];
+            const tv = trueVal.type === 'string' && e.values[trueVal.value] ? e.values[trueVal.value] : '.flex';
+            const fv = falseVal.type === 'string' && e.values[falseVal.value] ? e.values[falseVal.value] : '.none';
+            fields.push(`.${e.field} = if ${cond} ${tv} else ${fv}`);
+            if (c.kind() === TK.comma) c.advance();
+            continue;
+          }
+        }
+      }
       if (colorKeys[key]) {
         if (val.type === 'string') {
           fields.push(`.${colorKeys[key]} = ${parseColor(val.value)}`);

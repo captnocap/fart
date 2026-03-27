@@ -165,7 +165,7 @@ function parseJSXElement(c) {
         c.advance();
         if (attr === 'style') {
           styleFields = parseStyleBlock(c);
-        } else if (attr === 'onPress') {
+        } else if (attr === 'onPress' || attr === 'onTap' || attr === 'onToggle' || attr === 'onSelect' || attr === 'onChange') {
           if (c.kind() === TK.lbrace) {
             c.advance(); // {
             // Named handler reference: onPress={functionName}
@@ -494,6 +494,58 @@ function parseTemplateLiteral(raw) {
         } else {
           fmt += expr;
         }
+      } else if (expr.includes('?') && expr.includes(':')) {
+        // Ternary expression in template literal: condition ? trueVal : falseVal
+        // Parse recursively to handle chained ternaries: a == 0 ? "x" : a == 1 ? "y" : "z"
+        const parseTernaryExpr = (e) => {
+          const qIdx = e.indexOf('?');
+          if (qIdx < 0) return { isLiteral: true, value: e.trim() };
+          const condStr = e.slice(0, qIdx).trim();
+          const rest = e.slice(qIdx + 1);
+          // Find matching : considering nested ternaries (count ? depth)
+          let depth = 0, colonIdx = -1;
+          for (let ci = 0; ci < rest.length; ci++) {
+            if (rest[ci] === '?') depth++;
+            else if (rest[ci] === ':') { if (depth === 0) { colonIdx = ci; break; } depth--; }
+          }
+          if (colonIdx < 0) return { isLiteral: true, value: e.trim() };
+          let trueStr = rest.slice(0, colonIdx).trim();
+          let falseStr = rest.slice(colonIdx + 1).trim();
+          // Strip quotes from branches
+          const stripQ = (s) => (s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'")) ? s.slice(1, -1) : null;
+          // Resolve condition LHS
+          let condZig = condStr;
+          // Replace state getters in condition
+          for (const s of ctx.stateSlots) {
+            if (condStr.includes(s.getter)) {
+              condZig = condZig.replace(new RegExp('\\b' + s.getter + '\\b', 'g'), slotGet(s.getter));
+            }
+          }
+          // Fix === to ==, !== to !=
+          condZig = condZig.replace(/===/g, '==').replace(/!==/g, '!=');
+          const tv = stripQ(trueStr);
+          const fv = stripQ(falseStr);
+          if (tv !== null && fv !== null) {
+            return { isLiteral: false, zigExpr: `if (${condZig}) "${tv}" else "${fv}"`, spec: '{s}' };
+          }
+          // Recursive: false branch might be another ternary
+          const fvParsed = parseTernaryExpr(falseStr);
+          if (tv !== null && !fvParsed.isLiteral) {
+            return { isLiteral: false, zigExpr: `if (${condZig}) "${tv}" else ${fvParsed.zigExpr}`, spec: '{s}' };
+          }
+          // Numeric branches
+          if (/^-?\d+$/.test(trueStr) && /^-?\d+$/.test(falseStr)) {
+            return { isLiteral: false, zigExpr: `if (${condZig}) @as(i64, ${trueStr}) else @as(i64, ${falseStr})`, spec: '{d}' };
+          }
+          return { isLiteral: true, value: e.trim() };
+        };
+        const result = parseTernaryExpr(expr);
+        if (!result.isLiteral) {
+          fmt += result.spec;
+          args.push(result.zigExpr);
+        } else {
+          fmt += result.value;
+        }
       } else {
         // Non-resolvable arithmetic/complex expression — embed as literal text
         fmt += expr;
@@ -549,6 +601,11 @@ function tryParseConditional(c, children) {
       condParts.push(' and ');
       continue;
     }
+    if (c.kind() === TK.pipe_pipe) {
+      condParts.push(' or ');
+      c.advance();
+      continue;
+    }
     // Build condition expression with Zig-compatible ops
     if (c.kind() === TK.identifier) {
       const name = c.text();
@@ -578,8 +635,14 @@ function tryParseConditional(c, children) {
       else condParts.push(c.text());
     } else if (c.kind() === TK.eq_eq) {
       condParts.push(' == ');
+      c.advance();
+      if (c.kind() === TK.equals) c.advance(); // === → ==
+      continue;
     } else if (c.kind() === TK.not_eq) {
       condParts.push(' != ');
+      c.advance();
+      if (c.kind() === TK.equals) c.advance(); // !== → !=
+      continue;
     } else if (c.kind() === TK.gt_eq) {
       condParts.push(' >= ');
     } else if (c.kind() === TK.lt_eq) {
@@ -629,8 +692,8 @@ function tryParseTernaryJSX(c, children) {
       } else {
         condParts.push(name);
       }
-    } else if (c.kind() === TK.eq_eq) { condParts.push(' == '); }
-    else if (c.kind() === TK.not_eq) { condParts.push(' != '); }
+    } else if (c.kind() === TK.eq_eq) { condParts.push(' == '); c.advance(); if (c.kind() === TK.equals) c.advance(); continue; }
+    else if (c.kind() === TK.not_eq) { condParts.push(' != '); c.advance(); if (c.kind() === TK.equals) c.advance(); continue; }
     else if (c.kind() === TK.number) { condParts.push(c.text()); }
     else if (c.kind() === TK.gt) { condParts.push(' > '); }
     else if (c.kind() === TK.lt) { break; }
@@ -672,8 +735,8 @@ function tryParseTernaryText(c, children) {
     if (c.kind() === TK.identifier) {
       const name = c.text();
       condParts.push(isGetter(name) ? slotGet(name) : name);
-    } else if (c.kind() === TK.eq_eq) { condParts.push(' == '); }
-    else if (c.kind() === TK.not_eq) { condParts.push(' != '); }
+    } else if (c.kind() === TK.eq_eq) { condParts.push(' == '); c.advance(); if (c.kind() === TK.equals) c.advance(); continue; }
+    else if (c.kind() === TK.not_eq) { condParts.push(' != '); c.advance(); if (c.kind() === TK.equals) c.advance(); continue; }
     else if (c.kind() === TK.number) { condParts.push(c.text()); }
     else if (c.kind() === TK.gt) { condParts.push(' > '); }
     else { condParts.push(c.text()); }
