@@ -223,7 +223,7 @@ fn _rebuildMap1() void {
                 if (_jj >= MAX_MAP_0) break;
                 _map_texts_0_0[_jj] = std.fmt.bufPrint(&_map_text_bufs_0_0[_jj], "Group {d}: {s}", .{ @as(i64, @intCast(_i)), _oa0_name[_i][0.._oa0_name_lens[_i]] }) catch "";
                 _map_texts_0_1[_jj] = std.fmt.bufPrint(&_map_text_bufs_0_1[_jj], "{s}", .{ _oa1_label[_flat_j][0.._oa1_label_lens[_flat_j]] }) catch "";
-                _map_texts_0_2[_jj] = std.fmt.bufPrint(&_map_text_bufs_0_2[_jj], "{d} [gi,{d}]", .{ _oa1_value[_flat_j], @as(i64, @intCast(_i)) }) catch "";
+                _map_texts_0_2[_jj] = std.fmt.bufPrint(&_map_text_bufs_0_2[_jj], "{d} [{d},{d}]", .{ _oa1_value[_flat_j], @as(i64, @intCast(_i)), @as(i64, @intCast(_i)) }) catch "";
                 _map_pool_0[_i][_jj] = .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .padding = 8, .border_radius = 4, .background_color = Color.rgb(15, 52, 96) }, .handlers = .{ .lua_on_press = _map_lua_ptrs_0[_flat_j] }, .children = &_arr_0 };
                 _map_count_0[_i] += 1;
             }

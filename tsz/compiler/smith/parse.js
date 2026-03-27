@@ -287,6 +287,7 @@ function tryParseMap(c, oa) {
     oaIdx: oa.oaIdx, itemParam, indexParam,
     oa, textsInMap: [], innerCount: 0, parentArr: '', childIdx: 0,
     mapArrayDecls: [], mapArrayComments: [],
+    parentMap: savedMapCtx,  // track parent map for nested context
   };
   ctx.currentMap = mapInfo;
 
@@ -355,6 +356,7 @@ function tryParseNestedMap(c, nestedOa, fieldName) {
     parentOaIdx: savedMapCtx ? savedMapCtx.oaIdx : -1,
     nestedField: fieldName,
     iterVar: '_j', // nested loops use _j instead of _i
+    parentMap: savedMapCtx,  // track parent map for nested context
   };
   ctx.currentMap = mapInfo;
 
@@ -468,6 +470,11 @@ function parseTemplateLiteral(raw) {
         // Map index parameter: ${idx} → {d} with @as(i64, @intCast(_i))
         fmt += '{d}';
         args.push('@as(i64, @intCast(_i))');
+      } else if (ctx.currentMap && ctx.currentMap.parentMap && expr === ctx.currentMap.parentMap.indexParam) {
+        // Parent map index parameter: ${parent_idx} → {d} with outer loop index
+        // For nested maps, outer loop uses _i, inner loop uses iterator from parent
+        fmt += '{d}';
+        args.push('@as(i64, @intCast(_i))');  // parent map iteration still uses _i at its level
       } else if (ctx.currentMap && expr.startsWith(ctx.currentMap.itemParam + '.')) {
         // Map item member access: ${item.field} → {s}/{d} with OA field ref
         const field = expr.slice(ctx.currentMap.itemParam.length + 1);
