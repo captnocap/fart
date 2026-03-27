@@ -601,9 +601,6 @@ fn addAppExe(
         exe.linkLibCpp();
 
         // ── Vello CPU (anti-aliased 2D path rendering via Rust FFI) ──
-        // rust_eh_personality is defined in both vello and any other Rust static lib —
-        // --allow-multiple-definition prevents duplicate symbol linker errors.
-        exe.addLinkerArg("--allow-multiple-definition");
         exe.addObjectFile(b.path("../deps/vello_ffi/target/release/libvello_ffi_stripped.a"));
 
         if (os == .linux) {
@@ -771,7 +768,6 @@ fn addDevShellExe(
     exe.linkLibCpp();
 
     // ── Vello CPU (anti-aliased 2D path rendering via Rust FFI) ──
-    exe.addLinkerArg("--allow-multiple-definition");
     exe.addObjectFile(b.path("../deps/vello_ffi/target/release/libvello_ffi_stripped.a"));
 
     if (os == .linux) {
