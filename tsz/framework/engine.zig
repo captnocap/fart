@@ -50,16 +50,16 @@ const blend2d_gfx = if (HAS_BLEND2D) @import("blend2d.zig") else struct {
 };
 
 var g_paisley_debug_enabled: ?bool = null;
-var g_paisley_graph_logged_once = false;
+pub var g_paisley_graph_logged_once = false;
 
-fn paisleyDebugEnabled() bool {
+pub fn paisleyDebugEnabled() bool {
     if (g_paisley_debug_enabled == null) {
         g_paisley_debug_enabled = std.posix.getenv("ZIGOS_PAISLEY_DEBUG") != null;
     }
     return g_paisley_debug_enabled.?;
 }
 
-fn isPaisleyName(name: []const u8) bool {
+pub fn isPaisleyName(name: []const u8) bool {
     return std.mem.startsWith(u8, name, "paisley-");
 }
 
@@ -253,7 +253,7 @@ const TextEngine = text_mod.TextEngine;
 // ── Devtools removed — inspector lives in tsz-tools ─────────────────────
 
 // ── Cursor blink state ───────────────────────────────────────────────────
-var g_cursor_visible: bool = true;
+pub var g_cursor_visible: bool = true;
 var g_prev_tick: u32 = 0;
 
 // ── Physics 2D state ────────────────────────────────────────────────────
@@ -286,7 +286,7 @@ fn termPixelToCell(tn: *Node, mx: f32, my: f32) struct { row: u16, col: u16 } {
     };
 }
 
-fn termCellSelected(row: u16, col: u16) bool {
+pub fn termCellSelected(row: u16, col: u16) bool {
     if (!term_sel_active) return false;
     var r0 = term_sel_start_row; var c0 = term_sel_start_col;
     var r1 = term_sel_end_row; var c1 = term_sel_end_col;
@@ -459,7 +459,7 @@ fn initPhysicsNode(node: *Node) void {
 
 // ── Hover state ─────────────────────────────────────────────────────────
 
-var hovered_node: ?*Node = null;
+pub var hovered_node: ?*Node = null;
 var cursor_hand: ?*c.SDL_Cursor = null;
 var cursor_arrow: ?*c.SDL_Cursor = null;
 var cursor_is_hand: bool = false;
@@ -545,7 +545,7 @@ fn updateHover(root: *Node, mx: f32, my: f32) void {
     }
 }
 
-fn brighten(color: Color, amount: u8) Color {
+pub fn brighten(color: Color, amount: u8) Color {
     return .{
         .r = @min(255, @as(u16, color.r) + amount),
         .g = @min(255, @as(u16, color.g) + amount),
@@ -603,14 +603,14 @@ fn openUrl(url: []const u8) void {
     _ = child.spawnAndWait() catch {};
 }
 
-fn measureCallback(t: []const u8, font_size: u16, max_width: f32, letter_spacing: f32, line_height: f32, max_lines: u16, no_wrap: bool) layout.TextMetrics {
+pub fn measureCallback(t: []const u8, font_size: u16, max_width: f32, letter_spacing: f32, line_height: f32, max_lines: u16, no_wrap: bool) layout.TextMetrics {
     if (g_text_engine) |te| {
         return te.measureTextWrappedEx(t, font_size, max_width, letter_spacing, line_height, max_lines, no_wrap);
     }
     return .{};
 }
 
-fn measureWidthOnly(t: []const u8, font_size: u16) f32 {
+pub fn measureWidthOnly(t: []const u8, font_size: u16) f32 {
     if (g_text_engine) |te| {
         return te.measureTextWrappedEx(t, font_size, 0, 0, 0, 1, true).width;
     }
@@ -623,7 +623,7 @@ fn measureImageCallback(_: []const u8) layout.ImageDims {
 
 // ── Node painting (framework-owned) ─────────────────────────────────────
 
-fn offsetDescendants(node: *Node, dy: f32) void {
+pub fn offsetDescendants(node: *Node, dy: f32) void {
     for (node.children) |*child| {
         child.computed.y += dy;
         offsetDescendants(child, dy);
@@ -643,7 +643,7 @@ fn offsetNodeXY(node: *Node, dx: f32, dy: f32) void {
 ///   - Each column gets a randomized anchor gy (stagger) — no flat horizontal edges
 ///   - Tiles stack outward from anchor: odd-indexed down, even-indexed up
 ///   - Uniform CANVAS_NODE_GAP (30px) between all tiles
-fn positionCanvasNodes(parent: *Node) void {
+pub fn positionCanvasNodes(parent: *Node) void {
     // Auto-stack: run once on first frame for drift-enabled canvases
     if (parent.canvas_drift_active and !canvas_stacked) {
         canvas_stacked = true;

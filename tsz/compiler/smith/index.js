@@ -73,10 +73,12 @@ function resetCtx() {
     handlerCount: 0,
     conditionals: [],     // [{condExpr, kind, arrName, arrIndex, trueIdx, falseIdx}]
     dynTexts: [],         // [{bufId, fmtString, fmtArgs, arrName, arrIndex, bufSize}]
+    dynColors: [],        // [{dcId, arrName, arrIndex, colorExpr}] — color prop runtime assignments
     arrayComments: [],    // ["// tsz:file:line — <Tag>"] per array decl
     dynCount: 0,
     arrayCounter: 0,
     arrayDecls: [],       // ["var _arr_N = [_]Node{ ... };"]
+    slotRemap: {},        // {getter/setter name → slot index} — active during component inlining
     objectArrays: [],     // [{fields: [{name, type}], getter, setter}]
     maps: [],             // [{arrayName, itemParam, indexParam, innerNodes, parentArr, childIdx, textsInMap}]
     scriptBlock: null,     // raw JS from <script>...</script>
@@ -123,23 +125,61 @@ function collectComponents(c) {
         if (c.kind() === TK.rparen) c.advance();
       }
 
-      // Find the return statement's JSX position
-      // Scan for 'return' '(' '<'
+      // Scan component body: collect useState + find return JSX position
       let bodyPos = -1;
       let braceDepth = 0;
+      const compStateSlots = [];
       while (c.pos < c.count) {
         if (c.kind() === TK.lbrace) braceDepth++;
-        if (c.kind() === TK.rbrace) { braceDepth--; if (braceDepth < 0) break; }
+        if (c.kind() === TK.rbrace) { braceDepth--; if (braceDepth <= 0) break; }
+        // Collect useState inside component body (depth 1 = direct body)
+        if (braceDepth === 1 && (c.isIdent('const') || c.isIdent('let'))) {
+          const sp = c.pos; c.advance();
+          if (c.kind() === TK.lbracket) {
+            c.advance();
+            if (c.kind() === TK.identifier) {
+              const sg = c.text(); c.advance();
+              if (c.kind() === TK.comma) c.advance();
+              if (c.kind() === TK.identifier) {
+                const ss = c.text(); c.advance();
+                if (c.kind() === TK.rbracket) c.advance();
+                if (c.kind() === TK.equals) c.advance();
+                if (c.isIdent('useState')) {
+                  c.advance();
+                  if (c.kind() === TK.lparen) {
+                    c.advance();
+                    let init = 0; let type = 'int';
+                    if (c.kind() === TK.number) { const n = c.text(); init = n.includes('.') ? parseFloat(n) : parseInt(n); type = n.includes('.') ? 'float' : 'int'; c.advance(); }
+                    else if (c.isIdent('true')) { init = true; type = 'boolean'; c.advance(); }
+                    else if (c.isIdent('false')) { init = false; type = 'boolean'; c.advance(); }
+                    else if (c.kind() === TK.string) { init = c.text().slice(1,-1); type = 'string'; c.advance(); }
+                    compStateSlots.push({ getter: sg, setter: ss, initial: init, type });
+                  }
+                }
+              }
+            }
+          }
+          continue;
+        }
         if (c.isIdent('return')) {
           c.advance();
           if (c.kind() === TK.lparen) c.advance();
           if (c.kind() === TK.lt) { bodyPos = c.pos; break; }
+          // Check for map return: return ( identifier.map(
+          if (c.kind() === TK.identifier) {
+            const mapArr = c.text();
+            if (c.pos + 2 < c.count && c.kindAt(c.pos + 1) === TK.dot &&
+                c.kindAt(c.pos + 2) === TK.identifier && c.textAt(c.pos + 2) === 'map') {
+              bodyPos = c.pos;
+              break;
+            }
+          }
         }
         c.advance();
       }
 
       if (bodyPos >= 0) {
-        ctx.components.push({ name, propNames, bodyPos });
+        ctx.components.push({ name, propNames, bodyPos, stateSlots: compStateSlots });
       }
     }
     c.advance();

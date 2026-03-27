@@ -1,94 +1,39 @@
 // Dead Internet — Project Folder
 // Development hub. Click any segment to load its .so cartridge.
-// Auto-reloads when a segment is rebuilt.
+// Uses numeric state (0=index, 1-11=segments) since .map() handlers are broken.
 
-const [active, setActive] = useState('');
-
-const [boot, setBoot] = useState([{ id: '', name: '', desc: '', path: '', s: '' }]);
-const [shell, setShell] = useState([{ id: '', name: '', desc: '', path: '', s: '' }]);
-const [apps, setApps] = useState([{ id: '', name: '', desc: '', path: '', s: '' }]);
-const [esc, setEsc] = useState([{ id: '', name: '', desc: '', path: '', s: '' }]);
-const [infra, setInfra] = useState([{ id: '', name: '', desc: '', path: '', s: '' }]);
-
-<script>
-// s: W = work-in-progress, R = ready (compiles clean), '' = not started
-// path: source file relative to game/
-setBoot([
-  { id: 'boot', name: 'Boot Sequence', desc: 'BIOS POST, GRUB menu, account creation wizard', path: 'boot/boot.app.tsz', s: 'W' }
-]);
-
-setShell([
-  { id: 'shell', name: 'Desktop Shell', desc: 'Taskbar, window manager, wallpaper, app launcher', path: 'shell/shell.app.tsz', s: '' }
-]);
-
-setApps([
-  { id: 'browser', name: 'Web Browser', desc: 'Fake sites, search engine, bookmarks, tabs', path: 'apps/browser/browser.app.tsz', s: '' },
-  { id: 'messenger', name: 'Messenger', desc: 'Buddy list, chat rooms, away messages', path: 'apps/messenger/messenger.app.tsz', s: '' },
-  { id: 'social', name: 'Social Feed', desc: 'MyFace, InstaSnap, Threadit — NPC posts and profiles', path: 'apps/social/social.app.tsz', s: '' },
-  { id: 'settings', name: 'Settings', desc: 'Wallpaper, themes, account info, system', path: 'apps/settings/settings.app.tsz', s: '' },
-  { id: 'creative', name: 'Creative Studio', desc: 'Paint, music, simple creative tools', path: 'apps/creative/creative.app.tsz', s: '' },
-  { id: 'games', name: 'Mini-Games', desc: 'Solitaire, minesweeper, snake', path: 'apps/games/games.app.tsz', s: '' }
-]);
-
-setEsc([
-  { id: 'escape', name: 'The Escape', desc: 'BSP viewer, cs_office, the reveal sequence', path: 'escape/escape.app.tsz', s: '' }
-]);
-
-setInfra([
-  { id: 'ai-engine', name: 'AI Engine', desc: 'Local GGUF model, NPC personality system', path: 'ai/', s: '' },
-  { id: 'shared', name: 'Shared Assets', desc: 'Base classifiers, theme tokens, fonts', path: 'shared/base.cls.tsz', s: 'W' }
-]);
-</script>
-
-function LayerHeader(props: { num: string, title: string, count: string, desc: string }) {
-  return (
-    <Box style={{ borderBottomWidth: 1, borderColor: '#2a2a2a', paddingBottom: 8, marginTop: 20 }}>
-      <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-        <Text fontSize={9} color="#555555">{`LAYER ${props.num}`}</Text>
-        <Text fontSize={14} color="#cccccc">{props.title}</Text>
-      </Box>
-      <Text fontSize={9} color="#555555" style={{ marginTop: 2 }}>{props.desc}</Text>
-      <Text fontSize={8} color="#444444" style={{ marginTop: 2 }}>{`${props.count} segment(s)`}</Text>
-    </Box>
-  );
-}
-
-function SegmentRow(props: { id: string, name: string, desc: string, path: string, s: string }) {
-  return (
-    <Pressable onPress={() => { setActive(props.id + '.so') }} style={{ flexDirection: 'row', alignItems: 'center', paddingTop: 8, paddingBottom: 8, paddingLeft: 10, paddingRight: 12, borderBottomWidth: 1, borderColor: '#1a1a1a' }}>
-      <Box style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: props.s === 'W' ? '#facc15' : props.s === 'R' ? '#4ade80' : '#2a2a2a', marginRight: 10 }} />
-      <Box style={{ flexDirection: 'column', flexGrow: 1 }}>
-        <Text fontSize={12} color="#e0e0e0">{props.name}</Text>
-        <Text fontSize={9} color="#666666">{props.desc}</Text>
-      </Box>
-      <Box style={{ flexDirection: 'column', alignItems: 'flexEnd' }}>
-        <Text fontSize={8} color={props.s === 'W' ? '#facc15' : props.s === 'R' ? '#4ade80' : '#333333'}>{props.s === 'W' ? 'WIP' : props.s === 'R' ? 'READY' : '----'}</Text>
-        <Text fontSize={7} color="#333333">{props.path}</Text>
-      </Box>
-    </Pressable>
-  );
-}
+const [active, setActive] = useState(0);
 
 function App() {
   return (
     <Box style={{ width: '100%', height: '100%', backgroundColor: '#0d0d0d' }}>
-      {active !== '' && <Box style={{ width: '100%', height: '100%' }}>
+
+      {active != 0 && <Box style={{ width: '100%', height: '100%' }}>
         <Box style={{ flexDirection: 'row', alignItems: 'center', paddingLeft: 8, paddingRight: 8, paddingTop: 6, paddingBottom: 6, backgroundColor: '#141414', borderBottomWidth: 1, borderColor: '#2a2a2a' }}>
-          <Pressable onPress={() => { setActive('') }} style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 4, paddingBottom: 4, backgroundColor: '#1a1a1a', borderWidth: 1, borderColor: '#333333', borderRadius: 3 }}>
+          <Pressable onPress={() => { setActive(0) }} style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 4, paddingBottom: 4, backgroundColor: '#1a1a1a', borderWidth: 1, borderColor: '#333333', borderRadius: 3 }}>
             <Text fontSize={9} color="#999999">BACK TO FOLDER</Text>
           </Pressable>
-          <Text fontSize={9} color="#555555" style={{ marginLeft: 12 }}>{active}</Text>
         </Box>
         <Box style={{ flexGrow: 1 }}>
-          <Cartridge src={active} style={{ width: '100%', height: '100%' }} />
+          {active == 1 && <Cartridge src="boot.so" style={{ width: '100%', height: '100%' }} />}
+          {active == 2 && <Cartridge src="shell.so" style={{ width: '100%', height: '100%' }} />}
+          {active == 3 && <Cartridge src="browser.so" style={{ width: '100%', height: '100%' }} />}
+          {active == 4 && <Cartridge src="messenger.so" style={{ width: '100%', height: '100%' }} />}
+          {active == 5 && <Cartridge src="social.so" style={{ width: '100%', height: '100%' }} />}
+          {active == 6 && <Cartridge src="settings.so" style={{ width: '100%', height: '100%' }} />}
+          {active == 7 && <Cartridge src="creative.so" style={{ width: '100%', height: '100%' }} />}
+          {active == 8 && <Cartridge src="games.so" style={{ width: '100%', height: '100%' }} />}
+          {active == 9 && <Cartridge src="escape.so" style={{ width: '100%', height: '100%' }} />}
+          {active == 10 && <Cartridge src="ai-engine.so" style={{ width: '100%', height: '100%' }} />}
+          {active == 11 && <Cartridge src="shared.so" style={{ width: '100%', height: '100%' }} />}
         </Box>
       </Box>}
 
-      {active === '' && <Box style={{ width: '100%', height: '100%' }}>
+      {active == 0 && <Box style={{ width: '100%', height: '100%' }}>
         <Box style={{ paddingLeft: 20, paddingRight: 20, paddingTop: 16, paddingBottom: 14, borderBottomWidth: 2, borderColor: '#1a1a1a' }}>
           <Text fontSize={9} color="#444444">DEAD INTERNET SIMULATOR</Text>
           <Text fontSize={18} color="#e0e0e0">Project Folder</Text>
-          <Text fontSize={10} color="#666666" style={{ marginTop: 2 }}>11 segments across 5 layers — click to load cartridge</Text>
+          <Text fontSize={10} color="#666666" style={{ marginTop: 2 }}>11 segments across 5 layers</Text>
           <Box style={{ flexDirection: 'row', gap: 16, marginTop: 8 }}>
             <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
               <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#4ade80' }} />
@@ -108,36 +53,139 @@ function App() {
         <ScrollView style={{ flexGrow: 1 }}>
           <Box style={{ paddingLeft: 16, paddingRight: 16, paddingBottom: 40 }}>
 
-            <LayerHeader num="1" title="Boot" count="1" desc="BIOS POST, GRUB, account setup — first thing the player sees" />
-            {boot.map((seg) => (
-              <SegmentRow id={seg.id} name={seg.name} desc={seg.desc} path={seg.path} s={seg.s} />
-            ))}
+            <Box style={{ borderBottomWidth: 1, borderColor: '#2a2a2a', paddingBottom: 8, marginTop: 20 }}>
+              <Text fontSize={9} color="#555555">LAYER 1</Text>
+              <Text fontSize={14} color="#cccccc">Boot</Text>
+              <Text fontSize={9} color="#555555">BIOS POST, GRUB, account setup</Text>
+            </Box>
 
-            <LayerHeader num="2" title="Shell" count="1" desc="Desktop environment — taskbar, windows, wallpaper" />
-            {shell.map((seg) => (
-              <SegmentRow id={seg.id} name={seg.name} desc={seg.desc} path={seg.path} s={seg.s} />
-            ))}
+            <Pressable onPress={() => { setActive(1) }} style={{ flexDirection: 'row', alignItems: 'center', paddingTop: 8, paddingBottom: 8, paddingLeft: 10, paddingRight: 12, borderBottomWidth: 1, borderColor: '#1a1a1a' }}>
+              <Box style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#facc15', marginRight: 10 }} />
+              <Box style={{ flexDirection: 'column', flexGrow: 1 }}>
+                <Text fontSize={12} color="#e0e0e0">Boot Sequence</Text>
+                <Text fontSize={9} color="#666666">BIOS POST, GRUB menu, account creation wizard</Text>
+              </Box>
+              <Text fontSize={8} color="#facc15">WIP</Text>
+            </Pressable>
 
-            <LayerHeader num="3" title="Apps" count="6" desc="Each app is a Cartridge .so loaded by the shell" />
-            {apps.map((seg) => (
-              <SegmentRow id={seg.id} name={seg.name} desc={seg.desc} path={seg.path} s={seg.s} />
-            ))}
+            <Box style={{ borderBottomWidth: 1, borderColor: '#2a2a2a', paddingBottom: 8, marginTop: 20 }}>
+              <Text fontSize={9} color="#555555">LAYER 2</Text>
+              <Text fontSize={14} color="#cccccc">Shell</Text>
+              <Text fontSize={9} color="#555555">Desktop environment</Text>
+            </Box>
 
-            <LayerHeader num="4" title="Escape" count="1" desc="The reveal — BSP viewer, cs_office, there is no internet" />
-            {esc.map((seg) => (
-              <SegmentRow id={seg.id} name={seg.name} desc={seg.desc} path={seg.path} s={seg.s} />
-            ))}
+            <Pressable onPress={() => { setActive(2) }} style={{ flexDirection: 'row', alignItems: 'center', paddingTop: 8, paddingBottom: 8, paddingLeft: 10, paddingRight: 12, borderBottomWidth: 1, borderColor: '#1a1a1a' }}>
+              <Box style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#2a2a2a', marginRight: 10 }} />
+              <Box style={{ flexDirection: 'column', flexGrow: 1 }}>
+                <Text fontSize={12} color="#e0e0e0">Desktop Shell</Text>
+                <Text fontSize={9} color="#666666">Taskbar, window manager, wallpaper, app launcher</Text>
+              </Box>
+              <Text fontSize={8} color="#333333">----</Text>
+            </Pressable>
 
-            <LayerHeader num="5" title="Infrastructure" count="2" desc="AI engine, shared classifiers, theme tokens" />
-            {infra.map((seg) => (
-              <SegmentRow id={seg.id} name={seg.name} desc={seg.desc} path={seg.path} s={seg.s} />
-            ))}
+            <Box style={{ borderBottomWidth: 1, borderColor: '#2a2a2a', paddingBottom: 8, marginTop: 20 }}>
+              <Text fontSize={9} color="#555555">LAYER 3</Text>
+              <Text fontSize={14} color="#cccccc">Apps</Text>
+              <Text fontSize={9} color="#555555">Each app is a Cartridge .so loaded by the shell</Text>
+            </Box>
+
+            <Pressable onPress={() => { setActive(3) }} style={{ flexDirection: 'row', alignItems: 'center', paddingTop: 8, paddingBottom: 8, paddingLeft: 10, paddingRight: 12, borderBottomWidth: 1, borderColor: '#1a1a1a' }}>
+              <Box style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#2a2a2a', marginRight: 10 }} />
+              <Box style={{ flexDirection: 'column', flexGrow: 1 }}>
+                <Text fontSize={12} color="#e0e0e0">Web Browser</Text>
+                <Text fontSize={9} color="#666666">Fake sites, search engine, bookmarks, tabs</Text>
+              </Box>
+              <Text fontSize={8} color="#333333">----</Text>
+            </Pressable>
+
+            <Pressable onPress={() => { setActive(4) }} style={{ flexDirection: 'row', alignItems: 'center', paddingTop: 8, paddingBottom: 8, paddingLeft: 10, paddingRight: 12, borderBottomWidth: 1, borderColor: '#1a1a1a' }}>
+              <Box style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#2a2a2a', marginRight: 10 }} />
+              <Box style={{ flexDirection: 'column', flexGrow: 1 }}>
+                <Text fontSize={12} color="#e0e0e0">Messenger</Text>
+                <Text fontSize={9} color="#666666">Buddy list, chat rooms, away messages</Text>
+              </Box>
+              <Text fontSize={8} color="#333333">----</Text>
+            </Pressable>
+
+            <Pressable onPress={() => { setActive(5) }} style={{ flexDirection: 'row', alignItems: 'center', paddingTop: 8, paddingBottom: 8, paddingLeft: 10, paddingRight: 12, borderBottomWidth: 1, borderColor: '#1a1a1a' }}>
+              <Box style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#2a2a2a', marginRight: 10 }} />
+              <Box style={{ flexDirection: 'column', flexGrow: 1 }}>
+                <Text fontSize={12} color="#e0e0e0">Social Feed</Text>
+                <Text fontSize={9} color="#666666">MyFace, InstaSnap, Threadit posts and profiles</Text>
+              </Box>
+              <Text fontSize={8} color="#333333">----</Text>
+            </Pressable>
+
+            <Pressable onPress={() => { setActive(6) }} style={{ flexDirection: 'row', alignItems: 'center', paddingTop: 8, paddingBottom: 8, paddingLeft: 10, paddingRight: 12, borderBottomWidth: 1, borderColor: '#1a1a1a' }}>
+              <Box style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#2a2a2a', marginRight: 10 }} />
+              <Box style={{ flexDirection: 'column', flexGrow: 1 }}>
+                <Text fontSize={12} color="#e0e0e0">Settings</Text>
+                <Text fontSize={9} color="#666666">Wallpaper, themes, account info, system</Text>
+              </Box>
+              <Text fontSize={8} color="#333333">----</Text>
+            </Pressable>
+
+            <Pressable onPress={() => { setActive(7) }} style={{ flexDirection: 'row', alignItems: 'center', paddingTop: 8, paddingBottom: 8, paddingLeft: 10, paddingRight: 12, borderBottomWidth: 1, borderColor: '#1a1a1a' }}>
+              <Box style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#2a2a2a', marginRight: 10 }} />
+              <Box style={{ flexDirection: 'column', flexGrow: 1 }}>
+                <Text fontSize={12} color="#e0e0e0">Creative Studio</Text>
+                <Text fontSize={9} color="#666666">Paint, music, simple creative tools</Text>
+              </Box>
+              <Text fontSize={8} color="#333333">----</Text>
+            </Pressable>
+
+            <Pressable onPress={() => { setActive(8) }} style={{ flexDirection: 'row', alignItems: 'center', paddingTop: 8, paddingBottom: 8, paddingLeft: 10, paddingRight: 12, borderBottomWidth: 1, borderColor: '#1a1a1a' }}>
+              <Box style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#2a2a2a', marginRight: 10 }} />
+              <Box style={{ flexDirection: 'column', flexGrow: 1 }}>
+                <Text fontSize={12} color="#e0e0e0">Mini-Games</Text>
+                <Text fontSize={9} color="#666666">Solitaire, minesweeper, snake</Text>
+              </Box>
+              <Text fontSize={8} color="#333333">----</Text>
+            </Pressable>
+
+            <Box style={{ borderBottomWidth: 1, borderColor: '#2a2a2a', paddingBottom: 8, marginTop: 20 }}>
+              <Text fontSize={9} color="#555555">LAYER 4</Text>
+              <Text fontSize={14} color="#cccccc">Escape</Text>
+              <Text fontSize={9} color="#555555">The reveal</Text>
+            </Box>
+
+            <Pressable onPress={() => { setActive(9) }} style={{ flexDirection: 'row', alignItems: 'center', paddingTop: 8, paddingBottom: 8, paddingLeft: 10, paddingRight: 12, borderBottomWidth: 1, borderColor: '#1a1a1a' }}>
+              <Box style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#2a2a2a', marginRight: 10 }} />
+              <Box style={{ flexDirection: 'column', flexGrow: 1 }}>
+                <Text fontSize={12} color="#e0e0e0">The Escape</Text>
+                <Text fontSize={9} color="#666666">BSP viewer, cs_office, the reveal sequence</Text>
+              </Box>
+              <Text fontSize={8} color="#333333">----</Text>
+            </Pressable>
+
+            <Box style={{ borderBottomWidth: 1, borderColor: '#2a2a2a', paddingBottom: 8, marginTop: 20 }}>
+              <Text fontSize={9} color="#555555">LAYER 5</Text>
+              <Text fontSize={14} color="#cccccc">Infrastructure</Text>
+              <Text fontSize={9} color="#555555">AI engine, shared classifiers, theme tokens</Text>
+            </Box>
+
+            <Pressable onPress={() => { setActive(10) }} style={{ flexDirection: 'row', alignItems: 'center', paddingTop: 8, paddingBottom: 8, paddingLeft: 10, paddingRight: 12, borderBottomWidth: 1, borderColor: '#1a1a1a' }}>
+              <Box style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#2a2a2a', marginRight: 10 }} />
+              <Box style={{ flexDirection: 'column', flexGrow: 1 }}>
+                <Text fontSize={12} color="#e0e0e0">AI Engine</Text>
+                <Text fontSize={9} color="#666666">Local GGUF model, NPC personality system</Text>
+              </Box>
+              <Text fontSize={8} color="#333333">----</Text>
+            </Pressable>
+
+            <Pressable onPress={() => { setActive(11) }} style={{ flexDirection: 'row', alignItems: 'center', paddingTop: 8, paddingBottom: 8, paddingLeft: 10, paddingRight: 12, borderBottomWidth: 1, borderColor: '#1a1a1a' }}>
+              <Box style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#facc15', marginRight: 10 }} />
+              <Box style={{ flexDirection: 'column', flexGrow: 1 }}>
+                <Text fontSize={12} color="#e0e0e0">Shared Assets</Text>
+                <Text fontSize={9} color="#666666">Base classifiers, theme tokens, fonts</Text>
+              </Box>
+              <Text fontSize={8} color="#facc15">WIP</Text>
+            </Pressable>
 
             <Box style={{ marginTop: 24, borderTopWidth: 1, borderColor: '#1a1a1a', paddingTop: 12 }}>
               <Text fontSize={8} color="#444444">Build all: game/scripts/build-all.sh</Text>
               <Text fontSize={8} color="#444444">Build one: bin/tsz dev game/boot/boot.app.tsz</Text>
               <Text fontSize={8} color="#333333" style={{ marginTop: 4 }}>Segments auto-reload when their .so is rebuilt.</Text>
-              <Text fontSize={8} color="#333333">Update this manifest when adding new segments.</Text>
             </Box>
           </Box>
         </ScrollView>

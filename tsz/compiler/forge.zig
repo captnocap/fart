@@ -46,6 +46,22 @@ pub fn main() !void {
         return;
     };
 
+    // 1b. Resolve script imports — scan for: from "./FILE.script"
+    // Read the .script.tsz file and pass content to Smith
+    var script_content: ?[]const u8 = null;
+    if (std.mem.indexOf(u8, source, "from \"./")) |from_pos| {
+        const path_start = from_pos + 6; // skip 'from "'
+        if (std.mem.indexOfScalarPos(u8, source, path_start, '"')) |path_end| {
+            const import_rel = source[path_start..path_end];
+            // Build absolute path relative to input file's directory
+            const input_dir = std.fs.path.dirname(input_path) orelse ".";
+            const script_path = std.fmt.allocPrint(std.heap.page_allocator, "{s}/{s}.tsz", .{ input_dir, import_rel }) catch null;
+            if (script_path) |sp| {
+                script_content = std.fs.cwd().readFileAlloc(std.heap.page_allocator, sp, 1024 * 1024) catch null;
+            }
+        }
+    }
+
     // 2. Lex
     var lexer = Lexer.init(source);
     lexer.tokenize();
@@ -58,6 +74,7 @@ pub fn main() !void {
     // 4. Pass data to Smith
     smith.setGlobalString("__source", source);
     smith.setGlobalString("__file", input_path);
+    if (script_content) |sc| smith.setGlobalString("__scriptContent", sc);
 
     // Build token kind array as u8 slice for the bridge
     const kinds = std.heap.page_allocator.alloc(u8, lexer.count) catch return;

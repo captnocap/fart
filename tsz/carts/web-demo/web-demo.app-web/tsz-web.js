@@ -71,7 +71,7 @@ var ENVIRONMENT_IS_SHELL = !ENVIRONMENT_IS_WEB && !ENVIRONMENT_IS_NODE && !ENVIR
 
 // --pre-jses are emitted after the Module integration code, so that they can
 // refer to Module (if they choose; they can also define Module)
-// include: /tmp/tmp1y0i304w.js
+// include: /tmp/tmpfgam7mks.js
 
   if (!Module['expectedDataFileDownloads']) Module['expectedDataFileDownloads'] = 0;
   Module['expectedDataFileDownloads']++;
@@ -90,7 +90,7 @@ var ENVIRONMENT_IS_SHELL = !ENVIRONMENT_IS_WEB && !ENVIRONMENT_IS_NODE && !ENVIR
         // web worker
         PACKAGE_PATH = encodeURIComponent(location.pathname.substring(0, location.pathname.lastIndexOf('/')) + '/');
       }
-      var PACKAGE_NAME = '/home/siah/creative/reactjit/tsz/.zig-cache/o/491b2c270f1a418fb2f4925711866be0/tsz-web.data';
+      var PACKAGE_NAME = '/home/siah/creative/reactjit/tsz/.zig-cache/o/f5911350f9367d1d5499b985e272d648/tsz-web.data';
       var REMOTE_PACKAGE_BASE = 'tsz-web.data';
       var REMOTE_PACKAGE_NAME = Module['locateFile'] ? Module['locateFile'](REMOTE_PACKAGE_BASE, '') : REMOTE_PACKAGE_BASE;
       var REMOTE_PACKAGE_SIZE = metadata['remote_package_size'];
@@ -178,9 +178,9 @@ var ENVIRONMENT_IS_SHELL = !ENVIRONMENT_IS_WEB && !ENVIRONMENT_IS_NODE && !ENVIR
         Module['FS_createDataFile'](name, null, data, true, true, true);
         Module['removeRunDependency'](`fp ${name}`);
           }
-          Module['removeRunDependency']('datafile_/home/siah/creative/reactjit/tsz/.zig-cache/o/491b2c270f1a418fb2f4925711866be0/tsz-web.data');
+          Module['removeRunDependency']('datafile_/home/siah/creative/reactjit/tsz/.zig-cache/o/f5911350f9367d1d5499b985e272d648/tsz-web.data');
       }
-      Module['addRunDependency']('datafile_/home/siah/creative/reactjit/tsz/.zig-cache/o/491b2c270f1a418fb2f4925711866be0/tsz-web.data');
+      Module['addRunDependency']('datafile_/home/siah/creative/reactjit/tsz/.zig-cache/o/f5911350f9367d1d5499b985e272d648/tsz-web.data');
 
       if (!Module['preloadResults']) Module['preloadResults'] = {};
 
@@ -203,21 +203,21 @@ var ENVIRONMENT_IS_SHELL = !ENVIRONMENT_IS_WEB && !ENVIRONMENT_IS_NODE && !ENVIR
 
   })();
 
-// end include: /tmp/tmp1y0i304w.js
-// include: /tmp/tmpc0td8ba8.js
+// end include: /tmp/tmpfgam7mks.js
+// include: /tmp/tmpexejhg_b.js
 
     // All the pre-js content up to here must remain later on, we need to run
     // it.
     if ((typeof ENVIRONMENT_IS_WASM_WORKER != 'undefined' && ENVIRONMENT_IS_WASM_WORKER) || (typeof ENVIRONMENT_IS_PTHREAD != 'undefined' && ENVIRONMENT_IS_PTHREAD) || (typeof ENVIRONMENT_IS_AUDIO_WORKLET != 'undefined' && ENVIRONMENT_IS_AUDIO_WORKLET)) Module['preRun'] = [];
     var necessaryPreJSTasks = Module['preRun'].slice();
-  // end include: /tmp/tmpc0td8ba8.js
-// include: /tmp/tmpmw5dflpt.js
+  // end include: /tmp/tmpexejhg_b.js
+// include: /tmp/tmp5ud9yy5e.js
 
     if (!Module['preRun']) throw 'Module.preRun should exist because file support used it; did a pre-js delete it?';
     necessaryPreJSTasks.forEach((task) => {
       if (Module['preRun'].indexOf(task) < 0) throw 'All preRun tasks that exist before user pre-js code should remain after; did you replace Module or modify Module.preRun?';
     });
-  // end include: /tmp/tmpmw5dflpt.js
+  // end include: /tmp/tmp5ud9yy5e.js
 
 
 var arguments_ = [];
@@ -5340,6 +5340,84 @@ var stringToUTF8Array = (str, heap, outIdx, maxBytesToWrite) => {
   }
   }
 
+  function _vterm_free(...args
+  ) {
+  abort('missing function: vterm_free');
+  }
+  _vterm_free.stub = true;
+
+  function _vterm_input_write(...args
+  ) {
+  abort('missing function: vterm_input_write');
+  }
+  _vterm_input_write.stub = true;
+
+  function _vterm_new(...args
+  ) {
+  abort('missing function: vterm_new');
+  }
+  _vterm_new.stub = true;
+
+  function _vterm_obtain_screen(...args
+  ) {
+  abort('missing function: vterm_obtain_screen');
+  }
+  _vterm_obtain_screen.stub = true;
+
+  function _vterm_screen_convert_color_to_rgb(...args
+  ) {
+  abort('missing function: vterm_screen_convert_color_to_rgb');
+  }
+  _vterm_screen_convert_color_to_rgb.stub = true;
+
+  function _vterm_screen_enable_altscreen(...args
+  ) {
+  abort('missing function: vterm_screen_enable_altscreen');
+  }
+  _vterm_screen_enable_altscreen.stub = true;
+
+  function _vterm_screen_enable_reflow(...args
+  ) {
+  abort('missing function: vterm_screen_enable_reflow');
+  }
+  _vterm_screen_enable_reflow.stub = true;
+
+  function _vterm_screen_flush_damage(...args
+  ) {
+  abort('missing function: vterm_screen_flush_damage');
+  }
+  _vterm_screen_flush_damage.stub = true;
+
+  function _vterm_screen_get_cell(...args
+  ) {
+  abort('missing function: vterm_screen_get_cell');
+  }
+  _vterm_screen_get_cell.stub = true;
+
+  function _vterm_screen_reset(...args
+  ) {
+  abort('missing function: vterm_screen_reset');
+  }
+  _vterm_screen_reset.stub = true;
+
+  function _vterm_screen_set_callbacks(...args
+  ) {
+  abort('missing function: vterm_screen_set_callbacks');
+  }
+  _vterm_screen_set_callbacks.stub = true;
+
+  function _vterm_screen_set_damage_merge(...args
+  ) {
+  abort('missing function: vterm_screen_set_damage_merge');
+  }
+  _vterm_screen_set_damage_merge.stub = true;
+
+  function _vterm_set_utf8(...args
+  ) {
+  abort('missing function: vterm_set_utf8');
+  }
+  _vterm_set_utf8.stub = true;
+
   
   var _wgpuCommandEncoderBeginRenderPass = (encoderPtr, descriptor) => {
       assert(descriptor);
@@ -6488,8 +6566,8 @@ function checkIncomingModuleAPI() {
 
 // Imports from the Wasm binary.
 var _main = Module['_main'] = makeInvalidEarlyAccess('_main');
-var _web_serial_write = Module['_web_serial_write'] = makeInvalidEarlyAccess('_web_serial_write');
 var _web_serial_char = Module['_web_serial_char'] = makeInvalidEarlyAccess('_web_serial_char');
+var _web_serial_write = Module['_web_serial_write'] = makeInvalidEarlyAccess('_web_serial_write');
 var _web_click = Module['_web_click'] = makeInvalidEarlyAccess('_web_click');
 var _emwgpuCreateBindGroup = makeInvalidEarlyAccess('_emwgpuCreateBindGroup');
 var _emwgpuCreateBindGroupLayout = makeInvalidEarlyAccess('_emwgpuCreateBindGroupLayout');
@@ -6545,8 +6623,8 @@ var wasmTable = makeInvalidEarlyAccess('wasmTable');
 
 function assignWasmExports(wasmExports) {
   assert(typeof wasmExports['main'] != 'undefined', 'missing Wasm export: main');
-  assert(typeof wasmExports['web_serial_write'] != 'undefined', 'missing Wasm export: web_serial_write');
   assert(typeof wasmExports['web_serial_char'] != 'undefined', 'missing Wasm export: web_serial_char');
+  assert(typeof wasmExports['web_serial_write'] != 'undefined', 'missing Wasm export: web_serial_write');
   assert(typeof wasmExports['web_click'] != 'undefined', 'missing Wasm export: web_click');
   assert(typeof wasmExports['emwgpuCreateBindGroup'] != 'undefined', 'missing Wasm export: emwgpuCreateBindGroup');
   assert(typeof wasmExports['emwgpuCreateBindGroupLayout'] != 'undefined', 'missing Wasm export: emwgpuCreateBindGroupLayout');
@@ -6598,8 +6676,8 @@ function assignWasmExports(wasmExports) {
   assert(typeof wasmExports['memory'] != 'undefined', 'missing Wasm export: memory');
   assert(typeof wasmExports['__indirect_function_table'] != 'undefined', 'missing Wasm export: __indirect_function_table');
   _main = Module['_main'] = createExportWrapper('main', 2);
-  _web_serial_write = Module['_web_serial_write'] = createExportWrapper('web_serial_write', 2);
   _web_serial_char = Module['_web_serial_char'] = createExportWrapper('web_serial_char', 1);
+  _web_serial_write = Module['_web_serial_write'] = createExportWrapper('web_serial_write', 2);
   _web_click = Module['_web_click'] = createExportWrapper('web_click', 2);
   _emwgpuCreateBindGroup = createExportWrapper('emwgpuCreateBindGroup', 1);
   _emwgpuCreateBindGroupLayout = createExportWrapper('emwgpuCreateBindGroupLayout', 1);
@@ -6721,6 +6799,32 @@ var wasmImports = {
   invoke_v,
   /** @export */
   invoke_viiii,
+  /** @export */
+  vterm_free: _vterm_free,
+  /** @export */
+  vterm_input_write: _vterm_input_write,
+  /** @export */
+  vterm_new: _vterm_new,
+  /** @export */
+  vterm_obtain_screen: _vterm_obtain_screen,
+  /** @export */
+  vterm_screen_convert_color_to_rgb: _vterm_screen_convert_color_to_rgb,
+  /** @export */
+  vterm_screen_enable_altscreen: _vterm_screen_enable_altscreen,
+  /** @export */
+  vterm_screen_enable_reflow: _vterm_screen_enable_reflow,
+  /** @export */
+  vterm_screen_flush_damage: _vterm_screen_flush_damage,
+  /** @export */
+  vterm_screen_get_cell: _vterm_screen_get_cell,
+  /** @export */
+  vterm_screen_reset: _vterm_screen_reset,
+  /** @export */
+  vterm_screen_set_callbacks: _vterm_screen_set_callbacks,
+  /** @export */
+  vterm_screen_set_damage_merge: _vterm_screen_set_damage_merge,
+  /** @export */
+  vterm_set_utf8: _vterm_set_utf8,
   /** @export */
   wgpuCommandEncoderBeginRenderPass: _wgpuCommandEncoderBeginRenderPass,
   /** @export */

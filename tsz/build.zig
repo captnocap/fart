@@ -271,7 +271,7 @@ pub fn build(b: *std.Build) void {
         web_options.addOption(bool, "is_lib", false);
         web_options.addOption(bool, "has_quickjs", true);
         web_options.addOption(bool, "has_physics", false);
-        web_options.addOption(bool, "has_terminal", false);
+        web_options.addOption(bool, "has_terminal", true);
         web_options.addOption(bool, "has_video", false);
         web_options.addOption(bool, "has_render_surfaces", false);
         web_options.addOption(bool, "has_effects", false);
@@ -307,6 +307,15 @@ pub fn build(b: *std.Build) void {
 
         // stb_image
         web_mod.addCSourceFile(.{ .file = b.path("stb/stb_image_impl.c"), .flags = &.{"-O2"} });
+
+        // libvterm (terminal emulation — ANSI parsing → cell grid)
+        web_mod.addIncludePath(b.path("../deps/libvterm/include"));
+        web_mod.addIncludePath(b.path("../deps/libvterm/src"));
+        web_mod.addCSourceFiles(.{
+            .root = b.path("../deps/libvterm/src"),
+            .files = &.{ "encoding.c", "keyboard.c", "mouse.c", "parser.c", "pen.c", "screen.c", "state.c", "unicode.c", "vterm.c" },
+            .flags = &.{ "-O2", "-D_GNU_SOURCE" },
+        });
 
         // Framework includes (for @cImport in framework code)
         web_mod.addIncludePath(b.path("."));

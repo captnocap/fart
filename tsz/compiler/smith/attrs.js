@@ -36,6 +36,24 @@ function parseStyleValue(c) {
       c.advance();
       return { type: 'state', value: name, zigExpr: slotGet(name) };
     }
+    // Map item member access: tag.field
+    if (ctx.currentMap && name === ctx.currentMap.itemParam) {
+      c.advance(); // skip item name
+      if (c.kind() === TK.dot) {
+        c.advance(); // skip .
+        if (c.kind() === TK.identifier) {
+          const field = c.text();
+          const oa = ctx.currentMap.oa;
+          const fi = oa.fields.find(f => f.name === field);
+          c.advance();
+          if (fi) {
+            const oaIdx = oa.oaIdx;
+            return { type: 'map_field', value: `_oa${oaIdx}_${field}[_i]`, fieldType: fi.type };
+          }
+        }
+      }
+      return { type: 'unknown', value: '' };
+    }
     // Prop reference — detect type from prop value
     if (ctx.propStack[name] !== undefined) {
       c.advance();
@@ -66,6 +84,10 @@ function parseStyleBlock(c) {
           // Prop with numeric value passed as color — resolve hex from prop
           const propVal = ctx.propStack && Object.values(ctx.propStack).length > 0 ? val.value : '0';
           fields.push(`.${colorKeys[key]} = ${parseColor(propVal)}`);
+        } else if (val.type === 'map_field' && val.fieldType === 'int') {
+          // Map item int field as color — hex-to-RGB with bit-shift extraction
+          const v = val.value;
+          fields.push(`.${colorKeys[key]} = Color.rgb(@intCast((${v} >> 16) & 0xFF), @intCast((${v} >> 8) & 0xFF), @intCast(${v} & 0xFF))`);
         } else {
           // State or unknown — placeholder Color{}, dynamic update at runtime
           fields.push(`.${colorKeys[key]} = Color{}`);
@@ -75,7 +97,9 @@ function parseStyleBlock(c) {
           // Dynamic style — placeholder 0, update at runtime
           fields.push(`.${styleKeys[key]} = 0`);
           if (!ctx.dynStyles) ctx.dynStyles = [];
-          ctx.dynStyles.push({ field: styleKeys[key], expression: `@floatFromInt(${val.zigExpr})` });
+          const dsId = ctx.dynStyles.length;
+          ctx.dynStyles.push({ field: styleKeys[key], expression: `@as(f32, @floatFromInt(${val.zigExpr}))`, arrName: '', arrIndex: -1 });
+          fields._dynStyleId = dsId;
         } else if (val.type === 'string' && val.value.endsWith('%')) {
           const pct = parseFloat(val.value);
           fields.push(`.${styleKeys[key]} = ${pct === 100 ? -1 : pct / 100}`);
@@ -99,6 +123,8 @@ function parseStyleBlock(c) {
 // ── Handler parser ──
 
 function findSlot(name) {
+  // Check instance remap first (per-component-inline override)
+  if (ctx.slotRemap && name in ctx.slotRemap) return ctx.slotRemap[name];
   for (let i = 0; i < ctx.stateSlots.length; i++) {
     if (ctx.stateSlots[i].getter === name || ctx.stateSlots[i].setter === name) return i;
   }
@@ -106,10 +132,12 @@ function findSlot(name) {
 }
 
 function isGetter(name) {
+  if (ctx.slotRemap && name in ctx.slotRemap) return true;
   return ctx.stateSlots.some(s => s.getter === name);
 }
 
 function isSetter(name) {
+  if (ctx.slotRemap && name in ctx.slotRemap) return true;
   return ctx.stateSlots.some(s => s.setter === name);
 }
 
@@ -184,6 +212,123 @@ function parseHandler(c) {
   return body;
 }
 
+// ── Lua handler parser ──
+// Mirrors parseHandler/parseValueExpr but outputs Lua syntax.
+// Uses raw variable names (defined in LUA_LOGIC state wrappers).
+
+function luaParseValueExpr(c) {
+  let parts = [];
+  let depth = 0;
+  while (c.kind() !== TK.eof) {
+    if (c.kind() === TK.lparen) { depth++; parts.push('('); c.advance(); continue; }
+    if (c.kind() === TK.rparen) {
+      if (depth === 0) break;
+      depth--; parts.push(')'); c.advance(); continue;
+    }
+    if (c.kind() === TK.identifier) {
+      const name = c.text();
+      // Map item member access: item.field → item.field (Lua table access)
+      if (ctx.currentMap && name === ctx.currentMap.itemParam) {
+        parts.push(name);
+        c.advance();
+        // Check for .field
+        if (c.kind() === TK.dot) {
+          parts.push('.');
+          c.advance();
+          if (c.kind() === TK.identifier) {
+            parts.push(c.text());
+            c.advance();
+          }
+        }
+        continue;
+      }
+      if (ctx.currentMap && name === ctx.currentMap.indexParam) {
+        parts.push(name); // raw index variable name
+        c.advance(); continue;
+      }
+      // Raw variable names — state getters resolve to Lua locals
+      parts.push(name);
+      c.advance(); continue;
+    }
+    if (c.kind() === TK.number) { parts.push(c.text()); c.advance(); continue; }
+    if (c.kind() === TK.plus) { parts.push(' + '); c.advance(); continue; }
+    if (c.kind() === TK.minus) { parts.push(' - '); c.advance(); continue; }
+    if (c.kind() === TK.star) { parts.push(' * '); c.advance(); continue; }
+    if (c.kind() === TK.slash) { parts.push(' / '); c.advance(); continue; }
+    if (c.kind() === TK.percent) { parts.push(' % '); c.advance(); continue; }
+    if (c.kind() === TK.eq_eq) { parts.push(' == '); c.advance(); continue; }
+    if (c.kind() === TK.not_eq) { parts.push(' ~= '); c.advance(); continue; }
+    if (c.kind() === TK.gt) { parts.push(' > '); c.advance(); continue; }
+    if (c.kind() === TK.lt) { parts.push(' < '); c.advance(); continue; }
+    if (c.kind() === TK.gt_eq) { parts.push(' >= '); c.advance(); continue; }
+    if (c.kind() === TK.lt_eq) { parts.push(' <= '); c.advance(); continue; }
+    if (c.kind() === TK.question) {
+      // Ternary: cond ? trueVal : falseVal → (cond) and trueVal or falseVal
+      c.advance();
+      const trueVal = luaParseValueExpr(c);
+      if (c.kind() === TK.colon) c.advance();
+      const falseVal = luaParseValueExpr(c);
+      const cond = parts.join('');
+      parts.length = 0;
+      parts.push(`(${cond}) and ${trueVal} or ${falseVal}`);
+      continue;
+    }
+    if (c.kind() === TK.colon) break;
+    if (c.kind() === TK.dot) { parts.push('.'); c.advance(); continue; }
+    if (c.kind() === TK.string) {
+      // Convert JS string to Lua string: "foo" or 'foo' → 'foo'
+      const s = c.text();
+      const inner = s.slice(1, -1);
+      parts.push(`'${inner}'`);
+      c.advance(); continue;
+    }
+    parts.push(c.text());
+    c.advance();
+  }
+  return parts.join('');
+}
+
+function luaParseHandler(c) {
+  // Skip () =>
+  if (c.kind() === TK.lparen) c.advance();
+  if (c.kind() === TK.rparen) c.advance();
+  if (c.kind() === TK.arrow) c.advance();
+
+  let stmts = [];
+  if (c.kind() === TK.lbrace) {
+    c.advance();
+    while (c.kind() !== TK.rbrace && c.kind() !== TK.eof) {
+      if (c.kind() === TK.identifier && isSetter(c.text())) {
+        const setter = c.text();
+        c.advance();
+        if (c.kind() === TK.lparen) {
+          c.advance();
+          const valExpr = luaParseValueExpr(c);
+          stmts.push(`${setter}(${valExpr})`);
+          if (c.kind() === TK.rparen) c.advance();
+        }
+      }
+      if (c.kind() === TK.semicolon) c.advance();
+      else if (c.kind() !== TK.rbrace) c.advance();
+    }
+    if (c.kind() === TK.rbrace) c.advance();
+    return stmts.join('; ');
+  }
+
+  // Single expression
+  if (c.kind() === TK.identifier && isSetter(c.text())) {
+    const setter = c.text();
+    c.advance();
+    if (c.kind() === TK.lparen) {
+      c.advance();
+      const valExpr = luaParseValueExpr(c);
+      stmts.push(`${setter}(${valExpr})`);
+      if (c.kind() === TK.rparen) c.advance();
+    }
+  }
+  return stmts.join('; ');
+}
+
 // Parse a value expression (inside setter call) until ) at depth 0
 function parseValueExpr(c) {
   let parts = [];
@@ -198,6 +343,8 @@ function parseValueExpr(c) {
       const name = c.text();
       if (isGetter(name)) {
         parts.push(slotGet(name));
+      } else if (ctx.currentMap && name === ctx.currentMap.indexParam) {
+        parts.push('0'); // map index → 0 in handler context (reference behavior)
       } else {
         parts.push(name);
       }
@@ -211,16 +358,21 @@ function parseValueExpr(c) {
     if (c.kind() === TK.percent) { parts.push(' % '); c.advance(); continue; }
     if (c.kind() === TK.eq_eq) { parts.push(' == '); c.advance(); continue; }
     if (c.kind() === TK.not_eq) { parts.push(' != '); c.advance(); continue; }
+    if (c.kind() === TK.gt) { parts.push(' > '); c.advance(); continue; }
+    if (c.kind() === TK.lt) { parts.push(' < '); c.advance(); continue; }
+    if (c.kind() === TK.gt_eq) { parts.push(' >= '); c.advance(); continue; }
+    if (c.kind() === TK.lt_eq) { parts.push(' <= '); c.advance(); continue; }
     if (c.kind() === TK.question) {
-      // Ternary: cond ? trueVal : falseVal → if (cond) @as(i32, trueVal) else @as(i32, falseVal)
+      // Ternary: cond ? trueVal : falseVal → if ((cond)) (trueVal) else @as(i32, falseVal)
       c.advance();
       const trueVal = parseValueExpr(c); // reads until : at depth 0
-      // : already consumed by parseValueExpr stopping, or we need to skip it
       if (c.kind() === TK.colon) c.advance();
       const falseVal = parseValueExpr(c); // reads until ) at depth 0
       const cond = parts.join('');
       parts.length = 0;
-      parts.push(`if ((${cond})) @as(i32, ${trueVal}) else @as(i32, ${falseVal})`);
+      const hasOps = trueVal.includes(' + ') || trueVal.includes(' - ') || trueVal.includes(' * ') || trueVal.includes(' / ');
+      const wrappedTrue = hasOps ? `(${trueVal})` : `@as(i32, ${trueVal})`;
+      parts.push(`if ((${cond})) ${wrappedTrue} else @as(i32, ${falseVal})`);
       continue;
     }
     if (c.kind() === TK.colon) break; // stop for ternary false branch

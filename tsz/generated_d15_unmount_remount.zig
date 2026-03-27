@@ -3,7 +3,6 @@
 //! Source: d15_unmount_remount.tsz
 
 const std = @import("std");
-const builtin = @import("builtin");
 const build_options = @import("build_options");
 const IS_LIB = if (@hasDecl(build_options, "is_lib")) build_options.is_lib else false;
 
@@ -12,7 +11,7 @@ const Node = layout.Node;
 const Style = layout.Style;
 const Color = layout.Color;
 const state = @import("framework/state.zig");
-const engine = if (IS_LIB) struct {} else @import("framework/engine_web.zig");
+const engine = if (IS_LIB) struct {} else @import("framework/engine.zig");
 
 // ── State manifest ──────────────────────────────────────────────
 // slot 0: showA (int)
@@ -36,19 +35,19 @@ var _arr_3 = [_]Node{ .{ .text = "Show All", .font_size = 11, .text_color = Colo
 // tsz:d15_unmount_remount.tsz:39 — <Pressable>
 var _arr_4 = [_]Node{ .{ .text = "Hide All", .font_size = 11, .text_color = Color.rgb(226, 232, 240) } };
 // tsz:d15_unmount_remount.tsz:23 — <Box>
-var _arr_5 = [_]Node{ .{ .style = .{ .padding = 8, .border_radius = 6, .background_color = Color.rgb(30, 41, 59) }, .handlers = .{ .on_press = _handler_press_0 }, .children = &_arr_0 }, .{ .style = .{ .padding = 8, .border_radius = 6, .background_color = Color.rgb(30, 41, 59) }, .handlers = .{ .on_press = _handler_press_1 }, .children = &_arr_1 }, .{ .style = .{ .padding = 8, .border_radius = 6, .background_color = Color.rgb(30, 41, 59) }, .handlers = .{ .on_press = _handler_press_2 }, .children = &_arr_2 }, .{ .style = .{ .padding = 8, .border_radius = 6, .background_color = Color.rgb(51, 65, 85) }, .handlers = .{ .on_press = _handler_press_3 }, .children = &_arr_3 }, .{ .style = .{ .padding = 8, .border_radius = 6, .background_color = Color.rgb(51, 65, 85) }, .handlers = .{ .on_press = _handler_press_4 }, .children = &_arr_4 } };
+var _arr_5 = [_]Node{ .{ .style = .{ .padding = 8, .border_radius = 6, .background_color = Color.rgb(30, 41, 59) }, .handlers = .{ .lua_on_press = "setShowA((showA == 1) and 0 or 1); setCycleCount(cycleCount + 1)" }, .children = &_arr_0 }, .{ .style = .{ .padding = 8, .border_radius = 6, .background_color = Color.rgb(30, 41, 59) }, .handlers = .{ .lua_on_press = "setShowB((showB == 1) and 0 or 1); setCycleCount(cycleCount + 1)" }, .children = &_arr_1 }, .{ .style = .{ .padding = 8, .border_radius = 6, .background_color = Color.rgb(30, 41, 59) }, .handlers = .{ .lua_on_press = "setShowC((showC == 1) and 0 or 1); setCycleCount(cycleCount + 1)" }, .children = &_arr_2 }, .{ .style = .{ .padding = 8, .border_radius = 6, .background_color = Color.rgb(51, 65, 85) }, .handlers = .{ .lua_on_press = "setShowA(1); setShowB(1); setShowC(1); setCycleCount(cycleCount + 1)" }, .children = &_arr_3 }, .{ .style = .{ .padding = 8, .border_radius = 6, .background_color = Color.rgb(51, 65, 85) }, .handlers = .{ .lua_on_press = "setShowA(0); setShowB(0); setShowC(0); setCycleCount(cycleCount + 1)" }, .children = &_arr_4 } };
 // tsz:d15_unmount_remount.tsz:48 — <Pressable>
 var _arr_6 = [_]Node{ .{ .text = "+1", .font_size = 12, .text_color = Color.rgb(226, 232, 240) } };
 // tsz:d15_unmount_remount.tsz:45 — <Box>
-var _arr_7 = [_]Node{ .{ .text = "Panel A", .font_size = 14, .text_color = Color.rgb(59, 130, 246) }, .{ .text = "", .font_size = 28, .text_color = Color.rgb(59, 130, 246) }, .{ .style = .{ .background_color = Color.rgb(51, 65, 85), .border_radius = 6, .padding = 10, .align_items = .center }, .handlers = .{ .on_press = _handler_press_5 }, .children = &_arr_6 }, .{ .text = "Increment, hide, re-show. Does the count persist?", .font_size = 9, .text_color = Color.rgb(71, 85, 105) } };
+var _arr_7 = [_]Node{ .{ .text = "Panel A", .font_size = 14, .text_color = Color.rgb(59, 130, 246) }, .{ .text = "", .font_size = 28, .text_color = Color.rgb(59, 130, 246) }, .{ .style = .{ .background_color = Color.rgb(51, 65, 85), .border_radius = 6, .padding = 10, .align_items = .center }, .handlers = .{ .lua_on_press = "setCounterA(counterA + 1)" }, .children = &_arr_6 }, .{ .text = "Increment, hide, re-show. Does the count persist?", .font_size = 9, .text_color = Color.rgb(71, 85, 105) } };
 // tsz:d15_unmount_remount.tsz:57 — <Pressable>
 var _arr_8 = [_]Node{ .{ .text = "+1", .font_size = 12, .text_color = Color.rgb(226, 232, 240) } };
 // tsz:d15_unmount_remount.tsz:54 — <Box>
-var _arr_9 = [_]Node{ .{ .text = "Panel B", .font_size = 14, .text_color = Color.rgb(34, 197, 94) }, .{ .text = "", .font_size = 28, .text_color = Color.rgb(34, 197, 94) }, .{ .style = .{ .background_color = Color.rgb(51, 65, 85), .border_radius = 6, .padding = 10, .align_items = .center }, .handlers = .{ .on_press = _handler_press_6 }, .children = &_arr_8 }, .{ .text = "Hide A, does B's state change?", .font_size = 9, .text_color = Color.rgb(71, 85, 105) } };
+var _arr_9 = [_]Node{ .{ .text = "Panel B", .font_size = 14, .text_color = Color.rgb(34, 197, 94) }, .{ .text = "", .font_size = 28, .text_color = Color.rgb(34, 197, 94) }, .{ .style = .{ .background_color = Color.rgb(51, 65, 85), .border_radius = 6, .padding = 10, .align_items = .center }, .handlers = .{ .lua_on_press = "setCounterB(counterB + 1)" }, .children = &_arr_8 }, .{ .text = "Hide A, does B's state change?", .font_size = 9, .text_color = Color.rgb(71, 85, 105) } };
 // tsz:d15_unmount_remount.tsz:66 — <Pressable>
 var _arr_10 = [_]Node{ .{ .text = "+1", .font_size = 12, .text_color = Color.rgb(226, 232, 240) } };
 // tsz:d15_unmount_remount.tsz:63 — <Box>
-var _arr_11 = [_]Node{ .{ .text = "Panel C", .font_size = 14, .text_color = Color.rgb(245, 158, 11) }, .{ .text = "", .font_size = 28, .text_color = Color.rgb(245, 158, 11) }, .{ .style = .{ .background_color = Color.rgb(51, 65, 85), .border_radius = 6, .padding = 10, .align_items = .center }, .handlers = .{ .on_press = _handler_press_7 }, .children = &_arr_10 }, .{ .text = "C starts hidden. Show it. Does it start at 0?", .font_size = 9, .text_color = Color.rgb(71, 85, 105) } };
+var _arr_11 = [_]Node{ .{ .text = "Panel C", .font_size = 14, .text_color = Color.rgb(245, 158, 11) }, .{ .text = "", .font_size = 28, .text_color = Color.rgb(245, 158, 11) }, .{ .style = .{ .background_color = Color.rgb(51, 65, 85), .border_radius = 6, .padding = 10, .align_items = .center }, .handlers = .{ .lua_on_press = "setCounterC(counterC + 1)" }, .children = &_arr_10 }, .{ .text = "C starts hidden. Show it. Does it start at 0?", .font_size = 9, .text_color = Color.rgb(71, 85, 105) } };
 // tsz:d15_unmount_remount.tsz:44 — <Box>
 var _arr_12 = [_]Node{ .{ .style = .{ .flex_grow = 1, .background_color = Color.rgb(30, 41, 59), .border_radius = 8, .padding = 16, .gap = 8 }, .children = &_arr_7 }, .{ .style = .{ .flex_grow = 1, .background_color = Color.rgb(30, 41, 59), .border_radius = 8, .padding = 16, .gap = 8 }, .children = &_arr_9 }, .{ .style = .{ .flex_grow = 1, .background_color = Color.rgb(30, 41, 59), .border_radius = 8, .padding = 16, .gap = 8 }, .children = &_arr_11 } };
 // tsz:d15_unmount_remount.tsz:73 — <Box>
@@ -58,7 +57,7 @@ var _arr_14 = [_]Node{ .{ .text = "Unmount / Remount", .font_size = 18, .text_co
 var _root = Node{ .style = .{ .width = -1, .height = -1, .background_color = Color.rgb(15, 23, 42), .padding = 20, .gap = 12 }, .children = &_arr_14 };
 
 // ── Dynamic text buffers ─────────────────────────────────────────
-var _dyn_buf_0: [301]u8 = undefined;
+var _dyn_buf_0: [99]u8 = undefined;
 var _dyn_text_0: []const u8 = "";
 var _dyn_buf_1: [64]u8 = undefined;
 var _dyn_text_1: []const u8 = "";
@@ -67,49 +66,6 @@ var _dyn_text_2: []const u8 = "";
 var _dyn_buf_3: [64]u8 = undefined;
 var _dyn_text_3: []const u8 = "";
 
-// ── Event handlers ──────────────────────────────────────────────
-fn _handler_press_0() void {
-    state.setSlot(0, (if ((state.getSlot(0) == 1)) @as(i32, 0) else @as(i32, 1)));
-    state.setSlot(3, (state.getSlot(3) + 1));
-}
-
-fn _handler_press_1() void {
-    state.setSlot(1, (if ((state.getSlot(1) == 1)) @as(i32, 0) else @as(i32, 1)));
-    state.setSlot(3, (state.getSlot(3) + 1));
-}
-
-fn _handler_press_2() void {
-    state.setSlot(2, (if ((state.getSlot(2) == 1)) @as(i32, 0) else @as(i32, 1)));
-    state.setSlot(3, (state.getSlot(3) + 1));
-}
-
-fn _handler_press_3() void {
-    state.setSlot(0, 1);
-    state.setSlot(1, 1);
-    state.setSlot(2, 1);
-    state.setSlot(3, (state.getSlot(3) + 1));
-}
-
-fn _handler_press_4() void {
-    state.setSlot(0, 0);
-    state.setSlot(1, 0);
-    state.setSlot(2, 0);
-    state.setSlot(3, (state.getSlot(3) + 1));
-}
-
-fn _handler_press_5() void {
-    state.setSlot(4, (state.getSlot(4) + 1));
-}
-
-fn _handler_press_6() void {
-    state.setSlot(5, (state.getSlot(5) + 1));
-}
-
-fn _handler_press_7() void {
-    state.setSlot(6, (state.getSlot(6) + 1));
-}
-
-
 // ── Embedded JS logic ────────────────────────────────────────
 const JS_LOGIC =
     \\
@@ -117,6 +73,23 @@ const JS_LOGIC =
 
 // ── Embedded Lua logic ───────────────────────────────────────
 const LUA_LOGIC =
+    \\-- State variables (mirroring Zig state slots)
+    \\local showA = 1
+    \\local showB = 1
+    \\local showC = 0
+    \\local cycleCount = 0
+    \\local counterA = 0
+    \\local counterB = 0
+    \\local counterC = 0
+    \\
+    \\function setShowA(v) showA = v; __setState(0, v) end
+    \\function setShowB(v) showB = v; __setState(1, v) end
+    \\function setShowC(v) showC = v; __setState(2, v) end
+    \\function setCycleCount(v) cycleCount = v; __setState(3, v) end
+    \\function setCounterA(v) counterA = v; __setState(4, v) end
+    \\function setCounterB(v) counterB = v; __setState(5, v) end
+    \\function setCounterC(v) counterC = v; __setState(6, v) end
+    \\
     \\
 ;
 
@@ -140,7 +113,6 @@ fn _updateDynamicTexts() void {
     _dyn_text_3 = std.fmt.bufPrint(&_dyn_buf_3, "{d}", .{ state.getSlot(6) }) catch "";
     _arr_11[1].text = _dyn_text_3;
 }
-
 
 fn _updateConditionals() void {
     _arr_0[0].style.display = if ((state.getSlot(0) ==  1)) .flex else .none;

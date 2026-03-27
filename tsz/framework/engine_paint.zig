@@ -49,8 +49,21 @@ const render_surfaces = if (HAS_RENDER_SURFACES) @import("render_surfaces.zig") 
 };
 const vterm_mod = if (HAS_TERMINAL) @import("vterm.zig") else @import("vterm.zig");
 
+const engine = @import("engine.zig");
+const crashlog = @import("crashlog.zig");
+
 const Node = layout.Node;
 const Color = layout.Color;
+
+const paisleyDebugEnabled = engine.paisleyDebugEnabled;
+const positionCanvasNodes = engine.positionCanvasNodes;
+const isPaisleyName = engine.isPaisleyName;
+const brighten = engine.brighten;
+const measureCallback = engine.measureCallback;
+const termCellSelected = engine.termCellSelected;
+// g_paisley_graph_logged_once: use engine.g_paisley_graph_logged_once directly
+const offsetDescendants = engine.offsetDescendants;
+const measureWidthOnly = engine.measureWidthOnly;
 
 pub var g_paint_count: u32 = 0;
 pub var g_hidden_count: u32 = 0;
@@ -105,8 +118,8 @@ pub fn paintNode(node: *Node) void {
 
     // Graph container — lightweight canvas with transform for SVG path children
     if (node.graph_container) {
-        if (paisleyDebugEnabled() and !g_paisley_graph_logged_once) {
-            g_paisley_graph_logged_once = true;
+        if (paisleyDebugEnabled() and !engine.g_paisley_graph_logged_once) {
+            engine.g_paisley_graph_logged_once = true;
             std.debug.print("[paisley] graphContainer node={x} children={d}\n", .{ @intFromPtr(node), node.children.len });
             const sample_count = @min(node.children.len, 8);
             for (0..sample_count) |i| {
@@ -261,7 +274,7 @@ pub fn paintCanvasPath(node: *Node) callconv(.auto) void {
 /// Separated from paintNode to reduce the recursive frame size.
 noinline fn paintNodeVisuals(node: *Node) void {
     const r = node.computed;
-    const is_hovered = (hovered_node == node) and (node.handlers.on_hover_enter != null or node.handlers.on_hover_exit != null or node.hoverable);
+    const is_hovered = (engine.hovered_node == node) and (node.handlers.on_hover_enter != null or node.handlers.on_hover_exit != null or node.hoverable);
 
     if (is_hovered and node.style.background_color == null) {
         gpu.drawRect(r.x, r.y, r.w, r.h, 0.15, 0.15, 0.22, 0.6, node.style.border_radius, 0, 0, 0, 0, 0);
@@ -474,7 +487,7 @@ noinline fn paintTextInput(node: *Node, id: u8) void {
             );
         }
     }
-    if (input.isFocused(id) and g_cursor_visible) {
+    if (input.isFocused(id) and engine.g_cursor_visible) {
         const cursor_pos = input.getCursorPos(id);
         const pl = node.style.padLeft();
         const pt = node.style.padTop();
@@ -608,7 +621,7 @@ noinline fn paintTerminal(node: *Node) void {
     }
 
     // Cursor — only show when at live view (not scrolled up)
-    if (scroll_off == 0 and vterm_mod.getCursorVisibleIdx(ti) and g_cursor_visible) {
+    if (scroll_off == 0 and vterm_mod.getCursorVisibleIdx(ti) and engine.g_cursor_visible) {
         const crow = vterm_mod.getCursorRowIdx(ti);
         const ccol = vterm_mod.getCursorColIdx(ti);
         if (crow < rows and ccol < cols) {

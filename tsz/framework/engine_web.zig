@@ -1,11 +1,7 @@
 //! Web engine — thin GPU terminal + v86 serial bridge.
 //!
 //! Per WEB_ARCHITECTURE.md: the browser-side wasm is a dumb renderer.
-//! It receives draw commands (currently: local layout, will become VM serial).
-//! It sends back input events (click, key, resize).
-//!
-//! Phase 1: local layout + v86 serial → terminal text node.
-//! Phase 2: VM sends serialized node tree → browser just paints.
+//! Uses vterm for ANSI parsing of v86 serial output → cell grid → WebGPU.
 
 const std = @import("std");
 const builtin = @import("builtin");
@@ -14,6 +10,7 @@ const gpu = @import("gpu/gpu.zig");
 const wgpu = @import("wgpu");
 const Node = layout.Node;
 const Color = layout.Color;
+const vterm_mod = @import("vterm.zig");
 
 const c = @import("c.zig").imports;
 
@@ -47,58 +44,40 @@ pub const AppConfig = struct {
     post_reload: ?*const fn () void = null,
 };
 
-// ── Terminal buffer (v86 serial → text) ─────────────────────────────
+// ── Serial → vterm ──────────────────────────────────────────────────
 
-const TERM_BUF_SIZE = 32 * 1024;
-var g_term_buf: [TERM_BUF_SIZE]u8 = undefined;
-var g_term_len: usize = 0;
-var g_term_dirty: bool = false;
-var g_term_node: ?*Node = null;
-
-/// Exported to JS — receive a chunk of serial data (append).
-export fn web_serial_write(ptr: [*]const u8, len: usize) void {
-    const avail = TERM_BUF_SIZE - g_term_len;
-    const to_copy = @min(len, avail);
-    if (to_copy > 0) {
-        @memcpy(g_term_buf[g_term_len .. g_term_len + to_copy], ptr[0..to_copy]);
-        g_term_len += to_copy;
-        g_term_dirty = true;
-    }
+/// Exported to JS — v86 serial byte → feed to vterm.
+export fn web_serial_char(byte: u8) void {
+    const b = [1]u8{byte};
+    vterm_mod.feed(&b);
+    g_term_dirty = true;
 }
 
-/// Exported to JS — single byte from v86 serial0-output-byte.
-export fn web_serial_char(byte: u8) void {
-    if (g_term_len < TERM_BUF_SIZE) {
-        g_term_buf[g_term_len] = byte;
-        g_term_len += 1;
-        g_term_dirty = true;
-    }
+/// Exported to JS — v86 serial chunk → feed to vterm.
+export fn web_serial_write(ptr: [*]const u8, len: usize) void {
+    vterm_mod.feed(ptr[0..len]);
+    g_term_dirty = true;
 }
 
 /// Exported to JS — click at canvas coordinates.
 export fn web_click(x: f32, y: f32) void {
     _ = x;
     _ = y;
-    // Phase 1: click handling is done in JS (boot button detection).
-    // Phase 2: hit test against last node tree, send event to VM.
 }
 
-// ── Text measurement (for layout — Phase 1 only, moves to VM later) ─
+// ── Text measurement (Phase 1 — moves to VM later) ──────────────────
 
 var g_measure_face: c.FT_Face = null;
 
 fn measureCallback(t: []const u8, font_size: u16, max_width: f32, _: f32, _: f32, _: u16, _: bool) layout.TextMetrics {
     const face = g_measure_face orelse return .{};
     if (font_size == 0) return .{};
-
     _ = c.FT_Set_Pixel_Sizes(face, 0, font_size);
     const line_h: f32 = @as(f32, @floatFromInt(face.*.size.*.metrics.height)) / 64.0;
-
     var pen_x: f32 = 0;
     var max_line_w: f32 = 0;
     var lines: f32 = 1;
     var i: usize = 0;
-
     while (i < t.len) {
         var cp: u32 = t[i];
         var len: usize = 1;
@@ -124,6 +103,7 @@ var g_initialized: bool = false;
 var g_width: u32 = 800;
 var g_height: u32 = 600;
 var g_frame_count: u32 = 0;
+var g_term_dirty: bool = false;
 
 // ── Paint ───────────────────────────────────────────────────────────
 
@@ -132,6 +112,7 @@ fn paintNode(node: *Node) void {
     const r = node.computed;
     if (r.w <= 0 or r.h <= 0) return;
 
+    // Background rect
     if (node.style.background_color) |bg| {
         if (bg.a > 0) {
             const bc = node.style.border_color orelse Color.rgb(0, 0, 0);
@@ -146,7 +127,11 @@ fn paintNode(node: *Node) void {
         }
     }
 
-    if (node.text) |t| {
+    // Terminal node — render vterm cell grid
+    if (node.terminal) {
+        paintTerminal(node);
+    } else if (node.text) |t| {
+        // Regular text
         if (t.len > 0) {
             const tc = node.text_color orelse Color.rgb(255, 255, 255);
             const pl = node.style.padLeft();
@@ -164,15 +149,70 @@ fn paintNode(node: *Node) void {
     for (node.children) |*child| paintNode(child);
 }
 
-/// Find the terminal text node: root → child[1] (terminal box) → child[0] (text).
-fn findTermNode(root: *Node) ?*Node {
-    if (root.children.len > 1) {
-        const term_box = &root.children[1];
-        if (term_box.children.len > 0) {
-            return &term_box.children[0];
+/// Paint terminal cell grid from vterm — simplified version of engine_paint.paintTerminal.
+fn paintTerminal(node: *Node) void {
+    const r = node.computed;
+    const font_size = node.terminal_font_size;
+    const padding: f32 = 4;
+
+    const cell_w = gpu.getCharWidth(font_size);
+    const cell_h = gpu.getLineHeight(font_size);
+    if (cell_w <= 0 or cell_h <= 0) return;
+
+    const avail_w = r.w - padding * 2;
+    const avail_h = r.h - padding * 2;
+    const cols: u16 = @intFromFloat(@max(1, @floor(avail_w / cell_w)));
+    const rows: u16 = @intFromFloat(@max(1, @floor(avail_h / cell_h)));
+
+    const base_x = r.x + padding;
+    const base_y = r.y + padding;
+
+    var row: u16 = 0;
+    while (row < rows) : (row += 1) {
+        const cy = base_y + @as(f32, @floatFromInt(row)) * cell_h;
+
+        var col: u16 = 0;
+        while (col < cols) : (col += 1) {
+            const cell = vterm_mod.getCell(row, col);
+            const cx = base_x + @as(f32, @floatFromInt(col)) * cell_w;
+
+            // Background rect (non-default bg)
+            if (cell.bg) |bg| {
+                gpu.drawRect(cx, cy, cell_w * @as(f32, @floatFromInt(cell.width)), cell_h,
+                    @as(f32, @floatFromInt(bg.r)) / 255.0,
+                    @as(f32, @floatFromInt(bg.g)) / 255.0,
+                    @as(f32, @floatFromInt(bg.b)) / 255.0,
+                    1.0, 0, 0, 0, 0, 0, 0);
+            }
+
+            // Foreground glyph
+            if (cell.char_len > 0 and cell.char_buf[0] != ' ') {
+                const default_fg = vterm_mod.Color{ .r = 204, .g = 204, .b = 204 };
+                const fg = cell.fg orelse default_fg;
+                gpu.drawGlyphAt(
+                    cell.char_buf[0..cell.char_len],
+                    cx, cy, font_size,
+                    @as(f32, @floatFromInt(fg.r)) / 255.0,
+                    @as(f32, @floatFromInt(fg.g)) / 255.0,
+                    @as(f32, @floatFromInt(fg.b)) / 255.0,
+                    1.0,
+                );
+            }
+
+            if (cell.width > 1) col += cell.width - 1;
         }
     }
-    return null;
+
+    // Cursor
+    if (vterm_mod.getCursorVisible()) {
+        const crow = vterm_mod.getCursorRow();
+        const ccol = vterm_mod.getCursorCol();
+        if (crow < rows and ccol < cols) {
+            const cx = base_x + @as(f32, @floatFromInt(ccol)) * cell_w;
+            const cy = base_y + @as(f32, @floatFromInt(crow)) * cell_h;
+            gpu.drawRect(cx, cy, cell_w, cell_h, 0.8, 0.8, 0.8, 0.7, 0, 0, 0, 0, 0, 0);
+        }
+    }
 }
 
 // ── Frame callback ──────────────────────────────────────────────────
@@ -180,14 +220,6 @@ fn findTermNode(root: *Node) ?*Node {
 fn webFrame() callconv(.c) void {
     if (!g_initialized) return;
     g_frame_count += 1;
-
-    // Update terminal text node with serial buffer
-    if (g_term_dirty) {
-        if (g_term_node) |tn| {
-            tn.text = g_term_buf[0..g_term_len];
-        }
-        g_term_dirty = false;
-    }
 
     const w_f: f32 = @floatFromInt(g_width);
     const h_f: f32 = @floatFromInt(g_height);
@@ -222,7 +254,7 @@ pub fn run(config: AppConfig) !void {
     const queue = device.getQueue() orelse return error.GPUInitFailed;
     gpu.initWeb(device, queue, g_width, g_height) catch return error.GPUInitFailed;
 
-    // FreeType (Phase 1 — text measurement + rendering in browser)
+    // FreeType
     var library: c.FT_Library = null;
     if (c.FT_Init_FreeType(&library) != 0) return error.FontNotFound;
     var face: c.FT_Face = null;
@@ -231,17 +263,20 @@ pub fn run(config: AppConfig) !void {
     g_measure_face = face;
     layout.setMeasureFn(measureCallback);
 
+    // Initialize vterm (80x25 default, will auto-resize to fit terminal node)
+    vterm_mod.initVterm(25, 80);
+    webLog("[engine_web] vterm initialized 80x25", .{});
+
+    // Mark the second child of root as a terminal node
+    if (config.root.children.len > 1) {
+        config.root.children[1].terminal = true;
+    }
+
     // App init
     if (config.init) |init_fn| init_fn();
 
-    // Find terminal text node for serial output
-    g_term_node = findTermNode(config.root);
-    @memcpy(g_term_buf[0..30], "Waiting for v86 boot...\n\n$ _\x00\x00");
-    g_term_len = 28;
-    if (g_term_node) |tn| tn.text = g_term_buf[0..g_term_len];
-
     g_initialized = true;
-    webLog("[engine_web] ready — terminal node: {any}", .{g_term_node != null});
+    webLog("[engine_web] ready: {s}", .{config.title});
 
     emscripten_set_main_loop(&webFrame, 0, 0);
 }
