@@ -136,14 +136,20 @@ function parseStyleBlock(c) {
             const colorExpr = `if ${cond} ${resolveColorBranch(trueVal)} else ${resolveColorBranch(falseVal)}`;
             fields.push(`.${colorKeys[key]} = Color{}`);
             if (!ctx.dynStyles) ctx.dynStyles = [];
+            const dsId = ctx.dynStyles.length;
             ctx.dynStyles.push({ field: colorKeys[key], expression: colorExpr, arrName: '', arrIndex: -1, isColor: true });
+            if (!fields._dynStyleIds) fields._dynStyleIds = [];
+            fields._dynStyleIds.push(dsId);
             if (c.kind() === TK.comma) c.advance();
             continue;
           } else if (styleKeys[key] && trueVal.type === 'number' && falseVal.type === 'number') {
             // Ternary numeric style — also needs runtime
             fields.push(`.${styleKeys[key]} = 0`);
             if (!ctx.dynStyles) ctx.dynStyles = [];
+            const dsId2 = ctx.dynStyles.length;
             ctx.dynStyles.push({ field: styleKeys[key], expression: `if ${cond} @as(f32, ${trueVal.value}) else @as(f32, ${falseVal.value})`, arrName: '', arrIndex: -1 });
+            if (!fields._dynStyleIds) fields._dynStyleIds = [];
+            fields._dynStyleIds.push(dsId2);
             if (c.kind() === TK.comma) c.advance();
             continue;
           } else if (enumKeys[key]) {

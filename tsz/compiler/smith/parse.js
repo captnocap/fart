@@ -1048,6 +1048,12 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
         const ds = ctx.dynStyles[children[i].dynStyleId];
         if (ds) { ds.arrName = arrName; ds.arrIndex = i; }
       }
+      if (children[i].dynStyleIds) {
+        for (const dsId of children[i].dynStyleIds) {
+          const ds = ctx.dynStyles[dsId];
+          if (ds) { ds.arrName = arrName; ds.arrIndex = i; }
+        }
+      }
       if (children[i].ternaryCondIdx !== undefined) {
         const tc = ctx.conditionals[children[i].ternaryCondIdx];
         if (tc) {
@@ -1063,6 +1069,7 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
   const nodeResult = { nodeExpr: `.{ ${parts.join(', ')} }` };
   if (nodeFields && nodeFields._dynColorId !== undefined) nodeResult.dynColorId = nodeFields._dynColorId;
   if (styleFields._dynStyleId !== undefined) nodeResult.dynStyleId = styleFields._dynStyleId;
+  if (styleFields._dynStyleIds) nodeResult.dynStyleIds = styleFields._dynStyleIds;
   return nodeResult;
 }
 
