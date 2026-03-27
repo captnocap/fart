@@ -188,53 +188,53 @@ fn _oa0_unpack(ctx: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, argv: [*c]qjs.JSV
 
 
 // ── Map pools ───────────────────────────────────────────────────
-const MAX_MAP_1: usize = 4096;
-var _map_pool_1: [MAX_MAP_1]Node = undefined;
-var _map_count_1: usize = 0;
+const MAX_MAP_0: usize = 4096;
+var _map_pool_0: [MAX_MAP_0]Node = undefined;
+var _map_count_0: usize = 0;
 var _arr_1 = [_]Node{ .{ .style = .{ .gap = 4 } } };
-var _map_inner_1: [MAX_MAP_1][2]Node = undefined;
-const MAX_MAP_0: usize = 64;
-var _map_pool_0: [MAX_MAP_1][MAX_MAP_0]Node = undefined;
-var _map_count_0: [MAX_MAP_1]usize = undefined;
 var _map_inner_0: [MAX_MAP_0][2]Node = undefined;
 var _map_text_bufs_0_0: [MAX_MAP_0][256]u8 = undefined;
 var _map_texts_0_0: [MAX_MAP_0][]const u8 = undefined;
-var _map_text_bufs_0_1: [MAX_MAP_0][256]u8 = undefined;
-var _map_texts_0_1: [MAX_MAP_0][]const u8 = undefined;
-var _map_text_bufs_0_2: [MAX_MAP_0][256]u8 = undefined;
-var _map_texts_0_2: [MAX_MAP_0][]const u8 = undefined;
-var _map_lua_bufs_0: [MAX_MAP_0][32]u8 = undefined;
-var _map_lua_ptrs_0: [MAX_MAP_0]?[*:0]const u8 = .{null} ** MAX_MAP_0;
-fn _initMapLuaPtrs0() void {
-    for (0..MAX_MAP_0) |_i| {
-        const n = std.fmt.bufPrint(_map_lua_bufs_0[_i][0..31], "__mapPress_0({d})", .{_i}) catch continue;
-        _map_lua_bufs_0[_i][n.len] = 0;
-        _map_lua_ptrs_0[_i] = @ptrCast(_map_lua_bufs_0[_i][0..n.len :0]);
-    }
-}
-fn _rebuildMap1() void {
-    _map_count_1 = @min(_oa0_len, MAX_MAP_1);
-    for (0.._map_count_1) |_i| {
-        // Nested map 0: items
-        _map_count_0[_i] = 0;
+const MAX_MAP_1: usize = 64;
+const MAX_FLAT_1: usize = 4096;
+var _map_pool_1: [MAX_MAP_0][MAX_MAP_1]Node = undefined;
+var _map_count_1: [MAX_MAP_0]usize = undefined;
+var _map_inner_1: [MAX_FLAT_1][2]Node = undefined;
+var _map_text_bufs_1_1: [MAX_FLAT_1][256]u8 = undefined;
+var _map_texts_1_1: [MAX_FLAT_1][]const u8 = undefined;
+var _map_text_bufs_1_2: [MAX_FLAT_1][256]u8 = undefined;
+var _map_texts_1_2: [MAX_FLAT_1][]const u8 = undefined;
+var _map_lua_bufs_1: [MAX_FLAT_1][48]u8 = undefined;
+var _map_lua_ptrs_1: [MAX_FLAT_1]?[*:0]const u8 = .{null} ** MAX_FLAT_1;
+fn _rebuildMap0() void {
+    _map_count_0 = @min(_oa0_len, MAX_MAP_0);
+    for (0.._map_count_0) |_i| {
+        _map_texts_0_0[_i] = std.fmt.bufPrint(&_map_text_bufs_0_0[_i], "Group {d}: {s}", .{ @as(i64, @intCast(_i)), _oa0_name[_i][0.._oa0_name_lens[_i]] }) catch "";
+        // Nested map 1: items
+        _map_count_1[_i] = 0;
         for (0.._oa1_len) |_flat_j| {
             if (_oa1_parentIdx[_flat_j] == _i) {
-                const _jj = _map_count_0[_i];
-                if (_jj >= MAX_MAP_0) break;
-                _map_texts_0_0[_jj] = std.fmt.bufPrint(&_map_text_bufs_0_0[_jj], "Group {d}: {s}", .{ @as(i64, @intCast(_i)), _oa0_name[_i][0.._oa0_name_lens[_i]] }) catch "";
-                _map_texts_0_1[_jj] = std.fmt.bufPrint(&_map_text_bufs_0_1[_jj], "{s}", .{ _oa1_label[_flat_j][0.._oa1_label_lens[_flat_j]] }) catch "";
-                _map_texts_0_2[_jj] = std.fmt.bufPrint(&_map_text_bufs_0_2[_jj], "{d} [{d},{d}]", .{ _oa1_value[_flat_j], @as(i64, @intCast(_i)), @as(i64, @intCast(_i)) }) catch "";
-                _map_pool_0[_i][_jj] = .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .padding = 8, .border_radius = 4, .background_color = Color.rgb(15, 52, 96) }, .handlers = .{ .lua_on_press = _map_lua_ptrs_0[_flat_j] }, .children = &_arr_0 };
-                _map_count_0[_i] += 1;
+                const _jj = _map_count_1[_i];
+                if (_jj >= MAX_MAP_1) break;
+                _map_texts_1_1[_flat_j] = std.fmt.bufPrint(&_map_text_bufs_1_1[_flat_j], "{s}", .{ _oa1_label[_flat_j][0.._oa1_label_lens[_flat_j]] }) catch "";
+                _map_texts_1_2[_flat_j] = std.fmt.bufPrint(&_map_text_bufs_1_2[_flat_j], "{d} [{d},{d}]", .{ _oa1_value[_flat_j], @as(i64, @intCast(_i)), @as(i64, @intCast(_i)) }) catch "";
+                _map_inner_1[_flat_j] = [2]Node{ .{ .text = _map_texts_1_1[_flat_j], .font_size = 12, .text_color = Color.rgb(226, 226, 226) }, .{ .text = _map_texts_1_2[_flat_j], .font_size = 12, .text_color = Color.rgb(233, 69, 96) } };
+                {
+                    const _n = std.fmt.bufPrint(_map_lua_bufs_1[_flat_j][0..47], "__mapPress_1({d},{d})", .{_i, _jj}) catch "";
+                    _map_lua_bufs_1[_flat_j][_n.len] = 0;
+                    _map_lua_ptrs_1[_flat_j] = @ptrCast(_map_lua_bufs_1[_flat_j][0.._n.len :0]);
+                }
+                _map_pool_1[_i][_jj] = .{ .style = .{ .flex_direction = .row, .justify_content = .space_between, .padding = 8, .border_radius = 4, .background_color = Color.rgb(15, 52, 96) }, .handlers = .{ .lua_on_press = _map_lua_ptrs_1[_flat_j] }, .children = &_map_inner_1[_flat_j] };
+                _map_count_1[_i] += 1;
             }
         }
-        _map_inner_1[_i] = [2]Node{ .{ .text = "", .font_size = 14, .text_color = Color.rgb(233, 69, 96) }, .{ .style = .{ .margin_top = 8, .gap = 4 }, .children = &_arr_1 } };
-        _arr_3[0].children = _map_pool_0[_i][0.._map_count_0[_i]];
-        _map_pool_1[_i] = .{ .style = .{ .margin_bottom = 12, .background_color = Color.rgb(22, 33, 62), .border_radius = 8, .padding = 12 }, .children = &_map_inner_1[_i] };
+        _map_inner_0[_i] = [2]Node{ .{ .text = _map_texts_0_0[_i], .font_size = 14, .text_color = Color.rgb(233, 69, 96) }, .{ .style = .{ .margin_top = 8, .gap = 4 }, .children = _map_pool_1[_i][0.._map_count_1[_i]] } };
+        _arr_1[0].children = _map_pool_1[_i][0.._map_count_1[_i]];
+        _map_pool_0[_i] = .{ .style = .{ .margin_bottom = 12, .background_color = Color.rgb(22, 33, 62), .border_radius = 8, .padding = 12 }, .children = &_map_inner_0[_i] };
     }
+    _arr_3[0].children = _map_pool_0[0.._map_count_0];
 }
 
-var _arr_0 = [_]Node{ .{ .text = "", .font_size = 12, .text_color = Color.rgb(226, 226, 226) }, .{ .text = "", .font_size = 12, .text_color = Color.rgb(233, 69, 96) } };
 
 // ── Embedded JS logic ────────────────────────────────────────
 const JS_LOGIC =
@@ -260,6 +260,10 @@ const LUA_LOGIC =
     \\
     \\local groups = {}
     \\function setGroups(v) groups = v; __setObjArr0(v) end
+    \\function __mapPress_1(gi, ii)
+    \\  setSelected(gi * 100 + ii)
+    \\end
+    \\
     \\local g = {
     \\  { name = 'Alpha', items = {{ label = 'a1', value = 10 }, { label = 'a2', value = 20 }, { label = 'a3', value = 30 }} },
     \\  { name = 'Beta', items = {{ label = 'b1', value = 40 }, { label = 'b2', value = 50 }} },
@@ -267,12 +271,6 @@ const LUA_LOGIC =
     \\}
     \\setGroups(g);
     \\
-    \\
-    \\function __mapPress_0(idx)
-    \\  local item = items[idx + 1]
-    \\  local ii = idx
-    \\  setSelected(gi * 100 + ii)
-    \\end
     \\
     \\
 ;
@@ -291,13 +289,13 @@ fn _appInit() void {
     _initState();
     qjs_runtime.registerHostFn("__setObjArr0", @ptrCast(&_oa0_unpack), 1);
     _updateDynamicTexts();
-    _rebuildMap1();
+    _rebuildMap0();
 }
 
 fn _appTick(now: u32) void {
     _ = now;
     if (state.isDirty()) { _updateDynamicTexts();
-        _rebuildMap1();
+        _rebuildMap0();
  state.clearDirty(); }
 }
 

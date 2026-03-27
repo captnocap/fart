@@ -194,7 +194,7 @@ function parseJSXElement(c) {
               c.restore(saved);
               const body = parseHandler(c);
               const isMapHandler = !!ctx.currentMap;
-              ctx.handlers.push({ name: handlerName, body, luaBody, inMap: isMapHandler, mapIdx: isMapHandler ? ctx.maps.length : -1 });
+              ctx.handlers.push({ name: handlerName, body, luaBody, inMap: isMapHandler, mapIdx: isMapHandler ? ctx.maps.indexOf(ctx.currentMap) : -1 });
               handlerRef = handlerName;
               ctx.handlerCount++;
               if (c.kind() === TK.rbrace) c.advance(); // }
@@ -282,6 +282,8 @@ function tryParseMap(c, oa) {
 
   // Push map item context — so {item.label} resolves to _oa0_label[_i]
   const savedMapCtx = ctx.currentMap;
+  // Reserve slot BEFORE parsing template so nested maps pushed during template
+  // get higher indices, keeping this map's index stable.
   const mapIdx = ctx.maps.length;
   const mapInfo = {
     oaIdx: oa.oaIdx, itemParam, indexParam,
@@ -289,6 +291,7 @@ function tryParseMap(c, oa) {
     mapArrayDecls: [], mapArrayComments: [],
     parentMap: savedMapCtx,  // track parent map for nested context
   };
+  ctx.maps.push(mapInfo); // reserve slot early
   ctx.currentMap = mapInfo;
 
   // Save array state — arrays created during map template go to mapArrayDecls
@@ -314,9 +317,8 @@ function tryParseMap(c, oa) {
   if (c.kind() === TK.rparen) c.advance(); // )
   if (c.kind() === TK.rparen) c.advance(); // )
 
-  // Register the map
+  // Finalize map info (slot was reserved early)
   mapInfo.templateExpr = templateNode.nodeExpr;
-  ctx.maps.push(mapInfo);
 
   // Return a placeholder node — the parent array slot that gets .children set by _rebuildMap
   // Map placeholder — gets .children set by _rebuildMap at runtime
@@ -355,9 +357,10 @@ function tryParseNestedMap(c, nestedOa, fieldName) {
     isNested: true, parentMapIdx: savedMapCtx ? ctx.maps.indexOf(savedMapCtx) : -1,
     parentOaIdx: savedMapCtx ? savedMapCtx.oaIdx : -1,
     nestedField: fieldName,
-    iterVar: '_j', // nested loops use _j instead of _i
-    parentMap: savedMapCtx,  // track parent map for nested context
+    iterVar: '_j',
+    parentMap: savedMapCtx,
   };
+  ctx.maps.push(mapInfo); // reserve slot early
   ctx.currentMap = mapInfo;
 
   // Save array state
@@ -380,9 +383,8 @@ function tryParseNestedMap(c, nestedOa, fieldName) {
   if (c.kind() === TK.rparen) c.advance();
   if (c.kind() === TK.rparen) c.advance();
 
-  // Register the map
+  // Finalize (slot was reserved early)
   mapInfo.templateExpr = templateNode.nodeExpr;
-  ctx.maps.push(mapInfo);
 
   return { nodeExpr: `.{}`, mapIdx };
 }
@@ -769,7 +771,7 @@ function parseChildren(c) {
           if (isMapTemplate) {
             const mapBufId = ctx.mapDynCount || 0;
             ctx.mapDynCount = mapBufId + 1;
-            ctx.dynTexts.push({ bufId: mapBufId, fmtString: fmt, fmtArgs: args.join(', '), arrName: '', arrIndex: 0, bufSize: 256, inMap: true, mapIdx: ctx.maps.length });
+            ctx.dynTexts.push({ bufId: mapBufId, fmtString: fmt, fmtArgs: args.join(', '), arrName: '', arrIndex: 0, bufSize: 256, inMap: true, mapIdx: ctx.maps.indexOf(ctx.currentMap) });
             children.push({ nodeExpr: `.{ .text = "" }`, dynBufId: mapBufId, inMap: true });
           } else {
             const bufId = ctx.dynCount;
@@ -810,7 +812,7 @@ function parseChildren(c) {
             } else {
               args = `_oa${oaIdx}_${field}[_i]`;
             }
-            ctx.dynTexts.push({ bufId: mapBufId, fmtString: fmt, fmtArgs: args, arrName: '', arrIndex: 0, bufSize: 256, inMap: true, mapIdx: ctx.maps.length });
+            ctx.dynTexts.push({ bufId: mapBufId, fmtString: fmt, fmtArgs: args, arrName: '', arrIndex: 0, bufSize: 256, inMap: true, mapIdx: ctx.maps.indexOf(ctx.currentMap) });
             children.push({ nodeExpr: `.{ .text = "" }`, dynBufId: mapBufId, inMap: true });
             continue;
           }

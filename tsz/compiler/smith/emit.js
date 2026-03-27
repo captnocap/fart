@@ -336,7 +336,9 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
         // Nested map: 2D pool — [MAX_PARENT][MAX_NESTED]
         const parentMap = ctx.maps.find(pm => pm.oaIdx === m.parentOaIdx && !pm.isNested);
         const parentMi = parentMap ? ctx.maps.indexOf(parentMap) : 0;
+        m._parentMi = parentMi;
         out += `const MAX_MAP_${mi}: usize = 64;\n`; // max nested items per parent
+        out += `const MAX_FLAT_${mi}: usize = 4096;\n`; // max total nested items (flat)
         out += `var _map_pool_${mi}: [MAX_MAP_${parentMi}][MAX_MAP_${mi}]Node = undefined;\n`;
         out += `var _map_count_${mi}: [MAX_MAP_${parentMi}]usize = undefined;\n`;
       } else {
@@ -416,31 +418,38 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
         }
       }
       if (innerCount > 0) {
-        out += `var _map_inner_${mi}: [MAX_MAP_${mi}][${innerCount}]Node = undefined;\n`;
+        // Nested maps use flat indexing (_flat_j) so inner arrays must be sized for total items
+        const sizeConst = m.isNested ? `MAX_FLAT_${mi}` : `MAX_MAP_${mi}`;
+        out += `var _map_inner_${mi}: [${sizeConst}][${innerCount}]Node = undefined;\n`;
       }
 
       // Per-item text buffers for dynamic texts inside the map
       // Buffer index = child position in inner array (matches reference naming)
       const mapDynTexts = ctx.dynTexts.filter(dt => dt.inMap && dt.mapIdx === mi);
+      const texSizeConst = m.isNested ? `MAX_FLAT_${mi}` : `MAX_MAP_${mi}`;
       for (const dt of mapDynTexts) {
         dt._mapTextIdx = dt.bufId;
-        out += `var _map_text_bufs_${mi}_${dt.bufId}: [MAX_MAP_${mi}][256]u8 = undefined;\n`;
-        out += `var _map_texts_${mi}_${dt.bufId}: [MAX_MAP_${mi}][]const u8 = undefined;\n`;
+        out += `var _map_text_bufs_${mi}_${dt.bufId}: [${texSizeConst}][256]u8 = undefined;\n`;
+        out += `var _map_texts_${mi}_${dt.bufId}: [${texSizeConst}][]const u8 = undefined;\n`;
       }
 
       // Lua map handlers — pre-allocated per-item expression strings
       const mapHandlers = ctx.handlers.filter(h => h.inMap && h.mapIdx === mi);
       if (mapHandlers.length > 0) {
-        // Pre-allocate buffers for per-item Lua handler strings: "__mapPress_N(idx)"
-        out += `var _map_lua_bufs_${mi}: [MAX_MAP_${mi}][32]u8 = undefined;\n`;
-        out += `var _map_lua_ptrs_${mi}: [MAX_MAP_${mi}]?[*:0]const u8 = .{null} ** MAX_MAP_${mi};\n`;
-        out += `fn _initMapLuaPtrs${mi}() void {\n`;
-        out += `    for (0..MAX_MAP_${mi}) |_i| {\n`;
-        out += `        const n = std.fmt.bufPrint(_map_lua_bufs_${mi}[_i][0..31], "__mapPress_${mi}({d})", .{_i}) catch continue;\n`;
-        out += `        _map_lua_bufs_${mi}[_i][n.len] = 0;\n`;
-        out += `        _map_lua_ptrs_${mi}[_i] = @ptrCast(_map_lua_bufs_${mi}[_i][0..n.len :0]);\n`;
-        out += `    }\n`;
-        out += `}\n`;
+        const luaSizeConst = m.isNested ? `MAX_FLAT_${mi}` : `MAX_MAP_${mi}`;
+        out += `var _map_lua_bufs_${mi}: [${luaSizeConst}][48]u8 = undefined;\n`;
+        out += `var _map_lua_ptrs_${mi}: [${luaSizeConst}]?[*:0]const u8 = .{null} ** ${luaSizeConst};\n`;
+        if (!m.isNested) {
+          // Non-nested: pre-build ptrs at init (single index)
+          out += `fn _initMapLuaPtrs${mi}() void {\n`;
+          out += `    for (0..${luaSizeConst}) |_i| {\n`;
+          out += `        const n = std.fmt.bufPrint(_map_lua_bufs_${mi}[_i][0..47], "__mapPress_${mi}({d})", .{_i}) catch continue;\n`;
+          out += `        _map_lua_bufs_${mi}[_i][n.len] = 0;\n`;
+          out += `        _map_lua_ptrs_${mi}[_i] = @ptrCast(_map_lua_bufs_${mi}[_i][0..n.len :0]);\n`;
+          out += `    }\n`;
+          out += `}\n`;
+        }
+        // Nested: ptrs built during rebuild with (parent_idx, item_idx)
       }
 
       // Store metadata for pass 2
@@ -544,7 +553,7 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
             `_oa${cidx}_${cf.name}[_flat_j]`
           );
         }
-        // Replace nested map dynamic texts
+        // Replace nested map dynamic texts — use _flat_j for flat indexing
         const nestedMapDynTexts = ctx.dynTexts.filter(dt => dt.inMap && dt.mapIdx === nmi);
         for (const dt of nestedMapDynTexts) {
           const ti = dt._mapTextIdx;
@@ -560,11 +569,35 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
               `_oa${cidx}_${cf.name}_lens[_flat_j]`
             );
           }
-          out += `                _map_texts_${nmi}_${ti}[_jj] = std.fmt.bufPrint(&_map_text_bufs_${nmi}_${ti}[_jj], "${dt.fmtString}", .{ ${fixedArgs} }) catch "";\n`;
-          nestedPoolNode = nestedPoolNode.replace('.text = ""', `.text = _map_texts_${nmi}_${ti}[_jj]`);
+          out += `                _map_texts_${nmi}_${ti}[_flat_j] = std.fmt.bufPrint(&_map_text_bufs_${nmi}_${ti}[_flat_j], "${dt.fmtString}", .{ ${fixedArgs} }) catch "";\n`;
         }
-        // Replace handler refs
+        // Build per-item inner array from the shared children template
+        const nestedMeta = _mapMeta[nmi];
+        if (nestedMeta && nestedMeta.innerArr && nestedMeta.innerCount > 0) {
+          // Find the shared array declaration to get the node template
+          const sharedDecl = (nm.mapArrayDecls || []).find(d => d.startsWith(`var ${nestedMeta.innerArr}`)) ||
+                             ctx.arrayDecls.find(d => d.startsWith(`var ${nestedMeta.innerArr}`));
+          if (sharedDecl) {
+            let innerContent = sharedDecl.replace(/var \w+ = \[_\]Node\{ /, '').replace(/ \};.*$/, '');
+            // Replace .text = "" with dynamic text refs, in order
+            for (const dt of nestedMapDynTexts) {
+              const ti = dt._mapTextIdx;
+              innerContent = innerContent.replace('.text = ""', `.text = _map_texts_${nmi}_${ti}[_flat_j]`);
+            }
+            out += `                _map_inner_${nmi}[_flat_j] = [${nestedMeta.innerCount}]Node{ ${innerContent} };\n`;
+            // Replace children ref in pool node to use per-item inner array
+            nestedPoolNode = nestedPoolNode.replace(`&${nestedMeta.innerArr}`, `&_map_inner_${nmi}[_flat_j]`);
+          }
+        }
+        // Replace handler refs + build per-item Lua ptrs with (parent_idx, item_idx)
         const nestedHandlers = ctx.handlers.filter(h => h.inMap && h.mapIdx === nmi);
+        if (nestedHandlers.length > 0) {
+          out += `                {\n`;
+          out += `                    const _n = std.fmt.bufPrint(_map_lua_bufs_${nmi}[_flat_j][0..47], "__mapPress_${nmi}({d},{d})", .{_i, _jj}) catch "";\n`;
+          out += `                    _map_lua_bufs_${nmi}[_flat_j][_n.len] = 0;\n`;
+          out += `                    _map_lua_ptrs_${nmi}[_flat_j] = @ptrCast(_map_lua_bufs_${nmi}[_flat_j][0.._n.len :0]);\n`;
+          out += `                }\n`;
+        }
         for (const mh of nestedHandlers) {
           nestedPoolNode = nestedPoolNode.replace(`.lua_on_press = "${mh.luaBody ? mh.luaBody.replace(/\\/g, '\\\\').replace(/"/g, '\\"') : ''}"`, `.lua_on_press = _map_lua_ptrs_${nmi}[_flat_j]`);
           nestedPoolNode = nestedPoolNode.replace(`.on_press = ${mh.name}`, `.lua_on_press = _map_lua_ptrs_${nmi}[_flat_j]`);
@@ -597,15 +630,12 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
                 inner = inner.replace(new RegExp(`&${pid.name}\\b`, 'g'), `&_map_${pid.name}_${mj}[_i]`);
               }
             }
-            // Replace nested map placeholder children with nested pool slices
+            // Replace nested map shared children refs with per-group pool slices
             for (let nmi = 0; nmi < ctx.maps.length; nmi++) {
               const nm = ctx.maps[nmi];
               if (!nm.isNested || nm.parentOaIdx !== m.oaIdx) continue;
-              // The nested map placeholder is .{} in the inner array — find its parent array slot
-              // and replace its children assignment
-              if (nm.parentArr) {
-                // Find the placeholder in the inner content and replace it
-                // The placeholder is .{} or .{ .style = ... } at position nm.childIdx
+              if (nm.parentArr && inner.includes(`&${nm.parentArr}`)) {
+                inner = inner.replace(`&${nm.parentArr}`, `_map_pool_${nmi}[_i][0.._map_count_${nmi}[_i]]`);
               }
             }
             out += `        _map_inner_${mi}[_i] = [${innerCount}]Node{ ${inner} };\n`;
@@ -789,28 +819,51 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
     luaLines.push(`local ${oa.getter} = {}`);
     luaLines.push(`function ${oa.setter}(v) ${oa.getter} = v; __setObjArr${oa.oaIdx}(v) end`);
   }
-  // Script file imports — convert JS to Lua
+  // Map handler functions in Lua — MUST come before script content
+  // (script may call OA setters that fail in Lua, aborting the rest of the script)
+  // (script may call OA setters that fail in Lua, aborting the rest of the script)
+  for (let mi = 0; mi < ctx.maps.length; mi++) {
+    const mapHandlers = ctx.handlers.filter(h => h.inMap && h.mapIdx === mi);
+    for (const mh of mapHandlers) {
+      if (mh.luaBody) {
+        const m = ctx.maps[mi];
+        if (m.isNested && m.parentMap) {
+          // Nested map handler receives (parent_idx, item_idx)
+          const outerIdxParam = m.parentMap.indexParam || 'gi';
+          const innerIdxParam = m.indexParam || 'ii';
+          luaLines.push(`function __mapPress_${mi}(${outerIdxParam}, ${innerIdxParam})`);
+          luaLines.push(`  ${mh.luaBody}`);
+          luaLines.push(`end`);
+        } else {
+          // Top-level map handler receives single index
+          luaLines.push(`function __mapPress_${mi}(idx)`);
+          luaLines.push(`  local ${m.itemParam} = ${m.oa ? m.oa.getter : 'nil'}[idx + 1]`);
+          luaLines.push(`  local ${m.indexParam} = idx`);
+          luaLines.push(`  ${mh.luaBody}`);
+          luaLines.push(`end`);
+        }
+        luaLines.push('');
+      }
+    }
+  }
+  // Script file imports — convert JS to Lua (after handlers)
   if (globalThis.__scriptContent) {
     let scriptLines = globalThis.__scriptContent.split('\n');
     for (const line of scriptLines) {
-      // Convert JS syntax to Lua
       let luaLine = line;
-      luaLine = luaLine.replace(/\/\/.*$/g, ''); // strip JS comments
+      luaLine = luaLine.replace(/\/\/.*$/g, '');
       luaLine = luaLine.replace(/\bvar\b/g, 'local');
       luaLine = luaLine.replace(/\[{/g, '{{');
       luaLine = luaLine.replace(/}\]/g, '}}');
       luaLine = luaLine.replace(/\[$/gm, '{');
       luaLine = luaLine.replace(/^\s*\];?$/gm, '}');
-      // Convert { key: val } to { key = val }
       luaLine = luaLine.replace(/(\w+)\s*:\s*(?=[^:])/g, '$1 = ');
-      // Convert single-quoted strings: already Lua-compatible
-      // Convert "string" to 'string' (but not inside template literals)
       luaLine = luaLine.replace(/"([^"]*)"/g, "'$1'");
       luaLines.push(luaLine);
     }
     luaLines.push('');
   }
-  // Inline script block
+  // Inline script block — after handlers
   if (ctx.scriptBlock) {
     let scriptLines = ctx.scriptBlock.split('\n');
     for (const line of scriptLines) {
@@ -821,22 +874,6 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
       luaLines.push(luaLine);
     }
     luaLines.push('');
-  }
-  // Map handler functions in Lua — __mapPress_N(idx) dispatches to handler body
-  for (let mi = 0; mi < ctx.maps.length; mi++) {
-    const mapHandlers = ctx.handlers.filter(h => h.inMap && h.mapIdx === mi);
-    for (const mh of mapHandlers) {
-      if (mh.luaBody) {
-        const m = ctx.maps[mi];
-        // The handler receives 0-based index, Lua tables are 1-based
-        luaLines.push(`function __mapPress_${mi}(idx)`);
-        luaLines.push(`  local ${m.itemParam} = ${m.oa ? m.oa.getter : 'nil'}[idx + 1]`);
-        luaLines.push(`  local ${m.indexParam} = idx`);
-        luaLines.push(`  ${mh.luaBody}`);
-        luaLines.push(`end`);
-        luaLines.push('');
-      }
-    }
   }
   // Emit Lua lines as Zig multiline string
   if (luaLines.length > 0) {
