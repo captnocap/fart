@@ -48,7 +48,8 @@ function parseStyleValue(c) {
           c.advance();
           if (fi) {
             const oaIdx = oa.oaIdx;
-            return { type: 'map_field', value: `_oa${oaIdx}_${field}[_i]`, fieldType: fi.type };
+            const zigExpr = fi.type === 'string' ? `_oa${oaIdx}_${field}[_i][0.._oa${oaIdx}_${field}_lens[_i]]` : `_oa${oaIdx}_${field}[_i]`;
+            return { type: 'map_field', value: `_oa${oaIdx}_${field}[_i]`, zigExpr, fieldType: fi.type };
           }
         }
       }
@@ -78,7 +79,9 @@ function parseTernaryBranch(c, key) {
     c.advance();
     if ((op === '==' || op === '!=') && c.kind() === TK.equals) c.advance();
     let rhs = '';
+    let rhsIsString = false;
     if (c.kind() === TK.number) { rhs = c.text(); c.advance(); }
+    else if (c.kind() === TK.string) { rhs = c.text().slice(1, -1); c.advance(); rhsIsString = true; }
     else if (c.kind() === TK.identifier) { const n = c.text(); c.advance(); rhs = isGetter(n) ? slotGet(n) : (ctx.propStack && ctx.propStack[n] !== undefined ? ctx.propStack[n] : n); }
     if (c.kind() === TK.question) {
       c.advance();
@@ -86,7 +89,13 @@ function parseTernaryBranch(c, key) {
       if (c.kind() === TK.colon) c.advance();
       const fv = parseTernaryBranch(c, key);
       if (hasParen && c.kind() === TK.rparen) c.advance();
-      const cond = `(${val.zigExpr} ${op} ${rhs})`;
+      let cond;
+      if (rhsIsString || val.fieldType === 'string') {
+        const eql = `std.mem.eql(u8, ${val.zigExpr}, "${rhs}")`;
+        cond = op === '!=' ? `(!${eql})` : `(${eql})`;
+      } else {
+        cond = `(${val.zigExpr} ${op} ${rhs})`;
+      }
       if (colorKeys[key] && tv.type === 'string' && fv.type === 'string') {
         return { type: 'zig_expr', zigExpr: `if ${cond} ${parseColor(tv.value)} else ${parseColor(fv.value)}` };
       }

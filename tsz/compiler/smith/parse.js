@@ -275,28 +275,61 @@ function parseJSXElement(c) {
             c.advance();
             if (c.kind() === TK.identifier) {
               const propName = c.text(); c.advance();
-              // Check for ternary: getter == N ? "#color1" : "#color2"
-              if (isGetter(propName) && (c.kind() === TK.eq_eq || c.kind() === TK.not_eq || c.kind() === TK.gt || c.kind() === TK.lt || c.kind() === TK.gt_eq || c.kind() === TK.lt_eq)) {
+              // Resolve LHS: state getter or map item.field
+              let colorLhs = null;
+              let colorLhsIsString = false;
+              if (isGetter(propName)) {
+                const si = findSlot(propName);
+                colorLhs = slotGet(propName);
+                colorLhsIsString = si >= 0 && ctx.stateSlots[si].type === 'string';
+              } else if (ctx.currentMap && propName === ctx.currentMap.itemParam && c.kind() === TK.dot) {
+                c.advance(); // skip .
+                if (c.kind() === TK.identifier) {
+                  const field = c.text(); c.advance();
+                  const oa = ctx.currentMap.oa;
+                  const fi = oa ? oa.fields.find(f => f.name === field) : null;
+                  if (fi) {
+                    colorLhs = `_oa${oa.oaIdx}_${field}[_i]`;
+                    colorLhsIsString = fi.type === 'string';
+                    if (colorLhsIsString) colorLhs = `${colorLhs}[0.._oa${oa.oaIdx}_${field}_lens[_i]]`;
+                  }
+                }
+              }
+              // Check for ternary: lhs == N ? "#color1" : "#color2"
+              if (colorLhs && (c.kind() === TK.eq_eq || c.kind() === TK.not_eq || c.kind() === TK.gt || c.kind() === TK.lt || c.kind() === TK.gt_eq || c.kind() === TK.lt_eq)) {
                 const op = c.kind() === TK.eq_eq ? '==' : c.kind() === TK.not_eq ? '!=' : c.text();
                 c.advance();
                 if ((op === '==' || op === '!=') && c.kind() === TK.equals) c.advance();
                 let rhs = '';
+                let rhsIsString = false;
                 if (c.kind() === TK.number) { rhs = c.text(); c.advance(); }
+                else if (c.kind() === TK.string) { rhs = c.text().slice(1, -1); c.advance(); rhsIsString = true; }
                 else if (c.kind() === TK.identifier) { const n = c.text(); c.advance(); rhs = isGetter(n) ? slotGet(n) : (ctx.propStack && ctx.propStack[n] !== undefined ? ctx.propStack[n] : n); }
                 if (c.kind() === TK.question) {
                   c.advance();
                   const tv = parseTernaryBranch(c, 'color');
                   if (c.kind() === TK.colon) c.advance();
                   const fv = parseTernaryBranch(c, 'color');
-                  const cond = `(${slotGet(propName)} ${op} ${rhs})`;
+                  let cond;
+                  if (rhsIsString || colorLhsIsString) {
+                    const eql = `std.mem.eql(u8, ${colorLhs}, "${rhs}")`;
+                    cond = op === '!=' ? `(!${eql})` : `(${eql})`;
+                  } else {
+                    cond = `(${colorLhs} ${op} ${rhs})`;
+                  }
                   const resolveC = (v) => v.type === 'zig_expr' ? v.zigExpr : v.type === 'string' ? parseColor(v.value) : 'Color{}';
                   const colorExpr = `if ${cond} ${resolveC(tv)} else ${resolveC(fv)}`;
-                  nodeFields.push(`.text_color = Color.rgb(0, 0, 0)`);
-                  if (!ctx.dynStyles) ctx.dynStyles = [];
-                  const dsId = ctx.dynStyles.length;
-                  ctx.dynStyles.push({ field: 'text_color', expression: colorExpr, arrName: '', arrIndex: -1, isColor: true });
-                  if (!nodeFields._dynStyleIds) nodeFields._dynStyleIds = [];
-                  nodeFields._dynStyleIds.push(dsId);
+                  if (colorLhs && colorLhs.includes('_oa')) {
+                    // Map field ternary — emit inline (evaluated at rebuild time, not dynStyle)
+                    nodeFields.push(`.text_color = ${colorExpr}`);
+                  } else {
+                    nodeFields.push(`.text_color = Color.rgb(0, 0, 0)`);
+                    if (!ctx.dynStyles) ctx.dynStyles = [];
+                    const dsId = ctx.dynStyles.length;
+                    ctx.dynStyles.push({ field: 'text_color', expression: colorExpr, arrName: '', arrIndex: -1, isColor: true });
+                    if (!nodeFields._dynStyleIds) nodeFields._dynStyleIds = [];
+                    nodeFields._dynStyleIds.push(dsId);
+                  }
                 } else {
                   nodeFields.push(`.text_color = Color.rgb(0, 0, 0)`);
                 }

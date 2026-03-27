@@ -540,8 +540,19 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
         out += `        _map_texts_${mi}_${ti}[_i] = std.fmt.bufPrint(&_map_text_bufs_${mi}_${ti}[_i], "${dt.fmtString}", .{ ${dt.fmtArgs} }) catch "";\n`;
       }
 
+      // Pre-count how many .text = "" slots are in inner array vs per-item arrays
+      // so we can assign dynTexts in JSX order (inner first, then per-item)
+      let innerTextSlots = 0;
+      if (innerArr) {
+        const innerDecl = (m.mapArrayDecls || []).find(d => d.startsWith(`var ${innerArr}`)) ||
+                          ctx.arrayDecls.find(d => d.startsWith(`var ${innerArr}`));
+        if (innerDecl) innerTextSlots = (innerDecl.match(/\.text = ""/g) || []).length;
+      }
+
       // Fill per-item component arrays
       let dtConsumed = 0;
+      // Skip dynTexts that belong to the inner array (they come first in JSX order)
+      let dtSkippedForInner = innerTextSlots;
       for (const pid of m._mapPerItemDecls) {
         const content = pid.decl.replace(/var \w+ = \[_\]Node\{ /, '').replace(/ \};.*$/, '');
         // Replace references to per-item arrays from ALL maps
@@ -553,13 +564,15 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
             fixedContent = fixedContent.replace(new RegExp(`&${pid2.name}\\b`, 'g'), `&_map_${pid2.name}_${mj}[_i]`);
           }
         }
-        // Replace dynamic text refs in this per-item array
-        while (dtConsumed < mapDynTexts.length) {
-          const dt = mapDynTexts[dtConsumed];
+        // Replace dynamic text refs in this per-item array (skip inner array's texts)
+        let pidDtIdx = dtSkippedForInner + dtConsumed;
+        while (pidDtIdx < mapDynTexts.length) {
+          const dt = mapDynTexts[pidDtIdx];
           const ti = dt._mapTextIdx;
           const next = fixedContent.replace('.text = ""', `.text = _map_texts_${mi}_${ti}[_i]`);
           if (next === fixedContent) break;
           fixedContent = next;
+          pidDtIdx++;
           dtConsumed++;
         }
         // Replace handler refs in per-item arrays with per-item handler string pointers
@@ -705,9 +718,9 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
           const decl = (m.mapArrayDecls || []).find(d => d.startsWith(`var ${innerArr}`)) ||
                        ctx.arrayDecls.find(d => d.startsWith(`var ${innerArr}`));
           if (decl) {
-            // Replace _dyn_text references with _map_texts (skip dt's consumed by per-item arrays)
+            // Replace _dyn_text references with _map_texts (inner array texts come first in JSX order)
             let inner = decl.replace(/var \w+ = \[_\]Node\{ /, '').replace(/ \};.*$/, '');
-            for (let dti = dtConsumed; dti < mapDynTexts.length; dti++) {
+            for (let dti = 0; dti < innerTextSlots && dti < mapDynTexts.length; dti++) {
               const dt = mapDynTexts[dti];
               const ti = dt._mapTextIdx;
               inner = inner.replace('.text = ""', `.text = _map_texts_${mi}_${ti}[_i]`);
@@ -1169,7 +1182,16 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
     if (hasDynStyles) {
       // Dynamic styles need per-tick update — call unconditionally
       out += `    _updateDynamicTexts();\n`;
-      out += `    if (state.isDirty()) state.clearDirty();\n`;
+      if (ctx.maps.length > 0) {
+        out += `    if (state.isDirty()) {\n`;
+        for (let mi = 0; mi < ctx.maps.length; mi++) {
+          if (ctx.maps[mi].isNested) continue;
+          out += `        _rebuildMap${mi}();\n`;
+        }
+        out += `        state.clearDirty();\n    }\n`;
+      } else {
+        out += `    if (state.isDirty()) state.clearDirty();\n`;
+      }
     } else if (ctx.maps.length > 0) {
       out += `    if (state.isDirty()) { _updateDynamicTexts();`;
       if (hasConds) out += ` _updateConditionals();`;
