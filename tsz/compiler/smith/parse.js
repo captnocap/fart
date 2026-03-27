@@ -38,7 +38,7 @@ function parseJSXElement(c) {
             if (c.kind() === TK.identifier && (isScriptFunc(c.text()) || isSetter(c.text()))) {
               const fname = c.text(); c.advance();
               if (isScriptFunc(fname)) {
-                ctx.handlers.push({ name: handlerName, body: `    qjs_runtime.callGlobal("${fname}");\n` });
+                ctx.handlers.push({ name: handlerName, body: `    qjs_runtime.callGlobal("${fname}");\n`, luaBody: `${fname}()` });
               } else {
                 ctx.handlers.push({ name: handlerName, body: `    // ${fname}\n`, luaBody: fname });
               }
@@ -232,7 +232,7 @@ function parseJSXElement(c) {
               // Script function — call via QuickJS (not Lua, since <script> is JS)
               const handlerName = `_handler_press_${ctx.handlerCount}`;
               if (isScriptFunc(fname)) {
-                ctx.handlers.push({ name: handlerName, body: `    qjs_runtime.callGlobal("${fname}");\n` });
+                ctx.handlers.push({ name: handlerName, body: `    qjs_runtime.callGlobal("${fname}");\n`, luaBody: `${fname}()` });
               } else {
                 const luaBody = fname;
                 ctx.handlers.push({ name: handlerName, body: `    // ${fname}\n`, luaBody });
@@ -566,6 +566,18 @@ function parseTemplateLiteral(raw) {
         const slot = ctx.stateSlots[slotIdx];
         fmt += slot.type === 'string' ? '{s}' : '{d}';
         args.push(slotGet(expr));
+      } else if (/^(\w+)\s*([+\-*\/])\s*(.+)$/.test(expr)) {
+        // Arithmetic expression: getter + N, getter - 1, etc.
+        const m = expr.match(/^(\w+)\s*([+\-*\/])\s*(.+)$/);
+        const lhsSlot = findSlot(m[1]);
+        if (lhsSlot >= 0) {
+          const rhsSlot = findSlot(m[3].trim());
+          const rhsVal = rhsSlot >= 0 ? slotGet(m[3].trim()) : m[3].trim();
+          fmt += '{d}';
+          args.push(`${slotGet(m[1])} ${m[2]} ${rhsVal}`);
+        } else {
+          fmt += expr;
+        }
       } else if (ctx.propStack[expr] !== undefined) {
         // Prop substitution — use the concrete prop value
         const propVal = ctx.propStack[expr];
@@ -766,7 +778,12 @@ function tryParseConditional(c, children) {
     } else if (c.kind() === TK.gt) {
       condParts.push(' > ');
     } else if (c.kind() === TK.lt) {
-      // Could be < operator or start of JSX — if no && seen yet, it's not a conditional
+      // Disambiguate: < followed by number/getter is less-than comparison, not JSX tag open
+      if (c.pos + 1 < c.count && (c.kindAt(c.pos + 1) === TK.number || (c.kindAt(c.pos + 1) === TK.identifier && (isGetter(c.textAt(c.pos + 1)) || (ctx.propStack && ctx.propStack[c.textAt(c.pos + 1)] !== undefined))))) {
+        condParts.push(' < ');
+        c.advance();
+        continue;
+      }
       break;
     } else if (c.kind() === TK.question) {
       // Ternary — not a conditional, bail
@@ -830,7 +847,15 @@ function tryParseTernaryJSX(c, children) {
     else if (c.kind() === TK.not_eq) { condParts.push(' != '); c.advance(); if (c.kind() === TK.equals) c.advance(); continue; }
     else if (c.kind() === TK.number) { condParts.push(c.text()); }
     else if (c.kind() === TK.gt) { condParts.push(' > '); }
-    else if (c.kind() === TK.lt) { break; }
+    else if (c.kind() === TK.lt) {
+      // Disambiguate: < followed by number/getter is less-than comparison, not JSX tag open
+      if (c.pos + 1 < c.count && (c.kindAt(c.pos + 1) === TK.number || (c.kindAt(c.pos + 1) === TK.identifier && (isGetter(c.textAt(c.pos + 1)) || (ctx.propStack && ctx.propStack[c.textAt(c.pos + 1)] !== undefined))))) {
+        condParts.push(' < ');
+        c.advance();
+        continue;
+      }
+      break;
+    }
     else { condParts.push(c.text()); }
     c.advance();
   }
@@ -1143,9 +1168,13 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
   if (handlerRef) {
     // Look up the handler's Lua body for lua_on_press
     const handler = ctx.handlers.find(h => h.name === handlerRef);
-    if (handler && handler.luaBody && !handler.body.includes('qjs_runtime.') && !ctx.scriptBlock) {
+    if (handler && handler.luaBody && !handler.body.includes('qjs_runtime.') && !ctx.scriptBlock && !globalThis.__scriptContent) {
       const escaped = handler.luaBody.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
       parts.push(`.handlers = .{ .lua_on_press = "${escaped}" }`);
+    } else if ((ctx.scriptBlock || globalThis.__scriptContent) && handler && handler.luaBody) {
+      // Script block apps: use js_on_press for QuickJS dispatch
+      const escaped = handler.luaBody.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+      parts.push(`.handlers = .{ .js_on_press = "${escaped}" }`);
     } else {
       parts.push(`.handlers = .{ .on_press = ${handlerRef} }`);
     }

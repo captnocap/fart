@@ -442,13 +442,17 @@ function luaParseHandler(c) {
   if (c.kind() === TK.lbrace) {
     c.advance();
     while (c.kind() !== TK.rbrace && c.kind() !== TK.eof) {
-      if (c.kind() === TK.identifier && isSetter(c.text())) {
-        const setter = c.text();
+      if (c.kind() === TK.identifier && (isSetter(c.text()) || isScriptFunc(c.text()))) {
+        const fname = c.text();
         c.advance();
         if (c.kind() === TK.lparen) {
           c.advance();
-          const valExpr = luaParseValueExpr(c);
-          stmts.push(`${setter}(${valExpr})`);
+          if (c.kind() === TK.rparen) {
+            stmts.push(`${fname}()`);
+          } else {
+            const valExpr = luaParseValueExpr(c);
+            stmts.push(`${fname}(${valExpr})`);
+          }
           if (c.kind() === TK.rparen) c.advance();
         }
       }

@@ -907,13 +907,15 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
   }
   // Script file imports — content passed via __scriptContent
   if (globalThis.__scriptContent) {
-    let scriptLines = globalThis.__scriptContent.split('\n');
-    // Rewrite setter calls: setName(val) → __setState(idx, val)
+    // Emit state variable declarations (same as inline <script> path)
     for (const s of ctx.stateSlots) {
       const idx = ctx.stateSlots.indexOf(s);
-      const re = new RegExp(s.setter + '\\(([^)]+)\\)', 'g');
-      scriptLines = scriptLines.map(line => line.replace(re, `__setState(${idx}, $1)`));
+      jsLines.push(`var ${s.getter} = ${s.type === 'string' ? `'${s.initial}'` : s.initial};`);
+      const jsSetter = s.type === 'string' ? '__setStateString' : '__setState';
+      jsLines.push(`function ${s.setter}(v) { ${s.getter} = v; ${jsSetter}(${idx}, v); }`);
     }
+    // No setter rewriting needed — declared setter functions handle state updates
+    const scriptLines = globalThis.__scriptContent.split('\n');
     for (const line of scriptLines) jsLines.push(line);
     jsLines.push('');  // trailing blank line
   }
@@ -922,7 +924,8 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
     for (const s of ctx.stateSlots) {
       const idx = ctx.stateSlots.indexOf(s);
       jsLines.push(`var ${s.getter} = ${s.type === 'string' ? `'${s.initial}'` : s.initial};`);
-      jsLines.push(`function ${s.setter}(v) { ${s.getter} = v; __setState(${idx}, v); }`);
+      const jsSetter = s.type === 'string' ? '__setStateString' : '__setState';
+      jsLines.push(`function ${s.setter}(v) { ${s.getter} = v; ${jsSetter}(${idx}, v); }`);
     }
     for (const line of ctx.scriptBlock.split('\n')) jsLines.push(line);
     // Add __mapPress_N handlers to JS_LOGIC so map handlers dispatch through QuickJS
@@ -1182,8 +1185,9 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
     if (hasDynStyles) {
       // Dynamic styles need per-tick update — call unconditionally
       out += `    _updateDynamicTexts();\n`;
-      if (ctx.maps.length > 0) {
+      if (ctx.maps.length > 0 || hasConds) {
         out += `    if (state.isDirty()) {\n`;
+        if (hasConds) out += `        _updateConditionals();\n`;
         for (let mi = 0; mi < ctx.maps.length; mi++) {
           if (ctx.maps[mi].isNested) continue;
           out += `        _rebuildMap${mi}();\n`;
