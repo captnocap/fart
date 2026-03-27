@@ -17,7 +17,7 @@ function emitOutput(rootExpr, file) {
   out += `const Node = layout.Node;\nconst Style = layout.Style;\nconst Color = layout.Color;\n`;
   if (hasState || ctx.objectArrays.length > 0) out += `const state = @import("${prefix}state.zig");\n`;
   out += `const engine = if (IS_LIB) struct {} else @import("${prefix}engine.zig");\n`;
-  if (ctx.objectArrays.length > 0 || ctx.scriptBlock) {
+  if (ctx.objectArrays.length > 0 || ctx.scriptBlock || globalThis.__scriptContent) {
     out += `const qjs_runtime = if (IS_LIB) struct {\n`;
     out += `    pub fn callGlobal(_: []const u8) void {}\n`;
     out += `    pub fn callGlobalStr(_: []const u8, _: []const u8) void {}\n`;
@@ -562,6 +562,20 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
           fixedContent = next;
           dtConsumed++;
         }
+        // Replace handler refs in per-item arrays with per-item handler string pointers
+        // Must check ALL maps' handlers since nested map handlers may appear in parent per-item arrays
+        const pidPressField = ctx.scriptBlock ? 'js_on_press' : 'lua_on_press';
+        for (let mj = 0; mj < ctx.maps.length; mj++) {
+          const allMH = ctx.handlers.filter(h => h.inMap && h.mapIdx === mj);
+          for (let hi = 0; hi < allMH.length; hi++) {
+            const mh = allMH[hi];
+            if (mh.luaBody) {
+              const escaped = mh.luaBody.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+              fixedContent = fixedContent.replace(new RegExp(`\\.lua_on_press = "${escaped.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"`, 'g'), `.${pidPressField} = _map_lua_ptrs_${mj}_${hi}[_i]`);
+            }
+            fixedContent = fixedContent.replace(new RegExp(`\\.on_press = ${mh.name}`, 'g'), `.${pidPressField} = _map_lua_ptrs_${mj}_${hi}[_i]`);
+          }
+        }
         out += `        _map_${pid.name}_${mi}[_i] = [${pid.elemCount}]Node{ ${fixedContent} };\n`;
       }
 
@@ -714,6 +728,20 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
                 inner = inner.replace(`&${nm.parentArr}`, `_map_pool_${nmi}[_i][0.._map_count_${nmi}[_i]]`);
               }
             }
+            // Replace handler refs in inner array items with per-item handler string pointers
+            // Must check ALL maps' handlers since nested map handlers may appear in parent inner arrays
+            const innerPressField = ctx.scriptBlock ? 'js_on_press' : 'lua_on_press';
+            for (let mj = 0; mj < ctx.maps.length; mj++) {
+              const allMH = ctx.handlers.filter(h => h.inMap && h.mapIdx === mj);
+              for (let hi = 0; hi < allMH.length; hi++) {
+                const mh = allMH[hi];
+                if (mh.luaBody) {
+                  const escaped = mh.luaBody.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+                  inner = inner.replace(new RegExp(`\\.lua_on_press = "${escaped.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"`, 'g'), `.${innerPressField} = _map_lua_ptrs_${mj}_${hi}[_i]`);
+                }
+                inner = inner.replace(new RegExp(`\\.on_press = ${mh.name}`, 'g'), `.${innerPressField} = _map_lua_ptrs_${mj}_${hi}[_i]`);
+              }
+            }
             out += `        _map_inner_${mi}[_i] = [${innerCount}]Node{ ${inner} };\n`;
           }
         }
@@ -729,6 +757,8 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
             const isInnerChild = innerArr && nm.parentArr === innerArr;
             if (isInnerChild) {
               out += `        _map_inner_${mi}[_i][${nm.childIdx}].children = _map_pool_${nmi}[_i][0.._map_count_${nmi}[_i]];\n`;
+            } else if (_promotedToPerItem.has(nm.parentArr)) {
+              out += `        _map_${nm.parentArr}_${mi}[_i][${nm.childIdx}].children = _map_pool_${nmi}[_i][0.._map_count_${nmi}[_i]];\n`;
             } else {
               out += `        ${nm.parentArr}[${nm.childIdx}].children = _map_pool_${nmi}[_i][0.._map_count_${nmi}[_i]];\n`;
             }

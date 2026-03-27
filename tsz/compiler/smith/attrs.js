@@ -76,7 +76,7 @@ function parseTernaryBranch(c, key) {
   if ((c.kind() === TK.eq_eq || c.kind() === TK.not_eq || c.kind() === TK.gt || c.kind() === TK.lt || c.kind() === TK.gt_eq || c.kind() === TK.lt_eq) && val.zigExpr) {
     const op = c.kind() === TK.eq_eq ? '==' : c.kind() === TK.not_eq ? '!=' : c.text();
     c.advance();
-    if (op === '==' && c.kind() === TK.equals) c.advance();
+    if ((op === '==' || op === '!=') && c.kind() === TK.equals) c.advance();
     let rhs = '';
     if (c.kind() === TK.number) { rhs = c.text(); c.advance(); }
     else if (c.kind() === TK.identifier) { const n = c.text(); c.advance(); rhs = isGetter(n) ? slotGet(n) : (ctx.propStack && ctx.propStack[n] !== undefined ? ctx.propStack[n] : n); }
@@ -391,8 +391,8 @@ function luaParseValueExpr(c) {
     if (c.kind() === TK.star) { parts.push(' * '); c.advance(); continue; }
     if (c.kind() === TK.slash) { parts.push(' / '); c.advance(); continue; }
     if (c.kind() === TK.percent) { parts.push(' % '); c.advance(); continue; }
-    if (c.kind() === TK.eq_eq) { parts.push(' == '); c.advance(); continue; }
-    if (c.kind() === TK.not_eq) { parts.push(' ~= '); c.advance(); continue; }
+    if (c.kind() === TK.eq_eq) { parts.push(' == '); c.advance(); if (c.kind() === TK.equals) c.advance(); continue; }
+    if (c.kind() === TK.not_eq) { parts.push(' ~= '); c.advance(); if (c.kind() === TK.equals) c.advance(); continue; }
     if (c.kind() === TK.gt) { parts.push(' > '); c.advance(); continue; }
     if (c.kind() === TK.lt) { parts.push(' < '); c.advance(); continue; }
     if (c.kind() === TK.gt_eq) { parts.push(' >= '); c.advance(); continue; }
@@ -495,8 +495,8 @@ function parseValueExpr(c) {
     if (c.kind() === TK.star) { parts.push(' * '); c.advance(); continue; }
     if (c.kind() === TK.slash) { parts.push(' / '); c.advance(); continue; }
     if (c.kind() === TK.percent) { parts.push(' % '); c.advance(); continue; }
-    if (c.kind() === TK.eq_eq) { parts.push(' == '); c.advance(); continue; }
-    if (c.kind() === TK.not_eq) { parts.push(' != '); c.advance(); continue; }
+    if (c.kind() === TK.eq_eq) { parts.push(' == '); c.advance(); if (c.kind() === TK.equals) c.advance(); continue; }
+    if (c.kind() === TK.not_eq) { parts.push(' != '); c.advance(); if (c.kind() === TK.equals) c.advance(); continue; }
     if (c.kind() === TK.gt) { parts.push(' > '); c.advance(); continue; }
     if (c.kind() === TK.lt) { parts.push(' < '); c.advance(); continue; }
     if (c.kind() === TK.gt_eq) { parts.push(' >= '); c.advance(); continue; }

@@ -226,6 +226,16 @@ function collectScript(c) {
     c.advance();
   }
   c.restore(saved);
+  // Also scan imported script content for function names
+  if (globalThis.__scriptContent) {
+    const funcRegex2 = /function\s+(\w+)/g;
+    let match2;
+    while ((match2 = funcRegex2.exec(globalThis.__scriptContent)) !== null) {
+      if (!ctx.scriptFuncs.includes(match2[1])) {
+        ctx.scriptFuncs.push(match2[1]);
+      }
+    }
+  }
 }
 
 function isScriptFunc(name) {

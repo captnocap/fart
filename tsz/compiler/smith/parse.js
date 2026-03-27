@@ -31,6 +31,29 @@ function parseJSXElement(c) {
           if (c.kind() === TK.string) {
             propValues[attr] = c.text().slice(1, -1); // strip quotes
             c.advance();
+          } else if ((attr === 'onPress' || attr === 'onTap' || attr === 'onToggle' || attr === 'onSelect' || attr === 'onChange') && c.kind() === TK.lbrace) {
+            // Handler prop — parse as a real handler and store handler name
+            c.advance();
+            const handlerName = `_handler_press_${ctx.handlerCount}`;
+            if (c.kind() === TK.identifier && (isScriptFunc(c.text()) || isSetter(c.text()))) {
+              const fname = c.text(); c.advance();
+              if (isScriptFunc(fname)) {
+                ctx.handlers.push({ name: handlerName, body: `    qjs_runtime.callGlobal("${fname}");\n` });
+              } else {
+                ctx.handlers.push({ name: handlerName, body: `    // ${fname}\n`, luaBody: fname });
+              }
+              if (c.kind() === TK.lparen) { c.advance(); if (c.kind() === TK.rparen) c.advance(); }
+            } else {
+              const saved = c.save();
+              const luaBody = luaParseHandler(c);
+              c.restore(saved);
+              const body = parseHandler(c);
+              const isMapHandler = !!ctx.currentMap;
+              ctx.handlers.push({ name: handlerName, body, luaBody, inMap: isMapHandler, mapIdx: isMapHandler ? ctx.maps.indexOf(ctx.currentMap) : -1 });
+            }
+            ctx.handlerCount++;
+            if (c.kind() === TK.rbrace) c.advance();
+            propValues[attr] = handlerName;
           } else if (c.kind() === TK.lbrace) {
             // {expr} prop value — resolve map item access, state getters, etc.
             c.advance();
@@ -197,8 +220,13 @@ function parseJSXElement(c) {
         } else if (attr === 'onPress' || attr === 'onTap' || attr === 'onToggle' || attr === 'onSelect' || attr === 'onChange') {
           if (c.kind() === TK.lbrace) {
             c.advance(); // {
+            // Prop-passed handler: onPress={onToggle} where onToggle is a component prop
+            if (c.kind() === TK.identifier && ctx.propStack && ctx.propStack[c.text()] !== undefined && ctx.propStack[c.text()].startsWith('_handler_press_')) {
+              handlerRef = ctx.propStack[c.text()];
+              c.advance();
+              if (c.kind() === TK.rbrace) c.advance();
             // Named handler reference: onPress={functionName}
-            if (c.kind() === TK.identifier && (isScriptFunc(c.text()) || isSetter(c.text()))) {
+            } else if (c.kind() === TK.identifier && (isScriptFunc(c.text()) || isSetter(c.text()))) {
               const fname = c.text();
               c.advance();
               // Script function — call via QuickJS (not Lua, since <script> is JS)
@@ -251,7 +279,7 @@ function parseJSXElement(c) {
               if (isGetter(propName) && (c.kind() === TK.eq_eq || c.kind() === TK.not_eq || c.kind() === TK.gt || c.kind() === TK.lt || c.kind() === TK.gt_eq || c.kind() === TK.lt_eq)) {
                 const op = c.kind() === TK.eq_eq ? '==' : c.kind() === TK.not_eq ? '!=' : c.text();
                 c.advance();
-                if (op === '==' && c.kind() === TK.equals) c.advance();
+                if ((op === '==' || op === '!=') && c.kind() === TK.equals) c.advance();
                 let rhs = '';
                 if (c.kind() === TK.number) { rhs = c.text(); c.advance(); }
                 else if (c.kind() === TK.identifier) { const n = c.text(); c.advance(); rhs = isGetter(n) ? slotGet(n) : (ctx.propStack && ctx.propStack[n] !== undefined ? ctx.propStack[n] : n); }
@@ -856,6 +884,9 @@ function parseChildren(c) {
       // Try ternary JSX: {expr ? (<JSX>) : (<JSX>)}
       const ternJSXResult = tryParseTernaryJSX(c, children);
       if (ternJSXResult) continue;
+      // Try ternary text: {expr == val ? "str" : "str"}
+      const ternTextResult = tryParseTernaryText(c, children);
+      if (ternTextResult) continue;
       // Map: {items.map((item, i) => (...))}
       if (c.kind() === TK.identifier) {
         const maybeArr = c.text();
