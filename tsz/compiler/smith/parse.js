@@ -218,13 +218,39 @@ function parseJSXElement(c) {
             c.advance();
             if (c.kind() === TK.identifier) {
               const propName = c.text(); c.advance();
-              nodeFields.push(`.text_color = Color.rgb(0, 0, 0)`);
-              // If prop resolves to a hex color, register a runtime color update
-              const propVal = ctx.propStack && ctx.propStack[propName];
-              if (propVal && typeof propVal === 'string' && propVal.startsWith('#')) {
-                const dcId = ctx.dynColors.length;
-                ctx.dynColors.push({ dcId, arrName: '', arrIndex: -1, colorExpr: parseColor(propVal) });
-                nodeFields._dynColorId = dcId;
+              // Check for ternary: getter == N ? "#color1" : "#color2"
+              if (isGetter(propName) && (c.kind() === TK.eq_eq || c.kind() === TK.not_eq || c.kind() === TK.gt || c.kind() === TK.lt || c.kind() === TK.gt_eq || c.kind() === TK.lt_eq)) {
+                const op = c.kind() === TK.eq_eq ? '==' : c.kind() === TK.not_eq ? '!=' : c.text();
+                c.advance();
+                if (op === '==' && c.kind() === TK.equals) c.advance();
+                let rhs = '';
+                if (c.kind() === TK.number) { rhs = c.text(); c.advance(); }
+                else if (c.kind() === TK.identifier) { const n = c.text(); c.advance(); rhs = isGetter(n) ? slotGet(n) : n; }
+                if (c.kind() === TK.question) {
+                  c.advance();
+                  const tv = parseTernaryBranch(c, 'color');
+                  if (c.kind() === TK.colon) c.advance();
+                  const fv = parseTernaryBranch(c, 'color');
+                  const cond = `(${slotGet(propName)} ${op} ${rhs})`;
+                  const resolveC = (v) => v.type === 'zig_expr' ? v.zigExpr : v.type === 'string' ? parseColor(v.value) : 'Color{}';
+                  const colorExpr = `if ${cond} ${resolveC(tv)} else ${resolveC(fv)}`;
+                  nodeFields.push(`.text_color = Color.rgb(0, 0, 0)`);
+                  if (!ctx.dynStyles) ctx.dynStyles = [];
+                  const dsId = ctx.dynStyles.length;
+                  ctx.dynStyles.push({ field: 'text_color', expression: colorExpr, arrName: '', arrIndex: -1, isColor: true });
+                  if (!nodeFields._dynStyleIds) nodeFields._dynStyleIds = [];
+                  nodeFields._dynStyleIds.push(dsId);
+                } else {
+                  nodeFields.push(`.text_color = Color.rgb(0, 0, 0)`);
+                }
+              } else {
+                nodeFields.push(`.text_color = Color.rgb(0, 0, 0)`);
+                const propVal = ctx.propStack && ctx.propStack[propName];
+                if (propVal && typeof propVal === 'string' && propVal.startsWith('#')) {
+                  const dcId = ctx.dynColors.length;
+                  ctx.dynColors.push({ dcId, arrName: '', arrIndex: -1, colorExpr: parseColor(propVal) });
+                  nodeFields._dynColorId = dcId;
+                }
               }
             }
             if (c.kind() === TK.rbrace) c.advance();
@@ -1069,7 +1095,9 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
   const nodeResult = { nodeExpr: `.{ ${parts.join(', ')} }` };
   if (nodeFields && nodeFields._dynColorId !== undefined) nodeResult.dynColorId = nodeFields._dynColorId;
   if (styleFields._dynStyleId !== undefined) nodeResult.dynStyleId = styleFields._dynStyleId;
-  if (styleFields._dynStyleIds) nodeResult.dynStyleIds = styleFields._dynStyleIds;
+  // Merge dynStyleIds from both style block and node field ternaries
+  const allDynIds = [...(styleFields._dynStyleIds || []), ...((nodeFields && nodeFields._dynStyleIds) || [])];
+  if (allDynIds.length > 0) nodeResult.dynStyleIds = allDynIds;
   return nodeResult;
 }
 

@@ -926,9 +926,13 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
     for (const ds of ctx.dynStyles) {
       if (ds.arrName && ds.arrIndex >= 0) {
         const arrNum = parseInt(ds.arrName.replace('_arr_', ''));
-        dynUpdates.push({ arrNum, arrIndex: ds.arrIndex, line: `    ${ds.arrName}[${ds.arrIndex}].style.${ds.field} = ${ds.expression};\n` });
+        const nodeFields = ['text_color', 'font_size', 'text'];
+        const prefix = nodeFields.includes(ds.field) ? '' : 'style.';
+        dynUpdates.push({ arrNum, arrIndex: ds.arrIndex, line: `    ${ds.arrName}[${ds.arrIndex}].${prefix}${ds.field} = ${ds.expression};\n` });
       } else {
-        dynUpdates.push({ arrNum: 99999, arrIndex: 0, line: `    _root.style.${ds.field} = ${ds.expression};\n` });
+        const nodeFields2 = ['text_color', 'font_size', 'text'];
+        const prefix2 = nodeFields2.includes(ds.field) ? '' : 'style.';
+        dynUpdates.push({ arrNum: 99999, arrIndex: 0, line: `    _root.${prefix2}${ds.field} = ${ds.expression};\n` });
       }
     }
   }
