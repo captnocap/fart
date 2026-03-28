@@ -936,6 +936,8 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
         const mh = mapHandlers[hi];
         // Build JS handler body from luaBody or Zig body
         let jsHandlerBody = mh.luaBody || '';
+        // Convert Lua operators to JS in map handler bodies
+        if (jsHandlerBody) jsHandlerBody = jsHandlerBody.replace(/\band\b/g, '&&').replace(/\bor\b/g, '||').replace(/~=/g, '!=').replace(/\bnot\b/g, '!');
         if (!jsHandlerBody) {
           // Extract callGlobal("func") → func()
           const calls = (mh.body || '').match(/qjs_runtime\.callGlobal\("(\w+)"\)/g);

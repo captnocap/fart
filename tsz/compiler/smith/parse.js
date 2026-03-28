@@ -1071,24 +1071,96 @@ function parseChildren(c) {
       } else if (c.kind() === TK.identifier && isGetter(c.text())) {
         const getter = c.text();
         const slotIdx = findSlot(getter);
-        const bufId = ctx.dynCount;
         const slot = ctx.stateSlots[slotIdx];
-        const fmt = slot.type === 'string' ? '{s}' : slot.type === 'float' ? '{d:.2}' : '{d}';
-        const bufSize = slot.type === 'string' ? 128 : 64;
-        const args = slotGet(getter);
-        ctx.dynTexts.push({ bufId, fmtString: fmt, fmtArgs: args, arrName: '', arrIndex: 0, bufSize });
-        ctx.dynCount++;
         c.advance();
-        // Consume remaining expression tokens until closing brace
-        let _bd = 0;
-        while (c.kind() !== TK.eof) {
-          if (c.kind() === TK.lbrace) _bd++;
-          if (c.kind() === TK.rbrace) { if (_bd === 0) break; _bd--; }
+        // Check for ternary text: getter == N ? "A" : "B"
+        if (c.kind() === TK.eq_eq || c.kind() === TK.not_eq || c.kind() === TK.gt || c.kind() === TK.lt || c.kind() === TK.gt_eq || c.kind() === TK.lt_eq) {
+          const op = c.kind() === TK.eq_eq ? '==' : c.kind() === TK.not_eq ? '!=' : c.text();
           c.advance();
+          if ((op === '==' || op === '!=') && c.kind() === TK.equals) c.advance(); // === / !==
+          let rhs = '';
+          let rhsIsString = false;
+          if (c.kind() === TK.number) { rhs = c.text(); c.advance(); }
+          else if (c.kind() === TK.string) { rhs = c.text().slice(1, -1); c.advance(); rhsIsString = true; }
+          if (c.kind() === TK.question) {
+            c.advance(); // skip ?
+            // Parse true branch string
+            let trueText = '';
+            if (c.kind() === TK.string) { trueText = c.text().slice(1, -1); c.advance(); }
+            if (c.kind() === TK.colon) c.advance();
+            // Parse false branch — could be another ternary or a string
+            let falseExpr = '';
+            if (c.kind() === TK.string) {
+              falseExpr = `"${c.text().slice(1, -1)}"`;
+              c.advance();
+            } else if (c.kind() === TK.identifier && isGetter(c.text())) {
+              // Nested ternary: getter == M ? "C" : "D"
+              const g2 = c.text(); c.advance();
+              if (c.kind() === TK.eq_eq || c.kind() === TK.not_eq) {
+                const op2 = c.kind() === TK.eq_eq ? '==' : '!='; c.advance();
+                if (c.kind() === TK.equals) c.advance();
+                let rhs2 = '';
+                if (c.kind() === TK.number) { rhs2 = c.text(); c.advance(); }
+                else if (c.kind() === TK.string) { rhs2 = c.text().slice(1, -1); c.advance(); }
+                if (c.kind() === TK.question) {
+                  c.advance();
+                  let t2 = ''; if (c.kind() === TK.string) { t2 = c.text().slice(1, -1); c.advance(); }
+                  if (c.kind() === TK.colon) c.advance();
+                  let f2 = ''; if (c.kind() === TK.string) { f2 = c.text().slice(1, -1); c.advance(); }
+                  const cond2 = `(${slotGet(g2)} ${op2} ${rhs2})`;
+                  falseExpr = `if ${cond2} @as([]const u8, "${t2}") else @as([]const u8, "${f2}")`;
+                }
+              }
+            }
+            if (!falseExpr) falseExpr = '@as([]const u8, "")';
+            // Build condition
+            let cond;
+            if (rhsIsString || slot.type === 'string') {
+              const eql = `std.mem.eql(u8, ${slotGet(getter)}, "${rhs}")`;
+              cond = op === '!=' ? `(!${eql})` : `(${eql})`;
+            } else {
+              cond = `(${slotGet(getter)} ${op} ${rhs})`;
+            }
+            const ternaryExpr = `if ${cond} @as([]const u8, "${trueText}") else @as([]const u8, ${falseExpr})`;
+            // Use dynTexts — same as state getters, just with if/else as the format arg
+            const bufId = ctx.dynCount;
+            const bufSize = Math.max(64, trueText.length + 32);
+            ctx.dynTexts.push({ bufId, fmtString: '{s}', fmtArgs: ternaryExpr, arrName: '', arrIndex: 0, bufSize });
+            ctx.dynCount++;
+            // Consume remaining tokens until }
+            let _bd2 = 0;
+            while (c.kind() !== TK.eof) {
+              if (c.kind() === TK.lbrace) _bd2++;
+              if (c.kind() === TK.rbrace) { if (_bd2 === 0) break; _bd2--; }
+              c.advance();
+            }
+            if (c.kind() === TK.rbrace) c.advance();
+            children.push({ nodeExpr: '.{ .text = "" }', dynBufId: bufId });
+          } else {
+            // Not a ternary — consume rest and skip
+            while (c.kind() !== TK.rbrace && c.kind() !== TK.eof) c.advance();
+            if (c.kind() === TK.rbrace) c.advance();
+            children.push({ nodeExpr: '.{ .text = "" }' });
+          }
+        } else {
+          // Simple getter display
+          const bufId = ctx.dynCount;
+          const fmt = slot.type === 'string' ? '{s}' : slot.type === 'float' ? '{d:.2}' : '{d}';
+          const bufSize = slot.type === 'string' ? 128 : 64;
+          const args = slotGet(getter);
+          ctx.dynTexts.push({ bufId, fmtString: fmt, fmtArgs: args, arrName: '', arrIndex: 0, bufSize });
+          ctx.dynCount++;
+          // Consume remaining expression tokens until closing brace
+          let _bd = 0;
+          while (c.kind() !== TK.eof) {
+            if (c.kind() === TK.lbrace) _bd++;
+            if (c.kind() === TK.rbrace) { if (_bd === 0) break; _bd--; }
+            c.advance();
+          }
+          if (c.kind() === TK.rbrace) c.advance();
+          // Placeholder node — text will be set by _updateDynamicTexts
+          children.push({ nodeExpr: '.{ .text = "" }', dynBufId: bufId });
         }
-        if (c.kind() === TK.rbrace) c.advance();
-        // Placeholder node — text will be set by _updateDynamicTexts
-        children.push({ nodeExpr: '.{ .text = "" }', dynBufId: bufId });
       } else {
         // Skip unknown expression
         let depth = 1;
@@ -1173,7 +1245,10 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
       parts.push(`.handlers = .{ .lua_on_press = "${escaped}" }`);
     } else if ((ctx.scriptBlock || globalThis.__scriptContent) && handler && handler.luaBody) {
       // Script block apps: use js_on_press for QuickJS dispatch
-      const escaped = handler.luaBody.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+      // Convert Lua operators to JS: and→&&, or→||, ~=→!=, not→!
+      let jsBody = handler.luaBody;
+      jsBody = jsBody.replace(/\band\b/g, '&&').replace(/\bor\b/g, '||').replace(/~=/g, '!=').replace(/\bnot\b/g, '!');
+      const escaped = jsBody.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
       parts.push(`.handlers = .{ .js_on_press = "${escaped}" }`);
     } else {
       parts.push(`.handlers = .{ .on_press = ${handlerRef} }`);
@@ -1210,7 +1285,9 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
     for (let i = 0; i < children.length; i++) {
       if (children[i].dynBufId !== undefined) {
         const dt = ctx.dynTexts.find(d => d.bufId === children[i].dynBufId && !!d.inMap === !!children[i].inMap);
-        if (dt) { dt.arrName = arrName; dt.arrIndex = i; }
+        if (dt && !dt.arrName) {
+          dt.arrName = arrName; dt.arrIndex = i;
+        }
       }
       if (children[i].mapIdx !== undefined) {
         const m = ctx.maps[children[i].mapIdx];
@@ -1226,12 +1303,12 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
       }
       if (children[i].dynStyleId !== undefined) {
         const ds = ctx.dynStyles[children[i].dynStyleId];
-        if (ds) { ds.arrName = arrName; ds.arrIndex = i; }
+        if (ds && !ds.arrName) { ds.arrName = arrName; ds.arrIndex = i; }
       }
       if (children[i].dynStyleIds) {
         for (const dsId of children[i].dynStyleIds) {
           const ds = ctx.dynStyles[dsId];
-          if (ds) { ds.arrName = arrName; ds.arrIndex = i; }
+          if (ds && !ds.arrName) { ds.arrName = arrName; ds.arrIndex = i; }
         }
       }
       if (children[i].ternaryCondIdx !== undefined) {
