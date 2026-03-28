@@ -676,6 +676,7 @@ fn positionCanvasNodes(parent: *Node) void {
 const CANVAS_NODE_GAP: f32 = 30.0;
 var canvas_stacked: bool = false;
 var canvas_dump_frame: u8 = 0;
+var canvas_debug_frames: u8 = 3;
 
 /// Auto-stack canvas tiles per column with randomized stagger.
 /// Produces jagged top/bottom edges — no flat horizontal boundary.
@@ -1333,6 +1334,25 @@ noinline fn paintTerminal(node: *Node) void {
 noinline fn paintCanvasContainer(node: *Node) void {
     const r = node.computed;
     const ct = node.canvas_type.?;
+    if (canvas_debug_frames > 0) {
+        canvas_debug_frames -= 1;
+        std.debug.print("[canvas] paintCanvasContainer ct={s} rect=({d:.0},{d:.0},{d:.0},{d:.0}) zoom={d:.3} drift_active={} view_set={} children={d}\n", .{ ct, r.x, r.y, r.w, r.h, node.canvas_view_zoom, node.canvas_drift_active, node.canvas_view_set, node.children.len });
+        // Count child types
+        var n_paths: u32 = 0;
+        var n_cnodes: u32 = 0;
+        var n_other: u32 = 0;
+        for (node.children) |*child| {
+            if (child.canvas_node) { n_cnodes += 1; } else if (child.canvas_path) { n_paths += 1; } else { n_other += 1; }
+        }
+        std.debug.print("[canvas]   child breakdown: {d} canvas_nodes, {d} paths, {d} other\n", .{ n_cnodes, n_paths, n_other });
+        // Log first canvas_node
+        for (node.children) |*child| {
+            if (child.canvas_node) {
+                std.debug.print("[canvas]   first tile: gx={d:.0} gy={d:.0} gw={d:.0} gh={d:.0} computed=({d:.0},{d:.0},{d:.0},{d:.0}) display={s}\n", .{ child.canvas_gx, child.canvas_gy, child.canvas_gw, child.canvas_gh, child.computed.x, child.computed.y, child.computed.w, child.computed.h, @tagName(child.style.display) });
+                break;
+            }
+        }
+    }
     if (node.canvas_view_set) {
         canvas.setCamera(node.canvas_view_x, node.canvas_view_y, node.canvas_view_zoom);
         node.canvas_view_set = false;
@@ -1348,6 +1368,9 @@ noinline fn paintCanvasContainer(node: *Node) void {
     const vp_cx = r.x + r.w / 2;
     const vp_cy = r.y + r.h / 2;
     gpu.setTransform(0, 0, vp_cx - cam.cx * cam.scale, vp_cy - cam.cy * cam.scale, cam.scale);
+    if (canvas_debug_frames > 0) {
+        std.debug.print("[canvas]   cam: cx={d:.1} cy={d:.1} scale={d:.4} tx={d:.1} ty={d:.1}\n", .{ cam.cx, cam.cy, cam.scale, vp_cx - cam.cx * cam.scale, vp_cy - cam.cy * cam.scale });
+    }
     {
         const hovered = canvas.getHoveredNode();
         const selected = canvas.getSelectedNode();
