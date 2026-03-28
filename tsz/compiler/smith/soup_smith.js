@@ -440,9 +440,9 @@ function soupHandleMap(expr, warns, inPressable) {
   var arrayName = mapMatch[1];
   var itemParam = mapMatch[2];
 
-  // Find the => that belongs to .map()'s callback, not a preceding .filter() etc.
-  // Start searching from the position of .map( in the expression
-  var mapPos = expr.lastIndexOf('.map(');
+  // Find the => that belongs to the OUTER .map()'s callback.
+  // Use indexOf (first .map), not lastIndexOf (which finds inner nested .map)
+  var mapPos = expr.indexOf('.map(');
   var arrowIdx = expr.indexOf('=>', mapPos);
   var afterArrow = expr.slice(arrowIdx + 2).trim();
   var jsxBody = '';
