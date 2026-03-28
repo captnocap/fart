@@ -88,7 +88,16 @@ if [ -d "$GEN_DIR" ] && [ ! -f "$GEN" ]; then
     SPLIT_LINT=1
 fi
 
-# ── Step 2: preflight lint — catch smith bugs before wasting a zig build ──
+# ── Preflight block check — smith/preflight.js catches bugs before emit ──
+if grep -q "PREFLIGHT BLOCKED" "$GEN" 2>/dev/null; then
+    echo "[$NAME] PREFLIGHT BLOCKED:"
+    grep "FATAL:\|WARN:" "$GEN" 2>/dev/null | sed 's/^\/\/! /  /'
+    echo "[$NAME] Fix the .tsz source errors above. Generated file: $GEN"
+    if [ "$SPLIT_LINT" -eq 1 ]; then rm -f "$GEN"; fi
+    exit 1
+fi
+
+# ── Step 2: output-level lint — checks that require grepping generated Zig ──
 LINT_FAIL=0
 LINT_WARN=0
 
