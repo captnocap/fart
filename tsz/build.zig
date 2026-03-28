@@ -55,10 +55,16 @@ pub fn build(b: *std.Build) void {
     // full LLVM optimization. LLVM runs ONCE. Cart builds compile only
     // generated_app.zig (using api.zig for types) and link against
     // this .so — zero LLVM at cart build time.
-    const core_so = addCoreLib(b, target, optimize, wgpu_mod, sysroot);
+    const core_so = addCoreLib(b, target, optimize, wgpu_mod, sysroot, .static);
     const core_so_install = b.addInstallArtifact(core_so, .{});
-    const core_step = b.step("core", "Build framework as a cached shared library (.so)");
+    const core_step = b.step("core", "Build framework as a cached static library (.a)");
     core_step.dependOn(&core_so_install.step);
+
+    // ── EXPERIMENT: Dynamic .so for LuaJIT FFI cart loading ──────
+    const core_dyn = addCoreLib(b, target, optimize, wgpu_mod, sysroot, .dynamic);
+    const core_dyn_install = b.addInstallArtifact(core_dyn, .{});
+    const core_dyn_step = b.step("core-so", "EXPERIMENT: framework as .so for LuaJIT FFI");
+    core_dyn_step.dependOn(&core_dyn_install.step);
 
     // ── Fast cart build (api.zig types + pre-built engine .a) ──────
     // NO dependency on core_so — links against the cached .a on disk.
@@ -568,6 +574,7 @@ fn addCoreLib(
     optimize: std.builtin.OptimizeMode,
     wgpu_mod: *std.Build.Module,
     sysroot: ?[]const u8,
+    linkage: std.builtin.LinkMode,
 ) *std.Build.Step.Compile {
     const os = target.result.os.tag;
 
@@ -584,7 +591,7 @@ fn addCoreLib(
     options.addOption(bool, "has_transitions", true);
     options.addOption(bool, "has_networking", true);
     options.addOption(bool, "has_crypto", true);
-    options.addOption(bool, "has_blend2d", true);
+    options.addOption(bool, "has_blend2d", linkage == .static); // blend2d lacks -fPIC, disabled for .so
     options.addOption(bool, "has_debug_server", true);
 
     // ── zluajit (LuaJIT worker compute) ─────────────────────────
@@ -604,7 +611,7 @@ fn addCoreLib(
     root_mod.addImport("zluajit", zluajit_dep.module("zluajit"));
 
     const lib = b.addLibrary(.{
-        .linkage = .static,
+        .linkage = linkage,
         .name = "reactjit-core",
         .root_module = root_mod,
     });
@@ -658,10 +665,12 @@ fn addCoreLib(
     lib.linkSystemLibrary("curl");
     lib.linkSystemLibrary("archive");
 
-    // ── Blend2D ──
-    lib.root_module.addIncludePath(b.path("../blend2d"));
-    lib.addObjectFile(b.path("../blend2d/build/libblend2d_full.a"));
-    lib.linkLibCpp();
+    // ── Blend2D (static only — lacks -fPIC for .so builds) ──
+    if (linkage == .static) {
+        lib.root_module.addIncludePath(b.path("../blend2d"));
+        lib.addObjectFile(b.path("../blend2d/build/libblend2d_full.a"));
+        lib.linkLibCpp();
+    }
 
     // ── Vello CPU ──
     lib.addObjectFile(b.path("../deps/vello_ffi/target/release/libvello_ffi_stripped.a"));

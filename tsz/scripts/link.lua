@@ -13,6 +13,7 @@ local SCRIPT_DIR = arg[0]:match("(.*/)" ) or "./"
 local TSZ_DIR = SCRIPT_DIR:match("(.-)scripts/") or "./"
 local REPO_ROOT = TSZ_DIR .. "../"
 
+local ENGINE_SO   = TSZ_DIR .. "zig-out/lib/libreactjit-core.so"
 local ENGINE_A    = TSZ_DIR .. "zig-out/lib/libreactjit-core.current.a"
 local BLEND2D_A   = REPO_ROOT .. "blend2d/build/libblend2d_full.a"
 local VELLO_A     = REPO_ROOT .. "deps/vello_ffi/target/release/libvello_ffi_stripped.a"
@@ -109,7 +110,9 @@ local compile_cmd = table.concat({
     "-I " .. FFI_INCLUDE,
     "-I /usr/include/x86_64-linux-gnu",
     "-lc",
-    "-OReleaseFast",
+    -- Cart code is data declarations + thin handlers — doesn't need LLVM.
+    -- Engine .a is already fully optimized. Debug uses Zig's fast x86 backend.
+    "-ODebug", "-fstrip",
 }, " ")
 
 io.write("[link] compile " .. source .. "... ")
@@ -121,19 +124,33 @@ end
 local t1 = now_ms()
 io.write(tostring(t1 - t0) .. "ms\n")
 
--- ── Step 2: Link .o + engine .a → binary ────────────────────────────
-local link_cmd = table.concat({
-    "zig cc",
-    "-o " .. binary,
-    obj,
-    ENGINE_A,
-    WGPU_A,
-    BLEND2D_A,
-    VELLO_A,
-    "-lSDL3 -lfreetype -lluajit-5.1 -lX11",
-    "-lbox2d -lsqlite3 -lvterm -lcurl -larchive",
-    "-lm -lpthread -ldl -lstdc++",
-}, " ")
+-- ── Step 2: Link .o + engine → binary ───────────────────────────────
+-- Prefer .so (small binary, shared engine) over .a (fat static binary)
+local use_so = file_exists(ENGINE_SO)
+local link_cmd
+if use_so then
+    link_cmd = table.concat({
+        "zig cc",
+        "-o " .. binary,
+        obj,
+        ENGINE_SO,
+        "-Wl,-rpath," .. TSZ_DIR .. "zig-out/lib",
+        "-lm -lpthread -ldl",
+    }, " ")
+else
+    link_cmd = table.concat({
+        "zig cc",
+        "-o " .. binary,
+        obj,
+        ENGINE_A,
+        WGPU_A,
+        BLEND2D_A,
+        VELLO_A,
+        "-lSDL3 -lfreetype -lluajit-5.1 -lX11",
+        "-lbox2d -lsqlite3 -lvterm -lcurl -larchive",
+        "-lm -lpthread -ldl -lstdc++",
+    }, " ")
+end
 
 io.write("[link] link → " .. binary .. "... ")
 io.flush()
@@ -143,6 +160,9 @@ if not run(link_cmd .. " 2>/dev/null") then
 end
 local t2 = now_ms()
 io.write(tostring(t2 - t1) .. "ms\n")
+
+-- ── Step 3: Strip debug info ────────────────────────────────────────
+run("strip " .. binary .. " 2>/dev/null")
 
 -- ── Done ────────────────────────────────────────────────────────────
 io.write("[link] total: " .. tostring(t2 - t0) .. "ms → " .. binary .. "\n")

@@ -112,6 +112,9 @@ function splitArgs(s) {
   return args;
 }
 
+// Zero-init instead of undefined — puts arrays in .bss (0 bytes on disk) instead of .data
+function zeroed(type) { return `std.mem.zeroes(${type})`; }
+
 function emitOutput(rootExpr, file) {
   const basename = file.split('/').pop();
   const appName = basename.replace(/\.tsz$/, '');
@@ -588,20 +591,23 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
         m._parentMi = parentMi;
         out += `const MAX_MAP_${mi}: usize = 64;\n`; // max nested items per parent
         out += `const MAX_FLAT_${mi}: usize = 4096;\n`; // max total nested items (flat)
-        out += `var _map_pool_${mi}: [MAX_MAP_${parentMi}][MAX_MAP_${mi}]Node = undefined;\n`;
-        out += `var _map_count_${mi}: [MAX_MAP_${parentMi}]usize = undefined;\n`;
+        // Nested pool: use parent's actual pool size, NOT MAX_MAP_parent (which is 4096)
+        // A kanban with 10 columns × 64 items = 640 nodes, not 4096 × 64 = 262K nodes
+        const parentPoolSize = parentMap && !parentMap.isNested ? 128 : 64;
+        out += `const MAX_NESTED_OUTER_${mi}: usize = ${parentPoolSize};\n`;
+        out += `var _map_pool_${mi}: [MAX_NESTED_OUTER_${mi}][MAX_MAP_${mi}]Node = undefined;\n`;
+        out += `var _map_count_${mi}: [MAX_NESTED_OUTER_${mi}]usize = undefined;\n`;
       } else if (m.isInline) {
         // Inline map: separate-OA map inside another map's template (love2d pattern)
         // Each parent iteration gets independent child nodes — 2D pool [OUTER][INNER]
-        // Use small limits: 16 parents × 64 items = 1024 total (same memory as flat 4096)
         const parentMi = ctx.maps.indexOf(m.parentMap);
         m._parentMi = parentMi;
-        out += `const MAX_MAP_${mi}: usize = 64;\n`;
-        out += `const MAX_INLINE_OUTER_${mi}: usize = 16;\n`;
+        out += `const MAX_MAP_${mi}: usize = 16;\n`;
+        out += `const MAX_INLINE_OUTER_${mi}: usize = 8;\n`;
         out += `var _map_pool_${mi}: [MAX_INLINE_OUTER_${mi}][MAX_MAP_${mi}]Node = undefined;\n`;
         out += `var _map_count_${mi}: [MAX_INLINE_OUTER_${mi}]usize = undefined;\n`;
       } else {
-        out += `const MAX_MAP_${mi}: usize = 4096;\n`;
+        out += `const MAX_MAP_${mi}: usize = 256;\n`;
         out += `var _map_pool_${mi}: [MAX_MAP_${mi}]Node = undefined;\n`;
         out += `var _map_count_${mi}: usize = 0;\n`;
       }
@@ -1801,6 +1807,12 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
     for (const msg of globalThis.__dbg) out += '// DBG: ' + msg + '\n';
     globalThis.__dbg = [];
   }
+
+  // Post-pass: replace `= undefined;` with `= std.mem.zeroes(TYPE);`
+  // This puts arrays in .bss (0 bytes on disk) instead of .data (megabytes).
+  out = out.replace(/^(var \w+: )([^\n=]+) = undefined;$/gm, (_, prefix, type) => {
+    return prefix + type + ' = std.mem.zeroes(' + type.trim() + ');';
+  });
 
   return out;
 }
