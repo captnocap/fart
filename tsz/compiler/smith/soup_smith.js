@@ -653,8 +653,8 @@ function soupExprToZig(expr, warns, inPressable) {
         return { str: '.{ .text = "' + esc + '", .text_color = Color.rgb(' + tc + ') }', dynBufId: -1 };
       }
     }
-    warns.push('[W] complex ternary dropped: ' + expr.substring(0, 50));
-    return { str: '', dynBufId: -1 };
+    // No top-level ? found — the ? is nested (e.g. inside className={}).
+    // Fall through to other checks (.map(), etc.)
   }
 
   // .map() — checked AFTER && and ? so conditional wrappers are handled first

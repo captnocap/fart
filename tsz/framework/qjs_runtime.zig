@@ -130,6 +130,37 @@ fn hostLog(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSVa
     return QJS_UNDEFINED;
 }
 
+/// __js_eval(code) — evaluate a JS expression string and return result as string.
+/// Used by the inspector console to run live expressions.
+fn hostJsEval(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    const c2 = ctx orelse return QJS_UNDEFINED;
+    if (argc < 1) return QJS_UNDEFINED;
+    const code = qjs.JS_ToCString(c2, argv[0]);
+    if (code == null) return QJS_UNDEFINED;
+    defer qjs.JS_FreeCString(c2, code);
+    const code_span = std.mem.span(code);
+    const result = qjs.JS_Eval(c2, code, @intCast(code_span.len), "<eval>", qjs.JS_EVAL_TYPE_GLOBAL);
+    if (qjs.JS_IsException(result)) {
+        // Get exception message
+        const exc = qjs.JS_GetException(c2);
+        defer qjs.JS_FreeValue(c2, exc);
+        const exc_str = qjs.JS_ToCString(c2, exc);
+        if (exc_str != null) {
+            defer qjs.JS_FreeCString(c2, exc_str);
+            const span = std.mem.span(exc_str);
+            return qjs.JS_NewStringLen(c2, span.ptr, @intCast(span.len));
+        }
+        return qjs.JS_NewStringLen(c2, "Error", 5);
+    }
+    // Convert result to string
+    const str = qjs.JS_ToCString(c2, result);
+    qjs.JS_FreeValue(c2, result);
+    if (str == null) return qjs.JS_NewStringLen(c2, "undefined", 9);
+    defer qjs.JS_FreeCString(c2, str);
+    const span = std.mem.span(str);
+    return qjs.JS_NewStringLen(c2, span.ptr, @intCast(span.len));
+}
+
 fn hostHeavyCompute(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
     if (argc < 1) return qjs.JS_NewFloat64(null, 0);
     var n: i32 = 0;
@@ -1091,6 +1122,265 @@ const polyfill =
     \\};
 ;
 
+// ── IFTTT rules engine (embedded JS) ─────────────────────────────
+// Same DSL as the Lua version. Runs in QuickJS for <script> block carts.
+// Source-of-truth doc: framework/ifttt_lua.mod.tsz (same API, different lang)
+
+const JS_IFTTT =
+    \\// ifttt: If This Then That rules engine for QuickJS
+    \\globalThis.__ifttt = { rules: {}, _nextId: 1, _initialized: false, _elapsed: 0 };
+    \\
+    \\// ── SDL scancode name table ──
+    \\var __ifttt_keys = {
+    \\  a:4,b:5,c:6,d:7,e:8,f:9,g:10,h:11,i:12,j:13,k:14,l:15,m:16,
+    \\  n:17,o:18,p:19,q:20,r:21,s:22,t:23,u:24,v:25,w:26,x:27,y:28,z:29,
+    \\  '1':30,'2':31,'3':32,'4':33,'5':34,'6':35,'7':36,'8':37,'9':38,'0':39,
+    \\  enter:40,return:40,escape:41,esc:41,backspace:42,tab:43,space:44,
+    \\  minus:45,equals:46,leftbracket:47,rightbracket:48,backslash:49,
+    \\  semicolon:51,apostrophe:52,grave:53,comma:54,period:55,slash:56,
+    \\  capslock:57,f1:58,f2:59,f3:60,f4:61,f5:62,f6:63,f7:64,f8:65,
+    \\  f9:66,f10:67,f11:68,f12:69,printscreen:70,scrolllock:71,pause:72,
+    \\  insert:73,home:74,pageup:75,delete:76,end:77,pagedown:78,
+    \\  right:79,left:80,down:81,up:82,
+    \\};
+    \\function __ifttt_resolveKey(name) {
+    \\  if (!isNaN(+name)) return +name;
+    \\  return __ifttt_keys[name.toLowerCase()] || 0;
+    \\}
+    \\
+    \\// ── Named state registry ──
+    \\// Script blocks call __ifttt_registerState('name', slotId) during init
+    \\globalThis.__ifttt_stateMap = {};
+    \\globalThis.__ifttt_registerState = function(name, slot) {
+    \\  __ifttt_stateMap[name] = slot;
+    \\};
+    \\function __ifttt_resolveSlot(s) {
+    \\  if (!isNaN(+s)) return +s;
+    \\  return __ifttt_stateMap[s] !== undefined ? __ifttt_stateMap[s] : -1;
+    \\}
+    \\
+    \\// ── Trigger parsing ──
+    \\function __ifttt_parseTrigger(t) {
+    \\  if (t === 'mount') return { kind: 'mount' };
+    \\  if (t === 'click') return { kind: 'event', event: 'click' };
+    \\  if (t === 'filedrop') return { kind: 'event', event: 'filedrop' };
+    \\
+    \\  let m;
+    \\  if ((m = t.match(/^key:up:(.+)$/))) return { kind: 'key_up', key: __ifttt_resolveKey(m[1]) };
+    \\
+    \\  // key:ctrl+s, key:ctrl+shift+z — combo with modifiers
+    \\  if (t.startsWith('key:') && t.includes('+')) {
+    \\    var parts = t.slice(4).toLowerCase().split('+');
+    \\    var combo = { ctrl: false, shift: false, alt: false, key: 0 };
+    \\    for (var pi = 0; pi < parts.length; pi++) {
+    \\      var p = parts[pi].trim();
+    \\      if (p === 'ctrl' || p === 'control') combo.ctrl = true;
+    \\      else if (p === 'shift') combo.shift = true;
+    \\      else if (p === 'alt') combo.alt = true;
+    \\      else combo.key = __ifttt_resolveKey(p);
+    \\    }
+    \\    return { kind: 'key_combo', combo: combo };
+    \\  }
+    \\
+    \\  if ((m = t.match(/^key:(.+)$/))) return { kind: 'key', key: __ifttt_resolveKey(m[1]) };
+    \\
+    \\  // state:<name_or_slot>:<value>
+    \\  if ((m = t.match(/^state:([^:]+):(.+)$/))) {
+    \\    var slot = __ifttt_resolveSlot(m[1]);
+    \\    var val = m[2];
+    \\    if (val === 'true') val = true;
+    \\    else if (val === 'false') val = false;
+    \\    else if (!isNaN(+val)) val = +val;
+    \\    return { kind: 'state_match', slot: slot, matchVal: val, prevMatched: false };
+    \\  }
+    \\  if ((m = t.match(/^timer:every:(\d+)$/))) return { kind: 'timer_every', intervalMs: +m[1], accum: 0 };
+    \\  if ((m = t.match(/^timer:once:(\d+)$/))) return { kind: 'timer_once', intervalMs: +m[1], accum: 0, fired: false };
+    \\
+    \\  return { kind: 'event', event: t };
+    \\}
+    \\
+    \\// ── Action execution ──
+    \\function __ifttt_execAction(action, event) {
+    \\  if (typeof action === 'function') { action(event); return; }
+    \\  let m;
+    \\
+    \\  // state:set:<name_or_slot>:<value>
+    \\  if ((m = action.match(/^state:set:([^:]+):(.+)$/))) {
+    \\    const slot = __ifttt_resolveSlot(m[1]), val = m[2];
+    \\    if (slot < 0) return;
+    \\    if (val === 'true') __setState(slot, 1);
+    \\    else if (val === 'false') __setState(slot, 0);
+    \\    else if (!isNaN(+val)) __setState(slot, +val);
+    \\    else __setStateString(slot, val);
+    \\    return;
+    \\  }
+    \\
+    \\  // state:toggle:<name_or_slot>
+    \\  if ((m = action.match(/^state:toggle:([^:]+)$/))) {
+    \\    const slot = __ifttt_resolveSlot(m[1]);
+    \\    if (slot < 0) return;
+    \\    __setState(slot, __getState(slot) === 0 ? 1 : 0);
+    \\    return;
+    \\  }
+    \\
+    \\  if ((m = action.match(/^call:(.+)$/))) {
+    \\    const fn = globalThis[m[1]];
+    \\    if (typeof fn === 'function') fn(event);
+    \\    return;
+    \\  }
+    \\
+    \\  if ((m = action.match(/^log:(.+)$/))) {
+    \\    console.log('[IFTTT]', m[1], event || '');
+    \\    return;
+    \\  }
+    \\}
+    \\
+    \\// ── Public API ──
+    \\globalThis.useIFTTT = function(trigger, action) {
+    \\  const rule = {
+    \\    id: __ifttt._nextId++,
+    \\    action: action,
+    \\    fired: 0,
+    \\    active: true,
+    \\  };
+    \\
+    \\  if (typeof trigger === 'function') {
+    \\    rule.trigger = { kind: 'condition', fn: trigger, prev: false };
+    \\  } else {
+    \\    rule.trigger = __ifttt_parseTrigger(trigger);
+    \\  }
+    \\
+    \\  __ifttt.rules[rule.id] = rule;
+    \\  return rule;
+    \\};
+    \\
+    \\function __ifttt_fire(rule, event) {
+    \\  if (!rule.active) return;
+    \\  rule.fired++;
+    \\  __ifttt_execAction(rule.action, event);
+    \\}
+    \\
+    \\globalThis.__ifttt_init = function() {
+    \\  for (const id in __ifttt.rules) {
+    \\    const rule = __ifttt.rules[id];
+    \\    if (rule.trigger.kind === 'mount') __ifttt_fire(rule);
+    \\    if (rule.trigger.kind === 'condition') rule.trigger.prev = rule.trigger.fn();
+    \\  }
+    \\  __ifttt._initialized = true;
+    \\};
+    \\
+    \\// Patch existing __zigOS_tick to include IFTTT tick
+    \\const __ifttt_origTick = globalThis.__zigOS_tick;
+    \\globalThis.__zigOS_tick = function() {
+    \\  // Run original timer tick
+    \\  if (__ifttt_origTick) __ifttt_origTick();
+    \\
+    \\  // IFTTT tick (16ms assumed if no better dt available)
+    \\  const dt = 16;
+    \\  __ifttt._elapsed += dt;
+    \\
+    \\  for (const id in __ifttt.rules) {
+    \\    const rule = __ifttt.rules[id];
+    \\    if (!rule.active) continue;
+    \\    const t = rule.trigger;
+    \\
+    \\    if (t.kind === 'timer_every') {
+    \\      t.accum += dt;
+    \\      while (t.accum >= t.intervalMs) {
+    \\        t.accum -= t.intervalMs;
+    \\        __ifttt_fire(rule);
+    \\      }
+    \\    } else if (t.kind === 'timer_once') {
+    \\      if (!t.fired) {
+    \\        t.accum += dt;
+    \\        if (t.accum >= t.intervalMs) {
+    \\          t.fired = true;
+    \\          __ifttt_fire(rule);
+    \\        }
+    \\      }
+    \\    } else if (t.kind === 'state_match') {
+    \\      const cur = __getState(t.slot);
+    \\      let matched = false;
+    \\      if (typeof t.matchVal === 'boolean') {
+    \\        matched = t.matchVal ? cur !== 0 : cur === 0;
+    \\      } else {
+    \\        matched = cur === t.matchVal;
+    \\      }
+    \\      if (matched && !t.prevMatched) __ifttt_fire(rule);
+    \\      t.prevMatched = matched;
+    \\    } else if (t.kind === 'condition') {
+    \\      const cur = t.fn();
+    \\      if (cur && !t.prev) __ifttt_fire(rule);
+    \\      t.prev = cur;
+    \\    }
+    \\  }
+    \\};
+    \\
+    \\globalThis.__ifttt_onKeyDown = function(packed) {
+    \\  // Decode: low 16 bits = keycode, high 16 bits = modifiers
+    \\  var keycode = packed & 0xFFFF;
+    \\  var mods = (packed >> 16) & 0xFFFF;
+    \\  var hasCtrl = (mods & 0x00C0) !== 0;
+    \\  var hasShift = (mods & 0x0003) !== 0;
+    \\  var hasAlt = (mods & 0x0300) !== 0;
+    \\  var evt = { key: keycode, mods: mods, ctrl: hasCtrl, shift: hasShift, alt: hasAlt };
+    \\
+    \\  for (const id in __ifttt.rules) {
+    \\    const rule = __ifttt.rules[id];
+    \\    if (!rule.active) continue;
+    \\    if (rule.trigger.kind === 'key' && rule.trigger.key === keycode) {
+    \\      __ifttt_fire(rule, evt);
+    \\    } else if (rule.trigger.kind === 'key_combo') {
+    \\      var c = rule.trigger.combo;
+    \\      if (c.key === keycode && c.ctrl === hasCtrl && c.shift === hasShift && c.alt === hasAlt) {
+    \\        __ifttt_fire(rule, evt);
+    \\      }
+    \\    }
+    \\  }
+    \\};
+    \\
+    \\globalThis.__ifttt_onKeyUp = function(packed) {
+    \\  var keycode = packed & 0xFFFF;
+    \\  for (const id in __ifttt.rules) {
+    \\    const rule = __ifttt.rules[id];
+    \\    if (!rule.active) continue;
+    \\    if (rule.trigger.kind === 'key_up' && rule.trigger.key === keycode) {
+    \\      __ifttt_fire(rule, { key: keycode });
+    \\    }
+    \\  }
+    \\};
+    \\
+    \\// SDL_BUTTON_LEFT=1, SDL_BUTTON_RIGHT=3
+    \\globalThis.__ifttt_onClick = function(packed) {
+    \\  var button = packed & 0xFFFF;
+    \\  var mx = (packed >> 16) & 0xFFFF;
+    \\  var isLeft = (button === 1);
+    \\  var isRight = (button === 3);
+    \\  var evt = { button: button, x: mx, left: isLeft, right: isRight };
+    \\
+    \\  for (const id in __ifttt.rules) {
+    \\    const rule = __ifttt.rules[id];
+    \\    if (!rule.active) continue;
+    \\    if (rule.trigger.kind === 'event') {
+    \\      if (rule.trigger.event === 'click' && isLeft) __ifttt_fire(rule, evt);
+    \\      if (rule.trigger.event === 'rightclick' && isRight) __ifttt_fire(rule, evt);
+    \\      if (rule.trigger.event === 'anyclick') __ifttt_fire(rule, evt);
+    \\    }
+    \\  }
+    \\};
+    \\
+    \\globalThis.__ifttt_onFiledrop = function(path) {
+    \\  var evt = { path: path };
+    \\  for (const id in __ifttt.rules) {
+    \\    const rule = __ifttt.rules[id];
+    \\    if (!rule.active) continue;
+    \\    if (rule.trigger.kind === 'event' && rule.trigger.event === 'filedrop') {
+    \\      __ifttt_fire(rule, evt);
+    \\    }
+    \\  }
+    \\};
+;
+
 // ── HTTP fetch host function ─────────────────────────────────────
 
 fn hostFetch(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
@@ -1410,6 +1700,7 @@ pub fn initVM() void {
     _ = qjs.JS_SetPropertyStr(ctx, global, "__getState", qjs.JS_NewCFunction(ctx, hostGetState, "__getState", 1));
     _ = qjs.JS_SetPropertyStr(ctx, global, "__getStateString", qjs.JS_NewCFunction(ctx, hostGetStateString, "__getStateString", 1));
     _ = qjs.JS_SetPropertyStr(ctx, global, "__hostLog", qjs.JS_NewCFunction(ctx, hostLog, "__hostLog", 2));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__js_eval", qjs.JS_NewCFunction(ctx, hostJsEval, "__js_eval", 1));
     _ = qjs.JS_SetPropertyStr(ctx, global, "getFps", qjs.JS_NewCFunction(ctx, hostGetFps, "getFps", 0));
     _ = qjs.JS_SetPropertyStr(ctx, global, "getLayoutUs", qjs.JS_NewCFunction(ctx, hostGetLayoutUs, "getLayoutUs", 0));
     _ = qjs.JS_SetPropertyStr(ctx, global, "getPaintUs", qjs.JS_NewCFunction(ctx, hostGetPaintUs, "getPaintUs", 0));
@@ -1514,6 +1805,10 @@ pub fn initVM() void {
 
     const val = qjs.JS_Eval(ctx, polyfill.ptr, polyfill.len, "<polyfill>", qjs.JS_EVAL_TYPE_GLOBAL);
     qjs.JS_FreeValue(ctx, val);
+
+    // Load IFTTT rules engine
+    const ifttt_val = qjs.JS_Eval(ctx, JS_IFTTT.ptr, JS_IFTTT.len, "<ifttt>", qjs.JS_EVAL_TYPE_GLOBAL);
+    qjs.JS_FreeValue(ctx, ifttt_val);
 }
 
 /// Register a native function on the JS global object. Call after initVM, before evalScript.
