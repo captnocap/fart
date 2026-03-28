@@ -83,6 +83,7 @@ function resetCtx() {
     maps: [],             // [{arrayName, itemParam, indexParam, innerNodes, parentArr, childIdx, textsInMap}]
     scriptBlock: null,     // raw JS from <script>...</script>
     scriptFuncs: [],       // function names defined in <script>
+    classifiers: {},       // {Name: {type, style, fontSize, color, ...}} from .cls imports
   };
 }
 
@@ -396,6 +397,65 @@ function collectState(c) {
 }
 
 
+// ── Classifier support ──
+
+function collectClassifiers() {
+  ctx.classifiers = {};
+  const clsText = globalThis.__clsContent;
+  if (!clsText) return;
+  try {
+    let captured = null;
+    const classifier = function(obj) { captured = obj; }; // eslint-disable-line no-unused-vars
+    eval(clsText); // direct eval — sees local 'classifier' binding
+    if (captured) ctx.classifiers = captured;
+  } catch(e) {}
+}
+
+// Convert a classifier definition's style object → Zig styleFields array
+function clsStyleFields(def) {
+  if (!def || !def.style) return [];
+  const fields = [];
+  const style = def.style;
+  for (const key of Object.keys(style)) {
+    const val = style[key];
+    if (colorKeys[key]) {
+      fields.push(`.${colorKeys[key]} = ${parseColor(String(val))}`);
+    } else if (enumKeys[key]) {
+      const em = enumKeys[key];
+      const mapped = em.values[val];
+      if (mapped) fields.push(`.${em.field} = ${mapped}`);
+    } else if (styleKeys[key]) {
+      if (typeof val === 'string' && val.endsWith('%')) {
+        fields.push(`.${styleKeys[key]} = @as(f32, ${parseFloat(val)})`);
+      } else {
+        fields.push(`.${styleKeys[key]} = ${val}`);
+      }
+    }
+  }
+  return fields;
+}
+
+// Convert classifier fontSize/color → Zig nodeFields array
+function clsNodeFields(def) {
+  if (!def) return [];
+  const fields = [];
+  if (def.fontSize !== undefined) fields.push(`.font_size = ${def.fontSize}`);
+  if (def.color !== undefined) fields.push(`.text_color = ${parseColor(String(def.color))}`);
+  return fields;
+}
+
+// Merge classifier default fields with inline-specified fields (inline wins)
+function mergeFields(clsFields, inlineFields) {
+  const result = [...inlineFields];
+  for (const cf of clsFields) {
+    const key = cf.split('=')[0].trim();
+    if (!result.some(f => f.split('=')[0].trim() === key)) {
+      result.unshift(cf);
+    }
+  }
+  return result;
+}
+
 // ── Entry point ──
 
 function compile() {
@@ -406,10 +466,11 @@ function compile() {
 
   resetCtx();
 
-  // Phase 1: Collect script, components, and state
+  // Phase 1: Collect script, components, state, and classifiers
   collectScript(c);
   collectComponents(c);
   collectState(c);
+  collectClassifiers();
 
   // Find App function
   let appStart = -1;

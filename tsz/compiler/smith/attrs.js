@@ -200,7 +200,8 @@ function parseStyleBlock(c) {
           if (!ctx.dynStyles) ctx.dynStyles = [];
           const dsId = ctx.dynStyles.length;
           ctx.dynStyles.push({ field: styleKeys[key], expression: `@as(f32, @floatFromInt(${val.zigExpr}))`, arrName: '', arrIndex: -1 });
-          fields._dynStyleId = dsId;
+          if (!fields._dynStyleIds) fields._dynStyleIds = [];
+          fields._dynStyleIds.push(dsId);
         } else if (val.type === 'map_field') {
           // Map field in style — e.g. width: bar.pct * 3
           let expr = val.value;
@@ -385,8 +386,12 @@ function luaParseValueExpr(c) {
         parts.push(name); // raw index variable name
         c.advance(); continue;
       }
-      // Raw variable names — state getters resolve to Lua locals
-      parts.push(name);
+      // Resolve props, then raw variable names
+      if (ctx.propStack && ctx.propStack[name] !== undefined) {
+        parts.push(ctx.propStack[name]);
+      } else {
+        parts.push(name);
+      }
       c.advance(); continue;
     }
     if (c.kind() === TK.number) { parts.push(c.text()); c.advance(); continue; }

@@ -15,8 +15,17 @@ function parseJSXElement(c) {
     return buildNode('Box', [], children, null, null, '>', fragOffset);
   }
 
-  const rawTag = c.text();
+  let rawTag = c.text();
   c.advance();
+
+  // C.Name classifier resolution
+  let clsDef = null;
+  if (rawTag === 'C' && c.kind() === TK.dot) {
+    c.advance(); // skip .
+    const clsName = c.text(); c.advance();
+    clsDef = ctx.classifiers && ctx.classifiers[clsName];
+    rawTag = clsDef ? clsDef.type : 'Box';
+  }
 
   // Check if this is a component call
   const comp = findComponent(rawTag);
@@ -354,6 +363,12 @@ function parseJSXElement(c) {
     } else { c.advance(); }
   }
 
+  // Merge classifier defaults (inline attrs win)
+  if (clsDef) {
+    styleFields = mergeFields(clsStyleFields(clsDef), styleFields);
+    nodeFields = mergeFields(clsNodeFields(clsDef), nodeFields);
+  }
+
   // Self-closing: />
   if (c.kind() === TK.slash_gt) {
     c.advance();
@@ -363,10 +378,11 @@ function parseJSXElement(c) {
 
   const children = parseChildren(c);
 
-  // </Tag>
+  // </Tag> or </C.Name>
   if (c.kind() === TK.lt_slash) {
     c.advance();
-    if (c.kind() === TK.identifier) c.advance();
+    if (c.kind() === TK.identifier) c.advance(); // skip tag name (or "C")
+    if (c.kind() === TK.dot) { c.advance(); if (c.kind() === TK.identifier) c.advance(); } // skip .Name
     if (c.kind() === TK.gt) c.advance();
   }
 
@@ -1299,7 +1315,7 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
       }
       if (children[i].dynColorId !== undefined) {
         const dc = ctx.dynColors[children[i].dynColorId];
-        if (dc) { dc.arrName = arrName; dc.arrIndex = i; }
+        if (dc && !dc.arrName) { dc.arrName = arrName; dc.arrIndex = i; }
       }
       if (children[i].dynStyleId !== undefined) {
         const ds = ctx.dynStyles[children[i].dynStyleId];

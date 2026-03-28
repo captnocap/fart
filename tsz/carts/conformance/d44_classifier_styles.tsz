@@ -7,6 +7,7 @@ import { cls_data } from "./d44_classifier_styles.cls";
 
 const [items, setItems] = useState([{ title: '', status: 0 }]);
 const [selected, setSelected] = useState('');
+const [count, setCount] = useState(0);
 
 <script>
 var data = [
@@ -25,20 +26,26 @@ function App() {
       <Text fontSize={16} color="#c9d1d9">Classifier Styles</Text>
       <Box style={{ gap: 6 }}>
         {items.map((item, i) => (
-          <Pressable onPress={() => { setSelected(item.title) }} style={{ flexDirection: "row", justifyContent: "spaceBetween", alignItems: "center", padding: 10, backgroundColor: "#161b22", borderRadius: 6, borderWidth: 1, borderColor: "#30363d" }}>
-            <Text fontSize={12} color="#c9d1d9">{item.title}</Text>
-            {item.status == 0 && <Box style={{ backgroundColor: "#6e7681", borderRadius: 4, paddingLeft: 6, paddingRight: 6, paddingTop: 2, paddingBottom: 2 }}>
-              <Text fontSize={9} color="#ffffff">TODO</Text>
-            </Box>}
-            {item.status == 1 && <Box style={{ backgroundColor: "#238636", borderRadius: 4, paddingLeft: 6, paddingRight: 6, paddingTop: 2, paddingBottom: 2 }}>
-              <Text fontSize={9} color="#ffffff">DONE</Text>
-            </Box>}
-            {item.status == 2 && <Box style={{ backgroundColor: "#da3633", borderRadius: 4, paddingLeft: 6, paddingRight: 6, paddingTop: 2, paddingBottom: 2 }}>
-              <Text fontSize={9} color="#ffffff">BLOCKED</Text>
-            </Box>}
-          </Pressable>
+          <C.Card>
+            <Box style={{ flexDirection: "row", justifyContent: "spaceBetween", alignItems: "center" }}>
+              <C.CardTitle>{item.title}</C.CardTitle>
+              {item.status == 0 && <C.StatusBadge style={{ backgroundColor: "#6e7681" }}>
+                <C.StatusText>TODO</C.StatusText>
+              </C.StatusBadge>}
+              {item.status == 1 && <C.StatusBadge style={{ backgroundColor: "#238636" }}>
+                <C.StatusText>DONE</C.StatusText>
+              </C.StatusBadge>}
+              {item.status == 2 && <C.StatusBadge style={{ backgroundColor: "#da3633" }}>
+                <C.StatusText>BLOCKED</C.StatusText>
+              </C.StatusBadge>}
+            </Box>
+            <C.CardDetail>{`Task ${i}`}</C.CardDetail>
+          </C.Card>
         ))}
       </Box>
+      <C.ActionButton onPress={() => { setCount(count + 1) }}>
+        <C.ActionLabel>{`Actions: ${count}`}</C.ActionLabel>
+      </C.ActionButton>
       <Text fontSize={10} color="#484f58">{`selected: ${selected}`}</Text>
     </Box>
   );
