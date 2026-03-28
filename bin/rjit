@@ -21,7 +21,28 @@ shift || true
 
 case "$cmd" in
     build)
-        exec "$SCRIPTS/build" "$@"
+        # Always fast by default. --full overrides for framework-touching work.
+        FULL=0
+        ARGS=(--fast)
+        for arg in "$@"; do
+            if [[ "$arg" == "--full" ]]; then
+                FULL=1
+            elif [[ "$arg" == *.tsz ]]; then
+                if [[ -f "$arg" ]]; then
+                    ARGS+=("$(realpath "$arg")")
+                elif [[ -f "$REPO_ROOT/$arg" ]]; then
+                    ARGS+=("$(realpath "$REPO_ROOT/$arg")")
+                else
+                    ARGS+=("$arg")
+                fi
+            else
+                ARGS+=("$arg")
+            fi
+        done
+        if [[ "$FULL" -eq 1 ]]; then
+            ARGS=("${ARGS[@]/--fast}")
+        fi
+        exec "$SCRIPTS/build" "${ARGS[@]}"
         ;;
     core)
         echo "[rjit] Building engine core .a..."
@@ -44,7 +65,15 @@ case "$cmd" in
             case "$arg" in
                 --fast) FAST_FLAG="--fast" ;;
                 --debug) ;;
-                *) CART="$arg" ;;
+                *.tsz)
+                    if [[ -f "$arg" ]]; then
+                        CART="$(realpath "$arg")"
+                    elif [[ -f "$REPO_ROOT/$arg" ]]; then
+                        CART="$(realpath "$REPO_ROOT/$arg")"
+                    else
+                        CART="$arg"
+                    fi
+                    ;;
             esac
         done
         if [ -z "$CART" ]; then
@@ -52,7 +81,7 @@ case "$cmd" in
             exit 1
         fi
         NAME=$(basename "$CART" .tsz)
-        "$SCRIPTS/build" $FAST_FLAG "$CART"
+        "$SCRIPTS/build" --fast "$CART"
         exec "$TSZ_DIR/zig-out/bin/$NAME"
         ;;
     dev)
@@ -68,17 +97,16 @@ case "$cmd" in
         cat <<'HELP'
 rjit — ReactJIT CLI
 
-  rjit build <cart.tsz>          full build (~20s, links everything)
-  rjit build --fast <cart.tsz>   fast build against cached engine (~500ms)
-  rjit build --debug <cart.tsz>  debug build (unoptimized, no ReleaseFast)
-  rjit core                      build/rebuild the cached engine .a
+  rjit build <cart.tsz>          build cart (~500ms, uses cached engine)
+  rjit build --debug <cart.tsz>  debug build (unoptimized)
+  rjit build --full <cart.tsz>   full rebuild (links everything, ~20s fallback)
+  rjit core                      build/rebuild the cached engine .a (run once, or after framework changes)
   rjit run <cart.tsz>            build + run
-  rjit run --fast <cart.tsz>     fast build + run
   rjit dev <cart.tsz>            hot-reload dev mode (186ms reloads)
 
-First time fast build:
-  rjit core                      # one-time ~24s
-  rjit build --fast cart.tsz     # ~500ms from here on
+First time setup:
+  rjit core          # one-time ~24s engine build
+  rjit build cart.tsz  # ~500ms from here on
 HELP
         ;;
     *)
