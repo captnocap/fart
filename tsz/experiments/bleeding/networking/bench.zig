@@ -158,7 +158,9 @@ fn benchPool(allocator: std.mem.Allocator, port: u16, runtime_name: []const u8) 
     for (&payload) |*b| b.* = 'B';
     var recv_buf: [PAYLOAD_SIZE]u8 = undefined;
 
-    const max_pool = 10;
+    // Single persistent connection — measures reuse vs new-conn-per-request
+    // (Server is single-threaded, can't handle concurrent pool connections)
+    const max_pool = 1;
     var pool: [max_pool]?net.Stream = [_]?net.Stream{null} ** max_pool;
 
     const rss_before = getRssKb();
