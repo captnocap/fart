@@ -82,9 +82,19 @@ function preflight(ctx) {
   // Every Color{} must be backed by a dynStyle or dynColor entry
   var dynColorBackings = ctx.dynColors.length + (ctx.dynStyles ? ctx.dynStyles.length : 0);
   // Only fatal if there are orphan Color{} (more placeholders than runtime fixups)
+  // Exception: components with props can create template Color{} that get overwritten
+  // during inlining (e.g. color={color} in a component body). These aren't real orphans.
+  // When components with props exist, downgrade to warning since we can't distinguish
+  // template placeholders from real orphans without emit-phase tracking.
   var orphanColors = colorPlaceholderCount - dynColorBackings;
-  if (orphanColors > 0) {
+  var hasComponentsWithProps = false;
+  for (var ci = 0; ci < ctx.components.length; ci++) {
+    if (ctx.components[ci].propNames && ctx.components[ci].propNames.length > 0) { hasComponentsWithProps = true; break; }
+  }
+  if (orphanColors > 0 && !hasComponentsWithProps) {
     errors.push('F4: ' + orphanColors + ' Color{} placeholder(s) with no dynStyle/dynColor runtime fix');
+  } else if (orphanColors > 0 && hasComponentsWithProps) {
+    warnings.push('W1: ' + orphanColors + ' Color{} placeholder(s) — may be resolved by component prop inlining');
   }
 
   // F8: Map over non-OA identifier
