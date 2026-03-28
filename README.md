@@ -73,7 +73,7 @@ The `.tsz` compiler and native rendering framework. TypeScript + JSX compiles to
 The compiler is split into two parts:
 
 - **Forge** — small Zig kernel (~300 lines). Lexer, QuickJS bridge, file I/O. Built once, rarely changes. Tokenizes `.tsz` source and hands flat token arrays to Smith.
-- **Smith** — JS compiler intelligence (~1,600 lines across 5 files) running inside Forge via QuickJS. All parse, codegen, and emit logic lives here. Edit without rebuilding Forge.
+- **Smith** — JS compiler intelligence (~4,700 lines across 5 files) running inside Forge via QuickJS. All parse, codegen, and emit logic lives here. Edit without rebuilding Forge.
 
 ```
 app.tsz → [Forge: lex] → tokens → [Smith: parse + emit] → .zig source → native binary
@@ -189,17 +189,42 @@ Standalone imperative Zig module — no JSX, compiles TypeScript-like code direc
 ## Quick Start
 
 ```bash
-cd tsz
+# Build a cart (~500ms, LuaJIT linker)
+bin/rjit build carts/storybook/Storybook.tsz
 
-# Build the compiler
-zig build tsz              # Lean compiler → bin/tsz
-zig build tsz-full         # Full compiler → bin/tsz-full
+# Build + run
+bin/rjit run carts/storybook/Storybook.tsz
 
-# Build a cart
-bin/tsz build carts/storybook/Storybook.tsz
+# Hot-reload dev mode (186ms reloads)
+bin/rjit dev carts/storybook/Storybook.tsz
 
-# Or use hot-reload dev mode (63x faster iteration)
-bin/tsz dev carts/storybook/Storybook.tsz
+# First time only: build the cached engine (~24s, then never again)
+bin/rjit core
+```
+
+### Build Pipeline
+
+```
+.tsz source
+   |
+   v
+Forge + Smith (2ms) — .tsz → generated .zig
+   |
+   v
+zig build-obj (60-500ms) — .zig → .o (Zig's x86 backend, no LLVM)
+   |
+   v
+LuaJIT link.lua (50-80ms) — .o + engine .so → native binary
+```
+
+The engine (layout, GPU, state, networking, everything) is compiled once into a cached `.so` with full LLVM optimization. Cart builds skip LLVM entirely — Zig's fast x86 backend compiles only the cart code, then LuaJIT links it against the cached engine. Result: ~500ms from `.tsz` to clickable binary.
+
+```bash
+# Full build (fallback, links everything from source)
+bin/rjit build --full carts/storybook/Storybook.tsz
+
+# Rebuild engine after framework changes
+bin/rjit core
 ```
 
 ## Primitives
@@ -250,14 +275,14 @@ carts/
 
 ## Framework Modules
 
-77 modules in the framework runtime:
+79 modules in the framework runtime:
 
 | Category | Modules |
 |----------|---------|
 | Core | engine, state, events, input, layout, text, geometry, math, random |
 | Rendering | render_surfaces, render_surfaces_vm, effects, effect_ctx, effect_shader, easing, transition, canvas, svg_path, blend2d, vello |
 | UI | theme, classifier, selection, tooltip, context_menu, router, query, windows |
-| Cartridge | cartridge, cartpack, dev_shell, devtools, devtools_state |
+| Cartridge | cartridge, cartpack, dev_shell, devtools, devtools_state, api, core |
 | Terminal | pty, pty_client, pty_remote, vterm, semantic |
 | Networking | http, httpserver, websocket, wsserver, ipc, qjs_ipc, socks5, tor |
 | Media | audio, player, videos, recorder, capture |
@@ -272,12 +297,23 @@ carts/
 |-------|-------|------|
 | Autobahn WebSocket | 202/204 | RFC 6455 compliance |
 | WPT Flexbox | 70/70 | W3C CSS flex spec |
-| Compiler conformance suite | 159/283 | Language features, script runtimes, maps, components, integration |
+| Compiler conformance suite | 115/237 | Language features, script runtimes, maps, components, integration |
 | Smith conformance (vs OG Zig) | 89/112 | Forge+Smith output parity against the reference Zig compiler |
 | Surface conformance | 0/105 | Three-tier UI + logic tests (soup/mixed/chad) |
 | Crypto | 13/13 | HMAC, HKDF, Shamir, encryption, PII detection |
 
 ## Performance
+
+### Build
+
+| Cart | Time | What |
+|------|------|------|
+| Small (d70) | 80ms | forge + zig obj + luajit link |
+| Medium (d01) | 500ms | typical app with maps + state |
+| Large (d12 kanban) | 542ms | complex nested maps, was 18s before engine split |
+| Engine rebuild | ~24s | one-time, cached as .so |
+
+### Runtime
 
 At 4096 mapped items (5139 visible nodes):
 - Layout: ~3.3ms
