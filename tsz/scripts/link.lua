@@ -100,6 +100,47 @@ end
 
 os.execute("mkdir -p " .. outdir)
 
+-- ── Integrity check — verify generated .zig hasn't been hand-edited ──
+local function check_integrity(path)
+    local f = io.open(path, "r")
+    if not f then return true end -- no file = skip check
+    local first = f:read("*l")
+    f:close()
+    if not first or not first:match("^//! integrity:") then return true end -- no stamp = old file, ok
+    local body_hash = first:match("body=(%x+)")
+    if not body_hash then return true end
+
+    -- Re-read file, strip the integrity lines, compute sha256 of the body
+    f = io.open(path, "r")
+    local content = f:read("*a")
+    f:close()
+    local body = content:gsub("^//! integrity:[^\n]*\n//! DO NOT EDIT[^\n]*\n", "")
+
+    -- Use system sha256sum for cross-language consistency
+    local tmp = os.tmpname()
+    local tf = io.open(tmp, "w"); tf:write(body); tf:close()
+    local pf = io.popen("sha256sum " .. tmp .. " 2>/dev/null")
+    local computed = pf:read("*l"):match("^(%x+)")
+    pf:close(); os.remove(tmp)
+    -- Compare first 16 hex chars (64-bit prefix, matches Smith's stamp)
+    computed = computed:sub(1, 16)
+
+    if computed ~= body_hash then
+        io.stderr:write("[link] INTEGRITY FAIL: " .. path .. " has been hand-edited!\n")
+        io.stderr:write("[link] Expected body hash: " .. body_hash .. "\n")
+        io.stderr:write("[link] Computed body hash: " .. computed .. "\n")
+        io.stderr:write("[link] Re-run forge to regenerate from .tsz source.\n")
+        io.stderr:write("[link] Use --force to override (you know what you're doing).\n")
+        return false
+    end
+    return true
+end
+
+-- Check unless --force was passed (arg[3])
+if arg[3] ~= "--force" and not check_integrity(source) then
+    os.exit(1)
+end
+
 -- ── Step 1: Compile cart .zig → .o ──────────────────────────────────
 local t0 = now_ms()
 

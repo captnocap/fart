@@ -129,7 +129,29 @@ pub fn main() !void {
         return;
     };
 
-    // 7. Write output .zig file
+    // 7. Compute body hash and patch BODYHASH placeholder
+    // Strip integrity header lines to hash just the body
+    var body_start: usize = 0;
+    var newline_count: u8 = 0;
+    for (zig_output, 0..) |ch, idx| {
+        if (ch == '\n') {
+            newline_count += 1;
+            if (newline_count == 2) { body_start = idx + 1; break; }
+        }
+    }
+    const body = if (body_start < zig_output.len) zig_output[body_start..] else zig_output;
+    var hash: [32]u8 = undefined;
+    std.crypto.hash.sha2.Sha256.hash(body, &hash, .{});
+    var hash_hex: [16]u8 = undefined;
+    const hex_chars = "0123456789abcdef";
+    for (0..8) |i| {
+        hash_hex[i * 2] = hex_chars[hash[i] >> 4];
+        hash_hex[i * 2 + 1] = hex_chars[hash[i] & 0xf];
+    }
+    // Replace BODYHASH placeholder in output
+    const final_output = std.mem.replaceOwned(u8, std.heap.page_allocator, zig_output, "BODYHASH", &hash_hex) catch zig_output;
+
+    // 8. Write output .zig file
     const basename = std.fs.path.basename(input_path);
     const dot_pos = std.mem.lastIndexOfScalar(u8, basename, '.') orelse basename.len;
     const stem = basename[0..dot_pos];
@@ -140,12 +162,12 @@ pub fn main() !void {
         return;
     };
     defer out_file.close();
-    out_file.writeAll(zig_output) catch |err| {
+    out_file.writeAll(final_output) catch |err| {
         std.debug.print("[forge] Write error: {}\n", .{err});
         return;
     };
 
-    std.debug.print("[forge] Wrote {d} bytes to {s}\n", .{ zig_output.len, out_path });
+    std.debug.print("[forge] Wrote {d} bytes to {s}\n", .{ final_output.len, out_path });
 
     // 8. TODO: invoke zig build to compile the .zig into a binary
     // For now, just print what would happen
