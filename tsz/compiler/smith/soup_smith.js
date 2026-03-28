@@ -260,6 +260,11 @@ function soupToZig(node, warns, inPressable) {
   var kind = _STAG[node.tag] || 'box';
   if (kind === 'void') return { str: '', dynBufId: -1 };
 
+  // React fragments (<>...</>) — transparent wrapper, just emit children as a box
+  if (node.tag === '' || node.tag === 'react.fragment' || node.tag === 'fragment') {
+    kind = 'box';
+  }
+
   if (kind === 'stub') {
     warns.push('[W] <' + node.tag + '> unsupported → stub');
     return { str: '.{ .style = .{ .width = 60, .height = 30, .background_color = Color.rgb(' + _SC.stubBg + '), .border_radius = 4 } }', dynBufId: -1 };
@@ -435,8 +440,10 @@ function soupHandleMap(expr, warns, inPressable) {
   var arrayName = mapMatch[1];
   var itemParam = mapMatch[2];
 
-  // Find the template body after =>
-  var arrowIdx = expr.indexOf('=>');
+  // Find the => that belongs to .map()'s callback, not a preceding .filter() etc.
+  // Start searching from the position of .map( in the expression
+  var mapPos = expr.lastIndexOf('.map(');
+  var arrowIdx = expr.indexOf('=>', mapPos);
   var afterArrow = expr.slice(arrowIdx + 2).trim();
   var jsxBody = '';
 
@@ -511,6 +518,38 @@ function soupHandleMap(expr, warns, inPressable) {
   return result;
 }
 
+// ── Top-level token finders (skip nested parens/braces/strings) ───────────────
+
+function soupFindTopLevelAnd(expr) {
+  var depth = 0, i = 0;
+  while (i < expr.length - 1) {
+    var ch = expr.charAt(i);
+    if (ch === "'" || ch === '"' || ch === '`') {
+      var q = ch; i++;
+      while (i < expr.length && expr.charAt(i) !== q) { if (expr.charAt(i) === '\\') i++; i++; }
+    } else if (ch === '(' || ch === '{' || ch === '[') { depth++; }
+    else if (ch === ')' || ch === '}' || ch === ']') { depth--; }
+    else if (depth === 0 && ch === '&' && expr.charAt(i + 1) === '&') { return i; }
+    i++;
+  }
+  return -1;
+}
+
+function soupFindTopLevelChar(expr, target) {
+  var depth = 0, i = 0;
+  while (i < expr.length) {
+    var ch = expr.charAt(i);
+    if (ch === "'" || ch === '"' || ch === '`') {
+      var q = ch; i++;
+      while (i < expr.length && expr.charAt(i) !== q) { if (expr.charAt(i) === '\\') i++; i++; }
+    } else if (ch === '(' || ch === '{' || ch === '[') { depth++; }
+    else if (ch === ')' || ch === '}' || ch === ']') { depth--; }
+    else if (depth === 0 && ch === target) { return i; }
+    i++;
+  }
+  return -1;
+}
+
 // ── Expression → Zig ──────────────────────────────────────────────────────────
 
 function soupExprToZig(expr, warns, inPressable) {
@@ -548,15 +587,79 @@ function soupExprToZig(expr, warns, inPressable) {
     return { str: '', dynBufId: -1 };
   }
 
-  // .map()
-  if (expr.indexOf('.map(') >= 0) {
-    return soupHandleMap(expr, warns, inPressable);
+  // Conditional render: {condition && (<JSX/>)} — MUST check before .map()
+  // because the whole expr can contain .map() nested inside the JSX body.
+  if (expr.indexOf('&&') >= 0) {
+    var andIdx = soupFindTopLevelAnd(expr);
+    if (andIdx >= 0) {
+      var jsxPart = expr.slice(andIdx + 2).trim();
+      // Strip wrapping parens: (\n<div>...</div>\n) → <div>...</div>
+      if (jsxPart.charAt(0) === '(') {
+        var depth = 0, i = 0;
+        while (i < jsxPart.length) {
+          if (jsxPart.charAt(i) === '(') depth++;
+          else if (jsxPart.charAt(i) === ')') { depth--; if (depth === 0) { jsxPart = jsxPart.slice(1, i); break; } }
+          i++;
+        }
+      }
+      jsxPart = jsxPart.trim();
+      if (jsxPart.charAt(0) === '<') {
+        // Parse the JSX and render it
+        var tokens = soupTokenize(jsxPart);
+        var tree = soupBuildTree(tokens);
+        if (tree) {
+          soupExtractInlineHandlers(tree, warns);
+          warns.push('[W] conditional render (&&) rendered unconditionally');
+          return soupToZig(tree, warns, inPressable);
+        }
+      }
+    }
+    // No top-level && found — the && is nested (e.g. inside .filter()).
+    // Fall through to other checks (ternary, .map(), etc.)
   }
 
-  // Ternary / complex → drop
-  if (expr.indexOf('?') >= 0 || expr.indexOf('&&') >= 0) {
-    warns.push('[W] complex expr dropped: ' + expr.substring(0, 50));
+  // Ternary: {cond ? <A/> : <B/>} — render the true branch
+  if (expr.indexOf('?') >= 0) {
+    var qIdx = soupFindTopLevelChar(expr, '?');
+    if (qIdx >= 0) {
+      var afterQ = expr.slice(qIdx + 1).trim();
+      // Check if true branch starts with JSX or a string
+      if (afterQ.charAt(0) === '<' || afterQ.charAt(0) === '(') {
+        var trueBranch = afterQ;
+        if (trueBranch.charAt(0) === '(') {
+          var depth = 0, i = 0;
+          while (i < trueBranch.length) {
+            if (trueBranch.charAt(i) === '(') depth++;
+            else if (trueBranch.charAt(i) === ')') { depth--; if (depth === 0) { trueBranch = trueBranch.slice(1, i); break; } }
+            i++;
+          }
+        }
+        trueBranch = trueBranch.trim();
+        if (trueBranch.charAt(0) === '<') {
+          var tokens = soupTokenize(trueBranch);
+          var tree = soupBuildTree(tokens);
+          if (tree) {
+            soupExtractInlineHandlers(tree, warns);
+            warns.push('[W] ternary rendered true branch only');
+            return soupToZig(tree, warns, inPressable);
+          }
+        }
+      }
+      // String ternary: {cond ? "text" : "other"} → static text
+      var strMatch = afterQ.match(/^["']([^"']*)["']/);
+      if (strMatch) {
+        var esc = strMatch[1].replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+        var tc = inPressable ? _SC.textWhite : _SC.textP;
+        return { str: '.{ .text = "' + esc + '", .text_color = Color.rgb(' + tc + ') }', dynBufId: -1 };
+      }
+    }
+    warns.push('[W] complex ternary dropped: ' + expr.substring(0, 50));
     return { str: '', dynBufId: -1 };
+  }
+
+  // .map() — checked AFTER && and ? so conditional wrappers are handled first
+  if (expr.indexOf('.map(') >= 0) {
+    return soupHandleMap(expr, warns, inPressable);
   }
 
   warns.push('[W] expr dropped: {' + expr.substring(0, 50) + '}');
