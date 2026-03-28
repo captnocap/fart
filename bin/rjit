@@ -1,0 +1,88 @@
+#!/bin/bash
+# rjit — ReactJIT CLI
+#
+# Usage:
+#   rjit build <cart.tsz>          # full build (~20s)
+#   rjit build --fast <cart.tsz>   # fast build against cached engine (~500ms)
+#   rjit build --debug <cart.tsz>  # debug build (unoptimized)
+#   rjit core                      # build/rebuild the cached engine .a
+#   rjit run <cart.tsz>            # build + run
+#   rjit run --fast <cart.tsz>     # fast build + run
+#   rjit dev <cart.tsz>            # hot-reload dev mode
+
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SCRIPTS="$REPO_ROOT/tsz/scripts"
+TSZ_DIR="$REPO_ROOT/tsz"
+
+cmd="${1:-}"
+shift || true
+
+case "$cmd" in
+    build)
+        exec "$SCRIPTS/build" "$@"
+        ;;
+    core)
+        echo "[rjit] Building engine core .a..."
+        cd "$TSZ_DIR"
+        zig build core -Doptimize=ReleaseFast 2>&1
+        CORE_DIR="zig-out/lib"
+        mkdir -p "$CORE_DIR"
+        mv "$CORE_DIR/libreactjit-core.a" "$CORE_DIR/libreactjit-core.candidate.a"
+        if [ -f "$CORE_DIR/libreactjit-core.current.a" ]; then
+            mv "$CORE_DIR/libreactjit-core.current.a" "$CORE_DIR/libreactjit-core.lastgood.a"
+        fi
+        mv "$CORE_DIR/libreactjit-core.candidate.a" "$CORE_DIR/libreactjit-core.current.a"
+        echo "[rjit] Engine core ready → $CORE_DIR/libreactjit-core.current.a"
+        ;;
+    run)
+        # Parse flags to find the cart path
+        FAST_FLAG=""
+        CART=""
+        for arg in "$@"; do
+            case "$arg" in
+                --fast) FAST_FLAG="--fast" ;;
+                --debug) ;;
+                *) CART="$arg" ;;
+            esac
+        done
+        if [ -z "$CART" ]; then
+            echo "Usage: rjit run [--fast] <cart.tsz>"
+            exit 1
+        fi
+        NAME=$(basename "$CART" .tsz)
+        "$SCRIPTS/build" $FAST_FLAG "$CART"
+        exec "$TSZ_DIR/zig-out/bin/$NAME"
+        ;;
+    dev)
+        CART="${1:-}"
+        if [ -z "$CART" ]; then
+            echo "Usage: rjit dev <cart.tsz>"
+            exit 1
+        fi
+        cd "$TSZ_DIR"
+        exec "$TSZ_DIR/zig-out/bin/tsz" dev "$CART"
+        ;;
+    ""|help|--help|-h)
+        cat <<'HELP'
+rjit — ReactJIT CLI
+
+  rjit build <cart.tsz>          full build (~20s, links everything)
+  rjit build --fast <cart.tsz>   fast build against cached engine (~500ms)
+  rjit build --debug <cart.tsz>  debug build (unoptimized, no ReleaseFast)
+  rjit core                      build/rebuild the cached engine .a
+  rjit run <cart.tsz>            build + run
+  rjit run --fast <cart.tsz>     fast build + run
+  rjit dev <cart.tsz>            hot-reload dev mode (186ms reloads)
+
+First time fast build:
+  rjit core                      # one-time ~24s
+  rjit build --fast cart.tsz     # ~500ms from here on
+HELP
+        ;;
+    *)
+        echo "rjit: unknown command '$cmd'. Run 'rjit help' for usage."
+        exit 1
+        ;;
+esac
