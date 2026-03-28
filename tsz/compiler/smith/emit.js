@@ -866,11 +866,15 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
       // Per-item conditionals (visibility toggling inside map components)
       for (const cond of ctx.conditionals) {
         if (!cond.arrName || !m._mapPerItemDecls) continue;
+        // Skip conditionals that belong to a different map
+        if (cond.inMap && cond.mapIdx !== undefined && cond.mapIdx !== mi) continue;
         const pid = m._mapPerItemDecls.find(p => p.name === cond.arrName);
         if (!pid) continue;
         const poolArr = `_map_${cond.arrName}_${mi}[_i]`;
         // Resolve item.field references to OA field access
         let resolvedExpr = cond.condExpr;
+        // DEBUG: trace map cond resolution
+        if (resolvedExpr.includes('0.0')) ctx._debugLines.push('[MAP_COND_DEBUG] raw=' + resolvedExpr + ' arrName=' + cond.arrName + ' mapIdx=' + mi + ' itemParam=' + (m.itemParam || '?'));
         if (m.oa) {
           const itemParam = m.itemParam || 'item';
           for (const f of m.oa.fields) {

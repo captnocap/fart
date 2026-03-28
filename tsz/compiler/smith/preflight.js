@@ -279,6 +279,13 @@ function preflight(ctx) {
     }
   }
 
+  // --strict: promote all warnings to errors
+  if (globalThis.__strict === 1 && warnings.length > 0) {
+    for (var wi = 0; wi < warnings.length; wi++) {
+      errors.push('STRICT: ' + warnings[wi]);
+    }
+  }
+
   return {
     ok: errors.length === 0,
     errors: errors,

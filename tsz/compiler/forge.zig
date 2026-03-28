@@ -185,9 +185,14 @@ fn mergeImports(
     // For component files, strip `function App() { ... }` test stubs that would
     // pollute the merged source and confuse the App-finding logic in Smith.
     const this_class = classifyFile(file_path);
-    if (this_class == .component or this_class == .unknown) {
+    if (this_class == .component) {
+        // Strip function App() test stubs from component files only
         const stripped = stripAppStub(source);
         component_buf.appendSlice(Alloc, stripped) catch {};
+        component_buf.append(Alloc, '\n') catch {};
+    } else if (this_class == .unknown) {
+        // Main entry file — keep function App() intact
+        component_buf.appendSlice(Alloc, source) catch {};
         component_buf.append(Alloc, '\n') catch {};
     }
 }
@@ -211,6 +216,7 @@ pub fn main() !void {
     var mod_build = false;
     var split_output = false;
     var single_output = false;
+    var strict_mode = false;
     var input_path: []const u8 = undefined;
     var got_path = false;
     while (args.next()) |arg| {
@@ -222,6 +228,8 @@ pub fn main() !void {
             split_output = true;
         } else if (std.mem.eql(u8, arg, "--single")) {
             single_output = true;
+        } else if (std.mem.eql(u8, arg, "--strict")) {
+            strict_mode = true;
         } else {
             input_path = arg;
             got_path = true;
@@ -273,6 +281,7 @@ pub fn main() !void {
     // Split output is default unless --single is passed
     if (!single_output and !mod_build) smith.setGlobalInt("__splitOutput", 1);
     if (split_output) smith.setGlobalInt("__splitOutput", 1);
+    if (strict_mode) smith.setGlobalInt("__strict", 1);
 
     // Build token kind array as u8 slice for the bridge
     const kinds = Alloc.alloc(u8, lexer.count) catch return;
