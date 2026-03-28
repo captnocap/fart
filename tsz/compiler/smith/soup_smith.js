@@ -349,10 +349,7 @@ function soupToZig(node, warns, inPressable) {
   var childResults = [];
   for (var ci = 0; ci < node.children.length; ci++) {
     var child = node.children[ci];
-    if (child.type === 'expr' && (child.expr || '').indexOf('.map(') >= 0) {
-      warns.push('[W] .map() skipped (not yet supported in soup lane)');
-      continue;
-    }
+    // .map() expressions are handled by soupExprToZig → soupHandleMap
     var cr = soupToZig(child, warns, kind === 'pressable');
     if (cr.str) childResults.push(cr);
   }
@@ -439,6 +436,97 @@ function soupWireDynTextsInArray(arrName, childResults) {
   }
 }
 
+// ── .map() static template renderer ───────────────────────────────────────────
+// Renders ONE static copy of the .map() template with field names as placeholders.
+// arrayName.map((item) => ( <JSX with {item.field}> ))  →  one rendered card
+
+function soupHandleMap(expr, warns, inPressable) {
+  // Extract: arrayName.map((itemParam) => ...body...)
+  var mapMatch = expr.match(/^(\w+)(?:\.\w+)*\.map\(\s*\((\w+)(?:\s*,\s*\w+)?\)\s*=>/);
+  if (!mapMatch) {
+    // Try filtered: array.filter(...).map(...)
+    mapMatch = expr.match(/\.map\(\s*\((\w+)(?:\s*,\s*\w+)?\)\s*=>/);
+    if (mapMatch) {
+      mapMatch = [mapMatch[0], 'filtered', mapMatch[1]];
+    } else {
+      warns.push('[W] unrecognized .map() pattern — skipped');
+      return { str: '', dynBufId: -1 };
+    }
+  }
+  var arrayName = mapMatch[1];
+  var itemParam = mapMatch[2];
+
+  // Find the template body after =>
+  var arrowIdx = expr.indexOf('=>');
+  var afterArrow = expr.slice(arrowIdx + 2).trim();
+  var jsxBody = '';
+
+  if (afterArrow.charAt(0) === '(') {
+    // () => ( ... )  — extract balanced parens
+    var depth = 0, i = 0;
+    while (i < afterArrow.length) {
+      if (afterArrow.charAt(i) === '(') depth++;
+      else if (afterArrow.charAt(i) === ')') { depth--; if (depth === 0) { jsxBody = afterArrow.slice(1, i); break; } }
+      i++;
+    }
+  } else if (afterArrow.charAt(0) === '{') {
+    // () => { ... return (...) }  or  () => { ... return <tag>...</tag>; }
+    var block = soupBlock(afterArrow, 0);
+    var retIdx = block.lastIndexOf('return');
+    if (retIdx >= 0) {
+      var afterRet = block.slice(retIdx + 6).trim();
+      if (afterRet.charAt(0) === '(') {
+        // return ( ... )
+        var depth = 0, i = 0;
+        while (i < afterRet.length) {
+          if (afterRet.charAt(i) === '(') depth++;
+          else if (afterRet.charAt(i) === ')') { depth--; if (depth === 0) { jsxBody = afterRet.slice(1, i); break; } }
+          i++;
+        }
+      } else if (afterRet.charAt(0) === '<') {
+        // return <tag>...</tag>;  — extract JSX directly
+        jsxBody = afterRet.replace(/;\s*$/, '');
+      }
+    }
+    if (!jsxBody) {
+      warns.push('[W] .map() body has no extractable JSX for "' + arrayName + '" — skipped');
+      return { str: '', dynBufId: -1 };
+    }
+  } else if (afterArrow.charAt(0) === '<') {
+    // () => <Tag>...</Tag>  — direct JSX
+    jsxBody = afterArrow.replace(/\)\s*\)\s*$/, '');
+  }
+
+  if (!jsxBody || jsxBody.trim().length === 0) {
+    warns.push('[W] .map() body extraction failed for "' + arrayName + '" — skipped');
+    return { str: '', dynBufId: -1 };
+  }
+
+  // Replace {itemParam.field} references with static placeholder text
+  var itemRe = new RegExp('\\{\\s*' + itemParam + '\\.(\\w+)\\s*\\}', 'g');
+  jsxBody = jsxBody.replace(itemRe, '[$1]');
+
+  // Drop remaining complex expressions referencing the item param
+  var complexRe = new RegExp('\\{[^}]*' + itemParam + '[^}]*\\}', 'g');
+  jsxBody = jsxBody.replace(complexRe, '');
+
+  // Drop key={...} attributes
+  jsxBody = jsxBody.replace(/\s+key=\{[^}]*\}/g, '');
+
+  // Parse the cleaned template through normal soup pipeline
+  var tokens = soupTokenize(jsxBody.trim());
+  var tree = soupBuildTree(tokens);
+  if (!tree) {
+    warns.push('[W] .map() template parse failed for "' + arrayName + '" — skipped');
+    return { str: '', dynBufId: -1 };
+  }
+
+  // Render the static template
+  var result = soupToZig(tree, warns, inPressable);
+  warns.push('[W] .map("' + arrayName + '") → rendered 1 static template');
+  return result;
+}
+
 // ── Expression → Zig ──────────────────────────────────────────────────────────
 
 function soupExprToZig(expr, warns, inPressable) {
@@ -478,8 +566,7 @@ function soupExprToZig(expr, warns, inPressable) {
 
   // .map()
   if (expr.indexOf('.map(') >= 0) {
-    warns.push('[W] .map() skipped in soup lane');
-    return { str: '', dynBufId: -1 };
+    return soupHandleMap(expr, warns, inPressable);
   }
 
   // Ternary / complex → drop
