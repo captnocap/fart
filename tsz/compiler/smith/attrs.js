@@ -281,6 +281,9 @@ function parseStyleBlock(c) {
         } else {
           // State or unknown — placeholder Color{}, dynamic update at runtime
           fields.push(`.${colorKeys[key]} = Color{}`);
+          // Track orphan Color{} for preflight F4 — no dynStyle/dynColor backs this
+          if (!ctx._orphanColors) ctx._orphanColors = [];
+          ctx._orphanColors.push({ field: colorKeys[key], value: val.type + ':' + (val.value || '?') });
         }
       } else if (styleKeys[key]) {
         if (val.type === 'state') {
@@ -339,6 +342,18 @@ function isGetter(name) {
 function isSetter(name) {
   if (ctx.slotRemap && name in ctx.slotRemap) return true;
   return ctx.stateSlots.some(s => s.setter === name);
+}
+
+// Resolve a prop value for use in a conditional expression.
+// Zig expressions (state.getSlot, numbers, if-expressions) pass through.
+// String literals (multi-word text from prop="value") resolve to a truthy constant
+// since a provided string prop is always non-zero in a truthiness check.
+function _condPropValue(pv) {
+  if (/^-?\d+(\.\d+)?$/.test(pv)) return pv; // numeric literal
+  if (pv.startsWith('state.') || pv.startsWith('_oa') || pv.startsWith('if (') || pv.startsWith('@as(') || pv.startsWith('@intCast(')) return pv; // Zig expression
+  if (pv.startsWith('_handler_press_')) return '1'; // handler ref = truthy
+  // String literal — non-empty means truthy (1), empty means falsy (0)
+  return pv.length > 0 ? '1' : '0';
 }
 
 function slotGet(name) {
