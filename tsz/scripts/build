@@ -112,58 +112,9 @@ if grep -q '^const JS_LOGIC =' "$GEN" 2>/dev/null; then
     fi
 fi
 
-# FATAL: Handler referenced by node but never declared
-PRESS_REFS=$(grep -oP '\.on_press = (\w+)' "$GEN" 2>/dev/null | sed 's/\.on_press = //' | sort -u || true)
-for P in $PRESS_REFS; do
-    [ "$P" = "null" ] && continue
-    [ "$P" = "undefined" ] && continue
-    DEFINED=$(grep -c "fn ${P}" "$GEN" 2>/dev/null | tail -1 || echo "0")
-    if [ "$DEFINED" -eq "0" ]; then
-        echo "[$NAME] LINT FAIL: .on_press = $P but no fn $P exists"
-        LINT_FAIL=1
-    fi
-done
-
-# FATAL: Handler declared but never assigned to any node
-# Skip if file uses lua_on_press or js_on_press — map handlers dispatch via pointer arrays
-if ! grep -qE 'lua_on_press|js_on_press' "$GEN" 2>/dev/null; then
-    HANDLERS=$(grep -oP '(?<=fn )_handler_\w+' "$GEN" 2>/dev/null || true)
-    for H in $HANDLERS; do
-        if ! grep -q "\\.on_press = $H" "$GEN" 2>/dev/null; then
-            echo "[$NAME] LINT FAIL: handler $H declared but never assigned to any node"
-            LINT_FAIL=1
-        fi
-    done
-fi
-
-# FATAL: lua_on_press inside a map rebuild using string literal instead of _map_lua_ptrs
-# Map handlers must use pre-built pointer arrays, not inline strings with JS loop vars
-if grep -q '_rebuildMap' "$GEN" 2>/dev/null; then
-    BAD_MAP_HANDLERS=$(sed -n '/_rebuildMap/,/^}/p' "$GEN" | grep -n 'lua_on_press = "' | head -5 || true)
-    if [ -n "$BAD_MAP_HANDLERS" ]; then
-        echo "[$NAME] LINT FAIL: lua_on_press inside map rebuild uses string literal instead of _map_lua_ptrs:"
-        echo "$BAD_MAP_HANDLERS"
-        LINT_FAIL=1
-    fi
-fi
-
-# FATAL: JS + operator in Lua handler strings (Lua uses .. for concat)
-BAD_CONCAT=$(grep -n "lua_on_press.*' + " "$GEN" 2>/dev/null | head -5 || true)
-if [ -n "$BAD_CONCAT" ]; then
-    echo "[$NAME] LINT FAIL: JS + operator in Lua handler string (Lua uses .. for concat):"
-    echo "$BAD_CONCAT"
-    LINT_FAIL=1
-fi
-
-# FATAL: Duplicate __mapPress function names in Lua logic
-if grep -q '__mapPress' "$GEN" 2>/dev/null; then
-    DUPES=$(grep -oP '(?<=function )__mapPress_\d+_\d+' "$GEN" 2>/dev/null | sort | uniq -d | head -5 || true)
-    if [ -n "$DUPES" ]; then
-        echo "[$NAME] LINT FAIL: duplicate __mapPress functions — second overwrites first:"
-        echo "$DUPES"
-        LINT_FAIL=1
-    fi
-fi
+# [MIGRATED TO PREFLIGHT] Handler ref missing (F2), handler unassigned (F1/F3),
+# map handler string literal (F3), JS + in Lua (F10), duplicate __mapPress (F7)
+# — all now caught by smith/preflight.js before emit. Removed from bash lint.
 
 # WARN: Shared static arrays referenced from per-item map nodes
 # If _map_inner_N children point to a non-per-item _arr_, all map items render identical content
@@ -176,32 +127,8 @@ for MI in $(grep -oP '_map_inner_\d+' "$GEN" 2>/dev/null | sort -u || true); do
     fi
 done
 
-# FATAL: Raw JS syntax in LUA_LOGIC — switch/case/for-of/const/let leaked into Lua
-if grep -q 'LUA_LOGIC' "$GEN" 2>/dev/null; then
-    BAD_LUA=$(sed -n '/LUA_LOGIC/,/^;$/p' "$GEN" | grep -E '^\s*\\\\.*(\b(switch|case |const |let |var |for\s*\(|\.forEach|\.map\(|\.filter\(|\.reduce\()|[)]\s*\{|\bfunction\s+\w+\s*\([^)]*\)\s*\{|= \[)' | head -5 || true)
-    if [ -n "$BAD_LUA" ]; then
-        echo "[$NAME] LINT FAIL: raw JS syntax leaked into LUA_LOGIC (should be in JS_LOGIC only):"
-        echo "$BAD_LUA"
-        LINT_FAIL=1
-    fi
-fi
-
-# WARN: _map_lua_ptrs built but never referenced — handlers not wired
-for PTRS in $(grep -oP '_map_lua_ptrs_\d+' "$GEN" 2>/dev/null | sort -u || true); do
-    # Check if it's used anywhere in a lua_on_press assignment (not just declared)
-    if ! grep -q "on_press = ${PTRS}\|js_on_press = ${PTRS}" "$GEN" 2>/dev/null; then
-        echo "[$NAME] LINT WARN: $PTRS initialized but never used — map handlers not wired"
-        LINT_WARN=1
-    fi
-done
-
-# WARN: Color{} placeholders — app renders but elements invisible/black
-COLOR_EMPTY=$(grep -c 'Color{}' "$GEN" 2>/dev/null || true)
-COLOR_EMPTY=${COLOR_EMPTY:-0}
-if [ "$COLOR_EMPTY" -gt "0" ] 2>/dev/null; then
-    echo "[$NAME] LINT WARN: $COLOR_EMPTY x Color{} — unresolved ternary/state colors (will render black)"
-    LINT_WARN=1
-fi
+# [MIGRATED TO PREFLIGHT] JS in LUA_LOGIC (F10), _map_lua_ptrs unused (W2),
+# Color{} placeholders (F4/W1) — all now caught by smith/preflight.js.
 
 # WARN: __setObjArr in LUA_LOGIC without registration
 if grep -q '__setObjArr' "$GEN" 2>/dev/null; then
