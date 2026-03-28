@@ -282,8 +282,11 @@ function parseStyleBlock(c) {
           // State or unknown — placeholder Color{}, dynamic update at runtime
           fields.push(`.${colorKeys[key]} = Color{}`);
           // Track orphan Color{} for preflight F4 — no dynStyle/dynColor backs this
-          if (!ctx._orphanColors) ctx._orphanColors = [];
-          ctx._orphanColors.push({ field: colorKeys[key], value: val.type + ':' + (val.value || '?') });
+          // Exclude map_field/map_index (handled by map pool) and state (often backed by dynStyle from ternary path)
+          if (val.type !== 'map_field' && val.type !== 'map_index' && val.type !== 'state') {
+            if (!ctx._orphanColors) ctx._orphanColors = [];
+            ctx._orphanColors.push({ field: colorKeys[key], value: val.type + ':' + (val.value || '?') });
+          }
         }
       } else if (styleKeys[key]) {
         if (val.type === 'state') {
