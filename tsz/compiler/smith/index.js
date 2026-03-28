@@ -84,6 +84,7 @@ function resetCtx() {
     scriptBlock: null,     // raw JS from <script>...</script>
     scriptFuncs: [],       // function names defined in <script>
     classifiers: {},       // {Name: {type, style, fontSize, color, ...}} from .cls imports
+    _debugLines: [],       // debug output lines (emitted as Zig comments)
   };
 }
 
@@ -397,6 +398,98 @@ function collectState(c) {
 }
 
 
+// ── Collection: const arrays ──
+
+function collectConstArrays(c) {
+  const saved = c.save();
+  c.pos = 0;
+  while (c.pos < c.count) {
+    // const name = [{ field: val, ... }, ...]
+    if (c.isIdent('const') && c.pos + 3 < c.count) {
+      const declPos = c.pos;
+      c.advance();
+      if (c.kind() === TK.identifier) {
+        const name = c.text();
+        c.advance();
+        if (c.kind() === TK.equals) {
+          c.advance();
+          if (c.kind() === TK.lbracket) {
+            // Check it's not already a state var (useState was already collected)
+            const isStateVar = ctx.stateSlots.some(s => s.getter === name) ||
+                               ctx.objectArrays.some(o => o.getter === name);
+            if (!isStateVar) {
+              c.advance(); // skip [
+              if (c.kind() === TK.lbrace) {
+                // Parse all items: [{...}, {...}, ...]
+                const items = [];
+                let fields = null;
+                while (c.kind() === TK.lbrace && c.kind() !== TK.eof) {
+                  c.advance(); // skip {
+                  const item = {};
+                  const itemFields = [];
+                  while (c.kind() !== TK.rbrace && c.kind() !== TK.eof) {
+                    if (c.kind() === TK.identifier) {
+                      const fname = c.text(); c.advance();
+                      if (c.kind() === TK.colon) c.advance();
+                      let fval = null;
+                      let ftype = 'int';
+                      if (c.kind() === TK.string) {
+                        fval = c.text().slice(1, -1); // strip quotes
+                        ftype = 'string';
+                        c.advance();
+                      } else if (c.kind() === TK.number) {
+                        const nv = c.text();
+                        fval = nv.startsWith('0x') ? parseInt(nv, 16) : (nv.includes('.') ? parseFloat(nv) : parseInt(nv));
+                        ftype = nv.startsWith('0x') ? 'int' : (nv.includes('.') ? 'float' : 'int');
+                        c.advance();
+                      } else if (c.isIdent('true')) { fval = 1; ftype = 'int'; c.advance(); }
+                      else if (c.isIdent('false')) { fval = 0; ftype = 'int'; c.advance(); }
+                      else if (c.kind() === TK.minus) {
+                        c.advance();
+                        if (c.kind() === TK.number) { fval = -parseInt(c.text()); c.advance(); }
+                        else fval = 0;
+                      } else {
+                        fval = 0; c.advance(); // skip unknown
+                      }
+                      item[fname] = fval;
+                      itemFields.push({ name: fname, type: ftype });
+                    }
+                    if (c.kind() === TK.comma) c.advance();
+                    else if (c.kind() !== TK.rbrace) c.advance();
+                  }
+                  if (c.kind() === TK.rbrace) c.advance(); // skip }
+                  if (!fields) fields = itemFields; // schema from first item
+                  items.push(item);
+                  if (c.kind() === TK.comma) c.advance();
+                }
+                // skip ]
+                if (c.kind() === TK.rbracket) c.advance();
+                if (fields && fields.length > 0 && items.length > 0) {
+                  const oaIdx = ctx.objectArrays.length;
+                  ctx.objectArrays.push({
+                    fields, getter: name, setter: null,
+                    oaIdx, isConst: true,
+                    constData: items, constLen: items.length,
+                  });
+                  if (globalThis.__SMITH_DEBUG_MAP_DETECT) {
+                    if (!globalThis.__dbg) globalThis.__dbg = [];
+                    globalThis.__dbg.push(`CONST_ARRAY name="${name}" fields=[${fields.map(f=>f.name)}] items=${items.length}`);
+                  }
+                }
+              } else {
+                // Not an object array — skip
+              }
+            }
+          }
+        }
+      }
+      continue;
+    }
+    c.advance();
+  }
+  c.restore(saved);
+}
+
 // ── Classifier support ──
 
 function collectClassifiers() {
@@ -462,6 +555,12 @@ function compile() {
   const source = globalThis.__source;
   const tokens = globalThis.__tokens;
   const file = globalThis.__file || 'unknown.tsz';
+
+  // Module mode: transpile TS → Zig (no JSX, no app scaffolding)
+  if (globalThis.__modBuild === 1) {
+    return compileMod(source, file);
+  }
+
   const c = mkCursor(tokens, source);
 
   resetCtx();
@@ -470,6 +569,7 @@ function compile() {
   collectScript(c);
   collectComponents(c);
   collectState(c);
+  collectConstArrays(c);
   collectClassifiers();
 
   // Find App function
@@ -494,4 +594,134 @@ function compile() {
   const root = parseJSXElement(c);
 
   return emitOutput(root.nodeExpr, file);
+}
+
+// ── Module compilation: .mod.tsz → .zig ─────────────────────────────
+// Transpiles TypeScript-like imperative code to Zig.
+// No JSX, no components, no app scaffolding.
+function compileMod(source, file) {
+  const basename = file.split('/').pop();
+  let out = '//! Generated by Smith (mod mode) — do not edit\n//!\n//! Source: ' + basename + '\n\n';
+  let hasStdImport = false;
+
+  // Line-by-line transpilation
+  const lines = source.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    // Skip empty lines
+    if (trimmed === '') { out += '\n'; continue; }
+
+    // Comments: // stays as //
+    if (trimmed.startsWith('//')) { out += line + '\n'; continue; }
+
+    // import X from "Y" → const X = @import("Y")
+    const importMatch = trimmed.match(/^import\s+(\w+)\s+from\s+["']([^"']+)["'];?$/);
+    if (importMatch) {
+      if (importMatch[1] === 'std') hasStdImport = true;
+      out += 'const ' + importMatch[1] + ' = @import("' + importMatch[2] + '");\n';
+      continue;
+    }
+
+    // import { A, B } from "Y" → const A = @import("Y").A; etc
+    const namedImport = trimmed.match(/^import\s*\{\s*([^}]+)\}\s*from\s+["']([^"']+)["'];?$/);
+    if (namedImport) {
+      const names = namedImport[1].split(',').map(n => n.trim());
+      for (const name of names) {
+        out += 'const ' + name + ' = @import("' + namedImport[2] + '").' + name + ';\n';
+      }
+      continue;
+    }
+
+    // export function name(args): RetType → pub fn name(args) RetType
+    const exportFn = trimmed.match(/^export\s+function\s+(\w+)\s*\(([^)]*)\)\s*(?::\s*(.+?))?\s*\{$/);
+    if (exportFn) {
+      const [, name, params, ret] = exportFn;
+      const zigParams = transpileParams(params);
+      const zigRet = ret ? transpileType(ret) : 'void';
+      out += 'pub fn ' + name + '(' + zigParams + ') ' + zigRet + ' {\n';
+      continue;
+    }
+
+    // function name(args): RetType → fn name(args) RetType
+    const fnMatch = trimmed.match(/^function\s+(\w+)\s*\(([^)]*)\)\s*(?::\s*(.+?))?\s*\{$/);
+    if (fnMatch) {
+      const [, name, params, ret] = fnMatch;
+      const zigParams = transpileParams(params);
+      const zigRet = ret ? transpileType(ret) : 'void';
+      out += 'fn ' + name + '(' + zigParams + ') ' + zigRet + ' {\n';
+      continue;
+    }
+
+    // const x: Type = expr → const x: Type = expr
+    // let x: Type = expr → var x: Type = expr
+    const varMatch = trimmed.match(/^(const|let|var)\s+(\w+)\s*(?::\s*([^=]+?))?\s*=\s*(.+);?$/);
+    if (varMatch) {
+      const [, kind, name, type, expr] = varMatch;
+      const zigKind = kind === 'let' ? 'var' : kind;
+      const typeAnnot = type ? ': ' + transpileType(type.trim()) : '';
+      const indent = line.match(/^(\s*)/)[1];
+      out += indent + zigKind + ' ' + name + typeAnnot + ' = ' + transpileExpr(expr.replace(/;$/, '')) + ';\n';
+      continue;
+    }
+
+    // if (cond) { → if (cond) {
+    if (trimmed.startsWith('if ') || trimmed.startsWith('if(')) {
+      out += line.replace(/\bif\s*\(/, 'if (') + '\n';
+      continue;
+    }
+
+    // while (cond) { → while (cond) {
+    if (trimmed.startsWith('while ') || trimmed.startsWith('while(')) {
+      out += line + '\n';
+      continue;
+    }
+
+    // return expr; → return expr;
+    if (trimmed.startsWith('return ')) {
+      out += line + '\n';
+      continue;
+    }
+
+    // Closing braces, bare statements
+    out += line + '\n';
+  }
+
+  return out;
+}
+
+// Transpile TS type annotations to Zig types
+function transpileType(ts) {
+  const t = ts.trim();
+  if (t === 'number') return 'i64';
+  if (t === 'float' || t === 'f32') return 'f32';
+  if (t === 'f64') return 'f64';
+  if (t === 'boolean' || t === 'bool') return 'bool';
+  if (t === 'string') return '[]const u8';
+  if (t === 'void') return 'void';
+  if (t === 'any') return 'anytype';
+  if (t.startsWith('!')) return '!' + transpileType(t.slice(1));
+  // Pass through Zig types unchanged
+  return t;
+}
+
+// Transpile function parameters
+function transpileParams(params) {
+  if (!params.trim()) return '';
+  return params.split(',').map(p => {
+    const m = p.trim().match(/^(\w+)\s*:\s*(.+)$/);
+    if (m) return m[1] + ': ' + transpileType(m[2]);
+    return p.trim();
+  }).join(', ');
+}
+
+// Transpile expressions (minimal — expand as needed)
+function transpileExpr(expr) {
+  let e = expr.trim();
+  // null → null (same)
+  // true/false → true/false (same)
+  // String literals: "x" → "x" (same)
+  // Template literals: `${x}` → std.fmt (not handled yet, passthrough)
+  return e;
 }

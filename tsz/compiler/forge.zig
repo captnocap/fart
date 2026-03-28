@@ -37,11 +37,14 @@ pub fn main() !void {
 
     // Parse optional flags before the file path
     var fast_build = false;
+    var mod_build = false;
     var input_path: []const u8 = undefined;
     var got_path = false;
     while (args.next()) |arg| {
         if (std.mem.eql(u8, arg, "--fast")) {
             fast_build = true;
+        } else if (std.mem.eql(u8, arg, "--mod")) {
+            mod_build = true;
         } else {
             input_path = arg;
             got_path = true;
@@ -49,7 +52,7 @@ pub fn main() !void {
         }
     }
     if (!got_path) {
-        std.debug.print("Usage: forge build [--fast] <file.tsz>\n", .{});
+        std.debug.print("Usage: forge build [--fast] [--mod] <file.tsz>\n", .{});
         return;
     }
 
@@ -100,6 +103,7 @@ pub fn main() !void {
     if (script_content) |sc| smith.setGlobalString("__scriptContent", sc);
     if (cls_content) |cc| smith.setGlobalString("__clsContent", cc);
     smith.setGlobalInt("__fastBuild", if (fast_build) 1 else 0);
+    smith.setGlobalInt("__modBuild", if (mod_build) 1 else 0);
 
     // Build token kind array as u8 slice for the bridge
     const kinds = std.heap.page_allocator.alloc(u8, lexer.count) catch return;
