@@ -35,7 +35,7 @@ const [hpTogB, setHpTogB] = useState(0);
 
 function HomePage() {
   return (
-      <Canvas style={{ flexGrow: 1, flexBasis: 0 }} viewX={0} viewY={0} viewZoom={0.25} driftX={0} driftY={0}>
+      <Canvas style={{ flexGrow: 1, flexBasis: 0 }} viewX={0} viewY={0} viewZoom={0.8} driftX={-8} driftY={-5}>
 
         <Canvas.Path d="M -5000,-5000 L -5000,5000" stroke="#1a1b26" strokeWidth={1} />
         <Canvas.Path d="M -4500,-5000 L -4500,5000" stroke="#1a1b26" strokeWidth={1} />

@@ -197,7 +197,14 @@ function parseJSXElement(c) {
                     pm = pm.parentMap;
                   }
                 }
-                if (!resolved) val += c.text();
+                if (!resolved) {
+                  // Check propStack for component prop references
+                  if (c.kind() === TK.identifier && ctx.propStack && ctx.propStack[c.text()] !== undefined) {
+                    val += ctx.propStack[c.text()];
+                  } else {
+                    val += c.text();
+                  }
+                }
               }
               c.advance();
             }
@@ -650,6 +657,15 @@ function parseJSXElement(c) {
         }
       }
     } else { c.advance(); }
+  }
+
+  // Canvas: set drift_active when drift attrs present (enables auto-stacker + drift animation)
+  if (rawTag === 'Canvas') {
+    const hasDrift = nodeFields.some(f => f.includes('canvas_drift_x') || f.includes('canvas_drift_y'));
+    if (hasDrift) nodeFields.push('.canvas_drift_active = true');
+    // view_set is already emitted by viewZoom handler — only add if missing
+    const hasView = nodeFields.some(f => f.includes('canvas_view_x') || f.includes('canvas_view_y') || f.includes('canvas_view_zoom'));
+    if (hasView && !nodeFields.some(f => f.includes('canvas_view_set'))) nodeFields.push('.canvas_view_set = true');
   }
 
   // Merge classifier defaults (inline attrs win)
@@ -1114,9 +1130,9 @@ function tryParseConditional(c, children) {
     // Build condition expression with Zig-compatible ops
     if (c.kind() === TK.identifier) {
       const name = c.text();
-      if (globalThis.__SMITH_DEBUG_INLINE && (name === 'activeTab' || name === 'connectedApp')) {
+      if (globalThis.__SMITH_DEBUG_INLINE && (name === 'activeTab' || name === 'connectedApp' || name === 'selectedIdx' || name === 'crashCount' || name === 'copied')) {
         globalThis.__dbg = globalThis.__dbg || [];
-        globalThis.__dbg.push('[COND] name=' + name + ' isGetter=' + isGetter(name) + ' inline=' + (ctx.inlineComponent || 'App') + ' pos=' + c.pos);
+        globalThis.__dbg.push('[COND] name=' + name + ' isGetter=' + isGetter(name) + ' slot=' + findSlot(name) + ' inline=' + (ctx.inlineComponent || 'App') + ' pos=' + c.pos);
       }
       if (isGetter(name)) {
         condParts.push(slotGet(name));
@@ -1135,6 +1151,29 @@ function tryParseConditional(c, children) {
         }
       } else if (ctx.currentMap && name === ctx.currentMap.indexParam) {
         condParts.push('@as(i64, @intCast(_i))');
+      } else if (ctx.currentMap && name === ctx.currentMap.itemParam) {
+        // Map item parameter: check for .field access
+        c.advance();
+        if (c.kind() === TK.dot) {
+          c.advance();
+          if (c.kind() === TK.identifier) {
+            const field = c.text();
+            const oa = ctx.currentMap.oa;
+            if (oa) {
+              const fi = oa.fields.find(f => f.name === field);
+              if (fi) {
+                condParts.push(`_oa${oa.oaIdx}_${field}[_i]`);
+              } else {
+                condParts.push(`_oa${oa.oaIdx}_${field}[_i]`);
+              }
+            } else {
+              condParts.push('0');
+            }
+          }
+        } else {
+          condParts.push('@as(i64, @intCast(_i))');
+        }
+        // c.advance() handled below
       } else if (ctx.inlineComponent) {
         // Inside inlined component: unresolved identifier is an unprovided prop → falsy (0)
         condParts.push('0');
