@@ -4,12 +4,27 @@
 # Usage:
 #   ./scripts/build carts/conformance/d01_nested_maps.tsz
 #   ./scripts/build carts/conformance/d01_nested_maps.tsz --debug
+#   ./scripts/build --fast carts/conformance/d01_nested_maps.tsz
+#
+# --fast: compile cart against cached engine .a (~500ms vs 25s)
+#   On first run, builds the engine .a (one-time ~24s).
+#   Subsequent runs compile only the cart and link against the cached .a.
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-if [ -z "${1:-}" ]; then
-    echo "Usage: scripts/build <cart.tsz> [--debug]"
+# ── Parse flags ──────────────────────────────────────────────────────
+FAST=0
+POSITIONAL=()
+for arg in "$@"; do
+    case "$arg" in
+        --fast) FAST=1 ;;
+        *) POSITIONAL+=("$arg") ;;
+    esac
+done
+
+if [ "${#POSITIONAL[@]}" -eq 0 ]; then
+    echo "Usage: scripts/build [--fast] <cart.tsz> [--debug]"
     exit 1
 fi
 
@@ -20,9 +35,9 @@ if [ ! -f "$VELLO_LIB" ]; then
     bash ../deps/vello_ffi/build.sh
 fi
 
-CART="$1"
+CART="${POSITIONAL[0]}"
 NAME=$(basename "$CART" .tsz)
-OPT="${2:---release}"
+OPT="${POSITIONAL[1]:---release}"
 GEN="generated_${NAME}.zig"
 
 # Pick optimize flag
@@ -32,9 +47,37 @@ else
     ZIG_OPT="-Doptimize=ReleaseFast"
 fi
 
-# Step 1: forge (smith compiler: tsz → zig)
-echo "[$NAME] forge..."
-./zig-out/bin/forge build "$CART" 2>&1
+# ── Fast path: engine .a + cart-only compile ─────────────────────────
+if [ "$FAST" -eq 1 ]; then
+    CORE_DIR="zig-out/lib"
+    CORE_CURRENT="${CORE_DIR}/libreactjit-core.current.a"
+    CORE_CANDIDATE="${CORE_DIR}/libreactjit-core.candidate.a"
+    CORE_LASTGOOD="${CORE_DIR}/libreactjit-core.lastgood.a"
+
+    # Build engine .a if current artifact is missing
+    if [ ! -f "$CORE_CURRENT" ]; then
+        echo "[$NAME] engine .a not found — building (one-time, ~24s)..."
+        zig build core $ZIG_OPT 2>&1
+        # Fresh build: promote directly to current (no prior lastgood)
+        mkdir -p "$CORE_DIR"
+        mv zig-out/lib/libreactjit-core.a "$CORE_CANDIDATE"
+        mv "$CORE_CANDIDATE" "$CORE_CURRENT"
+        echo "[$NAME] engine .a ready → $CORE_CURRENT"
+    fi
+
+    # Step 1: forge with --fast flag (api.zig imports)
+    echo "[$NAME] forge (fast)..."
+    ./zig-out/bin/forge build --fast "$CART" 2>&1
+
+    # Step 2: preflight lint (same checks — skipped below via FAST guard)
+    # (lint block runs after this section — FAST path falls through to lint)
+fi
+
+# Step 1 (normal): forge (smith compiler: tsz → zig)
+if [ "$FAST" -eq 0 ]; then
+    echo "[$NAME] forge..."
+    ./zig-out/bin/forge build "$CART" 2>&1
+fi
 
 # ── Step 2: preflight lint — catch smith bugs before wasting a zig build ──
 LINT_FAIL=0
@@ -43,7 +86,7 @@ LINT_WARN=0
 # FATAL: Single-quoted multi-char strings (JS leaked into Zig)
 # Exclude: lines inside \\ JS string literals, and lines inside double-quoted strings
 # (single quotes inside "lua_on_press = '...'" are valid Zig)
-BAD_QUOTES=$(grep -n "'\w\w" "$GEN" 2>/dev/null | grep -v '^\s*[0-9]*:\s*\\\\' | grep -v 'lua_on_press' | head -5 || true)
+BAD_QUOTES=$(grep -n "'\w\w" "$GEN" 2>/dev/null | grep -v '^\s*[0-9]*:\s*\\\\' | grep -v 'lua_on_press' | grep -v 'js_on_press' | grep -v '^\s*[0-9]*:\s*//' | head -5 || true)
 if [ -n "$BAD_QUOTES" ]; then
     echo "[$NAME] LINT FAIL: JS string leaked into Zig (single-quoted multi-char):"
     echo "$BAD_QUOTES"
@@ -166,8 +209,13 @@ if [ "$LINT_WARN" -eq 1 ]; then
     echo "[$NAME] warnings above — building anyway but expect visual bugs"
 fi
 
-# Step 3: zig build — compile directly from the named file
-echo "[$NAME] zig build..."
-zig build app -Dapp-name="$NAME" -Dapp-source="$GEN" $ZIG_OPT 2>&1
+# Step 3: zig build
+if [ "$FAST" -eq 1 ]; then
+    echo "[$NAME] zig build (fast — cart-fast against cached engine)..."
+    zig build cart-fast -Dapp-name="$NAME" -Dapp-source="$GEN" $ZIG_OPT 2>&1
+else
+    echo "[$NAME] zig build..."
+    zig build app -Dapp-name="$NAME" -Dapp-source="$GEN" $ZIG_OPT 2>&1
+fi
 
 echo "[$NAME] done → zig-out/bin/$NAME"

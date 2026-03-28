@@ -57,6 +57,7 @@ pub fn setGlobalString(name: [*:0]const u8, value: []const u8) void {
     _ = qjs.JS_SetPropertyStr(ctx, global, name, js_str);
 }
 
+
 /// Set a global integer variable in the JS context.
 pub fn setGlobalInt(name: [*:0]const u8, value: i64) void {
     const ctx = g_ctx orelse return;

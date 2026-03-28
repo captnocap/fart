@@ -50,6 +50,77 @@ pub fn build(b: *std.Build) void {
     const app_lib_step = b.step("app-lib", "Build .tsz app as a hot-reloadable shared library (.so)");
     app_lib_step.dependOn(&app_lib_install.step);
 
+    // ── ReactJIT Engine shared library (cached framework .so) ─────
+    // Build ALL framework code + C deps into a shared library with
+    // full LLVM optimization. LLVM runs ONCE. Cart builds compile only
+    // generated_app.zig (using api.zig for types) and link against
+    // this .so — zero LLVM at cart build time.
+    const core_so = addCoreLib(b, target, optimize, wgpu_mod, sysroot);
+    const core_so_install = b.addInstallArtifact(core_so, .{});
+    const core_step = b.step("core", "Build framework as a cached shared library (.so)");
+    core_step.dependOn(&core_so_install.step);
+
+    // ── Fast cart build (api.zig types + pre-built engine .a) ──────
+    // NO dependency on core_so — links against the cached .a on disk.
+    // Run `zig build core` once to produce zig-out/lib/libreactjit-core.current.a,
+    // then every cart build skips the engine entirely.
+    {
+        const cart_fast_mod = b.createModule(.{
+            .root_source_file = b.path(app_source),
+            .target = target,
+            .optimize = optimize,
+        });
+        // Cart uses api.zig for types — NO framework source compilation.
+        // extern fns in api.zig resolve against the pre-built engine .a at link time.
+        cart_fast_mod.addIncludePath(b.path("../love2d/quickjs"));
+        cart_fast_mod.addIncludePath(b.path("ffi"));
+
+        const cart_fast_exe = b.addExecutable(.{
+            .name = app_name,
+            .root_module = cart_fast_mod,
+        });
+        cart_fast_exe.stack_size = 16 * 1024 * 1024;
+        cart_fast_exe.linkLibC();
+        cart_fast_exe.linkLibCpp();
+
+        // Pre-built engine (managed externally by scripts/build --fast)
+        cart_fast_exe.addObjectFile(b.path("zig-out/lib/libreactjit-core.current.a"));
+
+        // System libs that the engine .a references (must be linked by the final exe)
+        cart_fast_exe.linkSystemLibrary("SDL3");
+        cart_fast_exe.linkSystemLibrary("freetype");
+        cart_fast_exe.linkSystemLibrary("luajit-5.1");
+        cart_fast_exe.linkSystemLibrary("X11");
+        cart_fast_exe.linkSystemLibrary("box2d");
+        cart_fast_exe.linkSystemLibrary("sqlite3");
+        cart_fast_exe.linkSystemLibrary("vterm");
+        cart_fast_exe.linkSystemLibrary("curl");
+        cart_fast_exe.linkSystemLibrary("archive");
+        if (target.result.os.tag == .linux) {
+            cart_fast_exe.linkSystemLibrary("m");
+            cart_fast_exe.linkSystemLibrary("pthread");
+            cart_fast_exe.linkSystemLibrary("dl");
+            if (sysroot) |sr| {
+                cart_fast_exe.root_module.addLibraryPath(.{ .cwd_relative = b.fmt("{s}/usr/lib", .{sr}) });
+            }
+        } else if (target.result.os.tag == .macos) {
+            cart_fast_exe.root_module.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/lib" });
+        }
+        cart_fast_exe.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/luajit-2.1" });
+        cart_fast_exe.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/freetype2" });
+
+        // Blend2D and Vello (pre-built static libs)
+        cart_fast_exe.addObjectFile(b.path("../blend2d/build/libblend2d_full.a"));
+        cart_fast_exe.addObjectFile(b.path("../deps/vello_ffi/target/release/libvello_ffi_stripped.a"));
+
+        // wgpu-native
+        cart_fast_exe.root_module.addImport("wgpu", wgpu_mod);
+
+        const cart_fast_install = b.addInstallArtifact(cart_fast_exe, .{});
+        const cart_fast_step = b.step("cart-fast", "Fast cart build — api.zig types + cached engine .a");
+        cart_fast_step.dependOn(&cart_fast_install.step);
+    }
+
     // ── Dev shell (hot-reload host — loads app .so at runtime) ───
     // Always build dev shell in ReleaseFast — Debug mode tanks layout perf
     const dev_shell_optimize = if (optimize == .Debug) .ReleaseFast else optimize;
@@ -480,6 +551,132 @@ fn addEngineExe(
     exe.stack_size = 64 * 1024 * 1024; // 64MB — Generator struct + recursive parseJSXElement frames
 
     return exe;
+}
+
+// ── Core static library (cached framework — ALL modules, ALL deps) ─────
+//
+// Compiles the entire framework (layout, engine, GPU, text, audio, video,
+// QuickJS, physics, crypto — everything) into a static library .a.
+// This builds ONCE with full LLVM optimization and is cached. Cart builds
+// link against it and only compile generated_app.zig.
+//
+// Same model as Love2D: the engine is a pre-built binary, app code runs on top.
+
+fn addCoreLib(
+    b: *std.Build,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+    wgpu_mod: *std.Build.Module,
+    sysroot: ?[]const u8,
+) *std.Build.Step.Compile {
+    const os = target.result.os.tag;
+
+    const options = b.addOptions();
+    options.addOption(bool, "is_lib", false);
+    options.addOption(bool, "has_quickjs", true);
+    options.addOption(bool, "has_physics", true);
+    options.addOption(bool, "has_terminal", true);
+    options.addOption(bool, "has_video", true);
+    options.addOption(bool, "has_render_surfaces", true);
+    options.addOption(bool, "has_effects", true);
+    options.addOption(bool, "has_canvas", true);
+    options.addOption(bool, "has_3d", true);
+    options.addOption(bool, "has_transitions", true);
+    options.addOption(bool, "has_networking", true);
+    options.addOption(bool, "has_crypto", true);
+    options.addOption(bool, "has_blend2d", true);
+    options.addOption(bool, "has_debug_server", true);
+
+    // ── zluajit (LuaJIT worker compute) ─────────────────────────
+    const zluajit_dep = b.dependency("zluajit", .{
+        .target = target,
+        .optimize = optimize,
+        .system = true,
+    });
+
+    const root_mod = b.createModule(.{
+        .root_source_file = b.path("framework/core.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    root_mod.addOptions("build_options", options);
+    root_mod.addImport("wgpu", wgpu_mod);
+    root_mod.addImport("zluajit", zluajit_dep.module("zluajit"));
+
+    const lib = b.addLibrary(.{
+        .linkage = .static,
+        .name = "reactjit-core",
+        .root_module = root_mod,
+    });
+
+    // ── Always linked ──────────────────────────────────────────
+    lib.linkLibC();
+    lib.linkSystemLibrary("SDL3");
+    lib.linkSystemLibrary("freetype");
+    lib.linkSystemLibrary("luajit-5.1");
+    lib.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/luajit-2.1" });
+    lib.linkSystemLibrary("X11");
+
+    if (os == .linux) {
+        lib.linkSystemLibrary("m");
+        lib.linkSystemLibrary("pthread");
+        lib.linkSystemLibrary("dl");
+        if (sysroot) |sr| {
+            lib.root_module.addIncludePath(.{ .cwd_relative = b.fmt("{s}/usr/include/freetype2", .{sr}) });
+            lib.root_module.addIncludePath(.{ .cwd_relative = b.fmt("{s}/usr/include", .{sr}) });
+            lib.root_module.addLibraryPath(.{ .cwd_relative = b.fmt("{s}/usr/lib", .{sr}) });
+        } else {
+            lib.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/freetype2" });
+            lib.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/x86_64-linux-gnu" });
+        }
+    } else if (os == .macos) {
+        lib.root_module.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/lib" });
+        lib.root_module.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
+        lib.root_module.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include/freetype2" });
+    }
+
+    // ── Include paths ──────────────────────────────────────────
+    lib.root_module.addIncludePath(b.path("."));
+    lib.root_module.addIncludePath(b.path("../love2d/quickjs"));
+    lib.root_module.addIncludePath(b.path("ffi"));
+
+    // ── C sources ──────────────────────────────────────────────
+    lib.root_module.addCSourceFile(.{ .file = b.path("stb/stb_image_impl.c"), .flags = &.{"-O2"} });
+    lib.root_module.addCSourceFiles(.{
+        .root = b.path("../love2d/quickjs"),
+        .files = &.{ "cutils.c", "dtoa.c", "libregexp.c", "libunicode.c", "quickjs.c", "quickjs-libc.c" },
+        .flags = &.{ "-O2", "-D_GNU_SOURCE", "-DQUICKJS_NG_BUILD" },
+    });
+    lib.root_module.addCSourceFile(.{ .file = b.path("stb/stb_image_write_impl.c"), .flags = &.{"-O2"} });
+    lib.root_module.addCSourceFile(.{ .file = b.path("ffi/clock_shim.c"), .flags = &.{"-O2"} });
+    lib.root_module.addCSourceFile(.{ .file = b.path("ffi/compute_shim.c"), .flags = &.{"-O2"} });
+    lib.root_module.addCSourceFile(.{ .file = b.path("ffi/supervisor_shim.c"), .flags = &.{"-O2"} });
+    lib.root_module.addCSourceFile(.{ .file = b.path("ffi/physics_shim.cpp"), .flags = &.{"-O2"} });
+    lib.linkSystemLibrary("box2d");
+    lib.linkSystemLibrary("sqlite3");
+    lib.linkSystemLibrary("vterm");
+    lib.linkSystemLibrary("curl");
+    lib.linkSystemLibrary("archive");
+
+    // ── Blend2D ──
+    lib.root_module.addIncludePath(b.path("../blend2d"));
+    lib.addObjectFile(b.path("../blend2d/build/libblend2d_full.a"));
+    lib.linkLibCpp();
+
+    // ── Vello CPU ──
+    lib.addObjectFile(b.path("../deps/vello_ffi/target/release/libvello_ffi_stripped.a"));
+
+    if (os == .linux) {
+        if (sysroot) |sr| {
+            lib.root_module.addIncludePath(.{ .cwd_relative = b.fmt("{s}/usr/include", .{sr}) });
+        } else {
+            lib.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/x86_64-linux-gnu" });
+        }
+    } else if (os == .macos) {
+        lib.root_module.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
+    }
+
+    return lib;
 }
 
 // ── App executable (compiled .tsz, links framework) ─────────────────────

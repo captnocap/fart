@@ -1,0 +1,99 @@
+//! ReactJIT Core — framework root module for shared library builds.
+//!
+//! Re-exports framework modules AND provides C-ABI wrappers that
+//! cart executables link against. The cart uses framework/api.zig
+//! (types + extern declarations) and resolves functions from this .so.
+
+pub const layout = @import("layout.zig");
+pub const state_mod = @import("state.zig");
+pub const engine_mod = @import("engine.zig");
+pub const qjs_runtime_mod = @import("qjs_runtime.zig");
+
+// ── State C-ABI exports ─────────────────────────────────────────────
+
+export fn rjit_state_create_slot(initial: i64) usize {
+    return state_mod.createSlot(initial);
+}
+export fn rjit_state_create_slot_float(initial: f64) usize {
+    return state_mod.createSlotFloat(initial);
+}
+export fn rjit_state_create_slot_bool(initial: bool) usize {
+    return state_mod.createSlotBool(initial);
+}
+export fn rjit_state_create_slot_string(ptr: [*]const u8, len: usize) usize {
+    return state_mod.createSlotString(ptr[0..len]);
+}
+export fn rjit_state_get_slot(id: usize) i64 {
+    return state_mod.getSlot(id);
+}
+export fn rjit_state_set_slot(id: usize, val: i64) void {
+    state_mod.setSlot(id, val);
+}
+export fn rjit_state_get_slot_float(id: usize) f64 {
+    return state_mod.getSlotFloat(id);
+}
+export fn rjit_state_set_slot_float(id: usize, val: f64) void {
+    state_mod.setSlotFloat(id, val);
+}
+export fn rjit_state_get_slot_bool(id: usize) bool {
+    return state_mod.getSlotBool(id);
+}
+export fn rjit_state_set_slot_bool(id: usize, val: bool) void {
+    state_mod.setSlotBool(id, val);
+}
+export fn rjit_state_get_slot_string_ptr(id: usize) [*]const u8 {
+    return state_mod.getSlotString(id).ptr;
+}
+export fn rjit_state_get_slot_string_len(id: usize) usize {
+    return state_mod.getSlotString(id).len;
+}
+export fn rjit_state_set_slot_string(id: usize, ptr: [*]const u8, len: usize) void {
+    state_mod.setSlotString(id, ptr[0..len]);
+}
+export fn rjit_state_mark_dirty() void {
+    state_mod.markDirty();
+}
+export fn rjit_state_is_dirty() bool {
+    return state_mod.isDirty();
+}
+export fn rjit_state_clear_dirty() void {
+    state_mod.clearDirty();
+}
+
+// ── QJS Runtime C-ABI exports ───────────────────────────────────────
+
+const std = @import("std");
+
+export fn rjit_qjs_register_host_fn(name: [*:0]const u8, fn_ptr: ?*const anyopaque, argc: u8) void {
+    if (fn_ptr) |p| {
+        qjs_runtime_mod.registerHostFn(name, p, @as(c_int, argc));
+    }
+}
+export fn rjit_qjs_call_global(name: [*:0]const u8) void {
+    qjs_runtime_mod.callGlobal(name);
+}
+export fn rjit_qjs_call_global_str(name: [*:0]const u8, arg: [*:0]const u8) void {
+    qjs_runtime_mod.callGlobalStr(name, arg);
+}
+export fn rjit_qjs_call_global_int(name: [*:0]const u8, arg: i64) void {
+    qjs_runtime_mod.callGlobalInt(name, arg);
+}
+export fn rjit_qjs_eval_expr(expr: [*:0]const u8) void {
+    qjs_runtime_mod.evalExpr(std.mem.span(expr));
+}
+
+// ── Engine C-ABI export ─────────────────────────────────────────────
+
+const api = @import("api.zig");
+
+export fn rjit_engine_run(config: *const api.EngineConfig) c_int {
+    engine_mod.run(.{
+        .title = config.title,
+        .root = @ptrCast(config.root),
+        .js_logic = config.js_logic_ptr[0..config.js_logic_len],
+        .lua_logic = config.lua_logic_ptr[0..config.lua_logic_len],
+        .init = config.init,
+        .tick = config.tick,
+    }) catch return 1;
+    return 0;
+}

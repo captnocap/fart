@@ -35,10 +35,23 @@ pub fn main() !void {
         return;
     }
 
-    const input_path = args.next() orelse {
-        std.debug.print("Usage: forge build <file.tsz>\n", .{});
+    // Parse optional flags before the file path
+    var fast_build = false;
+    var input_path: []const u8 = undefined;
+    var got_path = false;
+    while (args.next()) |arg| {
+        if (std.mem.eql(u8, arg, "--fast")) {
+            fast_build = true;
+        } else {
+            input_path = arg;
+            got_path = true;
+            break;
+        }
+    }
+    if (!got_path) {
+        std.debug.print("Usage: forge build [--fast] <file.tsz>\n", .{});
         return;
-    };
+    }
 
     // 1. Read source file
     const source = std.fs.cwd().readFileAlloc(std.heap.page_allocator, input_path, 10 * 1024 * 1024) catch |err| {
@@ -46,19 +59,29 @@ pub fn main() !void {
         return;
     };
 
-    // 1b. Resolve script imports — scan for: from "./FILE.script"
-    // Read the .script.tsz file and pass content to Smith
+    // 1b. Resolve imports — scan all from "..." imports, route .cls to __clsContent
     var script_content: ?[]const u8 = null;
-    if (std.mem.indexOf(u8, source, "from \"./")) |from_pos| {
-        const path_start = from_pos + 6; // skip 'from "'
-        if (std.mem.indexOfScalarPos(u8, source, path_start, '"')) |path_end| {
-            const import_rel = source[path_start..path_end];
-            // Build absolute path relative to input file's directory
-            const input_dir = std.fs.path.dirname(input_path) orelse ".";
-            const script_path = std.fmt.allocPrint(std.heap.page_allocator, "{s}/{s}.tsz", .{ input_dir, import_rel }) catch null;
-            if (script_path) |sp| {
-                script_content = std.fs.cwd().readFileAlloc(std.heap.page_allocator, sp, 1024 * 1024) catch null;
-            }
+    var cls_content: ?[]const u8 = null;
+    const input_dir = std.fs.path.dirname(input_path) orelse ".";
+    {
+        var search_start: usize = 0;
+        while (std.mem.indexOfPos(u8, source, search_start, "from \"./")) |from_pos| {
+            const path_start = from_pos + 6; // skip 'from "'
+            if (std.mem.indexOfScalarPos(u8, source, path_start, '"')) |path_end| {
+                const import_rel = source[path_start..path_end];
+                const import_path = std.fmt.allocPrint(std.heap.page_allocator, "{s}/{s}.tsz", .{ input_dir, import_rel }) catch null;
+                if (import_path) |ip| {
+                    const content = std.fs.cwd().readFileAlloc(std.heap.page_allocator, ip, 1024 * 1024) catch null;
+                    if (content) |cnt| {
+                        if (std.mem.endsWith(u8, import_rel, ".cls")) {
+                            cls_content = cnt;
+                        } else {
+                            script_content = cnt;
+                        }
+                    }
+                }
+                search_start = path_end + 1;
+            } else break;
         }
     }
 
@@ -75,6 +98,8 @@ pub fn main() !void {
     smith.setGlobalString("__source", source);
     smith.setGlobalString("__file", input_path);
     if (script_content) |sc| smith.setGlobalString("__scriptContent", sc);
+    if (cls_content) |cc| smith.setGlobalString("__clsContent", cc);
+    smith.setGlobalInt("__fastBuild", if (fast_build) 1 else 0);
 
     // Build token kind array as u8 slice for the bridge
     const kinds = std.heap.page_allocator.alloc(u8, lexer.count) catch return;
