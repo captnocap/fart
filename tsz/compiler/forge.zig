@@ -110,6 +110,27 @@ fn findImportPaths(source: []const u8, paths_out: *[MAX_IMPORTS][]const u8) u32 
     return count;
 }
 
+/// Strip `function App() { ... }` test stubs from component files.
+/// Component files often have a standalone App() for testing. When merged into
+/// a larger app, these stubs confuse the parser (multiple App definitions,
+/// orphaned JSX tokens). Returns a slice of source up to the App stub.
+fn stripAppStub(source: []const u8) []const u8 {
+    // Find "function App()" — scan for the pattern
+    var i: usize = 0;
+    while (i + 14 < source.len) : (i += 1) {
+        if (source[i] == 'f' and
+            std.mem.startsWith(u8, source[i..], "function App("))
+        {
+            // Check it's at start of line (preceded by newline or start of file)
+            if (i == 0 or source[i - 1] == '\n') {
+                // Return everything before this function definition
+                return source[0..i];
+            }
+        }
+    }
+    return source;
+}
+
 /// Recursively resolve imports. Component sources are merged into component_buf
 /// (depth-first, so dependencies come before dependents). Classifiers and scripts
 /// are accumulated separately.
@@ -161,9 +182,12 @@ fn mergeImports(
     }
 
     // Append this file's source to component_buf (after its deps)
+    // For component files, strip `function App() { ... }` test stubs that would
+    // pollute the merged source and confuse the App-finding logic in Smith.
     const this_class = classifyFile(file_path);
     if (this_class == .component or this_class == .unknown) {
-        component_buf.appendSlice(Alloc, source) catch {};
+        const stripped = stripAppStub(source);
+        component_buf.appendSlice(Alloc, stripped) catch {};
         component_buf.append(Alloc, '\n') catch {};
     }
 }
