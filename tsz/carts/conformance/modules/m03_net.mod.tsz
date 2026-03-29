@@ -1,0 +1,144 @@
+// m03: Full networking module — types, ffi, functions, state
+// Proves: <module> with <ffi> bindings, connection state machine,
+//         function composition, the networking research routing table
+//
+// Design from RESULTS.md:
+//   TCP layer: Zig (no GC pauses under load)
+//   Small JSON (<1KB): QuickJS JSON.parse
+//   Medium/Large JSON: Zig (zero-copy field access)
+//   Plugin networking: QuickJS (network latency dwarfs runtime overhead)
+
+<module net>
+  <types>
+    Method: GET | POST | PUT | DELETE | HEAD
+
+    ConnState: idle | connecting | connected | error | closed
+
+    Header: {
+      name: string,
+      value: string
+    }
+
+    Request: {
+      url: string,
+      method: Method = GET,
+      headers: Header[16],
+      header_count: u8 = 0,
+      body: ?string = null,
+      timeout_ms: u32 = 10000
+    }
+
+    Response: {
+      status: u16 = 0,
+      body_buf: u8[65536],
+      body_len: usize = 0,
+      headers: Header[32],
+      header_count: u8 = 0,
+      state: ConnState = idle
+    }
+
+    Pool: {
+      host: string,
+      port: u16 = 80,
+      fd: i32 = -1,
+      state: ConnState = idle,
+      reuse_count: u32 = 0
+    }
+  </types>
+
+  <ffi>
+    socket    @("std.posix", "socket")
+    connect   @("std.posix", "connect")
+    send      @("std.posix", "send")
+    recv      @("std.posix", "recv")
+    close     @("std.posix", "close")
+    poll      @("std.posix", "poll")
+  </ffi>
+
+  <state>
+    pool: Pool[8]
+    pool_count: u8 = 0
+    active_response: Response
+  </state>
+
+  <functions>
+    // ── Connection management ──
+
+    acquire(host: string, port: u16): i32
+      // Check pool for existing idle connection to this host:port
+      for pool[0..pool_count] as conn:
+        conn.host exact host and conn.port exact port and conn.state exact idle
+          ? conn.state = connected; return conn.fd
+          : continue
+      // No pooled connection — open new
+      pool_count >= 8 ? stop : go
+      pool[pool_count] = { host: host, port: port, state: connecting }
+      pool[pool_count].fd = socket(AF_INET, SOCK_STREAM, 0)
+      connect(pool[pool_count].fd, host, port)
+      pool[pool_count].state = connected
+      pool_count = pool_count + 1
+      return pool[pool_count - 1].fd
+
+    release(fd: i32): void
+      for pool[0..pool_count] as conn:
+        conn.fd exact fd
+          ? conn.state = idle; conn.reuse_count = conn.reuse_count + 1; return
+          : continue
+
+    disconnect(fd: i32): void
+      for pool[0..pool_count] as conn:
+        conn.fd exact fd
+          ? close(fd); conn.state = closed; conn.fd = -1; return
+          : continue
+
+    // ── HTTP ──
+
+    get(url: string): Response
+      active_response = { state: connecting }
+      fd = acquire(parseHost(url), parsePort(url))
+      request_line = 'GET ' + parsePath(url) + ' HTTP/1.1\r\nHost: ' + parseHost(url) + '\r\n\r\n'
+      send(fd, request_line)
+      active_response.body_len = recv(fd, active_response.body_buf)
+      active_response.status = parseStatus(active_response.body_buf)
+      active_response.state = idle
+      release(fd)
+      return active_response
+
+    post(url: string, body: string): Response
+      active_response = { state: connecting }
+      fd = acquire(parseHost(url), parsePort(url))
+      request_line = 'POST ' + parsePath(url) + ' HTTP/1.1\r\nHost: ' + parseHost(url) + '\r\nContent-Length: ' + body.len + '\r\n\r\n' + body
+      send(fd, request_line)
+      active_response.body_len = recv(fd, active_response.body_buf)
+      active_response.status = parseStatus(active_response.body_buf)
+      active_response.state = idle
+      release(fd)
+      return active_response
+
+    // ── URL parsing (internal) ──
+
+    parseHost(url: string): string
+      // skip "http://" or "https://"
+      start = url.indexOf('//') + 2
+      end = url.indexOf('/', start)
+      end exact -1 ? end = url.len : go
+      colon = url.indexOf(':', start)
+      colon > 0 and colon < end ? return url[start..colon] : return url[start..end]
+
+    parsePort(url: string): u16
+      start = url.indexOf('//') + 2
+      end = url.indexOf('/', start)
+      end exact -1 ? end = url.len : go
+      colon = url.indexOf(':', start)
+      colon > 0 and colon < end ? return parseInt(url[colon+1..end]) : return 80
+
+    parsePath(url: string): string
+      start = url.indexOf('//') + 2
+      slash = url.indexOf('/', start)
+      slash exact -1 ? return '/' : return url[slash..url.len]
+
+    parseStatus(raw: u8[]): u16
+      // "HTTP/1.1 200 OK" — status starts at byte 9
+      return parseInt(raw[9..12])
+  </functions>
+</module>

@@ -1,0 +1,52 @@
+// m09: Mixed numeric types, float math, negative defaults
+// Proves: f32/i32/u16 coexistence, negative literals, float defaults
+
+<module physics>
+  <types>
+    Axis: x | y | z
+
+    Bounds: {
+      min_x: f32 = -100.0,
+      max_x: f32 = 100.0,
+      min_y: f32 = -100.0,
+      max_y: f32 = 100.0
+    }
+
+    Particle: {
+      x: f32 = 0.0,
+      y: f32 = 0.0,
+      vx: f32 = 0.0,
+      vy: f32 = 0.0,
+      mass: f32 = 1.0,
+      life: i32 = 60,
+      active: bool = false
+    }
+  </types>
+
+  <state>
+    particles: Particle[64]
+    count: u16 = 0
+    bounds: Bounds
+    gravity: f32 = -9.8
+  </state>
+
+  <functions>
+    emit(px: f32, py: f32, vx: f32, vy: f32): u16
+      count >= 64 ? stop : go
+      particles[count] = { x: px, y: py, vx: vx, vy: vy, active: true, life: 60 }
+      count = count + 1
+      return count - 1
+
+    step(dt: f32): void
+      for particles[0..count] as p:
+        p.active == true
+          ? p.vy = p.vy + gravity * dt; p.x = p.x + p.vx * dt; p.y = p.y + p.vy * dt; p.life = p.life - 1
+          : continue
+
+    prune(): void
+      for particles[0..count] as p:
+        p.life <= 0
+          ? p.active = false
+          : continue
+  </functions>
+</module>

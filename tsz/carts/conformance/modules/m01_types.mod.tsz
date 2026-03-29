@@ -1,0 +1,27 @@
+// m01: Types only — enums, structs, unions
+// Proves: <types> block parsing, enum variants, struct fields with defaults, tagged unions
+
+<module counter>
+  <types>
+    Direction: up | down | reset
+    Status: idle | running | paused | error
+
+    Config: {
+      max: int = 100,
+      min: int = 0,
+      step: int = 1,
+      wrap: bool = false
+    }
+
+    Counter: {
+      value: int = 0,
+      status: Status = idle,
+      config: Config
+    }
+
+    Result: union {
+      ok: int,
+      err: string
+    }
+  </types>
+</module>

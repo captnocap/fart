@@ -1,0 +1,39 @@
+// m14: FFI call prefixing in function bodies
+// Proves: bare FFI symbol calls get prefixed with import name
+
+<module io>
+  <ffi>
+    open   @("std.posix", "open")
+    read   @("std.posix", "read")
+    write  @("std.posix", "write")
+    close  @("std.posix", "close")
+  </ffi>
+
+  <types>
+    Handle: {
+      fd: i32 = -1,
+      open: bool = false
+    }
+  </types>
+
+  <state>
+    current: Handle
+  </state>
+
+  <functions>
+    open_file(path: string): i32
+      current.fd = open(path, 0)
+      current.open = true
+      return current.fd
+
+    read_bytes(buf: string, len: usize): usize
+      current.open == false ? stop : go
+      return read(current.fd, buf, len)
+
+    close_file(): void
+      current.open == false ? stop : go
+      close(current.fd)
+      current.fd = -1
+      current.open = false
+  </functions>
+</module>

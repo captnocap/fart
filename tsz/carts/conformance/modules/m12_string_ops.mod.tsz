@@ -1,0 +1,36 @@
+// m12: String stdlib method mapping
+// Proves: indexOf → std.mem.indexOf, string comparison via std.mem.eql
+
+<module parser>
+  <types>
+    Token: {
+      start: usize = 0,
+      end: usize = 0,
+      kind: string
+    }
+  </types>
+
+  <state>
+    buf: u8[4096]
+    buf_len: usize = 0
+    tokens: Token[64]
+    token_count: u8 = 0
+  </state>
+
+  <functions>
+    find_char(haystack: string, needle: u8): usize
+      return haystack.indexOfChar(needle)
+
+    find_str(haystack: string, needle: string): usize
+      return haystack.indexOf(needle)
+
+    compare(a: string, b: string): bool
+      return a.eql(b)
+
+    slice_from(s: string, start: usize): string
+      return s[start..]
+
+    slice_range(s: string, start: usize, end: usize): string
+      return s[start..end]
+  </functions>
+</module>

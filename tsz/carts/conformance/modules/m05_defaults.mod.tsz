@@ -1,0 +1,32 @@
+// m05: Struct field default inference
+// Proves: string fields get "", arrays get init, optionals get null, structs get .{}
+
+<module registry>
+  <types>
+    Kind: text | number | flag
+
+    Field: {
+      name: string,
+      kind: Kind = text,
+      required: bool = true
+    }
+
+    Schema: {
+      label: string,
+      fields: Field[8],
+      field_count: u8 = 0,
+      version: ?u16 = null
+    }
+
+    Buffer: {
+      data: u8[256],
+      len: usize = 0
+    }
+  </types>
+
+  <state>
+    schemas: Schema[4]
+    schema_count: u8 = 0
+    scratch: Buffer
+  </state>
+</module>

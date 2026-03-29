@@ -1,0 +1,39 @@
+// m04: FFI imports + enum-aware expressions
+// Proves: <ffi> block generates imports, enum variants get . prefix in bodies
+
+<module conn>
+  <ffi>
+    socket    @("std.posix", "socket")
+    close     @("std.posix", "close")
+  </ffi>
+
+  <types>
+    ConnState: idle | connecting | connected | closed
+
+    Conn: {
+      fd: i32 = -1,
+      state: ConnState = idle
+    }
+  </types>
+
+  <state>
+    conns: Conn[4]
+    count: u8 = 0
+  </state>
+
+  <functions>
+    open(): i32
+      count >= 4 ? stop : go
+      conns[count] = { fd: 42, state: connecting }
+      conns[count].state = connected
+      count = count + 1
+      return conns[count - 1].fd
+
+    close_conn(id: u8): void
+      conns[id].state = closed
+      conns[id].fd = -1
+
+    is_idle(id: u8): bool
+      return conns[id].state == idle
+  </functions>
+</module>

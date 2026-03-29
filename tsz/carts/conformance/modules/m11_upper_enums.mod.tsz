@@ -1,0 +1,36 @@
+// m11: Uppercase enum variants, HTTP method style
+// Proves: uppercase variants get . prefix in defaults and expressions
+
+<module http>
+  <types>
+    Method: GET | POST | PUT | DELETE | PATCH | HEAD
+
+    Status: OK | NOT_FOUND | SERVER_ERROR | REDIRECT
+
+    Request: {
+      method: Method = GET,
+      status: Status = OK,
+      retries: u8 = 3
+    }
+  </types>
+
+  <state>
+    current: Request
+    last_status: Status = OK
+  </state>
+
+  <functions>
+    set_method(m: Method): void
+      current.method = m
+
+    is_error(): bool
+      return last_status == SERVER_ERROR
+
+    is_redirect(): bool
+      return last_status == REDIRECT
+
+    reset(): void
+      current = { method: GET, status: OK, retries: 3 }
+      last_status = OK
+  </functions>
+</module>
