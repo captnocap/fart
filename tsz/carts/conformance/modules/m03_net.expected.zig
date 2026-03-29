@@ -5,8 +5,6 @@
 const std = @import("std");
 const posix = std.posix;
 
-// ── Types ──
-
 pub const Method = enum {
     GET,
     POST,
@@ -54,118 +52,96 @@ pub const Pool = struct {
     reuse_count: u32 = 0,
 };
 
-// ── State ──
-
 var pool: [8]Pool = [_]Pool{.{}} ** 8;
 var pool_count: u8 = 0;
 var active_response: Response = .{};
 
-// ── Connection management ──
-
 pub fn acquire(host: []const u8, port: u16) i32 {
-    var i: usize = 0;
-    while (i < pool_count) : (i += 1) {
-        if (std.mem.eql(u8, pool[i].host, host) and pool[i].port == port and pool[i].state == .idle) {
-            pool[i].state = .connected;
-            return pool[i].fd;
+    var _i: usize = 0;
+    while (_i < pool_count) : (_i += 1) {
+        if (pool[_i].host == host and pool[_i].port == port and pool[_i].state == .idle) {
+            pool[_i].state = .connected;
+            return pool[_i].fd;
         }
     }
-    if (pool_count >= 8) return -1;
+    if (pool_count >= 8) return count;
     pool[pool_count] = .{ .host = host, .port = port, .state = .connecting };
-    pool[pool_count].fd = posix.socket(posix.AF.INET, posix.SOCK.STREAM, 0) catch -1;
-    // connect(pool[pool_count].fd, host, port) — bridge generated from <ffi>
+    pool[pool_count].fd = posix.socket(AF_INET, SOCK_STREAM, 0);
+    posix.connect(pool[pool_count].fd, host, port);
     pool[pool_count].state = .connected;
     pool_count += 1;
     return pool[pool_count - 1].fd;
 }
 
 pub fn release(fd: i32) void {
-    var i: usize = 0;
-    while (i < pool_count) : (i += 1) {
-        if (pool[i].fd == fd) {
-            pool[i].state = .idle;
-            pool[i].reuse_count += 1;
+    var _i: usize = 0;
+    while (_i < pool_count) : (_i += 1) {
+        if (pool[_i].fd == fd) {
+            pool[_i].state = .idle;
+            pool[_i].reuse_count += 1;
             return;
         }
     }
 }
 
 pub fn disconnect(fd: i32) void {
-    var i: usize = 0;
-    while (i < pool_count) : (i += 1) {
-        if (pool[i].fd == fd) {
+    var _i: usize = 0;
+    while (_i < pool_count) : (_i += 1) {
+        if (pool[_i].fd == fd) {
             posix.close(fd);
-            pool[i].state = .closed;
-            pool[i].fd = -1;
+            pool[_i].state = .closed;
+            pool[_i].fd = -1;
             return;
         }
     }
 }
 
-// ── HTTP ──
-
-var _req_buf: [4096]u8 = undefined;
-
-pub fn get(url: []const u8) *Response {
+pub fn get(url: []const u8) Response {
     active_response = .{ .state = .connecting };
-    const host = parseHost(url);
-    const port = parsePort(url);
-    const fd = acquire(host, port);
-    const path = parsePath(url);
-    const req_len = std.fmt.bufPrint(&_req_buf, "GET {s} HTTP/1.1\r\nHost: {s}\r\n\r\n", .{ path, host }) catch return &active_response;
-    _ = posix.send(fd, _req_buf[0..req_len.len], 0) catch {};
-    const n = posix.recv(fd, &active_response.body_buf, 0) catch 0;
-    active_response.body_len = n;
-    active_response.status = parseStatus(active_response.body_buf[0..n]);
+    fd = acquire(parseHost(url), parsePort(url));
+    var request_line: []const u8 = std.fmt.bufPrint(&buf, "GET {s} HTTP/1.1\r\nHost: {s}\r\n\r\n", .{ parsePath(url), parseHost(url) }) catch "";
+    posix.send(fd, request_line);
+    active_response.body_len = posix.recv(fd, active_response.body_buf);
+    active_response.status = parseStatus(active_response.body_buf);
     active_response.state = .idle;
     release(fd);
-    return &active_response;
+    return active_response;
 }
 
-pub fn post(url: []const u8, body: []const u8) *Response {
+pub fn post(url: []const u8, body: []const u8) Response {
     active_response = .{ .state = .connecting };
-    const host = parseHost(url);
-    const port = parsePort(url);
-    const fd = acquire(host, port);
-    const path = parsePath(url);
-    const req_len = std.fmt.bufPrint(&_req_buf, "POST {s} HTTP/1.1\r\nHost: {s}\r\nContent-Length: {d}\r\n\r\n{s}", .{ path, host, body.len, body }) catch return &active_response;
-    _ = posix.send(fd, _req_buf[0..req_len.len], 0) catch {};
-    const n = posix.recv(fd, &active_response.body_buf, 0) catch 0;
-    active_response.body_len = n;
-    active_response.status = parseStatus(active_response.body_buf[0..n]);
+    fd = acquire(parseHost(url), parsePort(url));
+    var request_line: []const u8 = std.fmt.bufPrint(&buf, "POST {s} HTTP/1.1\r\nHost: {s}\r\nContent-Length: {d}\r\n\r\n{s}", .{ parsePath(url), parseHost(url), body.len, body }) catch "";
+    posix.send(fd, request_line);
+    active_response.body_len = posix.recv(fd, active_response.body_buf);
+    active_response.status = parseStatus(active_response.body_buf);
     active_response.state = .idle;
     release(fd);
-    return &active_response;
+    return active_response;
 }
 
-// ── URL parsing ──
-
-fn parseHost(url: []const u8) []const u8 {
-    const start = (std.mem.indexOf(u8, url, "//") orelse return "") + 2;
-    const rest = url[start..];
-    const slash = std.mem.indexOfScalar(u8, rest, '/') orelse rest.len;
-    const colon = std.mem.indexOfScalar(u8, rest, ':') orelse rest.len;
-    if (colon < slash) return rest[0..colon];
-    return rest[0..slash];
+pub fn parseHost(url: []const u8) []const u8 {
+    start = std.mem.indexOf(u8, url, "//") orelse url.len + 2;
+    end = std.mem.indexOf(u8, url, "/", start) orelse url.len;
+    end == -1 ? end = url.len : go;
+    colon = std.mem.indexOf(u8, url, ":", start) orelse url.len;
+    colon > 0 and colon < end ? return url[start..colon] : return url[start..end];
 }
 
-fn parsePort(url: []const u8) u16 {
-    const start = (std.mem.indexOf(u8, url, "//") orelse return 80) + 2;
-    const rest = url[start..];
-    const slash = std.mem.indexOfScalar(u8, rest, '/') orelse rest.len;
-    const colon = std.mem.indexOfScalar(u8, rest, ':') orelse return 80;
-    if (colon >= slash) return 80;
-    return std.fmt.parseInt(u16, rest[colon + 1 .. slash], 10) catch 80;
+pub fn parsePort(url: []const u8) u16 {
+    start = std.mem.indexOf(u8, url, "//") orelse url.len + 2;
+    end = std.mem.indexOf(u8, url, "/", start) orelse url.len;
+    end == -1 ? end = url.len : go;
+    colon = std.mem.indexOf(u8, url, ":", start) orelse url.len;
+    colon > 0 and colon < end ? return parseInt(url[colon+1..end]) : return 80;
 }
 
-fn parsePath(url: []const u8) []const u8 {
-    const start = (std.mem.indexOf(u8, url, "//") orelse return "/") + 2;
-    const rest = url[start..];
-    const slash = std.mem.indexOfScalar(u8, rest, '/') orelse return "/";
-    return rest[slash..];
+pub fn parsePath(url: []const u8) []const u8 {
+    start = std.mem.indexOf(u8, url, "//") orelse url.len + 2;
+    slash = std.mem.indexOf(u8, url, "/", start) orelse url.len;
+    slash == -1 ? return '/' : return url[slash..url.len];
 }
 
-fn parseStatus(raw: []const u8) u16 {
-    if (raw.len < 12) return 0;
-    return std.fmt.parseInt(u16, raw[9..12], 10) catch 0;
+pub fn parseStatus(raw: []u8) u16 {
+    return parseInt(raw[9..12]);
 }
