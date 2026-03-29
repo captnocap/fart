@@ -1111,13 +1111,11 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
     // Look up the handler's Lua body for lua_on_press
     const handler = ctx.handlers.find(h => h.name === handlerRef);
     if (handler && handler.luaBody && !handler.body.includes('qjs_runtime.') && !ctx.scriptBlock && !globalThis.__scriptContent) {
-      const escaped = handler.luaBody.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+      const escaped = luaTransform(handler.luaBody).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
       parts.push(`.handlers = .{ .lua_on_press = "${escaped}" }`);
     } else if ((ctx.scriptBlock || globalThis.__scriptContent) && handler && handler.luaBody) {
       // Script block apps: use js_on_press for QuickJS dispatch
-      // Convert Lua operators to JS: and→&&, or→||, ~=→!=, not→!
-      let jsBody = handler.luaBody;
-      jsBody = jsBody.replace(/\band\b/g, '&&').replace(/\bor\b/g, '||').replace(/~=/g, '!=').replace(/\bnot\b/g, '!');
+      const jsBody = jsTransform(handler.luaBody);
       const escaped = jsBody.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
       parts.push(`.handlers = .{ .js_on_press = "${escaped}" }`);
     } else {
