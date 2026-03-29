@@ -615,7 +615,30 @@ function tryParseTernaryText(c, children) {
         c.kind() === TK.lbrace) { c.restore(saved); return false; }
     if (c.kind() === TK.identifier) {
       const name = c.text();
-      condParts.push(isGetter(name) ? slotGet(name) : name);
+      if (isGetter(name)) {
+        condParts.push(slotGet(name));
+      } else if (ctx.currentMap && name === ctx.currentMap.itemParam) {
+        // Map item parameter: resolve .field to OA field access
+        c.advance();
+        if (c.kind() === TK.dot) {
+          c.advance();
+          if (c.kind() === TK.identifier) {
+            const field = c.text();
+            const oa = ctx.currentMap.oa;
+            if (oa) {
+              condParts.push(`_oa${oa.oaIdx}_${field}[_i]`);
+            } else {
+              condParts.push('0');
+            }
+          }
+        } else {
+          condParts.push('@as(i64, @intCast(_i))');
+        }
+      } else if (ctx.currentMap && name === ctx.currentMap.indexParam) {
+        condParts.push('@as(i64, @intCast(_i))');
+      } else {
+        condParts.push(name);
+      }
     } else if (c.kind() === TK.eq_eq) { condParts.push(' == '); c.advance(); if (c.kind() === TK.equals) c.advance(); continue; }
     else if (c.kind() === TK.not_eq) { condParts.push(' != '); c.advance(); if (c.kind() === TK.equals) c.advance(); continue; }
     else if (c.kind() === TK.number) { condParts.push(c.text()); }
