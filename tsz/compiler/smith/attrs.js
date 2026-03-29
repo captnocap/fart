@@ -147,7 +147,8 @@ function parseTernaryBranch(c, key) {
       if (hasParen && c.kind() === TK.rparen) c.advance();
       let cond;
       if (rhsIsString || val.fieldType === 'string') {
-        const eql = `std.mem.eql(u8, ${val.zigExpr}, ${rhsIsString && !rhs.startsWith('"') ? rhs : '"' + rhs + '"'})`;
+        const rhsQuoted = rhs.startsWith('"') ? rhs : '"' + rhs + '"';
+        const eql = `std.mem.eql(u8, ${val.zigExpr}, ${rhsQuoted})`;
         cond = op === '!=' ? `(!${eql})` : `(${eql})`;
       } else {
         cond = `(${val.zigExpr} ${op} ${rhs})`;
