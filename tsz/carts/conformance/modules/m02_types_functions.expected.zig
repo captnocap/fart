@@ -34,14 +34,14 @@ pub fn step(id: u8, dir: Direction) i64 {
             if (counters[id].wrap and counters[id].value >= counters[id].max) {
                 counters[id].value = counters[id].min;
             } else {
-                counters[id].value = counters[id].value + counters[id].step;
+                counters[id].value += counters[id].step;
             }
         },
         .down => {
             if (counters[id].wrap and counters[id].value <= counters[id].min) {
                 counters[id].value = counters[id].max;
             } else {
-                counters[id].value = counters[id].value - counters[id].step;
+                counters[id].value -= counters[id].step;
             }
         },
         .reset => {

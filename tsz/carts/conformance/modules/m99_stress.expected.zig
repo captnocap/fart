@@ -202,23 +202,24 @@ pub fn transition(id: u8, new_status: Status) void {
     switch (records[id].status) {
         .pending => {
             if (new_status == .active) {
-                records[id].status = active; active_count = active_count + 1;
+                records[id].status = .active;
+                active_count += 1;
             } else {
-                error_count = error_count + 1;
+                error_count += 1;
             }
         },
         .active => {
             if (new_status == .paused or new_status == .done) {
                 records[id].status = new_status;
             } else {
-                error_count = error_count + 1;
+                error_count += 1;
             }
         },
         .paused => {
             if (new_status == .active) {
                 records[id].status = .active;
             } else {
-                error_count = error_count + 1;
+                error_count += 1;
             }
         },
         .done => {
@@ -228,7 +229,7 @@ pub fn transition(id: u8, new_status: Status) void {
             if (new_status == .pending) {
                 records[id].status = .pending;
             } else {
-                error_count = error_count + 1;
+                error_count += 1;
             }
         },
     }

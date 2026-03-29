@@ -32,6 +32,8 @@ function modTranspileType(ts) {
   if (t === 'void') return 'void';
   // ?Type → optional
   if (t.startsWith('?')) return '?' + modTranspileType(t.slice(1));
+  // !Type → error union
+  if (t.startsWith('!')) return '!' + modTranspileType(t.slice(1));
   // TypeName[N] → [N]TypeName (fixed array)
   const arrMatch = t.match(/^(\w+)\[(\d+)\]$/);
   if (arrMatch) return '[' + arrMatch[2] + ']' + modTranspileType(arrMatch[1]);
@@ -677,6 +679,7 @@ function emitModBody(lines, startIdx, typeNames, depth, allVariants, retType) {
     else if (retType === 'u8' || retType === 'u16' || retType === 'u32' || retType === 'usize') guardRetVal = 'return 0';
     else if (retType === 'f32' || retType === 'f64') guardRetVal = 'return 0.0';
     else if (retType.startsWith('[]') || retType.startsWith('?') || retType.startsWith('*')) guardRetVal = 'return null';
+    else if (retType.startsWith('!')) guardRetVal = 'return error.GuardFailed';
     else guardRetVal = 'return undefined';
   }
   let i = startIdx;
@@ -784,6 +787,29 @@ function transpileStructLiteral(inner) {
   });
   return '.{ ' + zigFields.join(', ') + ' }';
 }
+// Emit a semicolon-separated statement list, each through modTranspileExpr
+function emitStatementList(expr, ind) {
+  var out = '';
+  var stmts = expr.split(';').map(function(s) { return s.trim(); }).filter(Boolean);
+  for (var s = 0; s < stmts.length; s++) {
+    var stmt = stmts[s];
+    var am = stmt.match(/^([^=!<>]+?)\s*=\s*([^=].*)$/);
+    if (am) {
+      var target = modTranspileExpr(am[1].trim());
+      var val = modTranspileExpr(am[2].trim());
+      var esc = target.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      var inc = val.match(new RegExp('^' + esc + '\\s*\\+\\s*(.+)$'));
+      var dec = !inc ? val.match(new RegExp('^' + esc + '\\s*-\\s*(.+)$')) : null;
+      if (inc) { out += ind + target + ' += ' + inc[1] + ';\n'; }
+      else if (dec) { out += ind + target + ' -= ' + dec[1] + ';\n'; }
+      else { out += ind + target + ' = ' + val + ';\n'; }
+    } else {
+      out += ind + modTranspileExpr(stmt) + ';\n';
+    }
+  }
+  return out;
+}
+
 function emitArmBodyV2(lines, typeNames, depth) {
   let out = ''; const ind = '    '.repeat(depth);
   // Multi-line ternary: condition \n ? true-expr \n : false-expr
@@ -791,16 +817,12 @@ function emitArmBodyV2(lines, typeNames, depth) {
     const cond = modTranspileExpr(lines[0].text);
     const trueExpr = lines[1].text.slice(2).trim();
     const falseExpr = lines[2].text.slice(2).trim();
-    const ta = trueExpr.match(/^([^=!<>]+?)\s*=\s*([^=].*)$/);
-    const fa = falseExpr.match(/^([^=!<>]+?)\s*=\s*([^=].*)$/);
-    if (ta && fa) {
-      out += ind + 'if (' + cond + ') {\n';
-      out += ind + '    ' + modTranspileExpr(ta[1].trim()) + ' = ' + modTranspileExpr(ta[2].trim()) + ';\n';
-      out += ind + '} else {\n';
-      out += ind + '    ' + modTranspileExpr(fa[1].trim()) + ' = ' + modTranspileExpr(fa[2].trim()) + ';\n';
-      out += ind + '}\n';
-      return out;
-    }
+    out += ind + 'if (' + cond + ') {\n';
+    out += emitStatementList(trueExpr, ind + '    ');
+    out += ind + '} else {\n';
+    out += emitStatementList(falseExpr, ind + '    ');
+    out += ind + '}\n';
+    return out;
   }
   for (let i = 0; i < lines.length; i++) {
     const text = lines[i].text;
