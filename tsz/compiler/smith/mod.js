@@ -5,6 +5,7 @@
 // Module-level state for the current compilation (set by compileModBlock)
 var _modEnumVariants = [];
 var _modFfiSymbols = {}; // symbol → prefix (e.g. 'socket' → 'posix')
+var _modStateVars = []; // state variable names — don't redeclare as locals
 
 const ZIG_KEYWORDS = ['error', 'type', 'test', 'return', 'break', 'continue', 'resume', 'cancel', 'suspend', 'align', 'async', 'await', 'catch', 'try', 'undefined', 'null', 'inline', 'comptime', 'volatile', 'extern', 'export', 'pub', 'fn', 'var', 'const', 'struct', 'enum', 'union', 'opaque', 'unreachable'];
 
@@ -45,6 +46,7 @@ function modTranspileType(ts) {
 
 function compileModBlock(source, file) {
   const basename = file.split('/').pop();
+  _modStateVars = [];
 
   // Extract module name
   const moduleMatch = source.match(/<module\s+(\w+)>/);
@@ -294,6 +296,7 @@ function emitStateBlock(content, typeNames) {
     const m = line.match(/^(\w+):\s*([^=]+?)(?:\s*=\s*(.+))?$/);
     if (!m) continue;
     const vname = m[1];
+    _modStateVars.push(vname);
     const rawType = m[2].trim();
     const vdefault = m[3] ? m[3].trim() : null;
     const zigType = modTranspileType(rawType);
@@ -618,6 +621,19 @@ function modTranspileExpr(expr) {
       e = e.replace(new RegExp('(?<!\\w\\.)\\b' + sym + '\\(', 'g'), info.prefix + '.' + info.fn + '(');
     }
   }
+  // ── Posix constant mapping ──
+  // AF_INET → posix.AF.INET, SOCK_STREAM → posix.SOCK.STREAM, O_RDONLY → posix.O.RDONLY, etc.
+  if (_modFfiSymbols) {
+    // Check if any FFI import is from std.posix
+    var hasPosix = false;
+    for (var s in _modFfiSymbols) { if (_modFfiSymbols[s].prefix === 'posix') hasPosix = true; }
+    if (hasPosix) {
+      // Map UPPER_CASE constants: PREFIX_REST → posix.PREFIX.REST
+      e = e.replace(/\b(AF|SOCK|IPPROTO|O|POLL|MSG|SO|SOL|SHUT|F|FD|SEEK|MAP|PROT|CLOCK|SIG|SA|S_I|EPOLL|IN)_([A-Z0-9_]+)\b/g, function(_, prefix, rest) {
+        return 'posix.' + prefix + '.' + rest;
+      });
+    }
+  }
   // ── String concatenation → std.fmt.bufPrint ──
   // Only trigger when expression contains a string literal with +
   if (e.indexOf(" + ") !== -1 && e.indexOf("'") !== -1) {
@@ -726,8 +742,9 @@ function emitModBody(lines, startIdx, typeNames, depth, allVariants, retType) {
       const target = modTranspileExpr(assignMatch[1].trim());
       const val = modTranspileExpr(assignMatch[2].trim());
       // Local variable declaration: bare identifier = expr → var name[: Type] = val
+      // BUT NOT if it's a known state variable (those are module-level, already declared)
       const rawTarget = assignMatch[1].trim();
-      if (/^\w+$/.test(rawTarget) && !rawTarget.includes('.') && !rawTarget.includes('[')) {
+      if (/^\w+$/.test(rawTarget) && !rawTarget.includes('.') && !rawTarget.includes('[') && _modStateVars.indexOf(rawTarget) === -1) {
         const inferredType = inferTypeFromValue(assignMatch[2].trim());
         if (inferredType) {
           out += ind + 'var ' + target + ': ' + inferredType + ' = ' + val + ';\n'; i++; continue;

@@ -1,0 +1,35 @@
+// m18: Posix constant mapping
+// Proves: AF_INET → posix.AF.INET, SOCK_STREAM → posix.SOCK.STREAM, etc.
+
+<module socket>
+  <ffi>
+    socket   @("std.posix", "socket")
+    connect  @("std.posix", "connect")
+    close    @("std.posix", "close")
+    send     @("std.posix", "send")
+    recv     @("std.posix", "recv")
+  </ffi>
+
+  <types>
+    Proto: tcp | udp
+  </types>
+
+  <state>
+    fd: i32 = -1
+  </state>
+
+  <functions>
+    open_tcp(): !i32
+      fd = try socket(AF_INET, SOCK_STREAM, 0)
+      return fd
+
+    open_udp(): !i32
+      fd = try socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)
+      return fd
+
+    shutdown(): void
+      fd == -1 ? stop : go
+      close(fd)
+      fd = -1
+  </functions>
+</module>
