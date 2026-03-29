@@ -692,7 +692,8 @@ function tryParseTernaryText(c, children) {
   const isComparison = condExpr.includes('==') || condExpr.includes('!=') ||
     condExpr.includes('>=') || condExpr.includes('<=') ||
     condExpr.includes(' > ') || condExpr.includes(' < ');
-  const zigCond = isComparison ? `(${condExpr})` : `((${condExpr}) != 0)`;
+  const isBool = condExpr.includes('getSlotBool');
+  const zigCond = (isComparison || isBool) ? `(${condExpr})` : `((${condExpr}) != 0)`;
   const bufId = ctx.dynCount;
   // Use Zig if/else to select the string at runtime
   const fmtArgs = `if ${zigCond} @as([]const u8, "${trueVal}") else @as([]const u8, "${falseVal}")`;

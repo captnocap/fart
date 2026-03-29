@@ -40,7 +40,7 @@
         <Text style={{ color: '#ef4444' }}>Reset</Text>
       </Pressable>
       <Pressable onPress={toggleActive}>
-        <Text style={{ color: '#22c55e' }}>Toggle</Text>
+        <Text style={{ color: '#22c55e' }}>{active ? 'ON' : 'OFF'}</Text>
       </Pressable>
     </Box>
   )

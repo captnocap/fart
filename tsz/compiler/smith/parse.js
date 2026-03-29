@@ -1124,8 +1124,29 @@ function parseChildren(c) {
         const slotIdx = findSlot(getter);
         const slot = ctx.stateSlots[slotIdx];
         c.advance();
+        // Bare boolean ternary: getter ? "A" : "B" (no comparison operator)
+        if (c.kind() === TK.question && slot && slot.type === 'boolean') {
+          c.advance(); // skip ?
+          let trueText = '';
+          if (c.kind() === TK.string) { trueText = c.text().slice(1, -1); c.advance(); }
+          if (c.kind() === TK.colon) c.advance();
+          let falseText = '';
+          if (c.kind() === TK.string) { falseText = c.text().slice(1, -1); c.advance(); }
+          const ternaryExpr = `if (${slotGet(getter)}) @as([]const u8, "${trueText}") else @as([]const u8, "${falseText}")`;
+          const bufId = ctx.dynCount;
+          const bufSize = Math.max(64, trueText.length + falseText.length + 16);
+          ctx.dynTexts.push({ bufId, fmtString: '{s}', fmtArgs: ternaryExpr, arrName: '', arrIndex: 0, bufSize });
+          ctx.dynCount++;
+          let _bd3 = 0;
+          while (c.kind() !== TK.eof) {
+            if (c.kind() === TK.lbrace) _bd3++;
+            if (c.kind() === TK.rbrace) { if (_bd3 === 0) break; _bd3--; }
+            c.advance();
+          }
+          if (c.kind() === TK.rbrace) c.advance();
+          children.push({ nodeExpr: '.{ .text = "" }', dynBufId: bufId });
         // Check for ternary text: getter == N ? "A" : "B"
-        if (c.kind() === TK.eq_eq || c.kind() === TK.not_eq || c.kind() === TK.gt || c.kind() === TK.lt || c.kind() === TK.gt_eq || c.kind() === TK.lt_eq) {
+        } else if (c.kind() === TK.eq_eq || c.kind() === TK.not_eq || c.kind() === TK.gt || c.kind() === TK.lt || c.kind() === TK.gt_eq || c.kind() === TK.lt_eq) {
           const op = c.kind() === TK.eq_eq ? '==' : c.kind() === TK.not_eq ? '!=' : c.text();
           c.advance();
           if ((op === '==' || op === '!=') && c.kind() === TK.equals) c.advance(); // === / !==
