@@ -258,6 +258,21 @@ function preflight(ctx) {
     }
   }
 
+  // ── F19: Leaked classifier/tag names as text content ──
+  // If a node's .text contains "C.Something>" or ">", it's a tag name that wasn't parsed
+  for (var di4 = 0; di4 < allDecls.length; di4++) {
+    var textMatch = allDecls[di4].match(/\.text = "([^"]*[A-Z]\w*>)"/);
+    if (textMatch && /C\.\w+>/.test(textMatch[1])) {
+      errors.push('F19: tag name leaked as text: "' + textMatch[1] + '" — ternary or conditional JSX parse failed');
+    }
+  }
+  // Check for bare ":" as text nodes (ternary colon leaked)
+  for (var di5 = 0; di5 < allDecls.length; di5++) {
+    if (/\{ \.text = ":" \}/.test(allDecls[di5])) {
+      errors.push('F19: bare ":" leaked as text node — ternary colon not consumed by parser');
+    }
+  }
+
   // ── F18: JS syntax leaked into Zig node declarations ──
   // Single-quoted multi-char strings, 'exact', ternary operators in text nodes = broken parse
   for (var di3 = 0; di3 < allDecls.length; di3++) {
