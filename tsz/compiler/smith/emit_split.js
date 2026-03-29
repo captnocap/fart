@@ -408,11 +408,16 @@ function emitLogicBlocks(ctx) {
     out += `const JS_LOGIC =\n`;
     // Generate JS logic: object array setters + script block + state setter rewrites
     const jsLines = [];
-    // Object array JS vars/setters
+    // Object array JS var declarations + setters
+    // For page mode (scriptBlock): var declarations here, setter functions AFTER scriptBlock
+    //   so they override page.js setters that lack __setObjArr calls.
+    // For non-page mode: both var + setter here (no conflict).
     for (const oa of ctx.objectArrays) {
       if (oa.isNested || oa.isConst) continue; // nested OAs unpacked by parent, const OAs are static
       jsLines.push(`var ${oa.getter} = [];`);
-      jsLines.push(`function ${oa.setter}(v) { ${oa.getter} = v; __setObjArr${oa.oaIdx}(v); }`);
+      if (!ctx.scriptBlock) {
+        jsLines.push(`function ${oa.setter}(v) { ${oa.getter} = v; __setObjArr${oa.oaIdx}(v); }`);
+      }
     }
     // Script file imports — content passed via __scriptContent
     if (globalThis.__scriptContent) {
@@ -438,6 +443,11 @@ function emitLogicBlocks(ctx) {
           jsLines.push(`function ${s.setter}(v) { ${s.getter} = v; ${jsSetter}(${idx}, v); }`);
         }
         for (const line of ctx.scriptBlock.split('\n')) jsLines.push(line);
+      }
+      // OA setter functions — AFTER scriptBlock so they override any page.js setters
+      for (const oa of ctx.objectArrays) {
+        if (oa.isNested || oa.isConst) continue;
+        jsLines.push(`function ${oa.setter}(v) { ${oa.getter} = v; __setObjArr${oa.oaIdx}(v); }`);
       }
       // Add __mapPress_N handlers to JS_LOGIC so map handlers dispatch through QuickJS
       for (let mi = 0; mi < ctx.maps.length; mi++) {

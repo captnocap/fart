@@ -392,6 +392,7 @@ function parseJSXElement(c) {
   if (rawTag === 'Canvas.Node') nodeFields.push('.canvas_node = true');
   // Canvas.Clamp → viewport-pinned overlay inside Canvas (not transformed by camera)
   if (rawTag === 'Canvas.Clamp') nodeFields.push('.canvas_clamp = true');
+  // Canvas.Overlay → viewport-pinned HUD layer (already handled above)
   // Canvas.Overlay → viewport-pinned HUD layer (position: absolute, covers parent)
   if (rawTag === 'Canvas.Overlay') { styleFields.push('.position = .absolute'); styleFields.push('.top = 0'); styleFields.push('.left = 0'); styleFields.push('.right = 0'); styleFields.push('.bottom = 0'); }
   // Terminal → allocate terminal_id
@@ -631,7 +632,14 @@ function parseJSXElement(c) {
         } else if (attr === 'd' && (rawTag === 'Graph.Path' || rawTag === 'Canvas.Path')) {
           // Graph.Path/Canvas.Path d="M..." → .canvas_path_d = "M..."
           if (c.kind() === TK.string) { nodeFields.push(`.canvas_path_d = "${c.text().slice(1, -1)}"`); c.advance(); }
-          else if (c.kind() === TK.lbrace) { skipBraces(c); }
+          else if (c.kind() === TK.lbrace) {
+            c.advance(); // skip {
+            if (c.kind() === TK.identifier && ctx.currentMap && c.text() === ctx.currentMap.itemParam) {
+              c.advance(); // skip item name
+              if (c.kind() === TK.dot) { c.advance(); const fn2 = c.text(); c.advance(); if (!ctx.currentMap._deferredCanvasAttrs) ctx.currentMap._deferredCanvasAttrs = []; ctx.currentMap._deferredCanvasAttrs.push({ zigField: 'canvas_path_d', oaField: fn2, type: 'string' }); }
+            } else { while (c.kind() !== TK.rbrace && c.kind() !== TK.eof) c.advance(); }
+            if (c.kind() === TK.rbrace) c.advance();
+          }
         } else if (attr === 'fill' && (rawTag === 'Graph.Path' || rawTag === 'Canvas.Path')) {
           // Graph.Path/Canvas.Path fill="#hex" → .canvas_fill_color (node field)
           if (c.kind() === TK.string) {
@@ -648,6 +656,10 @@ function parseJSXElement(c) {
           // Graph.Path/Canvas.Path strokeWidth={N} → .canvas_stroke_width (node field, f32)
           if (c.kind() === TK.lbrace) { c.advance(); if (c.kind() === TK.number) { nodeFields.push(`.canvas_stroke_width = ${c.text()}`); c.advance(); } if (c.kind() === TK.rbrace) c.advance(); }
           else if (c.kind() === TK.number) { nodeFields.push(`.canvas_stroke_width = ${c.text()}`); c.advance(); }
+        } else if (attr === 'flowSpeed' && (rawTag === 'Graph.Path' || rawTag === 'Canvas.Path')) {
+          // Canvas.Path flowSpeed={N} → .canvas_flow_speed (node field, f32)
+          if (c.kind() === TK.lbrace) { c.advance(); let neg = ''; if (c.kind() === TK.minus) { neg = '-'; c.advance(); } if (c.kind() === TK.number) { nodeFields.push(`.canvas_flow_speed = ${neg}${c.text()}`); c.advance(); } if (c.kind() === TK.rbrace) c.advance(); }
+          else if (c.kind() === TK.number) { nodeFields.push(`.canvas_flow_speed = ${c.text()}`); c.advance(); }
         } else if (attr === 'fillEffect' && (rawTag === 'Graph.Path' || rawTag === 'Canvas.Path')) {
           if (c.kind() === TK.string) { nodeFields.push(`.canvas_fill_effect = "${c.text().slice(1, -1)}"`); c.advance(); }
           else if (c.kind() === TK.lbrace) { skipBraces(c); }
@@ -670,10 +682,10 @@ function parseJSXElement(c) {
           if (c.kind() === TK.lbrace) { c.advance(); let neg = ''; if (c.kind() === TK.minus) { neg = '-'; c.advance(); } if (c.kind() === TK.number) { nodeFields.push(`.canvas_drift_y = ${neg}${c.text()}`); c.advance(); } if (c.kind() === TK.rbrace) c.advance(); }
           else if (c.kind() === TK.number) { nodeFields.push(`.canvas_drift_y = ${c.text()}`); c.advance(); }
         } else if (attr === 'gx' && rawTag === 'Canvas.Node') {
-          if (c.kind() === TK.lbrace) { c.advance(); let neg = ''; if (c.kind() === TK.minus) { neg = '-'; c.advance(); } if (c.kind() === TK.number) { nodeFields.push(`.canvas_gx = ${neg}${c.text()}`); c.advance(); } if (c.kind() === TK.rbrace) c.advance(); }
+          if (c.kind() === TK.lbrace) { c.advance(); let neg = ''; if (c.kind() === TK.minus) { neg = '-'; c.advance(); } if (c.kind() === TK.number) { nodeFields.push(`.canvas_gx = ${neg}${c.text()}`); c.advance(); } else if (c.kind() === TK.identifier && ctx.currentMap && c.text() === ctx.currentMap.itemParam) { c.advance(); if (c.kind() === TK.dot) { c.advance(); const fn2 = c.text(); c.advance(); if (!ctx.currentMap._deferredCanvasAttrs) ctx.currentMap._deferredCanvasAttrs = []; ctx.currentMap._deferredCanvasAttrs.push({ zigField: 'canvas_gx', oaField: fn2 }); } } if (c.kind() === TK.rbrace) c.advance(); }
           else if (c.kind() === TK.number) { nodeFields.push(`.canvas_gx = ${c.text()}`); c.advance(); }
         } else if (attr === 'gy' && rawTag === 'Canvas.Node') {
-          if (c.kind() === TK.lbrace) { c.advance(); let neg = ''; if (c.kind() === TK.minus) { neg = '-'; c.advance(); } if (c.kind() === TK.number) { nodeFields.push(`.canvas_gy = ${neg}${c.text()}`); c.advance(); } if (c.kind() === TK.rbrace) c.advance(); }
+          if (c.kind() === TK.lbrace) { c.advance(); let neg = ''; if (c.kind() === TK.minus) { neg = '-'; c.advance(); } if (c.kind() === TK.number) { nodeFields.push(`.canvas_gy = ${neg}${c.text()}`); c.advance(); } else if (c.kind() === TK.identifier && ctx.currentMap && c.text() === ctx.currentMap.itemParam) { c.advance(); if (c.kind() === TK.dot) { c.advance(); const fn2 = c.text(); c.advance(); if (!ctx.currentMap._deferredCanvasAttrs) ctx.currentMap._deferredCanvasAttrs = []; ctx.currentMap._deferredCanvasAttrs.push({ zigField: 'canvas_gy', oaField: fn2 }); } } if (c.kind() === TK.rbrace) c.advance(); }
           else if (c.kind() === TK.number) { nodeFields.push(`.canvas_gy = ${c.text()}`); c.advance(); }
         } else if (attr === 'gw' && rawTag === 'Canvas.Node') {
           if (c.kind() === TK.lbrace) { c.advance(); if (c.kind() === TK.number) { nodeFields.push(`.canvas_gw = ${c.text()}`); c.advance(); } if (c.kind() === TK.rbrace) c.advance(); }
@@ -1108,6 +1120,17 @@ function parseChildren(c) {
             children.push({ nodeExpr: `.{ .text = "" }`, dynBufId: mapBufId, inMap: true });
             continue;
           }
+        } else if (ctx.currentMap.isSimpleArray && c.kind() === TK.rbrace) {
+          // Bare {item} in simple-array For loop → resolve to _v field
+          c.advance(); // skip }
+          const oa = ctx.currentMap.oa;
+          const oaIdx = oa.oaIdx;
+          const mapBufId = ctx.mapDynCount || 0;
+          ctx.mapDynCount = mapBufId + 1;
+          const args = `_oa${oaIdx}__v[_i][0.._oa${oaIdx}__v_lens[_i]]`;
+          ctx.dynTexts.push({ bufId: mapBufId, fmtString: '{s}', fmtArgs: args, arrName: '', arrIndex: 0, bufSize: 256, inMap: true, mapIdx: ctx.maps.indexOf(ctx.currentMap) });
+          children.push({ nodeExpr: `.{ .text = "" }`, dynBufId: mapBufId, inMap: true });
+          continue;
         }
       }
       // {children} splice — insert component children

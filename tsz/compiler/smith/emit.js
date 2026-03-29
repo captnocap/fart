@@ -350,6 +350,13 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
       }
       out += `    for (0..count) |_i| {\n`;
       out += `        const elem = qjs.JS_GetPropertyUint32(c2, arr, @intCast(_i));\n`;
+      if (oa.isSimpleArray) {
+        // Simple array: elem IS the value (string/number), not an object
+        out += `        { const _s = qjs.JS_ToCString(c2, elem);\n`;
+        out += `        _oaFreeString(&_oa${idx}__v[_i], &_oa${idx}__v_lens[_i]);\n`;
+        out += `        if (_s) |ss| { const sl = std.mem.span(ss); _oa${idx}__v[_i] = _oaDupString(sl); _oa${idx}__v_lens[_i] = _oa${idx}__v[_i].len; qjs.JS_FreeCString(c2, _s); }\n`;
+        out += `        }\n`;
+      } else
       for (const f of oa.fields) {
         if (f.type === 'nested_array') {
           // Unpack nested array: iterate inner array and flatten into child OA
@@ -515,7 +522,7 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
         out += `var _map_pool_${mi}: [MAX_INLINE_OUTER_${mi}][MAX_MAP_${mi}]Node = undefined;\n`;
         out += `var _map_count_${mi}: [MAX_INLINE_OUTER_${mi}]usize = undefined;\n`;
       } else {
-        out += `const MAX_MAP_${mi}: usize = 256;\n`;
+        out += `const MAX_MAP_${mi}: usize = 4096;\n`;
         out += `var _map_pool_${mi}: [MAX_MAP_${mi}]Node = undefined;\n`;
         out += `var _map_count_${mi}: usize = 0;\n`;
       }
@@ -797,8 +804,8 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
         if (cond.kind === 'show_hide') {
           out += `        ${poolArr}[${cond.trueIdx}].style.display = if ${wrapped} .flex else .none;\n`;
         } else if (cond.kind === 'ternary_jsx') {
-          out += `        ${poolArr}[${cond.trueIdx}].style.display = if (${cond.condExpr}) .flex else .none;\n`;
-          out += `        ${poolArr}[${cond.falseIdx}].style.display = if (${cond.condExpr}) .none else .flex;\n`;
+          out += `        ${poolArr}[${cond.trueIdx}].style.display = if ${wrapped} .flex else .none;\n`;
+          out += `        ${poolArr}[${cond.falseIdx}].style.display = if ${wrapped} .none else .flex;\n`;
         }
       }
 
@@ -1068,8 +1075,9 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
           if (cond.kind === 'show_hide') {
             out += `            ${poolArr}[${cond.trueIdx}].style.display = if ((${resolvedExpr})) .flex else .none;\n`;
           } else if (cond.kind === 'ternary_jsx') {
-            out += `            ${poolArr}[${cond.trueIdx}].style.display = if ((${resolvedExpr})) .flex else .none;\n`;
-            out += `            ${poolArr}[${cond.falseIdx}].style.display = if ((${resolvedExpr})) .none else .flex;\n`;
+            const _w = (resolvedExpr.includes('==') || resolvedExpr.includes('!=') || resolvedExpr.includes('std.mem.eql') || resolvedExpr.includes('getSlotBool')) ? `((${resolvedExpr}))` : `((${resolvedExpr}) != 0)`;
+            out += `            ${poolArr}[${cond.trueIdx}].style.display = if ${_w} .flex else .none;\n`;
+            out += `            ${poolArr}[${cond.falseIdx}].style.display = if ${_w} .none else .flex;\n`;
           }
         }
         // Inner array conditionals (applied to _map_inner)
@@ -1080,8 +1088,9 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
             if (cond.kind === 'show_hide') {
               out += `            _map_inner_${imi}[_i][_j][${cond.trueIdx}].style.display = if ((${resolvedExpr})) .flex else .none;\n`;
             } else if (cond.kind === 'ternary_jsx') {
-              out += `            _map_inner_${imi}[_i][_j][${cond.trueIdx}].style.display = if ((${resolvedExpr})) .flex else .none;\n`;
-              out += `            _map_inner_${imi}[_i][_j][${cond.falseIdx}].style.display = if ((${resolvedExpr})) .none else .flex;\n`;
+              const _w2 = (resolvedExpr.includes('==') || resolvedExpr.includes('!=') || resolvedExpr.includes('std.mem.eql') || resolvedExpr.includes('getSlotBool')) ? `((${resolvedExpr}))` : `((${resolvedExpr}) != 0)`;
+              out += `            _map_inner_${imi}[_i][_j][${cond.trueIdx}].style.display = if ${_w2} .flex else .none;\n`;
+              out += `            _map_inner_${imi}[_i][_j][${cond.falseIdx}].style.display = if ${_w2} .none else .flex;\n`;
             }
           }
         }
@@ -1180,13 +1189,14 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
             const isComp = resolvedExpr.includes('==') || resolvedExpr.includes('!=') ||
               resolvedExpr.includes('>=') || resolvedExpr.includes('<=') ||
               resolvedExpr.includes(' > ') || resolvedExpr.includes(' < ') ||
-              resolvedExpr.includes('getSlotBool');
+              resolvedExpr.includes('getSlotBool') || resolvedExpr.includes('std.mem.eql');
             if (cond.kind === 'show_hide') {
               const wrapped = isComp ? `(${resolvedExpr})` : `((${resolvedExpr}) != 0)`;
               out += `        _map_inner_${mi}[_i][${cond.trueIdx}].style.display = if ${wrapped} .flex else .none;\n`;
             } else if (cond.kind === 'ternary_jsx') {
-              out += `        _map_inner_${mi}[_i][${cond.trueIdx}].style.display = if ((${resolvedExpr})) .flex else .none;\n`;
-              out += `        _map_inner_${mi}[_i][${cond.falseIdx}].style.display = if ((${resolvedExpr})) .none else .flex;\n`;
+              const _w3 = isComp ? `(${resolvedExpr})` : `((${resolvedExpr}) != 0)`;
+              out += `        _map_inner_${mi}[_i][${cond.trueIdx}].style.display = if ${_w3} .flex else .none;\n`;
+              out += `        _map_inner_${mi}[_i][${cond.falseIdx}].style.display = if ${_w3} .none else .flex;\n`;
             }
           }
         }
@@ -1297,6 +1307,18 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
         out += `        _map_pool_${mi}[_i] = ${m.templateExpr};\n`;
       }
 
+      // Deferred canvas attributes — dynamic gx/gy/d from map item fields
+      if (m._deferredCanvasAttrs) {
+        for (const da of m._deferredCanvasAttrs) {
+          const oaIdx = m.oaIdx;
+          const oaField = `_oa${oaIdx}_${da.oaField}`;
+          if (da.type === 'string') {
+            out += `        _map_pool_${mi}[_i].${da.zigField} = ${oaField}[_i][0..${oaField}_lens[_i]];\n`;
+          } else {
+            out += `        _map_pool_${mi}[_i].${da.zigField} = @floatFromInt(${oaField}[_i]);\n`;
+          }
+        }
+      }
       out += `    }\n`;
       // Bind pool to parent array
       if (m.parentArr) {
@@ -1440,13 +1462,13 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
       const isComparison = cond.condExpr.includes('==') || cond.condExpr.includes('!=') ||
         cond.condExpr.includes('>=') || cond.condExpr.includes('<=') ||
         cond.condExpr.includes(' > ') || cond.condExpr.includes(' < ') ||
-        cond.condExpr.includes('getBool') || cond.condExpr.includes('std.mem.eql');
+        cond.condExpr.includes('getBool') || cond.condExpr.includes('getSlotBool') || cond.condExpr.includes('std.mem.eql');
       const wrapped = isComparison ? `((${cond.condExpr}))` : `((${cond.condExpr}) != 0)`;
       if (cond.kind === 'show_hide') {
         out += `    ${cond.arrName}[${cond.trueIdx}].style.display = if ${wrapped} .flex else .none;\n`;
       } else if (cond.kind === 'ternary_jsx') {
-        out += `    ${cond.arrName}[${cond.trueIdx}].style.display = if (${cond.condExpr}) .flex else .none;\n`;
-        out += `    ${cond.arrName}[${cond.falseIdx}].style.display = if (${cond.condExpr}) .none else .flex;\n`;
+        out += `    ${cond.arrName}[${cond.trueIdx}].style.display = if ${wrapped} .flex else .none;\n`;
+        out += `    ${cond.arrName}[${cond.falseIdx}].style.display = if ${wrapped} .none else .flex;\n`;
       }
     }
     out += `}\n\n`;

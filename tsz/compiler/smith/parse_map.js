@@ -549,59 +549,131 @@ function tryParseConditional(c, children) {
   return false;
 }
 
-// Try to parse {expr ? (<JSX>) : (<JSX>)} ternary JSX branches
-function tryParseTernaryJSX(c, children) {
-  const saved = c.save();
-  let condParts = [];
-  let foundQuestion = false;
+// Resolve string comparisons: lhs == 'str' → std.mem.eql(u8, lhs, "str")
+// Also handles runtime string comparisons: slice == getSlotString(N) → std.mem.eql
+function _resolveStringComparison(condExpr) {
+  // Literal string comparison: lhs == 'str'
+  var m = condExpr.match(/^(.+?)\s*==\s*['"]([^'"]+)['"]$/);
+  if (m) {
+    var lhs = m[1].trim();
+    var rhs = m[2];
+    if (!lhs.includes('[0..') && /_oa\d+_\w+\[_i\]$/.test(lhs)) {
+      var lenField = lhs.replace(/\[_i\]$/, '_lens[_i]');
+      lhs = lhs + '[0..' + lenField + ']';
+    }
+    return 'std.mem.eql(u8, ' + lhs + ', "' + rhs + '")';
+  }
+  var m2 = condExpr.match(/^(.+?)\s*!=\s*['"]([^'"]+)['"]$/);
+  if (m2) {
+    var lhs2 = m2[1].trim();
+    var rhs2 = m2[2];
+    if (!lhs2.includes('[0..') && /_oa\d+_\w+\[_i\]$/.test(lhs2)) {
+      var lenField2 = lhs2.replace(/\[_i\]$/, '_lens[_i]');
+      lhs2 = lhs2 + '[0..' + lenField2 + ']';
+    }
+    return '!std.mem.eql(u8, ' + lhs2 + ', "' + rhs2 + '")';
+  }
+  // Runtime string comparison: stringExpr == stringExpr (both are []const u8)
+  var m3 = condExpr.match(/^(.+?)\s*==\s*(.+)$/);
+  if (m3) {
+    var lhs3 = m3[1].trim();
+    var rhs3 = m3[2].trim();
+    var lhsIsStr = lhs3.includes('[0..') || lhs3.includes('getSlotString') || lhs3.includes('getString');
+    var rhsIsStr = rhs3.includes('[0..') || rhs3.includes('getSlotString') || rhs3.includes('getString');
+    if (lhsIsStr || rhsIsStr) {
+      return 'std.mem.eql(u8, ' + lhs3 + ', ' + rhs3 + ')';
+    }
+  }
+  return condExpr;
+}
+
+// Parse ternary condition tokens until ? is found. Returns condParts array or null.
+function _parseTernaryCondParts(c) {
+  var condParts = [];
   while (c.kind() !== TK.eof && c.kind() !== TK.rbrace) {
-    if (c.kind() === TK.question) { foundQuestion = true; c.advance(); break; }
+    if (c.kind() === TK.question) { c.advance(); return condParts; }
     if (c.kind() === TK.identifier && c.text() === 'exact') {
-      condParts.push(' == '); c.advance(); if (c.kind() === TK.equals) c.advance(); continue;
+      c.advance(); if (c.kind() === TK.equals) c.advance(); // skip 'exact' and optional =
+      // Check what follows: string token, getter, or bare string value (quotes stripped by lexer)
+      if (c.kind() === TK.string) {
+        condParts.push(' == ');
+        condParts.push(c.text()); // includes quotes
+      } else if (c.kind() === TK.identifier) {
+        var rhsName = c.text();
+        // Map item/index params are always runtime values
+        if (ctx.currentMap && (rhsName === ctx.currentMap.itemParam || rhsName === ctx.currentMap.indexParam)) {
+          condParts.push(' == ');
+          continue; // don't advance — next iteration handles this identifier
+        }
+        // Only treat as runtime value if it's a STRING getter or a prop
+        // Non-string getters (bool/int) after exact are string literals (quotes stripped by lexer)
+        var isRuntimeStr = false;
+        if (isGetter(rhsName)) {
+          var _si = findSlot(rhsName);
+          isRuntimeStr = _si >= 0 && ctx.stateSlots[_si].type === 'string';
+        }
+        if (isRuntimeStr || (ctx.propStack && ctx.propStack[rhsName] !== undefined)) {
+          condParts.push(' == ');
+          continue; // don't advance — next iteration handles this identifier
+        } else {
+          // Bare string value (quotes stripped by lexer) — wrap for _resolveStringComparison
+          condParts.push(' == ');
+          condParts.push("'" + rhsName + "'");
+        }
+      } else {
+        condParts.push(' == ');
+        continue;
+      }
+      c.advance();
+      continue;
     }
     if (c.kind() === TK.identifier) {
-      const name = c.text();
+      var name = c.text();
       if (isGetter(name)) {
         condParts.push(slotGet(name));
       } else if (ctx.propStack && ctx.propStack[name] !== undefined) {
-        const pv2 = ctx.propStack[name];
+        var pv = ctx.propStack[name];
         if (ctx.currentMap && ctx.currentMap.oa) {
-          const fi = ctx.currentMap.oa.fields.find(f => f.name === name);
+          var fi = ctx.currentMap.oa.fields.find(function(f) { return f.name === name; });
           if (fi) {
-            condParts.push(`_oa${ctx.currentMap.oa.oaIdx}_${name}[_i]`);
+            condParts.push('_oa' + ctx.currentMap.oa.oaIdx + '_' + name + '[_i]');
           } else {
-            condParts.push(_condPropValue(pv2));
+            condParts.push(_condPropValue(pv));
           }
         } else {
-          condParts.push(_condPropValue(pv2));
+          condParts.push(_condPropValue(pv));
         }
       } else if (ctx.currentMap && name === ctx.currentMap.indexParam) {
         condParts.push('@as(i64, @intCast(_i))');
       } else if (ctx.currentMap && name === ctx.currentMap.itemParam) {
-        // Map item parameter: resolve item.field to OA field accessor
         c.advance();
         if (c.kind() === TK.dot) {
           c.advance();
           if (c.kind() === TK.identifier) {
-            let field = c.text(); c.advance();
+            var field = c.text(); c.advance();
             while (c.kind() === TK.dot && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.identifier) {
               c.advance(); field += '_' + c.text(); c.advance();
             }
-            const oa = ctx.currentMap.oa;
+            var oa = ctx.currentMap.oa;
             if (oa) {
-              const fi = oa.fields.find(f => f.name === field);
-              if (fi && fi.type === 'string') {
-                condParts.push(`_oa${oa.oaIdx}_${field}[_i][0.._oa${oa.oaIdx}_${field}_lens[_i]]`);
+              var fi2 = oa.fields.find(function(f) { return f.name === field; });
+              if (fi2 && fi2.type === 'string') {
+                condParts.push('_oa' + oa.oaIdx + '_' + field + '[_i][0.._oa' + oa.oaIdx + '_' + field + '_lens[_i]]');
               } else {
-                condParts.push(`_oa${oa.oaIdx}_${field}[_i]`);
+                condParts.push('_oa' + oa.oaIdx + '_' + field + '[_i]');
               }
             } else {
               condParts.push('0');
             }
             continue;
           }
+        } else if (ctx.currentMap.isSimpleArray) {
+          // Simple array: bare item → string value from _v field
+          var oa3 = ctx.currentMap.oa;
+          condParts.push('_oa' + oa3.oaIdx + '__v[_i][0.._oa' + oa3.oaIdx + '__v_lens[_i]]');
+        } else {
+          condParts.push('@as(i64, @intCast(_i))');
         }
-        condParts.push('@as(i64, @intCast(_i))');
         continue;
       } else if (ctx.inlineComponent) {
         condParts.push('0');
@@ -612,49 +684,121 @@ function tryParseTernaryJSX(c, children) {
     else if (c.kind() === TK.not_eq) { condParts.push(' != '); c.advance(); if (c.kind() === TK.equals) c.advance(); continue; }
     else if (c.kind() === TK.number) { condParts.push(c.text()); }
     else if (c.kind() === TK.gt) { condParts.push(' > '); }
+    else if (c.kind() === TK.gt_eq) { condParts.push(' >= '); }
+    else if (c.kind() === TK.lt_eq) { condParts.push(' <= '); }
     else if (c.kind() === TK.lt) {
-      // Disambiguate: < followed by number/getter is less-than comparison, not JSX tag open
       if (c.pos + 1 < c.count && (c.kindAt(c.pos + 1) === TK.number || (c.kindAt(c.pos + 1) === TK.identifier && (isGetter(c.textAt(c.pos + 1)) || (ctx.propStack && ctx.propStack[c.textAt(c.pos + 1)] !== undefined))))) {
         condParts.push(' < ');
         c.advance();
         continue;
       }
-      break;
+      return null; // < is JSX tag, bail
     }
     else { condParts.push(c.text()); }
     c.advance();
   }
-  if (!foundQuestion) { c.restore(saved); return false; }
-  // Check for JSX branches: ? (<JSX>) : (<JSX>) or ? <JSX> : <JSX>
-  // True branch — with or without parens
-  if (c.kind() === TK.lparen) { c.advance(); }
+  return null; // no ? found
+}
+
+// Try to parse {expr ? (<JSX>) : (<JSX>)} ternary JSX branches
+// Supports chained ternaries: {a ? <X> : b ? <Y> : <Z>}
+function tryParseTernaryJSX(c, children) {
+  var saved = c.save();
+
+  // Parse first condition
+  var condParts = _parseTernaryCondParts(c);
+  if (!condParts) { c.restore(saved); return false; }
+
+  // Parse first true branch
+  if (c.kind() === TK.lparen) c.advance();
   if (c.kind() !== TK.lt) { c.restore(saved); return false; }
-  const trueBranch = parseJSXElement(c);
+  var firstBranch = parseJSXElement(c);
   if (c.kind() === TK.rparen) c.advance();
   if (c.kind() !== TK.colon) { c.restore(saved); return false; }
   c.advance();
-  // False branch — with or without parens, may be nested ternary or null
-  if (c.kind() === TK.lparen) { c.advance(); }
-  if (c.kind() === TK.identifier && c.text() === 'null') {
-    // null branch — empty placeholder
-    c.advance();
+
+  // Collect all branches: [{condExpr, branch}, ...]
+  var allBranches = [{ condExpr: _resolveStringComparison(condParts.join('')), branch: firstBranch }];
+
+  // Parse remaining branches (chained or final)
+  while (true) {
+    if (c.kind() === TK.lparen) c.advance();
+
+    // null branch → done (no default)
+    if (c.kind() === TK.identifier && c.text() === 'null') {
+      c.advance();
+      if (c.kind() === TK.rparen) c.advance();
+      break;
+    }
+
+    // <JSX> → default branch, done
+    if (c.kind() === TK.lt) {
+      var defaultBranch = parseJSXElement(c);
+      if (c.kind() === TK.rparen) c.advance();
+      allBranches.push({ condExpr: null, branch: defaultBranch });
+      break;
+    }
+
+    // Chained ternary: expr ? <JSX> : ...
+    var nextCondParts = _parseTernaryCondParts(c);
+    if (!nextCondParts) { c.restore(saved); return false; }
+
+    if (c.kind() === TK.lparen) c.advance();
+    if (c.kind() !== TK.lt) { c.restore(saved); return false; }
+    var nextBranch = parseJSXElement(c);
     if (c.kind() === TK.rparen) c.advance();
-    if (c.kind() === TK.rbrace) c.advance();
-    const condExpr = condParts.join('');
-    const condIdx = ctx.conditionals.length;
-    ctx.conditionals.push({ condExpr, kind: 'show_hide', inMap: !!ctx.currentMap });
-    children.push({ nodeExpr: trueBranch.nodeExpr, condIdx, dynBufId: trueBranch.dynBufId });
-    return true;
+    allBranches.push({ condExpr: _resolveStringComparison(nextCondParts.join('')), branch: nextBranch });
+
+    if (c.kind() !== TK.colon) break; // no more chains
+    c.advance();
   }
-  if (c.kind() !== TK.lt) { c.restore(saved); return false; }
-  const falseBranch = parseJSXElement(c);
-  if (c.kind() === TK.rparen) c.advance();
+
   if (c.kind() === TK.rbrace) c.advance();
-  const condExpr = condParts.join('');
-  const condIdx = ctx.conditionals.length;
-  ctx.conditionals.push({ condExpr, kind: 'ternary_jsx', trueIdx: -1, falseIdx: -1, inMap: !!ctx.currentMap });
-  children.push({ nodeExpr: trueBranch.nodeExpr, ternaryCondIdx: condIdx, ternaryBranch: 'true', dynBufId: trueBranch.dynBufId });
-  children.push({ nodeExpr: falseBranch.nodeExpr, ternaryCondIdx: condIdx, ternaryBranch: 'false', dynBufId: falseBranch.dynBufId });
+
+  // Generate conditionals based on branch count
+  var hasDefault = allBranches.length > 1 && allBranches[allBranches.length - 1].condExpr === null;
+
+  if (allBranches.length === 1) {
+    // Single branch with null false → show_hide
+    var condIdx = ctx.conditionals.length;
+    ctx.conditionals.push({ condExpr: allBranches[0].condExpr, kind: 'show_hide', inMap: !!ctx.currentMap });
+    children.push({ nodeExpr: allBranches[0].branch.nodeExpr, condIdx: condIdx, dynBufId: allBranches[0].branch.dynBufId });
+  } else if (allBranches.length === 2 && hasDefault) {
+    // Simple binary ternary — use existing ternary_jsx for backward compat
+    var condExpr = allBranches[0].condExpr;
+    var condIdx2 = ctx.conditionals.length;
+    ctx.conditionals.push({ condExpr: condExpr, kind: 'ternary_jsx', trueIdx: -1, falseIdx: -1, inMap: !!ctx.currentMap });
+    children.push({ nodeExpr: allBranches[0].branch.nodeExpr, ternaryCondIdx: condIdx2, ternaryBranch: 'true', dynBufId: allBranches[0].branch.dynBufId });
+    children.push({ nodeExpr: allBranches[1].branch.nodeExpr, ternaryCondIdx: condIdx2, ternaryBranch: 'false', dynBufId: allBranches[1].branch.dynBufId });
+  } else {
+    // Multi-branch: show_hide with compound conditions
+    var resolvedConds = [];
+    for (var bi = 0; bi < allBranches.length; bi++) {
+      if (allBranches[bi].condExpr !== null) resolvedConds.push(allBranches[bi].condExpr);
+    }
+
+    for (var bi2 = 0; bi2 < allBranches.length; bi2++) {
+      var compoundExpr;
+      if (bi2 === 0) {
+        compoundExpr = resolvedConds[0];
+      } else if (allBranches[bi2].condExpr === null) {
+        // Default branch: show when all prior conditions are false
+        var negParts = [];
+        for (var ni = 0; ni < resolvedConds.length; ni++) negParts.push('!(' + resolvedConds[ni] + ')');
+        compoundExpr = negParts.join(' and ');
+      } else {
+        // Middle branch: !cond0 and ... and condN
+        var parts = [];
+        for (var ni2 = 0; ni2 < bi2; ni2++) parts.push('!(' + resolvedConds[ni2] + ')');
+        parts.push('(' + resolvedConds[bi2] + ')');
+        compoundExpr = parts.join(' and ');
+      }
+      var branchCondIdx = ctx.conditionals.length;
+      ctx.conditionals.push({ condExpr: compoundExpr, kind: 'show_hide', inMap: !!ctx.currentMap });
+      children.push({ nodeExpr: allBranches[bi2].branch.nodeExpr, condIdx: branchCondIdx, dynBufId: allBranches[bi2].branch.dynBufId });
+    }
+  }
+
   return true;
 }
 
@@ -801,14 +945,17 @@ function parseForLoop(c) {
   var oa = ctx.objectArrays.find(function(o) { return o.getter === arrayName; });
   if (!oa) oa = inferOaFromSource(c, arrayName);
   if (!oa) {
-    // No OA found — skip the For body and return empty
-    while (c.kind() !== TK.lt_slash && c.kind() !== TK.eof) c.advance();
-    if (c.kind() === TK.lt_slash) {
-      c.advance(); // </
-      if (c.kind() === TK.identifier && c.text() === 'For') c.advance();
-      if (c.kind() === TK.gt) c.advance();
-    }
-    return { nodeExpr: '.{}' };
+    // Simple (non-object) array — e.g., ['a', 'b', 'c'] or bare name (initially empty)
+    // Create synthetic OA with single _v field so the map infrastructure works
+    var oaIdx = ctx.objectArrays.length;
+    oa = {
+      fields: [{ name: '_v', type: 'string' }],
+      getter: arrayName,
+      setter: 'set_' + arrayName,
+      oaIdx: oaIdx,
+      isSimpleArray: true,
+    };
+    ctx.objectArrays.push(oa);
   }
 
   // Set up map context (same as tryParseMap)
@@ -821,6 +968,7 @@ function parseForLoop(c) {
     mapArrayDecls: [], mapArrayComments: [],
     parentMap: savedMapCtx,
     isInline: isInline,
+    isSimpleArray: !!oa.isSimpleArray,
   };
   ctx.maps.push(mapInfo);
   ctx.currentMap = mapInfo;
@@ -832,8 +980,41 @@ function parseForLoop(c) {
   ctx.arrayDecls = mapInfo.mapArrayDecls;
   ctx.arrayComments = mapInfo.mapArrayComments;
 
-  // Parse template — single child element or wrap multiple in container
-  var templateNode = parseJSXElement(c);
+  // Parse template — JSX element, or {expr} (wrap in synthetic Box if bare expression)
+  var templateNode;
+  if (c.kind() === TK.lbrace) {
+    // Bare {expr} template — parse children within map context, wrap in Box
+    var templateChildren = parseChildren(c);
+    var parts = [];
+    if (templateChildren.length > 0) {
+      var arrName = '_arr_' + ctx.arrayCounter++;
+      var childDecls = [];
+      for (var ti = 0; ti < templateChildren.length; ti++) {
+        childDecls.push(templateChildren[ti].nodeExpr);
+        if (templateChildren[ti].condIdx !== undefined) {
+          var tc = ctx.conditionals[templateChildren[ti].condIdx];
+          if (tc) { tc.arrName = arrName; tc.trueIdx = ti; }
+        }
+        if (templateChildren[ti].ternaryCondIdx !== undefined) {
+          var tc2 = ctx.conditionals[templateChildren[ti].ternaryCondIdx];
+          if (tc2) {
+            tc2.arrName = arrName;
+            if (templateChildren[ti].ternaryBranch === 'true') tc2.trueIdx = ti;
+            else tc2.falseIdx = ti;
+          }
+        }
+        if (templateChildren[ti].dynBufId !== undefined) {
+          var dt = ctx.dynTexts.find(function(d) { return d.bufId === templateChildren[ti].dynBufId; });
+          if (dt && !dt.arrName) { dt.arrName = arrName; dt.arrIndex = ti; }
+        }
+      }
+      ctx.arrayDecls.push('var ' + arrName + ' = [_]Node{ ' + childDecls.join(', ') + ' };');
+      parts.push('.children = &' + arrName);
+    }
+    templateNode = { nodeExpr: '.{ ' + parts.join(', ') + ' }' };
+  } else {
+    templateNode = parseJSXElement(c);
+  }
 
   // Restore array context
   ctx.arrayDecls = savedArrayDecls;
