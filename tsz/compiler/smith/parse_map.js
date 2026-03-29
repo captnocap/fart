@@ -424,6 +424,9 @@ function tryParseConditional(c, children) {
       continue;
     }
     // Build condition expression with Zig-compatible ops
+    if (c.kind() === TK.identifier && c.text() === 'exact') {
+      condParts.push(' == '); c.advance(); if (c.kind() === TK.equals) c.advance(); continue;
+    }
     if (c.kind() === TK.identifier) {
       const name = c.text();
       if (globalThis.__SMITH_DEBUG_INLINE && (name === 'activeTab' || name === 'connectedApp' || name === 'selectedIdx' || name === 'crashCount' || name === 'copied')) {
@@ -553,6 +556,9 @@ function tryParseTernaryJSX(c, children) {
   let foundQuestion = false;
   while (c.kind() !== TK.eof && c.kind() !== TK.rbrace) {
     if (c.kind() === TK.question) { foundQuestion = true; c.advance(); break; }
+    if (c.kind() === TK.identifier && c.text() === 'exact') {
+      condParts.push(' == '); c.advance(); if (c.kind() === TK.equals) c.advance(); continue;
+    }
     if (c.kind() === TK.identifier) {
       const name = c.text();
       if (isGetter(name)) {
@@ -593,16 +599,27 @@ function tryParseTernaryJSX(c, children) {
     c.advance();
   }
   if (!foundQuestion) { c.restore(saved); return false; }
-  // Check for JSX branches: ? ( <JSX> ) : ( <JSX> )
-  if (c.kind() !== TK.lparen) { c.restore(saved); return false; }
-  c.advance();
+  // Check for JSX branches: ? (<JSX>) : (<JSX>) or ? <JSX> : <JSX>
+  // True branch — with or without parens
+  if (c.kind() === TK.lparen) { c.advance(); }
   if (c.kind() !== TK.lt) { c.restore(saved); return false; }
   const trueBranch = parseJSXElement(c);
   if (c.kind() === TK.rparen) c.advance();
   if (c.kind() !== TK.colon) { c.restore(saved); return false; }
   c.advance();
-  if (c.kind() !== TK.lparen) { c.restore(saved); return false; }
-  c.advance();
+  // False branch — with or without parens, may be nested ternary or null
+  if (c.kind() === TK.lparen) { c.advance(); }
+  if (c.kind() === TK.identifier && c.text() === 'null') {
+    // null branch — empty placeholder
+    c.advance();
+    if (c.kind() === TK.rparen) c.advance();
+    if (c.kind() === TK.rbrace) c.advance();
+    const condExpr = condParts.join('');
+    const condIdx = ctx.conditionals.length;
+    ctx.conditionals.push({ condExpr, kind: 'show_hide', inMap: !!ctx.currentMap });
+    children.push({ nodeExpr: trueBranch.nodeExpr, condIdx, dynBufId: trueBranch.dynBufId });
+    return true;
+  }
   if (c.kind() !== TK.lt) { c.restore(saved); return false; }
   const falseBranch = parseJSXElement(c);
   if (c.kind() === TK.rparen) c.advance();
