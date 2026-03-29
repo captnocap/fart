@@ -17,6 +17,11 @@ function parseJSXElement(c) {
 
   let rawTag = c.text();
   c.advance();
+  // Handle <3D...> — lexer tokenizes "3" (number) + "D" (identifier)
+  if (rawTag === '3' && c.kind() === TK.identifier && c.text() === 'D') {
+    rawTag = '3D';
+    c.advance();
+  }
 
   // Skip <script>...</script> blocks — already collected by collectScript
   if (rawTag === 'script') {
@@ -63,6 +68,12 @@ function parseJSXElement(c) {
   if (rawTag === 'Scene3D' && c.kind() === TK.dot) {
     c.advance();
     rawTag = '3D.' + c.text(); c.advance();
+  }
+  // Physics.World / Physics.Wall / Physics.Ball / Physics.Box dot-name tags
+  if (rawTag === 'Physics' && c.kind() === TK.dot) {
+    c.advance();
+    const subTag = c.text(); c.advance();
+    rawTag = 'Physics.' + subTag;
   }
 
   // Check if this is a component call
@@ -391,6 +402,23 @@ function parseJSXElement(c) {
   if (rawTag === '3D.Camera') nodeFields.push('.scene3d_camera = true');
   // 3D.Light
   if (rawTag === '3D.Light') nodeFields.push('.scene3d_light = true');
+  // 3D shorthands: Floor/Cube/Sphere/Cylinder → scene3d_mesh + geometry
+  if (rawTag === '3D.Floor') { nodeFields.push('.scene3d_mesh = true'); nodeFields.push('.scene3d_geometry = "plane"'); }
+  if (rawTag === '3D.Cube') { nodeFields.push('.scene3d_mesh = true'); nodeFields.push('.scene3d_geometry = "box"'); }
+  if (rawTag === '3D.Sphere') { nodeFields.push('.scene3d_mesh = true'); nodeFields.push('.scene3d_geometry = "sphere"'); }
+  if (rawTag === '3D.Cylinder') { nodeFields.push('.scene3d_mesh = true'); nodeFields.push('.scene3d_geometry = "cylinder"'); }
+  // Physics.World → physics_world container
+  if (rawTag === 'Physics.World') nodeFields.push('.physics_world = true');
+  // Physics.Body → physics_body
+  if (rawTag === 'Physics.Body') nodeFields.push('.physics_body = true');
+  // Physics.Collider → physics_collider
+  if (rawTag === 'Physics.Collider') nodeFields.push('.physics_collider = true');
+  // Physics.Wall → static body + collider (shorthand)
+  if (rawTag === 'Physics.Wall') { nodeFields.push('.physics_body = true'); nodeFields.push('.physics_body_type = 0'); nodeFields.push('.physics_collider = true'); }
+  // Physics.Ball → dynamic circle body + collider (shorthand)
+  if (rawTag === 'Physics.Ball') { nodeFields.push('.physics_body = true'); nodeFields.push('.physics_body_type = 2'); nodeFields.push('.physics_collider = true'); nodeFields.push('.physics_shape = 1'); }
+  // Physics.Box → dynamic rect body + collider (shorthand)
+  if (rawTag === 'Physics.Box') { nodeFields.push('.physics_body = true'); nodeFields.push('.physics_body_type = 2'); nodeFields.push('.physics_collider = true'); nodeFields.push('.physics_shape = 0'); }
   let handlerRef = null;
 
   while (c.kind() !== TK.gt && c.kind() !== TK.slash_gt && c.kind() !== TK.eof) {
@@ -700,6 +728,151 @@ function parseJSXElement(c) {
         } else if (attr === 'shape' && rawTag === '3D.Mesh') {
           if (c.kind() === TK.string) { nodeFields.push(`.scene3d_geometry = "${c.text().slice(1, -1)}"`); c.advance(); }
           else if (c.kind() === TK.lbrace) { skipBraces(c); }
+        } else if (attr === 'at' && (rawTag.startsWith('3D.') || rawTag.startsWith('Physics.'))) {
+          // at={[x, y]} or at={[x, y, z]} → position alias for 3D and Physics
+          if (c.kind() === TK.lbrace) {
+            c.advance(); if (c.kind() === TK.lbracket) { c.advance();
+              const vals = [];
+              while (c.kind() !== TK.rbracket && c.kind() !== TK.eof) {
+                let neg = ''; if (c.kind() === TK.minus) { neg = '-'; c.advance(); }
+                if (c.kind() === TK.number) { vals.push(neg + c.text()); c.advance(); }
+                if (c.kind() === TK.comma) c.advance();
+              }
+              if (c.kind() === TK.rbracket) c.advance();
+              if (rawTag.startsWith('Physics.')) {
+                if (vals[0]) nodeFields.push(`.physics_x = ${vals[0]}`);
+                if (vals[1]) nodeFields.push(`.physics_y = ${vals[1]}`);
+              } else {
+                if (vals[0]) nodeFields.push(`.scene3d_pos_x = ${vals[0]}`);
+                if (vals[1]) nodeFields.push(`.scene3d_pos_y = ${vals[1]}`);
+                if (vals[2]) nodeFields.push(`.scene3d_pos_z = ${vals[2]}`);
+              }
+            } if (c.kind() === TK.rbrace) c.advance();
+          }
+        } else if (attr === 'size' && rawTag.startsWith('Physics.')) {
+          // size={[w, h]} → width/height style for physics bodies
+          if (c.kind() === TK.lbrace) {
+            c.advance(); if (c.kind() === TK.lbracket) { c.advance();
+              const vals = [];
+              while (c.kind() !== TK.rbracket && c.kind() !== TK.eof) {
+                let neg = ''; if (c.kind() === TK.minus) { neg = '-'; c.advance(); }
+                if (c.kind() === TK.number) { vals.push(neg + c.text()); c.advance(); }
+                if (c.kind() === TK.comma) c.advance();
+              }
+              if (c.kind() === TK.rbracket) c.advance();
+              if (vals[0]) styleFields.push(`.width = ${vals[0]}`);
+              if (vals[1]) styleFields.push(`.height = ${vals[1]}`);
+            } if (c.kind() === TK.rbrace) c.advance();
+          }
+        } else if (attr === 'size' && rawTag.startsWith('3D.')) {
+          // size={[x, y, z]} or size={N} → scene3d_size_x/y/z
+          if (c.kind() === TK.lbrace) {
+            c.advance();
+            if (c.kind() === TK.lbracket) { c.advance();
+              const vals = [];
+              while (c.kind() !== TK.rbracket && c.kind() !== TK.eof) {
+                let neg = ''; if (c.kind() === TK.minus) { neg = '-'; c.advance(); }
+                if (c.kind() === TK.number) { vals.push(neg + c.text()); c.advance(); }
+                if (c.kind() === TK.comma) c.advance();
+              }
+              if (c.kind() === TK.rbracket) c.advance();
+              if (vals[0]) nodeFields.push(`.scene3d_size_x = ${vals[0]}`);
+              if (vals[1]) nodeFields.push(`.scene3d_size_y = ${vals[1]}`);
+              if (vals[2]) nodeFields.push(`.scene3d_size_z = ${vals[2]}`);
+            } else if (c.kind() === TK.number) {
+              // Scalar size (cube shorthand)
+              const s = c.text(); c.advance();
+              nodeFields.push(`.scene3d_size_x = ${s}`); nodeFields.push(`.scene3d_size_y = ${s}`); nodeFields.push(`.scene3d_size_z = ${s}`);
+            }
+            if (c.kind() === TK.rbrace) c.advance();
+          } else if (c.kind() === TK.number) {
+            const s = c.text(); c.advance();
+            nodeFields.push(`.scene3d_size_x = ${s}`); nodeFields.push(`.scene3d_size_y = ${s}`); nodeFields.push(`.scene3d_size_z = ${s}`);
+          }
+        } else if (attr === 'radius' && rawTag.startsWith('Physics.')) {
+          // radius={N} → physics_radius + physics_shape=circle
+          if (c.kind() === TK.lbrace) { c.advance(); if (c.kind() === TK.number) { nodeFields.push(`.physics_radius = ${c.text()}`); c.advance(); } if (c.kind() === TK.rbrace) c.advance(); }
+          else if (c.kind() === TK.number) { nodeFields.push(`.physics_radius = ${c.text()}`); c.advance(); }
+        } else if (attr === 'radius' && rawTag.startsWith('3D.')) {
+          // radius={N} → scene3d_radius
+          if (c.kind() === TK.lbrace) { c.advance(); if (c.kind() === TK.number) { nodeFields.push(`.scene3d_radius = ${c.text()}`); c.advance(); } if (c.kind() === TK.rbrace) c.advance(); }
+          else if (c.kind() === TK.number) { nodeFields.push(`.scene3d_radius = ${c.text()}`); c.advance(); }
+        } else if (attr === 'height' && rawTag.startsWith('3D.')) {
+          // height={N} → scene3d_size_y
+          if (c.kind() === TK.lbrace) { c.advance(); if (c.kind() === TK.number) { nodeFields.push(`.scene3d_size_y = ${c.text()}`); c.advance(); } if (c.kind() === TK.rbrace) c.advance(); }
+          else if (c.kind() === TK.number) { nodeFields.push(`.scene3d_size_y = ${c.text()}`); c.advance(); }
+        } else if (attr === 'bounce' && rawTag.startsWith('Physics.')) {
+          // bounce={N} → physics_restitution
+          if (c.kind() === TK.lbrace) { c.advance(); if (c.kind() === TK.number) { nodeFields.push(`.physics_restitution = ${c.text()}`); c.advance(); } if (c.kind() === TK.rbrace) c.advance(); }
+          else if (c.kind() === TK.number) { nodeFields.push(`.physics_restitution = ${c.text()}`); c.advance(); }
+        } else if (attr === 'mass' && rawTag.startsWith('Physics.')) {
+          // mass={N} → physics_density
+          if (c.kind() === TK.lbrace) { c.advance(); if (c.kind() === TK.number) { nodeFields.push(`.physics_density = ${c.text()}`); c.advance(); } if (c.kind() === TK.rbrace) c.advance(); }
+          else if (c.kind() === TK.number) { nodeFields.push(`.physics_density = ${c.text()}`); c.advance(); }
+        } else if (attr === 'gravity' && rawTag === 'Physics.World') {
+          // gravity={[x, y]} → physics_gravity_x/y
+          if (c.kind() === TK.lbrace) {
+            c.advance(); if (c.kind() === TK.lbracket) { c.advance();
+              const vals = [];
+              while (c.kind() !== TK.rbracket && c.kind() !== TK.eof) {
+                let neg = ''; if (c.kind() === TK.minus) { neg = '-'; c.advance(); }
+                if (c.kind() === TK.number) { vals.push(neg + c.text()); c.advance(); }
+                if (c.kind() === TK.comma) c.advance();
+              }
+              if (c.kind() === TK.rbracket) c.advance();
+              if (vals[0]) nodeFields.push(`.physics_gravity_x = ${vals[0]}`);
+              if (vals[1]) nodeFields.push(`.physics_gravity_y = ${vals[1]}`);
+            } if (c.kind() === TK.rbrace) c.advance();
+          }
+        } else if (attr === 'paused' && rawTag === 'Physics.World') {
+          // paused={expr} → skip for now (runtime handles via JS)
+          if (c.kind() === TK.lbrace) { skipBraces(c); }
+          else if (c.kind() === TK.identifier) c.advance();
+        } else if (attr === 'color' && rawTag.startsWith('Physics.')) {
+          // color="#hex" → background_color style
+          if (c.kind() === TK.string) {
+            const val = c.text().slice(1, -1);
+            styleFields.push(`.background_color = ${parseColor(val)}`);
+            c.advance();
+          } else if (c.kind() === TK.lbrace) { skipBraces(c); }
+        } else if (attr === 'rotate' && rawTag.startsWith('3D.')) {
+          // rotate={[x, y, z]} → scene3d_rot_x/y/z
+          if (c.kind() === TK.lbrace) {
+            c.advance(); if (c.kind() === TK.lbracket) { c.advance();
+              const vals = [];
+              while (c.kind() !== TK.rbracket && c.kind() !== TK.eof) {
+                let neg = ''; if (c.kind() === TK.minus) { neg = '-'; c.advance(); }
+                if (c.kind() === TK.number) { vals.push(neg + c.text()); c.advance(); }
+                if (c.kind() === TK.comma) c.advance();
+              }
+              if (c.kind() === TK.rbracket) c.advance();
+              if (vals[0]) nodeFields.push(`.scene3d_rot_x = ${vals[0]}`);
+              if (vals[1]) nodeFields.push(`.scene3d_rot_y = ${vals[1]}`);
+              if (vals[2]) nodeFields.push(`.scene3d_rot_z = ${vals[2]}`);
+            } if (c.kind() === TK.rbrace) c.advance();
+          }
+        } else if (attr === 'type' && rawTag === '3D.Light') {
+          // type="ambient" / type="directional" → scene3d_light_type
+          if (c.kind() === TK.string) {
+            nodeFields.push(`.scene3d_light_type = "${c.text().slice(1, -1)}"`);
+            c.advance();
+          }
+        } else if (attr === 'direction' && rawTag === '3D.Light') {
+          // direction={[x, y, z]} → scene3d_dir_x/y/z
+          if (c.kind() === TK.lbrace) {
+            c.advance(); if (c.kind() === TK.lbracket) { c.advance();
+              const vals = [];
+              while (c.kind() !== TK.rbracket && c.kind() !== TK.eof) {
+                let neg = ''; if (c.kind() === TK.minus) { neg = '-'; c.advance(); }
+                if (c.kind() === TK.number) { vals.push(neg + c.text()); c.advance(); }
+                if (c.kind() === TK.comma) c.advance();
+              }
+              if (c.kind() === TK.rbracket) c.advance();
+              if (vals[0]) nodeFields.push(`.scene3d_dir_x = ${vals[0]}`);
+              if (vals[1]) nodeFields.push(`.scene3d_dir_y = ${vals[1]}`);
+              if (vals[2]) nodeFields.push(`.scene3d_dir_z = ${vals[2]}`);
+            } if (c.kind() === TK.rbrace) c.advance();
+          }
         } else if (attr === 'bold') {
           // bold attribute (no value) → .bold = true
           nodeFields.push('.bold = true');
@@ -746,8 +919,12 @@ function parseJSXElement(c) {
   // </Tag> or </C.Name>
   if (c.kind() === TK.lt_slash) {
     c.advance();
-    const closingTag = c.kind() === TK.identifier ? c.text() : '?';
+    let closingTag = c.kind() === TK.identifier ? c.text() : '?';
     if (c.kind() === TK.identifier) c.advance(); // skip tag name (or "C")
+    // Handle </3D...> — number "3" + identifier "D"
+    if (closingTag === '?' && c.kind() === TK.number && c.text() === '3') {
+      c.advance(); if (c.kind() === TK.identifier && c.text() === 'D') { closingTag = '3D'; c.advance(); }
+    }
     let closingFull = closingTag;
     if (c.kind() === TK.dot) { c.advance(); if (c.kind() === TK.identifier) { closingFull += '.' + c.text(); c.advance(); } } // skip .Name
     if (c.kind() === TK.gt) c.advance();

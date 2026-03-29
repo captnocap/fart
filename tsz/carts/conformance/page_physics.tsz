@@ -1,0 +1,51 @@
+// Conformance test: Physics.* and 3D shorthand in <page> mode
+// Tests: Physics.World/Wall/Ball, 3D.Floor/Cube/Sphere/Cylinder, at/size/radius/rotate
+
+<page route=PhysicsTest>
+  <var>
+    paused is false
+    frame is 0
+  </var>
+
+  <state>
+    set_paused
+    set_frame
+  </state>
+
+  <functions>
+    togglePause:
+      set_paused to !paused
+
+    tick:
+      paused exact true ? stop : go
+      set_frame to frame + 1
+  </functions>
+
+  return(
+    <Box style={{ flexDirection: 'column', padding: 16, backgroundColor: '#0f172a', width: '100%', height: '100%' }}>
+      <Text style={{ fontSize: 22, color: '#f8fafc' }}>Physics + 3D Test</Text>
+
+      <Box style={{ height: 200 }}>
+        <Physics.World gravity={[0, 980]}>
+          <Physics.Wall at={[140, 190]} size={[260, 10]} bounce={0.3} />
+          <Physics.Wall at={[10, 100]} size={[10, 200]} bounce={0.5} />
+          <Physics.Ball at={[80, 30]} radius={12} color="#ef4444" bounce={0.8} />
+          <Physics.Ball at={[160, 50]} radius={10} color="#3b82f6" bounce={0.85} mass={1.2} />
+          <Physics.Box at={[200, 20]} size={[20, 20]} color="#22c55e" bounce={0.75} />
+        </Physics.World>
+      </Box>
+
+      <Box style={{ height: 200 }}>
+        <Scene3D style={{ width: '100%', height: '100%' }}>
+          <3D.Camera at={[0, 4, 8]} lookAt={[0, 0, 0]} fov={60} />
+          <3D.Light type="ambient" intensity={0.3} />
+          <3D.Light type="directional" direction={[1, -1, 1]} intensity={0.8} />
+          <3D.Floor size={[8, 8]} color="#1e293b" />
+          <3D.Cube size={1.5} color="#ef4444" at={[-1.5, 0.75, 0]} rotate={[0, 45, 0]} />
+          <3D.Sphere radius={0.8} color="#22c55e" at={[1.5, 0.8, 0]} />
+          <3D.Cylinder radius={0.4} height={2} color="#a855f7" at={[0, 1, -2]} />
+        </Scene3D>
+      </Box>
+    </Box>
+  )
+</page>
