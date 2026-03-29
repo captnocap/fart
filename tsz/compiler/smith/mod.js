@@ -565,17 +565,18 @@ function modTranspileExpr(expr) {
   let e = expr.trim();
   // exact → ==
   e = e.replace(/\bexact\b/g, '==');
-  // Prefix known enum variants with . (but not if already prefixed or part of a dotted access)
+  // Prefix known enum variants with . when used as values (after = or ==)
+  // Do NOT prefix when used as LHS of comparison (e.g. paused == true where paused is a var)
   if (_modEnumVariants && _modEnumVariants.length > 0) {
     for (let v = 0; v < _modEnumVariants.length; v++) {
       var vname = _modEnumVariants[v];
-      // Match standalone enum variant (not preceded by . or followed by . or ()
-      // Must be after = or == or space, not part of a.b.variant
-      e = e.replace(new RegExp('(?<=[=\\s,;(])' + vname + '(?=[\\s;,)=]|$)', 'g'), '.' + vname);
-      // Also handle at start of expression
-      if (e === vname || e.startsWith(vname + ' ') || e.startsWith(vname + ';')) {
-        e = '.' + e;
-      }
+      // Match after = (assignment or comparison RHS), comma, semicolon, open paren
+      // Use capture group instead of variable-length lookbehind for QuickJS compat
+      e = e.replace(new RegExp('([=,;(] ?)' + vname + '(?=[\\s;,)=]|$)', 'g'), '$1.' + vname);
+      // Also match after == with space
+      e = e.replace(new RegExp('(== ?)' + vname + '(?=[\\s;,)=]|$)', 'g'), '$1.' + vname);
+      // Bare variant as entire expression
+      if (e === vname) e = '.' + vname;
     }
   }
   // and / or
@@ -687,7 +688,7 @@ function emitModBody(lines, startIdx, typeNames, depth, allVariants, retType) {
     // Return
     if (text.startsWith('return ')) { out += ind + 'return ' + modTranspileExpr(text.slice(7)) + ';\n'; i++; continue; }
     // Switch
-    const switchMatch = text.match(/^switch\s+(\w+):$/);
+    const switchMatch = text.match(/^switch\s+(.+):$/);
     if (switchMatch) {
       out += ind + 'switch (' + switchMatch[1] + ') {\n'; i++;
       while (i < lines.length) {
