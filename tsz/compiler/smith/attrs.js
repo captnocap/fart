@@ -66,20 +66,27 @@ function parseStyleValue(c) {
       c.advance();
       return { type: 'state', value: name, zigExpr: slotGet(name) };
     }
-    // Map item member access: tag.field
+    // Map item member access: tag.field (supports multi-level: tag.config.theme.bg)
     if (ctx.currentMap && name === ctx.currentMap.itemParam) {
       c.advance(); // skip item name
       if (c.kind() === TK.dot) {
         c.advance(); // skip .
         if (c.kind() === TK.identifier) {
-          const field = c.text();
+          let field = c.text(); c.advance();
+          // Multi-level dot access: item.config.theme.bg → config_theme_bg
+          while (c.kind() === TK.dot && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.identifier) {
+            c.advance(); field += '_' + c.text(); c.advance();
+          }
           const oa = ctx.currentMap.oa;
           const fi = oa.fields.find(f => f.name === field);
-          c.advance();
           if (fi) {
             const oaIdx = oa.oaIdx;
             const zigExpr = fi.type === 'string' ? `_oa${oaIdx}_${field}[_i][0.._oa${oaIdx}_${field}_lens[_i]]` : `_oa${oaIdx}_${field}[_i]`;
             return { type: 'map_field', value: `_oa${oaIdx}_${field}[_i]`, zigExpr, fieldType: fi.type };
+          } else {
+            // Field exists but wasn't in schema — emit anyway
+            const oaIdx = oa.oaIdx;
+            return { type: 'map_field', value: `_oa${oaIdx}_${field}[_i]`, zigExpr: `_oa${oaIdx}_${field}[_i]`, fieldType: 'int' };
           }
         }
       }
@@ -132,8 +139,11 @@ function parseTernaryBranch(c, key) {
       if (isGetter(n)) { rhs = slotGet(n); }
       else if (ctx.currentMap && n === ctx.currentMap.indexParam) { rhs = '@as(i64, @intCast(_i))'; }
       else if (ctx.currentMap && n === ctx.currentMap.itemParam && c.kind() === TK.dot) {
-        c.advance(); if (c.kind() === TK.identifier) { const field = c.text(); c.advance(); const oa = ctx.currentMap.oa;
-          if (oa) { const fi = oa.fields.find(f => f.name === field); if (fi) { rhs = fi.type === 'string' ? `_oa${oa.oaIdx}_${field}[_i][0.._oa${oa.oaIdx}_${field}_lens[_i]]` : `_oa${oa.oaIdx}_${field}[_i]`; if (fi.type === 'string') rhsIsString = true; } else { rhs = n + '.' + field; } } else { rhs = n + '.' + field; }
+        c.advance(); if (c.kind() === TK.identifier) { let field = c.text(); c.advance();
+          // Multi-level dot access: item.config.theme.bg → config_theme_bg
+          while (c.kind() === TK.dot && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.identifier) { c.advance(); field += '_' + c.text(); c.advance(); }
+          const oa = ctx.currentMap.oa;
+          if (oa) { const fi = oa.fields.find(f => f.name === field); if (fi) { rhs = fi.type === 'string' ? `_oa${oa.oaIdx}_${field}[_i][0.._oa${oa.oaIdx}_${field}_lens[_i]]` : `_oa${oa.oaIdx}_${field}[_i]`; if (fi.type === 'string') rhsIsString = true; } else { rhs = `_oa${oa.oaIdx}_${field}[_i]`; } } else { rhs = n + '.' + field; }
         }
       }
       else if (ctx.propStack && ctx.propStack[n] !== undefined) { rhs = ctx.propStack[n]; }

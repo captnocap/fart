@@ -457,23 +457,24 @@ function tryParseConditional(c, children) {
       } else if (ctx.currentMap && name === ctx.currentMap.indexParam) {
         condParts.push('@as(i64, @intCast(_i))');
       } else if (ctx.currentMap && name === ctx.currentMap.itemParam) {
-        // Map item parameter: check for .field access
+        // Map item parameter: check for .field access (supports multi-level: item.config.theme.bg)
         c.advance();
         if (c.kind() === TK.dot) {
           c.advance();
           if (c.kind() === TK.identifier) {
-            const field = c.text();
+            let field = c.text(); c.advance();
+            // Consume additional dot chains: .config.theme.bg → config_theme_bg
+            while (c.kind() === TK.dot && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.identifier) {
+              c.advance(); // skip .
+              field += '_' + c.text(); c.advance();
+            }
             const oa = ctx.currentMap.oa;
             if (oa) {
-              const fi = oa.fields.find(f => f.name === field);
-              if (fi) {
-                condParts.push(`_oa${oa.oaIdx}_${field}[_i]`);
-              } else {
-                condParts.push(`_oa${oa.oaIdx}_${field}[_i]`);
-              }
+              condParts.push(`_oa${oa.oaIdx}_${field}[_i]`);
             } else {
               condParts.push('0');
             }
+            continue; // already advanced past field
           }
         } else {
           condParts.push('@as(i64, @intCast(_i))');
@@ -645,13 +646,18 @@ function tryParseTernaryText(c, children) {
         if (c.kind() === TK.dot) {
           c.advance();
           if (c.kind() === TK.identifier) {
-            const field = c.text();
+            let field = c.text(); c.advance();
+            // Multi-level dot access: item.config.theme.bg → config_theme_bg
+            while (c.kind() === TK.dot && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.identifier) {
+              c.advance(); field += '_' + c.text(); c.advance();
+            }
             const oa = ctx.currentMap.oa;
             if (oa) {
               condParts.push(`_oa${oa.oaIdx}_${field}[_i]`);
             } else {
               condParts.push('0');
             }
+            continue;
           }
         } else {
           condParts.push('@as(i64, @intCast(_i))');

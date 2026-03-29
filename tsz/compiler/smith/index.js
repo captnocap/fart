@@ -317,6 +317,39 @@ function collectState(c) {
                         c.advance();
                       }
                       else if (c.isIdent('true') || c.isIdent('false')) { ftype = 'boolean'; c.advance(); }
+                      else if (c.kind() === TK.lbrace) {
+                        // Nested object field: config: { theme: { primary: 0x000000 } }
+                        // Recursively collect leaf fields with flattened names (e.g., config_theme_primary)
+                        // Stores explicit jsPath for JS property access chain
+                        const flatFields = [];
+                        const collectFlat = function(prefix, pathSoFar) {
+                          c.advance(); // skip {
+                          while (c.kind() !== TK.rbrace && c.kind() !== TK.eof) {
+                            if (c.kind() === TK.identifier) {
+                              const nf = c.text(); c.advance();
+                              if (c.kind() === TK.colon) c.advance();
+                              const fullName = prefix + '_' + nf;
+                              const fullPath = pathSoFar.concat([nf]);
+                              if (c.kind() === TK.lbrace) {
+                                collectFlat(fullName, fullPath);
+                              } else {
+                                let nft = 'int';
+                                if (c.kind() === TK.string) { nft = 'string'; c.advance(); }
+                                else if (c.kind() === TK.number) { const nv = c.text(); nft = nv.startsWith('0x') ? 'int' : (nv.includes('.') ? 'float' : 'int'); c.advance(); }
+                                else if (c.isIdent('true') || c.isIdent('false')) { nft = 'boolean'; c.advance(); }
+                                flatFields.push({ name: fullName, type: nft, jsPath: fullPath });
+                              }
+                            }
+                            if (c.kind() === TK.comma) c.advance();
+                            else if (c.kind() !== TK.rbrace) c.advance();
+                          }
+                          if (c.kind() === TK.rbrace) c.advance();
+                        };
+                        collectFlat(fname, [fname]);
+                        for (const ff of flatFields) fields.push(ff);
+                        if (c.kind() === TK.comma) c.advance();
+                        continue;
+                      }
                       else if (c.kind() === TK.lbracket) {
                         // Nested array field: items: [{ label: '', value: 0 }]
                         // Create a child OA for the nested array

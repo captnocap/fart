@@ -387,6 +387,30 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
           out += `        }\n`;
           out += `        qjs.JS_FreeValue(c2, _nested_arr);\n`;
           out += `        }\n`;
+        } else if (f.jsPath && f.jsPath.length > 1) {
+          // Nested object field: chain JS_GetPropertyStr calls
+          out += `        {\n`;
+          let parent = 'elem';
+          for (let pi = 0; pi < f.jsPath.length - 1; pi++) {
+            out += `        const _obj_${pi} = qjs.JS_GetPropertyStr(c2, ${parent}, "${f.jsPath[pi]}");\n`;
+            parent = `_obj_${pi}`;
+          }
+          const leaf = f.jsPath[f.jsPath.length - 1];
+          out += `        const _v = qjs.JS_GetPropertyStr(c2, ${parent}, "${leaf}");\n`;
+          if (f.type === 'string') {
+            out += `        const _s = qjs.JS_ToCString(c2, _v);\n`;
+            out += `        qjs.JS_FreeValue(c2, _v);\n`;
+            out += `        _oaFreeString(&_oa${idx}_${f.name}[_i], &_oa${idx}_${f.name}_lens[_i]);\n`;
+            out += `        if (_s) |ss| { const sl = std.mem.span(ss); _oa${idx}_${f.name}[_i] = _oaDupString(sl); _oa${idx}_${f.name}_lens[_i] = _oa${idx}_${f.name}[_i].len; qjs.JS_FreeCString(c2, _s); }\n`;
+          } else {
+            out += `        var _n: i64 = 0; _ = qjs.JS_ToInt64(c2, &_n, _v);\n`;
+            out += `        qjs.JS_FreeValue(c2, _v); _oa${idx}_${f.name}[_i] = _n;\n`;
+          }
+          // Free intermediate objects in reverse order
+          for (let pi = f.jsPath.length - 2; pi >= 0; pi--) {
+            out += `        qjs.JS_FreeValue(c2, _obj_${pi});\n`;
+          }
+          out += `        }\n`;
         } else if (f.type === 'string') {
           out += `        { const _v = qjs.JS_GetPropertyStr(c2, elem, "${f.name}");\n`;
           out += `        const _s = qjs.JS_ToCString(c2, _v);\n`;
