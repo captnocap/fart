@@ -1215,52 +1215,6 @@ function emitOneFunction(sig, rawBodyLines, typeNames, allVariants) {
   out += '}\n\n';
   return out;
 }
-function _unusedOldFunctionsBlock(content, typeNames) {
-  let out = '\n';
-  const lines = content.split('\n');
-  let i = 0;
-
-  while (i < lines.length) {
-    const line = lines[i];
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('//')) { i++; continue; }
-
-    // Function signature: name(params): RetType
-    const fnMatch = trimmed.match(/^(\w+)\(([^)]*)\)\s*(?::\s*(\S+))?\s*$/);
-    if (fnMatch) {
-      const fname = fnMatch[1];
-      const params = fnMatch[2];
-      const ret = fnMatch[3] || 'void';
-      const zigParams = modTranspileParams(params);
-      const zigRet = modTranspileType(ret);
-
-      out += 'pub fn ' + fname + '(' + zigParams + ') ' + zigRet + ' {\n';
-
-      // Collect indented body lines
-      i++;
-      const bodyLines = [];
-      while (i < lines.length) {
-        const bl = lines[i];
-        // Body lines are indented (at least 2 more spaces than the function sig)
-        // or empty. Stop at next function sig or end.
-        if (bl.trim() === '') { bodyLines.push(''); i++; continue; }
-        const indent = bl.match(/^(\s*)/)[1].length;
-        if (indent < 4 && bl.trim().match(/^\w+\(/)) break; // next function
-        if (indent < 4 && !bl.trim().startsWith('//')) break;
-        bodyLines.push(bl.trim());
-        i++;
-      }
-
-      out += emitFunctionBody(bodyLines, typeNames, 1);
-      out += '}\n\n';
-      continue;
-    }
-
-    i++;
-  }
-  return out;
-}
-
 function modTranspileParams(params) {
   if (!params.trim()) return '';
   return params.split(',').map(function(p) {
