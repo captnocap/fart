@@ -84,6 +84,7 @@ function resetCtx() {
     scriptBlock: null,     // raw JS from <script>...</script>
     scriptFuncs: [],       // function names defined in <script>
     classifiers: {},       // {Name: {type, style, fontSize, color, ...}} from .cls imports
+    renderLocals: {},      // {varName: resolvedValue} — variables between function App() and return
     _debugLines: [],       // debug output lines (emitted as Zig comments)
   };
 }
@@ -610,7 +611,76 @@ function compile() {
   }
   if (appStart < 0) return '// Smith error: no App function found\n';
 
-  // Find return
+  // Collect render-local variables between function body and return statement.
+  // Uses save/restore to avoid disturbing the cursor for the main parse.
+  // Love2D reference: tslx_compile.mjs:196-206 (renderLocals substitution)
+  ctx.renderLocals = {};
+  {
+    const rlSaved = c.save();
+    c.pos = appStart;
+    // Skip function signature: function Name(...) {
+    while (c.pos < c.count && c.kind() !== TK.lbrace) c.advance();
+    if (c.kind() === TK.lbrace) c.advance();
+    // Scan statements until 'return' — collect simple const/let assignments
+    while (c.pos < c.count) {
+      if (c.isIdent('return')) break;
+      if (c.isIdent('const') || c.isIdent('let')) {
+        c.advance();
+        // Skip destructured: [getter, setter] = useState(...)
+        if (c.kind() === TK.lbracket) {
+          let bd = 1; c.advance();
+          while (c.pos < c.count && bd > 0) {
+            if (c.kind() === TK.lbracket) bd++;
+            if (c.kind() === TK.rbracket) bd--;
+            c.advance();
+          }
+          // Skip past = useState(...)
+          while (c.pos < c.count && c.kind() !== TK.rparen && !c.isIdent('const') && !c.isIdent('let') && !c.isIdent('return')) c.advance();
+          if (c.kind() === TK.rparen) c.advance();
+          continue;
+        }
+        if (c.kind() === TK.identifier) {
+          const varName = c.text();
+          c.advance();
+          if (c.kind() === TK.equals) {
+            c.advance();
+            let valParts = [];
+            let depth = 0;
+            while (c.pos < c.count) {
+              if (c.kind() === TK.semicolon && depth === 0) { c.advance(); break; }
+              // Stop at statement boundaries (no semicolons in .tsz)
+              if (depth === 0 && c.kind() === TK.identifier && (c.text() === 'const' || c.text() === 'let' || c.text() === 'return' || c.text() === 'function')) break;
+              if (c.kind() === TK.lparen || c.kind() === TK.lbracket || c.kind() === TK.lbrace) depth++;
+              if (c.kind() === TK.rparen || c.kind() === TK.rbracket || c.kind() === TK.rbrace) {
+                depth--;
+                if (depth < 0) break;
+              }
+              // Resolve state getters, earlier render locals, and add spacing around operators
+              if (c.kind() === TK.identifier && ctx.renderLocals[c.text()] !== undefined) {
+                valParts.push(ctx.renderLocals[c.text()]);
+              } else if (c.kind() === TK.identifier && isGetter(c.text())) {
+                valParts.push(slotGet(c.text()));
+              } else if (c.kind() === TK.star || c.kind() === TK.plus || c.kind() === TK.minus || c.kind() === TK.slash || c.kind() === TK.percent) {
+                valParts.push(' ' + c.text() + ' ');
+              } else {
+                valParts.push(c.text());
+              }
+              c.advance();
+            }
+            const valStr = valParts.join('');
+            if (!valStr.includes('useState')) {
+              ctx.renderLocals[varName] = valStr;
+            }
+          }
+        }
+        continue;
+      }
+      c.advance();
+    }
+    c.restore(rlSaved);
+  }
+
+  // Find return (original path — cursor starts fresh from appStart)
   c.pos = appStart;
   while (c.pos < c.count) {
     if (c.isIdent('return')) { c.advance(); if (c.kind() === TK.lparen) c.advance(); break; }

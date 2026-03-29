@@ -90,6 +90,16 @@ function parseStyleValue(c) {
       c.advance();
       return { type: 'map_index', value: name, zigExpr: `@as(i64, @intCast(_i))` };
     }
+    // Render-local variable reference
+    if (ctx.renderLocals && ctx.renderLocals[name] !== undefined) {
+      c.advance();
+      const rlv = ctx.renderLocals[name];
+      if (/^-?\d+(\.\d+)?$/.test(rlv)) return { type: 'number', value: rlv };
+      if (rlv.startsWith('#') || namedColors[rlv]) return { type: 'string', value: rlv };
+      const isZigExpr = rlv.includes('state.get') || rlv.includes('getSlot') || rlv.includes('_oa') || rlv.includes('@as');
+      if (isZigExpr) return { type: 'state', value: name, zigExpr: rlv };
+      return { type: 'number', value: rlv };
+    }
     // Prop reference — detect type from prop value
     if (ctx.propStack[name] !== undefined) {
       c.advance();

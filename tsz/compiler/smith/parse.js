@@ -176,6 +176,7 @@ function parseJSXElement(c) {
                         }
                       }
                       if (isGetter(expr)) { val = slotGet(expr); break; }
+                      if (ctx.renderLocals && ctx.renderLocals[expr] !== undefined) { val = ctx.renderLocals[expr]; break; }
                       val += c.text(); // unresolved — keep as-is
                       break;
                     }
@@ -183,6 +184,7 @@ function parseJSXElement(c) {
                   ti++;
                 }
               } else if (c.kind() === TK.identifier && isGetter(c.text())) val += slotGet(c.text());
+              else if (c.kind() === TK.identifier && ctx.renderLocals && ctx.renderLocals[c.text()] !== undefined) val += ctx.renderLocals[c.text()];
               else if (c.kind() === TK.identifier && ctx.currentMap && c.text() === ctx.currentMap.indexParam) val += '@as(i64, @intCast(_i))';
               else {
                 // Check parent map index params with bridge resolution
@@ -198,8 +200,10 @@ function parseJSXElement(c) {
                   }
                 }
                 if (!resolved) {
-                  // Check propStack for component prop references
-                  if (c.kind() === TK.identifier && ctx.propStack && ctx.propStack[c.text()] !== undefined) {
+                  // Check render locals, then propStack for component prop references
+                  if (c.kind() === TK.identifier && ctx.renderLocals && ctx.renderLocals[c.text()] !== undefined) {
+                    val += ctx.renderLocals[c.text()];
+                  } else if (c.kind() === TK.identifier && ctx.propStack && ctx.propStack[c.text()] !== undefined) {
                     val += ctx.propStack[c.text()];
                   } else {
                     val += c.text();
@@ -971,6 +975,14 @@ function parseTemplateLiteral(raw) {
         } else {
           fmt += expr;
         }
+      } else if (ctx.renderLocals && ctx.renderLocals[expr] !== undefined) {
+        // Render-local variable substitution in template literal
+        const rlVal = ctx.renderLocals[expr];
+        const isNum = /^-?\d+(\.\d+)?$/.test(rlVal);
+        const isZigExpr = rlVal.includes('state.get') || rlVal.includes('getSlot') || rlVal.includes('_oa') || rlVal.includes('@as');
+        if (isNum) { fmt += '{d}'; args.push(rlVal); }
+        else if (isZigExpr) { fmt += '{d}'; args.push(leftFoldExpr(rlVal)); }
+        else { fmt += rlVal; }
       } else if (ctx.propStack[expr] !== undefined) {
         // Prop substitution — use the concrete prop value
         const propVal = ctx.propStack[expr];
@@ -1497,6 +1509,23 @@ function parseChildren(c) {
         c.advance();
         if (c.kind() === TK.rbrace) c.advance();
         for (const ch of ctx.componentChildren) children.push(ch);
+        continue;
+      }
+      // {renderLocal} — substitute render-local variables (Love2D: renderLocals)
+      if (c.kind() === TK.identifier && ctx.renderLocals && ctx.renderLocals[c.text()] !== undefined) {
+        const rlVal = ctx.renderLocals[c.text()];
+        c.advance();
+        if (c.kind() === TK.rbrace) c.advance();
+        // Zig runtime expressions → dynamic text buffer
+        const isZigExpr = rlVal.includes('state.get') || rlVal.includes('getSlot') || rlVal.includes('_oa') || rlVal.includes('@as');
+        if (isZigExpr) {
+          const bufId = ctx.dynCount;
+          ctx.dynTexts.push({ bufId, fmtString: '{d}', fmtArgs: leftFoldExpr(rlVal), arrName: '', arrIndex: 0, bufSize: 64 });
+          ctx.dynCount++;
+          children.push({ nodeExpr: `.{ .text = "" }`, dynBufId: bufId });
+        } else {
+          children.push({ nodeExpr: `.{ .text = "${rlVal}" }` });
+        }
         continue;
       }
       // {expr} — check props first, then state getters
