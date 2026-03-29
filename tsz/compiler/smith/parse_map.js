@@ -247,11 +247,15 @@ function parseTemplateLiteral(raw) {
           const rhsSlot = findSlot(m[3].trim());
           const rhsVal = rhsSlot >= 0 ? slotGet(m[3].trim()) : m[3].trim();
           fmt += '{d}';
-          args.push(`${slotGet(m[1])} ${m[2]} ${rhsVal}`);
+          if (m[2] === '/') args.push(`@divTrunc(${slotGet(m[1])}, ${rhsVal})`);
+          else if (m[2] === '%') args.push(`@mod(${slotGet(m[1])}, ${rhsVal})`);
+          else args.push(`${slotGet(m[1])} ${m[2]} ${rhsVal}`);
         } else if (ctx.currentMap && m[1] === ctx.currentMap.indexParam) {
           // Map index param in arithmetic: ${i + 1}, ${i - 1}, etc.
           fmt += '{d}';
-          args.push(`@as(i64, @intCast(_i)) ${m[2]} ${m[3].trim()}`);
+          if (m[2] === '/') args.push(`@divTrunc(@as(i64, @intCast(_i)), ${m[3].trim()})`);
+          else if (m[2] === '%') args.push(`@mod(@as(i64, @intCast(_i)), ${m[3].trim()})`);
+          else args.push(`@as(i64, @intCast(_i)) ${m[2]} ${m[3].trim()}`);
         } else {
           fmt += expr;
         }
