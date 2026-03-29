@@ -346,6 +346,14 @@ function emitOneFunction(sig, rawBodyLines, typeNames, allVariants) {
   if (!fnMatch) return '';
   const fname = fnMatch[1]; const params = fnMatch[2]; const ret = fnMatch[3] || 'void';
   const zigParams = modTranspileParams(params); const zigRet = modTranspileType(ret);
+  // Extract param names for local var scoping
+  const paramNames = [];
+  if (params.trim()) {
+    params.split(',').forEach(function(p) {
+      const pm = p.trim().match(/^(\w+)/);
+      if (pm) paramNames.push(pm[1]);
+    });
+  }
   const bodyLines = [];
   for (let i = 0; i < rawBodyLines.length; i++) {
     const raw = rawBodyLines[i]; const trimmed = raw.trim();
@@ -356,7 +364,7 @@ function emitOneFunction(sig, rawBodyLines, typeNames, allVariants) {
     return emitMapFunction(fname, zigParams, zigRet, bodyLines[0].text, typeNames);
   }
   let out = 'pub fn ' + fname + '(' + zigParams + ') ' + zigRet + ' {\n';
-  out += emitModBody(bodyLines, 0, typeNames, 1, allVariants, zigRet);
+  out += emitModBody(bodyLines, 0, typeNames, 1, allVariants, zigRet, paramNames);
   out += '}\n\n';
   return out;
 }
@@ -685,9 +693,10 @@ function transpileStringConcat(expr) {
   return 'std.fmt.bufPrint(&buf, "' + fmt + '", .{' + argStr + '}) catch ""';
 }
 
-function emitModBody(lines, startIdx, typeNames, depth, allVariants, retType) {
+function emitModBody(lines, startIdx, typeNames, depth, allVariants, retType, paramNames) {
   let out = '';
   const ind = '    '.repeat(depth);
+  const knownVars = (_modStateVars || []).concat(paramNames || []);
   var guardRetVal = 'return';
   if (retType && retType !== 'void') {
     if (retType === 'bool') guardRetVal = 'return false';
@@ -742,9 +751,9 @@ function emitModBody(lines, startIdx, typeNames, depth, allVariants, retType) {
       const target = modTranspileExpr(assignMatch[1].trim());
       const val = modTranspileExpr(assignMatch[2].trim());
       // Local variable declaration: bare identifier = expr → var name[: Type] = val
-      // BUT NOT if it's a known state variable (those are module-level, already declared)
+      // BUT NOT if it's a known state variable or function parameter
       const rawTarget = assignMatch[1].trim();
-      if (/^\w+$/.test(rawTarget) && !rawTarget.includes('.') && !rawTarget.includes('[') && _modStateVars.indexOf(rawTarget) === -1) {
+      if (/^\w+$/.test(rawTarget) && !rawTarget.includes('.') && !rawTarget.includes('[') && knownVars.indexOf(rawTarget) === -1) {
         const inferredType = inferTypeFromValue(assignMatch[2].trim());
         if (inferredType) {
           out += ind + 'var ' + target + ': ' + inferredType + ' = ' + val + ';\n'; i++; continue;
