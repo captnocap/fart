@@ -249,6 +249,89 @@ fn hostResetPathFlow(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JS
     return QJS_UNDEFINED;
 }
 
+/// Resolve the app root directory from /proc/self/exe.
+/// Self-extracting binaries: /proc/self/exe → <root>/lib/ld-linux-x86-64.so.2 → returns <root>/
+/// Non-self-extracting:      /proc/self/exe → <root>/app.bin → returns <root>/
+/// Returns the length of the directory path in buf (including trailing slash), or 0 on failure.
+var _app_dir_buf: [4096]u8 = undefined;
+var _app_dir_len: usize = 0;
+var _app_dir_resolved: bool = false;
+
+fn resolveAppDir() usize {
+    if (_app_dir_resolved) return _app_dir_len;
+    _app_dir_resolved = true;
+
+    const exe_path = std.posix.readlink("/proc/self/exe", &_app_dir_buf) catch return 0;
+    var dir_end: usize = exe_path.len;
+    // Strip filename
+    while (dir_end > 0 and _app_dir_buf[dir_end - 1] != '/') dir_end -= 1;
+    if (dir_end == 0) return 0;
+    // If exe is inside lib/, go up one more level
+    if (dir_end >= 4 and std.mem.eql(u8, _app_dir_buf[dir_end - 4 .. dir_end], "lib/")) {
+        dir_end -= 4;
+        if (dir_end > 0 and _app_dir_buf[dir_end - 1] == '/') {
+            // already at parent's trailing slash
+        } else {
+            while (dir_end > 0 and _app_dir_buf[dir_end - 1] != '/') dir_end -= 1;
+        }
+    }
+    _app_dir_len = dir_end;
+    return dir_end;
+}
+
+/// __get_app_dir() → string: the app's root directory (where `run` wrapper + app.bin live).
+/// Useful in scripts that need to reference sibling files or spawn processes.
+fn hostGetAppDir(ctx: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    const c2 = ctx orelse return QJS_UNDEFINED;
+    const dir_len = resolveAppDir();
+    if (dir_len == 0) return qjs.JS_NewStringLen(c2, "", 0);
+    return qjs.JS_NewStringLen(c2, &_app_dir_buf, dir_len);
+}
+
+/// __get_run_path() → string: full path to the `run` wrapper script.
+fn hostGetRunPath(ctx: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    const c2 = ctx orelse return QJS_UNDEFINED;
+    const dir_len = resolveAppDir();
+    if (dir_len == 0) return qjs.JS_NewStringLen(c2, "", 0);
+    const run_suffix = "run";
+    if (dir_len + run_suffix.len >= _app_dir_buf.len) return qjs.JS_NewStringLen(c2, "", 0);
+    var buf: [4096]u8 = undefined;
+    @memcpy(buf[0..dir_len], _app_dir_buf[0..dir_len]);
+    @memcpy(buf[dir_len .. dir_len + run_suffix.len], run_suffix);
+    return qjs.JS_NewStringLen(c2, &buf, dir_len + run_suffix.len);
+}
+
+/// Spawn a copy of the current app with TSZ_DEBUG=1. Returns child PID (or -1 on failure).
+/// Uses the `run` wrapper script (sibling of app.bin) which sets up ld-linux + library-path.
+fn hostSpawnSelf(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    const process_mod = @import("process.zig");
+    const log_mod = @import("log.zig");
+    const dir_len = resolveAppDir();
+    if (dir_len == 0) {
+        log_mod.info(.engine, "spawn_self: failed to resolve app directory", .{});
+        return qjs.JS_NewFloat64(null, -1);
+    }
+    // Build path to `run` wrapper
+    const run_suffix = "run";
+    if (dir_len + run_suffix.len >= _app_dir_buf.len) return qjs.JS_NewFloat64(null, -1);
+    var run_buf: [4096]u8 = undefined;
+    @memcpy(run_buf[0..dir_len], _app_dir_buf[0..dir_len]);
+    @memcpy(run_buf[dir_len .. dir_len + run_suffix.len], run_suffix);
+    run_buf[dir_len + run_suffix.len] = 0;
+    const run_z: [*:0]const u8 = @ptrCast(run_buf[0 .. dir_len + run_suffix.len :0]);
+    log_mod.info(.engine, "spawn_self: run_path={s}", .{run_z});
+    const child = process_mod.spawn(.{
+        .exe = run_z,
+        .env = &.{.{ .key = "TSZ_DEBUG", .value = "1" }},
+        .new_session = false,
+    }) catch |err| {
+        log_mod.info(.engine, "spawn_self: spawn failed: {s}", .{@errorName(err)});
+        return qjs.JS_NewFloat64(null, -1);
+    };
+    log_mod.info(.engine, "spawn_self: child pid={d}", .{child.pid});
+    return qjs.JS_NewFloat64(null, @floatFromInt(child.pid));
+}
+
 fn hostSetFlowEnabled(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
     const svg_path = @import("svg_path.zig");
     if (argc < 1) return QJS_UNDEFINED;
@@ -281,6 +364,22 @@ fn hostGetMouseY(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValu
     var my: f32 = 0;
     _ = c.SDL_GetMouseState(&mx, &my);
     return qjs.JS_NewFloat64(null, @floatCast(my));
+}
+
+fn hostClipboardSet(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    if (argc < 1) return QJS_UNDEFINED;
+    const str = qjs.JS_ToCString(ctx, argv[0]);
+    if (str == null) return QJS_UNDEFINED;
+    defer qjs.JS_FreeCString(ctx, str);
+    _ = c.SDL_SetClipboardText(str);
+    return QJS_UNDEFINED;
+}
+
+fn hostClipboardGet(ctx: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    const clip = c.SDL_GetClipboardText();
+    if (clip == null) return qjs.JS_NewString(ctx, "");
+    defer c.SDL_free(@ptrCast(clip));
+    return qjs.JS_NewString(ctx, clip);
 }
 fn hostGetMouseDown(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
     var mx: f32 = 0;
@@ -1233,6 +1332,18 @@ const JS_IFTTT =
     \\    console.log('[IFTTT]', m[1], event || '');
     \\    return;
     \\  }
+    \\
+    \\  // clipboard:<text> — copy text to system clipboard
+    \\  if ((m = action.match(/^clipboard:(.+)$/))) {
+    \\    __clipboard_set(m[1]);
+    \\    return;
+    \\  }
+    \\
+    \\  // notification:<msg> — log with notification prefix (OS notifications TODO)
+    \\  if ((m = action.match(/^notification:(.+)$/))) {
+    \\    console.log('[NOTIFICATION]', m[1]);
+    \\    return;
+    \\  }
     \\}
     \\
     \\// ── Public API ──
@@ -1710,6 +1821,8 @@ pub fn initVM() void {
     _ = qjs.JS_SetPropertyStr(ctx, global, "getMouseDown", qjs.JS_NewCFunction(ctx, hostGetMouseDown, "getMouseDown", 0));
     _ = qjs.JS_SetPropertyStr(ctx, global, "isKeyDown", qjs.JS_NewCFunction(ctx, hostIsKeyDown, "isKeyDown", 1));
     _ = qjs.JS_SetPropertyStr(ctx, global, "getMouseRightDown", qjs.JS_NewCFunction(ctx, hostGetMouseRightDown, "getMouseRightDown", 0));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__clipboard_set", qjs.JS_NewCFunction(ctx, hostClipboardSet, "__clipboard_set", 1));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__clipboard_get", qjs.JS_NewCFunction(ctx, hostClipboardGet, "__clipboard_get", 0));
     _ = qjs.JS_SetPropertyStr(ctx, global, "heavy_compute", qjs.JS_NewCFunction(ctx, hostHeavyCompute, "heavy_compute", 1));
     _ = qjs.JS_SetPropertyStr(ctx, global, "heavy_compute_timed", qjs.JS_NewCFunction(ctx, hostHeavyComputeTimed, "heavy_compute_timed", 1));
     _ = qjs.JS_SetPropertyStr(ctx, global, "set_compute_n", qjs.JS_NewCFunction(ctx, hostSetComputeN, "set_compute_n", 1));
@@ -1727,6 +1840,10 @@ pub fn initVM() void {
     // Per-path flow override (hover mode)
     _ = qjs.JS_SetPropertyStr(ctx, global, "setPathFlow", qjs.JS_NewCFunction(ctx, hostSetPathFlow, "setPathFlow", 2));
     _ = qjs.JS_SetPropertyStr(ctx, global, "resetPathFlow", qjs.JS_NewCFunction(ctx, hostResetPathFlow, "resetPathFlow", 0));
+    // Process spawning + app path resolution
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__spawn_self", qjs.JS_NewCFunction(ctx, hostSpawnSelf, "__spawn_self", 0));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__get_app_dir", qjs.JS_NewCFunction(ctx, hostGetAppDir, "__get_app_dir", 0));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__get_run_path", qjs.JS_NewCFunction(ctx, hostGetRunPath, "__get_run_path", 0));
 
     // Telemetry host functions — unified snapshot access
     _ = qjs.JS_SetPropertyStr(ctx, global, "__tel_frame", qjs.JS_NewCFunction(ctx, hostTelFrame, "__tel_frame", 0));

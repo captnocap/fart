@@ -449,6 +449,13 @@ function emitLogicBlocks(ctx) {
         if (oa.isNested || oa.isConst) continue;
         jsLines.push(`function ${oa.setter}(v) { ${oa.getter} = v; __setObjArr${oa.oaIdx}(v); }`);
       }
+      // Auto-push initial OA data to Zig side — script block may have set initial values
+      // that need to flow through __setObjArr to be visible in the node tree.
+      // Without this, data defined in <script> stays in JS-land and maps render empty.
+      for (const oa of ctx.objectArrays) {
+        if (oa.isNested || oa.isConst) continue;
+        jsLines.push(`if (${oa.getter} && ${oa.getter}.length > 0) ${oa.setter}(${oa.getter});`);
+      }
       // Add __mapPress_N handlers to JS_LOGIC so map handlers dispatch through QuickJS
       for (let mi = 0; mi < ctx.maps.length; mi++) {
         const m = ctx.maps[mi];

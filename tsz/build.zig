@@ -37,7 +37,7 @@ pub fn build(b: *std.Build) void {
     full_step.dependOn(&full_install.step);
 
     // ── App binary (compiled .tsz app) ──────────────────────────────
-    const app_name = b.option([]const u8, "app-name", "Output binary name (set by compiler)") orelse "tsz-app";
+    const app_name = b.option([]const u8, "app-name", "Output binary name (set by compiler)") orelse "app";
     const app_source = b.option([]const u8, "app-source", "Source .zig file to compile (default: generated_app.zig)") orelse "generated_app.zig";
     const app_exe = addAppExe(b, target, optimize, wgpu_mod, app_name, .full, sysroot, app_source);
     const app_install = b.addInstallArtifact(app_exe, .{});

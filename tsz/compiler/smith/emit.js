@@ -1325,7 +1325,15 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
           out += `        _map_pool_${mi}[_i] = ${poolNode};\n`;
         }
       } else {
-        out += `        _map_pool_${mi}[_i] = ${m.templateExpr};\n`;
+        // Single-node map template (no inner array) — wire dynamic text refs
+        // into the templateExpr before emitting. Without this, .text = "" stays empty.
+        let tExpr = m.templateExpr;
+        for (let dti = 0; dti < mapDynTexts.length; dti++) {
+          const dt = mapDynTexts[dti];
+          const ti = dt._mapTextIdx;
+          tExpr = tExpr.replace('.text = ""', `.text = _map_texts_${mi}_${ti}[_i]`);
+        }
+        out += `        _map_pool_${mi}[_i] = ${tExpr};\n`;
       }
 
       // Deferred canvas attributes — dynamic gx/gy/d from map item fields
@@ -1497,11 +1505,39 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
 
   out += `\n`;
 
+  // Input submit/change handler functions (onSubmit, onChangeText on TextInput)
+  if (ctx._inputSubmitHandlers) {
+    for (const h of ctx._inputSubmitHandlers) {
+      out += `fn _inputSubmit${h.inputId}() void {\n`;
+      out += `    qjs_runtime.evalExpr("${h.jsBody.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}");\n`;
+      out += `}\n`;
+    }
+  }
+  if (ctx._inputChangeHandlers) {
+    for (const h of ctx._inputChangeHandlers) {
+      out += `fn _inputChange${h.inputId}() void {\n`;
+      out += `    qjs_runtime.evalExpr("${h.jsBody.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}");\n`;
+      out += `}\n`;
+    }
+  }
+
   // _appInit
   out += `fn _appInit() void {\n    _initState();\n`;
   for (const oa of ctx.objectArrays) {
     if (oa.isNested || oa.isConst) continue; // nested OAs unpacked by parent, const OAs are static
     out += `    qjs_runtime.registerHostFn("__setObjArr${oa.oaIdx}", @ptrCast(&_oa${oa.oaIdx}_unpack), 1);\n`;
+  }
+  // Register input submit/change callbacks
+  const input_mod = `@import("${prefix}input.zig")`;
+  if (ctx._inputSubmitHandlers) {
+    for (const h of ctx._inputSubmitHandlers) {
+      out += `    ${input_mod}.setOnSubmit(${h.inputId}, &_inputSubmit${h.inputId});\n`;
+    }
+  }
+  if (ctx._inputChangeHandlers) {
+    for (const h of ctx._inputChangeHandlers) {
+      out += `    ${input_mod}.setOnChange(${h.inputId}, &_inputChange${h.inputId});\n`;
+    }
   }
   if (hasDynText) out += `    _updateDynamicTexts();\n`;
   if (hasConds) out += `    _updateConditionals();\n`;
