@@ -467,8 +467,13 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
   const _emittedMapArrays = new Set();
   // Pre-compute per-map metadata (innerCount, innerArr, mapDynTexts, etc.) for both passes
   const _mapMeta = [];
+  const _hasFlatMaps = ctx.maps.some(m => !m.isNested && !m.isInline);
   if (ctx.maps.length > 0) {
     out += `\n// ── Map pools ───────────────────────────────────────────────────\n`;
+    // Pool arena for dynamic node allocation (replaces static [MAX]Node arrays for flat maps)
+    if (_hasFlatMaps) {
+      out += `var _pool_arena: std.heap.ArenaAllocator = std.heap.ArenaAllocator.init(std.heap.page_allocator);\n`;
+    }
     // Pre-scan: compute handler field refs BEFORE any map emission needs them
     for (let _pmi = 0; _pmi < ctx.maps.length; _pmi++) {
       const _pm = ctx.maps[_pmi];
@@ -523,7 +528,7 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
         out += `var _map_count_${mi}: [MAX_INLINE_OUTER_${mi}]usize = undefined;\n`;
       } else {
         out += `const MAX_MAP_${mi}: usize = 4096;\n`;
-        out += `var _map_pool_${mi}: [MAX_MAP_${mi}]Node = undefined;\n`;
+        out += `var _map_pool_${mi}: []Node = undefined;\n`;
         out += `var _map_count_${mi}: usize = 0;\n`;
       }
 
@@ -590,9 +595,10 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
             mapPerItemDecls.push({ name: arrName, decl, elemCount: count });
             if (m.isInline) {
               out += `var _map_${arrName}_${mi}: [MAX_INLINE_OUTER_${mi}][MAX_MAP_${mi}][${count}]Node = undefined;\n`;
-            } else {
+            } else if (m.isNested) {
               out += `var _map_${arrName}_${mi}: [MAX_MAP_${mi}][${count}]Node = undefined;\n`;
             }
+            // flat map per-item arrays: allocated from pool in rebuild
           } else {
             out += decl + '\n';
           }
@@ -622,10 +628,10 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
       if (innerCount > 0) {
         if (m.isInline) {
           out += `var _map_inner_${mi}: [MAX_INLINE_OUTER_${mi}][MAX_MAP_${mi}][${innerCount}]Node = undefined;\n`;
-        } else {
-          const sizeConst = m.isNested ? `MAX_FLAT_${mi}` : `MAX_MAP_${mi}`;
-          out += `var _map_inner_${mi}: [${sizeConst}][${innerCount}]Node = undefined;\n`;
+        } else if (m.isNested) {
+          out += `var _map_inner_${mi}: [MAX_FLAT_${mi}][${innerCount}]Node = undefined;\n`;
         }
+        // flat map inner arrays: allocated from pool per-iteration in rebuild
       }
 
       // Per-item text buffers for dynamic texts inside the map
@@ -688,6 +694,7 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
 
       out += `fn _rebuildMap${mi}() void {\n`;
       out += `    _map_count_${mi} = @min(_oa${m.oaIdx}_len, MAX_MAP_${mi});\n`;
+      out += `    _map_pool_${mi} = _pool_arena.allocator().alloc(Node, _map_count_${mi}) catch unreachable;\n`;
       out += `    for (0.._map_count_${mi}) |_i| {\n`;
 
       // Emit per-item text formatting
@@ -731,7 +738,11 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
           const otherMap = ctx.maps[mj];
           if (!otherMap._mapPerItemDecls) continue;
           for (const pid2 of otherMap._mapPerItemDecls) {
-            fixedContent = fixedContent.replace(new RegExp(`&${pid2.name}\\b`, 'g'), `&_map_${pid2.name}_${mj}[_i]`);
+            if (!otherMap.isNested && !otherMap.isInline) {
+              fixedContent = fixedContent.replace(new RegExp(`&${pid2.name}\\b`, 'g'), `_pi_${pid2.name}_${mj}`);
+            } else {
+              fixedContent = fixedContent.replace(new RegExp(`&${pid2.name}\\b`, 'g'), `&_map_${pid2.name}_${mj}[_i]`);
+            }
           }
         }
         // Replace dynamic text refs in this per-item array (skip inner array's texts)
@@ -775,7 +786,8 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
         if (idxParam !== '_i') {
           fixedContent = fixedContent.replace(new RegExp(`\\b${idxParam}\\b`, 'g'), '@as(i64, @intCast(_i))');
         }
-        out += `        _map_${pid.name}_${mi}[_i] = [${pid.elemCount}]Node{ ${fixedContent} };\n`;
+        out += `        const _pi_${pid.name}_${mi} = _pool_arena.allocator().alloc(Node, ${pid.elemCount}) catch unreachable;\n`;
+        out += `        @memcpy(_pi_${pid.name}_${mi}, &[_]Node{ ${fixedContent} });\n`;
       }
 
       // Per-item conditionals (visibility toggling inside map components)
@@ -785,7 +797,7 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
         if (cond.inMap && cond.mapIdx !== undefined && cond.mapIdx !== mi) continue;
         const pid = m._mapPerItemDecls.find(p => p.name === cond.arrName);
         if (!pid) continue;
-        const poolArr = `_map_${cond.arrName}_${mi}[_i]`;
+        const poolArr = `_pi_${cond.arrName}_${mi}`;
         // Resolve item.field references to OA field access
         let resolvedExpr = cond.condExpr;
         // DEBUG: trace map cond resolution
@@ -815,7 +827,7 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
         if (!dt.arrName || !m._mapPerItemDecls) continue;
         const pid = m._mapPerItemDecls.find(p => p.name === dt.arrName);
         if (!pid) continue;
-        const poolArr = `_map_${dt.arrName}_${mi}[_i]`;
+        const poolArr = `_pi_${dt.arrName}_${mi}`;
         out += `        ${poolArr}[${dt.arrIndex}].text = std.fmt.bufPrint(&_dyn_buf_${dt.bufId}, "${dt.fmtString}", .{ ${dt.fmtArgs} }) catch "";\n`;
       }
 
@@ -1107,7 +1119,7 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
 
         // Bind inline pool to parent's per-item array
         if (im.parentArr && _promotedToPerItem.has(im.parentArr)) {
-          out += `        _map_${im.parentArr}_${mi}[_i][${im.childIdx}].children = _map_pool_${imi}[_i][0.._map_count_${imi}[_i]];\n`;
+          out += `        _pi_${im.parentArr}_${mi}[${im.childIdx}].children = _map_pool_${imi}[_i][0.._map_count_${imi}[_i]];\n`;
         }
       }
 
@@ -1135,7 +1147,11 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
               const otherMap = ctx.maps[mj];
               if (!otherMap._mapPerItemDecls) continue;
               for (const pid of otherMap._mapPerItemDecls) {
-                inner = inner.replace(new RegExp(`&${pid.name}\\b`, 'g'), `&_map_${pid.name}_${mj}[_i]`);
+                if (!otherMap.isNested && !otherMap.isInline) {
+                  inner = inner.replace(new RegExp(`&${pid.name}\\b`, 'g'), `_pi_${pid.name}_${mj}`);
+                } else {
+                  inner = inner.replace(new RegExp(`&${pid.name}\\b`, 'g'), `&_map_${pid.name}_${mj}[_i]`);
+                }
               }
             }
             // Replace nested map shared children refs with per-group pool slices
@@ -1168,7 +1184,8 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
             if (innerIdxParam !== '_i') {
               inner = inner.replace(new RegExp(`\\b${innerIdxParam}\\b`, 'g'), '@as(i64, @intCast(_i))');
             }
-            out += `        _map_inner_${mi}[_i] = [${innerCount}]Node{ ${inner} };\n`;
+            out += `        const _inner_${mi} = _pool_arena.allocator().alloc(Node, ${innerCount}) catch unreachable;\n`;
+            out += `        @memcpy(_inner_${mi}, &[_]Node{ ${inner} });\n`;
           }
         }
 
@@ -1192,11 +1209,11 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
               resolvedExpr.includes('getSlotBool') || resolvedExpr.includes('std.mem.eql');
             if (cond.kind === 'show_hide') {
               const wrapped = isComp ? `(${resolvedExpr})` : `((${resolvedExpr}) != 0)`;
-              out += `        _map_inner_${mi}[_i][${cond.trueIdx}].style.display = if ${wrapped} .flex else .none;\n`;
+              out += `        _inner_${mi}[${cond.trueIdx}].style.display = if ${wrapped} .flex else .none;\n`;
             } else if (cond.kind === 'ternary_jsx') {
               const _w3 = isComp ? `(${resolvedExpr})` : `((${resolvedExpr}) != 0)`;
-              out += `        _map_inner_${mi}[_i][${cond.trueIdx}].style.display = if ${_w3} .flex else .none;\n`;
-              out += `        _map_inner_${mi}[_i][${cond.falseIdx}].style.display = if ${_w3} .none else .flex;\n`;
+              out += `        _inner_${mi}[${cond.trueIdx}].style.display = if ${_w3} .flex else .none;\n`;
+              out += `        _inner_${mi}[${cond.falseIdx}].style.display = if ${_w3} .none else .flex;\n`;
             }
           }
         }
@@ -1211,9 +1228,9 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
             // Check if parentArr is in the inner array
             const isInnerChild = innerArr && nm.parentArr === innerArr;
             if (isInnerChild) {
-              out += `        _map_inner_${mi}[_i][${nm.childIdx}].children = _map_pool_${nmi}[_i][0.._map_count_${nmi}[_i]];\n`;
+              out += `        _inner_${mi}[${nm.childIdx}].children = _map_pool_${nmi}[_i][0.._map_count_${nmi}[_i]];\n`;
             } else if (_promotedToPerItem.has(nm.parentArr)) {
-              out += `        _map_${nm.parentArr}_${mi}[_i][${nm.childIdx}].children = _map_pool_${nmi}[_i][0.._map_count_${nmi}[_i]];\n`;
+              out += `        _pi_${nm.parentArr}_${mi}[${nm.childIdx}].children = _map_pool_${nmi}[_i][0.._map_count_${nmi}[_i]];\n`;
             } else {
               out += `        ${nm.parentArr}[${nm.childIdx}].children = _map_pool_${nmi}[_i][0.._map_count_${nmi}[_i]];\n`;
             }
@@ -1223,14 +1240,18 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
         // Build pool node from template, replacing children ref + handler refs
         let poolNode = m.templateExpr;
         if (innerArr) {
-          poolNode = poolNode.replace(`&${innerArr}`, `&_map_inner_${mi}[_i]`);
+          poolNode = poolNode.replace(`&${innerArr}`, `_inner_${mi}`);
         }
         // Replace per-item array refs in pool node from ALL maps
         for (let mj = 0; mj < ctx.maps.length; mj++) {
           const otherMap = ctx.maps[mj];
           if (!otherMap._mapPerItemDecls) continue;
           for (const pid of otherMap._mapPerItemDecls) {
-            poolNode = poolNode.replace(new RegExp(`&${pid.name}\\b`, 'g'), `&_map_${pid.name}_${mj}[_i]`);
+            if (!otherMap.isNested && !otherMap.isInline) {
+              poolNode = poolNode.replace(new RegExp(`&${pid.name}\\b`, 'g'), `_pi_${pid.name}_${mj}`);
+            } else {
+              poolNode = poolNode.replace(new RegExp(`&${pid.name}\\b`, 'g'), `&_map_${pid.name}_${mj}[_i]`);
+            }
           }
         }
         // Replace handler refs with per-item handler string pointers
@@ -1299,7 +1320,7 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
         if (innerCount === 1 && !poolNode.includes('.display') && !poolNode.includes('.style')) {
           poolNode = poolNode.replace('.{', '.{ .style = .{},');
           out += `        _map_pool_${mi}[_i] = ${poolNode};\n`;
-          out += `        _map_pool_${mi}[_i].style.display = _map_inner_${mi}[_i][0].style.display;\n`;
+          out += `        _map_pool_${mi}[_i].style.display = _inner_${mi}[0].style.display;\n`;
         } else {
           out += `        _map_pool_${mi}[_i] = ${poolNode};\n`;
         }
@@ -1496,6 +1517,7 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
       }
     }
   }
+  if (_hasFlatMaps) out += `    _ = _pool_arena.reset(.retain_capacity);\n`;
   for (let mi = 0; mi < ctx.maps.length; mi++) {
     if (ctx.maps[mi].isNested || ctx.maps[mi].isInline) continue; // nested/inline rebuilds inlined into parent
     out += `    _rebuildMap${mi}();\n`;
@@ -1512,6 +1534,7 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
       if (ctx.maps.length > 0 || hasConds) {
         out += `    if (state.isDirty()) {\n`;
         if (hasConds) out += `        _updateConditionals();\n`;
+        if (_hasFlatMaps) out += `        _ = _pool_arena.reset(.retain_capacity);\n`;
         for (let mi = 0; mi < ctx.maps.length; mi++) {
           if (ctx.maps[mi].isNested || ctx.maps[mi].isInline) continue;
           out += `        _rebuildMap${mi}();\n`;
@@ -1524,6 +1547,7 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
       out += `    if (state.isDirty()) { _updateDynamicTexts();`;
       if (hasConds) out += ` _updateConditionals();`;
       out += `\n`;
+      if (_hasFlatMaps) out += `        _ = _pool_arena.reset(.retain_capacity);\n`;
       for (let mi = 0; mi < ctx.maps.length; mi++) {
         if (ctx.maps[mi].isNested || ctx.maps[mi].isInline) continue;
         out += `        _rebuildMap${mi}();\n`;

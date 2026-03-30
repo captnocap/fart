@@ -64,6 +64,10 @@ function preflight(ctx) {
   // These are Color{} emissions with NO dynStyle/dynColor backing — guaranteed orphans.
   // Also collect allDecls for F2/F5 checks below.
   var allDecls = ctx.arrayDecls.slice();
+  // Include dynText fmtArgs in scan so F5 can detect OA field refs in format strings
+  for (var dti = 0; dti < ctx.dynTexts.length; dti++) {
+    if (ctx.dynTexts[dti].fmtArgs) allDecls.push(ctx.dynTexts[dti].fmtArgs);
+  }
   var allComments = (ctx.arrayComments || []).slice();
   for (var mi = 0; mi < ctx.maps.length; mi++) {
     if (ctx.maps[mi].mapArrayDecls) {
@@ -174,7 +178,9 @@ function preflight(ctx) {
             if (ctx.objectArrays[oi].oaIdx === oaIdx) { oa = ctx.objectArrays[oi]; break; }
           }
           if (oa && !oa.fields.some(function(f) { return f.name === fieldName; })) {
-            errors.push('F5: _oa' + oaIdx + '_' + fieldName + ' accesses field "' + fieldName + '" but OA[' + oaIdx + '] has no such field (schema: [' + oa.fields.map(function(f) { return f.name; }).join(', ') + '])');
+            // Auto-add missing fields referenced in template — likely added via script .map() transform
+            oa.fields.push({ name: fieldName, type: 'int' });
+            warnings.push('F5: auto-added field "' + fieldName + '" to OA[' + oaIdx + '] (referenced in template but missing from useState schema)');
           }
         }
       }

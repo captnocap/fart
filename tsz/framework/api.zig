@@ -387,6 +387,58 @@ pub const engine = struct {
     }
 };
 
+// ── NodePool ───────────────────────────────────────────────────────
+/// Dynamic arena-backed node pool. Replaces static pre-allocated Node arrays.
+/// Nodes are allocated from an arena — contiguous, cache-friendly, stable pointers.
+/// Call reset() before each rebuild cycle to free all nodes at once.
+pub const NodePool = struct {
+    arena: std.heap.ArenaAllocator,
+    node_count: usize = 0,
+
+    pub fn init(backing: std.mem.Allocator) NodePool {
+        return .{ .arena = std.heap.ArenaAllocator.init(backing) };
+    }
+
+    /// Allocate a single node, return a stable pointer.
+    pub fn add(self: *NodePool, node: Node) *Node {
+        const slice = self.arena.allocator().alloc(Node, 1) catch @panic("NodePool: out of memory");
+        slice[0] = node;
+        self.node_count += 1;
+        return &slice[0];
+    }
+
+    /// Copy nodes into the pool, return a stable slice.
+    pub fn addSlice(self: *NodePool, nodes: []const Node) []Node {
+        const slice = self.arena.allocator().alloc(Node, nodes.len) catch @panic("NodePool: out of memory");
+        @memcpy(slice, nodes);
+        self.node_count += nodes.len;
+        return slice;
+    }
+
+    /// Allocate N zero-initialized nodes, return a stable slice to fill in.
+    pub fn allocChildren(self: *NodePool, n: usize) []Node {
+        const slice = self.arena.allocator().alloc(Node, n) catch @panic("NodePool: out of memory");
+        for (slice) |*s| s.* = .{};
+        self.node_count += n;
+        return slice;
+    }
+
+    /// Free all nodes at once. O(1). Call before each rebuild cycle.
+    pub fn reset(self: *NodePool) void {
+        _ = self.arena.reset(.retain_capacity);
+        self.node_count = 0;
+    }
+
+    /// How many nodes are currently live in the pool.
+    pub fn count(self: NodePool) usize {
+        return self.node_count;
+    }
+
+    pub fn deinit(self: *NodePool) void {
+        self.arena.deinit();
+    }
+};
+
 // ── QJS Runtime extern ──────────────────────────────────────────────
 pub const qjs_runtime = struct {
     pub extern fn rjit_qjs_register_host_fn(name: [*:0]const u8, fn_ptr: ?*const anyopaque, argc: u8) void;
