@@ -121,16 +121,16 @@ Operating system shell and app distribution layer. CartridgeOS manages windows, 
 | `.zscript.tsz` | JS script that compiles to Zig | `logic.zscript.tsz` |
 | `.cls.tsz` | Shared styles/classifiers | `styles.cls.tsz` |
 
-### `<script>` vs `<lscript>` vs `<zscript>` — when to use which
+### `<script>` vs `<lscript>` vs `<zscript>` vs `<ascript>` — when to use which
 
-Three script runtimes, each with different tradeoffs.
+Four script runtimes, each with different tradeoffs.
 
-| | `<script>` / `.script.tsz` | `<lscript>` | `<zscript>` / `.zscript.tsz` |
-|---|---|---|---|
-| **Runs in** | QuickJS (JS runtime) | LuaJIT (main-thread VM) | Native Zig (compiled into binary) |
-| **When** | Runtime — after app starts | Runtime — after app starts | Compile time — baked into the binary |
-| **Good for** | Timers, async fetches, dynamic data, mock data | Handler logic, conditionals, .map() logic, DSP, hot paths | Performance-critical math, tests, FFI, framework access |
-| **Speed** | 52M ops/sec — hits the wall there | 2–11x faster than QuickJS (JIT-compiled, traces warm after ~50 calls) | No ceiling — native Zig, keeps scaling |
+| | `<script>` / `.script.tsz` | `<lscript>` | `<zscript>` / `.zscript.tsz` | `<ascript>` |
+|---|---|---|---|---|
+| **Runs in** | QuickJS (JS runtime) | LuaJIT (main-thread VM) | Native Zig (compiled into binary) | NSAppleScript (macOS FFI) |
+| **When** | Runtime — after app starts | Runtime — after app starts | Compile time — baked into the binary | Runtime — on press |
+| **Good for** | Timers, async fetches, dynamic data, mock data | Handler logic, conditionals, .map() logic, DSP, hot paths | Performance-critical math, tests, FFI, framework access | macOS automation — control any app, read iMessage, Finder, notifications |
+| **Speed** | 52M ops/sec — hits the wall there | 2–11x faster than QuickJS (JIT-compiled, traces warm after ~50 calls) | No ceiling — native Zig, keeps scaling | Depends on target app |
 
 We benchmarked both paths extensively. The JS bridge does 52M setState calls/sec with zero FPS impact (`8b7451b1`) — JS is not the slow path. LuaJIT beats QuickJS across every test category: host calls, state bridge, conditionals, .map(), string templates, component render, pure compute, and event handlers. The widest gap is on nested ternary conditionals — the exact pattern Smith generates for dynamic styles and handler routing — where LuaJIT is **11.1x faster** (`cb47b7a1`). Use `<lscript>` when the logic is complex or runs frequently. Use `<zscript>` when you need direct Zig type system access, FFI, or you're writing test assertions.
 
@@ -168,6 +168,22 @@ var items = [
 setEarningData(items);
 ```
 
+### `<lscript>` — Lua at runtime (LuaJIT)
+
+Inline Lua that runs in the main-thread LuaJIT VM. 2–11x faster than QuickJS. Use for handler logic, .map() callbacks, conditionals, DSP, or anything that runs frequently.
+
+```tsx
+<lscript>
+function onItemPress(idx)
+  local item = items[idx]
+  setSelected(item.title)
+  __hostLog('selected: ' .. item.title)
+end
+</lscript>
+```
+
+LuaJIT traces warm after ~50 calls and JIT-compiles hot paths. The widest speedup over QuickJS is on nested ternary conditionals (11.1x) — the exact pattern Smith generates for dynamic styles.
+
 ### `<zscript>` — Zig at compile time
 
 Inline Zig code emitted directly into the generated source. Runs at native speed. Use for performance-critical logic, test functions, or direct framework access.
@@ -185,6 +201,24 @@ fn test_counter_increments() !void {
 ### `.zscript.tsz` — Zig as a file
 
 Standalone imperative Zig module — no JSX, compiles TypeScript-like code directly to a `.zig` module. Use for utility modules, math, data processing, or anything that should be pure native Zig with no runtime overhead.
+
+### `<ascript>` — AppleScript at runtime (macOS)
+
+Execute AppleScript from any `.tsz` app via NSAppleScript FFI. No subprocess — runs in-process through the ObjC runtime. Wraps its children as a pressable.
+
+```tsx
+<ascript run='tell application "Messages" to get every chat' onResult={setResult}>
+  <Text color="#aaaadd">Get iMessage Chats</Text>
+</ascript>
+
+<ascript run='display notification "Hello" with title "ReactJIT"' onResult={setResult}>
+  <Text color="#aaaadd">Send Notification</Text>
+</ascript>
+```
+
+`run` is the AppleScript string. `onResult` is a state setter that receives the result. Also available as a runtime function from JS/Lua: `__applescript('the clipboard')`.
+
+Demo: `carts/applescript-demo/`
 
 ## Quick Start
 
@@ -250,7 +284,7 @@ Cart binaries are 27MB (engine is shared, not embedded). Updating the engine doe
 
 ## Primitives
 
-`Box` `Text` `Image` `Video` `Render` `Pressable` `ScrollView` `TextInput` `TextArea` `Glyph` `Cartridge`
+`Box` `Text` `Image` `Video` `Render` `Pressable` `ScrollView` `TextInput` `TextArea` `Glyph` `Cartridge` `ascript`
 
 System surfaces: `Canvas` `Graph` `Physics` `Scene3d` `ThreeD` `Effect` `Terminal` `Audio`
 

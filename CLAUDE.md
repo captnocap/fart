@@ -56,9 +56,9 @@ ReactJIT is a TS-to-native compiler and UI framework. `.tsz` source (TypeScript 
 
 ## The Primitives (shared)
 
-`Box`, `Text`, `Image`, `Pressable`, `ScrollView`, `TextInput`, `Cartridge`
+`Box`, `Text`, `Image`, `Pressable`, `ScrollView`, `TextInput`, `Cartridge`, `ascript`
 
-Everything is composed from these. A dashboard is Boxes and Text. `<Cartridge src="app.so">` embeds a dynamically loaded .so app inline.
+Everything is composed from these. A dashboard is Boxes and Text. `<Cartridge src="app.so">` embeds a dynamically loaded .so app inline. `<ascript>` runs AppleScript on macOS (see below).
 
 ## Layout Rules (shared)
 
