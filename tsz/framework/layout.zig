@@ -921,10 +921,10 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
     const y = py + mt;
     const innerW = w - pl - pr;
     const autoHeight = h == null;
-    // Scroll containers: use unlimited inner height so children don't shrink to fit.
-    // The container itself will still be constrained to its explicit height.
-    const isScrollContainer = (s.overflow == .scroll or s.overflow == .auto) and h != null;
-    const innerH = if (h != null and !isScrollContainer) h.? - pt - pb else @as(f32, 9999);
+    // Scroll containers need TWO heights:
+    // - innerH: the REAL container height (for flex distribution — children share this space)
+    // - childLayoutH: unlimited (so children can overflow and be scrolled to)
+    const innerH = if (h != null) h.? - pt - pb else @as(f32, 9999);
     const isRow = s.flex_direction == .row;
     const gap = s.gap;
     const justify = s.justify_content;
@@ -969,7 +969,13 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
             const chClamped = clampVal(chVal, resolveMaybePct(cs.min_height, innerH), resolveMaybePct(cs.max_height, innerH));
             const grow = cs.flex_grow;
             const shrink = cs.flex_shrink orelse 1.0;
-            const basis = resolveMaybePct(cs.flex_basis, if (isRow) innerW else innerH) orelse (if (isRow) cwClamped else chClamped);
+            // flex_grow children with no explicit size: basis=0 so they don't inflate totalBasis
+            // and steal space from fixed-size siblings. They grow INTO free space, not FROM content.
+            const defaultBasis = if (grow > 0 and ((isRow and cs.width == null) or (!isRow and cs.height == null)))
+                @as(f32, 0)
+            else
+                (if (isRow) cwClamped else chClamped);
+            const basis = resolveMaybePct(cs.flex_basis, if (isRow) innerW else innerH) orelse defaultBasis;
             const cmL = marLeft(cs);
             const cmR = marRight(cs);
             const cmT = marTop(cs);

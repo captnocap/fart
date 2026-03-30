@@ -441,7 +441,10 @@ function parseJSXElement(c) {
       if (c.kind() === TK.equals) {
         c.advance();
         if (attr === 'style') {
-          styleFields = parseStyleBlock(c);
+          const inlineStyles = parseStyleBlock(c);
+          // Merge: inline styles win over pre-injected (e.g. ScrollView overflow)
+          const preInjected = styleFields.filter(f => !inlineStyles.some(s => s.split(' = ')[0] === f.split(' = ')[0]));
+          styleFields = preInjected.concat(inlineStyles);
         } else if (attr === 'onPress' || attr === 'onTap' || attr === 'onToggle' || attr === 'onSelect' || attr === 'onChange') {
           // Bare handler reference: onPress=functionName (no braces) — common in page mode
           if (c.kind() === TK.identifier && c.kindAt(c.pos + 1) !== TK.dot) {
@@ -1420,6 +1423,13 @@ function parseInlineGlyph(c) {
 }
 
 function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, srcOffset) {
+  // Auto-overflow: any Box with constrained height gets overflow:auto (clips + scrolls when content exceeds)
+  // Triggers on explicit height OR flexGrow (height comes from flex distribution, not content).
+  // This makes <ScrollView> unnecessary at the authoring level — constrained containers just work.
+  const _hasConstrainedH = styleFields.some(f => f.startsWith('.height') || f.startsWith('.flex_grow'));
+  if (tag === 'Box' && !styleFields.some(f => f.startsWith('.overflow')) && _hasConstrainedH) {
+    styleFields.push('.overflow = .auto');
+  }
   const parts = [];
   if (styleFields.length > 0) parts.push(`.style = .{ ${styleFields.join(', ')} }`);
 
