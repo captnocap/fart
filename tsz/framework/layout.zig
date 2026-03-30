@@ -328,6 +328,7 @@ pub const Node = struct {
     canvas_drift_x: f32 = 0, // horizontal drift speed (px/s, negative = left)
     canvas_drift_y: f32 = 0, // vertical drift speed (px/s, negative = up)
     canvas_drift_active: bool = false, // true = drift animation is running
+    canvas_auto_stacked: bool = false, // true = generative layout already applied this visit
     // Per-node theme override (0 = inherit global, 1+ = palette ID from registry)
     theme_id: u8 = 0,
     // Canvas.Node fields — position + size in parent canvas's coordinate space

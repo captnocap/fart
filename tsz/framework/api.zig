@@ -286,6 +286,7 @@ pub const Node = struct {
     canvas_drift_x: f32 = 0,
     canvas_drift_y: f32 = 0,
     canvas_drift_active: bool = false,
+    canvas_auto_stacked: bool = false,
     theme_id: u8 = 0,
     canvas_node: bool = false,
     canvas_gx: f32 = 0,

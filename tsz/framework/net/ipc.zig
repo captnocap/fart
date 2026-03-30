@@ -39,7 +39,7 @@ const std = @import("std");
 // Constants
 // ════════════════════════════════════════════════════════════════════════
 
-const MAX_MSG_SIZE = 65536; // max bytes per NDJSON line
+const MAX_MSG_SIZE = 262144; // max bytes per NDJSON line (256K — room for tree responses + telemetry)
 const READ_BUF_SIZE = 8192; // per-read chunk
 
 // ════════════════════════════════════════════════════════════════════════

@@ -645,6 +645,28 @@ noinline fn paintTerminal(node: *Node) void {
     }
 }
 
+/// Paint a single canvas child (Canvas.Path or Canvas.Node) with highlight + dim/flow.
+fn paintCanvasChild(child: *Node, child_idx: u16, hovered: ?u16, selected: ?u16) void {
+    if (child.canvas_node) {
+        const node_selected = selected != null and selected.? == child_idx;
+        const node_hovered = hovered != null and hovered.? == child_idx;
+        if (node_selected) {
+            const hw = child.canvas_gw / 2 + 5;
+            const hh = child.canvas_gh / 2 + 5;
+            gpu.drawRect(child.canvas_gx - hw, child.canvas_gy - hh, hw * 2, hh * 2, 0.5, 0.4, 1.0, 0.4, 8, 2, 2, 2, 2, 1.0);
+        } else if (node_hovered) {
+            const hw = child.canvas_gw / 2 + 4;
+            const hh = child.canvas_gh / 2 + 4;
+            gpu.drawRect(child.canvas_gx - hw, child.canvas_gy - hh, hw * 2, hh * 2, 0.4, 0.3, 0.9, 0.25, 8, 0, 0, 0, 0, 0);
+        }
+    }
+    g_paint_opacity = canvas.getNodeDim(child_idx);
+    g_flow_enabled = canvas.getFlowOverride(child_idx);
+    paintNode(child);
+    g_paint_opacity = 1.0;
+    g_flow_enabled = true;
+}
+
 /// Paint a Canvas container: transform setup, graph children, HUD layer.
 noinline fn paintCanvasContainer(node: *Node) void {
     const r = node.computed;
@@ -669,27 +691,18 @@ noinline fn paintCanvasContainer(node: *Node) void {
         const selected = canvas.getSelectedNode();
         var child_idx: u16 = 0;
         for (node.children) |*child| {
-            if (!child.canvas_clamp) {
-                if (child.canvas_node) {
-                    const node_selected = selected != null and selected.? == child_idx;
-                    const node_hovered = hovered != null and hovered.? == child_idx;
-                    if (node_selected) {
-                        const hw = child.canvas_gw / 2 + 5;
-                        const hh = child.canvas_gh / 2 + 5;
-                        gpu.drawRect(child.canvas_gx - hw, child.canvas_gy - hh, hw * 2, hh * 2, 0.5, 0.4, 1.0, 0.4, 8, 2, 2, 2, 2, 1.0);
-                    } else if (node_hovered) {
-                        const hw = child.canvas_gw / 2 + 4;
-                        const hh = child.canvas_gh / 2 + 4;
-                        gpu.drawRect(child.canvas_gx - hw, child.canvas_gy - hh, hw * 2, hh * 2, 0.4, 0.3, 0.9, 0.25, 8, 0, 0, 0, 0, 0);
-                    }
+            if (child.canvas_clamp) continue;
+            if (child.canvas_node or child.canvas_path) {
+                paintCanvasChild(child, child_idx, hovered, selected);
+                child_idx += 1;
+            } else {
+                // Flatten through non-canvas container (map pool wrapper)
+                for (child.children) |*gc| {
+                    if (gc.canvas_clamp) continue;
+                    paintCanvasChild(gc, child_idx, hovered, selected);
+                    child_idx += 1;
                 }
-                g_paint_opacity = canvas.getNodeDim(child_idx);
-                g_flow_enabled = canvas.getFlowOverride(child_idx);
-                paintNode(child);
-                g_paint_opacity = 1.0;
-                g_flow_enabled = true;
             }
-            child_idx += 1;
         }
     }
     gpu.resetTransform();
@@ -702,6 +715,13 @@ noinline fn paintCanvasContainer(node: *Node) void {
         if (child.canvas_clamp) {
             layout.layoutNode(child, r.x, r.y, r.w, r.h);
             paintNode(child);
+        } else if (!child.canvas_node and !child.canvas_path) {
+            for (child.children) |*gc| {
+                if (gc.canvas_clamp) {
+                    layout.layoutNode(gc, r.x, r.y, r.w, r.h);
+                    paintNode(gc);
+                }
+            }
         }
     }
     gpu.popScissor();

@@ -55,7 +55,7 @@ if not name then
 end
 
 local outdir = TSZ_DIR .. "zig-out/bin"
-local obj = source:gsub("%.zig$", ".o")
+local obj = source:match("([^/]+)%.zig$"):gsub("%.zig$", "") .. ".o"
 local binary = outdir .. "/" .. name
 
 -- ── Helpers ─────────────────────────────────────────────────────────
@@ -87,14 +87,12 @@ local function now_ms()
 end
 
 -- ── Preflight ───────────────────────────────────────────────────────
-if not file_exists(ENGINE_A) then
-    io.stderr:write("[link] Engine .a not found at " .. ENGINE_A .. "\n")
-    io.stderr:write("[link] Run: rjit core\n")
-    os.exit(1)
-end
-
-if not WGPU_A or not file_exists(WGPU_A) then
-    io.stderr:write("[link] wgpu_native.a not found in zig cache\n")
+local STABLE_SO = TSZ_DIR .. "zig-out/lib/libreactjit-core.stable.so"
+local has_so = file_exists(ENGINE_SO) or file_exists(STABLE_SO)
+local has_a = file_exists(ENGINE_A)
+if not has_so and not has_a then
+    io.stderr:write("[link] No engine found (.so or .a) in zig-out/lib/\n")
+    io.stderr:write("[link] Rebuild the engine first.\n")
     os.exit(1)
 end
 
@@ -165,27 +163,9 @@ end
 local t1 = now_ms()
 io.write(tostring(t1 - t0) .. "ms\n")
 
--- ── Step 2: Link .o + engine → binary ───────────────────────────────
--- Channel mode (default): launcher.c + dlopen — cart picks engine at runtime
--- Fallback: direct link against .a (fat static binary)
-local LAUNCHER = TSZ_DIR .. "framework/launcher.c"
-local use_channels = file_exists(LAUNCHER) and file_exists(TSZ_DIR .. "zig-out/lib/libreactjit-core.stable.so")
+-- ── Step 2: Link .o + engine .so → binary ───────────────────────────
 local link_cmd
-if use_channels then
-    -- Channel mode: launcher provides main(), cart exports main_cart()
-    -- launcher.c dlopen's the right engine .so based on --engine= flag
-    -- Link against stable.so for symbol resolution; dlopen overrides at runtime
-    link_cmd = table.concat({
-        "zig cc",
-        "-o " .. binary,
-        LAUNCHER,
-        obj,
-        TSZ_DIR .. "zig-out/lib/libreactjit-core.stable.so",
-        "-Wl,-rpath,$ORIGIN/../lib",
-        "-ldl -lm -lpthread",
-    }, " ")
-elseif file_exists(ENGINE_SO) then
-    -- Direct .so link (no channel selector)
+if file_exists(ENGINE_SO) then
     link_cmd = table.concat({
         "zig cc",
         "-o " .. binary,
@@ -212,7 +192,7 @@ end
 
 io.write("[link] link → " .. binary .. "... ")
 io.flush()
-if not run(link_cmd .. " 2>/dev/null") then
+if not run(link_cmd .. " 2>&1") then
     io.write("FAILED\n")
     os.exit(1)
 end

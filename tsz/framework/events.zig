@@ -62,7 +62,8 @@ fn hasHandlers(h: *const EventHandler) bool {
         h.on_submit != null or
         h.on_scroll != null or
         h.on_right_click != null or
-        h.lua_on_press != null;
+        h.lua_on_press != null or
+        h.js_on_press != null;
 }
 
 // ── Hover Hit Test (any node, not just ones with handlers) ──────────────

@@ -9,7 +9,7 @@
 
 const std = @import("std");
 
-pub const MAX_SLOTS = 256;
+pub const MAX_SLOTS = 512;
 
 const alloc = std.heap.page_allocator;
 

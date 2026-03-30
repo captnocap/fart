@@ -1626,14 +1626,8 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
     out += `export fn app_state_mark_dirty() void { state.markDirty(); }\n`;
   }
 
-  // Main
-  if (fastBuild) {
-    // Channel build: launcher.c provides main(), cart exports main_cart() via C ABI
-    out += `\n// Cart entry point — called by launcher after engine dlopen\nexport fn main_cart() c_int {\n`;
-    out += `    _main_inner() catch return 1;\n    return 0;\n}\nfn _main_inner() !void {\n`;
-  } else {
-    out += `\n// Standalone mode \u2014 when compiled as an executable directly (skipped in .so builds)\npub fn main() !void {\n`;
-  }
+  // Main — both fast and normal builds emit pub fn main for standalone exe
+  out += `\npub fn main() !void {\n`;
   if (!fastBuild) out += `    if (IS_LIB) return;\n`;
   out += `    try engine.run(.{\n`;
   out += `        .title = "${appName}",\n`;

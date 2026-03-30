@@ -352,7 +352,7 @@ function preflight(ctx) {
       tagNames[ctx._unknownSubsystemTags[sti].tag] = true;
     }
     var uniqueTags = Object.keys(tagNames);
-    errors.push('F13: ' + ctx._unknownSubsystemTags.length + ' unsupported subsystem tag(s): <' + uniqueTags.join('>, <') + '> — no runtime support, rendered as empty boxes');
+    warnings.push('F13: ' + ctx._unknownSubsystemTags.length + ' unsupported subsystem tag(s): <' + uniqueTags.join('>, <') + '> — no runtime support, rendered as empty boxes');
   }
 
   // ── F14: Ignored <module> blocks ──

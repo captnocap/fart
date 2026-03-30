@@ -131,7 +131,11 @@ pub fn disconnect() void {
 /// Poll for incoming messages. Must be called each frame.
 /// Returns true if a new response was received and cached.
 pub fn poll() bool {
-    var c = &(client orelse return false);
+    if (client == null) {
+        std.debug.print("[dc] poll: client=null\n", .{});
+        return false;
+    }
+    var c = &(client.?);
     if (c.dead) {
         disconnect();
         return false;
@@ -140,13 +144,18 @@ pub fn poll() bool {
     const msgs = c.poll();
     var got_response = false;
 
+    std.debug.print("[dc] poll: dead={} auth={} msgs={d} tree_cached={d}\n", .{ c.dead, authenticated, msgs.len, tree_node_count });
+
     for (msgs) |msg| {
         if (!authenticated) {
             handleChallenge(msg.data);
         } else {
             if (decryptResponse(msg.data)) {
                 got_response = true;
+                std.debug.print("[dc] decrypted {d} bytes\n", .{resp_cache_len});
                 parseResponse();
+            } else {
+                std.debug.print("[dc] DECRYPT FAILED: {d} byte wire msg\n", .{msg.data.len});
             }
         }
     }
@@ -316,14 +325,20 @@ fn parseResponse() void {
     const method = jsonStr(data, "method") orelse return;
 
     if (eql(method, "debug.tree")) {
+        std.debug.print("[ipc_client] parseTree: {d} bytes, parsing...\n", .{data.len});
         parseTree(data);
+        std.debug.print("[ipc_client] parseTree: got {d} nodes\n", .{tree_node_count});
     } else if (eql(method, "debug.perf") or eql(method, "debug.telemetry.frame")) {
         parsePerf(data);
     }
 }
 
 fn parseTree(data: []const u8) void {
-    const nodes_start = std.mem.indexOf(u8, data, "\"nodes\":[") orelse return;
+    const log2 = @import("log.zig");
+    const nodes_start = std.mem.indexOf(u8, data, "\"nodes\":[") orelse {
+        log2.info(.engine, "parseTree: no nodes array found in {d} bytes", .{data.len});
+        return;
+    };
     var i = nodes_start + 9;
     tree_node_count = 0;
 

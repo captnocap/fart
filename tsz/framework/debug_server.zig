@@ -31,6 +31,7 @@ var enabled: bool = false;
 var authenticated: bool = false;
 var awaiting_code: bool = false;
 var streaming_telemetry: bool = false;
+var last_push_ms: i64 = 0;
 var selected_node_id: i32 = -1;
 
 var our_keypair: X25519.KeyPair = undefined;
@@ -83,7 +84,13 @@ pub fn poll() void {
         }
     }
     if (streaming_telemetry and authenticated) {
-        pushTelemetryFrame(srv);
+        // Throttle to ~4 pushes/sec (every 250ms matches client poll rate)
+        // Prevents recv buffer overflow from 230fps frame spam
+        const now = @import("std").time.milliTimestamp();
+        if (now - last_push_ms >= 250) {
+            last_push_ms = now;
+            pushTelemetryFrame(srv);
+        }
     }
 }
 

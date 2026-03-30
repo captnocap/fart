@@ -2,29 +2,25 @@
 # Build a .tsz cart into a native binary.
 #
 # Usage:
-#   ./scripts/build carts/conformance/d01_nested_maps.tsz
-#   ./scripts/build carts/conformance/d01_nested_maps.tsz --debug
-#   ./scripts/build --fast carts/conformance/d01_nested_maps.tsz
+#   ./scripts/build carts/storybook/Storybook.tsz
+#   ./scripts/build carts/storybook/Storybook.tsz --debug
 #
-# --fast: compile cart against cached engine .a (~500ms vs 25s)
-#   On first run, builds the engine .a (one-time ~24s).
-#   Subsequent runs compile only the cart and link against the cached .a.
+# First run builds the engine .a (~24s one-time). Every build after: ~6s.
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 # ── Parse flags ──────────────────────────────────────────────────────
-FAST=0
 POSITIONAL=()
 for arg in "$@"; do
     case "$arg" in
-        --fast) FAST=1 ;;
+        --fast) ;; # ignored, fast is always on
         *) POSITIONAL+=("$arg") ;;
     esac
 done
 
 if [ "${#POSITIONAL[@]}" -eq 0 ]; then
-    echo "Usage: scripts/build [--fast] <cart.tsz> [--debug]"
+    echo "Usage: scripts/build <cart.tsz> [--debug]"
     exit 1
 fi
 
@@ -48,37 +44,9 @@ else
     ZIG_OPT="-Doptimize=ReleaseFast"
 fi
 
-# ── Fast path: engine .a + cart-only compile ─────────────────────────
-if [ "$FAST" -eq 1 ]; then
-    CORE_DIR="zig-out/lib"
-    CORE_CURRENT="${CORE_DIR}/libreactjit-core.current.a"
-    CORE_CANDIDATE="${CORE_DIR}/libreactjit-core.candidate.a"
-    CORE_LASTGOOD="${CORE_DIR}/libreactjit-core.lastgood.a"
-
-    # Build engine .a if current artifact is missing
-    if [ ! -f "$CORE_CURRENT" ]; then
-        echo "[$NAME] engine .a not found — building (one-time, ~24s)..."
-        zig build core $ZIG_OPT 2>&1
-        # Fresh build: promote directly to current (no prior lastgood)
-        mkdir -p "$CORE_DIR"
-        mv zig-out/lib/libreactjit-core.a "$CORE_CANDIDATE"
-        mv "$CORE_CANDIDATE" "$CORE_CURRENT"
-        echo "[$NAME] engine .a ready → $CORE_CURRENT"
-    fi
-
-    # Step 1: forge with --fast flag (api.zig imports)
-    echo "[$NAME] forge (fast)..."
-    ./zig-out/bin/forge build --fast "$CART" 2>&1
-
-    # Step 2: preflight lint (same checks — skipped below via FAST guard)
-    # (lint block runs after this section — FAST path falls through to lint)
-fi
-
-# Step 1 (normal): forge (smith compiler: tsz → zig)
-if [ "$FAST" -eq 0 ]; then
-    echo "[$NAME] forge..."
-    ./zig-out/bin/forge build --single "$CART" 2>&1
-fi
+# ── Step 1: forge (smith compiler: .tsz → .zig) ─────────────────────
+echo "[$NAME] forge..."
+./zig-out/bin/forge build --fast "$CART" 2>&1
 
 # If split output, concat all files for lint (grep needs a single target)
 SPLIT_LINT=0
@@ -88,7 +56,7 @@ if [ -d "$GEN_DIR" ] && [ ! -f "$GEN" ]; then
     SPLIT_LINT=1
 fi
 
-# ── Preflight block check — smith/preflight.js catches bugs before emit ──
+# ── Preflight block check ───────────────────────────────────────────
 if grep -q "PREFLIGHT BLOCKED" "$GEN" 2>/dev/null; then
     echo "[$NAME] PREFLIGHT BLOCKED:"
     grep "FATAL:\|WARN:" "$GEN" 2>/dev/null | sed 's/^\/\/! /  /'
@@ -97,13 +65,10 @@ if grep -q "PREFLIGHT BLOCKED" "$GEN" 2>/dev/null; then
     exit 1
 fi
 
-# ── Step 2: output-level lint — checks that require grepping generated Zig ──
+# ── Step 2: output-level lint ───────────────────────────────────────
 LINT_FAIL=0
 LINT_WARN=0
 
-# FATAL: Single-quoted multi-char strings (JS leaked into Zig)
-# Exclude: lines inside \\ JS string literals, and lines inside double-quoted strings
-# (single quotes inside "lua_on_press = '...'" are valid Zig)
 BAD_QUOTES=$(grep -n "'\w\w" "$GEN" 2>/dev/null | grep -v '^\s*[0-9]*:\s*\\\\' | grep -v 'lua_on_press' | grep -v 'js_on_press' | grep -v '^\s*[0-9]*:\s*//' | head -5 || true)
 if [ -n "$BAD_QUOTES" ]; then
     echo "[$NAME] LINT FAIL: JS string leaked into Zig (single-quoted multi-char):"
@@ -111,7 +76,6 @@ if [ -n "$BAD_QUOTES" ]; then
     LINT_FAIL=1
 fi
 
-# FATAL: Broken JS_LOGIC multiline string — any line not starting with \\ is raw JS leaking
 if grep -q '^const JS_LOGIC =' "$GEN" 2>/dev/null; then
     BAD_JS=$(sed -n '/^const JS_LOGIC =/,/^;$/p' "$GEN" | grep -v '^\s*\\\\' | grep -v '^const \|^;$' | head -5 || true)
     if [ -n "$BAD_JS" ]; then
@@ -121,12 +85,6 @@ if grep -q '^const JS_LOGIC =' "$GEN" 2>/dev/null; then
     fi
 fi
 
-# [MIGRATED TO PREFLIGHT] Handler ref missing (F2), handler unassigned (F1/F3),
-# map handler string literal (F3), JS + in Lua (F10), duplicate __mapPress (F7)
-# — all now caught by smith/preflight.js before emit. Removed from bash lint.
-
-# WARN: Shared static arrays referenced from per-item map nodes
-# If _map_inner_N children point to a non-per-item _arr_, all map items render identical content
 for MI in $(grep -oP '_map_inner_\d+' "$GEN" 2>/dev/null | sort -u || true); do
     MAP_NUM=${MI#_map_inner_}
     SHARED=$(grep "$MI\[_i\].*&_arr_" "$GEN" 2>/dev/null | head -3 || true)
@@ -136,10 +94,6 @@ for MI in $(grep -oP '_map_inner_\d+' "$GEN" 2>/dev/null | sort -u || true); do
     fi
 done
 
-# [MIGRATED TO PREFLIGHT] JS in LUA_LOGIC (F10), _map_lua_ptrs unused (W2),
-# Color{} placeholders (F4/W1) — all now caught by smith/preflight.js.
-
-# WARN: __setObjArr in LUA_LOGIC without registration
 if grep -q '__setObjArr' "$GEN" 2>/dev/null; then
     echo "[$NAME] LINT WARN: __setObjArr in generated code — verify LuaJIT registration"
     LINT_WARN=1
@@ -154,23 +108,81 @@ if [ "$LINT_WARN" -eq 1 ]; then
     echo "[$NAME] warnings above — building anyway but expect visual bugs"
 fi
 
-# Clean up temp lint file
 if [ "$SPLIT_LINT" -eq 1 ]; then rm -f "$GEN"; fi
 
-# Resolve source: prefer split directory (generated_X/app.zig) over monolith
+# Resolve source: prefer split directory over monolith
 if [ -d "$GEN_DIR" ] && [ -f "$GEN_DIR/app.zig" ]; then
     APP_SOURCE="$GEN_DIR/app.zig"
 else
     APP_SOURCE="$GEN"
 fi
 
-# Step 3: zig build
-if [ "$FAST" -eq 1 ]; then
-    echo "[$NAME] zig build (fast — cart-fast against cached engine)..."
-    zig build cart-fast -Dapp-name="$NAME" -Dapp-source="$APP_SOURCE" $ZIG_OPT 2>&1
-else
-    echo "[$NAME] zig build..."
-    zig build app -Dapp-name="$NAME" -Dapp-source="$APP_SOURCE" $ZIG_OPT 2>&1
+# ── Step 3: LuaJIT link (cart .zig → .o + engine .so → binary) ───────
+echo "[$NAME] zig build..."
+luajit scripts/link.lua "$APP_SOURCE" "$NAME" 2>&1
+
+# ── Step 4: Package as self-extracting binary ────────────────────────
+RAW_BIN="zig-out/bin/$NAME"
+if [ -f "$RAW_BIN" ] && [ "$OPT" != "--debug" ]; then
+    echo "[$NAME] packaging..."
+    TMP_DIR="/tmp/tsz-dist-$NAME"
+    LIB_DIR="$TMP_DIR/lib"
+    rm -rf "$TMP_DIR"
+    mkdir -p "$LIB_DIR"
+    cp "$RAW_BIN" "$TMP_DIR/app.bin"
+
+    LIB_COUNT=0
+    while IFS= read -r line; do
+        case "$line" in *linux-vdso*) continue ;; esac
+        lib_path=$(echo "$line" | sed -n 's/.* => \([^ ]*\) .*/\1/p')
+        [ -z "$lib_path" ] && continue
+        [ ! -f "$lib_path" ] && continue
+        real_path=$(readlink -f "$lib_path")
+        soname=$(echo "$line" | sed 's/^ *//;s/ *=>.*//')
+        cp "$real_path" "$LIB_DIR/$soname"
+        LIB_COUNT=$((LIB_COUNT + 1))
+    done < <(ldd "$RAW_BIN" 2>/dev/null)
+
+    LD_LINUX=$(readlink -f /lib64/ld-linux-x86-64.so.2 2>/dev/null)
+    if [ -n "$LD_LINUX" ] && [ -f "$LD_LINUX" ]; then
+        cp "$LD_LINUX" "$LIB_DIR/ld-linux-x86-64.so.2"
+
+        cat > "$TMP_DIR/run" << 'LAUNCHER'
+#!/bin/sh
+DIR="$(cd "$(dirname "$0")" && pwd)"
+exec "$DIR/lib/ld-linux-x86-64.so.2" --inhibit-cache --library-path "$DIR/lib" "$DIR/app.bin" "$@"
+LAUNCHER
+        chmod +x "$TMP_DIR/run"
+
+        TARBALL="/tmp/tsz-${NAME}-payload.tar.gz"
+        (cd "$TMP_DIR" && tar czf "$TARBALL" .)
+
+        cat > "$RAW_BIN" << HEADER
+#!/bin/sh
+set -e
+APP_DIR=\${XDG_CACHE_HOME:-\$HOME/.cache}/tsz-$NAME
+SIG=\$(md5sum "\$0" 2>/dev/null | cut -c1-8 || cksum "\$0" | cut -d" " -f1)
+CACHE="\$APP_DIR/\$SIG"
+if [ ! -f "\$CACHE/.ready" ]; then
+  rm -rf "\$APP_DIR"
+  mkdir -p "\$CACHE"
+  SKIP=\$(awk '/^__ARCHIVE__\$/{print NR + 1; exit}' "\$0")
+  tail -n+"\$SKIP" "\$0" | tar xz -C "\$CACHE"
+  touch "\$CACHE/.ready"
+fi
+exec "\$CACHE/run" "\$@"
+__ARCHIVE__
+HEADER
+        cat "$TARBALL" >> "$RAW_BIN"
+        chmod +x "$RAW_BIN"
+
+        SIZE_MB=$(du -m "$RAW_BIN" | cut -f1)
+        echo "[$NAME] packaged ${SIZE_MB}MB self-extracting ($LIB_COUNT libs)"
+        rm -rf "$TMP_DIR" "$TARBALL"
+    else
+        echo "[$NAME] WARNING: ld-linux not found, skipping packaging"
+        rm -rf "$TMP_DIR"
+    fi
 fi
 
 echo "[$NAME] done → zig-out/bin/$NAME"

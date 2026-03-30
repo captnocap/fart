@@ -22,6 +22,8 @@ pub const CameraTransform = struct {
 
 pub const MAX_CANVAS_INSTANCES: u8 = 16;
 
+const MAX_CANVAS_CHILDREN: usize = 8192;
+
 pub const CanvasInstance = struct {
     // Camera
     cam_x: f32 = 0,
@@ -32,11 +34,11 @@ pub const CanvasInstance = struct {
     hovered_node_idx: ?u16 = null,
     selected_node_idx: ?u16 = null,
 
-    // Node dim/flow overrides
-    node_dim_idx: ?u16 = null,
-    node_dim_opacity: f32 = 1.0,
-    flow_override_idx: ?u16 = null,
-    flow_override_enabled: bool = false,
+    // Per-child dim/flow overrides (indexed by flattened canvas child_idx)
+    node_dim: [MAX_CANVAS_CHILDREN]f32 = [_]f32{1.0} ** MAX_CANVAS_CHILDREN,
+    flow_override: [MAX_CANVAS_CHILDREN]bool = [_]bool{true} ** MAX_CANVAS_CHILDREN,
+    dim_active: bool = false, // true when any dim != 1.0
+    flow_active: bool = false, // true when any flow != true
 
     // Active flag — true once any operation has touched this instance
     active: bool = false,
@@ -228,8 +230,10 @@ pub fn setNodeDim(idx: u16, opacity: f32) void {
 
 pub fn setNodeDimFor(id: u8, idx: u16, opacity: f32) void {
     const ci = inst(id);
-    ci.node_dim_idx = idx;
-    ci.node_dim_opacity = opacity;
+    if (idx < MAX_CANVAS_CHILDREN) {
+        ci.node_dim[idx] = opacity;
+        if (opacity != 1.0) ci.dim_active = true;
+    }
 }
 
 pub fn resetNodeDim() void {
@@ -238,8 +242,8 @@ pub fn resetNodeDim() void {
 
 pub fn resetNodeDimFor(id: u8) void {
     const ci = inst(id);
-    ci.node_dim_idx = null;
-    ci.node_dim_opacity = 1.0;
+    @memset(&ci.node_dim, 1.0);
+    ci.dim_active = false;
 }
 
 pub fn setFlowOverride(idx: u16, enabled: bool) void {
@@ -248,8 +252,10 @@ pub fn setFlowOverride(idx: u16, enabled: bool) void {
 
 pub fn setFlowOverrideFor(id: u8, idx: u16, enabled: bool) void {
     const ci = inst(id);
-    ci.flow_override_idx = idx;
-    ci.flow_override_enabled = enabled;
+    if (idx < MAX_CANVAS_CHILDREN) {
+        ci.flow_override[idx] = enabled;
+        if (!enabled) ci.flow_active = true;
+    }
 }
 
 pub fn resetFlowOverride() void {
@@ -258,8 +264,8 @@ pub fn resetFlowOverride() void {
 
 pub fn resetFlowOverrideFor(id: u8) void {
     const ci = inst(id);
-    ci.flow_override_idx = null;
-    ci.flow_override_enabled = false;
+    @memset(&ci.flow_override, true);
+    ci.flow_active = false;
 }
 
 pub fn getNodeDim(idx: u16) f32 {
@@ -268,9 +274,7 @@ pub fn getNodeDim(idx: u16) f32 {
 
 pub fn getNodeDimFor(id: u8, idx: u16) f32 {
     const ci = inst(id);
-    if (ci.node_dim_idx) |di| {
-        if (di == idx) return ci.node_dim_opacity;
-    }
+    if (idx < MAX_CANVAS_CHILDREN) return ci.node_dim[idx];
     return 1.0;
 }
 
@@ -280,9 +284,7 @@ pub fn getFlowOverride(idx: u16) bool {
 
 pub fn getFlowOverrideFor(id: u8, idx: u16) bool {
     const ci = inst(id);
-    if (ci.flow_override_idx) |fi| {
-        if (fi == idx) return ci.flow_override_enabled;
-    }
+    if (idx < MAX_CANVAS_CHILDREN) return ci.flow_override[idx];
     return true;
 }
 

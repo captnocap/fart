@@ -254,6 +254,7 @@ function splitOutput(monolith, file) {
     ac = ac.replace(/\b(_dyn_(?:buf|text)_\d+)\b/g, 'st.$1');
     ac = ac.replace(/\b(_oa\d+_\w+)\b/g, 'st.$1');
     ac = ac.replace(/\b_initState\b/g, 'st._initState');
+    ac = ac.replace(/\b(_pool_arena)\b/g, 'maps.$1');
     ac = ac.replace(/\b(_rebuildMap\d+)\b/g, 'maps.$1');
     ac = ac.replace(/\b(_initMapLuaPtrs\d+_\d+)\b/g, 'maps.$1');
     ac = ac.replace(/\bJS_LOGIC\b/g, 'logic.JS_LOGIC');

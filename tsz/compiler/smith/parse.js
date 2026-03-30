@@ -699,14 +699,58 @@ function parseJSXElement(c) {
         } else if (attr === 'placeholder' && rawTag === 'TextInput') {
           if (c.kind() === TK.string) { nodeFields.push(`.placeholder = "${c.text().slice(1, -1)}"`); c.advance(); }
           else if (c.kind() === TK.lbrace) { skipBraces(c); }
+        } else if ((attr === 'onSubmit' || attr === 'onChangeText') && rawTag === 'TextInput') {
+          // onSubmit/onChangeText={() => expr()} or () => { expr() } → register input callback
+          if (c.kind() === TK.lbrace) {
+            c.advance(); // skip outer {
+            if (c.kind() === TK.lparen) c.advance();
+            if (c.kind() === TK.rparen) c.advance();
+            if (c.kind() === TK.arrow) c.advance();
+            let jsBody = '';
+            if (c.kind() === TK.lbrace) {
+              // Block body: () => { expr(); }
+              c.advance();
+              let depth2 = 1;
+              while (depth2 > 0 && c.kind() !== TK.eof) {
+                if (c.kind() === TK.lbrace) depth2++;
+                if (c.kind() === TK.rbrace) { depth2--; if (depth2 === 0) break; }
+                jsBody += c.text() + ' ';
+                c.advance();
+              }
+              if (c.kind() === TK.rbrace) c.advance(); // skip inner }
+            } else {
+              // Expression body: () => expr()
+              let depth2 = 1; // track parens for nested calls
+              while (c.kind() !== TK.rbrace && c.kind() !== TK.eof) {
+                jsBody += c.text() + ' ';
+                c.advance();
+              }
+            }
+            jsBody = jsBody.trim().replace(/\s*;\s*$/, '').replace(/\s+/g, ' ');
+            if (jsBody.length > 0) {
+              const list = attr === 'onSubmit' ? '_inputSubmitHandlers' : '_inputChangeHandlers';
+              if (!ctx[list]) ctx[list] = [];
+              ctx[list].push({ inputId: ctx.inputCount - 1, jsBody });
+            }
+            if (c.kind() === TK.rbrace) c.advance(); // skip outer }
+          }
         } else if (attr === 'position' && (rawTag.startsWith('3D.') || rawTag === 'Scene3D')) {
-          // position={[x, y, z]} → scene3d_pos_x/y/z
+          // position={[x, y, z]} → scene3d_pos_x/y/z — supports numbers, negatives, and state variable expressions
           if (c.kind() === TK.lbrace) {
             c.advance(); if (c.kind() === TK.lbracket) { c.advance();
               const vals = [];
               while (c.kind() !== TK.rbracket && c.kind() !== TK.eof) {
                 let neg = ''; if (c.kind() === TK.minus) { neg = '-'; c.advance(); }
                 if (c.kind() === TK.number) { vals.push(neg + c.text()); c.advance(); }
+                else if (c.kind() === TK.identifier) {
+                  // State variable or expression — collect tokens until comma or rbracket
+                  let expr = neg + c.text(); c.advance();
+                  while (c.kind() !== TK.comma && c.kind() !== TK.rbracket && c.kind() !== TK.eof) {
+                    expr += ' ' + c.text(); c.advance();
+                  }
+                  vals.push(expr);
+                }
+                else { c.advance(); } // skip unrecognized tokens to prevent infinite loop
                 if (c.kind() === TK.comma) c.advance();
               }
               if (c.kind() === TK.rbracket) c.advance();
@@ -722,6 +766,12 @@ function parseJSXElement(c) {
               while (c.kind() !== TK.rbracket && c.kind() !== TK.eof) {
                 let neg = ''; if (c.kind() === TK.minus) { neg = '-'; c.advance(); }
                 if (c.kind() === TK.number) { vals.push(neg + c.text()); c.advance(); }
+                else if (c.kind() === TK.identifier) {
+                  let expr = neg + c.text(); c.advance();
+                  while (c.kind() !== TK.comma && c.kind() !== TK.rbracket && c.kind() !== TK.eof) { expr += ' ' + c.text(); c.advance(); }
+                  vals.push(expr);
+                }
+                else { c.advance(); }
                 if (c.kind() === TK.comma) c.advance();
               }
               if (c.kind() === TK.rbracket) c.advance();
@@ -737,6 +787,12 @@ function parseJSXElement(c) {
               while (c.kind() !== TK.rbracket && c.kind() !== TK.eof) {
                 let neg = ''; if (c.kind() === TK.minus) { neg = '-'; c.advance(); }
                 if (c.kind() === TK.number) { vals.push(neg + c.text()); c.advance(); }
+                else if (c.kind() === TK.identifier) {
+                  let expr = neg + c.text(); c.advance();
+                  while (c.kind() !== TK.comma && c.kind() !== TK.rbracket && c.kind() !== TK.eof) { expr += ' ' + c.text(); c.advance(); }
+                  vals.push(expr);
+                }
+                else { c.advance(); }
                 if (c.kind() === TK.comma) c.advance();
               }
               if (c.kind() === TK.rbracket) c.advance();
@@ -794,6 +850,8 @@ function parseJSXElement(c) {
               while (c.kind() !== TK.rbracket && c.kind() !== TK.eof) {
                 let neg = ''; if (c.kind() === TK.minus) { neg = '-'; c.advance(); }
                 if (c.kind() === TK.number) { vals.push(neg + c.text()); c.advance(); }
+                else if (c.kind() === TK.identifier) { let expr = neg + c.text(); c.advance(); while (c.kind() !== TK.comma && c.kind() !== TK.rbracket && c.kind() !== TK.eof) { expr += ' ' + c.text(); c.advance(); } vals.push(expr); }
+                else { c.advance(); }
                 if (c.kind() === TK.comma) c.advance();
               }
               if (c.kind() === TK.rbracket) c.advance();
@@ -810,6 +868,8 @@ function parseJSXElement(c) {
               while (c.kind() !== TK.rbracket && c.kind() !== TK.eof) {
                 let neg = ''; if (c.kind() === TK.minus) { neg = '-'; c.advance(); }
                 if (c.kind() === TK.number) { vals.push(neg + c.text()); c.advance(); }
+                else if (c.kind() === TK.identifier) { let expr = neg + c.text(); c.advance(); while (c.kind() !== TK.comma && c.kind() !== TK.rbracket && c.kind() !== TK.eof) { expr += ' ' + c.text(); c.advance(); } vals.push(expr); }
+                else { c.advance(); }
                 if (c.kind() === TK.comma) c.advance();
               }
               if (c.kind() === TK.rbracket) c.advance();
@@ -854,6 +914,8 @@ function parseJSXElement(c) {
               while (c.kind() !== TK.rbracket && c.kind() !== TK.eof) {
                 let neg = ''; if (c.kind() === TK.minus) { neg = '-'; c.advance(); }
                 if (c.kind() === TK.number) { vals.push(neg + c.text()); c.advance(); }
+                else if (c.kind() === TK.identifier) { let expr = neg + c.text(); c.advance(); while (c.kind() !== TK.comma && c.kind() !== TK.rbracket && c.kind() !== TK.eof) { expr += ' ' + c.text(); c.advance(); } vals.push(expr); }
+                else { c.advance(); }
                 if (c.kind() === TK.comma) c.advance();
               }
               if (c.kind() === TK.rbracket) c.advance();
@@ -880,6 +942,8 @@ function parseJSXElement(c) {
               while (c.kind() !== TK.rbracket && c.kind() !== TK.eof) {
                 let neg = ''; if (c.kind() === TK.minus) { neg = '-'; c.advance(); }
                 if (c.kind() === TK.number) { vals.push(neg + c.text()); c.advance(); }
+                else if (c.kind() === TK.identifier) { let expr = neg + c.text(); c.advance(); while (c.kind() !== TK.comma && c.kind() !== TK.rbracket && c.kind() !== TK.eof) { expr += ' ' + c.text(); c.advance(); } vals.push(expr); }
+                else { c.advance(); }
                 if (c.kind() === TK.comma) c.advance();
               }
               if (c.kind() === TK.rbracket) c.advance();
@@ -902,6 +966,8 @@ function parseJSXElement(c) {
               while (c.kind() !== TK.rbracket && c.kind() !== TK.eof) {
                 let neg = ''; if (c.kind() === TK.minus) { neg = '-'; c.advance(); }
                 if (c.kind() === TK.number) { vals.push(neg + c.text()); c.advance(); }
+                else if (c.kind() === TK.identifier) { let expr = neg + c.text(); c.advance(); while (c.kind() !== TK.comma && c.kind() !== TK.rbracket && c.kind() !== TK.eof) { expr += ' ' + c.text(); c.advance(); } vals.push(expr); }
+                else { c.advance(); }
                 if (c.kind() === TK.comma) c.advance();
               }
               if (c.kind() === TK.rbracket) c.advance();

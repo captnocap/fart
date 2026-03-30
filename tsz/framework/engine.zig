@@ -633,83 +633,117 @@ fn offsetNodeXY(node: *Node, dx: f32, dy: f32) void {
     for (node.children) |*child| offsetNodeXY(child, dx, dy);
 }
 
+/// Position a single Canvas.Node at its raw graph coordinates (gx/gy = center).
+fn positionOneCanvasNode(child: *Node) void {
+    const target_x = child.canvas_gx - child.computed.w / 2;
+    const target_y = child.canvas_gy - child.computed.h / 2;
+    const dx = target_x - child.computed.x;
+    const dy = target_y - child.computed.y;
+    child.computed.x = target_x;
+    child.computed.y = target_y;
+    for (child.children) |*gc| offsetNodeXY(gc, dx, dy);
+}
+
 /// Translate Canvas.Node children from flex positions to raw graph-space.
-/// On drift-enabled canvases, auto-stacks tiles per column on first frame:
-///   - Groups tiles by gx (columns), tiles must be ordered by gx in source
-///   - Each column gets a randomized anchor gy (stagger) — no flat horizontal edges
-///   - Tiles stack outward from anchor: odd-indexed down, even-indexed up
+/// Flattens through non-canvas containers (e.g., map pool wrappers from .map() inside Canvas).
+/// On drift-enabled canvases, auto-distributes and stacks tiles generatively:
+///   - Collects all Canvas.Node children into a flat list
+///   - Shuffles them randomly (Fisher-Yates, seeded by SDL_GetTicks)
+///   - Distributes round-robin across N columns at COLUMN_SPACING apart
+///   - Each column gets a randomized stagger — no flat horizontal edges
+///   - Tiles stack outward from stagger anchor: odd down, even up
 ///   - Uniform CANVAS_NODE_GAP (30px) between all tiles
+///   - Re-stacks every time the canvas becomes visible (generative layout)
 fn positionCanvasNodes(parent: *Node) void {
-    // Auto-stack: run once on first frame for drift-enabled canvases
-    if (parent.canvas_drift_active and !canvas_stacked) {
-        canvas_stacked = true;
-        autoStackCanvasColumns(parent);
+    // Generative auto-stack: re-run each time canvas becomes visible
+    if (parent.canvas_drift_active and !parent.canvas_auto_stacked) {
+        parent.canvas_auto_stacked = true;
+        autoDistributeAndStack(parent);
         // Dump immediately after stacking if CANVAS_DUMP is set
         if (std.posix.getenv("CANVAS_DUMP")) |_| {
-            // Position nodes first so computed values are correct for dump
             for (parent.children) |*child| {
-                if (!child.canvas_node) continue;
-                const tx = child.canvas_gx - child.computed.w / 2;
-                const ty = child.canvas_gy - child.computed.h / 2;
-                const ddx = tx - child.computed.x;
-                const ddy = ty - child.computed.y;
-                child.computed.x = tx;
-                child.computed.y = ty;
-                for (child.children) |*gc| offsetNodeXY(gc, ddx, ddy);
+                if (child.canvas_node) {
+                    positionOneCanvasNode(child);
+                } else if (!child.canvas_path and !child.canvas_clamp) {
+                    for (child.children) |*gc| {
+                        if (gc.canvas_node) positionOneCanvasNode(gc);
+                    }
+                }
             }
             dumpCanvasNodes(parent);
         }
     }
     for (parent.children) |*child| {
-        if (!child.canvas_node) continue;
-        // Place at raw graph coordinates (gx/gy = center)
-        const target_x = child.canvas_gx - child.computed.w / 2;
-        const target_y = child.canvas_gy - child.computed.h / 2;
-        const dx = target_x - child.computed.x;
-        const dy = target_y - child.computed.y;
-        child.computed.x = target_x;
-        child.computed.y = target_y;
-        for (child.children) |*gc| offsetNodeXY(gc, dx, dy);
+        if (child.canvas_node) {
+            positionOneCanvasNode(child);
+        } else if (!child.canvas_path and !child.canvas_clamp) {
+            // Flatten through non-canvas container (map pool wrapper)
+            for (child.children) |*gc| {
+                if (gc.canvas_node) positionOneCanvasNode(gc);
+            }
+        }
     }
 }
 
 const CANVAS_NODE_GAP: f32 = 30.0;
-var canvas_stacked: bool = false;
+const COLUMN_SPACING: f32 = 300.0;
+const NUM_COLUMNS: usize = 8;
 var canvas_dump_frame: u8 = 0;
 
-/// Auto-stack canvas tiles per column with randomized stagger.
-/// Produces jagged top/bottom edges — no flat horizontal boundary.
-/// Scans ALL children for each column (tiles may be non-contiguous).
-fn autoStackCanvasColumns(parent: *Node) void {
+/// Generative canvas layout: shuffle tiles, distribute across columns, stack with stagger.
+/// Produces a different layout every time the canvas appears.
+fn autoDistributeAndStack(parent: *Node) void {
     var seed: u32 = @as(u32, @truncate(c.SDL_GetTicks())) *% 2654435761;
 
-    // Collect unique gx values (max 16 columns)
-    var columns: [16]f32 = undefined;
-    var col_count: usize = 0;
+    // Collect all canvas node pointers (flatten through containers), max 128 tiles
+    var tiles: [128]*Node = undefined;
+    var tile_count: usize = 0;
     for (parent.children) |*child| {
-        if (!child.canvas_node) continue;
-        var found = false;
-        for (columns[0..col_count]) |cx| {
-            if (cx == child.canvas_gx) { found = true; break; }
-        }
-        if (!found and col_count < 16) {
-            columns[col_count] = child.canvas_gx;
-            col_count += 1;
-        }
-    }
-    // Sort columns left-to-right (bubble sort, max 16)
-    for (0..col_count) |a| {
-        for (a + 1..col_count) |b| {
-            if (columns[b] < columns[a]) {
-                const tmp = columns[a];
-                columns[a] = columns[b];
-                columns[b] = tmp;
+        if (child.canvas_node) {
+            if (tile_count < 128) {
+                tiles[tile_count] = child;
+                tile_count += 1;
+            }
+        } else if (!child.canvas_path and !child.canvas_clamp) {
+            for (child.children) |*gc| {
+                if (gc.canvas_node) {
+                    if (tile_count < 128) {
+                        tiles[tile_count] = gc;
+                        tile_count += 1;
+                    }
+                }
             }
         }
     }
 
-    // Stack each column: outward from staggered anchor, 30px gap
-    for (columns[0..col_count]) |col_gx| {
+    if (tile_count == 0) return;
+
+    // Fisher-Yates shuffle
+    var i: usize = tile_count;
+    while (i > 1) {
+        i -= 1;
+        seed = seed *% 2246822519 +% 1;
+        const j = seed % @as(u32, @intCast(i + 1));
+        const tmp = tiles[j];
+        tiles[j] = tiles[i];
+        tiles[i] = tmp;
+    }
+
+    // Assign columns: round-robin, centered around origin
+    // Columns at: -(N/2 - 0.5)*SPACING, ..., +(N/2 - 0.5)*SPACING
+    var col_gx: [NUM_COLUMNS]f32 = undefined;
+    for (0..NUM_COLUMNS) |c_idx| {
+        const offset: f32 = @as(f32, @floatFromInt(c_idx)) - @as(f32, @floatFromInt(NUM_COLUMNS)) / 2.0 + 0.5;
+        col_gx[c_idx] = offset * COLUMN_SPACING;
+    }
+
+    // Assign each tile to a column round-robin
+    for (tiles[0..tile_count], 0..) |tile, idx| {
+        tile.canvas_gx = col_gx[idx % NUM_COLUMNS];
+    }
+
+    // Stack each column: outward from randomized stagger anchor
+    for (0..NUM_COLUMNS) |c_idx| {
         seed = seed *% 2246822519 +% 1;
         const stagger: f32 = @as(f32, @floatFromInt(seed % 500)) - 250.0;
 
@@ -717,24 +751,28 @@ fn autoStackCanvasColumns(parent: *Node) void {
         var up_cursor: f32 = 0;
         var tile_idx: usize = 0;
 
-        for (parent.children) |*child| {
-            if (!child.canvas_node or child.canvas_gx != col_gx) continue;
-            const h = child.canvas_gh;
-
-            if (tile_idx == 0) {
-                child.canvas_gy = stagger;
-                down_cursor = stagger + h / 2;
-                up_cursor = stagger - h / 2;
-            } else if (tile_idx % 2 == 1) {
-                child.canvas_gy = down_cursor + CANVAS_NODE_GAP + h / 2;
-                down_cursor = child.canvas_gy + h / 2;
-            } else {
-                child.canvas_gy = up_cursor - CANVAS_NODE_GAP - h / 2;
-                up_cursor = child.canvas_gy - h / 2;
+        for (tiles[0..tile_count]) |tile| {
+            if (tile.canvas_gx == col_gx[c_idx]) {
+                stackCanvasTile(tile, &down_cursor, &up_cursor, &tile_idx, stagger);
             }
-            tile_idx += 1;
         }
     }
+}
+
+fn stackCanvasTile(child: *Node, down_cursor: *f32, up_cursor: *f32, tile_idx: *usize, stagger: f32) void {
+    const h = child.canvas_gh;
+    if (tile_idx.* == 0) {
+        child.canvas_gy = stagger;
+        down_cursor.* = stagger + h / 2;
+        up_cursor.* = stagger - h / 2;
+    } else if (tile_idx.* % 2 == 1) {
+        child.canvas_gy = down_cursor.* + CANVAS_NODE_GAP + h / 2;
+        down_cursor.* = child.canvas_gy + h / 2;
+    } else {
+        child.canvas_gy = up_cursor.* - CANVAS_NODE_GAP - h / 2;
+        up_cursor.* = child.canvas_gy - h / 2;
+    }
+    tile_idx.* += 1;
 }
 
 fn dumpCanvasNodes(parent: *Node) void {
@@ -742,15 +780,26 @@ fn dumpCanvasNodes(parent: *Node) void {
     var idx: u16 = 0;
     for (parent.children) |*child| {
         if (child.canvas_node) {
-            std.debug.print("NODE {d} gx={d:.0} gy={d:.0} gw={d:.0} gh={d:.0} computed_w={d:.0} computed_h={d:.0}\n", .{
-                idx, child.canvas_gx, child.canvas_gy, child.canvas_gw, child.canvas_gh,
-                child.computed.w, child.computed.h,
-            });
+            dumpOneCanvasNode(child, idx);
+            idx += 1;
+        } else if (!child.canvas_path and !child.canvas_clamp) {
+            for (child.children) |*gc| {
+                if (gc.canvas_node) {
+                    dumpOneCanvasNode(gc, idx);
+                    idx += 1;
+                }
+            }
         }
-        idx += 1;
     }
     std.debug.print("CANVAS_DUMP_END\n", .{});
     std.posix.exit(0);
+}
+
+fn dumpOneCanvasNode(child: *const Node, idx: u16) void {
+    std.debug.print("NODE {d} gx={d:.0} gy={d:.0} gw={d:.0} gh={d:.0} computed_w={d:.0} computed_h={d:.0}\n", .{
+        idx, child.canvas_gx, child.canvas_gy, child.canvas_gw, child.canvas_gh,
+        child.computed.w, child.computed.h,
+    });
 }
 
 var g_paint_count: u32 = 0;
@@ -1329,6 +1378,48 @@ noinline fn paintTerminal(node: *Node) void {
     }
 }
 
+/// Check if a Canvas.Node contains graph-space coordinates (for hover detection).
+fn hoverTestCanvasNode(child: *const Node, gpos: [2]f32) bool {
+    const hw = child.canvas_gw / 2;
+    const hh = child.canvas_gh / 2;
+    return gpos[0] >= child.canvas_gx - hw and gpos[0] <= child.canvas_gx + hw and
+        gpos[1] >= child.canvas_gy - hh and gpos[1] <= child.canvas_gy + hh;
+}
+
+/// Hit-test a Canvas.Node against graph-space coordinates.
+fn hitTestCanvasNode(child: *Node, gpos: [2]f32) ?*Node {
+    const hw = child.canvas_gw / 2;
+    const hh = child.canvas_gh / 2;
+    if (gpos[0] >= child.canvas_gx - hw and gpos[0] <= child.canvas_gx + hw and
+        gpos[1] >= child.canvas_gy - hh and gpos[1] <= child.canvas_gy + hh)
+    {
+        return layout.hitTest(child, gpos[0], gpos[1]);
+    }
+    return null;
+}
+
+/// Paint a single canvas child (Canvas.Path or Canvas.Node) with highlight + dim/flow.
+fn paintCanvasChild(child: *Node, child_idx: u16, hovered: ?u16, selected: ?u16) void {
+    if (child.canvas_node) {
+        const node_selected = selected != null and selected.? == child_idx;
+        const node_hovered = hovered != null and hovered.? == child_idx;
+        if (node_selected) {
+            const hw = child.canvas_gw / 2 + 5;
+            const hh = child.canvas_gh / 2 + 5;
+            gpu.drawRect(child.canvas_gx - hw, child.canvas_gy - hh, hw * 2, hh * 2, 0.5, 0.4, 1.0, 0.4, 8, 2, 2, 2, 2, 1.0);
+        } else if (node_hovered) {
+            const hw = child.canvas_gw / 2 + 4;
+            const hh = child.canvas_gh / 2 + 4;
+            gpu.drawRect(child.canvas_gx - hw, child.canvas_gy - hh, hw * 2, hh * 2, 0.4, 0.3, 0.9, 0.25, 8, 0, 0, 0, 0, 0);
+        }
+    }
+    g_paint_opacity = canvas.getNodeDim(child_idx);
+    g_flow_enabled = canvas.getFlowOverride(child_idx);
+    paintNode(child);
+    g_paint_opacity = 1.0;
+    g_flow_enabled = true;
+}
+
 /// Paint a Canvas container: transform setup, graph children, HUD layer.
 noinline fn paintCanvasContainer(node: *Node) void {
     const r = node.computed;
@@ -1353,27 +1444,18 @@ noinline fn paintCanvasContainer(node: *Node) void {
         const selected = canvas.getSelectedNode();
         var child_idx: u16 = 0;
         for (node.children) |*child| {
-            if (!child.canvas_clamp) {
-                if (child.canvas_node) {
-                    const node_selected = selected != null and selected.? == child_idx;
-                    const node_hovered = hovered != null and hovered.? == child_idx;
-                    if (node_selected) {
-                        const hw = child.canvas_gw / 2 + 5;
-                        const hh = child.canvas_gh / 2 + 5;
-                        gpu.drawRect(child.canvas_gx - hw, child.canvas_gy - hh, hw * 2, hh * 2, 0.5, 0.4, 1.0, 0.4, 8, 2, 2, 2, 2, 1.0);
-                    } else if (node_hovered) {
-                        const hw = child.canvas_gw / 2 + 4;
-                        const hh = child.canvas_gh / 2 + 4;
-                        gpu.drawRect(child.canvas_gx - hw, child.canvas_gy - hh, hw * 2, hh * 2, 0.4, 0.3, 0.9, 0.25, 8, 0, 0, 0, 0, 0);
-                    }
+            if (child.canvas_clamp) continue;
+            if (child.canvas_node or child.canvas_path) {
+                paintCanvasChild(child, child_idx, hovered, selected);
+                child_idx += 1;
+            } else {
+                // Flatten through non-canvas container (map pool wrapper)
+                for (child.children) |*gc| {
+                    if (gc.canvas_clamp) continue;
+                    paintCanvasChild(gc, child_idx, hovered, selected);
+                    child_idx += 1;
                 }
-                g_paint_opacity = canvas.getNodeDim(child_idx);
-                g_flow_enabled = canvas.getFlowOverride(child_idx);
-                paintNode(child);
-                g_paint_opacity = 1.0;
-                g_flow_enabled = true;
             }
-            child_idx += 1;
         }
     }
     gpu.resetTransform();
@@ -1386,6 +1468,14 @@ noinline fn paintCanvasContainer(node: *Node) void {
         if (child.canvas_clamp) {
             layout.layoutNode(child, r.x, r.y, r.w, r.h);
             paintNode(child);
+        } else if (!child.canvas_node and !child.canvas_path) {
+            // Flatten through container for clamp grandchildren
+            for (child.children) |*gc| {
+                if (gc.canvas_clamp) {
+                    layout.layoutNode(gc, r.x, r.y, r.w, r.h);
+                    paintNode(gc);
+                }
+            }
         }
     }
     gpu.popScissor();
@@ -1668,19 +1758,20 @@ pub fn run(config_in: AppConfig) !void {
                             const vp_cx = cn.computed.x + cn.computed.w / 2;
                             const vp_cy = cn.computed.y + cn.computed.h / 2;
                             const gpos = canvas.screenToGraph(mx, my, vp_cx, vp_cy);
-                            // Find which Canvas.Node child contains the click
+                            // Find which Canvas.Node child contains the click (flatten through containers)
                             var canvas_child_hit: ?*Node = null;
                             for (cn.children) |*child| {
                                 if (child.canvas_node) {
-                                    const hw = child.canvas_gw / 2;
-                                    const hh = child.canvas_gh / 2;
-                                    if (gpos[0] >= child.canvas_gx - hw and gpos[0] <= child.canvas_gx + hw and
-                                        gpos[1] >= child.canvas_gy - hh and gpos[1] <= child.canvas_gy + hh)
-                                    {
-                                        // Hit-test this node's subtree for interactive elements (graph-space coords)
-                                        canvas_child_hit = layout.hitTest(child, gpos[0], gpos[1]);
-                                        break;
+                                    canvas_child_hit = hitTestCanvasNode(child, gpos);
+                                    if (canvas_child_hit != null) break;
+                                } else if (!child.canvas_path and !child.canvas_clamp) {
+                                    for (child.children) |*gc| {
+                                        if (gc.canvas_node) {
+                                            canvas_child_hit = hitTestCanvasNode(gc, gpos);
+                                            if (canvas_child_hit != null) break;
+                                        }
                                     }
+                                    if (canvas_child_hit != null) break;
                                 }
                             }
                             // Dispatch interactive element if found, otherwise select node + start drag
@@ -1792,20 +1883,25 @@ pub fn run(config_in: AppConfig) !void {
                             const vp_cx = cn.computed.x + cn.computed.w / 2;
                             const vp_cy = cn.computed.y + cn.computed.h / 2;
                             const gpos = canvas.screenToGraph(mx, my, vp_cx, vp_cy);
-                            // Check Canvas.Node children
+                            // Check Canvas.Node children (flatten through containers)
                             var found_idx: ?u16 = null;
                             var ci: u16 = 0;
                             for (cn.children) |*child| {
                                 if (child.canvas_node) {
-                                    const hw = child.canvas_gw / 2;
-                                    const hh = child.canvas_gh / 2;
-                                    if (gpos[0] >= child.canvas_gx - hw and gpos[0] <= child.canvas_gx + hw and
-                                        gpos[1] >= child.canvas_gy - hh and gpos[1] <= child.canvas_gy + hh)
-                                    {
-                                        found_idx = ci;
+                                    if (hoverTestCanvasNode(child, gpos)) found_idx = ci;
+                                    ci += 1;
+                                } else if (!child.canvas_path and !child.canvas_clamp) {
+                                    for (child.children) |*gc| {
+                                        if (gc.canvas_node) {
+                                            if (hoverTestCanvasNode(gc, gpos)) found_idx = ci;
+                                            ci += 1;
+                                        } else if (gc.canvas_path) {
+                                            ci += 1;
+                                        }
                                     }
+                                } else if (child.canvas_path) {
+                                    ci += 1;
                                 }
-                                ci += 1;
                             }
                             canvas.setHoveredNode(found_idx);
                             g_hover_changed = true;
