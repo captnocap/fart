@@ -58,18 +58,14 @@ function tryParseMapHeader(c, defaultItemParam, defaultIndexParam) {
         c.advance(); // skip name
         if (c.kind() === TK.equals) {
           c.advance(); // skip =
-          var _mapVarParts = [];
+          // Consume value tokens up to semicolon (prevents leaking as text)
+          // Don't store as render local — JS expressions can't compile to Zig
           var _mvDepth = 0;
           while (c.pos < c.count) {
             if (c.kind() === TK.semicolon && _mvDepth === 0) { c.advance(); break; }
             if (c.kind() === TK.lparen || c.kind() === TK.lbracket || c.kind() === TK.lbrace) _mvDepth++;
             if (c.kind() === TK.rparen || c.kind() === TK.rbracket || c.kind() === TK.rbrace) { _mvDepth--; if (_mvDepth < 0) break; }
-            _mapVarParts.push(c.text());
             c.advance();
-          }
-          // Store as render local (will be available during map JSX parsing)
-          if (_mapVarParts.length > 0 && ctx.renderLocals) {
-            ctx.renderLocals[_mapVarName] = _mapVarParts.join('');
           }
         }
       }
