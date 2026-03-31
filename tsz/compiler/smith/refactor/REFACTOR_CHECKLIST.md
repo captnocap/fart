@@ -103,7 +103,7 @@ Current constraint:
 - [x] Extract dynamic text buffer emission.
 - [x] Extract non-map handler emission.
 - [x] Extract effect render emission.
-- [ ] Extract object-array emission.
+- [x] Extract object-array emission.
 - [ ] Extract map-pool emission.
 - [x] Extract update/entrypoint emission.
 - [x] Extract final cleanup/post-processing.
