@@ -131,6 +131,9 @@ function inlineComponentCall(c, comp, rawTag, propValues, compChildren) {
   }
 
   c.pos = comp.bodyPos;
+  // -> PROBE INJECTED HERE
+  print('[INLINE PROBE] Inlining component: ' + comp.name + ' bodyPos: ' + comp.bodyPos + ' token: ' + c.text() + ' kind: ' + c.kind());
+  
   let result;
   if (c.kind() === TK.identifier) {
     const maybeArr = c.text();

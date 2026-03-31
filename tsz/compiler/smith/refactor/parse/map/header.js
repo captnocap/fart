@@ -23,6 +23,11 @@ function tryParseMapHeader(c, defaultItemParam, defaultIndexParam) {
   if (c.kind() !== TK.lparen) { c.restore(saved); return null; }
   c.advance(); // skip (
 
+  // Handle function keyword: .map(function(item, idx) { ... })
+  if (c.isIdent('function')) {
+    c.advance(); // skip 'function'
+  }
+
   if (c.kind() !== TK.lparen) { c.restore(saved); return null; }
   c.advance(); // skip (
 
@@ -42,6 +47,11 @@ function tryParseMapHeader(c, defaultItemParam, defaultIndexParam) {
 
   if (c.kind() === TK.rparen) c.advance(); // skip )
   if (c.kind() === TK.arrow) c.advance(); // skip =>
+  // Handle function body: { return ( <JSX> ) }
+  if (c.kind() === TK.lbrace) {
+    c.advance(); // skip {
+    if (c.isIdent('return')) c.advance(); // skip return
+  }
   if (c.kind() === TK.lparen) c.advance(); // skip ( before JSX
 
   return { itemParam, indexParam };

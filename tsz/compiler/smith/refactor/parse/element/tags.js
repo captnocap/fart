@@ -47,7 +47,8 @@ function normalizeRawTag(c, rawTag) {
   }
 
   // Bare classifier import: <Nav> matches classifier key directly (no C. prefix)
-  if (!clsDef && ctx.classifiers && ctx.classifiers[rawTag]) {
+  // But components take priority — if a component exists with this name, don't classifier-ify it.
+  if (!clsDef && ctx.classifiers && ctx.classifiers[rawTag] && !findComponent(rawTag)) {
     clsDef = ctx.classifiers[rawTag];
     clsName = rawTag;
     rawTag = clsDef.type || 'Box';

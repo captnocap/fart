@@ -35,6 +35,46 @@ function tryParseBraceChild(c, children) {
 
   if (c.kind() === TK.identifier) {
     const maybeArr = c.text();
+    // Handle props.X.map() — resolve through propStack to find the OA name
+    if (ctx.propsObjectName && maybeArr === ctx.propsObjectName &&
+        c.pos + 4 < c.count && c.kindAt(c.pos + 1) === TK.dot &&
+        c.kindAt(c.pos + 2) === TK.identifier && c.kindAt(c.pos + 3) === TK.dot) {
+      const propField = c.textAt(c.pos + 2);
+      const propVal = ctx.propStack && ctx.propStack[propField];
+      const resolvedName = (propVal && typeof propVal === 'string') ? propVal : propField;
+      // Peek ahead past props.field. to check for .map()
+      const savedPropsPeek = c.save();
+      c.advance(); c.advance(); c.advance(); c.advance(); // skip props . field .
+      let isPropsMapCall = c.isIdent('map') && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.lparen;
+      if (!isPropsMapCall && (c.isIdent('slice') || c.isIdent('filter')) && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.lparen) {
+        c.advance(); c.advance();
+        let pd2 = 1;
+        while (c.pos < c.count && pd2 > 0) {
+          if (c.kind() === TK.lparen) pd2++;
+          if (c.kind() === TK.rparen) pd2--;
+          if (pd2 > 0) c.advance();
+        }
+        if (c.kind() === TK.rparen) c.advance();
+        if (c.kind() === TK.dot) { c.advance(); isPropsMapCall = c.isIdent('map') && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.lparen; }
+      }
+      c.restore(savedPropsPeek);
+      if (isPropsMapCall) {
+        let oa = ctx.objectArrays.find(o => o.getter === resolvedName);
+        if (!oa) oa = inferOaFromSource(c, resolvedName);
+        if (oa) {
+          // Skip props. to position cursor at field name for tryParseMap
+          c.advance(); // props
+          c.advance(); // .
+          // Now cursor is at field name — tryParseMap handles field.map(...)
+          const mapResult = tryParseMap(c, oa);
+          if (mapResult) {
+            children.push(mapResult);
+            if (c.kind() === TK.rbrace) c.advance();
+            return true;
+          }
+        }
+      }
+    }
     if (c.pos + 3 < c.count && c.kindAt(c.pos + 1) === TK.dot) {
       const savedPeek = c.save();
       c.advance();

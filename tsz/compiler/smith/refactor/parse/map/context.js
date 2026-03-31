@@ -28,8 +28,10 @@ function exitMapContext(scope) {
 }
 
 function consumeMapClose(c) {
-  if (c.kind() === TK.rparen) c.advance();
-  if (c.kind() === TK.rparen) c.advance();
+  if (c.kind() === TK.rparen) c.advance(); // close paren around JSX or return(...)
+  if (c.kind() === TK.semicolon) c.advance(); // optional ; after return
+  if (c.kind() === TK.rbrace) c.advance(); // close function body }
+  if (c.kind() === TK.rparen) c.advance(); // close .map(...)
 }
 
 function finalizeMapNode(mapInfo, templateNode) {
