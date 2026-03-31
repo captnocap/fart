@@ -101,6 +101,30 @@ function HomePage() {
           <StateTile />
         </Canvas.Node>
 
+        <Canvas.Node gx={-600} gy={-100} gw={260} gh={200}>
+          <TodoTile />
+        </Canvas.Node>
+
+        <Canvas.Node gx={600} gy={-100} gw={260} gh={200}>
+          <TabsTile />
+        </Canvas.Node>
+
+        <Canvas.Node gx={-600} gy={200} gw={260} gh={200}>
+          <GameTile />
+        </Canvas.Node>
+
+        <Canvas.Node gx={600} gy={200} gw={260} gh={200}>
+          <ColorMixTile />
+        </Canvas.Node>
+
+        <Canvas.Node gx={-600} gy={400} gw={260} gh={200}>
+          <FormTile />
+        </Canvas.Node>
+
+        <Canvas.Node gx={600} gy={400} gw={260} gh={200}>
+          <NetworkTile />
+        </Canvas.Node>
+
       </Canvas>
   );
 }
