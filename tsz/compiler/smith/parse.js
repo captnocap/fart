@@ -430,14 +430,14 @@ function parseJSXElement(c) {
     nodeFields.push(`.terminal_id = ${ctx.terminalCount}`);
     ctx.terminalCount++;
   }
-  // TextInput → allocate input_id
-  if (rawTag === 'TextInput') {
+  // TextInput / TextArea → allocate input_id
+  if (rawTag === 'TextInput' || rawTag === 'TextArea') {
     if (!ctx.inputCount) ctx.inputCount = 0;
     nodeFields.push(`.input_id = ${ctx.inputCount}`);
     ctx.inputCount++;
   }
-  // Scene3D → scene3d container
-  if (rawTag === 'Scene3D') nodeFields.push('.scene3d = true');
+  // Scene3D / 3D.View → scene3d container
+  if (rawTag === 'Scene3D' || rawTag === '3D.View') nodeFields.push('.scene3d = true');
   // 3D.Mesh
   if (rawTag === '3D.Mesh') nodeFields.push('.scene3d_mesh = true');
   // 3D.Camera
@@ -791,10 +791,10 @@ function parseJSXElement(c) {
         } else if (attr === 'gh' && rawTag === 'Canvas.Node') {
           if (c.kind() === TK.lbrace) { c.advance(); if (c.kind() === TK.number) { nodeFields.push(`.canvas_gh = ${c.text()}`); c.advance(); } if (c.kind() === TK.rbrace) c.advance(); }
           else if (c.kind() === TK.number) { nodeFields.push(`.canvas_gh = ${c.text()}`); c.advance(); }
-        } else if (attr === 'placeholder' && rawTag === 'TextInput') {
+        } else if (attr === 'placeholder' && (rawTag === 'TextInput' || rawTag === 'TextArea')) {
           if (c.kind() === TK.string) { nodeFields.push(`.placeholder = "${c.text().slice(1, -1)}"`); c.advance(); }
           else if (c.kind() === TK.lbrace) { skipBraces(c); }
-        } else if ((attr === 'onSubmit' || attr === 'onChangeText') && rawTag === 'TextInput') {
+        } else if ((attr === 'onSubmit' || attr === 'onChangeText') && (rawTag === 'TextInput' || rawTag === 'TextArea')) {
           // onSubmit/onChangeText={() => expr()} or () => { expr() } → register input callback
           if (c.kind() === TK.lbrace) {
             c.advance(); // skip outer {
@@ -1626,7 +1626,7 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
   // Triggers on explicit height OR flexGrow (height comes from flex distribution, not content).
   // This makes <ScrollView> unnecessary at the authoring level — constrained containers just work.
   const _hasConstrainedH = styleFields.some(f => f.startsWith('.height') || f.startsWith('.flex_grow'));
-  if (tag === 'Box' && !styleFields.some(f => f.startsWith('.overflow')) && _hasConstrainedH) {
+  if (tag === 'Box' && children.length > 0 && !styleFields.some(f => f.startsWith('.overflow')) && _hasConstrainedH) {
     styleFields.push('.overflow = .auto');
   }
   const parts = [];

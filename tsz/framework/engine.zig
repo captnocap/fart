@@ -739,7 +739,16 @@ fn paintNode(node: *Node) void {
     const is_scroll = (ov == .scroll or (ov == .auto and node.content_height > r.h));
     const is_clipped = is_scroll or ov == .hidden;
 
-    if (is_clipped) gpu.pushScissor(r.x, r.y, r.w, r.h);
+    if (is_clipped) {
+        // When a canvas transform is active, scissor coordinates are in graph space
+        // but pushScissor expects screen space. Transform through the active GPU transform.
+        const tf = gpu.getTransform();
+        if (tf.active) {
+            gpu.pushScissor(r.x * tf.scale + tf.tx, r.y * tf.scale + tf.ty, r.w * tf.scale, r.h * tf.scale);
+        } else {
+            gpu.pushScissor(r.x, r.y, r.w, r.h);
+        }
+    }
 
     if (is_scroll and node.scroll_y != 0) {
         const sy = node.scroll_y;
