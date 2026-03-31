@@ -432,7 +432,8 @@ function emitLogicBlocks(ctx) {
           var tk = globalThis.__cursor.textAt(ti);
           // Convert single-quoted strings to double-quoted for consistent JS
           if (tk.length >= 2 && tk[0] === "'" && tk[tk.length - 1] === "'") {
-            tk = '"' + tk.slice(1, -1) + '"';
+            var inner = tk.slice(1, -1).replace(/"/g, '\\"');
+            tk = '"' + inner + '"';
           }
           initParts.push(tk);
         }
@@ -463,7 +464,9 @@ function emitLogicBlocks(ctx) {
       // QuickJS eval doesn't support ES module syntax, so 'export' must be removed
       const scriptLines = globalThis.__scriptContent.split('\n')
         .filter(l => !/^\s*<\/?script>\s*$/.test(l))
-        .map(l => l.replace(/^export\s+/, ''));
+        .filter(l => !/^\s*declare\s+/.test(l))
+        .map(l => l.replace(/^export\s+/, ''))
+        .map(l => l.replace(/:\s*(any|void|string|number|boolean)\b/g, ''));
       for (const line of scriptLines) jsLines.push(line);
       jsLines.push('');  // trailing blank line
     }
