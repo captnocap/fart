@@ -60,6 +60,7 @@ Current constraint:
 - [x] Extract component inlining flow from `parseJSXElement`.
 - [x] Split `parseChildren` into child-type dispatchers.
 - [x] Extract element and brace child handlers from `parseChildren`.
+- [x] Move inline glyph child parsing out of `parse.js`.
 - [x] Move `buildNode` into its own file.
 - [x] Extract plain element callback attribute parsing from `parseJSXElement`.
 - [x] Extract basic element attribute parsing from `parseJSXElement`.

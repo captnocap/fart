@@ -40,6 +40,7 @@ const SMITH_JS = @embedFile("smith/rules.js") ++ "\n" ++
     @embedFile("smith/refactor/parse/map/plain.js") ++ "\n" ++
     @embedFile("smith/refactor/parse/map/for_loop.js") ++ "\n" ++
     @embedFile("smith/refactor/parse/map/nested.js") ++ "\n" ++
+    @embedFile("smith/refactor/parse/children/inline_glyph.js") ++ "\n" ++
     @embedFile("smith/refactor/parse/children/elements.js") ++ "\n" ++
     @embedFile("smith/refactor/parse/children/brace.js") ++ "\n" ++
     @embedFile("smith/refactor/parse/children/text.js") ++ "\n" ++

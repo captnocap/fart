@@ -91,38 +91,3 @@ function parseChildren(c) {
   }
   return children;
 }
-
-
-
-// Parse <Glyph d="..." fill="#color" fillEffect="name" /> inside <Text>
-// Returns a glyph marker child node or null
-function parseInlineGlyph(c) {
-  if (c.kind() !== TK.lt) return null;
-  c.advance(); // skip <
-  if (c.text() !== 'Glyph') return null;
-  c.advance(); // skip Glyph
-  let d = '', fill = '#ffffff', fillEffect = '', stroke = '', strokeWidth = '0', scale = '1.0';
-  while (c.kind() === TK.identifier && c.kind() !== TK.eof) {
-    const aname = c.text(); c.advance();
-    if (c.kind() !== TK.equals) continue;
-    c.advance(); // skip =
-    let aval = '';
-    if (c.kind() === TK.string) { aval = c.text().slice(1, -1); c.advance(); }
-    else if (c.kind() === TK.lbrace) { c.advance(); if (c.kind() === TK.identifier || c.kind() === TK.number) { aval = c.text(); c.advance(); } if (c.kind() === TK.rbrace) c.advance(); }
-    else { aval = c.text(); c.advance(); }
-    if (aname === 'd') d = aval;
-    else if (aname === 'fill') fill = aval;
-    else if (aname === 'fillEffect') fillEffect = aval;
-    else if (aname === 'stroke') stroke = aval;
-    else if (aname === 'strokeWidth') strokeWidth = aval;
-    else if (aname === 'scale') scale = aval;
-  }
-  // Skip /> or >
-  if (c.kind() === TK.slash_gt) c.advance();
-  else if (c.kind() === TK.gt) c.advance();
-  const fillColor = fill.startsWith('#') ? parseColor(fill) : 'Color.rgb(255, 255, 255)';
-  const strokeColor = stroke ? (stroke.startsWith('#') ? parseColor(stroke) : 'Color.rgba(0, 0, 0, 0)') : 'Color.rgba(0, 0, 0, 0)';
-  const fillEffectStr = fillEffect ? `, .fill_effect = "${fillEffect}"` : '';
-  const glyphExpr = `.{ .d = "${d}", .fill = ${fillColor}, .stroke = ${strokeColor}, .stroke_width = ${strokeWidth}, .scale = ${scale}${fillEffectStr} }`;
-  return { nodeExpr: '.{ .text = "\\x01" }', isGlyph: true, glyphExpr };
-}
