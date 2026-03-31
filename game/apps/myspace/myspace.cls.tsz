@@ -261,9 +261,9 @@ classifier({
   // === Blog Page Components ===
   BlogList: { type: 'Box', style: { flexDirection: 'column', gap: 12 } },
   BlogPost: { type: 'Box', style: { flexDirection: 'column', gap: 6, padding: 12, backgroundColor: '#f8f8f8', borderRadius: 4 } },
-  BlogPostTitle: { type: 'Text', fontSize: 14, color: '#003399', fontWeight: 'bold' } },
-  BlogPostMeta: { type: 'Text', fontSize: 9, color: '#666666' } },
-  BlogPostExcerpt: { type: 'Text', fontSize: 11, color: '#333333' } },
+  BlogPostTitle: { type: 'Text', fontSize: 14, color: '#003399', fontWeight: 'bold' },
+  BlogPostMeta: { type: 'Text', fontSize: 9, color: '#666666' },
+  BlogPostExcerpt: { type: 'Text', fontSize: 11, color: '#333333' },
 
   // === Groups/Forum Components ===
   CategoryList: { type: 'Box', style: { flexDirection: 'column', gap: 8 } },
@@ -274,29 +274,29 @@ classifier({
   // === Music Page Components ===
   SongList: { type: 'Box', style: { flexDirection: 'column', gap: 8 } },
   SongItem: { type: 'Box', style: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 10, backgroundColor: '#f5f5f5', borderRadius: 4 } },
-  SongNumber: { type: 'Text', fontSize: 11, color: '#999999', width: 24 } },
+  SongNumber: { type: 'Text', fontSize: 11, color: '#999999', width: 24 },
   SongInfo: { type: 'Box', style: { flexDirection: 'column', flexGrow: 1, gap: 2 } },
-  SongTitle: { type: 'Text', fontSize: 12, color: '#333333' } },
-  SongArtist: { type: 'Text', fontSize: 10, color: '#666666' } },
-  SongPlays: { type: 'Text', fontSize: 10, color: '#999999' } },
+  SongTitle: { type: 'Text', fontSize: 12, color: '#333333' },
+  SongArtist: { type: 'Text', fontSize: 10, color: '#666666' },
+  SongPlays: { type: 'Text', fontSize: 10, color: '#999999' },
   PlayButton: { type: 'Pressable', style: { paddingLeft: 12, paddingRight: 12, paddingTop: 6, paddingBottom: 6, backgroundColor: '#00cc00', borderRadius: 4 } },
-  PlayButtonText: { type: 'Text', fontSize: 10, color: '#ffffff' } },
+  PlayButtonText: { type: 'Text', fontSize: 10, color: '#ffffff' },
 
   // === Favorites Page Components ===
   FavGrid: { type: 'Box', style: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 } },
   FavItem: { type: 'Pressable', style: { flexDirection: 'column', alignItems: 'center', gap: 4, width: 80 } },
   FavAvatar: { type: 'Box', style: { width: 64, height: 64, borderWidth: 1, borderColor: '#cccccc', alignItems: 'center', justifyContent: 'center' } },
-  FavName: { type: 'Text', fontSize: 10, color: '#003399' } },
+  FavName: { type: 'Text', fontSize: 10, color: '#003399' },
 
   // === Invite Page Components ===
   InviteForm: { type: 'Box', style: { flexDirection: 'column', gap: 12, maxWidth: 400 } },
   InviteInput: { type: 'Box', style: { height: 36, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#cccccc', paddingLeft: 8 } },
   InviteTextArea: { type: 'Box', style: { height: 80, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#cccccc', paddingLeft: 8, paddingTop: 8 } },
-  InviteLabel: { type: 'Text', fontSize: 11, color: '#333333', fontWeight: 'bold' } },
+  InviteLabel: { type: 'Text', fontSize: 11, color: '#333333', fontWeight: 'bold' },
   InviteButton: { type: 'Pressable', style: { paddingLeft: 20, paddingRight: 20, paddingTop: 10, paddingBottom: 10, backgroundColor: '#003399', borderRadius: 4, alignSelf: 'flexStart' } },
-  InviteButtonText: { type: 'Text', fontSize: 12, color: '#ffffff' } },
+  InviteButtonText: { type: 'Text', fontSize: 12, color: '#ffffff' },
 
   // === Empty State ===
   EmptyState: { type: 'Box', style: { flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 40, gap: 8 } },
-  EmptyStateText: { type: 'Text', fontSize: 14, color: '#999999' } },
+  EmptyStateText: { type: 'Text', fontSize: 14, color: '#999999' },
 })
