@@ -1,4 +1,4 @@
-// Cursor IDE — Script logic
+// Cursor IDE — Script logic with framework FFI bridges
 
 declare function setFiles(v: any): void;
 declare function setRecentFiles(v: any): void;
@@ -7,17 +7,218 @@ declare function setActiveTabId(v: string): void;
 declare function setCurrentInputState(v: string): void;
 declare function setIsGenerating(v: number): void;
 declare function setChatMessages(v: any): void;
+declare function setTerminalLines(v: any): void;
+declare function setSearchResults(v: any): void;
+declare function setAgentStatus(v: string): void;
+declare function setAgentProgress(v: number): void;
+declare function setIndexedFiles(v: number): void;
+declare function setDbStatus(v: string): void;
 declare function setErrors(v: number): void;
 declare function setWarnings(v: number): void;
 declare var files: any;
 declare var openTabs: any;
 declare var chatMessages: any;
+declare var terminalLines: any;
 declare var currentInput: string;
+declare var searchQuery: string;
+declare var showTerminal: number;
+declare var dbStatus: string;
+
+// === SQLite Project Index ===
+var dbHandle: any = null;
+var fsWatchers: any = {};
 
 function initData() {
-  // Data is initialized in the main app useState calls
+  // Initialize SQLite database for project indexing
+  try {
+    if (typeof __sqlite_open === 'function') {
+      dbHandle = __sqlite_open('cursor_project.db');
+      __sqlite_exec(dbHandle, 'CREATE TABLE IF NOT EXISTS files (path TEXT PRIMARY KEY, content TEXT, language TEXT, lines INTEGER, last_modified INTEGER)');
+      __sqlite_exec(dbHandle, 'CREATE TABLE IF NOT EXISTS symbols (name TEXT, file TEXT, line INTEGER, type TEXT)');
+      __sqlite_exec(dbHandle, 'CREATE INDEX IF NOT EXISTS idx_symbols_name ON symbols(name)');
+      setDbStatus('connected');
+    }
+  } catch (e) {
+    setDbStatus('offline');
+  }
+
+  // Start file system watcher
+  startFSWatcher('./src');
 }
 
+// === File System Operations ===
+function startFSWatcher(path: string) {
+  if (typeof __fs_scandir !== 'function') return;
+
+  // Initial scan
+  indexProject(path);
+
+  // Periodic rescan (simulated watcher)
+  setInterval(function() {
+    if (showTerminal == 1) {
+      indexProject(path);
+    }
+  }, 10000);
+}
+
+function indexProject(path: string) {
+  if (!dbHandle) return;
+
+  try {
+    var entries = __fs_scandir(path);
+    var count = 0;
+
+    for (var i = 0; i < entries.length; i++) {
+      var entry = entries[i];
+      if (entry.endsWith('.ts') || entry.endsWith('.tsx') || entry.endsWith('.js')) {
+        count++;
+        // Insert or update file record
+        var stmt = __sqlite_prepare(dbHandle, 'INSERT OR REPLACE INTO files (path, language, lines) VALUES (?, ?, ?)');
+        if (stmt) {
+          __sqlite_bind_text(stmt, 1, entry);
+          __sqlite_bind_text(stmt, 2, entry.endsWith('x') ? 'tsx' : 'ts');
+          __sqlite_bind_int(stmt, 3, Math.floor(Math.random() * 500) + 10);
+          __sqlite_step(stmt);
+          __sqlite_finalize(stmt);
+        }
+      }
+    }
+
+    setIndexedFiles(count);
+    setTotalFiles(count + 5);
+  } catch (e) {
+    // FS not available in all builds
+  }
+}
+
+function searchProject(query: string) {
+  if (!dbHandle || query.length == 0) return [];
+
+  var results = [];
+  try {
+    var sql = 'SELECT path, content FROM files WHERE path LIKE ? OR content LIKE ? LIMIT 20';
+    var stmt = __sqlite_prepare(dbHandle, sql);
+    if (stmt) {
+      __sqlite_bind_text(stmt, 1, '%' + query + '%');
+      __sqlite_bind_text(stmt, 2, '%' + query + '%');
+
+      while (__sqlite_step(stmt)) {
+        results.push({
+          file: __sqlite_column_text(stmt, 0),
+          text: __sqlite_column_text(stmt, 1) || '...',
+          line: 1
+        });
+      }
+      __sqlite_finalize(stmt);
+    }
+  } catch (e) {
+    // Fallback to mock results
+    results = [
+      { file: 'useSQLite.ts', line: 15, text: 'const db = __sqlite_open("project.db");' },
+      { file: 'SearchPanel.tsx', line: 42, text: 'function searchProject(query) {' }
+    ];
+  }
+
+  return results;
+}
+
+// === Terminal / PTY ===
+function openTerminal() {
+  try {
+    if (typeof __pty_open === 'function') {
+      __pty_open('/bin/bash', { cwd: './' });
+      var lines = terminalLines;
+      lines.push({ text: '[pty] Terminal opened', type: 'info' });
+      setTerminalLines(lines);
+    }
+  } catch (e) {
+    // PTY not available
+  }
+}
+
+function execCommand(cmd: string) {
+  var lines = terminalLines;
+  lines.push({ text: '$ ' + cmd, type: 'command' });
+
+  try {
+    if (typeof __exec === 'function') {
+      var result = __exec(cmd);
+      lines.push({ text: result, type: 'output' });
+    } else {
+      // Simulate common commands
+      if (cmd.indexOf('__sqlite') >= 0) {
+        lines.push({ text: '[SQL query executed: 12ms]', type: 'output' });
+      } else if (cmd.indexOf('__fs_scandir') >= 0) {
+        lines.push({ text: '["components", "hooks", "utils", "styles"]', type: 'output' });
+      } else if (cmd.indexOf('__fetch') >= 0) {
+        lines.push({ text: '{"status": "ok", "data": {...}}', type: 'output' });
+      } else {
+        lines.push({ text: 'command not found: ' + cmd, type: 'error' });
+      }
+    }
+  } catch (e) {
+    lines.push({ text: 'Error: ' + e.message, type: 'error' });
+  }
+
+  lines.push({ text: '$', type: 'prompt' });
+  setTerminalLines(lines);
+}
+
+// === HTTP / Agent API ===
+function fetchAgent(prompt: string) {
+  setIsGenerating(1);
+  setAgentStatus('thinking');
+
+  try {
+    if (typeof __fetch === 'function') {
+      // Real HTTP call to agent API
+      __fetch('http://localhost:8080/api/agent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: prompt, context: getContext() })
+      }).then(function(response) {
+        return response.json();
+      }).then(function(data) {
+        var msgs = chatMessages;
+        msgs.push({ role: 'assistant', time: 'now', text: data.response });
+        setChatMessages(msgs);
+        setIsGenerating(0);
+        setAgentStatus('idle');
+      }).catch(function(e) {
+        setIsGenerating(0);
+        setAgentStatus('error');
+      });
+    } else {
+      // Fallback simulation
+      setTimeout(function() {
+        var msgs = chatMessages;
+        msgs.push({
+          role: 'assistant',
+          time: 'now',
+          text: 'I\'ve analyzed your request. Using SQLite index, I found ' + indexedFiles + ' files. Would you like me to refactor the component structure?'
+        });
+        setChatMessages(msgs);
+        setIsGenerating(0);
+        setAgentStatus('idle');
+      }, 1500);
+    }
+  } catch (e) {
+    setIsGenerating(0);
+    setAgentStatus('error');
+  }
+}
+
+function getContext() {
+  // Gather context from open files
+  var context = {
+    openFiles: openTabs.map(function(t) { return t.name; }),
+    cursorPosition: cursorPosition,
+    projectStats: { files: indexedFiles, symbols: 234 }
+  };
+  return JSON.stringify(context);
+}
+
+// === File Actions ===
 function selectFile(idx: number) {
   var f = files;
   f[idx].selected = 1 - f[idx].selected;
@@ -46,19 +247,27 @@ function sendMessage() {
   if (currentInput.length == 0) return;
 
   var msgs = chatMessages;
-  msgs.push({ role: 'user', time: '2:37 PM', text: currentInput });
+  msgs.push({ role: 'user', time: 'now', text: currentInput });
   setChatMessages(msgs);
   setCurrentInputState('');
   setIsGenerating(1);
+  setAgentStatus('thinking');
 
-  setTimeout(function() {
-    var m = chatMessages;
-    m.push({ role: 'assistant', time: '2:37 PM', text: 'I understand. Let me make those changes for you.' });
-    setChatMessages(m);
-    setIsGenerating(0);
-  }, 1500);
+  fetchAgent(currentInput);
 }
 
-function updateCursorPosition() {
-  // Handled by interval in main app
-}
+// Export for components
+export {
+  initData,
+  selectFile,
+  activateTab,
+  closeTab,
+  setCurrentInput,
+  sendMessage,
+  openTerminal,
+  execCommand,
+  searchProject,
+  indexProject,
+  fetchAgent,
+  startFSWatcher,
+};

@@ -1,0 +1,55 @@
+// Agent Tools Panel — Indexing, embeddings, code analysis
+
+function AgentTools(props) {
+  var statusColor = '#6e6e6e';
+  if (props.status == 'thinking') statusColor = '#2d62ff';
+  if (props.status == 'error') statusColor = '#ff7b72';
+  if (props.status == 'idle') statusColor = '#7ee787';
+
+  return (
+    <C.AgentToolsPanel>
+      <C.AgentToolsHeader>
+        <C.AgentToolsTitle>Agent Tools</C.AgentToolsTitle>
+        <C.AgentStatus style={{ color: statusColor }}>{props.status}</C.AgentStatus>
+      </C.AgentToolsHeader>
+
+      <C.AgentToolsContent>
+        <C.AgentToolSection>
+          <C.AgentToolLabel>Project Index</C.AgentToolLabel>
+          <C.AgentProgressBar>
+            <C.AgentProgressFill style={{ width: (props.indexedFiles / props.totalFiles * 100) + '%' }} />
+          </C.AgentProgressBar>
+          <C.AgentToolMeta>{props.indexedFiles} / {props.totalFiles} files indexed</C.AgentToolMeta>
+        </C.AgentToolSection>
+
+        <C.AgentToolSection>
+          <C.AgentToolLabel>SQLite Database</C.AgentToolLabel>
+          <C.AgentToolButtons>
+            <C.AgentToolBtn onPress={function() { indexProject('./src'); }}>Reindex</C.AgentToolBtn>
+            <C.AgentToolBtn>Vacuum</C.AgentToolBtn>
+            <C.AgentToolBtn>Export</C.AgentToolBtn>
+          </C.AgentToolButtons>
+        </C.AgentToolSection>
+
+        <C.AgentToolSection>
+          <C.AgentToolLabel>Embeddings</C.AgentToolLabel>
+          <C.AgentToolMeta>234 vectors stored</C.AgentToolMeta>
+          <C.AgentToolButtons>
+            <C.AgentToolBtn>Rebuild</C.AgentToolBtn>
+            <C.AgentToolBtn>Query</C.AgentToolBtn>
+          </C.AgentToolButtons>
+        </C.AgentToolSection>
+
+        <C.AgentToolSection>
+          <C.AgentToolLabel>External APIs</C.AgentToolLabel>
+          <C.AgentToolButtons>
+            <C.AgentToolBtn onPress={function() { __fetch && __fetch('http://localhost:8080/health'); }}>Test HTTP</C.AgentToolBtn>
+            <C.AgentToolBtn onPress={function() { execCommand('__fs_scandir "."'); }}>Test FS</C.AgentToolBtn>
+          </C.AgentToolButtons>
+        </C.AgentToolSection>
+      </C.AgentToolsContent>
+    </C.AgentToolsPanel>
+  );
+}
+
+export { AgentTools };

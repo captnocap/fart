@@ -1,0 +1,50 @@
+// Search Panel — Full-text search using SQLite FTS
+
+function SearchResult(props) {
+  var result = props.result;
+
+  return (
+    <C.SearchResult>
+      <C.SearchResultHeader>
+        <C.SearchResultFile>{result.file}</C.SearchResultFile>
+        <C.SearchResultLine>:{result.line}</C.SearchResultLine>
+      </C.SearchResultHeader>
+      <C.SearchResultText>{result.text}</C.SearchResultText>
+      <C.SearchResultMatches>{result.matches} matches</C.SearchResultMatches>
+    </C.SearchResult>
+  );
+}
+
+function SearchPanel(props) {
+  return (
+    <C.SearchPanel>
+      <C.SearchHeader>
+        <C.SearchTitle>Project Search</C.SearchTitle>
+        <C.SearchInputBox>
+          <C.SearchInput value={props.query} onChange={function(v) { setSearchQuery(v); }} placeholder="Search files, symbols..." />
+          <C.SearchInputIcon>Q</C.SearchInputIcon>
+        </C.SearchInputBox>
+        <C.SearchOptions>
+          <C.SearchOption>Case</C.SearchOption>
+          <C.SearchOption>Regex</C.SearchOption>
+          <C.SearchOption>Words</C.SearchOption>
+        </C.SearchOptions>
+      </C.SearchHeader>
+
+      <C.SearchResults>
+        <C.SearchResultsStack>
+          {props.results.map(function(result, idx) {
+            return <SearchResult result={result} />;
+          })}
+        </C.SearchResultsStack>
+      </C.SearchResults>
+
+      <C.SearchFooter>
+        <C.SearchFooterText>3 results</C.SearchFooterText>
+        <C.SearchActionBtn onPress={function() { searchProject(searchQuery); }}>Refresh</C.SearchActionBtn>
+      </C.SearchFooter>
+    </C.SearchPanel>
+  );
+}
+
+export { SearchPanel };
