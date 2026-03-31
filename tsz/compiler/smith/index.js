@@ -7,23 +7,6 @@
 
 // Collection lives in smith/refactor/collect/*
 
-// Resolve props.X dot-access: if current token is the component's bare param name
-// (e.g., 'props') and next tokens are .fieldName, check if fieldName is in propStack.
-// Returns { field, value } if resolved, null otherwise. Does NOT advance cursor.
-function peekPropsAccess(c) {
-  if (!ctx.propsObjectName || c.kind() !== TK.identifier || c.text() !== ctx.propsObjectName) return null;
-  if (c.pos + 2 >= c.count) return null;
-  if (c.kindAt(c.pos + 1) !== TK.dot || c.kindAt(c.pos + 2) !== TK.identifier) return null;
-  const field = c.textAt(c.pos + 2);
-  if (ctx.propStack && ctx.propStack[field] !== undefined) return { field: field, value: ctx.propStack[field] };
-  return null;
-}
-
-// Skip past props.X tokens (3 tokens: identifier, dot, identifier)
-function skipPropsAccess(c) {
-  c.advance(); c.advance(); c.advance();
-}
-
 // State/object-array collection lives in smith/refactor/collect/state.js
 
 // Classifier support lives in smith/refactor/collect/classifiers.js

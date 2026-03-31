@@ -37,6 +37,7 @@ Current constraint:
 - [x] Shared brace/offset parse helpers: `skipBraces`, `offsetToLine`.
 - [x] Shared press-handler capture helpers: forwarded refs, named handlers, inline closures.
 - [x] Shared attr value readers: signed numbers, vectors, repeated field emit helpers.
+- [x] Shared prop-access helpers: `peekPropsAccess`, `skipPropsAccess`.
 - [ ] Shared parse utility home for byte/offset/tag helpers.
 
 ## Phase 2: Collection Pass
@@ -45,6 +46,7 @@ Current constraint:
 - [x] Extract script block collection into its own unit.
 - [x] Extract state/object-array collection into its own unit.
 - [x] Extract classifier collection into its own unit.
+- [x] Extract render-local collection into its own unit.
 - [x] Reduce `index.js` collection work to composition only.
 
 ## Phase 3: Parse Dispatch

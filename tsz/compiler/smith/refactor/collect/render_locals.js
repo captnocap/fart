@@ -1,0 +1,122 @@
+// ── Render-local collection ──────────────────────────────────────
+
+function skipRenderLocalDestructure(c) {
+  var depth = 1;
+  c.advance();
+  while (c.pos < c.count && depth > 0) {
+    if (c.kind() === TK.lbracket) depth++;
+    if (c.kind() === TK.rbracket) depth--;
+    c.advance();
+  }
+  while (c.pos < c.count &&
+         c.kind() !== TK.rparen &&
+         !c.isIdent('const') &&
+         !c.isIdent('let') &&
+         !c.isIdent('return')) {
+    c.advance();
+  }
+  if (c.kind() === TK.rparen) c.advance();
+}
+
+function appendRenderLocalToken(c, valParts) {
+  if (c.kind() === TK.identifier && ctx.renderLocals[c.text()] !== undefined) {
+    valParts.push(ctx.renderLocals[c.text()]);
+    return true;
+  }
+  if (c.kind() === TK.identifier && isGetter(c.text())) {
+    valParts.push(slotGet(c.text()));
+    return true;
+  }
+  if (c.kind() === TK.eq_eq) {
+    c.advance();
+    if (c.kind() === TK.equals) c.advance();
+    if (c.kind() === TK.string) {
+      const lhs = valParts.join('');
+      const rhs = c.text().slice(1, -1);
+      valParts.length = 0;
+      valParts.push('std.mem.eql(u8, ' + lhs + ', "' + rhs + '")');
+    } else {
+      valParts.push(' == ');
+      return false;
+    }
+    return true;
+  }
+  if (c.kind() === TK.not_eq) {
+    c.advance();
+    if (c.kind() === TK.equals) c.advance();
+    if (c.kind() === TK.string) {
+      const lhs = valParts.join('');
+      const rhs = c.text().slice(1, -1);
+      valParts.length = 0;
+      valParts.push('!std.mem.eql(u8, ' + lhs + ', "' + rhs + '")');
+    } else {
+      valParts.push(' != ');
+      return false;
+    }
+    return true;
+  }
+  if (c.kind() === TK.star || c.kind() === TK.plus || c.kind() === TK.minus || c.kind() === TK.slash || c.kind() === TK.percent) {
+    valParts.push(' ' + c.text() + ' ');
+    return true;
+  }
+  if (c.kind() === TK.string) {
+    valParts.push('"' + c.text().slice(1, -1) + '"');
+    return true;
+  }
+  valParts.push(c.text());
+  return true;
+}
+
+function readRenderLocalValue(c) {
+  var valParts = [];
+  var depth = 0;
+  while (c.pos < c.count) {
+    if (c.kind() === TK.semicolon && depth === 0) {
+      c.advance();
+      break;
+    }
+    if (depth === 0 &&
+        c.kind() === TK.identifier &&
+        (c.text() === 'const' || c.text() === 'let' || c.text() === 'return' || c.text() === 'function')) {
+      break;
+    }
+    if (c.kind() === TK.lparen || c.kind() === TK.lbracket || c.kind() === TK.lbrace) depth++;
+    if (c.kind() === TK.rparen || c.kind() === TK.rbracket || c.kind() === TK.rbrace) {
+      depth--;
+      if (depth < 0) break;
+    }
+    if (!appendRenderLocalToken(c, valParts)) continue;
+    c.advance();
+  }
+  return valParts.join('');
+}
+
+function collectRenderLocals(c, appStart) {
+  ctx.renderLocals = {};
+  const saved = c.save();
+  c.pos = appStart;
+  while (c.pos < c.count && c.kind() !== TK.lbrace) c.advance();
+  if (c.kind() === TK.lbrace) c.advance();
+  while (c.pos < c.count) {
+    if (c.isIdent('return')) break;
+    if (c.isIdent('const') || c.isIdent('let')) {
+      c.advance();
+      if (c.kind() === TK.lbracket) {
+        skipRenderLocalDestructure(c);
+        continue;
+      }
+      if (c.kind() === TK.identifier) {
+        const varName = c.text();
+        c.advance();
+        if (c.kind() === TK.equals) {
+          c.advance();
+          const valStr = readRenderLocalValue(c);
+          if (!valStr.includes('useState')) ctx.renderLocals[varName] = valStr;
+        }
+      }
+      continue;
+    }
+    c.advance();
+  }
+  c.restore(saved);
+}

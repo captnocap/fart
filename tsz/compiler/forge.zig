@@ -22,6 +22,7 @@ const SMITH_JS = @embedFile("smith/rules.js") ++ "\n" ++
     @embedFile("smith/refactor/collect/script.js") ++ "\n" ++
     @embedFile("smith/refactor/collect/state.js") ++ "\n" ++
     @embedFile("smith/refactor/collect/classifiers.js") ++ "\n" ++
+    @embedFile("smith/refactor/collect/render_locals.js") ++ "\n" ++
     @embedFile("smith/refactor/collect/pipeline.js") ++ "\n" ++
     @embedFile("smith/index.js") ++ "\n" ++
     @embedFile("smith/mod.js") ++ "\n" ++

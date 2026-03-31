@@ -162,3 +162,18 @@ function slotGet(name) {
   if (s.type === 'boolean') return `state.getSlotBool(${i})`;
   return `state.getSlot(${i})`;
 }
+
+function peekPropsAccess(c) {
+  if (!ctx.propsObjectName || c.kind() !== TK.identifier || c.text() !== ctx.propsObjectName) return null;
+  if (c.pos + 2 >= c.count) return null;
+  if (c.kindAt(c.pos + 1) !== TK.dot || c.kindAt(c.pos + 2) !== TK.identifier) return null;
+  const field = c.textAt(c.pos + 2);
+  if (ctx.propStack && ctx.propStack[field] !== undefined) return { field: field, value: ctx.propStack[field] };
+  return null;
+}
+
+function skipPropsAccess(c) {
+  c.advance();
+  c.advance();
+  c.advance();
+}
