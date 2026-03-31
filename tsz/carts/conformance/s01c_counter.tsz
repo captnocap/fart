@@ -1,7 +1,5 @@
 // SURFACE CONFORMANCE s01c: Counter — chad tier
 
-from './s00c_manifest_cls'
-
 <page route=counter>
   <var>
     count is 0
@@ -26,20 +24,23 @@ from './s00c_manifest_cls'
   </functions>
 
   return(
-    <C.Page style={{ backgroundColor: '#0f172a', padding: 16, gap: 8 }}>
-      <C.Title style={{ fontSize: 22, color: '#f8fafc' }}>Counter</C.Title>
-      <C.Body style={{ fontSize: 14, color: '#e2e8f0' }}>{hint}</C.Body>
-      <C.Body style={{ fontSize: 14, color: '#e2e8f0' }}>{count}</C.Body>
-
-      <C.BtnDanger style={{ padding: 10, borderRadius: 6 }} onPress=decrement>
-        <C.Body style={{ fontSize: 14, color: '#ffffff' }}>Red Minus</C.Body>
-      </C.BtnDanger>
-      <C.BtnMuted style={{ padding: 10, borderRadius: 6, backgroundColor: '#334155' }} onPress=reset>
-        <C.Body style={{ fontSize: 14, color: '#ffffff' }}>Gray Reset</C.Body>
-      </C.BtnMuted>
-      <C.Btn style={{ padding: 10, borderRadius: 6, backgroundColor: '#3b82f6' }} onPress=increment>
-        <C.Body style={{ fontSize: 14, color: '#ffffff' }}>Blue Plus</C.Body>
-      </C.Btn>
-    </C.Page>
+    <Box style={{ backgroundColor: "#0f172a", width: "100%", height: "100%", alignItems: "center", justifyContent: "center" }}>
+      <Box style={{ backgroundColor: "#1e293b", borderRadius: 12, padding: 24, gap: 16, alignItems: "center" }}>
+        <Text fontSize={18} color="#e2e8f0">Counter</Text>
+        <Text fontSize={11} color="#64748b">{hint}</Text>
+        <Text fontSize={48} color="#f8fafc">{count}</Text>
+        <Box style={{ flexDirection: "row", gap: 8 }}>
+          <Pressable onPress=decrement style={{ padding: 12, backgroundColor: "#dc2626", borderRadius: 8, minWidth: 44, alignItems: "center", justifyContent: "center" }}>
+            <Text fontSize={18} color="#ffffff">-</Text>
+          </Pressable>
+          <Pressable onPress=reset style={{ padding: 12, backgroundColor: "#334155", borderRadius: 8, minWidth: 44, alignItems: "center", justifyContent: "center" }}>
+            <Text fontSize={12} color="#94a3b8">Reset</Text>
+          </Pressable>
+          <Pressable onPress=increment style={{ padding: 12, backgroundColor: "#3b82f6", borderRadius: 8, minWidth: 44, alignItems: "center", justifyContent: "center" }}>
+            <Text fontSize={18} color="#ffffff">+</Text>
+          </Pressable>
+        </Box>
+      </Box>
+    </Box>
   )
 </page>

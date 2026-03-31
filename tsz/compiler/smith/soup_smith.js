@@ -306,6 +306,13 @@ function soupToZig(node, warns, inPressable) {
     var tc = _SC.textH;
     if (node.tag === 'p' || node.tag === 'label') tc = _SC.textP;
     if (node.tag === 'span' || node.tag === 'small') tc = _SC.textDim;
+    if (inPressable) tc = _SC.textWhite;
+
+    if (styleAttr && typeof styleAttr === 'object' && styleAttr.expr) {
+      var textStyle = soupParseTextStyle(styleAttr.expr);
+      if (textStyle.fontSize !== null) fs = textStyle.fontSize;
+      if (textStyle.textColor) tc = textStyle.textColor;
+    }
 
     // Check children: could be text, expr, or mixed
     var textContent = '';
@@ -341,19 +348,30 @@ function soupToZig(node, warns, inPressable) {
   // ── Pressable (button) ──
   if (kind === 'pressable') {
     var parts = [];
-    // Determine button color from text content
-    var btnColor = _SC.btnBlue;
-    var btnText = '';
-    for (var ci = 0; ci < node.children.length; ci++) {
-      if (node.children[ci].type === 'text') btnText += node.children[ci].text.toLowerCase();
+    var btnStyleFields = styleFields.slice();
+    if (btnStyleFields.every(function(f) { return f.indexOf('background_color') < 0; })) {
+      // Preserve the old soup heuristic only when no explicit button color exists.
+      var btnColor = _SC.btnBlue;
+      var btnText = '';
+      for (var ci = 0; ci < node.children.length; ci++) {
+        if (node.children[ci].type === 'text') btnText += node.children[ci].text.toLowerCase();
+      }
+      if (btnText.indexOf('red') >= 0 || btnText.indexOf('delete') >= 0 || btnText.indexOf('remove') >= 0)
+        btnColor = _SC.btnRed;
+      else if (btnText.indexOf('reset') >= 0 || btnText.indexOf('cancel') >= 0 || btnText.indexOf('gray') >= 0)
+        btnColor = _SC.btnGray;
+      btnStyleFields.push('.background_color = Color.rgb(' + btnColor + ')');
     }
-    if (btnText.indexOf('red') >= 0 || btnText.indexOf('delete') >= 0 || btnText.indexOf('remove') >= 0)
-      btnColor = _SC.btnRed;
-    else if (btnText.indexOf('reset') >= 0 || btnText.indexOf('cancel') >= 0 || btnText.indexOf('gray') >= 0)
-      btnColor = _SC.btnGray;
+    if (btnStyleFields.every(function(f) { return f.indexOf('.padding') < 0; }))
+      btnStyleFields.push('.padding = 10');
+    if (btnStyleFields.every(function(f) { return f.indexOf('border_radius') < 0; }))
+      btnStyleFields.push('.border_radius = 6');
+    if (btnStyleFields.every(function(f) { return f.indexOf('align_items') < 0; }))
+      btnStyleFields.push('.align_items = .center');
+    if (btnStyleFields.every(function(f) { return f.indexOf('justify_content') < 0; }))
+      btnStyleFields.push('.justify_content = .center');
 
-    var btnStyle = '.style = .{ .padding = 10, .background_color = Color.rgb(' + btnColor + '), .border_radius = 6 }';
-    parts.push(btnStyle);
+    parts.push('.style = .{ ' + btnStyleFields.join(', ') + ' }');
     if (handlerRef) parts.push('.handlers = .{ .js_on_press = "' + handlerRef + '()" }');
 
     if (childResults.length > 0) {
@@ -697,11 +715,8 @@ function soupParseStyle(expr, warns) {
   var bgM = /backgroundColor\s*:\s*(?:'([^']+)'|"([^"]+)"|(\w+))/.exec(expr);
   if (bgM) {
     var bg = bgM[1] || bgM[2] || bgM[3] || '';
-    if (bg.charAt(0) === '#') { var c = soupHexRgb(bg); if (c) fields.push('.background_color = Color.rgb(' + c + ')'); }
-    else if (bg === 'blue') fields.push('.background_color = Color.rgb(59, 130, 246)');
-    else if (bg === 'red') fields.push('.background_color = Color.rgb(220, 38, 38)');
-    else if (bg === 'black') fields.push('.background_color = Color.rgb(0, 0, 0)');
-    else if (bg === 'white') fields.push('.background_color = Color.rgb(255, 255, 255)');
+    var c = soupStyleColorToRgb(bg);
+    if (c) fields.push('.background_color = Color.rgb(' + c + ')');
     // Dynamic bg (variable ref) → skip with warning
     else if (/^\w+$/.test(bg)) warns.push('[W] dynamic backgroundColor=' + bg + ' dropped');
   }
@@ -709,13 +724,69 @@ function soupParseStyle(expr, warns) {
   if (wM) { var wv = wM[1]||wM[2]||wM[3]||''; if (wv==='100%') fields.push('.width = -1'); else if (/^\d+$/.test(wv)) fields.push('.width = '+wv); }
   var hM = /\bheight\s*:\s*(?:'([^']+)'|"([^"]+)"|(\d+))/.exec(expr);
   if (hM) { var hv = hM[1]||hM[2]||hM[3]||''; if (hv==='100%') fields.push('.height = -1'); else if (/^\d+$/.test(hv)) fields.push('.height = '+hv); }
+  var minWM = /\bminWidth\s*:\s*(\d+)/.exec(expr);
+  if (minWM) fields.push('.min_width = ' + minWM[1]);
   var pM = /\bpadding\s*:\s*(\d+)/.exec(expr);
   if (pM) fields.push('.padding = ' + pM[1]);
   var gM = /\bgap\s*:\s*(\d+)/.exec(expr);
   if (gM) fields.push('.gap = ' + gM[1]);
   var brM = /\bborderRadius\s*:\s*(\d+)/.exec(expr);
   if (brM) fields.push('.border_radius = ' + brM[1]);
+  var fdM = /flexDirection\s*:\s*(?:'([^']+)'|"([^"]+)")/.exec(expr);
+  if (fdM) {
+    var fd = (fdM[1] || fdM[2] || '').toLowerCase();
+    if (fd === 'row') fields.push('.flex_direction = .row');
+    else if (fd === 'column') fields.push('.flex_direction = .column');
+  }
+  var aiM = /alignItems\s*:\s*(?:'([^']+)'|"([^"]+)")/.exec(expr);
+  if (aiM) {
+    var ai = aiM[1] || aiM[2] || '';
+    if (ai === 'center') fields.push('.align_items = .center');
+    else if (ai === 'start' || ai === 'flex-start' || ai === 'flexStart') fields.push('.align_items = .start');
+    else if (ai === 'end' || ai === 'flex-end' || ai === 'flexEnd') fields.push('.align_items = .end');
+  }
+  var jcM = /justifyContent\s*:\s*(?:'([^']+)'|"([^"]+)")/.exec(expr);
+  if (jcM) {
+    var jc = jcM[1] || jcM[2] || '';
+    if (jc === 'center') fields.push('.justify_content = .center');
+    else if (jc === 'start' || jc === 'flex-start' || jc === 'flexStart') fields.push('.justify_content = .start');
+    else if (jc === 'end' || jc === 'flex-end' || jc === 'flexEnd') fields.push('.justify_content = .end');
+    else if (jc === 'space-between' || jc === 'spaceBetween') fields.push('.justify_content = .space_between');
+  }
+  var ovM = /overflow\s*:\s*(?:'([^']+)'|"([^"]+)")/.exec(expr);
+  if (ovM) {
+    var ov = ovM[1] || ovM[2] || '';
+    if (ov === 'hidden') fields.push('.overflow = .hidden');
+  }
   return fields;
+}
+
+function soupStyleColorToRgb(raw) {
+  if (!raw) return null;
+  if (raw.charAt(0) === '#') return soupHexRgb(raw);
+  var key = raw.toLowerCase();
+  if (typeof namedColors !== 'undefined' && namedColors[key]) {
+    var c = namedColors[key];
+    return c[0] + ', ' + c[1] + ', ' + c[2];
+  }
+  if (key === 'blue') return '59, 130, 246';
+  if (key === 'red') return '220, 38, 38';
+  if (key === 'black') return '0, 0, 0';
+  if (key === 'white') return '255, 255, 255';
+  return null;
+}
+
+function soupParseTextStyle(expr) {
+  var result = { fontSize: null, textColor: null };
+  var fsM = /\bfontSize\s*:\s*(\d+)/.exec(expr);
+  if (fsM) result.fontSize = parseInt(fsM[1], 10);
+  var colorM = /\bcolor\s*:\s*(?:'([^']+)'|"([^"]+)"|(\w+))/.exec(expr);
+  if (colorM) {
+    var raw = colorM[1] || colorM[2] || colorM[3] || '';
+    var rgb = soupStyleColorToRgb(raw);
+    if (rgb) result.textColor = rgb;
+  }
+  return result;
 }
 
 function soupHexRgb(hex) {
