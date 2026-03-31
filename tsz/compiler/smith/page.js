@@ -510,17 +510,5 @@ function compilePage(source, c, file) {
     ctx.scriptBlock += '\n' + evalLines.join('\n');
   }
 
-  // Preflight validation
-  var pf = preflight(ctx);
-  if (!pf.ok) {
-    return stampIntegrity(preflightErrorZig(pf, file));
-  }
-  ctx._preflight = pf;
-
-  // Emit Zig output
-  var zigOut = emitOutput(root.nodeExpr, file);
-  if (typeof zigOut === 'string' && zigOut.indexOf('__SPLIT_OUTPUT__') === 0) {
-    return zigOut;
-  }
-  return stampIntegrity(zigOut);
+  return finishParsedLane(root.nodeExpr, file);
 }

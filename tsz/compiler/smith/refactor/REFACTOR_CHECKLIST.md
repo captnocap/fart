@@ -114,11 +114,11 @@ Current constraint:
 
 ## Phase 7: Lane Compilers
 
-- [ ] Separate app lane composition.
-- [ ] Separate page lane composition.
-- [ ] Separate module lane composition.
-- [ ] Separate soup lane composition.
-- [ ] Make lane-specific masters call shared collect/parse/preflight/emit helpers.
+- [x] Separate app lane composition.
+- [x] Separate page lane composition.
+- [x] Separate module lane composition.
+- [x] Separate soup lane composition.
+- [x] Make lane-specific masters call shared collect/parse/preflight/emit helpers.
 
 ## Phase 8: Build Integration
 

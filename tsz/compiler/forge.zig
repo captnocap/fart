@@ -24,6 +24,12 @@ const SMITH_JS = @embedFile("smith/rules.js") ++ "\n" ++
     @embedFile("smith/refactor/collect/classifiers.js") ++ "\n" ++
     @embedFile("smith/refactor/collect/render_locals.js") ++ "\n" ++
     @embedFile("smith/refactor/collect/pipeline.js") ++ "\n" ++
+    @embedFile("smith/refactor/lanes/shared.js") ++ "\n" ++
+    @embedFile("smith/refactor/lanes/app.js") ++ "\n" ++
+    @embedFile("smith/refactor/lanes/page.js") ++ "\n" ++
+    @embedFile("smith/refactor/lanes/module.js") ++ "\n" ++
+    @embedFile("smith/refactor/lanes/soup.js") ++ "\n" ++
+    @embedFile("smith/refactor/lanes/dispatcher.js") ++ "\n" ++
     @embedFile("smith/index.js") ++ "\n" ++
     @embedFile("smith/mod.js") ++ "\n" ++
     @embedFile("smith/page.js") ++ "\n" ++
