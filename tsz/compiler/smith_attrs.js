@@ -461,7 +461,8 @@ function parseHandler(c) {
           // Single string arg: 'value' → callGlobalStr (avoids single-quote lint)
           const strMatch = args.match(/^'([^']*)'$/) || args.match(/^"([^"]*)"$/);
           if (strMatch) {
-            body += `    qjs_runtime.callGlobalStr("${fname}", "${strMatch[1]}");\n`;
+            var _strVal = strMatch[1].replace(/"/g, '\\"');
+            body += `    qjs_runtime.callGlobalStr("${fname}", "${_strVal}");\n`;
           } else if (/^-?\d+$/.test(args)) {
             body += `    qjs_runtime.callGlobalInt("${fname}", ${args});\n`;
           } else {
@@ -758,16 +759,31 @@ function parseValueExpr(c) {
     }
     if (c.kind() === TK.identifier) {
       const name = c.text();
+      // Const OA row ref + .field (from prop or render local)
+      var _pvRef = (ctx.propStack && ctx.propStack[name]) || (ctx.renderLocals && ctx.renderLocals[name]);
+      if (typeof _pvRef === 'string' && _pvRef.charCodeAt(0) === 1 &&
+          c.pos + 2 < c.count && c.kindAt(c.pos + 1) === TK.dot && c.kindAt(c.pos + 2) === TK.identifier) {
+        var _vfld = resolveConstOaFieldFromRef(_pvRef, c.textAt(c.pos + 2));
+        if (_vfld !== null) {
+          if (_vfld.charAt(0) === '"' && _vfld.charAt(_vfld.length - 1) === '"') _vfld = _vfld.slice(1, -1);
+          parts.push(_vfld);
+          c.advance(); c.advance(); c.advance(); continue;
+        }
+      }
+      // Object state field access
+      var _osRef = tryResolveObjectStateAccess(c);
+      if (_osRef) { parts.push(_osRef); continue; }
       if (isGetter(name)) {
         parts.push(slotGet(name));
       } else if (ctx.currentMap && name === ctx.currentMap.indexParam) {
-        parts.push('0'); // map index → 0 in handler context (reference behavior)
+        parts.push('0');
       } else if (ctx.propStack && ctx.propStack[name] !== undefined) {
         const pv = ctx.propStack[name];
-        // Use numeric prop values directly; non-numeric (like _i map var) fall back to 0
         parts.push(/^-?\d+(\.\d+)?$/.test(pv) ? pv : '0');
       } else {
-        parts.push(name);
+        // Unknown identifier (e.g. handler closure param) — emit 0 for valid Zig
+        // The JS handler body provides the actual runtime behavior
+        parts.push('0');
       }
       c.advance(); continue;
     }
