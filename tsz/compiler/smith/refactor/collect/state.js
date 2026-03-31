@@ -73,6 +73,7 @@ function collectState(c) {
 }
 
 function collectObjectArrayState(c, getter, setter) {
+  const arrayStartPos = c.pos - 1; // position of [
   c.advance();
   if (c.kind() !== TK.lbrace) return 'int';
 
@@ -110,7 +111,11 @@ function collectObjectArrayState(c, getter, setter) {
   }
 
   const parentOaIdx = ctx.objectArrays.length;
-  ctx.objectArrays.push({ fields, getter, setter, oaIdx: parentOaIdx });
+  // Capture raw token range for initial data emission
+  // arrayStartPos is at [, current pos is after first object's fields (still inside the array)
+  // We'll reconstruct the JS source from tokens between [ and the matching ]
+  const initDataStartPos = arrayStartPos;
+  ctx.objectArrays.push({ fields, getter, setter, oaIdx: parentOaIdx, initDataStartPos });
   for (const field of fields) {
     if (field.type === 'nested_array' && field.nestedFields) {
       const childOaIdx = ctx.objectArrays.length;
@@ -133,6 +138,9 @@ function collectObjectArrayState(c, getter, setter) {
     if (c.kind() === TK.rbracket || c.kind() === TK.rbrace) depth--;
     c.advance();
   }
+  // Save end position for initial data reconstruction
+  const oa = ctx.objectArrays[parentOaIdx];
+  oa.initDataEndPos = c.pos; // position after closing ] )
 
   return 'object_array';
 }

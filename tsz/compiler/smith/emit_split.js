@@ -418,12 +418,36 @@ function emitLogicBlocks(ctx) {
     // For page mode (scriptBlock): var declarations here, setter functions AFTER scriptBlock
     //   so they override page.js setters that lack __setObjArr calls.
     // For non-page mode: both var + setter here (no conflict).
+    var oaInitCalls = [];
     for (const oa of ctx.objectArrays) {
       if (oa.isNested || oa.isConst) continue; // nested OAs unpacked by parent, const OAs are static
       jsLines.push(`var ${oa.getter} = [];`);
       if (!ctx.scriptBlock && !globalThis.__scriptContent) {
         jsLines.push(`function ${oa.setter}(v) { ${oa.getter} = v; __setObjArr${oa.oaIdx}(v); }`);
       }
+      // Reconstruct initial data from tokens and schedule setter call
+      if (oa.initDataStartPos !== undefined && oa.initDataEndPos !== undefined && oa.setter) {
+        var initParts = [];
+        for (var ti = oa.initDataStartPos; ti < oa.initDataEndPos; ti++) {
+          var tk = globalThis.__cursor.textAt(ti);
+          // Convert single-quoted strings to double-quoted for consistent JS
+          if (tk.length >= 2 && tk[0] === "'" && tk[tk.length - 1] === "'") {
+            tk = '"' + tk.slice(1, -1) + '"';
+          }
+          initParts.push(tk);
+        }
+        var initText = initParts.join(' ');
+        // Strip outer () from useState( [...] )
+        initText = initText.replace(/^\(\s*/, '').replace(/\s*\)\s*$/, '');
+        if (initText.length > 2 && initText[0] === '[') {
+          oaInitCalls.push(`${oa.setter}(${initText});`);
+        }
+      }
+    }
+    // Emit OA init calls after setter definitions are available
+    if (oaInitCalls.length > 0) {
+      jsLines.push('// OA initial data');
+      for (var ii = 0; ii < oaInitCalls.length; ii++) jsLines.push(oaInitCalls[ii]);
     }
     // Script file imports — content passed via __scriptContent
     if (globalThis.__scriptContent) {
