@@ -285,6 +285,15 @@ function tryParseTernaryText(c, children) {
       c.restore(saved);
       return false;
     }
+    // props.X dot-access in ternary condition
+    {
+      const pa = peekPropsAccess(c);
+      if (pa) {
+        skipPropsAccess(c);
+        condParts.push(_condPropValue(pa.value));
+        continue;
+      }
+    }
     if (c.kind() === TK.identifier) {
       const name = c.text();
       const oa = ctx.objectArrays.find(o => o.getter === name);
@@ -303,6 +312,29 @@ function tryParseTernaryText(c, children) {
       }
       if (isGetter(name)) {
         condParts.push(slotGet(name));
+      } else if (ctx.renderLocals && ctx.renderLocals[name] !== undefined) {
+        const rlVal = ctx.renderLocals[name];
+        // If renderLocal resolves to map itemParam, treat as item field access
+        if (ctx.currentMap && rlVal === ctx.currentMap.itemParam &&
+            c.pos + 2 < c.count && c.kindAt(c.pos + 1) === TK.dot && c.kindAt(c.pos + 2) === TK.identifier) {
+          c.advance(); // skip name
+          c.advance(); // skip .
+          const field = c.text();
+          c.advance(); // skip field
+          const mapOa = ctx.currentMap.oa;
+          const fieldInfo = mapOa ? mapOa.fields.find(function(f) { return f.name === field; }) : null;
+          if (mapOa && fieldInfo && fieldInfo.type === 'string') {
+            condParts.push(`_oa${mapOa.oaIdx}_${field}[${ctx.currentMap.iterVar || '_i'}][0.._oa${mapOa.oaIdx}_${field}_lens[${ctx.currentMap.iterVar || '_i'}]]`);
+          } else if (mapOa) {
+            condParts.push(`_oa${mapOa.oaIdx}_${field}[${ctx.currentMap.iterVar || '_i'}]`);
+          } else {
+            condParts.push('0');
+          }
+          continue;
+        }
+        condParts.push(rlVal);
+      } else if (ctx.propStack && ctx.propStack[name] !== undefined) {
+        condParts.push(_condPropValue(ctx.propStack[name]));
       } else if (ctx.currentMap && name === ctx.currentMap.itemParam) {
         c.advance();
         if (c.kind() === TK.dot) {
@@ -381,7 +413,7 @@ function tryParseTernaryText(c, children) {
   if (strEqlMatch) {
     var lhs = strEqlMatch[1].trim();
     var rhs = strEqlMatch[2];
-    if (lhs.includes('[_i]') && lhs.includes('_oa')) {
+    if (lhs.includes('[_i]') && lhs.includes('_oa') && !lhs.includes('[0..')) {
       var lenField = lhs.replace(/\[_i\]$/, '_lens[_i]');
       condExpr = `std.mem.eql(u8, ${lhs}[0..${lenField}], "${rhs}")`;
     } else if (lhs.includes('getSlotString')) {

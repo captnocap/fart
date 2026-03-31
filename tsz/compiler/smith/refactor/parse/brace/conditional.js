@@ -16,9 +16,15 @@ function tryParseConditional(c, children) {
           condParts.push('(' + slotGet(name) + ' == 0)');
         } else if (ctx.renderLocals && ctx.renderLocals[name] !== undefined) {
           const rlVal = ctx.renderLocals[name];
-          condParts.push('(' + rlVal + ' == 0)');
+          // If the value is already a boolean expression (contains comparison), negate with !
+          const isBoolExpr = / > | < | >= | <= | == | != /.test(rlVal) || rlVal.includes('.len');
+          if (isBoolExpr) {
+            condParts.push('(!(' + rlVal + '))');
+          } else {
+            condParts.push('((' + rlVal + ') == 0)');
+          }
         } else if (ctx.propStack && ctx.propStack[name] !== undefined) {
-          condParts.push('(' + _condPropValue(ctx.propStack[name]) + ' == 0)');
+          condParts.push('((' + _condPropValue(ctx.propStack[name]) + ') == 0)');
         } else {
           condParts.push('(0)');
         }
@@ -131,7 +137,15 @@ function tryParseConditional(c, children) {
       const pa = peekPropsAccess(c);
       if (pa) {
         skipPropsAccess(c);
-        condParts.push(_condPropValue(pa.value));
+        const pav = _condPropValue(pa.value);
+        // Handle .length after props access: props.X.length → resolved.len
+        if (c.kind() === TK.dot && c.pos + 1 < c.count && c.textAt(c.pos + 1) === 'length') {
+          condParts.push(pav + '.len');
+          c.advance(); // skip .
+          c.advance(); // skip length
+        } else {
+          condParts.push(pav);
+        }
         continue;
       }
     }

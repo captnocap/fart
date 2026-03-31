@@ -18,7 +18,8 @@ import {
 const [activeTabId, setActiveTabId] = useState('1');
 const [currentInput, setCurrentInputState] = useState('');
 const [isGenerating, setIsGenerating] = useState(0);
-const [cursorPosition, setCursorPosition] = useState({ line: 10, column: 24 });
+const [cursorLine, setCursorLine] = useState(10);
+const [cursorColumn, setCursorColumn] = useState(24);
 const [ready, setReady] = useState(0);
 
 // File tree state
@@ -104,7 +105,8 @@ if (ready == 0) {
 
 // Cursor position simulation
 setInterval(function() {
-  setCursorPosition({ line: 10 + Math.floor(Math.random() * 5), column: 20 + Math.floor(Math.random() * 10) });
+  setCursorLine(10 + Math.floor(Math.random() * 5));
+  setCursorColumn(20 + Math.floor(Math.random() * 10));
 }, 5000);
 
 function App() {
@@ -130,8 +132,8 @@ function App() {
       <StatusBar
         gitBranch={gitBranch}
         gitStatus={gitStatus}
-        cursorLine={cursorPosition.line}
-        cursorColumn={cursorPosition.column}
+        cursorLine={cursorLine}
+        cursorColumn={cursorColumn}
         languageMode={languageMode}
         errors={errors}
         warnings={warnings}

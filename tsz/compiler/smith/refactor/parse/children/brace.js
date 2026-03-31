@@ -293,6 +293,30 @@ function tryParseBraceChild(c, children) {
         }
         return true;
       }
+      // props.item.field inside map — resolve to OA field access
+      if (ctx.currentMap && typeof propVal === 'string' && propVal === ctx.currentMap.itemParam &&
+          c.kind() === TK.dot && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.identifier) {
+        c.advance(); // skip .
+        const field = c.text();
+        c.advance(); // skip field name
+        const oa = ctx.currentMap.oa;
+        const oaIdx = oa.oaIdx;
+        const fieldInfo = oa.fields.find(function(f) { return f.name === field; });
+        if (c.kind() === TK.rbrace) c.advance();
+        const mapBufId = ctx.mapDynCount || 0;
+        ctx.mapDynCount = mapBufId + 1;
+        const fmt = fieldInfo && fieldInfo.type === 'string' ? '{s}' : '{d}';
+        let args;
+        if (fieldInfo && fieldInfo.type === 'string') {
+          args = `_oa${oaIdx}_${field}[_i][0.._oa${oaIdx}_${field}_lens[_i]]`;
+        } else {
+          args = `_oa${oaIdx}_${field}[_i]`;
+        }
+        ctx.dynTexts.push({ bufId: mapBufId, fmtString: fmt, fmtArgs: args, arrName: '', arrIndex: 0, bufSize: 256, inMap: true, mapIdx: ctx.maps.indexOf(ctx.currentMap) });
+        children.push({ nodeExpr: `.{ .text = "__mt${mapBufId}__" }`, dynBufId: mapBufId, inMap: true });
+        return true;
+      }
+
       // props.X followed by more tokens (e.g., props.active === 1) — handle via scriptBlock or drop
       const dropTokens2 = [String(propVal)];
       let depth2 = 1;

@@ -63,7 +63,7 @@ function inlineComponentCall(c, comp, rawTag, propValues, compChildren) {
     if (c.kind() === TK.lbrace) c.advance();
     while (c.pos < comp.bodyPos) {
       if (c.isIdent('return')) break;
-      if (c.isIdent('const') || c.isIdent('let')) {
+      if (c.isIdent('const') || c.isIdent('let') || c.isIdent('var')) {
         c.advance();
         if (c.kind() === TK.lbracket) {
           let bd = 1; c.advance();
@@ -72,7 +72,7 @@ function inlineComponentCall(c, comp, rawTag, propValues, compChildren) {
             if (c.kind() === TK.rbracket) bd--;
             c.advance();
           }
-          while (c.pos < c.count && c.kind() !== TK.rparen && !c.isIdent('const') && !c.isIdent('let') && !c.isIdent('return')) c.advance();
+          while (c.pos < c.count && c.kind() !== TK.rparen && !c.isIdent('const') && !c.isIdent('let') && !c.isIdent('var') && !c.isIdent('return')) c.advance();
           if (c.kind() === TK.rparen) c.advance();
           continue;
         }
@@ -84,7 +84,7 @@ function inlineComponentCall(c, comp, rawTag, propValues, compChildren) {
             let depth = 0;
             while (c.pos < c.count) {
               if (c.kind() === TK.semicolon && depth === 0) { c.advance(); break; }
-              if (depth === 0 && c.kind() === TK.identifier && (c.text() === 'const' || c.text() === 'let' || c.text() === 'return' || c.text() === 'function')) break;
+              if (depth === 0 && c.kind() === TK.identifier && (c.text() === 'const' || c.text() === 'let' || c.text() === 'var' || c.text() === 'return' || c.text() === 'function')) break;
               if (c.kind() === TK.lparen || c.kind() === TK.lbracket || c.kind() === TK.lbrace) depth++;
               if (c.kind() === TK.rparen || c.kind() === TK.rbracket || c.kind() === TK.rbrace) { depth--; if (depth < 0) break; }
               const pa = peekPropsAccess(c);
@@ -97,7 +97,25 @@ function inlineComponentCall(c, comp, rawTag, propValues, compChildren) {
                 continue;
               }
               if (c.kind() === TK.identifier && ctx.renderLocals[c.text()] !== undefined) {
-                valParts.push(ctx.renderLocals[c.text()]);
+                const rlv = ctx.renderLocals[c.text()];
+                // If renderLocal resolves to map itemParam and next is .field, resolve to OA field
+                if (ctx.currentMap && rlv === ctx.currentMap.itemParam &&
+                    c.pos + 2 < c.count && c.kindAt(c.pos + 1) === TK.dot && c.kindAt(c.pos + 2) === TK.identifier) {
+                  c.advance(); // skip name
+                  c.advance(); // skip .
+                  const rlField = c.text();
+                  const mapOa = ctx.currentMap.oa;
+                  const rlFieldInfo = mapOa ? mapOa.fields.find(function(f) { return f.name === rlField; }) : null;
+                  if (mapOa && rlFieldInfo && rlFieldInfo.type === 'string') {
+                    valParts.push(`_oa${mapOa.oaIdx}_${rlField}[${ctx.currentMap.iterVar || '_i'}][0.._oa${mapOa.oaIdx}_${rlField}_lens[${ctx.currentMap.iterVar || '_i'}]]`);
+                  } else if (mapOa) {
+                    valParts.push(`_oa${mapOa.oaIdx}_${rlField}[${ctx.currentMap.iterVar || '_i'}]`);
+                  } else {
+                    valParts.push(rlv + '.' + rlField);
+                  }
+                } else {
+                  valParts.push(rlv);
+                }
               } else if (c.kind() === TK.identifier && isGetter(c.text())) {
                 valParts.push(slotGet(c.text()));
               } else if (c.kind() === TK.eq_eq) {
@@ -110,10 +128,17 @@ function inlineComponentCall(c, comp, rawTag, propValues, compChildren) {
                 c.advance();
                 if (c.kind() === TK.equals) c.advance();
                 continue;
-              } else if (c.kind() === TK.star || c.kind() === TK.plus || c.kind() === TK.minus || c.kind() === TK.slash || c.kind() === TK.percent) {
+              } else if (c.kind() === TK.star || c.kind() === TK.plus || c.kind() === TK.minus || c.kind() === TK.slash || c.kind() === TK.percent ||
+                         c.kind() === TK.gt || c.kind() === TK.lt || c.kind() === TK.gt_eq || c.kind() === TK.lt_eq) {
                 valParts.push(' ' + c.text() + ' ');
               } else {
-                valParts.push(c.text());
+                // Convert .length to .len for Zig slice compatibility
+                if (c.kind() === TK.identifier && c.text() === 'length' && valParts.length > 0 && valParts[valParts.length - 1] === '.') {
+                  valParts.pop();
+                  valParts.push('.len');
+                } else {
+                  valParts.push(c.text());
+                }
               }
               c.advance();
             }
