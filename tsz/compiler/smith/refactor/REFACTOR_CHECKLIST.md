@@ -106,7 +106,7 @@ Current constraint:
 - [x] Extract effect render emission.
 - [x] Extract object-array emission.
 - [x] Extract map-pool declaration/metadata pass.
-- [ ] Extract map-pool rebuild emission.
+- [x] Extract map-pool rebuild emission.
 - [x] Extract orphaned map-array reconciliation.
 - [x] Extract update/entrypoint emission.
 - [x] Extract final cleanup/post-processing.
