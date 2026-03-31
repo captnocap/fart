@@ -96,6 +96,8 @@ function bindPressHandlerExpression(c, handlerName) {
     return handlerName;
   }
 
+  // Skip 'function' keyword so pushInlinePressHandler sees (params)
+  if (c.kind() === TK.identifier && c.text() === 'function') c.advance();
   pushInlinePressHandler(c, handlerName);
   if (c.kind() === TK.rbrace) c.advance();
   return handlerName;

@@ -657,8 +657,18 @@ function luaParseHandler(c) {
           parts.push(name);
         } else if (ctx.propStack && ctx.propStack[name] !== undefined && typeof ctx.propStack[name] === 'string') {
           // In Lua/JS handler context, emit the prop NAME (not the Zig value).
-          // The __mapPress function preamble will declare these as JS variables.
           const pv = ctx.propStack[name];
+          // Const OA row ref with .field access
+          if (typeof pv === 'string' && pv.charCodeAt(0) === 1 &&
+              c.pos + 2 < c.count && c.kindAt(c.pos + 1) === TK.dot && c.kindAt(c.pos + 2) === TK.identifier) {
+            var _hpfld = resolveConstOaFieldFromRef(pv, c.textAt(c.pos + 2));
+            if (_hpfld !== null) {
+              if (_hpfld.charAt(0) === '"' && _hpfld.charAt(_hpfld.length - 1) === '"') _hpfld = _hpfld.slice(1, -1);
+              parts.push(_hpfld);
+              c.advance(); c.advance(); c.advance();
+              continue;
+            }
+          }
           const isZigExpr = pv.includes('@as(') || pv.includes('@intCast') || pv.includes('_oa') || pv.includes('state.get') || pv.includes('getSlot');
           if (isZigExpr) {
             parts.push(name);
@@ -666,7 +676,21 @@ function luaParseHandler(c) {
             parts.push(pv);
           }
         } else if (ctx.renderLocals && ctx.renderLocals[name] !== undefined) {
-          parts.push(ctx.renderLocals[name]);
+          var _hrlv = ctx.renderLocals[name];
+          // Resolve const OA row ref + .field in handler bodies
+          if (typeof _hrlv === 'string' && _hrlv.charCodeAt(0) === 1 &&
+              c.pos + 2 < c.count && c.kindAt(c.pos + 1) === TK.dot && c.kindAt(c.pos + 2) === TK.identifier) {
+            var _hfld = resolveConstOaFieldFromRef(_hrlv, c.textAt(c.pos + 2));
+            if (_hfld !== null) {
+              // Strip quotes for JS/Lua handler context
+              if (_hfld.charAt(0) === '"' && _hfld.charAt(_hfld.length - 1) === '"') _hfld = _hfld.slice(1, -1);
+              parts.push(_hfld);
+              c.advance(); c.advance(); // skip name and dot; field advanced by loop
+              c.advance(); // advance past field
+              continue;
+            }
+          }
+          parts.push(_hrlv);
         } else {
           parts.push(remapped);
         }

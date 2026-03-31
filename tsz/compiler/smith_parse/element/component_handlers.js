@@ -19,6 +19,8 @@ function tryParseComponentHandlerProp(c, attr, propValues) {
     return false;
   }
 
+  // Skip 'function' keyword so pushInlinePressHandler sees (params)
+  if (c.kind() === TK.identifier && c.text() === 'function') c.advance();
   const handlerName = `_handler_press_${ctx.handlerCount}`;
   pushInlinePressHandler(c, handlerName);
   ctx.handlerCount++;
@@ -28,19 +30,24 @@ function tryParseComponentHandlerProp(c, attr, propValues) {
 }
 
 function isPressLikeComponentAttr(attr) {
-  return attr === 'onPress' || attr === 'onTap' || attr === 'onToggle' || attr === 'onSelect' || attr === 'onChange';
+  // Match any on + uppercase pattern (onPress, onToggleChat, onSelectItem, etc.)
+  return attr.length > 2 && attr[0] === 'o' && attr[1] === 'n' && attr[2] >= 'A' && attr[2] <= 'Z';
 }
 
 function startsArrowHandler(c) {
-  if (c.kind() !== TK.lparen) return false;
-
-  let lookahead = c.pos;
-  let parenDepth = 1;
-  lookahead++;
-  while (lookahead < c.count && parenDepth > 0) {
-    if (c.kindAt(lookahead) === TK.lparen) parenDepth++;
-    if (c.kindAt(lookahead) === TK.rparen) parenDepth--;
+  // Arrow function: (params) => { ... }
+  if (c.kind() === TK.lparen) {
+    let lookahead = c.pos;
+    let parenDepth = 1;
     lookahead++;
+    while (lookahead < c.count && parenDepth > 0) {
+      if (c.kindAt(lookahead) === TK.lparen) parenDepth++;
+      if (c.kindAt(lookahead) === TK.rparen) parenDepth--;
+      lookahead++;
+    }
+    return lookahead < c.count && c.kindAt(lookahead) === TK.arrow;
   }
-  return lookahead < c.count && c.kindAt(lookahead) === TK.arrow;
+  // function keyword: function(params) { ... }
+  if (c.kind() === TK.identifier && c.text() === 'function') return true;
+  return false;
 }
