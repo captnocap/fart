@@ -38,23 +38,7 @@ function finishParsedElement(c, rawTag, effectiveTag, styleFields, children, han
 
   if (c.kind() === TK.lt_slash) {
     c.advance();
-    let closingTag = c.kind() === TK.identifier ? c.text() : '?';
-    if (c.kind() === TK.identifier) c.advance();
-    if (closingTag === '?' && c.kind() === TK.number && c.text() === '3') {
-      c.advance();
-      if (c.kind() === TK.identifier && c.text() === 'D') {
-        closingTag = '3D';
-        c.advance();
-      }
-    }
-    let closingFull = closingTag;
-    if (c.kind() === TK.dot) {
-      c.advance();
-      if (c.kind() === TK.identifier) {
-        closingFull += '.' + c.text();
-        c.advance();
-      }
-    }
+    const closingFull = readQualifiedClosingTag(c);
     if (c.kind() === TK.gt) c.advance();
     if (globalThis.__SMITH_DEBUG_INLINE && ctx.inlineComponent === 'SourcePage') {
       const openTag = clsDef ? ('C.' + (rawTag === 'Box' ? 'SourceSurface' : rawTag)) : rawTag;

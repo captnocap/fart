@@ -39,7 +39,7 @@ Current constraint:
 - [x] Shared press-handler capture helpers: forwarded refs, named handlers, inline closures.
 - [x] Shared attr value readers: signed numbers, vectors, repeated field emit helpers.
 - [x] Shared prop-access helpers: `peekPropsAccess`, `skipPropsAccess`.
-- [ ] Shared parse utility home for byte/offset/tag helpers.
+- [x] Shared parse utility home for byte/offset/tag helpers.
 
 ## Phase 2: Collection Pass
 

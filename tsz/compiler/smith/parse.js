@@ -1,7 +1,5 @@
 // ── JSX parser ──
 
-function resolveTag(name) { return htmlTags[name] || name; }
-
 function parseJSXElement(c) {
   if (c.kind() !== TK.lt) return { nodeExpr: '.{}' };
   c.advance(); // <
@@ -9,13 +7,7 @@ function parseJSXElement(c) {
   const fragmentNode = tryParseFragmentElement(c);
   if (fragmentNode) return fragmentNode;
 
-  let rawTag = c.text();
-  c.advance();
-  // Handle <3D...> — lexer tokenizes "3" (number) + "D" (identifier)
-  if (rawTag === '3' && c.kind() === TK.identifier && c.text() === 'D') {
-    rawTag = '3D';
-    c.advance();
-  }
+  let rawTag = readTagToken(c);
 
   if (rawTag === 'script') return skipScriptElement(c);
 
@@ -44,7 +36,7 @@ function parseJSXElement(c) {
 
   const tag = resolveTag(rawTag);
   // Track source position for breadcrumb comments
-  const tagSrcOffset = c.starts[c.pos > 0 ? c.pos - 1 : 0];
+  const tagSrcOffset = lastTokenOffset(c);
 
   let elementState = initElementParseState(rawTag, tag);
   const attrState = {
