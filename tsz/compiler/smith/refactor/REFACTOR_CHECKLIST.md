@@ -104,7 +104,9 @@ Current constraint:
 - [x] Extract non-map handler emission.
 - [x] Extract effect render emission.
 - [x] Extract object-array emission.
-- [ ] Extract map-pool emission.
+- [x] Extract map-pool declaration/metadata pass.
+- [ ] Extract map-pool rebuild emission.
+- [x] Extract orphaned map-array reconciliation.
 - [x] Extract update/entrypoint emission.
 - [x] Extract final cleanup/post-processing.
 - [ ] Reduce `emit.js` to a top-level emit coordinator.

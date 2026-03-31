@@ -78,6 +78,7 @@ const SMITH_JS = @embedFile("smith/rules.js") ++ "\n" ++
     @embedFile("smith/refactor/emit/handlers.js") ++ "\n" ++
     @embedFile("smith/refactor/emit/effects.js") ++ "\n" ++
     @embedFile("smith/refactor/emit/object_arrays.js") ++ "\n" ++
+    @embedFile("smith/refactor/emit/map_pools.js") ++ "\n" ++
     @embedFile("smith/refactor/emit/entrypoints.js") ++ "\n" ++
     @embedFile("smith/refactor/emit/finalize.js") ++ "\n" ++
     @embedFile("smith/emit_split.js") ++ "\n" ++
