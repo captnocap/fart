@@ -459,6 +459,22 @@ function emitLogicBlocks(ctx) {
         if (oa.isNested || oa.isConst) continue;
         jsLines.push(`if (${oa.getter} && ${oa.getter}.length > 0) ${oa.setter}(${oa.getter});`);
       }
+      // Emit JS wrapper functions for prop-forwarded handler closures
+      // These are handlers created from closure props (e.g., onSelect={(next) => { selectTab(next) }})
+      // that get called with arguments from inside inlined components (e.g., onSelect(0))
+      for (const h of ctx.handlers) {
+        if (h.inMap) continue; // map handlers have their own __mapPress wrappers
+        if (!h.luaBody) continue;
+        if (!h.closureParams || h.closureParams.length === 0) continue;
+        // Check if this handler name is referenced in any other handler's luaBody or in node js_on_press strings
+        const hName = h.name;
+        const isReferenced = ctx.handlers.some(function(h2) { return h2 !== h && h2.luaBody && h2.luaBody.indexOf(hName + '(') >= 0; });
+        if (!isReferenced) continue;
+        const params = h.closureParams.join(', ');
+        let jsBody = h.luaBody || '';
+        if (jsBody) jsBody = jsTransform(jsBody);
+        jsLines.push(`function ${hName}(${params}) { ${jsBody}; }`);
+      }
       // Add __mapPress_N handlers to JS_LOGIC so map handlers dispatch through QuickJS
       for (let mi = 0; mi < ctx.maps.length; mi++) {
         const m = ctx.maps[mi];

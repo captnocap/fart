@@ -162,7 +162,8 @@ function parseJSXElement(c) {
                   }
                 }
               }
-              ctx.handlers.push({ name: handlerName, body, luaBody, inMap: isMapHandler, mapIdx: isMapHandler ? ctx.maps.indexOf(ctx.currentMap) : -1, zigProps });
+              const closureParams1 = ctx._lastClosureParams || [];
+              ctx.handlers.push({ name: handlerName, body, luaBody, inMap: isMapHandler, mapIdx: isMapHandler ? ctx.maps.indexOf(ctx.currentMap) : -1, zigProps, closureParams: closureParams1 });
             }
             ctx.handlerCount++;
             if (c.kind() === TK.rbrace) c.advance();
@@ -206,7 +207,8 @@ function parseJSXElement(c) {
                     }
                   }
                 }
-                ctx.handlers.push({ name: handlerName, body, luaBody, inMap: isMapHandler, mapIdx: isMapHandler ? ctx.maps.indexOf(ctx.currentMap) : -1, zigProps: zigProps2 });
+                const closureParams = ctx._lastClosureParams || [];
+                ctx.handlers.push({ name: handlerName, body, luaBody, inMap: isMapHandler, mapIdx: isMapHandler ? ctx.maps.indexOf(ctx.currentMap) : -1, zigProps: zigProps2, closureParams });
                 ctx.handlerCount++;
                 if (c.kind() === TK.rbrace) c.advance();
                 propValues[attr] = handlerName;
@@ -533,7 +535,8 @@ function parseJSXElement(c) {
                   }
                 }
               }
-              ctx.handlers.push({ name: handlerName, body, luaBody, inMap: isMapHandler, mapIdx: isMapHandler ? ctx.maps.indexOf(ctx.currentMap) : -1, zigProps: zigProps3 });
+              const closureParams3 = ctx._lastClosureParams || [];
+              ctx.handlers.push({ name: handlerName, body, luaBody, inMap: isMapHandler, mapIdx: isMapHandler ? ctx.maps.indexOf(ctx.currentMap) : -1, zigProps: zigProps3, closureParams: closureParams3 });
               handlerRef = handlerName;
               ctx.handlerCount++;
               if (c.kind() === TK.rbrace) c.advance(); // }
@@ -605,7 +608,34 @@ function parseJSXElement(c) {
                 let rhsIsString = false;
                 if (c.kind() === TK.number) { rhs = c.text(); c.advance(); }
                 else if (c.kind() === TK.string) { rhs = c.text().slice(1, -1); c.advance(); rhsIsString = true; }
-                else if (c.kind() === TK.identifier) { const n = c.text(); c.advance(); rhs = isGetter(n) ? slotGet(n) : (ctx.currentMap && n === ctx.currentMap.indexParam) ? '@as(i64, @intCast(_i))' : (ctx.propStack && ctx.propStack[n] !== undefined && typeof ctx.propStack[n] === 'string' ? ctx.propStack[n] : n); }
+                else if (c.kind() === TK.identifier) {
+                  const n = c.text(); c.advance();
+                  if (isGetter(n)) {
+                    rhs = slotGet(n);
+                  } else if (ctx.currentMap && n === ctx.currentMap.itemParam && c.kind() === TK.dot) {
+                    // Map item field access: notice.title → OA field
+                    c.advance(); // skip .
+                    if (c.kind() === TK.identifier) {
+                      const field = c.text(); c.advance();
+                      const oa = ctx.currentMap.oa;
+                      const fi = oa ? oa.fields.find(f => f.name === field) : null;
+                      if (fi && fi.type === 'string') {
+                        rhs = `_oa${oa.oaIdx}_${field}[_i][0.._oa${oa.oaIdx}_${field}_lens[_i]]`;
+                        rhsIsString = true;
+                      } else if (fi) {
+                        rhs = `_oa${oa.oaIdx}_${field}[_i]`;
+                      } else {
+                        rhs = n + '.' + field;
+                      }
+                    }
+                  } else if (ctx.currentMap && n === ctx.currentMap.indexParam) {
+                    rhs = '@as(i64, @intCast(_i))';
+                  } else if (ctx.propStack && ctx.propStack[n] !== undefined && typeof ctx.propStack[n] === 'string') {
+                    rhs = ctx.propStack[n];
+                  } else {
+                    rhs = n;
+                  }
+                }
                 if (c.kind() === TK.question) {
                   c.advance();
                   const tv = parseTernaryBranch(c, 'color');
@@ -613,7 +643,9 @@ function parseJSXElement(c) {
                   const fv = parseTernaryBranch(c, 'color');
                   let cond;
                   if (rhsIsString || colorLhsIsString) {
-                    const eql = `std.mem.eql(u8, ${colorLhs}, "${rhs}")`;
+                    // If rhs is a Zig expression (OA field, state getter), don't quote it
+                    const rhsExpr = (rhs.includes('[_i]') || rhs.includes('_oa') || rhs.includes('state.get') || rhs.includes('getSlot')) ? rhs : `"${rhs}"`;
+                    const eql = `std.mem.eql(u8, ${colorLhs}, ${rhsExpr})`;
                     cond = op === '!=' ? `(!${eql})` : `(${eql})`;
                   } else {
                     cond = `(${colorLhs} ${op} ${rhs})`;
@@ -1612,6 +1644,10 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
       const result = { nodeExpr: expr, dynBufId: dynChild.dynBufId };
       if (dynChild.inMap) result.inMap = true;
       if (nodeFields && nodeFields._dynColorId !== undefined) result.dynColorId = nodeFields._dynColorId;
+      if (nodeFields && nodeFields._dynStyleIds) result.dynStyleIds = nodeFields._dynStyleIds;
+      if (nodeFields && nodeFields._dynStyleId !== undefined) result.dynStyleId = nodeFields._dynStyleId;
+      if (styleFields._dynStyleIds) result.dynStyleIds = [...(result.dynStyleIds || []), ...styleFields._dynStyleIds];
+      if (styleFields._dynStyleId !== undefined) result.dynStyleId = result.dynStyleId || styleFields._dynStyleId;
       return result;
     }
     // Single static text child — hoist to .text field

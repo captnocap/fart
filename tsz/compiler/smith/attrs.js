@@ -413,9 +413,12 @@ function slotSet(slotIdx) {
 // Parse a handler expression: () => setCount(expr)
 // Returns the Zig body as a string
 function parseHandler(c) {
-  // Skip () =>
-  if (c.kind() === TK.lparen) c.advance();
-  if (c.kind() === TK.rparen) c.advance();
+  // Skip (params) =>
+  if (c.kind() === TK.lparen) {
+    c.advance();
+    while (c.kind() !== TK.rparen && c.kind() !== TK.eof) c.advance();
+    if (c.kind() === TK.rparen) c.advance();
+  }
   if (c.kind() === TK.arrow) c.advance();
 
   // Parse body — could be { stmts } or single expression
@@ -589,10 +592,19 @@ function luaParseValueExpr(c) {
 }
 
 function luaParseHandler(c) {
-  // Skip () =>
-  if (c.kind() === TK.lparen) c.advance();
-  if (c.kind() === TK.rparen) c.advance();
+  // Skip (params) => — capture parameter names for JS wrapper emission
+  var _closureParams = [];
+  if (c.kind() === TK.lparen) {
+    c.advance();
+    while (c.kind() !== TK.rparen && c.kind() !== TK.eof) {
+      if (c.kind() === TK.identifier) _closureParams.push(c.text());
+      c.advance();
+    }
+    if (c.kind() === TK.rparen) c.advance();
+  }
   if (c.kind() === TK.arrow) c.advance();
+  // Store params on context for the handler creator to pick up
+  ctx._lastClosureParams = _closureParams;
 
   if (c.kind() === TK.lbrace) {
     // Block body: capture all tokens with spacing, resolve names, let luaTransform fix syntax
@@ -617,7 +629,7 @@ function luaParseHandler(c) {
           parts.push(name);
         } else if (ctx.currentMap && name === ctx.currentMap.indexParam) {
           parts.push(name);
-        } else if (ctx.propStack && ctx.propStack[name] !== undefined) {
+        } else if (ctx.propStack && ctx.propStack[name] !== undefined && typeof ctx.propStack[name] === 'string') {
           // In Lua/JS handler context, emit the prop NAME (not the Zig value).
           // The __mapPress function preamble will declare these as JS variables.
           const pv = ctx.propStack[name];
