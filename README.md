@@ -1,7 +1,7 @@
 # ReactJIT
 its react! (kinda) its fast! (really fast) its highly experimental currently. the following is ai generated while the development speed is pushing 30+ commits a day. we will see where this all lands at the 60 day mark and again at the 90 day mark. thanks for stopping by
 ---
-Write React. Get a native binary. Your UI compiles to native code — no virtual DOM, no reconciler, no garbage collector. QuickJS is embedded for optional `<script>` blocks (dynamic logic, timers, data), but your components, layout, and rendering are all compiled Zig.
+Write React. Get a native binary. Your UI compiles to native code — no virtual DOM, no reconciler. QuickJS is embedded for optional `<script>` blocks (dynamic logic, timers, data), but your components, layout, and rendering are all compiled Zig.
 
 ```
 app.tsz (TypeScript + JSX)
@@ -73,8 +73,8 @@ The `.tsz` compiler and native rendering framework. TypeScript + JSX compiles to
 
 The compiler is split into two parts:
 
-- **Forge** — small Zig kernel (~440 lines). Lexer, QuickJS bridge, file I/O. Built once, rarely changes. Tokenizes `.tsz` source and hands flat token arrays to Smith.
-- **Smith** — JS compiler intelligence (~25,400 lines across ~77 files) running inside Forge via QuickJS. Modular structure: `smith_parse/` (element/brace/map/template parsing), `smith_emit/` (Zig codegen), `smith_collect/` (preflight collection passes), `smith_preflight/` (tier detection), `smith_lanes/` (app/page/module/soup dispatch). Edit without rebuilding Forge.
+- **Forge** — small Zig kernel (~441 lines). Lexer, QuickJS bridge, file I/O. Built once, rarely changes. Tokenizes `.tsz` source and hands flat token arrays to Smith.
+- **Smith** — JS compiler intelligence (~12,800 lines across ~76 files) running inside Forge via QuickJS. Modular structure: `smith_parse/` (element/brace/map/template parsing), `smith_emit/` (Zig codegen), `smith_collect/` (preflight collection passes), `smith_preflight/` (tier detection), `smith_lanes/` (app/page/module/soup dispatch). Edit without rebuilding Forge.
 
 ```
 app.tsz → [Forge: lex] → tokens → [Smith: parse + emit] → .zig source → native binary
@@ -121,6 +121,7 @@ Operating system shell and app distribution layer. CartridgeOS manages windows, 
 | `.script.tsz` | QuickJS runtime script | `data.script.tsz` |
 | `.zscript.tsz` | JS script that compiles to Zig | `logic.zscript.tsz` |
 | `.cls.tsz` | Shared styles/classifiers | `styles.cls.tsz` |
+| `.lscript.tsz` | LuaJIT runtime script | `logic.lscript.tsz` |
 
 ### `<script>` vs `<lscript>` vs `<zscript>` vs `<ascript>` — when to use which
 
@@ -321,6 +322,8 @@ carts/
   remote-chat/        WebSocket chat demo
   world3d-demo/       3D physics + world rendering demo
   cursor-ide/         VS Code-style IDE clone (editor, sidebar, tabs, chat panel)
+  lua-test/           LuaJIT runtime test cart
+  lua-bench/          LuaJIT vs QuickJS benchmark suite
   catalog/            Component catalog
   claude-canvas/      Canvas playground
   control-panel/      System control panel
@@ -358,7 +361,7 @@ carts/
 |-------|-------|------|
 | Autobahn WebSocket | 202/204 | RFC 6455 compliance |
 | WPT Flexbox | 70/70 | W3C CSS flex spec |
-| Compiler conformance suite | 161/283 | Language features, script runtimes, maps, components, integration |
+| Compiler conformance suite | 159/283 | Language features, script runtimes, maps, components, integration |
 | Surface conformance | 0/105 | Three-tier UI + logic tests (soup/mixed/chad) |
 | Crypto | 13/13 | HMAC, HKDF, Shamir, encryption, PII detection |
 
