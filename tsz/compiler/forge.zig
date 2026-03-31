@@ -71,6 +71,13 @@ const SMITH_JS = @embedFile("smith/rules.js") ++ "\n" ++
     @embedFile("smith/refactor/preflight/rules/classifiers.js") ++ "\n" ++
     @embedFile("smith/refactor/preflight/rules/js_logic.js") ++ "\n" ++
     @embedFile("smith/preflight.js") ++ "\n" ++
+    @embedFile("smith/refactor/emit/preamble.js") ++ "\n" ++
+    @embedFile("smith/refactor/emit/state_manifest.js") ++ "\n" ++
+    @embedFile("smith/refactor/emit/node_tree.js") ++ "\n" ++
+    @embedFile("smith/refactor/emit/dyn_text.js") ++ "\n" ++
+    @embedFile("smith/refactor/emit/handlers.js") ++ "\n" ++
+    @embedFile("smith/refactor/emit/effects.js") ++ "\n" ++
+    @embedFile("smith/refactor/emit/finalize.js") ++ "\n" ++
     @embedFile("smith/emit_split.js") ++ "\n" ++
     @embedFile("smith/emit.js") ++ "\n" ++
     @embedFile("smith/soup_smith.js");

@@ -97,16 +97,16 @@ Current constraint:
 
 ## Phase 6: Emit
 
-- [ ] Extract preamble/import emission.
-- [ ] Extract state manifest emission.
-- [ ] Extract node-tree emission.
-- [ ] Extract dynamic text buffer emission.
-- [ ] Extract non-map handler emission.
-- [ ] Extract effect render emission.
+- [x] Extract preamble/import emission.
+- [x] Extract state manifest emission.
+- [x] Extract node-tree emission.
+- [x] Extract dynamic text buffer emission.
+- [x] Extract non-map handler emission.
+- [x] Extract effect render emission.
 - [ ] Extract object-array emission.
 - [ ] Extract map-pool emission.
 - [ ] Extract update/entrypoint emission.
-- [ ] Extract final cleanup/post-processing.
+- [x] Extract final cleanup/post-processing.
 - [ ] Reduce `emit.js` to a top-level emit coordinator.
 
 ## Phase 7: Lane Compilers
