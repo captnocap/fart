@@ -35,6 +35,7 @@ Current constraint:
 - [x] Shared compiler context owner: `ctx`, `resetCtx`.
 - [x] Slot/state helper home: `findSlot`, `isGetter`, `isSetter`, `slotGet`.
 - [x] Shared brace/offset parse helpers: `skipBraces`, `offsetToLine`.
+- [x] Shared press-handler capture helpers: forwarded refs, named handlers, inline closures.
 - [ ] Shared parse utility home for byte/offset/tag helpers.
 
 ## Phase 2: Collection Pass
@@ -50,9 +51,13 @@ Current constraint:
 - [ ] Split `parseJSXElement` into dispatcher + helpers.
 - [x] Extract fragment/script/finish flow from `parseJSXElement`.
 - [x] Extract tag normalization and classifier/dot-tag rewriting from `parseJSXElement`.
+- [x] Extract tag-based default node/style setup from `parseJSXElement`.
+- [x] Extract component prop collection from `parseJSXElement`.
+- [x] Extract component inlining flow from `parseJSXElement`.
 - [x] Split `parseChildren` into child-type dispatchers.
 - [x] Extract element and brace child handlers from `parseChildren`.
 - [x] Move `buildNode` into its own file.
+- [x] Extract plain element callback attribute parsing from `parseJSXElement`.
 - [ ] Split tag normalization from attribute parsing.
 - [ ] Split handler parsing from non-handler prop parsing.
 
