@@ -565,6 +565,32 @@ This means:
 - Functions that need `item` only work when called from a context that has it.
 - The compiler enforces this — calling a function that uses `item` from outside a `<For>` is a compile error.
 
+### `requires` — Scope Documentation
+
+Functions that depend on scope variables declare it with `requires`:
+
+```
+<functions>
+  toggleItem requires item:
+    item.done is not item.done
+
+  moveToDone requires item:
+    item.col is 'done'
+
+  transferItem requires item, targetCol:
+    item.col is targetCol
+
+  // no requires — works anywhere
+  increment:
+    set_count is count + 1
+</functions>
+```
+
+- `requires` is a declaration, not a mechanism — the compiler already enforces scope
+- It makes scope dependencies visible to humans and tooling
+- If `requires` is declared and the function is called from the wrong context → compile error with a clear message
+- If `requires` is omitted but the function uses scoped vars → compiler still catches it, tooling warns about missing `requires`
+
 ---
 
 ## Control Flow Blocks
