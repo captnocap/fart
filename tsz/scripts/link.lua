@@ -134,6 +134,8 @@ io.write("[link] link → " .. binary .. "... ")
 io.flush()
 if not run(link_cmd .. " 2>&1") then
     io.write("FAILED\n")
+    os.remove(obj_name)
+    os.remove(TSZ_DIR .. obj_name)
     os.exit(1)
 end
 local t2 = now_ms()
@@ -142,5 +144,7 @@ io.write(tostring(t2 - t1) .. "ms\n")
 -- ── Cleanup ─────────────────────────────────────────────────────────
 run("strip " .. binary .. " 2>/dev/null")
 os.remove(obj_name)
+-- Also try TSZ_DIR in case zig dropped the .o relative to the source
+os.remove(TSZ_DIR .. obj_name)
 
 io.write("[link] total: " .. tostring(t2 - t0) .. "ms → " .. binary .. "\n")

@@ -339,6 +339,8 @@ function splitOutput(monolith, file) {
         h += 'const nodes = @import("nodes.zig");\n';
       if (F['maps.zig'] && F['maps.zig'].indexOf('st.') >= 0)
         h += 'const st = @import("state.zig");\n';
+      if (F['maps.zig'] && F['maps.zig'].indexOf('handlers.') >= 0)
+        h += 'const handlers = @import("handlers.zig");\n';
     }
     if (fname === 'app.zig') {
       h += 'const nodes = @import("nodes.zig");\n';

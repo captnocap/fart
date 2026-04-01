@@ -38,6 +38,60 @@ GEN_ROOT="/tmp/tsz-gen"
 GEN="$GEN_ROOT/generated_${NAME}.zig"
 GEN_DIR="$GEN_ROOT/generated_${NAME}"
 
+# ── Conformance tracking ───────────────────────────────────────────
+# Auto-record builds for carts/conformance/ into conformance.db
+CONF_DB="conformance.db"
+IS_CONFORMANCE=0
+CONF_LANE="unknown"
+
+if [[ "$CART" == *carts/conformance/* ]]; then
+    IS_CONFORMANCE=1
+    # Lane = subdirectory under carts/conformance/, or "root"
+    CONF_REL="${CART#*carts/conformance/}"
+    if [[ "$CONF_REL" == */* ]]; then
+        CONF_LANE="${CONF_REL%%/*}"
+    else
+        CONF_LANE="root"
+    fi
+
+    # Ensure db + table exist
+    sqlite3 "$CONF_DB" "CREATE TABLE IF NOT EXISTS builds (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        test_name   TEXT    NOT NULL,
+        lane        TEXT    NOT NULL,
+        built_at    TEXT    NOT NULL DEFAULT (datetime('now')),
+        status      TEXT    NOT NULL,
+        generated   TEXT,
+        binary_sha  TEXT,
+        binary_size INTEGER,
+        error_log   TEXT,
+        verified_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_test_time ON builds(test_name, built_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_lane      ON builds(lane);
+    CREATE INDEX IF NOT EXISTS idx_status    ON builds(status);"
+fi
+
+record_build() {
+    [ "$IS_CONFORMANCE" -eq 0 ] && return
+    local status="$1"
+    local error_log="${2:-}"
+    local bin_sha=""
+    local bin_size=""
+    local bin_path="zig-out/bin/$NAME"
+
+    if [ "$status" = "compiled" ] && [ -f "$bin_path" ]; then
+        bin_sha=$(sha256sum "$bin_path" | awk '{print $1}')
+        bin_size=$(stat --printf="%s" "$bin_path" 2>/dev/null || stat -f%z "$bin_path" 2>/dev/null || echo "")
+    fi
+
+    # Truncate error log to 500 chars, escape single quotes for SQL
+    error_log=$(printf '%s' "$error_log" | head -c 500 | sed "s/'/''/g")
+
+    sqlite3 "$CONF_DB" "INSERT INTO builds (test_name, lane, status, binary_sha, binary_size, error_log)
+        VALUES ('$NAME', '$CONF_LANE', '$status', '$bin_sha', $( [ -n "$bin_size" ] && echo "$bin_size" || echo "NULL"), '$error_log');"
+}
+
 # Pick optimize flag
 if [ "$OPT" = "--debug" ]; then
     ZIG_OPT=""
@@ -46,8 +100,16 @@ else
 fi
 
 # ── Step 1: forge (smith compiler: .tsz → .zig) ─────────────────────
+# Clean stale outputs so preflight check doesn't read old monolith errors
+rm -f "$GEN"
+rm -rf "$GEN_DIR"
 echo "[$NAME] forge..."
-./zig-out/bin/forge build --fast "$CART" 2>&1
+FORGE_OUT=$(./zig-out/bin/forge build --fast "$CART" 2>&1) || {
+    echo "$FORGE_OUT"
+    record_build "forge_fail" "$FORGE_OUT"
+    exit 1
+}
+echo "$FORGE_OUT"
 
 # Some soup carts currently return split-output markers in a monolith payload
 # instead of a generated directory. Fall back to a single-file forge build so
@@ -71,6 +133,7 @@ if grep -q "PREFLIGHT BLOCKED" "$GEN" 2>/dev/null; then
     grep "FATAL:\|WARN:" "$GEN" 2>/dev/null | sed 's/^\/\/! /  /'
     echo "[$NAME] Fix the .tsz source errors above. Generated file: $GEN"
     if [ "$SPLIT_LINT" -eq 1 ]; then rm -f "$GEN"; fi
+    record_build "preflight_blocked" "$(grep 'FATAL:\|WARN:' "$GEN" 2>/dev/null | head -5)"
     exit 1
 fi
 
@@ -110,6 +173,7 @@ fi
 
 if [ "$LINT_FAIL" -eq 1 ]; then
     echo "[$NAME] BLOCKED — fix smith before building. Generated file: $GEN"
+    record_build "forge_fail" "lint: JS string or bad quote leaked into generated Zig"
     exit 1
 fi
 
@@ -128,7 +192,12 @@ fi
 
 # ── Step 3: LuaJIT link (cart .zig → .o + engine .so → binary) ───────
 echo "[$NAME] zig build..."
-luajit scripts/link.lua "$APP_SOURCE" "$NAME" 2>&1
+LINK_OUT=$(luajit scripts/link.lua "$APP_SOURCE" "$NAME" 2>&1) || {
+    echo "$LINK_OUT"
+    record_build "zig_fail" "$LINK_OUT"
+    exit 1
+}
+echo "$LINK_OUT"
 
 # ── Step 4: Package as self-extracting binary ────────────────────────
 RAW_BIN="zig-out/bin/$NAME"
@@ -300,4 +369,5 @@ HEADER
     fi
 fi
 
+record_build "compiled"
 echo "[$NAME] done → zig-out/bin/$NAME"

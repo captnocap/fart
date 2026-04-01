@@ -119,6 +119,27 @@ When you hit a compiler bug in Smith, READ THE LOVE2D VERSION FIRST. Copy the ap
 - `--strict` — warnings become build errors
 - `--embed` — compile UI into `framework/devtools.zig` for engine integration
 
+## Conformance Tracking
+
+Every `scripts/build` run on a `carts/conformance/` cart auto-records to `conformance.db` (pass or fail). No manual step needed.
+
+```bash
+# Summary: coverage, pass rate, per-lane breakdown, failures
+./scripts/conformance-report
+
+# All tests (disk vs db, shows untested)
+./scripts/conformance-report --all
+
+# Only failures + untested
+./scripts/conformance-report --fails
+
+# Filter by lane (chad, mixed, lscript, wpt-flex, soup, etc.)
+./scripts/conformance-report --lane mixed
+
+# List tests with no db entry
+./scripts/conformance-report --untested
+```
+
 ## File Length Limit (ENFORCED)
 
 **Max 1600 lines per `.zig` or `.tsz` file.** Enforced by `scripts/check-file-length.sh`. If a file is over 1600 lines, the build fails. Split the file — never raise the limit.

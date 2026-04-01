@@ -431,7 +431,7 @@ function emitMapPoolRebuilds(ctx, meta) {
             fixedContent = fixedContent.replace(new RegExp(`\\.js_on_press = "${escapedRegex}"`, 'g'), ptrReplacement);
           }
           const ptrReplacement2 = `.${pidPressField} = _map_lua_ptrs_${mj}_${hi}[_i]`;
-          fixedContent = fixedContent.replace(new RegExp(`\\.on_press = ${mh.name}`, 'g'), ptrReplacement2);
+          fixedContent = fixedContent.replace(new RegExp(`\\.on_press = (?:handlers\\.)?${mh.name}`, 'g'), ptrReplacement2);
         }
       }
       // Replace raw map index param (e.g. 'i') with Zig loop variable in ternary conditions
@@ -563,6 +563,7 @@ function emitMapPoolRebuilds(ctx, meta) {
         out += `                }\n`;
         const mh = nestedHandlers[nhi];
         nestedPoolNode = nestedPoolNode.replace(`.lua_on_press = "${mh.luaBody ? mh.luaBody.replace(/\\/g, '\\\\').replace(/"/g, '\\"') : ''}"`, `.lua_on_press = _map_lua_ptrs_${nmi}_${nhi}[_flat_j]`);
+        nestedPoolNode = nestedPoolNode.replace(`.on_press = handlers.${mh.name}`, `.lua_on_press = _map_lua_ptrs_${nmi}_${nhi}[_flat_j]`);
         nestedPoolNode = nestedPoolNode.replace(`.on_press = ${mh.name}`, `.lua_on_press = _map_lua_ptrs_${nmi}_${nhi}[_flat_j]`);
       }
       out += `                _map_pool_${nmi}[_i][_jj] = ${nestedPoolNode};\n`;
@@ -614,7 +615,7 @@ function emitMapPoolRebuilds(ctx, meta) {
             content = content.replace(new RegExp(`\\.lua_on_press = "${escapedRegex}"`, 'g'), `.${imPressField} = _map_lua_ptrs_${imi}_${hi}[_i][_j]`);
             content = content.replace(new RegExp(`\\.js_on_press = "${escapedRegex}"`, 'g'), `.${imPressField} = _map_lua_ptrs_${imi}_${hi}[_i][_j]`);
           }
-          content = content.replace(new RegExp(`\\.on_press = ${mh.name}`, 'g'), `.${imPressField} = _map_lua_ptrs_${imi}_${hi}[_i][_j]`);
+          content = content.replace(new RegExp(`\\.on_press = (?:handlers\\.)?${mh.name}`, 'g'), `.${imPressField} = _map_lua_ptrs_${imi}_${hi}[_i][_j]`);
         }
         // 2. Fix inner OA field refs: _i→_j
         for (const f of imOa.fields) {
@@ -682,7 +683,7 @@ function emitMapPoolRebuilds(ctx, meta) {
               ic = ic.replace(new RegExp(`\\.lua_on_press = "${escapedRegex}"`, 'g'), `.${imPressField} = _map_lua_ptrs_${imi}_${hi}[_i][_j]`);
               ic = ic.replace(new RegExp(`\\.js_on_press = "${escapedRegex}"`, 'g'), `.${imPressField} = _map_lua_ptrs_${imi}_${hi}[_i][_j]`);
             }
-            ic = ic.replace(new RegExp(`\\.on_press = ${mh.name}`, 'g'), `.${imPressField} = _map_lua_ptrs_${imi}_${hi}[_i][_j]`);
+            ic = ic.replace(new RegExp(`\\.on_press = (?:handlers\\.)?${mh.name}`, 'g'), `.${imPressField} = _map_lua_ptrs_${imi}_${hi}[_i][_j]`);
           }
           out += `            _map_inner_${imi}[_i][_j] = [${imMeta.innerCount}]Node{ ${ic} };\n`;
         }
@@ -705,6 +706,7 @@ function emitMapPoolRebuilds(ctx, meta) {
           imPool = imPool.replace(`.lua_on_press = "${escaped}"`, `.${imPressField} = _map_lua_ptrs_${imi}_${hi}[_i][_j]`);
           imPool = imPool.replace(`.js_on_press = "${escaped}"`, `.${imPressField} = _map_lua_ptrs_${imi}_${hi}[_i][_j]`);
         }
+        imPool = imPool.replace(`.on_press = handlers.${mh.name}`, `.${imPressField} = _map_lua_ptrs_${imi}_${hi}[_i][_j]`);
         imPool = imPool.replace(`.on_press = ${mh.name}`, `.${imPressField} = _map_lua_ptrs_${imi}_${hi}[_i][_j]`);
       }
       // Per-item conditionals for inline map (display:none toggling)
@@ -839,7 +841,7 @@ function emitMapPoolRebuilds(ctx, meta) {
                 inner = inner.replace(new RegExp(`\\.lua_on_press = "${escapedRegex}"`, 'g'), ptrReplacement);
                 inner = inner.replace(new RegExp(`\\.js_on_press = "${escapedRegex}"`, 'g'), ptrReplacement);
               }
-              inner = inner.replace(new RegExp(`\\.on_press = ${mh.name}`, 'g'), `.${innerPressField} = _map_lua_ptrs_${mj}_${hi}[_i]`);
+              inner = inner.replace(new RegExp(`\\.on_press = (?:handlers\\.)?${mh.name}`, 'g'), `.${innerPressField} = _map_lua_ptrs_${mj}_${hi}[_i]`);
             }
           }
           // Replace raw map index param with Zig loop variable in inner node ternaries
@@ -933,6 +935,7 @@ function emitMapPoolRebuilds(ctx, meta) {
         // Match both .lua_on_press and .js_on_press — parse.js emits js_on_press for script blocks
         poolNode = poolNode.replace(`.lua_on_press = "${escaped}"`, ptrReplacement);
         poolNode = poolNode.replace(`.js_on_press = "${escaped}"`, ptrReplacement);
+        poolNode = poolNode.replace(`.on_press = handlers.${mh.name}`, ptrReplacement);
         poolNode = poolNode.replace(`.on_press = ${mh.name}`, ptrReplacement);
       }
       // Swap field order: .children before .handlers in map pool nodes (matches reference)

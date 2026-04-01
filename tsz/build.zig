@@ -129,7 +129,7 @@ pub fn build(b: *std.Build) void {
         // Blend2D and Vello (pre-built static libs)
         cart_fast_exe.root_module.addIncludePath(b.path("../blend2d"));
         cart_fast_exe.addObjectFile(b.path("../blend2d/build/libblend2d_full.a"));
-        cart_fast_exe.root_module.addCSourceFile(.{ .file = b.path("framework/ffi/blend2d_shim.cpp"), .flags = &.{"-O2"} });
+        cart_fast_exe.root_module.addCSourceFile(.{ .file = b.path("ffi/blend2d_shim.cpp"), .flags = &.{"-O2"} });
         cart_fast_exe.addObjectFile(b.path("../deps/vello_ffi/target/release/libvello_ffi_stripped.a"));
 
         // wgpu-native
@@ -192,6 +192,9 @@ pub fn build(b: *std.Build) void {
         }
         const smith_bundle_step = b.step("smith-bundle", "Generate compiler/dist/smith.bundle.js");
         smith_bundle_step.dependOn(&smith_bundle.step);
+
+
+
 
         const smith_sync_tool = b.addExecutable(.{
             .name = "smith-sync-tool",
@@ -758,7 +761,7 @@ fn addCoreLib(
         lib.linkFramework("IOKit");
         lib.linkFramework("CoreVideo");
         // AppleScript bridge (NSAppleScript via ObjC FFI)
-        lib.root_module.addCSourceFile(.{ .file = b.path("framework/ffi/applescript_shim.m"), .flags = &.{"-O2"} });
+        lib.root_module.addCSourceFile(.{ .file = b.path("ffi/applescript_shim.m"), .flags = &.{"-O2"} });
     }
 
     // ── Include paths ──────────────────────────────────────────
@@ -774,10 +777,10 @@ fn addCoreLib(
         .flags = &.{ "-O2", "-D_GNU_SOURCE", "-DQUICKJS_NG_BUILD" },
     });
     lib.root_module.addCSourceFile(.{ .file = b.path("stb/stb_image_write_impl.c"), .flags = &.{"-O2"} });
-    lib.root_module.addCSourceFile(.{ .file = b.path("framework/ffi/clock_shim.c"), .flags = &.{"-O2"} });
-    lib.root_module.addCSourceFile(.{ .file = b.path("framework/ffi/compute_shim.c"), .flags = &.{"-O2"} });
-    lib.root_module.addCSourceFile(.{ .file = b.path("framework/ffi/supervisor_shim.c"), .flags = &.{"-O2"} });
-    lib.root_module.addCSourceFile(.{ .file = b.path("framework/ffi/physics_shim.cpp"), .flags = &.{"-O2"} });
+    lib.root_module.addCSourceFile(.{ .file = b.path("ffi/clock_shim.c"), .flags = &.{"-O2"} });
+    lib.root_module.addCSourceFile(.{ .file = b.path("ffi/compute_shim.c"), .flags = &.{"-O2"} });
+    lib.root_module.addCSourceFile(.{ .file = b.path("ffi/supervisor_shim.c"), .flags = &.{"-O2"} });
+    lib.root_module.addCSourceFile(.{ .file = b.path("ffi/physics_shim.cpp"), .flags = &.{"-O2"} });
     lib.linkSystemLibrary("box2d");
     lib.linkSystemLibrary("sqlite3");
     lib.linkSystemLibrary("vterm");
@@ -788,7 +791,7 @@ fn addCoreLib(
     if (linkage == .static) {
         lib.root_module.addIncludePath(b.path("../blend2d"));
         lib.addObjectFile(b.path("../blend2d/build/libblend2d_full.a"));
-        lib.root_module.addCSourceFile(.{ .file = b.path("framework/ffi/blend2d_shim.cpp"), .flags = &.{"-O2"} });
+        lib.root_module.addCSourceFile(.{ .file = b.path("ffi/blend2d_shim.cpp"), .flags = &.{"-O2"} });
         lib.linkLibCpp();
     }
 
@@ -885,7 +888,7 @@ fn addAppExe(
             exe.root_module.addIncludePath(.{ .cwd_relative = "/usr/include/x86_64-linux-gnu" });
         }
         if (target.result.abi == .musl) {
-            exe.root_module.addCSourceFile(.{ .file = b.path("framework/ffi/musl_compat.c"), .flags = &.{"-O2"} });
+            exe.root_module.addCSourceFile(.{ .file = b.path("ffi/musl_compat.c"), .flags = &.{"-O2"} });
         }
     } else if (os == .macos) {
         exe.root_module.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include/luajit-2.1" });
@@ -900,7 +903,7 @@ fn addAppExe(
         exe.linkFramework("Cocoa");
         exe.linkFramework("IOKit");
         exe.linkFramework("CoreVideo");
-        exe.root_module.addCSourceFile(.{ .file = b.path("framework/ffi/applescript_shim.m"), .flags = &.{"-O2"} });
+        exe.root_module.addCSourceFile(.{ .file = b.path("ffi/applescript_shim.m"), .flags = &.{"-O2"} });
     }
 
     // ── Include paths needed by framework headers (even in lean — for @cImport) ──
@@ -922,10 +925,10 @@ fn addAppExe(
             .flags = &.{ "-O2", "-D_GNU_SOURCE", "-DQUICKJS_NG_BUILD" },
         });
         exe.root_module.addCSourceFile(.{ .file = b.path("stb/stb_image_write_impl.c"), .flags = &.{"-O2"} });
-        exe.root_module.addCSourceFile(.{ .file = b.path("framework/ffi/clock_shim.c"), .flags = &.{"-O2"} });
-        exe.root_module.addCSourceFile(.{ .file = b.path("framework/ffi/compute_shim.c"), .flags = &.{"-O2"} });
-        exe.root_module.addCSourceFile(.{ .file = b.path("framework/ffi/supervisor_shim.c"), .flags = &.{"-O2"} });
-        exe.root_module.addCSourceFile(.{ .file = b.path("framework/ffi/physics_shim.cpp"), .flags = &.{"-O2"} });
+        exe.root_module.addCSourceFile(.{ .file = b.path("ffi/clock_shim.c"), .flags = &.{"-O2"} });
+        exe.root_module.addCSourceFile(.{ .file = b.path("ffi/compute_shim.c"), .flags = &.{"-O2"} });
+        exe.root_module.addCSourceFile(.{ .file = b.path("ffi/supervisor_shim.c"), .flags = &.{"-O2"} });
+        exe.root_module.addCSourceFile(.{ .file = b.path("ffi/physics_shim.cpp"), .flags = &.{"-O2"} });
         exe.root_module.addIncludePath(b.path("ffi"));
         exe.linkSystemLibrary("box2d");
         exe.linkSystemLibrary("sqlite3");
@@ -936,7 +939,7 @@ fn addAppExe(
         // ── Blend2D (2D vector graphics engine) ──
         exe.root_module.addIncludePath(b.path("../blend2d"));
         exe.addObjectFile(b.path("../blend2d/build/libblend2d_full.a"));
-        exe.root_module.addCSourceFile(.{ .file = b.path("framework/ffi/blend2d_shim.cpp"), .flags = &.{"-O2"} });
+        exe.root_module.addCSourceFile(.{ .file = b.path("ffi/blend2d_shim.cpp"), .flags = &.{"-O2"} });
         exe.linkLibCpp();
 
         // ── Vello CPU (anti-aliased 2D path rendering via Rust FFI) ──
@@ -1081,7 +1084,7 @@ fn addDevShellExe(
         exe.linkFramework("Cocoa");
         exe.linkFramework("IOKit");
         exe.linkFramework("CoreVideo");
-        exe.root_module.addCSourceFile(.{ .file = b.path("framework/ffi/applescript_shim.m"), .flags = &.{"-O2"} });
+        exe.root_module.addCSourceFile(.{ .file = b.path("ffi/applescript_shim.m"), .flags = &.{"-O2"} });
     }
 
     exe.root_module.addIncludePath(b.path("."));
@@ -1098,11 +1101,11 @@ fn addDevShellExe(
         .flags = &.{ "-O2", "-D_GNU_SOURCE", "-DQUICKJS_NG_BUILD" },
     });
     exe.root_module.addCSourceFile(.{ .file = b.path("stb/stb_image_write_impl.c"), .flags = &.{"-O2"} });
-    exe.root_module.addCSourceFile(.{ .file = b.path("framework/ffi/clock_shim.c"), .flags = &.{"-O2"} });
-    exe.root_module.addCSourceFile(.{ .file = b.path("framework/ffi/compute_shim.c"), .flags = &.{"-O2"} });
-    exe.root_module.addCSourceFile(.{ .file = b.path("framework/ffi/supervisor_shim.c"), .flags = &.{"-O2"} });
-    exe.root_module.addCSourceFile(.{ .file = b.path("framework/ffi/physics_shim.cpp"), .flags = &.{"-O2"} });
-    exe.root_module.addCSourceFile(.{ .file = b.path("framework/ffi/lua_worker_shim.c"), .flags = &.{"-O2"} });
+    exe.root_module.addCSourceFile(.{ .file = b.path("ffi/clock_shim.c"), .flags = &.{"-O2"} });
+    exe.root_module.addCSourceFile(.{ .file = b.path("ffi/compute_shim.c"), .flags = &.{"-O2"} });
+    exe.root_module.addCSourceFile(.{ .file = b.path("ffi/supervisor_shim.c"), .flags = &.{"-O2"} });
+    exe.root_module.addCSourceFile(.{ .file = b.path("ffi/physics_shim.cpp"), .flags = &.{"-O2"} });
+    exe.root_module.addCSourceFile(.{ .file = b.path("ffi/lua_worker_shim.c"), .flags = &.{"-O2"} });
     exe.root_module.addIncludePath(b.path("ffi"));
     exe.linkSystemLibrary("box2d");
     exe.linkSystemLibrary("sqlite3");
@@ -1113,7 +1116,7 @@ fn addDevShellExe(
     // ── Blend2D (2D vector graphics engine) ──
     exe.root_module.addIncludePath(b.path("../blend2d"));
     exe.addObjectFile(b.path("../blend2d/build/libblend2d_full.a"));
-    exe.root_module.addCSourceFile(.{ .file = b.path("framework/ffi/blend2d_shim.cpp"), .flags = &.{"-O2"} });
+    exe.root_module.addCSourceFile(.{ .file = b.path("ffi/blend2d_shim.cpp"), .flags = &.{"-O2"} });
     exe.linkLibCpp();
 
     // ── Vello CPU (anti-aliased 2D path rendering via Rust FFI) ──

@@ -67,10 +67,12 @@ function checkLuaSyntaxLeaks(ctx, scan, errors) {
 
 function checkHandlerReferences(scan, errors) {
   for (var di = 0; di < scan.allDecls.length; di++) {
-    var onPressMatch = scan.allDecls[di].match(/\.on_press = (\w+)/g);
+    var onPressMatch = scan.allDecls[di].match(/\.on_press = ([\w.]+)/g);
     if (!onPressMatch) continue;
     for (var pi = 0; pi < onPressMatch.length; pi++) {
       var ref = onPressMatch[pi].replace('.on_press = ', '');
+      // Strip module prefix (handlers.X → X) for split-file output
+      if (ref.indexOf('handlers.') === 0) ref = ref.substring(9);
       if (ref !== 'null' && !scan.handlerNameSet[ref]) {
         errors.push('F2: .on_press references handler "' + ref + '" but no such handler exists');
       }
