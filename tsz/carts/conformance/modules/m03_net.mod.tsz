@@ -1,6 +1,12 @@
-// m03: Full networking module — types, ffi, functions, state
-// Proves: <module> with <ffi> bindings, connection state machine,
-//         function composition, the networking research routing table
+// CONFORMANCE TEST: Networking module
+//
+// Full module layout with FFI bindings, pooled state, and string-heavy helpers.
+//
+// Features exercised:
+// - ffi, types, state, and functions blocks in one module
+// - connection pooling and state transitions
+// - string search helpers with indexOf / parseInt
+// - request formatting via concatenation
 //
 // Design from RESULTS.md:
 //   TCP layer: Zig (no GC pauses under load)
@@ -67,7 +73,7 @@
     acquire(host: string, port: u16): i32
       // Check pool for existing idle connection to this host:port
       for pool[0..pool_count] as conn:
-        conn.host exact host and conn.port exact port and conn.state exact idle
+        conn.host.eql(host) and conn.port == port and conn.state == idle
           ? conn.state = connected; return conn.fd
           : continue
       // No pooled connection — open new
@@ -81,13 +87,13 @@
 
     release(fd: i32): void
       for pool[0..pool_count] as conn:
-        conn.fd exact fd
+        conn.fd == fd
           ? conn.state = idle; conn.reuse_count = conn.reuse_count + 1; return
           : continue
 
     disconnect(fd: i32): void
       for pool[0..pool_count] as conn:
-        conn.fd exact fd
+        conn.fd == fd
           ? close(fd); conn.state = closed; conn.fd = -1; return
           : continue
 
@@ -121,21 +127,21 @@
       // skip "http://" or "https://"
       start = url.indexOf('//') + 2
       end = url.indexOf('/', start)
-      end exact -1 ? end = url.len : go
+      end == -1 ? end = url.len : go
       colon = url.indexOf(':', start)
       colon > 0 and colon < end ? return url[start..colon] : return url[start..end]
 
     parsePort(url: string): u16
       start = url.indexOf('//') + 2
       end = url.indexOf('/', start)
-      end exact -1 ? end = url.len : go
+      end == -1 ? end = url.len : go
       colon = url.indexOf(':', start)
       colon > 0 and colon < end ? return parseInt(url[colon+1..end]) : return 80
 
     parsePath(url: string): string
       start = url.indexOf('//') + 2
       slash = url.indexOf('/', start)
-      slash exact -1 ? return '/' : return url[slash..url.len]
+      slash == -1 ? return '/' : return url[slash..url.len]
 
     parseStatus(raw: u8[]): u16
       // "HTTP/1.1 200 OK" — status starts at byte 9

@@ -1,5 +1,12 @@
-// m01: Types only — enums, structs, unions
-// Proves: <types> block parsing, enum variants, struct fields with defaults, tagged unions
+// CONFORMANCE TEST: Types only
+//
+// Baseline module declarations with enums, structs, and one tagged union.
+//
+// Features exercised:
+// - types block parsing
+// - enum variants and defaults
+// - nested struct defaults
+// - tagged union declarations
 
 <module counter>
   <types>

@@ -1,5 +1,10 @@
-// m16: String concatenation → std.fmt.bufPrint
-// Proves: 'literal' + var + 'literal' becomes bufPrint with format string
+// CONFORMANCE TEST: String concatenation
+//
+// Small formatting fixture that relies on the module compiler's concat lowering.
+//
+// Features exercised:
+// - literal + value + literal concatenation
+// - mixed numeric and string formatting
 
 <module msg>
   <state>
@@ -7,6 +12,8 @@
   </state>
 
   <functions>
+    // ── Formatting ──
+
     greet(name: string): string
       return 'Hello, ' + name + '!'
 

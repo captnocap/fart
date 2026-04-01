@@ -3,6 +3,7 @@
 function collectCompilerInputs(c) {
   globalThis.__cursor = c; // save for emit-time token access
   collectScript(c);
+  collectLScript(c);
   collectComponents(c);
   collectState(c);
   collectConstArrays(c);

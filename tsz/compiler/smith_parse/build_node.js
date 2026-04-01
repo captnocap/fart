@@ -64,18 +64,22 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
   }
 
   if (handlerRef) {
-    // Look up the handler's Lua body for lua_on_press
+    // Look up the handler to decide dispatch method
     const handler = ctx.handlers.find(h => h.name === handlerRef);
-    if (handler && handler.luaBody && !handler.body.includes('qjs_runtime.') && !ctx.scriptBlock && !globalThis.__scriptContent) {
+    // Prefer Zig function pointer when handler has a pure-Zig body (state.setSlot calls).
+    // This avoids JS eval dispatch which can trigger mid-tick map rebuilds → segfault.
+    const hasZigBody = handler && handler.body && handler.body.trim().length > 0 && !handler.body.includes('qjs_runtime.');
+    if (hasZigBody) {
+      parts.push(`.handlers = .{ .on_press = handlers.${handlerRef} }`);
+    } else if (handler && handler.luaBody && !ctx.scriptBlock && !globalThis.__scriptContent) {
       const escaped = luaTransform(handler.luaBody).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
       parts.push(`.handlers = .{ .lua_on_press = "${escaped}" }`);
     } else if ((ctx.scriptBlock || globalThis.__scriptContent) && handler && handler.luaBody) {
-      // Script block apps: use js_on_press for QuickJS dispatch
       const jsBody = jsTransform(handler.luaBody);
       const escaped = jsBody.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
       parts.push(`.handlers = .{ .js_on_press = "${escaped}" }`);
     } else {
-      parts.push(`.handlers = .{ .on_press = ${handlerRef} }`);
+      parts.push(`.handlers = .{ .on_press = handlers.${handlerRef} }`);
     }
   }
 

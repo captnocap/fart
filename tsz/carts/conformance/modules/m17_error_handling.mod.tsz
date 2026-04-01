@@ -1,5 +1,11 @@
-// m17: Error handling — try, catch, error union return types
-// Proves: try passthrough, !Type return, catch in FFI calls
+// CONFORMANCE TEST: Error handling
+//
+// Safe I/O wrapper fixture for the error-oriented corners of module syntax.
+//
+// Features exercised:
+// - error-union return types
+// - optional error state
+// - try passthrough around FFI calls
 
 <module safe_io>
   <ffi>
@@ -23,6 +29,8 @@
   </state>
 
   <functions>
+    // ── Safe wrappers ──
+
     safe_open(path: string): !i32
       current.fd = try open(path, 0)
       current.open = true

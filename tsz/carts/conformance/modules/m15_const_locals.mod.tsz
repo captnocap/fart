@@ -1,5 +1,11 @@
-// m15: const local declarations and function calls as expressions
-// Proves: const x = fn_call() emits as const, chained calls
+// CONFORMANCE TEST: Local inference from function results
+//
+// Routing fixture that uses local temporaries sourced from other module calls.
+//
+// Features exercised:
+// - local inference from function return values
+// - chained function usage
+// - looped string matching
 
 <module router>
   <types>
@@ -15,6 +21,8 @@
   </state>
 
   <functions>
+    // ── Routing ──
+
     register(path: string): u8
       count >= 16 ? stop : go
       routes[count] = { path: path, handler_id: count }

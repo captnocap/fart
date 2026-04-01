@@ -23,7 +23,7 @@ pub fn put(key: []const u8, value: i32, ttl: u32) void {
 pub fn get(key: []const u8) i32 {
     var _i: usize = 0;
     while (_i < count) : (_i += 1) {
-        if (entries[_i].alive == true and entries[_i].key == key) {
+        if (entries[_i].alive == true and std.mem.eql(u8, entries[_i].key, key)) {
             return entries[_i].value;
         }
     }

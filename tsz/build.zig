@@ -289,9 +289,34 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_compiler_tests.step);
 
     // ── Handler Test Harness — headless handler validator ────────────
-    // zig build test-handlers -- <app.zig path> [--js-logic <file>]
+    // zig build test-handlers -Dtest-app=generated_app.zig
+    //
+    // Compiles the app with a test harness entry point that:
+    //   1. Boots headless (no SDL, no GPU)
+    //   2. Initializes state + QuickJS
+    //   3. Loads JS_LOGIC from the app
+    //   4. Walks the node tree and fires every handler
+    //   5. Reports segfaults, exceptions, and state changes
+    //
+    // The test harness imports the app file and uses its root node and JS_LOGIC.
+    // Both share the same framework imports.
+    
+    const test_app_source = b.option([]const u8, "test-app", "App source file to test") orelse "generated_app.zig";
+    
+    // Generate a wrapper file in the project directory (not cache) so it can import local files
+    const wrapper_content = std.fmt.allocPrint(b.allocator,
+        "// Auto-generated test harness wrapper - DO NOT EDIT\n// Imports: {s}\npub const app_under_test = @import(\"{s}\");\npub fn main() u8 {{ return @import(\"test_handlers.zig\").main() catch 1; }}\n",
+        .{ test_app_source, test_app_source }) catch @panic("OOM");
+    defer b.allocator.free(wrapper_content);
+    
+    // Write to project directory so imports work relative to it
+    const wrapper_file = std.fs.cwd().createFile("test_harness_main.zig", .{}) catch @panic("failed to create wrapper");
+    wrapper_file.writeAll(wrapper_content) catch @panic("failed to write wrapper");
+    wrapper_file.close();
+    
+    // Create the test harness executable using the wrapper as the root
     const test_handlers_mod = b.createModule(.{
-        .root_source_file = b.path("test_handlers.zig"),
+        .root_source_file = b.path("test_harness_main.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -313,9 +338,16 @@ pub fn build(b: *std.Build) void {
         test_handlers_exe.linkSystemLibrary("pthread");
     }
 
+
     const test_handlers_install = b.addInstallArtifact(test_handlers_exe, .{});
-    const test_handlers_step = b.step("test-handlers", "Run handler tests (headless) — args: <app.zig> [--js-logic <file>]");
+    const test_handlers_step = b.step("test-handlers", "Build handler test harness — run with: zig-out/bin/test-handlers");
     test_handlers_step.dependOn(&test_handlers_install.step);
+    
+    // Also add a run step
+    const run_test_handlers = b.addRunArtifact(test_handlers_exe);
+    const run_test_handlers_step = b.step("run-test-handlers", "Build and run handler tests");
+    run_test_handlers_step.dependOn(&test_handlers_install.step);
+    run_test_handlers_step.dependOn(&run_test_handlers.step);
 
     // ── WASM target — layout engine only, no native deps ──────────
     const wasm_lib = b.addExecutable(.{

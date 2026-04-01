@@ -16,7 +16,7 @@ var tokens: [64]Token = [_]Token{.{}} ** 64;
 var token_count: u8 = 0;
 
 pub fn find_char(haystack: []const u8, needle: u8) usize {
-    return std.mem.indexOfScalar(u8, haystack, needle) orelse haystack.len;
+    return std.mem.indexOf(u8, haystack, needle) orelse haystack.len;
 }
 
 pub fn find_str(haystack: []const u8, needle: []const u8) usize {

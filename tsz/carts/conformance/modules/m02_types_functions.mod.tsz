@@ -1,5 +1,12 @@
-// m02: Types + functions — logic bodies, state mutation, dispatch
-// Proves: <functions> with typed params, return types, if/else, switch, loops
+// CONFORMANCE TEST: Types + functions
+//
+// Stateful module logic with typed params, dispatch, and array projections.
+//
+// Features exercised:
+// - functions block parsing
+// - typed params and return values
+// - switch dispatch
+// - state mutation and map returns
 
 <module counter>
   <types>
@@ -20,11 +27,15 @@
   </state>
 
   <functions>
+    // ── Lifecycle ──
+
     create(initial: int, max: int): u8
       count >= 8 ? stop : go
       counters[count] = { value: initial, max: max }
       count = count + 1
       return count - 1
+
+    // ── Updates ──
 
     step(id: u8, dir: Direction): int
       switch dir:
@@ -39,6 +50,8 @@
         reset:
           counters[id].value = 0
       return counters[id].value
+
+    // ── Reads ──
 
     get(id: u8): int
       return counters[id].value

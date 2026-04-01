@@ -1,5 +1,11 @@
-// m08: Nested struct field access, multiple operations per function
-// Proves: deep dot access, multiple for-loops, bool logic
+// CONFORMANCE TEST: Nested struct access
+//
+// Entity-style fixture with deep field access and looped updates.
+//
+// Features exercised:
+// - deep dot access through nested structs
+// - multiple statements in one branch
+// - per-entity simulation loops
 
 <module ecs>
   <types>
@@ -30,6 +36,8 @@
   </state>
 
   <functions>
+    // ── Entity lifecycle ──
+
     spawn(x: f32, y: f32): u8
       count >= 32 ? stop : go
       entities[count] = { id: count, alive: true, pos: { x: x, y: y } }
@@ -45,11 +53,15 @@
       entities[id].hp.current <= 0 ? stop : go
       entities[id].alive = false
 
+    // ── Simulation ──
+
     tick_physics(dt: f32): void
       for entities[0..count] as e:
         e.alive == true
           ? e.pos.x = e.pos.x + e.vel.x * dt; e.pos.y = e.pos.y + e.vel.y * dt
           : continue
+
+    // ── Queries ──
 
     count_alive(): i32
       n = 0

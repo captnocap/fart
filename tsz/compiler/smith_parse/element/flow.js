@@ -27,6 +27,20 @@ function skipScriptElement(c) {
   return { nodeExpr: '.{}' };
 }
 
+function skipLScriptElement(c) {
+  if (c.kind() === TK.gt) c.advance();
+  while (c.pos < c.count) {
+    if (c.kind() === TK.lt_slash && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.identifier && c.textAt(c.pos + 1) === 'lscript') {
+      c.advance();
+      c.advance();
+      if (c.kind() === TK.gt) c.advance();
+      break;
+    }
+    c.advance();
+  }
+  return { nodeExpr: '.{}' };
+}
+
 function finishParsedElement(c, rawTag, effectiveTag, styleFields, children, handlerRef, nodeFields, clsDef, tagSrcOffset) {
   if (c.kind() === TK.slash_gt) {
     c.advance();

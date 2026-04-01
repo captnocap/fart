@@ -1,5 +1,11 @@
-// m09: Mixed numeric types, float math, negative defaults
-// Proves: f32/i32/u16 coexistence, negative literals, float defaults
+// CONFORMANCE TEST: Mixed numeric types
+//
+// Physics-flavored fixture with floats, signed ints, and unsigned counters.
+//
+// Features exercised:
+// - mixed numeric scalar types
+// - negative float defaults
+// - multi-statement per-item updates
 
 <module physics>
   <types>
@@ -31,17 +37,23 @@
   </state>
 
   <functions>
+    // ── Lifecycle ──
+
     emit(px: f32, py: f32, vx: f32, vy: f32): u16
       count >= 64 ? stop : go
       particles[count] = { x: px, y: py, vx: vx, vy: vy, active: true, life: 60 }
       count = count + 1
       return count - 1
 
+    // ── Simulation ──
+
     step(dt: f32): void
       for particles[0..count] as p:
         p.active == true
           ? p.vy = p.vy + gravity * dt; p.x = p.x + p.vx * dt; p.y = p.y + p.vy * dt; p.life = p.life - 1
           : continue
+
+    // ── Cleanup ──
 
     prune(): void
       for particles[0..count] as p:

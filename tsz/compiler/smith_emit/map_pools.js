@@ -414,7 +414,7 @@ function emitMapPoolRebuilds(ctx, meta) {
       }
       // Replace handler refs in per-item arrays with per-item handler string pointers
       // Must check ALL maps' handlers since nested map handlers may appear in parent per-item arrays
-      const pidPressField = (ctx.scriptBlock || globalThis.__scriptContent) ? 'js_on_press' : 'lua_on_press';
+      const pidPressField = ctx.scriptBlock || globalThis.__scriptContent ? 'js_on_press' : 'lua_on_press';
       for (let mj = 0; mj < ctx.maps.length; mj++) {
         const allMH = ctx.handlers.filter(h => h.inMap && h.mapIdx === mj);
         for (let hi = 0; hi < allMH.length; hi++) {
@@ -579,7 +579,7 @@ function emitMapPoolRebuilds(ctx, meta) {
       const imMeta = _mapMeta[imi];
       if (!imMeta) continue;
       const imOa = im.oa;
-      const imPressField = (ctx.scriptBlock || globalThis.__scriptContent) ? 'js_on_press' : 'lua_on_press';
+      const imPressField = ctx.scriptBlock || globalThis.__scriptContent ? 'js_on_press' : 'lua_on_press';
   
       out += `        // inline map ${imi}: ${imOa.getter}.map (per-parent)\n`;
       out += `        _map_count_${imi}[_i] = @min(_oa${im.oaIdx}_len, MAX_MAP_${imi});\n`;
@@ -827,7 +827,7 @@ function emitMapPoolRebuilds(ctx, meta) {
           }
           // Replace handler refs in inner array items with per-item handler string pointers
           // Must check ALL maps' handlers since nested map handlers may appear in parent inner arrays
-          const innerPressField = (ctx.scriptBlock || globalThis.__scriptContent) ? 'js_on_press' : 'lua_on_press';
+          const innerPressField = ctx.scriptBlock || globalThis.__scriptContent ? 'js_on_press' : 'lua_on_press';
           for (let mj = 0; mj < ctx.maps.length; mj++) {
             const allMH = ctx.handlers.filter(h => h.inMap && h.mapIdx === mj);
             for (let hi = 0; hi < allMH.length; hi++) {
@@ -919,7 +919,7 @@ function emitMapPoolRebuilds(ctx, meta) {
       }
       // Replace handler refs with per-item handler string pointers
       // Use js_on_press when there's a <script> block (QuickJS dispatch)
-      const pressField = (ctx.scriptBlock || globalThis.__scriptContent) ? 'js_on_press' : 'lua_on_press';
+      const pressField = ctx.scriptBlock || globalThis.__scriptContent ? 'js_on_press' : 'lua_on_press';
       if (typeof globalThis.__SMITH_DEBUG_MAP_TEXT !== 'undefined') {
         ctx._debugLines.push('[MAP_POOL_NODE] mi=' + mi + ' pressField=' + pressField + ' poolNode=' + poolNode.substring(0, 300));
       }

@@ -1,5 +1,11 @@
-// m07: Comments preserved, section comments in functions
-// Proves: comments pass through, multi-function blocks with comment separators
+// CONFORMANCE TEST: Comments and sections
+//
+// Verifies that section comments survive in a multi-function module fixture.
+//
+// Features exercised:
+// - line comments in module source
+// - section comments inside the functions block
+// - string equality via .eql in loops
 
 <module cache>
   <types>
@@ -28,7 +34,7 @@
 
     get(key: string): i32
       for entries[0..count] as e:
-        e.alive == true and e.key == key
+        e.alive == true and e.key.eql(key)
           ? return e.value
           : continue
       return -1

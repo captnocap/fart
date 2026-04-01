@@ -1,5 +1,11 @@
-// m04: FFI imports + enum-aware expressions
-// Proves: <ffi> block generates imports, enum variants get . prefix in bodies
+// CONFORMANCE TEST: FFI imports + enums
+//
+// Small module that mixes external bindings with enum-aware state updates.
+//
+// Features exercised:
+// - ffi import parsing
+// - enum defaults in structs
+// - enum comparisons in function bodies
 
 <module conn>
   <ffi>
@@ -22,6 +28,8 @@
   </state>
 
   <functions>
+    // ── Lifecycle ──
+
     open(): i32
       count >= 4 ? stop : go
       conns[count] = { fd: 42, state: connecting }
@@ -32,6 +40,8 @@
     close_conn(id: u8): void
       conns[id].state = closed
       conns[id].fd = -1
+
+    // ── Queries ──
 
     is_idle(id: u8): bool
       return conns[id].state == idle

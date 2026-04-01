@@ -10,6 +10,7 @@ function parseJSXElement(c) {
   let rawTag = readTagToken(c);
 
   if (rawTag === 'script') return skipScriptElement(c);
+  if (rawTag === 'lscript') return skipLScriptElement(c);
 
   const normalizedTag = normalizeRawTag(c, rawTag);
   rawTag = normalizedTag.rawTag;

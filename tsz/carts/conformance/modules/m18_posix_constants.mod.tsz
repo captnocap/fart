@@ -1,5 +1,11 @@
-// m18: Posix constant mapping
-// Proves: AF_INET → posix.AF.INET, SOCK_STREAM → posix.SOCK.STREAM, etc.
+// CONFORMANCE TEST: POSIX constants
+//
+// Socket fixture that uses the module-level constant names expected by the mapper.
+//
+// Features exercised:
+// - POSIX constant remapping
+// - FFI socket creation
+// - guarded shutdown logic
 
 <module socket>
   <ffi>
@@ -19,6 +25,8 @@
   </state>
 
   <functions>
+    // ── Socket lifecycle ──
+
     open_tcp(): !i32
       fd = try socket(AF_INET, SOCK_STREAM, 0)
       return fd

@@ -156,6 +156,7 @@ function resetCtx() {
     _undefinedJSCalls: [],
     _duplicateJSVars: [],
     _jsDynTexts: [],
+    _luaDynTexts: [],
   };
 }
 

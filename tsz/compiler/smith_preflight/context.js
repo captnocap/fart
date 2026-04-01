@@ -6,6 +6,7 @@ function derivePreflightIntents(ctx) {
     has_map_handlers: ctx.handlers.some(function(h) { return h.inMap; }),
     has_state: ctx.stateSlots.length > 0,
     has_script_block: ctx.scriptBlock !== null || !!globalThis.__scriptContent,
+    has_lua_block: ctx.luaBlock !== null,
     has_dynTexts: ctx.dynTexts.length > 0,
     has_dynColors: ctx.dynColors.length > 0,
     has_dynStyles: !!(ctx.dynStyles && ctx.dynStyles.length > 0),

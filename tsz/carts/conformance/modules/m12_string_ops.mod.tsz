@@ -1,5 +1,11 @@
-// m12: String stdlib method mapping
-// Proves: indexOf → std.mem.indexOf, string comparison via std.mem.eql
+// CONFORMANCE TEST: String helpers
+//
+// Focused fixture for the higher-level string helper surface used in modules.
+//
+// Features exercised:
+// - indexOf mapping
+// - string equality via .eql
+// - slice forms with open and closed ranges
 
 <module parser>
   <types>
@@ -18,14 +24,20 @@
   </state>
 
   <functions>
+    // ── Search ──
+
     find_char(haystack: string, needle: u8): usize
-      return haystack.indexOfChar(needle)
+      return haystack.indexOf(needle)
 
     find_str(haystack: string, needle: string): usize
       return haystack.indexOf(needle)
 
+    // ── Comparison ──
+
     compare(a: string, b: string): bool
       return a.eql(b)
+
+    // ── Slices ──
 
     slice_from(s: string, start: usize): string
       return s[start..]

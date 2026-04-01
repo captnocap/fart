@@ -1,5 +1,11 @@
-// m06: For-loop iteration with conditionals
-// Proves: for...as loops, conditional match-and-return, enum comparisons in loops
+// CONFORMANCE TEST: For-loop iteration
+//
+// Focused fixture for module-level `for ... as ...` loops with enum conditions.
+//
+// Features exercised:
+// - `for range as item:` syntax
+// - conditional match-and-return
+// - accumulation inside loops
 
 <module pool>
   <types>
@@ -18,11 +24,15 @@
   </state>
 
   <functions>
+    // ── Lifecycle ──
+
     add(val: i32): u8
       count >= 8 ? stop : go
       slots[count] = { id: count, status: busy, value: val }
       count = count + 1
       return count - 1
+
+    // ── Queries ──
 
     find_free(): i32
       for slots[0..count] as s:
@@ -34,6 +44,8 @@
     release(id: u8): void
       slots[id].status = free
       slots[id].value = 0
+
+    // ── Aggregation ──
 
     sum_busy(): i32
       total = 0

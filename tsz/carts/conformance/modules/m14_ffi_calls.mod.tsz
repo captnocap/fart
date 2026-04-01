@@ -1,5 +1,11 @@
-// m14: FFI call prefixing in function bodies
-// Proves: bare FFI symbol calls get prefixed with import name
+// CONFORMANCE TEST: FFI call prefixing
+//
+// Minimal I/O module proving that bare FFI calls still lower through the import table.
+//
+// Features exercised:
+// - FFI calls from function bodies
+// - guard-style early exits around external calls
+// - state updates after FFI lifecycle events
 
 <module io>
   <ffi>
@@ -21,6 +27,8 @@
   </state>
 
   <functions>
+    // ── File lifecycle ──
+
     open_file(path: string): i32
       current.fd = open(path, 0)
       current.open = true

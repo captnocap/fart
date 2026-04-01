@@ -503,7 +503,7 @@ function tryParseBraceChild(c, children) {
         c.advance();
       }
       if (c.kind() === TK.rbrace) c.advance();
-      if (tailTokens.length > 0 && ctx.scriptBlock) {
+      if (tailTokens.length > 0 && (ctx.scriptBlock || ctx.luaBlock)) {
         ctx.dynTexts.pop();
         ctx.dynCount--;
         const fullExpr = (getter + ' ' + tailTokens.join(' ')).replace(/\bexact\b/g, '===');
@@ -512,7 +512,16 @@ function tryParseBraceChild(c, children) {
         const jsBufId = ctx.dynCount;
         ctx.dynTexts.push({ bufId: jsBufId, fmtString: '{s}', fmtArgs: 'state.getSlotString(' + jsSlotIdx + ')', arrName: '', arrIndex: 0, bufSize: 256 });
         ctx.dynCount++;
-        ctx._jsDynTexts.push({ slotIdx: jsSlotIdx, jsExpr: fullExpr });
+        // Route to JS or Lua based on what's available
+        if (ctx.scriptBlock) {
+          ctx._jsDynTexts.push({ slotIdx: jsSlotIdx, jsExpr: fullExpr });
+        } else if (ctx.luaBlock) {
+          // Convert JS operators to Lua operators, and single-quoted strings to double-quoted
+          let luaExpr = fullExpr.replace(/\|\|/g, 'or').replace(/&&/g, 'and').replace(/===/g, '==').replace(/!==/g, '~=');
+          // Convert 'string' to "string" for Lua compatibility
+          luaExpr = luaExpr.replace(/'([^']*)'/g, '"$1"');
+          ctx._luaDynTexts.push({ slotIdx: jsSlotIdx, luaExpr: luaExpr });
+        }
         children.push({ nodeExpr: '.{ .text = "" }', dynBufId: jsBufId });
       } else if (tailTokens.length > 0) {
         ctx._droppedExpressions.push({ expr: getter + ' ' + tailTokens.join(' '), line: 0 });

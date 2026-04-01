@@ -9,7 +9,7 @@ function emitOutput(rootExpr, file) {
   const pfLane = ctx._preflight ? ctx._preflight.lane : 'unknown';
   const hasDynamicOA = ctx.objectArrays.some(o => !o.isConst && !o.isNested);
   const fastBuild = globalThis.__fastBuild === 1;
-  const hasScriptRuntime = hasDynamicOA || ctx.scriptBlock || globalThis.__scriptContent;
+  const hasScriptRuntime = hasDynamicOA || ctx.scriptBlock || ctx.luaBlock || globalThis.__scriptContent;
 
   out += emitPreamble({
     basename: basename,
