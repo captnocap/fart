@@ -1,0 +1,199 @@
+#!/bin/bash
+# Post-commit regression hook.
+# Fires ONLY when compiler or engine files changed in the commit.
+# Runs conformance rescan and reports regressions vs the prior baseline.
+#
+# Install:  ln -sf ../../tsz/scripts/regression-hook .git/hooks/post-commit
+# Manual:   scripts/regression-hook [commit-sha]
+#
+# Output is a compact diff: newly regressed, still broken, newly fixed, stable.
+
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+DB="conformance.db"
+LEDGER="scripts/ledger"
+
+# ── Which commit are we checking? ─────────────────────────────
+
+COMMIT="${1:-HEAD}"
+COMMIT_SHA=$(git rev-parse --short "$COMMIT" 2>/dev/null || echo "manual")
+COMMIT_MSG=$(git log -1 --format='%s' "$COMMIT" 2>/dev/null || echo "manual run")
+
+# ── Should we run? Only if compiler/engine paths changed ──────
+
+TRIGGER_PATHS=(
+    "compiler/"
+    "framework/"
+    "scripts/build"
+    "scripts/link.lua"
+)
+
+changed_files=$(git diff-tree --no-commit-id --name-only -r "$COMMIT" 2>/dev/null || echo "")
+
+should_run=0
+for pattern in "${TRIGGER_PATHS[@]}"; do
+    if echo "$changed_files" | grep -q "^$pattern"; then
+        should_run=1
+        break
+    fi
+done
+
+# Allow forced run
+if [ "${FORCE:-0}" = "1" ]; then
+    should_run=1
+fi
+
+if [ "$should_run" -eq 0 ]; then
+    exit 0
+fi
+
+echo ""
+echo "╔══════════════════════════════════════════════════════════╗"
+echo "║  Regression scan triggered by: $COMMIT_SHA              "
+echo "║  $COMMIT_MSG"
+echo "╚══════════════════════════════════════════════════════════╝"
+echo ""
+
+# ── Snapshot the current baseline ─────────────────────────────
+
+# Get current pass/fail state per test before we rebuild
+BASELINE_PASS=$(sqlite3 "$DB" "
+    SELECT test_name FROM (
+        SELECT test_name, status,
+               ROW_NUMBER() OVER (PARTITION BY test_name ORDER BY built_at DESC) as rn
+        FROM builds
+    ) WHERE rn = 1 AND status = 'compiled'
+    ORDER BY test_name;
+" 2>/dev/null || echo "")
+
+BASELINE_FAIL=$(sqlite3 "$DB" "
+    SELECT test_name FROM (
+        SELECT test_name, status,
+               ROW_NUMBER() OVER (PARTITION BY test_name ORDER BY built_at DESC) as rn
+        FROM builds
+    ) WHERE rn = 1 AND status != 'compiled'
+    ORDER BY test_name;
+" 2>/dev/null || echo "")
+
+# ── Run the full conformance sweep ────────────────────────────
+
+echo "Running conformance sweep..."
+echo ""
+
+# Build all tests silently, just collect results
+pass=0
+fail=0
+total=0
+declare -A RESULTS=()
+
+for dir in carts/conformance/soup carts/conformance/mixed carts/conformance/chad carts/conformance/lscript carts/conformance; do
+    [ -d "$dir" ] || continue
+    for f in "$dir"/*.tsz; do
+        [ -f "$f" ] || continue
+        bn=$(basename "$f")
+        case "$bn" in
+            *.script.tsz|*.cls.tsz|*.effects.tsz|*.glyphs.tsz|*.tcls.tsz|*.vcls.tsz) continue ;;
+        esac
+
+        name=$(basename "$f" .tsz)
+        lane="shared"
+        case "$dir" in
+            *soup*) lane="soup" ;; *mixed*) lane="mixed" ;; *chad*) lane="chad" ;; *lscript*) lane="lscript" ;;
+        esac
+
+        total=$((total + 1))
+        gen_file="generated_${name}.zig"
+        binary="zig-out/bin/$name"
+
+        rm -f "$gen_file" "$binary"
+        build_out=$(scripts/build "$f" 2>&1) || true
+
+        if [ -f "$binary" ]; then
+            RESULTS["$name"]="compiled"
+            pass=$((pass + 1))
+
+            # Stamp into DB with commit context
+            sha=$(sha256sum "$binary" | cut -d' ' -f1)
+            gen=""
+            [ -f "$gen_file" ] && gen=$(cat "$gen_file" | sed "s/'/''/g")
+            sqlite3 "$DB" "INSERT INTO builds (test_name, lane, status, generated, binary_sha)
+                           VALUES ('$name', '$lane', 'compiled', '$gen', '$sha');"
+        else
+            local_status="forge_fail"
+            [ -f "$gen_file" ] && local_status="zig_fail"
+            grep -q "PREFLIGHT BLOCKED" "$gen_file" 2>/dev/null && local_status="preflight_blocked"
+            RESULTS["$name"]="$local_status"
+            fail=$((fail + 1))
+
+            err=$(echo "$build_out" | head -c 500 | sed "s/'/''/g")
+            sqlite3 "$DB" "INSERT INTO builds (test_name, lane, status, error_log)
+                           VALUES ('$name', '$lane', '$local_status', '$err');"
+        fi
+    done
+done
+
+# ── Compute diff ──────────────────────────────────────────────
+
+newly_regressed=()
+still_broken=()
+newly_fixed=()
+stable=0
+
+for name in "${!RESULTS[@]}"; do
+    status="${RESULTS[$name]}"
+    was_passing=$(echo "$BASELINE_PASS" | grep -c "^${name}$" || true)
+    was_failing=$(echo "$BASELINE_FAIL" | grep -c "^${name}$" || true)
+
+    if [ "$status" = "compiled" ]; then
+        if [ "$was_failing" -gt 0 ]; then
+            newly_fixed+=("$name")
+        else
+            stable=$((stable + 1))
+        fi
+    else
+        if [ "$was_passing" -gt 0 ]; then
+            newly_regressed+=("$name ($status)")
+        else
+            still_broken+=("$name")
+        fi
+    fi
+done
+
+# ── Report ────────────────────────────────────────────────────
+
+echo ""
+echo "┌──────────────────────────────────────────────────────────┐"
+echo "│  Regression Report for $COMMIT_SHA"
+echo "│  $total tests scanned"
+echo "├──────────────────────────────────────────────────────────┤"
+printf "│  %3d newly regressed\n" "${#newly_regressed[@]}"
+printf "│  %3d still broken from before\n" "${#still_broken[@]}"
+printf "│  %3d newly compiling\n" "${#newly_fixed[@]}"
+printf "│  %3d unchanged/stable\n" "$stable"
+echo "└──────────────────────────────────────────────────────────┘"
+
+if [ ${#newly_regressed[@]} -gt 0 ]; then
+    echo ""
+    echo "🔴 REGRESSIONS:"
+    for t in "${newly_regressed[@]}"; do
+        echo "  - $t"
+    done
+fi
+
+if [ ${#newly_fixed[@]} -gt 0 ]; then
+    echo ""
+    echo "🟢 NEWLY PASSING:"
+    for t in "${newly_fixed[@]}"; do
+        echo "  + $t"
+    done
+fi
+
+# Exit non-zero if there are regressions (but don't block the commit — it's post-commit)
+if [ ${#newly_regressed[@]} -gt 0 ]; then
+    echo ""
+    echo "⚠ ${#newly_regressed[@]} regression(s) detected. Use 'scripts/ledger diff <test>' to investigate."
+    exit 1
+fi
+
+exit 0

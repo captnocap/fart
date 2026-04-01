@@ -1,0 +1,433 @@
+#!/bin/bash
+# Conformance ledger — SQLite-backed build tracker with generated code archive.
+#
+# Usage:
+#   ledger watch          — poll zig-out/bin/, auto-stamp new binaries
+#   ledger run [lane]     — build all tests (or one lane), stamp results into DB
+#   ledger status         — show what's passing, broken, regressed, fixed
+#   ledger diff <test>    — diff current generated .zig vs last good build
+#   ledger show <test>    — print last good generated .zig to stdout
+#   ledger history <test> — show build history for a test
+#   ledger init           — (re)create the database
+#
+# The DB lives at tsz/conformance.db (gitignored).
+
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+DB="conformance.db"
+BIN_DIR="zig-out/bin"
+SCRIPTS_DIR="scripts"
+
+# ── DB bootstrap ──────────────────────────────────────────────
+
+init_db() {
+    sqlite3 "$DB" <<'SQL'
+CREATE TABLE IF NOT EXISTS builds (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    test_name   TEXT    NOT NULL,
+    lane        TEXT    NOT NULL,
+    built_at    TEXT    NOT NULL DEFAULT (datetime('now')),
+    status      TEXT    NOT NULL,  -- compiled | forge_fail | zig_fail | preflight_blocked
+    generated   TEXT,              -- full generated .zig source
+    binary_sha  TEXT,              -- sha256 of the output binary
+    error_log   TEXT               -- first 500 chars of error output if failed
+);
+
+CREATE INDEX IF NOT EXISTS idx_test_time ON builds(test_name, built_at DESC);
+CREATE INDEX IF NOT EXISTS idx_lane      ON builds(lane);
+CREATE INDEX IF NOT EXISTS idx_status    ON builds(status);
+SQL
+}
+
+# Ensure DB exists
+[ -f "$DB" ] || init_db
+
+# ── Helpers ───────────────────────────────────────────────────
+
+# Detect which lane a .tsz file belongs to
+detect_lane() {
+    local path="$1"
+    case "$path" in
+        *conformance/soup/*)    echo "soup" ;;
+        *conformance/mixed/*)   echo "mixed" ;;
+        *conformance/chad/*)    echo "chad" ;;
+        *conformance/lscript/*) echo "lscript" ;;
+        *conformance/apps/*)    echo "apps" ;;
+        *conformance/libs/*)    echo "libs" ;;
+        *conformance/*)         echo "shared" ;;
+        *)                      echo "unknown" ;;
+    esac
+}
+
+# Get test name from .tsz path (strip extension and path)
+test_name_from_path() {
+    basename "$1" .tsz
+}
+
+# Record a build result into the DB
+stamp() {
+    local name="$1" lane="$2" status="$3" gen_file="$4" binary="$5" err_log="${6:-}"
+
+    local generated=""
+    if [ -f "$gen_file" ]; then
+        generated=$(cat "$gen_file")
+    fi
+
+    local sha=""
+    if [ -f "$binary" ]; then
+        sha=$(sha256sum "$binary" | cut -d' ' -f1)
+    fi
+
+    # Truncate error log
+    err_log=$(echo "$err_log" | head -c 500)
+
+    # Escape single quotes for SQL
+    generated="${generated//\'/\'\'}"
+    err_log="${err_log//\'/\'\'}"
+    name="${name//\'/\'\'}"
+
+    sqlite3 "$DB" "INSERT INTO builds (test_name, lane, status, generated, binary_sha, error_log)
+                   VALUES ('$name', '$lane', '$status', '$generated', '$sha', '$err_log');"
+}
+
+# Get the last good generated code for a test
+last_good_generated() {
+    local name="$1"
+    sqlite3 "$DB" "SELECT generated FROM builds
+                   WHERE test_name = '$name' AND status = 'compiled'
+                   ORDER BY built_at DESC LIMIT 1;"
+}
+
+# ── Watch mode ────────────────────────────────────────────────
+
+cmd_watch() {
+    echo "=== Ledger Watch ==="
+    echo "Watching $BIN_DIR/ for new binaries. Ctrl+C to stop."
+    echo ""
+
+    # Snapshot current state
+    local snapshot="/tmp/ledger_snapshot_$$"
+    find "$BIN_DIR" -maxdepth 1 -type f -executable -printf '%f %T@\n' 2>/dev/null | sort > "$snapshot"
+
+    while true; do
+        sleep 2
+
+        local current="/tmp/ledger_current_$$"
+        find "$BIN_DIR" -maxdepth 1 -type f -executable -printf '%f %T@\n' 2>/dev/null | sort > "$current"
+
+        # Find new or modified binaries
+        while IFS= read -r line; do
+            local name mtime
+            name=$(echo "$line" | cut -d' ' -f1)
+            mtime=$(echo "$line" | cut -d' ' -f2)
+
+            # Skip non-conformance binaries
+            case "$name" in
+                forge|forge-*|tsz|tsz-*|dev-shell|dev_shell|cursor-ide*) continue ;;
+            esac
+
+            # Check if this is new or modified
+            local old_mtime
+            old_mtime=$(grep "^${name} " "$snapshot" 2>/dev/null | cut -d' ' -f2)
+
+            if [ -z "$old_mtime" ] || [ "$old_mtime" != "$mtime" ]; then
+                # Try to find the source .tsz and its lane
+                local lane="unknown"
+                local tsz_path=""
+                for dir in carts/conformance/soup carts/conformance/mixed carts/conformance/chad carts/conformance/lscript carts/conformance; do
+                    if [ -f "$dir/${name}.tsz" ]; then
+                        tsz_path="$dir/${name}.tsz"
+                        lane=$(detect_lane "$tsz_path")
+                        break
+                    fi
+                done
+
+                local gen_file="generated_${name}.zig"
+                local binary="$BIN_DIR/$name"
+                local sha=""
+                if [ -f "$binary" ]; then
+                    sha=$(sha256sum "$binary" | cut -d' ' -f1)
+                fi
+
+                stamp "$name" "$lane" "compiled" "$gen_file" "$binary"
+
+                local ts
+                ts=$(date '+%H:%M:%S')
+                echo "[$ts] STAMPED: $name ($lane) sha:${sha:0:12}..."
+            fi
+        done < "$current"
+
+        # Update snapshot
+        mv "$current" "$snapshot"
+    done
+}
+
+# ── Run mode ──────────────────────────────────────────────────
+
+cmd_run() {
+    local target_lane="${1:-all}"
+
+    echo "=== Ledger Run: $target_lane ==="
+    echo ""
+
+    local pass=0 fail=0 total=0
+
+    # Collect .tsz files to build
+    local files=()
+    if [ "$target_lane" = "all" ]; then
+        for dir in carts/conformance/soup carts/conformance/mixed carts/conformance/chad carts/conformance/lscript carts/conformance; do
+            [ -d "$dir" ] || continue
+            for f in "$dir"/*.tsz; do
+                [ -f "$f" ] || continue
+                local bn
+                bn=$(basename "$f")
+                case "$bn" in
+                    *.script.tsz|*.cls.tsz|*.effects.tsz|*.glyphs.tsz|*.tcls.tsz|*.vcls.tsz) continue ;;
+                esac
+                files+=("$f")
+            done
+        done
+    else
+        local dir="carts/conformance/$target_lane"
+        if [ ! -d "$dir" ]; then
+            echo "ERROR: lane '$target_lane' not found at $dir"
+            exit 1
+        fi
+        for f in "$dir"/*.tsz; do
+            [ -f "$f" ] || continue
+            local bn
+            bn=$(basename "$f")
+            case "$bn" in
+                *.script.tsz|*.cls.tsz|*.effects.tsz|*.glyphs.tsz|*.tcls.tsz|*.vcls.tsz) continue ;;
+            esac
+            files+=("$f")
+        done
+    fi
+
+    echo "Building ${#files[@]} tests..."
+    echo ""
+
+    for f in "${files[@]}"; do
+        local name lane gen_file binary
+        name=$(test_name_from_path "$f")
+        lane=$(detect_lane "$f")
+        gen_file="generated_${name}.zig"
+        binary="$BIN_DIR/$name"
+
+        total=$((total + 1))
+        printf "  [%3d/%3d] %-45s " "$total" "${#files[@]}" "$name"
+
+        # Clean stale artifacts
+        rm -f "$gen_file" "$binary"
+
+        # Build via the one true command
+        local build_out
+        build_out=$("$SCRIPTS_DIR/build" "$f" 2>&1) || true
+
+        if [ -f "$binary" ]; then
+            stamp "$name" "$lane" "compiled" "$gen_file" "$binary"
+            pass=$((pass + 1))
+            echo "PASS"
+        elif [ -f "$gen_file" ] && grep -q "PREFLIGHT BLOCKED" "$gen_file" 2>/dev/null; then
+            stamp "$name" "$lane" "preflight_blocked" "$gen_file" "" "$build_out"
+            fail=$((fail + 1))
+            echo "PREFLIGHT"
+        elif [ -f "$gen_file" ]; then
+            stamp "$name" "$lane" "zig_fail" "$gen_file" "" "$build_out"
+            fail=$((fail + 1))
+            echo "ZIG_FAIL"
+        else
+            stamp "$name" "$lane" "forge_fail" "" "" "$build_out"
+            fail=$((fail + 1))
+            echo "FORGE_FAIL"
+        fi
+    done
+
+    echo ""
+    echo "=== Results: $pass/$total passed, $fail failed ==="
+}
+
+# ── Status mode ───────────────────────────────────────────────
+
+cmd_status() {
+    echo "=== Conformance Ledger Status ==="
+    echo ""
+
+    # Latest build per test
+    echo "--- By Lane ---"
+    sqlite3 -header -column "$DB" "
+        SELECT
+            lane,
+            COUNT(DISTINCT test_name) as tests,
+            SUM(CASE WHEN status = 'compiled' THEN 1 ELSE 0 END) as passing,
+            SUM(CASE WHEN status != 'compiled' THEN 1 ELSE 0 END) as failing
+        FROM (
+            SELECT test_name, lane, status,
+                   ROW_NUMBER() OVER (PARTITION BY test_name ORDER BY built_at DESC) as rn
+            FROM builds
+        ) WHERE rn = 1
+        GROUP BY lane
+        ORDER BY lane;
+    "
+
+    echo ""
+    echo "--- Regressions (was compiled, now failing) ---"
+    sqlite3 -header -column "$DB" "
+        WITH latest AS (
+            SELECT test_name, lane, status, built_at,
+                   ROW_NUMBER() OVER (PARTITION BY test_name ORDER BY built_at DESC) as rn
+            FROM builds
+        ),
+        prev_good AS (
+            SELECT test_name, MAX(built_at) as last_good
+            FROM builds
+            WHERE status = 'compiled'
+            GROUP BY test_name
+        )
+        SELECT l.test_name, l.lane, l.status, l.built_at as broke_at, p.last_good
+        FROM latest l
+        JOIN prev_good p ON l.test_name = p.test_name
+        WHERE l.rn = 1 AND l.status != 'compiled'
+        ORDER BY l.built_at DESC
+        LIMIT 20;
+    "
+
+    echo ""
+    echo "--- Newly Fixed (was failing, now compiled) ---"
+    sqlite3 -header -column "$DB" "
+        WITH ranked AS (
+            SELECT test_name, lane, status, built_at,
+                   ROW_NUMBER() OVER (PARTITION BY test_name ORDER BY built_at DESC) as rn
+            FROM builds
+        )
+        SELECT r1.test_name, r1.lane, r1.built_at as fixed_at
+        FROM ranked r1
+        JOIN ranked r2 ON r1.test_name = r2.test_name AND r2.rn = 2
+        WHERE r1.rn = 1 AND r1.status = 'compiled' AND r2.status != 'compiled'
+        ORDER BY r1.built_at DESC
+        LIMIT 20;
+    "
+
+    echo ""
+    echo "--- Never Compiled ---"
+    sqlite3 -header -column "$DB" "
+        SELECT test_name, lane, status, built_at as last_attempt
+        FROM (
+            SELECT test_name, lane, status, built_at,
+                   ROW_NUMBER() OVER (PARTITION BY test_name ORDER BY built_at DESC) as rn
+            FROM builds
+        ) WHERE rn = 1
+        AND test_name NOT IN (SELECT DISTINCT test_name FROM builds WHERE status = 'compiled')
+        ORDER BY lane, test_name;
+    "
+}
+
+# ── Diff mode ─────────────────────────────────────────────────
+
+cmd_diff() {
+    local name="$1"
+    local gen_file="generated_${name}.zig"
+
+    if [ ! -f "$gen_file" ]; then
+        echo "No current generated file: $gen_file"
+        echo "Build it first: scripts/build carts/conformance/*/${name}.tsz"
+        exit 1
+    fi
+
+    local last_good
+    last_good=$(last_good_generated "$name")
+
+    if [ -z "$last_good" ]; then
+        echo "No previous good build for '$name' in ledger."
+        echo "Current generated file exists at: $gen_file"
+        exit 0
+    fi
+
+    local tmp="/tmp/ledger_lastgood_${name}.zig"
+    echo "$last_good" > "$tmp"
+
+    echo "=== Diff: $name (last good → current) ==="
+    diff --color=auto -u "$tmp" "$gen_file" || true
+    rm -f "$tmp"
+}
+
+# ── Show mode ─────────────────────────────────────────────────
+
+cmd_show() {
+    local name="$1"
+    local last_good
+    last_good=$(last_good_generated "$name")
+
+    if [ -z "$last_good" ]; then
+        echo "No good build for '$name' in ledger."
+        exit 1
+    fi
+
+    echo "$last_good"
+}
+
+# ── History mode ──────────────────────────────────────────────
+
+cmd_history() {
+    local name="$1"
+    sqlite3 -header -column "$DB" "
+        SELECT id, built_at, status, binary_sha,
+               LENGTH(generated) as gen_size,
+               SUBSTR(error_log, 1, 80) as error_preview
+        FROM builds
+        WHERE test_name = '$name'
+        ORDER BY built_at DESC
+        LIMIT 20;
+    "
+}
+
+# ── Dispatch ──────────────────────────────────────────────────
+
+case "${1:-help}" in
+    init)
+        init_db
+        echo "Database initialized at $DB"
+        ;;
+    watch)
+        cmd_watch
+        ;;
+    run)
+        cmd_run "${2:-all}"
+        ;;
+    status)
+        cmd_status
+        ;;
+    diff)
+        [ -z "${2:-}" ] && echo "Usage: ledger diff <test_name>" && exit 1
+        cmd_diff "$2"
+        ;;
+    show)
+        [ -z "${2:-}" ] && echo "Usage: ledger show <test_name>" && exit 1
+        cmd_show "$2"
+        ;;
+    history)
+        [ -z "${2:-}" ] && echo "Usage: ledger history <test_name>" && exit 1
+        cmd_history "$2"
+        ;;
+    help|--help|-h)
+        echo "Conformance Ledger — SQLite-backed build tracker"
+        echo ""
+        echo "Usage: scripts/ledger <command> [args]"
+        echo ""
+        echo "Commands:"
+        echo "  watch          Poll zig-out/bin/, auto-stamp new binaries"
+        echo "  run [lane]     Build all tests (or one lane), stamp results"
+        echo "  status         Show passing/broken/regressed/fixed summary"
+        echo "  diff <test>    Diff current generated .zig vs last good"
+        echo "  show <test>    Print last good generated .zig"
+        echo "  history <test> Show build history for a test"
+        echo "  init           (Re)create the database"
+        echo ""
+        echo "Lanes: soup, mixed, chad, lscript"
+        ;;
+    *)
+        echo "Unknown command: $1 (try 'ledger help')"
+        exit 1
+        ;;
+esac
