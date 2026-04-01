@@ -365,7 +365,12 @@ pub fn main() !void {
         const fw_link = std.fmt.allocPrint(Alloc, "{s}/framework", .{dir_path}) catch return;
         // Remove existing symlink/file first (ignore errors)
         std.fs.cwd().deleteFile(fw_link) catch {};
-        std.fs.cwd().symLink("../framework", fw_link, .{}) catch |err| {
+        // Use absolute path — output dir may be outside the repo (e.g. /tmp)
+        const fw_abs = std.fs.cwd().realpathAlloc(Alloc, "framework") catch |err| {
+            std.debug.print("[forge] Cannot resolve framework path: {}\n", .{err});
+            return;
+        };
+        std.fs.cwd().symLink(fw_abs, fw_link, .{}) catch |err| {
             std.debug.print("[forge] Cannot create framework symlink: {}\n", .{err});
         };
 
