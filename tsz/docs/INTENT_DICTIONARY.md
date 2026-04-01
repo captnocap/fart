@@ -282,6 +282,54 @@ from './backend'
 
 Modules don't leak into global scope. The lib is the namespace. If you see `backend.database.init`, you know exactly where it lives.
 
+**Lib state persists across pages.** A lib lives for the app's lifetime. Pages mount and unmount — the lib stays. Module state inside a lib survives page transitions:
+
+```
+// auth.mod.tsz — state persists as long as the lib is loaded
+<auth module>
+  <var>
+    currentUser
+    token is ''
+  </var>
+
+  <state>
+    set_currentUser
+    set_token
+  </state>
+
+  <functions>
+    login(credentials):
+      <if net.post('/auth', credentials) as result>
+        set_currentUser is result.user
+        set_token is result.token
+      </if>
+  </functions>
+</auth>
+```
+
+Pages read lib state directly through the namespace:
+
+```
+from './backend'
+
+<profile page>
+  <functions>
+    boot:
+      <if not backend.auth.currentUser>
+        navigate('login')
+      </if>
+  </functions>
+
+  return(
+    <C.Page>
+      <C.Title>{backend.auth.currentUser.name}</C.Title>
+    </C.Page>
+  )
+</profile>
+```
+
+State reads through the lib namespace are reactive — when `backend.auth.currentUser` changes (via `set_currentUser` inside the auth module), any page reading it re-renders.
+
 **Only the engine's system modules are truly global ambients:** `sys.*`, `time.*`, `device.*`, `input.*`, `math.*`, `locale.*`, `privacy.*`. Everything else comes through a lib or a direct import.
 
 ### Module (`.mod.tsz`) — backend logic, no UI
@@ -330,8 +378,7 @@ Non-entry files use extensions to identify their kind:
 | `.tsz` | app, lib, page, widget | **yes** | `my.tsz`, `backend.tsz` |
 | `.c.tsz` | component | no | `counter.c.tsz` |
 | `.cls.tsz` | classifiers | no | `theme.cls.tsz` |
-| `.vcls.tsz` | classifier variations | no | `dark.vcls.tsz` |
-| `.tcls.tsz` | theme tokens | no | `tokens.tcls.tsz` |
+| `.tcls.tsz` | theme tokens + theme blocks | no | `theme.tcls.tsz` |
 | `.effects.tsz` | effects | no | `fire.effects.tsz` |
 | `.glyphs.tsz` | glyphs (svg, 3d, polygons) | no | `icons.glyphs.tsz` |
 | `.script.tsz` | JS logic escape hatch | no | `bridge.script.tsz` |
@@ -693,7 +740,40 @@ Functions that depend on scope variables declare it with `requires`:
 
 Each block closes itself: `</if>`, `</else>`. The compiler reads linearly — sees `</if>`, knows the if-body is done. Sees `<else if>`, knows it's the next branch. No backtracking.
 
+#### Conditional Binding (`as`)
+
+When a call might return something or nothing, bind the result and branch on it in one step:
+
+```
+<if db.read('SELECT * FROM users') as rows>
+  <for rows as row>
+    process(row)
+  </for>
+</if>
+<else>
+  set_error is 'query failed'
+</else>
+```
+
+`as` binds the return value to a name. The `<if>` is true when the value is non-null/non-empty. The bound name (`rows`) is scoped to that `<if>` block only.
+
+This is the same `as` keyword used in `<for items as item>` and `<while cond as var>`. Same meaning everywhere: "bind this to a name."
+
+```
+<if net.get(apiUrl) as response>
+  set_data is response
+</if>
+
+<if items.where(item.active) as active>
+  set_count is active.length
+</if>
+```
+
+No special "optional unwrapping" or "nullish" syntax. `<if thing as name>` — if it exists, bind it, enter the block. If not, skip to `<else>`.
+
 ### `<for>`
+
+**Collection iteration:**
 
 ```
 <for records as r>
@@ -702,6 +782,22 @@ Each block closes itself: `</if>`, `</else>`. The compiler reads linearly — se
   </if>
 </for>
 ```
+
+**Range iteration:**
+
+```
+<for 0..count as i>
+  set_total is total + scores[i]
+</for>
+
+<for 1..11 as i>
+  log(i)
+</for>
+```
+
+`0..count` — `i` goes from 0 to count-1 (exclusive end). Same as every modern range. No inclusive variant — if you need 1 to 10, write `1..11`.
+
+Range works with variables, literals, and expressions on either side. The `as` binding is required — bare `<for 0..10>` without a name is a compile error.
 
 ### `<during>` — Lifecycle / Reactive Scope
 
@@ -790,6 +886,53 @@ Phases nest. Cleanups unwind with the phase.
 | event subscriptions | `<during connected>`, `<during recording>` |
 | if/else state chains | multiple `<during state>` blocks |
 
+**Rules for `<during>`:**
+
+1. **Multiple blocks, same variable** — all activate independently. No priority, no conflict. Declaration order determines execution order when they fire simultaneously.
+
+```
+<during loading>
+  showSpinner
+</during>
+
+<during loading>
+  logLoadStart
+</during>
+```
+
+Both run when `loading` is true. Both stop when it's false. They don't know about each other.
+
+2. **Nested `<during>`** — inner only activates when ALL ancestors are also active.
+
+```
+<during connected>
+  <during authenticated>
+    fetchData
+  </during>
+</during>
+```
+
+`fetchData` only runs when connected AND authenticated. If `connected` goes false, the inner block deactivates even if `authenticated` is still true. Reactivation of the outer re-checks the inner condition.
+
+3. **`<during>` in components** — scoped to the component's lifetime. Activates when the component mounts AND the condition is true. Deactivates when the component unmounts OR the condition becomes false. Unmount always wins — a component's `<during>` blocks cannot outlive the component.
+
+```
+<recorder component>
+  <var>
+    active is false
+  </var>
+
+  <during active>
+    media.captureFrame every 33
+  </during>
+
+  // when this component unmounts, the <during> stops
+  // regardless of whether active is still true
+</recorder>
+```
+
+4. **Cleanup** — when a `<during>` block deactivates, any `cleanup:` pairings inside it run in reverse order, same as function cleanup. Resources acquired during the block's lifetime are released.
+
 ### `<while>`
 
 Condition-based loops for explicit iteration (not lifecycle/reactive — use `<during>` for that):
@@ -817,8 +960,13 @@ Multi-branch matching. Each case closes itself:
   <case keydown>
     handleKey
   </case>
+  <case else>
+    ignore
+  </case>
 </switch>
 ```
+
+`<case else>` is the default branch — runs when no other case matches. Must be the last case. If omitted, unmatched values do nothing (no error, no fallthrough).
 
 ### Cleanup Pairing (`cleanup`)
 
@@ -959,6 +1107,125 @@ All referenced by name. All defined in their own files. No inline styling anywhe
 
 Defined in `.cls.tsz` files. `C.Name` pattern. If you need a new look, add a classifier.
 
+#### Classifier Definition Syntax
+
+Classifiers are defined in `.cls.tsz` files using the same block + binding syntax as everything else. No JS objects, no `classifier({})` calls.
+
+Each classifier is a block: `<C.Name is Primitive>` with properties inside.
+
+```
+<C.Row is Box>
+  flexDirection exact row
+  gap is theme-spaceMd
+  alignItems is center
+</C.Row>
+
+<C.Title is Text>
+  fontSize is 18
+  color is theme-text
+</C.Title>
+
+<C.Btn is Pressable>
+  backgroundColor is theme-primary
+  borderRadius is theme-radiusSm
+  padding is theme-spaceMd
+  alignItems is center
+  justifyContent is center
+</C.Btn>
+
+<C.Divider is Box>
+  height exact 1
+  backgroundColor is theme-borderLight
+</C.Divider>
+```
+
+**Binding rules in classifiers:**
+
+- `prop is value` — default, overridable by the active theme
+- `prop exact value` — locked, structural, no override ever
+
+Use `exact` when changing the prop would break the classifier's identity (a Row that isn't `flexDirection: row` isn't a Row). Use `is` when the prop is cosmetic or themeable.
+
+**Base type** — `is Primitive` on the block tag declares what primitive this classifier wraps: `Box`, `Text`, `Pressable`, `ScrollView`, `Image`, `Canvas`, `Effect`.
+
+**No JS objects, no `classifier({})`, no `style: {}`.** Classifiers are blocks, same as everything else.
+
+#### Theme Token Syntax
+
+Tokens are defined in `.tcls.tsz` files. Two parts: a `<tokens>` block declares the contract (what names exist), then named theme blocks assign values.
+
+```
+<tokens>
+  bg
+  bgAlt
+  surface
+  text
+  textSecondary
+  textDim
+  primary
+  accent
+  success
+  warning
+  error
+  border
+  spaceSm
+  spaceMd
+  spaceLg
+  radiusSm
+  radiusMd
+  fontSm
+  fontMd
+  fontLg
+</tokens>
+
+<main>
+  bg is '#0f172a'
+  bgAlt is '#1e293b'
+  surface is '#334155'
+  text is '#f8fafc'
+  textSecondary is '#e2e8f0'
+  textDim is '#64748b'
+  primary is '#3b82f6'
+  accent is '#8b5cf6'
+  success is '#22c55e'
+  warning is '#f59e0b'
+  error is '#ef4444'
+  border is '#334155'
+  spaceSm is 4
+  spaceMd is 8
+  spaceLg is 16
+  radiusSm is 4
+  radiusMd is 8
+  fontSm is 11
+  fontMd is 13
+  fontLg is 18
+</main>
+
+<light>
+  bg is '#ffffff'
+  bgAlt is '#f8fafc'
+  surface is '#e2e8f0'
+  text is '#0f172a'
+  textSecondary is '#334155'
+  textDim is '#64748b'
+  primary is '#2563eb'
+  accent is '#7c3aed'
+  success is '#16a34a'
+  warning is '#d97706'
+  error is '#dc2626'
+  border is '#e2e8f0'
+</light>
+```
+
+**Rules:**
+
+- `<tokens>` declares names only — no values, no types. Just the contract.
+- `<main>` is the default theme. Required. Every token must have a value here.
+- Other theme blocks (`<light>`, `<dark>`, `<high-contrast>`, etc.) inherit from `<main>`. Only specify tokens that differ.
+- Classifiers reference tokens as `theme-name` (e.g., `theme-bg`, `theme-primary`). The active theme resolves the value.
+- Effects can reference tokens too — `deep is theme-lavaDeep` in an effect's `<var>`.
+- **No `.vcls.tsz` files.** Theme blocks replace variant classifiers entirely. To add a theme, add a block in the `.tcls.tsz` file.
+
 **2. Effects** (bare name on tag) — live procedural fills:
 
 ```
@@ -969,6 +1236,62 @@ Defined in `.cls.tsz` files. `C.Name` pattern. If you need a new look, add a cla
 ```
 
 The effect name IS the prop. A bare word on a tag that matches a named effect applies that effect as a fill. Defined in `.effects.tsz` files.
+
+#### Effect Definition Syntax
+
+Effects are defined in `.effects.tsz` files. An effect is a named block whose required contract is a `fill(x, y, t)` function returning a color. There is no special "effect syntax" — it's a block with `<var>` and `<functions>`, same as everything else. The `effect` keyword on the tag tells the compiler this block fulfills the effect contract.
+
+```
+<lava effect>
+  <var>
+    speed is 0.5
+    intensity is 0.8
+    deep is theme-lavaDeep
+    mid is theme-lavaMid
+    hot is theme-lavaHot
+    peak is theme-lavaPeak
+  </var>
+
+  <functions>
+    fill(x, y, t):
+      heat is math.turbulence(x, y, t * speed)
+      math.ramp(heat * intensity, deep, mid, hot, peak)
+  </functions>
+</lava>
+
+<plasma effect>
+  <functions>
+    fill(x, y, t):
+      v is math.plasma(x, y, t)
+      math.hue(v)
+  </functions>
+</plasma>
+
+<ocean effect>
+  <var>
+    depth is 3
+    shallow is theme-oceanShallow
+    mid is theme-oceanMid
+    deep is theme-oceanDeep
+    foam is theme-oceanFoam
+  </var>
+
+  <functions>
+    fill(x, y, t):
+      w is math.waves(x, y, t, depth)
+      math.ramp(w, deep, mid, shallow, foam)
+  </functions>
+</ocean>
+```
+
+An effect is just a block. It has `<var>` and `<functions>` like anything else. The only contract: it must have a `fill(x, y, t)` function that returns a color.
+
+- `<var>` declares tunable parameters — theme tokens work anywhere a color literal works
+- Colors with `is` are themeable (dark mode gets different lava). `exact` locks them.
+- `fill(x, y, t)` — called per pixel per frame
+- `x`, `y` are normalized 0-1 coordinates within the element
+- `t` is elapsed time in seconds
+- Return value is a color (theme token, hex string, or result of `math.hue`/`math.ramp`)
 
 **3. Glyphs** (`:name:` in text) — Discord-style inline shortcodes:
 
@@ -984,6 +1307,32 @@ The effect name IS the prop. A bare word on a tag that matches a named effect ap
 - Works anywhere inside text content — inline like emoji
 
 Defined in `.glyphs.tsz` files. The compiler resolves `:name:` from the glyphs registry.
+
+#### Glyph Definition Syntax
+
+Glyphs are defined in `.glyphs.tsz` files. Each glyph is a named block with `glyph` as its type.
+
+```
+<check glyph>
+  d is 'M5 12l5 5L20 7'
+  fill is theme-success
+</check>
+
+<warning glyph>
+  d is 'M12 2L2 22h20L12 2z'
+  fill is theme-warning
+</warning>
+
+<star glyph>
+  d is 'M12 2l3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L2 9h7z'
+  fill is theme-accent
+</star>
+```
+
+- `d` — SVG path data (same as SVG `<path d="...">`)
+- `fill` — default fill color (hex, theme token, or effect name)
+- Glyphs scale with the surrounding text's `fontSize`
+- `:name[effect]:` in text overrides the glyph's default fill with a named effect
 
 **Chad-tier JSX has no `style=` prop.** No visual props (`fontSize`, `color`, `backgroundColor`) on primitives. Classifiers handle structure, effects handle procedural fills, glyphs handle inline assets.
 
@@ -1043,6 +1392,28 @@ A timer is a function with `every ms` after its name:
 
 No `<timer>` block. It's still a function — composable, scoped, `stop` works. `every` just tells the compiler to schedule it.
 
+
+---
+
+## Callbacks
+
+A callback is just "if this happened, do this." And we already have that:
+
+```
+<functions>
+  fetchData:
+    result is net.get(apiUrl)
+    <if result>
+      set_data is result
+    </if>
+    <if not result>
+      catchError('fetch failed')
+    </if>
+</functions>
+```
+
+The "callback" is just the <if> after the call. There's no special callback surface because there is no async ceremony. You call a thing, you check what happened, you respond. Linear.
+
 ---
 
 ## `<log>` — Debug Wrapping
@@ -1097,6 +1468,22 @@ Works inside `<during>`:
 Every activation gets logged. Deactivation logs the duration.
 
 **Production:** Strip `<log>` tags — they compile to nothing. Or leave them in to feed the telemetry/debug system.
+
+---
+
+  ┌─────────────────────┬────────────────────────┐
+  │ What people call it │  What it actually is   │
+  ├─────────────────────┼────────────────────────┤
+  │ callback            │ <if> after a call      │
+  ├─────────────────────┼────────────────────────┤
+  │ event listener      │ <during> on a variable │
+  ├─────────────────────┼────────────────────────┤
+  │ promise.then        │ <if result>            	│
+  ├─────────────────────┼────────────────────────┤
+  │ onChange handler    │ onPress=funcName       │
+  ├─────────────────────┼────────────────────────┤
+  │ subscription        │ <during module.state>    │
+  └─────────────────────┴────────────────────────┘
 
 ---
 
@@ -1418,6 +1805,7 @@ Imports everything exported (classifiers, effects, glyphs).
 | `style={{ ... }}` | JS object-in-JSX | classifier in `.cls.tsz` |
 | `fontSize={18}` | visual prop on primitive | classifier |
 | `color="#fff"` | visual prop on primitive | classifier |
+| `classifier({ Name: { type: 'Box', style: {...} } })` | JS object classifier | `<C.Name is Box>` block in `.cls.tsz` |
 | `<Text ...>` in page JSX | raw primitive | `<C.Label>`, `<C.Body>`, etc. |
 | `<Box style={...}>` in page JSX | raw primitive | `<C.Card>`, `<C.Row>`, etc. |
 | `try x catch err` | Zig error handling | `<if result>` check |
@@ -1438,6 +1826,10 @@ Imports everything exported (classifiers, effects, glyphs).
 | raw JS inside `<script>` | language leak | intent syntax with `<script>` hatch |
 | raw Lua inside `<lscript>` | language leak | intent syntax with `<lscript>` hatch |
 | raw Zig inside `<zscript>` | language leak | intent syntax with `<zscript>` hatch |
+| `for (let i = 0; i < n; i++)` | JS index loop | `<for 0..n as i>` |
+| `default:` in switch | JS/Zig default | `<case else>` |
+| `if (x = call()) { use(x) }` | assignment-in-condition | `<if call() as x>` |
+| `effect({ fill: (x,y,t) => ... })` | JS effect definition | `<name effect>` block in `.effects.tsz` |
 
 ---
 
@@ -1446,7 +1838,7 @@ Imports everything exported (classifiers, effects, glyphs).
 Modules can declare dependencies on other modules:
 
 ```
-<module engine>
+<engine module>
   <uses>
     terminal
     physics
@@ -1464,7 +1856,7 @@ Modules can declare dependencies on other modules:
     sdlInit cleanup:
       sdl.quit
   </functions>
-</module>
+</engine>
 ```
 
 `<uses>` makes the named modules available as namespaces. `terminal.spawn()`, `physics.tick()`, etc.
@@ -1485,3 +1877,9 @@ After writing a test, walk through this:
 8. Are event handlers bare names? No `() => {}`.
 9. Are data literals in their own named blocks? No `[{...}]` in `<var>`.
 10. Are big functions composed with `+`? No god functions.
+11. Are classifiers defined as blocks? No `classifier({})` JS objects.
+12. Are effects defined as `<name effect>` blocks with `fill(x, y, t)`? No JS functions.
+13. Are glyphs defined as `<name glyph>` blocks with `d` and `fill`? No inline SVG.
+14. Does `<switch>` use `<case else>` for default? No bare `default:`.
+15. Do numeric loops use `<for 0..n as i>`? No `for (let i = 0; ...)`.
+16. Does conditional binding use `<if call() as name>`? No assignment-in-condition.
