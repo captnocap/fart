@@ -169,13 +169,32 @@ pub fn build(b: *std.Build) void {
 
     // ── Forge (compiler kernel + QuickJS → runs Smith JS codegen) ──
     {
-        const smith_bundle = b.addSystemCommand(&.{"node"});
-        smith_bundle.addFileArg(b.path("compiler/build_smith_bundle.mjs"));
+        const smith_bundle_tool = b.addExecutable(.{
+            .name = "smith-bundle-tool",
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("compiler/smith_bundle.zig"),
+                .target = b.graph.host,
+                .optimize = .ReleaseSafe,
+            }),
+        });
+        const smith_bundle = b.addRunArtifact(smith_bundle_tool);
+        smith_bundle.setCwd(b.path("."));
+        smith_bundle.addDirectoryArg(b.path("compiler"));
         const smith_bundle_step = b.step("smith-bundle", "Generate compiler/dist/smith.bundle.js");
         smith_bundle_step.dependOn(&smith_bundle.step);
 
-        const smith_sync = b.addSystemCommand(&.{"node"});
-        smith_sync.addFileArg(b.path("compiler/sync_smith.mjs"));
+        const smith_sync_tool = b.addExecutable(.{
+            .name = "smith-sync-tool",
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("compiler/smith_sync.zig"),
+                .target = b.graph.host,
+                .optimize = .ReleaseSafe,
+            }),
+        });
+        const smith_sync = b.addRunArtifact(smith_sync_tool);
+        smith_sync.setCwd(b.path("."));
+        smith_sync.addDirectoryArg(b.path(".."));
+        smith_sync.addDirectoryArg(b.path("compiler"));
         const smith_sync_step = b.step("smith-sync", "Report Smith sync drift and manifest coverage");
         smith_sync_step.dependOn(&smith_sync.step);
 

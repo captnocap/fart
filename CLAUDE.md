@@ -8,7 +8,7 @@ The following directories are READ-ONLY and FROZEN:
 - `archive/` — old compiler iterations (v1 tsz, v2 tsz-gen). Reference only.
 - `love2d/` — Lua reference stack. Read for porting, do not modify.
 
-The active codebase is `tsz/`. The active compiler is `tsz/zig-out/bin/zigos-compiler`.
+The active codebase is `tsz/`. The active `.tsz` compiler path is Forge + Smith inside `tsz/`: rebuild with `zig build forge`, then use `./scripts/build` for end-to-end cart builds or `./zig-out/bin/forge build` for direct compiler runs.
 
 # HARD RULE: DO NOT USE EXPLORE IN THIS REPOSITORY
 For feature verification, compiler capability checks, and architecture comparisons in this repo:
@@ -82,18 +82,20 @@ The flex layout engine is pixel-perfect and shared between Lua (`love2d/lua/layo
 
 ## Build (tsz stack)
 
-Two compiler binaries at `bin/` (repo root): `bin/tsz` (lean) and `bin/tsz-full` (full).
+Use the `tsz/` build path that the active compiler actually uses:
 
 ```bash
-# Build the compilers (from tsz/ directory)
-cd tsz && zig build tsz          # Lean compiler → bin/tsz
-cd tsz && zig build tsz-full     # Full compiler → bin/tsz-full
-
-# Build a .tsz app (self-extracting portable binary)
-bin/tsz build carts/path/to/app.tsz
+cd tsz
+./scripts/build carts/path/to/app.tsz   # preferred end-to-end cart build
+zig build forge                         # rebuild Forge after editing Smith compiler files
+zig build smith-sync                    # verify Smith manifest/bundle coverage
+zig build smith-bundle                  # rebuild Smith bundle only
+./zig-out/bin/forge build --single carts/path/to/app.tsz  # direct compiler run when needed
 ```
 
-**Old commands are GONE:** `zig build compiler`, `zig build app`, `zigos-compiler`, `zigos-app` — all removed. Use `bin/tsz build <file.tsz>`.
+Smith now lives directly under `tsz/compiler/` as `smith_*.js`, `smith_collect/`, `smith_lanes/`, `smith_parse/`, `smith_preflight/`, and `smith_emit/`.
+
+**Do not use Node for active Smith builds.** The old `node compiler/build_smith_bundle.mjs` and `node compiler/sync_smith.mjs` path is removed. The active bundle/sync tools are native Zig: `tsz/compiler/smith_bundle.zig` and `tsz/compiler/smith_sync.zig`.
 
 ## Hot-Reload Dev Mode (PREFERRED FOR ITERATION)
 

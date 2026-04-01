@@ -51,11 +51,11 @@ Authoritative manifest:
 
 Bundle builder:
 
-- [build_smith_bundle.mjs](/home/siah/creative/reactjit/tsz/compiler/build_smith_bundle.mjs)
+- [smith_bundle.zig](/home/siah/creative/reactjit/tsz/compiler/smith_bundle.zig)
 
 Sync scanner:
 
-- [sync_smith.mjs](/home/siah/creative/reactjit/tsz/compiler/sync_smith.mjs)
+- [smith_sync.zig](/home/siah/creative/reactjit/tsz/compiler/smith_sync.zig)
 
 Generated bundle:
 
@@ -66,6 +66,8 @@ Useful commands:
 - `zig build smith-sync`
 - `zig build smith-bundle`
 - `zig build forge`
+
+`smith-bundle` and `smith-sync` are native Zig host tools. No Node runtime is required for active Smith builds.
 
 `smith-sync` now checks:
 

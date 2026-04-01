@@ -72,6 +72,23 @@ cd tsz/carts/my-cart
 
 `tsz run dev` and `tsz dev` both infer the app entry from the current directory when there is exactly one app file. If there are multiple app entries, pass the file explicitly.
 
+## TSZ Compiler Path
+
+For active `tsz/` compiler work, keep everyone on the same path:
+
+```bash
+cd tsz
+./scripts/build carts/path/to/app.tsz   # preferred end-to-end cart build
+zig build forge                         # rebuild Forge after editing Smith compiler files
+zig build smith-sync                    # verify Smith manifest/bundle coverage
+zig build smith-bundle                  # rebuild Smith bundle only
+./zig-out/bin/forge build --single carts/path/to/app.tsz  # direct compiler run when needed
+```
+
+Smith now lives directly under `tsz/compiler/` as `smith_*.js`, `smith_collect/`, `smith_lanes/`, `smith_parse/`, `smith_preflight/`, and `smith_emit/`.
+
+**Do not use Node for active Smith builds.** The old `node compiler/build_smith_bundle.mjs` and `node compiler/sync_smith.mjs` path is removed. The active bundle/sync tools are native Zig: `tsz/compiler/smith_bundle.zig` and `tsz/compiler/smith_sync.zig`.
+
 ## One-Liner Design Philosophy
 
 Every capability should be usable in one line by someone who doesn't code. The target user knows their domain (music, art, data, games) but doesn't know internals. An AI should be able to discover and control it without documentation.
