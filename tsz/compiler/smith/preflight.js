@@ -30,6 +30,7 @@ function preflight(ctx) {
   checkIgnoredModuleBlocks(ctx, errors);
   checkUndefinedJSCalls(ctx, errors);
   checkDuplicateJSVars(ctx, errors);
+  checkUnimplementedJSXBlocks(errors);
 
   // --strict: promote all warnings to errors
   if (globalThis.__strict === 1 && warnings.length > 0) {

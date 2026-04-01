@@ -68,6 +68,7 @@ smith/preflight/rules/dyn.js
 smith/preflight/rules/state.js
 smith/preflight/rules/classifiers.js
 smith/preflight/rules/js_logic.js
+smith/preflight/rules/unimplemented.js
 smith/preflight.js
 
 smith/emit/preamble.js
