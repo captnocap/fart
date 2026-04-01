@@ -8,6 +8,7 @@
 #   ledger diff <test>    — diff current generated .zig vs last good build
 #   ledger show <test>    — print last good generated .zig to stdout
 #   ledger history <test> — show build history for a test
+#   ledger clean [N]      — prune to last N builds per test (default 50)
 #   ledger init           — (re)create the database
 #
 # The DB lives at tsz/conformance.db (gitignored).
@@ -18,6 +19,34 @@ cd "$(dirname "$0")/.."
 DB="conformance.db"
 BIN_DIR="zig-out/bin"
 SCRIPTS_DIR="scripts"
+
+# ── Platform shims ────────────────────────────────────────────
+
+file_size() {
+    if [[ "$OSTYPE" == darwin* ]]; then
+        stat -f%z "$1" 2>/dev/null || echo "0"
+    else
+        stat -c%s "$1" 2>/dev/null || echo "0"
+    fi
+}
+
+compute_sha() {
+    if command -v sha256sum &>/dev/null; then
+        sha256sum "$1" | cut -d' ' -f1
+    else
+        shasum -a 256 "$1" | cut -d' ' -f1
+    fi
+}
+
+find_executables() {
+    local dir="$1"
+    if [[ "$OSTYPE" == darwin* ]]; then
+        find "$dir" -maxdepth 1 -type f -perm +111 -exec stat -f '%N %m' {} \; 2>/dev/null |
+            sed "s|${dir}/||"
+    else
+        find "$dir" -maxdepth 1 -type f -executable -printf '%f %T@\n' 2>/dev/null
+    fi
+}
 
 # ── DB bootstrap ──────────────────────────────────────────────
 
@@ -78,8 +107,8 @@ stamp() {
     local sha=""
     local size=0
     if [ -f "$binary" ]; then
-        sha=$(sha256sum "$binary" | cut -d' ' -f1)
-        size=$(stat -c%s "$binary")
+        sha=$(compute_sha "$binary")
+        size=$(file_size "$binary")
     fi
 
     # Check for bloat: if we have a previous good build, compare sizes
@@ -96,9 +125,10 @@ stamp() {
             local growth
             growth=$(( (size - prev_size) * 100 / prev_size ))
             if [ "$growth" -gt 30 ]; then
-                local prev_mb=$(python3 -c "print(f'{$prev_size/1048576:.1f}')")
-                local curr_mb=$(python3 -c "print(f'{$size/1048576:.1f}')")
-                bloat_warn="BLOAT: ${prev_mb}M → ${curr_mb}M (+${growth}%)"
+                local prev_mb curr_mb
+                prev_mb=$(awk "BEGIN {printf \"%.1f\", $prev_size/1048576}")
+                curr_mb=$(awk "BEGIN {printf \"%.1f\", $size/1048576}")
+                bloat_warn="BLOAT: ${prev_mb}M -> ${curr_mb}M (+${growth}%)"
                 status="bloated"
             fi
         fi
@@ -127,6 +157,16 @@ last_good_generated() {
                    ORDER BY built_at DESC LIMIT 1;"
 }
 
+# Skip non-buildable file extensions
+is_buildable() {
+    local bn
+    bn=$(basename "$1")
+    case "$bn" in
+        *.script.tsz|*.cls.tsz|*.effects.tsz|*.glyphs.tsz|*.tcls.tsz|*.vcls.tsz|*.c.tsz|*.cmod.tsz|*.mod.tsz|*.lscript.tsz) return 1 ;;
+        *) return 0 ;;
+    esac
+}
+
 # ── Watch mode ────────────────────────────────────────────────
 
 cmd_watch() {
@@ -134,15 +174,16 @@ cmd_watch() {
     echo "Watching $BIN_DIR/ for new binaries. Ctrl+C to stop."
     echo ""
 
-    # Snapshot current state
     local snapshot="/tmp/ledger_snapshot_$$"
-    find "$BIN_DIR" -maxdepth 1 -type f -executable -printf '%f %T@\n' 2>/dev/null | sort > "$snapshot"
+    local current="/tmp/ledger_current_$$"
+    trap 'rm -f "$snapshot" "$current"' EXIT INT TERM
+
+    find_executables "$BIN_DIR" | sort > "$snapshot"
 
     while true; do
         sleep 2
 
-        local current="/tmp/ledger_current_$$"
-        find "$BIN_DIR" -maxdepth 1 -type f -executable -printf '%f %T@\n' 2>/dev/null | sort > "$current"
+        find_executables "$BIN_DIR" | sort > "$current"
 
         # Find new or modified binaries
         while IFS= read -r line; do
@@ -175,7 +216,7 @@ cmd_watch() {
                 local binary="$BIN_DIR/$name"
                 local sha=""
                 if [ -f "$binary" ]; then
-                    sha=$(sha256sum "$binary" | cut -d' ' -f1)
+                    sha=$(compute_sha "$binary")
                 fi
 
                 stamp "$name" "$lane" "compiled" "$gen_file" "$binary"
@@ -208,11 +249,7 @@ cmd_run() {
             [ -d "$dir" ] || continue
             for f in "$dir"/*.tsz; do
                 [ -f "$f" ] || continue
-                local bn
-                bn=$(basename "$f")
-                case "$bn" in
-                    *.script.tsz|*.cls.tsz|*.effects.tsz|*.glyphs.tsz|*.tcls.tsz|*.vcls.tsz) continue ;;
-                esac
+                is_buildable "$f" || continue
                 files+=("$f")
             done
         done
@@ -224,11 +261,7 @@ cmd_run() {
         fi
         for f in "$dir"/*.tsz; do
             [ -f "$f" ] || continue
-            local bn
-            bn=$(basename "$f")
-            case "$bn" in
-                *.script.tsz|*.cls.tsz|*.effects.tsz|*.glyphs.tsz|*.tcls.tsz|*.vcls.tsz) continue ;;
-            esac
+            is_buildable "$f" || continue
             files+=("$f")
         done
     fi
@@ -250,8 +283,8 @@ cmd_run() {
         rm -f "$gen_file" "$binary"
 
         # Build via the one true command
-        local build_out
-        build_out=$("$SCRIPTS_DIR/build" "$f" 2>&1) || true
+        local build_out build_rc=0
+        build_out=$("$SCRIPTS_DIR/build" "$f" 2>&1) || build_rc=$?
 
         if [ -f "$binary" ]; then
             local bloat
@@ -409,7 +442,7 @@ cmd_diff() {
     local tmp="/tmp/ledger_lastgood_${name}.zig"
     echo "$last_good" > "$tmp"
 
-    echo "=== Diff: $name (last good → current) ==="
+    echo "=== Diff: $name (last good -> current) ==="
     diff --color=auto -u "$tmp" "$gen_file" || true
     rm -f "$tmp"
 }
@@ -444,6 +477,29 @@ cmd_history() {
     "
 }
 
+# ── Clean mode ────────────────────────────────────────────────
+
+cmd_clean() {
+    local keep="${1:-50}"
+    local before
+    before=$(sqlite3 "$DB" "SELECT COUNT(*) FROM builds;")
+    sqlite3 "$DB" "
+        DELETE FROM builds WHERE id NOT IN (
+            SELECT id FROM (
+                SELECT id, ROW_NUMBER() OVER (
+                    PARTITION BY test_name
+                    ORDER BY built_at DESC
+                ) as rn
+                FROM builds
+            ) WHERE rn <= $keep
+        );
+        VACUUM;
+    "
+    local after
+    after=$(sqlite3 "$DB" "SELECT COUNT(*) FROM builds;")
+    echo "Pruned $((before - after)) rows (kept last $keep per test). $after rows remain."
+}
+
 # ── Dispatch ──────────────────────────────────────────────────
 
 case "${1:-help}" in
@@ -472,6 +528,9 @@ case "${1:-help}" in
         [ -z "${2:-}" ] && echo "Usage: ledger history <test_name>" && exit 1
         cmd_history "$2"
         ;;
+    clean)
+        cmd_clean "${2:-50}"
+        ;;
     help|--help|-h)
         echo "Conformance Ledger — SQLite-backed build tracker"
         echo ""
@@ -484,6 +543,7 @@ case "${1:-help}" in
         echo "  diff <test>    Diff current generated .zig vs last good"
         echo "  show <test>    Print last good generated .zig"
         echo "  history <test> Show build history for a test"
+        echo "  clean [N]      Prune to last N builds per test (default 50)"
         echo "  init           (Re)create the database"
         echo ""
         echo "Lanes: soup, mixed, chad, lscript"
