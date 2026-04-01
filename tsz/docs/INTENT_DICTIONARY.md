@@ -32,7 +32,7 @@ Three ways to declare anything:
 
 Name first, type second. Reads like English: "home is a page", "counter is a component."
 
-### App (`.app.tsz`) — root shell, owns navigation
+### App (`.tsz`) — root shell, owns navigation
 
 The app is a layout that wraps pages. It has `<var>`, `<state>`, `<functions>`, and `return()` like anything else — its job is the chrome (sidebar, nav, header) with pages slotted in.
 
@@ -115,7 +115,7 @@ A widget is a complete app in one file. No `from`, no dependencies. Compiles to 
 
 Pages can `from` import components, classifiers, effects, glyphs.
 
-### Component (`.tsz`) — reusable, consumed by pages
+### Component (`.c.tsz`) — reusable, consumed by pages
 
 ```
 <counter component>
@@ -255,11 +255,29 @@ from './counter'
 
 | Type | Imports | Standalone | Reusable | Has UI | File |
 |------|---------|------------|----------|--------|------|
-| `app` | pages/widgets | yes | no | no (shell) | `.app.tsz` |
+| `app` | pages/widgets | yes | no | no (shell) | `.tsz` |
 | `widget` | no | yes | no | yes | `.tsz` |
 | `page` | yes | yes | no | yes | `.tsz` |
-| `component` | yes | no | yes | yes | `.tsz` |
+| `component` | yes | no | yes | yes | `.c.tsz` |
 | `module` | yes | no | yes | no | `.mod.tsz` |
+
+### Full File Extension Table
+
+| Extension | What | Example |
+|-----------|------|---------|
+| `.tsz` | entry point (app, page, widget) | `my.tsz`, `home.tsz` |
+| `.c.tsz` | component | `counter.c.tsz` |
+| `.cls.tsz` | classifiers | `theme.cls.tsz` |
+| `.vcls.tsz` | classifier variations | `dark.vcls.tsz` |
+| `.tcls.tsz` | theme tokens | `tokens.tcls.tsz` |
+| `.effects.tsz` | effects | `fire.effects.tsz` |
+| `.glyphs.tsz` | glyphs (inline svg, 3d, polygons) | `icons.glyphs.tsz` |
+| `.script.tsz` | JS logic escape hatch | `bridge.script.tsz` |
+| `.zscript.tsz` | Zig logic escape hatch | `physics.zscript.tsz` |
+| `.lscript.tsz` | Lua logic escape hatch | `audio.lscript.tsz` |
+| `.mod.tsz` | module (also an entry point) | `database.mod.tsz` |
+
+A `.tsz` entry point (widget especially) can inline everything — classifiers, effects, glyphs, logic — all in one file. The separate extensions exist for organization in larger apps, not because the language requires them.
 
 All blocks are optional. Order doesn't matter. Every block appears at most once (except data blocks — see below).
 
