@@ -73,8 +73,8 @@ The `.tsz` compiler and native rendering framework. TypeScript + JSX compiles to
 
 The compiler is split into two parts:
 
-- **Forge** — small Zig kernel (~441 lines). Lexer, QuickJS bridge, file I/O. Built once, rarely changes. Tokenizes `.tsz` source and hands flat token arrays to Smith.
-- **Smith** — JS compiler intelligence (~12,800 lines across ~76 files) running inside Forge via QuickJS. Modular structure: `smith_parse/` (element/brace/map/template parsing), `smith_emit/` (Zig codegen), `smith_collect/` (preflight collection passes), `smith_preflight/` (tier detection), `smith_lanes/` (app/page/module/soup dispatch). Edit without rebuilding Forge.
+- **Forge** — small Zig kernel (~449 lines). Lexer, QuickJS bridge, file I/O. Built once, rarely changes. Tokenizes `.tsz` source and hands flat token arrays to Smith. Generated code outputs to `/tmp/tsz-gen/` by default (overridable with `--out-dir=`).
+- **Smith** — JS compiler intelligence (~13,200 lines across 76 files) running inside Forge via QuickJS. Lives in `compiler/smith/` with scoped subdirs: `parse/` (element/brace/map/template parsing), `emit/` (Zig codegen), `collect/` (preflight collection passes), `preflight/` (tier detection), `lanes/` (app/page/module/soup dispatch). Edit without rebuilding Forge.
 
 ```
 app.tsz → [Forge: lex] → tokens → [Smith: parse + emit] → .zig source → native binary
@@ -84,7 +84,7 @@ Smith handles the cases Zig can't. The canonical example is `.map()` handlers: Z
 
 This is the general routing rule: statically-bound logic compiles to Zig; logic that needs runtime capture (indexes, closures, dynamic dispatch) routes to LuaJIT via `LUA_LOGIC`. `<script>` blocks use QuickJS for the same reason. The compiler picks the backend; the author writes plain `.tsz`.
 
-- **Compiler** — 7 Zig modules + ~77 JS modules (Smith). Components, useState, useEffect, .map(), conditionals, template literals, classifiers, script imports, HTML tags, FFI, lscript/LuaJIT, `<page>` blocks, `<module>` blocks, Physics/3D shorthands, JSX prop spread
+- **Compiler** — 5 Zig modules + 76 JS modules (Smith). Components, useState, useEffect, .map(), conditionals, template literals, classifiers, script imports, HTML tags, FFI, lscript/LuaJIT, `<page>` blocks, `<module>` blocks, Physics/3D shorthands, JSX prop spread
 - **GPU renderer** — wgpu pipeline: SDF text, rounded rects, borders, shadows, images, video, 3D (Blinn-Phong), custom effects
 - **Layout engine** — Flexbox (1400 lines), CSS-spec-aligned, WPT-tested
 - **Networking** — HTTP client/server, WebSocket client/server, IPC, SOCKS5, Tor — all pure Zig
@@ -225,17 +225,18 @@ Demo: `carts/applescript-demo/`
 ## Quick Start
 
 ```bash
-# Build a cart (~500ms, LuaJIT linker)
-bin/rjit build carts/storybook/Storybook.tsz
+cd tsz
 
-# Build + run
-bin/rjit run carts/storybook/Storybook.tsz
+# Build a cart (forge + zig + luajit link)
+./scripts/build carts/conformance/soup/s01a_counter.tsz
 
-# Hot-reload dev mode (186ms reloads)
-bin/rjit dev carts/storybook/Storybook.tsz
+# Or with the alias (if set up):
+tsz-build carts/conformance/soup/s01a_counter.tsz
 
-# First time only: build the cached engine (~24s, then never again)
-bin/rjit core
+# Debug build (unoptimized, faster compile):
+./scripts/build carts/conformance/soup/s01a_counter.tsz --debug
+
+# Output: zig-out/bin/s01a_counter
 ```
 
 ### Build Pipeline
@@ -256,11 +257,11 @@ LuaJIT link.lua (50-80ms) — .o + engine .so → native binary
 The engine (layout, GPU, state, networking, everything) is compiled once into a cached `.so` with full LLVM optimization. Cart builds skip LLVM entirely — Zig's fast x86 backend compiles only the cart code, then LuaJIT links it against the cached engine. Result: ~500ms from `.tsz` to clickable binary.
 
 ```bash
-# Full build (fallback, links everything from source)
-bin/rjit build --full carts/storybook/Storybook.tsz
+# Rebuild forge after editing Smith JS files
+zig build forge
 
-# Rebuild engine after framework changes
-bin/rjit core
+# Rebuild Smith bundle only
+zig build smith-bundle
 ```
 
 ### Engine Channels
@@ -274,15 +275,9 @@ The engine ships as a shared library (`.so`). Three channels run side by side �
 RJIT_ENGINE=bleeding ./my_app    # env var also works
 ```
 
-Promotion flow:
+Promotion flow: `bleeding → nightly` (after conformance passes) → `nightly → stable` (after soak period).
 
-```
-rjit core              → builds bleeding.so
-rjit promote nightly   → bleeding → nightly (after conformance passes)
-rjit promote stable    → nightly → stable (after soak period)
-```
-
-Cart binaries are 27MB (engine is shared, not embedded). Updating the engine doesn't require rebuilding any carts — the next launch picks up the new `.so` automatically.
+Cart binaries are ~23MB (engine is shared, not embedded). Updating the engine doesn't require rebuilding any carts — the next launch picks up the new `.so` automatically.
 
 ## Primitives
 
@@ -327,13 +322,16 @@ carts/
   catalog/            Component catalog
   claude-canvas/      Canvas playground
   control-panel/      System control panel
-  conformance/        Compiler conformance suite (283 tests)
-  wpt-flex/           W3C Web Platform Tests for flexbox (70 tests)
-  autobahn-ws/        Autobahn WebSocket conformance (202/204 cases pass)
-  http-conformance/   HTTP conformance test harness
-  ws-conformance/     WebSocket conformance tests
-  ipc-conformance/    IPC conformance tests
-  socks5-conformance/ SOCKS5 conformance tests
+  conformance/        Conformance test suites, organized by lane:
+    soup/             End-to-end app tests in real-world syntax (18 tests)
+    mixed/            Exhaustive feature + torture tests (144 tests)
+    chad/             Intent dictionary syntax tests (57 tests)
+    lscript/          LuaJIT script backend tests (35 tests)
+    wpt-flex/         W3C Web Platform Tests for flexbox (75 tests)
+    ws/               WebSocket conformance (Autobahn + protocol)
+    http/             HTTP conformance test harness
+    ipc/              IPC conformance tests
+    socks5/           SOCKS5 conformance tests
 ```
 
 ## Framework Modules
@@ -357,13 +355,17 @@ carts/
 
 ## Conformance
 
-| Suite | Score | What |
+| Suite | Tests | What |
 |-------|-------|------|
 | Autobahn WebSocket | 202/204 | RFC 6455 compliance |
-| WPT Flexbox | 70/70 | W3C CSS flex spec |
-| Compiler conformance suite | 184/283 | Language features, script runtimes, maps, components, integration |
-| Surface conformance | 25/45 | Three-tier UI tests (soup/mixed/chad) |
+| WPT Flexbox | 75 | W3C CSS flex spec |
+| Mixed (feature + torture) | 144 | Exhaustive compiler coverage — every feature, every edge case |
+| Chad (intent syntax) | 57 | Dictionary-based intent syntax, multi-file apps, libs |
+| Lscript | 35 | LuaJIT script backend |
+| Soup (real-world) | 18 | End-to-end apps in messy real-world syntax |
 | Crypto | 13/13 | HMAC, HKDF, Shamir, encryption, PII detection |
+
+Conformance is tracked by a SQLite-backed ledger (`scripts/ledger`). A post-commit hook auto-runs regression sweeps when compiler or framework files change, reporting newly broken vs already broken vs newly fixed.
 
 ## Performance
 
@@ -403,15 +405,15 @@ But the golden path is conservative. First-party code uses strict semantic zones
 
 ### Three Tiers
 
-Every surface conformance test exists in three versions that produce identical output:
+Conformance tests are organized into lanes under `carts/conformance/`:
 
-| Tier | File | What it proves |
-|------|------|----------------|
-| **Soup** | `s01a_counter.tsz` | Real model output (Qwen 1.5B, zero context). Tests compiler resilience — HTML tags, DOM patterns, CSS hallucinations. Slowest compile path. |
-| **Mixed** | `s01b_counter.tsz` | Uses framework primitives (Box, Text, Pressable) with inline styles. Tests today's API surface. Medium compile path. |
-| **Chad** | `s01c_counter.tsz` | Classifiers, script blocks, theme tokens, named resources. The golden path. Fastest compile path — preflight detects the clean structure and skips HTML mapping, style validation, and event normalization entirely. |
+| Lane | What it proves |
+|------|----------------|
+| **`soup/`** | End-to-end apps in real-world syntax (HTML tags, DOM patterns, CSS hallucinations). Tests compiler resilience. Thin — only full app tests, no isolated features. |
+| **`mixed/`** | The exhaustive proving ground. Every feature, every edge case, every torture test. Uses framework primitives with inline styles. If it works in mixed, the other lanes just prove their translation layers don't break. |
+| **`chad/`** | End-to-end apps in intent dictionary syntax. Classifiers, script blocks, theme tokens, named resources. The golden path. Fastest compile path. |
 
-The tier system isn't just readability. It's compiler architecture. Clean code compiles faster because the compiler does less work. The framework literally rewards you with speed for following the golden path.
+Mixed is the ground truth. Soup and chad are thin wrappers proving the compiler's translation layers work on top of what mixed already validates. The tier system isn't just readability — it's compiler architecture. Clean code compiles faster because the compiler does less work.
 
 ### File Taxonomy (Chad Tier)
 
