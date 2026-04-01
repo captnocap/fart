@@ -201,3 +201,13 @@ tsz/experiments/bleeding/networking/test_api*
 tsz/experiments/bleeding/networking/test_io*
 tsz/experiments/bleeding/networking/quickjs/qjs_*_server
 tsz/test_cart_linked
+
+# Generated test artifacts
+generated_*/
+refactor_generated_*
+tsz/handlers.zig
+tsz/logic.zig
+tsz/maps.zig
+tsz/nodes.zig
+tsz/state.zig
+tsz/test_*.zig
