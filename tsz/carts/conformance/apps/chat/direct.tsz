@@ -1,0 +1,100 @@
+// Direct messages page — 1:1 conversations.
+
+from '../../theme.cls'
+from '../../icons.glyphs'
+from './message_row.c'
+
+<direct page>
+  <var>
+    contacts is objects
+    activeContact is 'alice'
+    messages is objects
+    input is ''
+  </var>
+
+  <contacts>
+    id: alice, name: Alice, status: online
+    id: bob, name: Bob, status: away
+    id: carol, name: Carol, status: offline
+  </contacts>
+
+  <messages>
+    id: 1, contact: alice, author: alice, text: Hey are you free?, time: '11:00 AM'
+    id: 2, contact: alice, author: me, text: Yeah whats up, time: '11:01 AM'
+    id: 3, contact: bob, author: bob, text: PR looks good, time: '10:30 AM'
+  </messages>
+
+  <state>
+    set_activeContact
+    set_messages
+    set_input
+  </state>
+
+  <functions>
+    selectContact requires item:
+      set_activeContact is item.id
+
+    contactMessages:
+      messages.where(item.contact exact activeContact)
+
+    sendDM:
+      <if input exact ''>
+        stop
+      </if>
+      set_input is ''
+
+    statusDot requires item:
+      <switch item.status>
+        <case 'online'>
+          'check'
+        </case>
+        <case 'away'>
+          'warning'
+        </case>
+        <case else>
+          'error'
+        </case>
+      </switch>
+  </functions>
+
+  return(
+    <C.Split>
+      <C.PanelNarrow>
+        <C.Subtitle>Direct Messages</C.Subtitle>
+        <For each=contacts>
+          <Pressable onPress=selectContact>
+            <C.ListItem>
+              <if item.status exact 'online'>
+                <C.DotGreen />
+              </if>
+              <else if item.status exact 'away'>
+                <C.DotYellow />
+              </else>
+              <else>
+                <C.DotRed />
+              </else>
+              <C.Body>{item.name}</C.Body>
+            </C.ListItem>
+          </Pressable>
+        </For>
+      </C.PanelNarrow>
+
+      <C.Panel>
+        <C.Title>{activeContact}</C.Title>
+        <C.Divider />
+        <C.Scroll>
+          <For each=contactMessages>
+            <MessageRow message=item />
+          </For>
+        </C.Scroll>
+        <C.Divider />
+        <C.Row>
+          <C.InputWrap>
+            <TextInput value={input} onChange=set_input placeholder='Message...' />
+          </C.InputWrap>
+          <C.Btn onPress=sendDM><C.BtnLabel>Send</C.BtnLabel></C.Btn>
+        </C.Row>
+      </C.Panel>
+    </C.Split>
+  )
+</direct>

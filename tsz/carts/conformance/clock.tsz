@@ -1,0 +1,92 @@
+// CONFORMANCE: Clock — ambient namespaces, scheduled functions, <switch>.
+// Proves: time.*, device.*, every, <switch>/<case else>, state types.
+
+from './theme.cls'
+
+<clock widget>
+  <var>
+    mode exact type
+    ticks is 0
+  </var>
+
+  <types>
+    <mode>
+      time
+      date
+      system
+    </mode>
+  </types>
+
+  <state>
+    set_mode exact mode
+    set_ticks
+  </state>
+
+  <functions>
+    tick every 1000:
+      set_ticks is ticks + 1
+
+    showTime:
+      set_mode is time
+
+    showDate:
+      set_mode is date
+
+    showSystem:
+      set_mode is system
+
+    display:
+      <switch mode>
+        <case time>
+          time.hour + ':' + time.minute + ':' + time.second
+        </case>
+        <case date>
+          time.year + '-' + time.month + '-' + time.day
+        </case>
+        <case system>
+          sys.user + ' @ ' + sys.host
+        </case>
+        <case else>
+          time.hour + ':' + time.minute
+        </case>
+      </switch>
+
+    statusLine:
+      <if device.online>
+        ':check: online'
+      </if>
+      <else>
+        ':warning: offline'
+      </else>
+  </functions>
+
+  return(
+    <C.Page>
+      <C.Card>
+        <C.Value>{display}</C.Value>
+        <C.Hint>{statusLine}</C.Hint>
+        <C.Row>
+          <C.BtnSmall onPress=showTime><C.BtnLabelSmall>Time</C.BtnLabelSmall></C.BtnSmall>
+          <C.BtnSmall onPress=showDate><C.BtnLabelSmall>Date</C.BtnLabelSmall></C.BtnSmall>
+          <C.BtnSmall onPress=showSystem><C.BtnLabelSmall>System</C.BtnLabelSmall></C.BtnSmall>
+        </C.Row>
+        <C.Divider />
+        <C.Row>
+          <C.Label>FPS</C.Label>
+          <C.Spacer />
+          <C.Mono>{time.fps}</C.Mono>
+        </C.Row>
+        <C.Row>
+          <C.Label>Uptime</C.Label>
+          <C.Spacer />
+          <C.Mono>{sys.uptime}</C.Mono>
+        </C.Row>
+        <C.Row>
+          <C.Label>Ticks</C.Label>
+          <C.Spacer />
+          <C.Mono>{ticks}</C.Mono>
+        </C.Row>
+      </C.Card>
+    </C.Page>
+  )
+</clock>

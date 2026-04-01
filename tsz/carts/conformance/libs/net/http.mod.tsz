@@ -1,0 +1,82 @@
+// HTTP module — get, post, request lifecycle.
+// Exercises: <if as>, <during>, <switch>/<case else>, state, composition
+
+<http module>
+  <ffi>
+    curl_easy_init    @("libcurl.so")
+    curl_easy_setopt  @("libcurl.so")
+    curl_easy_perform @("libcurl.so")
+    curl_easy_cleanup @("libcurl.so")
+  </ffi>
+
+  <types>
+    <Response>
+      status is 0
+      body is ''
+      headers is object
+    </Response>
+
+    <Method>
+      GET
+      POST
+      PUT
+      DELETE
+    </Method>
+  </types>
+
+  <var>
+    pending is false
+    lastResponse
+    lastError is ''
+  </var>
+
+  <state>
+    set_pending
+    set_lastResponse
+    set_lastError
+  </state>
+
+  <functions>
+    request(method, url, body):
+      set_pending is true
+      set_lastError is ''
+      <if curl_easy_init() as handle>
+        curl_easy_setopt(handle, 'url', url)
+        <switch method>
+          <case POST>
+            curl_easy_setopt(handle, 'postfields', body)
+          </case>
+          <case PUT>
+            curl_easy_setopt(handle, 'customrequest', 'PUT')
+            curl_easy_setopt(handle, 'postfields', body)
+          </case>
+          <case DELETE>
+            curl_easy_setopt(handle, 'customrequest', 'DELETE')
+          </case>
+          <case else>
+            // GET is default
+          </case>
+        </switch>
+        <if curl_easy_perform(handle) as response>
+          set_lastResponse is response
+        </if>
+        <else>
+          set_lastError is 'request failed: ' + url
+        </else>
+        curl_easy_cleanup(handle)
+      </if>
+      set_pending is false
+
+    get(url):
+      request('GET', url, '')
+
+    post(url, body):
+      request('POST', url, body)
+
+    put(url, body):
+      request('PUT', url, body)
+
+    delete(url):
+      request('DELETE', url, '')
+  </functions>
+</http>

@@ -1,0 +1,77 @@
+// Text module — font loading, text measurement.
+// Exercises: ffi, struct types, <if as>
+
+<text module>
+  <ffi>
+    FT_Init_FreeType @("libfreetype.so")
+    FT_Done_FreeType @("libfreetype.so")
+    FT_New_Face      @("libfreetype.so")
+    FT_Set_Pixel_Sizes @("libfreetype.so")
+    FT_Load_Char     @("libfreetype.so")
+  </ffi>
+
+  <types>
+    <TextMetrics>
+      width is 0
+      height is 0
+      baseline is 0
+      lineCount is 1
+    </TextMetrics>
+
+    <Font>
+      face
+      size is 16
+      loaded is false
+    </Font>
+  </types>
+
+  <var>
+    library
+    defaultFont is Font
+  </var>
+
+  <state>
+    set_defaultFont
+  </state>
+
+  <functions>
+    boot:
+      library is FT_Init_FreeType()
+
+    boot cleanup:
+      FT_Done_FreeType(library)
+
+    loadFont(path, size):
+      <if FT_New_Face(library, path) as face>
+        FT_Set_Pixel_Sizes(face, 0, size)
+        font is Font
+        font.face is face
+        font.size is size
+        font.loaded is true
+        font
+      </if>
+
+    measure(content, fontSize, maxWidth):
+      metrics is TextMetrics
+      <if defaultFont.loaded>
+        x is 0
+        y is fontSize
+        <for 0..content.length as i>
+          <if FT_Load_Char(defaultFont.face, content[i]) as glyph>
+            <if x + glyph.advance above maxWidth>
+              x is 0
+              y is y + fontSize
+              metrics.lineCount is metrics.lineCount + 1
+            </if>
+            x is x + glyph.advance
+            <if x above metrics.width>
+              metrics.width is x
+            </if>
+          </if>
+        </for>
+        metrics.height is y
+        metrics.baseline is fontSize
+      </if>
+      metrics
+  </functions>
+</text>

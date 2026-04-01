@@ -1,0 +1,84 @@
+// SQLite query module — exec, read, write operations.
+// Exercises: <uses>, <if as>, <for>, <switch>, <case else>, cross-module state
+
+<query module>
+  <uses>
+    connection
+  </uses>
+
+  <ffi>
+    sqlite3_exec       @("libsqlite3.so")
+    sqlite3_prepare_v2 @("libsqlite3.so")
+    sqlite3_step       @("libsqlite3.so")
+    sqlite3_column_text @("libsqlite3.so")
+    sqlite3_column_int  @("libsqlite3.so")
+    sqlite3_finalize    @("libsqlite3.so")
+  </ffi>
+
+  <types>
+    <QueryResult is union>
+      rows is Row array
+      error is string
+    </QueryResult>
+
+    <Row>
+      columns is string array
+      values is string array
+    </Row>
+
+    <StepResult>
+      row
+      done
+      error
+    </StepResult>
+  </types>
+
+  <functions>
+    exec(sql):
+      <if not connection.isOpen>
+        stop
+      </if>
+      <if sqlite3_exec(connection.db.ptr, sql) as result>
+        result
+      </if>
+      <else>
+        connection.set_lastError is 'exec failed: ' + sql
+      </else>
+
+    read(sql):
+      <if not connection.isOpen>
+        stop
+      </if>
+      <if sqlite3_prepare_v2(connection.db.ptr, sql) as stmt>
+        rows is array
+        <while sqlite3_step(stmt) as step>
+          <switch step>
+            <case row>
+              rows is rows.concat(step.row)
+            </case>
+            <case done>
+              stop
+            </case>
+            <case else>
+              connection.set_lastError is 'step error'
+              stop
+            </case>
+          </switch>
+        </while>
+        sqlite3_finalize(stmt)
+        rows
+      </if>
+
+    write(sql):
+      exec(sql)
+
+    createTable(name, schema):
+      exec('CREATE TABLE IF NOT EXISTS ' + name + ' (' + schema + ')')
+
+    insert(table, values):
+      exec('INSERT INTO ' + table + ' VALUES (' + values + ')')
+
+    deleteWhere(table, condition):
+      exec('DELETE FROM ' + table + ' WHERE ' + condition)
+  </functions>
+</query>

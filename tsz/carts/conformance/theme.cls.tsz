@@ -1,0 +1,469 @@
+// Classifiers — structural styling for all conformance tests.
+// Every visual element in page/app JSX uses these. No raw primitives.
+
+from './theme.tcls'
+
+// ── Layout shells ──
+
+<C.Page is Box>
+  width exact '100%'
+  height exact '100%'
+  backgroundColor is theme-bg
+  padding is theme-spaceXl
+  gap is theme-spaceLg
+</C.Page>
+
+<C.PageRow is Box>
+  width exact '100%'
+  height exact '100%'
+  backgroundColor is theme-bg
+  flexDirection exact row
+</C.PageRow>
+
+<C.Split is Box>
+  flexDirection exact row
+  flexGrow exact 1
+  gap is theme-spaceLg
+</C.Split>
+
+<C.Sidebar is Box>
+  width is 220
+  backgroundColor is theme-surface
+  padding is theme-spaceLg
+  gap is theme-spaceMd
+  borderRightWidth exact 1
+  borderColor is theme-border
+</C.Sidebar>
+
+<C.Main is Box>
+  flexGrow exact 1
+  padding is theme-spaceXl
+  gap is theme-spaceLg
+</C.Main>
+
+<C.Spacer is Box>
+  flexGrow exact 1
+</C.Spacer>
+
+// ── Cards / Panels ──
+
+<C.Card is Box>
+  backgroundColor is theme-bgElevated
+  borderRadius is theme-radiusMd
+  padding is theme-spaceLg
+  gap is theme-spaceMd
+  borderWidth exact 1
+  borderColor is theme-border
+</C.Card>
+
+<C.Panel is Box>
+  flexGrow exact 1
+  backgroundColor is theme-bgElevated
+  borderRadius is theme-radiusMd
+  padding is theme-spaceLg
+  gap is theme-spaceMd
+  borderWidth exact 1
+  borderColor is theme-border
+</C.Panel>
+
+<C.PanelNarrow is Box>
+  width is 280
+  backgroundColor is theme-bgElevated
+  borderRadius is theme-radiusMd
+  padding is theme-spaceLg
+  gap is theme-spaceMd
+  borderWidth exact 1
+  borderColor is theme-border
+</C.PanelNarrow>
+
+// ── Typography ──
+
+<C.Title is Text>
+  fontSize is theme-fontLg
+  color is theme-text
+</C.Title>
+
+<C.Subtitle is Text>
+  fontSize is theme-fontMd
+  color is theme-textSecondary
+</C.Subtitle>
+
+<C.Body is Text>
+  fontSize is theme-fontSm
+  color is theme-textSecondary
+</C.Body>
+
+<C.Label is Text>
+  fontSize is theme-fontSm
+  color is theme-textDim
+</C.Label>
+
+<C.Hint is Text>
+  fontSize is theme-fontXs
+  color is theme-textDim
+</C.Hint>
+
+<C.Value is Text>
+  fontSize is theme-fontHero
+  color is theme-text
+</C.Value>
+
+<C.Mono is Text>
+  fontSize is theme-fontSm
+  color is theme-accent
+</C.Mono>
+
+// ── Rows / Columns ──
+
+<C.Row is Box>
+  flexDirection exact row
+  gap is theme-spaceMd
+  alignItems is center
+</C.Row>
+
+<C.Col is Box>
+  gap is theme-spaceMd
+</C.Col>
+
+// ── Buttons ──
+
+<C.Btn is Pressable>
+  backgroundColor is theme-primary
+  borderRadius is theme-radiusSm
+  padding is theme-spaceMd
+  alignItems exact center
+  justifyContent exact center
+</C.Btn>
+
+<C.BtnDanger is Pressable>
+  backgroundColor is theme-error
+  borderRadius is theme-radiusSm
+  padding is theme-spaceMd
+  alignItems exact center
+  justifyContent exact center
+</C.BtnDanger>
+
+<C.BtnSmall is Pressable>
+  backgroundColor is theme-surface
+  borderRadius is theme-radiusSm
+  paddingLeft is theme-spaceMd
+  paddingRight is theme-spaceMd
+  paddingTop is theme-spaceSm
+  paddingBottom is theme-spaceSm
+  alignItems exact center
+</C.BtnSmall>
+
+<C.BtnLabel is Text>
+  fontSize is theme-fontSm
+  color is theme-bg
+</C.BtnLabel>
+
+<C.BtnLabelSmall is Text>
+  fontSize is theme-fontXs
+  color is theme-textSecondary
+</C.BtnLabelSmall>
+
+// ── Inputs ──
+
+<C.InputWrap is Box>
+  backgroundColor is theme-bgAlt
+  borderRadius is theme-radiusSm
+  borderWidth exact 1
+  borderColor is theme-border
+  padding is theme-spaceMd
+</C.InputWrap>
+
+// ── Lists ──
+
+<C.ListItem is Box>
+  flexDirection exact row
+  alignItems exact center
+  padding is theme-spaceMd
+  gap is theme-spaceMd
+  borderBottomWidth exact 1
+  borderColor is theme-borderLight
+</C.ListItem>
+
+// ── Nav ──
+
+<C.NavItem is Pressable>
+  padding is theme-spaceMd
+  borderRadius is theme-radiusSm
+</C.NavItem>
+
+<C.NavItemActive is Pressable>
+  padding is theme-spaceMd
+  borderRadius is theme-radiusSm
+  backgroundColor is theme-surface
+</C.NavItemActive>
+
+<C.NavLabel is Text>
+  fontSize is theme-fontMd
+  color is theme-textDim
+</C.NavLabel>
+
+<C.NavLabelActive is Text>
+  fontSize is theme-fontMd
+  color is theme-text
+</C.NavLabelActive>
+
+// ── Dots ──
+
+<C.DotGreen is Box>
+  width exact 8
+  height exact 8
+  borderRadius exact 4
+  backgroundColor is theme-success
+</C.DotGreen>
+
+<C.DotRed is Box>
+  width exact 8
+  height exact 8
+  borderRadius exact 4
+  backgroundColor is theme-error
+</C.DotRed>
+
+<C.DotYellow is Box>
+  width exact 8
+  height exact 8
+  borderRadius exact 4
+  backgroundColor is theme-warning
+</C.DotYellow>
+
+// ── Separators ──
+
+<C.Divider is Box>
+  height exact 1
+  backgroundColor is theme-borderLight
+</C.Divider>
+
+// ── Kanban ──
+
+<C.KanbanCol is Box>
+  flexGrow exact 1
+  backgroundColor is theme-surface
+  borderRadius is theme-radiusMd
+  padding is theme-spaceMd
+  gap is theme-spaceMd
+</C.KanbanCol>
+
+<C.KanbanCard is Box>
+  backgroundColor is theme-bgAlt
+  borderRadius is theme-radiusSm
+  padding is theme-spaceMd
+  gap is theme-spaceSm
+  borderWidth exact 1
+  borderColor is theme-border
+</C.KanbanCard>
+
+<C.KanbanTitle is Text>
+  fontSize is theme-fontSm
+  color is theme-textSecondary
+</C.KanbanTitle>
+
+// ── Badges ──
+
+<C.BadgeGreen is Box>
+  backgroundColor is theme-success
+  borderRadius is theme-radiusSm
+  paddingLeft is theme-spaceMd
+  paddingRight is theme-spaceMd
+  paddingTop exact 2
+  paddingBottom exact 2
+</C.BadgeGreen>
+
+<C.BadgeRed is Box>
+  backgroundColor is theme-error
+  borderRadius is theme-radiusSm
+  paddingLeft is theme-spaceMd
+  paddingRight is theme-spaceMd
+  paddingTop exact 2
+  paddingBottom exact 2
+</C.BadgeRed>
+
+<C.BadgeText is Text>
+  fontSize is theme-fontXs
+  color is theme-bg
+</C.BadgeText>
+
+// ── Scroll ──
+
+<C.Scroll is ScrollView>
+  flexGrow exact 1
+</C.Scroll>
+
+// ── Stats ──
+
+<C.StatValue is Text>
+  fontSize is theme-fontXl
+  color is theme-text
+</C.StatValue>
+
+<C.StatLabel is Text>
+  fontSize is theme-fontSm
+  color is theme-textDim
+</C.StatLabel>
+
+// ── Breadcrumbs ──
+
+<C.Breadcrumb is Box>
+  flexDirection exact row
+  alignItems exact center
+  gap is theme-spaceSm
+</C.Breadcrumb>
+
+<C.BreadcrumbText is Text>
+  fontSize is theme-fontSm
+  color is theme-textDim
+</C.BreadcrumbText>
+
+<C.BreadcrumbActive is Text>
+  fontSize is theme-fontSm
+  color is theme-text
+</C.BreadcrumbActive>
+
+// ── Transport (audio/video controls) ──
+
+<C.TransportRow is Box>
+  flexDirection exact row
+  alignItems exact center
+  justifyContent exact center
+  gap is theme-spaceLg
+</C.TransportRow>
+
+<C.TransportBtn is Pressable>
+  width is 40
+  height is 40
+  borderRadius is 20
+  backgroundColor is theme-surface
+  alignItems exact center
+  justifyContent exact center
+</C.TransportBtn>
+
+<C.TransportBtnLarge is Pressable>
+  width is 56
+  height is 56
+  borderRadius is 28
+  backgroundColor is theme-primary
+  alignItems exact center
+  justifyContent exact center
+</C.TransportBtnLarge>
+
+<C.TransportIcon is Text>
+  fontSize is theme-fontLg
+  color is theme-textSecondary
+</C.TransportIcon>
+
+// ── Progress ──
+
+<C.ProgressTrack is Box>
+  height exact 6
+  backgroundColor is theme-surface
+  borderRadius exact 3
+  flexGrow exact 1
+</C.ProgressTrack>
+
+<C.ProgressFill is Box>
+  height exact 6
+  backgroundColor is theme-primary
+  borderRadius exact 3
+</C.ProgressFill>
+
+// ── Tree (file browser) ──
+
+<C.TreeItem is Pressable>
+  flexDirection exact row
+  alignItems exact center
+  gap is theme-spaceSm
+  paddingTop is theme-spaceSm
+  paddingBottom is theme-spaceSm
+</C.TreeItem>
+
+<C.TreeIndent is Box>
+  width exact 16
+</C.TreeIndent>
+
+<C.TreeLabel is Text>
+  fontSize is theme-fontSm
+  color is theme-textSecondary
+</C.TreeLabel>
+
+<C.TreeLabelActive is Text>
+  fontSize is theme-fontSm
+  color is theme-text
+</C.TreeLabelActive>
+
+// ── Table ──
+
+<C.TableHeader is Box>
+  flexDirection exact row
+  borderBottomWidth exact 1
+  borderColor is theme-border
+  paddingBottom is theme-spaceSm
+</C.TableHeader>
+
+<C.TableRow is Box>
+  flexDirection exact row
+  paddingTop is theme-spaceMd
+  paddingBottom is theme-spaceMd
+  borderBottomWidth exact 1
+  borderColor is theme-borderLight
+</C.TableRow>
+
+<C.TableCell is Box>
+  flexGrow exact 1
+  paddingLeft is theme-spaceMd
+  paddingRight is theme-spaceMd
+</C.TableCell>
+
+<C.TableText is Text>
+  fontSize is theme-fontSm
+  color is theme-textSecondary
+</C.TableText>
+
+<C.TableLabel is Text>
+  fontSize is theme-fontSm
+  color is theme-textDim
+</C.TableLabel>
+
+// ── Message (chat) ──
+
+<C.MessageRow is Box>
+  flexDirection exact row
+  gap is theme-spaceMd
+  padding is theme-spaceMd
+</C.MessageRow>
+
+<C.Avatar is Box>
+  width exact 32
+  height exact 32
+  borderRadius exact 16
+  backgroundColor is theme-surface
+  alignItems exact center
+  justifyContent exact center
+</C.Avatar>
+
+<C.AvatarText is Text>
+  fontSize is theme-fontSm
+  color is theme-textDim
+</C.AvatarText>
+
+<C.MessageBody is Box>
+  flexGrow exact 1
+  gap is theme-spaceSm
+</C.MessageBody>
+
+<C.MessageAuthor is Text>
+  fontSize is theme-fontSm
+  color is theme-text
+</C.MessageAuthor>
+
+<C.MessageText is Text>
+  fontSize is theme-fontSm
+  color is theme-textSecondary
+</C.MessageText>
+
+<C.MessageTime is Text>
+  fontSize is theme-fontXs
+  color is theme-textDim
+</C.MessageTime>

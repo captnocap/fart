@@ -1,0 +1,72 @@
+// WebSocket module — connect, send, receive, disconnect.
+// Exercises: <during>, cleanup pairing, state, <if as>
+
+<socket module>
+  <ffi>
+    ws_connect    @("libwebsockets.so")
+    ws_send       @("libwebsockets.so")
+    ws_recv       @("libwebsockets.so")
+    ws_close      @("libwebsockets.so")
+    ws_poll       @("libwebsockets.so")
+  </ffi>
+
+  <types>
+    <Connection>
+      handle
+      url exact string
+      ready is false
+    </Connection>
+
+    <Message>
+      data is ''
+      timestamp is 0
+    </Message>
+  </types>
+
+  <var>
+    conn
+    connected is false
+    messages is array
+    lastMessage
+  </var>
+
+  <state>
+    set_conn
+    set_connected
+    set_messages
+    set_lastMessage
+  </state>
+
+  <functions>
+    connect(url):
+      <if ws_connect(url) as handle>
+        set_conn is handle
+        conn.url is url
+        conn.ready is true
+        set_connected is true
+      </if>
+
+    disconnect:
+      <if connected>
+        ws_close(conn.handle)
+        conn.ready is false
+        set_connected is false
+      </if>
+
+    connect cleanup:
+      disconnect
+
+    send(data):
+      <if connected>
+        ws_send(conn.handle, data)
+      </if>
+
+    poll every 16:
+      <if connected>
+        <if ws_poll(conn.handle) as msg>
+          set_lastMessage is msg
+          set_messages is messages.concat(msg)
+        </if>
+      </if>
+  </functions>
+</socket>

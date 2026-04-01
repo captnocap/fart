@@ -1,0 +1,8 @@
+// Layout library — flex layout, text measurement, scrolling.
+// The framework's own layout engine, written in intent syntax.
+
+<layout lib>
+  <flex module />
+  <measure module />
+  <scroll module />
+</layout>

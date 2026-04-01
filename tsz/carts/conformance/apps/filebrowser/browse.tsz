@@ -1,0 +1,165 @@
+// Browse page — directory listing, navigation, file operations.
+
+from '../../theme.cls'
+from '../../icons.glyphs'
+from '../../libs/fs/fs'
+from './file_row.c'
+
+<browse page>
+  <var>
+    currentPath is '/home'
+    entries is objects
+    selectedFile
+    loading is false
+    ready is false
+    pathParts is array
+    sortBy exact type
+  </var>
+
+  <entries>
+    name: Documents, path: /home/Documents, isDir: true, size: 0
+    name: Pictures, path: /home/Pictures, isDir: true, size: 0
+    name: notes.txt, path: /home/notes.txt, isDir: false, size: 2048
+    name: config.json, path: /home/config.json, isDir: false, size: 512
+    name: photo.jpg, path: /home/photo.jpg, isDir: false, size: 1048576
+  </entries>
+
+  <pathParts>
+    home
+  </pathParts>
+
+  <types>
+    <sortBy>
+      name
+      size
+      type
+    </sortBy>
+  </types>
+
+  <state>
+    set_currentPath
+    set_entries
+    set_selectedFile
+    set_loading
+    set_ready
+    set_pathParts
+    set_sortBy exact sortBy
+  </state>
+
+  <functions>
+    loadDirectory(path):
+      set_loading is true
+      set_currentPath is path
+      <if fs.files.list(path) as items>
+        set_entries is items
+        set_ready is true
+      </if>
+      set_loading is false
+
+    boot:
+      set_sortBy is name
+      set_ready is true
+
+    navigateTo requires item:
+      <if item.isDir>
+        loadDirectory(item.path)
+      </if>
+      <else>
+        set_selectedFile is item
+      </else>
+
+    goUp:
+      // navigate to parent
+      loadDirectory(currentPath)
+
+    selectFile requires item:
+      set_selectedFile is item
+
+    deleteFile requires item:
+      fs.files.delete(item.path)
+      set_entries is entries.without(item)
+
+    fileIcon requires item:
+      <if item.isDir>
+        ':folder:'
+      </if>
+      <else>
+        ':file:'
+      </else>
+
+    formatSize requires item:
+      <if item.size above 1048576>
+        math.floor(item.size / 1048576) + ' MB'
+      </if>
+      <else if item.size above 1024>
+        math.floor(item.size / 1024) + ' KB'
+      </else>
+      <else>
+        item.size + ' B'
+      </else>
+
+    directories:
+      entries.where(item.isDir)
+
+    files:
+      entries.where(not item.isDir)
+
+    sortByName:
+      set_sortBy is name
+
+    sortBySize:
+      set_sortBy is size
+
+    sortByType:
+      set_sortBy is type
+  </functions>
+
+  return(
+    <C.Col>
+      // ── Breadcrumbs ──
+      <C.Breadcrumb>
+        <For each=pathParts>
+          <C.BreadcrumbText>{item}</C.BreadcrumbText>
+          <C.BreadcrumbText>/</C.BreadcrumbText>
+        </For>
+        <C.BreadcrumbActive>{currentPath}</C.BreadcrumbActive>
+      </C.Breadcrumb>
+
+      // ── Toolbar ──
+      <C.Row>
+        <C.BtnSmall onPress=goUp><C.BtnLabelSmall>Up</C.BtnLabelSmall></C.BtnSmall>
+        <C.Spacer />
+        <C.Label>Sort:</C.Label>
+        <C.BtnSmall onPress=sortByName><C.BtnLabelSmall>Name</C.BtnLabelSmall></C.BtnSmall>
+        <C.BtnSmall onPress=sortBySize><C.BtnLabelSmall>Size</C.BtnLabelSmall></C.BtnSmall>
+        <C.BtnSmall onPress=sortByType><C.BtnLabelSmall>Type</C.BtnLabelSmall></C.BtnSmall>
+      </C.Row>
+
+      <during loading>
+        <C.Body>Loading...</C.Body>
+      </during>
+
+      <during ready>
+        <C.Card>
+          <C.TableHeader>
+            <C.TableCell><C.TableLabel>Name</C.TableLabel></C.TableCell>
+            <C.TableCell><C.TableLabel>Size</C.TableLabel></C.TableCell>
+            <C.TableCell><C.TableLabel>Actions</C.TableLabel></C.TableCell>
+          </C.TableHeader>
+
+          // ── Directories first ──
+          <For each=directories>
+            <FileRow entry=item onNavigate=navigateTo onDelete=deleteFile />
+          </For>
+
+          // ── Then files ──
+          <For each=files>
+            <FileRow entry=item onNavigate=selectFile onDelete=deleteFile />
+          </For>
+        </C.Card>
+
+        <C.Hint>{entries.length + ' items'}</C.Hint>
+      </during>
+    </C.Col>
+  )
+</browse>

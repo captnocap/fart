@@ -1,0 +1,82 @@
+// Scroll module — scroll state, clamping, velocity.
+// Exercises: state, <if>, math.clamp, composition
+
+<scroll module>
+  <types>
+    <ScrollState>
+      offsetY is 0
+      velocity is 0
+      contentHeight is 0
+      viewportHeight is 0
+      dragging is false
+      lastY is 0
+    </ScrollState>
+  </types>
+
+  <var>
+    active is ScrollState
+    friction exact 0.92
+    threshold exact 0.5
+  </var>
+
+  <state>
+    set_active
+  </state>
+
+  <functions>
+    maxScroll:
+      math.max(0, active.contentHeight - active.viewportHeight)
+
+    clampOffset:
+      active.offsetY is math.clamp(active.offsetY, 0, maxScroll)
+
+    startDrag(y):
+      active.dragging is true
+      active.lastY is y
+      active.velocity is 0
+
+    moveDrag(y):
+      <if active.dragging>
+        delta is y - active.lastY
+        active.offsetY is active.offsetY - delta
+        active.velocity is -delta
+        active.lastY is y
+        clampOffset
+      </if>
+
+    endDrag:
+      active.dragging is false
+
+    applyInertia:
+      <if not active.dragging and math.abs(active.velocity) above threshold>
+        active.offsetY is active.offsetY + active.velocity
+        active.velocity is active.velocity * friction
+        clampOffset
+      </if>
+      <else>
+        active.velocity is 0
+      </else>
+
+    scrollTo(offset):
+      active.offsetY is offset
+      active.velocity is 0
+      clampOffset
+
+    scrollToTop:
+      scrollTo(0)
+
+    scrollToBottom:
+      scrollTo(maxScroll)
+
+    tick every 16:
+      applyInertia
+
+    setContentHeight(h):
+      active.contentHeight is h
+      clampOffset
+
+    setViewportHeight(h):
+      active.viewportHeight is h
+      clampOffset
+  </functions>
+</scroll>

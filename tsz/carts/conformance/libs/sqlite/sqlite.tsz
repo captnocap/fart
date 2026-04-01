@@ -1,0 +1,7 @@
+// SQLite library — composes connection + query modules.
+// Usage from a page: backend.sqlite.open('app.db')
+
+<sqlite lib>
+  <connection module />
+  <query module />
+</sqlite>

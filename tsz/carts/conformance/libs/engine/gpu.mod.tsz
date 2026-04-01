@@ -1,0 +1,87 @@
+// GPU module — wgpu surface, render pass, draw commands.
+// Exercises: ffi, <uses>, struct types, boot/shutdown, cleanup
+
+<gpu module>
+  <uses>
+    sdl
+  </uses>
+
+  <ffi>
+    wgpu_create_instance @("libwgpu_native.a")
+    wgpu_create_surface  @("libwgpu_native.a")
+    wgpu_create_device   @("libwgpu_native.a")
+    wgpu_begin_frame     @("libwgpu_native.a")
+    wgpu_end_frame       @("libwgpu_native.a")
+    wgpu_draw_rect       @("libwgpu_native.a")
+    wgpu_draw_text       @("libwgpu_native.a")
+    wgpu_release         @("libwgpu_native.a")
+  </ffi>
+
+  <types>
+    <Color>
+      r is 0
+      g is 0
+      b is 0
+      a is 255
+    </Color>
+
+    <Rect>
+      x is 0
+      y is 0
+      w is 0
+      h is 0
+    </Rect>
+
+    <RenderState>
+      instance
+      surface
+      device
+      ready is false
+    </RenderState>
+  </types>
+
+  <var>
+    render is RenderState
+  </var>
+
+  <state>
+    set_render
+  </state>
+
+  <functions>
+    boot:
+      render.instance is wgpu_create_instance()
+      <if sdl.window>
+        render.surface is wgpu_create_surface(render.instance, sdl.window)
+        render.device is wgpu_create_device(render.instance)
+        render.ready is true
+      </if>
+
+    boot cleanup:
+      <if render.ready>
+        wgpu_release(render.device)
+        wgpu_release(render.surface)
+        wgpu_release(render.instance)
+      </if>
+
+    beginFrame:
+      <if render.ready>
+        wgpu_begin_frame(render.surface, render.device)
+      </if>
+
+    endFrame:
+      <if render.ready>
+        wgpu_end_frame(render.surface, render.device)
+      </if>
+
+    drawRect(rect, color):
+      <if render.ready>
+        wgpu_draw_rect(render.device, rect.x, rect.y, rect.w, rect.h, color.r, color.g, color.b, color.a)
+      </if>
+
+    drawText(text, x, y, size, color):
+      <if render.ready>
+        wgpu_draw_text(render.device, text, x, y, size, color.r, color.g, color.b, color.a)
+      </if>
+  </functions>
+</gpu>

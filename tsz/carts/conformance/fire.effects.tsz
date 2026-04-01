@@ -1,0 +1,67 @@
+// Effects — procedural fills applied to elements as bare props.
+// Usage: <C.Card lava> or <C.Title plasma>
+// An effect is a block with a contract: must expose fill(x, y, t) returning a color.
+
+<lava effect>
+  <var>
+    speed is 0.5
+    intensity is 0.8
+    deep is theme-lavaDeep
+    mid is theme-lavaMid
+    hot is theme-lavaHot
+    peak is theme-lavaPeak
+  </var>
+
+  <functions>
+    fill(x, y, t):
+      heat is math.turbulence(x, y, t * speed)
+      math.ramp(heat * intensity, deep, mid, hot, peak)
+  </functions>
+</lava>
+
+<plasma effect>
+  <functions>
+    fill(x, y, t):
+      v is math.plasma(x, y, t)
+      math.hue(v)
+  </functions>
+</plasma>
+
+<ocean effect>
+  <var>
+    depth is 3
+    shallow is theme-oceanShallow
+    mid is theme-oceanMid
+    deep is theme-oceanDeep
+    foam is theme-oceanFoam
+  </var>
+
+  <functions>
+    fill(x, y, t):
+      w is math.waves(x, y, t, depth)
+      math.ramp(w, deep, mid, shallow, foam)
+  </functions>
+</ocean>
+
+<ember effect>
+  <var>
+    speed is 0.3
+    deep is theme-lavaDeep
+    hot is theme-lavaHot
+  </var>
+
+  <functions>
+    fill(x, y, t):
+      n is math.fbm(x * 4, y * 4 + t * speed, 3)
+      math.ramp(n, deep, deep, hot, hot)
+  </functions>
+</ember>
+
+<pulse effect>
+  <functions>
+    fill(x, y, t):
+      d is math.radial(x - 0.5, y - 0.5)
+      p is math.drift(d, t, 2, 0.3)
+      math.ramp(p, theme-primary, theme-accent, theme-primary)
+  </functions>
+</pulse>

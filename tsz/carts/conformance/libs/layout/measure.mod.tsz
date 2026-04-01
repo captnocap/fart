@@ -1,0 +1,41 @@
+// Measure module — text measurement for layout.
+// Exercises: struct types, <for>, range iteration, <if>
+
+<measure module>
+  <types>
+    <TextMetrics>
+      width is 0
+      height is 0
+      lineCount is 1
+    </TextMetrics>
+  </types>
+
+  <functions>
+    measureText(content, fontSize, maxWidth):
+      metrics is TextMetrics
+      x is 0
+      charWidth is fontSize * 0.6
+
+      <for 0..content.length as i>
+        <if x + charWidth above maxWidth>
+          x is 0
+          metrics.lineCount is metrics.lineCount + 1
+        </if>
+        x is x + charWidth
+        <if x above metrics.width>
+          metrics.width is x
+        </if>
+      </for>
+
+      metrics.height is metrics.lineCount * fontSize * 1.2
+      metrics
+
+    estimateLines(content, fontSize, maxWidth):
+      charWidth is fontSize * 0.6
+      charsPerLine is math.floor(maxWidth / charWidth)
+      <if charsPerLine below 1>
+        charsPerLine is 1
+      </if>
+      math.ceil(content.length / charsPerLine)
+  </functions>
+</measure>

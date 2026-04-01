@@ -1,0 +1,87 @@
+// SDL module — window creation, event loop, lifecycle.
+// Exercises: ffi, boot/shutdown, cleanup pairing, <while>, <switch>/<case else>
+
+<sdl module>
+  <ffi>
+    SDL_Init          @("libSDL3.so")
+    SDL_Quit          @("libSDL3.so")
+    SDL_CreateWindow  @("libSDL3.so")
+    SDL_DestroyWindow @("libSDL3.so")
+    SDL_PollEvent     @("libSDL3.so")
+    SDL_GetTicks      @("libSDL3.so")
+  </ffi>
+
+  <types>
+    <WindowConfig>
+      title is 'ReactJIT'
+      width is 1280
+      height is 720
+      flags is 0
+    </WindowConfig>
+
+    <Event>
+      type
+      key
+      x is 0
+      y is 0
+    </Event>
+
+    <EventType>
+      quit
+      keydown
+      keyup
+      mousemove
+      mousedown
+      mouseup
+      resize
+      focus
+      blur
+    </EventType>
+  </types>
+
+  <var>
+    window
+    running is false
+    ticks is 0
+  </var>
+
+  <state>
+    set_window
+    set_running
+    set_ticks
+  </state>
+
+  <functions>
+    boot:
+      SDL_Init('video')
+      set_running is true
+
+    boot cleanup:
+      SDL_Quit
+
+    createWindow(config):
+      <if SDL_CreateWindow(config.title, config.width, config.height, config.flags) as win>
+        set_window is win
+      </if>
+
+    createWindow cleanup:
+      <if window>
+        SDL_DestroyWindow(window)
+      </if>
+
+    pollEvents(handler):
+      <while SDL_PollEvent() as event>
+        <switch event.type>
+          <case quit>
+            set_running is false
+          </case>
+          <case else>
+            handler(event)
+          </case>
+        </switch>
+      </while>
+
+    tick:
+      set_ticks is SDL_GetTicks()
+  </functions>
+</sdl>

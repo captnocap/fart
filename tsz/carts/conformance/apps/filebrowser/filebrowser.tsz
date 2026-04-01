@@ -1,0 +1,52 @@
+// CONFORMANCE: File Browser — Finder/Nautilus-style app.
+// Proves: fs lib integration, tree structure, <switch> on file type, breadcrumbs, components.
+
+from '../../theme.cls'
+from '../../icons.glyphs'
+from '../../libs/fs/fs'
+from './file_row.c'
+
+<fileBrowser app>
+  <var>
+    pages is page array
+    active is 'browse'
+  </var>
+
+  <pages>
+    browse
+    preview
+  </pages>
+
+  <state>
+    set_active
+  </state>
+
+  <functions>
+    goTo requires item:
+      set_active is item
+  </functions>
+
+  return(
+    <C.PageRow>
+      <C.Sidebar>
+        <C.Title>:folder: Files</C.Title>
+        <C.Divider />
+        <For each=pages>
+          <Pressable onPress=goTo>
+            <if item exact active>
+              <C.NavItemActive><C.NavLabelActive>{item}</C.NavLabelActive></C.NavItemActive>
+            </if>
+            <else>
+              <C.NavItem><C.NavLabel>{item}</C.NavLabel></C.NavItem>
+            </else>
+          </Pressable>
+        </For>
+        <C.Spacer />
+        <C.Hint>{sys.os + ' ' + sys.kernel}</C.Hint>
+      </C.Sidebar>
+      <C.Main>
+        <active page />
+      </C.Main>
+    </C.PageRow>
+  )
+</fileBrowser>

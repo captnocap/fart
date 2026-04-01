@@ -1,0 +1,208 @@
+// Flex module — the core layout algorithm.
+// Exercises: struct types, recursive <for>, range iteration, <switch>, state, composition
+
+<flex module>
+  <uses>
+    measure
+  </uses>
+
+  <types>
+    <FlexDirection>
+      row
+      column
+      rowReverse
+      columnReverse
+    </FlexDirection>
+
+    <Align>
+      start
+      center
+      end
+      stretch
+      baseline
+    </Align>
+
+    <Justify>
+      start
+      center
+      end
+      spaceBetween
+      spaceAround
+      spaceEvenly
+    </Justify>
+
+    <LayoutRect>
+      x is 0
+      y is 0
+      w is 0
+      h is 0
+    </LayoutRect>
+
+    <Style>
+      width
+      height
+      flexDirection is column
+      alignItems is stretch
+      justifyContent is start
+      flexGrow is 0
+      padding is 0
+      paddingLeft
+      paddingRight
+      paddingTop
+      paddingBottom
+      gap is 0
+    </Style>
+
+    <Node>
+      style is Style
+      children is Node array
+      computed is LayoutRect
+      text
+      fontSize is 16
+      contentHeight is 0
+    </Node>
+  </types>
+
+  <var>
+    budget exact 100000
+    passes is 0
+  </var>
+
+  <state>
+    set_passes
+  </state>
+
+  <functions>
+    padLeft(style):
+      <if style.paddingLeft>
+        style.paddingLeft
+      </if>
+      <else>
+        style.padding
+      </else>
+
+    padRight(style):
+      <if style.paddingRight>
+        style.paddingRight
+      </if>
+      <else>
+        style.padding
+      </else>
+
+    padTop(style):
+      <if style.paddingTop>
+        style.paddingTop
+      </if>
+      <else>
+        style.padding
+      </else>
+
+    padBottom(style):
+      <if style.paddingBottom>
+        style.paddingBottom
+      </if>
+      <else>
+        style.padding
+      </else>
+
+    resolveSize(value, parentSize):
+      <if not value>
+        parentSize
+      </if>
+      <else if value below 0>
+        (-value) * parentSize
+      </else>
+      <else>
+        value
+      </else>
+
+    layoutNode(node, px, py, pw, ph):
+      set_passes is passes + 1
+      <if passes above budget>
+        stop
+      </if>
+
+      w is resolveSize(node.style.width, pw)
+      h is resolveSize(node.style.height, ph)
+
+      <if node.text and not node.style.height>
+        innerW is w - padLeft(node.style) - padRight(node.style)
+        <if measure.measureText(node.text, node.fontSize, innerW) as metrics>
+          h is metrics.height + padTop(node.style) + padBottom(node.style)
+        </if>
+      </if>
+
+      node.computed.x is px
+      node.computed.y is py
+      node.computed.w is w
+      node.computed.h is h
+
+      innerX is px + padLeft(node.style)
+      innerY is py + padTop(node.style)
+      innerW is w - padLeft(node.style) - padRight(node.style)
+      innerH is h - padTop(node.style) - padBottom(node.style)
+
+      <switch node.style.flexDirection>
+        <case row>
+          layoutRow(node, innerX, innerY, innerW, innerH)
+        </case>
+        <case else>
+          layoutColumn(node, innerX, innerY, innerW, innerH)
+        </case>
+      </switch>
+
+    layoutColumn(node, x, y, w, h):
+      cursor is y
+      totalGrow is 0
+      fixedHeight is 0
+
+      <for node.children as child>
+        <if child.style.flexGrow above 0>
+          totalGrow is totalGrow + child.style.flexGrow
+        </if>
+        <else>
+          fixedHeight is fixedHeight + resolveSize(child.style.height, h)
+        </else>
+      </for>
+
+      remaining is h - fixedHeight - (node.children.length - 1) * node.style.gap
+
+      <for node.children as child>
+        childH is resolveSize(child.style.height, h)
+        <if child.style.flexGrow above 0 and totalGrow above 0>
+          childH is (child.style.flexGrow / totalGrow) * remaining
+        </if>
+        layoutNode(child, x, cursor, w, childH)
+        cursor is cursor + childH + node.style.gap
+      </for>
+
+    layoutRow(node, x, y, w, h):
+      cursor is x
+      totalGrow is 0
+      fixedWidth is 0
+
+      <for node.children as child>
+        <if child.style.flexGrow above 0>
+          totalGrow is totalGrow + child.style.flexGrow
+        </if>
+        <else>
+          fixedWidth is fixedWidth + resolveSize(child.style.width, w)
+        </else>
+      </for>
+
+      remaining is w - fixedWidth - (node.children.length - 1) * node.style.gap
+
+      <for node.children as child>
+        childW is resolveSize(child.style.width, w)
+        <if child.style.flexGrow above 0 and totalGrow above 0>
+          childW is (child.style.flexGrow / totalGrow) * remaining
+        </if>
+        layoutNode(child, cursor, y, childW, h)
+        cursor is cursor + childW + node.style.gap
+      </for>
+
+    layout(root, x, y, w, h):
+      set_passes is 0
+      layoutNode(root, x, y, w, h)
+  </functions>
+</flex>

@@ -1,0 +1,115 @@
+// Theme tokens — the contract + themed values.
+// Classifiers reference these as theme-name. Active theme resolves the value.
+
+<tokens>
+  // ── Colors ──
+  bg
+  bgAlt
+  bgElevated
+  surface
+  text
+  textSecondary
+  textDim
+  primary
+  primaryHover
+  accent
+  success
+  warning
+  error
+  border
+  borderLight
+
+  // ── Spacing ──
+  spaceSm
+  spaceMd
+  spaceLg
+  spaceXl
+
+  // ── Radii ──
+  radiusSm
+  radiusMd
+  radiusLg
+
+  // ── Typography ──
+  fontXs
+  fontSm
+  fontMd
+  fontLg
+  fontXl
+  fontHero
+
+  // ── Effect colors ──
+  lavaDeep
+  lavaMid
+  lavaHot
+  lavaPeak
+  oceanDeep
+  oceanMid
+  oceanShallow
+  oceanFoam
+</tokens>
+
+<main>
+  bg is '#0f172a'
+  bgAlt is '#1e293b'
+  bgElevated is '#1e293b'
+  surface is '#334155'
+  text is '#f8fafc'
+  textSecondary is '#e2e8f0'
+  textDim is '#64748b'
+  primary is '#3b82f6'
+  primaryHover is '#2563eb'
+  accent is '#8b5cf6'
+  success is '#22c55e'
+  warning is '#f59e0b'
+  error is '#ef4444'
+  border is '#334155'
+  borderLight is '#1e293b'
+  spaceSm is 4
+  spaceMd is 8
+  spaceLg is 16
+  spaceXl is 24
+  radiusSm is 4
+  radiusMd is 8
+  radiusLg is 12
+  fontXs is 9
+  fontSm is 11
+  fontMd is 13
+  fontLg is 18
+  fontXl is 24
+  fontHero is 36
+  lavaDeep is '#330000'
+  lavaMid is '#ff4400'
+  lavaHot is '#ffaa00'
+  lavaPeak is '#ffffff'
+  oceanDeep is '#001133'
+  oceanMid is '#003366'
+  oceanShallow is '#0066cc'
+  oceanFoam is '#99ccff'
+</main>
+
+<light>
+  bg is '#ffffff'
+  bgAlt is '#f8fafc'
+  bgElevated is '#ffffff'
+  surface is '#e2e8f0'
+  text is '#0f172a'
+  textSecondary is '#334155'
+  textDim is '#64748b'
+  primary is '#2563eb'
+  primaryHover is '#1d4ed8'
+  accent is '#7c3aed'
+  success is '#16a34a'
+  warning is '#d97706'
+  error is '#dc2626'
+  border is '#e2e8f0'
+  borderLight is '#f1f5f9'
+  lavaDeep is '#4a0000'
+  lavaMid is '#ff5500'
+  lavaHot is '#ffbb33'
+  lavaPeak is '#ffffff'
+  oceanDeep is '#002244'
+  oceanMid is '#004488'
+  oceanShallow is '#2288dd'
+  oceanFoam is '#bbddff'
+</light>

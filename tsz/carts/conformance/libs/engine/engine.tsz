@@ -1,0 +1,9 @@
+// Engine library — SDL, GPU, text rendering, input.
+// The runtime's own modules, written in intent syntax.
+
+<engine lib>
+  <sdl module />
+  <gpu module />
+  <text module />
+  <input module />
+</engine>

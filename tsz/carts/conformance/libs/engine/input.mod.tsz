@@ -1,0 +1,88 @@
+// Input module — mouse, keyboard, touch state.
+// Exercises: struct types, <switch>, state, <during>
+
+<input module>
+  <uses>
+    sdl
+  </uses>
+
+  <types>
+    <MouseState>
+      x is 0
+      y is 0
+      leftDown is false
+      rightDown is false
+    </MouseState>
+
+    <KeyState>
+      shift is false
+      ctrl is false
+      alt is false
+      lastKey is ''
+    </KeyState>
+
+    <TouchState>
+      active is false
+      x is 0
+      y is 0
+      count is 0
+    </TouchState>
+  </types>
+
+  <var>
+    mouse is MouseState
+    keys is KeyState
+    touch is TouchState
+  </var>
+
+  <state>
+    set_mouse
+    set_keys
+    set_touch
+  </state>
+
+  <functions>
+    handleEvent(event):
+      <switch event.type>
+        <case mousemove>
+          mouse.x is event.x
+          mouse.y is event.y
+        </case>
+        <case mousedown>
+          mouse.leftDown is true
+        </case>
+        <case mouseup>
+          mouse.leftDown is false
+        </case>
+        <case keydown>
+          keys.lastKey is event.key
+          <if event.key exact 'shift'>
+            keys.shift is true
+          </if>
+          <if event.key exact 'ctrl'>
+            keys.ctrl is true
+          </if>
+          <if event.key exact 'alt'>
+            keys.alt is true
+          </if>
+        </case>
+        <case keyup>
+          <if event.key exact 'shift'>
+            keys.shift is false
+          </if>
+          <if event.key exact 'ctrl'>
+            keys.ctrl is false
+          </if>
+          <if event.key exact 'alt'>
+            keys.alt is false
+          </if>
+        </case>
+        <case else>
+          // unhandled event type
+        </case>
+      </switch>
+
+    isKeyDown(key):
+      keys.lastKey exact key
+  </functions>
+</input>

@@ -1,0 +1,117 @@
+// Playback module — load, play, pause, stop, seek.
+// Exercises: ffi, state, <during>, <switch>/<case else>, cleanup
+
+<playback module>
+  <ffi>
+    SDL_OpenAudioDevice  @("libSDL3.so")
+    SDL_CloseAudioDevice @("libSDL3.so")
+    SDL_LoadWAV          @("libSDL3.so")
+    SDL_QueueAudio       @("libSDL3.so")
+    SDL_PauseAudioDevice @("libSDL3.so")
+    SDL_FreeWAV          @("libSDL3.so")
+  </ffi>
+
+  <types>
+    <Track>
+      path exact string
+      data
+      length is 0
+      loaded is false
+    </Track>
+
+    <PlayState>
+      idle
+      playing
+      paused
+      stopped
+    </PlayState>
+  </types>
+
+  <var>
+    device
+    currentTrack
+    state is idle
+    position is 0
+    volume is 100
+    deviceOpen is false
+  </var>
+
+  <state>
+    set_currentTrack
+    set_state exact PlayState
+    set_position
+    set_volume exact number
+    set_deviceOpen
+  </state>
+
+  <functions>
+    boot:
+      <if SDL_OpenAudioDevice() as dev>
+        device is dev
+        set_deviceOpen is true
+      </if>
+
+    boot cleanup:
+      <if deviceOpen>
+        SDL_CloseAudioDevice(device)
+      </if>
+
+    load(path):
+      <if SDL_LoadWAV(path) as wav>
+        track is Track
+        track.path is path
+        track.data is wav.data
+        track.length is wav.length
+        track.loaded is true
+        set_currentTrack is track
+      </if>
+
+    play:
+      <if currentTrack.loaded and deviceOpen>
+        SDL_QueueAudio(device, currentTrack.data, currentTrack.length)
+        SDL_PauseAudioDevice(device, false)
+        set_state is playing
+      </if>
+
+    pause:
+      <if state exact playing>
+        SDL_PauseAudioDevice(device, true)
+        set_state is paused
+      </if>
+
+    resume:
+      <if state exact paused>
+        SDL_PauseAudioDevice(device, false)
+        set_state is playing
+      </if>
+
+    stop:
+      SDL_PauseAudioDevice(device, true)
+      set_position is 0
+      set_state is stopped
+
+    togglePlay:
+      <switch state>
+        <case playing>
+          pause
+        </case>
+        <case paused>
+          resume
+        </case>
+        <case else>
+          play
+        </case>
+      </switch>
+
+    setVolume(level):
+      set_volume is math.clamp(level, 0, 100)
+
+    trackProgress every 100:
+      <during state exact playing>
+        set_position is position + 100
+        <if position exact or above currentTrack.length>
+          stop
+        </if>
+      </during>
+  </functions>
+</playback>
