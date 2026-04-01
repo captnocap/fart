@@ -965,6 +965,61 @@ No `<timer>` block. It's still a function — composable, scoped, `stop` works. 
 
 ---
 
+## `<log>` — Debug Wrapping
+
+Wrap anything in `<log>` to trace what ran, what it returned, and how long it took. No `console.log`, no `print`, no debug statements to clean up.
+
+```
+<functions>
+  saveData:
+    <log>
+      fetchData + validateData + writeToDb
+    </log>
+</functions>
+```
+
+Named logs tag their entries for filtering:
+
+```
+<log save>
+  fetchData + validateData + writeToDb
+</log>
+```
+
+Nested logs produce a timing tree:
+
+```
+<log frame>
+  <log input>
+    pollEvents
+  </log>
+  <log physics>
+    stepPhysics
+  </log>
+  <log paint>
+    paintFrame
+  </log>
+</log>
+```
+
+Frame total with input/physics/paint breakdowns — declarative telemetry.
+
+Works inside `<during>`:
+
+```
+<during loading>
+  <log>
+    fetchData
+  </log>
+</during>
+```
+
+Every activation gets logged. Deactivation logs the duration.
+
+**Production:** Strip `<log>` tags — they compile to nothing. Or leave them in to feed the telemetry/debug system.
+
+---
+
 ## Ambient Namespaces
 
 Always available. No import needed. These are modules the engine provides — the FFI and equations live inside, the author just uses named verbs.
