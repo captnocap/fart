@@ -9,19 +9,6 @@ const active_files = [_][]const u8{
     "tsz/compiler/smith_LOAD_ORDER.txt",
     "tsz/compiler/smith_bundle.zig",
     "tsz/compiler/smith_sync.zig",
-    "tsz/compiler/smith_rules.js",
-    "tsz/compiler/smith_logs.js",
-    "tsz/compiler/smith_core.js",
-    "tsz/compiler/smith_index.js",
-    "tsz/compiler/smith_parse.js",
-    "tsz/compiler/smith_parse_map.js",
-    "tsz/compiler/smith_attrs.js",
-    "tsz/compiler/smith_preflight.js",
-    "tsz/compiler/smith_emit.js",
-    "tsz/compiler/smith_emit_split.js",
-    "tsz/compiler/smith_page.js",
-    "tsz/compiler/smith_mod.js",
-    "tsz/compiler/smith_soup.js",
     "tsz/compiler/smith_DICTIONARY.md",
     "tsz/compiler/forge.zig",
     "tsz/build.zig",
@@ -29,11 +16,7 @@ const active_files = [_][]const u8{
 };
 
 const active_dirs = [_][]const u8{
-    "tsz/compiler/smith_collect/",
-    "tsz/compiler/smith_lanes/",
-    "tsz/compiler/smith_parse/",
-    "tsz/compiler/smith_preflight/",
-    "tsz/compiler/smith_emit/",
+    "tsz/compiler/smith/",
 };
 
 pub fn main() !void {
@@ -217,32 +200,14 @@ fn isActivePath(rel_path: []const u8) bool {
 }
 
 fn isLegacyCompilerPath(rel_path: []const u8) bool {
-    return std.mem.startsWith(u8, rel_path, "tsz/compiler/smith/");
+    // Legacy paths are the old flat smith_*.js at compiler root
+    if (!std.mem.startsWith(u8, rel_path, "tsz/compiler/")) return false;
+    const after = rel_path["tsz/compiler/".len..];
+    return std.mem.startsWith(u8, after, "smith_") and std.mem.endsWith(u8, after, ".js");
 }
 
 fn isSmithSource(rel_path: []const u8) bool {
-    inline for ([_][]const u8{
-        "smith_rules.js",
-        "smith_logs.js",
-        "smith_core.js",
-        "smith_index.js",
-        "smith_parse.js",
-        "smith_parse_map.js",
-        "smith_attrs.js",
-        "smith_preflight.js",
-        "smith_emit.js",
-        "smith_emit_split.js",
-        "smith_page.js",
-        "smith_mod.js",
-        "smith_soup.js",
-    }) |entry| {
-        if (std.mem.eql(u8, rel_path, entry)) return true;
-    }
-    return std.mem.startsWith(u8, rel_path, "smith_collect/") or
-        std.mem.startsWith(u8, rel_path, "smith_lanes/") or
-        std.mem.startsWith(u8, rel_path, "smith_parse/") or
-        std.mem.startsWith(u8, rel_path, "smith_preflight/") or
-        std.mem.startsWith(u8, rel_path, "smith_emit/");
+    return std.mem.startsWith(u8, rel_path, "smith/");
 }
 
 fn printSliceGroup(writer: anytype, title: []const u8, items: []const []const u8) !void {

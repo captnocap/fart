@@ -193,21 +193,6 @@ pub fn build(b: *std.Build) void {
         const smith_bundle_step = b.step("smith-bundle", "Generate compiler/dist/smith.bundle.js");
         smith_bundle_step.dependOn(&smith_bundle.step);
 
-        const smith_refactor_bundle = b.addRunArtifact(smith_bundle_tool);
-        smith_refactor_bundle.setCwd(b.path("."));
-        smith_refactor_bundle.addDirectoryArg(b.path("compiler/smith_refactor"));
-        const smith_refactor_bundle_out = smith_refactor_bundle.addOutputFileArg("smith-refactor.bundle.js");
-        smith_refactor_bundle.addFileInput(b.path("compiler/smith_refactor/smith_LOAD_ORDER.txt"));
-        const smith_refactor_manifest = std.fs.cwd().readFileAlloc(b.allocator, "compiler/smith_refactor/smith_LOAD_ORDER.txt", 1024 * 1024) catch @panic("read smith refactor manifest");
-        var smith_refactor_lines = std.mem.splitScalar(u8, smith_refactor_manifest, '\n');
-        while (smith_refactor_lines.next()) |raw_line| {
-            const line = std.mem.trim(u8, raw_line, " \t\r");
-            if (line.len == 0 or line[0] == '#') continue;
-            smith_refactor_bundle.addFileInput(b.path(b.fmt("compiler/smith_refactor/{s}", .{line})));
-        }
-        const smith_refactor_bundle_step = b.step("smith-refactor-bundle", "Generate compiler/smith_refactor/dist/smith.bundle.js");
-        smith_refactor_bundle_step.dependOn(&smith_refactor_bundle.step);
-
         const smith_sync_tool = b.addExecutable(.{
             .name = "smith-sync-tool",
             .root_module = b.createModule(.{
@@ -249,31 +234,6 @@ pub fn build(b: *std.Build) void {
         const forge_step = b.step("forge", "Forge: compiler kernel + QuickJS (hosts Smith JS codegen)");
         forge_step.dependOn(&forge_install.step);
 
-        const forge_refactor_mod = b.createModule(.{
-            .root_source_file = b.path("compiler/forge_refactor.zig"),
-            .target = target,
-            .optimize = optimize,
-        });
-        const forge_refactor_exe = b.addExecutable(.{
-            .name = "forge-refactor",
-            .root_module = forge_refactor_mod,
-        });
-        forge_refactor_exe.linkLibC();
-        forge_refactor_exe.root_module.addIncludePath(b.path("../love2d/quickjs"));
-        forge_refactor_exe.root_module.addCSourceFiles(.{
-            .root = b.path("../love2d/quickjs"),
-            .files = &.{ "cutils.c", "dtoa.c", "libregexp.c", "libunicode.c", "quickjs.c" },
-            .flags = &.{ "-O2", "-D_GNU_SOURCE", "-DQUICKJS_NG_BUILD" },
-        });
-        if (target.result.os.tag == .linux) {
-            forge_refactor_exe.linkSystemLibrary("m");
-            forge_refactor_exe.linkSystemLibrary("pthread");
-        }
-        forge_refactor_exe.step.dependOn(&smith_refactor_bundle.step);
-        forge_refactor_exe.step.addWatchInput(smith_refactor_bundle_out) catch @panic("OOM");
-        const forge_refactor_install = b.addInstallArtifact(forge_refactor_exe, .{});
-        const forge_refactor_step = b.step("forge-refactor", "Forge refactor: isolated Smith refactor host");
-        forge_refactor_step.dependOn(&forge_refactor_install.step);
     }
 
     // ── Compiler tests ───────────────────────────────────────────
