@@ -1,16 +1,11 @@
 // ═══════════════════════════════════════════════════════════════════════
 // ENGINE — the entire runtime lifecycle in intent syntax
 //
-// This is a translation of engine.zig (2216 lines) into chad-tier .tsz.
-// Where the syntax works, it reads clean. Where it doesn't, that's a
-// gap in the dictionary we need to fix.
+// Translation of engine.zig (2216 lines). Uses <during> for lifecycle
+// phases, state-driven behavior, and recursive tree walks.
 // ═══════════════════════════════════════════════════════════════════════
 
 <engine module>
-
-  // ═════════════════════════════════════════════════════════════════════
-  // USES — module dependencies
-  // ═════════════════════════════════════════════════════════════════════
 
   <uses>
     layout
@@ -92,23 +87,20 @@
   // ═════════════════════════════════════════════════════════════════════
 
   <var>
-    // feature flags
-    features is Feature array
-
-    // window
     window
     win_w is 0.0
     win_h is 0.0
-
-    // text engine
     text_engine
+    config is AppConfig
 
     // cursor
     cursor_kind is 'arrow'
     hovered_node
 
-    // physics
+    // subsystem flags
     physics_initialized is false
+    carts_scanned is false
+    semantic_overlay is false
 
     // terminal
     terminals_initialized is bool array
@@ -149,18 +141,11 @@
     paint_opacity is 1.0
     flow_enabled is true
     hover_changed is false
-    semantic_overlay is false
 
     // main loop
     running is true
-    carts_scanned is false
     fps_frames is 0
     fps_last is 0
-
-    // config
-    config is AppConfig
-
-    // timing
     prev_tick is 0
     cursor_visible is true
   </var>
@@ -193,27 +178,29 @@
   </state>
 
   // ═════════════════════════════════════════════════════════════════════
-  // FUNCTIONS
+  // LIFECYCLE — <during> phases
   // ═════════════════════════════════════════════════════════════════════
 
   <functions>
 
-    // ── LIFECYCLE ──────────────────────────────────────────────────────
+    // ── BOOT ──────────────────────────────────────────────────────────
+    // The entire engine startup is one composed chain.
+    // Each step has a cleanup pair. If any step fails, cleanups
+    // unwind in reverse.
 
     boot:
-      crashlog.init + initSignals + initDebugServer + initSDL + initCanvas +
-      initGeometry + initWindow + initVideo + initRenderSurfaces + initCapture +
-      initEffects + initGPU + initText + initLayout + initQJS + initLuaJIT +
-      registerBridges + runAppInit + runTestHarness + runScripts + runFirstTick +
-      initPtyRemote + mainLoop
+      crashlog.init + initSignals + initDebugServer + initSDL +
+      initCanvas + initGeometry + initWindow + initVideo +
+      initRenderSurfaces + initCapture + initEffects + initGPU +
+      initText + initLayout + initQJS + initLuaJIT + registerBridges +
+      runAppInit + runTestHarness + runScripts + runFirstTick +
+      initPtyRemote
 
     shutdown:
       pty_remote.deinit + debug_server.deinit + windows.deinitAll +
       effects.deinit + capture.deinit + render_surfaces.deinit +
-      videos.deinit + gpu.deinit + text_engine.deinit + qjs.deinit +
-      luajit.deinit + sdl.quit
-
-    // ── INIT STEPS (each paired with cleanup via composition order) ──
+      videos.deinit + gpu.deinit + text_engine.deinit +
+      qjs.deinit + luajit.deinit + sdl.quit
 
     initSignals:
       crashlog.ignoreSignal(13)
@@ -343,16 +330,52 @@
     initPtyRemote cleanup:
       pty_remote.deinit
 
-    // ── MAIN LOOP ─────────────────────────────────────────────────────
+  </functions>
 
-    mainLoop:
-      <while running>
-        checkHotReload + pollEvents + tickSystems + doLayout +
-        tickPhysics + layoutWindows + resolveSelection +
-        updateMedia + updateTimers + paintFrame + paintOverlays +
-        presentFrame + checkCapture + checkTests + collectTelemetry +
-        updateFPS
-      </while>
+  // ═════════════════════════════════════════════════════════════════════
+  // DURING RUNNING — the main loop
+  //
+  // This entire block is active while `running` is true.
+  // Setting running to false exits the engine.
+  // ═════════════════════════════════════════════════════════════════════
+
+  <during running>
+    checkHotReload + pollEvents + tickSystems + doLayout +
+    tickPhysics + layoutWindows + resolveSelection +
+    updateMedia + updateTimers + paintFrame + paintOverlays +
+    presentFrame + checkCapture + checkTests + collectTelemetry +
+    updateFPS
+  </during>
+
+  // ═════════════════════════════════════════════════════════════════════
+  // DURING STATES — reactive behaviors tied to variables
+  // ═════════════════════════════════════════════════════════════════════
+
+  <during physics_initialized>
+    tickPhysicsStep every 16
+  </during>
+
+  <during term_sel.dragging>
+    // terminal selection is active — drag updates happen in handleMouseMove
+  </during>
+
+  <during input_drag.active>
+    // text input drag is active — updates happen in handleMouseMove
+  </during>
+
+  <during canvas_drag.node>
+    // canvas pan is active — drag updates happen in handleMouseMove
+  </during>
+
+  <during semantic_overlay>
+    // semantic coloring is active on focused terminal
+  </during>
+
+  // ═════════════════════════════════════════════════════════════════════
+  // FRAME FUNCTIONS
+  // ═════════════════════════════════════════════════════════════════════
+
+  <functions>
 
     // ── HOT RELOAD ────────────────────────────────────────────────────
 
@@ -418,7 +441,7 @@
         </switch>
       </while>
 
-    // ── EVENT HANDLERS ────────────────────────────────────────────────
+    // ── WINDOW ────────────────────────────────────────────────────────
 
     handleResize:
       size is sdl.getWindowSize(window)
@@ -428,32 +451,29 @@
       breakpoint.update(win_w)
       geometry.save(window)
 
+    // ── MOUSE DOWN ────────────────────────────────────────────────────
+
     handleMouseDown:
       luajit.updateMouseButton(true, event.button exact 'right')
 
-      // render surface gets first shot
       <if render_surfaces.handleMouseDown(event.x, event.y, event.button)>
         stop
       </if>
 
-      // physics drag
       <if event.button exact 'left' and physics.isInitialized>
         physics.startDrag(event.x, event.y)
       </if>
 
-      // context menu dismiss
       <if event.button exact 'left' and context_menu.isVisible>
         <if context_menu.handleClick(event.x, event.y)>
           stop
         </if>
       </if>
 
-      // right click — context menu
       <if event.button exact 'right'>
         handleRightClick
       </if>
 
-      // left click — interactive elements
       <if event.button exact 'left'>
         handleLeftClick
       </if>
@@ -550,7 +570,6 @@
       </else>
 
     handleBackgroundClick:
-      // check terminals
       clicked_term is findClickedTerminal(event.x, event.y)
       <if clicked_term>
         set_focused_terminal is clicked_term
@@ -562,6 +581,8 @@
       </else>
       input.unfocus
 
+    // ── MOUSE MOVE ────────────────────────────────────────────────────
+
     handleMouseMove:
       luajit.updateMouse(event.x, event.y)
 
@@ -569,33 +590,36 @@
         stop
       </if>
 
-      <if physics.isDragging>
+      <during physics.isDragging>
         physics.updateDrag(event.x, event.y)
-      </if>
+      </during>
 
-      <if term_sel.dragging>
+      <during term_sel.dragging>
         updateTerminalDrag(event.x, event.y)
-      </if>
+      </during>
 
-      <if input_drag.active>
+      <during input_drag.active>
         local_x is event.x - input_drag.node_x - input_drag.node_pl
         input.updateDrag(input_drag.id, local_x, input_drag.font_size)
-      </if>
+      </during>
 
       updateHover(config.root, event.x, event.y)
       context_menu.updateHover(event.x, event.y)
       updateCanvasHover(event.x, event.y)
 
-      <if event.dragging_left and canvas_drag.node>
+      <during canvas_drag.node>
         dx is event.x - canvas_drag.last_x
         dy is event.y - canvas_drag.last_y
         canvas.handleDrag(dx, dy)
         canvas_drag.last_x is event.x
         canvas_drag.last_y is event.y
-      </if>
-      <else if event.dragging_left>
+      </during>
+
+      <if event.dragging_left and not canvas_drag.node>
         selection.onMouseDrag(config.root, event.x, event.y)
-      </else>
+      </if>
+
+    // ── MOUSE UP ──────────────────────────────────────────────────────
 
     handleMouseUp:
       luajit.updateMouseButton(false, event.button exact 'right')
@@ -612,6 +636,8 @@
         selection.onMouseUp
       </if>
 
+    // ── TEXT INPUT ─────────────────────────────────────────────────────
+
     handleTextInput:
       <if terminals_initialized[focused_terminal]>
         terminalHandleTextInput(event.text)
@@ -626,12 +652,13 @@
       </if>
       input.handleTextInput(event.text)
 
+    // ── KEY DOWN ──────────────────────────────────────────────────────
+
     handleKeyDown:
       <if capture.handleKey(event.sym)>
         stop
       </if>
 
-      // terminal copy/paste and special keys
       <if terminals_initialized[focused_terminal]>
         <if event.ctrl and event.shift>
           <switch event.sym>
@@ -679,13 +706,13 @@
         qjs.callGlobalInt('__onKeyDown', event.sym)
       </if>
 
+    // ── SCROLL ────────────────────────────────────────────────────────
+
     handleScroll:
-      // terminal scrollback
       <if handleTerminalScroll(event.x, event.y, event.wheel_y)>
         stop
       </if>
 
-      // canvas zoom vs inner scroll
       cn is events.findCanvasNode(config.root, event.x, event.y)
       <if cn>
         handleCanvasScroll(cn, event)
@@ -711,7 +738,7 @@
       </if>
 
     applyScroll(node, wheel_y, wheel_x):
-      scale is sys.scrollScale
+      scale is OS.scrollScale
       <if wheel_y not exact 0>
         node.scroll_y is node.scroll_y - wheel_y * scale
       </if>
@@ -729,8 +756,8 @@
     // ── SYSTEM TICKS ──────────────────────────────────────────────────
 
     tickSystems:
-      tickQJS + tickLuaJIT + tickApp + tickCartridges + tickTransitions +
-      tickPhysicsInit + tickPtyRemote + tickTerminals
+      tickQJS + tickLuaJIT + tickApp + tickCartridges +
+      tickTransitions + tickPtyRemote + tickTerminals
 
     tickQJS:
       qjs.tick
@@ -755,14 +782,7 @@
     tickTransitions:
       now is sdl.getTicks
       dt is now - prev_tick
-      dt_s is dt / 1000.0
-      transition.tick(dt_s)
-
-    tickPhysicsInit:
-      <if not physics_initialized>
-        initPhysicsFromTree(config.root)
-        set_physics_initialized is true
-      </if>
+      transition.tick(dt / 1000.0)
 
     tickPtyRemote:
       pty_remote.poll
@@ -786,8 +806,7 @@
       <if semantic_detected[i]>
         stop
       </if>
-      rows is terminal.getRowsIdx(i)
-      detect_rows is math.min(rows, 6)
+      detect_rows is math.min(terminal.getRowsIdx(i), 6)
       <for 0..detect_rows as row>
         text is terminal.getRowTextIdx(i, row)
         <if text.contains('Claude Code')>
@@ -824,9 +843,8 @@
     tickPhysics:
       <if physics.isInitialized>
         now is sdl.getTicks
-        dt is now - prev_tick
-        dt_s is math.min(dt / 1000.0, 0.05)
-        physics.tick(dt_s)
+        dt is math.min((now - prev_tick) / 1000.0, 0.05)
+        physics.tick(dt)
       </if>
 
     layoutWindows:
@@ -849,16 +867,17 @@
       effects.update(dt_sec)
       r3d.update(dt_sec)
 
-    // ── PAINT ─────────────────────────────────────────────────────────
+    // ── PAINT — recursive tree walk via <during> ──────────────────────
 
     paintFrame:
       selection.resetWalkState
       set_paint_count is 0
       set_hidden_count is 0
       set_zero_count is 0
-      paintNode(config.root)
+      <during paintNode(config.root)>
+      </during>
 
-    paintNode(node):
+    <during paintNode(node)>
       <if node.style.display exact 'none'>
         set_hidden_count is hidden_count + 1
         stop
@@ -876,7 +895,6 @@
         stop
       </if>
 
-      // save and apply opacity
       saved_opacity is paint_opacity
       <if node.style.opacity below 1.0>
         set_paint_opacity is paint_opacity * node.style.opacity
@@ -901,40 +919,36 @@
 
       paintChildren(node)
       set_paint_opacity is saved_opacity
+    </during>
 
     paintNodeVisuals(node):
       r is node.computed
       is_hovered is hovered_node exact node and node.hoverable
 
-      // hover highlight
       <if is_hovered and not node.style.background_color>
         gpu.drawRect(r.x, r.y, r.w, r.h, 0.15, 0.15, 0.22, 0.6, node.style.border_radius)
       </if>
 
-      // background
       <if node.style.background_color>
         paintBackground(node, is_hovered)
       </if>
 
-      // border without background
       <if not node.style.background_color and node.style.hasBorder>
         paintBorderOnly(node)
       </if>
 
-      // video
       <if node.video_src>
         videos.paintVideo(node.video_src, r.x, r.y, r.w, r.h, paint_opacity)
       </if>
 
-      // render surface
       <if node.render_src>
         render_surfaces.paintSurface(node.render_src, r.x, r.y, r.w, r.h, paint_opacity)
       </if>
 
-      // effects
       <if node.effect_type>
         effects.paintEffect(node.effect_type, r.x, r.y, r.w, r.h, paint_opacity)
       </if>
+
       <if node.effect_render and node.effect_name>
         effects.paintNamedEffect(node, node.effect_name, r.x, r.y, r.w, r.h)
       </if>
@@ -942,25 +956,20 @@
         effects.paintCustomEffect(node, r.x, r.y, r.w, r.h, paint_opacity)
       </else>
 
-      // 3D
       <if node.scene3d>
         r3d.render(node, r.x, r.y, r.w, r.h, paint_opacity)
       </if>
 
-      // selection highlight
       selection.paintHighlight(node, r.x, r.y)
 
-      // terminal
       <if node.terminal>
         paintTerminal(node)
       </if>
 
-      // text
       <if node.text>
         paintText(node)
       </if>
 
-      // text input
       <if node.input_id>
         paintTextInput(node, node.input_id)
       </if>
@@ -991,7 +1000,6 @@
         gpu.clearTextEffect
       </if>
 
-      // underline for links
       <if node.href>
         text_w is measureWidthOnly(node.text, node.font_size)
         underline_y is r.y + pt + text_h - 2
@@ -1038,9 +1046,11 @@
       cy is r.y + r.h / 2
       saved_tf is gpu.getTransform
       gpu.setTransform(0, 0, cx - vx * vz, cy - vy * vz, vz)
+
       <for node.children as child>
         paintNode(child)
       </for>
+
       <if saved_tf.active>
         gpu.setTransform(saved_tf)
       </if>
@@ -1069,8 +1079,6 @@
         exit_code is testharness.runAll(config.root)
         sys.exit(exit_code)
       </if>
-
-    // ── TELEMETRY ─────────────────────────────────────────────────────
 
     collectTelemetry:
       telemetry.collect(paint_count, hidden_count, zero_count, config.root, window, hovered_node)
@@ -1114,13 +1122,11 @@
         stop
       </if>
 
-      // exit previous
       <if hovered_node and hovered_node.handlers.on_hover_exit>
         hovered_node.handlers.on_hover_exit()
       </if>
       set_hovered_node is hit
 
-      // enter new
       <if hit>
         <if hit.handlers.on_hover_enter>
           hit.handlers.on_hover_enter()
@@ -1149,7 +1155,7 @@
         offsetDescendants(child, dy)
       </for>
 
-    // ── TERMINAL HELPERS ──────────────────────────────────────────────
+    // ── TERMINAL ──────────────────────────────────────────────────────
 
     clearTerminalSelection:
       term_sel.active is false
@@ -1199,12 +1205,10 @@
     terminalHandleKey(sym, mod):
       clearTerminalSelection
       terminal.scrollToBottomIdx(focused_terminal)
-      // ctrl+letter → raw control character
       <if mod.ctrl and sym exact or above 'a' and sym exact or below 'z'>
         terminal.writePtyIdx(focused_terminal, controlChar(sym))
         stop
       </if>
-      // special keys → ANSI sequences
       seq is ansiSequence(sym)
       <if seq>
         terminal.writePtyIdx(focused_terminal, seq)
@@ -1215,9 +1219,9 @@
       terminal.scrollToBottomIdx(focused_terminal)
       terminal.writePtyIdx(focused_terminal, text)
 
-    // ── CARTRIDGE HELPERS ─────────────────────────────────────────────
+    // ── CARTRIDGE ─────────────────────────────────────────────────────
 
-    scanCartridgeNodes(node):
+    <during scanCartridgeNodes(node)>
       <if node.cartridge_src>
         <if node.children.length exact 0>
           idx is cartridge.load(node.cartridge_src)
@@ -1233,6 +1237,7 @@
       <for node.children as child>
         scanCartridgeNodes(child)
       </for>
+    </during>
 
     refreshCartridgeChildren(node):
       <for 0..cartridge.count as i>
@@ -1243,9 +1248,9 @@
         </if>
       </for>
 
-    // ── PHYSICS HELPERS ───────────────────────────────────────────────
+    // ── PHYSICS ───────────────────────────────────────────────────────
 
-    initPhysicsFromTree(node):
+    <during initPhysicsFromTree(node)>
       <if node.physics_world>
         physics.init(node.physics_gravity_x, node.physics_gravity_y)
         <for node.children as child>
@@ -1260,6 +1265,7 @@
       <for node.children as child>
         initPhysicsFromTree(child)
       </for>
+    </during>
 
     createPhysicsBody(node):
       visual_child is findVisualChild(node)
@@ -1305,7 +1311,7 @@
         physics.addBoxCollider(body_idx, w, h, collider.physics_density, collider.physics_friction, collider.physics_restitution)
       </else>
 
-    // ── CANVAS HELPERS ────────────────────────────────────────────────
+    // ── CANVAS ────────────────────────────────────────────────────────
 
     positionCanvasNodes(parent):
       <for parent.children as child>
@@ -1338,8 +1344,6 @@
       <for node.children as child>
         offsetNodeXY(child, dx, dy)
       </for>
-
-    // ── SCROLL SCALE (platform-aware) ─────────────────────────────────
 
     OS.scrollScale:
       <if sys.os exact 'macos'>

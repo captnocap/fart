@@ -1092,6 +1092,74 @@ Hashing and encryption.
 
 ---
 
+## Backend Hatches (`<script>`, `<lscript>`, `<zscript>`)
+
+By default, the compiler picks the best backend for each function. When the author knows better, they force it with a hatch. **The syntax inside is identical** — same `<if>`, `<for>`, `<during>`, `is`, `exact`, everything. The hatch only changes the compilation target.
+
+| Hatch | Target | Use when |
+|-------|--------|----------|
+| (none) | compiler picks | default — let the routing table decide |
+| `<script>` | QuickJS (JavaScript) | browser APIs, JSON, string-heavy logic |
+| `<lscript>` | LuaJIT | DSP threads, compute workers, audio |
+| `<zscript>` | Zig (native) | hot loops, GPU, physics, zero-alloc paths |
+
+### Inside `<functions>`
+
+Wrap any function or group of functions in a hatch:
+
+```
+<functions>
+  // compiler picks
+  increment:
+    set_count is count + 1
+
+  // forced to Zig — hot particle loop
+  <zscript>
+  tick every 16:
+    <for particles as p>
+      p.x is p.x + p.vx * dt_sec
+      p.y is p.y + p.vy * dt_sec
+      p.vy is p.vy + gravity
+    </for>
+  </zscript>
+
+  // forced to Lua — runs on DSP thread
+  <lscript>
+  processAudio:
+    <for samples as s>
+      s is s * gain
+      s is math.clamp(s, -1.0, 1.0)
+    </for>
+  </lscript>
+
+  // forced to JS — needs fetch/JSON
+  <script>
+  fetchExternal:
+    result is net.get(apiUrl)
+    set_data is result
+  </script>
+</functions>
+```
+
+### Rules
+
+- **Same syntax everywhere.** The hatch does not change the language — only the backend.
+- **Hatched functions compose with `+`.** A chain can mix backends: `validate + processAudio + updateUI` where each step compiles to a different target.
+- **Hatched functions work with `every`, `cleanup`, `<during>`.** All function features apply.
+- **The compiler handles boundary crossings.** Marshaling data between QuickJS/LuaJIT/Zig at the seams is automatic. The author doesn't think about it unless they want to.
+- **Hatches can wrap multiple functions.** Everything between `<zscript>` and `</zscript>` compiles to that target.
+
+### When to use hatches
+
+Most authors never will. The compiler's routing table picks the right backend. Hatches are for:
+
+- **Performance-critical code** — force `<zscript>` for particle systems, physics, pixel loops
+- **Thread affinity** — force `<lscript>` for audio DSP that must run on the Lua worker thread
+- **Platform APIs** — force `<script>` for browser interop, JSON parsing, string manipulation
+- **Debugging** — temporarily force a backend to isolate where a bug lives
+
+---
+
 ## Imports
 
 ```
@@ -1142,6 +1210,9 @@ Imports everything exported (classifiers, effects, glyphs).
 | `componentDidMount` | React lifecycle | `boot:` or `<during boot>` |
 | `while (true) { }` for state | loop as state machine | `<during varName>` |
 | nested if/else for UI states | branching chains | multiple `<during state>` blocks |
+| raw JS inside `<script>` | language leak | intent syntax with `<script>` hatch |
+| raw Lua inside `<lscript>` | language leak | intent syntax with `<lscript>` hatch |
+| raw Zig inside `<zscript>` | language leak | intent syntax with `<zscript>` hatch |
 
 ---
 
