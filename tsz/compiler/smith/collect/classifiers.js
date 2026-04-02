@@ -101,6 +101,36 @@ function parseChadClassifiers(text) {
   }
 
   ctx.classifiers = merged;
+
+  // 3. Parse glyph blocks: <name glyph> ... </name>
+  ctx._glyphRegistry = {};
+  var glyphRe = /<(\w+)\s+glyph\s*>([\s\S]*?)<\/\1>/g;
+  var gm;
+  while ((gm = glyphRe.exec(text)) !== null) {
+    var gName = gm[1];
+    var gBody = gm[2];
+    var gDef = { d: '', fill: '#ffffff' };
+    var gLines = gBody.split('\n');
+    for (var gi = 0; gi < gLines.length; gi++) {
+      var gl = gLines[gi].trim();
+      if (!gl || gl.startsWith('//')) continue;
+      var gpm = gl.match(/^(\w+)\s+is\s+(.+)$/);
+      if (gpm) {
+        var gProp = gpm[1];
+        var gVal = gpm[2].trim();
+        if ((gVal[0] === "'" && gVal[gVal.length - 1] === "'") ||
+            (gVal[0] === '"' && gVal[gVal.length - 1] === '"')) {
+          gVal = gVal.slice(1, -1);
+        }
+        // Resolve theme tokens for fill
+        if (gProp === 'fill' && gVal.startsWith('theme-')) {
+          gVal = resolveThemeToken(gVal);
+        }
+        gDef[gProp] = gVal;
+      }
+    }
+    ctx._glyphRegistry[gName] = gDef;
+  }
 }
 
 var _defaultStyleTokens = {

@@ -416,8 +416,49 @@ function emitLogicBlocks(ctx) {
     // JS/Lua logic — with section dividers matching reference
     out += `\n// \u2500\u2500 Embedded JS logic \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n`;
     out += `const JS_LOGIC =\n`;
-    // Generate JS logic: object array setters + script block + state setter rewrites
+    // Generate JS logic: ambient namespaces + object array setters + script block
     const jsLines = [];
+
+    // ── Ambient namespace objects ──
+    // Provides time.*, sys.*, device.*, input.* as JS globals with live getters.
+    // Uses existing host functions where available, JS Date for time values.
+    jsLines.push('// Ambient namespaces');
+    jsLines.push('var time = {');
+    jsLines.push('  get hour() { return new Date().getHours(); },');
+    jsLines.push('  get minute() { return String(new Date().getMinutes()).padStart(2, "0"); },');
+    jsLines.push('  get second() { return String(new Date().getSeconds()).padStart(2, "0"); },');
+    jsLines.push('  get year() { return new Date().getFullYear(); },');
+    jsLines.push('  get month() { return new Date().getMonth() + 1; },');
+    jsLines.push('  get day() { return new Date().getDate(); },');
+    jsLines.push('  get fps() { return typeof getFps === "function" ? getFps() : 0; },');
+    jsLines.push('  get delta() { return 16; },');
+    jsLines.push('  get elapsed() { return Date.now(); },');
+    jsLines.push('  get timestamp() { return Date.now(); },');
+    jsLines.push('};');
+    jsLines.push('var sys = {');
+    jsLines.push('  get user() { return typeof __os_user !== "undefined" ? __os_user : "user"; },');
+    jsLines.push('  get uptime() { return Math.floor(Date.now() / 1000); },');
+    jsLines.push('  get os() { return "linux"; },');
+    jsLines.push('  get host() { return "localhost"; },');
+    jsLines.push('  get kernel() { return "unknown"; },');
+    jsLines.push('};');
+    jsLines.push('var device = {');
+    jsLines.push('  get width() { return 1280; },');
+    jsLines.push('  get height() { return 800; },');
+    jsLines.push('  get battery() { return 100; },');
+    jsLines.push('  get online() { return true; },');
+    jsLines.push('  get dpi() { return 96; },');
+    jsLines.push('};');
+    jsLines.push('var input = {');
+    jsLines.push('  mouse: {');
+    jsLines.push('    get x() { return typeof getMouseX === "function" ? getMouseX() : 0; },');
+    jsLines.push('    get y() { return typeof getMouseY === "function" ? getMouseY() : 0; },');
+    jsLines.push('  },');
+    jsLines.push('  keys: { shift: false, ctrl: false, alt: false },');
+    jsLines.push('  touch: { count: 0 },');
+    jsLines.push('};');
+    jsLines.push('');
+
     // Object array JS var declarations + setters
     // For page mode (scriptBlock): var declarations here, setter functions AFTER scriptBlock
     //   so they override page.js setters that lack __setObjArr calls.
