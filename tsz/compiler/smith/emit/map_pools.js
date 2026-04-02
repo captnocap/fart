@@ -444,7 +444,7 @@ function emitMapPoolRebuilds(ctx, meta) {
       }
       // Replace handler refs in per-item arrays with per-item handler string pointers
       // Must check ALL maps' handlers since nested map handlers may appear in parent per-item arrays
-      const pidPressField = ctx.handlerDispatch === 'js' ? 'js_on_press' : 'lua_on_press';
+      const pidPressField = ctx.handlerDispatch === 'lua' ? 'lua_on_press' : 'js_on_press';
       for (let mj = 0; mj < ctx.maps.length; mj++) {
         const allMH = ctx.handlers.filter(h => h.inMap && h.mapIdx === mj);
         for (let hi = 0; hi < allMH.length; hi++) {
@@ -559,6 +559,10 @@ function emitMapPoolRebuilds(ctx, meta) {
             `_oa${cidx}_${cf.name}_lens[_flat_j]`
           );
         }
+        // Also replace bare _j refs (from template literal iterVar) with _flat_j
+        fixedArgs = fixedArgs.replace(new RegExp(`_oa${cidx}_(\\w+)\\[_j\\]`, 'g'), `_oa${cidx}_$1[_flat_j]`);
+        fixedArgs = fixedArgs.replace(new RegExp(`_oa${cidx}_(\\w+)_lens\\[_j\\]`, 'g'), `_oa${cidx}_$1_lens[_flat_j]`);
+        fixedArgs = fixedArgs.replace(/@intCast\(_j\)/g, '@intCast(_flat_j)');
         out += `                _map_texts_${nmi}_${ti}[_flat_j] = std.fmt.bufPrint(&_map_text_bufs_${nmi}_${ti}[_flat_j], "${dt.fmtString}", .{ ${fixedArgs} }) catch "";\n`;
       }
       // Build per-item inner array from the shared children template
@@ -592,7 +596,7 @@ function emitMapPoolRebuilds(ctx, meta) {
         out += `                    _map_lua_ptrs_${nmi}_${nhi}[_flat_j] = @ptrCast(_map_lua_bufs_${nmi}_${nhi}[_flat_j][0.._n.len :0]);\n`;
         out += `                }\n`;
         const mh = nestedHandlers[nhi];
-        const nestedPressField = ctx.handlerDispatch === 'js' ? 'js_on_press' : 'lua_on_press';
+        const nestedPressField = ctx.handlerDispatch === 'lua' ? 'lua_on_press' : 'js_on_press';
         const nestedPtrRepl = `.${nestedPressField} = _map_lua_ptrs_${nmi}_${nhi}[_flat_j]`;
         nestedPoolNode = nestedPoolNode.replace(`.lua_on_press = "${mh.luaBody ? mh.luaBody.replace(/\\/g, '\\\\').replace(/"/g, '\\"') : ''}"`, nestedPtrRepl);
         nestedPoolNode = nestedPoolNode.replace(`.js_on_press = "${mh.luaBody ? mh.luaBody.replace(/\\/g, '\\\\').replace(/"/g, '\\"') : ''}"`, nestedPtrRepl);
@@ -613,7 +617,7 @@ function emitMapPoolRebuilds(ctx, meta) {
       const imMeta = _mapMeta[imi];
       if (!imMeta) continue;
       const imOa = im.oa;
-      const imPressField = ctx.handlerDispatch === 'js' ? 'js_on_press' : 'lua_on_press';
+      const imPressField = ctx.handlerDispatch === 'lua' ? 'lua_on_press' : 'js_on_press';
   
       out += `        // inline map ${imi}: ${imOa.getter}.map (per-parent)\n`;
       out += `        _map_count_${imi}[_i] = @min(_oa${im.oaIdx}_len, MAX_MAP_${imi});\n`;
@@ -820,8 +824,12 @@ function emitMapPoolRebuilds(ctx, meta) {
       out += `        }\n        }\n`;
   
       // Bind inline pool to parent's per-item array
-      if (im.parentArr && _promotedToPerItem.has(im.parentArr)) {
-        out += `        _pi_${im.parentArr}_${mi}[${im.childIdx}].children = _map_pool_${imi}[_i][0.._map_count_${imi}[_i]];\n`;
+      if (im.parentArr) {
+        const isPerItem = _promotedToPerItem.has(im.parentArr) ||
+                          (m._mapPerItemDecls && m._mapPerItemDecls.some(function(p) { return p.name === im.parentArr; }));
+        if (isPerItem) {
+          out += `        _pi_${im.parentArr}_${mi}[${im.childIdx}].children = _map_pool_${imi}[_i][0.._map_count_${imi}[_i]];\n`;
+        }
       }
     }
   
@@ -867,7 +875,7 @@ function emitMapPoolRebuilds(ctx, meta) {
           }
           // Replace handler refs in inner array items with per-item handler string pointers
           // Must check ALL maps' handlers since nested map handlers may appear in parent inner arrays
-          const innerPressField = ctx.handlerDispatch === 'js' ? 'js_on_press' : 'lua_on_press';
+          const innerPressField = ctx.handlerDispatch === 'lua' ? 'lua_on_press' : 'js_on_press';
           for (let mj = 0; mj < ctx.maps.length; mj++) {
             const allMH = ctx.handlers.filter(h => h.inMap && h.mapIdx === mj);
             for (let hi = 0; hi < allMH.length; hi++) {
@@ -959,7 +967,7 @@ function emitMapPoolRebuilds(ctx, meta) {
       }
       // Replace handler refs with per-item handler string pointers
       // Use js_on_press when there's a <script> block (QuickJS dispatch)
-      const pressField = ctx.handlerDispatch === 'js' ? 'js_on_press' : 'lua_on_press';
+      const pressField = ctx.handlerDispatch === 'lua' ? 'lua_on_press' : 'js_on_press';
       if (typeof globalThis.__SMITH_DEBUG_MAP_TEXT !== 'undefined') {
         ctx._debugLines.push('[MAP_POOL_NODE] mi=' + mi + ' pressField=' + pressField + ' poolNode=' + poolNode.substring(0, 300));
       }

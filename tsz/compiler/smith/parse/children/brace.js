@@ -46,7 +46,7 @@ function tryParseBraceChild(c, children) {
       const savedPropsPeek = c.save();
       c.advance(); c.advance(); c.advance(); c.advance(); // skip props . field .
       let isPropsMapCall = c.isIdent('map') && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.lparen;
-      if (!isPropsMapCall && (c.isIdent('slice') || c.isIdent('filter')) && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.lparen) {
+      while (!isPropsMapCall && (c.isIdent('slice') || c.isIdent('filter') || c.isIdent('sort')) && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.lparen) {
         c.advance(); c.advance();
         let pd2 = 1;
         while (c.pos < c.count && pd2 > 0) {
@@ -56,6 +56,7 @@ function tryParseBraceChild(c, children) {
         }
         if (c.kind() === TK.rparen) c.advance();
         if (c.kind() === TK.dot) { c.advance(); isPropsMapCall = c.isIdent('map') && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.lparen; }
+        else break;
       }
       c.restore(savedPropsPeek);
       if (isPropsMapCall) {
@@ -80,9 +81,9 @@ function tryParseBraceChild(c, children) {
       c.advance();
       c.advance();
       let isMapCall = c.isIdent('map') && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.lparen;
-      // Handle .slice(...).map() and .filter(...).map() chaining
-      if (!isMapCall && (c.isIdent('slice') || c.isIdent('filter')) && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.lparen) {
-        c.advance(); c.advance(); // skip 'slice' '('
+      // Handle .slice(...).filter(...).sort(...).map() chaining (multiple)
+      while (!isMapCall && (c.isIdent('slice') || c.isIdent('filter') || c.isIdent('sort')) && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.lparen) {
+        c.advance(); c.advance(); // skip 'filter/slice/sort' '('
         let pd = 1;
         while (c.pos < c.count && pd > 0) {
           if (c.kind() === TK.lparen) pd++;
@@ -93,7 +94,7 @@ function tryParseBraceChild(c, children) {
         if (c.kind() === TK.dot) {
           c.advance();
           isMapCall = c.isIdent('map') && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.lparen;
-        }
+        } else break;
       }
       c.restore(savedPeek);
       if (isMapCall) {

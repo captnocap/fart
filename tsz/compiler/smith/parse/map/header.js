@@ -5,10 +5,10 @@ function tryParseMapHeader(c, defaultItemParam, defaultIndexParam) {
   c.advance(); // skip array or field identifier
   if (c.kind() !== TK.dot) { c.restore(saved); return null; }
   c.advance(); // skip .
-  // Skip .slice(...) or .filter(...) chaining before .map()
-  if ((c.isIdent('slice') || c.isIdent('filter')) && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.lparen) {
-    c.advance(); c.advance(); // skip 'slice' '('
-    let pd = 1;
+  // Skip .slice(...), .filter(...), .sort(...) chaining before .map()
+  while ((c.isIdent('slice') || c.isIdent('filter') || c.isIdent('sort')) && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.lparen) {
+    c.advance(); c.advance(); // skip 'filter/slice/sort' '('
+    var pd = 1;
     while (c.pos < c.count && pd > 0) {
       if (c.kind() === TK.lparen) pd++;
       if (c.kind() === TK.rparen) pd--;
