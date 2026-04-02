@@ -261,6 +261,37 @@ if [ "$SRC_LOOPS" -gt 0 ]; then
     fi
 fi
 
+# ── 6c. Unresolved bracket text in map ───────────────────────
+# If generated code contains .text = "[fieldname]" with literal brackets,
+# a template expression like {item.field} was compiled as literal text
+# instead of resolving to an OA field reference.
+if [ "$SRC_LOOPS" -gt 0 ]; then
+    BRACKET_TEXTS=$(gocount '\.text = "\[[a-zA-Z]+\]' "$GEN_BLOB")
+    if [ "$BRACKET_TEXTS" -gt 0 ]; then
+        BRACKET_SAMPLES=$(grep -oE '\.text = "\[[a-zA-Z]+\][^"]*"' <<< "$GEN_BLOB" 2>/dev/null | head -3 | tr '\n' ', ' | sed 's/,$//')
+        fail "$BRACKET_TEXTS unresolved bracket text(s) in map — template expressions not compiled: $BRACKET_SAMPLES"
+    fi
+fi
+
+# ── 6d. Unfilled empty text nodes ─────────────────────────────
+# Every .text = "" was intended to have content. Some are dynText placeholders
+# filled at runtime via _dyn_text_N vars, bufPrint, or __setStateString.
+# Any text="" without a corresponding fill is a dropped expression.
+GEN_EMPTY_TEXTS=$(gocount '\.text = ""' "$GEN_BLOB")
+if [ "$GEN_EMPTY_TEXTS" -gt 0 ]; then
+    # _dyn_text_N vars: each unique var is one placeholder fill
+    GEN_DYN_TEXT_UNIQUE=$(grep -oE '_dyn_text_[0-9]+' <<< "$GEN_BLOB" 2>/dev/null | sort -u | wc -l | tr -d ' ')
+    # JS __setStateString fills (each targets a string state slot used as text)
+    GEN_JS_TEXT_FILLS=$(gocount '__setStateString' "$GEN_BLOB")
+    # Map text arrays: each unique _map_texts_N_M covers one text="" per map item
+    GEN_MAP_TEXT_UNIQUE=$(grep -oE '_map_texts_[0-9]+_[0-9]+' <<< "$GEN_BLOB" 2>/dev/null | sort -u | wc -l | tr -d ' ')
+    GEN_TOTAL_FILLS=$((GEN_DYN_TEXT_UNIQUE + GEN_JS_TEXT_FILLS + GEN_MAP_TEXT_UNIQUE))
+    UNFILLED=$((GEN_EMPTY_TEXTS - GEN_TOTAL_FILLS))
+    if [ "$UNFILLED" -gt 0 ]; then
+        fail "$UNFILLED text node(s) compiled as empty with no runtime fill — expression dropped"
+    fi
+fi
+
 # ── 7. Component inlining check ──────────────────────────────
 COMPONENT_DEFS=$(grep -oE '^function ([A-Z][A-Za-z0-9_]+)' "$SOURCE" 2>/dev/null | \
     sed 's/^function //' | grep -v '^App$' || true)
