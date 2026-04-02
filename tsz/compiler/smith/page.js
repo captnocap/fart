@@ -152,6 +152,20 @@ function parsePageVarBlock(block) {
         continue;
       }
 
+      // Dictionary data types: array, TYPE array, object, objects
+      if (value === 'array' || /^\w+\s+array$/.test(value)) {
+        vars.push({ name: name, initial: null, type: 'array', dataKind: value });
+        continue;
+      }
+      if (value === 'object') {
+        vars.push({ name: name, initial: null, type: 'expression', dataKind: 'object' });
+        continue;
+      }
+      if (value === 'objects') {
+        vars.push({ name: name, initial: null, type: 'object_array', dataKind: 'objects' });
+        continue;
+      }
+
       // Fallback: expression
       vars.push({ name: name, initial: value, type: 'expression' });
       continue;
@@ -206,8 +220,8 @@ function parsePageFunctionsBlock(block) {
     // Skip regular comments
     if (trimmed.startsWith('//')) continue;
 
-    // Function header: name: or name(params): or name every N:
-    var funcMatch = trimmed.match(/^(\w+)(?:\s+every\s+(\d+))?(\(([^)]*)\))?\s*:$/);
+    // Function header: name: or name(params): or name every N: or name requires X, Y:
+    var funcMatch = trimmed.match(/^(\w+)(?:\s+every\s+(\d+))?(?:\s+requires\s+[\w\s,]+)?(\(([^)]*)\))?\s*:$/);
     if (funcMatch) {
       if (current) funcs.push(current);
       var params = funcMatch[4] ? funcMatch[4].split(',').map(function(p) { return p.trim(); }) : [];
