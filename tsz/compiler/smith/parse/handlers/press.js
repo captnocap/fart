@@ -16,11 +16,13 @@ function collectHandlerZigProps() {
 function pushBarePressHandler(handlerName, fname) {
   var inMap = !!ctx.currentMap;
   var mapOaGetter = inMap ? ctx.currentMap.oa.getter : '';
+  var mapIdx = inMap ? ctx.maps.indexOf(ctx.currentMap) : -1;
   ctx.handlers.push({
     name: handlerName,
     body: `    qjs_runtime.callGlobal("${fname}");\n`,
     luaBody: `${fname}()`,
     inMap: inMap,
+    mapIdx: mapIdx,
     mapOaGetter: mapOaGetter,
     jsFuncName: fname,
   });
