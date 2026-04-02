@@ -1,132 +1,137 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
-## Who Maintains This
-
-**You do.** Bugs are from other versions of yourself in parallel instances. If a bug from another Claude is blocking you, fix it — it is your code. All of it.
-
-**Committing:** If you commit on your own, only commit your own work. If prompted to commit, commit everything unaccounted for.
+Context for AI agents (Codex, etc.) working in this repository. Last updated: 2026-04-02.
 
 ## What This Is
 
-ReactJIT is a rendering framework with **two stacks** that share the same layout engine and primitives:
+ReactJIT is a `.tsz`-to-native compiler and UI framework. `.tsz` source (TypeScript + JSX dialect) compiles to Zig, which links against the framework runtime (SDL3 + wgpu + FreeType + QuickJS) to produce native binaries.
 
-- **`love2d/`** — React reconciler → QuickJS → Lua → Love2D (OpenGL 2.1). Full-featured legacy stack. See `love2d/CLAUDE.md`.
-- **`tsz/`** — `.tsz` source → Zig compiler → SDL2 + wgpu + FreeType. Zero-dependency native stack. See `tsz/CLAUDE.md`.
+## Repository Layout
 
-**The native engine is where the energy is.** The Love2D stack is maintained but not where innovation happens.
+```
+tsz/            <- ALL ACTIVE DEVELOPMENT HAPPENS HERE
+  compiler/     <- Forge (Zig host) + Smith (JS compiler, runs in QuickJS)
+  framework/    <- Engine core: layout, GPU, events, state, text, windows, canvas
+  carts/        <- Apps built with the framework
+    conformance/  <- Test suite (d01-d135+, tiered: soup/mixed/chad)
+  scripts/      <- Build scripts (build, flight-check, conformance-report)
 
-**Read the subdirectory CLAUDE.md for whichever stack you're working in.** The stacks have completely different languages, tools, and workflows.
+love2d/         <- REFERENCE ONLY. Lua stack. Read for porting, do not modify.
+archive/        <- FROZEN. Old compiler iterations. Do not modify.
+os/             <- Future (CartridgeOS). Mostly stubs.
+game/           <- Dead Internet Game. Separate project.
+```
 
-### The tsz Rule
+## DO NOT TOUCH
 
-**If it's not generating code, it should be generated code.** The runtime is `.tsz` source in `tsz/runtime/tsz/`. The compiler generates `.zig` into `tsz/runtime/compiled/`. Hand-written `.zig` in the runtime is temporary — fix the compiler, don't write more `.zig`.
+- `love2d/` — Read-only reference stack
+- `archive/` — Frozen old compilers
+- `bin/tsz` — Frozen reference binary (SHA256 verified). Never rebuild.
+- Any `.gen.zig` file — These are build artifacts. Fix the `.tsz` source instead.
 
-## The Primitives (shared)
+## Build Commands
 
-`Box`, `Text`, `Image`, `Pressable`, `ScrollView`, `TextInput`
+From the `tsz/` directory:
 
-Everything is composed from these. A dashboard is Boxes and Text. There are no special node types.
+```bash
+# The one command you need to build a cart:
+./scripts/build carts/conformance/d01_nested_maps.tsz
 
-## Layout Rules (shared)
+# Or with alias:
+tsz-build carts/conformance/d01_nested_maps.tsz
 
-The flex layout engine is pixel-perfect and shared between Lua (`love2d/lua/layout.lua`) and tsz (`tsz/runtime/tsz/layout.tsz` → compiled to `tsz/runtime/compiled/layout.zig`).
+# Debug build:
+./scripts/build carts/path/to/app.tsz --debug
 
-### Sizing tiers (first match wins)
-1. **Explicit dimensions** — `width`, `height`, `flexGrow`, `flexBasis`
-2. **Content auto-sizing** — containers shrink-wrap children, text measures from font metrics
-3. **Proportional fallback** — empty surfaces get 1/4 of parent (cascades)
+# Rebuild compiler after editing Smith JS files:
+zig build forge
 
-### Rules that still cause bugs
+# Verify Smith manifest/bundle coverage:
+zig build smith-sync
+
+# Hot-reload dev mode (63x faster, preferred for iteration):
+bin/tsz dev carts/path/to/app.tsz
+```
+
+**After editing any Smith JS file** (`compiler/smith_*.js`, `smith_collect/`, `smith_lanes/`, `smith_parse/`, `smith_preflight/`, `smith_emit/`), you MUST run `zig build forge` before those changes take effect. Forge embeds the JS bundle at build time.
+
+## Build Pipeline (3 stages)
+
+1. **Forge** (Zig binary) hosts Smith via QuickJS
+2. **Smith** (JS) compiles `.tsz` source into `generated_*.zig`
+3. **Zig build** compiles generated Zig into a native binary
+
+## Compiler Structure
+
+Smith is a JS compiler that runs inside QuickJS, hosted by Forge (a small Zig binary). Smith source lives at `tsz/compiler/`:
+
+- `smith_*.js` — Root compiler files
+- `smith_collect/` — Collection pass
+- `smith_lanes/` — Entry lanes + surface tiering (soup/mixed/chad)
+- `smith_parse/` — JSX/map/element parsing
+- `smith_preflight/` — Validation rules
+- `smith_emit/` — Zig code emission
+- `smith_DICTIONARY.md` — Live map of the active Smith layout
+
+The Intent Dictionary at `tsz/docs/INTENT_DICTIONARY.md` is the single source of truth for `.tsz` syntax.
+
+## File Extensions
+
+| Extension | What | Example |
+|-----------|------|---------|
+| `.app.tsz` | App entry point, compiles to binary | `counter.app.tsz` |
+| `.mod.tsz` | Runtime module, compiles to `.gen.zig` | `state.mod.tsz` |
+| `.tsz` | Component import | `Button.tsz` |
+| `.cls.tsz` | Shared styles/classifiers | `styles.cls.tsz` |
+
+## Primitives
+
+`Box`, `Text`, `Image`, `Pressable`, `ScrollView`, `TextInput`, `Cartridge`, `ascript`
+
+Everything is composed from these. `<Cartridge src="app.so">` embeds a dynamically loaded .so app inline.
+
+## Key Rules
+
+- **No hand-painted Zig UI.** `.tsz` compiles TO Zig. Write `.tsz`, not raw Zig UI code.
+- **The tsz rule:** If it's not generating code, it should be generated code.
+- **No `<` or `>` comparisons in .tsz.** Use word comparisons: `exact`, `not exact`, `above`, `below`, `exact or above`, `exact or below`.
+- **Root Page never scrolls.** Scrollable content goes in nested `ScrollView` only.
+- **File length limit:** Max 1600 lines per `.zig` or `.tsz` file (enforced by build).
+- **Love2D reference first:** Before fixing any compiler bug, check `love2d/scripts/tslx_compile.mjs`. Port proven solutions.
+
+## Layout Rules
+
+Flex layout engine in `tsz/framework/layout.zig`. Sizing tiers (first match wins):
+
+1. Explicit dimensions (`width`, `height`, `flexGrow`, `flexBasis`)
+2. Content auto-sizing (shrink-wrap children, text measures from font metrics)
+3. Proportional fallback (empty surfaces get 1/4 of parent)
+
+Common pitfalls:
 - Root containers need `width: '100%', height: '100%'`
-- Use `flexGrow: 1` for space-filling elements, never hardcoded pixel heights
-- ScrollView needs explicit height (excluded from proportional fallback)
+- Use `flexGrow: 1` for space-filling, never hardcoded pixel heights
+- ScrollView needs explicit height
 - Don't mix text and expressions in `<Text>` — use template literals
 
-### Layout anti-patterns
-- Hardcoding pixel heights to fit a known window size → use `flexGrow: 1`
-- Manual pixel budgeting → let flex handle distribution
-- Fixed dimensions where auto-sizing works → let containers shrink-wrap
+## Conformance Suite
 
-## Build (root level)
+Tests live in `tsz/carts/conformance/` organized by tier:
+- `soup/` — HTML-like syntax (slowest compile path)
+- `mixed/` — Transitional syntax
+- `chad/` — Clean classifier-based syntax (fastest compile path)
 
-`build.zig` at the repo root compiles all native artifacts:
-
-```bash
-zig build                    # libquickjs + blake3 (Love2D deps)
-zig build tsz-compiler       # .tsz compiler
-zig build engine-app         # Compiled .tsz app
-zig build engine             # Standalone runtime
-zig build all                # Everything
-```
-
-## TSZ Dev CLI
-
-Prefer the `tsz` CLI over ad hoc run scripts when iterating on native carts.
+Every `scripts/build` run on a conformance cart auto-records pass/fail to `conformance.db`.
 
 ```bash
-cd tsz/carts/my-cart
-../../zig-out/bin/tsz run dev
+./scripts/conformance-report          # Summary
+./scripts/conformance-report --fails  # Failures + untested
+./scripts/conformance-report --lane chad  # Filter by tier
 ```
 
-`tsz run dev` and `tsz dev` both infer the app entry from the current directory when there is exactly one app file. If there are multiple app entries, pass the file explicitly.
+## Zig Version
 
-## TSZ Compiler Path
+This project uses **Zig 0.15.2**. Training data for most models covers 0.13/0.14. Key breaking changes exist — check actual source before assuming API shapes.
 
-For active `tsz/` compiler work, keep everyone on the same path:
+## Git Discipline
 
-```bash
-cd tsz
-./scripts/build carts/path/to/app.tsz   # preferred end-to-end cart build
-zig build forge                         # rebuild Forge after editing Smith compiler files
-zig build smith-sync                    # verify Smith manifest/bundle coverage
-zig build smith-bundle                  # rebuild Smith bundle only
-./zig-out/bin/forge build --single carts/path/to/app.tsz  # direct compiler run when needed
-```
-
-Smith now lives directly under `tsz/compiler/` as `smith_*.js`, `smith_collect/`, `smith_lanes/`, `smith_parse/`, `smith_preflight/`, and `smith_emit/`.
-
-**Do not use Node for active Smith builds.** The old `node compiler/build_smith_bundle.mjs` and `node compiler/sync_smith.mjs` path is removed. The active bundle/sync tools are native Zig: `tsz/compiler/smith_bundle.zig` and `tsz/compiler/smith_sync.zig`.
-
-## One-Liner Design Philosophy
-
-Every capability should be usable in one line by someone who doesn't code. The target user knows their domain (music, art, data, games) but doesn't know internals. An AI should be able to discover and control it without documentation.
-
-## Model Selection
-
-**Always use Opus 4.6 (`claude-opus-4-6`) for debugging.** Sonnet is fine for scaffolding and routine tasks. When tracking down layout bugs, coordinate mismatches, or anything structural — use Opus.
-
-## Git Discipline (CRITICAL)
-
-**Commit early and often. Do not leave work uncommitted.**
-
-### When to commit
-- After completing each logical unit of work
-- Before risky operations (refactoring core files, changing build pipeline)
-- When you've touched 3+ files
-- At natural breakpoints in multi-step work
-- When the human gives positive feedback ("nice", "cool", "ok", thumbs up) — that IS the approval signal
-- When in doubt, commit
-
-### How to commit
-- Descriptive conventional-commit messages: `feat(tsz): add FFI support`
-- One logical change per commit
-- Never leave a session with uncommitted work
-
-### Parallel sessions ("empty fridge" problem)
-Multiple Claude instances work simultaneously. If `git status` is unexpectedly clean:
-1. Run `git log --oneline -5` ONCE
-2. Another you committed it. Move on.
-3. Do NOT loop on `git status`
-
-## Documentation Workflow
-
-Documentation is a completion criterion. After major features:
-1. Emit a CHANGESET brief (what, why, affects, breaking changes, new APIs)
-2. Update affected docs
-3. Commit code + docs together
-
-## Skills & Agents
-
-All skills and agents are Love2D-specific and live in `love2d/.claude/`. The `tsz/` stack has none yet.
+Commit early and often. Descriptive conventional-commit messages (`feat(tsz): ...`, `fix(smith): ...`). Multiple Claude sessions run in parallel — if `git status` is unexpectedly clean, check `git log` and move on.

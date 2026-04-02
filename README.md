@@ -1,5 +1,5 @@
 # ReactJIT
-its react! (kinda) its fast! (really fast) its highly experimental currently. the following is ai generated while the development speed is pushing 30+ commits a day. we will see where this all lands at the 60 day mark and again at the 90 day mark. thanks for stopping by
+its react! (kinda) its fast! (really fast) hi. all the code in this project is an accident from a bad joke. the code is not a joke, how it came to be was though. also, i didnt write a single line of code in here, and this readme is also ai generated after i finish my brief intro. this is really now just one big experiment that started from asking how i could put the react based game i was making, inside of a monitor in cs_office, things really got out of hand after that. this is a series of fortunate (or unfortunate) events that all came from asking 'how' and then following with 'if that worked, what about this'. we will see where this all lands at the 60 day mark and again at the 90 day mark. thanks for stopping by
 ---
 Write React. Get a native binary. Your UI compiles to native code — no virtual DOM, no reconciler. QuickJS is embedded for optional `<script>` blocks (dynamic logic, timers, data), but your components, layout, and rendering are all compiled Zig.
 
@@ -74,7 +74,7 @@ The `.tsz` compiler and native rendering framework. TypeScript + JSX compiles to
 The compiler is split into two parts:
 
 - **Forge** — small Zig kernel (~460 lines). Lexer, QuickJS bridge, file I/O. Built once, rarely changes. Tokenizes `.tsz` source and hands flat token arrays to Smith. Generated code outputs to `/tmp/tsz-gen/` by default (overridable with `--out-dir=`).
-- **Smith** — JS compiler intelligence (~15,200 lines across 79 files) running inside Forge via QuickJS. Lives in `compiler/smith/` with scoped subdirs: `parse/` (element/brace/map/template parsing), `emit/` (Zig codegen), `collect/` (preflight collection passes), `preflight/` (tier detection), `lanes/` (app/page/module/soup dispatch). Edit without rebuilding Forge.
+- **Smith** — JS compiler intelligence (~15,300 lines across 79 files) running inside Forge via QuickJS. Lives in `compiler/smith/` with scoped subdirs: `parse/` (element/brace/map/template parsing), `emit/` (Zig codegen), `collect/` (preflight collection passes), `preflight/` (tier detection), `lanes/` (app/page/module/soup dispatch). Edit without rebuilding Forge.
 
 ```
 app.tsz → [Forge: lex] → tokens → [Smith: parse + emit] → .zig source → native binary
@@ -84,7 +84,7 @@ Smith handles the cases Zig can't. The canonical example is `.map()` handlers: Z
 
 This is the general routing rule: statically-bound logic compiles to Zig; logic that needs runtime capture (indexes, closures, dynamic dispatch) routes to LuaJIT via `LUA_LOGIC`. `<script>` blocks use QuickJS for the same reason. The compiler picks the backend; the author writes plain `.tsz`.
 
-- **Compiler** — 5 Zig modules + 79 JS modules (Smith). Components, useState, useEffect, .map(), conditionals, template literals, classifiers, script imports, HTML tags, FFI, lscript/LuaJIT, `<page>` blocks, `<module>` blocks, Physics/3D shorthands, JSX prop spread
+- **Compiler** — 5 Zig modules + 79 JS modules (Smith, ~15,300 lines). Components, useState, useEffect, .map(), conditionals, template literals, classifiers, script imports, HTML tags, FFI, lscript/LuaJIT, `<page>` blocks, `<module>` blocks, Physics/3D shorthands, JSX prop spread
 - **GPU renderer** — wgpu pipeline: SDF text, rounded rects, borders, shadows, images, video, 3D (Blinn-Phong), custom effects
 - **Layout engine** — Flexbox (1400 lines), CSS-spec-aligned, WPT-tested
 - **Networking** — HTTP client/server, WebSocket client/server, IPC, SOCKS5, Tor — all pure Zig
@@ -279,65 +279,37 @@ Also accepts HTML tags: `div` `span` `p` `h1`-`h6` `button` `section` `nav` `hea
 
 ## Carts
 
-Apps are called "carts." Each is a `.tsz` entry point with optional components, classifiers, and scripts.
+Apps are called "carts." Each is a `.tsz` entry point with optional components, classifiers, and scripts. Most former standalone carts have been absorbed into the conformance suite — if something compiled, it belongs there as a test.
 
 ```
 carts/
-  storybook/          Component catalog + infinite canvas + theme demo
-  inspector/          Built-in devtools (element tree, styles, perf)
-  dashboard/          Dashboard demo
-  charts/             Chart library (area, bar, candlestick, pie, radar, graph, ...)
-  browser/            In-app web content renderer
-  terminal/           PTY terminal emulator with scrollback + selection
-  crypto-test/        Cryptography test suite (HMAC, HKDF, Shamir, encryption, PII)
-  scene3d-demo/       3D rendering demo
-  3d-ui-experiment/   3D UI interaction experiments
-  constraint-graph/   Constraint graph visualization
-  animations/         Animation and physics demos
-  effects/            Visual effects demos
-  effect-bench/       Effect subsystem benchmarks
-  effect-test/        Effect test harness
-  benchmarks/         Subsystem benchmarks (layout, render, state, script)
-  stress-test/        Progressive load across all subsystems
-  parity/             React parity demos (TodoMVC, Slack, VS Code, Gmail, Figma, ...)
-  flatworld/          Flatworld exploration cart
-  audio-ui/           Synth cart with full audio interface
+  conformance/          Conformance test suites (432 tests), organized by lane:
+    mixed/              Exhaustive feature + torture tests (256 tests)
+    wpt-flex/           W3C Web Platform Tests for flexbox (75 tests)
+    lscript/            LuaJIT script backend tests (37 tests)
+    chad/               Intent dictionary syntax tests (35 tests)
+    soup/               End-to-end apps in real-world syntax (21 tests)
+    parity/             React parity demos — TodoMVC, Slack, VS Code, etc. (7 tests)
+    ws/                 WebSocket conformance (Autobahn + protocol)
+    http/               HTTP conformance test harness
+    ipc/                IPC conformance tests
+    socks5/             SOCKS5 conformance tests
+    zscript/            Zig script backend tests
+  storybook/            Component catalog + infinite canvas + theme demo
+  inspector/            Built-in devtools (element tree, styles, perf)
   supervisor-dashboard/ Task board, terminal, search, violations
-  semantic-terminal/  Terminal with classifier overlay
-  themes/             Theme showcase
-  theme-creator/      Interactive theme builder
-  hackernews/         HackerNews client demo
-  remote-chat/        WebSocket chat demo
-  world3d-demo/       3D physics + world rendering demo
-  cursor-ide/         VS Code-style IDE clone (editor, sidebar, tabs, chat panel)
-  cursor-ide-hell/    Stress-test IDE clone with heavy content
-  lua-test/           LuaJIT runtime test cart
-  lua-bench/          LuaJIT vs QuickJS benchmark suite
-  catalog/            Component catalog
-  claude-canvas/      Canvas playground
-  control-panel/      System control panel
-  applescript-demo/   macOS AppleScript automation demo
-  polygons/           Polygon rendering tests
-  render-test/        GPU rendering test harness
-  smith-test/         Smith compiler test cart
-  transition-test/    Transition animation tests
-  video-test/         Video playback tests
-  web-demo/           Web runtime demo
-  window-paths/       Windowing path tests
-  hotreload-test/     Hot reload experiments
-  flex-wrap-test/     Flexbox wrap behavior tests
-  ipc-test/           IPC test harness
-  tools/              Developer utilities
-  conformance/        Conformance test suites, organized by lane:
-    soup/             End-to-end app tests in real-world syntax (21 tests)
-    mixed/            Exhaustive feature + torture tests (153 tests)
-    chad/             Intent dictionary syntax tests (34 tests)
-    lscript/          LuaJIT script backend tests (35 tests)
-    wpt-flex/         W3C Web Platform Tests for flexbox (75 tests)
-    ws/               WebSocket conformance (Autobahn + protocol)
-    http/             HTTP conformance test harness
-    ipc/              IPC conformance tests
-    socks5/           SOCKS5 conformance tests
+  benchmarks/           Subsystem benchmarks (layout, render, state, script)
+  effect-bench/         Effect subsystem benchmarks
+  catalog/              Component catalog
+  claude-canvas/        Canvas playground
+  theme-creator/        Interactive theme builder
+  remote-chat/          WebSocket chat demo
+  cursor-ide-hell/      Stress-test IDE clone with heavy content
+  web-demo/             Web runtime demo
+  window-paths/         Windowing path tests
+  hotreload-test/       Hot reload experiments
+  ipc-test/             IPC test harness
+  tools/                Developer utilities
 ```
 
 ## Framework Modules
@@ -363,13 +335,13 @@ carts/
 
 | Suite | Disk | Compiled | Verified | What |
 |-------|------|----------|----------|------|
-| Mixed (feature + torture) | 153 | 142 | 117 | Exhaustive compiler coverage |
+| Mixed (feature + torture) | 256 | 135 | 94 | Exhaustive compiler coverage |
 | WPT Flexbox | 75 | 75 | 70 | W3C CSS flex spec |
-| Lscript | 35 | 14 | 6 | LuaJIT script backend |
-| Chad (intent syntax) | 34 | 22 | 4 | Dictionary-based intent syntax |
-| Soup (real-world) | 21 | 10 | 2 | End-to-end apps in messy real-world syntax |
-| Root | 1 | 0 | 0 | Root-level harness |
-| **Overall** | **319** | **264 (82%)** | **201 (63%)** | |
+| Lscript | 37 | 9 | 5 | LuaJIT script backend |
+| Chad (intent syntax) | 35 | 7 | 4 | Dictionary-based intent syntax |
+| Soup (real-world) | 21 | 13 | 2 | End-to-end apps in messy real-world syntax |
+| Parity | 7 | 0 | 0 | React parity demos (TodoMVC, Slack, VS Code, etc.) |
+| **Overall** | **432** | **270 (62%)** | **201** | |
 
 Conformance is tracked by a SQLite-backed ledger (`scripts/ledger`). A post-commit hook auto-runs regression sweeps when compiler or framework files change, reporting newly broken vs already broken vs newly fixed.
 
@@ -416,9 +388,10 @@ Conformance tests are organized into lanes under `carts/conformance/`:
 
 | Lane | What it proves |
 |------|----------------|
-| **`soup/`** | End-to-end apps in real-world syntax (HTML tags, DOM patterns, CSS hallucinations). Tests compiler resilience. Thin — only full app tests, no isolated features. |
-| **`mixed/`** | The exhaustive proving ground. Every feature, every edge case, every torture test. Uses framework primitives with inline styles. If it works in mixed, the other lanes just prove their translation layers don't break. |
-| **`chad/`** | End-to-end apps in intent dictionary syntax. Classifiers, script blocks, theme tokens, named resources. The golden path. Fastest compile path. |
+| **`soup/`** | End-to-end apps in real-world syntax (HTML tags, DOM patterns, CSS hallucinations). Tests compiler resilience. Thin — only full app tests, no isolated features. (21 tests) |
+| **`mixed/`** | The exhaustive proving ground. Every feature, every edge case, every torture test. Uses framework primitives with inline styles. Most former standalone carts live here now. If it works in mixed, the other lanes just prove their translation layers don't break. (256 tests) |
+| **`chad/`** | End-to-end apps in intent dictionary syntax. Classifiers, script blocks, theme tokens, named resources. The golden path. Fastest compile path. (35 tests) |
+| **`parity/`** | React parity demos — TodoMVC, Slack, VS Code, Gmail, Figma. Proves the framework can replicate real-world UIs. (7 tests) |
 
 Mixed is the ground truth. Soup and chad are thin wrappers proving the compiler's translation layers work on top of what mixed already validates. The tier system isn't just readability — it's compiler architecture. Clean code compiles faster because the compiler does less work.
 
