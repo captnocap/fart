@@ -239,9 +239,22 @@ function normalizeComponentTernaryValue(val) {
   const cIdx = val.indexOf(':', qIdx);
   if (!(qIdx > 0 && cIdx > qIdx)) return val;
 
-  const cond = val.substring(0, qIdx).trim();
+  var cond = val.substring(0, qIdx).trim();
   const thenVal = val.substring(qIdx + 1, cIdx).trim();
   const elseVal = val.substring(cIdx + 1).trim();
+  // Fix string comparisons: == / != on []const u8 must use std.mem.eql
+  var _eqMatch = cond.match(/^(.+?)\s*(==|!=)\s*(.+)$/);
+  if (_eqMatch) {
+    var _lhs = _eqMatch[1].trim();
+    var _op = _eqMatch[2];
+    var _rhs = _eqMatch[3].trim();
+    var _lhsIsStr = _lhs.includes('getSlotString') || (_lhs.includes('[0..') && _lhs.includes('_lens'));
+    var _rhsIsStr = _rhs.includes('getSlotString') || (_rhs.includes('[0..') && _rhs.includes('_lens')) || /^"[^"]*"$/.test(_rhs);
+    if (_lhsIsStr || _rhsIsStr) {
+      var _eql = 'std.mem.eql(u8, ' + _lhs + ', ' + _rhs + ')';
+      cond = _op === '!=' ? '!' + _eql : _eql;
+    }
+  }
   // String branches need @as([]const u8, ...) for Zig type unification
   const thenIsStr = /^"[^"]*"$/.test(thenVal);
   const elseIsStr = /^"[^"]*"$/.test(elseVal);

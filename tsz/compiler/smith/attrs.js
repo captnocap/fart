@@ -133,6 +133,13 @@ function parseStyleValue(c) {
           return { type: 'number', value: String(Math.round(result)) };
         }
       }
+      // Check if prop value is a Zig expression that needs zigExpr for ternary resolution
+      const isZigExpr = typeof pv === 'string' && (pv.includes('state.get') || pv.includes('getSlot') || pv.includes('_oa') || pv.includes('@as') || pv.includes('if ('));
+      if (isZigExpr) {
+        // Wrap if-expressions in parens so they compose safely in further comparisons
+        const zigExpr = pv.startsWith('if (') ? '(' + pv + ')' : pv;
+        return { type: 'state', value: name, zigExpr };
+      }
       return { type: 'number', value: pv };
     }
   }
