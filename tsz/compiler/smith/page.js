@@ -324,8 +324,16 @@ function transpilePageBody(bodyLines, setterNames, jsLines, indent, isComputed) 
       continue;
     }
 
-    // </else>
+    // </else> — check if followed by another <else, merge into } else
     if (line === '</else>') {
+      var nextAfterElse = '';
+      for (var je = i + 1; je < bodyLines.length; je++) {
+        nextAfterElse = bodyLines[je].trim();
+        if (nextAfterElse) break;
+      }
+      if (nextAfterElse.indexOf('<else') === 0) {
+        continue;
+      }
       jsLines.push(indent + '}');
       continue;
     }

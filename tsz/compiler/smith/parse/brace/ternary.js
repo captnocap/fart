@@ -428,10 +428,17 @@ function tryParseTernaryText(c, children) {
     condExpr.includes('std.mem.eql');
   const isBool = condExpr.includes('getSlotBool');
   const zigCond = (isComparison || isBool) ? `(${condExpr})` : `((${condExpr}) != 0)`;
-  const bufId = ctx.dynCount;
   const fmtArgs = `if ${zigCond} @as([]const u8, "${trueVal}") else @as([]const u8, "${falseVal}")`;
-  ctx.dynTexts.push({ bufId, fmtString: '{s}', fmtArgs, arrName: '', arrIndex: 0, bufSize: 64 });
-  ctx.dynCount++;
-  children.push({ nodeExpr: `.{ .text = "" }`, dynBufId: bufId });
+  if (ctx.currentMap && (fmtArgs.includes('_oa') || condExpr.includes('_oa'))) {
+    const mapBufId = ctx.mapDynCount || 0;
+    ctx.mapDynCount = mapBufId + 1;
+    ctx.dynTexts.push({ bufId: mapBufId, fmtString: '{s}', fmtArgs, arrName: '', arrIndex: 0, bufSize: 256, inMap: true, mapIdx: ctx.maps.indexOf(ctx.currentMap) });
+    children.push({ nodeExpr: `.{ .text = "__mt${mapBufId}__" }`, dynBufId: mapBufId, inMap: true });
+  } else {
+    const bufId = ctx.dynCount;
+    ctx.dynTexts.push({ bufId, fmtString: '{s}', fmtArgs, arrName: '', arrIndex: 0, bufSize: 64 });
+    ctx.dynCount++;
+    children.push({ nodeExpr: `.{ .text = "" }`, dynBufId: bufId });
+  }
   return true;
 }

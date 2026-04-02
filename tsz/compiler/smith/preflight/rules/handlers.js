@@ -38,6 +38,7 @@ function checkScriptHandlerCalls(ctx, scan, errors) {
   for (var hi = 0; hi < ctx.handlers.length; hi++) {
     var h = ctx.handlers[hi];
     if (!h.body) continue;
+    if (h._delegateToJs) continue; // JS wrapper emitted at emit time
     var callMatch = h.body.match(/callGlobal\("(\w+)"\)/g);
     if (!callMatch) continue;
     for (var ci = 0; ci < callMatch.length; ci++) {

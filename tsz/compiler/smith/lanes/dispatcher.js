@@ -12,7 +12,7 @@ function compileLane(source, tokens, file) {
   }
 
   if (isChadBlockSource(source)) {
-    return compilePageLane(source, tokens, file);
+    return compileChadLane(source, tokens, file);
   }
 
   return compileAppLane(source, tokens, file);

@@ -644,6 +644,29 @@ function emitLogicBlocks(ctx) {
         }
       }
     }
+    // Emit JS wrappers for handlers delegated from Zig (string concat, etc.)
+    // This runs outside the scriptBlock conditional since delegated handlers
+    // can occur in non-script tests (e.g., component prop string concat).
+    var _hasDelegated = ctx.handlers.some(function(h) { return !h.inMap && h._delegateToJs; });
+    if (_hasDelegated) {
+      // Ensure state var declarations exist in JS_LOGIC for delegated handlers
+      if (!ctx.scriptBlock && !globalThis.__scriptContent) {
+        for (var _di = 0; _di < ctx.stateSlots.length; _di++) {
+          var _ds = ctx.stateSlots[_di];
+          var _djsSetter = _ds.type === 'string' ? '__setStateString' : '__setState';
+          jsLines.push('var ' + _ds.getter + ' = ' + (_ds.type === 'string' ? "'" + _ds.initial + "'" : _ds.initial) + ';');
+          jsLines.push('function ' + _ds.setter + '(v) { ' + _ds.getter + ' = v; ' + _djsSetter + '(' + _di + ', v); }');
+        }
+      }
+      for (var _dhi = 0; _dhi < ctx.handlers.length; _dhi++) {
+        var _dh = ctx.handlers[_dhi];
+        if (_dh.inMap) continue;
+        if (!_dh._delegateToJs) continue;
+        var _djsBody = _dh.luaBody || '';
+        if (_djsBody) _djsBody = jsTransform(_djsBody);
+        if (_djsBody) jsLines.push('function ' + _dh.name + '() { ' + _djsBody + '; }');
+      }
+    }
     // Append __evalDynTexts for JS-evaluated dynamic text expressions (e.g., {fmtTime()})
     if (ctx._jsDynTexts && ctx._jsDynTexts.length > 0) {
       jsLines.push('function __evalDynTexts() {');

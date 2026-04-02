@@ -14,8 +14,7 @@ function checkUnimplementedJSXBlocks(errors) {
   var jsxSource = source.slice(retIdx);
 
   var blocks = [
-    { tag: '<during ', id: 'F16', desc: '<during> in JSX — conditional rendering not yet compiled (children render unconditionally)' },
-    { tag: '<For ',    id: 'F17', desc: '<For> in JSX — declarative loop not yet compiled in page/chad lane' },
+    // <if>, <else>, <during>, <For> are now compiled — see parse/children/conditional_blocks.js
     { tag: '<while ',  id: 'F18', desc: '<while> in JSX — loop block not yet compiled' },
   ];
 

@@ -131,7 +131,43 @@ function parseComponentBraceValue(c) {
         val += _rlv;
       }
     } else if (c.kind() === TK.identifier && ctx.currentMap && c.text() === ctx.currentMap.indexParam) {
-      val += '@as(i64, @intCast(_i))';
+      val += '@as(i64, @intCast(' + (ctx.currentMap.iterVar || '_i') + '))';
+    } else if (c.kind() === TK.identifier && ctx.currentMap) {
+      var _anc = ctx.currentMap.parentMap;
+      var _hitParent = null;
+      while (_anc) {
+        if (c.text() === _anc.indexParam) {
+          _hitParent = _anc;
+          break;
+        }
+        _anc = _anc.parentMap;
+      }
+      if (_hitParent) {
+        val += '@as(i64, @intCast(' + (_hitParent.iterVar || '_i') + '))';
+      } else if (c.text() === ctx.currentMap.itemParam) {
+        // Map item param .field access → OA field reference
+        if (c.pos + 2 < c.count && c.kindAt(c.pos + 1) === TK.dot && c.kindAt(c.pos + 2) === TK.identifier) {
+          c.advance(); // skip item name
+          c.advance(); // skip dot → now at field
+          var _mf = c.text();
+          var _moa = ctx.currentMap.oa;
+          var _mfi = _moa ? _moa.fields.find(function(f) { return f.name === _mf; }) : null;
+          var _miv = ctx.currentMap.iterVar || '_i';
+          if (_moa && _mfi && _mfi.type === 'string') {
+            val += '_oa' + _moa.oaIdx + '_' + _mf + '[' + _miv + '][0.._oa' + _moa.oaIdx + '_' + _mf + '_lens[' + _miv + ']]';
+          } else if (_moa) {
+            val += '_oa' + _moa.oaIdx + '_' + _mf + '[' + _miv + ']';
+          } else {
+            val += '0';
+          }
+        } else {
+          val += '@as(i64, @intCast(' + (ctx.currentMap.iterVar || '_i') + '))';
+        }
+      } else {
+        const resolvedValue = resolveComponentIdentifierValue(c);
+        if (resolvedValue !== null) val += resolvedValue;
+        else val += c.text();
+      }
     } else {
       const resolvedValue = resolveComponentIdentifierValue(c);
       if (resolvedValue !== null) val += resolvedValue;
@@ -183,6 +219,8 @@ function resolveComponentIdentifierValue(c) {
           resolved = `_oa${ctx.currentMap.oa.oaIdx}_${backrefField.name}[_i]`;
           break;
         }
+        resolved = '@as(i64, @intCast(' + (mapCursor.iterVar || '_i') + '))';
+        break;
       }
       mapCursor = mapCursor.parentMap;
     }
@@ -204,6 +242,12 @@ function normalizeComponentTernaryValue(val) {
   const cond = val.substring(0, qIdx).trim();
   const thenVal = val.substring(qIdx + 1, cIdx).trim();
   const elseVal = val.substring(cIdx + 1).trim();
+  // String branches need @as([]const u8, ...) for Zig type unification
+  const thenIsStr = /^"[^"]*"$/.test(thenVal);
+  const elseIsStr = /^"[^"]*"$/.test(elseVal);
+  if (thenIsStr && elseIsStr) {
+    return 'if (' + cond + ') @as([]const u8, ' + thenVal + ') else @as([]const u8, ' + elseVal + ')';
+  }
   const zigThen = /^-?\d+$/.test(thenVal) ? '@as(i64, ' + thenVal + ')' : thenVal;
   const zigElse = /^-?\d+$/.test(elseVal) ? '@as(i64, ' + elseVal + ')' : elseVal;
   return 'if (' + cond + ') ' + zigThen + ' else ' + zigElse;

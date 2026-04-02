@@ -435,16 +435,36 @@ function parseHandler(c) {
     let body = '';
     while (c.kind() !== TK.rbrace && c.kind() !== TK.eof) {
       if (c.kind() === TK.identifier && isSetter(c.text())) {
+        // Delegate setter calls to JS so the JS variable AND Zig slot both update.
+        // Direct Zig slot writes (state.setSlot) bypass the JS variable, causing
+        // desync when JS logic later reads the variable (e.g. goNext checks `name`).
         const setter = c.text();
-        const slotIdx = findSlot(setter);
         c.advance();
+        let args = '';
         if (c.kind() === TK.lparen) {
           c.advance();
-          const valExpr = parseValueExpr(c);
-          const needsParens = valExpr.includes(' + ') || valExpr.includes(' - ') || valExpr.includes(' * ') || valExpr.includes(' / ') || valExpr.includes('if (');
-          const wrapped = needsParens ? `(${valExpr})` : valExpr;
-          body += `    ${slotSet(slotIdx)}(${slotIdx}, ${wrapped});\n`;
-          if (c.kind() === TK.rparen) c.advance();
+          let depth = 1;
+          while (c.kind() !== TK.eof && depth > 0) {
+            if (c.kind() === TK.lparen) depth++;
+            else if (c.kind() === TK.rparen) { depth--; if (depth === 0) { c.advance(); break; } }
+            args += c.text();
+            c.advance();
+          }
+        }
+        args = args.trim();
+        if (args.length === 0) {
+          body += `    qjs_runtime.callGlobal("${setter}");\n`;
+        } else {
+          const strMatch = args.match(/^'([^']*)'$/) || args.match(/^"([^"]*)"$/);
+          if (strMatch) {
+            var _strVal = strMatch[1].replace(/"/g, '\\"');
+            body += `    qjs_runtime.callGlobalStr("${setter}", "${_strVal}");\n`;
+          } else if (/^-?\d+$/.test(args)) {
+            body += `    qjs_runtime.callGlobalInt("${setter}", ${args});\n`;
+          } else {
+            const jsCall = `${setter}(${args.replace(/'/g, '\\"')})`;
+            body += `    qjs_runtime.evalExpr("${jsCall}");\n`;
+          }
         }
       } else if (c.kind() === TK.identifier && c.text() === 'setVariant') {
         c.advance();
@@ -505,20 +525,35 @@ function parseHandler(c) {
     }
     return body;
   }
-  // Single expression: setCount(expr)
+  // Single expression: setCount(expr) — delegate to JS (same reason as block body)
   if (c.kind() === TK.identifier && isSetter(c.text())) {
     const setter = c.text();
-    const slotIdx = findSlot(setter);
     c.advance();
+    let args = '';
     if (c.kind() === TK.lparen) {
       c.advance();
-      // Parse the value expression until matching )
-      const valExpr = parseValueExpr(c);
-      // Only wrap in parens if expression has operators
-      const needsParens = valExpr.includes(' + ') || valExpr.includes(' - ') || valExpr.includes(' * ') || valExpr.includes(' / ');
-      const wrapped = needsParens ? `(${valExpr})` : valExpr;
-      body = `    ${slotSet(slotIdx)}(${slotIdx}, ${wrapped});\n`;
-      if (c.kind() === TK.rparen) c.advance();
+      let depth = 1;
+      while (c.kind() !== TK.eof && depth > 0) {
+        if (c.kind() === TK.lparen) depth++;
+        else if (c.kind() === TK.rparen) { depth--; if (depth === 0) { c.advance(); break; } }
+        args += c.text();
+        c.advance();
+      }
+    }
+    args = args.trim();
+    if (args.length === 0) {
+      body = `    qjs_runtime.callGlobal("${setter}");\n`;
+    } else {
+      const strMatch = args.match(/^'([^']*)'$/) || args.match(/^"([^"]*)"$/);
+      if (strMatch) {
+        var _strVal2 = strMatch[1].replace(/"/g, '\\"');
+        body = `    qjs_runtime.callGlobalStr("${setter}", "${_strVal2}");\n`;
+      } else if (/^-?\d+$/.test(args)) {
+        body = `    qjs_runtime.callGlobalInt("${setter}", ${args});\n`;
+      } else {
+        const jsCall = `${setter}(${args.replace(/'/g, '\\"')})`;
+        body = `    qjs_runtime.evalExpr("${jsCall}");\n`;
+      }
     }
   }
   return body;

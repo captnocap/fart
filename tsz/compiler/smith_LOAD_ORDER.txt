@@ -16,6 +16,7 @@ smith/collect/pipeline.js
 smith/lanes/shared.js
 smith/lanes/app.js
 smith/lanes/page.js
+smith/lanes/chad.js
 smith/lanes/module.js
 smith/lanes/soup.js
 smith/lanes/dispatcher.js
@@ -38,6 +39,7 @@ smith/parse/map/plain.js
 smith/parse/map/for_loop.js
 smith/parse/map/nested.js
 smith/parse/children/inline_glyph.js
+smith/parse/children/conditional_blocks.js
 smith/parse/children/elements.js
 smith/parse/children/brace.js
 smith/parse/children/text.js

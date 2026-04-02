@@ -45,14 +45,25 @@ function pushInlinePressHandler(c, handlerName) {
   const body = parseHandler(c);
   const isMapHandler = !!ctx.currentMap;
   const closureParams = ctx._lastClosureParams || [];
+
+  // Detect invalid Zig: setSlotString with + operator (string concat is not valid Zig).
+  // Delegate the entire handler to JS via qjs_runtime.callGlobal.
+  let finalBody = body;
+  let delegateToJs = false;
+  if (/setSlotString\([^;]*\+/.test(body)) {
+    delegateToJs = true;
+    finalBody = `    qjs_runtime.callGlobal("${handlerName}");\n`;
+  }
+
   ctx.handlers.push({
     name: handlerName,
-    body,
+    body: finalBody,
     luaBody,
     inMap: isMapHandler,
     mapIdx: isMapHandler ? ctx.maps.indexOf(ctx.currentMap) : -1,
     zigProps: collectHandlerZigProps(),
     closureParams,
+    _delegateToJs: delegateToJs,
   });
 }
 

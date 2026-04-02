@@ -352,7 +352,37 @@ function emitMapPoolRebuilds(ctx, meta) {
       const ti = dt._mapTextIdx;
       out += `        _map_texts_${mi}_${ti}[_i] = std.fmt.bufPrint(&_map_text_bufs_${mi}_${ti}[_i], "${dt.fmtString}", .{ ${dt.fmtArgs} }) catch "";\n`;
     }
-  
+
+    // Emit handler ptr init BEFORE per-item arrays that reference them.
+    // When handlers use OA field refs, the ptrs are built inline per-iteration
+    // (not pre-computed in _initMapLuaPtrs). They must be set before @memcpy
+    // copies js_on_press into nodes, otherwise nodes get null pointers.
+    {
+      const _earlyFieldRefsMap = m._handlerFieldRefsMap || {};
+      for (let _ehi = 0; _ehi < mapHandlers.length; _ehi++) {
+        const _erefs = _earlyFieldRefsMap[_ehi] || [];
+        if (_erefs.length > 0) {
+          const _eoaIdx = m.oa ? m.oa.oaIdx : (m.oaIdx || 0);
+          const _efmtParts = ['{d}'];
+          const _eargParts = ['_i'];
+          for (const _ef of _erefs) {
+            if (_ef.type === 'string') {
+              _efmtParts.push("'{s}'");
+              _eargParts.push(`_oa${_eoaIdx}_${_ef.name}[_i][0.._oa${_eoaIdx}_${_ef.name}_lens[_i]]`);
+            } else {
+              _efmtParts.push('{d}');
+              _eargParts.push(`_oa${_eoaIdx}_${_ef.name}[_i]`);
+            }
+          }
+          out += `        {\n`;
+          out += `            const _n = std.fmt.bufPrint(_map_lua_bufs_${mi}_${_ehi}[_i][0..127], "__mapPress_${mi}_${_ehi}(${_efmtParts.join(',')})", .{${_eargParts.join(', ')}}) catch "";\n`;
+          out += `            _map_lua_bufs_${mi}_${_ehi}[_i][_n.len] = 0;\n`;
+          out += `            _map_lua_ptrs_${mi}_${_ehi}[_i] = @ptrCast(_map_lua_bufs_${mi}_${_ehi}[_i][0.._n.len :0]);\n`;
+          out += `        }\n`;
+        }
+      }
+    }
+
     // Pre-count how many .text = "" slots are in inner array vs per-item arrays
     // so we can assign dynTexts in JSX order (inner first, then per-item)
     if (typeof globalThis.__SMITH_DEBUG_MAP_TEXT !== 'undefined') {
@@ -599,8 +629,17 @@ function emitMapPoolRebuilds(ctx, meta) {
           args = args.replace(new RegExp(`_oa${im.oaIdx}_${f.name}_lens\\[_i\\]`, 'g'), `_oa${im.oaIdx}_${f.name}_lens[_j]`);
           args = args.replace(new RegExp(`_oa${im.oaIdx}_${f.name}\\[_i\\]`, 'g'), `_oa${im.oaIdx}_${f.name}[_j]`);
         }
-        args = args.replace(/@as\(i64, @intCast\(_i\)\)/g, '@as(i64, @intCast(_j))');
+        // Do not rewrite @as(i64, @intCast(_i)) here — that is the outer map index; inner uses _j from template_literal / props.
         out += `            _map_texts_${imi}_${ti}[_i][_j] = std.fmt.bufPrint(&_map_text_bufs_${imi}_${ti}[_i][_j], "${dt.fmtString}", .{ ${args} }) catch "";\n`;
+      }
+  
+      // Handler pointers BEFORE node literals that embed .js_on_press / .lua_on_press (otherwise nodes capture null).
+      for (let hi = 0; hi < imMeta.mapHandlers.length; hi++) {
+        out += `            {\n`;
+        out += `                const _n = std.fmt.bufPrint(_map_lua_bufs_${imi}_${hi}[_i][_j][0..47], "__mapPress_${imi}_${hi}({d})", .{_j}) catch "";\n`;
+        out += `                _map_lua_bufs_${imi}_${hi}[_i][_j][_n.len] = 0;\n`;
+        out += `                _map_lua_ptrs_${imi}_${hi}[_i][_j] = @ptrCast(_map_lua_bufs_${imi}_${hi}[_i][_j][0.._n.len :0]);\n`;
+        out += `            }\n`;
       }
   
       // Per-item array fills with content fixup
@@ -626,8 +665,10 @@ function emitMapPoolRebuilds(ctx, meta) {
             `_oa${im.oaIdx}_${f.name}[_j][0.._oa${im.oaIdx}_${f.name}_lens[_j]]`);
           content = content.replace(new RegExp(`_oa${im.oaIdx}_${f.name}\\[_i\\]`, 'g'), `_oa${im.oaIdx}_${f.name}[_j]`);
         }
+        // Preserve outer-section @as(i64, @intCast(_i)) while rewriting inner-index _i→_j elsewhere
+        content = content.replace(/@as\(i64, @intCast\(_i\)\)/g, '__SMITH_OUTER_I64_I__');
         content = content.replace(/@intCast\(_i\)/g, '@intCast(_j)');
-        content = content.replace(/@as\(i64, @intCast\(_i\)\)/g, '@as(i64, @intCast(_j))');
+        content = content.replace(/__SMITH_OUTER_I64_I__/g, '@as(i64, @intCast(_i))');
         // 3. Fix per-item array refs to [_i][_j]
         for (const pid2 of imMeta.mapPerItemDecls) {
           content = content.replace(new RegExp(`&${pid2.name}\\b`, 'g'), `&_map_${pid2.name}_${imi}[_i][_j]`);
@@ -648,15 +689,6 @@ function emitMapPoolRebuilds(ctx, meta) {
         out += `            _map_${pid.name}_${imi}[_i][_j] = [${pid.elemCount}]Node{ ${content} };\n`;
       }
   
-      // Handler pointer building
-      for (let hi = 0; hi < imMeta.mapHandlers.length; hi++) {
-        out += `            {\n`;
-        out += `                const _n = std.fmt.bufPrint(_map_lua_bufs_${imi}_${hi}[_i][_j][0..47], "__mapPress_${imi}_${hi}({d})", .{_j}) catch "";\n`;
-        out += `                _map_lua_bufs_${imi}_${hi}[_i][_j][_n.len] = 0;\n`;
-        out += `                _map_lua_ptrs_${imi}_${hi}[_i][_j] = @ptrCast(_map_lua_bufs_${imi}_${hi}[_i][_j][0.._n.len :0]);\n`;
-        out += `            }\n`;
-      }
-  
       // Inner array construction
       if (imMeta.innerArr && imMeta.innerCount > 0) {
         const sharedDecl = (im.mapArrayDecls || []).find(d => d.startsWith(`var ${imMeta.innerArr}`)) ||
@@ -668,8 +700,9 @@ function emitMapPoolRebuilds(ctx, meta) {
               `_oa${im.oaIdx}_${f.name}[_j][0.._oa${im.oaIdx}_${f.name}_lens[_j]]`);
             ic = ic.replace(new RegExp(`_oa${im.oaIdx}_${f.name}\\[_i\\]`, 'g'), `_oa${im.oaIdx}_${f.name}[_j]`);
           }
+          ic = ic.replace(/@as\(i64, @intCast\(_i\)\)/g, '__SMITH_OUTER_I64_I__');
           ic = ic.replace(/@intCast\(_i\)/g, '@intCast(_j)');
-          ic = ic.replace(/@as\(i64, @intCast\(_i\)\)/g, '@as(i64, @intCast(_j))');
+          ic = ic.replace(/__SMITH_OUTER_I64_I__/g, '@as(i64, @intCast(_i))');
           for (const pid of imMeta.mapPerItemDecls) {
             ic = ic.replace(new RegExp(`&${pid.name}\\b`, 'g'), `&_map_${pid.name}_${imi}[_i][_j]`);
           }
@@ -697,7 +730,9 @@ function emitMapPoolRebuilds(ctx, meta) {
       for (const f of imOa.fields) {
         imPool = imPool.replace(new RegExp(`_oa${im.oaIdx}_${f.name}\\[_i\\]`, 'g'), `_oa${im.oaIdx}_${f.name}[_j]`);
       }
+      imPool = imPool.replace(/@as\(i64, @intCast\(_i\)\)/g, '__SMITH_OUTER_I64_I__');
       imPool = imPool.replace(/@intCast\(_i\)/g, '@intCast(_j)');
+      imPool = imPool.replace(/__SMITH_OUTER_I64_I__/g, '@as(i64, @intCast(_i))');
       if (imMeta.innerArr) imPool = imPool.replace(`&${imMeta.innerArr}`, `&_map_inner_${imi}[_i][_j]`);
       for (const pid of imMeta.mapPerItemDecls) {
         imPool = imPool.replace(new RegExp(`&${pid.name}\\b`, 'g'), `&_map_${pid.name}_${imi}[_i][_j]`);
@@ -947,36 +982,14 @@ function emitMapPoolRebuilds(ctx, meta) {
       if (hm && cm) {
         poolNode = poolNode.replace(hm[0] + ', ' + cm[0], cm[0] + ', ' + hm[0]);
       }
-      // Build handler ptrs at rebuild time if handlers use OA field refs
+      // Handler ptr init moved to top of loop body (before @memcpy reads them).
+      // Debug logging kept here for reference.
       const fieldRefsMap = m._handlerFieldRefsMap || {};
       if (typeof globalThis.__SMITH_DEBUG_MAP_TEXT !== 'undefined') {
         ctx._debugLines.push('[MAP_HANDLER_DEBUG] map=' + mi + ' fieldRefsMap keys=' + JSON.stringify(Object.keys(fieldRefsMap)) + ' mapHandlers.length=' + mapHandlers.length);
         for (let _dhi = 0; _dhi < mapHandlers.length; _dhi++) {
           const _dmh = mapHandlers[_dhi];
           ctx._debugLines.push('[MAP_HANDLER_DEBUG]   handler[' + _dhi + '] name=' + _dmh.name + ' luaBody=' + (_dmh.luaBody || '').substring(0, 100) + ' fieldRefs=' + JSON.stringify(fieldRefsMap[_dhi] || []));
-        }
-      }
-      for (let hi = 0; hi < mapHandlers.length; hi++) {
-        const refs = fieldRefsMap[hi] || [];
-        if (refs.length > 0) {
-          const oaIdx = m.oa.oaIdx;
-          const fmtParts = ['{d}'];
-          const argParts = ['_i'];
-          for (const f of refs) {
-            if (f.type === 'string') {
-              fmtParts.push("'{s}'");
-              argParts.push(`_oa${oaIdx}_${f.name}[_i][0.._oa${oaIdx}_${f.name}_lens[_i]]`);
-            } else {
-              fmtParts.push('{d}');
-              argParts.push(`_oa${oaIdx}_${f.name}[_i]`);
-            }
-          }
-          const bufSize = 127;
-          out += `        {\n`;
-          out += `            const _n = std.fmt.bufPrint(_map_lua_bufs_${mi}_${hi}[_i][0..${bufSize}], "__mapPress_${mi}_${hi}(${fmtParts.join(',')})", .{${argParts.join(', ')}}) catch "";\n`;
-          out += `            _map_lua_bufs_${mi}_${hi}[_i][_n.len] = 0;\n`;
-          out += `            _map_lua_ptrs_${mi}_${hi}[_i] = @ptrCast(_map_lua_bufs_${mi}_${hi}[_i][0.._n.len :0]);\n`;
-          out += `        }\n`;
         }
       }
       // Replace raw map index param (e.g. 'i') with Zig loop variable in pool node ternary conditions

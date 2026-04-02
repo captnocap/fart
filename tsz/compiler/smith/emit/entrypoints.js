@@ -28,9 +28,9 @@ function emitRuntimeEntrypoints(ctx, meta) {
     const mapHandlers = ctx.handlers.filter(function(h) { return h.inMap && h.mapIdx === mi; });
     const fieldRefsMap = ctx.maps[mi]._handlerFieldRefsMap || {};
     for (let hi = 0; hi < mapHandlers.length; hi++) {
-      // Skip init call if handler uses field refs (init is inline in rebuild function)
-      // Also check the map-level flag in case individual handler index doesn't match
-      const hasFieldRefs = (fieldRefsMap[hi] && fieldRefsMap[hi].length > 0) || (ctx.maps[mi]._handlerFieldRefs && ctx.maps[mi]._handlerFieldRefs.length > 0);
+      // Skip init call if THIS handler uses field refs (init is inline in rebuild)
+      // Only check per-handler refs — map-level flag would wrongly skip handlers without refs
+      const hasFieldRefs = fieldRefsMap[hi] && fieldRefsMap[hi].length > 0;
       if (!hasFieldRefs) out += `    _initMapLuaPtrs${mi}_${hi}();\n`;
     }
   }

@@ -231,10 +231,21 @@ function tryParseBraceChild(c, children) {
     if (c.kind() === TK.rbrace) c.advance();
     const isZigExpr = typeof _brRlVal === 'string' && (_brRlVal.includes('state.get') || _brRlVal.includes('getSlot') || _brRlVal.includes('_oa') || _brRlVal.includes('@as'));
     if (isZigExpr) {
-      const bufId = ctx.dynCount;
-      ctx.dynTexts.push({ bufId, fmtString: '{d}', fmtArgs: leftFoldExpr(_brRlVal), arrName: '', arrIndex: 0, bufSize: 64 });
-      ctx.dynCount++;
-      children.push({ nodeExpr: `.{ .text = "" }`, dynBufId: bufId });
+      const isStr = _brRlVal.includes('getSlotString') || _brRlVal.includes('@as([]const u8');
+      const fmt = isStr ? '{s}' : '{d}';
+      const fmtArgs = isStr ? _brRlVal : leftFoldExpr(_brRlVal);
+      const bufSize = isStr ? 128 : 64;
+      if (ctx.currentMap && _brRlVal.includes('_oa')) {
+        const mapBufId = ctx.mapDynCount || 0;
+        ctx.mapDynCount = mapBufId + 1;
+        ctx.dynTexts.push({ bufId: mapBufId, fmtString: fmt, fmtArgs, arrName: '', arrIndex: 0, bufSize: 256, inMap: true, mapIdx: ctx.maps.indexOf(ctx.currentMap) });
+        children.push({ nodeExpr: `.{ .text = "__mt${mapBufId}__" }`, dynBufId: mapBufId, inMap: true });
+      } else {
+        const bufId = ctx.dynCount;
+        ctx.dynTexts.push({ bufId, fmtString: fmt, fmtArgs, arrName: '', arrIndex: 0, bufSize });
+        ctx.dynCount++;
+        children.push({ nodeExpr: `.{ .text = "" }`, dynBufId: bufId });
+      }
     } else {
       children.push({ nodeExpr: `.{ .text = "${_brRlVal}" }` });
     }
@@ -254,7 +265,7 @@ function tryParseBraceChild(c, children) {
       if (c.kind() === TK.rbrace) c.advance();
       const isZigExpr = typeof propVal === 'string' && (propVal.includes('state.get') || propVal.includes('getSlot') || propVal.includes('_oa') || propVal.includes('@as'));
       if (isZigExpr) {
-        const isStr = propVal.includes('getSlotString') || propVal.includes('..');
+        const isStr = propVal.includes('getSlotString') || propVal.includes('..') || propVal.includes('@as([]const u8');
         const fmt = isStr ? '{s}' : '{d}';
         const args = isStr ? propVal : leftFoldExpr(propVal);
         if (ctx.currentMap) {
@@ -290,7 +301,7 @@ function tryParseBraceChild(c, children) {
         }
         const isZigExpr = typeof propVal === 'string' && (propVal.includes('state.get') || propVal.includes('getSlot') || propVal.includes('_oa') || propVal.includes('@as'));
         if (isZigExpr) {
-          const isStr = typeof propVal === 'string' && (propVal.includes('getSlotString') || propVal.includes('..'));
+          const isStr = typeof propVal === 'string' && (propVal.includes('getSlotString') || propVal.includes('..') || propVal.includes('@as([]const u8'));
           const fmt = isStr ? '{s}' : '{d}';
           const args = isStr ? propVal : leftFoldExpr(propVal);
           if (ctx.currentMap) {

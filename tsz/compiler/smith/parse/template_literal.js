@@ -45,10 +45,11 @@ function parseTemplateLiteral(raw) {
           else args.push(`${slotGet(m[1])} ${m[2]} ${rhsVal}`);
         } else if (ctx.currentMap && m[1] === ctx.currentMap.indexParam) {
           // Map index param in arithmetic: ${i + 1}, ${i - 1}, etc.
+          const iv = ctx.currentMap.iterVar || '_i';
           fmt += '{d}';
-          if (m[2] === '/') args.push(`@divTrunc(@as(i64, @intCast(_i)), ${m[3].trim()})`);
-          else if (m[2] === '%') args.push(`@mod(@as(i64, @intCast(_i)), ${m[3].trim()})`);
-          else args.push(`@as(i64, @intCast(_i)) ${m[2]} ${m[3].trim()}`);
+          if (m[2] === '/') args.push(`@divTrunc(@as(i64, @intCast(${iv})), ${m[3].trim()})`);
+          else if (m[2] === '%') args.push(`@mod(@as(i64, @intCast(${iv})), ${m[3].trim()})`);
+          else args.push(`@as(i64, @intCast(${iv})) ${m[2]} ${m[3].trim()}`);
         } else {
           fmt += expr;
         }
@@ -89,26 +90,29 @@ function parseTemplateLiteral(raw) {
           args.push(`"${propVal}"`);
         }
       } else if (ctx.currentMap && expr === ctx.currentMap.indexParam) {
-        // Map index parameter: ${idx} → {d} with @as(i64, @intCast(_i))
+        // Map index: use iterVar so inline inner maps use _j, outer maps use _i
+        const iv = ctx.currentMap.iterVar || '_i';
         fmt += '{d}';
-        args.push('@as(i64, @intCast(_i))');
+        args.push('@as(i64, @intCast(' + iv + '))');
       } else if (ctx.currentMap && ctx.currentMap.parentMap && expr === ctx.currentMap.parentMap.indexParam) {
-        // Parent map index parameter: ${parent_idx} → {d} with outer loop index
+        // Parent map index parameter: ${parent_idx} → outer loop variable (inline: _i)
+        const piv = ctx.currentMap.parentMap.iterVar || '_i';
         fmt += '{d}';
-        args.push('@as(i64, @intCast(_i))');
+        args.push('@as(i64, @intCast(' + piv + '))');
       } else if (ctx.currentMap && expr.startsWith(ctx.currentMap.itemParam + '.')) {
         // Map item member access: ${item.field} → {s}/{d} with OA field ref
         const field = expr.slice(ctx.currentMap.itemParam.length + 1);
         const oa = ctx.currentMap.oa;
         const fi = oa.fields.find(f => f.name === field);
+        const iv = ctx.currentMap.iterVar || '_i';
         if (fi) {
           const oaIdx = oa.oaIdx;
           if (fi.type === 'string') {
             fmt += '{s}';
-            args.push(`_oa${oaIdx}_${field}[_i][0.._oa${oaIdx}_${field}_lens[_i]]`);
+            args.push(`_oa${oaIdx}_${field}[${iv}][0.._oa${oaIdx}_${field}_lens[${iv}]]`);
           } else {
             fmt += '{d}';
-            args.push(`_oa${oaIdx}_${field}[_i]`);
+            args.push(`_oa${oaIdx}_${field}[${iv}]`);
           }
         } else {
           fmt += expr;
