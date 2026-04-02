@@ -240,6 +240,18 @@ function transpilePageExpr(expr) {
   return expr;
 }
 
+// Quote bare words that are known type variants.
+// e.g., set_mode('time') instead of set_mode(time)
+function _quoteTypeVariant(expr) {
+  if (!ctx._typeVariants) return expr;
+  var trimmed = expr.trim();
+  // Only quote single bare identifiers that are type variants
+  if (/^\w+$/.test(trimmed) && ctx._typeVariants[trimmed]) {
+    return "'" + trimmed + "'";
+  }
+  return expr;
+}
+
 function transpilePageLine(line, setterNames, isComputed) {
   // Guard: expr ? stop : go → early return
   if (/\?\s*stop\s*:\s*go\s*$/.test(line)) {
@@ -256,13 +268,13 @@ function transpilePageLine(line, setterNames, isComputed) {
   // Setter: set_X to expression
   var setterMatch = line.match(/^(set_\w+)\s+to\s+(.+)$/);
   if (setterMatch) {
-    return setterMatch[1] + '(' + transpilePageExpr(setterMatch[2]) + ');';
+    return setterMatch[1] + '(' + _quoteTypeVariant(transpilePageExpr(setterMatch[2])) + ');';
   }
 
   // Setter: set_X is expression (dictionary/chad syntax)
   var setterIsMatch = line.match(/^(set_\w+)\s+is\s+(.+)$/);
   if (setterIsMatch) {
-    return setterIsMatch[1] + '(' + transpilePageExpr(setterIsMatch[2]) + ');';
+    return setterIsMatch[1] + '(' + _quoteTypeVariant(transpilePageExpr(setterIsMatch[2])) + ');';
   }
 
   // stop → return

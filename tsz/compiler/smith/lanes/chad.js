@@ -111,6 +111,24 @@ function compileChadLane(source, tokens, file) {
   var functionsBlock = extractPageBlock(inner, 'functions');
   var timerBlocks = extractPageBlocks(inner, 'timer');
 
+  // ── Parse <types> block → type variant values ──
+  // These are string enums: <types><mode>time\ndate\nsystem</mode></types>
+  // The transpiler needs to quote bare words that match type variants.
+  var typesBlock = extractPageBlock(inner, 'types');
+  ctx._typeVariants = {};
+  if (typesBlock) {
+    var typeBlockRe = /<(\w+)>([\s\S]*?)<\/\1>/g;
+    var tbMatch;
+    while ((tbMatch = typeBlockRe.exec(typesBlock)) !== null) {
+      var typeName = tbMatch[1];
+      var typeBody = tbMatch[2];
+      var variants = typeBody.split('\n').map(function(l) { return l.trim(); }).filter(function(l) { return l && !l.startsWith('//'); });
+      for (var tvi = 0; tvi < variants.length; tvi++) {
+        ctx._typeVariants[variants[tvi]] = typeName;
+      }
+    }
+  }
+
   // Track <module> blocks as ignored (not yet compiled)
   var moduleMatches = inner.match(/<module\s+(\w+)\s*>/g);
   if (moduleMatches) {
