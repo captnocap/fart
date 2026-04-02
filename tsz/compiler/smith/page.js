@@ -291,6 +291,12 @@ function transpilePageLine(line, setterNames, isComputed) {
     return setterIsMatch[1] + '(' + _quoteTypeVariant(transpilePageExpr(setterIsMatch[2])) + ');';
   }
 
+  // Local variable assignment: name is expr (not a setter, not a state var)
+  var localIsMatch = line.match(/^(\w+)\s+is\s+(.+)$/);
+  if (localIsMatch && !localIsMatch[1].startsWith('set_')) {
+    return 'var ' + localIsMatch[1] + ' = ' + transpilePageExpr(localIsMatch[2]) + ';';
+  }
+
   // stop → return
   if (line === 'stop') return 'return;';
 
@@ -360,6 +366,19 @@ function transpilePageBody(bodyLines, setterNames, jsLines, indent, isComputed) 
       if (nextAfterElse.indexOf('<else') === 0) {
         continue;
       }
+      jsLines.push(indent + '}');
+      continue;
+    }
+
+    // <during condition> — in function bodies, acts as <if> (conditional exec)
+    var duringMatch = line.match(/^<during\s+(.+)>$/);
+    if (duringMatch) {
+      jsLines.push(indent + 'if (' + transpilePageExpr(duringMatch[1]) + ') {');
+      continue;
+    }
+
+    // </during>
+    if (line === '</during>') {
       jsLines.push(indent + '}');
       continue;
     }

@@ -274,10 +274,16 @@ function compileChadLane(source, tokens, file) {
     }
   }
 
-  // ── Register OAs for object_array state vars ──
+  // ── Register OAs for object_array state vars (skip if data block already registered) ──
   for (var oai = 0; oai < stateVars.length; oai++) {
     var oav = stateVars[oai];
     if (oav.type !== 'object_array' || !oav.initial) continue;
+    // Skip if data block parser already registered this OA
+    var alreadyRegistered = false;
+    for (var ari = 0; ari < ctx.objectArrays.length; ari++) {
+      if (ctx.objectArrays[ari].getter === oav.name) { alreadyRegistered = true; break; }
+    }
+    if (alreadyRegistered) continue;
     var oaFieldMatch = oav.initial.match(/\[\s*\{([^}]+)\}/);
     if (!oaFieldMatch) continue;
     var oaFieldPairs = oaFieldMatch[1].split(',');
