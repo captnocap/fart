@@ -1,0 +1,14 @@
+<calculator app>
+  <var>
+    pages is page array
+    active is 'main'
+  </var>
+
+  <pages>
+    main
+  </pages>
+
+  return(
+    <active page />
+  )
+</calculator>
