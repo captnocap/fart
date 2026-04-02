@@ -361,17 +361,15 @@ carts/
 
 ## Conformance
 
-| Suite | Tests | Pass Rate | What |
-|-------|-------|-----------|------|
-| Autobahn WebSocket | 202/204 | 99% | RFC 6455 compliance |
-| WPT Flexbox | 75 | 100% | W3C CSS flex spec |
-| Mixed (feature + torture) | 153 | 117/153 compiled | Exhaustive compiler coverage — every feature, every edge case |
-| Chad (intent syntax) | 34 | 22/34 compiled | Dictionary-based intent syntax, multi-file apps, libs |
-| Lscript | 35 | 14/35 compiled | LuaJIT script backend |
-| Soup (real-world) | 21 | 7/21 compiled | End-to-end apps in messy real-world syntax |
-| Crypto | 13/13 | 100% | HMAC, HKDF, Shamir, encryption, PII detection |
-
-**Overall: 261/319 compiled (81% pass rate), 201/319 verified (63% verified pass rate).**
+| Suite | Disk | Compiled | Verified | What |
+|-------|------|----------|----------|------|
+| Mixed (feature + torture) | 153 | 142 | 117 | Exhaustive compiler coverage |
+| WPT Flexbox | 75 | 75 | 70 | W3C CSS flex spec |
+| Lscript | 35 | 14 | 6 | LuaJIT script backend |
+| Chad (intent syntax) | 34 | 22 | 4 | Dictionary-based intent syntax |
+| Soup (real-world) | 21 | 10 | 2 | End-to-end apps in messy real-world syntax |
+| Root | 1 | 0 | 0 | Root-level harness |
+| **Overall** | **319** | **264 (82%)** | **201 (63%)** | |
 
 Conformance is tracked by a SQLite-backed ledger (`scripts/ledger`). A post-commit hook auto-runs regression sweeps when compiler or framework files change, reporting newly broken vs already broken vs newly fixed.
 
@@ -379,12 +377,13 @@ Conformance is tracked by a SQLite-backed ledger (`scripts/ledger`). A post-comm
 
 ### Build
 
-| Cart | Time | What |
-|------|------|------|
-| Small (d70) | 80ms | forge + zig obj + luajit link |
-| Medium (d01) | 500ms | typical app with maps + state |
-| Large (d12 kanban) | 542ms | complex nested maps, was 18s before engine split |
-| Engine rebuild | ~24s | one-time, cached as .so |
+| Phase | Time | What |
+|-------|------|------|
+| Compile + link (simple, ~50 lines) | ~90-110ms | zig build-obj + link against engine .so |
+| Compile + link (typical, ~100 lines) | ~150-160ms | maps, state, components |
+| Compile + link (complex, ~200-350 lines) | ~250-570ms | nested maps, ternaries, heavy codegen |
+| End-to-end script | ~2.1-3.1s | includes forge lex/emit + zig build + packaging |
+| Engine rebuild | ~24s | one-time |
 
 ### Runtime
 
