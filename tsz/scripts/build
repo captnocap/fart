@@ -101,7 +101,22 @@ if [[ "$CART" == *carts/conformance/* ]] && [[ "$CART" != *.script.tsz ]] && [[ 
         verified_at      TEXT NOT NULL,
         source_path      TEXT NOT NULL,
         verified_build_id INTEGER
-    );"
+    );
+    CREATE TABLE IF NOT EXISTS build_perf (
+        id             INTEGER PRIMARY KEY AUTOINCREMENT,
+        test_name      TEXT    NOT NULL,
+        lane           TEXT    NOT NULL,
+        built_at       TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%d %I:%M:%S', 'now', 'localtime')),
+        source_lines   INTEGER NOT NULL,
+        generated_bytes INTEGER NOT NULL,
+        forge_ms       INTEGER NOT NULL,
+        zig_ms         INTEGER NOT NULL,
+        total_ms       INTEGER NOT NULL,
+        lines_per_sec  REAL   NOT NULL,
+        bytes_per_line REAL   NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_perf_test ON build_perf(test_name);
+    CREATE INDEX IF NOT EXISTS idx_perf_date ON build_perf(built_at);"
 fi
 
 record_build() {
@@ -173,12 +188,25 @@ fi
 rm -f "$GEN"
 rm -rf "$GEN_DIR"
 echo "[$NAME] forge..."
+FORGE_START=$(date +%s%N)
 FORGE_OUT=$(./zig-out/bin/forge build --fast "$CART" 2>&1) || {
     echo "$FORGE_OUT"
     record_build "forge_fail" "$FORGE_OUT"
     exit 1
 }
+FORGE_END=$(date +%s%N)
+FORGE_MS=$(( (FORGE_END - FORGE_START) / 1000000 ))
 echo "$FORGE_OUT"
+
+# Parse source metrics from forge output
+SOURCE_LINES=$(echo "$FORGE_OUT" | grep -oP 'source_lines=\K[0-9]+' || echo "0")
+GENERATED_BYTES=0
+# Get generated output size
+if [ -d "$GEN_DIR" ]; then
+    GENERATED_BYTES=$(cat "$GEN_DIR"/*.zig 2>/dev/null | wc -c)
+elif [ -f "$GEN" ]; then
+    GENERATED_BYTES=$(wc -c < "$GEN" 2>/dev/null || echo "0")
+fi
 
 # Some soup carts currently return split-output markers in a monolith payload
 # instead of a generated directory. Fall back to a single-file forge build so
@@ -274,11 +302,14 @@ fi
 
 # ── Step 3: LuaJIT link (cart .zig → .o + engine .so → binary) ───────
 echo "[$NAME] zig build..."
+ZIG_START=$(date +%s%N)
 LINK_OUT=$(luajit scripts/link.lua "$APP_SOURCE" "$NAME" 2>&1) || {
     echo "$LINK_OUT"
     record_build "zig_fail" "$LINK_OUT"
     exit 1
 }
+ZIG_END=$(date +%s%N)
+ZIG_MS=$(( (ZIG_END - ZIG_START) / 1000000 ))
 echo "$LINK_OUT"
 
 # ── Step 4: Package as self-extracting binary ────────────────────────
@@ -452,4 +483,24 @@ HEADER
 fi
 
 record_build "compiled"
+
+# ── Record build performance ──────────────────────────────────────
+if [ "$IS_CONFORMANCE" -eq 1 ] && [ "${SOURCE_LINES:-0}" -gt 0 ]; then
+    TOTAL_MS=$(( FORGE_MS + ZIG_MS ))
+    if [ "$TOTAL_MS" -gt 0 ]; then
+        LINES_PER_SEC=$(echo "scale=1; $SOURCE_LINES * 1000 / $TOTAL_MS" | bc 2>/dev/null || echo "0")
+    else
+        LINES_PER_SEC=0
+    fi
+    if [ "$SOURCE_LINES" -gt 0 ]; then
+        BYTES_PER_LINE=$(echo "scale=1; $GENERATED_BYTES / $SOURCE_LINES" | bc 2>/dev/null || echo "0")
+    else
+        BYTES_PER_LINE=0
+    fi
+    SAFE_PERF_NAME=$(printf '%s' "$CONF_NAME" | sed "s/'/''/g")
+    cdb "INSERT INTO build_perf (test_name, lane, source_lines, generated_bytes, forge_ms, zig_ms, total_ms, lines_per_sec, bytes_per_line)
+        VALUES ('$SAFE_PERF_NAME', '$CONF_LANE', $SOURCE_LINES, $GENERATED_BYTES, $FORGE_MS, $ZIG_MS, $TOTAL_MS, $LINES_PER_SEC, $BYTES_PER_LINE);"
+    echo "[$NAME] perf: ${SOURCE_LINES} lines in → ${GENERATED_BYTES} bytes out | forge ${FORGE_MS}ms + zig ${ZIG_MS}ms = ${TOTAL_MS}ms (${LINES_PER_SEC} lines/sec)"
+fi
+
 echo "[$NAME] done → zig-out/bin/$NAME"

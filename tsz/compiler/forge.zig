@@ -294,9 +294,15 @@ pub fn main() !void {
     // 2. Lex the merged source
     var lexer = Lexer.init(merged_source);
     lexer.tokenize();
+    // Count source lines in merged input
+    var src_lines: usize = 1;
+    for (merged_source) |c| {
+        if (c == '\n') src_lines += 1;
+    }
     std.debug.print("[forge] Lexed {d} tokens from {s}", .{ lexer.count, input_path });
     if (visited_count > 1) std.debug.print(" (+{d} imports)", .{visited_count - 1});
     std.debug.print("\n", .{});
+    std.debug.print("[forge] source_lines={d} merged_bytes={d}\n", .{ src_lines, merged_source.len });
 
     // 3. Init Smith (QuickJS)
     smith.init();
