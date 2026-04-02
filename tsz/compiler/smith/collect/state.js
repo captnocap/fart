@@ -122,7 +122,32 @@ function collectObjectState(c, getter, setter) {
 function collectObjectArrayState(c, getter, setter) {
   const arrayStartPos = c.pos - 1; // position of [
   c.advance();
-  if (c.kind() !== TK.lbrace) return 'int';
+  // Primitive array: useState([0, 0, 0, ...]) → synthetic OA with single 'value' field
+  if (c.kind() !== TK.lbrace) {
+    // Check if it's an array of numbers/booleans
+    if (c.kind() === TK.number || c.kind() === TK.minus || c.isIdent('true') || c.isIdent('false')) {
+      const parentOaIdx = ctx.objectArrays.length;
+      ctx.objectArrays.push({
+        fields: [{ name: 'value', type: 'int' }],
+        getter, setter, oaIdx: parentOaIdx,
+        initDataStartPos: arrayStartPos,
+        isPrimitiveArray: true,
+      });
+      // Skip to end of array
+      let depth = 1;
+      while (depth > 0 && c.kind() !== TK.eof) {
+        if (c.kind() === TK.lbracket) depth++;
+        if (c.kind() === TK.rbracket) depth--;
+        if (depth > 0) c.advance();
+      }
+      if (c.kind() === TK.rbracket) c.advance();
+      if (c.kind() === TK.rparen) c.advance();
+      const oa = ctx.objectArrays[parentOaIdx];
+      oa.initDataEndPos = c.pos;
+      return 'object_array';
+    }
+    return 'int';
+  }
 
   const fields = [];
   c.advance();

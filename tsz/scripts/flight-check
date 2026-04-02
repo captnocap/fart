@@ -191,7 +191,7 @@ SRC_MAPS=$(gcount_file '\.map\s*\(' "$SOURCE")
 SRC_FOR=$(gcount_file '<For ' "$SOURCE")
 SRC_LOOPS=$((SRC_MAPS + SRC_FOR))
 if [ "$SRC_LOOPS" -gt 0 ]; then
-    GEN_REBUILD_FNS=$(gcount 'pub fn _rebuildMap[0-9]+' "$GEN_BLOB")
+    GEN_REBUILD_FNS=$(gcount 'fn _rebuildMap[0-9]+' "$GEN_BLOB")
     if [ "$GEN_REBUILD_FNS" -eq 0 ]; then
         fail "$SRC_LOOPS loop(s) in source (.map/$SRC_MAPS, <For>/$SRC_FOR) but no _rebuildMap function in generated"
     fi

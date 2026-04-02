@@ -164,25 +164,47 @@ function tryParseConditional(c, children) {
         c.advance();
         continue;
       }
-      // OA getter followed by [mapIndex].field → resolve to OA field access
-      if (oa && ctx.currentMap && c.pos + 4 < c.count &&
-          c.kindAt(c.pos + 1) === TK.lbracket) {
-        // Check if bracket contains map index param
+      // OA getter followed by [expr] or [expr].field → resolve to OA field access
+      if (oa && c.pos + 2 < c.count && c.kindAt(c.pos + 1) === TK.lbracket) {
+        // Resolve bracket expression to Zig index
         const bracketIdent = c.textAt(c.pos + 2);
-        const isMapIdx = bracketIdent === ctx.currentMap.indexParam;
-        if (isMapIdx && c.kindAt(c.pos + 3) === TK.rbracket &&
-            c.kindAt(c.pos + 4) === TK.dot && c.pos + 5 < c.count &&
-            c.kindAt(c.pos + 5) === TK.identifier) {
-          const field = c.textAt(c.pos + 5);
-          const iterVar = ctx.currentMap.iterVar || '_i';
-          const fieldInfo = oa.fields.find(f => f.name === field);
-          if (fieldInfo && fieldInfo.type === 'string') {
-            condParts.push(`_oa${oa.oaIdx}_${field}[${iterVar}][0.._oa${oa.oaIdx}_${field}_lens[${iterVar}]]`);
-          } else {
-            condParts.push(`_oa${oa.oaIdx}_${field}[${iterVar}]`);
+        let resolvedIdx = null;
+        if (ctx.currentMap && bracketIdent === ctx.currentMap.indexParam) {
+          resolvedIdx = ctx.currentMap.iterVar || '_i';
+        } else if (ctx.propStack && ctx.propStack[bracketIdent] !== undefined) {
+          const bpv = ctx.propStack[bracketIdent];
+          if (typeof bpv === 'string' && bpv.includes('_oa')) {
+            resolvedIdx = `@as(usize, @intCast(${bpv}))`;
+          } else if (typeof bpv === 'string' && bpv.includes('@intCast(')) {
+            resolvedIdx = bpv.replace('@as(i64, ', '@as(usize, ');
+          } else if (/^\d+$/.test(bpv)) {
+            resolvedIdx = bpv;
           }
-          c.advance(); c.advance(); c.advance(); c.advance(); c.advance(); c.advance(); // skip name [ idx ] . field
-          continue;
+        } else if (ctx.currentMap && ctx.currentMap.oa) {
+          const bracketField = ctx.currentMap.oa.fields.find(f => f.name === bracketIdent);
+          if (bracketField) {
+            resolvedIdx = `@as(usize, @intCast(_oa${ctx.currentMap.oa.oaIdx}_${bracketIdent}[${ctx.currentMap.iterVar || '_i'}]))`;
+          }
+        }
+        if (resolvedIdx !== null && c.kindAt(c.pos + 3) === TK.rbracket) {
+          // Check for .field after ] (object array bracket access)
+          if (c.pos + 5 < c.count && c.kindAt(c.pos + 4) === TK.dot && c.kindAt(c.pos + 5) === TK.identifier) {
+            const field = c.textAt(c.pos + 5);
+            const fieldInfo = oa.fields.find(f => f.name === field);
+            if (fieldInfo && fieldInfo.type === 'string') {
+              condParts.push(`_oa${oa.oaIdx}_${field}[${resolvedIdx}][0.._oa${oa.oaIdx}_${field}_lens[${resolvedIdx}]]`);
+            } else {
+              condParts.push(`_oa${oa.oaIdx}_${field}[${resolvedIdx}]`);
+            }
+            c.advance(); c.advance(); c.advance(); c.advance(); c.advance(); c.advance(); // skip name [ idx ] . field
+            continue;
+          }
+          // Primitive array: no .field — just oaName[idx] → _oaN_value[idx]
+          if (oa.isPrimitiveArray) {
+            condParts.push(`_oa${oa.oaIdx}_value[${resolvedIdx}]`);
+            c.advance(); c.advance(); c.advance(); c.advance(); // skip name [ idx ]
+            continue;
+          }
         }
       }
       if (isGetter(name)) {

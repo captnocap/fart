@@ -510,6 +510,8 @@ function emitMapPoolRebuilds(ctx, meta) {
           resolvedExpr = resolvedExpr.replace(new RegExp(`${itemParam}\\.${f.name}`, 'g'), `_oa${m.oa.oaIdx}_${f.name}[_i]`);
         }
       }
+      // Skip unresolvable conditionals (e.g. JS function calls that can't compile to Zig)
+      if (/\b0\(/.test(resolvedExpr) || /\b0\b.*@as/.test(resolvedExpr)) continue;
       const wrapped = _wrapMapCondition(resolvedExpr);
       if (cond.kind === 'show_hide') {
         out += `        ${poolArr}[${cond.trueIdx}].style.display = if ${wrapped} .flex else .none;\n`;
@@ -518,7 +520,7 @@ function emitMapPoolRebuilds(ctx, meta) {
         out += `        ${poolArr}[${cond.falseIdx}].style.display = if ${wrapped} .none else .flex;\n`;
       }
     }
-  
+
     // Per-item dynamic texts (text formatting inside map components)
     for (const dt of ctx.dynTexts) {
       if (dt.inMap) continue;  // inMap texts handled separately
@@ -929,6 +931,8 @@ function emitMapPoolRebuilds(ctx, meta) {
               resolvedExpr = resolvedExpr.replace(new RegExp(`${itemParam}\\.${f.name}`, 'g'), `_oa${m.oa.oaIdx}_${f.name}[_i]`);
             }
           }
+          // Skip unresolvable conditionals (e.g. JS function calls that can't compile to Zig)
+          if (/\b0\(/.test(resolvedExpr) || /\b0\b.*@as/.test(resolvedExpr)) continue;
           const _wc = _wrapMapCondition(resolvedExpr);
           if (cond.kind === 'show_hide') {
             out += `        _inner_${mi}[${cond.trueIdx}].style.display = if ${_wc} .flex else .none;\n`;
@@ -1052,7 +1056,7 @@ function emitMapPoolRebuilds(ctx, meta) {
     const mapVBs = ctx.variantBindings.filter(function(vb) { return vb.inMap; });
     if (mapVBs.length > 0 && ctx.variantNames.length > 0) {
       out += `        {\n`;
-      out += `        const _v = @as(usize, @import("framework/api.zig").theme.rjit_theme_active_variant());\n`;
+      out += `        const _v = @as(usize, api.theme.rjit_theme_active_variant());\n`;
       for (const vb of mapVBs) {
         let target;
         if (!vb.arrName) {

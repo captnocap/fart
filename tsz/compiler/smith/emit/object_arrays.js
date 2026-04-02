@@ -189,7 +189,12 @@ fn _oaFreeString(slot: *[]const u8, len_slot: *usize) void {
     }
     out += `    for (0..count) |_i| {\n`;
     out += `        const elem = qjs.JS_GetPropertyUint32(c2, arr, @intCast(_i));\n`;
-    if (oa.isSimpleArray) {
+    if (oa.isPrimitiveArray) {
+      // Primitive array: element is the value directly (not an object)
+      out += `        { var _n: i64 = 0; _ = qjs.JS_ToInt64(c2, &_n, elem);\n`;
+      out += `        _oa${idx}_value[_i] = _n;\n`;
+      out += `        }\n`;
+    } else if (oa.isSimpleArray) {
       out += `        { const _s = qjs.JS_ToCString(c2, elem);\n`;
       out += `        _oaFreeString(&_oa${idx}__v[_i], &_oa${idx}__v_lens[_i]);\n`;
       out += `        if (_s) |ss| { const sl = std.mem.span(ss); _oa${idx}__v[_i] = _oaDupString(sl); _oa${idx}__v_lens[_i] = _oa${idx}__v[_i].len; qjs.JS_FreeCString(c2, _s); }\n`;

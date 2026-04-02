@@ -1,5 +1,29 @@
 // ── Brace ternary parsing ─────────────────────────────────────────
 
+// Resolve bracket index expression to a Zig usize for OA access
+function _resolveOaBracketIdx(ident) {
+  if (ctx.currentMap && ident === ctx.currentMap.indexParam) {
+    return ctx.currentMap.iterVar || '_i';
+  }
+  if (ctx.propStack && ctx.propStack[ident] !== undefined) {
+    var bpv = ctx.propStack[ident];
+    if (typeof bpv === 'string' && bpv.includes('_oa')) {
+      return '@as(usize, @intCast(' + bpv + '))';
+    }
+    if (typeof bpv === 'string' && bpv.includes('@intCast(')) {
+      return bpv.replace('@as(i64, ', '@as(usize, ');
+    }
+    if (/^\d+$/.test(bpv)) return bpv;
+  }
+  if (ctx.currentMap && ctx.currentMap.oa) {
+    var bf = ctx.currentMap.oa.fields.find(function(f) { return f.name === ident; });
+    if (bf) {
+      return '@as(usize, @intCast(_oa' + ctx.currentMap.oa.oaIdx + '_' + ident + '[' + (ctx.currentMap.iterVar || '_i') + ']))';
+    }
+  }
+  return null;
+}
+
 // Resolve string comparisons: lhs == 'str' → std.mem.eql(u8, lhs, "str")
 // Also handles runtime string comparisons: slice == getSlotString(N) → std.mem.eql
 function _resolveStringComparison(condExpr) {
@@ -86,12 +110,43 @@ function _parseTernaryCondParts(c) {
     }
     if (c.kind() === TK.identifier) {
       var name = c.text();
+      // OA getter followed by [expr] — primitive array or object array bracket access
+      var _ternOa = ctx.objectArrays ? ctx.objectArrays.find(function(o) { return o.getter === name; }) : null;
+      if (_ternOa && c.pos + 3 < c.count && c.kindAt(c.pos + 1) === TK.lbracket) {
+        var _tIdx = _resolveOaBracketIdx(c.textAt(c.pos + 2));
+        if (_tIdx !== null && c.kindAt(c.pos + 3) === TK.rbracket) {
+          if (_ternOa.isPrimitiveArray) {
+            condParts.push('_oa' + _ternOa.oaIdx + '_value[' + _tIdx + ']');
+            c.advance(); c.advance(); c.advance(); c.advance();
+            continue;
+          }
+          if (c.pos + 5 < c.count && c.kindAt(c.pos + 4) === TK.dot && c.kindAt(c.pos + 5) === TK.identifier) {
+            var _tf = c.textAt(c.pos + 5);
+            condParts.push('_oa' + _ternOa.oaIdx + '_' + _tf + '[' + _tIdx + ']');
+            c.advance(); c.advance(); c.advance(); c.advance(); c.advance(); c.advance();
+            continue;
+          }
+        }
+      }
       if (isGetter(name)) {
         condParts.push(slotGet(name));
       } else if (ctx.renderLocals && ctx.renderLocals[name] !== undefined) {
         condParts.push(ctx.renderLocals[name]);
       } else if (ctx.propStack && ctx.propStack[name] !== undefined) {
         var pv = ctx.propStack[name];
+        // If prop is a map-item ref and next is .field, resolve as OA field access
+        if (ctx.currentMap && ctx.currentMap.oa &&
+            typeof pv === 'string' && pv.includes('@intCast(') &&
+            c.pos + 2 < c.count && c.kindAt(c.pos + 1) === TK.dot && c.kindAt(c.pos + 2) === TK.identifier) {
+          c.advance(); // skip prop name
+          c.advance(); // skip dot
+          var field = c.text();
+          var mapOa = ctx.currentMap.oa;
+          var iterVar = ctx.currentMap.iterVar || '_i';
+          condParts.push('_oa' + mapOa.oaIdx + '_' + field + '[' + iterVar + ']');
+          c.advance(); // skip field
+          continue;
+        }
         condParts.push(_condPropValue(pv));
       } else if (ctx.currentMap && name === ctx.currentMap.indexParam) {
         condParts.push('@as(i64, @intCast(' + (ctx.currentMap.iterVar || '_i') + '))');
@@ -310,6 +365,24 @@ function tryParseTernaryText(c, children) {
         if (c.kind() === TK.equals) c.advance();
         continue;
       }
+      // OA getter followed by [expr] — primitive array or object array bracket access
+      var _ternOa2 = ctx.objectArrays ? ctx.objectArrays.find(function(o) { return o.getter === name; }) : null;
+      if (_ternOa2 && c.pos + 3 < c.count && c.kindAt(c.pos + 1) === TK.lbracket) {
+        var _tIdx2 = _resolveOaBracketIdx(c.textAt(c.pos + 2));
+        if (_tIdx2 !== null && c.kindAt(c.pos + 3) === TK.rbracket) {
+          if (_ternOa2.isPrimitiveArray) {
+            condParts.push('_oa' + _ternOa2.oaIdx + '_value[' + _tIdx2 + ']');
+            c.advance(); c.advance(); c.advance(); c.advance();
+            continue;
+          }
+          if (c.pos + 5 < c.count && c.kindAt(c.pos + 4) === TK.dot && c.kindAt(c.pos + 5) === TK.identifier) {
+            var _tf2 = c.textAt(c.pos + 5);
+            condParts.push('_oa' + _ternOa2.oaIdx + '_' + _tf2 + '[' + _tIdx2 + ']');
+            c.advance(); c.advance(); c.advance(); c.advance(); c.advance(); c.advance();
+            continue;
+          }
+        }
+      }
       if (isGetter(name)) {
         condParts.push(slotGet(name));
       } else if (ctx.renderLocals && ctx.renderLocals[name] !== undefined) {
@@ -334,7 +407,21 @@ function tryParseTernaryText(c, children) {
         }
         condParts.push(rlVal);
       } else if (ctx.propStack && ctx.propStack[name] !== undefined) {
-        condParts.push(_condPropValue(ctx.propStack[name]));
+        const _pv2 = ctx.propStack[name];
+        // If prop is a map-item ref and next is .field, resolve as OA field access
+        if (ctx.currentMap && ctx.currentMap.oa &&
+            typeof _pv2 === 'string' && _pv2.includes('@intCast(') &&
+            c.pos + 2 < c.count && c.kindAt(c.pos + 1) === TK.dot && c.kindAt(c.pos + 2) === TK.identifier) {
+          c.advance(); // skip prop name
+          c.advance(); // skip dot
+          const _f2 = c.text();
+          const _moa2 = ctx.currentMap.oa;
+          const _iv2 = ctx.currentMap.iterVar || '_i';
+          condParts.push(`_oa${_moa2.oaIdx}_${_f2}[${_iv2}]`);
+          c.advance(); // skip field
+          continue;
+        }
+        condParts.push(_condPropValue(_pv2));
       } else if (ctx.currentMap && name === ctx.currentMap.itemParam) {
         c.advance();
         if (c.kind() === TK.dot) {
