@@ -343,20 +343,10 @@ noinline fn paintNodeVisuals(node: *Node) void {
     const r = node.computed;
     const is_hovered = (engine.hovered_node == node) and (node.handlers.on_hover_enter != null or node.handlers.on_hover_exit != null or node.hoverable);
 
-    // DEBUG: unconditional red marker on every node with background
-    if (node.style.background_color != null) {
-        gpu.drawRect(r.x, r.y, 8, 8, 1.0, 0.0, 0.0, 1.0, 0, 0, 0, 0, 0, 0);
-    }
-
     // Box shadow — draw BEFORE background so it appears behind
     if (node.style.shadow_color) |sc| {
         if (node.style.shadow_blur > 0) {
-            // Comparison mode: left half = multi-rect, right half = SDF shader
-            if (r.x + r.w * 0.5 < 400) {
-                paintShadowMultiRect(r, node.style, sc);
-            } else {
-                paintShadowSDF(r, node.style, sc);
-            }
+            paintShadowSDF(r, node.style, sc);
         }
     }
 

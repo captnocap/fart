@@ -873,6 +873,47 @@ noinline fn paintNodeVisuals(node: *Node) void {
         gpu.drawRect(r.x, r.y, r.w, r.h, 0.15, 0.15, 0.22, 0.6, node.style.border_radius, 0, 0, 0, 0, 0);
     }
 
+    // Box shadow — draw BEFORE background so it appears behind
+    if (node.style.shadow_color) |sc| {
+        if (node.style.shadow_blur > 0) {
+            const sa = @as(f32, @floatFromInt(sc.a)) / 255.0 * g_paint_opacity;
+            const sr = @as(f32, @floatFromInt(sc.r)) / 255.0;
+            const sg = @as(f32, @floatFromInt(sc.g)) / 255.0;
+            const sb = @as(f32, @floatFromInt(sc.b)) / 255.0;
+            const ox = node.style.shadow_offset_x;
+            const oy = node.style.shadow_offset_y;
+            const blur = node.style.shadow_blur;
+            // Left half: multi-rect (Love2D approach), right half: SDF shader
+            if (r.x + r.w * 0.5 < 640) {
+                // Multi-rect: N expanded rects with fading alpha
+                var steps: u32 = @intFromFloat(@ceil(blur));
+                if (steps > 16) steps = 16;
+                if (steps < 1) steps = 1;
+                const fsteps = @as(f32, @floatFromInt(steps));
+                var i: u32 = steps;
+                while (i >= 1) : (i -= 1) {
+                    const expand = @as(f32, @floatFromInt(i));
+                    const alpha = (sa / fsteps) * (fsteps - expand + 1);
+                    const rad = node.style.radiusTL() + expand;
+                    gpu.drawRect(
+                        r.x + ox - expand, r.y + oy - expand,
+                        r.w + expand * 2, r.h + expand * 2,
+                        sr, sg, sb, alpha,
+                        rad, 0, 0, 0, 0, 0,
+                    );
+                }
+            } else {
+                // SDF shader: single rect with GPU blur
+                gpu.drawRectShadow(
+                    r.x + ox, r.y + oy, r.w, r.h,
+                    sr, sg, sb, sa,
+                    node.style.radiusTL(), node.style.radiusTR(), node.style.radiusBR(), node.style.radiusBL(),
+                    blur,
+                );
+            }
+        }
+    }
+
     if (node.style.background_color) |bg_raw| {
         if (bg_raw.a > 0) {
             const bg = if (is_hovered) brighten(bg_raw, 20) else bg_raw;

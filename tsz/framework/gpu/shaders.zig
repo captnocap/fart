@@ -22,9 +22,10 @@ pub const rect_wgsl =
     \\    @location(3) border_color: vec4f,// border RGBA [0..1]
     \\    @location(4) radii: vec4f,       // border-radius: tl, tr, br, bl
     \\    @location(5) border_width: f32,  // border thickness in pixels
-    \\    @location(6) rotation: f32,     // degrees
+    \\    @location(6) rotation: f32,      // degrees
     \\    @location(7) scale_x: f32,
     \\    @location(8) scale_y: f32,
+    \\    @location(9) blur_radius: f32,   // SDF shadow blur (0 = sharp)
     \\};
     \\
     \\// ── Vertex output ────────────────────────────────────────────
@@ -36,6 +37,7 @@ pub const rect_wgsl =
     \\    @location(3) border_color: vec4f,
     \\    @location(4) radii: vec4f,
     \\    @location(5) border_width: f32,
+    \\    @location(6) blur_radius: f32,
     \\};
     \\
     \\// ── Vertex shader ────────────────────────────────────────────
@@ -51,9 +53,14 @@ pub const rect_wgsl =
     \\    var quad_y = array<f32, 6>(0.0, 0.0, 1.0, 1.0, 0.0, 1.0);
     \\    let uv = vec2f(quad_x[vertex_index], quad_y[vertex_index]);
     \\
+    \\    // Expand quad by blur_radius so the soft shadow falloff has pixels to render into
+    \\    let pad = inst.blur_radius;
+    \\    let padded_size = inst.size + vec2f(pad * 2.0, pad * 2.0);
+    \\    let padded_pos = inst.pos - vec2f(pad, pad);
+    \\
     \\    // Per-node transform: rotate + scale around rect center
-    \\    let center = inst.pos + inst.size * 0.5;
-    \\    var local = (uv - 0.5) * inst.size; // offset from center
+    \\    let center = padded_pos + padded_size * 0.5;
+    \\    var local = (uv - 0.5) * padded_size; // offset from center
     \\    // Apply scale
     \\    local = vec2f(local.x * inst.scale_x, local.y * inst.scale_y);
     \\    // Apply rotation (degrees to radians)
@@ -72,12 +79,14 @@ pub const rect_wgsl =
     \\
     \\    var out: VertexOutput;
     \\    out.clip_pos = vec4f(ndc, 0.0, 1.0);
-    \\    out.local_pos = uv * inst.size;
+    \\    // local_pos is relative to the ORIGINAL rect (not padded), offset by pad
+    \\    out.local_pos = uv * padded_size - vec2f(pad, pad);
     \\    out.size = inst.size;
     \\    out.color = inst.color;
     \\    out.border_color = inst.border_color;
     \\    out.radii = inst.radii;
     \\    out.border_width = inst.border_width;
+    \\    out.blur_radius = inst.blur_radius;
     \\    return out;
     \\}
     \\
@@ -100,7 +109,17 @@ pub const rect_wgsl =
     \\
     \\    let dist = sdf_rounded_rect(p, half_size, in.radii);
     \\
-    \\    // Anti-aliased edge (1px smooth falloff)
+    \\    // Shadow mode: blur_radius > 0 uses wide SDF falloff
+    \\    // dist < 0 = inside rect, dist > 0 = outside rect
+    \\    // Shadow fades from full opacity at the edge to zero at blur_radius beyond
+    \\    if in.blur_radius > 0.0 {
+    \\        let shadow_aa = 1.0 - smoothstep(0.0, in.blur_radius, dist);
+    \\        if shadow_aa <= 0.0 { discard; }
+    \\        let final_a = in.color.a * shadow_aa;
+    \\        return vec4f(in.color.rgb * final_a, final_a);
+    \\    }
+    \\
+    \\    // Normal mode: anti-aliased edge (1px smooth falloff)
     \\    let aa = 1.0 - smoothstep(-1.0, 0.5, dist);
     \\
     \\    if aa <= 0.0 {
