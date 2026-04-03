@@ -183,6 +183,15 @@ if [ "$IS_CONFORMANCE" -eq 1 ]; then
     fi
 fi
 
+# ── Step 0: ensure forge is up to date ──────────────────────────────
+# Smith JS is embedded at compile time. If any smith_*.js file changed
+# since the last forge build, the binary is stale. zig build is
+# incremental — no-op when nothing changed (~200ms), rebundle when
+# JS changed (~2s). Cheaper than debugging stale output.
+zig build forge 2>/dev/null || {
+    echo "[$NAME] WARNING: zig build forge failed — using existing binary"
+}
+
 # ── Step 1: forge (smith compiler: .tsz → .zig) ─────────────────────
 # Clean stale outputs so preflight check doesn't read old monolith errors
 rm -f "$GEN"
@@ -238,7 +247,7 @@ fi
 LINT_FAIL=0
 LINT_WARN=0
 
-BAD_QUOTES=$(grep -n "'\w\w" "$GEN" 2>/dev/null | grep -v '^\s*[0-9]*:\s*\\\\' | grep -v 'lua_on_press' | grep -v 'js_on_press' | grep -v 'evalExpr' | grep -v '^\s*[0-9]*:\s*//' | head -5 || true)
+BAD_QUOTES=$(grep -n "'\w\w" "$GEN" 2>/dev/null | grep -v '^\s*[0-9]*:\s*\\\\' | grep -v 'lua_on_press' | grep -v 'js_on_press' | grep -v 'evalExpr' | grep -v 'evalToString' | grep -v '^\s*[0-9]*:\s*//' | head -5 || true)
 if [ -n "$BAD_QUOTES" ]; then
     echo "[$NAME] LINT FAIL: JS string leaked into Zig (single-quoted multi-char):"
     echo "$BAD_QUOTES"
@@ -432,7 +441,7 @@ PLIST
             [ -z "$lib_path" ] && continue
             [ ! -f "$lib_path" ] && continue
             real_path=$(readlink -f "$lib_path")
-            soname=$(echo "$line" | sed 's/^ *//;s/ *=>.*//')
+            soname=$(echo "$line" | sed 's/^[[:space:]]*//;s/[[:space:]]*=>.*//')
             [ -f "$LIB_DIR/$soname" ] && continue
             cp "$real_path" "$LIB_DIR/$soname"
             LIB_COUNT=$((LIB_COUNT + 1))
