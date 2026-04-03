@@ -134,9 +134,11 @@ case "$MODE" in
         echo "  SHA256: $SOURCE_HASH"
 
         # Snapshot generated code
+        # Forge uses just the basename (no subdirectory), so "effects/plasma" → "plasma"
         GEN_ROOT="/tmp/tsz-gen"
-        GEN_FILE="$GEN_ROOT/generated_${TNAME}.zig"
-        GEN_SPLIT="$GEN_ROOT/generated_${TNAME}"
+        GEN_BASENAME=$(basename "$TNAME")
+        GEN_FILE="$GEN_ROOT/generated_${GEN_BASENAME}.zig"
+        GEN_SPLIT="$GEN_ROOT/generated_${GEN_BASENAME}"
         SNAP_DIR="$VERIFIED_DIR/$TNAME"
         mkdir -p "$SNAP_DIR"
 
