@@ -10,6 +10,40 @@ Single source of truth for chad-tier `.tsz` syntax. If a construct isn't here, i
 
 ---
 
+## Compilation Model — Flat Arrival, Not Cascade
+
+React is a party where one guest invites another who invites another — the compiler discovers the full dependency graph by following import chains. One change deep in the tree invalidates everything above it.
+
+Intent syntax is a party where everyone arrives at the same time. The compiler does **preflight** — scans all files, reads every block header, knows the full guest list before compilation starts. You're in or you're not. No discovery chain. No cascade.
+
+**Preflight steps:**
+
+1. Scan all files in the directory
+2. Read every block header: `<my awesome app>`, `<sidebar component>`, `<theme tokens>`, etc.
+3. Read every extension: `.tsz`, `.c.tsz`, `.cls.tsz`, `.mod.tsz`
+4. Build the full namespace map — who exists, what they are, where they belong
+5. **Then** compile. No surprises.
+
+This is why there are no imports. The compiler already knows everything.
+
+### Three Namespaces
+
+**1. Block scope** — lives and dies with the block.
+
+`item` inside `<for>`, `child` inside `<for ... as child>`, local vars inside a function body. Invisible outside the block.
+
+**2. File scope** — `<var>` declarations at the top.
+
+Visible to everything in that file — functions, return(), the whole thing. Invisible to other files. Two files can both have a `count` var — different scopes, no collision.
+
+**3. Ambient scope** — determined by the file's **block header**, not the filename.
+
+`<super cool component>` IS the identity. The filename `filea.tsz` is for humans. The header is for the compiler. The extension `.c.tsz` tells the compiler it's a component. The header tells it WHICH component.
+
+Name collisions are caught at preflight, before any code compiles. Two files both claiming `<counter component>` is an error. Two files both having `count` in `<var>` is fine — different file scopes.
+
+---
+
 ## Binding Levels
 
 Three ways to declare anything:
@@ -22,7 +56,7 @@ Three ways to declare anything:
 
 `exact` carries the same meaning everywhere it appears:
 - In `<var>`: immutable binding
-- In `<state>`: constrains what a setter accepts
+- In `<var>` with `set_` prefix: the var has a reactive setter
 - In `<config>` / data blocks: immutable field
 - In expressions: strict equality comparison
 
@@ -40,7 +74,7 @@ The app is a layout that wraps pages. It has `<var>`, `<state>`, `<functions>`, 
 <my app>
   <var>
     pages is page array
-    active is 'home'
+    set_active is 'home'
   </var>
 
   <pages>
@@ -48,10 +82,6 @@ The app is a layout that wraps pages. It has `<var>`, `<state>`, `<functions>`, 
     settings
     profile
   </pages>
-
-  <state>
-    set_active
-  </state>
 
   <functions>
     goTo:
@@ -62,16 +92,16 @@ The app is a layout that wraps pages. It has `<var>`, `<state>`, `<functions>`, 
     <C.PageRow>
       <C.Sidebar>
         <C.Title>My App</C.Title>
-        <For each=pages>
-          <Pressable onPress=goTo>
+        <for pages>
+          <C.NavItem goTo>
             <if item exact active>
               <C.NavItemActive><C.NavLabelActive>{item}</C.NavLabelActive></C.NavItemActive>
             </if>
             <else>
               <C.NavItem><C.NavLabel>{item}</C.NavLabel></C.NavItem>
             </else>
-          </Pressable>
-        </For>
+          </C.NavItem>
+        </for>
       </C.Sidebar>
       <C.Main>
         <active page />
@@ -82,7 +112,7 @@ The app is a layout that wraps pages. It has `<var>`, `<state>`, `<functions>`, 
 ```
 
 - `<pages>` is a data block (array). Adding a page = one line here + a file on disk.
-- `goTo` works from inside `<For>` — `item` is the page name via scope.
+- `goTo` works from inside `<for>` — `item` is the page name via scope.
 - `<active page />` renders the page whose name matches the `active` variable.
 - Pages don't know about each other. The app owns all routing.
 
@@ -90,9 +120,14 @@ The app is a layout that wraps pages. It has `<var>`, `<state>`, `<functions>`, 
 
 ```
 <weather widget>
+  <tokens> ... </tokens>
+  <colors> ... </colors>
+  <main> ... </main>
+  <C.Name is Primitive> ... </C.Name>
+  <name glyph> ... </name>
+  <name effect> ... </name>
   <ffi> ... </ffi>
   <var> ... </var>
-  <state> ... </state>
   <types> ... </types>
   <functions> ... </functions>
   return( ... )
@@ -101,12 +136,13 @@ The app is a layout that wraps pages. It has `<var>`, `<state>`, `<functions>`, 
 
 A widget is a complete app in one file. No `from`, no dependencies. Compiles to a binary by itself. The one-liner design philosophy.
 
+**A widget can contain every block type.** Tokens, colors, theme blocks, classifiers, glyphs, effects, types, ffi, var, state, functions, and return — all inline. Everything the widget needs lives inside its opening and closing tags. If a widget uses a classifier, it defines that classifier. If it uses a theme token, it declares that token. Nothing comes from outside.
+
 ### Page (`.tsz`) — app entry, can import
 
 ```
 <home page>
   <var> ... </var>
-  <state> ... </state>
   <types> ... </types>
   <functions> ... </functions>
   return( ... )
@@ -124,11 +160,8 @@ Pages can `from` import components, classifiers, effects, glyphs.
     max exact number
   </props>
   <var>
-    count is initial
+    set_count is initial
   </var>
-  <state>
-    set_count
-  </state>
   <functions>
     increment:
       <if count exact or above max>
@@ -141,9 +174,9 @@ Pages can `from` import components, classifiers, effects, glyphs.
   </functions>
   return(
     <C.Row>
-      <C.Btn onPress=decrement><C.BtnLabel>-</C.BtnLabel></C.Btn>
+      <C.Btn decrement><C.BtnLabel>-</C.BtnLabel></C.Btn>
       <C.Value>{count}</C.Value>
-      <C.Btn onPress=increment><C.BtnLabel>+</C.BtnLabel></C.Btn>
+      <C.Btn increment><C.BtnLabel>+</C.BtnLabel></C.Btn>
     </C.Row>
   )
 </counter>
@@ -168,13 +201,9 @@ Each instance gets its own `<var>`, `<state>`, `<functions>`. Components are opa
     onSave
   </props>
   <var>
-    editing is false
-    draft is ''
+    set_editing is false
+    set_draft is string
   </var>
-  <state>
-    set_editing
-    set_draft
-  </state>
   <functions>
     startEdit:
       set_editing is true
@@ -190,11 +219,11 @@ Each instance gets its own `<var>`, `<state>`, `<functions>`. Components are opa
         <C.InputWrap>
           <TextInput value={draft} onChange=set_draft />
         </C.InputWrap>
-        <C.Btn onPress=save><C.BtnLabel>Save</C.BtnLabel></C.Btn>
+        <C.Btn save><C.BtnLabel>Save</C.BtnLabel></C.Btn>
       </if>
       <else>
         <C.Title>{card.title}</C.Title>
-        <C.Btn onPress=startEdit><C.BtnLabel>Edit</C.BtnLabel></C.Btn>
+        <C.Btn startEdit><C.BtnLabel>Edit</C.BtnLabel></C.Btn>
       </else>
     </C.Card>
   )
@@ -204,8 +233,6 @@ Each instance gets its own `<var>`, `<state>`, `<functions>`. Components are opa
 Used in a page:
 
 ```
-from './editableCard'
-
 <home page>
   <functions>
     persistCard:
@@ -213,9 +240,9 @@ from './editableCard'
   </functions>
 
   return(
-    <For each=cards as card>
+    <for cards as card>
       <EditableCard card=card onSave=persistCard />
-    </For>
+    </for>
   )
 </home>
 ```
@@ -231,8 +258,6 @@ The component calls `onSave`, which resolves to `persistCard` in the page. The c
 
 Used in a page:
 ```
-from './counter'
-
 <home page>
   return(
     <Counter />
@@ -244,15 +269,52 @@ from './counter'
 
 ### Lib (`.tsz`) — backend package, owns modules
 
-A lib composes modules into a reusable package. Same pattern as app owning pages.
+A lib composes modules. Core modules are declared directly at the lib root. Optional/extended modules go in named groups — groups are the tree-shaking boundary.
 
 ```
 <backend lib>
-  <database module />
-  <auth module />
-  <cache module />
+  database exact database
+  auth exact auth
+  cache exact cache
 </backend>
 ```
+
+Direct modules — `name exact module` at lib root. Access as `backend.database.init()`.
+
+**Backend hatches on module groups** — wrap modules in `<zscript>`, `<lscript>`, or `<script>` to declare their compilation target. Same hatch pattern as in `<functions>`, applied one level up:
+
+```
+<layout lib>
+  <zscript>
+    flex
+    measure
+    padding
+    margin
+    size
+  </zscript>
+</layout>
+
+<engine lib>
+  <zscript>
+    physics
+    render
+    collision
+  </zscript>
+  <lscript>
+    audio
+    dsp
+  </lscript>
+  <script>
+    networking
+    json
+  </script>
+</engine>
+```
+
+- Hatches are compilation directives, NOT namespace levels. Access is flat: `engine.physics.tick()`, `engine.audio.play()` — not `engine.zscript.physics`.
+- Modules only compile in if referenced. The hatch is the tree-shaking boundary.
+- Unhatchéd modules (direct `name exact module`) let the compiler pick the backend.
+- The compiler matches module names to `.mod.tsz` files.
 
 **Modules are ambient within their lib** — sibling modules can see each other directly:
 
@@ -269,8 +331,6 @@ A lib composes modules into a reusable package. Same pattern as app owning pages
 **Outside the lib, access goes through the lib name:**
 
 ```
-from './backend'
-
 <home page>
   <functions>
     boot:
@@ -280,7 +340,7 @@ from './backend'
 </home>
 ```
 
-Modules don't leak into global scope. The lib is the namespace. If you see `backend.database.init`, you know exactly where it lives.
+The path tells you exactly where everything lives. `backend.database.init` — the `backend` lib, `database` module, `init` function.
 
 **Lib state persists across pages.** A lib lives for the app's lifetime. Pages mount and unmount — the lib stays. Module state inside a lib survives page transitions:
 
@@ -288,14 +348,9 @@ Modules don't leak into global scope. The lib is the namespace. If you see `back
 // auth.mod.tsz — state persists as long as the lib is loaded
 <auth module>
   <var>
-    currentUser
-    token is ''
-  </var>
-
-  <state>
     set_currentUser
-    set_token
-  </state>
+    set_token is string
+  </var>
 
   <functions>
     login(credentials):
@@ -310,8 +365,6 @@ Modules don't leak into global scope. The lib is the namespace. If you see `back
 Pages read lib state directly through the namespace:
 
 ```
-from './backend'
-
 <profile page>
   <functions>
     boot:
@@ -338,7 +391,7 @@ State reads through the lib namespace are reactive — when `backend.auth.curren
 <database module>
   <ffi> ... </ffi>
   <types> ... </types>
-  <state> ... </state>
+  <var> ... </var>
   <functions> ... </functions>
 </database>
 ```
@@ -380,7 +433,7 @@ Non-entry files use extensions to identify their kind:
 | `.cls.tsz` | classifiers | no | `theme.cls.tsz` |
 | `.tcls.tsz` | theme tokens + theme blocks | no | `theme.tcls.tsz` |
 | `.effects.tsz` | effects | no | `fire.effects.tsz` |
-| `.glyphs.tsz` | glyphs (svg, 3d, polygons) | no | `icons.glyphs.tsz` |
+| `.glyphs.tsz` | glyphs (shapes, composites, svg hatch) | no | `icons.glyphs.tsz` |
 | `.script.tsz` | JS logic escape hatch | no | `bridge.script.tsz` |
 | `.zscript.tsz` | Zig logic escape hatch | no | `physics.zscript.tsz` |
 | `.lscript.tsz` | Lua logic escape hatch | no | `audio.lscript.tsz` |
@@ -392,25 +445,32 @@ All blocks are optional. Order doesn't matter. Every block appears at most once 
 
 ---
 
-## `<var>` — Variable Declarations
+## `<var>` — Variable and State Declarations
 
-One declaration per line. No expressions on the right side — literals only.
+One declaration per line. The `set_` prefix declares a reactive setter for the var.
 
 ```
 <var>
-  count is 0
-  name is 'default'
-  active is true
-  input is ''
+  set_count is 0
+  set_name is 'default'
+  set_active is true
+  set_input is string
   items is array
   config is object
   cards is objects
   filter
-  thing exact 'locked'
+  MAX exact 100
 </var>
 ```
 
-Bare `thing` = untyped `let`. `is` = mutable with initial value. `exact` = immutable.
+- `set_name is value` — has a setter, initial value. Read as `name`, mutate as `set_name is newValue`.
+- `set_name` — has a setter, uninitialized.
+- `name is value` — no setter, initialized. Read-only or computed.
+- `name` — no setter, uninitialized.
+- `name exact value` — immutable constant. No setter possible.
+- `name is string` / `name is number` — type declaration instead of empty literal (`string` not `''`).
+
+**There is no separate `<state>` block.** The `set_` prefix in `<var>` declares both the variable and its setter in one line. In functions, `set_count is 0` calls the setter. In JSX, `count` reads the value.
 
 ### Shape Declarations (`has`)
 
@@ -499,27 +559,6 @@ Fields use `exact` (immutable) or `is` (mutable). Bare field name = untyped.
 
 ---
 
-## `<state>` — Setter Declarations
-
-Declares which variables can be mutated and optionally constrains them.
-
-```
-<state>
-  set_count
-  set_filter exact filter
-  set_status exact 'pending' or 'done' or 'error'
-  set_thing exact 'some type'
-  set_number exact number
-</state>
-```
-
-- `set_name` — unconstrained setter for `name`
-- `set_name exact value` — setter locked to a single value
-- `set_name exact typename` — setter constrained to a type declared in `<types>`
-- `set_name exact 'a' or 'b' or 'c'` — setter constrained to one of listed values (inline enum)
-
-Every setter must pair with a var: `set_count` requires `count` in `<var>`.
-
 ---
 
 ## `<types>` — Type Definitions
@@ -566,7 +605,7 @@ Fields use `is` for defaults, `exact` for fixed.
 
 ```
 <types>
-  <Payload is union>
+  <Payload union>
     int is i64
     float is f64
     text is string
@@ -575,7 +614,7 @@ Fields use `is` for defaults, `exact` for fixed.
 </types>
 ```
 
-`is union` on the block tag. Same `is` keyword used everywhere else. No bare `union` keyword on its own line.
+`<Name union>` — same `<name type>` pattern as everything else: `<counter widget>`, `<home page>`, `<lava effect>`. A union is a type declaration, not a binding.
 
 ---
 
@@ -603,7 +642,7 @@ A small set of names the compiler recognizes as lifecycle hooks:
 </functions>
 ```
 
-Everything else is either called by an event (`onPress=funcName`), composed (`a + b + c`), or scheduled (`funcName every N:`). No `useEffect`, no `componentDidMount`, no `onInit`.
+Everything else is either called by an event (bare word on a Pressable classifier), composed (`a + b + c`), or scheduled (`funcName every N:`). No `useEffect`, no `componentDidMount`, no `onInit`.
 
 ### Nullary Functions
 
@@ -659,11 +698,11 @@ Two kinds. The `set_` prefix means reactive state. Plain `is` on a field means d
 
 | Syntax | What it is |
 |--------|-----------|
-| `set_count is count + 1` | state mutation — declared in `<state>`, triggers re-render |
-| `r.ttl is r.ttl - 1` | field write — on a scoped variable (loop, `<For>`) |
-| `item.done is not item.done` | field write — on `<For>` item |
+| `set_count is count + 1` | state mutation — `set_` prefix var, triggers re-render |
+| `r.ttl is r.ttl - 1` | field write — on a scoped variable (loop, `<for>`) |
+| `item.done is not item.done` | field write — on `<for>` item |
 
-`set_` is never used for field writes. `field is value` is never used for state. The compiler knows the difference because state setters are declared in `<state>`.
+`set_` is never used for field writes. `field is value` is never used for state. The compiler knows the difference because state vars have the `set_` prefix in `<var>`.
 
 ### `stop`
 
@@ -684,13 +723,13 @@ Skips to the next iteration in a `<for>` or `<while>` loop. Like `continue` in o
 
 ### Scope Rule
 
-**Functions see the scope of their call site.** If a function is called from inside a `<For>`, `item` is available. If called from outside, it isn't — the compiler errors.
+**Functions see the scope of their call site.** If a function is called from inside a `<for>`, `item` is available. If called from outside, it isn't — the compiler errors.
 
 This means:
 - No parameterized event handlers. No closures. No arrows.
-- `onPress=toggleItem` inside a `<For>` gives `toggleItem` access to `item`.
+- `<C.Btn toggleItem>` inside a `<for>` gives `toggleItem` access to `item`.
 - Functions that need `item` only work when called from a context that has it.
-- The compiler enforces this — calling a function that uses `item` from outside a `<For>` is a compile error.
+- The compiler enforces this — calling a function that uses `item` from outside a `<for>` is a compile error.
 
 ### `requires` — Scope Documentation
 
@@ -839,9 +878,9 @@ return(
       <C.ErrorCard>{errorMessage}</C.ErrorCard>
     </during>
     <during ready>
-      <For each=items>
+      <for items>
         <C.ListItem>{item.name}</C.ListItem>
-      </For>
+      </for>
     </during>
   </C.Page>
 )
@@ -1035,17 +1074,17 @@ All comparisons are words. No sigils.
 | Syntax | Meaning |
 |--------|---------|
 | `items.where(condition)` | filter — keep items matching condition |
-| `items.without(item)` | remove current item (inside `<For>` scope) |
+| `items.without(item)` | remove current item (inside `<for>` scope) |
 | `items.concat(value)` | append, returns new collection |
 | `items.length` | count |
+| `items.search(query)` | fuzzy search across all string fields of items |
+| `items.regex(pattern)` | regex match across all string fields of items |
 
 **No `.map()`, `.filter()` with lambdas.** Use `.where()` with `item` from scope, or `<for>` blocks for transforms.
 
-`item` inside `.where()` is implicit — it comes from the collection being operated on, same as inside `<For>`.
+`item` inside `.where()` is implicit — it comes from the collection being operated on, same as inside `<for>`.
 
-### Null Coalescing
-
-`a ?? b` — if `a` is null/undefined, use `b`.
+`.search()` and `.regex()` are ambient framework operations — the framework handles which fields to search. Works on collections of objects (searches all string fields) and on individual strings (`name.search('sun')` → true if name contains "sun"). `.regex()` takes a regex pattern string for when you need precise matching.
 
 ---
 
@@ -1053,45 +1092,89 @@ All comparisons are words. No sigils.
 
 ### Event Handlers
 
-Function names only. No inline closures. No arrows. No parameters.
+**Pressable-based classifiers** — bare words on the tag are what happens when you press it. The classifier already knows it's pressable:
 
 ```
-// correct
-onPress=increment
-onPress=reset
-onChange=set_input
+// function call on press
+<C.Btn decrement><C.BtnLabel>-</C.BtnLabel></C.Btn>
 
+// animation on press
+<C.Btn bounce><C.BtnLabel>Boop</C.BtnLabel></C.Btn>
+
+// composed — animate AND mutate, same + operator as logic chains
+<C.Btn bounce + decrement><C.BtnLabel>-</C.BtnLabel></C.Btn>
+
+// animation + physics + function + audio
+<C.Btn spring + impulse + decrement + audio.play('click')><C.BtnLabel>Go</C.BtnLabel></C.Btn>
+```
+
+The compiler resolves each word by registry:
+- Function → from `<functions>` — call it
+- Animation → from animations — run it
+- Physics → from physics primitives — apply it
+- Effect → from effects — fill it
+
+**The `+` operator composes across all domains.** Same operator that chains `validateInput + appendItem + clearInput` in logic chains `bounce + haptic + decrement` on a pressable. One composition model, not four APIs.
+
+And `<during>` still works on top:
+
+```
+<during dragging>
+  spring + followCursor
+</during>
+```
+
+Bare word on a Pressable = what happens on press. `<during>` = what happens while a state is active. `+` composes anything with anything.
+
+**TextInput** — still uses explicit `onChange=` because it has multiple event types:
+
+```
+<TextInput value={input} onChange=set_input placeholder='Search...' />
+```
+
+**No inline closures. No arrows. No parameters.**
+
+```
 // WRONG — JS leak
 onPress={() => { increment() }}
 onPress={(e) => handleClick(e)}
-onPress={() => { moveCard(item.id, 'done') }}
 ```
 
-There are no parameterized handlers. Scope handles it. Inside a `<For>`, the function sees `item` automatically. Define small named functions in `<functions>` that operate on `item`:
+There are no parameterized handlers. Scope handles it. Inside a `<for>`, the function sees `item` automatically. Define small named functions in `<functions>` that operate on `item`:
 
 ```
 <functions>
   moveToDone:
-    set item.col is 'done'
+    item.col is 'done'
 </functions>
 
-<For each=cards>
-  <Pressable onPress=moveToDone>
-</For>
+<for cards>
+  <C.Btn moveToDone><C.BtnLabel>Done</C.BtnLabel></C.Btn>
+</for>
 ```
 
-### `<For>` — Collection Iteration
+### `<for>` in JSX — Collection Iteration
+
+Same `<for>` block used in functions works in JSX. No capital `<For>`, no `each=`. Consistent everywhere.
 
 ```
-<For each=items>
-  <Text>{item.name}</Text>
-</For>
+<for items>
+  <C.ListItem>{item.name}</C.ListItem>
+</for>
 ```
 
-- `item` refers to the current element inside `<For>`
-- `each` references a var name — no braces needed
+- `item` is implicit — always available inside `<for>`
+- `as name` is optional — use it for readability or nested loops where `item` would collide:
 
-**No `{items.map(...)}`**. Use `<For>`.
+```
+<for channels as ch>
+  <for ch.effects as fx>
+    <C.Body>{ch.label + ': ' + fx.name}</C.Body>
+  </for>
+</for>
+```
+
+**No `{items.map(...)}`**. Use `<for>`.
 
 ### Three Visual Layers
 
@@ -1150,9 +1233,69 @@ Use `exact` when changing the prop would break the classifier's identity (a Row 
 
 **No JS objects, no `classifier({})`, no `style: {}`.** Classifiers are blocks, same as everything else.
 
+#### Named Colors
+
+Colors are ambient — the engine provides a default palette of named colors: `red`, `blue`, `green`, `purple`, `amber`, `gray`, `white`, `black`, `cyan`, `teal`, `pink`, `orange`, `slate`, etc. Just use them. No definition needed.
+
+**Override or extend with `<colors>`:**
+
+```
+<colors>
+  // override the default red entirely
+  red exact '#cc0000'
+
+  // add variants to a color
+  <red>
+    dark exact '#4a0000'
+    light exact '#ff6666'
+    lava exact '#ff4400'
+  </red>
+
+  <blue>
+    dark exact '#0f172a'
+    deep exact '#1e293b'
+    mid exact '#334155'
+  </blue>
+</colors>
+```
+
+- Bare `red` — engine default. No definition needed.
+- `red exact '#cc0000'` — override the default for your app.
+- `<red>` with variants — access as `red(dark)`, `red(lava)`, etc.
+- Hex escape `'#0f172a'` — always available for precise values.
+
+**Gradients** are defined with `gradient` on the block tag. Stops are colors with percentage weights. Used anywhere a color goes:
+
+```
+<colors>
+  <ocean gradient>
+    blue is 40
+    '#1e293b' is 50
+    gray is 10
+    angle is vertical
+  </ocean>
+
+  <sunset gradient>
+    orange is 30
+    pink is 40
+    purple is 30
+    angle is horizontal
+  </sunset>
+</colors>
+
+<main>
+  bg is ocean
+  accent is sunset
+</main>
+```
+
+- Stops are named colors or hex values with percentage weights (`blue is 40` = 40% blue)
+- `angle` — `vertical`, `horizontal`, `diagonal`, or a degree value
+- Used like any color: `bg is ocean`, `fill is sunset`
+
 #### Theme Token Syntax
 
-Tokens are defined in `.tcls.tsz` files. Two parts: a `<tokens>` block declares the contract (what names exist), then named theme blocks assign values.
+Tokens are defined in `.tcls.tsz` files. A `<tokens>` block declares the contract, a `<colors>` block defines custom/variant colors, then named theme blocks assign values using named colors.
 
 ```
 <tokens>
@@ -1178,19 +1321,31 @@ Tokens are defined in `.tcls.tsz` files. Two parts: a `<tokens>` block declares 
   fontLg
 </tokens>
 
+<colors>
+  <blue>
+    dark exact '#0f172a'
+    deep exact '#1e293b'
+  </blue>
+  <gray>
+    mid exact '#334155'
+    light exact '#64748b'
+    bright exact '#e2e8f0'
+  </gray>
+</colors>
+
 <main>
-  bg is '#0f172a'
-  bgAlt is '#1e293b'
-  surface is '#334155'
-  text is '#f8fafc'
-  textSecondary is '#e2e8f0'
-  textDim is '#64748b'
-  primary is '#3b82f6'
-  accent is '#8b5cf6'
-  success is '#22c55e'
-  warning is '#f59e0b'
-  error is '#ef4444'
-  border is '#334155'
+  bg is blue(dark)
+  bgAlt is blue(deep)
+  surface is gray(mid)
+  text is white
+  textSecondary is gray(bright)
+  textDim is gray(light)
+  primary is blue
+  accent is purple
+  success is green
+  warning is amber
+  error is red
+  border is gray(mid)
   spaceSm is 4
   spaceMd is 8
   spaceLg is 16
@@ -1202,24 +1357,24 @@ Tokens are defined in `.tcls.tsz` files. Two parts: a `<tokens>` block declares 
 </main>
 
 <light>
-  bg is '#ffffff'
-  bgAlt is '#f8fafc'
-  surface is '#e2e8f0'
-  text is '#0f172a'
-  textSecondary is '#334155'
-  textDim is '#64748b'
-  primary is '#2563eb'
-  accent is '#7c3aed'
-  success is '#16a34a'
-  warning is '#d97706'
-  error is '#dc2626'
-  border is '#e2e8f0'
+  bg is white
+  bgAlt is gray(bright)
+  surface is gray(bright)
+  text is blue(dark)
+  textSecondary is gray(mid)
+  primary is blue
+  accent is purple
+  success is green
+  warning is amber
+  error is red
+  border is gray(bright)
 </light>
 ```
 
 **Rules:**
 
 - `<tokens>` declares names only — no values, no types. Just the contract.
+- `<colors>` defines custom colors and variants. Optional — ambient colors work without it.
 - `<main>` is the default theme. Required. Every token must have a value here.
 - Other theme blocks (`<light>`, `<dark>`, `<high-contrast>`, etc.) inherit from `<main>`. Only specify tokens that differ.
 - Classifiers reference tokens as `theme-name` (e.g., `theme-bg`, `theme-primary`). The active theme resolves the value.
@@ -1293,7 +1448,34 @@ An effect is just a block. It has `<var>` and `<functions>` like anything else. 
 - `t` is elapsed time in seconds
 - Return value is a color (theme token, hex string, or result of `math.hue`/`math.ramp`)
 
-**3. Glyphs** (`:name:` in text) — Discord-style inline shortcodes:
+**3. Animations** (bare word or composed) — motion and transitions:
+
+Common animations are ambient — the engine provides: `fadeIn`, `fadeOut`, `slideUp`, `slideDown`, `scaleIn`, `scaleOut`, `bounce`, `spring`, `shake`. Just use them.
+
+Custom animations defined as blocks:
+
+```
+<slideUp animation>
+  property is translateY
+  from is 100
+  to is 0
+  duration is 300
+  easing is ease
+</slideUp>
+
+<pulse animation>
+  property is scale
+  from is 1
+  to is 1.1
+  duration is 200
+  easing is elastic
+  repeat is true
+</pulse>
+```
+
+Applied as bare words on any element: `<C.Card slideUp>`, or composed: `<C.Card slideUp + fadeIn>`. On Pressable classifiers, they run on press. With `<during>`, they run while a state is active.
+
+**4. Glyphs** (`:name:` in text) — Discord-style inline shortcodes:
 
 ```
 <Text>Status :check: all good</Text>
@@ -1308,31 +1490,115 @@ An effect is just a block. It has `<var>` and `<functions>` like anything else. 
 
 Defined in `.glyphs.tsz` files. The compiler resolves `:name:` from the glyphs registry.
 
-#### Glyph Definition Syntax
+#### Glyph Tiers
 
-Glyphs are defined in `.glyphs.tsz` files. Each glyph is a named block with `glyph` as its type.
+**Tier 1 — Ambient glyphs.** The engine provides common glyphs with theme-aware defaults: `:star:`, `:check:`, `:warning:`, `:error:`, `:circle:`, `:play:`, `:pause:`, etc. Just use them — no definition needed. Like `Box`/`Text` are ambient UI primitives, these are ambient glyph primitives.
+
+**Tier 2 — Customized ambient.** Override properties of an existing ambient glyph using `is`/`exact` — same binding semantics as everywhere else:
+
+```
+// custom star under a new name — :star: stays ambient, :thick_star: is yours
+<thick_star is star glyph>
+  thickness exact 15
+  fill is theme-warning
+</thick_star>
+
+// take the star name — :star: is now YOUR version in this file
+<star is star glyph>
+  points exact 7
+  fill is theme-accent
+</star>
+
+// alias the default under a new name — no modifications, self-closing
+<normal_star exact star glyph />
+```
+
+- `<name is builtin glyph>` — creates a glyph based on the builtin with overrides (`is` = mutable, has modifications)
+- `<name exact builtin glyph />` — aliases the builtin unchanged (`exact` = locked, as-is)
+- If you use the builtin's own name (`<star is star glyph>`), you shadow it locally — that name is now yours
+
+**Tier 3 — Composed glyphs.** Build custom glyphs from shape primitives with `<layers>`:
 
 ```
 <check glyph>
-  d is 'M5 12l5 5L20 7'
-  fill is theme-success
+  <layers>
+    stroke
+  </layers>
+  <stroke exact path>
+    points is '5,12 10,17 20,7'
+    thickness is 2
+    cap is round
+    fill is theme-success
+  </stroke>
 </check>
 
-<warning glyph>
-  d is 'M12 2L2 22h20L12 2z'
-  fill is theme-warning
-</warning>
-
-<star glyph>
-  d is 'M12 2l3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L2 9h7z'
-  fill is theme-accent
-</star>
+<error glyph>
+  <layers>
+    disc
+    cross
+  </layers>
+  <disc exact circle>
+    fill is theme-error
+  </disc>
+  <cross exact x>
+    thickness is 2
+    fill is theme-bg
+    inset is 4
+  </cross>
+</error>
 ```
 
-- `d` — SVG path data (same as SVG `<path d="...">`)
-- `fill` — default fill color (hex, theme token, or effect name)
+Shape primitives: `circle`, `line`, `triangle`, `arc`, `polygon`, `path`, `x`, `star`. Each takes properties via `is`/`exact`: `thickness`, `fill`, `inset`, `points`, `cap`, `tilt`, `opacity`.
+
+**Each layer is a tiny scene** — it can have its own fill, animation, and effects:
+
+```
+<pentagram glyph>
+  <layers>
+    stroke
+    ring
+  </layers>
+  <stroke exact path>
+    points is '...'
+    fill is fire
+    animation is pulse
+  </stroke>
+  <ring exact circle>
+    fill is red(dark)
+    animation is spin
+  </ring>
+  <merge>
+    stroke mask ring
+  </merge>
+</pentagram>
+```
+
+- `fill` accepts colors, theme tokens, or effects: `fill is red`, `fill is theme-primary`, `fill is fire`
+- `animation` applies a named animation to the layer: `animation is spin`, `animation is pulse`
+- `<merge>` controls compositing between layers: `stroke mask ring` (stroke clips to ring). Operations: `mask`, `blend`, `overlay`
+
+The whole thing packs into a single shortcode: `:pentagram:`. The engine handles layered composition, animated fills, and merge operations. `:pentagram[ocean]:` overrides all fill layers with the ocean effect.
+
+`<layers>` declares composition order (bottom to top). `<merge>` declares compositing operations between named layers.
+
+**Tier 4 — `<svg>` hatch.** Raw SVG path data for exotic shapes not covered by primitives. Discouraged but allowed — same pattern as `<script>`/`<zscript>`/`<lscript>` hatches:
+
+```
+<exotic glyph>
+  <svg>
+    d is 'M12 2C6.48 2 2 ...'
+    fill is theme-accent
+  </svg>
+</exotic>
+```
+
+#### Glyph Rules
+
+- Glyphs are defined in `.glyphs.tsz` files, or inline in widgets
+- Common glyphs (star, check, warning, error, circle, play, pause) are engine ambients — no definition needed
 - Glyphs scale with the surrounding text's `fontSize`
 - `:name[effect]:` in text overrides the glyph's default fill with a named effect
+- `fill` — default fill color (hex, theme token, or effect name)
 
 **Chad-tier JSX has no `style=` prop.** No visual props (`fontSize`, `color`, `backgroundColor`) on primitives. Classifiers handle structure, effects handle procedural fills, glyphs handle inline assets.
 
@@ -1345,7 +1611,7 @@ Props are bare — no braces for values:
 ```
 // correct
 <TextInput value={input} onChange=set_input placeholder='Add item...' />
-<For each=items>
+<for items>
 
 // WRONG — JS braces
 <Text fontSize={18} color="#e2e8f0">
@@ -1358,21 +1624,43 @@ Exception: `{varName}` braces for dynamic value interpolation in text and prop b
 
 `Box`, `Text`, `Image`, `Pressable`, `ScrollView`, `TextInput`, `Canvas`, `Effect`
 
-These are building blocks for classifiers. They appear in `.cls.tsz` files, not in page-level JSX (except `TextInput` and `Pressable` which have behavioral props like `onChange` and `onPress`).
+These are building blocks for classifiers. They appear in `.cls.tsz` files, not in page-level JSX (except `TextInput` which has behavioral props like `onChange` and `value`).
 
 ---
 
 ## `<ffi>` — Foreign Function Interface (modules)
 
+The block name is the C library name. List the function suffixes inside:
+
 ```
-<ffi>
-  open    @("libsqlite3.so")
-  exec    @("libsqlite3.so")
-  socket  @("std.posix", "socket")
-</ffi>
+<sqlite3 ffi>
+  open
+  close
+  errmsg
+  exec
+  prepare_v2
+</sqlite3>
 ```
 
-`symbolName @("library")` or `symbolName @("library", "function")`.
+The compiler resolves `open` → `sqlite3_open`, `close` → `sqlite3_close`, etc. The underscore join is implicit — every C library uses `libname_function`. You don't think about it.
+
+**Multiple libraries** — one block per library, no wrapper needed:
+
+```
+<sqlite3 ffi>
+  open
+  close
+  exec
+</sqlite3>
+
+<libmpv ffi>
+  create
+  play
+  destroy
+</libmpv>
+```
+
+Each `<libname ffi>` is independent. No master `<ffi>` block. The compiler handles prefix join and library linking per block.
 
 ---
 
@@ -1480,7 +1768,7 @@ Every activation gets logged. Deactivation logs the duration.
   ├─────────────────────┼────────────────────────┤
   │ promise.then        │ <if result>            	│
   ├─────────────────────┼────────────────────────┤
-  │ onChange handler    │ onPress=funcName       │
+  │ onChange handler    │ bare word on classifier │
   ├─────────────────────┼────────────────────────┤
   │ subscription        │ <during module.state>    │
   └─────────────────────┴────────────────────────┘
@@ -1772,13 +2060,57 @@ Most authors never will. The compiler's routing table picks the right backend. H
 
 ---
 
+## `<semantics>` — Custom Binding Keywords
+
+Define new keywords that expand to intent syntax. The author teaches the compiler what a word means:
+
+```
+<semantics>
+  <has exact function>
+    <if var not initialized>
+      set_var is value
+      set_var.shape is declared
+    </if>
+  </has>
+
+  <owns exact function>
+    // like has, but with cleanup pairing — when parent dies, children die
+  </owns>
+
+  <watches exact function>
+    // reactive binding — when source changes, target updates
+  </watches>
+
+  <mirrors exact function>
+    // two-way binding
+  </mirrors>
+</semantics>
+```
+
+Now anywhere in the project:
+
+```
+<var>
+  player has position
+  player has health
+  player owns inventory
+  sidebar watches auth.currentUser
+  draft mirrors input
+</var>
+```
+
+Reads like English, compiles to whatever the semantic expands to.
+
+- Custom keywords are macros that expand to `is`/`exact`/`<if>`/`<for>` primitives
+- `<semantics>` at the lib level means the whole lib shares the vocabulary
+- Domain-specific vocabularies that read like the domain: a game framework where `owns`, `spawns`, `collides` are first-class verbs. A music app where `plays`, `loops`, `fades` are binding keywords.
+- The language is opinionated about syntax (no sigils, words only). It's not opinionated about taste. What you name your semantics is on you.
+
+---
+
 ## Imports
 
-```
-from './path/to/file'
-```
-
-Imports everything exported (classifiers, effects, glyphs).
+**There are no imports.** File extensions tell the compiler what belongs to the app. `.cls.tsz`, `.effects.tsz`, `.glyphs.tsz`, `.c.tsz`, `.mod.tsz` files in the app directory are ambient — the compiler includes them automatically. Widgets inline everything.
 
 ---
 
@@ -1786,18 +2118,23 @@ Imports everything exported (classifiers, effects, glyphs).
 
 | Pattern | Why it's wrong | Use instead |
 |---------|---------------|-------------|
-| `const [x, setX] = useState(0)` | React hooks | `<var>` + `<state>` |
+| `const [x, setX] = useState(0)` | React hooks | `set_x is 0` in `<var>` |
+| `<state> set_x </state>` | separate state block | `set_x` in `<var>` (prefix IS the setter) |
+| `from './file'` | explicit import | file extensions are ambient — no imports needed |
+| `onPress=funcName` | explicit handler prop | bare word on Pressable classifier: `<C.Btn funcName>` |
 | `function App() { return () }` | JS function | `<page>` + `return()` |
 | `() => { ... }` | JS arrow / closure | named function in `<functions>` |
 | `if (x) { ... }` | JS control flow | `<if x> ... </if>` |
 | `x === y` | JS equality | `x exact y` |
 | `!x` | JS negation | `not x` |
 | `x !== y` | JS inequality | `x not exact y` |
-| `items.map(i => ...)` in JSX | JS map | `<For each=items>` |
+| `items.map(i => ...)` in JSX | JS map | `<for var>` |
+| `<For each=items>` | React-style iteration | `<for var>` (lowercase, iterates a `<var>` name) |
 | `{ key: val }` inline in `<var>` | JS object literal | data block (`is object` + `<name>`) |
 | `[a, b, c]` inline in `<var>` | JS array literal | data block (`is array` + `<name>`) |
 | `condition ? a : b` | JS ternary | `<if condition> ... <else> ... </if>` |
 | `? stop : go` | old guard syntax | `<if condition> stop </if>` |
+| `a ?? b` | JS null coalescing | `<if a> a </if> <else> b </else>` |
 | `x = x + 1` | direct mutation | `set_x is x + 1` |
 | `;` semicolons | JS statement separator | one statement per line |
 | `function ... end` | Lua syntax | `<functions>` block |
@@ -1813,7 +2150,7 @@ Imports everything exported (classifiers, effects, glyphs).
 | `?Type` / `orelse` | Zig optionals | bare `<var>` + `<if thing>` check |
 | `while (cond) { }` | Zig/JS while | `<while cond> ... </while>` |
 | `switch (x) { }` | Zig/JS switch | `<switch x> <case val> ... </switch>` |
-| `union { }` | Zig union keyword | `<TypeName is union>` in `<types>` |
+| `union { }` | Zig union keyword | `<TypeName union>` in `<types>` |
 | `<timer interval=N>` | old timer block | `funcName every N:` in `<functions>` |
 | `a > b` | sigil comparison | `a above b` |
 | `a < b` | sigil comparison | `a below b` |
@@ -1830,6 +2167,7 @@ Imports everything exported (classifiers, effects, glyphs).
 | `default:` in switch | JS/Zig default | `<case else>` |
 | `if (x = call()) { use(x) }` | assignment-in-condition | `<if call() as x>` |
 | `effect({ fill: (x,y,t) => ... })` | JS effect definition | `<name effect>` block in `.effects.tsz` |
+| `symbol @("library")` in `<ffi>` | old FFI per-line syntax | `<libname ffi>` block with suffix names |
 
 ---
 
@@ -1868,18 +2206,18 @@ Modules can declare dependencies on other modules:
 After writing a test, walk through this:
 
 1. Are ALL variables in `<var>`? No `const`, no `let`, no `useState`.
-2. Are ALL setters in `<state>`? No inline `setX`.
+2. Do all mutable vars use `set_` prefix in `<var>`? No separate `<state>` block.
 3. Is ALL logic in `<functions>`? No inline functions in JSX.
 4. Are conditionals `<if>` blocks? No ternaries, no `? stop : go`.
-5. Are loops `<for>` blocks (in functions) or `<For>` (in JSX)? No `.map()` with arrows.
+5. Are loops `<for>` blocks (same in functions and JSX)? No `.map()` with arrows.
 6. Are comparisons words only? `exact`, `not exact`, `above`, `below`, `exact or above`, `exact or below`. No `===`, `!==`, `==`, `>`, `<`, `>=`, `<=`.
 7. Is negation `not`? No `!`.
-8. Are event handlers bare names? No `() => {}`.
+8. Are event handlers bare words on Pressable classifiers? No `onPress=`, no `() => {}`.
 9. Are data literals in their own named blocks? No `[{...}]` in `<var>`.
 10. Are big functions composed with `+`? No god functions.
 11. Are classifiers defined as blocks? No `classifier({})` JS objects.
 12. Are effects defined as `<name effect>` blocks with `fill(x, y, t)`? No JS functions.
-13. Are glyphs defined as `<name glyph>` blocks with `d` and `fill`? No inline SVG.
+13. Are common glyphs using ambients (`:star:`, `:check:`, etc.) without unnecessary definitions? Custom glyphs composed from shape primitives with `<layers>`? No raw SVG `d` paths (use `<svg>` hatch only as last resort)?
 14. Does `<switch>` use `<case else>` for default? No bare `default:`.
 15. Do numeric loops use `<for 0..n as i>`? No `for (let i = 0; ...)`.
 16. Does conditional binding use `<if call() as name>`? No assignment-in-condition.

@@ -1,36 +1,36 @@
 // SQLite query module — exec, read, write operations.
-// Exercises: <uses>, <if as>, <for>, <switch>, <case else>, cross-module state
+// Exercises: <uses>, <if as>, <for>, <while>, <switch>, <case>, cross-module state
 
 <query module>
   <uses>
     connection
   </uses>
 
-  <ffi>
-    sqlite3_exec       @("libsqlite3.so")
-    sqlite3_prepare_v2 @("libsqlite3.so")
-    sqlite3_step       @("libsqlite3.so")
-    sqlite3_column_text @("libsqlite3.so")
-    sqlite3_column_int  @("libsqlite3.so")
-    sqlite3_finalize    @("libsqlite3.so")
-  </ffi>
+  <sqlite3 ffi>
+    exec
+    prepare_v2
+    step
+    column_text
+    column_int
+    finalize
+  </sqlite3>
 
   <types>
-    <QueryResult is union>
-      rows is Row array
+    <queryResult union>
+      rows is row array
       error is string
-    </QueryResult>
+    </queryResult>
 
-    <Row>
+    <row>
       columns is string array
       values is string array
-    </Row>
+    </row>
 
-    <StepResult>
+    <step>
       row
       done
       error
-    </StepResult>
+    </step>
   </types>
 
   <functions>
@@ -38,7 +38,7 @@
       <if not connection.isOpen>
         stop
       </if>
-      <if sqlite3_exec(connection.db.ptr, sql) as result>
+      <if sqlite3.exec(connection.ptr, sql) as result>
         result
       </if>
       <else>
@@ -49,23 +49,23 @@
       <if not connection.isOpen>
         stop
       </if>
-      <if sqlite3_prepare_v2(connection.db.ptr, sql) as stmt>
+      <if sqlite3.prepare_v2(connection.ptr, sql) as prepared>
         rows is array
-        <while sqlite3_step(stmt) as step>
-          <switch step>
+        <while sqlite3.step(prepared) as current>
+          <switch current>
             <case row>
-              rows is rows.concat(step.row)
+              rows is rows.concat(current.row)
             </case>
             <case done>
               stop
             </case>
-            <case else>
-              connection.set_lastError is 'step error'
+            <case error>
+              connection.set_lastError is current.error
               stop
             </case>
           </switch>
         </while>
-        sqlite3_finalize(stmt)
+        sqlite3.finalize(prepared)
         rows
       </if>
 

@@ -1,57 +1,51 @@
 // SQLite connection module — open, close, lifecycle.
-// Exercises: ffi, types (struct + union), state, cleanup pairing, <if as>
+// Exercises: ffi, types (union), var with set_, cleanup pairing, <if as>
 
 <connection module>
-  <ffi>
-    sqlite3_open    @("libsqlite3.so")
-    sqlite3_close   @("libsqlite3.so")
-    sqlite3_errmsg  @("libsqlite3.so")
-  </ffi>
+  <sqlite3 ffi>
+    open
+    close
+    errmsg
+  </sqlite3>
 
   <types>
-    <DbHandle>
-      ptr
-      path exact string
-      open is false
-    </DbHandle>
-
-    <OpenResult is union>
-      ok is DbHandle
+    <result union>
+      ok
       err is string
-    </OpenResult>
+    </result>
   </types>
 
   <var>
-    db
-    lastError is ''
+    set_active is false
+    set_ptr
+    set_path is string
+    set_lastError is string
+    set_status
   </var>
 
-  <state>
-    set_db
-    set_lastError
-  </state>
-
   <functions>
-    open(path):
-      <if sqlite3_open(path) as handle>
-        set_db is handle
-        db.path is path
-        db.open is true
+    open(dbPath):
+      <if sqlite3.open(dbPath) as handle>
+        set_ptr is handle
+        set_active is true
+        set_path is dbPath
+        set_status is ok
       </if>
       <else>
-        set_lastError is sqlite3_errmsg()
+        set_lastError is sqlite3.errmsg
+        set_status is err(sqlite3.errmsg)
       </else>
 
     close:
-      <if db.open>
-        sqlite3_close(db.ptr)
-        db.open is false
+      <if active>
+        sqlite3.close(ptr)
+        set_active is false
       </if>
 
     open cleanup:
       close
 
     isOpen:
-      db.open
+      active
   </functions>
 </connection>
