@@ -245,6 +245,7 @@ function splitOutput(monolith, file) {
     mc = mc.replace(/\b(_root)\b/g, 'nodes.$1');
     mc = mc.replace(/\b(_oa\d+_\w+)\b/g, 'st.$1');
     mc = mc.replace(/\b(_dyn_(?:buf|text)_\d+)\b/g, 'st.$1');
+    mc = mc.replace(/\b(_eval_buf_\d+)\b/g, 'st.$1');
     F['maps.zig'] = mc;
   }
 
@@ -254,6 +255,7 @@ function splitOutput(monolith, file) {
     ac = prefixArrRefs(ac, 'nodes.');
     ac = ac.replace(/\b(_root)\b/g, 'nodes.$1');
     ac = ac.replace(/\b(_dyn_(?:buf|text)_\d+)\b/g, 'st.$1');
+    ac = ac.replace(/\b(_eval_buf_\d+)\b/g, 'st.$1');
     ac = ac.replace(/\b(_oa\d+_\w+)\b/g, 'st.$1');
     ac = ac.replace(/\b(_setVariantHost)\b/g, 'st.$1');
     ac = ac.replace(/\b_initState\b/g, 'st._initState');
@@ -606,8 +608,8 @@ function emitLogicBlocks(ctx) {
             }
           }
           if (jsHandlerBody) {
-            if (m.isNested && m.parentMap) {
-              // Nested map handler receives (parent_idx, item_idx)
+            if ((m.isNested || m.isInline) && m.parentMap) {
+              // Nested/inline map handler receives (parent_idx, item_idx)
               const outerIdxParam = m.parentMap.indexParam || 'gi';
               const innerIdxParam = m.indexParam || 'ii';
               jsLines.push(`function __mapPress_${mi}_${hi}(${outerIdxParam}, ${innerIdxParam}) {`);
