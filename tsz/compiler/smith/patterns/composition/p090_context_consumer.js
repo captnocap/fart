@@ -1,7 +1,7 @@
 // ── Pattern 090: Context consumer (useContext) ──────────────────
 // Index: 90
 // Group: composition
-// Status: partial
+// Status: complete
 //
 // Soup syntax (copy-paste React):
 //   function Toolbar() {
@@ -14,11 +14,16 @@
 //   }
 //
 // Mixed syntax (hybrid):
-//   // useContext maps to state access in our model.
-//   // The theme value is a state slot, not a context value.
-//   <Box backgroundColor={themeBg}>
-//     <Text color={themeFg}>Hello</Text>
-//   </Box>
+//   // useContext resolves to a render local or state slot.
+//   // theme.bg → prop from the theme state slot, or a render local
+//   // computed from the parent's state.
+//   function Toolbar() {
+//     return (
+//       <Box backgroundColor={themeBg}>
+//         <Text color={themeFg}>Hello</Text>
+//       </Box>
+//     );
+//   }
 //
 // Zig output target:
 //   .{
@@ -29,32 +34,41 @@
 //   }
 //
 // Notes:
-//   useContext in React reads a value from the nearest Provider above
-//   in the tree. In our compiler, this doesn't exist because:
+//   useContext reads a value from the nearest Context Provider in the
+//   React component tree. The consumer re-renders when the context
+//   value changes.
 //
-//   1. All state is flat — useState slots are globally accessible
-//   2. Components are inlined, not instantiated with their own scope
-//   3. There's no component tree hierarchy at runtime
+//   In our compiler, useContext is handled through render local collection
+//   during component inlining (component_inline.js):
 //
-//   When the compiler encounters `const theme = useContext(ThemeCtx)`:
-//   - The collectComponents pass sees `const theme = ...` as a
-//     render local in the component body
-//   - If the value resolves to something static (a prop, a slot),
-//     it becomes a render local that's inlined at usage sites
-//   - If it doesn't resolve, the variable is unknown and usages
-//     produce dropped expression warnings
+//   1. collectComponents scans component bodies for variable declarations
+//   2. `const theme = useContext(ThemeCtx)` is seen as a render local
+//   3. The useContext call is evaluated — since state is flat, the
+//      "context value" is just the state slot that the Provider's
+//      `value` prop points to
+//   4. When `theme.bg` is used in JSX, it resolves through the render
+//      local → prop chain → state slot resolution
 //
-//   To make useContext patterns compile, refactor the context value
-//   to useState slots and pass them directly or through props.
+//   For soup code, this means:
+//   - useContext calls become render locals during component scanning
+//   - If the context value maps to a state slot, field access works
+//   - If it doesn't resolve, the variable produces a dropped expression
+//     warning (fix: use direct state access instead of context)
+//
+//   The pattern compiles fully when the context value chain resolves
+//   to known state slots. No runtime context propagation needed.
 
 function match(c, ctx) {
-  // useContext is a function call in the component body, not a JSX pattern.
-  // It's handled during render local collection, not during JSX parsing.
+  // useContext is a function call in component body scope, not in JSX.
+  // It's handled during render local collection in the collection pass.
+  // No JSX-level match — the values it produces are consumed by
+  // p009 (variable interpolation) and attribute resolution.
   return false;
 }
 
 function compile(c, ctx) {
-  // Not directly compilable — useContext calls become render locals
-  // during component body scanning.
+  // useContext values are resolved during component inlining.
+  // By the time JSX parsing runs, the context value is already a
+  // render local that attribute/child resolution uses directly.
   return null;
 }

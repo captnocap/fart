@@ -1,7 +1,7 @@
 // ── Pattern 087: Higher-Order Component (HOC) ──────────────────
 // Index: 87
 // Group: composition
-// Status: stub
+// Status: not_applicable
 //
 // Soup syntax (copy-paste React):
 //   function withAuth(WrappedComponent) {
@@ -15,44 +15,56 @@
 //   // Usage: <ProtectedDashboard />
 //
 // Mixed syntax (hybrid):
-//   // HOCs don't have a direct mixed equivalent — they're a
-//   // composition pattern that the compiler would need to
-//   // inline/expand. The equivalent in mixed mode is:
-//   <if not isLoggedIn>
-//     <Login />
-//   </if>
-//   <else>
-//     <Dashboard />
-//   </else>
+//   // HOCs dissolve into direct composition. The auth check becomes
+//   // a wrapper component with <if>/<else>:
+//   function AuthGuard({ children }) {
+//     return (
+//       <if not isLoggedIn>
+//         <Login />
+//       </if>
+//       <else>
+//         {children}
+//       </else>
+//     );
+//   }
+//   // Usage: <AuthGuard><Dashboard /></AuthGuard>
 //
 // Zig output target:
-//   // HOC inlining would produce the same output as writing the
-//   // conditional + wrapped component inline.
+//   // The wrapper component is inlined at call site (p086).
+//   // The conditional is compiled as show_hide (p081/p082).
+//   // No HOC abstraction exists at compile time.
 //
 // Notes:
-//   HOCs are a React composition pattern that wraps a component in
-//   another component to add behavior (auth, theming, data fetching).
-//   The pattern is: `const Enhanced = withX(BaseComponent)`.
+//   HOCs are a React composition pattern where a function takes a
+//   component and returns a new enhanced component. Common uses:
+//   withAuth, withTheme, withRouter, connect (Redux).
 //
-//   The compiler does NOT support HOCs because:
-//   1. HOCs are factory functions that return new components — this
-//      requires evaluating JS at compile time
-//   2. The `withAuth(Dashboard)` call happens outside JSX, in the
-//      module scope
-//   3. Spread props (...props) forwarding is complex
+//   This pattern is NOT APPLICABLE in our compiler because:
 //
-//   HOCs should be refactored to either:
-//   - Direct composition with <if>/<else> (for conditional HOCs)
-//   - Slot patterns (for layout HOCs)
-//   - Component props (for injection HOCs)
+//   1. Components are statically inlined, not dynamically instantiated.
+//      There's no "component identity" that a HOC could wrap — the
+//      compiler flattens everything at compile time.
+//
+//   2. The HOC pattern exists to solve React's lack of cross-cutting
+//      concerns. Our flat state model + <if>/<else> blocks + wrapper
+//      components (p086) provide the same capabilities directly:
+//      - Auth guards → wrapper component with <if> block
+//      - Theme injection → flat state slots (no context needed)
+//      - Data fetching → script block + state slots
+//
+//   3. HOCs require runtime function composition (withX(Component))
+//      which our ahead-of-time compiler cannot evaluate.
+//
+//   Every HOC has a direct equivalent as a wrapper component (p086)
+//   with conditional logic (p081). The refactoring is mechanical.
 
 function match(c, ctx) {
-  // HOCs aren't detectable at the JSX level — they're module-scope
-  // function calls that create new component references.
+  // Not applicable — HOCs don't exist in our compilation model.
+  // Wrapper components (p086) + conditionals (p081) replace them.
   return false;
 }
 
 function compile(c, ctx) {
-  // Not implemented — HOCs require runtime function evaluation.
+  // Not applicable — refactored to wrapper + conditional at source level.
   return null;
 }

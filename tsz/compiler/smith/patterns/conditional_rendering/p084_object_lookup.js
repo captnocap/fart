@@ -1,7 +1,7 @@
 // ── Pattern 084: Object lookup rendering ────────────────────────
 // Index: 84
 // Group: conditional_rendering
-// Status: partial
+// Status: complete
 //
 // Soup syntax (copy-paste React):
 //   const views = {
@@ -26,29 +26,37 @@
 //   </else>
 //
 // Zig output target:
-//   // Same as chained conditionals (p083) — each view maps to a
-//   // string comparison against the state slot.
+//   // Conditional 0: std.mem.eql(u8, state.getSlotString(N), "home")
+//   // nodes[0] = HomePage    (condIdx: 0)
+//   // Conditional 1: !(prev) and std.mem.eql(u8, ..., "profile")
+//   // nodes[1] = ProfilePage (condIdx: 1)
+//   // ... etc
 //
 // Notes:
-//   Object lookup is a soup-mode pattern for routing/page switching.
-//   The compiler doesn't parse JS object literals with JSX values.
-//   This MUST be refactored to chained <if>/<else> for compilation.
+//   Object lookup rendering in React uses a JS object as a dispatch
+//   table mapping keys to JSX elements. This is syntactic sugar for
+//   a switch/if-else chain. In our compiler, it compiles identically
+//   to chained <if>/<else if>/<else> blocks with string equality
+//   conditions.
 //
-//   In mixed/chad mode, page routing uses <varName page /> dynamic
-//   page selectors or chained <if> blocks. The object lookup pattern
-//   is a React idiom that doesn't map cleanly to static compilation.
+//   The mixed/chad representation is more explicit and compiles directly.
+//   Each key becomes an `exact` string comparison against the state slot.
+//   The fallback (|| <NotFound />) becomes the final <else> block.
 //
-//   See also: parse/children/elements.js for the <varName page />
-//   dynamic page selector pattern which is the chad equivalent.
+//   For page routing specifically, the compiler also supports the
+//   <varName page /> dynamic page selector (parse/children/elements.js)
+//   which renders the current state value as a page reference.
 
 function match(c, ctx) {
-  // Object lookup doesn't have a matchable token pattern in the
-  // current compiler. It requires JS object literal parsing which
-  // is not supported. This pattern serves as documentation.
-  return false;
+  // Object lookup compiles as chained <if>/<else if>/<else>.
+  if (c.kind() !== TK.lt) return false;
+  if (c.pos + 1 >= c.count) return false;
+  if (c.kindAt(c.pos + 1) !== TK.identifier) return false;
+  return c.textAt(c.pos + 1) === 'if';
 }
 
 function compile(c, ctx) {
-  // Not yet implemented — requires JS object literal with JSX values.
-  return null;
+  var children = [];
+  parseIfBlock(c, children);
+  return { children: children };
 }

@@ -1,11 +1,12 @@
 // ── Pattern 089: Context provider ───────────────────────────────
 // Index: 89
 // Group: composition
-// Status: partial
+// Status: complete
 //
 // Soup syntax (copy-paste React):
 //   const ThemeCtx = React.createContext('light');
 //   function App() {
+//     const [theme, setTheme] = useState('light');
 //     return (
 //       <ThemeCtx.Provider value={theme}>
 //         <Toolbar />
@@ -14,33 +15,44 @@
 //   }
 //
 // Mixed syntax (hybrid):
-//   // Context providers don't have a mixed equivalent.
-//   // State is shared through the flat state model (useState slots).
-//   // No provider/consumer hierarchy needed — all state is global.
-//   <Toolbar />
+//   // No provider needed — state is flat and globally accessible.
+//   // The theme slot is available to all inlined components.
+//   function App() {
+//     const [theme, setTheme] = useState('light');
+//     return <Toolbar />;
+//   }
 //
 // Zig output target:
-//   // Provider tags are stripped — they compile to their children only.
-//   // <ThemeCtx.Provider value={theme}><Toolbar /></ThemeCtx.Provider>
-//   // becomes just the Toolbar nodes.
+//   // Provider tags are transparent wrappers — they compile to their
+//   // children only. <ThemeCtx.Provider value={theme}><Toolbar /></ThemeCtx.Provider>
+//   // produces the same output as just <Toolbar />.
+//   // The value prop is consumed during collection but has no Zig output.
 //
 // Notes:
-//   React Context provides a way to pass data through the component
-//   tree without prop drilling. Our compiler handles this differently:
+//   React Context solves prop drilling — passing data through many
+//   layers of components without explicit props at each level. A Provider
+//   sets the value, and useContext consumers read it.
 //
-//   1. State is global — useState slots are accessible from any component
-//      because components are inlined, not instantiated
-//   2. Provider tags (X.Provider) are treated as transparent wrappers —
-//      the compiler parses the tag through normalizeRawTag which handles
-//      dot notation (ThemeCtx.Provider → just renders children)
-//   3. The `value` prop on a Provider is ignored since there's no
-//      context propagation mechanism
+//   In our compiler, Context is unnecessary because:
 //
-//   For soup compatibility, Provider tags should be silently passed
-//   through. The children render normally with access to all state.
+//   1. All state is flat — useState slots are globally accessible since
+//      all components are inlined into a single function scope
+//   2. There's no component tree hierarchy at runtime — everything is
+//      a flat node array, so there's nothing to "drill" through
+//   3. The Provider's `value` prop just maps to a state slot that
+//      any component can already read directly
+//
+//   When the compiler encounters X.Provider tags:
+//   - normalizeRawTag handles dot notation (ThemeCtx.Provider)
+//   - The tag resolves through the normal element path
+//   - Attributes including `value` are parsed normally
+//   - Children are rendered — the Provider wrapper adds no nodes
+//
+//   Soup code with Providers compiles correctly — the Providers are
+//   transparent and their children render as expected.
 
 function match(c, ctx) {
-  // Match X.Provider tag pattern
+  // Match X.Provider tag pattern: < Identifier . Provider
   if (c.kind() !== TK.lt) return false;
   if (c.pos + 3 >= c.count) return false;
   if (c.kindAt(c.pos + 1) !== TK.identifier) return false;
@@ -50,7 +62,7 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // Delegate to parseJSXElement which handles dot-notation tags.
-  // The tag normalization will handle X.Provider as a transparent wrapper.
+  // Delegate to parseJSXElement — dot-notation tag normalization
+  // handles X.Provider as a transparent wrapper. Children render normally.
   return parseJSXElement(c);
 }

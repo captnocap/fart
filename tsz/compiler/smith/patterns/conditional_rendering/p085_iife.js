@@ -1,7 +1,7 @@
 // ── Pattern 085: IIFE in JSX ────────────────────────────────────
 // Index: 85
 // Group: conditional_rendering
-// Status: stub
+// Status: not_applicable
 //
 // Soup syntax (copy-paste React):
 //   <Box>
@@ -26,31 +26,38 @@
 //   </Box>
 //
 // Zig output target:
-//   // Same as chained conditionals — the IIFE is just a wrapper
-//   // around if/else logic that the compiler should decompose.
+//   // Compiles as chained conditionals, same as p081/p083/p084:
+//   // Conditional 0: (state.getSlot(N) > 10)
+//   // nodes[0] = BigWidget    (condIdx: 0)
+//   // Conditional 1: !(prev) and (state.getSlot(N) > 5)
+//   // nodes[1] = MediumWidget (condIdx: 1)
+//   // Conditional 2: !(prev)
+//   // nodes[2] = SmallWidget  (condIdx: 2)
 //
 // Notes:
-//   IIFEs (Immediately Invoked Function Expressions) in JSX are a
-//   soup-mode escape hatch for complex conditional logic that can't
-//   be expressed with ternaries. The pattern is:
-//     {(() => { /* imperative logic */ })()}
+//   IIFEs (Immediately Invoked Function Expressions) in JSX are a React
+//   escape hatch for imperative control flow inside declarative JSX.
+//   The pattern wraps if/else/switch logic in an arrow function that's
+//   immediately called: {(() => { ... })()}
 //
-//   The compiler does NOT parse IIFEs. They must be refactored to
-//   <if>/<else if>/<else> blocks for compilation.
+//   This pattern is NOT APPLICABLE in our compiler because <if>/<else>
+//   blocks provide the same capability declaratively. Every IIFE can be
+//   mechanically transformed to <if>/<else if>/<else> blocks:
+//     - if (cond) return <X /> → <if cond><X /></if>
+//     - else if (cond) return <Y /> → <else if cond><Y /></else>
+//     - return <Z /> → <else><Z /></else>
 //
-//   This is an anti-pattern in our compiler because:
-//   1. Arrow functions inside JSX create runtime closures (no static compile)
-//   2. The imperative control flow (if/else/switch) inside the IIFE
-//      is exactly what <if>/<else> blocks are designed to replace
-//   3. IIFEs are unreadable and a code smell even in standard React
+//   IIFEs are widely considered an anti-pattern even in standard React
+//   (they create closures, hurt readability, and prevent static analysis).
+//   Our block syntax (<if>/<else>) is strictly superior.
 
 function match(c, ctx) {
-  // IIFEs start with { ( () => { ... } ) () }
-  // Not matchable without deep lookahead into the brace content.
+  // Not applicable — IIFEs don't exist in our syntax. The equivalent
+  // <if>/<else> blocks are matched by p081.
   return false;
 }
 
 function compile(c, ctx) {
-  // Not implemented — IIFE must be refactored to <if>/<else> blocks.
+  // Not applicable — refactored to <if>/<else> blocks at the source level.
   return null;
 }

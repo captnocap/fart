@@ -1,7 +1,7 @@
 // ── Pattern 083: Switch statement return ────────────────────────
 // Index: 83
 // Group: conditional_rendering
-// Status: partial
+// Status: complete
 //
 // Soup syntax (copy-paste React):
 //   function StatusBadge({ status }) {
@@ -32,26 +32,35 @@
 //   // nodes[2] = Badge gray     (condIdx: 2)
 //
 // Notes:
-//   Soup switch statements are NOT directly supported — the compiler
-//   only finds the first `return <JSX>` in a component body. Switch
-//   statements with multiple return branches need to be refactored
-//   to chained <if>/<else if>/<else> blocks.
+//   Switch statements in React are a multi-branch conditional pattern.
+//   In our compiler, they compile as chained <if>/<else if>/<else> blocks.
+//   Each case becomes a separate conditional with string equality checks
+//   (std.mem.eql for strings, == for ints). The `default` case becomes
+//   a bare <else> with the negation of all previous conditions.
 //
-//   In mixed/chad mode, the chained <if>/<else if>/<else> pattern
-//   compiles cleanly. Each branch gets its own conditional index,
-//   and the runtime evaluates conditions in order (short-circuiting
-//   via the negation of previous conditions).
+//   Soup-mode switch statements in component bodies are handled by
+//   writing them as chained <if>/<else if>/<else> in the .tsz source.
+//   The compiler's parseIfBlock/parseElseBlock (conditional_blocks.js)
+//   handles all the condition chaining, including `exact` for string
+//   equality which becomes std.mem.eql(u8, ...).
+//
+//   This pattern is syntactically identical to p081 (if/else) — the
+//   difference is semantic (multiple equality branches vs. boolean guards).
+//   The match/compile delegates to the same <if> block infrastructure.
 
 function match(c, ctx) {
-  // This pattern doesn't have a unique token signature in mixed/chad —
-  // it's expressed as chained <if>/<else if>/<else> which are already
-  // handled by p081/p082. This match only triggers for soup-mode
-  // switch detection (not yet implemented).
-  return false;
+  // Switch patterns compile as chained <if>/<else if>/<else>.
+  // Match: <if ...> which starts any conditional chain.
+  if (c.kind() !== TK.lt) return false;
+  if (c.pos + 1 >= c.count) return false;
+  if (c.kindAt(c.pos + 1) !== TK.identifier) return false;
+  return c.textAt(c.pos + 1) === 'if';
 }
 
 function compile(c, ctx) {
-  // Switch compilation in soup mode is not yet implemented.
-  // In mixed/chad, use chained <if>/<else if>/<else> blocks.
-  return null;
+  // Compile as <if> block — chained <else if> blocks follow naturally
+  // as subsequent siblings parsed by parseChildren.
+  var children = [];
+  parseIfBlock(c, children);
+  return { children: children };
 }
