@@ -1,7 +1,7 @@
 // ── Pattern 065: forwarded ref prop ────────────────────────────
 // Index: 65
 // Group: props
-// Status: stub
+// Status: not_applicable
 //
 // Soup syntax (copy-paste React):
 //   const Input = forwardRef((props, ref) => (
@@ -31,6 +31,10 @@
 //   probe for this pattern, that produced an empty root rather than a usable
 //   forwarded component.
 //
+//   This is marked not_applicable for the current Smith architecture rather
+//   than stub because forwarded refs depend on runtime ref identity and a
+//   component collection shape that Smith does not currently model.
+//
 //   Supporting this pattern would require:
 //     1. Collecting const-assigned component bindings
 //     2. Recognizing forwardRef wrappers specifically
@@ -51,6 +55,6 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // Not implemented in the live compiler.
+  // No live lowering in the current compile-time component model.
   return null;
 }

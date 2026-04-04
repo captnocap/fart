@@ -1,7 +1,7 @@
 // ── Pattern 061: function-as-children ──────────────────────────
 // Index: 61
 // Group: props
-// Status: stub
+// Status: not_applicable
 //
 // Soup syntax (copy-paste React):
 //   <DataProvider>
@@ -33,8 +33,10 @@
 //     1. Passing a function as the only child
 //     2. Calling children(...) inside the component body
 //
-//   This is intentionally marked stub, not partial, because the defining
-//   callable child payload never survives parsing.
+//   This is marked not_applicable for the current Smith architecture rather
+//   than stub because the missing behavior is not "undocumented React";
+//   it is a runtime callable-child pattern that does not fit the current
+//   compile-time slot model without adding first-class callable child slots.
 
 function match(c, ctx) {
   // Brace child whose contents are an arrow function:
@@ -65,6 +67,6 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // Not implemented in the live compiler.
+  // No live lowering in the current compile-time component model.
   return null;
 }
