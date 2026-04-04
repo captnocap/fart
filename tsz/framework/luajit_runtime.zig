@@ -317,89 +317,8 @@ const TSL_STDLIB =
     \\function __tsl.toUpperCase(s) return s:upper() end
     \\function __tsl.toLowerCase(s) return s:lower() end
     \\
-    \\-- Minimal JSON decoder for map data bridge (QJS → LuaJIT)
-    \\function __jsonDecode(s)
-    \\  if not s or s == "" then return nil end
-    \\  local i = 1
-    \\  local function skip_ws()
-    \\    while i <= #s and s:byte(i) <= 32 do i = i + 1 end
-    \\  end
-    \\  local function parse_string()
-    \\    i = i + 1 -- skip "
-    \\    local start = i
-    \\    while i <= #s and s:byte(i) ~= 34 do
-    \\      if s:byte(i) == 92 then i = i + 1 end -- skip escaped
-    \\      i = i + 1
-    \\    end
-    \\    local val = s:sub(start, i - 1):gsub("\\\\(.)", {n="\n",t="\t",r="\r",['"']='"',["\\"]="\\",["/"]}    )
-    \\    i = i + 1 -- skip closing "
-    \\    return val
-    \\  end
-    \\  local function parse_number()
-    \\    local start = i
-    \\    if s:byte(i) == 45 then i = i + 1 end -- minus
-    \\    while i <= #s and s:byte(i) >= 48 and s:byte(i) <= 57 do i = i + 1 end
-    \\    if i <= #s and s:byte(i) == 46 then
-    \\      i = i + 1
-    \\      while i <= #s and s:byte(i) >= 48 and s:byte(i) <= 57 do i = i + 1 end
-    \\    end
-    \\    return tonumber(s:sub(start, i - 1))
-    \\  end
-    \\  local parse_value
-    \\  local function parse_array()
-    \\    i = i + 1 -- skip [
-    \\    local arr = {}
-    \\    skip_ws()
-    \\    if i <= #s and s:byte(i) == 93 then i = i + 1; return arr end
-    \\    while true do
-    \\      skip_ws()
-    \\      arr[#arr + 1] = parse_value()
-    \\      skip_ws()
-    \\      if i > #s or s:byte(i) ~= 44 then break end
-    \\      i = i + 1 -- skip ,
-    \\    end
-    \\    if i <= #s and s:byte(i) == 93 then i = i + 1 end
-    \\    return arr
-    \\  end
-    \\  local function parse_object()
-    \\    i = i + 1 -- skip {
-    \\    local obj = {}
-    \\    skip_ws()
-    \\    if i <= #s and s:byte(i) == 125 then i = i + 1; return obj end
-    \\    while true do
-    \\      skip_ws()
-    \\      local key = parse_string()
-    \\      skip_ws()
-    \\      i = i + 1 -- skip :
-    \\      skip_ws()
-    \\      obj[key] = parse_value()
-    \\      skip_ws()
-    \\      if i > #s or s:byte(i) ~= 44 then break end
-    \\      i = i + 1 -- skip ,
-    \\    end
-    \\    if i <= #s and s:byte(i) == 125 then i = i + 1 end
-    \\    return obj
-    \\  end
-    \\  parse_value = function()
-    \\    skip_ws()
-    \\    if i > #s then return nil end
-    \\    local b = s:byte(i)
-    \\    if b == 34 then return parse_string() end
-    \\    if b == 91 then return parse_array() end
-    \\    if b == 123 then return parse_object() end
-    \\    if b == 116 then i = i + 4; return true end   -- true
-    \\    if b == 102 then i = i + 5; return false end   -- false
-    \\    if b == 110 then i = i + 4; return nil end     -- null
-    \\    return parse_number()
-    \\  end
-    \\  return parse_value()
-    \\end
-    \\
-    \\-- Map data bridge: called from Zig with (index, jsonStr)
-    \\function __setMapDataJSON(idx, json)
-    \\  local data = __jsonDecode(json)
-    \\  _G["__luaMapData" .. idx] = data
-    \\end
+    \\-- Map data is populated directly via pushJSValueToLua (zero-copy FFI).
+    \\-- No JSON serialization needed. See qjs_runtime.zig:evalLuaMapData.
 ;
 
 // ── Lua Map Node Stamping ───────────────────────────────────────────────
@@ -673,22 +592,6 @@ pub fn callGlobalStr(name: [*:0]const u8, arg: [*:0]const u8) void {
     if (lua.lua_isfunction(L, -1)) {
         lua.lua_pushstring(L, arg);
         if (lua.lua_pcall(L, 1, 0, 0) != 0) {
-            logLuaError(L, std.mem.span(name));
-            lua.lua_pop(L, 1);
-        }
-    } else {
-        lua.lua_pop(L, 1);
-    }
-}
-
-/// Call a global Lua function with two string arguments
-pub fn callGlobalStr2(name: [*:0]const u8, arg1: [*:0]const u8, arg2: [*:0]const u8) void {
-    const L = g_lua orelse return;
-    _ = lua.lua_getglobal(L, name);
-    if (lua.lua_isfunction(L, -1)) {
-        lua.lua_pushstring(L, arg1);
-        lua.lua_pushstring(L, arg2);
-        if (lua.lua_pcall(L, 2, 0, 0) != 0) {
             logLuaError(L, std.mem.span(name));
             lua.lua_pop(L, 1);
         }
