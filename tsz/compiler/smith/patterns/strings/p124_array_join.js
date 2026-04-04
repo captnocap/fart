@@ -1,7 +1,7 @@
 // ── Pattern 124: Array join ─────────────────────────────────────
 // Index: 124
 // Group: strings
-// Status: stub
+// Status: partial
 //
 // Soup syntax (copy-paste React):
 //   <Text>{items.join(", ")}</Text>

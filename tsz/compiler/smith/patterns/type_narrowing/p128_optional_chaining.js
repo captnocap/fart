@@ -1,7 +1,7 @@
 // ── Pattern 128: Optional chaining ──────────────────────────────
 // Index: 128
 // Group: type_narrowing
-// Status: stub
+// Status: partial
 //
 // Soup syntax (copy-paste React):
 //   <Text>{user?.name}</Text>

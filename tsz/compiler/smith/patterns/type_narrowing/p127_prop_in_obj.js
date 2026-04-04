@@ -1,7 +1,7 @@
 // ── Pattern 127: 'prop' in obj ──────────────────────────────────
 // Index: 127
 // Group: type_narrowing
-// Status: stub
+// Status: partial
 //
 // Soup syntax (copy-paste React):
 //   {'url' in item && <Image source={{uri: item.url}} />}

@@ -1,7 +1,7 @@
 // ── Pattern 039: Array(n).fill().map() ──────────────────────────
 // Index: 39
 // Group: array_construction
-// Status: stub
+// Status: partial
 //
 // Soup syntax (copy-paste React):
 //   {Array(5).fill(0).map((_, i) => (

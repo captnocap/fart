@@ -1,7 +1,7 @@
 // ── Pattern 038: [...a, ...b].map() ─────────────────────────────
 // Index: 38
 // Group: filter_sort
-// Status: stub
+// Status: partial
 //
 // Soup syntax (copy-paste React):
 //   {[...listA, ...listB].map(item => (

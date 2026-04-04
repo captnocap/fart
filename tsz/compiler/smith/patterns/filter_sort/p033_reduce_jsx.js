@@ -1,7 +1,7 @@
 // ── Pattern 033: reduce() → JSX ─────────────────────────────────
 // Index: 33
 // Group: filter_sort
-// Status: stub
+// Status: partial
 //
 // Soup syntax (copy-paste React):
 //   {items.reduce((acc, item) => [...acc, <Box key={item.id}>{item.name}</Box>], [])}

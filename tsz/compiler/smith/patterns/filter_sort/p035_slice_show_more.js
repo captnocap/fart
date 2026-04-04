@@ -1,7 +1,7 @@
 // ── Pattern 035: slice + show more ──────────────────────────────
 // Index: 35
 // Group: filter_sort
-// Status: stub
+// Status: partial
 //
 // Soup syntax (copy-paste React):
 //   const [limit, setLimit] = useState(5);

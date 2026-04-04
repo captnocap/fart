@@ -1,7 +1,7 @@
 // ── Pattern 037: flatMap() → element ────────────────────────────
 // Index: 37
 // Group: filter_sort
-// Status: stub
+// Status: partial
 //
 // Soup syntax (copy-paste React):
 //   {items.flatMap(item => [

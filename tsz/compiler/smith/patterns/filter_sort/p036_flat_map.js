@@ -1,7 +1,7 @@
 // ── Pattern 036: flat().map() ───────────────────────────────────
 // Index: 36
 // Group: filter_sort
-// Status: stub
+// Status: partial
 //
 // Soup syntax (copy-paste React):
 //   {nested.flat().map(item => (
