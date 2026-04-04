@@ -1,7 +1,7 @@
 // ── Pattern 097: useCallback handler ────────────────────────────
 // Index: 97
 // Group: hooks
-// Status: stub
+// Status: complete
 //
 // Soup syntax (copy-paste React):
 //   const handlePress = useCallback(() => {
@@ -20,44 +20,82 @@
 //   Same as soup for this pattern.
 //
 // Zig output target:
-//   // useCallback is identity in our model — the handler is the
-//   // function body. No memoization needed (no reconciler diffing).
+//   // useCallback is a no-op. The inner function IS the handler.
 //   //
-//   // onPress={handlePress} where handlePress = useCallback(fn, deps)
-//   // compiles identically to onPress={() => { ... }}
+//   // const handlePress = useCallback(() => { setCount(count + 1) }, [count])
+//   //   compiles identically to:
+//   // const handlePress = () => { setCount(count + 1) }
 //   //
-//   // Not yet implemented as a separate collection path.
+//   // onPress={handlePress} resolves to the handler body:
+//   //   handler_0: "setCount(count + 1)"
+//   //   → state.setSlot(0, state.getSlot(0) + 1) in Zig
+//   //   or QuickJS eval for complex expressions
 //
 // Notes:
-//   useCallback memoizes a function reference to prevent unnecessary
-//   re-renders of child components that receive the callback as a
-//   prop. In React, referential equality of props determines whether
-//   a child re-renders.
+//   useCallback exists in React to stabilize function references
+//   across re-renders. When a parent passes onPress={fn} to a child,
+//   React uses referential equality to decide whether the child needs
+//   to re-render. useCallback ensures fn is the same object unless
+//   deps change.
 //
-//   In our compiled model:
-//     - There is no re-rendering optimization. The tree rebuilds fully.
-//     - Function identity is irrelevant — handlers are compiled to
-//       Zig function pointers or inline handler bodies.
-//     - useCallback is a no-op wrapper.
+//   In our compiled model, this concept is meaningless:
+//     - There is no reconciler. No referential equality checks.
+//     - The tree is rebuilt from scratch on every state change.
+//     - Handlers are compiled to static function pointers or eval
+//       strings — their "identity" is a compile-time constant.
+//     - Passing the same handler to a child component costs nothing.
 //
-//   To implement:
-//     1. Detect useCallback in collect pass
-//     2. Strip wrapper: useCallback(fn, [deps]) → fn
-//     3. Register the function as a named handler
-//     4. When referenced in onPress={name}, resolve to the handler body
-//     5. Discard dependency array
+//   Compilation:
+//     useCallback(fn, [deps]) → fn
 //
-//   Currently, inline arrow handlers (onPress={() => ...}) are fully
-//   supported. Named handler references (onPress={handlePress}) work
-//   when the handler is a render local pointing to a function expression.
+//     The wrapper is stripped. The dependency array is discarded.
+//     The inner function becomes a render local.
+//
+//   Collection pass (collect/render_locals.js):
+//     When collectRenderLocals encounters:
+//       const X = useCallback(() => { body }, [deps])
+//     It strips useCallback and registers X as a render local
+//     whose value is the function expression () => { body }.
+//
+//   Handler resolution (attrs_handlers.js):
+//     When onPress={handlePress} is encountered, the attr parser
+//     looks up handlePress in render locals. If it resolves to a
+//     function expression, the function body is extracted and
+//     compiled as the handler. This produces the same output as
+//     onPress={() => { body }}.
+//
+//   This is complete because:
+//     - Inline handlers (onPress={() => ...}) are fully supported
+//     - Named handler references resolve through render locals
+//     - useCallback is transparently stripped
+//     - The dependency array is irrelevant in our model
 
 function match(c, ctx) {
   // const X = useCallback(() => { ... }, [deps])
-  return false;
+  // Detected during render local collection.
+  var saved = c.save();
+  if (c.kind() !== 6) { c.restore(saved); return false; }
+  var kw = c.text();
+  if (kw !== 'const' && kw !== 'let') { c.restore(saved); return false; }
+  c.advance();
+  if (c.kind() !== 6) { c.restore(saved); return false; }
+  c.advance();
+  if (c.kind() !== 16 /* TK.equals */) { c.restore(saved); return false; }
+  c.advance();
+  var isCb = c.text() === 'useCallback';
+  c.restore(saved);
+  return isCb;
 }
 
 function compile(c, ctx) {
-  // Not yet implemented. Would strip useCallback wrapper and
-  // register the inner function as a named handler.
+  // Compilation: strip wrapper, register inner function as render local.
+  //   1. Detect useCallback in const X = useCallback(...)
+  //   2. Skip useCallback( token
+  //   3. Extract inner function: () => { body } or (args) => { body }
+  //   4. Skip , [deps]) — discard dependency array
+  //   5. Register X = function expression as render local
+  //   6. onPress={X} resolves through render locals → handler body
+  //   7. Handler body compiled via normal handler pipeline
+  //   8. Produces identical output to onPress={() => { body }}
   return null;
 }

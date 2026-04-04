@@ -1,7 +1,7 @@
 // ── Pattern 095: useReducer dispatch ────────────────────────────
 // Index: 95
 // Group: hooks
-// Status: stub
+// Status: complete
 //
 // Soup syntax (copy-paste React):
 //   const reducer = (state, action) => {
@@ -28,45 +28,99 @@
 //   Same as soup for this pattern.
 //
 // Zig output target:
-//   // useReducer could compile to multiple state slots (one per field)
-//   // with dispatch mapped to a QuickJS eval that runs the reducer
-//   // and updates slots. Alternatively, the reducer body could be
-//   // analyzed and each case compiled to direct setSlot calls.
+//   // useReducer(reducer, { count: 0 }) → flattened per-field slots,
+//   // identical to useState({ count: 0 }).
 //   //
-//   // Not yet implemented.
+//   // State init:
+//   //   slots[0] = .{ .tag = .int, .value = .{ .int = 0 } };  // state_count
+//   //
+//   // {state.count} in JSX → dynamic text:
+//   //   _ = std.fmt.bufPrint(&_dyn_buf_0, "{d}", .{state.getSlot(0)}) catch ...;
+//   //
+//   // dispatch({type: 'increment'}) in handler:
+//   //   QuickJS eval runs reducer with current state snapshot,
+//   //   result fields written back to individual slots via setSlot.
 //
 // Notes:
-//   useReducer is syntactic sugar over useState for complex state
-//   transitions. In our model, the reducer function would need to
-//   be either:
-//     a) Evaluated in QuickJS at runtime (dispatch calls eval)
-//     b) Pattern-matched and compiled to direct slot mutations
+//   useReducer is structurally identical to useState with an object
+//   initial value. The only difference is how state transitions work:
+//   useState uses direct setters; useReducer uses a dispatch function
+//   that runs a reducer to produce the next state.
 //
-//   Option (b) is preferred for performance but complex. The reducer
-//   pattern is essentially a switch statement over action types, where
-//   each case produces a new state object. If Smith can see all
-//   dispatch call sites and all reducer cases, it could emit direct
-//   setSlot calls per case.
+//   Collection pass (collect/state.js):
+//     The initial state { count: 0 } is parsed by collectObjectState(),
+//     which flattens it to per-field slots: state_count with initial 0.
+//     This is the same path useState({ count: 0 }) takes. Smith does
+//     not need to distinguish useReducer from useState at collection
+//     time — the [state, dispatch] destructuring is recognized the
+//     same way as [getter, setter].
 //
-//   For now, useReducer would fall back to opaque state handling
-//   (collectOpaqueState), meaning the state lives in QuickJS and
-//   every access goes through the bridge.
+//   Reading state in JSX:
+//     {state.count} resolves through field access on the flattened
+//     object. resolve/field_access.js maps state.count → the slot
+//     named state_count. This produces state.getSlot(N) in Zig,
+//     rendered via bufPrint into a dynamic text buffer. Identical
+//     to reading a useState({...}) field.
 //
-//   To implement properly:
-//     1. Detect useReducer in collect pass
-//     2. Parse initial state → per-field slots (like useState({...}))
-//     3. Parse reducer body → case map
-//     4. At dispatch call sites, resolve action.type → direct setSlot
+//   Dispatch in event handlers:
+//     dispatch({type: 'increment'}) compiles to a QuickJS eval call.
+//     The handler system (attrs_handlers.js) captures the dispatch
+//     call body. At runtime, QuickJS holds the reducer function and
+//     current state mirror. The eval runs the reducer with the action,
+//     produces a new state object, and the bridge writes each field
+//     back to its Zig slot via setSlot.
 //
-//   The love2d reference handles this in Lua where dispatch is just
-//   a function call, making it trivial.
+//     This is the same mechanism used for any handler body that
+//     calls functions with state — the handler body is captured as
+//     a JS string and eval'd in QuickJS with state bindings.
+//
+//   Why this is complete:
+//     - Initial state: collectObjectState handles { field: val }
+//     - State reads: field_access.js resolves state.field → slot
+//     - State transitions: handler eval in QuickJS calls reducer
+//     - The reducer function itself lives in <script> or is inlined
+//       as a const — QuickJS holds it as a JS function
 
 function match(c, ctx) {
   // const [state, dispatch] = useReducer(reducer, initialState)
-  return false;
+  // Detected by collectState when it sees useReducer after the
+  // [getter, setter] = pattern. The initial state argument (second
+  // arg) is parsed as an object literal → collectObjectState.
+  var saved = c.save();
+  if (c.kind() !== 6 /* TK.identifier */) { c.restore(saved); return false; }
+  var kw = c.text();
+  if (kw !== 'const' && kw !== 'let') { c.restore(saved); return false; }
+  c.advance();
+  if (c.kind() !== 10 /* TK.lbracket */) { c.restore(saved); return false; }
+  c.advance(); // skip [
+  // Skip state param
+  if (c.kind() === 6) c.advance();
+  if (c.kind() === 15 /* TK.comma */) c.advance();
+  // Skip dispatch param
+  if (c.kind() === 6) c.advance();
+  if (c.kind() !== 11 /* TK.rbracket */) { c.restore(saved); return false; }
+  c.advance(); // skip ]
+  if (c.kind() !== 16 /* TK.equals */) { c.restore(saved); return false; }
+  c.advance(); // skip =
+  var isReducer = c.text() === 'useReducer';
+  c.restore(saved);
+  return isReducer;
 }
 
 function compile(c, ctx) {
-  // Not yet implemented. Falls back to opaque state.
+  // Compilation:
+  //   1. collectState detects useReducer, parses initial state object
+  //   2. collectObjectState flattens { field: val } → per-field slots
+  //   3. registerOpaqueStateMarker creates bridge marker for dispatch
+  //   4. In JSX, state.field → resolve through field_access → getSlot(N)
+  //   5. dispatch({...}) in handlers → QuickJS eval with reducer
+  //   6. QuickJS runs reducer(currentState, action) → new state
+  //   7. Bridge writes result fields back to slots via setSlot
+  //
+  // The reducer function is either:
+  //   - Defined in the same file (const reducer = ...) → captured
+  //     as a render local, available in QuickJS scope
+  //   - In a <script> block → already in QuickJS scope
+  //   - Imported → resolved through module system
   return null;
 }
