@@ -1,7 +1,7 @@
 // ── Pattern 114: CSS-in-JS object ───────────────────────────────
 // Index: 114
 // Group: style
-// Status: stub
+// Status: not_applicable
 //
 // Soup syntax (copy-paste React):
 //   const headerStyle = css({
@@ -41,9 +41,17 @@
 //   Users should use the `style` prop with inline objects instead.
 
 function match(c, ctx) {
+  // css() function calls are treated as normal expressions.
+  // If used as a prop value (css={{...}}), the `css` prop is unknown
+  // to the framework and is dropped during attribute parsing.
+  // Only `style` is recognized as a style attribute.
   return false;
 }
 
 function compile(c, children, ctx) {
+  // No compile path — css() calls produce CSS class names via runtime
+  // injection in web frameworks. In native, the call would execute in
+  // qjs eval but its return value (a class name string) has no effect.
+  // Users should use style={{...}} instead.
   return null;
 }

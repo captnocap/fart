@@ -1,7 +1,7 @@
 // ── Pattern 112: CSS module ─────────────────────────────────────
 // Index: 112
 // Group: style
-// Status: stub
+// Status: not_applicable
 //
 // Soup syntax (copy-paste React):
 //   import styles from './Header.module.css';
@@ -28,9 +28,13 @@
 //   See p105_inline_object.js for the supported inline style pattern.
 
 function match(c, ctx) {
+  // CSS module imports are stripped during compilation. className attrs
+  // are dropped with a warning by the soup lane (soup.js ~511).
   return false;
 }
 
 function compile(c, children, ctx) {
+  // The import statement is ignored. className={styles.X} is dropped
+  // with warning "[W] dynamic className dropped". No Zig output.
   return null;
 }

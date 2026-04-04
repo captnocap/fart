@@ -1,7 +1,7 @@
 // ── Pattern 111: classnames/clsx utility ────────────────────────
 // Index: 111
 // Group: style
-// Status: stub
+// Status: not_applicable
 //
 // Soup syntax (copy-paste React):
 //   className={clsx('btn', {active})}
@@ -33,9 +33,16 @@
 //   supported style patterns.
 
 function match(c, ctx) {
+  // className is detected during attribute parsing. The soup lane
+  // (soup.js ~511) identifies className/class attrs and drops them.
+  // This pattern file exists for documentation — the match/compile
+  // entry point is the attribute dispatcher, not child parsing.
   return false;
 }
 
 function compile(c, children, ctx) {
+  // className is dropped with a warning by the soup lane.
+  // No Zig output is generated — the attr is consumed and discarded.
+  // Warnings: "[W] dynamic className dropped" or "[W] className=... dropped"
   return null;
 }

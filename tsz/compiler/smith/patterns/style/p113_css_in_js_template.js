@@ -1,7 +1,7 @@
 // ── Pattern 113: CSS-in-JS template literal ─────────────────────
 // Index: 113
 // Group: style
-// Status: stub
+// Status: not_applicable
 //
 // Soup syntax (copy-paste React):
 //   const Header = styled.div`
@@ -36,9 +36,18 @@
 //   Users should convert to inline style objects.
 
 function match(c, ctx) {
+  // Tagged template literals (styled.div`...`, css`...`) are parsed as
+  // normal expressions by the lexer. The tag function is treated as an
+  // identifier, the template as a template literal. Neither triggers
+  // special style handling — the expression falls through to qjs eval
+  // or is ignored depending on context.
   return false;
 }
 
 function compile(c, children, ctx) {
+  // No dedicated compile path. If used as a prop value, the tagged
+  // template expression is passed to qjs eval. If used as a variable
+  // assignment, it becomes a render-local evaluated at runtime.
+  // The CSS string it produces has no effect — no DOM to inject into.
   return null;
 }
