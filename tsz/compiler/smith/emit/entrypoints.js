@@ -62,8 +62,15 @@ function emitRuntimeEntrypoints(ctx, meta) {
         }
       }
       // Produce __luaMapDataN: evaluate the source JS expression and pass to LuaJIT
+      // Escape for Zig string literal: backslash, quote, newline, tab, carriage return, null
       var rawSource = lmr.rawSource || lmr.varName;
-      var escaped = rawSource.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+      var escaped = rawSource
+        .replace(/\\/g, '\\\\')
+        .replace(/"/g, '\\"')
+        .replace(/\n/g, '\\n')
+        .replace(/\r/g, '\\r')
+        .replace(/\t/g, '\\t')
+        .replace(/\0/g, '');
       out += `    qjs_runtime.evalLuaMapData(${lmi}, "` + escaped + `");\n`;
     }
     // Call Lua rebuild at init (not just on dirty ticks)
@@ -77,7 +84,7 @@ function emitRuntimeEntrypoints(ctx, meta) {
   if (hasLuaMaps) {
     for (var _ldi = 0; _ldi < ctx._luaMapRebuilders.length; _ldi++) {
       var _ldr = ctx._luaMapRebuilders[_ldi];
-      var _ldSrc = (_ldr.rawSource || _ldr.varName).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+      var _ldSrc = (_ldr.rawSource || _ldr.varName).replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/\t/g, '\\t').replace(/\0/g, '');
       _luaDataEvalBlock += `        qjs_runtime.evalLuaMapData(${_ldi}, "` + _ldSrc + `");\n`;
     }
   }

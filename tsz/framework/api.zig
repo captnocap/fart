@@ -470,6 +470,7 @@ pub const qjs_runtime = struct {
     pub extern fn rjit_qjs_call_global_int(name: [*:0]const u8, arg: i64) void;
     pub extern fn rjit_qjs_eval_expr(expr: [*:0]const u8) void;
     pub extern fn rjit_qjs_eval_to_string(expr: [*]const u8, expr_len: usize, buf: [*]u8, buf_len: usize) usize;
+    pub extern fn rjit_qjs_eval_lua_map_data(index: usize, expr: [*]const u8, expr_len: usize) void;
 
     pub fn registerHostFn(name: [*:0]const u8, fn_ptr: ?*const anyopaque, argc: u8) void {
         rjit_qjs_register_host_fn(name, fn_ptr, argc);

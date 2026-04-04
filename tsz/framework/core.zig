@@ -108,6 +108,9 @@ export fn rjit_qjs_eval_to_string(expr: [*]const u8, expr_len: usize, buf: [*]u8
     @memcpy(buf[0..n], result[0..n]);
     return n;
 }
+export fn rjit_qjs_eval_lua_map_data(index: usize, expr: [*]const u8, expr_len: usize) void {
+    qjs_runtime_mod.evalLuaMapData(index, expr[0..expr_len]);
+}
 
 // ── LuaJIT Runtime C-ABI exports ────────────────────────────────────
 export fn rjit_lua_call_global(name: [*:0]const u8) void {

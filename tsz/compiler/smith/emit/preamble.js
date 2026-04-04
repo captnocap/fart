@@ -25,6 +25,7 @@ function emitPreamble(meta) {
       out += `    pub fn callGlobalInt(_: []const u8, _: i64) void {}\n`;
       out += `    pub fn registerHostFn(_: []const u8, _: ?*const anyopaque, _: u8) void {}\n`;
       out += `    pub fn evalExpr(_: []const u8) void {}\n`;
+      out += `    pub fn evalLuaMapData(_: usize, _: []const u8) void {}\n`;
       out += `} else @import("${meta.prefix}qjs_runtime.zig");\n`;
     }
   }

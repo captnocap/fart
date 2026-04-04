@@ -2158,11 +2158,12 @@ pub fn evalLuaMapData(index: usize, js_expr: []const u8) void {
 }
 
 /// Walk a QuickJS JSValue and push the equivalent Lua value onto the Lua stack.
-/// Two-phase array/object conversion: pin all children first, then convert.
-/// This prevents GC from collecting large string properties mid-walk.
-/// Ported from love2d/lua/bridge_quickjs.lua:jsValueToLua.
+/// Two-phase conversion: pin ALL children first, THEN convert ALL.
+/// This prevents QJS GC from collecting large string properties mid-walk.
+/// Matches love2d/lua/bridge_quickjs.lua:jsValueToLua exactly.
 fn pushJSValueToLua(ctx: *qjs.JSContext, L: *@import("luajit_runtime.zig").lua.lua_State, val: qjs.JSValue, depth: u32) void {
     const lua = @import("luajit_runtime.zig").lua;
+    const alloc = std.heap.page_allocator;
 
     if (depth > 32) {
         lua.lua_pushnil(L);
@@ -2214,24 +2215,29 @@ fn pushJSValueToLua(ctx: *qjs.JSContext, L: *@import("luajit_runtime.zig").lua.l
     // Object (array or table)
     if (tag == qjs.JS_TAG_OBJECT) {
         if (qjs.JS_IsArray(ctx, val) != 0) {
-            // Array: get length, pin all elements, then convert
+            // Array: get length
             const len_val = qjs.JS_GetPropertyStr(ctx, val, "length");
             var len: i32 = 0;
             _ = qjs.JS_ToInt32(ctx, &len, len_val);
             qjs.JS_FreeValue(ctx, len_val);
+            const count: usize = @intCast(@max(len, 0));
 
-            lua.lua_createtable(L, @intCast(len), 0);
+            lua.lua_createtable(L, @intCast(count), 0);
 
-            // Phase 1: Pin all elements (prevents GC during conversion)
-            var pinned: [256]qjs.JSValue = undefined;
-            const count: usize = @intCast(@min(len, 256));
+            // Phase 1: Pin ALL elements (no cap — heap allocated)
+            const pinned = alloc.alloc(qjs.JSValue, count) catch {
+                // OOM — leave empty table on stack
+                return;
+            };
+            defer alloc.free(pinned);
+
             for (0..count) |i| {
                 const elem = qjs.JS_GetPropertyUint32(ctx, val, @intCast(i));
                 pinned[i] = qjs.JS_DupValue(ctx, elem);
                 qjs.JS_FreeValue(ctx, elem);
             }
 
-            // Phase 2: Convert pinned elements and push to Lua table
+            // Phase 2: Convert ALL pinned elements
             for (0..count) |i| {
                 pushJSValueToLua(ctx, L, pinned[i], depth + 1);
                 lua.lua_rawseti(L, -2, @intCast(i + 1));
@@ -2248,28 +2254,46 @@ fn pushJSValueToLua(ctx: *qjs.JSContext, L: *@import("luajit_runtime.zig").lua.l
                 return;
             }
 
-            lua.lua_createtable(L, 0, @intCast(plen));
-
-            // Phase 1: Collect keys and pin values
             const prop_count: usize = @intCast(plen);
+            lua.lua_createtable(L, 0, @intCast(prop_count));
+
+            // Phase 1: Collect ALL keys and pin ALL values BEFORE any conversion.
+            // This matches love2d/lua/bridge_quickjs.lua:225 exactly —
+            // prevents GC from collecting large string values during
+            // recursive conversion of other properties.
+            const keys = alloc.alloc([*:0]const u8, prop_count) catch {
+                qjs.js_free(ctx, ptab);
+                return;
+            };
+            defer alloc.free(keys);
+            const vals = alloc.alloc(qjs.JSValue, prop_count) catch {
+                qjs.js_free(ctx, ptab);
+                return;
+            };
+            defer alloc.free(vals);
+
+            var valid_count: usize = 0;
             for (0..prop_count) |i| {
                 const key_cstr = qjs.JS_AtomToCString(ctx, ptab[i].atom);
                 if (key_cstr) |key| {
                     const prop_val = qjs.JS_GetPropertyStr(ctx, val, key);
-                    const pinned_val = qjs.JS_DupValue(ctx, prop_val);
+                    keys[valid_count] = key;
+                    vals[valid_count] = qjs.JS_DupValue(ctx, prop_val);
                     qjs.JS_FreeValue(ctx, prop_val);
-
-                    // Phase 2: Convert and set immediately (key is still alive)
-                    lua.lua_pushstring(L, key);
-                    pushJSValueToLua(ctx, L, pinned_val, depth + 1);
-                    lua.lua_settable(L, -3);
-
-                    qjs.JS_FreeValue(ctx, pinned_val);
-                    qjs.JS_FreeCString(ctx, key_cstr);
+                    valid_count += 1;
                 }
                 qjs.JS_FreeAtom(ctx, ptab[i].atom);
             }
             qjs.js_free(ctx, ptab);
+
+            // Phase 2: Convert ALL pinned values
+            for (0..valid_count) |i| {
+                lua.lua_pushstring(L, keys[i]);
+                pushJSValueToLua(ctx, L, vals[i], depth + 1);
+                lua.lua_settable(L, -3);
+                qjs.JS_FreeValue(ctx, vals[i]);
+                qjs.JS_FreeCString(ctx, keys[i]);
+            }
         }
         return;
     }
