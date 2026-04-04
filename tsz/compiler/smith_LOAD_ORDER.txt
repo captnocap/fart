@@ -6,6 +6,13 @@ smith/logs.js
 
 smith/core.js
 
+smith/resolve/eval_builder.js
+smith/resolve/identity.js
+smith/resolve/comparison.js
+smith/resolve/truthiness.js
+smith/resolve/field_access.js
+smith/resolve/ternary.js
+
 smith/collect/components.js
 smith/collect/script.js
 smith/collect/state.js
@@ -81,6 +88,7 @@ smith/emit/handlers.js
 smith/emit/effects.js
 smith/emit/object_arrays.js
 smith/emit/map_pools.js
+smith/emit/lua_maps.js
 smith/emit/runtime_updates.js
 smith/emit/entrypoints.js
 smith/emit/finalize.js

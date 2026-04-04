@@ -219,14 +219,7 @@ function parseTernaryBranch(c, key) {
       if (c.kind() === TK.colon) c.advance();
       const fv = parseTernaryBranch(c, key);
       if (hasParen && c.kind() === TK.rparen) c.advance();
-      let cond;
-      if (rhsIsString || val.fieldType === 'string') {
-        const rhsQuoted = rhs.startsWith('"') ? rhs : '"' + rhs + '"';
-        const eql = `std.mem.eql(u8, ${val.zigExpr}, ${rhsQuoted})`;
-        cond = op === '!=' ? `(!${eql})` : `(${eql})`;
-      } else {
-        cond = `(${val.zigExpr} ${op} ${rhs})`;
-      }
+      var cond = resolveComparison(val.zigExpr, op, rhs, ctx);
       if (colorKeys[key] && tv.type === 'string' && fv.type === 'string') {
         return { type: 'zig_expr', zigExpr: `if ${cond} ${parseColor(tv.value)} else ${parseColor(fv.value)}` };
       }
@@ -304,15 +297,7 @@ function parseStyleBlock(c) {
           const trueVal = parseTernaryBranch(c, key);
           if (c.kind() === TK.colon) c.advance();
           const falseVal = parseTernaryBranch(c, key);
-          // String comparison: use std.mem.eql instead of == / !=
-          let cond;
-          const lhsIsString = val.fieldType === 'string' || (val.type === 'state' && ctx.stateSlots.find(s => s.getter === val.value)?.type === 'string');
-          if (rhs.startsWith('"') || rhsIsStringExpr || lhsIsString) {
-            const eql = `std.mem.eql(u8, ${val.zigExpr}, ${rhs})`;
-            cond = op === '!=' ? `(!${eql})` : `(${eql})`;
-          } else {
-            cond = `(${val.zigExpr} ${op} ${rhs})`;
-          }
+          var cond = resolveComparison(val.zigExpr, op, rhs, ctx);
           // Resolve branch expressions: string→parseColor, zig_expr→zigExpr, number→value
           const resolveColorBranch = (v) => v.type === 'zig_expr' ? v.zigExpr : v.type === 'string' ? parseColor(v.value) : v.type === 'number' ? parseColor(v.value) : 'Color{}';
           const resolveNumBranch = (v) => v.type === 'zig_expr' ? v.zigExpr : v.value;
@@ -369,12 +354,16 @@ function parseStyleBlock(c) {
           // Map item int field as color — hex-to-RGB with bit-shift extraction
           const v = val.value;
           fields.push(`.${colorKeys[key]} = Color.rgb(@intCast((${v} >> 16) & 0xFF), @intCast((${v} >> 8) & 0xFF), @intCast(${v} & 0xFF))`);
+        } else if (val.type === 'map_field' && val.fieldType === 'string') {
+          // Map item string field as color — runtime hex-to-Color parsing
+          fields.push(`.${colorKeys[key]} = Color.fromHex(${val.zigExpr})`);
         } else {
           // State or unknown — placeholder Color{}, dynamic update at runtime
           fields.push(`.${colorKeys[key]} = Color{}`);
           // Track orphan Color{} for preflight F4 — no dynStyle/dynColor backs this
-          // Exclude map_field/map_index (handled by map pool) and state (often backed by dynStyle from ternary path)
-          if (val.type !== 'map_field' && val.type !== 'map_index' && val.type !== 'state') {
+          // Exclude map_field/map_index (handled by map pool), state (backed by dynStyle),
+          // and unknown (unresolvable JS expressions — will be Color{} at runtime, not a compiler bug)
+          if (val.type !== 'map_field' && val.type !== 'map_index' && val.type !== 'state' && val.type !== 'unknown') {
             if (!ctx._orphanColors) ctx._orphanColors = [];
             ctx._orphanColors.push({ field: colorKeys[key], value: val.type + ':' + (val.value || '?') });
           }

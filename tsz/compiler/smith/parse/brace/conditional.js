@@ -210,7 +210,37 @@ function tryParseConditional(c, children) {
       if (isGetter(name)) {
         condParts.push(slotGet(name));
       } else if (ctx.renderLocals && ctx.renderLocals[name] !== undefined) {
-        condParts.push(ctx.renderLocals[name]);
+        const rlVal = ctx.renderLocals[name];
+        const rawExpr = ctx._renderLocalRaw && ctx._renderLocalRaw[name];
+        const nextKind = c.pos + 1 < c.count ? c.kindAt(c.pos + 1) : TK.eof;
+        const hasExplicitComparison = nextKind === TK.eq_eq || nextKind === TK.not_eq ||
+          nextKind === TK.gt || nextKind === TK.gt_eq || nextKind === TK.lt || nextKind === TK.lt_eq;
+        if (rawExpr && c.pos + 2 < c.count && c.kindAt(c.pos + 1) === TK.lparen && c.kindAt(c.pos + 2) === TK.rparen) {
+          if (!ctx._jsEvalCount) ctx._jsEvalCount = 0;
+          const evalBufId = ctx._jsEvalCount;
+          ctx._jsEvalCount = evalBufId + 1;
+          const escaped = rawExpr.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+          condParts.push(`(qjs_runtime.evalToString("String(( ${escaped} )())", &_eval_buf_${evalBufId}).len > 0)`);
+          c.advance();
+          c.advance();
+          c.advance();
+          continue;
+        }
+        if (rawExpr && c.pos + 2 < c.count && c.kindAt(c.pos + 1) === TK.dot && c.kindAt(c.pos + 2) === TK.identifier) {
+          if (!ctx._jsEvalCount) ctx._jsEvalCount = 0;
+          const evalBufId = ctx._jsEvalCount;
+          ctx._jsEvalCount = evalBufId + 1;
+          const field = c.textAt(c.pos + 2);
+          const escaped = rawExpr.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+          condParts.push(`(qjs_runtime.evalToString("String((${escaped}).${field})", &_eval_buf_${evalBufId}).len > 0)`);
+          c.advance();
+          c.advance();
+          c.advance();
+          continue;
+        }
+        if (rlVal === 'null' || rlVal === 'undefined') condParts.push('0');
+        else if (isEval(rlVal) && !hasExplicitComparison) condParts.push(zigBool(rlVal, ctx));
+        else condParts.push(rlVal);
       } else if (ctx.propStack && ctx.propStack[name] !== undefined) {
         const pv = ctx.propStack[name];
         // If prop is a map-item ref and next is .field, resolve as OA field access

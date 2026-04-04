@@ -29,6 +29,15 @@ function parseTemplateLiteral(raw) {
         if (oa) {
           fmt += '{d}';
           args.push(`@as(i64, @intCast(_oa${oa.oaIdx}_len))`);
+        } else if ((ctx.scriptBlock || globalThis.__scriptContent) && (ctx.renderLocals && ctx.renderLocals[arrName] !== undefined)) {
+          // Render-local .length — evaluate via QuickJS
+          if (!ctx._jsEvalCount) ctx._jsEvalCount = 0;
+          const evalBufId = ctx._jsEvalCount;
+          ctx._jsEvalCount = evalBufId + 1;
+          fmt += '{s}';
+          // Don't expand — use the raw variable name. __computeRenderBody makes it a JS global.
+          const escaped = expr.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+          args.push(`qjs_runtime.evalToString("String(${escaped})", &_eval_buf_${evalBufId})`);
         } else {
           fmt += expr;
         }
@@ -64,9 +73,17 @@ function parseTemplateLiteral(raw) {
         // Render-local variable substitution in template literal
         const rlVal = ctx.renderLocals[expr];
         const isNum = /^-?\d+(\.\d+)?$/.test(rlVal);
+        const isEvalExpr = rlVal.includes('qjs_runtime.evalToString');
         const isZigExpr = rlVal.includes('state.get') || rlVal.includes('getSlot') || rlVal.includes('_oa') || rlVal.includes('@as');
-        if (isNum) {
+        const isStringArray = isZigExpr && rlVal.includes('[') && rlVal.includes('..');
+        if (isEvalExpr) {
+          fmt += '{s}';
+          args.push(rlVal);
+        } else if (isNum) {
           fmt += '{d}';
+          args.push(rlVal);
+        } else if (isStringArray) {
+          fmt += '{s}';
           args.push(rlVal);
         } else if (isZigExpr) {
           fmt += '{d}';
@@ -108,18 +125,47 @@ function parseTemplateLiteral(raw) {
         args.push('@as(i64, @intCast(' + piv + '))');
       } else if (ctx.currentMap && expr.startsWith(ctx.currentMap.itemParam + '.')) {
         // Map item member access: ${item.field} → {s}/{d} with OA field ref
-        const field = expr.slice(ctx.currentMap.itemParam.length + 1);
+        let field = expr.slice(ctx.currentMap.itemParam.length + 1);
         const oa = ctx.currentMap.oa;
+        // Handle item.field || 'fallback' — logical OR with string default
+        let orFallback = null;
+        const orMatch = field.match(/^(\w+)\s*\|\|\s*['"]([^'"]*)['"]\s*$/);
+        if (orMatch) {
+          field = orMatch[1];
+          orFallback = orMatch[2];
+        }
         const fi = oa.fields.find(f => f.name === field);
         const iv = ctx.currentMap.iterVar || '_i';
         if (fi) {
           const oaIdx = oa.oaIdx;
           if (fi.type === 'string') {
             fmt += '{s}';
-            args.push(`_oa${oaIdx}_${field}[${iv}][0.._oa${oaIdx}_${field}_lens[${iv}]]`);
+            if (orFallback !== null) {
+              args.push(`if (_oa${oaIdx}_${field}_lens[${iv}] > 0) _oa${oaIdx}_${field}[${iv}][0.._oa${oaIdx}_${field}_lens[${iv}]] else "${orFallback}"`);
+            } else {
+              args.push(`_oa${oaIdx}_${field}[${iv}][0.._oa${oaIdx}_${field}_lens[${iv}]]`);
+            }
           } else {
             fmt += '{d}';
             args.push(`_oa${oaIdx}_${field}[${iv}]`);
+          }
+        } else {
+          fmt += expr;
+        }
+      } else if (ctx.currentMap && ctx.currentMap.parentMap && expr.startsWith(ctx.currentMap.parentMap.itemParam + '.')) {
+        // Parent map item member access: ${section.field} → {s}/{d} with parent OA field ref
+        const pField = expr.slice(ctx.currentMap.parentMap.itemParam.length + 1);
+        const pOa = ctx.currentMap.parentMap.oa;
+        const pFi = pOa ? pOa.fields.find(f => f.name === pField) : null;
+        const pIv = ctx.currentMap.parentMap.iterVar || '_i';
+        if (pFi) {
+          const pOaIdx = pOa.oaIdx;
+          if (pFi.type === 'string') {
+            fmt += '{s}';
+            args.push(`_oa${pOaIdx}_${pField}[${pIv}][0.._oa${pOaIdx}_${pField}_lens[${pIv}]]`);
+          } else {
+            fmt += '{d}';
+            args.push(`_oa${pOaIdx}_${pField}[${pIv}]`);
           }
         } else {
           fmt += expr;
@@ -148,6 +194,12 @@ function parseTemplateLiteral(raw) {
           let falseStr = rest.slice(colonIdx + 1).trim();
           const stripQ = (s) => (s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'")) ? s.slice(1, -1) : null;
           let condZig = condStr;
+          // Resolve OA .length → _oaN_len (before getter resolution to avoid partial match)
+          for (const oa of ctx.objectArrays) {
+            if (condZig.includes(oa.getter + '.length')) {
+              condZig = condZig.replace(new RegExp('\\b' + oa.getter + '\\.length\\b', 'g'), '_oa' + oa.oaIdx + '_len');
+            }
+          }
           for (const s of ctx.stateSlots) {
             if (condStr.includes(s.getter)) {
               condZig = condZig.replace(new RegExp('\\b' + s.getter + '\\b', 'g'), slotGet(s.getter));
@@ -173,10 +225,87 @@ function parseTemplateLiteral(raw) {
           fmt += result.spec;
           args.push(result.zigExpr);
         } else {
-          fmt += result.value;
+          if (!ctx._jsEvalCount) ctx._jsEvalCount = 0;
+          const evalBufId = ctx._jsEvalCount;
+          ctx._jsEvalCount = evalBufId + 1;
+          fmt += '{s}';
+          const escaped = expr.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+          args.push(`qjs_runtime.evalToString("String(${escaped})", &_eval_buf_${evalBufId})`);
         }
+      } else if (ctx.currentMap) {
+        const wrapper = expr.match(/^([A-Za-z_]\w*)\(([^(),]+)\)$/);
+        if (wrapper && /^(String|format[A-Z]\w*)$/.test(wrapper[1])) {
+          const innerExpr = wrapper[2].trim();
+          if (innerExpr.startsWith(ctx.currentMap.itemParam + '.')) {
+            const field = innerExpr.slice(ctx.currentMap.itemParam.length + 1).replace(/\./g, '_');
+            const oa = ctx.currentMap.oa;
+            const fi = oa && oa.fields.find(function(f) { return f.name === field; });
+            const iv = ctx.currentMap.iterVar || '_i';
+            if (fi && fi.type === 'string') {
+              fmt += '{s}';
+              args.push(`_oa${oa.oaIdx}_${field}[${iv}][0.._oa${oa.oaIdx}_${field}_lens[${iv}]]`);
+            } else if (fi) {
+              fmt += '{d}';
+              args.push(`_oa${oa.oaIdx}_${field}[${iv}]`);
+            } else {
+              fmt += expr;
+            }
+          } else if (ctx.renderLocals && ctx.renderLocals[innerExpr] !== undefined) {
+            const rlVal = ctx.renderLocals[innerExpr];
+            const isStringArray = typeof rlVal === 'string' && rlVal.includes('[') && rlVal.includes('..');
+            if (isStringArray) {
+              fmt += '{s}';
+              args.push(rlVal);
+            } else {
+              fmt += '{d}';
+              args.push(leftFoldExpr(rlVal));
+            }
+          } else {
+            fmt += expr;
+          }
+        } else if (expr.includes('(') && expr.includes(')')) {
+          // Function call expression — evaluate via QuickJS at runtime
+          if (!ctx._jsEvalCount) ctx._jsEvalCount = 0;
+          const evalBufId = ctx._jsEvalCount;
+          ctx._jsEvalCount = evalBufId + 1;
+          fmt += '{s}';
+          const escaped = expr.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+          args.push(`qjs_runtime.evalToString("${escaped}", &_eval_buf_${evalBufId})`);
+        } else {
+          // Non-resolvable expression — embed as literal text
+          fmt += expr;
+        }
+      } else if (expr.includes('(') && expr.includes(')')) {
+        // Function call expression — evaluate via QuickJS at runtime
+        if (!ctx._jsEvalCount) ctx._jsEvalCount = 0;
+        const evalBufId = ctx._jsEvalCount;
+        ctx._jsEvalCount = evalBufId + 1;
+        fmt += '{s}';
+        // Expand render-local references before embedding in eval string
+        const expanded = (typeof expandRenderLocalRawExpr === 'function' && ctx._renderLocalRaw)
+          ? expandRenderLocalRawExpr(expr) : expr;
+        const escaped = expanded.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+        args.push(`qjs_runtime.evalToString("${escaped}", &_eval_buf_${evalBufId})`);
+      } else if (expr.includes('||') || expr.includes('&&')) {
+        // Logical OR/AND expression — evaluate via QuickJS at runtime
+        if (!ctx._jsEvalCount) ctx._jsEvalCount = 0;
+        const evalBufId = ctx._jsEvalCount;
+        ctx._jsEvalCount = evalBufId + 1;
+        fmt += '{s}';
+        const escaped = expr.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+        args.push(`qjs_runtime.evalToString("String(${escaped})", &_eval_buf_${evalBufId})`);
+      } else if (ctx.scriptBlock || globalThis.__scriptContent) {
+        // Script available — evaluate via QuickJS at runtime instead of embedding as literal
+        if (!ctx._jsEvalCount) ctx._jsEvalCount = 0;
+        const evalBufId = ctx._jsEvalCount;
+        ctx._jsEvalCount = evalBufId + 1;
+        fmt += '{s}';
+        const expanded = (typeof expandRenderLocalRawExpr === 'function' && ctx._renderLocalRaw)
+          ? expandRenderLocalRawExpr(expr) : expr;
+        const escaped = expanded.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+        args.push(`qjs_runtime.evalToString("String(${escaped})", &_eval_buf_${evalBufId})`);
       } else {
-        // Non-resolvable arithmetic/complex expression — embed as literal text
+        // Non-resolvable expression — embed as literal text
         fmt += expr;
       }
       i = j;

@@ -27,6 +27,14 @@ function _resolveOaBracketIdx(ident) {
 // Resolve string comparisons: lhs == 'str' → std.mem.eql(u8, lhs, "str")
 // Also handles runtime string comparisons: slice == getSlotString(N) → std.mem.eql
 function _resolveStringComparison(condExpr) {
+  // Empty string: x == '' → x.len == 0, x != '' → x.len > 0
+  var mEmpty = condExpr.match(/^(.+?)\s*(==|!=)\s*['"]['"]$/);
+  if (mEmpty) {
+    var lhsE = mEmpty[1].trim();
+    if (lhsE.includes('getSlotString') || lhsE.includes('[0..') || lhsE.includes('getString')) {
+      return mEmpty[2] === '==' ? lhsE + '.len == 0' : lhsE + '.len > 0';
+    }
+  }
   var m = condExpr.match(/^(.+?)\s*==\s*['"]([^'"]+)['"]$/);
   if (m) {
     var lhs = m[1].trim();
@@ -110,8 +118,14 @@ function _parseTernaryCondParts(c) {
     }
     if (c.kind() === TK.identifier) {
       var name = c.text();
-      // OA getter followed by [expr] — primitive array or object array bracket access
+      // OA getter followed by .length → _oaN_len
       var _ternOa = ctx.objectArrays ? ctx.objectArrays.find(function(o) { return o.getter === name; }) : null;
+      if (_ternOa && c.pos + 2 < c.count && c.kindAt(c.pos + 1) === TK.dot && c.textAt(c.pos + 2) === 'length') {
+        condParts.push('_oa' + _ternOa.oaIdx + '_len');
+        c.advance(); c.advance(); c.advance();
+        continue;
+      }
+      // OA getter followed by [expr] — primitive array or object array bracket access
       if (_ternOa && c.pos + 3 < c.count && c.kindAt(c.pos + 1) === TK.lbracket) {
         var _tIdx = _resolveOaBracketIdx(c.textAt(c.pos + 2));
         if (_tIdx !== null && c.kindAt(c.pos + 3) === TK.rbracket) {
@@ -131,7 +145,32 @@ function _parseTernaryCondParts(c) {
       if (isGetter(name)) {
         condParts.push(slotGet(name));
       } else if (ctx.renderLocals && ctx.renderLocals[name] !== undefined) {
-        condParts.push(ctx.renderLocals[name]);
+        var rlVal = ctx.renderLocals[name];
+        if (c.pos + 2 < c.count && c.kindAt(c.pos + 1) === TK.dot && c.textAt(c.pos + 2) === 'length') {
+          condParts.push(rlVal + '.len');
+          c.advance();
+          c.advance();
+          c.advance();
+          continue;
+        }
+        if (isEval(rlVal)) {
+          var nextK = c.pos + 1 < c.count ? c.kindAt(c.pos + 1) : TK.eof;
+          var hasNumCmp = (nextK === TK.eq_eq || nextK === TK.not_eq) &&
+            c.pos + 2 < c.count && c.kindAt(c.pos + 2) === TK.number;
+          if (!hasNumCmp && nextK === TK.eq_eq && c.pos + 2 < c.count && c.kindAt(c.pos + 2) === TK.equals &&
+              c.pos + 3 < c.count && c.kindAt(c.pos + 3) === TK.number) hasNumCmp = true;
+          if (hasNumCmp) {
+            var isNeg = nextK === TK.not_eq;
+            c.advance(); c.advance(); // skip name, skip == or !=
+            if (c.kind() === TK.equals) c.advance(); // skip 3rd = of ===
+            var cmpVal = c.text(); c.advance(); // skip number
+            condParts.push(resolveComparison(rlVal, isNeg ? '!=' : '==', cmpVal, ctx));
+            continue;
+          }
+          condParts.push(zigBool(rlVal, ctx));
+        } else {
+          condParts.push(rlVal);
+        }
       } else if (ctx.propStack && ctx.propStack[name] !== undefined) {
         var pv = ctx.propStack[name];
         // If prop is a map-item ref and next is .field, resolve as OA field access
@@ -224,6 +263,32 @@ function _parseTernaryCondParts(c) {
 
 // Try to parse {expr ? (<JSX>) : (<JSX>)} ternary JSX branches
 // Supports chained ternaries: {a ? <X> : b ? <Y> : <Z>}
+function _parseTernaryBranchNode(c) {
+  var saved = c.save();
+  var wrapped = false;
+  if (c.kind() === TK.lparen) {
+    wrapped = true;
+    c.advance();
+  }
+
+  if (c.kind() === TK.lt) {
+    var jsxNode = parseJSXElement(c);
+    if (wrapped && c.kind() === TK.rparen) c.advance();
+    return jsxNode;
+  }
+
+  if (c.kind() === TK.identifier) {
+    var branchChildren = [];
+    if (_tryParseIdentifierMapExpression(c, branchChildren, false) && branchChildren.length > 0) {
+      if (wrapped && c.kind() === TK.rparen) c.advance();
+      return branchChildren[0];
+    }
+  }
+
+  c.restore(saved);
+  return null;
+}
+
 function tryParseTernaryJSX(c, children) {
   var saved = c.save();
   var condParts = _parseTernaryCondParts(c);
@@ -232,13 +297,11 @@ function tryParseTernaryJSX(c, children) {
     return false;
   }
 
-  if (c.kind() === TK.lparen) c.advance();
-  if (c.kind() !== TK.lt) {
+  var firstBranch = _parseTernaryBranchNode(c);
+  if (!firstBranch) {
     c.restore(saved);
     return false;
   }
-  var firstBranch = parseJSXElement(c);
-  if (c.kind() === TK.rparen) c.advance();
   if (c.kind() !== TK.colon) {
     c.restore(saved);
     return false;
@@ -248,34 +311,38 @@ function tryParseTernaryJSX(c, children) {
   var allBranches = [{ condExpr: _resolveStringComparison(condParts.join('')), branch: firstBranch }];
 
   while (true) {
-    if (c.kind() === TK.lparen) c.advance();
+    var defaultSaved = c.save();
+    var wrappedDefault = false;
+    if (c.kind() === TK.lparen) {
+      wrappedDefault = true;
+      c.advance();
+    }
 
     if (c.kind() === TK.identifier && c.text() === 'null') {
       c.advance();
-      if (c.kind() === TK.rparen) c.advance();
+      if (wrappedDefault && c.kind() === TK.rparen) c.advance();
       break;
     }
 
-    if (c.kind() === TK.lt) {
-      var defaultBranch = parseJSXElement(c);
-      if (c.kind() === TK.rparen) c.advance();
+    c.restore(defaultSaved);
+    var defaultBranch = _parseTernaryBranchNode(c);
+    if (defaultBranch) {
       allBranches.push({ condExpr: null, branch: defaultBranch });
       break;
     }
 
+    c.restore(defaultSaved);
     var nextCondParts = _parseTernaryCondParts(c);
     if (!nextCondParts) {
       c.restore(saved);
       return false;
     }
 
-    if (c.kind() === TK.lparen) c.advance();
-    if (c.kind() !== TK.lt) {
+    var nextBranch = _parseTernaryBranchNode(c);
+    if (!nextBranch) {
       c.restore(saved);
       return false;
     }
-    var nextBranch = parseJSXElement(c);
-    if (c.kind() === TK.rparen) c.advance();
     allBranches.push({ condExpr: _resolveStringComparison(nextCondParts.join('')), branch: nextBranch });
 
     if (c.kind() !== TK.colon) break;
@@ -509,12 +576,7 @@ function tryParseTernaryText(c, children) {
       condExpr = `std.mem.eql(u8, ${lhs}, "${rhs}")`;
     }
   }
-  const isComparison = condExpr.includes('==') || condExpr.includes('!=') ||
-    condExpr.includes('>=') || condExpr.includes('<=') ||
-    condExpr.includes(' > ') || condExpr.includes(' < ') ||
-    condExpr.includes('std.mem.eql');
-  const isBool = condExpr.includes('getSlotBool');
-  const zigCond = (isComparison || isBool) ? `(${condExpr})` : `((${condExpr}) != 0)`;
+  var zigCond = zigBool(condExpr, ctx);
   const fmtArgs = `if ${zigCond} @as([]const u8, "${trueVal}") else @as([]const u8, "${falseVal}")`;
   if (ctx.currentMap && (fmtArgs.includes('_oa') || condExpr.includes('_oa'))) {
     const mapBufId = ctx.mapDynCount || 0;

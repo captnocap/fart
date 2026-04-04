@@ -74,6 +74,40 @@ function tryResolveMappedComponentProp(c, attr, propValues) {
 }
 
 function parseComponentBraceValue(c) {
+  // Script function call as brace value: funcName(...) ? ... : ...
+  // Detect unresolvable identifier followed by ( — route entire expression through QuickJS
+  if ((ctx.scriptBlock || globalThis.__scriptContent) &&
+      c.kind() === TK.identifier && !isGetter(c.text()) &&
+      !(ctx.renderLocals && ctx.renderLocals[c.text()] !== undefined) &&
+      !(ctx.propStack && ctx.propStack[c.text()] !== undefined) &&
+      c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.lparen) {
+    // Collect raw tokens as JS expression for QuickJS eval
+    let rawParts = [];
+    let bd = 0;
+    while (c.kind() !== TK.eof) {
+      if (c.kind() === TK.rbrace && bd === 0) break;
+      if (c.kind() === TK.lbrace) bd++;
+      if (c.kind() === TK.rbrace) bd--;
+      rawParts.push(c.text());
+      c.advance();
+    }
+    if (c.kind() === TK.rbrace) c.advance();
+    let rawExpr = rawParts.join(' ').replace(/\s*\.\s*/g, '.').replace(/\s*\(\s*/g, '(').replace(/\s*\)\s*/g, ')').replace(/\s*,\s*/g, ', ');
+    // If it's a ternary, extract branches: cond ? "then" : "else"
+    let qIdx = -1, bd2 = 0;
+    for (let ri = 0; ri < rawExpr.length; ri++) {
+      if (rawExpr[ri] === '(') bd2++;
+      else if (rawExpr[ri] === ')') bd2--;
+      else if (rawExpr[ri] === '?' && bd2 === 0) { qIdx = ri; break; }
+    }
+    // Eval the entire expression via QuickJS — ternary and all
+    if (!ctx._jsEvalCount) ctx._jsEvalCount = 0;
+    let evalBufId = ctx._jsEvalCount;
+    ctx._jsEvalCount = evalBufId + 1;
+    let escaped = rawExpr.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    return 'qjs_runtime.evalToString("String(' + escaped + ')", &_eval_buf_' + evalBufId + ')';
+  }
+
   let val = '';
   let depth = 0;
   while (c.kind() !== TK.eof) {
@@ -127,6 +161,30 @@ function parseComponentBraceValue(c) {
         } else {
           val += _rlv;
         }
+      } else if (typeof _rlv === 'string' && _rlv.includes('qjs_runtime.evalToString') &&
+          c.pos + 2 < c.count && c.kindAt(c.pos + 1) === TK.dot && c.kindAt(c.pos + 2) === TK.identifier) {
+        // qjs eval render-local + .field → route field access through QuickJS
+        var _rlName = c.text();
+        var _qField = c.textAt(c.pos + 2);
+        // Use raw expression if available, otherwise try to extract from eval string
+        var _rawExpr = ctx._renderLocalRaw && ctx._renderLocalRaw[_rlName];
+        if (_rawExpr) {
+          if (!ctx._jsEvalCount) ctx._jsEvalCount = 0;
+          var _qBuf = ctx._jsEvalCount; ctx._jsEvalCount = _qBuf + 1;
+          var _qEsc = _rawExpr.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+          val += 'qjs_runtime.evalToString("String((' + _qEsc + ').' + _qField + ')", &_eval_buf_' + _qBuf + ')';
+        } else {
+          var _qInner = _rlv.match(/evalToString\("String\((.+)\)",/);
+          if (_qInner) {
+            if (!ctx._jsEvalCount) ctx._jsEvalCount = 0;
+            var _qBuf2 = ctx._jsEvalCount; ctx._jsEvalCount = _qBuf2 + 1;
+            var _qExpr = _qInner[1].replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+            val += 'qjs_runtime.evalToString("String((' + _qExpr + ').' + _qField + ')", &_eval_buf_' + _qBuf2 + ')';
+          } else {
+            val += _rlv;
+          }
+        }
+        c.advance(); c.advance(); // skip name and dot; field advanced below
       } else {
         val += _rlv;
       }
@@ -168,6 +226,12 @@ function parseComponentBraceValue(c) {
         if (resolvedValue !== null) val += resolvedValue;
         else val += c.text();
       }
+    } else if (c.kind() === TK.eq_eq || c.kind() === TK.not_eq) {
+      // === / !== → == / != (skip trailing = from JS triple-equals)
+      val += c.text();
+      c.advance();
+      if (c.kind() === TK.equals) c.advance(); // skip 3rd = of ===
+      continue;
     } else {
       const resolvedValue = resolveComponentIdentifierValue(c);
       if (resolvedValue !== null) val += resolvedValue;
@@ -242,18 +306,13 @@ function normalizeComponentTernaryValue(val) {
   var cond = val.substring(0, qIdx).trim();
   const thenVal = val.substring(qIdx + 1, cIdx).trim();
   const elseVal = val.substring(cIdx + 1).trim();
-  // Fix string comparisons: == / != on []const u8 must use std.mem.eql
+  cond = cond.replace(/===/g, '==').replace(/!==/g, '!=');
+  // Resolve comparison or bare truthiness via resolve layer
   var _eqMatch = cond.match(/^(.+?)\s*(==|!=)\s*(.+)$/);
   if (_eqMatch) {
-    var _lhs = _eqMatch[1].trim();
-    var _op = _eqMatch[2];
-    var _rhs = _eqMatch[3].trim();
-    var _lhsIsStr = _lhs.includes('getSlotString') || (_lhs.includes('[0..') && _lhs.includes('_lens'));
-    var _rhsIsStr = _rhs.includes('getSlotString') || (_rhs.includes('[0..') && _rhs.includes('_lens')) || /^"[^"]*"$/.test(_rhs);
-    if (_lhsIsStr || _rhsIsStr) {
-      var _eql = 'std.mem.eql(u8, ' + _lhs + ', ' + _rhs + ')';
-      cond = _op === '!=' ? '!' + _eql : _eql;
-    }
+    cond = resolveComparison(_eqMatch[1].trim(), _eqMatch[2], _eqMatch[3].trim(), ctx);
+  } else if (isEval(cond)) {
+    cond = zigBool(cond, ctx);
   }
   // String branches need @as([]const u8, ...) for Zig type unification
   const thenIsStr = /^"[^"]*"$/.test(thenVal);
