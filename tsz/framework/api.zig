@@ -483,6 +483,9 @@ pub const qjs_runtime = struct {
         const n = rjit_qjs_eval_to_string(code.ptr, code.len, buf, 256);
         return buf[0..n];
     }
+    pub fn evalLuaMapData(index: usize, expr: []const u8) void {
+        rjit_qjs_eval_lua_map_data(index, expr.ptr, expr.len);
+    }
 };
 
 // ── LuaJIT Runtime extern ──────────────────────────────────────────

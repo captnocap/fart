@@ -141,16 +141,18 @@ function emitLuaTextContent(c, itemParam) {
 }
 
 var _luaEmitDepth = 0;
+var _luaEmitIter = 0;
+var _LUA_EMIT_MAX_ITER = 5000; // hard cap — prevents machine freeze
 
 function emitLuaElement(c, itemParam, indent) {
   _luaEmitDepth++;
-  if (_luaEmitDepth > 20) {
-    // Bail out — too deep, skip remaining tokens until we're back at a sane point
+  if (_luaEmitDepth > 20 || _luaEmitIter > _LUA_EMIT_MAX_ITER) {
     _luaEmitDepth--;
-    var _bailDepth = 0;
-    while (c.pos < c.count) {
+    // Skip to closing tag or end
+    while (c.pos < c.count && _luaEmitIter < _LUA_EMIT_MAX_ITER + 500) {
+      _luaEmitIter++;
       if (c.kind() === TK.lt && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.slash) {
-        c.advance(); c.advance(); // </
+        c.advance(); c.advance();
         if (c.kind() === TK.identifier) c.advance();
         if (c.kind() === TK.gt) c.advance();
         break;
@@ -159,7 +161,25 @@ function emitLuaElement(c, itemParam, indent) {
     }
     return '{ text = "..." }';
   }
+  // Must be at < (JSX opening tag) — if not, bail immediately
+  if (c.kind() !== TK.lt) {
+    _luaEmitDepth--;
+    // Skip block body: consume tokens until we find < or run out
+    while (c.pos < c.count && c.kind() !== TK.lt && _luaEmitIter < _LUA_EMIT_MAX_ITER) {
+      _luaEmitIter++;
+      // If we hit a closing paren at depth 0, the map body is done
+      if (c.kind() === TK.rparen || c.kind() === TK.rbrace) break;
+      c.advance();
+    }
+    if (c.kind() === TK.lt) {
+      // Found JSX after block prefix — retry
+      _luaEmitDepth++;
+    } else {
+      return '{ text = "..." }';
+    }
+  }
   // Cursor at < (opening tag)
+  _luaEmitIter++;
   c.advance(); // skip <
   var tagName = c.text();
   c.advance(); // skip tag name
@@ -168,8 +188,9 @@ function emitLuaElement(c, itemParam, indent) {
 
   // Parse attributes
   var _attrLastPos = -1;
-  while (c.pos < c.count && c.kind() !== TK.gt && c.kind() !== TK.slash) {
-    if (c.pos === _attrLastPos) { c.advance(); continue; } // safety: skip stuck token
+  while (c.pos < c.count && c.kind() !== TK.gt && c.kind() !== TK.slash && _luaEmitIter < _LUA_EMIT_MAX_ITER) {
+    _luaEmitIter++;
+    if (c.pos === _attrLastPos) { c.advance(); continue; }
     _attrLastPos = c.pos;
     if (c.kind() === TK.identifier) {
       var attrName = c.text();
@@ -244,7 +265,8 @@ function emitLuaElement(c, itemParam, indent) {
 function emitLuaChildren(c, itemParam, indent) {
   var children = [];
   var _chLastPos = -1;
-  while (c.pos < c.count) {
+  while (c.pos < c.count && _luaEmitIter < _LUA_EMIT_MAX_ITER) {
+    _luaEmitIter++;
     if (c.pos === _chLastPos) { c.advance(); continue; }
     _chLastPos = c.pos;
     // Stop at closing tag
@@ -341,6 +363,7 @@ function emitLuaChildren(c, itemParam, indent) {
 function emitLuaRebuildList(mapIdx, c, itemParam, wrapperTag) {
   // c is positioned at the first child of the map body (after the arrow)
   // Walk the JSX and emit Lua
+  _luaEmitIter = 0; // reset iteration counter per map
 
   // Skip optional ( wrapper
   if (c.kind() === TK.lparen) c.advance();
@@ -377,5 +400,61 @@ function emitLuaRebuildList(mapIdx, c, itemParam, wrapperTag) {
   fn += '  return { children = result }\n';
   fn += 'end\n';
 
+  return fn;
+}
+
+// ── Parsed-result Lua rebuilder ────────────────────────────────────
+// Instead of walking raw tokens (which breaks on block bodies, destructuring,
+// nested maps), this takes the PARSED node result from Smith's normal parser
+// and converts the Zig nodeExpr to a Lua template.
+// The parser already handles all edge cases — we just translate the output.
+
+function _zigNodeExprToLua(nodeExpr) {
+  if (!nodeExpr || typeof nodeExpr !== 'string') return '{}';
+  // Convert Zig struct literal to Lua table:
+  // .{ .field = value, ... } → { field = value, ... }
+  var lua = nodeExpr;
+  // Strip leading .{ and trailing }
+  lua = lua.replace(/^\.{\s*/, '{ ').replace(/\s*}$/, ' }');
+  // .field = → field =
+  lua = lua.replace(/\.(\w+)\s*=/g, '$1 =');
+  // .{ → { (nested structs)
+  lua = lua.replace(/\.\{/g, '{');
+  // .enum_value → "enum_value" (Zig enum → Lua string)
+  lua = lua.replace(/=\s*\.(\w+)/g, '= "$1"');
+  // Color.rgb(r,g,b) → simplified hex (or pass through)
+  lua = lua.replace(/Color\.rgb\((\d+),\s*(\d+),\s*(\d+)\)/g, function(_, r, g, b) {
+    return '0x' + ((+r << 16) | (+g << 8) | +b).toString(16).padStart(6, '0');
+  });
+  // &_arr_N references → nil (array refs don't translate to Lua)
+  lua = lua.replace(/&_arr_\d+/g, 'nil');
+  // OA field refs: _oaN_field[_i][0.._oaN_field_lens[_i]] → _item.field
+  lua = lua.replace(/_oa\d+_(\w+)\[_i\]\[0\.\._oa\d+_\w+_lens\[_i\]\]/g, 'tostring(_item.$1)');
+  lua = lua.replace(/_oa\d+_(\w+)\[_i\]/g, '_item.$1');
+  // std.fmt.bufPrint refs → tostring(_item.field)
+  lua = lua.replace(/std\.fmt\.bufPrint\([^)]+\)/g, '"..."');
+  // Clean up: children = nil → remove
+  lua = lua.replace(/,?\s*children\s*=\s*nil/g, '');
+  return lua;
+}
+
+function _nodeResultToLuaRebuilder(mapIdx, nodeResult, oa) {
+  var templateLua = _zigNodeExprToLua(nodeResult.nodeExpr || '.{}');
+  var fn = '';
+  fn += 'function __rebuildLuaMap' + mapIdx + '()\n';
+  fn += '  __clearLuaNodes()\n';
+  fn += '  local wrapper = __mw' + mapIdx + '\n';
+  fn += '  if not wrapper then return end\n';
+  fn += '  local items = __luaMapData' + mapIdx + '\n';
+  fn += '  if not items or #items == 0 then\n';
+  fn += '    __declareChildren(wrapper, {})\n';
+  fn += '    return\n';
+  fn += '  end\n';
+  fn += '  local tmpl = {}\n';
+  fn += '  for _i, _item in ipairs(items) do\n';
+  fn += '    tmpl[#tmpl + 1] = ' + templateLua + '\n';
+  fn += '  end\n';
+  fn += '  __declareChildren(wrapper, tmpl)\n';
+  fn += 'end\n';
   return fn;
 }

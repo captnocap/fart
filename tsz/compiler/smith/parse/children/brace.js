@@ -242,10 +242,55 @@ function _tryParseComputedChainMap(c, children, baseName, baseExpr, consumeClosi
 
   const getterName = _sanitizeComputedGetter(baseName, suffixText);
   const mapExpr = (baseExpr ? '(' + baseExpr + ')' : baseName) + suffixText;
-  const oa = _ensureSyntheticComputedOa(getterName, mapExpr, mapSnippet, header);
+
+  // ── Lua detour: if the source is render-local/computed, route to LuaJIT ──
+  // Let the normal parser handle the JSX (it handles block bodies, destructuring,
+  // nested maps, ternaries — everything). Then convert the parsed result to Lua.
+  // Do NOT walk raw tokens — that's what caused the infinite loop.
+  var _isRenderLocal = ctx._renderLocalRaw && ctx._renderLocalRaw[baseName] !== undefined;
+  var _isStateOa = false;
+  for (var _oai = 0; _oai < ctx.objectArrays.length; _oai++) {
+    if (ctx.objectArrays[_oai].getter === baseName && !ctx.objectArrays[_oai]._computedExpr) {
+      _isStateOa = true; break;
+    }
+  }
+  if (_isRenderLocal && !_isStateOa) {
+    // Let the normal Zig path parse the JSX and create the OA.
+    // But tag the resulting map as lua_runtime so emit skips Zig pool/rebuild.
+    var oa = _ensureSyntheticComputedOa(getterName, mapExpr, mapSnippet, header);
+    c.restore(mapPos);
+    var mapResult = tryParsePlainMapFromMethod(c, oa, oa._computedHeader || header);
+    if (!mapResult) { c.restore(saved); return false; }
+
+    // Tag the map for Lua routing — emit will skip Zig rebuild, use evalLuaMapData instead
+    var mapIdx = -1;
+    for (var _mi = 0; _mi < ctx.maps.length; _mi++) {
+      if (ctx.maps[_mi].oa === oa) { mapIdx = _mi; break; }
+    }
+    if (mapIdx >= 0) ctx.maps[mapIdx].mapBackend = 'lua_runtime';
+
+    // Register as a Lua map rebuilder with a parsed-node Lua template
+    if (!ctx._luaMapRebuilders) ctx._luaMapRebuilders = [];
+    var _luaIdx = ctx._luaMapRebuilders.length;
+    var _luaRaw = expandRenderLocalRawExpr(ctx._renderLocalRaw[baseName] || baseName, baseName);
+    // Convert the parsed nodeExpr tree to a Lua template
+    var _luaBody = _nodeResultToLuaRebuilder(_luaIdx, mapResult, oa);
+    ctx._luaMapRebuilders.push({
+      index: _luaIdx,
+      luaCode: _luaBody,
+      rawSource: _luaRaw,
+      varName: baseName
+    });
+    // Replace the Zig node with a Lua wrapper placeholder
+    children.push({ nodeExpr: '.{ .test_id = "__lmw' + _luaIdx + '" }', _luaMapWrapper: _luaIdx });
+    if (consumeClosingBrace && c.kind() === TK.rbrace) c.advance();
+    return true;
+  }
+
+  var oa = _ensureSyntheticComputedOa(getterName, mapExpr, mapSnippet, header);
 
   c.restore(mapPos);
-  const mapResult = tryParsePlainMapFromMethod(c, oa, oa._computedHeader || header);
+  var mapResult = tryParsePlainMapFromMethod(c, oa, oa._computedHeader || header);
   if (!mapResult) { c.restore(saved); return false; }
   children.push(mapResult);
   if (consumeClosingBrace && c.kind() === TK.rbrace) c.advance();
@@ -331,23 +376,9 @@ function _tryParseIdentifierMapExpression(c, children, consumeClosingBrace) {
 
   const maybeArr = c.text();
   if (ctx._renderLocalRaw && ctx._renderLocalRaw[maybeArr]) {
-    const rawExpr = ctx._renderLocalRaw[maybeArr];
-    // Check for imperative source patterns — if found, skip OA path (Lua bus handles it)
-    // One-level dependency check: look at raw + raw of any referenced render locals
-    var _cmAll = rawExpr;
-    if (ctx._renderLocalRaw) {
-      var _cmNames = Object.keys(ctx._renderLocalRaw);
-      for (var _cmi = 0; _cmi < _cmNames.length; _cmi++) {
-        if (_cmNames[_cmi] !== maybeArr && rawExpr.indexOf(_cmNames[_cmi]) >= 0) {
-          _cmAll += ' ' + (ctx._renderLocalRaw[_cmNames[_cmi]] || '');
-        }
-      }
-    }
-    var _cmCompact = _cmAll.replace(/\s+/g, '');
-    var _cmIsImperative = _cmCompact.indexOf('newMap') >= 0 || _cmCompact.indexOf('newSet') >= 0 ||
-      _cmCompact.indexOf('.entries()') >= 0 || _cmCompact.indexOf('Array.from') >= 0 ||
-      _cmCompact.indexOf('for(') >= 0;
-    // Even if imperative, let the OA path register fields — __computeRenderBody() fixes data at runtime
+    var rawExpr = ctx._renderLocalRaw[maybeArr];
+    // Render-local map → route through _tryParseComputedChainMap which
+    // handles the Lua detour using the parser (not raw token walking).
     if (_tryParseComputedChainMap(c, children, maybeArr, rawExpr, consumeClosingBrace)) return true;
   }
 
@@ -679,62 +710,8 @@ function tryParseBraceChild(c, children) {
       return true;
     }
     c.advance();
-    // Render-local followed by .map() — detour to Lua bus
-    if (c.kind() === TK.dot && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.identifier &&
-        (c.textAt(c.pos + 1) === 'map' || c.textAt(c.pos + 1) === 'filter' || c.textAt(c.pos + 1) === 'slice') &&
-        c.pos + 2 < c.count && c.kindAt(c.pos + 2) === TK.lparen &&
-        typeof emitLuaRebuildList === 'function') {
-      // Save position for the map body walk
-      if (!ctx._luaMapRebuilders) ctx._luaMapRebuilders = [];
-      var _luaMapIdx = ctx._luaMapRebuilders.length;
-      // Skip to .map( and parse the header to get itemParam
-      var _lmSaved = c.save();
-      // Skip any chained .filter()/.slice() before .map()
-      while (c.kind() === TK.dot && c.pos + 1 < c.count &&
-             (c.textAt(c.pos + 1) === 'filter' || c.textAt(c.pos + 1) === 'slice') &&
-             c.pos + 2 < c.count && c.kindAt(c.pos + 2) === TK.lparen) {
-        c.advance(); c.advance(); c.advance(); // . filter (
-        var _skipDepth = 1;
-        while (c.pos < c.count && _skipDepth > 0) {
-          if (c.kind() === TK.lparen) _skipDepth++;
-          if (c.kind() === TK.rparen) _skipDepth--;
-          if (_skipDepth > 0) c.advance();
-        }
-        if (c.kind() === TK.rparen) c.advance();
-      }
-      if (c.kind() === TK.dot) c.advance(); // .
-      if (c.isIdent('map')) c.advance(); // map
-      if (c.kind() === TK.lparen) c.advance(); // (
-      // Parse arrow function params: (item) => or (item, idx) =>
-      var _luaItemParam = '_item';
-      if (c.kind() === TK.lparen) {
-        c.advance();
-        if (c.kind() === TK.identifier) { _luaItemParam = c.text(); c.advance(); }
-        while (c.kind() !== TK.rparen && c.pos < c.count) c.advance();
-        if (c.kind() === TK.rparen) c.advance();
-      } else if (c.kind() === TK.identifier) {
-        _luaItemParam = c.text(); c.advance();
-      }
-      if (c.kind() === TK.arrow) c.advance(); // =>
-      // Now c is at the map body JSX — emit real Lua via emitLuaRebuildList
-      var _luaCode = emitLuaRebuildList(_luaMapIdx, c, _luaItemParam, 'Box');
-      // emitLuaRebuildList walks the JSX and advances cursor past it.
-      // Consume any remaining parens/braces from the .map() wrapper
-      while (c.kind() === TK.rparen) c.advance();
-      if (c.kind() === TK.rbrace) c.advance(); // }
-      // Store the Lua rebuilder and raw JS for the source array computation
-      var _luaRawSource = ctx._renderLocalRaw && ctx._renderLocalRaw[_brRlName] || _brRlName;
-      ctx._luaMapRebuilders.push({
-        index: _luaMapIdx,
-        luaCode: _luaCode,
-        rawSource: _luaRawSource,
-        varName: _brRlName
-      });
-      // Emit a wrapper node placeholder — Lua will populate its children
-      // Tag with __lmwN so entrypoints can find and register the pointer with LuaJIT
-      children.push({ nodeExpr: '.{ .test_id = "__lmw' + _luaMapIdx + '" }', _luaMapWrapper: _luaMapIdx });
-      return true;
-    }
+    // Render-local .map() is handled by _tryParseIdentifierMapExpression →
+    // _tryParseComputedChainMap which uses the parser (not raw token walking).
     // Const OA row ref: resolve .field access before closing brace
     if (typeof _brRlVal === 'string' && _brRlVal.charCodeAt(0) === 1 &&
         c.kind() === TK.dot && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.identifier) {
