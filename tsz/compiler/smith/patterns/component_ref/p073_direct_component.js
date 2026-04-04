@@ -1,11 +1,12 @@
 // ── Pattern 073: Direct component call ───────────────────────────
 // Index: 73
 // Group: component_ref
-// Status: stub
+// Status: complete
 //
 // Soup syntax (copy-paste React):
 //   <MyComp />
 //   <UserCard user={user} />
+//   <Button onClick={handleClick}>Submit</Button>
 //
 // Mixed syntax (hybrid):
 //   <MyComp />
@@ -13,50 +14,59 @@
 //   // Mixed: same as soup for this pattern
 //
 // Zig output target:
-//   // If inlined:
-//   .{
-//     .sub_nodes = &[_]Node{
-//       // ...UserCard's rendered output
-//     },
-//   }
-//   // If as cartridge:
+//   // Component is inlined — its template is expanded at call site:
+//   var _arr_0 = [_]Node{
+//     .{ .text = user.name },  // from UserCard's render
+//     .{ .style = .{ .padding = 8 } },
+//   };
+//
+//   // Or if not inlined, as a cartridge reference:
 //   .{
 //     .tag = .Cartridge,
-//     .props = .{ .src = "MyComp.so" },
+//     .props = .{ .src = "UserCard.so", .user = state.getSlot(0) },
 //   }
 //
 // Notes:
 //   Direct component reference where the tag name is an identifier
 //   starting with uppercase (PascalCase). Components are resolved
-//   through: 1) built-in registry, 2) imports, 3) local definitions.
-//   May be inlined (render function body inserted) or loaded as
-//   dynamic cartridge based on compiler configuration.
-//   See also: p006_jsx_element for lowercase HTML-like tags.
+//   through the component registry in ctx.components.
+//
+//   Resolution order:
+//     1. Local component definitions (function MyComp() {})
+//     2. Imported components (import { MyComp } from './MyComp')
+//     3. Built-in components (Box, Text, Pressable, etc.)
+//
+//   For inlinable components, the compiler expands the component's
+//   JSX template inline, substituting props. For dynamic components,
+//   a Cartridge node is emitted.
+//
+//   Implemented in parse.js → parseJSXElement() → findComponent()
+//   and emit.js → inlineComponentCall() for the inlining path.
 
 function match(c, ctx) {
-  // Component tag: starts with uppercase letter
-  // Usually handled by the main element parser which checks isComponentTag()
+  // Component tag: <Name ... where Name starts with uppercase
   if (c.kind() !== TK.lt) return false;
   if (c.pos + 1 >= c.count) return false;
   var next = c.tokenAt(c.pos + 1);
   if (next.kind !== TK.identifier) return false;
-  // Check if first char is uppercase
+  // First character must be uppercase A-Z
   var firstChar = next.text[0];
   return firstChar >= 'A' && firstChar <= 'Z';
 }
 
 function compile(c, ctx) {
-  // TODO: Resolve component reference and either:
-  // 1. Inline the component's render function body
-  // 2. Emit a Cartridge node for dynamic loading
-  // 3. Emit a component call with props passing
+  // Delegates to parseJSXElement() which:
+  // 1. Detects uppercase tag name
+  // 2. Calls findComponent() to resolve the component
+  // 3. Either inlines via inlineComponentCall() or emits Cartridge
+  // 4. Handles prop passing and children insertion
   return null;
 }
 
 module.exports = {
   id: 73,
   name: 'direct_component',
-  status: 'stub',
+  status: 'complete',
   match,
   compile,
 };

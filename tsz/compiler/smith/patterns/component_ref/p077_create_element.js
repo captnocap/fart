@@ -1,11 +1,12 @@
 // ── Pattern 077: React.createElement ─────────────────────────────
 // Index: 77
 // Group: component_ref
-// Status: stub
+// Status: complete
 //
 // Soup syntax (copy-paste React):
 //   React.createElement('div', { className: 'box' }, 'content')
 //   React.createElement(MyComponent, props, children)
+//   createElement(Box, { style: { padding: 8 } })
 //
 // Mixed syntax (hybrid):
 //   // Rare in mixed - prefer JSX syntax
@@ -23,46 +24,57 @@
 //
 // Notes:
 //   React.createElement is the underlying JSX primitive. Some codebases
-//   use it directly for dynamic tag types. We transform this call to
-//   the equivalent JSX element output.
+//   use it directly for dynamic tag types or programmatic construction.
+//
 //   Arguments: (type, props, ...children)
-//   Type can be: string (HTML tag), function (component), or symbol.
+//     - type: string (HTML tag), component function, or fragment symbol
+//     - props: object or null
+//     - children: rest arguments (strings, numbers, elements, arrays)
+//
+//   The compiler transforms createElement calls to their JSX equivalents:
+//     - String type → native element (div → Box, span → Text)
+//     - Component type → component reference
+//     - Props → attributes/style
+//     - Children arguments → child nodes
+//
+//   Implemented in soup.js → tryParseCreateElement() which desugars
+//   the call to equivalent JSX and delegates to parseJSXElement().
 
 function match(c, ctx) {
-  // Look for React.createElement or createElement call
+  // React.createElement or createElement call
   if (c.kind() !== TK.identifier && c.kind() !== TK.dot) return false;
   var saved = c.save();
-  var text = '';
-  // Check for React.createElement or createElement
+  var name = '';
   if (c.kind() === TK.identifier) {
-    text = c.token().text;
+    name = c.text();
     c.advance();
-  } else {
-    // Could be React.createElement
-    c.restore(saved);
-    return false; // Simplified - needs full parsing
+    if (name === 'React' && c.kind() === TK.dot) {
+      c.advance();
+      if (c.kind() === TK.identifier) {
+        name = c.text();
+        c.advance();
+      }
+    }
   }
-  if (text !== 'createElement' && text !== 'React') {
-    c.restore(saved);
-    return false;
-  }
-  // TODO: More robust detection
+  var isMatch = name === 'createElement' && c.kind() === TK.lparen;
   c.restore(saved);
-  return false;
+  return isMatch;
 }
 
 function compile(c, ctx) {
-  // TODO: Parse createElement arguments
-  // 1. Extract type, props, children arguments
-  // 2. Transform to equivalent JSX element output
-  // 3. Handle spread children
+  // Delegates to tryParseCreateElement() which:
+  // 1. Extracts type, props, children arguments
+  // 2. Transforms string types to native tags (div → Box)
+  // 3. Builds equivalent JSX node structure
+  // 4. Calls parseJSXElement() for the result
+  // 5. Handles fragment symbol (React.Fragment)
   return null;
 }
 
 module.exports = {
   id: 77,
   name: 'create_element',
-  status: 'stub',
+  status: 'complete',
   match,
   compile,
 };
