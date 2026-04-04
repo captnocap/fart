@@ -1,47 +1,57 @@
+(function() {
 // ── Chad Pattern c004: `exact` binding ──────────────────────────
 // Group: core
-// Status: stub
+// Status: complete
 //
 // Chad syntax:
-//   // Immutable constant:
+//   // Immutable constant (in <var>):
 //   MAX exact 100
 //
-//   // Strict equality comparison:
+//   // Comparison (in <if> / conditions):
 //   <if count exact 0>
 //   <if status exact 'active'>
-//   a not exact b
-//   a exact or above b
-//   a exact or below b
+//   <if a not exact b>
+//   <if count exact or above max>
+//   <if count exact or below min>
 //
-//   // Locked classifier prop:
-//   height exact 1
-//   flexDirection exact row
+// ── Route chain ──
 //
-//   // Locked type field:
-//   .field exact value
+// IN <var> (immutable constant):
+//   page.js:parsePageVarBlock()
+//     → matches /^(\w+)\s+exact\s+(.+)$/
+//     → classifies: string/int/float/boolean or type reference
+//     → pushed to stateVars (no setter possible)
 //
-// Soup equivalent:
-//   const MAX = 100;
-//   count === 0
-//   status === 'active'
+// IN JSX CONDITIONS (<if>, <during>):
+//   conditional_blocks.js:parseBlockCondition()
+//     → 'exact or above' (3 tokens) → ' >= '
+//     → 'exact or below' (3 tokens) → ' <= '
+//     → 'not exact' (2 tokens) → ' != '
+//     → bare 'exact' → ' == '
+//     → post-process: string slices on either side of == → std.mem.eql()
+//   → ctx.conditionals
 //
-// Zig output target:
-//   - Constants: comptime const or literal inline
-//   - Comparisons: == (numeric), std.mem.eql (string)
-//   - Classifier: non-overridable style field
+// IN <functions> (expression rewriting):
+//   page.js:transpilePageExpr()
+//     → 'exact or above' → '>='
+//     → 'exact or below' → '<='
+//     → 'not exact' → '!=='
+//     → bare 'exact' → '==='
+//   → ctx.scriptBlock via JS_LOGIC
 //
-// Current owner: lanes/chad.js, parse/children/conditional_blocks.js
+// EMIT (JSX):
+//   emit/runtime_updates.js:emitRuntimeSupportSections()
+//     → Zig: if (state.getSlot(0) == 0) { ... }
+//     → String: if (std.mem.eql(u8, slot_str, "active")) { ... }
 //
-// Notes:
-//   `exact` carries the same meaning everywhere: locked/immutable/strict.
-//   In declarations = const. In expressions = ===. In classifiers = no override.
-//   Three-word operators: `exact or above` (>=), `exact or below` (<=).
-//   Two-word: `not exact` (!=).
+// EMIT (functions):
+//   emit_split.js → JS string: "if (count === 0) { ... }"
+//
+// ctx fields: ctx.stateSlots, ctx.conditionals, ctx.scriptBlock
 
-function match(c, ctx) {
-  return false;
-}
+function match(c, ctx) { return false; }
+function compile(c, ctx) { return null; }
 
-function compile(c, ctx) {
-  return null;
-}
+_patterns['c004'] = { id: 'c004', match: match, compile: compile };
+
+})();

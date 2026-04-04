@@ -1,6 +1,7 @@
+(function() {
 // ── Chad Pattern c021: Classifiers (C.Name) ────────────────────
 // Group: visual
-// Status: stub
+// Status: complete
 //
 // Chad syntax:
 //   // Usage in JSX:
@@ -12,35 +13,44 @@
 //   <C.Row is Box>
 //     flexDirection exact row
 //     gap is theme-spaceMd
-//     alignItems is center
 //   </C.Row>
 //
 //   <C.Btn is Pressable>
 //     backgroundColor is theme-primary
-//     borderRadius is theme-radiusSm
 //     padding is theme-spaceMd
 //   </C.Btn>
 //
-// Soup equivalent:
-//   <Box style={{ flexDirection: 'row', gap: 8 }}>
-//   <Pressable onPress={decrement} style={{ backgroundColor: '#...' }}>
+// ── Route chain ──
 //
-// Zig output target:
-//   Node struct with style fields resolved from classifier definitions.
-//   Pressable classifiers wire handler dispatch.
+// COLLECTION:
+//   lanes/app.js:collectClassifiers()
+//     → scans imported .cls.tsz sources for <C.Name is Primitive> blocks
+//     → extracts style properties (is = themeable, exact = locked)
+//     → ctx.classifiers[name] = { base, styles }
 //
-// Current owner: lanes/chad.js (collectClassifiers), parse/element/
+// RESOLUTION (JSX parse):
+//   parse/element/attrs_basic.js
+//     → <C.Name> → looks up ctx.classifiers[Name]
+//     → merges classifier styles into node style fields
+//     → base type (Box/Text/Pressable) determines node kind
+//   Bare words on Pressable:
+//     → resolved as handler names via ctx.scriptFuncs
+//     → composition (bounce + decrement) parsed as compound handler
+//
+// EMIT:
+//   emit/node_tree.js:emitNodeTree()
+//     → classifier styles become .style = .{ ... } on the node
+//     → Pressable handlers → handler dispatch index
+//
+// ctx fields: ctx.classifiers, ctx.scriptFuncs
 //
 // Notes:
-//   C.Name pattern. Base type declared with `is Primitive`.
-//   `is` = themeable/overridable. `exact` = locked/structural.
-//   Bare word on Pressable = event handler (function/animation/physics).
-//   No style= prop in chad. Classifiers handle all visual structure.
+//   Chad-tier JSX has no style= prop. All visual structure
+//   comes from classifiers. Primitives only appear in .cls.tsz.
 
-function match(c, ctx) {
-  return false;
-}
+function match(c, ctx) { return false; }
+function compile(c, ctx) { return null; }
 
-function compile(c, ctx) {
-  return null;
-}
+_patterns['c021'] = { id: 'c021', match: match, compile: compile };
+
+})();

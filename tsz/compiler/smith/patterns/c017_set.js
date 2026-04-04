@@ -1,37 +1,47 @@
+(function() {
 // ── Chad Pattern c017: set_ reactive mutation ───────────────────
 // Group: functions
-// Status: stub
+// Status: complete
 //
 // Chad syntax:
-//   // State mutation (triggers re-render):
-//   set_count is count + 1
-//   set_name is 'hello'
-//   set_active is true
-//   set_editing is false
+//   set_count is count + 1      → state mutation, triggers re-render
+//   set_name is 'hello'         → string state mutation
+//   set_active is true           → boolean state mutation
+//   set_mode is 'time'           → type variant auto-quoted
 //
-//   // vs field write (no re-render):
-//   item.done is not item.done
-//   r.ttl is r.ttl - 1
+//   // vs field write (NOT set_):
+//   item.done is not item.done   → field write, no re-render
 //
-// Soup equivalent:
-//   setCount(count + 1);
-//   setName('hello');
+// ── Route chain ──
 //
-// Zig output target:
-//   state.setSlot(N, value) in JS logic block.
-//   Triggers dirty flag for runtime tick.
+// DECLARATION (in <var>):
+//   page.js:parsePageVarBlock()
+//     → set_ prefix vars → stateVars with setter name
+//   chad.js/page.js → ctx.stateSlots for primitives
+//   page.js:buildPageJSLogic()
+//     → primitives: funcNames.push('set_' + name) (emit handles decl)
+//     → complex: emits JS setter: function set_items(v) { items = v; }
 //
-// Current owner: lanes/chad.js (buildPageJSLogic)
+// MUTATION (in <functions>):
+//   page.js:transpilePageLine()
+//     → matches /^(set_\w+)\s+is\s+(.+)$/
+//     → emits: set_count(transpilePageExpr("count + 1"));
+//     → _quoteTypeVariant() quotes if value matches ctx._typeVariants
 //
-// Notes:
-//   set_ prefix = reactive state setter. Declared in <var> with set_ prefix.
-//   set_ is never used for field writes. field is value is never for state.
-//   The compiler knows because state vars have set_ prefix in <var>.
+// EMIT:
+//   Primitives:
+//     emit/state_manifest.js → Zig state slot declarations
+//     emit_split.js → JS_LOGIC auto-generates:
+//       "var count = __getState(0); function set_count(v) { __setState(0, v); }"
+//   Complex (OA):
+//     emit_split.js → JS_LOGIC:
+//       "function set_cards(v) { cards = v; __setObjArr0(v); }"
+//
+// ctx fields: ctx.stateSlots, ctx.scriptBlock, ctx._typeVariants
 
-function match(c, ctx) {
-  return false;
-}
+function match(c, ctx) { return false; }
+function compile(c, ctx) { return null; }
 
-function compile(c, ctx) {
-  return null;
-}
+_patterns['c017'] = { id: 'c017', match: match, compile: compile };
+
+})();

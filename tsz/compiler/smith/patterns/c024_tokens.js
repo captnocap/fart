@@ -1,3 +1,4 @@
+(function() {
 // ── Chad Pattern c024: Theme tokens ─────────────────────────────
 // Group: visual
 // Status: stub
@@ -54,3 +55,7 @@ function match(c, ctx) {
 function compile(c, ctx) {
   return null;
 }
+
+_patterns['c024'] = { id: 'c024', match: match, compile: compile };
+
+})();

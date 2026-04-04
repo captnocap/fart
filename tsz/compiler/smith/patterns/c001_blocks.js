@@ -1,3 +1,4 @@
+(function() {
 // ── Chad Pattern c001: Block headers ────────────────────────────
 // Group: core
 // Status: complete
@@ -43,3 +44,7 @@
 
 function match(c, ctx) { return false; }
 function compile(c, ctx) { return null; }
+
+_patterns['c001'] = { id: 'c001', match: match, compile: compile };
+
+})();

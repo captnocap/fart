@@ -1,3 +1,4 @@
+(function() {
 // ── Chad Pattern c027: Backend hatches ──────────────────────────
 // Group: hatches
 // Status: stub
@@ -66,3 +67,7 @@ function match(c, ctx) {
 function compile(c, ctx) {
   return null;
 }
+
+_patterns['c027'] = { id: 'c027', match: match, compile: compile };
+
+})();

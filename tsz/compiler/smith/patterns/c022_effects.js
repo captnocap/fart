@@ -1,3 +1,4 @@
+(function() {
 // ── Chad Pattern c022: Effects ──────────────────────────────────
 // Group: visual
 // Status: stub
@@ -43,3 +44,7 @@ function match(c, ctx) {
 function compile(c, ctx) {
   return null;
 }
+
+_patterns['c022'] = { id: 'c022', match: match, compile: compile };
+
+})();

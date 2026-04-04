@@ -1,6 +1,7 @@
+(function() {
 // ── Chad Pattern c012: <switch> / <case> ────────────────────────
 // Group: control_flow
-// Status: stub
+// Status: complete
 //
 // Chad syntax:
 //   <switch event.type>
@@ -15,27 +16,27 @@
 //     </case>
 //   </switch>
 //
-// Soup equivalent:
-//   switch (event.type) {
-//     case 'quit': return stop();
-//     case 'resize': return updateSize();
-//     default: return ignore();
-//   }
+// ── Route chain ──
 //
-// Zig output target:
-//   switch statement or if/else chain depending on type.
+// IN FUNCTIONS (<functions> body):
+//   page.js:transpilePageBody()
+//     → <switch expr>: switch (transpilePageExpr(expr)) {
+//     → <case value>: case 'value': {
+//     → <case else>: default: {
+//     → </case>: break; }
+//     → </switch>: }
+//     → case values auto-quoted as strings (bare words → 'word')
+//   emit_split.js → JS_LOGIC embedded in Zig
 //
-// Current owner: not yet implemented
+// IN JSX:
+//   Not yet implemented in JSX return(). In JSX, use multiple
+//   <during> blocks or <if>/<else if>/<else> chains instead.
 //
-// Notes:
-//   Each case self-closes with </case>.
-//   <case else> is the default — must be last.
-//   No fallthrough. Unmatched values do nothing.
+// ctx fields: ctx.scriptBlock
 
-function match(c, ctx) {
-  return false;
-}
+function match(c, ctx) { return false; }
+function compile(c, ctx) { return null; }
 
-function compile(c, ctx) {
-  return null;
-}
+_patterns['c012'] = { id: 'c012', match: match, compile: compile };
+
+})();

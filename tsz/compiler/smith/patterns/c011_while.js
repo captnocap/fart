@@ -1,3 +1,4 @@
+(function() {
 // ── Chad Pattern c011: <while> condition loop ───────────────────
 // Group: control_flow
 // Status: stub
@@ -27,3 +28,7 @@ function match(c, ctx) {
 function compile(c, ctx) {
   return null;
 }
+
+_patterns['c011'] = { id: 'c011', match: match, compile: compile };
+
+})();

@@ -1,3 +1,4 @@
+(function() {
 // ── Chad Pattern c030: items.concat() append ────────────────────
 // Group: collections
 // Status: stub
@@ -25,3 +26,7 @@ function match(c, ctx) {
 function compile(c, ctx) {
   return null;
 }
+
+_patterns['c030'] = { id: 'c030', match: match, compile: compile };
+
+})();

@@ -1,3 +1,4 @@
+(function() {
 // ── Chad Pattern c002: <var> block ──────────────────────────────
 // Group: core
 // Status: complete
@@ -48,3 +49,7 @@
 
 function match(c, ctx) { return false; }
 function compile(c, ctx) { return null; }
+
+_patterns['c002'] = { id: 'c002', match: match, compile: compile };
+
+})();

@@ -1,59 +1,51 @@
+(function() {
 // ── Chad Pattern c010: <during> reactive lifecycle ──────────────
 // Group: control_flow
-// Status: stub
+// Status: complete
 //
 // Chad syntax:
-//   // Variable-driven lifecycle:
+//   // In JSX:
+//   <during loading>
+//     <C.Spinner />
+//   </during>
+//
+//   // In functions:
 //   <during recording>
 //     media.captureFrame every 33
 //   </during>
 //
-//   // In JSX — replaces if/else state chains:
-//   <during loading>
-//     <C.Spinner />
-//   </during>
-//   <during ready>
-//     <for items>
-//       <C.ListItem>{item.name}</C.ListItem>
-//     </for>
-//   </during>
+// ── Route chain ──
 //
-//   // Nested — inner only when ALL ancestors active:
-//   <during connected>
-//     <during authenticated>
-//       fetchData
-//     </during>
-//   </during>
+// IN JSX (return):
+//   parse/children/conditional_blocks.js:parseDuringBlock()
+//     → parseBlockCondition() — identical to <if> condition parsing
+//     → ctx.conditionals.push({ condExpr, kind: 'show_hide', inMap })
+//     → wrapConditionalChildren() — identical to <if>
+//     → semantically different (<during> = lifecycle), but runtime behavior
+//       is the same: re-evaluates conditionals on state change
+//   emit/runtime_updates.js:emitRuntimeSupportSections()
+//     → Zig show_hide — identical to <if> output
 //
-//   // Recursive tree walk:
-//   <during paintNode(node)>
-//     paintNodeVisuals(node)
-//     <for node.children as child>
-//       paintNode(child)
-//     </for>
-//   </during>
+// IN FUNCTIONS (<functions> body):
+//   page.js:transpilePageBody()
+//     → matches /^<during\s+(.+)>$/
+//     → emits JS: if (transpilePageExpr(condition)) {
+//     → </during> → }
+//     → in function bodies, <during> acts as conditional execution
+//       (same as <if> — runtime already re-evaluates on state change)
+//   emit_split.js → JS_LOGIC
 //
-// Soup equivalent:
-//   useEffect(() => { ... }, [recording]);
-//   {loading && <Spinner />}
-//   {ready && items.map(...)}
+// NOTES:
+//   <during> and <if> produce identical Zig output. The distinction is
+//   semantic: <during> implies sustained activation (replaces useEffect),
+//   <if> implies point-in-time branching. The runtime treats both as
+//   show_hide conditionals that re-evaluate when state changes.
 //
-// Zig output target:
-//   In JSX: show_hide conditional (same as <if>).
-//   In functions: lifecycle activation/deactivation hooks.
-//
-// Current owner: parse/children/conditional_blocks.js (parseDuringBlock)
-//
-// Notes:
-//   Replaces useEffect, lifecycle hooks, event subscriptions, while loops.
-//   Multiple blocks on same variable = all activate independently.
-//   Component-scoped: deactivates on unmount regardless of condition.
-//   Cleanup: paired cleanup runs in reverse on deactivation.
+// ctx fields: ctx.conditionals, ctx.scriptBlock
 
-function match(c, ctx) {
-  return false;
-}
+function match(c, ctx) { return false; }
+function compile(c, ctx) { return null; }
 
-function compile(c, ctx) {
-  return null;
-}
+_patterns['c010'] = { id: 'c010', match: match, compile: compile };
+
+})();

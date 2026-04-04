@@ -1,3 +1,4 @@
+(function() {
 // ── Chad Pattern c003: `is` binding ─────────────────────────────
 // Group: core
 // Status: complete
@@ -48,3 +49,7 @@
 
 function match(c, ctx) { return false; }
 function compile(c, ctx) { return null; }
+
+_patterns['c003'] = { id: 'c003', match: match, compile: compile };
+
+})();

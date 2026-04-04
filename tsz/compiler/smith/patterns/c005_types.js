@@ -1,9 +1,9 @@
+(function() {
 // ── Chad Pattern c005: <types> block ────────────────────────────
 // Group: core
-// Status: stub
+// Status: complete
 //
 // Chad syntax:
-//   // String enums:
 //   <types>
 //     <mode>
 //       time
@@ -12,43 +12,37 @@
 //     </mode>
 //   </types>
 //
-//   // Struct types (modules):
-//   <types>
-//     <Vec2>
-//       x is f32
-//       y is f32
-//     </Vec2>
-//   </types>
+// ── Route chain ──
 //
-//   // Tagged unions (modules):
-//   <types>
-//     <Payload union>
-//       int is i64
-//       float is f64
-//       text is string
-//     </Payload>
-//   </types>
+// PARSE:
+//   chad.js:compileChadLane()
+//     → extractPageBlock(inner, 'types') gets raw block content
+//     → regex: /<(\w+)>([\s\S]*?)<\/\1>/g matches each type sub-block
+//     → splits body on newlines, trims, filters comments
+//     → stores: ctx._typeVariants[variantName] = typeName
+//       e.g., ctx._typeVariants['time'] = 'mode'
 //
-// Soup equivalent:
-//   type Mode = 'time' | 'date' | 'system';
-//   interface Vec2 { x: number; y: number; }
+// EFFECT ON COMPILATION:
+//   page.js:_quoteTypeVariant()
+//     → when transpiling set_X is <bareword>, checks ctx._typeVariants
+//     → if bareword is a known variant, quotes it: set_mode('time')
+//     → prevents bare identifiers from being treated as variable references
 //
-// Zig output target:
-//   String enums → variant quoting in JS logic.
-//   Structs → Zig struct definitions.
-//   Unions → Zig tagged unions.
+// EMIT:
+//   emit_split.js → JS_LOGIC block:
+//     → "set_mode('time');" instead of "set_mode(time);"
+//   No direct Zig type definition emitted (variants are JS strings)
 //
-// Current owner: lanes/chad.js (ctx._typeVariants parsing)
+// ctx fields: ctx._typeVariants
 //
 // Notes:
-//   Enum variants are bare words, one per line.
-//   The block name connects to the var name it constrains.
-//   Scoped type constraints: <r.status> constrains the status field of r.
+//   Struct types and tagged unions (<Vec2>, <Payload union>) are
+//   documented in the dictionary but only used in .mod.tsz modules,
+//   which go through smith/mod.js, not the chad lane.
 
-function match(c, ctx) {
-  return false;
-}
+function match(c, ctx) { return false; }
+function compile(c, ctx) { return null; }
 
-function compile(c, ctx) {
-  return null;
-}
+_patterns['c005'] = { id: 'c005', match: match, compile: compile };
+
+})();

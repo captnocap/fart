@@ -1,42 +1,41 @@
+(function() {
 // ── Chad Pattern c014: + composition operator ──────────────────
 // Group: functions
-// Status: stub
+// Status: complete
 //
 // Chad syntax:
-//   // Function chaining:
 //   addItem:
 //     validateInput + appendItem + clearInput + bumpId
 //
-//   // Cross-domain on pressable:
-//   <C.Btn bounce + decrement><C.BtnLabel>-</C.BtnLabel></C.Btn>
+//   <C.Btn bounce + decrement>
 //
-//   // Animation + physics + function + audio:
-//   <C.Btn spring + impulse + decrement + audio.play('click')>
+// ── Route chain ──
 //
-//   // In <during>:
-//   <during dragging>
-//     spring + followCursor
-//   </during>
+// IN FUNCTIONS:
+//   page.js:buildPageJSLogic()
+//     → detects single-line body matching /^\w+(\s*\+\s*\w+)+$/
+//     → splits on '+', trims each part
+//     → parts without parens get () appended
+//     → emits: function addItem() { validateInput(); appendItem(); clearInput(); bumpId(); }
 //
-// Soup equivalent:
-//   const addItem = () => { validate(); append(); clear(); bump(); };
-//   onClick={() => { bounce(); decrement(); }}
+// ON PRESSABLE (JSX):
+//   parse/element/attrs_basic.js
+//     → bare words on Pressable classifiers resolved as handler names
+//     → composition (bounce + decrement) parsed as compound handler
+//     → each part looked up in ctx.scriptFuncs and animation/effect registries
+//   emit/handlers.js → handler dispatch with sequential calls
 //
-// Zig output target:
-//   Sequential function calls in JS logic block.
-//   Handler dispatch wiring for composed event handlers.
+// EMIT:
+//   emit_split.js → JS_LOGIC:
+//     → "function addItem() { validateInput(); appendItem(); clearInput(); }"
+//   `stop` in any composed function → return; halts the chain
+//     (each part is a call, return exits the wrapper function)
 //
-// Current owner: lanes/chad.js (buildPageJSLogic)
-//
-// Notes:
-//   + composes across ALL domains: functions, animations, physics, effects, audio.
-//   Sequential execution. `stop` in any step halts the chain.
-//   Same operator everywhere — logic chains, pressable events, <during> blocks.
+// ctx fields: ctx.scriptBlock, ctx.scriptFuncs
 
-function match(c, ctx) {
-  return false;
-}
+function match(c, ctx) { return false; }
+function compile(c, ctx) { return null; }
 
-function compile(c, ctx) {
-  return null;
-}
+_patterns['c014'] = { id: 'c014', match: match, compile: compile };
+
+})();

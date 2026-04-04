@@ -1,3 +1,4 @@
+(function() {
 // ── Chad Pattern c025: <colors> block ───────────────────────────
 // Group: visual
 // Status: stub
@@ -48,3 +49,7 @@ function match(c, ctx) {
 function compile(c, ctx) {
   return null;
 }
+
+_patterns['c025'] = { id: 'c025', match: match, compile: compile };
+
+})();

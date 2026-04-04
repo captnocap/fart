@@ -1,49 +1,54 @@
+(function() {
 // ── Chad Pattern c013: <functions> block ────────────────────────
 // Group: functions
-// Status: stub
+// Status: complete
 //
 // Chad syntax:
 //   <functions>
-//     reset:
+//     reset:                          → nullary
 //       set_count is 0
-//
-//     increment:
-//       set_count is count + 1
-//
-//     move(id, toCol):
+//     move(id, toCol):                → with params
 //       set_cards is cards.map(id, col: toCol)
-//
-//     toggleItem requires item:
+//     toggleItem requires item:       → scope dependency
 //       item.done is not item.done
-//
-//     sdlInit cleanup:
-//       sdl.quit
-//
-//     boot:
+//     boot:                           → reserved lifecycle
 //       set_active is home
+//     sdlInit cleanup:                → cleanup pairing (future)
+//       sdl.quit
 //   </functions>
 //
-// Soup equivalent:
-//   const reset = () => setCount(0);
-//   const increment = () => setCount(c => c + 1);
-//   useEffect(() => { setActive('home') }, []);
+// ── Route chain ──
 //
-// Zig output target:
-//   JS_LOGIC script block with named functions.
-//   Handler dispatch entries for event wiring.
+// PARSE:
+//   page.js:parsePageFunctionsBlock()
+//     → regex: /^(\w+)(?:\s+every\s+(\d+))?(?:\s+requires\s+[\w\s,]+)?(\(([^)]*)\))?\s*:$/
+//     → extracts: name, params[], bodyLines[], interval
+//     → body lines collected until next function header
 //
-// Current owner: lanes/chad.js (buildPageJSLogic)
+// TRANSPILE:
+//   page.js:buildPageJSLogic()
+//     → single-line pure expression → computed getter: function name() { return expr; }
+//     → composition (a + b + c) → sequential calls: a(); b(); c();
+//     → multi-line → function name(params) { transpilePageBody(lines) }
+//     → each function name → ctx.scriptFuncs (for handler resolution)
 //
-// Notes:
-//   Nullary (no args), parameterized, `requires` for scope deps.
-//   `cleanup:` pairs run in reverse on scope unwind.
-//   `boot` / `shutdown` are reserved lifecycle names.
-//   Functions see the scope of their call site (<for> gives item).
+// BODY:
+//   page.js:transpilePageBody()
+//     → handles <if>/<else>/<during>/<switch>/<case> blocks inline
+//     → delegates line-by-line to transpilePageLine()
+//
+// EMIT:
+//   emit_split.js → JS_LOGIC block:
+//     → "function increment() { set_count(count + 1); }"
+//   Handler wiring:
+//     → ctx.scriptFuncs used by parse/element/ to resolve bare words on Pressable
+//     → emit/handlers.js wires handler dispatch indices
+//
+// ctx fields: ctx.scriptBlock, ctx.scriptFuncs
 
-function match(c, ctx) {
-  return false;
-}
+function match(c, ctx) { return false; }
+function compile(c, ctx) { return null; }
 
-function compile(c, ctx) {
-  return null;
-}
+_patterns['c013'] = { id: 'c013', match: match, compile: compile };
+
+})();

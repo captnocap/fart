@@ -1,14 +1,13 @@
+(function() {
 // ── Chad Pattern c015: stop / skip ──────────────────────────────
 // Group: functions
-// Status: stub
+// Status: complete
 //
 // Chad syntax:
-//   // Halt function/chain:
 //   <if input exact ''>
 //     stop
 //   </if>
 //
-//   // Skip iteration:
 //   <for items as item>
 //     <if not item.active>
 //       skip
@@ -16,25 +15,29 @@
 //     process
 //   </for>
 //
-// Soup equivalent:
-//   if (input === '') return;
-//   if (!item.active) continue;
+// ── Route chain ──
 //
-// Zig output target:
-//   stop → return / break (context-dependent)
-//   skip → continue
+// STOP:
+//   page.js:transpilePageLine()
+//     → line === 'stop' → emits: return;
+//     → in composed chain (a + b + c), each is a call inside a wrapper
+//       function, so return; exits the wrapper → halts entire chain
+//     → guard shorthand: "expr ? stop : go" →
+//       if (transpilePageExpr(expr)) return;
 //
-// Current owner: not yet implemented
+// SKIP:
+//   Not yet in transpilePageLine. Future: skip → continue;
+//   Only valid inside <for> / <while> loops.
 //
-// Notes:
-//   `stop` halts current function. In composed chain, halts entire chain.
-//   Inside <while>, breaks out of loop.
-//   `skip` only valid in <for> / <while> — skips to next iteration.
+// EMIT:
+//   emit_split.js → JS_LOGIC:
+//     → "if (input === '') return;"
+//
+// ctx fields: ctx.scriptBlock
 
-function match(c, ctx) {
-  return false;
-}
+function match(c, ctx) { return false; }
+function compile(c, ctx) { return null; }
 
-function compile(c, ctx) {
-  return null;
-}
+_patterns['c015'] = { id: 'c015', match: match, compile: compile };
+
+})();

@@ -1,3 +1,4 @@
+(function() {
 // ── Chad Pattern c019: <ffi> block ──────────────────────────────
 // Group: data
 // Status: stub
@@ -38,3 +39,7 @@ function match(c, ctx) {
 function compile(c, ctx) {
   return null;
 }
+
+_patterns['c019'] = { id: 'c019', match: match, compile: compile };
+
+})();

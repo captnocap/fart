@@ -1,3 +1,4 @@
+(function() {
 // ── Chad Pattern c026: Animations ───────────────────────────────
 // Group: visual
 // Status: stub
@@ -54,3 +55,7 @@ function match(c, ctx) {
 function compile(c, ctx) {
   return null;
 }
+
+_patterns['c026'] = { id: 'c026', match: match, compile: compile };
+
+})();

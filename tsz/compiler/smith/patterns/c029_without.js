@@ -1,3 +1,4 @@
+(function() {
 // ── Chad Pattern c029: items.without() removal ──────────────────
 // Group: collections
 // Status: stub
@@ -26,3 +27,7 @@ function match(c, ctx) {
 function compile(c, ctx) {
   return null;
 }
+
+_patterns['c029'] = { id: 'c029', match: match, compile: compile };
+
+})();

@@ -1,3 +1,4 @@
+(function() {
 // ── Chad Pattern c020: <log> debug wrapping ─────────────────────
 // Group: data
 // Status: stub
@@ -47,3 +48,7 @@ function match(c, ctx) {
 function compile(c, ctx) {
   return null;
 }
+
+_patterns['c020'] = { id: 'c020', match: match, compile: compile };
+
+})();

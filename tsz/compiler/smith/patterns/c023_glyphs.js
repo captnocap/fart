@@ -1,3 +1,4 @@
+(function() {
 // ── Chad Pattern c023: Glyphs (:name: shortcodes) ───────────────
 // Group: visual
 // Status: stub
@@ -55,3 +56,7 @@ function match(c, ctx) {
 function compile(c, ctx) {
   return null;
 }
+
+_patterns['c023'] = { id: 'c023', match: match, compile: compile };
+
+})();

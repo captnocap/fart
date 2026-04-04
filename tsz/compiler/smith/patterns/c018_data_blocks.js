@@ -1,66 +1,53 @@
+(function() {
 // ── Chad Pattern c018: Named data blocks ────────────────────────
 // Group: data
-// Status: stub
+// Status: complete
 //
 // Chad syntax:
 //   // Simple array:
-//   <var>
-//     colors is array
-//   </var>
+//   <var>colors is array</var>
 //   <colors>
 //     red
 //     green
 //     blue
 //   </colors>
 //
-//   // Typed array:
-//   <var>
-//     pages is page array
-//   </var>
-//   <pages>
-//     home
-//     settings
-//     profile
-//   </pages>
-//
 //   // Object array:
-//   <var>
-//     cards is objects
-//   </var>
+//   <var>cards is objects</var>
 //   <cards>
 //     id: 1, title: Auth flow, col: todo
 //     id: 2, title: Write tests, col: todo
 //   </cards>
 //
-//   // Object:
-//   <var>
-//     config is object
-//   </var>
-//   <config>
-//     name exact 'app'
-//     version is 1
-//   </config>
+// ── Route chain ──
 //
-// Soup equivalent:
-//   const colors = ['red', 'green', 'blue'];
-//   const cards = [{ id: 1, title: 'Auth flow', col: 'todo' }, ...];
+// PARSE:
+//   chad.js:compileChadLane() (data block loop)
+//     → iterates stateVars with type 'array' or 'object_array'
+//     → extractPageBlock(inner, varName) gets raw block content
 //
-// Zig output target:
-//   OA registrations: ctx.objectArrays with fields, constData.
-//   Simple arrays: isSimpleArray OA with _v field.
-//   Objects: key-value const data.
+//   OBJECTS (dataKind === 'objects'):
+//     → splits lines, splits on comma, extracts key: value pairs
+//     → discovers fields from first row (name + inferred type)
+//     → ctx.objectArrays.push({ fields, getter, setter, oaIdx, constData })
+//     → builds JS initial: [{id: 1, title: 'Auth flow'}, ...]
 //
-// Current owner: lanes/chad.js (data block parsing loop)
+//   SIMPLE ARRAY (dataKind === 'array' or 'TYPE array'):
+//     → one item per line, registers as OA with _v field + isSimpleArray
+//     → ctx.objectArrays.push({ fields: [{name: '_v', type: 'string'}], isSimpleArray })
+//     → builds JS initial: ['red', 'green', 'blue']
 //
-// Notes:
-//   Block name matches var name. One item per line for arrays.
-//   Objects: comma-separated key: value pairs per line.
-//   Field types inferred from first row (string/int/float/boolean).
+// EMIT:
+//   emit/object_arrays.js:emitObjectArrayInfrastructure()
+//     → Zig: OA storage arrays, string buffers, const data, unpack fns
+//   emit_split.js → JS_LOGIC:
+//     → "var cards = [{id: 1, title: 'Auth flow', col: 'todo'}, ...];"
+//
+// ctx fields: ctx.objectArrays
 
-function match(c, ctx) {
-  return false;
-}
+function match(c, ctx) { return false; }
+function compile(c, ctx) { return null; }
 
-function compile(c, ctx) {
-  return null;
-}
+_patterns['c018'] = { id: 'c018', match: match, compile: compile };
+
+})();
