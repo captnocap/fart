@@ -1,5 +1,20 @@
 # tsz/ — Active Stack
 
+## DEBUG FLAGS — USE THESE WHEN SHIT DOESN'T RENDER
+
+```bash
+./scripts/build carts/app.tsz -n    # NODES: every node tagged with source line + x/y/w/h dump on frame 1
+./scripts/build carts/app.tsz -s    # STATE: prints slot name + old→new value on every state change
+./scripts/build carts/app.tsz -c    # COMPILER: dumps what Smith understood (ctx after parse)
+./scripts/build carts/app.tsz -ns   # combine any flags
+```
+
+`-n` is the one you want 90% of the time. Build with `-n`, run the binary, stderr shows the full node tree with computed layout. Every node says what it is and where it came from (`Box@L12`, `Text@L45`). Zero-size or hidden nodes get flagged `!! ZERO-SIZE` or `!! HIDDEN`. No env vars, no editing files, no remembering anything. Just `-n`.
+
+**DO NOT invent new debug methods.** Do not scatter `std.debug.print` in framework code. Do not add `__dbg.push()` in compiler JS. Do not create new debug flags. The flags above exist. Use them.
+
+---
+
 ## THE ONLY BUILD COMMAND
 
 ```bash
@@ -104,7 +119,7 @@ When you hit a compiler bug in Smith, READ THE LOVE2D VERSION FIRST. Copy the ap
 
 ## Rules
 
-- **Do not add debug logging.** If you need to understand the output, read the generated .zig file.
+- **Do not add debug logging.** Use `./scripts/build app.tsz -n` (or `-s`, `-c`). See top of this file.
 - **Do not build comptime dispatch tables or academic Zig tricks.** Simple and dumb. If love2d does it in 5 lines, yours should be about 5 lines.
 - **Do not trace scope chains.** If something is broken, check the love2d reference for how it handles the same case.
 - **Do not declare "fundamental limitations."** We own the compiler, lexer, parser, runtime — everything. Nothing is impossible.
@@ -115,7 +130,8 @@ When you hit a compiler bug in Smith, READ THE LOVE2D VERSION FIRST. Copy the ap
 
 ## Debug Tools
 
-- `ZIGOS_LOG=events,state ./app` — runtime logging by category
+**Use the build flags.** See top of this file. `-n` for layout, `-s` for state, `-c` for compiler.
+
 - `--strict` — warnings become build errors
 - `--embed` — compile UI into `framework/devtools.zig` for engine integration
 

@@ -6,6 +6,12 @@ const builtin = @import("builtin");
 
 var g_fd: ?std.posix.fd_t = null;
 var g_initialized = false;
+var g_clean_shutdown = false;
+
+/// Call this from engine.zig when the event loop exits normally.
+pub fn markCleanShutdown() void {
+    g_clean_shutdown = true;
+}
 
 // macOS: sigaction struct has different layout and fields.
 // Linux paths (/run/user/) and ucontext register offsets are x86_64-linux-specific.
@@ -80,7 +86,7 @@ pub fn init() void {
     }
 
     // Install crash handlers with SA_SIGINFO for faulting address
-    const signals = [_]c_int{ 11, 6, 7, 8 }; // SIGSEGV, SIGABRT, SIGBUS, SIGFPE
+    const signals = [_]c_int{ 11, 6, 7, 8, 4, 5 }; // SIGSEGV, SIGABRT, SIGBUS, SIGFPE, SIGILL, SIGTRAP
     for (signals) |sig| {
         if (is_linux) {
             var sa = Sigaction{
@@ -105,7 +111,14 @@ pub fn init() void {
 }
 
 fn atexitHandler() callconv(.c) void {
-    logRaw("EXIT: atexit handler called (clean exit or exit())\n");
+    if (g_clean_shutdown) return;
+    // If the engine didn't mark clean shutdown, something called exit() directly
+    // (SDL init failure, wgpu panic, C library assertion, etc.)
+    logRaw("EXIT: abnormal — exit() called without engine shutdown\n");
+    const stderr = 2;
+    _ = std.posix.write(stderr, "\n[CRASH] Process called exit() without clean shutdown.\n") catch {};
+    _ = std.posix.write(stderr, "[CRASH] Likely cause: SDL init failure, wgpu error, or C library abort.\n") catch {};
+    _ = std.posix.write(stderr, "[CRASH] Check stderr output above for the actual error.\n\n") catch {};
 }
 
 pub fn ignoreSignal(sig: c_int) void {
@@ -132,46 +145,72 @@ pub fn ignoreSignal(sig: c_int) void {
 
 fn crashHandlerSiginfo(sig: c_int, info: *siginfo_t, ctx: ?*anyopaque) callconv(.c) void {
     const name: []const u8 = switch (sig) {
-        11 => "SIGSEGV",
-        6 => "SIGABRT",
-        7 => "SIGBUS",
-        8 => "SIGFPE",
-        else => "UNKNOWN",
+        11 => "SIGSEGV (null ptr / bad memory access)",
+        6 => "SIGABRT (assertion / panic / abort())",
+        7 => "SIGBUS (bad alignment / unmapped memory)",
+        8 => "SIGFPE (divide by zero / arithmetic overflow)",
+        4 => "SIGILL (illegal instruction / bad codegen)",
+        5 => "SIGTRAP (breakpoint / unreachable hit)",
+        else => "UNKNOWN SIGNAL",
     };
+
+    // Write to stderr — this is the only output Claude will see.
+    // Must be unmissable. Signal handler context: no allocator, no formatting
+    // beyond bufPrint, only write() is async-signal-safe.
+    const stderr = 2;
+    _ = std.posix.write(stderr, "\n\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n") catch {};
+    _ = std.posix.write(stderr, "!!!  CRASH: ") catch {};
+    _ = std.posix.write(stderr, name) catch {};
+    _ = std.posix.write(stderr, "  !!!\n") catch {};
+    _ = std.posix.write(stderr, "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n") catch {};
+
+    if (info.si_addr) |addr| {
+        var buf: [80]u8 = undefined;
+        const s = std.fmt.bufPrint(&buf, "fault address: 0x{x}\n", .{@intFromPtr(addr)}) catch "fault address: ?\n";
+        _ = std.posix.write(stderr, s) catch {};
+    }
+
+    if (ctx) |uctx| {
+        const uctx_bytes: [*]const u8 = @ptrCast(uctx);
+        if (is_linux) {
+            const mctx_offset: usize = 40;
+            const rip_offset: usize = mctx_offset + 16 * 8;
+            const rip_ptr: *const u64 = @ptrCast(@alignCast(uctx_bytes + rip_offset));
+            var buf2: [80]u8 = undefined;
+            const s2 = std.fmt.bufPrint(&buf2, "instruction ptr: 0x{x}\n", .{rip_ptr.*}) catch "instruction ptr: ?\n";
+            _ = std.posix.write(stderr, s2) catch {};
+        } else {
+            var buf2: [80]u8 = undefined;
+            const s2 = std.fmt.bufPrint(&buf2, "ucontext: 0x{x}\n", .{@intFromPtr(uctx_bytes)}) catch "ucontext: ?\n";
+            _ = std.posix.write(stderr, s2) catch {};
+        }
+    }
+
+    _ = std.posix.write(stderr, "Rebuild with --debug for symbols, then:\n") catch {};
+    _ = std.posix.write(stderr, "  addr2line -e zig-out/bin/APP 0xADDRESS\n") catch {};
+    _ = std.posix.write(stderr, "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n\n") catch {};
+
+    // Also write to log file
     logRaw("CRASH: signal ");
     logRaw(name);
     logRaw("\n");
-
-    // Log faulting address
     if (info.si_addr) |addr| {
         var buf: [64]u8 = undefined;
         const s = std.fmt.bufPrint(&buf, "fault_addr: 0x{x}\n", .{@intFromPtr(addr)}) catch "fault_addr: ?\n";
         logRaw(s);
-    } else {
-        logRaw("fault_addr: null\n");
     }
-
-    // Try to extract instruction pointer from ucontext
     if (ctx) |uctx| {
         const uctx_bytes: [*]const u8 = @ptrCast(uctx);
         if (is_linux) {
-            // ucontext_t.uc_mcontext.gregs[REG_RIP] on x86_64 Linux
-            // mcontext is at offset 40, REG_RIP is gregs[16], each greg is 8 bytes
             const mctx_offset: usize = 40;
-            const rip_offset: usize = mctx_offset + 16 * 8; // REG_RIP = 16
+            const rip_offset: usize = mctx_offset + 16 * 8;
             const rip_ptr: *const u64 = @ptrCast(@alignCast(uctx_bytes + rip_offset));
             var buf2: [64]u8 = undefined;
             const s2 = std.fmt.bufPrint(&buf2, "rip: 0x{x}\n", .{rip_ptr.*}) catch "rip: ?\n";
             logRaw(s2);
-        } else {
-            // macOS/ARM: ucontext layout differs, log what we can
-            var buf2: [64]u8 = undefined;
-            const s2 = std.fmt.bufPrint(&buf2, "ucontext: 0x{x}\n", .{@intFromPtr(uctx_bytes)}) catch "ucontext: ?\n";
-            logRaw(s2);
         }
     }
 
-    // Flush and die
     _exit(128 + sig);
 }
 

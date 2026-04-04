@@ -88,3 +88,5 @@ smith/emit_split.js
 smith/emit.js
 
 smith/soup.js
+
+smith/debug.js

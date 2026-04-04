@@ -555,6 +555,8 @@ fn renderGpu(self: *Instance) bool {
 fn renderCpuNow(self: *Instance) bool {
     const render = self.render_fn orelse return false;
     const buf = self.pixel_buf orelse return false;
+    if (self.width == 0 or self.height == 0) return false;
+    if (buf.len < @as(usize, self.width) * @as(usize, self.height) * 4) return false;
     var ctx = EffectContext{
         .buf = buf.ptr,
         .width = self.width,
@@ -648,6 +650,9 @@ pub fn paintEffect(effect_type: []const u8, x: f32, y: f32, w: f32, h: f32, opac
     const bg = i.bind_group orelse return false;
     if (i.width == 0 or i.height == 0) return false;
 
+    log.info(.render, "effect cpu type={s} rect=({d:.0},{d:.0},{d:.0},{d:.0}) tex={d}x{d}", .{
+        effect_type, x, y, w, h, i.width, i.height,
+    });
     images.queueQuad(x, y, w, h, opacity, bg);
     return true;
 }
@@ -666,23 +671,53 @@ pub fn paintCustomEffect(node: *const Node, x: f32, y: f32, w: f32, h: f32, opac
 
     const iw: u32 = @intFromFloat(@max(1, w));
     const ih: u32 = @intFromFloat(@max(1, h));
+    const node_name = node.debug_name orelse "?";
+    log.info(.render, "custom effect node={s} ptr=0x{x} rect=({d:.0},{d:.0},{d:.0},{d:.0}) gpu_try={} gpu_failed={} shader={} background={}", .{
+        node_name, @intFromPtr(node), x, y, w, h, shouldTryGpu(node), i.gpu_failed, node.effect_shader != null, node.effect_background,
+    });
+
     if (shouldTryGpu(node) and !i.gpu_failed) {
         i.backend = .gpu;
-        if (ensureGpuSize(i, iw, ih) and ensureGpuPipeline(i) and renderGpu(i)) {
+        const size_ok = ensureGpuSize(i, iw, ih);
+        const pipe_ok = size_ok and ensureGpuPipeline(i);
+        const render_ok = pipe_ok and renderGpu(i);
+        log.info(.render, "custom effect gpu node={s} size_ok={} pipe_ok={} render_ok={} tex={d}x{d} bind_group={} target={} pipeline={}", .{
+            node_name,
+            size_ok,
+            pipe_ok,
+            render_ok,
+            i.width,
+            i.height,
+            i.bind_group != null,
+            i.texture_view != null,
+            i.gpu_pipeline != null,
+        });
+        if (size_ok and pipe_ok and render_ok) {
             const bg = i.bind_group orelse return false;
             images.queueQuad(x, y, w, h, opacity, bg);
+            log.info(.render, "custom effect gpu queued node={s}", .{node_name});
             return true;
         }
+        log.warn(.render, "custom effect gpu failed node={s} -> cpu fallback", .{node_name});
         i.gpu_failed = true;
     }
 
     i.backend = .cpu;
     i.ensureCpuSize(iw, ih);
-    if (i.width == 0 or i.height == 0) return false;
-    if (!renderCpuNow(i)) return false;
+    if (i.width == 0 or i.height == 0) {
+        log.warn(.render, "custom effect cpu zero-sized node={s}", .{node_name});
+        return false;
+    }
+    if (!renderCpuNow(i)) {
+        log.warn(.render, "custom effect cpu render failed node={s} tex={d}x{d} bind_group={} pixel_buf={}", .{
+            node_name, i.width, i.height, i.bind_group != null, i.pixel_buf != null,
+        });
+        return false;
+    }
     const bg = i.bind_group orelse return false;
 
     images.queueQuad(x, y, w, h, opacity, bg);
+    log.info(.render, "custom effect cpu queued node={s} tex={d}x{d}", .{ node_name, i.width, i.height });
     return true;
 }
 

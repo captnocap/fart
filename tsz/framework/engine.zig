@@ -245,6 +245,7 @@ const physics2d = if (HAS_PHYSICS) @import("physics2d.zig") else struct {
 const Node = layout.Node;
 const Color = layout.Color;
 const TextEngine = text_mod.TextEngine;
+const state_mod = @import("state.zig");
 
 // ── Devtools removed — inspector lives in tsz-tools ─────────────────────
 
@@ -870,7 +871,9 @@ noinline fn paintNodeVisuals(node: *Node) void {
     const is_hovered = (hovered_node == node) and (node.handlers.on_hover_enter != null or node.handlers.on_hover_exit != null or node.hoverable);
 
     if (is_hovered and node.style.background_color == null) {
-        gpu.drawRect(r.x, r.y, r.w, r.h, 0.15, 0.15, 0.22, 0.6, node.style.border_radius, 0, 0, 0, 0, 0);
+        gpu.drawRectCorners(r.x, r.y, r.w, r.h, 0.15, 0.15, 0.22, 0.6,
+            node.style.radiusTL(), node.style.radiusTR(), node.style.radiusBR(), node.style.radiusBL(),
+            0, 0, 0, 0, 0);
     }
 
     // Box shadow — draw BEFORE background so it appears behind
@@ -919,21 +922,53 @@ noinline fn paintNodeVisuals(node: *Node) void {
             const bc = node.style.border_color orelse Color.rgb(0, 0, 0);
             const has_transform = node.style.rotation != 0 or node.style.scale_x != 1.0 or node.style.scale_y != 1.0;
             if (has_transform) {
-                gpu.drawRectTransformed(
+                gpu.drawRectCornersTransformed(
                     r.x, r.y, r.w, r.h,
                     @as(f32, @floatFromInt(bg.r)) / 255.0, @as(f32, @floatFromInt(bg.g)) / 255.0,
                     @as(f32, @floatFromInt(bg.b)) / 255.0, @as(f32, @floatFromInt(bg.a)) / 255.0 * g_paint_opacity,
-                    node.style.border_radius, node.style.brdTop(),
+                    node.style.radiusTL(), node.style.radiusTR(), node.style.radiusBR(), node.style.radiusBL(),
+                    node.style.brdTop(),
                     @as(f32, @floatFromInt(bc.r)) / 255.0, @as(f32, @floatFromInt(bc.g)) / 255.0,
                     @as(f32, @floatFromInt(bc.b)) / 255.0, @as(f32, @floatFromInt(bc.a)) / 255.0 * g_paint_opacity,
                     node.style.rotation, node.style.scale_x, node.style.scale_y,
                 );
+            } else if (node.style.gradient_color_end) |ge| {
+                if (node.style.gradient_direction != .none) {
+                    const dir: f32 = switch (node.style.gradient_direction) {
+                        .vertical => 1.0,
+                        .horizontal => 2.0,
+                        else => 0.0,
+                    };
+                    gpu.drawRectGradient(
+                        r.x, r.y, r.w, r.h,
+                        @as(f32, @floatFromInt(bg.r)) / 255.0, @as(f32, @floatFromInt(bg.g)) / 255.0,
+                        @as(f32, @floatFromInt(bg.b)) / 255.0, @as(f32, @floatFromInt(bg.a)) / 255.0 * g_paint_opacity,
+                        node.style.radiusTL(), node.style.radiusTR(), node.style.radiusBR(), node.style.radiusBL(),
+                        node.style.brdTop(),
+                        @as(f32, @floatFromInt(bc.r)) / 255.0, @as(f32, @floatFromInt(bc.g)) / 255.0,
+                        @as(f32, @floatFromInt(bc.b)) / 255.0, @as(f32, @floatFromInt(bc.a)) / 255.0 * g_paint_opacity,
+                        @as(f32, @floatFromInt(ge.r)) / 255.0, @as(f32, @floatFromInt(ge.g)) / 255.0,
+                        @as(f32, @floatFromInt(ge.b)) / 255.0, @as(f32, @floatFromInt(ge.a)) / 255.0 * g_paint_opacity,
+                        dir,
+                    );
+                } else {
+                    gpu.drawRectCorners(
+                        r.x, r.y, r.w, r.h,
+                        @as(f32, @floatFromInt(bg.r)) / 255.0, @as(f32, @floatFromInt(bg.g)) / 255.0,
+                        @as(f32, @floatFromInt(bg.b)) / 255.0, @as(f32, @floatFromInt(bg.a)) / 255.0 * g_paint_opacity,
+                        node.style.radiusTL(), node.style.radiusTR(), node.style.radiusBR(), node.style.radiusBL(),
+                        node.style.brdTop(),
+                        @as(f32, @floatFromInt(bc.r)) / 255.0, @as(f32, @floatFromInt(bc.g)) / 255.0,
+                        @as(f32, @floatFromInt(bc.b)) / 255.0, @as(f32, @floatFromInt(bc.a)) / 255.0 * g_paint_opacity,
+                    );
+                }
             } else {
-                gpu.drawRect(
+                gpu.drawRectCorners(
                     r.x, r.y, r.w, r.h,
                     @as(f32, @floatFromInt(bg.r)) / 255.0, @as(f32, @floatFromInt(bg.g)) / 255.0,
                     @as(f32, @floatFromInt(bg.b)) / 255.0, @as(f32, @floatFromInt(bg.a)) / 255.0 * g_paint_opacity,
-                    node.style.border_radius, node.style.brdTop(),
+                    node.style.radiusTL(), node.style.radiusTR(), node.style.radiusBR(), node.style.radiusBL(),
+                    node.style.brdTop(),
                     @as(f32, @floatFromInt(bc.r)) / 255.0, @as(f32, @floatFromInt(bc.g)) / 255.0,
                     @as(f32, @floatFromInt(bc.b)) / 255.0, @as(f32, @floatFromInt(bc.a)) / 255.0 * g_paint_opacity,
                 );
@@ -944,10 +979,11 @@ noinline fn paintNodeVisuals(node: *Node) void {
     // Border without background — draw border-only rect with transparent fill
     if (node.style.background_color == null and (node.style.brdTop() > 0 or node.style.border_width > 0)) {
         if (node.style.border_color) |bc| {
-            gpu.drawRect(
+            gpu.drawRectCorners(
                 r.x, r.y, r.w, r.h,
                 0, 0, 0, 0,
-                node.style.border_radius, node.style.brdTop(),
+                node.style.radiusTL(), node.style.radiusTR(), node.style.radiusBR(), node.style.radiusBL(),
+                node.style.brdTop(),
                 @as(f32, @floatFromInt(bc.r)) / 255.0, @as(f32, @floatFromInt(bc.g)) / 255.0,
                 @as(f32, @floatFromInt(bc.b)) / 255.0, @as(f32, @floatFromInt(bc.a)) / 255.0 * g_paint_opacity,
             );
@@ -1032,7 +1068,6 @@ noinline fn paintNodeVisuals(node: *Node) void {
 
 /// Render inline glyphs (polygons embedded in text) at their recorded slot positions.
 fn paintInlineGlyphs(glyphs: []const layout.InlineGlyph, font_size: u16) void {
-    @setRuntimeSafety(false);
     const slot_count = gpu.getInlineSlotCount();
     const slots = gpu.getInlineSlots();
     var gi: usize = 0;
@@ -1072,29 +1107,11 @@ fn paintInlineGlyphs(glyphs: []const layout.InlineGlyph, font_size: u16) void {
         // Fill: effect texture or flat color
         var used_effect = false;
         if (glyph.fill_effect) |ename| {
-            std.debug.print("glyph fill_effect='{s}'\n", .{ename});
             if (effects.getEffectFill(ename)) |info| {
-                std.debug.print("  -> found effect w={d} h={d}\n", .{info.width, info.height});
-                if (HAS_BLEND2D) {
-                    blend2d_gfx.fillSVGPathFromEffect(
-                        glyph.d,
-                        info.pixel_buf,
-                        info.width,
-                        info.height,
-                        min_x,
-                        min_y,
-                        pw,
-                        ph,
-                        g_paint_opacity,
-                        @as(f32, @floatFromInt(glyph.stroke.r)) / 255.0,
-                        @as(f32, @floatFromInt(glyph.stroke.g)) / 255.0,
-                        @as(f32, @floatFromInt(glyph.stroke.b)) / 255.0,
-                        @as(f32, @floatFromInt(glyph.stroke.a)) / 255.0,
-                        glyph.stroke_width,
-                    );
-                } else {
-                    svg_path.drawFillFromEffect(&path, info.pixel_buf, info.width, info.height, min_x, min_y, pw, ph);
-                }
+                // Always use direct triangle fill for inline glyphs. The
+                // Blend2D path uses a shared surface that can be overwritten
+                // between glyph paints, which breaks effect-masked icons.
+                svg_path.drawFillFromEffect(&path, info.pixel_buf, info.width, info.height, min_x, min_y, pw, ph);
                 used_effect = true;
             }
         }
@@ -1422,7 +1439,10 @@ pub fn run(config_in: AppConfig) !void {
     defer debug_server.deinit();
 
     if (!c.SDL_Init(c.SDL_INIT_VIDEO)) return error.SDLInitFailed;
-    defer c.SDL_Quit();
+    defer {
+        c.SDL_Quit();
+        crashlog.markCleanShutdown();
+    }
     log.info(.engine, "SDL initialized", .{});
 
     // Canvas system init
@@ -1517,17 +1537,17 @@ pub fn run(config_in: AppConfig) !void {
         }
     }.open);
 
-    // App init (FFI registration, initial state)
+    // App init (FFI registration, state slots, initial conditionals/maps)
     if (config.init) |initFn| initFn();
+
+    // Load embedded scripts — after init so host functions are registered,
+    // then mark dirty so first tick re-evaluates conditionals with scripts available.
+    if (config.js_logic.len > 0) qjs_runtime.evalScript(config.js_logic);
+    if (config.lua_logic.len > 0) luajit_runtime.evalScript(config.lua_logic);
+    if (config.js_logic.len > 0 or config.lua_logic.len > 0) state_mod.markDirty();
 
     // Test harness — enable if ZIGOS_TEST=1
     if (testharness.envEnabled()) testharness.enable();
-
-    // Run embedded JS
-    if (config.js_logic.len > 0) qjs_runtime.evalScript(config.js_logic);
-
-    // Run embedded Lua
-    if (config.lua_logic.len > 0) luajit_runtime.evalScript(config.lua_logic);
 
     // Initial tick — set up dynamic texts after JS/Lua is evaluated
     if (config.tick) |tickFn| tickFn(@truncate(c.SDL_GetTicks()));
@@ -1552,12 +1572,13 @@ pub fn run(config_in: AppConfig) !void {
                 term_sel_dragging = false;
                 hovered_node = null;
                 g_hover_changed = true;
+                // Load scripts before init (same order as startup)
+                if (config.js_logic.len > 0) qjs_runtime.evalScript(config.js_logic);
+                if (config.lua_logic.len > 0) luajit_runtime.evalScript(config.lua_logic);
                 // Re-init the new app
                 if (config.init) |initFn| initFn();
                 // Restore preserved state (after init resets to defaults, before tick uses it)
                 if (config.post_reload) |postFn| postFn();
-                if (config.js_logic.len > 0) qjs_runtime.evalScript(config.js_logic);
-                if (config.lua_logic.len > 0) luajit_runtime.evalScript(config.lua_logic);
                 if (config.tick) |tickFn| tickFn(@truncate(c.SDL_GetTicks()));
                 std.debug.print("[hot-reload] App reloaded\n", .{});
             }

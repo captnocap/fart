@@ -372,6 +372,36 @@ noinline fn paintNodeVisuals(node: *Node) void {
                     @as(f32, @floatFromInt(bc.b)) / 255.0, @as(f32, @floatFromInt(bc.a)) / 255.0 * g_paint_opacity,
                     node.style.rotation, node.style.scale_x, node.style.scale_y,
                 );
+            } else if (node.style.gradient_color_end) |ge| {
+                if (node.style.gradient_direction != .none) {
+                    const dir: f32 = switch (node.style.gradient_direction) {
+                        .vertical => 1.0,
+                        .horizontal => 2.0,
+                        else => 0.0,
+                    };
+                    gpu.drawRectGradient(
+                        r.x, r.y, r.w, r.h,
+                        @as(f32, @floatFromInt(bg.r)) / 255.0, @as(f32, @floatFromInt(bg.g)) / 255.0,
+                        @as(f32, @floatFromInt(bg.b)) / 255.0, @as(f32, @floatFromInt(bg.a)) / 255.0 * g_paint_opacity,
+                        node.style.radiusTL(), node.style.radiusTR(), node.style.radiusBR(), node.style.radiusBL(),
+                        node.style.brdTop(),
+                        @as(f32, @floatFromInt(bc.r)) / 255.0, @as(f32, @floatFromInt(bc.g)) / 255.0,
+                        @as(f32, @floatFromInt(bc.b)) / 255.0, @as(f32, @floatFromInt(bc.a)) / 255.0 * g_paint_opacity,
+                        @as(f32, @floatFromInt(ge.r)) / 255.0, @as(f32, @floatFromInt(ge.g)) / 255.0,
+                        @as(f32, @floatFromInt(ge.b)) / 255.0, @as(f32, @floatFromInt(ge.a)) / 255.0 * g_paint_opacity,
+                        dir,
+                    );
+                } else {
+                    gpu.drawRectCorners(
+                        r.x, r.y, r.w, r.h,
+                        @as(f32, @floatFromInt(bg.r)) / 255.0, @as(f32, @floatFromInt(bg.g)) / 255.0,
+                        @as(f32, @floatFromInt(bg.b)) / 255.0, @as(f32, @floatFromInt(bg.a)) / 255.0 * g_paint_opacity,
+                        node.style.radiusTL(), node.style.radiusTR(), node.style.radiusBR(), node.style.radiusBL(),
+                        node.style.brdTop(),
+                        @as(f32, @floatFromInt(bc.r)) / 255.0, @as(f32, @floatFromInt(bc.g)) / 255.0,
+                        @as(f32, @floatFromInt(bc.b)) / 255.0, @as(f32, @floatFromInt(bc.a)) / 255.0 * g_paint_opacity,
+                    );
+                }
             } else {
                 gpu.drawRectCorners(
                     r.x, r.y, r.w, r.h,
@@ -478,7 +508,6 @@ noinline fn paintNodeVisuals(node: *Node) void {
 
 /// Render inline glyphs (polygons embedded in text) at their recorded slot positions.
 pub fn paintInlineGlyphs(glyphs: []const layout.InlineGlyph, font_size: u16) void {
-    @setRuntimeSafety(false);
     const slot_count = gpu.getInlineSlotCount();
     const slots = gpu.getInlineSlots();
     var gi: usize = 0;

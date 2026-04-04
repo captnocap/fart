@@ -172,6 +172,12 @@ Every capability should be usable in one line by someone who doesn't code. The t
 
 **Commit early and often. Do not leave work uncommitted.**
 
+### MAIN ONLY — NO BRANCHES
+
+**Do not create branches. Do not checkout branches. Do not use git switch.** Commit and push to `main`. That's it. No feature branches, no PRs, no selective staging workflows. This is a solo project — branch workflows waste time and `git checkout` / `git stash` / `git reset` destroy work.
+
+The only safe git commands are: `git add`, `git commit`, `git push`, `git status`, `git log`, `git diff`.
+
 ### When to commit
 - After completing each logical unit of work
 - Before risky operations (refactoring core files, changing build pipeline)

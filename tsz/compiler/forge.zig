@@ -239,6 +239,9 @@ pub fn main() !void {
     var strict_mode = false;
     var logs_enabled = false;
     var logs_find: ?[]const u8 = null;
+    var dbg_nodes = false;
+    var dbg_state = false;
+    var dbg_compiler = false;
     var out_dir: []const u8 = "/tmp/tsz-gen";
     var input_path: []const u8 = undefined;
     var got_path = false;
@@ -261,6 +264,12 @@ pub fn main() !void {
             logs_enabled = true;
         } else if (std.mem.startsWith(u8, arg, "--logs=find:")) {
             logs_find = arg["--logs=find:".len..];
+        } else if (std.mem.eql(u8, arg, "--dbg-nodes")) {
+            dbg_nodes = true;
+        } else if (std.mem.eql(u8, arg, "--dbg-state")) {
+            dbg_state = true;
+        } else if (std.mem.eql(u8, arg, "--dbg-compiler")) {
+            dbg_compiler = true;
         } else {
             input_path = arg;
             got_path = true;
@@ -322,6 +331,9 @@ pub fn main() !void {
     if (strict_mode) smith.setGlobalInt("__strict", 1);
     if (logs_enabled) smith.setGlobalInt("__SMITH_LOGS", 1);
     if (logs_find) |query| smith.setGlobalString("__SMITH_LOGS_FIND", query);
+    if (dbg_nodes) smith.setGlobalInt("__DBG_NODES", 1);
+    if (dbg_state) smith.setGlobalInt("__DBG_STATE", 1);
+    if (dbg_compiler) smith.setGlobalInt("__DBG_COMPILER", 1);
 
     // Build token kind array as u8 slice for the bridge
     const kinds = Alloc.alloc(u8, lexer.count) catch return;

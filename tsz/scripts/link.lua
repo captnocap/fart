@@ -36,6 +36,9 @@ local outdir = TSZ_DIR .. "zig-out/bin"
 -- zig build-obj outputs basename.o in cwd, not next to source
 local obj_name = source:match("([^/]+)%.zig$"):gsub("%.zig$", "") .. ".o"
 local binary = outdir .. "/" .. name
+local ZIG_LOCAL_CACHE = TSZ_DIR .. "zig-cache/link-local"
+local ZIG_GLOBAL_CACHE = TSZ_DIR .. "zig-cache/link-global"
+local ZIG_ENV = "ZIG_LOCAL_CACHE_DIR=" .. ZIG_LOCAL_CACHE .. " ZIG_GLOBAL_CACHE_DIR=" .. ZIG_GLOBAL_CACHE .. " "
 
 -- ── Helpers ─────────────────────────────────────────────────────────
 local function run(cmd)
@@ -73,12 +76,14 @@ if not file_exists(ENGINE_SO) then
 end
 
 os.execute("mkdir -p " .. outdir)
+os.execute("mkdir -p " .. ZIG_LOCAL_CACHE)
+os.execute("mkdir -p " .. ZIG_GLOBAL_CACHE)
 
 -- ── Step 1: Compile cart .zig → .o ──────────────────────────────────
 local t0 = now_ms()
 
 local include_flags = {
-    "zig build-obj",
+    ZIG_ENV .. "zig build-obj",
     source,
     "-I " .. QJS_INCLUDE,
     "-I " .. FFI_INCLUDE,
@@ -92,7 +97,7 @@ else
 end
 table.insert(include_flags, "-lc")
 table.insert(include_flags, "-ODebug")
-table.insert(include_flags, "-fstrip")
+if not os.getenv("TSZ_GDB") then table.insert(include_flags, "-fstrip") end
 local compile_cmd = table.concat(include_flags, " ")
 
 io.write("[link] compile " .. source .. "... ")
@@ -108,7 +113,7 @@ io.write(tostring(t1 - t0) .. "ms\n")
 local link_cmd
 if is_macos then
     link_cmd = table.concat({
-        "zig cc",
+        ZIG_ENV .. "zig cc",
         "-o " .. binary,
         obj_name,
         ENGINE_SO,
@@ -121,7 +126,7 @@ else
     -- $ORIGIN/lib lets the self-extracting package find the bundled .so
     -- Single-quote the -Wl arg so the shell doesn't expand $ORIGIN
     link_cmd = table.concat({
-        "zig cc",
+        ZIG_ENV .. "zig cc",
         "-o " .. binary,
         obj_name,
         ENGINE_SO,
@@ -142,7 +147,7 @@ local t2 = now_ms()
 io.write(tostring(t2 - t1) .. "ms\n")
 
 -- ── Cleanup ─────────────────────────────────────────────────────────
-run("strip " .. binary .. " 2>/dev/null")
+if not os.getenv("TSZ_GDB") then run("strip " .. binary .. " 2>/dev/null") end
 os.remove(obj_name)
 -- Also try TSZ_DIR in case zig dropped the .o relative to the source
 os.remove(TSZ_DIR .. obj_name)

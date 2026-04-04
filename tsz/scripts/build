@@ -12,9 +12,21 @@ cd "$(dirname "$0")/.."
 
 # ── Parse flags ──────────────────────────────────────────────────────
 POSITIONAL=()
+DBG_FLAGS=""
+GDB_MODE=0
 for arg in "$@"; do
     case "$arg" in
         --fast) ;; # ignored, fast is always on
+        -n) DBG_FLAGS="$DBG_FLAGS --dbg-nodes" ;;
+        -s) DBG_FLAGS="$DBG_FLAGS --dbg-state" ;;
+        -c) DBG_FLAGS="$DBG_FLAGS --dbg-compiler" ;;
+        -g) GDB_MODE=1 ;;
+        -nsc|-nsv|-ns|-nc|-sc|-snc|-ng|-sg|-cg|-nsg|-ncg|-scg|-nscg) # combo flags
+            [[ "$arg" == *n* ]] && DBG_FLAGS="$DBG_FLAGS --dbg-nodes"
+            [[ "$arg" == *s* ]] && DBG_FLAGS="$DBG_FLAGS --dbg-state"
+            [[ "$arg" == *c* ]] && DBG_FLAGS="$DBG_FLAGS --dbg-compiler"
+            [[ "$arg" == *g* ]] && GDB_MODE=1
+            ;;
         *) POSITIONAL+=("$arg") ;;
     esac
 done
@@ -183,7 +195,7 @@ if [ "$IS_CONFORMANCE" -eq 1 ]; then
     fi
 fi
 
-# ── Step 0: ensure forge is up to date ──────────────────────────────
+# ── Step 0: ensure forge + engine are up to date ───────────────────
 # Smith JS is embedded at compile time. If any smith_*.js file changed
 # since the last forge build, the binary is stale. zig build is
 # incremental — no-op when nothing changed (~200ms), rebundle when
@@ -192,13 +204,21 @@ zig build forge 2>/dev/null || {
     echo "[$NAME] WARNING: zig build forge failed — using existing binary"
 }
 
+# Engine .so: if any framework/*.zig file changed, the .so is stale.
+# Same deal — incremental, no-op when nothing changed. Catches the
+# "edited crashlog.zig but the binary still segfaults silently" class
+# of bugs that waste entire sessions.
+zig build core-so -Doptimize=ReleaseFast 2>/dev/null || {
+    echo "[$NAME] WARNING: zig build core-so failed — using existing engine"
+}
+
 # ── Step 1: forge (smith compiler: .tsz → .zig) ─────────────────────
 # Clean stale outputs so preflight check doesn't read old monolith errors
 rm -f "$GEN"
 rm -rf "$GEN_DIR"
 echo "[$NAME] forge..."
 FORGE_START=$(date +%s%N)
-FORGE_OUT=$(./zig-out/bin/forge build --fast "$CART" 2>&1) || {
+FORGE_OUT=$(./zig-out/bin/forge build --fast $DBG_FLAGS "$CART" 2>&1) || {
     echo "$FORGE_OUT"
     record_build "forge_fail" "$FORGE_OUT"
     exit 1
@@ -312,6 +332,7 @@ fi
 # ── Step 3: LuaJIT link (cart .zig → .o + engine .so → binary) ───────
 echo "[$NAME] zig build..."
 ZIG_START=$(date +%s%N)
+[ "$GDB_MODE" -eq 1 ] && export TSZ_GDB=1
 LINK_OUT=$(luajit scripts/link.lua "$APP_SOURCE" "$NAME" 2>&1) || {
     echo "$LINK_OUT"
     record_build "zig_fail" "$LINK_OUT"
@@ -320,6 +341,20 @@ LINK_OUT=$(luajit scripts/link.lua "$APP_SOURCE" "$NAME" 2>&1) || {
 ZIG_END=$(date +%s%N)
 ZIG_MS=$(( (ZIG_END - ZIG_START) / 1000000 ))
 echo "$LINK_OUT"
+
+# ── Step 3b: GDB mode — skip packaging, run under gdb ──────────────
+if [ "$GDB_MODE" -eq 1 ]; then
+    RAW_BIN="zig-out/bin/$NAME"
+    echo "[$NAME] running under gdb..."
+    LD_LIBRARY_PATH=zig-out/lib gdb -batch \
+        -ex run \
+        -ex 'bt 20' \
+        -ex 'info locals' \
+        -ex quit \
+        "$RAW_BIN" 2>&1
+    echo "[$NAME] gdb done (exit $?)"
+    exit 0
+fi
 
 # ── Step 4: Package as self-extracting binary ────────────────────────
 RAW_BIN="zig-out/bin/$NAME"

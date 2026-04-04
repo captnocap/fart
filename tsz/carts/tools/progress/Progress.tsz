@@ -1,0 +1,854 @@
+// Progress — meta progress desk for git velocity, conformance ramp, and verification
+// Build: ./scripts/build carts/tools/progress/Progress.tsz
+
+import { loadProgressMeta, loadTestList, loadPerfData, buildAndLaunchTest, killTestProcess } from "./progress.script";
+import { Page, Topbar, TitleText, TitleMeta, Tabbar, Tab, TabActive, TabLabel, TabLabelActive,
+         Body, Panel, PanelHeader, PanelTitle, PanelMeta, MetricGrid, MetricCard, MetricAccent,
+         MetricValue, MetricLabel, MetricMeta, RangeRow, RangeChip, RangeChipActive, RangeLabel,
+         RangeLabelActive, LegendRow, LegendChip, LegendDot, LegendText, StatusBar, StatusText,
+         StatusAccent, SmallLabel, SmallValue, Divider, MonoText } from './progress_cls';
+
+const [activeTab, setActiveTab] = useState(0);
+const [rangeDays, setRangeDays] = useState(14);
+
+const [timelineDays, setTimelineDays] = useState([]);
+const [timelineCount, setTimelineCount] = useState(0);
+const [projectStartDay, setProjectStartDay] = useState('');
+const [projectEndDay, setProjectEndDay] = useState('');
+const [commitCount, setCommitCount] = useState(0);
+const [recentCommits, setRecentCommits] = useState([]);
+const [repoFileCount, setRepoFileCount] = useState(0);
+const [gitBornCount, setGitBornCount] = useState(0);
+const [activeDays, setActiveDays] = useState(0);
+const [fresh7dCount, setFresh7dCount] = useState(0);
+const [areaRows, setAreaRows] = useState([]);
+const [areaCount, setAreaCount] = useState(0);
+const [laneRows, setLaneRows] = useState([]);
+const [laneCount, setLaneCount] = useState(0);
+const [freshFiles, setFreshFiles] = useState([]);
+const [freshFileCount, setFreshFileCount] = useState(0);
+
+const [confCompiled, setConfCompiled] = useState(0);
+const [confFailed, setConfFailed] = useState(0);
+const [confVerified, setConfVerified] = useState(0);
+const [confUntested, setConfUntested] = useState(0);
+const [confTotal, setConfTotal] = useState(0);
+const [confPassRate, setConfPassRate] = useState(0);
+const [confFailures, setConfFailures] = useState([]);
+const [confFailureCount, setConfFailureCount] = useState(0);
+const [compileBacklog, setCompileBacklog] = useState(0);
+const [verifyBacklog, setVerifyBacklog] = useState(0);
+const [currentSeen, setCurrentSeen] = useState(0);
+const [buildAttemptCount, setBuildAttemptCount] = useState(0);
+const [latestBuildDay, setLatestBuildDay] = useState('');
+
+const [perfLanes, setPerfLanes] = useState([]);
+const [perfLaneCount, setPerfLaneCount] = useState(0);
+const [perfAvgTotal, setPerfAvgTotal] = useState(0);
+const [perfAvgForge, setPerfAvgForge] = useState(0);
+const [perfAvgZig, setPerfAvgZig] = useState(0);
+const [perfAvgLps, setPerfAvgLps] = useState(0);
+const [perfAvgBpl, setPerfAvgBpl] = useState(0);
+const [perfBuildCount, setPerfBuildCount] = useState(0);
+const [perfAvgLines, setPerfAvgLines] = useState(0);
+const [perfAvgBytes, setPerfAvgBytes] = useState(0);
+const [perfSlowest, setPerfSlowest] = useState([]);
+const [perfSlowestCount, setPerfSlowestCount] = useState(0);
+const [perfLargest, setPerfLargest] = useState([]);
+const [perfLargestCount, setPerfLargestCount] = useState(0);
+
+const [testList, setTestList] = useState([]);
+const [testCount, setTestCount] = useState(0);
+const [selectedTest, setSelectedTest] = useState(0);
+const [selTestName, setSelTestName] = useState('');
+const [selTestLane, setSelTestLane] = useState('');
+const [selTestStatus, setSelTestStatus] = useState('untested');
+const [selTestVerified, setSelTestVerified] = useState('');
+const [selTestBuiltDay, setSelTestBuiltDay] = useState('');
+const [selTestSourceSha, setSelTestSourceSha] = useState('');
+const [selTestHasVerified, setSelTestHasVerified] = useState(0);
+const [ipcStatus, setIpcStatus] = useState('idle');
+const [ipcLog, setIpcLog] = useState('');
+
+<script>
+function refreshAll() {
+  loadProgressMeta();
+  loadTestList();
+  loadPerfData();
+}
+
+function selectTest(tidx) {
+  setSelectedTest(tidx);
+  var tests = testList;
+  if (tidx >= 0 && tidx < tests.length) {
+    var t = tests[tidx];
+    setSelTestName(t.name);
+    setSelTestLane(t.lane);
+    setSelTestStatus(t.status);
+    setSelTestVerified(t.verified);
+    setSelTestBuiltDay(t.builtDay);
+    setSelTestSourceSha(t.sourceSha);
+    setSelTestHasVerified(t.verified.length > 0 ? 1 : 0);
+  }
+}
+
+function loadSelectedTest() {
+  var tidx = selectedTest;
+  var tests = testList;
+  if (tidx >= 0 && tidx < tests.length) {
+    buildAndLaunchTest(tests[tidx].path);
+  }
+}
+
+function verifySelectedTest() {
+  var tidx = selectedTest;
+  var tests = testList;
+  if (tidx >= 0 && tidx < tests.length) {
+    var t = tests[tidx];
+    try {
+      var out = __exec('cd /home/siah/creative/reactjit/tsz && ./scripts/conformance-report --verify ' + shellQuote(t.name) + ' 2>&1');
+      setIpcStatus('verified ' + t.name);
+      setIpcLog(out.substring(0, 220));
+      refreshAll();
+    } catch (e) {
+      setIpcStatus('verify failed');
+      setIpcLog(('' + e).substring(0, 220));
+    }
+  }
+}
+
+function visibleDays() {
+  var rows = timelineDays;
+  if (rangeDays > 0 && rows.length > rangeDays) return rows.slice(rows.length - rangeDays);
+  return rows;
+}
+
+function sumField(rows, field) {
+  var total = 0;
+  var i = 0;
+  while (i < rows.length) {
+    total = total + (rows[i][field] || 0);
+    i = i + 1;
+  }
+  return total;
+}
+
+function maxField(rows, field) {
+  var max = 0;
+  var i = 0;
+  while (i < rows.length) {
+    if ((rows[i][field] || 0) > max) max = rows[i][field] || 0;
+    i = i + 1;
+  }
+  return max;
+}
+
+function lastField(rows, field) {
+  if (rows.length === 0) return 0;
+  return rows[rows.length - 1][field] || 0;
+}
+
+function chartX(index, count) {
+  if (count <= 1) return 0;
+  return -460 + ((index * 920) / (count - 1));
+}
+
+function normalizedLinePath(rows, field, topY, bottomY) {
+  if (rows.length === 0) return '';
+  var max = maxField(rows, field);
+  if (max <= 0) max = 1;
+  var path = '';
+  var i = 0;
+  while (i < rows.length) {
+    var x = chartX(i, rows.length);
+    var value = rows[i][field] || 0;
+    var y = bottomY - ((value / max) * (bottomY - topY));
+    if (i === 0) path = 'M ' + x + ',' + y;
+    else path = path + ' L ' + x + ',' + y;
+    i = i + 1;
+  }
+  return path;
+}
+
+function barSegments(rows, field, baseY, topY) {
+  var out = [];
+  var max = maxField(rows, field);
+  if (max <= 0) max = 1;
+  var i = 0;
+  while (i < rows.length) {
+    var value = rows[i][field] || 0;
+    if (value > 0) {
+      var x = chartX(i, rows.length);
+      var y = baseY - ((value / max) * (baseY - topY));
+      out.push({ d: 'M ' + x + ',' + baseY + ' L ' + x + ',' + y });
+    }
+    i = i + 1;
+  }
+  return out;
+}
+
+function shouldShowAxisLabel(index, total) {
+  if (index === 0 || index === total - 1) return 1;
+  if (total <= 10) return 1;
+  if (total <= 18) return index % 2 === 0 ? 1 : 0;
+  return index % 3 === 0 ? 1 : 0;
+}
+
+function tone(value, max, c1, c2, c3, c4) {
+  if (max <= 0 || value <= 0) return '#0f1a25';
+  var pct = value / max;
+  if (pct >= 0.75) return c4;
+  if (pct >= 0.5) return c3;
+  if (pct >= 0.25) return c2;
+  return c1;
+}
+
+function pulseColor(kind, value, max) {
+  if (kind === 'commits') return tone(value, max, '#2a2216', '#644315', '#a96a10', '#f59e0b');
+  if (kind === 'files') return tone(value, max, '#122632', '#15445a', '#1f7295', '#38bdf8');
+  if (kind === 'tests') return tone(value, max, '#11251e', '#18503f', '#238a63', '#34d399');
+  if (kind === 'builds') return tone(value, max, '#1f2430', '#334155', '#475569', '#7b93a6');
+  if (kind === 'pass') return tone(value, max, '#13261d', '#185633', '#22a05a', '#34d399');
+  if (kind === 'verify') return tone(value, max, '#11253b', '#163d6a', '#2563eb', '#60a5fa');
+  if (kind === 'fails') return tone(value, max, '#2a1418', '#5c1f2a', '#9d2237', '#f87171');
+  return '#0f1a25';
+}
+
+function rangeLabel() {
+  if (rangeDays === 7) return 'last 7 days';
+  if (rangeDays === 14) return 'last 14 days';
+  return 'full span';
+}
+
+function formatWindow(rows) {
+  if (rows.length === 0) return '';
+  return rows[0].shortDay + ' -> ' + rows[rows.length - 1].shortDay;
+}
+
+function testCounts() {
+  var ready = 0;
+  var failed = 0;
+  var untested = 0;
+  var verified = 0;
+  var i = 0;
+  while (i < testList.length) {
+    var t = testList[i];
+    if (t.verified && t.verified.length > 0) verified = verified + 1;
+    else if (t.status === 'compiled') ready = ready + 1;
+    else if (t.status === 'untested') untested = untested + 1;
+    else failed = failed + 1;
+    i = i + 1;
+  }
+  return { ready: ready, failed: failed, untested: untested, verified: verified };
+}
+
+function statusTextColor(status, verified) {
+  if (verified && verified.length > 0) return '#60a5fa';
+  if (status === 'compiled') return '#34d399';
+  if (status === 'untested') return '#94a3b8';
+  return '#f87171';
+}
+
+refreshAll();
+</script>
+
+function App() {
+  var days = visibleDays();
+  var commitBars = barSegments(days, 'commitCount', -8, -118);
+  var fileRibbon = normalizedLinePath(days, 'totalFiles', 22, 124);
+  var testsLine = normalizedLinePath(days, 'totalConformance', 22, 124);
+  var passingLine = normalizedLinePath(days, 'currentPassing', 22, 124);
+  var verifyLine = normalizedLinePath(days, 'currentVerified', 22, 124);
+  var pulse = [
+    { key: 'commits', label: 'commits', field: 'commitCount' },
+    { key: 'files', label: 'file adds', field: 'fileAdds' },
+    { key: 'tests', label: 'tests added', field: 'conformanceAdds' },
+    { key: 'builds', label: 'builds', field: 'buildAttempts' },
+    { key: 'pass', label: 'new passes', field: 'compileAdds' },
+    { key: 'verify', label: 'verifies', field: 'verifyAdds' },
+    { key: 'fails', label: 'build fails', field: 'buildFails' }
+  ];
+  var queue = testCounts();
+  var perfMax = maxField(perfLanes, 'avgMs');
+  if (perfMax <= 0) perfMax = 1;
+
+  return (
+    <C.Page>
+      <C.Topbar>
+        <Box style={{ flexDirection: 'column', gap: 2 }}>
+          <C.TitleText>meta progress</C.TitleText>
+          <C.TitleMeta>{`${projectStartDay} -> ${projectEndDay} | ${activeDays} days | ${commitCount} commits | ${confCompiled}/${confTotal} passing`}</C.TitleMeta>
+        </Box>
+
+        <Box style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
+          <Text fontSize={11} color="#7b93a6">{`build db ${latestBuildDay || '--'}`}</Text>
+          <Pressable onPress={() => { refreshAll() }}>
+            <Box style={{ paddingLeft: 12, paddingRight: 12, paddingTop: 7, paddingBottom: 7, borderRadius: 999, backgroundColor: '#103145', borderWidth: 1, borderColor: '#1e516e' }}>
+              <Text fontSize={10} color="#d9eef7">Refresh</Text>
+            </Box>
+          </Pressable>
+        </Box>
+      </C.Topbar>
+
+      <C.Tabbar>
+        {activeTab === 0 && <C.TabActive onPress={() => { setActiveTab(0) }}><C.TabLabelActive>Progress</C.TabLabelActive></C.TabActive>}
+        {activeTab !== 0 && <C.Tab onPress={() => { setActiveTab(0) }}><C.TabLabel>Progress</C.TabLabel></C.Tab>}
+
+        {activeTab === 1 && <C.TabActive onPress={() => { setActiveTab(1) }}><C.TabLabelActive>Verify</C.TabLabelActive></C.TabActive>}
+        {activeTab !== 1 && <C.Tab onPress={() => { setActiveTab(1) }}><C.TabLabel>Verify</C.TabLabel></C.Tab>}
+      </C.Tabbar>
+
+      {activeTab === 0 && <C.Body>
+        <ScrollView style={{ flexGrow: 1, flexBasis: 0 }}>
+          <C.MetricGrid>
+            <C.MetricCard>
+              <C.MetricAccent style={{ backgroundColor: '#f59e0b' }} />
+              <C.MetricValue>{`${commitCount}`}</C.MetricValue>
+              <C.MetricLabel>Commits</C.MetricLabel>
+              <C.MetricMeta>{`${sumField(days, 'commitCount')} in ${rangeLabel()}`}</C.MetricMeta>
+            </C.MetricCard>
+
+            <C.MetricCard>
+              <C.MetricAccent style={{ backgroundColor: '#38bdf8' }} />
+              <C.MetricValue>{`${repoFileCount}`}</C.MetricValue>
+              <C.MetricLabel>Files On Disk</C.MetricLabel>
+              <C.MetricMeta>{`${gitBornCount} git-born tracked additions`}</C.MetricMeta>
+            </C.MetricCard>
+
+            <C.MetricCard>
+              <C.MetricAccent style={{ backgroundColor: '#34d399' }} />
+              <C.MetricValue>{`${confTotal}`}</C.MetricValue>
+              <C.MetricLabel>Conformance On Disk</C.MetricLabel>
+              <C.MetricMeta>{`${currentSeen} ever touched by ledger`}</C.MetricMeta>
+            </C.MetricCard>
+
+            <C.MetricCard>
+              <C.MetricAccent style={{ backgroundColor: '#22c55e' }} />
+              <C.MetricValue>{`${confCompiled}`}</C.MetricValue>
+              <C.MetricLabel>Passing Now</C.MetricLabel>
+              <C.MetricMeta>{`${confPassRate}% current pass rate`}</C.MetricMeta>
+            </C.MetricCard>
+
+            <C.MetricCard>
+              <C.MetricAccent style={{ backgroundColor: '#60a5fa' }} />
+              <C.MetricValue>{`${confVerified}`}</C.MetricValue>
+              <C.MetricLabel>Verified</C.MetricLabel>
+              <C.MetricMeta>{`${verifyBacklog} compiled but not locked`}</C.MetricMeta>
+            </C.MetricCard>
+
+            <C.MetricCard>
+              <C.MetricAccent style={{ backgroundColor: '#f87171' }} />
+              <C.MetricValue>{`${compileBacklog}`}</C.MetricValue>
+              <C.MetricLabel>Compile Gap</C.MetricLabel>
+              <C.MetricMeta>{`${confFailed} current failures | ${confUntested} untouched`}</C.MetricMeta>
+            </C.MetricCard>
+
+            <C.MetricCard>
+              <C.MetricAccent style={{ backgroundColor: '#a78bfa' }} />
+              <C.MetricValue>{`${buildAttemptCount}`}</C.MetricValue>
+              <C.MetricLabel>Ledger Rows</C.MetricLabel>
+              <C.MetricMeta>{`${sumField(days, 'buildAttempts')} builds in ${rangeLabel()}`}</C.MetricMeta>
+            </C.MetricCard>
+
+            <C.MetricCard>
+              <C.MetricAccent style={{ backgroundColor: '#f97316' }} />
+              <C.MetricValue>{`${perfAvgTotal}ms`}</C.MetricValue>
+              <C.MetricLabel>Avg Build</C.MetricLabel>
+              <C.MetricMeta>{`${perfBuildCount} perf samples | ${fresh7dCount} fresh files 7d`}</C.MetricMeta>
+            </C.MetricCard>
+          </C.MetricGrid>
+
+          <C.Panel>
+            <C.PanelHeader>
+              <Box style={{ flexDirection: 'column', gap: 2 }}>
+                <C.PanelTitle>Project Arc</C.PanelTitle>
+                <C.PanelMeta>{`Daily commit pulse above, normalized growth curves below | ${formatWindow(days)}`}</C.PanelMeta>
+              </Box>
+
+              <C.RangeRow>
+                {rangeDays === 7 && <C.RangeChipActive onPress={() => { setRangeDays(7) }}><C.RangeLabelActive>7d</C.RangeLabelActive></C.RangeChipActive>}
+                {rangeDays !== 7 && <C.RangeChip onPress={() => { setRangeDays(7) }}><C.RangeLabel>7d</C.RangeLabel></C.RangeChip>}
+
+                {rangeDays === 14 && <C.RangeChipActive onPress={() => { setRangeDays(14) }}><C.RangeLabelActive>14d</C.RangeLabelActive></C.RangeChipActive>}
+                {rangeDays !== 14 && <C.RangeChip onPress={() => { setRangeDays(14) }}><C.RangeLabel>14d</C.RangeLabel></C.RangeChip>}
+
+                {rangeDays === 0 && <C.RangeChipActive onPress={() => { setRangeDays(0) }}><C.RangeLabelActive>all</C.RangeLabelActive></C.RangeChipActive>}
+                {rangeDays !== 0 && <C.RangeChip onPress={() => { setRangeDays(0) }}><C.RangeLabel>all</C.RangeLabel></C.RangeChip>}
+              </C.RangeRow>
+            </C.PanelHeader>
+
+            <Box style={{ height: 270 }}>
+              <Graph style={{ width: '100%', height: '100%' }} viewX={0} viewY={0} viewZoom={1}>
+                <Graph.Path d="M -470,-124 L 470,-124" stroke="#152533" strokeWidth={1} />
+                <Graph.Path d="M -470,-84 L 470,-84" stroke="#11202d" strokeWidth={1} />
+                <Graph.Path d="M -470,-44 L 470,-44" stroke="#11202d" strokeWidth={1} />
+                <Graph.Path d="M -470,0 L 470,0" stroke="#244255" strokeWidth={1.2} />
+                <Graph.Path d="M -470,42 L 470,42" stroke="#11202d" strokeWidth={1} />
+                <Graph.Path d="M -470,84 L 470,84" stroke="#11202d" strokeWidth={1} />
+                <Graph.Path d="M -470,124 L 470,124" stroke="#152533" strokeWidth={1} />
+
+                {commitBars.map((bar) => (
+                  <Graph.Path d={bar.d} stroke="#f59e0b" strokeWidth={16} />
+                ))}
+
+                {fileRibbon != '' && <Graph.Path d={fileRibbon} stroke="#123342" strokeWidth={18} />}
+                {fileRibbon != '' && <Graph.Path d={fileRibbon} stroke="#38bdf8" strokeWidth={3} />}
+                {testsLine != '' && <Graph.Path d={testsLine} stroke="#f59e0b" strokeWidth={2.5} />}
+                {passingLine != '' && <Graph.Path d={passingLine} stroke="#34d399" strokeWidth={3} />}
+                {verifyLine != '' && <Graph.Path d={verifyLine} stroke="#60a5fa" strokeWidth={3} />}
+              </Graph>
+            </Box>
+
+            <C.LegendRow>
+              <C.LegendChip>
+                <C.LegendDot style={{ backgroundColor: '#f59e0b' }} />
+                <C.LegendText>{`${sumField(days, 'commitCount')} commits`}</C.LegendText>
+              </C.LegendChip>
+              <C.LegendChip>
+                <C.LegendDot style={{ backgroundColor: '#38bdf8' }} />
+                <C.LegendText>{`${lastField(days, 'totalFiles')} git-born files`}</C.LegendText>
+              </C.LegendChip>
+              <C.LegendChip>
+                <C.LegendDot style={{ backgroundColor: '#f59e0b' }} />
+                <C.LegendText>{`${lastField(days, 'totalConformance')} tests added`}</C.LegendText>
+              </C.LegendChip>
+              <C.LegendChip>
+                <C.LegendDot style={{ backgroundColor: '#34d399' }} />
+                <C.LegendText>{`${lastField(days, 'currentPassing')} passing now`}</C.LegendText>
+              </C.LegendChip>
+              <C.LegendChip>
+                <C.LegendDot style={{ backgroundColor: '#60a5fa' }} />
+                <C.LegendText>{`${lastField(days, 'currentVerified')} verified`}</C.LegendText>
+              </C.LegendChip>
+            </C.LegendRow>
+
+            <Box style={{ flexDirection: 'row', gap: 4 }}>
+              {days.map((day, idx) => (
+                <Box style={{ flexGrow: 1, alignItems: 'center' }}>
+                  <Text fontSize={8} color="#567084">{shouldShowAxisLabel(idx, days.length) ? day.shortDay : ''}</Text>
+                </Box>
+              ))}
+            </Box>
+          </C.Panel>
+
+          <Box style={{ flexDirection: 'row', gap: 12 }}>
+            <C.Panel style={{ flexGrow: 1, flexBasis: 0 }}>
+              <C.PanelHeader>
+                <Box style={{ flexDirection: 'column', gap: 2 }}>
+                  <C.PanelTitle>Pulse Matrix</C.PanelTitle>
+                  <C.PanelMeta>Every day in the window, all signals side by side</C.PanelMeta>
+                </Box>
+                <Text fontSize={10} color="#7b93a6">{rangeLabel()}</Text>
+              </C.PanelHeader>
+
+              {pulse.map((row) => (
+                <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                  <Box style={{ width: 72 }}>
+                    <Text fontSize={10} color="#d5dfeb">{row.label}</Text>
+                  </Box>
+                  <Box style={{ flexDirection: 'row', gap: 4, flexGrow: 1 }}>
+                    {days.map((day) => (
+                      <Box style={{ flexGrow: 1, height: 16, borderRadius: 4, backgroundColor: pulseColor(row.key, day[row.field] || 0, maxField(days, row.field)) }} />
+                    ))}
+                  </Box>
+                  <Box style={{ width: 42, alignItems: 'flex-end' }}>
+                    <Text fontSize={10} color="#7b93a6">{`${maxField(days, row.field)}`}</Text>
+                  </Box>
+                </Box>
+              ))}
+
+              <C.Divider />
+
+              <Box style={{ flexDirection: 'row', gap: 10 }}>
+                <Box style={{ flexGrow: 1 }}>
+                  <C.SmallLabel>Window commits</C.SmallLabel>
+                  <C.SmallValue>{`${sumField(days, 'commitCount')}`}</C.SmallValue>
+                </Box>
+                <Box style={{ flexGrow: 1 }}>
+                  <C.SmallLabel>Window file adds</C.SmallLabel>
+                  <C.SmallValue>{`${sumField(days, 'fileAdds')}`}</C.SmallValue>
+                </Box>
+                <Box style={{ flexGrow: 1 }}>
+                  <C.SmallLabel>Window build fails</C.SmallLabel>
+                  <C.SmallValue>{`${sumField(days, 'buildFails')}`}</C.SmallValue>
+                </Box>
+              </Box>
+            </C.Panel>
+
+            <C.Panel style={{ flexGrow: 1, flexBasis: 0 }}>
+              <C.PanelHeader>
+                <Box style={{ flexDirection: 'column', gap: 2 }}>
+                  <C.PanelTitle>Lane Pressure</C.PanelTitle>
+                  <C.PanelMeta>Disk reality against current ledger state</C.PanelMeta>
+                </Box>
+                <Text fontSize={10} color="#7b93a6">{`${laneCount} lanes`}</Text>
+              </C.PanelHeader>
+
+              {laneRows.map((lane) => (
+                <Box style={{ flexDirection: 'column', gap: 6, paddingTop: 6, paddingBottom: 6 }}>
+                  <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+                    <Box style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: lane.color }} />
+                    <Text fontSize={11} color="#e8eef5">{lane.name}</Text>
+                    <Text fontSize={9} color="#7b93a6">{`${lane.diskTotal} disk`}</Text>
+                    <Box style={{ flexGrow: 1 }} />
+                    <Text fontSize={10} color="#34d399">{`${lane.compiledCurrent}`}</Text>
+                    <Text fontSize={10} color="#60a5fa">{`${lane.verifiedCurrent}`}</Text>
+                    <Text fontSize={10} color="#f87171">{`${lane.failedCurrent}`}</Text>
+                    <Text fontSize={10} color="#94a3b8">{`${lane.untested}`}</Text>
+                  </Box>
+
+                  <Box style={{ flexDirection: 'row', gap: 2, height: 10, backgroundColor: '#101c27', borderRadius: 999 }}>
+                    {lane.verifiedCurrent > 0 && <Box style={{ flexGrow: lane.verifiedCurrent, backgroundColor: '#60a5fa', borderRadius: 999 }} />}
+                    {lane.compiledCurrent - lane.verifiedCurrent > 0 && <Box style={{ flexGrow: lane.compiledCurrent - lane.verifiedCurrent, backgroundColor: '#34d399', borderRadius: 999 }} />}
+                    {lane.failedCurrent > 0 && <Box style={{ flexGrow: lane.failedCurrent, backgroundColor: '#f87171', borderRadius: 999 }} />}
+                    {lane.untested > 0 && <Box style={{ flexGrow: lane.untested, backgroundColor: '#334155', borderRadius: 999 }} />}
+                  </Box>
+
+                  <Box style={{ flexDirection: 'row', gap: 12 }}>
+                    <Text fontSize={9} color="#7b93a6">{`added ${lane.firstAddDay || '--'}`}</Text>
+                    <Text fontSize={9} color="#7b93a6">{`${lane.compilePct}% compile`}</Text>
+                    <Text fontSize={9} color="#7b93a6">{`${lane.verifyPct}% verify`}</Text>
+                  </Box>
+                </Box>
+              ))}
+            </C.Panel>
+          </Box>
+
+          <Box style={{ flexDirection: 'row', gap: 12 }}>
+            <C.Panel style={{ flexGrow: 1, flexBasis: 0 }}>
+              <C.PanelHeader>
+                <Box style={{ flexDirection: 'column', gap: 2 }}>
+                  <C.PanelTitle>Area Growth</C.PanelTitle>
+                  <C.PanelMeta>Git additions, live disk footprint, and fresh local births</C.PanelMeta>
+                </Box>
+                <Text fontSize={10} color="#7b93a6">{`${areaCount} areas`}</Text>
+              </C.PanelHeader>
+
+              {areaRows.map((area) => (
+                <Box style={{ flexDirection: 'column', gap: 5, paddingTop: 6, paddingBottom: 6 }}>
+                  <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+                    <Box style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: area.color }} />
+                    <Text fontSize={11} color="#e8eef5">{area.name}</Text>
+                    <Box style={{ flexGrow: 1 }} />
+                    <Text fontSize={10} color="#d5dfeb">{`${area.diskNow}`}</Text>
+                    <Text fontSize={10} color="#7b93a6">{`git +${area.gitAdds}`}</Text>
+                    <Text fontSize={10} color="#38bdf8">{`7d ${area.fresh7d}`}</Text>
+                  </Box>
+
+                  <Box style={{ height: 8, backgroundColor: '#101c27', borderRadius: 999 }}>
+                    <Box style={{ width: `${area.pct}%`, height: 8, borderRadius: 999, backgroundColor: area.color }} />
+                  </Box>
+
+                  <Box style={{ flexDirection: 'row', gap: 12 }}>
+                    <Text fontSize={9} color="#7b93a6">{`first ${area.firstGitDay || '--'}`}</Text>
+                    <Text fontSize={9} color="#7b93a6">{`last git ${area.lastGitDay || '--'}`}</Text>
+                    <Text fontSize={9} color="#7b93a6">{`last disk ${area.lastDiskDay || '--'}`}</Text>
+                  </Box>
+                </Box>
+              ))}
+            </C.Panel>
+
+            <C.Panel style={{ flexGrow: 1, flexBasis: 0 }}>
+              <C.PanelHeader>
+                <Box style={{ flexDirection: 'column', gap: 2 }}>
+                  <C.PanelTitle>Build Engine</C.PanelTitle>
+                  <C.PanelMeta>Forge and Zig throughput from `build_perf`</C.PanelMeta>
+                </Box>
+                <Text fontSize={10} color="#7b93a6">{`${perfLaneCount} lanes`}</Text>
+              </C.PanelHeader>
+
+              <Box style={{ flexDirection: 'row', gap: 10 }}>
+                <Box style={{ flexGrow: 1 }}>
+                  <C.SmallLabel>Avg total</C.SmallLabel>
+                  <C.SmallValue>{`${perfAvgTotal}ms`}</C.SmallValue>
+                </Box>
+                <Box style={{ flexGrow: 1 }}>
+                  <C.SmallLabel>Forge</C.SmallLabel>
+                  <C.SmallValue>{`${perfAvgForge}ms`}</C.SmallValue>
+                </Box>
+                <Box style={{ flexGrow: 1 }}>
+                  <C.SmallLabel>Zig</C.SmallLabel>
+                  <C.SmallValue>{`${perfAvgZig}ms`}</C.SmallValue>
+                </Box>
+                <Box style={{ flexGrow: 1 }}>
+                  <C.SmallLabel>Samples</C.SmallLabel>
+                  <C.SmallValue>{`${perfBuildCount}`}</C.SmallValue>
+                </Box>
+              </Box>
+
+              <Box style={{ flexDirection: 'row', gap: 10, paddingTop: 4 }}>
+                <Box style={{ flexGrow: 1 }}>
+                  <C.SmallLabel>Avg source</C.SmallLabel>
+                  <C.SmallValue>{`${perfAvgLines} lines`}</C.SmallValue>
+                </Box>
+                <Box style={{ flexGrow: 1 }}>
+                  <C.SmallLabel>Avg output</C.SmallLabel>
+                  <C.SmallValue>{`${perfAvgBytes} bytes`}</C.SmallValue>
+                </Box>
+                <Box style={{ flexGrow: 1 }}>
+                  <C.SmallLabel>Lines/sec</C.SmallLabel>
+                  <C.SmallValue>{`${perfAvgLps}`}</C.SmallValue>
+                </Box>
+                <Box style={{ flexGrow: 1 }}>
+                  <C.SmallLabel>Bytes/line</C.SmallLabel>
+                  <C.SmallValue>{`${perfAvgBpl}`}</C.SmallValue>
+                </Box>
+              </Box>
+
+              <C.Divider />
+
+              {perfLanes.map((lane) => (
+                <Box style={{ flexDirection: 'column', gap: 4, paddingTop: 5, paddingBottom: 5 }}>
+                  <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+                    <Box style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: lane.color }} />
+                    <Text fontSize={11} color="#e8eef5">{lane.name}</Text>
+                    <Box style={{ flexGrow: 1 }} />
+                    <Text fontSize={10} color="#d5dfeb">{`${lane.avgMs}ms`}</Text>
+                    <Text fontSize={10} color="#7b93a6">{`${lane.buildCount}`}</Text>
+                  </Box>
+                  <Box style={{ height: 7, backgroundColor: '#101c27', borderRadius: 999 }}>
+                    <Box style={{ width: `${Math.round((lane.avgMs * 100) / perfMax)}%`, height: 7, borderRadius: 999, backgroundColor: lane.color }} />
+                  </Box>
+                  <Box style={{ flexDirection: 'row', gap: 12 }}>
+                    <Text fontSize={9} color="#7b93a6">{`forge ${lane.avgForge}`}</Text>
+                    <Text fontSize={9} color="#7b93a6">{`zig ${lane.avgZig}`}</Text>
+                    <Text fontSize={9} color="#7b93a6">{`${lane.avgLps} l/s`}</Text>
+                  </Box>
+                </Box>
+              ))}
+            </C.Panel>
+          </Box>
+
+          <Box style={{ flexDirection: 'row', gap: 12 }}>
+            <C.Panel style={{ flexGrow: 1, flexBasis: 0 }}>
+              <C.PanelHeader>
+                <Box style={{ flexDirection: 'column', gap: 2 }}>
+                  <C.PanelTitle>Recent Commits</C.PanelTitle>
+                  <C.PanelMeta>Conventional history, latest first</C.PanelMeta>
+                </Box>
+                <Text fontSize={10} color="#7b93a6">{`${recentCommits.length} shown`}</Text>
+              </C.PanelHeader>
+
+              {recentCommits.map((commit) => (
+                <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center', paddingTop: 4, paddingBottom: 4 }}>
+                  <Box style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: commit.dotColor }} />
+                  <Box style={{ paddingLeft: 7, paddingRight: 7, paddingTop: 3, paddingBottom: 3, borderRadius: 999, backgroundColor: commit.badgeBg }}>
+                    <Text fontSize={8} color="#e8eef5">{commit.ctype}</Text>
+                  </Box>
+                  <Text fontSize={10} color="#7dd3fc">{commit.hash}</Text>
+                  <Box style={{ flexGrow: 1 }}>
+                    <Text fontSize={11} color="#e8eef5">{commit.msg}</Text>
+                    <Text fontSize={9} color="#7b93a6">{`${commit.author} | ${commit.shortDay}`}</Text>
+                  </Box>
+                </Box>
+              ))}
+            </C.Panel>
+
+            <C.Panel style={{ flexGrow: 1, flexBasis: 0 }}>
+              <C.PanelHeader>
+                <Box style={{ flexDirection: 'column', gap: 2 }}>
+                  <C.PanelTitle>Queue + Freshness</C.PanelTitle>
+                  <C.PanelMeta>What needs attention, and what just landed on disk</C.PanelMeta>
+                </Box>
+                <Text fontSize={10} color="#7b93a6">{`${confFailureCount} failing now | ${freshFileCount} newest files`}</Text>
+              </C.PanelHeader>
+
+              <Box style={{ flexDirection: 'row', gap: 10 }}>
+                <Box style={{ flexGrow: 1 }}>
+                  <C.SmallLabel>Ready to verify</C.SmallLabel>
+                  <C.SmallValue>{`${queue.ready}`}</C.SmallValue>
+                </Box>
+                <Box style={{ flexGrow: 1 }}>
+                  <C.SmallLabel>Failed now</C.SmallLabel>
+                  <C.SmallValue>{`${queue.failed}`}</C.SmallValue>
+                </Box>
+                <Box style={{ flexGrow: 1 }}>
+                  <C.SmallLabel>Untested now</C.SmallLabel>
+                  <C.SmallValue>{`${queue.untested}`}</C.SmallValue>
+                </Box>
+                <Box style={{ flexGrow: 1 }}>
+                  <C.SmallLabel>Fresh files 7d</C.SmallLabel>
+                  <C.SmallValue>{`${fresh7dCount}`}</C.SmallValue>
+                </Box>
+              </Box>
+
+              <C.Divider />
+
+              <Text fontSize={10} color="#9fb2c3">Current failure front</Text>
+              {confFailures.slice(0, 8).map((failure) => (
+                <Box style={{ flexDirection: 'row', gap: 8, paddingTop: 4, paddingBottom: 4, alignItems: 'center' }}>
+                  <Text fontSize={10} color="#f87171">{failure.status}</Text>
+                  <Box style={{ flexGrow: 1 }}>
+                    <Text fontSize={11} color="#e8eef5">{failure.name}</Text>
+                    <Text fontSize={9} color="#7b93a6">{failure.error}</Text>
+                  </Box>
+                </Box>
+              ))}
+
+              <C.Divider />
+
+              <Text fontSize={10} color="#9fb2c3">Newest files on disk</Text>
+              {freshFiles.slice(0, 8).map((file) => (
+                <Box style={{ flexDirection: 'row', gap: 8, paddingTop: 4, paddingBottom: 4, alignItems: 'center' }}>
+                  <Box style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: file.color }} />
+                  <Box style={{ flexGrow: 1 }}>
+                    <Text fontSize={11} color="#e8eef5">{file.path}</Text>
+                    <Text fontSize={9} color="#7b93a6">{`${file.area} | ${file.day}`}</Text>
+                  </Box>
+                </Box>
+              ))}
+            </C.Panel>
+          </Box>
+        </ScrollView>
+      </C.Body>}
+
+      {activeTab === 1 && <C.Body>
+        <Box style={{ flexDirection: 'row', gap: 12, flexGrow: 1, flexBasis: 0 }}>
+          <C.Panel style={{ flexGrow: 1, flexBasis: 0 }}>
+            <C.PanelHeader>
+              <Box style={{ flexDirection: 'column', gap: 2 }}>
+                <C.PanelTitle>Verification Queue</C.PanelTitle>
+                <C.PanelMeta>Compiled-unverified first, then failures, then untouched</C.PanelMeta>
+              </Box>
+              <Text fontSize={10} color="#7b93a6">{`${testCount} tests`}</Text>
+            </C.PanelHeader>
+
+            <Box style={{ flexDirection: 'row', gap: 10, paddingBottom: 6 }}>
+              <Text fontSize={10} color="#34d399">{`${queue.ready} ready`}</Text>
+              <Text fontSize={10} color="#f87171">{`${queue.failed} failing`}</Text>
+              <Text fontSize={10} color="#94a3b8">{`${queue.untested} untested`}</Text>
+              <Text fontSize={10} color="#60a5fa">{`${queue.verified} locked`}</Text>
+            </Box>
+
+            <ScrollView style={{ flexGrow: 1, flexBasis: 0 }}>
+              {testList.map((test) => (
+                <Pressable onPress={() => { selectTest(test.tidx) }}>
+                  <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center', paddingTop: 7, paddingBottom: 7, paddingLeft: 10, paddingRight: 10, borderRadius: 10, backgroundColor: selectedTest === test.tidx ? '#12374d' : '#0a141d', borderWidth: 1, borderColor: selectedTest === test.tidx ? '#2b83b6' : '#152634', marginBottom: 6 }}>
+                    <Box style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: test.dotColor }} />
+                    <Box style={{ flexGrow: 1 }}>
+                      <Text fontSize={11} color="#e8eef5">{test.name}</Text>
+                      <Text fontSize={9} color="#7b93a6">{`${test.lane} | ${test.builtDay}`}</Text>
+                    </Box>
+                    <Text fontSize={10} color={statusTextColor(test.status, test.verified)}>{test.verified ? 'verified' : test.status}</Text>
+                  </Box>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </C.Panel>
+
+          <Box style={{ width: 380, flexDirection: 'column', gap: 12 }}>
+            <C.Panel>
+              <C.PanelHeader>
+                <Box style={{ flexDirection: 'column', gap: 2 }}>
+                  <C.PanelTitle>Selected Test</C.PanelTitle>
+                  <C.PanelMeta>Full qualified name so verification hits the right row</C.PanelMeta>
+                </Box>
+              </C.PanelHeader>
+
+              <Box style={{ flexDirection: 'column', gap: 8 }}>
+                <Box>
+                  <C.SmallLabel>Name</C.SmallLabel>
+                  <C.SmallValue>{selTestName || '--'}</C.SmallValue>
+                </Box>
+                <Box>
+                  <C.SmallLabel>Lane</C.SmallLabel>
+                  <C.SmallValue>{selTestLane || '--'}</C.SmallValue>
+                </Box>
+                <Box>
+                  <C.SmallLabel>Status</C.SmallLabel>
+                  <Text fontSize={12} color={statusTextColor(selTestStatus, selTestVerified)}>{selTestHasVerified === 1 ? 'verified' : selTestStatus}</Text>
+                </Box>
+                <Box>
+                  <C.SmallLabel>Last built</C.SmallLabel>
+                  <C.SmallValue>{selTestBuiltDay || '--'}</C.SmallValue>
+                </Box>
+                {selTestHasVerified === 1 && <Box>
+                  <C.SmallLabel>Verified at</C.SmallLabel>
+                  <Text fontSize={11} color="#60a5fa">{selTestVerified}</Text>
+                </Box>}
+                <Box>
+                  <C.SmallLabel>Source SHA</C.SmallLabel>
+                  <C.MonoText>{selTestSourceSha || '--'}</C.MonoText>
+                </Box>
+              </Box>
+            </C.Panel>
+
+            <Box style={{ flexDirection: 'row', gap: 8 }}>
+              <Pressable onPress={() => { loadSelectedTest() }}>
+                <Box style={{ paddingLeft: 14, paddingRight: 14, paddingTop: 9, paddingBottom: 9, borderRadius: 999, backgroundColor: '#0f6b4b', borderWidth: 1, borderColor: '#2aa170' }}>
+                  <Text fontSize={10} color="#f6fffb">Build + Launch</Text>
+                </Box>
+              </Pressable>
+
+              <Pressable onPress={() => { verifySelectedTest() }}>
+                <Box style={{ paddingLeft: 14, paddingRight: 14, paddingTop: 9, paddingBottom: 9, borderRadius: 999, backgroundColor: '#123f7c', borderWidth: 1, borderColor: '#3b82f6' }}>
+                  <Text fontSize={10} color="#eef5ff">Verify</Text>
+                </Box>
+              </Pressable>
+
+              <Pressable onPress={() => { killTestProcess() }}>
+                <Box style={{ paddingLeft: 14, paddingRight: 14, paddingTop: 9, paddingBottom: 9, borderRadius: 999, backgroundColor: '#24161a', borderWidth: 1, borderColor: '#5c2b35' }}>
+                  <Text fontSize={10} color="#f3dfe3">Kill</Text>
+                </Box>
+              </Pressable>
+            </Box>
+
+            <C.Panel>
+              <C.PanelHeader>
+                <Box style={{ flexDirection: 'column', gap: 2 }}>
+                  <C.PanelTitle>Runtime</C.PanelTitle>
+                  <C.PanelMeta>Fallback runner mode: build a native binary, kill the old one, launch the new one</C.PanelMeta>
+                </Box>
+              </C.PanelHeader>
+
+              <Box style={{ flexDirection: 'column', gap: 8 }}>
+                <Box>
+                  <C.SmallLabel>Status</C.SmallLabel>
+                  <C.SmallValue>{ipcStatus}</C.SmallValue>
+                </Box>
+                <Box>
+                  <C.SmallLabel>Log</C.SmallLabel>
+                  <Text fontSize={10} color="#9fb2c3">{ipcLog || '--'}</Text>
+                </Box>
+              </Box>
+            </C.Panel>
+
+            <C.Panel style={{ flexGrow: 1, flexBasis: 0 }}>
+              <C.PanelHeader>
+                <Box style={{ flexDirection: 'column', gap: 2 }}>
+                  <C.PanelTitle>Lane Backlog</C.PanelTitle>
+                  <C.PanelMeta>Current coverage by lane, same numbers as the main desk</C.PanelMeta>
+                </Box>
+              </C.PanelHeader>
+
+              {laneRows.map((lane) => (
+                <Box style={{ flexDirection: 'column', gap: 4, paddingTop: 5, paddingBottom: 5 }}>
+                  <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+                    <Box style={{ width: 9, height: 9, borderRadius: 5, backgroundColor: lane.color }} />
+                    <Text fontSize={11} color="#e8eef5">{lane.name}</Text>
+                    <Box style={{ flexGrow: 1 }} />
+                    <Text fontSize={10} color="#34d399">{`${lane.compiledCurrent}`}</Text>
+                    <Text fontSize={10} color="#60a5fa">{`${lane.verifiedCurrent}`}</Text>
+                    <Text fontSize={10} color="#f87171">{`${lane.failedCurrent}`}</Text>
+                  </Box>
+                  <Box style={{ height: 7, backgroundColor: '#101c27', borderRadius: 999 }}>
+                    <Box style={{ width: `${lane.compilePct}%`, height: 7, borderRadius: 999, backgroundColor: lane.color }} />
+                  </Box>
+                </Box>
+              ))}
+            </C.Panel>
+          </Box>
+        </Box>
+      </C.Body>}
+
+      <C.StatusBar>
+        <C.StatusAccent>progress</C.StatusAccent>
+        <C.StatusText>{`${rangeLabel()} | ${formatWindow(days)}`}</C.StatusText>
+        <C.StatusText>{`${confCompiled}/${confTotal} passing`}</C.StatusText>
+        <C.StatusText>{`${confVerified} verified`}</C.StatusText>
+        <C.StatusText>{`${perfAvgTotal}ms avg build`}</C.StatusText>
+        <C.StatusText>{ipcStatus}</C.StatusText>
+      </C.StatusBar>
+    </C.Page>
+  );
+}
