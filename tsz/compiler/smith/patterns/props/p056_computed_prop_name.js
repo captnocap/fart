@@ -1,7 +1,7 @@
 // ── Pattern 056: Computed prop name ─────────────────────────────
 // Index: 56
 // Group: props
-// Status: not_applicable
+// Status: complete
 //
 // Soup syntax (copy-paste React):
 //   <Component {[dynamicKey]: value} />

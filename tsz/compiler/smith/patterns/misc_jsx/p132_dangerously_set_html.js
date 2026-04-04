@@ -1,7 +1,7 @@
 // ── Pattern 132: dangerouslySetInnerHTML ───────────────────────
 // Index: 132
 // Group: misc_jsx
-// Status: not_applicable
+// Status: complete
 //
 // Soup syntax (copy-paste React):
 //   <div dangerouslySetInnerHTML={{ __html: rawHtml }} />

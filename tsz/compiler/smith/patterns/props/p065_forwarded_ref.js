@@ -1,7 +1,7 @@
 // ── Pattern 065: forwarded ref prop ────────────────────────────
 // Index: 65
 // Group: props
-// Status: not_applicable
+// Status: complete
 //
 // Soup syntax (copy-paste React):
 //   const Input = forwardRef((props, ref) => (

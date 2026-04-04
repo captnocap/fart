@@ -1,7 +1,7 @@
 // ── Pattern 137: Namespaced attrs ──────────────────────────────
 // Index: 137
 // Group: misc_jsx
-// Status: not_applicable
+// Status: complete
 //
 // Soup syntax (copy-paste React):
 //   <use xlinkHref="#icon" />

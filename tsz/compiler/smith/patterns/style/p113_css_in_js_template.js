@@ -1,7 +1,7 @@
 // ── Pattern 113: CSS-in-JS template literal ─────────────────────
 // Index: 113
 // Group: style
-// Status: not_applicable
+// Status: complete
 //
 // Soup syntax (copy-paste React):
 //   const Header = styled.div`

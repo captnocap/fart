@@ -1,7 +1,7 @@
 // ── Pattern 111: classnames/clsx utility ────────────────────────
 // Index: 111
 // Group: style
-// Status: not_applicable
+// Status: complete
 //
 // Soup syntax (copy-paste React):
 //   className={clsx('btn', {active})}

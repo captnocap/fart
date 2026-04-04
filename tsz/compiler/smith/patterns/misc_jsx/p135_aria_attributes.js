@@ -1,7 +1,7 @@
 // ── Pattern 135: ARIA / role attrs ─────────────────────────────
 // Index: 135
 // Group: misc_jsx
-// Status: not_applicable
+// Status: complete
 //
 // Soup syntax (copy-paste React):
 //   <Box aria-label="close" role="button" />

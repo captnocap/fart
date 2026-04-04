@@ -1,7 +1,7 @@
 // ── Pattern 134: data-* attributes ─────────────────────────────
 // Index: 134
 // Group: misc_jsx
-// Status: not_applicable
+// Status: complete
 //
 // Soup syntax (copy-paste React):
 //   <Box data-testid="main" />

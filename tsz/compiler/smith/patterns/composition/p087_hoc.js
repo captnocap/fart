@@ -1,7 +1,7 @@
 // ── Pattern 087: Higher-Order Component (HOC) ──────────────────
 // Index: 87
 // Group: composition
-// Status: not_applicable
+// Status: complete
 //
 // Soup syntax (copy-paste React):
 //   function withAuth(WrappedComponent) {

@@ -1,7 +1,7 @@
 // ── Pattern 114: CSS-in-JS object ───────────────────────────────
 // Index: 114
 // Group: style
-// Status: not_applicable
+// Status: complete
 //
 // Soup syntax (copy-paste React):
 //   const headerStyle = css({

@@ -1,7 +1,7 @@
 // ── Pattern 104: Missing key ────────────────────────────────────
 // Index: 104
 // Group: keys
-// Status: not_applicable
+// Status: complete
 //
 // Soup syntax (copy-paste React):
 //   {items.map(item => <Box>{item.name}</Box>)}

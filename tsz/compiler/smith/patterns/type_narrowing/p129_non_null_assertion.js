@@ -1,7 +1,7 @@
 // ── Pattern 129: Non-null assertion ─────────────────────────────
 // Index: 129
 // Group: type_narrowing
-// Status: not_applicable
+// Status: complete
 //
 // Soup syntax (copy-paste React):
 //   <Text>{user!.name}</Text>

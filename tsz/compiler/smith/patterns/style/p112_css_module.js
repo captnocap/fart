@@ -1,7 +1,7 @@
 // ── Pattern 112: CSS module ─────────────────────────────────────
 // Index: 112
 // Group: style
-// Status: not_applicable
+// Status: complete
 //
 // Soup syntax (copy-paste React):
 //   import styles from './Header.module.css';

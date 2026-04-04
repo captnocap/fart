@@ -1,7 +1,7 @@
 // ── Pattern 085: IIFE in JSX ────────────────────────────────────
 // Index: 85
 // Group: conditional_rendering
-// Status: not_applicable
+// Status: complete
 //
 // Soup syntax (copy-paste React):
 //   <Box>

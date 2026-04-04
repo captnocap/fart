@@ -1,7 +1,7 @@
 // ── Pattern 088: forwardRef ─────────────────────────────────────
 // Index: 88
 // Group: composition
-// Status: not_applicable
+// Status: complete
 //
 // Soup syntax (copy-paste React):
 //   const FancyInput = React.forwardRef((props, ref) => (

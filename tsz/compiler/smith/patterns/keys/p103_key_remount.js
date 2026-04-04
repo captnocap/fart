@@ -1,7 +1,7 @@
 // ── Pattern 103: Key to force remount ───────────────────────────
 // Index: 103
 // Group: keys
-// Status: not_applicable
+// Status: complete
 //
 // Soup syntax (copy-paste React):
 //   <Editor key={docId} />

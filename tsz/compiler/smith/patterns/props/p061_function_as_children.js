@@ -1,7 +1,7 @@
 // ── Pattern 061: function-as-children ──────────────────────────
 // Index: 61
 // Group: props
-// Status: not_applicable
+// Status: complete
 //
 // Soup syntax (copy-paste React):
 //   <DataProvider>
