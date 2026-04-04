@@ -2120,6 +2120,43 @@ pub fn evalToString(code: []const u8, buf: *[256]u8) []const u8 {
     return "";
 }
 
+/// Evaluate a JS expression, JSON.stringify the result, and pass to LuaJIT
+/// as __luaMapDataN. Bridge: QJS → JSON → Lua table.
+/// Called by generated code: qjs_runtime.evalLuaMapData(0, "sourceExpr")
+pub fn evalLuaMapData(index: usize, js_expr: []const u8) void {
+    if (comptime !HAS_QUICKJS) return;
+    if (g_qjs_ctx) |ctx| {
+        if (js_expr.len == 0) return;
+        // Build: JSON.stringify(sourceExpr)
+        var code_buf: [4096]u8 = undefined;
+        const code = std.fmt.bufPrint(&code_buf, "JSON.stringify({s})", .{js_expr}) catch return;
+        const r = qjs.JS_Eval(ctx, code.ptr, code.len, "<evalLuaMapData>", 0);
+        defer qjs.JS_FreeValue(ctx, r);
+        if (qjs.JS_IsException(r)) {
+            const ex = qjs.JS_GetException(ctx);
+            defer qjs.JS_FreeValue(ctx, ex);
+            const es = qjs.JS_ToCString(ctx, ex);
+            if (es) |s| {
+                std.debug.print("[evalLuaMapData error] {s}: {s}\n", .{ js_expr, s });
+                qjs.JS_FreeCString(ctx, s);
+            }
+            return;
+        }
+        const json_cstr = qjs.JS_ToCString(ctx, r);
+        if (json_cstr) |json| {
+            defer qjs.JS_FreeCString(ctx, json_cstr);
+            // Build index string for Lua call
+            var idx_buf: [16]u8 = undefined;
+            const idx_str = std.fmt.bufPrint(&idx_buf, "{d}", .{index}) catch return;
+            idx_buf[idx_str.len] = 0;
+            const idx_z: [*:0]const u8 = @ptrCast(idx_buf[0..idx_str.len :0]);
+            // Call Lua: __setMapDataJSON(index, jsonStr)
+            const luajit = @import("luajit_runtime.zig");
+            luajit.callGlobalStr2("__setMapDataJSON", idx_z, json);
+        }
+    }
+}
+
 pub fn tick() void {
     if (comptime !HAS_QUICKJS) return;
     if (g_qjs_ctx) |ctx| {
