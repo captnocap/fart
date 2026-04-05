@@ -231,7 +231,13 @@ pub fn build(b: *std.Build) void {
             forge_exe.linkSystemLibrary("m");
             forge_exe.linkSystemLibrary("pthread");
         }
-        forge_exe.step.dependOn(&smith_bundle.step);
+        // Install bundle to source tree so @embedFile("dist/smith.bundle.js") resolves.
+        // Using UpdateSourceFiles so the build system tracks it properly —
+        // if the dist file is deleted, it gets regenerated from the cached output.
+        const update_bundle = b.addUpdateSourceFiles();
+        update_bundle.addCopyFileToSource(smith_bundle_out, "compiler/dist/smith.bundle.js");
+        update_bundle.step.dependOn(&smith_bundle.step);
+        forge_exe.step.dependOn(&update_bundle.step);
         forge_exe.step.addWatchInput(smith_bundle_out) catch @panic("OOM");
         const forge_install = b.addInstallArtifact(forge_exe, .{});
         const forge_step = b.step("forge", "Forge: compiler kernel + QuickJS (hosts Smith JS codegen)");

@@ -38,7 +38,7 @@
 // Notes:
 //   Struct types and tagged unions (<Vec2>, <Payload union>) are
 //   documented in the dictionary but only used in .mod.tsz modules,
-//   which go through smith/mod.js, not the chad lane.
+//   which go through smith/mod/, not the chad lane.
 
 function match(c, ctx) { return false; }
 function compile(c, ctx) { return null; }

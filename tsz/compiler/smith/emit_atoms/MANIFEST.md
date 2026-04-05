@@ -10,7 +10,7 @@ Unlike intake patterns, emit atoms are positive-only:
 - there are no "reject" atoms
 - mapped content that is not cleanly OA-backed belongs in LuaJIT atoms, not new Zig map loops
 
-Current live emit logic still lives under `smith/emit/*.js` and `smith/emit_split.js`.
+Current live emit logic lives under `smith/emit/*.js`.
 This tree is the catalog and migration target for breaking that logic into additive atoms.
 
 ## File Format

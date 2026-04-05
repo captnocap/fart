@@ -52,11 +52,5 @@ pub fn main() !void {
     defer file.close();
     try file.writeAll(parts.items);
 
-    if (!std.mem.eql(u8, out_path, dist_out_path)) {
-        var dist_file = try std.fs.cwd().createFile(dist_out_path, .{});
-        defer dist_file.close();
-        try dist_file.writeAll(parts.items);
-    }
-
-    std.debug.print("wrote dist/smith.bundle.js\n", .{});
+    std.debug.print("wrote {s} ({d} entries, {d} bytes)\n", .{ out_path, entry_count, parts.items.len });
 }

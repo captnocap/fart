@@ -25,7 +25,7 @@
 //   @cImport / extern fn declarations.
 //   open → sqlite3_open (implicit prefix join).
 //
-// Current owner: smith/mod.js (module block compiler)
+// Current owner: smith/mod/ (module block compiler)
 //
 // Notes:
 //   Block name = C library name. Listed suffixes auto-prefix.
