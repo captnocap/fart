@@ -900,113 +900,8 @@ function emitLogicBlocks(ctx) {
         if (jsBody) jsBody = jsTransform(jsBody);
         jsLines.push(`function ${hName}(${params}) { ${jsBody}; }`);
       }
-      // Add __mapPress_N handlers to JS_LOGIC so map handlers dispatch through QuickJS
-      for (let mi = 0; mi < ctx.maps.length; mi++) {
-        const m = ctx.maps[mi];
-        const mapHandlers = ctx.handlers.filter(h => h.inMap && h.mapIdx === mi);
-        for (let hi = 0; hi < mapHandlers.length; hi++) {
-          const mh = mapHandlers[hi];
-          // Build JS handler body from luaBody or Zig body
-          let jsHandlerBody = mh.luaBody || '';
-          // Convert Lua operators to JS in map handler bodies
-          if (jsHandlerBody) jsHandlerBody = jsTransform(jsHandlerBody);
-          if (!jsHandlerBody) {
-            // Extract callGlobal("func") → func()
-            const calls = (mh.body || '').match(/qjs_runtime\.callGlobal\("(\w+)"\)/g);
-            if (calls) jsHandlerBody = calls.map(c => { const m2 = c.match(/"(\w+)"/); return m2 ? m2[1] + '()' : ''; }).filter(Boolean).join('; ');
-            // Extract setSlot(N, expr) → setterName(expr)
-            const sets = (mh.body || '').match(/state\.setSlot\((\d+),\s*([^)]+)\)/g);
-            if (sets) {
-              const setParts = sets.map(s => { const m2 = s.match(/state\.setSlot\((\d+),\s*([^)]+)\)/); if (!m2) return ''; const ss = ctx.stateSlots[parseInt(m2[1])]; return ss ? ss.setter + '(' + m2[2].replace(/state\.getSlot\((\d+)\)/g, (_, si) => { const s2 = ctx.stateSlots[parseInt(si)]; return s2 ? s2.getter : '__getState(' + si + ')'; }) + ')' : ''; }).filter(Boolean);
-              jsHandlerBody = (jsHandlerBody ? jsHandlerBody + '; ' : '') + setParts.join('; ');
-            }
-          }
-          if (jsHandlerBody) {
-            if ((m.isNested || m.isInline) && m.parentMap) {
-              // Nested/inline map handler receives (parent_idx, item_idx)
-              const outerIdxParam = m.parentMap.indexParam || 'gi';
-              const innerIdxParam = m.indexParam || 'ii';
-              jsLines.push(`function __mapPress_${mi}_${hi}(${outerIdxParam}, ${innerIdxParam}) {`);
-              // Declare item variables for parent and inner maps so handler body can access fields
-              if (m.parentMap.oa) {
-                jsLines.push(`  var ${m.parentMap.itemParam} = ${m.parentMap.oa.getter}[${outerIdxParam}];`);
-              }
-              if (m.oa) {
-                jsLines.push(`  var ${m.itemParam} = ${m.oa.getter}[${innerIdxParam}];`);
-              }
-              jsLines.push(`  ${jsHandlerBody};`);
-              jsLines.push(`}`);
-              mh._emittedInJS = true;
-              continue;
-            }
-            jsLines.push(`function __mapPress_${mi}_${hi}(idx) {`);
-            if (m.oa) {
-              jsLines.push(`  var ${m.itemParam} = ${m.oa.getter}[idx];`);
-              jsLines.push(`  var ${m.indexParam} = idx;`);
-              // Extract component props that map to item fields (e.g., label → item.label)
-              for (const f of m.oa.fields) {
-                if (f.type === 'nested_array') continue;
-                const pat = new RegExp(`\\b${f.name}\\b`);
-                if (pat.test(jsHandlerBody) && f.name !== m.itemParam && f.name !== m.indexParam) {
-                  jsLines.push(`  var ${f.name} = ${m.itemParam}.${f.name};`);
-                }
-              }
-            }
-            // Declare JS variables for component props that were Zig expressions
-            // (luaParseHandler emitted the prop name; now we need to bind it to a JS value)
-            if (mh.zigProps) {
-              for (const [propName, zigVal] of Object.entries(mh.zigProps)) {
-                const propPat = new RegExp(`\\b${propName}\\b`);
-                if (!propPat.test(jsHandlerBody)) continue;
-                // Already declared as OA field or map param — skip
-                if (m.oa && m.oa.fields.some(f => f.name === propName)) continue;
-                if (propName === (m && m.itemParam) || propName === (m && m.indexParam)) continue;
-                // Convert Zig expression to JS equivalent
-                let jsVal = zigVal;
-                // @as(i64, @intCast(_i)) or @as(i64, @intCast(_j)) → idx (map index)
-                if (/^@as\(i64,\s*@intCast\(_[ij]\)\)$/.test(zigVal)) {
-                  jsVal = 'idx';
-                }
-                // _oaN_field[_i] → item.field (OA field access from current or parent map)
-                else if (/^_oa(\d+)_(\w+)\[_i\]$/.test(zigVal)) {
-                  const oaMatch = zigVal.match(/^_oa(\d+)_(\w+)\[_i\]$/);
-                  if (oaMatch) {
-                    const oaIdx = parseInt(oaMatch[1]);
-                    const field = oaMatch[2];
-                    // Find which OA this belongs to and use its getter
-                    const srcOa = ctx.objectArrays.find(o => o.oaIdx === oaIdx);
-                    if (srcOa) jsVal = `${srcOa.getter}[idx].${field}`;
-                    else jsVal = `idx`;
-                  }
-                }
-                // _oaN_field[_i][0.._oaN_field_lens[_i]] → item.field (string OA field)
-                else if (/^_oa(\d+)_(\w+)\[_i\]\[0\.\._oa\d+_\w+_lens\[_i\]\]$/.test(zigVal)) {
-                  const oaMatch = zigVal.match(/^_oa(\d+)_(\w+)\[_i\]/);
-                  if (oaMatch) {
-                    const oaIdx = parseInt(oaMatch[1]);
-                    const field = oaMatch[2];
-                    const srcOa = ctx.objectArrays.find(o => o.oaIdx === oaIdx);
-                    if (srcOa) jsVal = `${srcOa.getter}[idx].${field}`;
-                    else jsVal = `idx`;
-                  }
-                }
-                // state.getSlot(N) → getter name
-                else if (/^state\.getSlot\((\d+)\)$/.test(zigVal)) {
-                  const slotMatch = zigVal.match(/^state\.getSlot\((\d+)\)$/);
-                  if (slotMatch) {
-                    const ss = ctx.stateSlots[parseInt(slotMatch[1])];
-                    jsVal = ss ? ss.getter : zigVal;
-                  }
-                }
-                jsLines.push(`  var ${propName} = ${jsVal};`);
-              }
-            }
-            jsLines.push(`  ${jsHandlerBody};`);
-            jsLines.push(`}`);
-            mh._emittedInJS = true;
-          }
-        }
-      }
+      // Map press handlers go through LUA_LOGIC — not JS.
+      // (JS path removed — all __mapPress_N_M functions are emitted in LUA_LOGIC below)
     }
     // Emit JS wrappers for handlers delegated from Zig (string concat, etc.)
     // This runs outside the scriptBlock conditional since delegated handlers
@@ -1083,8 +978,8 @@ function emitLogicBlocks(ctx) {
     // Generate Lua state variable declarations + setter functions
     const luaLines = [];
     const hasLuaHandlers = ctx.handlers.some(h => h.luaBody);
-    // Only emit Lua state setters when there's an <lscript> block
-    if (ctx.luaBlock && (hasLuaHandlers || ctx.stateSlots.length > 0)) {
+    // Emit Lua state setters whenever handlers exist (they dispatch through LuaJIT)
+    if (hasLuaHandlers || ctx.stateSlots.length > 0) {
       luaLines.push('-- State variables (mirroring Zig state slots)');
       for (let si = 0; si < ctx.stateSlots.length; si++) {
         const s = ctx.stateSlots[si];
@@ -1103,12 +998,12 @@ function emitLogicBlocks(ctx) {
       }
       luaLines.push('');
     }
-    // Object array data loading via Lua (only when <lscript> block exists)
-    if (ctx.luaBlock) {
+    // Object array data loading via Lua — needed for any cart with OA-backed maps
+    if (ctx.objectArrays.length > 0) {
       for (const oa of ctx.objectArrays) {
-        if (oa.isNested || oa.isConst) continue; // nested OAs unpacked by parent, const OAs are static
-        luaLines.push(`local ${oa.getter} = {}`);
-        luaLines.push(`function ${oa.setter}(v) ${oa.getter} = v; __setObjArr${oa.oaIdx}(v) end`);
+        if (oa.isNested || oa.isConst) continue;
+        luaLines.push(`${oa.getter} = {}`);
+        luaLines.push(`function ${oa.setter}(v) ${oa.getter} = v end`);
       }
     }
     // Map handler functions in Lua — MUST come before script content
@@ -1118,15 +1013,49 @@ function emitLogicBlocks(ctx) {
       const mapHandlers = ctx.handlers.filter(h => h.inMap && h.mapIdx === mi);
       for (let hi = 0; hi < mapHandlers.length; hi++) {
         const mh = mapHandlers[hi];
-        if (mh.luaBody && !mh._emittedInJS) {
+        if (mh.luaBody) {
           const m = ctx.maps[mi];
           if (m.isNested && m.parentMap) {
-            // Nested map handler receives (parent_idx, item_idx)
+            // Nested map handler — scan for field refs and pass as args from Zig
+            // (Lua tables are empty; data lives in Zig OA columns)
             const outerIdxParam = m.parentMap.indexParam || 'gi';
             const innerIdxParam = m.indexParam || 'ii';
-            luaLines.push(`function __mapPress_${mi}_${hi}(${outerIdxParam}, ${innerIdxParam})`);
-            luaLines.push(`  ${luaTransform(mh.luaBody)}`);
+            const parentFieldRefs = [];
+            const childFieldRefs = [];
+            if (m.parentMap.oa) {
+              for (const f of m.parentMap.oa.fields) {
+                if (f.type === 'nested_array') continue;
+                const pat = new RegExp(`\\b${m.parentMap.itemParam}\\.${f.name}\\b`);
+                if (pat.test(mh.luaBody)) parentFieldRefs.push(f);
+              }
+            }
+            if (m.oa) {
+              for (const f of m.oa.fields) {
+                if (f.type === 'nested_array') continue;
+                const pat = new RegExp(`\\b${m.itemParam}\\.${f.name}\\b`);
+                if (pat.test(mh.luaBody)) childFieldRefs.push(f);
+              }
+            }
+            const params = [outerIdxParam, innerIdxParam,
+              ...parentFieldRefs.map(f => `_fp_${f.name}`),
+              ...childFieldRefs.map(f => `_fc_${f.name}`)];
+            luaLines.push(`function __mapPress_${mi}_${hi}(${params.join(', ')})`);
+            let body = luaTransform(mh.luaBody);
+            for (const f of parentFieldRefs) {
+              body = body.replace(new RegExp(`\\b${m.parentMap.itemParam}\\.${f.name}\\b`, 'g'), `_fp_${f.name}`);
+            }
+            for (const f of childFieldRefs) {
+              body = body.replace(new RegExp(`\\b${m.itemParam}\\.${f.name}\\b`, 'g'), `_fc_${f.name}`);
+            }
+            luaLines.push(`  ${body}`);
             luaLines.push(`end`);
+            // Store field refs for Zig-side ptr building
+            if (!m._handlerFieldRefsMap) m._handlerFieldRefsMap = {};
+            m._handlerFieldRefsMap[hi] = [...parentFieldRefs, ...childFieldRefs];
+            m._nestedParentFieldRefs = m._nestedParentFieldRefs || {};
+            m._nestedParentFieldRefs[hi] = parentFieldRefs;
+            m._nestedChildFieldRefs = m._nestedChildFieldRefs || {};
+            m._nestedChildFieldRefs[hi] = childFieldRefs;
           } else {
             // Top-level map handler — scan for item.field refs and pass as args
             const oa = m.oa;
@@ -1168,6 +1097,22 @@ function emitLogicBlocks(ctx) {
         }
       }
     }
+    // Non-map handler closures in Lua (mirrors JS closure wrappers above)
+    for (const h of ctx.handlers) {
+      if (h.inMap) continue;
+      if (!h.luaBody) continue;
+      if (!h.closureParams || h.closureParams.length === 0) continue;
+      const hName = h.name;
+      const isReferenced = ctx.handlers.some(function(h2) { return h2 !== h && h2.luaBody && h2.luaBody.indexOf(hName + '(') >= 0; });
+      if (!isReferenced) continue;
+      const params = h.closureParams.join(', ');
+      const luaBody = luaTransform(h.luaBody);
+      luaLines.push(`function ${hName}(${params}) ${luaBody} end`);
+    }
+    // setVariant Lua wrapper
+    if (ctx.variantBindings && ctx.variantBindings.length > 0) {
+      luaLines.push(`function setVariant(v) __setVariant(v) end`);
+    }
     // Inline <lscript> block content — emitted raw as Lua
     if (ctx.luaBlock) {
       luaLines.push('-- <lscript> block');
@@ -1186,8 +1131,6 @@ function emitLogicBlocks(ctx) {
       }
       luaLines.push('end');
       luaLines.push('__evalDynTexts()');
-      luaLines.push('if __evalInterval then __evalInterval:stop() end');
-      luaLines.push('__evalInterval = __setInterval(__evalDynTexts, 16)');
       luaLines.push('');
     }
     // Script file imports — NOT included in LUA_LOGIC.

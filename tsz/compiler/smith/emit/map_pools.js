@@ -480,7 +480,7 @@ function emitMapPoolRebuilds(ctx, meta) {
       }
       // Replace handler refs in per-item arrays with per-item handler string pointers
       // Must check ALL maps' handlers since nested map handlers may appear in parent per-item arrays
-      const pidPressField = ctx.handlerDispatch === 'lua' ? 'lua_on_press' : 'js_on_press';
+      const pidPressField = 'lua_on_press';
       for (let mj = 0; mj < ctx.maps.length; mj++) {
         const allMH = ctx.handlers.filter(h => h.inMap && h.mapIdx === mj);
         for (let hi = 0; hi < allMH.length; hi++) {
@@ -621,16 +621,40 @@ function emitMapPoolRebuilds(ctx, meta) {
           nestedPoolNode = nestedPoolNode.replace(`&${nestedMeta.innerArr}`, `&_map_inner_${nmi}[_flat_j]`);
         }
       }
-      // Replace handler refs + build per-item Lua ptrs with (parent_idx, item_idx)
+      // Replace handler refs + build per-item Lua ptrs with (parent_idx, item_idx, ...field_refs)
       const nestedHandlers = ctx.handlers.filter(h => h.inMap && h.mapIdx === nmi);
       for (let nhi = 0; nhi < nestedHandlers.length; nhi++) {
+        const _npRefs = (nm._nestedParentFieldRefs && nm._nestedParentFieldRefs[nhi]) || [];
+        const _ncRefs = (nm._nestedChildFieldRefs && nm._nestedChildFieldRefs[nhi]) || [];
+        const _hasNRefs = _npRefs.length > 0 || _ncRefs.length > 0;
+        const _nBufSize = _hasNRefs ? 127 : 47;
+        const _nFmtParts = ['{d}', '{d}'];
+        const _nArgParts = ['_i', '_jj'];
+        for (const _pf of _npRefs) {
+          if (_pf.type === 'string') {
+            _nFmtParts.push("'{s}'");
+            _nArgParts.push(`_oa${m.oaIdx}_${_pf.name}[_i][0.._oa${m.oaIdx}_${_pf.name}_lens[_i]]`);
+          } else {
+            _nFmtParts.push('{d}');
+            _nArgParts.push(`_oa${m.oaIdx}_${_pf.name}[_i]`);
+          }
+        }
+        for (const _cf of _ncRefs) {
+          if (_cf.type === 'string') {
+            _nFmtParts.push("'{s}'");
+            _nArgParts.push(`_oa${cidx}_${_cf.name}[_flat_j][0.._oa${cidx}_${_cf.name}_lens[_flat_j]]`);
+          } else {
+            _nFmtParts.push('{d}');
+            _nArgParts.push(`_oa${cidx}_${_cf.name}[_flat_j]`);
+          }
+        }
         out += `                {\n`;
-        out += `                    const _n = std.fmt.bufPrint(_map_lua_bufs_${nmi}_${nhi}[_flat_j][0..47], "__mapPress_${nmi}_${nhi}({d},{d})", .{_i, _jj}) catch "";\n`;
+        out += `                    const _n = std.fmt.bufPrint(_map_lua_bufs_${nmi}_${nhi}[_flat_j][0..${_nBufSize}], "__mapPress_${nmi}_${nhi}(${_nFmtParts.join(',')})", .{${_nArgParts.join(', ')}}) catch "";\n`;
         out += `                    _map_lua_bufs_${nmi}_${nhi}[_flat_j][_n.len] = 0;\n`;
         out += `                    _map_lua_ptrs_${nmi}_${nhi}[_flat_j] = @ptrCast(_map_lua_bufs_${nmi}_${nhi}[_flat_j][0.._n.len :0]);\n`;
         out += `                }\n`;
         const mh = nestedHandlers[nhi];
-        const nestedPressField = ctx.handlerDispatch === 'lua' ? 'lua_on_press' : 'js_on_press';
+        const nestedPressField = 'lua_on_press';
         const nestedPtrRepl = `.${nestedPressField} = _map_lua_ptrs_${nmi}_${nhi}[_flat_j]`;
         nestedPoolNode = nestedPoolNode.replace(`.lua_on_press = "${mh.luaBody ? mh.luaBody.replace(/\\/g, '\\\\').replace(/"/g, '\\"') : ''}"`, nestedPtrRepl);
         nestedPoolNode = nestedPoolNode.replace(`.js_on_press = "${mh.luaBody ? mh.luaBody.replace(/\\/g, '\\\\').replace(/"/g, '\\"') : ''}"`, nestedPtrRepl);
@@ -651,7 +675,7 @@ function emitMapPoolRebuilds(ctx, meta) {
       const imMeta = _mapMeta[imi];
       if (!imMeta) continue;
       const imOa = im.oa;
-      const imPressField = ctx.handlerDispatch === 'lua' ? 'lua_on_press' : 'js_on_press';
+      const imPressField = 'lua_on_press';
   
       out += `        // inline map ${imi}: ${imOa.getter}.map (per-parent)\n`;
       out += `        _map_count_${imi}[_i] = @min(_oa${im.oaIdx}_len, MAX_MAP_${imi});\n`;
@@ -916,7 +940,7 @@ function emitMapPoolRebuilds(ctx, meta) {
           }
           // Replace handler refs in inner array items with per-item handler string pointers
           // Must check ALL maps' handlers since nested map handlers may appear in parent inner arrays
-          const innerPressField = ctx.handlerDispatch === 'lua' ? 'lua_on_press' : 'js_on_press';
+          const innerPressField = 'lua_on_press';
           for (let mj = 0; mj < ctx.maps.length; mj++) {
             const allMH = ctx.handlers.filter(h => h.inMap && h.mapIdx === mj);
             for (let hi = 0; hi < allMH.length; hi++) {
@@ -1006,7 +1030,7 @@ function emitMapPoolRebuilds(ctx, meta) {
       }
       // Replace handler refs with per-item handler string pointers
       // Use js_on_press when there's a <script> block (QuickJS dispatch)
-      const pressField = ctx.handlerDispatch === 'lua' ? 'lua_on_press' : 'js_on_press';
+      const pressField = 'lua_on_press';
       if (typeof globalThis.__SMITH_DEBUG_MAP_TEXT !== 'undefined') {
         ctx._debugLines.push('[MAP_POOL_NODE] mi=' + mi + ' pressField=' + pressField + ' poolNode=' + poolNode.substring(0, 300));
       }

@@ -20,10 +20,13 @@ function _a039_emit(ctx, meta) {
     var oa = ctx.objectArrays[oi];
     if (oa.isNested || oa.isConst) continue;
     out += '    qjs_runtime.registerHostFn("__setObjArr' + oa.oaIdx + '", @ptrCast(&_oa' + oa.oaIdx + '_unpack), 1);\n';
+    // NOTE: _oa_unpack is QuickJS ABI (JSContext, JSValue, ...) — NOT lua_CFunction.
+    // Lua handlers receive OA field values as args from Zig, not by indexing Lua tables.
   }
 
   if (meta.hasVariants) {
     out += '    qjs_runtime.registerHostFn("__setVariant", @ptrCast(&_setVariantHost), 1);\n';
+    // NOTE: _setVariantHost is QuickJS ABI — not lua_CFunction. Lua uses setVariant() wrapper in LUA_LOGIC.
   }
 
   var inputMod = '@import("' + meta.prefix + 'input.zig")';
