@@ -303,6 +303,42 @@ function emitLuaChildren(c, itemParam, indent) {
             if (c.kind() === TK.rbrace) c.advance();
             continue;
           }
+          // Check if next is a conditional nested map: cond && expr.map(...)
+          // e.g. {state.plugins && state.plugins.map((p) => (<Box>...</Box>))}
+          if (c.kind() === TK.identifier) {
+            // Scan ahead for .map( — skip balanced parens for chained calls
+            var _cmSaved = c.save();
+            var _cmFound = false;
+            var _cmDepth = 0;
+            while (c.pos < c.count && c.kind() !== TK.rbrace) {
+              if (c.kind() === TK.identifier && c.text() === 'map' && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.lparen) {
+                _cmFound = true;
+                break;
+              }
+              if (c.kind() === TK.lparen) _cmDepth++;
+              if (c.kind() === TK.rparen) { if (_cmDepth > 0) _cmDepth--; else break; }
+              c.advance();
+            }
+            if (_cmFound) {
+              // Position at 'map' — skip to the callback body
+              c.advance(); // skip 'map'
+              if (c.kind() === TK.lparen) c.advance(); // (
+              if (c.kind() === TK.lparen) c.advance(); // inner (
+              var _cmParam = c.text();
+              c.advance(); // param name
+              if (c.kind() === TK.rparen) c.advance(); // )
+              if (c.kind() === TK.arrow) c.advance(); // =>
+              if (c.kind() === TK.lparen) c.advance(); // (
+              var _cmChild = emitLuaElement(c, _cmParam, indent + '  ');
+              // Consume closing parens/braces
+              while (c.kind() === TK.rparen) c.advance();
+              if (c.kind() === TK.rbrace) c.advance();
+              // Emit as conditional nested map
+              children.push('(' + condExpr + ') and __luaNestedMap(' + condExpr + ', function(' + _cmParam + ') return ' + _cmChild + ' end) or nil');
+              continue;
+            }
+            c.restore(_cmSaved);
+          }
         }
         // Not a conditional — restore and skip
         c.restore(saved);
