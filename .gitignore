@@ -1,6 +1,7 @@
 # ── Build artifacts ──────────────────────────────────────
 bin/
 .zig-cache/
+zig-cache/
 zig-out/
 zig-out-win/
 dist/
@@ -129,6 +130,15 @@ generated_app.zig
 # Claude ephemeral
 .claude/scheduled_tasks.lock
 
+# Cursor
+.cursorignore
+
+# Stray build/benchmark artifacts
+app.o
+Empty File
+AGENT_ARCHITECTURE.md
+benchmark_*.csv
+
 # ── General ─────────────────────────────────────────────
 # Generated files
 src/generated/content.json
@@ -211,3 +221,4 @@ tsz/maps.zig
 tsz/nodes.zig
 tsz/state.zig
 tsz/test_*.zig
+tsz/test_min
