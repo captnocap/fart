@@ -247,7 +247,7 @@ function emitLuaElement(c, itemParam, indent) {
 
   // Parse attributes
   var _attrLastPos = -1;
-  while (c.pos < c.count && c.kind() !== TK.gt && c.kind() !== TK.slash && _luaEmitIter < _LUA_EMIT_MAX_ITER) {
+  while (c.pos < c.count && c.kind() !== TK.gt && c.kind() !== TK.slash && c.kind() !== TK.slash_gt && _luaEmitIter < _LUA_EMIT_MAX_ITER) {
     _luaEmitIter++;
     if (c.pos === _attrLastPos) { c.advance(); continue; }
     _attrLastPos = c.pos;
@@ -293,10 +293,11 @@ function emitLuaElement(c, itemParam, indent) {
     }
   }
 
-  // Self-closing: />
+  // Self-closing: /> (lexer emits as single TK.slash_gt token OR TK.slash + TK.gt)
   var selfClosing = false;
-  if (c.kind() === TK.slash) { c.advance(); selfClosing = true; }
-  if (c.kind() === TK.gt) c.advance();
+  if (c.kind() === TK.slash_gt) { c.advance(); selfClosing = true; }
+  else if (c.kind() === TK.slash) { c.advance(); selfClosing = true; if (c.kind() === TK.gt) c.advance(); }
+  else if (c.kind() === TK.gt) { c.advance(); }
 
   if (!selfClosing) {
     if (tagName === 'Text') {
