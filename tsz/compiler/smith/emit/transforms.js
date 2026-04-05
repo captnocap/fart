@@ -16,6 +16,29 @@ function luaTransform(code) {
   s = s.replace(/&&/g, ' and ');
   // !expr → not expr (but not != which is already handled)
   s = s.replace(/!(?!=|=)/g, 'not ');
+  // Ternary: a ? b : c → (a) and (b) or (c)
+  // Find ? at any depth, then find : at the same depth
+  var _tDep = 0, _qPos = -1, _qDep = -1;
+  for (var ti = 0; ti < s.length; ti++) {
+    if (s[ti] === '(' || s[ti] === '[') _tDep++;
+    else if (s[ti] === ')' || s[ti] === ']') _tDep--;
+    else if (s[ti] === '?' && s[ti + 1] !== '?' && s[ti + 1] !== '.') { _qPos = ti; _qDep = _tDep; break; }
+  }
+  if (_qPos > 0) {
+    var _cPos = -1;
+    _tDep = _qDep;
+    for (var ci = _qPos + 1; ci < s.length; ci++) {
+      if (s[ci] === '(' || s[ci] === '[') _tDep++;
+      else if (s[ci] === ')' || s[ci] === ']') _tDep--;
+      else if (s[ci] === ':' && _tDep === _qDep) { _cPos = ci; break; }
+    }
+    if (_cPos > 0) {
+      var tCond = s.substring(0, _qPos).trim();
+      var tTrue = s.substring(_qPos + 1, _cPos).trim();
+      var tFalse = s.substring(_cPos + 1).trim();
+      s = tCond + ' and ' + tTrue + ' or ' + tFalse;
+    }
+  }
   // Control flow: if/else/elseif/while/for → Lua equivalents
   // } else if (cond) { → elseif cond then (must come before } else {)
   s = s.replace(/\}\s*else\s+if\s*\(([^)]+)\)\s*\{/g, ' elseif $1 then ');

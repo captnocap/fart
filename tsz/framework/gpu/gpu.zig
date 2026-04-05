@@ -523,7 +523,7 @@ pub fn init(window: if (is_web) *anyopaque else *c.SDL_Window) !void {
         var info: @import("../gpu/gpu.zig").wgpu.AdapterInfo = undefined;
         _ = adapter.getInfo(&info);
         std.debug.print("[gpu] adapter: {s} (device=0x{x})\n", .{
-            @as([*:0]const u8, info.description),
+            info.description.toSlice() orelse "(unknown)",
             info.device_id,
         });
     }
