@@ -313,7 +313,7 @@ function emitLogicBlocks(ctx) {
     // (script may call OA setters that fail in Lua, aborting the rest of the script)
     // (script may call OA setters that fail in Lua, aborting the rest of the script)
     for (let mi = 0; mi < ctx.maps.length; mi++) {
-      if (ctx.maps[mi].mapBackend === 'lua_runtime') continue; // handlers wired via lua_on_press in Lua template
+      if (ctx.maps[mi].mapBackend === 'lua_runtime') continue; // handlers inlined in Lua template as lua_on_press
       const mapHandlers = ctx.handlers.filter(h => h.inMap && h.mapIdx === mi);
       for (let hi = 0; hi < mapHandlers.length; hi++) {
         const mh = mapHandlers[hi];

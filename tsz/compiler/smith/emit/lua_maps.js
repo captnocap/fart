@@ -276,11 +276,30 @@ function emitLuaElement(c, itemParam, indent) {
           if (c.kind() === TK.lbrace) { c.advance(); var kd = 0; while (c.pos < c.count && !(c.kind() === TK.rbrace && kd === 0)) { if (c.kind() === TK.lbrace) kd++; if (c.kind() === TK.rbrace) kd--; c.advance(); } if (c.kind() === TK.rbrace) c.advance(); }
           else if (c.kind() === TK.string) c.advance();
         } else if (/^on(Press|Click)$/.test(attrName)) {
-          // Handler: onPress={...} → lua_on_press = "__mapHandler(_i)"
-          // Skip the handler body tokens
-          if (c.kind() === TK.lbrace) { c.advance(); var hd = 0; while (c.pos < c.count && !(c.kind() === TK.rbrace && hd === 0)) { if (c.kind() === TK.lbrace) hd++; if (c.kind() === TK.rbrace) hd--; c.advance(); } if (c.kind() === TK.rbrace) c.advance(); }
-          // Mark as pressable — Lua template will emit lua_on_press
-          node.handler = true;
+          // Handler: onPress={() => { body }} → capture body as Lua expression
+          if (c.kind() === TK.lbrace) {
+            c.advance(); // skip outer {
+            // Skip arrow prefix: () => or (params) =>
+            while (c.pos < c.count && c.kind() !== TK.arrow && c.kind() !== TK.rbrace) c.advance();
+            if (c.kind() === TK.arrow) c.advance();
+            if (c.kind() === TK.lbrace) c.advance(); // skip block {
+            // Collect handler body tokens
+            var _hParts = [];
+            var _hd = 0;
+            while (c.pos < c.count) {
+              if (c.kind() === TK.lbrace) _hd++;
+              if (c.kind() === TK.rbrace) { if (_hd === 0) break; _hd--; }
+              _hParts.push(c.text());
+              c.advance();
+            }
+            if (c.kind() === TK.rbrace) c.advance(); // skip block }
+            if (c.kind() === TK.rbrace) c.advance(); // skip outer }
+            var _hBody = _hParts.join(' ').replace(/\s*;\s*$/, '').trim();
+            _hBody = _hBody.replace(new RegExp('\\b' + itemParam + '\\b', 'g'), '_item');
+            // Convert === to ==, !== to ~=
+            _hBody = _hBody.replace(/===/g, '==').replace(/!==/g, '~=');
+            node.handler = _hBody || true;
+          }
         } else {
           // Skip unknown attribute value
           if (c.kind() === TK.string) c.advance();
@@ -321,7 +340,10 @@ function emitLuaElement(c, itemParam, indent) {
   if (node.text) fields.push('text = ' + node.text);
   if (node.fontSize) fields.push('font_size = ' + node.fontSize);
   if (node.color) fields.push('text_color = ' + node.color);
-  if (node.handler) fields.push('lua_on_press = "__luaMapPress(" .. _i .. ")"');
+  if (node.handler) {
+    var _hp = typeof node.handler === 'string' ? node.handler : '__luaMapPress(" .. _i .. ")';
+    fields.push('lua_on_press = "' + _hp.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"');
+  }
   if (node.children.length > 0) {
     fields.push('children = {\n' + node.children.map(function(ch) { return indent + '  ' + ch; }).join(',\n') + '\n' + indent + '}');
   }
