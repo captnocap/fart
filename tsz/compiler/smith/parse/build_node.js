@@ -105,16 +105,9 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
 
   if (handlerRef) {
     const handler = ctx.handlers.find(h => h.name === handlerRef);
-    const hasZigBody = handler && handler.body && handler.body.trim().length > 0 && !handler.body.includes('qjs_runtime.');
-    if (hasZigBody) {
-      parts.push(`.handlers = .{ .on_press = handlers.${handlerRef} }`);
-    } else if (handler && handler.luaBody && ctx.handlerDispatch === 'lua') {
+    if (handler && handler.luaBody) {
       const escaped = luaTransform(handler.luaBody).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
       parts.push(`.handlers = .{ .lua_on_press = "${escaped}" }`);
-    } else if (handler && handler.luaBody && ctx.handlerDispatch === 'js') {
-      const jsBody = jsTransform(handler.luaBody);
-      const escaped = jsBody.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-      parts.push(`.handlers = .{ .js_on_press = "${escaped}" }`);
     } else {
       parts.push(`.handlers = .{ .on_press = handlers.${handlerRef} }`);
     }

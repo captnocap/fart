@@ -101,7 +101,7 @@ function _a026_emit(ctx, meta) {
     // Fill per-item component arrays
     var dtConsumed = 0;
     var dtSkippedForInner = 0;
-    var pidPressField = ctx.handlerDispatch === 'lua' ? 'lua_on_press' : 'js_on_press';
+    var pidPressField = 'lua_on_press';
     for (var pi = 0; pi < mapPerItemDecls.length; pi++) {
       var pid = mapPerItemDecls[pi];
       var content = pid.decl.replace(/var \w+ = \[_\]Node\{ /, '').replace(/ \};.*$/, '');
@@ -276,7 +276,7 @@ function _a026_emit(ctx, meta) {
         out += '                    _map_lua_ptrs_' + nmi + '_' + nhi + '[_flat_j] = @ptrCast(_map_lua_bufs_' + nmi + '_' + nhi + '[_flat_j][0.._n.len :0]);\n';
         out += '                }\n';
         var nmh = nestedHandlers[nhi];
-        var nestedPressField = ctx.handlerDispatch === 'lua' ? 'lua_on_press' : 'js_on_press';
+        var nestedPressField = 'lua_on_press';
         var nestedPtrRepl = '.' + nestedPressField + ' = _map_lua_ptrs_' + nmi + '_' + nhi + '[_flat_j]';
         nestedPoolNode = nestedPoolNode.replace('.lua_on_press = "' + (nmh.luaBody ? nmh.luaBody.replace(/\\/g, '\\\\').replace(/"/g, '\\"') : '') + '"', nestedPtrRepl);
         nestedPoolNode = nestedPoolNode.replace('.js_on_press = "' + (nmh.luaBody ? nmh.luaBody.replace(/\\/g, '\\\\').replace(/"/g, '\\"') : '') + '"', nestedPtrRepl);
@@ -296,7 +296,7 @@ function _a026_emit(ctx, meta) {
       var imMeta = _mapMeta[imi];
       if (!imMeta) continue;
       var imOa = im.oa;
-      var imPressField = ctx.handlerDispatch === 'lua' ? 'lua_on_press' : 'js_on_press';
+      var imPressField = 'lua_on_press';
 
       out += '        // inline map ' + imi + ': ' + imOa.getter + '.map (per-parent)\n';
       out += '        _map_count_' + imi + '[_i] = @min(_oa' + im.oaIdx + '_len, MAX_MAP_' + imi + ');\n';
@@ -562,7 +562,7 @@ function _a026_emit(ctx, meta) {
             }
           }
           // Handler refs in inner array
-          var innerPressField = ctx.handlerDispatch === 'lua' ? 'lua_on_press' : 'js_on_press';
+          var innerPressField = 'lua_on_press';
           for (var fhmj = 0; fhmj < ctx.maps.length; fhmj++) {
             var fhMH = ctx.handlers.filter(function(h) { return h.inMap && h.mapIdx === fhmj; });
             for (var fhhi = 0; fhhi < fhMH.length; fhhi++) {
@@ -646,7 +646,7 @@ function _a026_emit(ctx, meta) {
         }
       }
       // Handler refs in pool node
-      var pressField = ctx.handlerDispatch === 'lua' ? 'lua_on_press' : 'js_on_press';
+      var pressField = 'lua_on_press';
       for (var phi = 0; phi < mapHandlers.length; phi++) {
         var pmh = mapHandlers[phi];
         var pEscaped = pmh.luaBody ? pmh.luaBody.replace(/\\/g, '\\\\').replace(/"/g, '\\"') : '';

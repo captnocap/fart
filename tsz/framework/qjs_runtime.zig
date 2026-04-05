@@ -2154,7 +2154,7 @@ pub fn evalLuaMapData(index: usize, js_expr: []const u8) void {
     var name_buf: [24]u8 = undefined;
     const name = std.fmt.bufPrint(&name_buf, "__luaMapData{d}", .{index}) catch return;
     name_buf[name.len] = 0;
-    lua.lua_setglobal(L, @ptrCast(name_buf[0..name.len :0]));
+    lua.lua_setglobal(L, @as([*:0]const u8, @ptrCast(name_buf[0..name.len :0])));
 }
 
 /// Walk a QuickJS JSValue and push the equivalent Lua value onto the Lua stack.
@@ -2214,7 +2214,7 @@ fn pushJSValueToLua(ctx: *qjs.JSContext, L: *@import("luajit_runtime.zig").lua.l
 
     // Object (array or table)
     if (tag == qjs.JS_TAG_OBJECT) {
-        if (qjs.JS_IsArray(ctx, val) != 0) {
+        if (qjs.JS_IsArray(val)) {
             // Array: get length
             const len_val = qjs.JS_GetPropertyStr(ctx, val, "length");
             var len: i32 = 0;

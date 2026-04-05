@@ -608,7 +608,7 @@ function soupToZig(node, warns, inPressable) {
     parts.push('.text_color = Color.rgb(' + _SC.textP + ')');
     parts.push('.font_size = 14');
 
-    if (handlerRef) parts.push('.handlers = .{ .js_on_press = "' + handlerRef + '()" }');
+    if (handlerRef) parts.push('.handlers = .{ .lua_on_press = "' + handlerRef + '()" }');
 
     return { str: '.{ ' + parts.join(', ') + ' }', dynBufId: -1 };
   }
@@ -704,7 +704,7 @@ function soupToZig(node, warns, inPressable) {
       btnStyleFields.push('.justify_content = .center');
 
     parts.push('.style = .{ ' + btnStyleFields.join(', ') + ' }');
-    if (handlerRef) parts.push('.handlers = .{ .js_on_press = "' + handlerRef + '()" }');
+    if (handlerRef) parts.push('.handlers = .{ .lua_on_press = "' + handlerRef + '()" }');
 
     if (childResults.length > 0) {
       var aname = '_arr_' + ctx.arrayCounter++;
@@ -740,7 +740,7 @@ function soupToZig(node, warns, inPressable) {
   }
 
   if (styleFields.length > 0) parts.push('.style = .{ ' + styleFields.join(', ') + ' }');
-  if (handlerRef) parts.push('.handlers = .{ .js_on_press = "' + handlerRef + '()" }');
+  if (handlerRef) parts.push('.handlers = .{ .lua_on_press = "' + handlerRef + '()" }');
 
   // Propagate span/small text color+fontSize to child text nodes
   if ((node.tag === 'span' || node.tag === 'small') && styleAttr && typeof styleAttr === 'object' && styleAttr.expr) {
@@ -1261,7 +1261,12 @@ function compileSoup(source, file) {
   _sMapCount = 0;
 
   resetCtx();
+  ctx._source = source;
   assignSurfaceTier(source, file);
+
+  // ── Route plan — scan source, build plan, hard stop on ambiguity ──
+  var routeErr = buildRoutePlan(source);
+  if (routeErr) return routeErr;
 
   // Phase 1: State
   soupParseState(source, warns);

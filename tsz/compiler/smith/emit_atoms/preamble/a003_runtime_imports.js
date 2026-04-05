@@ -20,7 +20,7 @@ function _a003_emit(ctx, meta) {
     if (meta.hasState || meta.hasDynamicOA) out += 'const state = api.state;\n';
     out += 'const engine = api.engine;\n';
     if (meta.hasScriptRuntime) out += 'const qjs_runtime = api.qjs_runtime;\n';
-    if (meta.hasLuaMaps) out += 'const luajit_runtime = api.luajit_runtime;\n';
+    if (meta.hasScriptRuntime || meta.hasLuaMaps) out += 'const luajit_runtime = api.luajit_runtime;\n';
   } else {
     if (meta.hasState || meta.hasDynamicOA) out += 'const state = @import("' + meta.prefix + 'state.zig");\n';
     out += 'const engine = if (IS_LIB) struct {} else @import("' + meta.prefix + 'engine.zig");\n';
@@ -33,10 +33,11 @@ function _a003_emit(ctx, meta) {
       out += '    pub fn evalExpr(_: []const u8) void {}\n';
       out += '} else @import("' + meta.prefix + 'qjs_runtime.zig");\n';
     }
-    if (meta.hasLuaMaps) {
+    if (meta.hasScriptRuntime || meta.hasLuaMaps) {
       out += 'const luajit_runtime = if (IS_LIB) struct {\n';
       out += '    pub fn callGlobal(_: [*:0]const u8) void {}\n';
       out += '    pub fn setMapWrapper(_: usize, _: *anyopaque) void {}\n';
+      out += '    pub fn registerHostFn(_: [*:0]const u8, _: ?*const anyopaque, _: c_int) void {}\n';
       out += '} else @import("' + meta.prefix + 'luajit_runtime.zig");\n';
     }
   }

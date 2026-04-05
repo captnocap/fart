@@ -20,7 +20,7 @@ const Node = layout.Node;
 const Style = layout.Style;
 const Color = layout.Color;
 
-const lua = @cImport({
+pub const lua = @cImport({
     @cInclude("lua.h");
     @cInclude("lauxlib.h");
     @cInclude("lualib.h");
@@ -28,7 +28,7 @@ const lua = @cImport({
 
 // ── Global VM state ─────────────────────────────────────────────────────
 
-var g_lua: ?*lua.lua_State = null;
+pub var g_lua: ?*lua.lua_State = null;
 
 // ── Telemetry (read from engine.zig) ────────────────────────────────────
 
@@ -528,6 +528,17 @@ pub fn initVM() void {
     }
 
     std.log.info("[luajit-runtime] VM initialized with tsl_stdlib", .{});
+}
+
+/// Register a host function as a Lua global (mirrors qjs_runtime.registerHostFn).
+/// Called from generated _appInit() for per-cart functions like __setObjArr0.
+pub fn registerHostFn(name: [*:0]const u8, func: *const anyopaque, argc: c_int) void {
+    _ = argc;
+    const L = g_lua orelse return;
+    const FnType = lua.lua_CFunction;
+    const lua_fn: FnType = @ptrCast(@alignCast(func));
+    lua.lua_pushcclosure(L, lua_fn, 0);
+    lua.lua_setglobal(L, name);
 }
 
 pub fn deinit() void {

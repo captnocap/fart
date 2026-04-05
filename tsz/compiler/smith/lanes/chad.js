@@ -90,6 +90,7 @@ function extractChadInner(source, block) {
 function compileChadLane(source, tokens, file) {
   var c = mkCursor(tokens, source);
   resetCtx();
+  ctx._source = source;
   assignSurfaceTier(source, file);
 
   // ── Detect chad block ──
@@ -316,8 +317,12 @@ function compileChadLane(source, tokens, file) {
   collectConstArrays(c);
   collectClassifiers();
 
-  // ── Chad always dispatches handlers through JS ──
-  ctx.handlerDispatch = 'js';
+  // ── Handlers always go through LuaJIT ──
+  ctx.handlerDispatch = 'lua';
+
+  // ── Route plan — scan source, build plan, hard stop on ambiguity ──
+  var routeErr = buildRoutePlan(source);
+  if (routeErr) return routeErr;
 
   // ── Find the LAST return() in tokens → parse JSX ──
   // Imports are prepended to the token stream. The main chad block's
