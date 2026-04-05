@@ -519,6 +519,14 @@ pub fn init(window: if (is_web) *anyopaque else *c.SDL_Window) !void {
     }
     g_adapter = adapter_response.adapter;
     const adapter = g_adapter.?;
+    {
+        var info: @import("../gpu/gpu.zig").wgpu.AdapterInfo = undefined;
+        _ = adapter.getInfo(&info);
+        std.debug.print("[gpu] adapter: {s} (device=0x{x})\n", .{
+            @as([*:0]const u8, info.description),
+            info.device_id,
+        });
+    }
 
     // Request device
     const device_response = adapter.requestDeviceSync(instance, null, 200_000_000);

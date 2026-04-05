@@ -1423,6 +1423,7 @@ noinline fn paintCanvasContainer(node: *Node) void {
 
 pub fn run(config_in: AppConfig) !void {
     var config = config_in;
+    const startup_t0 = std.time.microTimestamp();
     // Crash log + signal handling for file-explorer launches (no stderr).
     // Logs to /run/user/<uid>/claude-sessions/supervisor-crash.log
     crashlog.init();
@@ -1501,6 +1502,10 @@ pub fn run(config_in: AppConfig) !void {
         return error.GPUInitFailed;
     };
     defer gpu.deinit();
+    {
+        const dt = @divTrunc(std.time.microTimestamp() - startup_t0, 1000);
+        std.debug.print("[startup] gpu: {d}ms\n", .{dt});
+    }
 
     // Text engine (FreeType)
     var te = TextEngine.initHeadless("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf") catch
@@ -1514,6 +1519,10 @@ pub fn run(config_in: AppConfig) !void {
     layout.setMeasureFn(measureCallback);
     layout.setMeasureImageFn(measureImageCallback);
     input.setMeasureWidthFn(measureWidthOnly);
+    {
+        const dt = @divTrunc(std.time.microTimestamp() - startup_t0, 1000);
+        std.debug.print("[startup] text: {d}ms\n", .{dt});
+    }
 
     var win_w: f32 = @floatFromInt(init_w);
     var win_h: f32 = @floatFromInt(init_h);
@@ -1529,6 +1538,10 @@ pub fn run(config_in: AppConfig) !void {
     @import("audio.zig").registerQjsHostFunctions();
     @import("pty_client.zig").registerQjsHostFunctions();
     @import("applescript.zig").registerQjsHostFunctions();
+    {
+        const dt = @divTrunc(std.time.microTimestamp() - startup_t0, 1000);
+        std.debug.print("[startup] vms: {d}ms\n", .{dt});
+    }
 
     // Register window-open bridge so JS can call __openWindow
     qjs_runtime.setOpenWindowFn(struct {
@@ -1539,18 +1552,30 @@ pub fn run(config_in: AppConfig) !void {
 
     // App init (FFI registration, state slots, initial conditionals/maps)
     if (config.init) |initFn| initFn();
+    {
+        const dt = @divTrunc(std.time.microTimestamp() - startup_t0, 1000);
+        std.debug.print("[startup] app_init: {d}ms\n", .{dt});
+    }
 
     // Load embedded scripts — after init so host functions are registered,
     // then mark dirty so first tick re-evaluates conditionals with scripts available.
     if (config.js_logic.len > 0) qjs_runtime.evalScript(config.js_logic);
     if (config.lua_logic.len > 0) luajit_runtime.evalScript(config.lua_logic);
     if (config.js_logic.len > 0 or config.lua_logic.len > 0) state_mod.markDirty();
+    {
+        const dt = @divTrunc(std.time.microTimestamp() - startup_t0, 1000);
+        std.debug.print("[startup] scripts: {d}ms\n", .{dt});
+    }
 
     // Test harness — enable if ZIGOS_TEST=1
     if (testharness.envEnabled()) testharness.enable();
 
     // Initial tick — set up dynamic texts after JS/Lua is evaluated
     if (config.tick) |tickFn| tickFn(@truncate(c.SDL_GetTicks()));
+    {
+        const dt = @divTrunc(std.time.microTimestamp() - startup_t0, 1000);
+        std.debug.print("[startup] first_tick: {d}ms → ready\n", .{dt});
+    }
 
     // PTY remote control socket
     pty_remote.init();
@@ -1572,11 +1597,11 @@ pub fn run(config_in: AppConfig) !void {
                 term_sel_dragging = false;
                 hovered_node = null;
                 g_hover_changed = true;
-                // Load scripts before init (same order as startup)
+                // Re-init first (registers host functions), then load scripts
+                // (matches startup order: _appInit → evalScript)
+                if (config.init) |initFn| initFn();
                 if (config.js_logic.len > 0) qjs_runtime.evalScript(config.js_logic);
                 if (config.lua_logic.len > 0) luajit_runtime.evalScript(config.lua_logic);
-                // Re-init the new app
-                if (config.init) |initFn| initFn();
                 // Restore preserved state (after init resets to defaults, before tick uses it)
                 if (config.post_reload) |postFn| postFn();
                 if (config.tick) |tickFn| tickFn(@truncate(c.SDL_GetTicks()));
