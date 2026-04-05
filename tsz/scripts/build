@@ -14,9 +14,11 @@ cd "$(dirname "$0")/.."
 POSITIONAL=()
 DBG_FLAGS=""
 GDB_MODE=0
+PROVE_I_BROKE_IT=0
 for arg in "$@"; do
     case "$arg" in
         --fast) ;; # ignored, fast is always on
+        --proveIBrokeIt) PROVE_I_BROKE_IT=1 ;;
         -n) DBG_FLAGS="$DBG_FLAGS --dbg-nodes" ;;
         -s) DBG_FLAGS="$DBG_FLAGS --dbg-state" ;;
         -c) DBG_FLAGS="$DBG_FLAGS --dbg-compiler" ;;
@@ -32,7 +34,7 @@ for arg in "$@"; do
 done
 
 if [ "${#POSITIONAL[@]}" -eq 0 ]; then
-    echo "Usage: scripts/build <cart.tsz> [--debug]"
+    echo "Usage: scripts/build <cart.tsz> [--debug] [--proveIBrokeIt]"
     exit 1
 fi
 
@@ -97,7 +99,8 @@ if [[ "$CART" == *carts/conformance/* ]] && [[ "$CART" != *.script.tsz ]] && [[ 
         binary_size INTEGER,
         error_log   TEXT,
         verified_at TEXT,
-        source_sha  TEXT
+        source_sha  TEXT,
+        engine_sha  TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_test_time ON builds(test_name, built_at DESC);
     CREATE INDEX IF NOT EXISTS idx_lane      ON builds(lane);
@@ -112,8 +115,19 @@ if [[ "$CART" == *carts/conformance/* ]] && [[ "$CART" != *.script.tsz ]] && [[ 
         source_sha       TEXT NOT NULL,
         verified_at      TEXT NOT NULL,
         source_path      TEXT NOT NULL,
-        verified_build_id INTEGER
+        verified_build_id INTEGER,
+        engine_sha       TEXT
     );
+    CREATE TABLE IF NOT EXISTS engine_builds (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        engine_sha  TEXT    NOT NULL UNIQUE,
+        built_at    TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%d %I:%M:%S %p', 'now', 'localtime')),
+        blessed_at  TEXT,
+        commit_sha  TEXT,
+        source_hash TEXT,
+        last_good_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_engine_sha ON engine_builds(engine_sha);
     CREATE TABLE IF NOT EXISTS build_perf (
         id             INTEGER PRIMARY KEY AUTOINCREMENT,
         test_name      TEXT    NOT NULL,
@@ -129,6 +143,10 @@ if [[ "$CART" == *carts/conformance/* ]] && [[ "$CART" != *.script.tsz ]] && [[ 
     );
     CREATE INDEX IF NOT EXISTS idx_perf_test ON build_perf(test_name);
     CREATE INDEX IF NOT EXISTS idx_perf_date ON build_perf(built_at);"
+    # Migrations: add columns to existing tables (no-op if already present)
+    cdb "ALTER TABLE builds ADD COLUMN engine_sha TEXT;" 2>/dev/null || true
+    cdb "ALTER TABLE verified_sources ADD COLUMN engine_sha TEXT;" 2>/dev/null || true
+    cdb "ALTER TABLE engine_builds ADD COLUMN last_good_at TEXT;" 2>/dev/null || true
 fi
 
 record_build() {
@@ -144,6 +162,31 @@ record_build() {
         bin_size=$(stat --printf="%s" "$bin_path" 2>/dev/null || stat -f%z "$bin_path" 2>/dev/null || echo "")
     fi
 
+    # Hash the engine .so that was linked against.
+    # Prefer REACTJIT_ENGINE_SHA if set (locked by ICantCallPreExistingOnThisOne
+    # before the build starts — immune to parallel sessions overwriting the .so).
+    local eng_sha="${REACTJIT_ENGINE_SHA:-}"
+    if [ -z "$eng_sha" ]; then
+        local engine_so="zig-out/lib/libreactjit-core.so"
+        [ -f "$engine_so" ] && eng_sha=$(sha256sum "$engine_so" | awk '{print $1}')
+    fi
+
+    # Register this engine in engine_builds if not already known
+    local fw_hash_now=$(find framework/ -name '*.zig' -exec sha256sum {} + 2>/dev/null | sort | sha256sum | cut -c1-64)
+    if [ -n "$eng_sha" ]; then
+        local safe_eng=$(printf '%s' "$eng_sha" | sed "s/'/''/g")
+        local commit=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
+        cdb "INSERT OR IGNORE INTO engine_builds (engine_sha, commit_sha, source_hash)
+            VALUES ('$safe_eng', '$commit', '$fw_hash_now');"
+    fi
+
+    # On success: update this engine as "last known good" (compiled something)
+    if [ "$status" = "compiled" ] && [ -n "$eng_sha" ]; then
+        local safe_eng2=$(printf '%s' "$eng_sha" | sed "s/'/''/g")
+        cdb "UPDATE engine_builds SET last_good_at = strftime('%Y-%m-%d %I:%M:%S %p', 'now', 'localtime')
+            WHERE engine_sha = '$safe_eng2';"
+    fi
+
     # Truncate error log to 500 chars, escape single quotes for SQL
     error_log=$(printf '%s' "$error_log" | head -c 500 | sed "s/'/''/g")
     # Escape all values for SQL safety
@@ -151,9 +194,134 @@ record_build() {
     local safe_lane=$(printf '%s' "$CONF_LANE" | sed "s/'/''/g")
     local safe_sha=$(printf '%s' "$bin_sha" | sed "s/'/''/g")
     local safe_src_sha=$(printf '%s' "$SOURCE_HASH" | sed "s/'/''/g")
+    local safe_eng_sha=$(printf '%s' "$eng_sha" | sed "s/'/''/g")
 
-    cdb "INSERT INTO builds (test_name, lane, status, binary_sha, binary_size, error_log, source_sha)
-        VALUES ('$safe_name', '$safe_lane', '$status', '$safe_sha', $( [ -n "$bin_size" ] && echo "$bin_size" || echo "NULL"), '$error_log', '$safe_src_sha');"
+    cdb "INSERT INTO builds (test_name, lane, status, binary_sha, binary_size, error_log, source_sha, engine_sha)
+        VALUES ('$safe_name', '$safe_lane', '$status', '$safe_sha', $( [ -n "$bin_size" ] && echo "$bin_size" || echo "NULL"), '$error_log', '$safe_src_sha', '$safe_eng_sha');"
+
+    # On failure, print the full receipt so Claude can't claim pre-existing
+    if [ "$status" != "compiled" ]; then
+        report_failure "$status"
+    fi
+}
+
+report_failure() {
+    [ "$IS_CONFORMANCE" -eq 0 ] && return
+    local fail_status="$1"
+    local safe_name=$(printf '%s' "$CONF_NAME" | sed "s/'/''/g")
+
+    # Current engine + framework state
+    local cur_eng="${REACTJIT_ENGINE_SHA:-}"
+    if [ -z "$cur_eng" ]; then
+        local engine_so="zig-out/lib/libreactjit-core.so"
+        [ -f "$engine_so" ] && cur_eng=$(sha256sum "$engine_so" | awk '{print $1}')
+    fi
+    local fw_hash_now=$(find framework/ -name '*.zig' -exec sha256sum {} + 2>/dev/null | sort | sha256sum | cut -c1-16)
+
+    # Last good build for this test
+    local last_good=$(cdb "SELECT built_at, engine_sha, source_sha
+        FROM builds WHERE test_name = '$safe_name' AND status = 'compiled'
+        ORDER BY id DESC LIMIT 1;" 2>/dev/null || true)
+
+    # Last good engine's framework source hash
+    local lg_fw_hash=""
+    if [ -n "$last_good" ]; then
+        local lg_eng_full=$(echo "$last_good" | cut -d'|' -f2)
+        if [ -n "$lg_eng_full" ]; then
+            local safe_lg_eng=$(printf '%s' "$lg_eng_full" | sed "s/'/''/g")
+            lg_fw_hash=$(cdb "SELECT substr(source_hash,1,16) FROM engine_builds
+                WHERE engine_sha = '$safe_lg_eng';" 2>/dev/null || true)
+        fi
+    fi
+
+    # How many distinct engines this test has passed on
+    local engine_count=$(cdb "SELECT COUNT(DISTINCT engine_sha)
+        FROM builds WHERE test_name = '$safe_name' AND status = 'compiled'
+        AND engine_sha IS NOT NULL AND engine_sha != '';" 2>/dev/null || echo "0")
+
+    # Human verification info
+    local verified_info=$(cdb "SELECT verified_at, substr(engine_sha,1,16)
+        FROM verified_sources WHERE test_name = '$safe_name';" 2>/dev/null || true)
+
+    # Is current engine blessed?
+    local is_blessed=""
+    if [ -n "$cur_eng" ]; then
+        local safe_cur_eng=$(printf '%s' "$cur_eng" | sed "s/'/''/g")
+        is_blessed=$(cdb "SELECT blessed_at FROM engine_builds
+            WHERE engine_sha = '$safe_cur_eng' AND blessed_at IS NOT NULL;" 2>/dev/null || true)
+    fi
+
+    # Last engine that compiled ANYTHING successfully
+    local last_any_good=$(cdb "SELECT substr(engine_sha,1,16), last_good_at, substr(source_hash,1,16)
+        FROM engine_builds WHERE last_good_at IS NOT NULL
+        ORDER BY last_good_at DESC LIMIT 1;" 2>/dev/null || true)
+
+    echo ""
+    echo "╔══════════════════════════════════════════════════════════════╗"
+    echo "║  BUILD FAILURE RECEIPT: $CONF_NAME"
+    echo "╠══════════════════════════════════════════════════════════════╣"
+    echo "║"
+    echo "║  Failed stage:    $fail_status"
+    echo "║  Test source:     ${SOURCE_HASH:0:16}..."
+    echo "║  Your engine:     ${cur_eng:0:16}...$([ -n "$is_blessed" ] && echo " (BLESSED)" || echo " (NOT BLESSED)")"
+    echo "║  Your framework:  ${fw_hash_now}..."
+    echo "║"
+
+    if [ -n "$last_good" ]; then
+        local lg_time=$(echo "$last_good" | cut -d'|' -f1)
+        local lg_eng=$(echo "$last_good" | cut -d'|' -f2)
+        local lg_src=$(echo "$last_good" | cut -d'|' -f3)
+        echo "║  ── LAST KNOWN GOOD (this test) ──"
+        echo "║  Built at:        $lg_time"
+        echo "║  Engine:          ${lg_eng:0:16}..."
+        echo "║  Framework src:   ${lg_fw_hash:-unknown}..."
+        if [ "$lg_src" = "$SOURCE_HASH" ]; then
+            echo "║  Test source:     UNCHANGED (same hash)"
+        else
+            echo "║  Test source:     CHANGED (test was modified!)"
+        fi
+        if [ -n "$lg_fw_hash" ] && [ "$lg_fw_hash" = "$fw_hash_now" ]; then
+            echo "║  Framework src:   UNCHANGED (same hash)"
+        elif [ -n "$lg_fw_hash" ]; then
+            echo "║  Framework src:   CHANGED ← YOU changed the engine code"
+        fi
+    else
+        echo "║  Last good build:  NEVER (no successful build on record)"
+    fi
+
+    echo "║"
+    if [ -n "$last_any_good" ]; then
+        local lag_eng=$(echo "$last_any_good" | cut -d'|' -f1)
+        local lag_time=$(echo "$last_any_good" | cut -d'|' -f2)
+        local lag_fw=$(echo "$last_any_good" | cut -d'|' -f3)
+        echo "║  ── LAST ENGINE THAT COMPILED ANYTHING ──"
+        echo "║  Engine:          ${lag_eng}..."
+        echo "║  Compiled at:     $lag_time"
+        echo "║  Framework src:   ${lag_fw}..."
+        if [ "$lag_fw" != "$fw_hash_now" ]; then
+            echo "║  vs your code:    DIFFERENT ← your framework/ changes broke it"
+        fi
+    fi
+
+    echo "║"
+    echo "║  ── HISTORY ──"
+    echo "║  Engines this test has passed on: $engine_count"
+    if [ -n "$verified_info" ]; then
+        local v_time=$(echo "$verified_info" | cut -d'|' -f1)
+        local v_eng=$(echo "$verified_info" | cut -d'|' -f2)
+        echo "║  Human verified:  $v_time (engine $v_eng...)"
+    else
+        echo "║  Human verified:  NEVER"
+    fi
+
+    echo "║"
+    echo "║  Human has verified this source code works. It has built"
+    echo "║  successfully against $engine_count engine(s). The framework"
+    echo "║  source you are running is DIFFERENT from the last working"
+    echo "║  build. This is an error in YOUR CODE."
+    echo "║"
+    echo "╚══════════════════════════════════════════════════════════════╝"
+    echo ""
 }
 
 # Pick optimize flag
@@ -204,13 +372,77 @@ zig build forge 2>/dev/null || {
     echo "[$NAME] WARNING: zig build forge failed — using existing binary"
 }
 
-# Engine .so: if any framework/*.zig file changed, the .so is stale.
-# Same deal — incremental, no-op when nothing changed. Catches the
-# "edited crashlog.zig but the binary still segfaults silently" class
-# of bugs that waste entire sessions.
-zig build core-so -Doptimize=ReleaseFast 2>/dev/null || {
-    echo "[$NAME] WARNING: zig build core-so failed — using existing engine"
-}
+# ── Engine routing ──────────────────────────────────────────────────
+# Three modes:
+#   1. REACTJIT_SKIP_ENGINE_BUILD=1 → blessed engine already swapped in, don't touch
+#   2. --proveIBrokeIt → swap blessed engine in for this build
+#   3. Normal → check if framework/ changed since last engine build.
+#      If changed: force dirty rebuild (cache nuke). If not: use existing.
+BLESSED_SO="zig-out/lib/libreactjit-core-blessed.so"
+
+if [ "${REACTJIT_SKIP_ENGINE_BUILD:-0}" = "1" ]; then
+    echo "[$NAME] using blessed engine (skip engine rebuild)"
+
+elif [ "$PROVE_I_BROKE_IT" -eq 1 ]; then
+    # --proveIBrokeIt: use the blessed engine, lock its hash
+    if [ ! -f "$BLESSED_SO" ]; then
+        echo "[$NAME] ERROR: --proveIBrokeIt requires a blessed engine."
+        echo "  Ask the human to run: ./scripts/bless-engine"
+        exit 1
+    fi
+    cp "$BLESSED_SO" "zig-out/lib/libreactjit-core.so"
+    export REACTJIT_ENGINE_SHA=$(sha256sum "$BLESSED_SO" | awk '{print $1}')
+    echo "[$NAME] using blessed engine (--proveIBrokeIt): ${REACTJIT_ENGINE_SHA:0:16}..."
+
+else
+    # Auto-detect: has framework/ changed since last engine build?
+    ENGINE_SO="zig-out/lib/libreactjit-core.so"
+    FW_HASH_NOW=$(find framework/ -name '*.zig' -exec sha256sum {} + 2>/dev/null | sort | sha256sum | cut -c1-64)
+
+    # Get source hash of the last recorded engine build
+    LAST_ENGINE_SRC=""
+    if [ -f "$ENGINE_SO" ]; then
+        CUR_ENG_SHA=$(sha256sum "$ENGINE_SO" | awk '{print $1}')
+        SAFE_CUR_ENG=$(printf '%s' "$CUR_ENG_SHA" | sed "s/'/''/g")
+        if [ -f "conformance.db" ]; then
+            LAST_ENGINE_SRC=$(sqlite3 conformance.db ".timeout 5000" \
+                "SELECT source_hash FROM engine_builds WHERE engine_sha = '$SAFE_CUR_ENG';" 2>/dev/null || true)
+        fi
+    fi
+
+    if [ -n "$LAST_ENGINE_SRC" ] && [ "$FW_HASH_NOW" = "$LAST_ENGINE_SRC" ]; then
+        # Framework unchanged — use existing engine
+        echo "[$NAME] engine up to date (framework/ unchanged)"
+    else
+        # Framework changed or unknown engine — force dirty rebuild
+        echo "[$NAME] framework/ changed since last engine build — forcing clean rebuild"
+        rm -f "$ENGINE_SO"
+        rm -rf .zig-cache/h
+        zig build core-so -Doptimize=ReleaseFast 2>&1 || {
+            echo ""
+            echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+            echo "  ENGINE BUILD FAILED"
+            echo "  Your framework/ changes don't compile."
+            echo "  Fix them before building carts."
+            echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+
+            # Show the receipt if this is a conformance build
+            if [ "$IS_CONFORMANCE" -eq 1 ]; then
+                record_build "engine_fail" "engine build failed — framework/ changes don't compile"
+            fi
+            exit 1
+        }
+        # Record the new engine
+        NEW_ENG_SHA=$(sha256sum "$ENGINE_SO" | awk '{print $1}')
+        COMMIT=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
+        if [ -f "conformance.db" ]; then
+            sqlite3 conformance.db ".timeout 5000" \
+                "INSERT OR REPLACE INTO engine_builds (engine_sha, commit_sha, source_hash)
+                 VALUES ('$NEW_ENG_SHA', '$COMMIT', '$FW_HASH_NOW');" 2>/dev/null || true
+        fi
+        echo "[$NAME] engine rebuilt: ${NEW_ENG_SHA:0:16}..."
+    fi
+fi
 
 # ── Step 1: forge (smith compiler: .tsz → .zig) ─────────────────────
 # Clean stale outputs so preflight check doesn't read old monolith errors

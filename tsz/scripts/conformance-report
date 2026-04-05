@@ -122,16 +122,34 @@ case "$MODE" in
         # Refresh in case fuzzy match resolved TNAME
         SAFE_TNAME=$(sql_escape "$TNAME")
 
-        # Mark as verified + lock source hash + record which build was verified
+        # Mark as verified + lock source hash + engine hash + record which build was verified
         NOW=$(date +"%Y-%m-%d %I:%M:%S %p")
         SOURCE_HASH=$(sha256sum "$SOURCE_PATH" | awk '{print $1}')
         SAFE_SOURCE_PATH=$(sql_escape "$SOURCE_PATH")
+
+        # Get the engine hash from the build record, or hash current .so
+        ENGINE_SHA=$(sqlite3 "$DB" ".timeout 5000" \
+            "SELECT engine_sha FROM builds WHERE id = $LATEST_ID;" 2>/dev/null || true)
+        if [ -z "$ENGINE_SHA" ]; then
+            ENGINE_SO="zig-out/lib/libreactjit-core.so"
+            [ -f "$ENGINE_SO" ] && ENGINE_SHA=$(sha256sum "$ENGINE_SO" | awk '{print $1}')
+        fi
+        SAFE_ENGINE_SHA=$(sql_escape "${ENGINE_SHA:-unknown}")
+
         sqlite3 "$DB" ".timeout 5000" "UPDATE builds SET verified_at = '$NOW' WHERE id = $LATEST_ID;"
-        sqlite3 "$DB" ".timeout 5000" "INSERT OR REPLACE INTO verified_sources (test_name, source_sha, verified_at, source_path, verified_build_id)
-            VALUES ('$SAFE_TNAME', '$SOURCE_HASH', '$NOW', '$SAFE_SOURCE_PATH', $LATEST_ID);"
+        sqlite3 "$DB" ".timeout 5000" "INSERT OR REPLACE INTO verified_sources (test_name, source_sha, verified_at, source_path, verified_build_id, engine_sha)
+            VALUES ('$SAFE_TNAME', '$SOURCE_HASH', '$NOW', '$SAFE_SOURCE_PATH', $LATEST_ID, '$SAFE_ENGINE_SHA');"
+
+        # Check if this engine is blessed
+        IS_BLESSED=""
+        if [ -n "$ENGINE_SHA" ]; then
+            IS_BLESSED=$(sqlite3 "$DB" ".timeout 5000" \
+                "SELECT blessed_at FROM engine_builds WHERE engine_sha = '$SAFE_ENGINE_SHA' AND blessed_at IS NOT NULL;" 2>/dev/null || true)
+        fi
 
         echo "LOCKED: $SOURCE_PATH"
-        echo "  SHA256: $SOURCE_HASH"
+        echo "  source: $SOURCE_HASH"
+        echo "  engine: ${ENGINE_SHA:0:16}...$([ -n "$IS_BLESSED" ] && echo " (BLESSED)" || echo " (unblessed)")"
 
         # Snapshot generated code
         # Forge uses just the basename (no subdirectory), so "effects/plasma" → "plasma"
@@ -204,26 +222,32 @@ case "$MODE" in
 
     --verified)
         echo ""
-        printf "%-30s %-10s %-20s %-20s %s\n" "TEST" "LANE" "FIRST BUILT" "VERIFIED BUILD" "LAST BUILD"
-        printf "%-30s %-10s %-20s %-20s %s\n" "---" "----" "-----------" "--------------" "----------"
+        printf "%-30s %-10s %-20s %-18s %-18s %s\n" "TEST" "LANE" "VERIFIED" "ENGINE" "BLESSED?" "ENGINES PASSED"
+        printf "%-30s %-10s %-20s %-18s %-18s %s\n" "---" "----" "--------" "------" "--------" "--------------"
         sqlite3 "$DB" ".timeout 5000" \
             "SELECT v.test_name, v.source_path,
-                    first.built_at,
                     v.verified_at,
-                    latest.built_at
+                    COALESCE(v.engine_sha, ''),
+                    COALESCE(e.blessed_at, ''),
+                    (SELECT COUNT(DISTINCT b.engine_sha)
+                     FROM builds b
+                     WHERE b.test_name = v.test_name
+                       AND b.status = 'compiled'
+                       AND b.engine_sha IS NOT NULL)
              FROM verified_sources v
-             LEFT JOIN builds first ON first.test_name = v.test_name
-               AND first.id = (SELECT MIN(id) FROM builds WHERE test_name = v.test_name)
-             LEFT JOIN builds latest ON latest.test_name = v.test_name
-               AND latest.id = (SELECT MAX(id) FROM builds WHERE test_name = v.test_name)
-             ORDER BY v.verified_at DESC;" | while IFS='|' read -r name spath first_built verified_at last_built; do
+             LEFT JOIN engine_builds e ON e.engine_sha = v.engine_sha
+             ORDER BY v.verified_at DESC;" | while IFS='|' read -r name spath verified_at eng_sha blessed_at engine_count; do
             rel="${spath#*carts/conformance/}"
             if [[ "$rel" == */* ]]; then
                 lane="${rel%%/*}"
             else
                 lane="root"
             fi
-            printf "%-30s %-10s %-20s %-20s %s\n" "$name" "$lane" "${first_built:--}" "${verified_at:--}" "${last_built:--}"
+            eng_short="${eng_sha:0:12}"
+            [ -z "$eng_short" ] && eng_short="-"
+            blessed_flag="-"
+            [ -n "$blessed_at" ] && blessed_flag="YES"
+            printf "%-30s %-10s %-20s %-18s %-18s %s\n" "$name" "$lane" "${verified_at:--}" "$eng_short" "$blessed_flag" "${engine_count:-0}"
         done
         ;;
 
