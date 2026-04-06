@@ -12,7 +12,32 @@ function _textToLua(text, itemParam, indexParam) {
 
   // State variable: { stateVar: "count" } → tostring(count)
   if (typeof text === 'object' && text.stateVar) {
-    return 'tostring(' + text.stateVar + ')';
+    var _sv = text.stateVar;
+    // If stateVar still has Zig syntax, route through __eval
+    if (/@|state\.getSlot|\bif\b/.test(_sv)) {
+      // Strip Zig wrappers iteratively
+      for (var _i = 0; _i < 5; _i++) {
+        _sv = _sv.replace(/@as\(\[?\]?(?:const )?\w+,\s*([^)]+)\)/g, '$1');
+        _sv = _sv.replace(/@floatFromInt\(([^)]+)\)/g, '$1');
+        _sv = _sv.replace(/@intCast\(([^)]+)\)/g, '$1');
+      }
+      // if/else → ternary (iterate for nested, handle missing parens)
+      for (var _ti = 0; _ti < 5; _ti++) {
+        _sv = _sv.replace(/\bif\s+\((.+?)\)\s+/g, '$1 ? ');
+        _sv = _sv.replace(/\bif\s+\((.+?)\s+/g, '$1 ? '); // missing close paren
+        _sv = _sv.replace(/\s+else\s+/g, ' : ');
+      }
+      // State slots → getter names
+      _sv = _sv.replace(/state\.getSlot(?:Int|Float|Bool)?\((\d+)\)/g, function(_, idx) {
+        return (typeof ctx !== 'undefined' && ctx.stateSlots && ctx.stateSlots[+idx]) ? ctx.stateSlots[+idx].getter : '_slot' + idx;
+      });
+      // Clean orphan parens
+      var _open = (_sv.match(/\(/g) || []).length;
+      var _close = (_sv.match(/\)/g) || []).length;
+      while (_close > _open && _sv.indexOf(')') >= 0) { _sv = _sv.replace(/\)/, ''); _close--; }
+      return 'tostring(__eval("' + _sv.replace(/"/g, '\\"') + '"))';
+    }
+    return 'tostring(' + _sv + ')';
   }
 
   // Lua expression: { luaExpr: "(mode == 0) and \"A\" or \"B\"" }
