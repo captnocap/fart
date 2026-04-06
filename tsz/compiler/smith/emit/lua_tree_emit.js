@@ -198,36 +198,29 @@ function emitLuaTreeApp(ctx, rootExpr, file) {
   // Init + tick functions (v4 pattern)
   zig += 'fn _appInit() void {\n';
   zig += '    luajit_runtime.setMapWrapper(0, @ptrCast(&_root));\n';
-  // Sync OA data from QJS → Lua after script init
-  if (ctx.objectArrays && ctx.objectArrays.length > 0) {
-    var _oaInitIdx = 0;
+  zig += '    // OA data synced on first tick (after JS_LOGIC loads)\n';
+  zig += '    state.markDirty();\n';
+  zig += '}\n\n';
+
+  var _hasOA = ctx.objectArrays && ctx.objectArrays.some(function(o) { return !o.isConst && !o.isNested; });
+  zig += 'var _first_render: bool = true;\n';
+  zig += 'fn _appTick(now: u32) void {\n';
+  zig += '    _ = now;\n';
+  zig += '    if (_first_render or state.isDirty()) {\n';
+  // Sync OA data from QJS → Lua
+  if (_hasOA) {
+    var _oaTickIdx = 0;
     for (var oai = 0; oai < ctx.objectArrays.length; oai++) {
       var oa = ctx.objectArrays[oai];
       if (oa.isConst || oa.isNested) continue;
       var oaGetter = oa.getter.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-      zig += '    qjs_runtime.evalLuaMapData(' + _oaInitIdx + ', "' + oaGetter + '");\n';
-      _oaInitIdx++;
-    }
-  }
-  zig += '    luajit_runtime.callGlobal("__render");\n';
-  zig += '}\n\n';
-
-  zig += 'fn _appTick(now: u32) void {\n';
-  zig += '    _ = now;\n';
-  zig += '    if (state.isDirty()) {\n';
-  // Re-sync OA data on dirty tick
-  if (ctx.objectArrays && ctx.objectArrays.length > 0) {
-    var _oaTickIdx = 0;
-    for (var oai2 = 0; oai2 < ctx.objectArrays.length; oai2++) {
-      var oa2 = ctx.objectArrays[oai2];
-      if (oa2.isConst || oa2.isNested) continue;
-      var oaGetter2 = oa2.getter.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-      zig += '        qjs_runtime.evalLuaMapData(' + _oaTickIdx + ', "' + oaGetter2 + '");\n';
+      zig += '        qjs_runtime.evalLuaMapData(' + _oaTickIdx + ', "' + oaGetter + '");\n';
       _oaTickIdx++;
     }
   }
   zig += '        luajit_runtime.callGlobal("__render");\n';
   zig += '        state.clearDirty();\n';
+  zig += '        _first_render = false;\n';
   zig += '    }\n';
   zig += '}\n\n';
 

@@ -35,8 +35,8 @@ function _styleToLua(style, itemParam, indexParam) {
     var val = style[key];
     var luaKey = key; // already snake_case from buildNode
 
-    // Skip overflow (Zig-only layout concern)
-    if (luaKey === 'overflow') continue;
+    // Overflow: pass through for ScrollView/auto-overflow
+    // readLuaStyle handles scroll/hidden/auto
 
     // Zig if/else or any complex expression → __eval() escape hatch
     // If the value contains Zig syntax, it came from a ternary or complex expression.
