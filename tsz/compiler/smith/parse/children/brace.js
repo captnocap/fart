@@ -12,6 +12,15 @@ function tryParseBraceChild(c, children) {
     return true;
   }
 
+  // {"string literal"} or {'string literal'} — static text child
+  if (c.kind() === TK.string && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.rbrace) {
+    var _strText = c.text().slice(1, -1);
+    children.push({ nodeExpr: '.{ .text = "' + _strText.replace(/"/g, '\\"') + '" }', luaNode: { text: _strText } });
+    c.advance(); // string
+    c.advance(); // }
+    return true;
+  }
+
   if (globalThis.__SMITH_DEBUG_MAP_DETECT) {
     if (!globalThis.__dbg) globalThis.__dbg = [];
     globalThis.__dbg.push(`BRACE kind=${c.kind()} text=${c.text()} pos=${c.pos}`);
