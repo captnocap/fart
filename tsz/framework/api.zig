@@ -471,6 +471,7 @@ pub const qjs_runtime = struct {
     pub extern fn rjit_qjs_eval_expr(expr: [*:0]const u8) void;
     pub extern fn rjit_qjs_eval_to_string(expr: [*]const u8, expr_len: usize, buf: [*]u8, buf_len: usize) usize;
     pub extern fn rjit_qjs_eval_lua_map_data(index: usize, expr: [*]const u8, expr_len: usize) void;
+    pub extern fn rjit_qjs_sync_scalar_to_lua(name: [*:0]const u8) void;
 
     pub fn registerHostFn(name: [*:0]const u8, fn_ptr: ?*const anyopaque, argc: u8) void {
         rjit_qjs_register_host_fn(name, fn_ptr, argc);
@@ -485,6 +486,9 @@ pub const qjs_runtime = struct {
     }
     pub fn evalLuaMapData(index: usize, expr: []const u8) void {
         rjit_qjs_eval_lua_map_data(index, expr.ptr, expr.len);
+    }
+    pub fn syncScalarToLua(name: [*:0]const u8) void {
+        rjit_qjs_sync_scalar_to_lua(name);
     }
 };
 

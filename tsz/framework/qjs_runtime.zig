@@ -2120,6 +2120,53 @@ pub fn evalToString(code: []const u8, buf: *[256]u8) []const u8 {
     return "";
 }
 
+/// Sync a scalar JS variable to a Lua global of the same name.
+/// Reads the JS value via eval, then sets the Lua global using luajit_runtime.
+/// Handles: string, number, boolean. Arrays/objects are skipped (use evalLuaMapData).
+pub fn syncScalarToLua(var_name: [*:0]const u8) void {
+    if (comptime !HAS_QUICKJS) return;
+    const ctx = g_qjs_ctx orelse return;
+
+    const luajit = @import("luajit_runtime.zig");
+    const lua = luajit.lua;
+    const L = luajit.g_lua orelse return;
+
+    const name_span = std.mem.span(var_name);
+    if (name_span.len == 0) return;
+
+    // Eval the JS variable name to get its value
+    const r = qjs.JS_Eval(ctx, name_span.ptr, name_span.len, "<sync>", 0);
+    defer qjs.JS_FreeValue(ctx, r);
+    if (qjs.JS_IsException(r)) return;
+
+    // Push the value type to Lua
+    if (qjs.JS_IsNumber(r)) {
+        var dval: f64 = 0;
+        _ = qjs.JS_ToFloat64(ctx, &dval, r);
+        _ = lua.lua_getglobal(L, "_G");
+        lua.lua_pushnumber(L, dval);
+        lua.lua_setfield(L, -2, var_name);
+        lua.lua_pop(L, 1);
+    } else if (qjs.JS_IsBool(r)) {
+        const bval = qjs.JS_ToBool(ctx, r);
+        _ = lua.lua_getglobal(L, "_G");
+        lua.lua_pushboolean(L, if (bval != 0) 1 else 0);
+        lua.lua_setfield(L, -2, var_name);
+        lua.lua_pop(L, 1);
+    } else {
+        // String or other — convert to string
+        const s = qjs.JS_ToCString(ctx, r);
+        if (s) |str| {
+            defer qjs.JS_FreeCString(ctx, s);
+            const span = std.mem.span(str);
+            _ = lua.lua_getglobal(L, "_G");
+            _ = lua.lua_pushlstring(L, span.ptr, span.len);
+            lua.lua_setfield(L, -2, var_name);
+            lua.lua_pop(L, 1);
+        }
+    }
+}
+
 /// Evaluate a JS expression and pass the result directly to LuaJIT as
 /// __luaMapDataN. Uses direct FFI value walking — no JSON serialization.
 /// Ported from love2d/lua/bridge_quickjs.lua:jsValueToLua (the proven bridge).

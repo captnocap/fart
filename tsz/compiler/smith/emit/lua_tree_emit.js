@@ -228,6 +228,19 @@ function emitLuaTreeApp(ctx, rootExpr, file) {
       _oaTickIdx++;
     }
   }
+  // Sync scalar state from QJS → Lua before render
+  // Only needed when there's a script block (js_on_press handlers update JS vars)
+  if (ctx.scriptBlock || globalThis.__scriptContent) {
+    if (ctx.stateSlots && ctx.stateSlots.length > 0) {
+      for (var ssi = 0; ssi < ctx.stateSlots.length; ssi++) {
+        var ss = ctx.stateSlots[ssi];
+        if (ss.getter.indexOf('__') === 0) continue; // skip internal
+        var ssGetter = ss.getter.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+        // Read JS value and set Lua global
+        zig += '        qjs_runtime.syncScalarToLua("' + ssGetter + '");\n';
+      }
+    }
+  }
   zig += '        luajit_runtime.callGlobal("__render");\n';
   zig += '        state.clearDirty();\n';
   zig += '        _first_render = false;\n';
