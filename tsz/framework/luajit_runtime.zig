@@ -355,9 +355,24 @@ fn readLuaStyle(L: ?*lua.lua_State, idx: c_int) Style {
     if (readLuaOptFloat(L, idx, "padding_left")) |v| s.padding_left = v;
     if (readLuaOptFloat(L, idx, "padding_right")) |v| s.padding_right = v;
     if (readLuaOptFloat(L, idx, "margin_top")) |v| s.margin_top = v;
+    if (readLuaOptFloat(L, idx, "margin_bottom")) |v| s.margin_bottom = v;
     if (readLuaOptFloat(L, idx, "margin_left")) |v| s.margin_left = v;
     if (readLuaOptFloat(L, idx, "border_radius")) |v| s.border_radius = v;
     if (readLuaOptFloat(L, idx, "border_width")) |v| s.border_width = v;
+    // justify_content: check string
+    lua.lua_getfield(L, idx, "justify_content");
+    if (lua.lua_isstring(L, -1) != 0) {
+        var jlen: usize = 0;
+        const jptr = lua.lua_tolstring(L, -1, &jlen);
+        if (jptr != null) {
+            const jc: []const u8 = @as([*]const u8, @ptrCast(jptr))[0..jlen];
+            if (std.mem.eql(u8, jc, "center")) s.justify_content = .center
+            else if (std.mem.eql(u8, jc, "spaceBetween")) s.justify_content = .space_between
+            else if (std.mem.eql(u8, jc, "spaceAround")) s.justify_content = .space_around
+            else if (std.mem.eql(u8, jc, "end")) s.justify_content = .end;
+        }
+    }
+    lua.lua_pop(L, 1);
     // flex_direction: check string
     lua.lua_getfield(L, idx, "flex_direction");
     if (lua.lua_isstring(L, -1) != 0) {
@@ -419,6 +434,22 @@ fn stampLuaNode(L: ?*lua.lua_State, idx: c_int, alloc: std.mem.Allocator) Node {
     // style
     lua.lua_getfield(L, idx, "style");
     if (lua.lua_istable(L, -1)) node.style = readLuaStyle(L, -1);
+    lua.lua_pop(L, 1);
+    // lua_on_press handler (string → null-terminated copy for Zig)
+    lua.lua_getfield(L, idx, "lua_on_press");
+    if (lua.lua_isstring(L, -1) != 0) {
+        var len: usize = 0;
+        const ptr = lua.lua_tolstring(L, -1, &len);
+        if (ptr != null and len > 0) {
+            const copy = alloc.alloc(u8, len + 1) catch {
+                lua.lua_pop(L, 1);
+                return node;
+            };
+            @memcpy(copy[0..len], @as([*]const u8, @ptrCast(ptr))[0..len]);
+            copy[len] = 0;
+            node.handlers.lua_on_press = @ptrCast(copy[0..len :0]);
+        }
+    }
     lua.lua_pop(L, 1);
     // children (recursive)
     lua.lua_getfield(L, idx, "children");
