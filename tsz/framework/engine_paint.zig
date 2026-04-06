@@ -89,6 +89,12 @@ pub var input_drag_node_x: f32 = 0; // node rect x (for computing local_x)
 pub var input_drag_node_pl: f32 = 0; // node padding-left
 pub var input_drag_font_size: u16 = 0;
 
+pub fn resetPaintCounters() void {
+    g_paint_count = 0;
+    g_budget_exceeded = false;
+    g_hidden_count = 0;
+}
+
 pub fn paintNode(node: *Node) void {
     if (node.style.display == .none) { g_hidden_count += 1; log.info(.render, "hidden {s}", .{node.debug_name orelse "?"}); return; }
     g_paint_count += 1;

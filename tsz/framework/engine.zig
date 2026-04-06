@@ -2231,6 +2231,9 @@ pub fn run(config_in: AppConfig) !void {
         // Paint (main window — wgpu)
         g_dt_sec = dt_sec;
         selection.resetWalkState();
+        g_paint_count = 0;
+        g_budget_exceeded = false;
+        g_hidden_count = 0;
         const t4 = std.time.microTimestamp();
         paintNode(config.root);
 
