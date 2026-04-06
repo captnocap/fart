@@ -91,14 +91,13 @@ function _nodeToLua(node, itemParam, indexParam, indent) {
       } else if (child.luaMapLoop) {
         // Inline map loop — emits as a Lua function call that returns children
         var ml = child.luaMapLoop;
+        // Map loops can't use unpack() mid-table (Lua only takes first result).
+        // Instead, emit the loop BEFORE the children table and splice the results.
+        // Use __mapLoop helper that returns the array directly.
         var loopBody = ml.bodyNode ? _nodeToLua(ml.bodyNode, ml.itemParam, ml.indexParam, indent + '    ') : '{}';
-        childLua.push('unpack((function()\n' +
-          indent + '    local _r = {}\n' +
-          indent + '    for _i, _item in ipairs(' + ml.dataVar + ') do\n' +
-          indent + '      _r[#_r + 1] = ' + loopBody + '\n' +
-          indent + '    end\n' +
-          indent + '    return _r\n' +
-          indent + '  end)())');
+        childLua.push('__mapLoop(' + ml.dataVar + ', function(_item, _i)\n' +
+          indent + '    return ' + loopBody + '\n' +
+          indent + '  end)');
       } else {
         childLua.push(_nodeToLua(child, itemParam, indexParam, indent + '  '));
       }

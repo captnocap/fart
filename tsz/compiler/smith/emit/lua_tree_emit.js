@@ -20,6 +20,33 @@ function emitLuaTreeApp(ctx, rootExpr, file) {
   lua.push('function _setState(k, v) _state[k] = v; __markDirty() end');
   lua.push('');
 
+  // Map loop helper — returns a marker table that __flattenChildren expands
+  lua.push('function __mapLoop(arr, fn)');
+  lua.push('  if not arr then return nil end');
+  lua.push('  local r = {}');
+  lua.push('  for i, item in ipairs(arr) do');
+  lua.push('    r[#r + 1] = fn(item, i)');
+  lua.push('  end');
+  lua.push('  r.__isMapResult = true');
+  lua.push('  return r');
+  lua.push('end');
+  lua.push('');
+
+  // Flatten children: expand __mapLoop results inline
+  lua.push('function __flattenChildren(children)');
+  lua.push('  if not children then return {} end');
+  lua.push('  local flat = {}');
+  lua.push('  for _, child in ipairs(children) do');
+  lua.push('    if type(child) == "table" and child.__isMapResult then');
+  lua.push('      for _, mc in ipairs(child) do flat[#flat + 1] = mc end');
+  lua.push('    elseif child ~= nil then');
+  lua.push('      flat[#flat + 1] = child');
+  lua.push('    end');
+  lua.push('  end');
+  lua.push('  return flat');
+  lua.push('end');
+  lua.push('');
+
   // State slot setters/getters (compatibility with existing useState pattern)
   if (ctx.stateSlots && ctx.stateSlots.length > 0) {
     for (var si = 0; si < ctx.stateSlots.length; si++) {

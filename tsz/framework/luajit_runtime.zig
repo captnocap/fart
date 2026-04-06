@@ -506,21 +506,63 @@ fn stampLuaNode(L: ?*lua.lua_State, idx: c_int, alloc: std.mem.Allocator) Node {
         }
     }
     lua.lua_pop(L, 1);
-    // children (recursive)
+    // children (recursive) — handles __isMapResult expansion
     lua.lua_getfield(L, idx, "children");
     if (lua.lua_istable(L, -1)) {
         const n: usize = @intCast(lua.lua_objlen(L, -1));
         if (n > 0) {
-            const kids = alloc.alloc(Node, n) catch {
-                lua.lua_pop(L, 1);
-                return node;
-            };
+            // Pass 1: count total children (expand __isMapResult arrays)
+            var total: usize = 0;
             for (0..n) |i| {
                 lua.lua_rawgeti(L, -1, @intCast(i + 1));
-                kids[i] = stampLuaNode(L, -1, alloc);
+                if (lua.lua_istable(L, -1)) {
+                    lua.lua_getfield(L, -1, "__isMapResult");
+                    const is_map = lua.lua_toboolean(L, -1) != 0;
+                    lua.lua_pop(L, 1);
+                    if (is_map) {
+                        total += @intCast(lua.lua_objlen(L, -1));
+                    } else {
+                        total += 1;
+                    }
+                } else if (!lua.lua_isnil(L, -1)) {
+                    total += 1;
+                }
                 lua.lua_pop(L, 1);
             }
-            node.children = kids;
+            if (total > 0) {
+                const kids = alloc.alloc(Node, total) catch {
+                    lua.lua_pop(L, 1);
+                    return node;
+                };
+                // Pass 2: fill children (expand map results inline)
+                var ki: usize = 0;
+                for (0..n) |i| {
+                    lua.lua_rawgeti(L, -1, @intCast(i + 1));
+                    if (lua.lua_istable(L, -1)) {
+                        lua.lua_getfield(L, -1, "__isMapResult");
+                        const is_map = lua.lua_toboolean(L, -1) != 0;
+                        lua.lua_pop(L, 1);
+                        if (is_map) {
+                            const mn: usize = @intCast(lua.lua_objlen(L, -1));
+                            for (0..mn) |mi| {
+                                lua.lua_rawgeti(L, -1, @intCast(mi + 1));
+                                if (ki < total) {
+                                    kids[ki] = stampLuaNode(L, -1, alloc);
+                                    ki += 1;
+                                }
+                                lua.lua_pop(L, 1);
+                            }
+                        } else {
+                            if (ki < total) {
+                                kids[ki] = stampLuaNode(L, -1, alloc);
+                                ki += 1;
+                            }
+                        }
+                    }
+                    lua.lua_pop(L, 1);
+                }
+                node.children = kids[0..ki];
+            }
         }
     }
     lua.lua_pop(L, 1);
