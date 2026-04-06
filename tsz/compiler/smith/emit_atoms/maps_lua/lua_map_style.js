@@ -21,6 +21,13 @@ function _zigColorToLuaHex(val) {
   return null;
 }
 
+function _zigOaToLuaItem(val) {
+  // Color.rgb(@intCast((_oa0_labelBg[_i] >> 16) & 0xFF), ...) → _item.labelBg
+  var m = val.match(/_oa\d+_(\w+)\[_i\]/);
+  if (m) return '_item.' + m[1];
+  return null;
+}
+
 function _styleToLua(style, itemParam, indexParam) {
   if (!style) return null;
   var parts = [];
@@ -30,6 +37,13 @@ function _styleToLua(style, itemParam, indexParam) {
 
     // Skip overflow (Zig-only layout concern)
     if (luaKey === 'overflow') continue;
+
+    // Zig OA field reference → _item.field
+    var oaItem = _zigOaToLuaItem(val);
+    if (oaItem) {
+      parts.push(luaKey + ' = ' + oaItem);
+      continue;
+    }
 
     // Color.rgb() → hex
     var colorHex = _zigColorToLuaHex(val);
