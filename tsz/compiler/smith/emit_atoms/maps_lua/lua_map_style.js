@@ -33,6 +33,8 @@ function _styleToLua(style, itemParam, indexParam) {
   var parts = [];
   for (var key in style) {
     var val = style[key];
+    // Strip Zig enum prefix: .hidden → hidden, .center → center
+    if (typeof val === 'string' && val.charAt(0) === '.') val = val.slice(1);
     var luaKey = key; // already snake_case from buildNode
 
     // Overflow: pass through for ScrollView/auto-overflow
@@ -71,8 +73,15 @@ function _styleToLua(style, itemParam, indexParam) {
       var _eo = (_jsExpr.match(/\(/g) || []).length;
       var _ec = (_jsExpr.match(/\)/g) || []).length;
       while (_ec > _eo && _jsExpr.endsWith(')')) { _jsExpr = _jsExpr.slice(0, -1); _ec--; }
-      // If the cleaned expression is a pure Lua reference (no JS syntax), emit bare
+      // If the cleaned expression is valid Lua (no JS syntax left), emit bare
+      // Covers: _item.field, _item.field * N, var, var + N, ternary with and/or
       if (/^[a-zA-Z_][\w.]*$/.test(_jsExpr) || /^_item\.\w+$/.test(_jsExpr)) {
+        parts.push(luaKey + ' = ' + _jsExpr);
+      } else if (/^[\w._\s+\-*/%()]+$/.test(_jsExpr) && !/[?:]/.test(_jsExpr) && !/\bif\b/.test(_jsExpr)) {
+        // Pure arithmetic/field expression — safe as bare Lua
+        parts.push(luaKey + ' = ' + _jsExpr);
+      } else if (/and|or/.test(_jsExpr) && !/[?:]/.test(_jsExpr) && !/\bif\b/.test(_jsExpr)) {
+        // Lua ternary (cond) and val or val — safe as bare Lua
         parts.push(luaKey + ' = ' + _jsExpr);
       } else {
         parts.push(luaKey + ' = __eval("' + _jsExpr.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '")');
