@@ -343,10 +343,12 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
     if (_hoistedStaticText !== null && _hoistedStaticText !== undefined) {
       _ln.text = _hoistedStaticText;
     }
-    // Handler
+    // Handler — apply luaTransform to convert JS→Lua syntax
     if (handlerRef) {
       var _handler = ctx.handlers.find(function(h) { return h.name === handlerRef; });
-      if (_handler && _handler.luaBody) _ln.handler = _handler.luaBody;
+      if (_handler && _handler.luaBody) {
+        _ln.handler = (typeof luaTransform === 'function') ? luaTransform(_handler.luaBody) : _handler.luaBody;
+      }
     }
     // Children: collect luaNodes from child results
     if (children.length > 0) {

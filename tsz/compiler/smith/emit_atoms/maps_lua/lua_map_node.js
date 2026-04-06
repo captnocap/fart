@@ -23,8 +23,28 @@ function _nodeToLua(node, itemParam, indexParam, indent) {
   }
 
   if (node.color) {
-    var _colorLua = _zigColorToLuaHex(node.color) || _hexToLua(node.color);
-    fields.push('text_color = ' + _colorLua);
+    var _cv = node.color;
+    // Zig if/else color ternary → Lua (cond) and hex or hex
+    if (typeof _cv === 'string' && _cv.indexOf('if ') === 0) {
+      var _cm = _cv.match(/^if\s+\((.+?)\)\s+Color\.rgb\((\d+),\s*(\d+),\s*(\d+)\)\s+else\s+Color\.rgb\((\d+),\s*(\d+),\s*(\d+)\)$/);
+      if (_cm) {
+        var _cc = _cm[1].replace(/_oa\d+_(\w+)\[_i\]/g, '_item.$1').replace(/state\.getSlotInt\(\d+\)/g, '0');
+        var _th = '0x' + ((+_cm[2] << 16) | (+_cm[3] << 8) | +_cm[4]).toString(16).padStart(6, '0');
+        var _fh = '0x' + ((+_cm[5] << 16) | (+_cm[6] << 8) | +_cm[7]).toString(16).padStart(6, '0');
+        fields.push('text_color = (' + _cc + ') and ' + _th + ' or ' + _fh);
+      } else {
+        // OA ref in color
+        var _oaColor = _cv.match(/_oa\d+_(\w+)\[_i\]/);
+        if (_oaColor) {
+          fields.push('text_color = _item.' + _oaColor[1]);
+        } else {
+          fields.push('text_color = 0x000000');
+        }
+      }
+    } else {
+      var _colorLua = _zigColorToLuaHex(_cv) || _hexToLua(_cv);
+      fields.push('text_color = ' + _colorLua);
+    }
   }
 
   if (node.handler) {

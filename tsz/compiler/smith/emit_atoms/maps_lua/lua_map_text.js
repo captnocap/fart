@@ -61,9 +61,23 @@ function _textToLua(text, itemParam, indexParam) {
     return '"' + text.replace(/"/g, '\\"') + '"';
   }
 
-  // Expression string with dynamic refs
+  // Expression string with dynamic refs — clean up Zig/JS leaks
   var luaExpr = _jsExprToLua(String(text), itemParam, indexParam);
-  if (luaExpr.indexOf('_item') >= 0 || luaExpr.indexOf('(_i - 1)') >= 0) {
+  // .length → # (Lua length)
+  luaExpr = luaExpr.replace(/(\w+(?:\.\w+)*)\.length\b/g, '#$1');
+  // OA refs: _oa0_field[_i] → _item.field
+  luaExpr = luaExpr.replace(/_oa\d+_(\w+)\[_i\]\[0\.\._oa\d+_\w+_lens\[_i\]\]/g, '_item.$1');
+  luaExpr = luaExpr.replace(/_oa\d+_(\w+)\[_i\]/g, '_item.$1');
+  // state.getSlotInt(N) / state.getSlotString(N) — can't resolve name, pass through
+  // JS label syntax: "id: expr" → just "expr"
+  luaExpr = luaExpr.replace(/\b\w+:\s+/g, '');
+  // @as(type, val) → val
+  luaExpr = luaExpr.replace(/@as\([^,]+,\s*/g, '');
+  luaExpr = luaExpr.replace(/@intCast\(/g, '(');
+  // Clean trailing )
+  luaExpr = luaExpr.trim();
+  if (luaExpr.indexOf('_item') >= 0 || luaExpr.indexOf('(_i - 1)') >= 0 ||
+      luaExpr.indexOf('#') >= 0 || luaExpr.indexOf('(') >= 0) {
     return 'tostring(' + luaExpr + ')';
   }
   return '"' + luaExpr.replace(/"/g, '\\"') + '"';
