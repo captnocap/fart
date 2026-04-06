@@ -174,16 +174,14 @@ function emitLuaTreeApp(ctx, rootExpr, file) {
     var _jsBlock = ctx.scriptBlock;
     _jsBlock = _jsBlock.replace(/^declare\s+.*$/gm, ''); // remove declare statements
     _jsBlock = _jsBlock.replace(/\):\s*\w+[\[\]]*\s*\{/g, ') {'); // strip return type annotations
-    _jsBlock = _jsBlock.replace(/:\s*(string|number|boolean|any|void|never|object)\b/g, ''); // strip param type annotations
-    _jsBlock = _jsBlock.replace(/<[^>]+>/g, ''); // strip generics
+    _jsBlock = _jsBlock.replace(/(\w)\s*:\s*(string|number|boolean|any|void|never|object)\s*([,\)])/g, '$1$3'); // strip param type annotations
     jsContent += _jsBlock;
   }
   if (globalThis.__scriptContent) {
     var _scriptCleaned = globalThis.__scriptContent;
     _scriptCleaned = _scriptCleaned.replace(/^declare\s+.*$/gm, '');
     _scriptCleaned = _scriptCleaned.replace(/\):\s*\w+[\[\]]*\s*\{/g, ') {');
-    _scriptCleaned = _scriptCleaned.replace(/:\s*(string|number|boolean|any|void|never|object)\b/g, '');
-    _scriptCleaned = _scriptCleaned.replace(/<[^>]+>/g, '');
+    _scriptCleaned = _scriptCleaned.replace(/(\w)\s*:\s*(string|number|boolean|any|void|never|object)\s*([,\)])/g, '$1$3');
     jsContent += (jsContent ? '\n' : '') + _scriptCleaned;
   }
   if (jsContent) {
