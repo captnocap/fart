@@ -1,9 +1,33 @@
 // ── Brace conditional parsing ─────────────────────────────────────
 
+// Build Lua condition by reading raw tokens from saved position.
+function _buildLuaCondFromTokens(c, savedStart) {
+  var _cur = c.save();
+  c.restore(savedStart);
+  var parts = [];
+  while (c.pos < c.count && c.kind() !== TK.amp_amp && c.kind() !== TK.rbrace) {
+    if (c.kind() === TK.eq_eq) { parts.push('=='); c.advance(); if (c.kind() === TK.equals) c.advance(); continue; }
+    if (c.kind() === TK.not_eq) { parts.push('~='); c.advance(); if (c.kind() === TK.equals) c.advance(); continue; }
+    if (c.kind() === TK.bang) { parts.push('not'); c.advance(); continue; }
+    if (c.kind() === TK.pipe_pipe) { parts.push('or'); c.advance(); continue; }
+    if (c.kind() === TK.string) {
+      var sv = c.text().slice(1, -1);
+      if (sv.charAt(0) === '#' && /^#[0-9a-fA-F]{3,8}$/.test(sv)) { parts.push('0x' + sv.slice(1)); }
+      else { parts.push('"' + sv + '"'); }
+      c.advance(); continue;
+    }
+    parts.push(c.text());
+    c.advance();
+  }
+  c.restore(_cur);
+  return parts.join(' ').trim();
+}
+
 // Try to parse {expr && <JSX>} conditional — returns true if consumed
 function tryParseConditional(c, children) {
   // Look ahead: identifier (op identifier/number)* && <
   const saved = c.save();
+  const _luaCondStart = c.save(); // save position for lua-tree expr conversion
   let condParts = [];
   // Collect condition expression until && or }
   while (c.kind() !== TK.eof && c.kind() !== TK.rbrace) {
@@ -16,7 +40,6 @@ function tryParseConditional(c, children) {
           condParts.push('(' + slotGet(name) + ' == 0)');
         } else if (ctx.renderLocals && ctx.renderLocals[name] !== undefined) {
           const rlVal = ctx.renderLocals[name];
-          // If the value is already a boolean expression (contains comparison), negate with !
           const isBoolExpr = / > | < | >= | <= | == | != /.test(rlVal) || rlVal.includes('.len');
           if (isBoolExpr) {
             condParts.push('(!(' + rlVal + '))');
@@ -70,8 +93,10 @@ function tryParseConditional(c, children) {
         }
         // Register as conditional
         const condIdx = ctx.conditionals.length;
-        ctx.conditionals.push({ condExpr, kind: 'show_hide', inMap: !!ctx.currentMap });
-        children.push({ nodeExpr: jsxNode.nodeExpr, condIdx, dynBufId: jsxNode.dynBufId });
+        // Build Lua condition from raw tokens
+        var _luaCond = _buildLuaCondFromTokens(c, _luaCondStart);
+        ctx.conditionals.push({ condExpr, luaCondExpr: _luaCond, kind: 'show_hide', inMap: !!ctx.currentMap });
+        children.push({ nodeExpr: jsxNode.nodeExpr, condIdx, dynBufId: jsxNode.dynBufId, luaNode: jsxNode.luaNode });
         return true;
       }
       // Check for conditional children splice: && children or && props.children

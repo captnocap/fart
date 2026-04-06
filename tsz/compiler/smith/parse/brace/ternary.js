@@ -327,7 +327,8 @@ function tryParseTernaryJSX(c, children) {
   }
   c.advance();
 
-  var allBranches = [{ condExpr: _resolveStringComparison(condParts.join('')), branch: firstBranch }];
+  var _rawCondStr = condParts.join('').replace(/!==/g, '~=').replace(/===/g, '==').replace(/&&/g, 'and').replace(/\|\|/g, 'or');
+  var allBranches = [{ condExpr: _resolveStringComparison(condParts.join('')), luaCondExpr: _rawCondStr, branch: firstBranch }];
 
   while (true) {
     var defaultSaved = c.save();
@@ -374,14 +375,14 @@ function tryParseTernaryJSX(c, children) {
 
   if (allBranches.length === 1) {
     var condIdx = ctx.conditionals.length;
-    ctx.conditionals.push({ condExpr: allBranches[0].condExpr, kind: 'show_hide', inMap: !!ctx.currentMap });
-    children.push({ nodeExpr: allBranches[0].branch.nodeExpr, condIdx: condIdx, dynBufId: allBranches[0].branch.dynBufId });
+    ctx.conditionals.push({ condExpr: allBranches[0].condExpr, luaCondExpr: allBranches[0].luaCondExpr, kind: 'show_hide', inMap: !!ctx.currentMap });
+    children.push({ nodeExpr: allBranches[0].branch.nodeExpr, condIdx: condIdx, dynBufId: allBranches[0].branch.dynBufId, luaNode: allBranches[0].branch.luaNode });
   } else if (allBranches.length === 2 && hasDefault) {
     var condExpr = allBranches[0].condExpr;
     var condIdx2 = ctx.conditionals.length;
-    ctx.conditionals.push({ condExpr: condExpr, kind: 'ternary_jsx', trueIdx: -1, falseIdx: -1, inMap: !!ctx.currentMap });
-    children.push({ nodeExpr: allBranches[0].branch.nodeExpr, ternaryCondIdx: condIdx2, ternaryBranch: 'true', dynBufId: allBranches[0].branch.dynBufId });
-    children.push({ nodeExpr: allBranches[1].branch.nodeExpr, ternaryCondIdx: condIdx2, ternaryBranch: 'false', dynBufId: allBranches[1].branch.dynBufId });
+    ctx.conditionals.push({ condExpr: condExpr, luaCondExpr: allBranches[0].luaCondExpr, kind: 'ternary_jsx', trueIdx: -1, falseIdx: -1, inMap: !!ctx.currentMap });
+    children.push({ nodeExpr: allBranches[0].branch.nodeExpr, ternaryCondIdx: condIdx2, ternaryBranch: 'true', dynBufId: allBranches[0].branch.dynBufId, luaNode: allBranches[0].branch.luaNode });
+    children.push({ nodeExpr: allBranches[1].branch.nodeExpr, ternaryCondIdx: condIdx2, ternaryBranch: 'false', dynBufId: allBranches[1].branch.dynBufId, luaNode: allBranches[1].branch.luaNode });
   } else {
     var resolvedConds = [];
     for (var bi = 0; bi < allBranches.length; bi++) {

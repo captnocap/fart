@@ -357,13 +357,22 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
         if (_ch.luaNode) {
           // Conditionals
           if (_ch.condIdx !== undefined && ctx.conditionals[_ch.condIdx]) {
-            _ln.children.push({ condition: ctx.conditionals[_ch.condIdx].condExpr, node: _ch.luaNode });
+            var _cond = ctx.conditionals[_ch.condIdx];
+            _ln.children.push({ condition: _cond.luaCondExpr || _cond.condExpr, node: _ch.luaNode });
           } else if (_ch.ternaryCondIdx !== undefined && ctx.conditionals[_ch.ternaryCondIdx]) {
             var _tc = ctx.conditionals[_ch.ternaryCondIdx];
+            var _tcLua = _tc.luaCondExpr || _tc.condExpr;
             if (_ch.ternaryBranch === 'true') {
-              _ln.children.push({ ternaryCondition: _tc.condExpr, trueNode: _ch.luaNode, falseNode: null });
+              _ln.children.push({ ternaryCondition: _tcLua, trueNode: _ch.luaNode, falseNode: null });
+            } else if (_ch.ternaryBranch === 'false') {
+              // Find the matching true entry and attach false branch
+              for (var _tci = _ln.children.length - 1; _tci >= 0; _tci--) {
+                if (_ln.children[_tci].ternaryCondition === _tcLua && !_ln.children[_tci].falseNode) {
+                  _ln.children[_tci].falseNode = _ch.luaNode;
+                  break;
+                }
+              }
             }
-            // false branch gets merged into existing ternary entry
           } else {
             _ln.children.push(_ch.luaNode);
           }
