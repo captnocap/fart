@@ -166,7 +166,22 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
               _singleClean = _singleClean.replace(/,\s*&_eval_buf_\d+/g, '');
               _singleClean = _singleClean.replace(/&_eval_buf_\d+/g, '');
               for (var _sci = 0; _sci < 3; _sci++) {
-                _singleClean = _singleClean.replace(/@as\(\[?\]?(?:const )?\w+,\s*([^)]*)\)/g, '$1');
+                // @as(TYPE, VALUE) → VALUE — balanced paren strip
+                var _asPos = _singleClean.indexOf('@as(');
+                while (_asPos >= 0) {
+                  var _ad = 1, _ai = _asPos + 4, _commaPos = -1;
+                  while (_ai < _singleClean.length && _ad > 0) {
+                    if (_singleClean[_ai] === '(') _ad++;
+                    if (_singleClean[_ai] === ')') { _ad--; if (_ad === 0) break; }
+                    if (_ad === 1 && _commaPos < 0 && _singleClean[_ai] === ',') _commaPos = _ai;
+                    _ai++;
+                  }
+                  if (_ad === 0 && _commaPos >= 0) {
+                    var _asVal = _singleClean.substring(_commaPos + 1, _ai).trim();
+                    _singleClean = _singleClean.substring(0, _asPos) + _asVal + _singleClean.substring(_ai + 1);
+                    _asPos = _singleClean.indexOf('@as(');
+                  } else break;
+                }
                 _singleClean = _singleClean.replace(/@intCast\(([^)]+)\)/g, '$1');
                 _singleClean = _singleClean.replace(/@floatFromInt\(([^)]+)\)/g, '$1');
               }

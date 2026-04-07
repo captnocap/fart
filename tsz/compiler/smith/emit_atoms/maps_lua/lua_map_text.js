@@ -13,29 +13,60 @@ function _textToLua(text, itemParam, indexParam) {
   // State variable: { stateVar: "count" } → tostring(count)
   if (typeof text === 'object' && text.stateVar) {
     var _sv = text.stateVar;
-    // If stateVar still has Zig syntax, route through __eval
+    // If stateVar still has Zig syntax, clean it up
     if (/@|state\.getSlot|\bif\b/.test(_sv)) {
-      // Strip Zig wrappers iteratively
+      // Color.rgb → 0xHEX
+      _sv = _sv.replace(/Color\.rgb\((\d+),\s*(\d+),\s*(\d+)\)/g, function(_, r, g, b) {
+        return '0x' + ((+r << 16) | (+g << 8) | +b).toString(16).padStart(6, '0');
+      });
+      // Strip Zig @as wrappers — handle []const u8 type parameter
       for (var _i = 0; _i < 5; _i++) {
-        _sv = _sv.replace(/@as\(\[?\]?(?:const )?\w+,\s*([^)]+)\)/g, '$1');
+        _sv = _sv.replace(/@as\(\[\]const u8,\s*("[^"]*")\)/g, '$1');
+        _sv = _sv.replace(/@as\(\w+,\s*([^)]+)\)/g, '$1');
         _sv = _sv.replace(/@floatFromInt\(([^)]+)\)/g, '$1');
         _sv = _sv.replace(/@intCast\(([^)]+)\)/g, '$1');
       }
-      // if/else → ternary (iterate for nested, handle missing parens)
-      for (var _ti = 0; _ti < 5; _ti++) {
-        _sv = _sv.replace(/\bif\s+\((.+?)\)\s+/g, '$1 ? ');
-        _sv = _sv.replace(/\bif\s+\((.+?)\s+/g, '$1 ? '); // missing close paren
-        _sv = _sv.replace(/\s+else\s+/g, ' : ');
-      }
+      // JS operators → Lua
+      _sv = _sv.replace(/&&/g, ' and ').replace(/\|\|/g, ' or ');
+      _sv = _sv.replace(/===/g, '==').replace(/!==/g, '~=');
       // State slots → getter names
-      _sv = _sv.replace(/state\.getSlot(?:Int|Float|Bool)?\((\d+)\)/g, function(_, idx) {
+      _sv = _sv.replace(/state\.getSlot(?:Int|Float|Bool|String)?\((\d+)\)/g, function(_, idx) {
         return (typeof ctx !== 'undefined' && ctx.stateSlots && ctx.stateSlots[+idx]) ? ctx.stateSlots[+idx].getter : '_slot' + idx;
       });
+      // OA refs → _item.field
+      _sv = _sv.replace(/_oa\d+_(\w+)\[_i\]\[0\.\._oa\d+_\w+_lens\[_i\]\]/g, '_item.$1');
+      _sv = _sv.replace(/_oa\d+_(\w+)\[_i\]/g, '_item.$1');
+      // qjs_runtime.evalToString → bare expression
+      _sv = _sv.replace(/qjs_runtime\.evalToString\("String\(([^)]+)\)"[^)]*\)/g, '$1');
+      _sv = _sv.replace(/&_eval_buf_\d+/g, '');
+      // Iterative if/else → and/or (balanced parens, handles chaining)
+      for (var _ifIter = 0; _ifIter < 10; _ifIter++) {
+        var _ifPos = _sv.indexOf('if (');
+        if (_ifPos < 0) break;
+        var _depth = 0, _ci = _ifPos + 3;
+        for (; _ci < _sv.length; _ci++) {
+          if (_sv[_ci] === '(') _depth++;
+          if (_sv[_ci] === ')') { _depth--; if (_depth === 0) break; }
+        }
+        if (_depth !== 0) break;
+        var _cond = _sv.substring(_ifPos + 4, _ci);
+        var _after = _sv.substring(_ci + 1).trim();
+        var _elseIdx = _after.indexOf(' else ');
+        if (_elseIdx < 0) break;
+        var _trueVal = _after.substring(0, _elseIdx).trim();
+        var _prefix = _sv.substring(0, _ifPos);
+        var _suffix = _after.substring(_elseIdx + 6).trim();
+        _sv = _prefix + '(' + _cond + ') and ' + _trueVal + ' or ' + _suffix;
+      }
       // Clean orphan parens
       var _open = (_sv.match(/\(/g) || []).length;
       var _close = (_sv.match(/\)/g) || []).length;
-      while (_close > _open && _sv.indexOf(')') >= 0) { _sv = _sv.replace(/\)/, ''); _close--; }
-      return 'tostring(__eval("' + _sv.replace(/"/g, '\\"') + '"))';
+      while (_close > _open && _sv.endsWith(')')) { _sv = _sv.slice(0, -1); _close--; }
+      // If clean Lua now (no Zig syntax left), emit bare
+      if (!/[@?]/.test(_sv) && !/\bif\b/.test(_sv) && !/qjs_runtime/.test(_sv)) {
+        return 'tostring(' + _sv + ')';
+      }
+      return 'tostring(__eval("' + _sv.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"))';
     }
     return 'tostring(' + _sv + ')';
   }
