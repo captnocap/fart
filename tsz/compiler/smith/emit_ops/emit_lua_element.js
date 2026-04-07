@@ -116,6 +116,7 @@ function emitLuaElement(c, itemParam, indent, indexParam) {
       ctx._compChildrenPos = _prevChildrenPos;
       // Substitute prop references in the emitted Lua
       for (var _pk in _compProps) {
+        if (_pk === '__childrenPos') continue;
         _compResult = _compResult.replace(new RegExp('_item\\.' + _pk + '\\b', 'g'), _compProps[_pk]);
         // Also replace bare prop names for bare-param components
         if (_comp.isBareParams) {

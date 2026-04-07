@@ -129,7 +129,20 @@ function tryParseBraceChild(c, children) {
         const mapBufId = ctx.mapDynCount || 0;
         ctx.mapDynCount = mapBufId + 1;
         ctx.dynTexts.push({ bufId: mapBufId, fmtString: fmt, fmtArgs: args.join(', '), arrName: '', arrIndex: 0, bufSize: 256, inMap: true, mapIdx: ctx.maps.indexOf(ctx.currentMap) });
-        children.push({ nodeExpr: `.{ .text = "__mt${mapBufId}__" }`, dynBufId: mapBufId, inMap: true, _luaTemplateRaw: raw });
+        // Resolve component prop names in template literal for Lua tree
+        var _luaRaw = raw;
+        if (ctx.propStack) {
+          for (var _tpk in ctx.propStack) {
+            if (_luaRaw.indexOf('${' + _tpk + '}') >= 0) {
+              var _tpv = String(ctx.propStack[_tpk]);
+              _tpv = _tpv.replace(/_oa\d+_(\w+)\[_i\]\[0\.\._oa\d+_\w+_lens\[_i\]\]/g, '_item.$1');
+              _tpv = _tpv.replace(/_oa\d+_(\w+)\[_i\]/g, '_item.$1');
+              _tpv = _tpv.replace(/@as\([^,]+,\s*/g, '').replace(/@intCast\(/g, '(').replace(/@floatFromInt\(/g, '(');
+              _luaRaw = _luaRaw.replace(new RegExp('\\$\\{' + _tpk + '\\}', 'g'), '${' + _tpv + '}');
+            }
+          }
+        }
+        children.push({ nodeExpr: `.{ .text = "__mt${mapBufId}__" }`, dynBufId: mapBufId, inMap: true, _luaTemplateRaw: _luaRaw });
       } else {
         const bufId = ctx.dynCount;
         const staticText = fmt.replace(/\{[ds](?::\.?\d+)?\}/g, '');
@@ -588,7 +601,15 @@ function tryParseBraceChild(c, children) {
         ctx._droppedExpressions.push({ expr: getter + ' ' + tailTokens.join(' '), line: 0 });
         children.push({ nodeExpr: '.{ .text = "" }', dynBufId: bufId });
       } else {
-        children.push({ nodeExpr: '.{ .text = "" }', dynBufId: bufId, _luaStateGetter: getter });
+        // Resolve component props for Lua tree — bare prop names need _item.field
+        var _luaGetter = getter;
+        if (ctx.propStack && ctx.propStack[getter] !== undefined) {
+          _luaGetter = String(ctx.propStack[getter]);
+          _luaGetter = _luaGetter.replace(/_oa\d+_(\w+)\[_i\]\[0\.\._oa\d+_\w+_lens\[_i\]\]/g, '_item.$1');
+          _luaGetter = _luaGetter.replace(/_oa\d+_(\w+)\[_i\]/g, '_item.$1');
+          _luaGetter = _luaGetter.replace(/@as\([^,]+,\s*/g, '').replace(/@intCast\(/g, '(').replace(/@floatFromInt\(/g, '(');
+        }
+        children.push({ nodeExpr: '.{ .text = "" }', dynBufId: bufId, _luaStateGetter: _luaGetter });
       }
       return true;
     }

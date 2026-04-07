@@ -35,6 +35,7 @@ function inlineComponentCall(c, comp, rawTag, propValues, compChildren) {
   ctx.propStack = propValues;
   ctx.inlineComponent = rawTag;
   ctx.componentChildren = compChildren;
+  if (globalThis.__SMITH_DEBUG) print('[INLINE] ' + rawTag + ' propStack: ' + JSON.stringify(propValues) + ' inMap: ' + !!ctx.currentMap);
 
   // Set propsObjectName for bare-param components: function Comp(props) { ... props.X ... }
   const savedPropsObjectName = ctx.propsObjectName;

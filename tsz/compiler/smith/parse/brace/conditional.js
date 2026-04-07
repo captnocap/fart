@@ -16,6 +16,20 @@ function _buildLuaCondFromTokens(c, savedStart) {
       else { parts.push('"' + sv + '"'); }
       c.advance(); continue;
     }
+    // Resolve component prop names to their values (OA refs cleaned for Lua)
+    if (c.kind() === TK.identifier && ctx.propStack && ctx.propStack[c.text()] !== undefined) {
+      var _pv = String(ctx.propStack[c.text()]);
+      _pv = _pv.replace(/_oa\d+_(\w+)\[_i\]\[0\.\._oa\d+_\w+_lens\[_i\]\]/g, '_item.$1');
+      _pv = _pv.replace(/_oa\d+_(\w+)\[_i\]/g, '_item.$1');
+      _pv = _pv.replace(/@as\([^,]+,\s*/g, '').replace(/@intCast\(/g, '(').replace(/@floatFromInt\(/g, '(');
+      parts.push(_pv);
+      c.advance(); continue;
+    }
+    // Resolve map item param access: item.field → _item.field
+    if (c.kind() === TK.identifier && ctx.currentMap && c.text() === ctx.currentMap.itemParam) {
+      parts.push('_item');
+      c.advance(); continue;
+    }
     parts.push(c.text());
     c.advance();
   }

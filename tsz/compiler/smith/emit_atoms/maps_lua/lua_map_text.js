@@ -13,6 +13,8 @@ function _textToLua(text, itemParam, indexParam) {
   // State variable: { stateVar: "count" } → tostring(count)
   if (typeof text === 'object' && text.stateVar) {
     var _sv = text.stateVar;
+    // Resolve component props — bare prop names need _item.field substitution
+    _sv = _jsExprToLua(_sv, itemParam, indexParam);
     // If stateVar still has Zig syntax, clean it up
     if (/@|state\.getSlot|\bif\b/.test(_sv)) {
       // Color.rgb → 0xHEX
