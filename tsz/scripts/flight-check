@@ -58,6 +58,8 @@ if [ "$IS_LUA_TREE" -eq 1 ]; then
     else
         LUA_BLOB=$(sed -n '/^pub const LUA_LOGIC/,/^;$/p' "$GEN" 2>/dev/null)
     fi
+    # Strip Zig multiline string prefix (\\) so all LT checks work on clean Lua
+    LUA_BLOB=$(echo "$LUA_BLOB" | sed 's/^[[:space:]]*\\\\//')
 fi
 
 # Safe grep count — always returns a clean number, never fails
@@ -1135,6 +1137,21 @@ if [ -n "$LUA_BLOB" ]; then
     fi
 fi
 
+# ── LT4l. Unquoted string field in handler splice ────────────
+# When a handler splices _item.field into a Lua string via concatenation,
+# string values must be quoted: setFoo('" .. _item.name .. "')
+# Without quotes: setFoo(" .. (_item.name) .. ") → setFoo(api-gateway)
+# Lua parses the bare value as an expression (nil minus nil = error or nil).
+# Detect: bare _item.field splices with no arithmetic operators inside.
+if [ -n "$LUA_BLOB" ]; then
+    # Bad pattern: (" .. (_item.field) .. ") — paren before .., no quote
+    # Good pattern: ('" .. (_item.field) .. "') — quote before ..
+    UNQUOTED_SPLICES=$(grep -oE '\(" \.\. \(_item\.[a-zA-Z_]+\) \.\. "\)' <<< "$LUA_BLOB" 2>/dev/null | wc -l | tr -d ' ')
+    if [ "$UNQUOTED_SPLICES" -gt 0 ]; then
+        fail "$UNQUOTED_SPLICES handler splice(s) with unquoted _item.field — string values need quotes"
+    fi
+fi
+
 # ── LT5. Map variable leakage in handlers and conditionals ───
 # Inside __mapLoop bodies, handler strings should use _item not source vars.
 # Also check for source map INDEX vars (si, fi, idx, etc.) leaking into
@@ -1159,6 +1176,105 @@ for mv in $MAP_INDEX_VARS; do
         fail "$n reference(s) to source map index var '$mv' leaked into Lua — should be (_i - 1) or (_ni - 1)"
     fi
 done
+
+# ── LT6. Children manifest check ─────────────────────────────
+# The compiler emits a manifest (children_manifest.json) describing
+# every children block: its source line, child count, how many are
+# conditional vs unconditional, and the expected Lua pattern.
+# Flight check validates structural safety from the manifest.
+if [ -d "$GEN" ] && [ -f "$GEN/children_manifest.json" ]; then
+    MANIFEST="$GEN/children_manifest.json"
+    # Check each block: if ALL children are conditional (values=0),
+    # the Lua array is fully sparse and lua_objlen can return 0.
+    SPARSE_BLOCKS=$(python3 -c "
+import json, sys
+m = json.load(open('$MANIFEST'))
+hits = 0
+for block in m.get('blocks', []):
+    if block.get('conditionals', 0) > 1 and block.get('values', 0) == 0:
+        hits += 1
+print(hits)
+" 2>/dev/null) || SPARSE_BLOCKS=0
+    if [ "$SPARSE_BLOCKS" -gt 0 ]; then
+        warn "$SPARSE_BLOCKS children block(s) are fully conditional (no unconditional anchor) — runtime uses lua_next to handle sparse arrays"
+    fi
+fi
+
+# ── LT6b. syncScalarToLua runs every tick (stomps Lua state) ──
+# When js_on_press exists in the tree, the compiler emits syncScalarToLua
+# unconditionally in _appTick. This stomps Lua state set by lua_on_press
+# because it copies stale QJS values over fresh Lua values every dirty tick.
+# Correct: sync only on _first_render. Broken: sync on every dirty tick.
+if [ -d "$GEN" ] && [ -f "$GEN/app.zig" ]; then
+    # Check if syncScalarToLua appears outside of "if (_first_render)" guard
+    APP_BLOB=$(cat "$GEN/app.zig" 2>/dev/null)
+    HAS_SYNC=$(echo "$APP_BLOB" | grep -c 'syncScalarToLua' 2>/dev/null) || HAS_SYNC=0
+    if [ "$HAS_SYNC" -gt 0 ]; then
+        # The line immediately before the first syncScalarToLua must be "if (_first_render) {"
+        GUARD_LINE=$(echo "$APP_BLOB" | grep -B1 'syncScalarToLua' | head -1)
+        case "$GUARD_LINE" in
+            *'if (_first_render)'*) ;; # properly guarded
+            *)
+                fail "syncScalarToLua runs every dirty tick (not guarded by _first_render) — stomps Lua state set by lua_on_press"
+                ;;
+        esac
+    fi
+fi
+
+# ── LT7a. JS state setters missing dirty signal ───────────────
+# In lua-tree mode, JS state setters must signal dirty so the tick
+# loop syncs QJS vars to Lua and re-renders. A setter of the form
+# `function setX(v) { X = v; }` with no __markDirty/__setState call
+# means pressing a button updates QJS state but the screen never updates.
+if [ -d "$GEN" ] && [ -f "$GEN/logic.zig" ]; then
+    JS_LOGIC_BLOB=$(sed -n '/^pub const JS_LOGIC/,/^;$/p' "$GEN/logic.zig" 2>/dev/null | sed 's/^[[:space:]]*\\\\//')
+    if [ -n "$JS_LOGIC_BLOB" ] && [ "$JS_LOGIC_BLOB" != '""' ]; then
+        BROKEN_SETTERS=0
+        while IFS= read -r _line; do
+            case "$_line" in
+                *'function set'*'(v) {'*)
+                    case "$_line" in
+                        *'__markDirty'*|*'__setState'*|*'__setStateString'*) ;;
+                        *)
+                            # Extract varname: setFoo → foo
+                            _setter=$(echo "$_line" | sed 's/.*function \(set[A-Za-z0-9_]*\).*/\1/')
+                            _varname=$(echo "$_setter" | sed 's/^set//' | awk '{print tolower(substr($0,1,1)) substr($0,2)}')
+                            # Skip OA setters — var declared as array: var X = [];
+                            case "$JS_LOGIC_BLOB" in
+                                *"var ${_varname} = [];"*) ;;
+                                *) BROKEN_SETTERS=$((BROKEN_SETTERS + 1)) ;;
+                            esac
+                            ;;
+                    esac
+                    ;;
+            esac
+        done <<< "$JS_LOGIC_BLOB"
+        if [ "$BROKEN_SETTERS" -gt 0 ]; then
+            fail "LT7a: $BROKEN_SETTERS JS state setter(s) in JS_LOGIC have no dirty signal (__markDirty/__setState) — button presses will update QJS vars but never re-render"
+        fi
+    fi
+fi
+
+# ── LT7b. declare function call in JS_LOGIC without bridge ────
+# Source `declare function X(...)` declares a C FFI function. In the
+# lua-tree path those calls land in JS_LOGIC via the script block, but
+# the declared function is never bridged into the QJS context — so X()
+# throws or returns undefined. Detect: source declares X, JS_LOGIC calls X.
+DECLARE_FNS=$(grep -oE '^declare function ([A-Za-z_][A-Za-z0-9_]*)' "$SOURCE" 2>/dev/null | sed 's/^declare function //' || true)
+if [ -n "$DECLARE_FNS" ] && [ -d "$GEN" ] && [ -f "$GEN/logic.zig" ]; then
+    JS_BLOB_FOR_DECL=$(sed -n '/^pub const JS_LOGIC/,/^;$/p' "$GEN/logic.zig" 2>/dev/null | sed 's/^[[:space:]]*\\\\//')
+    for dfn in $DECLARE_FNS; do
+        CALLED=0
+        DEFINED=0
+        while IFS= read -r _line; do
+            case "$_line" in *"${dfn}("*) CALLED=$((CALLED + 1)) ;; esac
+            case "$_line" in *"function ${dfn}("*) DEFINED=$((DEFINED + 1)) ;; esac
+        done <<< "$JS_BLOB_FOR_DECL"
+        if [ "$CALLED" -gt 0 ] && [ "$DEFINED" -eq 0 ]; then
+            fail "LT7b: JS_LOGIC calls '${dfn}' which was declared via 'declare function' (C FFI). The declare line is stripped from JS_LOGIC but the call remains — '${dfn}' is not registered as a QJS global so it will throw ReferenceError at runtime"
+        fi
+    done
+fi
 
 fi # IS_LUA_TREE
 

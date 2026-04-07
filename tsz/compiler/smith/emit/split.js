@@ -295,5 +295,12 @@ function splitOutput(monolith, file) {
     encoded += '__FILE:' + allFnames[ei] + '__\n';
     encoded += result[allFnames[ei]];
   }
+
+  // ── 11. Children manifest — structural metadata for flight check ──
+  if (ctx._childrenManifest && ctx._childrenManifest.length > 0) {
+    encoded += '__FILE:children_manifest.json__\n';
+    encoded += JSON.stringify({ blocks: ctx._childrenManifest }) + '\n';
+  }
+
   return encoded;
 }

@@ -230,6 +230,14 @@ function emitLuaElement(c, itemParam, indent, indexParam) {
     fields.push('lua_on_press = "' + _hp.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"');
   }
   if (node.children.length > 0) {
+    // Track children block metadata for manifest
+    var _cbValues = 0, _cbConds = 0;
+    for (var _ci = 0; _ci < node.children.length; _ci++) {
+      if (node.children[_ci].indexOf('or nil') >= 0) _cbConds++;
+      else _cbValues++;
+    }
+    if (!ctx._childrenManifest) ctx._childrenManifest = [];
+    ctx._childrenManifest.push({ line: c.pos, total: node.children.length, values: _cbValues, conditionals: _cbConds });
     fields.push('children = {\n' + node.children.map(function(ch) { return indent + '  ' + ch; }).join(',\n') + '\n' + indent + '}');
   }
   // Token-walker Lua emit: same scroll persistence as _nodeToLua (root ScrollView only).

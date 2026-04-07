@@ -206,6 +206,16 @@ function _nodeToLua(node, itemParam, indexParam, indent, _luaIdxExpr) {
     if (fields.length === 0 && childLua.length === 1 && childLua[0].indexOf(' or nil') >= 0) {
       return childLua[0];
     }
+    // Track children block metadata for manifest
+    var _cbValues = 0, _cbConds = 0;
+    for (var _mi = 0; _mi < childLua.length; _mi++) {
+      if (childLua[_mi].indexOf('or nil') >= 0) _cbConds++;
+      else _cbValues++;
+    }
+    if (typeof ctx !== 'undefined') {
+      if (!ctx._childrenManifest) ctx._childrenManifest = [];
+      ctx._childrenManifest.push({ total: childLua.length, values: _cbValues, conditionals: _cbConds });
+    }
     fields.push('children = {\n' + childLua.map(function(ch) { return indent + '  ' + ch; }).join(',\n') + '\n' + indent + '}');
   }
 

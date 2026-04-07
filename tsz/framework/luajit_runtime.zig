@@ -538,9 +538,21 @@ fn stampLuaNode(L: ?*lua.lua_State, idx: c_int, alloc: std.mem.Allocator) Node {
     }
     lua.lua_pop(L, 1);
     // children (recursive) — handles __isMapResult expansion
+    // NOTE: uses lua_next to find true max index instead of lua_objlen,
+    // because LuaJIT's # operator returns 0 on sparse arrays where
+    // both first and last entries are nil (e.g. all-conditional children).
     lua.lua_getfield(L, idx, "children");
     if (lua.lua_istable(L, -1)) {
-        const n: usize = @intCast(lua.lua_objlen(L, -1));
+        // Find true max integer key via lua_next
+        var n: usize = 0;
+        lua.lua_pushnil(L);
+        while (lua.lua_next(L, -2) != 0) {
+            if (lua.lua_isnumber(L, -2) != 0) {
+                const k: usize = @intCast(lua.lua_tointeger(L, -2));
+                if (k > n) n = k;
+            }
+            lua.lua_pop(L, 1); // pop value, keep key
+        }
         if (n > 0) {
             // Pass 1: count total children (expand __isMapResult arrays)
             var total: usize = 0;
