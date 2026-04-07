@@ -368,9 +368,10 @@ fn readLuaStyle(L: ?*lua.lua_State, idx: c_int) Style {
         if (jptr != null) {
             const jc: []const u8 = @as([*]const u8, @ptrCast(jptr))[0..jlen];
             if (std.mem.eql(u8, jc, "center")) s.justify_content = .center
-            else if (std.mem.eql(u8, jc, "spaceBetween")) s.justify_content = .space_between
-            else if (std.mem.eql(u8, jc, "spaceAround")) s.justify_content = .space_around
-            else if (std.mem.eql(u8, jc, "end")) s.justify_content = .end;
+            else if (std.mem.eql(u8, jc, "spaceBetween") or std.mem.eql(u8, jc, "space_between")) s.justify_content = .space_between
+            else if (std.mem.eql(u8, jc, "spaceAround") or std.mem.eql(u8, jc, "space_around")) s.justify_content = .space_around
+            else if (std.mem.eql(u8, jc, "spaceEvenly") or std.mem.eql(u8, jc, "space_evenly")) s.justify_content = .space_evenly
+            else if (std.mem.eql(u8, jc, "end") or std.mem.eql(u8, jc, "flex_end")) s.justify_content = .end;
         }
     }
     lua.lua_pop(L, 1);
@@ -401,8 +402,9 @@ fn readLuaStyle(L: ?*lua.lua_State, idx: c_int) Style {
         if (ptr != null) {
             const v: []const u8 = @as([*]const u8, @ptrCast(ptr))[0..len];
             if (std.mem.eql(u8, v, "center")) s.align_items = .center
-            else if (std.mem.eql(u8, v, "flexStart") or std.mem.eql(u8, v, "start")) s.align_items = .start
-            else if (std.mem.eql(u8, v, "flexEnd") or std.mem.eql(u8, v, "end")) s.align_items = .end;
+            else if (std.mem.eql(u8, v, "flexStart") or std.mem.eql(u8, v, "start") or std.mem.eql(u8, v, "flex_start")) s.align_items = .start
+            else if (std.mem.eql(u8, v, "flexEnd") or std.mem.eql(u8, v, "end") or std.mem.eql(u8, v, "flex_end")) s.align_items = .end
+            else if (std.mem.eql(u8, v, "stretch")) s.align_items = .stretch;
         }
     }
     lua.lua_pop(L, 1);
@@ -414,8 +416,9 @@ fn readLuaStyle(L: ?*lua.lua_State, idx: c_int) Style {
         if (ptr != null) {
             const v: []const u8 = @as([*]const u8, @ptrCast(ptr))[0..len];
             if (std.mem.eql(u8, v, "center")) s.align_self = .center
-            else if (std.mem.eql(u8, v, "flexStart") or std.mem.eql(u8, v, "start")) s.align_self = .start
-            else if (std.mem.eql(u8, v, "flexEnd") or std.mem.eql(u8, v, "end")) s.align_self = .end;
+            else if (std.mem.eql(u8, v, "flexStart") or std.mem.eql(u8, v, "start") or std.mem.eql(u8, v, "flex_start")) s.align_self = .start
+            else if (std.mem.eql(u8, v, "flexEnd") or std.mem.eql(u8, v, "end") or std.mem.eql(u8, v, "flex_end")) s.align_self = .end
+            else if (std.mem.eql(u8, v, "stretch")) s.align_self = .stretch;
         }
     }
     lua.lua_pop(L, 1);
