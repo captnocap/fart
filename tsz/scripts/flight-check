@@ -1043,6 +1043,37 @@ if [ "$HAS_JS_ON_PRESS" -gt 0 ]; then
     fi
 fi
 
+# ── LT4h. Unresolved component props inside map ──────────────
+# When a component (function Badge(kind, value)) is inlined inside .map(),
+# its props must be rewritten from bare names to _item.field. If they stay
+# as bare names (tostring(kind) instead of tostring(_item.kind)), they
+# resolve to nil at runtime — badges vanish, text shows "nil", etc.
+HAS_MAP_LOOP=$(gcount '__mapLoop' "$LUA_BLOB")
+if [ "$HAS_MAP_LOOP" -gt 0 ]; then
+    # Get component param names from source (non-App uppercase functions)
+    COMP_PARAMS=$(grep -oE '^function [A-Z][A-Za-z0-9_]*\([^)]+\)' "$SOURCE" 2>/dev/null | grep -v '^function App(' | sed 's/^function [A-Z][A-Za-z0-9_]*(//;s/)//' | tr ',' '\n' | tr -d ' ' | grep -v '^$' | sort -u || true)
+    if [ -n "$COMP_PARAMS" ]; then
+        MAP_BODY=$(sed -n '/__mapLoop/,/end)/p' <<< "$LUA_BLOB" 2>/dev/null || true)
+        BARE_PROPS=""
+        BARE_COUNT=0
+        for prop in $COMP_PARAMS; do
+            # Check if prop appears as bare name in map body (tostring(prop) or prop ==)
+            n=$(echo "$MAP_BODY" | grep -cE "tostring\(${prop}\)|\\b${prop} ==" 2>/dev/null) || n=0
+            if [ "$n" -gt 0 ]; then
+                # Verify it's NOT also appearing as _item.prop (partially resolved is OK)
+                as_item=$(echo "$MAP_BODY" | grep -c "_item\.${prop}" 2>/dev/null) || as_item=0
+                if [ "$as_item" -eq 0 ]; then
+                    BARE_PROPS="$BARE_PROPS $prop($n)"
+                    BARE_COUNT=$((BARE_COUNT + n))
+                fi
+            fi
+        done
+        if [ "$BARE_COUNT" -gt 0 ]; then
+            fail "$BARE_COUNT unresolved component prop(s) inside __mapLoop:$BARE_PROPS — should be _item.field"
+        fi
+    fi
+fi
+
 # ── LT5. Map variable leakage in handlers ────────────────────
 # Inside __mapLoop bodies, handler strings should use _item not source vars
 # Detect: map source var (from .map((x, ...) in source) appearing raw in handlers
