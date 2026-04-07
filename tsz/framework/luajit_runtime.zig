@@ -667,32 +667,10 @@ fn hostSyncToJS(L: ?*lua.lua_State) callconv(.c) c_int {
     var name_len: usize = 0;
     const name_ptr = lua.lua_tolstring(L, 1, &name_len);
     if (name_ptr == null or name_len == 0) return 0;
-    const name: []const u8 = @as([*]const u8, @ptrCast(name_ptr))[0..name_len];
-
-    // Sync Lua value to JS global via evalExpr("name = value;")
-    var buf: [512]u8 = undefined;
-    if (lua.lua_isnumber(L, 2) != 0) {
-        const v = lua.lua_tonumber(L, 2);
-        const iv: i64 = @intFromFloat(v);
-        const is_int = @as(f64, @floatFromInt(iv)) == v;
-        const js = if (is_int)
-            std.fmt.bufPrint(&buf, "{s} = {d};", .{ name, iv }) catch return 0
-        else
-            std.fmt.bufPrint(&buf, "{s} = {d:.10};", .{ name, v }) catch return 0;
-        qjs_runtime.evalExpr(js);
-    } else if (lua.lua_isstring(L, 2) != 0) {
-        var val_len: usize = 0;
-        const val_ptr = lua.lua_tolstring(L, 2, &val_len);
-        if (val_ptr != null) {
-            const val: []const u8 = @as([*]const u8, @ptrCast(val_ptr))[0..val_len];
-            const js = std.fmt.bufPrint(&buf, "{s} = '{s}';", .{ name, val }) catch return 0;
-            qjs_runtime.evalExpr(js);
-        }
-    } else if (lua.lua_isboolean(L, 2)) {
-        const bval = lua.lua_toboolean(L, 2);
-        const js = std.fmt.bufPrint(&buf, "{s} = {s};", .{ name, if (bval != 0) "true" else "false" }) catch return 0;
-        qjs_runtime.evalExpr(js);
-    }
+    // The Lua setter already set the global before calling us,
+    // so syncLuaToQjs can read it by name.
+    const name_z: [*:0]const u8 = @ptrCast(name_ptr);
+    qjs_runtime.syncLuaToQjs(name_z);
     return 0;
 }
 

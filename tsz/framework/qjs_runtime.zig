@@ -130,6 +130,19 @@ fn hostLog(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSVa
     return QJS_UNDEFINED;
 }
 
+/// __luaEval(code) — evaluate a Lua expression from QJS. Used by JS setters
+/// to call Lua setters directly so Lua owns state.
+fn hostLuaEval(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    const c2 = ctx orelse return QJS_UNDEFINED;
+    if (argc < 1) return QJS_UNDEFINED;
+    const code = qjs.JS_ToCString(c2, argv[0]);
+    if (code == null) return QJS_UNDEFINED;
+    defer qjs.JS_FreeCString(c2, code);
+    const luajit = @import("luajit_runtime.zig");
+    luajit.evalExpr(std.mem.span(code));
+    return QJS_UNDEFINED;
+}
+
 /// __js_eval(code) — evaluate a JS expression string and return result as string.
 /// Used by the inspector console to run live expressions.
 fn hostJsEval(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
@@ -1854,6 +1867,7 @@ pub fn initVM() void {
 
     const global = qjs.JS_GetGlobalObject(ctx);
     defer qjs.JS_FreeValue(ctx, global);
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__luaEval", qjs.JS_NewCFunction(ctx, hostLuaEval, "__luaEval", 1));
     _ = qjs.JS_SetPropertyStr(ctx, global, "__setState", qjs.JS_NewCFunction(ctx, hostSetState, "__setState", 2));
     _ = qjs.JS_SetPropertyStr(ctx, global, "__setStateString", qjs.JS_NewCFunction(ctx, hostSetStateString, "__setStateString", 2));
     _ = qjs.JS_SetPropertyStr(ctx, global, "__getState", qjs.JS_NewCFunction(ctx, hostGetState, "__getState", 1));
@@ -2163,6 +2177,44 @@ pub fn syncScalarToLua(var_name: [*:0]const u8) void {
             _ = lua.lua_pushlstring(L, span.ptr, span.len);
             lua.lua_setfield(L, -2, var_name);
             lua.lua_pop(L, 1);
+        }
+    }
+}
+
+/// Sync a Lua global variable to a QJS global variable.
+/// Lua owns state in lua-tree mode — this pushes Lua's truth to QJS
+/// so js_on_press script functions see current values.
+pub fn syncLuaToQjs(var_name: [*:0]const u8) void {
+    if (comptime !HAS_QUICKJS) return;
+    const ctx = g_qjs_ctx orelse return;
+
+    const luajit = @import("luajit_runtime.zig");
+    const lua = luajit.lua;
+    const L = luajit.g_lua orelse return;
+
+    const name_span = std.mem.span(var_name);
+    if (name_span.len == 0) return;
+
+    // Read from Lua global
+    _ = lua.lua_getglobal(L, var_name);
+    defer lua.lua_pop(L, 1);
+
+    const global = qjs.JS_GetGlobalObject(ctx);
+    defer qjs.JS_FreeValue(ctx, global);
+
+    if (lua.lua_isnumber(L, -1) != 0) {
+        const val = lua.lua_tonumber(L, -1);
+        const js_val = qjs.JS_NewFloat64(ctx, val);
+        _ = qjs.JS_SetPropertyStr(ctx, global, var_name, js_val);
+    } else if (lua.lua_type(L, -1) == 1) { // LUA_TBOOLEAN
+        const js_val = if (lua.lua_toboolean(L, -1) != 0) qjs.JS_NewFloat64(ctx, 1) else qjs.JS_NewFloat64(ctx, 0);
+        _ = qjs.JS_SetPropertyStr(ctx, global, var_name, js_val);
+    } else if (lua.lua_isstring(L, -1) != 0) {
+        var len: usize = 0;
+        const ptr = lua.lua_tolstring(L, -1, &len);
+        if (ptr != null) {
+            const js_val = qjs.JS_NewStringLen(ctx, @ptrCast(ptr), len);
+            _ = qjs.JS_SetPropertyStr(ctx, global, var_name, js_val);
         }
     }
 }

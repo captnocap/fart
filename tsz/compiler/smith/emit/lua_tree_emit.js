@@ -58,10 +58,62 @@ function emitLuaTreeApp(ctx, rootExpr, file) {
       lua.push('_state["' + getter + '"] = ' + _luaLiteral(init));
       // Getter as global variable (read from state pool)
       lua.push(getter + ' = _state["' + getter + '"]');
-      // Setter function
-      lua.push('function ' + setter + '(v) _state["' + getter + '"] = v; ' + getter + ' = v; __markDirty() end');
+      // Setter function — Lua is SSoT, sync to QJS so js_on_press sees it
+      var _syncToJS = (ctx.scriptBlock || globalThis.__scriptContent) ? ' __syncToJS("' + getter + '", v);' : '';
+      lua.push('function ' + setter + '(v) _state["' + getter + '"] = v; ' + getter + ' = v;' + _syncToJS + ' __markDirty() end');
     }
     lua.push('');
+  }
+
+  // FFI declarations — LuaJIT ffi.cdef + wrappers for each declare function
+  if (ctx._ffiDecls && ctx._ffiDecls.length > 0) {
+    lua.push('-- FFI-declared functions (via declare function / @ffi)');
+    lua.push('local _ffi = require("ffi")');
+    var _cdefs = [];
+    for (var fdi = 0; fdi < ctx._ffiDecls.length; fdi++) {
+      var _fd = ctx._ffiDecls[fdi];
+      var _retC = _tsToCType(_fd.returnType);
+      var _paramsC = _fd.params.length > 0
+        ? _fd.params.map(function(p) { return _tsToCType(p.type); }).join(', ')
+        : 'void';
+      _cdefs.push('  ' + _retC + ' ' + _fd.name + '(' + _paramsC + ');');
+    }
+    lua.push('_ffi.cdef[[');
+    for (var ci = 0; ci < _cdefs.length; ci++) lua.push(_cdefs[ci]);
+    lua.push(']]');
+    for (var fwi = 0; fwi < ctx._ffiDecls.length; fwi++) {
+      var _fw = ctx._ffiDecls[fwi];
+      var _pnames = _fw.params.map(function(p) { return p.name; }).join(', ');
+      var _call = '_ffi.C.' + _fw.name + '(' + _pnames + ')';
+      if (_fw.returnType === 'void') {
+        lua.push('function ' + _fw.name + '(' + _pnames + ') ' + _call + ' end');
+      } else if (_fw.returnType === 'string') {
+        lua.push('function ' + _fw.name + '(' + _pnames + ') return _ffi.string(' + _call + ') end');
+      } else {
+        lua.push('function ' + _fw.name + '(' + _pnames + ') return tonumber(' + _call + ') end');
+      }
+    }
+    lua.push('');
+  }
+
+  // Script block routed to Lua (when @ffi / declare function present)
+  if (ctx._scriptBlockIsLua) {
+    var _luaScript = ctx.scriptBlock || globalThis.__scriptContent || '';
+    if (globalThis.__scriptContent && ctx.scriptBlock) {
+      _luaScript = ctx.scriptBlock + '\n\n' + globalThis.__scriptContent;
+    }
+    if (_luaScript) {
+      // Strip declare statements — they're now wrappers above
+      _luaScript = _luaScript.replace(/^declare\s+.*$/gm, '');
+      _luaScript = _luaScript.replace(/^<\/?script>$/gm, '');
+      _luaScript = _luaScript.trim();
+      if (_luaScript) {
+        lua.push('-- Script block (compiled to Lua via FFI routing)');
+        var _luaLines = luaTransform(_luaScript).split('\n');
+        for (var li = 0; li < _luaLines.length; li++) lua.push(_luaLines[li]);
+        lua.push('');
+      }
+    }
   }
 
   // OA setters (arrays)
@@ -154,7 +206,11 @@ function emitLuaTreeApp(ctx, rootExpr, file) {
       if (js.getter.indexOf('__') === 0) continue; // skip internal slots
       var jsInit = js.initial !== undefined ? JSON.stringify(js.initial) : '0';
       jsStateBindings += 'var ' + js.getter + ' = ' + jsInit + ';\n';
-      jsStateBindings += 'function ' + js.setter + '(v) { ' + js.getter + ' = v; }\n';
+      // JS setter updates local var then calls Lua setter (Lua owns state)
+      var _luaSetCall = js.type === 'string'
+        ? '__luaEval("' + js.setter + '(\\\'" + v + "\\\')")'
+        : '__luaEval("' + js.setter + '(" + v + ")")';
+      jsStateBindings += 'function ' + js.setter + '(v) { ' + js.getter + ' = v; ' + _luaSetCall + '; }\n';
     }
   }
   // OA getters in JS
@@ -169,21 +225,24 @@ function emitLuaTreeApp(ctx, rootExpr, file) {
   }
 
   var jsContent = jsStateBindings;
-  if (ctx.scriptBlock) {
-    // Strip TypeScript syntax: declare statements, type annotations, generics
-    var _jsBlock = ctx.scriptBlock;
-    _jsBlock = _jsBlock.replace(/^declare\s+.*$/gm, ''); // remove declare statements
-    _jsBlock = _jsBlock.replace(/\):\s*\w+[\[\]]*\s*\{/g, ') {'); // strip return type annotations
-    _jsBlock = _jsBlock.replace(/(\w)\s*:\s*(string|number|boolean|any|void|never|object)\s*([,\)])/g, '$1$3'); // strip param type annotations
-    jsContent += _jsBlock;
-  }
-  if (globalThis.__scriptContent) {
-    var _scriptCleaned = globalThis.__scriptContent;
-    _scriptCleaned = _scriptCleaned.replace(/^<\/?script>$/gm, ''); // strip <script> tags
-    _scriptCleaned = _scriptCleaned.replace(/^declare\s+.*$/gm, '');
-    _scriptCleaned = _scriptCleaned.replace(/\):\s*\w+[\[\]]*\s*\{/g, ') {');
-    _scriptCleaned = _scriptCleaned.replace(/(\w)\s*:\s*(string|number|boolean|any|void|never|object)\s*([,\)])/g, '$1$3');
-    jsContent += (jsContent ? '\n' : '') + _scriptCleaned;
+  // When FFI decls are present the script block is routed to LUA_LOGIC instead
+  if (!ctx._scriptBlockIsLua) {
+    if (ctx.scriptBlock) {
+      // Strip TypeScript syntax: declare statements, type annotations, generics
+      var _jsBlock = ctx.scriptBlock;
+      _jsBlock = _jsBlock.replace(/^declare\s+.*$/gm, ''); // remove declare statements
+      _jsBlock = _jsBlock.replace(/\):\s*\w+[\[\]]*\s*\{/g, ') {'); // strip return type annotations
+      _jsBlock = _jsBlock.replace(/(\w)\s*:\s*(string|number|boolean|any|void|never|object)\s*([,\)])/g, '$1$3'); // strip param type annotations
+      jsContent += _jsBlock;
+    }
+    if (globalThis.__scriptContent) {
+      var _scriptCleaned = globalThis.__scriptContent;
+      _scriptCleaned = _scriptCleaned.replace(/^<\/?script>$/gm, ''); // strip <script> tags
+      _scriptCleaned = _scriptCleaned.replace(/^declare\s+.*$/gm, '');
+      _scriptCleaned = _scriptCleaned.replace(/\):\s*\w+[\[\]]*\s*\{/g, ') {');
+      _scriptCleaned = _scriptCleaned.replace(/(\w)\s*:\s*(string|number|boolean|any|void|never|object)\s*([,\)])/g, '$1$3');
+      jsContent += (jsContent ? '\n' : '') + _scriptCleaned;
+    }
   }
   if (jsContent) {
     zig += 'const JS_LOGIC =\n';
@@ -236,29 +295,16 @@ function emitLuaTreeApp(ctx, rootExpr, file) {
   // (syncing every frame would stomp Lua-side updates).
   if (ctx.scriptBlock || globalThis.__scriptContent) {
     if (ctx.stateSlots && ctx.stateSlots.length > 0) {
-      // Check if the Lua tree has js_on_press handlers (needs every-frame sync).
-      // js_on_press runs in QuickJS — JS setters update JS vars but never
-      // reach Lua. Must sync scalars every dirty frame so Lua tree sees changes.
-      var _hasJsOnPress = luaStr.indexOf('js_on_press') >= 0;
-      if (_hasJsOnPress) {
-        // js_on_press handlers update JS — sync to Lua every dirty frame
-        for (var ssi = 0; ssi < ctx.stateSlots.length; ssi++) {
-          var ss = ctx.stateSlots[ssi];
-          if (ss.getter.indexOf('__') === 0) continue;
-          var ssGetter = ss.getter.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-          zig += '        qjs_runtime.syncScalarToLua("' + ssGetter + '");\n';
-        }
-      } else {
-        // Pure lua_on_press — only sync on first render (JS init values)
-        zig += '        if (_first_render) {\n';
-        for (var ssi2 = 0; ssi2 < ctx.stateSlots.length; ssi2++) {
-          var ss2 = ctx.stateSlots[ssi2];
-          if (ss2.getter.indexOf('__') === 0) continue;
-          var ssGetter2 = ss2.getter.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-          zig += '            qjs_runtime.syncScalarToLua("' + ssGetter2 + '");\n';
-        }
-        zig += '        }\n';
+      // First render: push JS init values to Lua (script block ran in QJS first)
+      zig += '        if (_first_render) {\n';
+      for (var ssi = 0; ssi < ctx.stateSlots.length; ssi++) {
+        var ss = ctx.stateSlots[ssi];
+        if (ss.getter.indexOf('__') === 0) continue;
+        var ssGetter = ss.getter.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+        zig += '            qjs_runtime.syncScalarToLua("' + ssGetter + '");\n';
       }
+      zig += '        }\n';
+      // Lua→QJS sync handled by __syncToJS in Lua setters (no tick sync needed)
     }
   }
   zig += '        luajit_runtime.callGlobal("__render");\n';

@@ -1017,33 +1017,9 @@ fi
 # If handlers use js_on_press (runs in QuickJS), the JS setter updates
 # the JS variable but doesn't sync to Lua. syncScalarToLua bridges this,
 # but if it only runs on _first_render, state changes after frame 1
-# never reach the Lua tree — the UI shows stale values forever.
-HAS_JS_ON_PRESS=$(gcount 'js_on_press' "$LUA_BLOB")
-if [ "$HAS_JS_ON_PRESS" -gt 0 ]; then
-    # Check app.zig for syncScalarToLua inside _first_render guard
-    APP_ZIG=""
-    if [ -d "$GEN" ]; then
-        APP_ZIG=$(cat "$GEN/app.zig" 2>/dev/null)
-    else
-        APP_ZIG="$GEN_BLOB"
-    fi
-    HAS_SYNC=$(gcount 'syncScalarToLua' "$APP_ZIG")
-    if [ "$HAS_SYNC" -gt 0 ]; then
-        # Check if syncScalarToLua is gated behind a standalone if (_first_render) block.
-        # Pattern: "if (_first_render) {" on its own line, with sync calls inside.
-        # If sync is in the main dirty block (no _first_render guard), that's correct.
-        TICK_BODY=$(echo "$APP_ZIG" | sed -n '/fn _appTick/,/^}/p')
-        FIRST_RENDER_GUARD=$(echo "$TICK_BODY" | grep -c 'if (_first_render) {' 2>/dev/null) || FIRST_RENDER_GUARD=0
-        if [ "$FIRST_RENDER_GUARD" -gt 0 ]; then
-            # There's a _first_render guard — check if ALL sync calls are inside it
-            # by checking if any sync call exists OUTSIDE the guard
-            SYNC_OUTSIDE=$(echo "$TICK_BODY" | sed '/if (_first_render) {/,/}/d' | grep -c 'syncScalarToLua' 2>/dev/null) || SYNC_OUTSIDE=0
-            if [ "$SYNC_OUTSIDE" -eq 0 ]; then
-                fail "$HAS_JS_ON_PRESS js_on_press handler(s) but syncScalarToLua only runs on first render — state changes after frame 1 never reach Lua tree"
-            fi
-        fi
-    fi
-fi
+# (removed: old check wrongly required every-tick sync when js_on_press present.
+#  LT6b proves the opposite — every-tick sync stomps lua_on_press state.
+#  _first_render guard is the correct behavior for all carts.)
 
 # ── LT4h. Unresolved component props inside map ──────────────
 # When a component (function Badge(kind, value)) is inlined inside .map(),
@@ -1234,7 +1210,7 @@ if [ -d "$GEN" ] && [ -f "$GEN/logic.zig" ]; then
             case "$_line" in
                 *'function set'*'(v) {'*)
                     case "$_line" in
-                        *'__markDirty'*|*'__setState'*|*'__setStateString'*) ;;
+                        *'__markDirty'*|*'__setState'*|*'__setStateString'*|*'__luaEval'*) ;;
                         *)
                             # Extract varname: setFoo → foo
                             _setter=$(echo "$_line" | sed 's/.*function \(set[A-Za-z0-9_]*\).*/\1/')
