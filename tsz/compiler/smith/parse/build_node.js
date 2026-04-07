@@ -416,10 +416,39 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
         expr = expr.replace(/@intCast\(([^)]+)\)/g, '$1');
         expr = expr.replace(/@as\(\w+,\s*([^)]+)\)/g, '$1');
       }
+      // Color.rgb → 0xRRGGBB
+      expr = expr.replace(/Color\.rgb\((\d+),\s*(\d+),\s*(\d+)\)/g, function(_, r, g, b) {
+        return '0x' + ((+r << 16) | (+g << 8) | +b).toString(16).padStart(6, '0');
+      });
+      // OA refs → _item.field
+      expr = expr.replace(/_oa\d+_(\w+)\[_i\]\[0\.\._oa\d+_\w+_lens\[_i\]\]/g, '_item.$1');
+      expr = expr.replace(/_oa\d+_(\w+)\[_i\]/g, '_item.$1');
+      // Clean orphan parens
       var _openCount = (expr.match(/\(/g) || []).length;
       var _closeCount = (expr.match(/\)/g) || []).length;
       while (_closeCount > _openCount && expr.endsWith(')')) { expr = expr.slice(0, -1); _closeCount--; }
-      expr = expr.replace(/\bif\s+\((.+?)\)\s+(\S+)\s+else\s+(\S+)/g, '($1) and $2 or $3');
+      // Iterative if/else → and/or (handles chained ternaries)
+      for (var _ifIter = 0; _ifIter < 10; _ifIter++) {
+        var _ifPos = expr.indexOf('if (');
+        if (_ifPos < 0) break;
+        var _depth = 0, _ci = _ifPos + 3;
+        for (; _ci < expr.length; _ci++) {
+          if (expr[_ci] === '(') _depth++;
+          if (expr[_ci] === ')') { _depth--; if (_depth === 0) break; }
+        }
+        if (_depth !== 0) break;
+        var _cond = expr.substring(_ifPos + 4, _ci);
+        var _after = expr.substring(_ci + 1).trim();
+        var _elseIdx = _after.indexOf(' else ');
+        if (_elseIdx < 0) break;
+        var _trueVal = _after.substring(0, _elseIdx).trim();
+        var _prefix = expr.substring(0, _ifPos);
+        var _suffix = _after.substring(_elseIdx + 6).trim();
+        expr = _prefix + '(' + _cond + ') and ' + _trueVal + ' or ' + _suffix;
+      }
+      // qjs_runtime.evalToString → bare expression
+      expr = expr.replace(/qjs_runtime\.evalToString\("String\(([^)]+)\)"[^)]*\)/g, '$1');
+      expr = expr.replace(/&_eval_buf_\d+/g, '');
       return expr;
     };
     // Style: parse Zig style fields back to key/value pairs
