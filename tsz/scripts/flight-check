@@ -1058,11 +1058,15 @@ if [ "$HAS_MAP_LOOP" -gt 0 ]; then
         BARE_COUNT=0
         for prop in $COMP_PARAMS; do
             # Check if prop appears as bare name in map body (tostring(prop) or prop ==)
-            n=$(echo "$MAP_BODY" | grep -cE "tostring\(${prop}\)|\\b${prop} ==" 2>/dev/null) || n=0
+            # Exclude field access patterns: .prop or _item.prop or _nitem.prop
+            n=$(echo "$MAP_BODY" | grep -oE "tostring\(${prop}\)|[^.]\\b${prop} ==" 2>/dev/null | wc -l) || n=0
             if [ "$n" -gt 0 ]; then
-                # Verify it's NOT also appearing as _item.prop (partially resolved is OK)
-                as_item=$(echo "$MAP_BODY" | grep -c "_item\.${prop}" 2>/dev/null) || as_item=0
-                if [ "$as_item" -eq 0 ]; then
+                # Verify it's NOT also appearing as _item.prop or _nitem.prop (resolved is OK)
+                as_item=$(echo "$MAP_BODY" | grep -cE "\.\s*${prop}" 2>/dev/null) || as_item=0
+                if [ "$as_item" -ge "$n" ]; then
+                    n=0  # All occurrences are field accesses
+                fi
+                if [ "$n" -gt 0 ]; then
                     BARE_PROPS="$BARE_PROPS $prop($n)"
                     BARE_COUNT=$((BARE_COUNT + n))
                 fi

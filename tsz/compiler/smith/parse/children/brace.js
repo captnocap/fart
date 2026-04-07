@@ -137,7 +137,14 @@ function tryParseBraceChild(c, children) {
               var _tpv = String(ctx.propStack[_tpk]);
               _tpv = _tpv.replace(/_oa\d+_(\w+)\[_i\]\[0\.\._oa\d+_\w+_lens\[_i\]\]/g, '_item.$1');
               _tpv = _tpv.replace(/_oa\d+_(\w+)\[_i\]/g, '_item.$1');
-              _tpv = _tpv.replace(/@as\([^,]+,\s*/g, '').replace(/@intCast\(/g, '(').replace(/@floatFromInt\(/g, '(');
+              if (/@as\(i64,\s*@intCast\((_\w+)\)\)/.test(_tpv)) {
+                _tpv = _tpv.replace(/@as\(i64,\s*@intCast\((_\w+)\)\)/g, '($1 - 1)');
+              }
+              for (var _ci4 = 0; _ci4 < 3; _ci4++) {
+                _tpv = _tpv.replace(/@as\([^,]+,\s*([^)]+)\)/g, '$1');
+                _tpv = _tpv.replace(/@intCast\(([^)]+)\)/g, '$1');
+                _tpv = _tpv.replace(/@floatFromInt\(([^)]+)\)/g, '$1');
+              }
               _luaRaw = _luaRaw.replace(new RegExp('\\$\\{' + _tpk + '\\}', 'g'), '${' + _tpv + '}');
             }
           }
@@ -607,7 +614,14 @@ function tryParseBraceChild(c, children) {
           _luaGetter = String(ctx.propStack[getter]);
           _luaGetter = _luaGetter.replace(/_oa\d+_(\w+)\[_i\]\[0\.\._oa\d+_\w+_lens\[_i\]\]/g, '_item.$1');
           _luaGetter = _luaGetter.replace(/_oa\d+_(\w+)\[_i\]/g, '_item.$1');
-          _luaGetter = _luaGetter.replace(/@as\([^,]+,\s*/g, '').replace(/@intCast\(/g, '(').replace(/@floatFromInt\(/g, '(');
+          if (/@as\(i64,\s*@intCast\((_\w+)\)\)/.test(_luaGetter)) {
+            _luaGetter = _luaGetter.replace(/@as\(i64,\s*@intCast\((_\w+)\)\)/g, '($1 - 1)');
+          }
+          for (var _ci3 = 0; _ci3 < 3; _ci3++) {
+            _luaGetter = _luaGetter.replace(/@as\([^,]+,\s*([^)]+)\)/g, '$1');
+            _luaGetter = _luaGetter.replace(/@intCast\(([^)]+)\)/g, '$1');
+            _luaGetter = _luaGetter.replace(/@floatFromInt\(([^)]+)\)/g, '$1');
+          }
         }
         children.push({ nodeExpr: '.{ .text = "" }', dynBufId: bufId, _luaStateGetter: _luaGetter });
       }

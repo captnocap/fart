@@ -17,11 +17,24 @@ function _buildLuaCondFromTokens(c, savedStart) {
       c.advance(); continue;
     }
     // Resolve component prop names to their values (OA refs cleaned for Lua)
-    if (c.kind() === TK.identifier && ctx.propStack && ctx.propStack[c.text()] !== undefined) {
+    // Skip if preceded by a dot (field access like _nitem.deptIdx — not a prop ref)
+    var _isPropRef = c.kind() === TK.identifier && ctx.propStack && ctx.propStack[c.text()] !== undefined;
+    if (_isPropRef && parts.length > 0 && parts[parts.length - 1] === '.') _isPropRef = false;
+    if (_isPropRef) {
       var _pv = String(ctx.propStack[c.text()]);
+      // OA field refs → _item.field
       _pv = _pv.replace(/_oa\d+_(\w+)\[_i\]\[0\.\._oa\d+_\w+_lens\[_i\]\]/g, '_item.$1');
       _pv = _pv.replace(/_oa\d+_(\w+)\[_i\]/g, '_item.$1');
-      _pv = _pv.replace(/@as\([^,]+,\s*/g, '').replace(/@intCast\(/g, '(').replace(/@floatFromInt\(/g, '(');
+      // Index casts → Lua index expression
+      if (/@as\(i64,\s*@intCast\((_\w+)\)\)/.test(_pv)) {
+        _pv = _pv.replace(/@as\(i64,\s*@intCast\((_\w+)\)\)/g, '($1 - 1)');
+      }
+      // Strip remaining Zig casts
+      for (var _ci = 0; _ci < 3; _ci++) {
+        _pv = _pv.replace(/@as\([^,]+,\s*([^)]+)\)/g, '$1');
+        _pv = _pv.replace(/@intCast\(([^)]+)\)/g, '$1');
+        _pv = _pv.replace(/@floatFromInt\(([^)]+)\)/g, '$1');
+      }
       parts.push(_pv);
       c.advance(); continue;
     }

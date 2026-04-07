@@ -28,9 +28,16 @@ function _jsExprToLua(expr, itemParam, indexParam) {
           // Clean Zig OA refs to Lua _item.field
           _pv = _pv.replace(/_oa\d+_(\w+)\[_i\]\[0\.\._oa\d+_\w+_lens\[_i\]\]/g, '_item.$1');
           _pv = _pv.replace(/_oa\d+_(\w+)\[_i\]/g, '_item.$1');
-          // Strip Zig casts
-          _pv = _pv.replace(/@as\([^,]+,\s*/g, '').replace(/@intCast\(/g, '(');
-          _pv = _pv.replace(/@floatFromInt\(/g, '(');
+          // Index casts → Lua index expression
+          if (/@as\(i64,\s*@intCast\((_\w+)\)\)/.test(_pv)) {
+            _pv = _pv.replace(/@as\(i64,\s*@intCast\((_\w+)\)\)/g, '($1 - 1)');
+          }
+          // Strip remaining Zig casts
+          for (var _ci2 = 0; _ci2 < 3; _ci2++) {
+            _pv = _pv.replace(/@as\([^,]+,\s*([^)]+)\)/g, '$1');
+            _pv = _pv.replace(/@intCast\(([^)]+)\)/g, '$1');
+            _pv = _pv.replace(/@floatFromInt\(([^)]+)\)/g, '$1');
+          }
           expr = expr.replace(new RegExp('\\b' + _pk + '\\b', 'g'), _pv);
         }
       }
