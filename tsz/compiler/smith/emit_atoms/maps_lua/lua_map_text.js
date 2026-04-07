@@ -2,7 +2,7 @@
 // Turns text content into a Lua string expression.
 // Uses _jsExprToLua from lua_map_subs.js.
 
-function _textToLua(text, itemParam, indexParam) {
+function _textToLua(text, itemParam, indexParam, _luaIdxExpr) {
   if (!text) return '""';
 
   // Field reference: { field: "title" } → tostring(_item.title)
@@ -14,7 +14,7 @@ function _textToLua(text, itemParam, indexParam) {
   if (typeof text === 'object' && text.stateVar) {
     var _sv = text.stateVar;
     // Resolve component props — bare prop names need _item.field substitution
-    _sv = _jsExprToLua(_sv, itemParam, indexParam);
+    _sv = _jsExprToLua(_sv, itemParam, indexParam, _luaIdxExpr);
     // If stateVar still has Zig syntax, clean it up
     if (/@|state\.getSlot|\bif\b/.test(_sv)) {
       // Color.rgb → 0xHEX
@@ -86,7 +86,7 @@ function _textToLua(text, itemParam, indexParam) {
       if (part.literal) {
         luaParts.push('"' + part.literal.replace(/"/g, '\\"') + '"');
       } else if (part.expr) {
-        luaParts.push('tostring(' + _jsExprToLua(part.expr, itemParam, indexParam) + ')');
+        luaParts.push('tostring(' + _jsExprToLua(part.expr, itemParam, indexParam, _luaIdxExpr) + ')');
       }
     }
     return luaParts.join(' .. ');
@@ -106,7 +106,7 @@ function _textToLua(text, itemParam, indexParam) {
           tj++;
         }
         var tExpr = text.slice(ti + 2, tj - 1).trim();
-        tExpr = _jsExprToLua(tExpr, itemParam, indexParam);
+        tExpr = _jsExprToLua(tExpr, itemParam, indexParam, _luaIdxExpr);
         tParts.push('tostring(' + tExpr + ')');
         ti = tj;
       } else {
@@ -141,7 +141,7 @@ function _textToLua(text, itemParam, indexParam) {
   }
 
   // Expression string with dynamic refs
-  var luaExpr = _jsExprToLua(String(text), itemParam, indexParam);
+  var luaExpr = _jsExprToLua(String(text), itemParam, indexParam, _luaIdxExpr);
   // Simple cleanups
   luaExpr = luaExpr.replace(/(\w+(?:\.\w+)*)\.length\b/g, '#$1');
   luaExpr = luaExpr.replace(/_oa\d+_(\w+)\[_i\]\[0\.\._oa\d+_\w+_lens\[_i\]\]/g, '_item.$1');

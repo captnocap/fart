@@ -56,17 +56,17 @@ function _wrapCondEval(cond) {
   return cond;
 }
 
-function _nodeToLua(node, itemParam, indexParam, indent) {
+function _nodeToLua(node, itemParam, indexParam, indent, _luaIdxExpr) {
   if (!node) return '{}';
   if (!indent) indent = '      ';
   var fields = [];
 
   if (node.style && Object.keys(node.style).length > 0) {
-    fields.push('style = ' + _styleToLua(node.style, itemParam, indexParam));
+    fields.push('style = ' + _styleToLua(node.style, itemParam, indexParam, _luaIdxExpr));
   }
 
   if (node.text !== undefined && node.text !== null) {
-    fields.push('text = ' + _textToLua(node.text, itemParam, indexParam));
+    fields.push('text = ' + _textToLua(node.text, itemParam, indexParam, _luaIdxExpr));
   }
 
   if (node.fontSize) {
@@ -138,7 +138,7 @@ function _nodeToLua(node, itemParam, indexParam, indent) {
       var _jh = node.handler.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
       fields.push('js_on_press = "' + _jh + '"');
     } else {
-      fields.push('lua_on_press = ' + _handlerToLua(node.handler, itemParam, indexParam));
+      fields.push('lua_on_press = ' + _handlerToLua(node.handler, itemParam, indexParam, _luaIdxExpr));
     }
   }
 
@@ -147,15 +147,20 @@ function _nodeToLua(node, itemParam, indexParam, indent) {
     for (var ci = 0; ci < node.children.length; ci++) {
       var child = node.children[ci];
       if (child.condition) {
-        var cond = _jsExprToLua(child.condition, itemParam, indexParam);
+        var cond = _jsExprToLua(child.condition, itemParam, indexParam, _luaIdxExpr);
         cond = _wrapCondEval(cond);
-        var body = _nodeToLua(child.node, itemParam, indexParam, indent + '  ');
-        childLua.push('(' + cond + ') and ' + body + ' or nil');
+        var body = _nodeToLua(child.node, itemParam, indexParam, indent + '  ', _luaIdxExpr);
+        // If body is already a conditional ending with 'or nil' (from unwrap), don't double-wrap
+        if (body.indexOf(' or nil') === body.length - 7) {
+          childLua.push('(' + cond + ') and ' + body);
+        } else {
+          childLua.push('(' + cond + ') and ' + body + ' or nil');
+        }
       } else if (child.ternaryCondition) {
-        var tcond = _jsExprToLua(child.ternaryCondition, itemParam, indexParam);
+        var tcond = _jsExprToLua(child.ternaryCondition, itemParam, indexParam, _luaIdxExpr);
         tcond = _wrapCondEval(tcond);
-        var trueBranch = _nodeToLua(child.trueNode, itemParam, indexParam, indent + '  ');
-        var falseBranch = _nodeToLua(child.falseNode, itemParam, indexParam, indent + '  ');
+        var trueBranch = _nodeToLua(child.trueNode, itemParam, indexParam, indent + '  ', _luaIdxExpr);
+        var falseBranch = _nodeToLua(child.falseNode, itemParam, indexParam, indent + '  ', _luaIdxExpr);
         childLua.push('(' + tcond + ') and ' + trueBranch + ' or nil');
         childLua.push('(not (' + tcond + ')) and ' + falseBranch + ' or nil');
       } else if (child.nestedMap) {
@@ -172,12 +177,15 @@ function _nodeToLua(node, itemParam, indexParam, indent) {
         var _innerFnItem = _isNested ? '_nitem' : '_item';
         var _innerFnIdx = _isNested ? '_ni' : '_i';
         var _innerIdxP = ml.indexParam || null;
+        // For nested maps, pass the Lua index expression so all sub-calls
+        // emit (_ni - 1) instead of (_i - 1) for the inner map's index
+        var _innerLuaIdx = _isNested ? '(_ni - 1)' : null;
         var loopBody;
         if (ml.bodyLua) {
           // Pre-built Lua from token walker (nested maps)
           loopBody = ml.bodyLua;
         } else if (ml.bodyNode) {
-          loopBody = _nodeToLua(ml.bodyNode, ml.itemParam, _innerIdxP, indent + '    ');
+          loopBody = _nodeToLua(ml.bodyNode, ml.itemParam, _innerIdxP, indent + '    ', _innerLuaIdx);
           // For nested maps: _nodeToLua always emits _item — replace with _nitem
           if (_isNested) {
             loopBody = loopBody.replace(/\b_item\b/g, _innerFnItem);
@@ -189,7 +197,7 @@ function _nodeToLua(node, itemParam, indexParam, indent) {
           indent + '    return ' + loopBody + '\n' +
           indent + '  end)');
       } else {
-        childLua.push(_nodeToLua(child, itemParam, indexParam, indent + '  '));
+        childLua.push(_nodeToLua(child, itemParam, indexParam, indent + '  ', _luaIdxExpr));
       }
     }
     // Unwrap: if node has no style/text/handler and all children are conditionals,

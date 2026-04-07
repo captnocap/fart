@@ -28,7 +28,7 @@ function _zigOaToLuaItem(val) {
   return null;
 }
 
-function _styleToLua(style, itemParam, indexParam) {
+function _styleToLua(style, itemParam, indexParam, _luaIdxExpr) {
   if (!style) return null;
   var parts = [];
   for (var key in style) {
@@ -180,11 +180,11 @@ function _styleToLua(style, itemParam, indexParam) {
 
     // Dynamic item reference
     if (typeof val === 'string' && itemParam && val.indexOf(itemParam) >= 0) {
-      parts.push(luaKey + ' = ' + _jsExprToLua(val, itemParam, indexParam));
+      parts.push(luaKey + ' = ' + _jsExprToLua(val, itemParam, indexParam, _luaIdxExpr));
       continue;
     }
     if (typeof val === 'string' && indexParam && val.indexOf(indexParam) >= 0) {
-      parts.push(luaKey + ' = ' + _jsExprToLua(val, itemParam, indexParam));
+      parts.push(luaKey + ' = ' + _jsExprToLua(val, itemParam, indexParam, _luaIdxExpr));
       continue;
     }
 

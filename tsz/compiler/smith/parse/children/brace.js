@@ -135,10 +135,17 @@ function tryParseBraceChild(c, children) {
           for (var _tpk in ctx.propStack) {
             if (_luaRaw.indexOf('${' + _tpk + '}') >= 0) {
               var _tpv = String(ctx.propStack[_tpk]);
+              _tpv = _tpv.replace(/_oa\d+_(\w+)\[_j\]\[0\.\._oa\d+_\w+_lens\[_j\]\]/g, '_nitem.$1');
+              _tpv = _tpv.replace(/_oa\d+_(\w+)\[_j\]/g, '_nitem.$1');
               _tpv = _tpv.replace(/_oa\d+_(\w+)\[_i\]\[0\.\._oa\d+_\w+_lens\[_i\]\]/g, '_item.$1');
               _tpv = _tpv.replace(/_oa\d+_(\w+)\[_i\]/g, '_item.$1');
               if (/@as\(i64,\s*@intCast\((_\w+)\)\)/.test(_tpv)) {
-                _tpv = _tpv.replace(/@as\(i64,\s*@intCast\((_\w+)\)\)/g, '($1 - 1)');
+                _tpv = _tpv.replace(/@as\(i64,\s*@intCast\((_\w+)\)\)/g, function(_, v) {
+                  if (v === '_i') return '(_i - 1)';
+                  if (v === '_j') return '(_ni - 1)';
+                  if (v === '_k') return '(_nni - 1)';
+                  return '(' + v + ' - 1)';
+                });
               }
               for (var _ci4 = 0; _ci4 < 3; _ci4++) {
                 _tpv = _tpv.replace(/@as\([^,]+,\s*([^)]+)\)/g, '$1');

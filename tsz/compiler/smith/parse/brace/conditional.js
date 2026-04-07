@@ -22,12 +22,20 @@ function _buildLuaCondFromTokens(c, savedStart) {
     if (_isPropRef && parts.length > 0 && parts[parts.length - 1] === '.') _isPropRef = false;
     if (_isPropRef) {
       var _pv = String(ctx.propStack[c.text()]);
-      // OA field refs → _item.field
+      // OA field refs → _item.field or _nitem.field
+      _pv = _pv.replace(/_oa\d+_(\w+)\[_j\]\[0\.\._oa\d+_\w+_lens\[_j\]\]/g, '_nitem.$1');
+      _pv = _pv.replace(/_oa\d+_(\w+)\[_j\]/g, '_nitem.$1');
       _pv = _pv.replace(/_oa\d+_(\w+)\[_i\]\[0\.\._oa\d+_\w+_lens\[_i\]\]/g, '_item.$1');
       _pv = _pv.replace(/_oa\d+_(\w+)\[_i\]/g, '_item.$1');
       // Index casts → Lua index expression
+      // Zig: _i (outer), _j (inner), _k (triple-nested) → Lua: _i, _ni, _nni
       if (/@as\(i64,\s*@intCast\((_\w+)\)\)/.test(_pv)) {
-        _pv = _pv.replace(/@as\(i64,\s*@intCast\((_\w+)\)\)/g, '($1 - 1)');
+        _pv = _pv.replace(/@as\(i64,\s*@intCast\((_\w+)\)\)/g, function(_, v) {
+          if (v === '_i') return '(_i - 1)';
+          if (v === '_j') return '(_ni - 1)';
+          if (v === '_k') return '(_nni - 1)';
+          return '(' + v + ' - 1)';
+        });
       }
       // Strip remaining Zig casts
       for (var _ci = 0; _ci < 3; _ci++) {
@@ -42,6 +50,24 @@ function _buildLuaCondFromTokens(c, savedStart) {
     if (c.kind() === TK.identifier && ctx.currentMap && c.text() === ctx.currentMap.itemParam) {
       parts.push('_item');
       c.advance(); continue;
+    }
+    // Resolve map index param: si → (_i - 1), fi → (_ni - 1)
+    if (c.kind() === TK.identifier && ctx.currentMap) {
+      var _mapCur = ctx.currentMap;
+      var _idxResolved = false;
+      while (_mapCur) {
+        if (c.text() === _mapCur.indexParam) {
+          var _zigIter = _mapCur.iterVar || '_i';
+          // Map Zig iter vars to Lua: _i→_i, _j→_ni, _k→_nni
+          if (_zigIter === '_j') parts.push('(_ni - 1)');
+          else if (_zigIter === '_k') parts.push('(_nni - 1)');
+          else parts.push('(' + _zigIter + ' - 1)');
+          _idxResolved = true;
+          break;
+        }
+        _mapCur = _mapCur.parentMap || null;
+      }
+      if (_idxResolved) { c.advance(); continue; }
     }
     parts.push(c.text());
     c.advance();

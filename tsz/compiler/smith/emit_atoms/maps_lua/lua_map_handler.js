@@ -2,18 +2,19 @@
 // Turns an onPress handler body into a Lua string expression.
 // Uses _jsExprToLua from lua_map_subs.js.
 
-function _handlerToLua(handler, itemParam, indexParam) {
+function _handlerToLua(handler, itemParam, indexParam, _luaIdxExpr) {
   if (!handler) return null;
-  var h = _jsExprToLua(handler, itemParam, indexParam);
-  var hasDynamic = h.indexOf('_item') >= 0 || h.indexOf('(_i - 1)') >= 0;
+  var h = _jsExprToLua(handler, itemParam, indexParam, _luaIdxExpr);
+  var _ixStr = _luaIdxExpr || '(_i - 1)';
+  var hasDynamic = h.indexOf('_item') >= 0 || h.indexOf(_ixStr) >= 0 || h.indexOf('(_i - 1)') >= 0;
   if (hasDynamic) {
-    return '"' + _spliceDynamicHandler(h) + '"';
+    return '"' + _spliceDynamicHandler(h, _ixStr) + '"';
   }
   return '"' + h.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
 }
 
 // "toggleTodo(_item.id)" → 'toggleTodo(" .. (_item.id) .. ")'
-function _spliceDynamicHandler(h) {
+function _spliceDynamicHandler(h, _ixStr) {
   var out = '';
   var i = 0;
   while (i < h.length) {
@@ -33,7 +34,7 @@ function _spliceDynamicHandler(h) {
       argEnd++;
     }
     var args = h.slice(argStart, argEnd - 1).trim();
-    var argDyn = args.indexOf('_item') >= 0 || args.indexOf('(_i - 1)') >= 0;
+    var argDyn = args.indexOf('_item') >= 0 || args.indexOf('(_i - 1)') >= 0 || (_ixStr && args.indexOf(_ixStr) >= 0);
     out += h.slice(i, fnNameStart);
     if (argDyn && fnName) {
       out += fnName + '(" .. (' + args + ') .. ")';

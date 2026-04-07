@@ -768,7 +768,32 @@ function luaParseHandler(c) {
           }
           const isZigExpr = pv.includes('@as(') || pv.includes('@intCast') || pv.includes('_oa') || pv.includes('state.get') || pv.includes('getSlot');
           if (isZigExpr) {
-            parts.push(name);
+            // Convert Zig expression to Lua for handler context
+            var _luaPv = pv;
+            // OA refs → _item.field or _nitem.field
+            _luaPv = _luaPv.replace(/_oa\d+_(\w+)\[_j\]\[0\.\._oa\d+_\w+_lens\[_j\]\]/g, '_nitem.$1');
+            _luaPv = _luaPv.replace(/_oa\d+_(\w+)\[_j\]/g, '_nitem.$1');
+            _luaPv = _luaPv.replace(/_oa\d+_(\w+)\[_i\]\[0\.\._oa\d+_\w+_lens\[_i\]\]/g, '_item.$1');
+            _luaPv = _luaPv.replace(/_oa\d+_(\w+)\[_i\]/g, '_item.$1');
+            // Index casts → Lua index expression
+            // Zig uses _i (outer), _j (inner), _k (triple-nested).
+            // Lua uses _i (outer), _ni (inner).
+            _luaPv = _luaPv.replace(/@as\(i64,\s*@intCast\(([^)]+)\)\)/g, function(_, v) {
+              if (v === '_i') return '(_i - 1)';
+              if (v === '_j') return '(_ni - 1)';
+              if (v === '_k') return '(_nni - 1)';
+              return '(' + v + ' - 1)';
+            });
+            // Strip remaining Zig casts
+            for (var _zci = 0; _zci < 3; _zci++) {
+              _luaPv = _luaPv.replace(/@as\([^,]+,\s*([^)]+)\)/g, '$1');
+              _luaPv = _luaPv.replace(/@intCast\(([^)]+)\)/g, '$1');
+            }
+            // State slots → getter names
+            _luaPv = _luaPv.replace(/state\.getSlot(?:Int|Float|Bool|String)?\((\d+)\)/g, function(_, idx) {
+              return (ctx.stateSlots && ctx.stateSlots[+idx]) ? ctx.stateSlots[+idx].getter : '_slot' + idx;
+            });
+            parts.push(_luaPv);
           } else if (/^-?\d+(\.\d+)?$/.test(pv) || /^0x[0-9a-fA-F]+$/.test(pv)) {
             parts.push(pv);
           } else if (pv.startsWith("'") || pv.startsWith('"')) {
