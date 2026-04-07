@@ -259,7 +259,7 @@ smith/parse.js
 smith/preflight/context.js
 smith/preflight/pattern_atoms.js
 smith/preflight/route_scan.js
-smith/preflight/flight_check.js
+smith/preflight/routing_check.js
 smith/preflight/rules/handlers.js
 smith/preflight/rules/maps.js
 smith/preflight/rules/dyn.js

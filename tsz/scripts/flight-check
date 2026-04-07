@@ -1,10 +1,17 @@
 #!/bin/bash
-# flight-check — post-compile integrity check for generated Zig
+# ── Flight Check ─────────────────────────────────────────────────
+# Post-compile, pre-build integrity check for generated Zig.
 # Validates that source .tsz content survived compilation intact.
 #
-# Runs AFTER forge (Smith), BEFORE zig build.
+# This is THE flight check — the gate between compiled output and
+# the binary build. If this fails, the build is blocked.
+#
+# Pipeline position:
+#   Linting (validate.js) → Compile (Smith) → Routing Check → ** FLIGHT CHECK ** → Zig Build
+#
 # Catches: phantom colors, dropped colors, handler imbalance,
-#          state slot mismatch, dropped static text.
+#          state slot mismatch, dropped static text, Zig/JS syntax
+#          leaked into Lua, broken handlers, empty nodes.
 #
 # Usage:
 #   ./scripts/flight-check <source.tsz> <gen_dir_or_file>

@@ -1,7 +1,7 @@
-// ── Post-parse validation ──
+// ── Linting (post-parse validation) ──
 // Pure read-only function. Runs after parseJSXElement (ctx fully populated),
 // before emitOutput. Validates ctx for Class A (detectable) and Class B
-// (silent wrong-output) bugs.
+// (silent wrong-output) bugs. Blocks compilation if errors are found.
 
 function validate(ctx) {
   const errors = [];

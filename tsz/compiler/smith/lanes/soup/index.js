@@ -163,7 +163,7 @@ function compileSoup(source, file) {
 
   var output = emitOutput(rootExpr, file);
 
-  // Emit excluded conditional texts as comments (flight-check compatibility)
+  // Emit excluded conditional texts as comments (flight check compatibility)
   if (ctx._excludedConditionalTexts && ctx._excludedConditionalTexts.length > 0) {
     output += '\n// ── Excluded conditional branch texts ────────────────────────\n';
     for (var eci = 0; eci < ctx._excludedConditionalTexts.length; eci++) {
@@ -189,7 +189,7 @@ function compileSoup(source, file) {
   // The old soup-specific post-hoc emit was removed — it generated the function
   // but emitOutput() had already built _appTick without the call, making it dead code.
 
-  // Emit all source hex colors as a comment so flight-check can find them.
+  // Emit all source hex colors as a comment so flight check can find them.
   // Soup ternaries can only render one branch statically — this preserves
   // the others and any dynamic/JS-resolved colors for the integrity check.
   var srcHexRe = /#[0-9a-fA-F]{3,8}/g;

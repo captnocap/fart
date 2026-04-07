@@ -27,7 +27,7 @@ function soupExpandComponents(source, jsx) {
 
   if (Object.keys(compDefs).length === 0) return jsx;
 
-  // Collect excluded conditional texts for flight-check comment emission
+  // Collect excluded conditional texts for flight check comment emission
   if (!ctx._excludedConditionalTexts) ctx._excludedConditionalTexts = [];
   for (var cn in compDefs) {
     var et = compDefs[cn].excludedTexts;
@@ -136,7 +136,7 @@ function _soupExtractComponentReturns(body) {
   } else {
     allJsx = '{children}';
   }
-  // Collect excluded conditional text for flight-check compatibility
+  // Collect excluded conditional text for flight check compatibility
   var excludedTexts = [];
   if (hasChildrenReturn && returns.length > 0) {
     for (var ei = 0; ei < returns.length; ei++) {

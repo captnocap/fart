@@ -1,17 +1,17 @@
-// ── Flight Check ────────────────────────────────────────────────
+// ── Routing Check ───────────────────────────────────────────────
 //
 // Post-emit verifier. Reads ctx._routePlan and the generated Zig
 // output string. Verifies that what the route scanner predicted
 // matches what emit actually produced.
 //
-// This is a COMPILER SELF-TEST, not user validation. If flight
+// This is a COMPILER SELF-TEST, not user validation. If routing
 // check fails, the compiler has a bug — the plan said X, the
-// output says Y. User-facing errors stay in preflight.
+// output says Y. User-facing errors stay in linting (validate.js).
 //
 // Returns { ok, mismatches[] }. Each mismatch is a diagnostic
 // string describing what was expected vs what was found.
 
-function flightCheck(ctx, zigOutput) {
+function routingCheck(ctx, zigOutput) {
   var plan = ctx._routePlan;
   if (!plan) return { ok: true, mismatches: [] };
 

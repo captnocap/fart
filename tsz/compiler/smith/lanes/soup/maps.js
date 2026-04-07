@@ -66,7 +66,7 @@ function soupHandleMap(expr, warns, inPressable) {
   }
 
   // Replace {itemParam.field} references with static placeholder text (dotted name)
-  // Using dotted form avoids triggering flight-check bracket text regex [a-zA-Z]+
+  // Using dotted form avoids triggering flight check bracket text regex [a-zA-Z]+
   var itemRe = new RegExp('\\{\\s*' + itemParam + '\\.(\\w+)\\s*\\}', 'g');
   jsxBody = jsxBody.replace(itemRe, itemParam + '.$1');
 

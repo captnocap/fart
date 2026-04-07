@@ -596,10 +596,10 @@ fi
 
 if [ "$SPLIT_LINT" -eq 1 ]; then rm -f "$GEN"; fi
 
-# ── Step 2b: flight check (source↔generated integrity) ─────────
+# ── Step 2b: flight check (post-compile, pre-build integrity) ─────────
 FLIGHT_GEN="$GEN_DIR"
 [ ! -d "$FLIGHT_GEN" ] && FLIGHT_GEN="$GEN_ROOT/generated_${NAME}.zig"
-# Flight checks run for ALL modes — lua-tree checks are inside flight-check itself
+# Flight check runs for ALL modes — lua-tree checks are inside flight-check itself
 if [ -e "$FLIGHT_GEN" ]; then
     FLIGHT_EXIT=0
     FLIGHT_OUT=$(./scripts/flight-check "$CART" "$FLIGHT_GEN" 2>&1) || FLIGHT_EXIT=$?

@@ -84,21 +84,21 @@ function finishParsedLane(nodeExpr, file, opts) {
 
   var zigOut = emitOutput(nodeExpr, file);
 
-  // ── Flight check — verify output matches route plan ──
-  if (ctx._routePlan && typeof flightCheck === 'function') {
-    var fc = flightCheck(ctx, zigOut);
+  // ── Routing check — verify output matches route plan ──
+  if (ctx._routePlan && typeof routingCheck === 'function') {
+    var fc = routingCheck(ctx, zigOut);
     if (!fc.ok) {
       for (var fci = 0; fci < fc.mismatches.length; fci++) {
-        print('[flight-check] ' + fc.mismatches[fci]);
+        print('[routing-check] ' + fc.mismatches[fci]);
       }
     }
     if (ctx._routePlan && globalThis.__SMITH_DEBUG) {
       print('[route-plan] ' + ctx._routePlan.summary);
       print('[route-plan] atoms: ' + ctx._routePlan.predictedAtoms.join(','));
       if (fc.mismatches.length > 0) {
-        print('[flight-check] MISMATCHES: ' + fc.mismatches.length);
+        print('[routing-check] MISMATCHES: ' + fc.mismatches.length);
       } else {
-        print('[flight-check] OK — output matches plan');
+        print('[routing-check] OK — output matches plan');
       }
     }
   }
