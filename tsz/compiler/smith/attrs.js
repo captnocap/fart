@@ -245,7 +245,7 @@ function parseStyleBlock(c) {
       if (c.kind() === TK.colon) c.advance();
       let val = parseStyleValue(c);
       // Handle modulo before comparison: i % 2 == 0 — consume % N and fold into zigExpr
-      if (c.kind() === TK.mod && val.zigExpr) {
+      if (c.kind() === TK.percent && val.zigExpr) {
         c.advance();
         if (c.kind() === TK.number) {
           val = { type: val.type, value: val.value, zigExpr: `(${val.zigExpr} % ${c.text()})` };
