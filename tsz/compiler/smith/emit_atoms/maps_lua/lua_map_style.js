@@ -40,15 +40,25 @@ function _styleToLua(style, itemParam, indexParam, _luaIdxExpr) {
     // Overflow: pass through for ScrollView/auto-overflow
     // readLuaStyle handles scroll/hidden/auto
 
-    // Zig if/else or any complex expression → __eval() escape hatch
-    // If the value contains Zig syntax, it came from a ternary or complex expression.
-    // Store the original .tsz expression on the style field (via _luaRawExpr) and __eval it.
-    // For now: detect Zig patterns and use __eval with a cleaned-up version.
-    // Color{} placeholder → 0x000000 (dynStyle should have replaced this)
+    // Color{} placeholder → 0x000000
     if (typeof val === 'string' && val === 'Color{}') val = '0x000000';
-    // 0 placeholder from numeric dynStyle → keep as 0 (but dynStyle should override)
 
-    if (typeof val === 'string' && (val.indexOf('if ') === 0 || val.indexOf('if(') === 0 || val.indexOf('@as(') >= 0 || val.indexOf('@intCast') >= 0 || val.indexOf('state.getSlot') >= 0 || val.indexOf('Color.rgb') >= 0)) {
+    // JS ternary in style: cond ? valA : valB → (cond) and valA or valB
+    if (typeof val === 'string' && val.indexOf('?') >= 0 && val.indexOf(':') >= 0) {
+      var _tParts = val.match(/^(.+?)\s*\?\s*(.+?)\s*:\s*(.+)$/);
+      if (_tParts) {
+        var _tCond = _tParts[1].replace(/===/g, '==').replace(/!==/g, '~=');
+        var _tTrue = _tParts[2].charAt(0) === '#' ? _hexToLua(_tParts[2].replace(/"/g, '')) : _tParts[2].replace(/"/g, '');
+        var _tFalse = _tParts[3].charAt(0) === '#' ? _hexToLua(_tParts[3].replace(/"/g, '')) : _tParts[3].replace(/"/g, '');
+        if (typeof _tTrue === 'string' && _tTrue.charAt(0) === '#') _tTrue = _hexToLua(_tTrue);
+        if (typeof _tFalse === 'string' && _tFalse.charAt(0) === '#') _tFalse = _hexToLua(_tFalse);
+        parts.push(luaKey + ' = (' + _tCond + ') and ' + _tTrue + ' or ' + _tFalse);
+        continue;
+      }
+    }
+
+    // Zig if/else or any complex expression → __eval() escape hatch
+    if (typeof val === 'string' && (val.indexOf('if ') === 0 || val.indexOf('if(') === 0 || val.indexOf('@as(') >= 0 || val.indexOf('@intCast') >= 0 || val.indexOf('state.getSlot') >= 0 || val.indexOf('Color.rgb') >= 0 || val.indexOf(' and ') >= 0)) {
       var _jsExpr = val;
       // 1. Color.rgb → 0xRRGGBB FIRST (before paren stripping mangles them)
       _jsExpr = _jsExpr.replace(/Color\.rgb\((\d+),\s*(\d+),\s*(\d+)\)/g, function(_, r, g, b) {
