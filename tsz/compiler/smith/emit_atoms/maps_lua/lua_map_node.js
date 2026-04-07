@@ -192,6 +192,12 @@ function _nodeToLua(node, itemParam, indexParam, indent) {
         childLua.push(_nodeToLua(child, itemParam, indexParam, indent + '  '));
       }
     }
+    // Unwrap: if node has no style/text/handler and all children are conditionals,
+    // return the conditional directly instead of wrapping in { children = { cond or nil } }.
+    // This prevents empty wrapper nodes from taking layout space when conditions are false.
+    if (fields.length === 0 && childLua.length === 1 && childLua[0].indexOf(' or nil') >= 0) {
+      return childLua[0];
+    }
     fields.push('children = {\n' + childLua.map(function(ch) { return indent + '  ' + ch; }).join(',\n') + '\n' + indent + '}');
   }
 
