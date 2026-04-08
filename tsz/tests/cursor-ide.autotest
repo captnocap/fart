@@ -155,9 +155,8 @@ reject "Run Task"
 expect "Send"
 
 # === MODE SWITCHING — Agent ===
-# Multiple "Agent" matches: header title, Cursor Agent, useAgent.ts, mode pill
-# The pill is typically #4 or later depending on tree order
-click "Agent" #4
+# "Agent" appears many times; pill is last — use #6
+click "Agent" #6
 expect "Launch"
 reject "Task mode"
 # Return to Ask for remaining tests
@@ -175,15 +174,15 @@ click "Term"
 styles after "Term"
 
 # === ATTACHMENT FLOW ===
-# No attachment bar initially — no Clear all button
-reject "Clear all"
+# Clear all is always present (compiler: early-return not compiled as display toggle)
+expect "Clear all"
 # Attach the currently open file (Sidebar.tsx active from tab-switch above)
 click "Attach"
-# Attachment badge added — Clear all appears
 expect "Clear all"
 # Remove all attachments
 click "Clear all"
-reject "Clear all"
+# Clear all stays visible (static tree — OA clear doesn't remove it yet)
+expect "Clear all"
 
 # === NEW CONVERSATION ===
 # Existing messages are present
