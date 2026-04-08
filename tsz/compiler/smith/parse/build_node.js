@@ -84,7 +84,47 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
             var _dnf = nodeFields[_dni];
             if (typeof _dnf === 'string') {
               if (_dnf.startsWith('.font_size = ')) _dln.fontSize = _dnf.slice(13);
-              if (_dnf.startsWith('.text_color = ')) _dln.color = _dnf.slice(14);
+              if (_dnf.startsWith('.text_color = ')) {
+                var _tcv = _dnf.slice(14);
+                // Convert Zig expressions to Lua (state slots, OA refs, if/else, Color.rgb)
+                _tcv = _tcv.replace(/state\.getSlot(?:Int|Float|Bool)?\((\d+)\)/g, function(_, idx) {
+                  var _s2 = ctx.stateSlots[+idx]; return _s2 ? _s2.getter : '_slot' + idx;
+                });
+                _tcv = _tcv.replace(/state\.getSlotString\((\d+)\)/g, function(_, idx) {
+                  var _s2 = ctx.stateSlots[+idx]; return _s2 ? _s2.getter : '_slot' + idx;
+                });
+                _tcv = _tcv.replace(/_oa\d+_(\w+)\[_i\]\[0\.\._oa\d+_\w+_lens\[_i\]\]/g, '_item.$1');
+                _tcv = _tcv.replace(/_oa\d+_(\w+)\[_i\]/g, '_item.$1');
+                _tcv = _tcv.replace(/Color\.rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*\d+)?\)/g, function(_, r, g, b) {
+                  return '0x' + ((+r << 16) | (+g << 8) | +b).toString(16).padStart(6, '0');
+                });
+                for (var _tci = 0; _tci < 3; _tci++) {
+                  _tcv = _tcv.replace(/@as\([^,]+,\s*([^)]+)\)/g, '$1');
+                  _tcv = _tcv.replace(/@intCast\(([^)]+)\)/g, '$1');
+                }
+                // Iterative if/else → and/or
+                for (var _tcif = 0; _tcif < 10; _tcif++) {
+                  var _tcifPos = _tcv.indexOf('if (');
+                  if (_tcifPos < 0) break;
+                  var _tcd = 0, _tcci = _tcifPos + 3;
+                  for (; _tcci < _tcv.length; _tcci++) {
+                    if (_tcv[_tcci] === '(') _tcd++;
+                    if (_tcv[_tcci] === ')') { _tcd--; if (_tcd === 0) break; }
+                  }
+                  if (_tcd !== 0) break;
+                  var _tcCond = _tcv.substring(_tcifPos + 4, _tcci);
+                  var _tcAfter = _tcv.substring(_tcci + 1).trim();
+                  var _tcElse = _tcAfter.indexOf(' else ');
+                  if (_tcElse < 0) break;
+                  var _tcTrue = _tcAfter.substring(0, _tcElse).trim();
+                  var _tcPfx = _tcv.substring(0, _tcifPos);
+                  var _tcSfx = _tcAfter.substring(_tcElse + 6).trim();
+                  _tcv = _tcPfx + '(' + _tcCond + ') and ' + _tcTrue + ' or ' + _tcSfx;
+                }
+                // std.mem.eql → Lua string compare
+                _tcv = _tcv.replace(/std\.mem\.eql\(u8,\s*([^,]+),\s*([^)]+)\)/g, '($1 == $2)');
+                _dln.color = _tcv;
+              }
             }
           }
         }
@@ -570,7 +610,7 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
         var _nf = nodeFields[_ni];
         if (typeof _nf === 'string') {
           if (_nf.startsWith('.font_size = ')) _ln.fontSize = _nf.slice(13);
-          if (_nf.startsWith('.text_color = ') && !(_ln.style && _ln.style.text_color)) _ln.color = _nf.slice(14);
+          if (_nf.startsWith('.text_color = ') && !(_ln.style && _ln.style.text_color)) _ln.color = _cleanZigExpr(_nf.slice(14));
           if (_nf.startsWith('.text = ')) _ln.text = _nf.slice(8).replace(/^"/, '').replace(/"$/, '');
           // Canvas/Graph/3D/Physics node fields → forward to luaNode
           var _nfEq = _nf.indexOf(' = ');

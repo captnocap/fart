@@ -34,11 +34,32 @@ function tryParseTextColorAttr(c, attr, nodeFields) {
       }
     } else if (_lhsResolved.kind === 'prop') {
       var propVal = _lhsResolved.zigExpr;
-      if (typeof propVal === 'string') {
+      // Prop is a map item reference (e.g., m={m} where m is map item) — treat .field access like map_item
+      if (ctx.currentMap && c.kind() === TK.dot && (propVal === ctx.currentMap.itemParam || (typeof propVal === 'string' && propVal.includes('@intCast')))) {
+        c.advance(); // skip .
+        if (c.kind() === TK.identifier) {
+          var propField = c.text();
+          c.advance();
+          var mapOa = ctx.currentMap.oa;
+          if (mapOa) {
+            var propFi = mapOa.fields.find(function(f) { return f.name === propField; });
+            if (propFi) {
+              colorLhs = propFi.type === 'string'
+                ? '_oa' + mapOa.oaIdx + '_' + propField + '[_i][0.._oa' + mapOa.oaIdx + '_' + propField + '_lens[_i]]'
+                : '_oa' + mapOa.oaIdx + '_' + propField + '[_i]';
+              colorLhsIsString = propFi.type === 'string';
+            } else {
+              colorLhs = '_oa' + mapOa.oaIdx + '_' + propField + '[_i]';
+            }
+          }
+        }
+      } else if (typeof propVal === 'string') {
         colorLhs = propVal;
         colorLhsIsString = propVal.includes('getSlotString') || (propVal.includes('[0..') && propVal.includes('_lens'));
       }
     }
+
+
 
     if (colorLhs && (c.kind() === TK.eq_eq || c.kind() === TK.not_eq || c.kind() === TK.gt || c.kind() === TK.lt || c.kind() === TK.gt_eq || c.kind() === TK.lt_eq)) {
       const op = c.kind() === TK.eq_eq ? '==' : c.kind() === TK.not_eq ? '!=' : c.text();
