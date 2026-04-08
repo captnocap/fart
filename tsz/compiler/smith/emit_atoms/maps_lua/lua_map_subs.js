@@ -87,7 +87,10 @@ function _jsExprToLua(expr, itemParam, indexParam, _luaIdxExpr) {
     });
   }
   // Zig qjs_runtime.evalToString → __eval (JS function calls from Lua)
-  expr = expr.replace(/qjs_runtime\.evalToString\("String\(([^)]+)\)"[^)]*\)/g, '__eval("$1")');
+  // Pattern 1: "String(expr)" → __eval("expr")
+  expr = expr.replace(/qjs_runtime\.evalToString\("String\(([^"]+)\)"[^)]*\)/g, '__eval("$1")');
+  // Pattern 2: general "any JS code" → __eval("code")
+  expr = expr.replace(/qjs_runtime\.evalToString\("([^"]+)"[^)]*\)/g, '__eval("$1")');
   expr = expr.replace(/&_eval_buf_\d+/g, '');
   // Zig if/else chains → Lua and/or (from parseTemplateLiteral ternary emit)
   for (var _ifIter = 0; _ifIter < 10; _ifIter++) {

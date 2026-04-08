@@ -131,7 +131,7 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
               // Strip Zig runtime calls BEFORE splitting (they contain commas)
               var _cleanedArgs = _fmtExpr;
               // qjs_runtime.evalToString("String(expr)", &buf) → expr
-              _cleanedArgs = _cleanedArgs.replace(/qjs_runtime\.evalToString\("String\(([^)]+)\)"[^)]*\)/g, '$1');
+              _cleanedArgs = _cleanedArgs.replace(/qjs_runtime\.evalToString\("String\(([^"]+)\)"[^)]*\)/g, '$1');
               _cleanedArgs = _cleanedArgs.replace(/&_eval_buf_\d+/g, '');
               for (var _cai = 0; _cai < 5; _cai++) {
                 _cleanedArgs = _cleanedArgs.replace(/@as\(\[?\]?(?:const )?\w+,\s*([^)]*)\)/g, '$1');
@@ -165,7 +165,7 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
                 if (_pi < _args.length) {
                   var _argClean = _args[_pi].trim();
                   // Strip qjs_runtime.evalToString → bare expression
-                  _argClean = _argClean.replace(/qjs_runtime\.evalToString\("String\(([^)]+)\)"[^)]*\)/g, '$1');
+                  _argClean = _argClean.replace(/qjs_runtime\.evalToString\("String\(([^"]+)\)"[^)]*\)/g, '$1');
                   _argClean = _argClean.replace(/,\s*&_eval_buf_\d+/g, '');
                   _argClean = _argClean.replace(/&_eval_buf_\d+/g, '');
                   // Strip @as wrappers first (iterate for nesting)
@@ -205,7 +205,7 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
               // Single-arg: strip Zig runtime calls and casts
               var _singleClean = _fmtExpr;
               // qjs_runtime.evalToString("String(expr)", &buf) → expr
-              _singleClean = _singleClean.replace(/qjs_runtime\.evalToString\("String\(([^)]+)\)"[^)]*\)/g, '$1');
+              _singleClean = _singleClean.replace(/qjs_runtime\.evalToString\("String\(([^"]+)\)"[^)]*\)/g, '$1');
               // &_eval_buf_N leftover
               _singleClean = _singleClean.replace(/,\s*&_eval_buf_\d+/g, '');
               _singleClean = _singleClean.replace(/&_eval_buf_\d+/g, '');
@@ -506,7 +506,7 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
         expr = _prefix + '(' + _cond + ') and ' + _trueVal + ' or ' + _suffix;
       }
       // qjs_runtime.evalToString → bare expression
-      expr = expr.replace(/qjs_runtime\.evalToString\("String\(([^)]+)\)"[^)]*\)/g, '$1');
+      expr = expr.replace(/qjs_runtime\.evalToString\("String\(([^"]+)\)"[^)]*\)/g, '$1');
       expr = expr.replace(/&_eval_buf_\d+/g, '');
       return expr;
     };
@@ -554,6 +554,16 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
         }
       }
     }
+    // Direct dynStyle color fallback: if dynStyleIds exist but style.text_color wasn't set
+    // (can happen when nodeResult.dynStyleIds propagation missed), apply directly
+    if (nodeFields && nodeFields._dynStyleIds && ctx.dynStyles) {
+      for (var _fbi = 0; _fbi < nodeFields._dynStyleIds.length; _fbi++) {
+        var _fds = ctx.dynStyles[nodeFields._dynStyleIds[_fbi]];
+        if (_fds && _fds.field === 'text_color' && _fds.expression && !(_ln.style && _ln.style.text_color)) {
+          _ln.color = _cleanZigExpr(_fds.expression);
+        }
+      }
+    }
     // Text + nodeFields
     if (nodeFields) {
       for (var _ni = 0; _ni < nodeFields.length; _ni++) {
@@ -583,7 +593,7 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
       }
     }
     // Promote dynStyle text_color to node.color (text_color is a node field, not style)
-    if (_ln.style && _ln.style.text_color && (!_ln.color || _ln.color === 'Color{}' || _ln.color === '0x000000' || _ln.color === 0)) {
+    if (_ln.style && _ln.style.text_color && (!_ln.color || _ln.color === 'Color{}' || _ln.color === '0x000000' || _ln.color === 0 || _ln.color === 'Color.rgb(0, 0, 0)' || (typeof _ln.color === 'string' && _ln.color.indexOf('Color') >= 0 && _ln.color.indexOf('and') < 0))) {
       _ln.color = _ln.style.text_color;
       delete _ln.style.text_color;
     }

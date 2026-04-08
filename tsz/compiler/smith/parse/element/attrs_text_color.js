@@ -94,10 +94,10 @@ function tryParseTextColorAttr(c, attr, nodeFields) {
 
         const resolveColor = (value) => value.type === 'zig_expr' ? value.zigExpr : value.type === 'string' ? parseColor(value.value) : 'Color{}';
         const colorExpr = `if ${cond} ${resolveColor(truthyValue)} else ${resolveColor(falsyValue)}`;
-        if (ctx.currentMap || (colorLhs && colorLhs.includes('_oa'))) {
-          nodeFields.push(`.text_color = ${colorExpr}`);
-        } else {
-          nodeFields.push(`.text_color = Color.rgb(0, 0, 0)`);
+        // Always emit the real expression — Lua tree builder converts via _cleanZigExpr
+        nodeFields.push(`.text_color = ${colorExpr}`);
+        if (!ctx.currentMap && !(colorLhs && colorLhs.includes('_oa'))) {
+          // Also create dynStyle for the Zig node tree path
           if (!ctx.dynStyles) ctx.dynStyles = [];
           const dynStyleId = ctx.dynStyles.length;
           ctx.dynStyles.push({ field: 'text_color', expression: colorExpr, arrName: '', arrIndex: -1, isColor: true });

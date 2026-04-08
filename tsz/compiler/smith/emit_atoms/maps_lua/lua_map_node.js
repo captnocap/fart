@@ -73,9 +73,15 @@ function _nodeToLua(node, itemParam, indexParam, indent, _luaIdxExpr) {
     fields.push('font_size = ' + node.fontSize);
   }
 
+  // Promote style.text_color to color if color is a placeholder (dynStyle override)
+  if (node.style && node.style.text_color && typeof node.style.text_color === 'string' && /\band\b/.test(node.style.text_color) &&
+      (!node.color || node.color === 'Color.rgb(0, 0, 0)' || node.color === '0x000000' || node.color === 0x000000 || (typeof node.color === 'string' && node.color.indexOf('Color') >= 0 && node.color.indexOf('and') < 0))) {
+    node.color = node.style.text_color;
+    delete node.style.text_color;
+  }
   if (node.color) {
     var _cv = node.color;
-    if (typeof _cv === 'string' && (_cv.indexOf('if ') === 0 || _cv.indexOf('@') >= 0 || _cv.indexOf('state.get') >= 0)) {
+    if (typeof _cv === 'string' && (_cv.indexOf('if ') === 0 || _cv.indexOf('@') >= 0 || _cv.indexOf('state.get') >= 0 || _cv.indexOf(' and ') >= 0)) {
       // OA ref in color → _item.field
       var _oaColor = _cv.match(/_oa\d+_(\w+)\[_i\]/);
       if (_oaColor) {
@@ -97,22 +103,24 @@ function _nodeToLua(node, itemParam, indexParam, indent, _luaIdxExpr) {
         });
         // OA refs
         _jsColor = _jsColor.replace(/_oa\d+_(\w+)\[_i\]/g, '_item.$1');
-        // Zig if/else → Lua and/or (balanced paren match)
-        var _ifColorMatch = _jsColor.match(/^if\s*\(/);
-        if (_ifColorMatch) {
-          var _cd = 0, _cci = 3;
+        // Zig if/else → Lua and/or (iterative for nested ternaries)
+        for (var _cifIter = 0; _cifIter < 10; _cifIter++) {
+          var _cifPos = _jsColor.indexOf('if (');
+          if (_cifPos < 0) break;
+          var _cd = 0, _cci = _cifPos + 3;
           for (; _cci < _jsColor.length; _cci++) {
             if (_jsColor[_cci] === '(') _cd++;
             if (_jsColor[_cci] === ')') { _cd--; if (_cd === 0) break; }
           }
-          if (_cd === 0) {
-            var _ccond = _jsColor.substring(4, _cci);
-            var _crest = _jsColor.substring(_cci + 1).trim();
-            var _celse = _crest.split(/\s+else\s+/);
-            if (_celse.length === 2) {
-              _jsColor = '(' + _ccond + ') and ' + _celse[0].trim() + ' or ' + _celse[1].trim();
-            }
-          }
+          if (_cd !== 0) break;
+          var _ccond = _jsColor.substring(_cifPos + 4, _cci);
+          var _crest = _jsColor.substring(_cci + 1).trim();
+          var _celseIdx = _crest.indexOf(' else ');
+          if (_celseIdx < 0) break;
+          var _ctrueVal = _crest.substring(0, _celseIdx).trim();
+          var _cprefix = _jsColor.substring(0, _cifPos);
+          var _csuffix = _crest.substring(_celseIdx + 6).trim();
+          _jsColor = _cprefix + '(' + _ccond + ') and ' + _ctrueVal + ' or ' + _csuffix;
         }
         // Clean orphan parens
         var _co = (_jsColor.match(/\(/g) || []).length;
