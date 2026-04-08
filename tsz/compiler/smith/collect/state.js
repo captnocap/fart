@@ -154,6 +154,21 @@ function collectObjectState(c, getter, setter) {
 function collectObjectArrayState(c, getter, setter) {
   const arrayStartPos = c.pos - 1; // position of [
   c.advance();
+  // Empty array: useState([]) → OA with no fields, managed entirely in JS/Lua
+  if (c.kind() === TK.rbracket) {
+    const parentOaIdx = ctx.objectArrays.length;
+    ctx.objectArrays.push({
+      fields: [],
+      getter: getter, setter: setter, oaIdx: parentOaIdx,
+      initDataStartPos: arrayStartPos,
+      isEmpty: true,
+    });
+    c.advance(); // skip ]
+    if (c.kind() === TK.rparen) c.advance();
+    const oa = ctx.objectArrays[parentOaIdx];
+    oa.initDataEndPos = c.pos;
+    return 'object_array';
+  }
   // Primitive array: useState([0, 0, 0, ...]) → synthetic OA with single 'value' field
   if (c.kind() !== TK.lbrace) {
     // Check if it's an array of numbers/booleans

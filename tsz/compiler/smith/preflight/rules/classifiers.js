@@ -41,10 +41,19 @@ function checkUnresolvedClassifierComponents(ctx, errors) {
 
 function checkDroppedExpressions(ctx, errors) {
   if (!(ctx._droppedExpressions && ctx._droppedExpressions.length > 0)) return;
+  // When __scriptContent is present (via .script.tsz import), the lua-tree
+  // runtime evaluates brace expressions natively — they're not truly dropped,
+  // just not handled by the Zig dynText path. Downgrade to warning.
+  var isLuaTree = !!globalThis.__scriptContent;
   for (var dei = 0; dei < ctx._droppedExpressions.length; dei++) {
     var de = ctx._droppedExpressions[dei];
     var snippet = de.expr.length > 60 ? de.expr.substring(0, 60) + '...' : de.expr;
-    errors.push('F12: dropped expression {' + snippet + '} — not a getter, prop, template, map, or conditional');
+    if (isLuaTree) {
+      ctx._warnings = ctx._warnings || [];
+      ctx._warnings.push('W12: lua-tree expression {' + snippet + '} — handled at runtime, not in Zig emit');
+    } else {
+      errors.push('F12: dropped expression {' + snippet + '} — not a getter, prop, template, map, or conditional');
+    }
   }
 }
 
