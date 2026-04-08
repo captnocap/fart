@@ -391,6 +391,14 @@ function ChatPanel(props) {
 
       <C.ChatMessages>
         <C.ChatStack>
+          {/* Welcome banner */}
+          <Box style={{ flexDirection: 'column', alignItems: 'center', paddingTop: 8, paddingBottom: 12, borderBottomWidth: 1, borderColor: '#1f1f1f', marginBottom: 8 }}>
+            <Box style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: '#1a3a6e', alignItems: 'center', justifyContent: 'center', marginBottom: 6 }}>
+              <Text fontSize={14} color="#79c0ff">C</Text>
+            </Box>
+            <Text fontSize={11} color="#4a4a4a">Cursor Agent is ready</Text>
+          </Box>
+
           {props.messages.map(function(msg, idx) {
             return <Message key={idx} msg={msg} />;
           })}

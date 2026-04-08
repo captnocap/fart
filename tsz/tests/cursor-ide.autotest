@@ -152,7 +152,7 @@ expect "Send"
 
 # === MODE SWITCHING — Agent ===
 # "Agent" appears many times; pill is last — use #6
-click "Agent" #6
+click "Agent" #7
 expect "Launch"
 reject "Task mode"
 # Return to Ask for remaining tests
