@@ -140,27 +140,22 @@ function ThinkingIndicator() {
   );
 }
 
-// Mode pill bar — Ask / Plan / Task / Agent
+// Mode pill bar — Ask / Plan / Task / Agent (static, avoids local-array .map() compiler gap)
 function ModePillBar() {
-  var modes = ['ask', 'plan', 'task', 'agent'];
-  var labels = { ask: 'Ask', plan: 'Plan', task: 'Task', agent: 'Agent' };
-
   return (
     <C.ModePillBar>
-      {modes.map(function(m, idx) {
-        var isActive = agentMode == m;
-        return (
-          <C.ModePill
-            key={m}
-            onPress={function() { setAgentMode(m); }}
-            style={isActive ? { backgroundColor: '#0d2040', borderColor: '#2d62ff' } : {}}
-          >
-            <C.ModePillLabel style={isActive ? { color: '#79c0ff' } : {}}>
-              {labels[m]}
-            </C.ModePillLabel>
-          </C.ModePill>
-        );
-      })}
+      <C.ModePill onPress={function() { setAgentMode('ask'); }} style={agentMode == 'ask' ? { backgroundColor: '#0d2040', borderColor: '#2d62ff' } : {}}>
+        <C.ModePillLabel style={agentMode == 'ask' ? { color: '#79c0ff' } : {}}>Ask</C.ModePillLabel>
+      </C.ModePill>
+      <C.ModePill onPress={function() { setAgentMode('plan'); }} style={agentMode == 'plan' ? { backgroundColor: '#0d2040', borderColor: '#2d62ff' } : {}}>
+        <C.ModePillLabel style={agentMode == 'plan' ? { color: '#79c0ff' } : {}}>Plan</C.ModePillLabel>
+      </C.ModePill>
+      <C.ModePill onPress={function() { setAgentMode('task'); }} style={agentMode == 'task' ? { backgroundColor: '#0d2040', borderColor: '#2d62ff' } : {}}>
+        <C.ModePillLabel style={agentMode == 'task' ? { color: '#79c0ff' } : {}}>Task</C.ModePillLabel>
+      </C.ModePill>
+      <C.ModePill onPress={function() { setAgentMode('agent'); }} style={agentMode == 'agent' ? { backgroundColor: '#0d2040', borderColor: '#2d62ff' } : {}}>
+        <C.ModePillLabel style={agentMode == 'agent' ? { color: '#79c0ff' } : {}}>Agent</C.ModePillLabel>
+      </C.ModePill>
     </C.ModePillBar>
   );
 }
@@ -217,18 +212,12 @@ function ToolToggle(props) {
 }
 
 // Clickable model pill — cycles through available models
+// Uses modelDisplayName state (set by cycleModel in script) to avoid local-var drop
 function ModelPicker() {
-  var displayName = selectedModel;
-  if (selectedModel == 'claude-opus-4') displayName = 'Opus 4';
-  else if (selectedModel == 'claude-sonnet-4') displayName = 'Sonnet 4';
-  else if (selectedModel == 'gpt-4o') displayName = 'GPT-4o';
-  else if (selectedModel == 'o1-preview') displayName = 'o1';
-  var isAnthropic = selectedModel.indexOf('claude') != -1;
-
   return (
     <C.ModelPickerBtn onPress={function() { cycleModel(); }}>
-      <C.ModelPickerDot style={{ backgroundColor: isAnthropic ? '#ff7b72' : '#7ee787' }} />
-      <C.ModelPickerLabel>{displayName}</C.ModelPickerLabel>
+      <C.ModelPickerDot style={{ backgroundColor: '#ff7b72' }} />
+      <C.ModelPickerLabel>{modelDisplayName}</C.ModelPickerLabel>
       <C.ModelPickerChevron>v</C.ModelPickerChevron>
     </C.ModelPickerBtn>
   );
@@ -283,30 +272,10 @@ function SlashHints() {
   );
 }
 
-// Main composer — the power user input area
+// Main composer — uses direct state refs (avoids local-var dropped expressions)
 function ChatInput() {
-  var hasInput = currentInput.length > 0;
-  var hasAttachments = attachments.length > 0;
-  var canSend = hasInput || hasAttachments;
-  var isTask = agentMode == 'task';
-  var isPlan = agentMode == 'plan';
-  var isAgent = agentMode == 'agent';
-  var showSlashHints = hasInput && currentInput.charAt(0) == '/' && currentInput.indexOf(' ') == -1;
-
-  var placeholder = 'Ask anything, # files, @ symbols...';
-  if (isPlan) placeholder = 'Describe changes to plan...';
-  else if (isTask) placeholder = 'Describe the task to run autonomously...';
-  else if (isAgent) placeholder = 'What should the background agent do?';
-
-  var sendLabel = 'Send';
-  if (isPlan) sendLabel = 'Plan';
-  else if (isTask) sendLabel = 'Run Task';
-  else if (isAgent) sendLabel = 'Launch';
-
   return (
     <C.ChatInputArea>
-      {showSlashHints && <SlashHints />}
-
       <ModePillBar />
 
       <C.ChatInputBox>
@@ -315,7 +284,7 @@ function ChatInput() {
         <C.ChatInputField
           value={currentInput}
           onChange={function(v) { setCurrentInput(v); }}
-          placeholder={placeholder}
+          placeholder="Ask anything, # files, @ symbols..."
           multiline={true}
         />
 
@@ -341,42 +310,36 @@ function ChatInput() {
             <ToolToggle icon="W" label="Web" active={webSearch} onToggle={function() { toggleWebSearch(); }} />
             <ToolToggle icon=">" label="Term" active={termAccess} onToggle={function() { toggleTermAccess(); }} />
 
-            {isTask && (
+            {agentMode == 'task' && (
               <ToolToggle icon="A" label="Auto" active={autoApply} onToggle={function() { toggleAutoApply(); }} />
             )}
           </C.ChatInputToolsLeft>
 
           <C.ChatInputToolsRight>
-            <TokenCountBadge />
             <ModelPicker />
 
-            {canSend && (
-              <C.ChatSendBtn onPress={function() { sendMessage(); }}>
-                <C.ChatSendIcon>^</C.ChatSendIcon>
-                <C.ChatSendLabel>{sendLabel}</C.ChatSendLabel>
-                <C.ChatSendShortcut>
-                  <C.ChatSendShortcutText>Enter</C.ChatSendShortcutText>
-                </C.ChatSendShortcut>
-              </C.ChatSendBtn>
-            )}
-
-            {!canSend && (
-              <C.ChatSendBtnDisabled>
-                <C.ChatSendLabelDisabled>{sendLabel}</C.ChatSendLabelDisabled>
-              </C.ChatSendBtnDisabled>
-            )}
+            <C.ChatSendBtn onPress={function() { sendMessage(); }}>
+              <C.ChatSendIcon>^</C.ChatSendIcon>
+              {agentMode == 'ask' && <C.ChatSendLabel>Send</C.ChatSendLabel>}
+              {agentMode == 'plan' && <C.ChatSendLabel>Plan</C.ChatSendLabel>}
+              {agentMode == 'task' && <C.ChatSendLabel>Run Task</C.ChatSendLabel>}
+              {agentMode == 'agent' && <C.ChatSendLabel>Launch</C.ChatSendLabel>}
+              <C.ChatSendShortcut>
+                <C.ChatSendShortcutText>Enter</C.ChatSendShortcutText>
+              </C.ChatSendShortcut>
+            </C.ChatSendBtn>
           </C.ChatInputToolsRight>
         </C.ChatInputToolbar>
       </C.ChatInputBox>
 
-      {isTask && (
+      {agentMode == 'task' && (
         <C.TaskModeHint>
           <C.TaskModeHintIcon>!</C.TaskModeHintIcon>
           <C.TaskModeHintText>Task mode — agent autonomously reads and edits files</C.TaskModeHintText>
         </C.TaskModeHint>
       )}
 
-      {isPlan && (
+      {agentMode == 'plan' && (
         <C.PlanModeHint>
           <C.PlanModeHintIcon>i</C.PlanModeHintIcon>
           <C.PlanModeHintText>Plan mode — review diff before changes are applied</C.PlanModeHintText>

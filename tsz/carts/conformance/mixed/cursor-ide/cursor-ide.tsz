@@ -107,6 +107,9 @@ const [searchResults, setSearchResults] = useState([
   { file: 'SearchPanel.tsx', line: 42, text: 'function searchProject(query) {', matches: 2 },
 ]);
 
+// === MODEL DISPLAY ===
+const [modelDisplayName, setModelDisplayName] = useState('Opus 4');
+
 // === STATUS BAR ===
 const [gitBranch, setGitBranch] = useState('main');
 const [gitStatus, setGitStatus] = useState('*1');
@@ -130,7 +133,7 @@ if (ready == 0) {
 function App() {
   return (
     <C.Shell>
-      <TopBar title={currentFilePath} onToggleChat={function() { setShowChat(1 - showChat); }} onToggleTerminal={function() { setShowTerminal(1 - showTerminal); }} onToggleSearch={function() { setShowSearch(1 - showSearch); }} />
+      <TopBar title={currentFilePath} onToggleChat={function() { setShowChat(1 - showChat); }} onToggleTerminal={function() { openTerminal(); setShowTerminal(1 - showTerminal); }} onToggleSearch={function() { setShowSearch(1 - showSearch); }} />
 
       <C.Workspace>
         <Sidebar files={files} onSelectFile={function(idx) { openFile(idx); }} />
@@ -149,7 +152,7 @@ function App() {
 
           <Editor content={editorContent} lineNumbers={lineNumbers} totalLines={totalLines} cursorLine={cursorPosition.line} modified={editorModified} />
 
-          {showTerminal == 1 && <TerminalPanel lines={terminalLines} />}
+          {showTerminal == 1 && <TerminalPanel />}
         </C.Editor>
 
         {showChat == 1 && <ChatPanel messages={chatMessages} isGenerating={isGenerating} />}

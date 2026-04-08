@@ -40,13 +40,14 @@ expect "Sidebar.tsx"
 expect "components"
 
 # === EDITOR ===
-# Line count visible
-expect "lines"
+# Line number gutter visible (real line numbers)
+expect "1"
+expect "10"
 expect "20"
 
 # === CHAT PANEL ===
 expect "Agent"
-expect "GPT-4"
+expect "claude-opus-4"
 expect "Cursor Agent"
 expect "I have analyzed the codebase"
 expect "Search for all components"
@@ -103,3 +104,103 @@ color "UTF-8" #6e6e6e
 # === HIDDEN PANELS ===
 reject "Project Search"
 reject "$"
+
+# =============================================================
+# === AGENT INPUT — POWER USER COMPOSER ===
+# =============================================================
+
+# Mode pills all present
+expect "Ask"
+expect "Plan"
+expect "Task"
+expect "Agent"
+
+# Tool buttons
+expect "Files"
+expect "Symbols"
+expect "Attach"
+
+# Capability toggles
+expect "Web"
+expect "Term"
+
+# Model picker shows initial model
+expect "Opus 4"
+
+# Chat header new conversation + history buttons
+expect "+ New"
+expect "History"
+
+# === MODE SWITCHING — Plan ===
+# Click Plan pill — plan hint should appear, send label should change
+click "Plan"
+expect "Plan mode"
+reject "Task mode"
+reject "Run Task"
+reject "Launch"
+
+# === MODE SWITCHING — Task ===
+# Task mode adds the Auto-apply toggle and Run Task button
+click "Task"
+expect "Task mode"
+expect "Auto"
+expect "Run Task"
+reject "Plan mode"
+
+# Back to Ask — everything task-specific disappears
+click "Ask"
+reject "Task mode"
+reject "Auto"
+reject "Run Task"
+expect "Send"
+
+# === MODE SWITCHING — Agent ===
+click "Agent"
+expect "Launch"
+reject "Task mode"
+# Return to Ask for remaining tests
+click "Ask"
+reject "Launch"
+expect "Send"
+
+# === TOOL TOGGLES — verify style state changes on activation ===
+styles before "Web"
+click "Web"
+styles after "Web"
+
+styles before "Term"
+click "Term"
+styles after "Term"
+
+# === ATTACHMENT FLOW ===
+# No attachment bar initially — no Clear all button
+reject "Clear all"
+# Attach the currently open file (Sidebar.tsx active from tab-switch above)
+click "Attach"
+# Attachment badge added — Clear all appears
+expect "Clear all"
+# Remove all attachments
+click "Clear all"
+reject "Clear all"
+
+# === NEW CONVERSATION ===
+# Existing messages are present
+expect "I have analyzed the codebase"
+expect "Found 3 files"
+# Clear the conversation
+click "+ New"
+reject "I have analyzed the codebase"
+reject "Found 3 files"
+reject "Search for all components"
+
+# === MODEL CYCLING ===
+# Model is GPT-4o from earlier cycling (steps 98-103)
+# Cycle: GPT-4o → o1
+expect "GPT-4o"
+click "GPT-4o"
+expect "o1"
+reject "GPT-4o"
+# Cycle again: o1 → Opus 4
+click "o1"
+expect "Opus 4"
+reject "o1"

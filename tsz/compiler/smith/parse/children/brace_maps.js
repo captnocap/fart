@@ -99,6 +99,7 @@ function _tryParseComputedChainMap(c, children, baseName, baseExpr, consumeClosi
       bodyNode: mapResult.luaNode || null,
       itemParam: header.itemParam || '_item',
       indexParam: header.indexParam || null,
+      dataVar: oa.getter,
       rawSource: _luaRaw,
       varName: baseName,
       isNested: !!ctx.currentMap
@@ -125,7 +126,7 @@ function _tryParseComputedChainMap(c, children, baseName, baseExpr, consumeClosi
 
   if (!ctx._luaMapRebuilders) ctx._luaMapRebuilders = [];
   var _ccLuaIdx = ctx._luaMapRebuilders.length;
-  var _ccRawSource = expandRenderLocalRawExpr(ctx._renderLocalRaw[baseName] || baseName, baseName);
+  var _ccRawSource = mapExpr;
   // Use the PARSED node result — the parser already walked the JSX and built the
   // template node expression. Just convert Zig syntax → Lua table syntax.
   var _ccTemplateExpr = (_ccMapIdx >= 0 && ctx.maps[_ccMapIdx].templateExpr) || mapResult.templateNodeExpr || '.{}';
@@ -137,6 +138,7 @@ function _tryParseComputedChainMap(c, children, baseName, baseExpr, consumeClosi
     bodyNode: mapResult.luaNode || null,
     itemParam: header.itemParam || '_item',
     indexParam: header.indexParam || null,
+    dataVar: oa.getter,
     rawSource: _ccRawSource,
     varName: baseName,
     isNested: !!ctx.currentMap
@@ -287,7 +289,13 @@ function _tryParseIdentifierMapExpression(c, children, consumeClosingBrace) {
     if (_tryParseComputedChainMap(c, children, maybeArr, rawExpr, consumeClosingBrace)) return true;
   }
 
-  if (!_identifierStartsMapCall(c)) return false;
+  if (!_identifierStartsMapCall(c)) {
+    // Function-call / computed sources like pulseRows().map(...) don't
+    // start as identifier.map(...), but they still need the Lua runtime
+    // map path rather than being silently dropped.
+    if (_tryParseComputedChainMap(c, children, maybeArr, null, consumeClosingBrace)) return true;
+    return false;
+  }
 
   // Nested map on item field: itemParam.field.map((x) => <JSX>)
   // The item param isn't an OA — the field is a nested array on the parent item.

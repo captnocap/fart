@@ -55,6 +55,8 @@ declare var agentSessionId: string;
 declare var activeAgentId: string;
 declare var agentStatusText: string;
 declare var workDir: string;
+declare function setModelDisplayName(v: string): void;
+declare var modelDisplayName: string;
 
 // === File Content Store ===
 // In a real app this would be backed by __fs_readfile/__fs_writefile
@@ -493,11 +495,13 @@ function stopBackgroundAgent() {
   }
 }
 
-// === Terminal ===
+// === Terminal (real PTY) ===
+var ptyStarted = 0;
 function openTerminal() {
-  var lines = terminalLines;
-  lines.push({ text: '[new terminal session]', type: 'info' });
-  setTerminalLines(lines);
+  if (ptyStarted == 0) {
+    __pty_open(80, 24);
+    ptyStarted = 1;
+  }
 }
 
 function execCommand(cmd: string) {
@@ -638,12 +642,14 @@ function toggleAutoApply() {
 
 function cycleModel() {
   var models = ['claude-opus-4', 'claude-sonnet-4', 'gpt-4o', 'o1-preview'];
+  var names = ['Opus 4', 'Sonnet 4', 'GPT-4o', 'o1'];
   var idx = 0;
   for (var i = 0; i < models.length; i++) {
     if (models[i] == selectedModel) { idx = i; }
   }
   var next = (idx + 1) % models.length;
   setSelectedModelState(models[next]);
+  setModelDisplayName(names[next]);
 }
 
 function startNewConversation() {
