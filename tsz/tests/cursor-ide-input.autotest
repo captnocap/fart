@@ -35,13 +35,8 @@ click "Terminal"
 expect "bash"
 
 # === TOOL TOGGLES ===
-styles before "Web"
 click "Web"
-styles after "Web"
-
-styles before "Term"
 click "Term"
-styles after "Term"
 
 # === ATTACHMENT ===
 click "Attach"
@@ -53,7 +48,7 @@ click "+ New"
 reject "I have analyzed the codebase"
 
 # === AGENT MODE (after + New, fewer Agent matches) ===
-click "Agent" #3
+click "Agent" #4
 expect "Launch"
 click "Ask"
 expect "Send"
