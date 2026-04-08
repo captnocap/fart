@@ -65,6 +65,30 @@ function _jsExprToLua(expr, itemParam, indexParam, _luaIdxExpr) {
     expr = expr.replace(/@intCast\(([^)]+)\)/g, '$1');
     expr = expr.replace(/@floatFromInt\(([^)]+)\)/g, '$1');
   }
+  // OA length refs: _oa0_len → #getter_name
+  if (typeof ctx !== 'undefined' && ctx.objectArrays) {
+    expr = expr.replace(/_oa(\d+)_len\b/g, function(_, oaIdx) {
+      var _oa = ctx.objectArrays[+oaIdx];
+      return _oa ? '#' + _oa.getter : '#_oa' + oaIdx;
+    });
+  }
+  // OA field refs that leaked through: _oa0_field[_i] → _item.field
+  expr = expr.replace(/_oa\d+_(\w+)\[_i\]\[0\.\._oa\d+_\w+_lens\[_i\]\]/g, '_item.$1');
+  expr = expr.replace(/_oa\d+_(\w+)\[_i\]/g, '_item.$1');
+  // Zig state.getSlot* → Lua getter name
+  if (typeof ctx !== 'undefined' && ctx.stateSlots) {
+    expr = expr.replace(/state\.getSlot(?:Int|Float|Bool)?\((\d+)\)/g, function(_, idx) {
+      var _s = ctx.stateSlots[+idx];
+      return _s ? _s.getter : '_slot' + idx;
+    });
+    expr = expr.replace(/state\.getSlotString\((\d+)\)/g, function(_, idx) {
+      var _s = ctx.stateSlots[+idx];
+      return _s ? _s.getter : '_slot' + idx;
+    });
+  }
+  // Zig qjs_runtime.evalToString → __eval (JS function calls from Lua)
+  expr = expr.replace(/qjs_runtime\.evalToString\("String\(([^)]+)\)"[^)]*\)/g, '__eval("$1")');
+  expr = expr.replace(/&_eval_buf_\d+/g, '');
   // Zig if/else chains → Lua and/or (from parseTemplateLiteral ternary emit)
   for (var _ifIter = 0; _ifIter < 10; _ifIter++) {
     var _ifPos = expr.indexOf('if (');

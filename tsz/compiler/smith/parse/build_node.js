@@ -116,6 +116,13 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
             _fmtExpr = _fmtExpr.replace(/_oa\d+_(\w+)\[_i\]\[0\.\._oa\d+_\w+_lens\[_i\]\]/g, '_item.$1');
             // OA int/float field refs: _oa0_field[_i] → _item.field
             _fmtExpr = _fmtExpr.replace(/_oa\d+_(\w+)\[_i\]/g, '_item.$1');
+            // OA length refs: _oa0_len → #getter_name
+            _fmtExpr = _fmtExpr.replace(/_oa(\d+)_len\b/g, function(_, oaIdx) {
+              var _oa = ctx.objectArrays[+oaIdx];
+              return _oa ? '#' + _oa.getter : '#_oa' + oaIdx;
+            });
+            // @intCast(_oa0_len) → #getter_name (Zig cast wrapping length)
+            _fmtExpr = _fmtExpr.replace(/@intCast\(#(\w+)\)/g, '#$1');
             // NOTE: @as stripping moved to per-arg cleanup below (commas in @as break split)
             // If it has a format string with interpolation, build template
             if (_dt.fmtString && _dt.fmtString !== '{s}' && _dt.fmtString !== '{d}') {
