@@ -1359,20 +1359,20 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
                         }
                     }
                 }
+                }
                 if (isRow) {
-                    {
-                        var i = ls;
-                        while (i < ls + lc) : (i += 1) {
-                            const childIdx = visibleIndices[@intCast(i)];
-                            const childNode = &node.children[@intCast(childIdx)];
-                            if (childNode.style.min_width != null) {
-                                continue;
-                            }
-                            const mcw = computeMinContentW(childNode);
-                            if (asF32(childBasis[@intCast(i)]) < asF32(mcw)) {
-                                childBasis[@intCast(i)] = mcw;
-                            }
-                        }
+                var i = ls;
+                while (i < ls + lc) : (i += 1) {
+                    const childIdx = visibleIndices[@intCast(i)];
+                    const childNode = &node.children[@intCast(childIdx)];
+                    if (childNode.style.min_width != null) {
+                        continue;
+                    }
+                    const autoMinW = computeMinContentW(childNode);
+                    const maxW = resolveMaybePct(childNode.style.max_width, innerW);
+                    const floorW = if (maxW != null) @min(autoMinW, maxW.?) else autoMinW;
+                    if (asF32(childBasis[@intCast(i)]) < asF32(floorW)) {
+                        childBasis[@intCast(i)] = floorW;
                     }
                 }
             }

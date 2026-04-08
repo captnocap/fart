@@ -277,6 +277,7 @@ classifier({
   // Toolbar: left tools + right actions
   ChatInputToolsLeft: { type: 'Box', style: { flexDirection: 'row', alignItems: 'center', gap: 4, flexGrow: 1 } },
   ChatInputToolsRight: { type: 'Box', style: { flexDirection: 'row', alignItems: 'center', gap: 8 } },
+  ChatInputToolsRight: { type: 'Box', style: { flexDirection: 'row', alignItems: 'center', gap: 8 } },
 
   // Compact labeled tool buttons (#Files, @Symbols, +Attach)
   ChatToolBtnCompact: { type: 'Pressable', style: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingLeft: 6, paddingRight: 6, paddingTop: 4, paddingBottom: 4, borderRadius: 4 } },

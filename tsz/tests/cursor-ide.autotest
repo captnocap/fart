@@ -129,7 +129,7 @@ expect "Opus 4"
 
 # Chat header new conversation + history buttons
 expect "+ New"
-expect "History"
+expect "Index"
 
 # === MODE SWITCHING — Plan ===
 # Click Plan pill — plan hint should appear, send label should change
@@ -155,7 +155,9 @@ reject "Run Task"
 expect "Send"
 
 # === MODE SWITCHING — Agent ===
-click "Agent"
+# Multiple "Agent" matches: header title, Cursor Agent, useAgent.ts, mode pill
+# The pill is typically #4 or later depending on tree order
+click "Agent" #4
 expect "Launch"
 reject "Task mode"
 # Return to Ask for remaining tests
