@@ -242,7 +242,7 @@ function openFile(idx: number) {
   if (found == 0) {
     tabId = '' + (openTabs.length + 1);
     var tabs = openTabs;
-    tabs.push({ id: tabId, name: file.name, path: file.path, modified: 0 });
+    tabs.push({ id: tabId, name: file.name, path: file.path, type: file.type, modified: 0 });
     setOpenTabs(tabs);
   }
   setActiveTabId(tabId);

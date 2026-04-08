@@ -83,7 +83,7 @@ const [lineNumbers, setLineNumbers] = useState([
 
 // === TABS ===
 const [openTabs, setOpenTabs] = useState([
-  { id: '1', name: 'Sidebar.tsx', path: 'src/components/Sidebar.tsx', modified: 0 },
+  { id: '1', name: 'Sidebar.tsx', path: 'src/components/Sidebar.tsx', type: 'tsx', modified: 0 },
 ]);
 
 // === CHAT ===
@@ -144,6 +144,7 @@ function App() {
             {breadcrumbs.map(function(crumb, idx) {
               return (
                 <C.BreadcrumbItem>
+                  <C.BreadcrumbSep>/</C.BreadcrumbSep>
                   <C.BreadcrumbText>{crumb.label}</C.BreadcrumbText>
                 </C.BreadcrumbItem>
               );
