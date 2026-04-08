@@ -75,6 +75,37 @@ function _buildLuaCondFromTokens(c, savedStart) {
       parts.push(_pv);
       c.advance(); continue;
     }
+    // Resolve render-local aliased to map item param: var tab = props.tab where tab → itemParam
+    // When tab.modified is encountered, resolve via renderLocals → itemParam → _item.field
+    if (c.kind() === TK.identifier && ctx.renderLocals && ctx.renderLocals[c.text()] !== undefined) {
+      var _rlv2 = ctx.renderLocals[c.text()];
+      if (ctx.currentMap && _rlv2 === ctx.currentMap.itemParam &&
+          c.pos + 2 < c.count && c.kindAt(c.pos + 1) === TK.dot && c.kindAt(c.pos + 2) === TK.identifier) {
+        parts.push('_item');
+        c.advance(); continue;
+      }
+      // Resolve state.getSlot → getter name for Lua, .len → # prefix
+      if (typeof _rlv2 === 'string') {
+        _rlv2 = _rlv2.replace(/state\.getSlot(?:Int|Float|Bool)?\((\d+)\)/g, function(_, idx) {
+          return (ctx.stateSlots && ctx.stateSlots[+idx]) ? ctx.stateSlots[+idx].getter : '_slot' + idx;
+        });
+        _rlv2 = _rlv2.replace(/state\.getSlotString\((\d+)\)/g, function(_, idx) {
+          return (ctx.stateSlots && ctx.stateSlots[+idx]) ? ctx.stateSlots[+idx].getter : '_slot' + idx;
+        });
+        for (var _ci3 = 0; _ci3 < 3; _ci3++) {
+          _rlv2 = _rlv2.replace(/@as\([^,]+,\s*([^)]+)\)/g, '$1');
+          _rlv2 = _rlv2.replace(/@intCast\(([^)]+)\)/g, '$1');
+        }
+        // Zig .len → Lua # (string/array length)
+        _rlv2 = _rlv2.replace(/(\w+)\.len\b/g, '#$1');
+        // Wrap compound expressions in parens for correct Lua precedence (not X > 0 → not (X > 0))
+        if (/[><=!~+\-*\/%]/.test(_rlv2) || /\band\b|\bor\b/.test(_rlv2)) {
+          _rlv2 = '(' + _rlv2 + ')';
+        }
+        parts.push(_rlv2);
+        c.advance(); continue;
+      }
+    }
     // Resolve map item param access: item.field → _item.field
     if (c.kind() === TK.identifier && ctx.currentMap && c.text() === ctx.currentMap.itemParam) {
       parts.push('_item');

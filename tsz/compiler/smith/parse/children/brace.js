@@ -238,6 +238,18 @@ function tryParseBraceChild(c, children) {
     return true;
   }
 
+  // {props.children} — bare-param component child forwarding
+  if (c.kind() === TK.identifier && ctx.propsObjectName && c.text() === ctx.propsObjectName &&
+      c.pos + 2 < c.count && c.kindAt(c.pos + 1) === TK.dot && c.textAt(c.pos + 2) === 'children' &&
+      ctx.componentChildren) {
+    c.advance(); // props
+    c.advance(); // .
+    c.advance(); // children
+    if (c.kind() === TK.rbrace) c.advance();
+    for (const ch of ctx.componentChildren) children.push(ch);
+    return true;
+  }
+
   if (c.kind() === TK.identifier && ctx.renderLocals && ctx.renderLocals[c.text()] !== undefined) {
     if (_tryParseStoredRenderLocal(c, children, c.text())) return true;
     const _brExprStart = c.save();

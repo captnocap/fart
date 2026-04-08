@@ -627,6 +627,11 @@ function tryParseTernaryText(c, children) {
     var _luaTernCond = (typeof _buildLuaCondFromTokens === 'function')
       ? _buildLuaCondFromTokens(c, _luaTernSaved)
       : condParts.join('').replace(/!==/g, '~=').replace(/===/g, '==');
+    // Lua truthiness fix: 0 is truthy in Lua but falsy in JS
+    // If condition is a simple expression without comparison operators, add ~= 0
+    if (_luaTernCond && !/[=~<>]/.test(_luaTernCond) && !/\band\b|\bor\b|\bnot\b/.test(_luaTernCond)) {
+      _luaTernCond = _luaTernCond.trim() + ' ~= 0';
+    }
     children.push({ nodeExpr: `.{ .text = "" }`, dynBufId: bufId, _luaTernaryText: '(' + _luaTernCond + ') and "' + trueVal + '" or "' + falseVal + '"' });
   }
   return true;
