@@ -30,8 +30,8 @@ expect "theme.css"
 
 # === FILE TYPE ICONS (colored badges) ===
 expect "TS"
-expect "JS"
 expect "MD"
+expect "CS"
 
 # === TABS ===
 expect "Sidebar.tsx"

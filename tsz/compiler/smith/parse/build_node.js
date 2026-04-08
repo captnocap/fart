@@ -641,7 +641,27 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
         if (typeof _nf === 'string') {
           if (_nf.startsWith('.font_size = ')) _ln.fontSize = _nf.slice(13);
           if (_nf.startsWith('.text_color = ') && !(_ln.style && _ln.style.text_color)) _ln.color = _cleanZigExpr(_nf.slice(14));
-          if (_nf.startsWith('.text = ')) _ln.text = _nf.slice(8).replace(/^"/, '').replace(/"$/, '');
+          if (_nf.startsWith('.text = ')) {
+            var _textVal = _nf.slice(8);
+            var _isQuotedStr = _textVal.charAt(0) === '"' && _textVal.charAt(_textVal.length - 1) === '"';
+            if (_isQuotedStr) {
+              _ln.text = _textVal.slice(1, -1);
+            } else {
+              // Dynamic text binding (e.g., state getter) — resolve to getter name and mark as variable
+              _textVal = _textVal.replace(/state\.getSlot(?:Int|Float|Bool)?\((\d+)\)/g, function(_, idx) {
+                return (ctx.stateSlots && ctx.stateSlots[+idx]) ? ctx.stateSlots[+idx].getter : '_slot' + idx;
+              });
+              _textVal = _textVal.replace(/state\.getSlotString\((\d+)\)/g, function(_, idx) {
+                return (ctx.stateSlots && ctx.stateSlots[+idx]) ? ctx.stateSlots[+idx].getter : '_slot' + idx;
+              });
+              _ln.text = { stateVar: _textVal };
+            }
+          }
+          // TextInput: input_id → mark as text_input in luaNode
+          if (_nf.startsWith('.input_id = ')) {
+            _ln.text_input = true;
+            _ln.input_id = parseInt(_nf.slice(12));
+          }
           // Canvas/Graph/3D/Physics node fields → forward to luaNode
           var _nfEq = _nf.indexOf(' = ');
           if (_nfEq > 1) {

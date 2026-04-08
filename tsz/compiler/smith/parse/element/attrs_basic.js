@@ -62,6 +62,34 @@ function tryParseBasicElementAttr(c, attr, rawTag, nodeFields, currentState) {
     return { ascriptScript, ascriptOnResult };
   }
 
+  if (attr === 'value' && (rawTag === 'TextInput' || rawTag === 'TextArea')) {
+    if (c.kind() === TK.lbrace) {
+      c.advance();
+      var _valParts = [];
+      while (c.kind() !== TK.rbrace && c.kind() !== TK.eof) {
+        var _pa = peekPropsAccess(c);
+        if (_pa) {
+          skipPropsAccess(c, _pa);
+          _valParts.push(typeof _pa.value === 'string' ? _pa.value : String(_pa.value));
+          continue;
+        }
+        if (c.kind() === TK.identifier && isGetter(c.text())) {
+          // Store both Zig and raw getter name — build_node.js will resolve for Lua
+          _valParts.push(slotGet(c.text()));
+        } else if (c.kind() === TK.identifier && ctx.renderLocals && ctx.renderLocals[c.text()] !== undefined) {
+          _valParts.push(ctx.renderLocals[c.text()]);
+        } else {
+          _valParts.push(c.text());
+        }
+        c.advance();
+      }
+      if (c.kind() === TK.rbrace) c.advance();
+      var _valExpr = _valParts.join('');
+      nodeFields.push('.text = ' + _valExpr);
+    }
+    return { ascriptScript, ascriptOnResult };
+  }
+
   if (attr === 'placeholder' && (rawTag === 'TextInput' || rawTag === 'TextArea')) {
     if (c.kind() === TK.string) {
       nodeFields.push(`.placeholder = "${c.text().slice(1, -1)}"`);

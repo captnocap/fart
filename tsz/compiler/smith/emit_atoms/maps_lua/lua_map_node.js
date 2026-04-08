@@ -21,6 +21,9 @@ function _cleanCondForEval(expr) {
   // OA refs
   expr = expr.replace(/_oa\d+_(\w+)\[_i\]\[0\.\._oa\d+_\w+_lens\[_i\]\]/g, '_item.$1');
   expr = expr.replace(/_oa\d+_(\w+)\[_i\]/g, '_item.$1');
+  // std.mem.eql → Lua string compare
+  expr = expr.replace(/!std\.mem\.eql\(u8,\s*([^,]+),\s*([^)]+)\)/g, '($1 ~= $2)');
+  expr = expr.replace(/std\.mem\.eql\(u8,\s*([^,]+),\s*([^)]+)\)/g, '($1 == $2)');
   // Clean orphan parens
   var _o = (expr.match(/\(/g) || []).length;
   var _c = (expr.match(/\)/g) || []).length;
@@ -61,7 +64,15 @@ function _nodeToLua(node, itemParam, indexParam, indent, _luaIdxExpr) {
   if (!indent) indent = '      ';
   var fields = [];
 
-  if (node.style && Object.keys(node.style).length > 0) {
+  if (node._variantStyles && node._variantStyles.length > 1) {
+    // Emit variant-conditional style: (__variant == 1) and {compact} or (__variant == 2) and {spacious} or {default}
+    var _vParts = [];
+    for (var _vi = 1; _vi < node._variantStyles.length; _vi++) {
+      _vParts.push('(__variant == ' + _vi + ') and ' + _styleToLua(node._variantStyles[_vi], itemParam, indexParam, _luaIdxExpr));
+    }
+    _vParts.push(_styleToLua(node._variantStyles[0], itemParam, indexParam, _luaIdxExpr));
+    fields.push('style = (' + _vParts.join(' or ') + ')');
+  } else if (node.style && Object.keys(node.style).length > 0) {
     fields.push('style = ' + _styleToLua(node.style, itemParam, indexParam, _luaIdxExpr));
   }
 
@@ -139,6 +150,12 @@ function _nodeToLua(node, itemParam, indexParam, indent, _luaIdxExpr) {
       var _colorLua = _zigColorToLuaHex(_cv) || _hexToLua(_cv);
       fields.push('text_color = ' + _colorLua);
     }
+  }
+
+  // TextInput: emit text_input flag and value binding
+  if (node.text_input) {
+    fields.push('text_input = true');
+    fields.push('input_id = ' + (node.input_id || 0));
   }
 
   if (node.handler) {

@@ -200,6 +200,9 @@ function emitLuaTreeApp(ctx, rootExpr, file) {
   zig += '// ── Embedded JS logic ──\n';
   // Build JS state bindings so script functions can read/write state
   var jsStateBindings = '';
+  // Helper: escape a JS string for safe embedding in a Lua eval single-quoted string
+  // Uses charCodeAt to avoid regex escaping nightmares across JS→Zig→JS→Lua layers
+  jsStateBindings += 'function __luaEscStr(s) { var r = "", i, c; for (i = 0; i < s.length; i++) { c = s.charCodeAt(i); if (c === 92) r += "\\\\"; else if (c === 39) r += "\\\\\'"; else if (c === 10) r += "\\\\n"; else if (c === 13) r += ""; else r += s.charAt(i); } return r; }\n';
   if (ctx.stateSlots && ctx.stateSlots.length > 0) {
     for (var jsi = 0; jsi < ctx.stateSlots.length; jsi++) {
       var js = ctx.stateSlots[jsi];
@@ -210,7 +213,7 @@ function emitLuaTreeApp(ctx, rootExpr, file) {
       // Guard: at init time Lua setters aren't defined yet (JS_LOGIC loads
       // before LUA_LOGIC). __luaReady is set by engine after LUA_LOGIC loads.
       var _luaSetCall = js.type === 'string'
-        ? '__luaEval("' + js.setter + '(\\\'" + v + "\\\')")'
+        ? '__luaEval("' + js.setter + '(\\\'" + __luaEscStr(v) + "\\\')")'
         : '__luaEval("' + js.setter + '(" + v + ")")';
       jsStateBindings += 'function ' + js.setter + '(v) { ' + js.getter + ' = v; if (__luaReady) ' + _luaSetCall + '; else __markDirty(); }\n';
     }
