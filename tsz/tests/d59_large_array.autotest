@@ -1,0 +1,40 @@
+# d59_large_array: Large array rendering (30 items)
+# Tests: map over big list, zebra striping with modulo
+
+# Verify title and count
+expect "Large List (30)"
+
+# Verify total calculated by script
+expect "total:"
+
+# Verify first and last items from script names array
+expect "Alpha"
+expect "Bravo"
+expect "Charlie"
+expect "Zulu"
+expect "Alfa2"
+expect "Bravo2"
+expect "Charlie2"
+expect "Delta2"
+
+# Verify group labels (A, B, C, D based on i % 4)
+expect "A"
+expect "B"
+expect "C"
+expect "D"
+
+# Verify values (calculated as (i + 1) * 7 % 100)
+# i=0: (1*7)%100 = 7
+# i=1: (2*7)%100 = 14
+# etc.
+expect "7"
+expect "14"
+
+# Click a row and verify selection
+expect "sel: 0"
+click "Alpha"
+expect "sel: 0"
+click "Bravo"
+expect "sel: 1"
+click "Zulu"
+expect "sel: 25"

@@ -1,0 +1,50 @@
+# d34_switch_forof_while: switch/case, for, while, continue
+# Tests: statement types via stmtgen
+
+# Verify title
+expect "Switch / ForOf / While"
+
+# Verify items from script with template: `cat:${item.category} val:${item.value}`
+expect "Alpha"
+expect "cat:0 val:10"
+expect "Beta"
+expect "cat:1 val:20"
+expect "Gamma"
+expect "cat:2 val:30"
+expect "Delta"
+expect "cat:0 val:40"
+expect "Epsilon"
+expect "cat:1 val:50"
+
+# Verify buttons
+expect "Sum Low"
+expect "Sum Mid"
+expect "Sum High"
+expect "Count ≤25"
+expect "Count ≤40"
+
+# Click Sum Low (category 0: Alpha=10 + Delta=40 = 50)
+click "Sum Low"
+expect "total: 50"
+expect "sum of cat 0 = 50"
+
+# Click Sum Mid (category 1: Beta=20 + Epsilon=50 = 70)
+click "Sum Mid"
+expect "total: 70"
+expect "sum of cat 1 = 70"
+
+# Click Sum High (category 2: Gamma=30 = 30)
+click "Sum High"
+expect "total: 30"
+expect "sum of cat 2 = 30"
+
+# Count ≤25 (while loop) - Alpha=10, Grace_db=980 is last with value 980... wait that's wrong.
+# Actually from script: values are 10,20,30,40,50. Items <=25: just Alpha=10
+click "Count ≤25"
+expect "total: 1"
+expect "1 items <= 25"
+
+# Count ≤40 - Alpha=10, Beta=20, Gamma=30, Delta=40 = 4 items
+click "Count ≤40"
+expect "total: 4"
+expect "4 items <= 40"

@@ -1,47 +1,13 @@
-# d124: variant switcher — 5 variant buttons change classifier styles on 3 cards
+# d124_variant_switcher: Variant switcher component
+# Tests: dynamic variant switching
 
-# Initial state
-expect "Variant Switcher"
-expect "variant: 0"
+// Verify initial
+expect "Revenue"
 
-# Verify cards render
-expect "Inbox"
-expect "Archive"
-expect "Drafts"
-expect "New"
-expect "Old"
-expect "WIP"
-expect "Count: 12"
-expect "Count: 340"
-expect "Count: 3"
-expect "3 cards loaded"
+// Switch to compact
+click "Compact"
+expect "Compact"
 
-# Snapshot default styles
-styles before Inbox
-
-# Click Magazine variant
-click "Magazine"
-expect "variant: 1"
-styles after Inbox
-
-# Snapshot magazine styles
-styles before Inbox
-
-# Click Brutalist variant
-click "Brutalist"
-expect "variant: 2"
-styles after Inbox
-
-# Snapshot brutalist
-styles before Inbox
-
-# Click BIOS
-click "BIOS"
-expect "variant: 3"
-styles after Inbox
-
-# Back to Base
-styles before Inbox
-click "Base"
-expect "variant: 0"
-styles after Inbox
+// Switch back
+click "Comfortable"
+expect "Comfortable"

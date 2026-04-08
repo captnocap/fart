@@ -1,0 +1,32 @@
+# d26a_timer_script: Timers and intervals — <script> variant
+# Tests: setInterval, setTimeout, Date.now(), timer control
+
+# Verify title
+expect "Timer Test"
+
+# Verify initial counter
+expect "0"
+
+# Verify elapsed time
+expect "elapsed: 0s"
+
+# Verify control buttons
+expect "Start"
+expect "Stop"
+expect "Reset"
+
+# Verify initial state
+expect "STOPPED"
+
+# Test starting timer
+click "Start"
+expect "RUNNING"
+
+# Test stopping timer
+click "Stop"
+expect "STOPPED"
+
+# Test reset
+click "Reset"
+expect "0"
+expect "elapsed: 0s"

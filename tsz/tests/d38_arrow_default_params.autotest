@@ -1,0 +1,55 @@
+# d38_arrow_default_params: Arrow functions and default parameters
+# Tests: default param values, arrow function syntax
+
+# Verify title
+expect "Arrow + Default Params"
+
+# Verify buttons
+expect "Run Tests"
+expect "Add More"
+
+# Verify test results from runTests() which runs on init
+# Results show label and value from log array
+expect "format(42)"
+expect "42"
+
+# clamp(-5) with defaults lo=0, hi=100 returns 0
+expect "clamp(-5)"
+expect "0"
+
+# clamp(50) returns 50
+expect "clamp(50)"
+expect "50"
+
+# clamp(150) returns 100 (default hi)
+expect "clamp(150)"
+expect "100"
+
+# clamp(75, 0, 80) returns 75
+expect "clamp(75, 0, 80)"
+expect "75"
+
+# clamp(75, 80, 100) returns 80 (below lo)
+expect "clamp(75, 80, 100)"
+expect "80"
+
+# Verify count and output
+expect "count: 6"
+expect "ran 6 tests"
+
+# Click Add More to add 5 more entries
+click "Add More"
+expect "count: 11"
+expect "added 5 more"
+
+# Verify the additional clamp entries were added
+expect "clamp(17, 10, 60)"
+expect "17"
+expect "clamp(34, 10, 60)"
+expect "34"
+expect "clamp(51, 10, 60)"
+expect "51"
+expect "clamp(68, 10, 60)"
+expect "60"
+expect "clamp(85, 10, 60)"
+expect "60"

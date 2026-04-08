@@ -1,0 +1,10 @@
+# d147_system_text_message: System messages
+# Tests: system message display
+
+// Verify renders
+expect "System Messages"
+expect "System: started"
+
+// New message
+click "New Message"
+expect "System: updated"

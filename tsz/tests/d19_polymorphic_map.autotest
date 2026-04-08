@@ -1,0 +1,34 @@
+# d19_polymorphic_map: Different visual structure per item type
+# Tests: polymorphic rendering based on type field
+
+# Verify activity feed renders
+expect "Activity Feed"
+
+# Verify different item types render
+expect "User signed up"
+expect "Payment received"
+expect "Payment failed"
+expect "Session started"
+
+# Verify different visual treatments (indirect via interactions)
+expect "last:"
+
+# Click items
+click "User signed up"
+expect "last: User signed up"
+
+click "Payment received"
+expect "last: Payment received"
+
+click "Payment failed"
+expect "last: Payment failed"
+
+click "Session started"
+expect "last: Session started"
+
+# Click back to first
+click "User signed up"
+expect "last: User signed up"
+
+# Verify all items still visible
+expect "+50"

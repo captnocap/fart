@@ -1,0 +1,14 @@
+# d148_manage_marketplaces: Marketplace management
+# Tests: marketplace list management
+
+// Verify renders
+expect "Marketplaces"
+expect "count: 2"
+
+// Add
+click "Add"
+expect "count: 3"
+
+// Remove
+click "Remove"
+expect "count: 2"

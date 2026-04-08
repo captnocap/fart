@@ -1,0 +1,32 @@
+# d103_inline_glyphs: Inline Glyph + Effect Text Test
+# Tests: Solid inline glyphs, effect-filled glyphs, text effects
+
+# Verify title
+expect "Inline Glyph + Effect Text Test"
+
+# Verify section headers
+expect "Solid inline glyphs"
+expect "Effect-filled inline glyphs"
+expect "Effect-masked text (per-glyph coloring)"
+
+# Verify solid glyph content
+expect "Status:"
+expect "Active"
+expect "Warning"
+expect "Level 3"
+expect "Home"
+expect "Settings"
+expect "Profile"
+expect "BIG"
+expect "TEXT"
+
+# Verify effect-filled glyph content
+expect "Plasma"
+expect "star"
+expect "Lava"
+expect "triangle"
+
+# Verify effect-masked text content
+expect "PLASMA TEXT"
+expect "MOLTEN LETTERS"
+expect "OCEAN WAVES"

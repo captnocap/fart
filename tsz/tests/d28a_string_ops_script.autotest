@@ -1,0 +1,49 @@
+# d28a_string_ops_script: String manipulation — <script> variant
+# Tests: split, slice, indexOf, toLowerCase, trim
+
+# Verify title
+expect "Email Parser"
+
+# Verify filter buttons
+expect ".com"
+expect ".org"
+expect "alice"
+expect "Clear"
+
+# Verify email entries
+expect "alice@example.com"
+expect "bob@gmail.com"
+expect "carol@test.org"
+expect "dave@company.co.uk"
+expect "eve@dev.io"
+expect "frank@yahoo.com"
+expect "grace@startup.ai"
+expect "heidi@university.edu"
+
+# Verify domains
+expect "example.com"
+expect "gmail.com"
+expect "test.org"
+expect "company.co.uk"
+expect "dev.io"
+expect "yahoo.com"
+expect "startup.ai"
+expect "university.edu"
+
+# Verify validity indicators
+expect "OK"
+expect "BAD"
+
+# Verify stats
+expect "10 results"
+
+# Test filtering
+click ".com"
+expect "alice@example.com"
+expect "bob@gmail.com"
+
+click ".org"
+expect "carol@test.org"
+
+click "Clear"
+expect "showing all"

@@ -1,0 +1,17 @@
+# d128_tool_lifecycle: Tool lifecycle management
+# Tests: tool activation/deactivation
+
+// Verify initial
+expect "Tool Lifecycle"
+
+// Activate
+click "Activate"
+expect "active: Tool A"
+
+// Switch tool
+click "Switch"
+expect "active: Tool B"
+
+// Deactivate
+click "Deactivate"
+expect "active: none"

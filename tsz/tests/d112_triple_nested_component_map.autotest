@@ -1,0 +1,27 @@
+# d112_triple_nested_component_map: Three-level component nesting with maps at each level
+# Tests: 3 levels of component inlining + 3 levels of .map() + prop forwarding chains
+
+# Verify title
+expect "Org Chart"
+
+# Verify initial state
+expect "selected: 0"
+expect "depth: 0"
+
+# Note: This test imports data from d112_triple_nested_component_map.script.tsz
+# Structure: depts.map() → DeptCard → teams.map() → TeamRow → members.map() → MemberBadge
+
+# Each level can be clicked to set selected and depth
+# DeptCard sets depth: 1
+# TeamRow sets depth: 2  
+# MemberBadge sets depth: 3
+
+# Verify budget labels
+expect "$"
+expect "k"
+
+# Verify team size labels
+expect "ppl"
+
+# Verify role indicators (colored dots)
+# Role 0 = gray, Role 1 = orange, Role 2 = red

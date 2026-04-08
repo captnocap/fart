@@ -1,0 +1,50 @@
+# d87_kanban_lite: Kanban board (lite) — move items between columns
+# Tests: multi-column layout, move operations between arrays
+
+# Verify title and status
+expect "Kanban Lite"
+expect "0 moves"
+expect "sel:0"
+
+# Verify columns
+expect "Todo"
+expect "In Progress"
+expect "Done"
+
+# Verify initial tasks in columns (from script)
+# Todo (col=0): Setup project, Design API, Fix bugs
+expect "Setup project"
+expect "Design API"
+expect "Fix bugs"
+
+# In Progress (col=1): Build auth, Write tests
+expect "Build auth"
+expect "Write tests"
+
+# Done (col=2): Deploy v1, Add docs
+expect "Deploy v1"
+expect "Add docs"
+
+# Verify move arrows on a card
+expect "←"
+expect "→"
+
+# Click to select a task
+click "Setup project"
+expect "sel:0"
+
+# Move a task right (from Todo to In Progress)
+click "→" # First → arrow for Setup project
+expect "1 moves"
+expect "sel:0"
+
+# Setup project should now be in In Progress
+# (Need to verify by checking it's visible there)
+
+# Move another task
+click "Design API"
+click "→"
+expect "2 moves"
+
+# Move a task left (from In Progress back to Todo)
+# First click the task in In Progress, then click left arrow

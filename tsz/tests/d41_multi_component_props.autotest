@@ -1,0 +1,7 @@
+# d41_multi_component_props: Components with many props
+# Tests prop passing and receiving
+
+expect "Multi Props"
+click "Card A"
+expect "selected: Card A"
+expect "Score: 100"

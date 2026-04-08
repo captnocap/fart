@@ -1,0 +1,14 @@
+# d138_map_graph_path: Graph path mapping
+# Tests: graph path mapping
+
+// Verify renders
+expect "Map Graph Path"
+expect "Node A"
+
+// Click node
+click "Node A"
+expect "path: A"
+
+// Click another
+click "Node B"
+expect "path: A -> B"

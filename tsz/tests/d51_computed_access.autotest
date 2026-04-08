@@ -1,0 +1,64 @@
+# d51_computed_access: Computed property access (bracket notation)
+# Tests: array[index], object[key] with bracket notation
+
+# Verify title
+expect "Computed Access"
+
+# Verify grid rows with labels
+expect "Row A"
+expect "Row B"
+expect "Row C"
+expect "Row D"
+
+# Verify cell values from script data
+# Row A: 10, 20, 30
+expect "10"
+expect "20"
+expect "30"
+
+# Row B: 40, 50, 60
+expect "40"
+expect "50"
+expect "60"
+
+# Row C: 70, 80, 90
+expect "70"
+expect "80"
+expect "90"
+
+# Row D: 11, 22, 33
+expect "11"
+expect "22"
+expect "33"
+
+# Verify sum buttons for each row
+expect "sum"
+
+# Verify column sum buttons
+expect "Col 0 sum"
+expect "Col 1 sum"
+expect "Col 2 sum"
+
+# Click a cell and verify output
+click "10"
+expect "cell [0,0] = 10"
+
+click "50"
+expect "cell [1,1] = 50"
+
+click "90"
+expect "cell [2,2] = 90"
+
+# Sum a row (Row A: 10+20+30=60)
+click "sum"
+expect "row 0 sum = 60"
+
+# Sum a column (Col 0: 10+40+70+11=131)
+click "Col 0 sum"
+expect "column 0 sum = 131"
+
+click "Col 1 sum"
+expect "column 1 sum = 172"
+
+click "Col 2 sum"
+expect "column 2 sum = 213"

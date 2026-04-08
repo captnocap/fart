@@ -1,0 +1,40 @@
+# d57_children_prop: Children prop forwarding
+# Tests: component with {children} slot
+
+# Verify title
+expect "Children Prop"
+
+# Verify Card component with children
+expect "Simple card with text children"
+expect "Just two Text nodes inside a Card wrapper"
+
+# Verify nested Card with Section children
+expect "Status"
+expect "Actions"
+
+# Verify Badge components (no children, just props)
+expect "Online"
+expect "v2.4"
+expect "Prod"
+
+# Verify initial tap count
+expect "Tap me (0)"
+
+# Tap the button
+click "Tap me (0)"
+expect "Tap me (1)"
+
+click "Tap me (1)"
+expect "Tap me (2)"
+
+# Verify taps shown in badge
+expect "2 taps"
+
+# Tap more
+click "Tap me (2)"
+click "Tap me (3)"
+click "Tap me (4)"
+expect "5 taps"
+
+# Verify nested wrappers text
+expect "Nested wrappers"

@@ -1,0 +1,44 @@
+# d20_multi_handler_map: Multiple handlers per map item
+# Tests: star, copy, download actions on each file
+
+# Verify files render
+expect "README.md"
+expect "package.json"
+expect "index.tsx"
+expect "styles.css"
+expect "config.yaml"
+
+# Verify starred files show filled star
+expect "*"
+
+# Toggle star on README (currently starred)
+click "*"
+expect "action: unstar README.md"
+
+# Toggle star back
+click "*"
+expect "action: star README.md"
+
+# Copy file name
+click "cp"
+expect "clip: README.md"
+expect "action: cp README.md"
+
+# Download
+click "dl"
+expect "downloads: 1"
+expect "action: dl README.md"
+
+# Interact with second file
+click "*" #2
+expect "action: unstar styles.css"
+
+# Copy second file
+click "cp" #2
+expect "clip: styles.css"
+
+# Multiple downloads
+click "dl" #3
+click "dl" #4
+click "dl" #5
+expect "downloads: 4"

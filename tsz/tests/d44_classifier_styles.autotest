@@ -1,0 +1,40 @@
+# d44_classifier_styles: Classifier (styled component) declarations
+# Tests: classifier() pattern with C.Name usage
+
+# Verify title
+expect "Classifier Styles"
+
+# Verify cards from script data with classifier components (C.Card, C.CardTitle, etc.)
+expect "Setup CI"
+expect "Write tests"
+expect "Deploy v3"
+expect "Fix auth bug"
+expect "Update deps"
+
+# Verify status badges (C.StatusBadge, C.StatusText)
+# status=0 -> TODO (gray)
+# status=1 -> DONE (green)
+# status=2 -> BLOCKED (red)
+expect "TODO"
+expect "DONE"
+expect "BLOCKED"
+
+# Verify task index: `Task ${i}`
+expect "Task 0"
+expect "Task 1"
+expect "Task 2"
+expect "Task 3"
+expect "Task 4"
+
+# Verify action button with classifier (C.ActionButton, C.ActionLabel)
+expect "Actions: 0"
+
+# Click action button
+click "Actions: 0"
+expect "Actions: 1"
+
+click "Actions: 1"
+expect "Actions: 2"
+
+# Verify selected tracking
+expect "selected:"

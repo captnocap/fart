@@ -1,0 +1,17 @@
+# d81_rest_spread_params: Rest and spread
+# Tests: ...rest and ...spread
+
+# Verify rest params work
+expect "Rest/Spread"
+
+# Sum all with rest
+click "Sum All"
+expect "result: 15"
+
+# Concatenate with spread
+click "Concat"
+expect "result: 1,2,3,4,5,6"
+
+# Object spread
+click "Merge"
+expect "result: {a:1,b:2,c:3}"

@@ -1,0 +1,54 @@
+# d40_type_annotations: Type annotations on state
+# Tests: type annotations don't break compilation
+
+# Verify title
+expect "Type Annotations"
+
+# Verify initial state from script: setName('Alice'), setScore(100), setActive(1)
+expect "name: Alice"
+expect "score: 100"
+expect "ACTIVE"
+
+# Verify filter buttons
+expect "dev"
+expect "bugfix"
+expect "ops"
+expect "All"
+
+# Verify initial items from script
+expect "Write tests"
+expect "[ ]"
+expect "Fix bug #42"
+expect "[x]"
+expect "Code review"
+expect "Deploy v2"
+expect "Update docs"
+
+# Verify tags
+expect "dev"
+expect "bugfix"
+expect "ops"
+
+# Verify priority labels
+expect "HIGH"
+expect "MED"
+expect "LOW"
+
+# Toggle a todo
+click "Write tests"
+expect "[x]"
+expect "3/5 done"
+
+# Filter by dev tag
+click "dev"
+expect "filtered: dev"
+expect "Write tests"
+expect "Code review"
+reject "Fix bug #42"
+
+# Show all
+click "All"
+expect "showing all"
+expect "Write tests"
+expect "Fix bug #42"
+expect "Code review"

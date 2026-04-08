@@ -1,0 +1,31 @@
+# s10b_pixel_effect: Pixel Effect — mixed tier
+# Tests: Effect palette generation, animation frames
+
+# Verify title
+expect "Pixel Effect"
+
+# Verify effect toggles
+expect "plasma"
+expect "fire"
+expect "wave"
+
+# Verify step button
+expect "Step Frame"
+
+# Verify initial state
+expect "plasma"
+expect "t=0"
+
+# Test switching effects
+click "fire"
+expect "fire"
+
+click "wave"
+expect "wave"
+
+click "plasma"
+expect "plasma"
+
+# Test stepping animation
+click "Step Frame"
+expect "t=1"

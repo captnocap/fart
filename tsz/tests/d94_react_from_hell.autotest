@@ -1,0 +1,109 @@
+# d94_react_from_hell: React App From Hell
+# Tests: combines Slack, Notion, Linear, Vercel patterns
+
+# Verify sidebar navigation with panel buttons
+expect "C"
+expect "I"
+expect "D"
+expect "N"
+expect "L"
+expect "S"
+
+# Verify header shows Messages panel by default
+expect "Messages"
+expect "0 actions"
+
+# Verify channel list
+expect "# general"
+expect "# design"
+expect "# random"
+expect "Show Pins"
+expect "10 msgs"
+expect "23 rxns"
+
+# Verify messages in general channel (channel 0)
+expect "alice"
+expect "Hey team, v2.5 is ready for review"
+expect "bob"
+expect "LGTM, shipping it"
+expect "10:01"
+expect "10:03"
+
+# Verify message actions
+expect "👍 3"
+expect "unpin"
+expect "pin"
+expect "+react"
+expect "2 replies"
+expect "4 replies"
+
+# Switch to Issues panel (I button)
+click "I"
+expect "Issues"
+expect "0 actions"
+
+# Verify issue filters
+expect "All"
+expect "Open"
+expect "In Progress"
+expect "Done"
+expect "51 pts"
+
+# Verify issues list
+expect "Auth flow broken on Safari"
+expect "Add dark mode to settings"
+expect "bug"
+expect "feature"
+expect "URGENT"
+expect "HIGH"
+expect "LOW"
+expect "5pt"
+
+# Verify avatars for assignees
+expect "alice"
+expect "bob"
+expect "carol"
+
+# Click an issue to transition
+click "Auth flow broken on Safari"
+expect "1 actions"
+expect "moved: Auth flow broken on"
+
+# Switch to Deploys panel (D button)
+click "D"
+expect "Deploys"
+expect "5/6 successful"
+
+# Verify deploy list
+expect "frontend"
+expect "api"
+expect "worker"
+expect "cron"
+expect "prod"
+expect "staging"
+expect "main"
+expect "fix/auth"
+expect "42s"
+expect "67s"
+expect "FAIL"
+expect "BUILDING"
+
+# Switch to Docs panel (N button)
+click "N"
+expect "Docs"
+
+# Verify blocks
+expect "Project Roadmap Q2"
+expect "Ship v2.5 with auth redesign and dark mode support"
+expect "Auth flow redesign"
+expect "Open Questions"
+
+# Toggle theme
+click "L"
+expect "1 actions"
+expect "theme toggle"
+
+# Toggle compact
+click "S"
+expect "2 actions"
+expect "compact toggle"

@@ -1,0 +1,56 @@
+# d50_boolean_state: Boolean state patterns
+# Tests: toggle patterns, conditional rendering with booleans
+
+# Verify initial state (light mode, sidebar shown)
+expect "Boolean State"
+expect "toggles: 0"
+expect "Dark Mode"
+expect "Sidebar"
+expect "Footer"
+
+# Toggle dark mode
+click "Dark Mode"
+expect "toggles: 1"
+expect "Light Mode"
+
+# Toggle sidebar
+click "Hide Sidebar"
+expect "toggles: 2"
+reject "Sidebar"
+
+# Show sidebar again
+click "Show Sidebar"
+expect "toggles: 3"
+expect "Sidebar"
+
+# Toggle footer
+click "Hide Footer"
+expect "toggles: 4"
+reject "Footer"
+
+# Toggle lock
+click "Lock"
+expect "toggles: 5"
+expect "Unlock"
+expect "Content is locked"
+
+# Unlock
+click "Unlock"
+expect "toggles: 6"
+expect "Lock"
+reject "Content is locked"
+
+# Expand/collapse
+click "Expand"
+expect "toggles: 7"
+expect "Collapse"
+expect "Expanded detail line 1"
+
+click "Collapse"
+expect "toggles: 8"
+expect "Expand"
+reject "Expanded detail line 1"
+
+# Verify footer status shown
+click "Show Footer"
+expect "dark:0 sidebar:1 footer:1 locked:0 expanded:0"

@@ -1,0 +1,20 @@
+# d75_throw_try_catch: Exception handling
+# Tests: try/catch/throw
+
+# Verify initial state
+expect "Try/Catch"
+expect "caught: false"
+
+# Safe call doesn't throw
+click "Safe Call"
+expect "caught: false"
+expect "result: success"
+
+# Error call throws and gets caught
+click "Error Call"
+expect "caught: true"
+expect "error: something went wrong"
+
+# Can continue after catch
+click "Safe Call"
+expect "caught: false"

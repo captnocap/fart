@@ -1,0 +1,34 @@
+# d48_complex_template_literals: Complex template literal expressions
+# Tests: arithmetic, nested access, ternary inside ${}
+
+# Verify title
+expect "Template Literals"
+
+# Verify header with complex template: `Total: ${total} pts across ${5} users (avg: ${total / 5})`
+# Total = 142+87+256+31+198 = 714, avg = 714/5 = 142.8
+expect "Total: 714 pts across 5 users (avg: 142.8)"
+
+# Verify users from script with template: `${user.name} [L${user.level}]`
+expect "Alice [L3]"
+expect "Bob [L2]"
+expect "Carol [L4]"
+expect "Dave [L1]"
+expect "Eve [L3]"
+
+# Verify scores with template: `${user.score} pts`
+expect "142 pts"
+expect "87 pts"
+expect "256 pts"
+expect "31 pts"
+expect "198 pts"
+
+# Online indicators (online==1 shows green, online==0 shows gray)
+# Alice, Carol, Dave are online; Bob, Eve are not
+
+# Click users and verify selection with template
+expect "selected:"
+click "Alice [L3]"
+expect "selected: Alice (L3, 142pts)"
+
+click "Carol [L4]"
+expect "selected: Carol (L4, 256pts)"

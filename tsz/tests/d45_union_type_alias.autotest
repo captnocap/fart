@@ -1,0 +1,6 @@
+# d45_union_type_alias: Type aliases and unions
+# Tests type syntax
+
+expect "Type Aliases"
+click "Set Status"
+expect "status: ready"

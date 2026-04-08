@@ -1,0 +1,17 @@
+# d131_spinner_modes: Spinner/loader modes
+# Tests: different loading states
+
+// Verify initial
+expect "Spinner Modes"
+
+// Set loading
+click "Loading"
+expect "mode: loading"
+
+// Set success
+click "Success"
+expect "mode: success"
+
+// Set error
+click "Error"
+expect "mode: error"

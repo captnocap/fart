@@ -1,0 +1,49 @@
+# d23_empty_array: Empty array and array replacement
+# Tests: Start with empty, load inbox, load spam, clear
+
+# Verify title
+expect "Inbox"
+
+# Verify buttons
+expect "Load inbox"
+expect "Load spam"
+expect "Clear"
+
+# Initially empty (count==0), should show "No messages"
+expect "No messages"
+
+# Verify initial mode/count: `mode: ${mode} · count: ${count}`
+expect "mode: 0 · count: 0"
+
+# Load inbox
+click "Load inbox"
+expect "mode: 1 · count: 3"
+
+# Verify inbox messages from script
+expect "Alice"
+expect "Hey, the PR looks good"
+expect "Bob"
+expect "Can you review my branch?"
+expect "Carol"
+expect "Deployed to staging"
+
+# Load spam (replaces inbox)
+click "Load spam"
+expect "mode: 2 · count: 2"
+
+# Verify spam messages from script
+expect "Prince"
+expect "You have won a prize"
+expect "Casino"
+expect "Free spins today only"
+
+# Inbox messages should be gone
+reject "Hey, the PR looks good"
+reject "Can you review my branch?"
+
+# Clear all
+click "Clear"
+expect "mode: 0 · count: 0"
+expect "No messages"
+reject "Prince"
+reject "Casino"

@@ -1,0 +1,13 @@
+# d143_manage_plugins_entries_map: Plugin management
+# Tests: plugin entries with map
+
+// Verify renders
+expect "Plugin Manager"
+
+// Enable
+click "Enable"
+expect "enabled: 1"
+
+// Disable
+click "Disable"
+expect "enabled: 0"

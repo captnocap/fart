@@ -1,0 +1,11 @@
+# d102_effect_color_indexing: Effect color helper array indexing
+# Tests: rgb[0]/rgb[1]/rgb[2] on e.hsv() and e.hsl() results
+
+# Verify title
+expect "D102 Effect Color Indexing"
+
+# Verify description
+expect "Top panel should be a full hue gradient. Bottom panel should show coral, aqua, and violet pastel bands."
+
+# Note: This test is primarily visual - the Effect components render pixel data
+# The test verifies the text elements render correctly

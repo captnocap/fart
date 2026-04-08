@@ -1,0 +1,43 @@
+# d31a_state_machine_script: State machine — <script> variant
+# Tests: finite state machine with valid/invalid transitions
+
+# Verify title
+expect "State Machine"
+
+# Verify initial state
+expect "idle"
+
+# Verify transition buttons
+expect "idle"
+expect "loading"
+expect "success"
+expect "error"
+expect "Reset"
+
+# Test valid transition
+click "loading"
+expect "loading"
+expect "1 transitions"
+
+# Test invalid transition (should show error)
+click "idle"
+expect "2 transitions"
+
+# Test success state
+click "success"
+expect "success"
+
+# Test history
+expect "idle"
+expect "loading"
+expect "->"
+expect "OK"
+
+# Test error state
+click "error"
+expect "error"
+
+# Test reset
+click "Reset"
+expect "idle"
+expect "0 transitions"

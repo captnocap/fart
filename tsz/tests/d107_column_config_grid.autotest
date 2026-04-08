@@ -1,0 +1,64 @@
+# d107_column_config_grid: Column-config-driven grid rendering
+# Tests: const column config mapped to headers and cells, computed row[col.key]
+
+# Verify title
+expect "Column Config Grid"
+expect "score desc"
+
+# Verify column headers
+expect "Service"
+expect "Owner"
+expect "Status"
+expect "Score"
+
+# Verify data rows (sorted by score desc initially)
+expect "api-gateway"
+expect "checkout-web"
+expect "event-worker"
+expect "design-tokens"
+expect "incident-bot"
+
+# Verify owners
+expect "Ava"
+expect "Luca"
+expect "Mina"
+expect "Nora"
+expect "Owen"
+
+# Verify status values
+expect "healthy"
+expect "watch"
+expect "paused"
+expect "critical"
+
+# Verify scores
+expect "97"
+expect "92"
+expect "84"
+expect "71"
+expect "58"
+
+# Test clicking header cells
+click "Service"
+
+# Test clicking data cells
+click "api-gateway"
+expect "row 0 · col 0"
+expect "service: api-gateway"
+
+click "Ava"
+expect "owner: Ava"
+
+click "healthy"
+expect "status: healthy"
+
+# Test sort toggle by clicking Score header
+click "Score"
+expect "score asc"
+
+# Test selecting another row
+click "incident-bot"
+expect "service: incident-bot"
+
+# Verify selection panel
+expect "Selection"

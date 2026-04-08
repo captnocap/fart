@@ -1,0 +1,11 @@
+# d140_stats_nasty_map: Complex stats with maps
+# Tests: statistics calculation in maps
+
+// Verify renders
+expect "Stats Nasty Map"
+
+// Calculate
+click "Calculate"
+expect "total: 150"
+expect "average: 30"
+expect "max: 50"

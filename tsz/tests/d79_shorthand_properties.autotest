@@ -1,0 +1,17 @@
+# d79_shorthand_properties: Shorthand object properties
+# Tests: {a, b} shorthand
+
+# Verify shorthand works
+expect "Shorthand"
+
+# Create with shorthand
+click "Create"
+expect "result: {x:5,y:10}"
+
+# Create with mixed
+click "Mixed"
+expect "result: {x:5,y:10,z:15}"
+
+# Verify values accessible
+click "Access"
+expect "x=5, y=10"

@@ -1,0 +1,61 @@
+# d126_key_event_router: Key Event Router
+# Tests: Objects with 8+ boolean fields, OR chains, compound modifier checks
+
+# Verify title
+expect "Key Event Router"
+
+# Verify status panel
+expect "Clear Selection"
+expect "Focus Move"
+expect "Wheel Mult"
+expect "Direction"
+
+# Verify initial state
+expect "NO"
+expect "none"
+expect "0x"
+expect "-"
+
+# Verify keys
+expect "A"
+expect "Left"
+expect "Shift+Left"
+expect "Shift+Right"
+expect "Shift+Up"
+expect "Shift+Down"
+expect "Shift+Home"
+expect "Shift+End"
+expect "Meta+Left"
+expect "Ctrl+C"
+expect "Alt+Tab"
+expect "WheelUp"
+expect "WheelDown"
+expect "Shift+Meta+Down"
+expect "Enter"
+expect "Escape"
+
+# Verify modifier badges
+expect "Shift"
+expect "Ctrl"
+expect "Alt"
+expect "Meta"
+
+# Verify key type badges
+expect "NAV"
+expect "WHEEL"
+
+# Test clicking a navigation key
+click "Left"
+expect "YES"
+expect "clearSelection"
+
+# Test clicking a shift+nav key
+click "Shift+Left"
+expect "left"
+
+# Test wheel keys
+click "WheelUp"
+expect "UP"
+
+# Verify event log
+expect "events"

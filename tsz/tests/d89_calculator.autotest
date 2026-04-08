@@ -1,0 +1,43 @@
+# d89_calculator: Calculator UI state machine
+# Tests: complex state machine, operator chaining
+
+# Verify initial state
+expect "Calculator"
+expect "0"
+
+# Simple addition: 7 + 3 = 10
+click "7"
+expect "7"
+click "+"
+click "3"
+click "="
+expect "10"
+
+# Clear
+click "C"
+expect "0"
+
+# Chain operations: 5 + 3 * 2 = 16 (as integer math)
+click "5"
+click "+"
+click "3"
+click "*"
+click "2"
+click "="
+
+# Clear and try subtraction
+click "C"
+click "9"
+click "-"
+click "4"
+click "="
+
+# Clear and try division
+click "C"
+click "8"
+click "/"
+click "2"
+click "="
+
+# History shows last operation
+expect "history"

@@ -1,0 +1,51 @@
+# Progress cart runtime smoke test
+# Verifies real tab/range interaction without pinning repo-specific metrics.
+
+expect "meta progress"
+expect "Project Arc"
+expect "Pulse Matrix"
+expect "Window commits"
+expect "Window build fails"
+expect "Recent Commits"
+expect "Queue + Freshness"
+expect "repo commits"
+expect "tests on disk"
+expect "db builds"
+expect "v4 builds"
+expect "eng hash"
+expect "cmp hash"
+expect "Refresh"
+expect "7d"
+expect "14d"
+expect "all"
+reject "0 shown"
+color "Progress" #0000aa
+color "Verify" #d6d6d6
+color "14d" #0000aa
+color "all" #ffffff
+
+click "7d"
+color "14d" #0000aa
+color "all" #0000aa
+
+click "all"
+color "all" #ffffff
+color "14d" #0000aa
+
+click "Verify"
+expect "Verification Queue"
+expect "Selected Test"
+expect "Build + Launch"
+expect "Runtime"
+expect "Lane Backlog"
+reject "Project Arc"
+reject "Pulse Matrix"
+color "Verify" #0000aa
+color "Progress" #d6d6d6
+
+click "Progress"
+expect "Project Arc"
+expect "Pulse Matrix"
+reject "Verification Queue"
+color "Progress" #0000aa
+color "Verify" #d6d6d6

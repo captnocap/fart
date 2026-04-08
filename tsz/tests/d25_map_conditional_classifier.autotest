@@ -1,0 +1,36 @@
+# d25_map_conditional_classifier: Classifier components inside conditional inside map
+# Tests: classifier resolution in map conditionals
+
+# Verify services render with status
+expect "Service Monitor"
+expect "api-gateway"
+expect "ONLINE"
+expect "auth-service"
+expect "OFFLINE"
+expect "worker-pool"
+expect "cache-redis"
+expect "db-primary"
+
+# Click Inspect on online service
+click "Inspect"
+expect "action: inspect"
+expect "selected: api-gateway"
+
+# Click Restart on offline service
+click "Restart"
+expect "action: restart"
+expect "selected: auth-service"
+
+# Click another online service
+click "Inspect" #2
+expect "selected: worker-pool"
+
+# Click another offline service
+click "Restart" #2
+expect "selected: cache-redis"
+
+# Verify all service details render
+expect "Healthy"
+expect "Connection refused"
+expect "workers active"
+expect "OOM killed"

@@ -1,0 +1,9 @@
+# surface.glyphs: Named inline assets for shared surface conformance design system
+# Tests: Glyph definitions with named shapes (check, warning, hexagon, star, triangle)
+
+# Note: This file defines named glyph assets that can be referenced by other components
+# Glyphs: check, warning, hex, plasma-star, lava-triangle
+# Features: shape, stroke, fill, fillEffect
+
+# This is a glyphs definition file - no interactive elements to test
+# Glyphs are used by other carts via Glyph components

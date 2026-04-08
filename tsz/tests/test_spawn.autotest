@@ -1,0 +1,28 @@
+# test_spawn: Process spawning diagnostic
+# Tests: __spawn_self, __exec, process spawning from running app
+
+# Verify title
+expect "Process Spawn Test"
+
+# Verify description
+expect "Tests whether we can spawn child processes from a running app"
+
+# Verify test buttons
+expect "1. spawn_self()"
+expect "2. exec echo"
+expect "3. exec bg"
+expect "4. inspect paths"
+expect "5. exec fork"
+
+# Verify log header
+expect "Log"
+expect "entries"
+
+# Verify initial log messages
+expect "Spawn test cart loaded"
+expect "Press buttons to test each spawn method"
+
+# Test buttons
+click "1. spawn_self()"
+click "2. exec echo"
+click "3. exec bg"

@@ -1,0 +1,82 @@
+# d101_filter_sort_map_render: Inline filter/sort/slice/map render pipeline
+# Tests: chained array methods directly in JSX, multiple callback arrows
+
+# Verify header
+expect "Render Pipeline"
+expect "0 picks"
+
+# Verify description
+expect "List is rendered by chaining filter, sort, slice, and map inline in JSX."
+
+# Verify filter buttons
+expect "All"
+expect "Ops"
+expect "Design"
+expect "Infra"
+expect "Offline Off"
+expect "Top 4"
+
+# Verify initial commands (All, online only, top 4 by score)
+expect "Rotate stale API keys"
+expect "Open incident room"
+expect "Tail auth-service logs"
+expect "Open changelog draft"
+
+# Verify group labels
+expect "ops"
+expect "design"
+expect "infra"
+
+# Verify online/offline status
+expect "online"
+expect "offline"
+
+# Verify score labels
+expect "score 97"
+expect "score 88"
+expect "score 79"
+
+# Test group filters
+click "Ops"
+expect "Open incident room"
+expect "Tail auth-service logs"
+reject "Rebuild search index"
+
+click "Design"
+expect "Invite design reviewers"
+expect "Open changelog draft"
+expect "Sync support macros"
+
+click "Infra"
+expect "Rebuild search index"
+expect "Deploy billing-worker"
+expect "Rotate stale API keys"
+
+# Test offline toggle
+click "Offline Off"
+expect "Offline On"
+
+# Now should see offline items too
+click "All"
+expect "Deploy billing-worker"
+
+# Toggle offline back off
+click "Offline On"
+expect "Offline Off"
+
+# Test limit toggle
+click "Top 4"
+expect "Top 6"
+
+# Should now show 6 items
+expect "Sync support macros"
+
+# Test selecting commands
+click "Rotate stale API keys"
+expect "1 picks"
+expect "Selected command"
+expect "Rotate stale API keys"
+
+click "Rebuild search index"
+expect "2 picks"
+expect "Rebuild search index"

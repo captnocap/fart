@@ -1,30 +1,61 @@
-# d11: map-component-map — org chart with nested maps through components
+# d11_map_component_map: Map → Component → Map
+# Tests: outer map iterates groups, component contains inner map
 
-# Initial render
+# Verify title
 expect "Org Chart"
-expect "clicks: 0"
 
-# Verify department headers
+# Verify initial status: `dept: ${selectedDept} | emp: ${selectedEmp} | clicks: ${totalClicks}`
+expect "dept: 0 | emp: 0 | clicks: 0"
+
+# Verify departments from script with template: `${dept.headcount} people | $${dept.budget}k budget`
 expect "Engineering"
+expect "8 people | $450k budget"
 expect "Design"
+expect "4 people | $200k budget"
 expect "Marketing"
+expect "5 people | $300k budget"
 expect "Sales"
+expect "6 people | $350k budget"
 expect "Operations"
+expect "3 people | $150k budget"
 
-# Verify employees render
+# Verify employees under Engineering (deptIdx=0): Alice, Bob, Carol, Dave
 expect "Alice"
 expect "Bob"
 expect "Carol"
-expect "Eve"
-expect "Frank"
-expect "Grace"
-expect "Judy"
-expect "Mike"
+expect "Dave"
 
-# Click Engineering dept header
+# Verify employee salaries
+expect "$120"
+expect "$115"
+expect "$130"
+expect "$95"
+
+# Click Engineering department
 click "Engineering"
+expect "dept: 0"
 expect "clicks: 1"
 
-# Click Alice employee
+# Click an employee (Alice, emp index 0)
 click "Alice"
+expect "emp: 0"
 expect "clicks: 2"
+
+# Click Bob (emp index 1)
+click "Bob"
+expect "emp: 1"
+expect "clicks: 3"
+
+# Click Design department
+click "Design"
+expect "dept: 1"
+expect "clicks: 4"
+
+# Verify Design employees: Eve, Frank
+expect "Eve"
+expect "Frank"
+
+# Click Eve (emp index 4 in full list)
+click "Eve"
+expect "emp: 4"
+expect "clicks: 5"

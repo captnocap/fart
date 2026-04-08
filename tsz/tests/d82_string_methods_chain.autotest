@@ -1,0 +1,17 @@
+# d82_string_methods_chain: Chained string methods
+# Tests: string method chaining
+
+# Verify string chain works
+expect "String Chain"
+
+# Transform: trim -> upper -> replace
+click "Transform"
+expect "result: HELLO WORLD"
+
+# Split and join
+click "Split Join"
+expect "result: h-e-l-l-o"
+
+# Slice
+click "Slice"
+expect "result: WORLD"

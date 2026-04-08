@@ -1,0 +1,17 @@
+# d77_do_while: Do-while loops
+# Tests: do-while statement
+
+# Verify do-while works
+expect "Do-While"
+
+# Count to 5
+click "Count"
+expect "result: 5"
+
+# Sum array
+click "Sum"
+expect "result: 15"
+
+# Find item
+click "Find"
+expect "found: true"

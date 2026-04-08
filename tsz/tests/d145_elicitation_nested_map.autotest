@@ -1,0 +1,13 @@
+# d145_elicitation_nested_map: Elicitation UI
+# Tests: nested elicitation patterns
+
+// Verify renders
+expect "Elicitation"
+
+// Select
+click "Select"
+expect "selected: option"
+
+// Confirm
+click "Confirm"
+expect "confirmed: true"

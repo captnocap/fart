@@ -1,0 +1,13 @@
+# d152_cascade_configurator: Cascading config
+# Tests: cascading selections
+
+// Verify renders
+expect "Cascade Config"
+
+// Select level 1
+click "Level 1"
+expect "options: 3"
+
+// Select level 2
+click "Level 2"
+expect "options: 2"

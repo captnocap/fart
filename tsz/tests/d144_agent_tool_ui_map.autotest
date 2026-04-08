@@ -1,0 +1,13 @@
+# d144_agent_tool_ui_map: Agent tool UI
+# Tests: agent tool interface
+
+// Verify renders
+expect "Agent Tool UI"
+
+// Run tool
+click "Run"
+expect "running: true"
+
+// Stop
+click "Stop"
+expect "running: false"

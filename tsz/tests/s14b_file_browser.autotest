@@ -1,0 +1,47 @@
+# s14b_file_browser: File Browser — mixed tier
+# Tests: tree navigation, breadcrumb, file/folder display
+
+# Verify title
+expect "File Browser"
+
+# Verify view toggles
+expect "List"
+expect "Grid"
+
+# Verify breadcrumb
+expect "Home"
+
+# Verify initial contents (Home directory)
+expect "Documents"
+expect "Pictures"
+expect "Downloads"
+
+# Verify folder/file icons
+expect "📁"
+
+# Test navigation
+click "Documents"
+expect "Documents"
+expect "report.pdf"
+expect "notes.txt"
+expect "budget.xlsx"
+
+# Verify file sizes
+expect "2.4 MB"
+expect "12 KB"
+expect "340 KB"
+
+# Test breadcrumb navigation
+click "Home"
+expect "Documents"
+expect "Pictures"
+
+# Test view toggle
+click "Grid"
+
+click "List"
+
+# Test Up navigation
+click "Documents"
+click "← Up"
+expect "Home"

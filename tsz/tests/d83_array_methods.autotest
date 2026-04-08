@@ -1,0 +1,42 @@
+# d83_array_methods: Array manipulation patterns
+# Tests: slice, sort, filter, find patterns
+
+# Verify initial items
+expect "Array Methods"
+expect "6 items"
+expect "Zulu"
+expect "Alpha"
+expect "Mike"
+
+# Sort by name A-Z
+click "Sort A-Z"
+expect "sorted by name"
+expect "Alpha"
+expect "Bravo"
+expect "Delta"
+
+# Sort by value descending
+click "Sort by Val"
+expect "sorted by value desc"
+expect "Alpha"
+expect "30"
+
+# Filter above 15
+click "Filter >15"
+expect "filtered > 15: 4 items"
+expect "4 items"
+
+# Reset view
+click "Show All"
+expect "6 items"
+
+# Find by name
+click "Find Mike"
+expect "found Mike at index 2 (value=15)"
+
+# Reverse
+click "Reverse"
+expect "reversed"
+
+# Verify it's reversed (Yankee was last, should be first)
+click "Show All"

@@ -1,0 +1,16 @@
+# d150_browser_tabbed: Tabbed browser interface
+# Tests: tab switching
+
+// Verify renders
+expect "Browser"
+expect "Tab 1"
+expect "Content 1"
+
+// Switch tab
+click "Tab 2"
+expect "Content 2"
+reject "Content 1"
+
+// Switch back
+click "Tab 1"
+expect "Content 1"

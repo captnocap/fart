@@ -1,0 +1,14 @@
+# d149_config_entries_filter: Config filtering
+# Tests: configuration entry filtering
+
+// Verify renders
+expect "Config Filter"
+expect "shown: 5"
+
+// Filter
+click "Filter"
+expect "shown: 2"
+
+// Clear
+click "Clear"
+expect "shown: 5"

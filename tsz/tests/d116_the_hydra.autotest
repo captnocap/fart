@@ -1,0 +1,39 @@
+# d116_the_hydra: Every composition seam in one app
+# Tests: component in map + ternary + nested map + ternary component select + handlers
+
+# Verify title
+expect "The Hydra"
+
+# Verify initial state
+expect "expanded: 0"
+expect "sel: 0"
+expect "actions: 0"
+
+# Verify sidebar
+expect "Projects"
+expect "actions: 0"
+expect "last: #0"
+expect "task: 0"
+
+# Note: This test imports data from d116_the_hydra.script.tsz
+# Structure: Projects → ProjectCard (ternary expanded/collapsed) → tasks.map() → BugCard/FeatureCard
+
+# Verify project cards show "tap to expand" when collapsed
+expect "tap to expand"
+
+# BugCard indicators
+expect "BUG"
+expect "RESOLVED"
+expect "OPEN"
+
+# FeatureCard indicators
+expect "FEAT"
+expect "SHIPPED"
+expect "URGENT"
+expect "IN PROGRESS"
+
+# Test expanding a project
+
+# Test selecting tasks
+
+# Test sidebar navigation

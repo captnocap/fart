@@ -1,0 +1,34 @@
+# s09b_physics_sim: Physics Sim — mixed tier
+# Tests: animation frame updates, physics simulation
+
+# Verify title
+expect "Physics Sim"
+
+# Verify stats
+expect "frame 0"
+expect "3 balls"
+
+# Verify control buttons
+expect "Step"
+expect "Pause"
+expect "+Ball"
+expect "Reset"
+
+# Test stepping
+click "Step"
+
+# Test pause/play toggle
+click "Pause"
+expect "Play"
+
+click "Play"
+expect "Pause"
+
+# Test adding ball
+click "+Ball"
+expect "4 balls"
+
+# Test reset
+click "Reset"
+expect "frame 0"
+expect "3 balls"

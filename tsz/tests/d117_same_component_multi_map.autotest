@@ -1,0 +1,34 @@
+# d117_same_component_multi_map: Same component reused across multiple independent maps
+# Tests: StatusRow component used in 3 different .map() calls with different arrays
+
+# Verify tabs
+expect "Alerts"
+expect "Logs"
+expect "Events"
+
+# Verify initial state
+expect "last: 0"
+expect "clicks: 0"
+
+# Note: This test imports data from d117_same_component_multi_map.script.tsz
+# Same StatusRow component used in 3 maps: alerts, logs, events
+
+# Verify Alerts tab is active (red text)
+expect "Alerts"
+
+# Verify severity indicators (colored dots)
+# Severity 0 = gray, 1 = orange, 2 = red
+
+# Source identifiers
+expect "s0:"
+expect "s1:"
+expect "s2:"
+
+# Test switching tabs
+click "Logs"
+expect "Logs"
+
+click "Events"
+expect "Events"
+
+# Test clicking items

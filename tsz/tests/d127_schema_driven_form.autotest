@@ -1,0 +1,11 @@
+# d127_schema_driven_form: Schema-driven forms
+# Tests: form generation from schema
+
+// Verify form renders
+expect "Schema Form"
+expect "Name"
+expect "Email"
+
+// Submit
+click "Submit"
+expect "submitted: true"

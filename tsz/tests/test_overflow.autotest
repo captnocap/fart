@@ -1,0 +1,19 @@
+# test_overflow: Overflow/clipping test
+# Tests: Box overflow behavior vs ScrollView scrolling
+
+# Verify panel headers
+expect "200h — no ScrollView"
+expect "200h — ScrollView"
+expect "flexGrow — no ScrollView"
+
+# Verify overflow indicators
+expect "RED overflow"
+expect "TEAL scroll"
+
+# Verify Lorem ipsum content
+expect "Lorem ipsum dolor sit amet"
+
+# Verify color indicators
+expect "Red = clipped (no scroll)"
+expect "Teal = reachable by scrolling"
+expect "Red = clipped + scrollable"

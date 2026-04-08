@@ -1,0 +1,13 @@
+# d141_log_selector_nested_map: Nested log selector
+# Tests: log filtering with nested maps
+
+// Verify renders
+expect "Log Selector"
+
+// Filter
+click "Filter"
+expect "filtered: 5"
+
+// Filter by level
+click "Error Only"
+expect "filtered: 2"

@@ -1,0 +1,52 @@
+# d52_multi_handler_state: Complex handler bodies with multiple state updates
+# Tests: if/else, early return, multiple setState in one handler
+
+# Verify initial state
+expect "Handler Logic"
+expect "0"
+expect "Novice"
+expect "0 actions logged"
+
+# Add 10 points
+click "+10"
+expect "10"
+expect "Novice"
+expect "+10"
+
+# Add 50 points (should reach Bronze at 60)
+click "+50"
+expect "60"
+expect "Bronze"
+
+# Add 100 points (should reach Silver at 160)
+click "+100"
+expect "160"
+expect "Silver"
+
+# Add another 100 (should reach Gold at 260)
+click "+100"
+expect "260"
+expect "Gold"
+
+# Add another 200 (should reach Diamond at 460)
+click "+100"
+expect "460"
+expect "Diamond"
+
+# Test lock/unlock
+click "Lock/Unlock"
+expect "locked"
+click "+10"
+expect "locked!"
+expect "460"  # Should not increase
+
+# Unlock
+click "Lock/Unlock"
+click "+10"
+expect "470"
+
+# Reset
+click "Reset"
+expect "0"
+expect "Novice"
+expect "0 actions logged"

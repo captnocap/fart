@@ -1,0 +1,80 @@
+# d53_compound_conditionals: Compound conditional rendering
+# Tests: multiple && chains, || in conditions, nested conditionals
+
+# Verify title
+expect "Compound Conditionals"
+
+# Verify role buttons
+expect "Guest"
+expect "User"
+expect "Admin"
+expect "Super"
+
+# Verify toggle buttons (initial state)
+expect "Unverified"
+expect "Free"
+
+# Verify Check button
+expect "Check"
+
+# Verify features from script
+expect "View Dashboard"
+expect "Edit Profile"
+expect "Admin Panel"
+expect "Analytics"
+expect "API Access"
+expect "Custom Theme"
+expect "Superadmin"
+
+# Verify requirement tags
+expect "role≥2"
+expect "role≥1"
+expect "role≥3"
+expect "verified"
+expect "premium"
+
+# Initially as Guest (role=0), only View Dashboard should show ACCESS
+# Guest has no access to most things
+
+# Check access count
+click "Check"
+# Guest can only access View Dashboard (1/7)
+expect "1/7 accessible"
+
+# Switch to User role
+click "User"
+expect "role:1"
+
+# Check access again
+click "Check"
+# User: View Dashboard, API Access (2/7)
+expect "2/7 accessible"
+
+# Verify verified toggle
+click "Unverified"
+expect "Verified ✓"
+expect "verified:1"
+
+# Check access with verified
+click "Check"
+# User + verified: View Dashboard, Edit Profile, API Access (3/7)
+expect "3/7 accessible"
+
+# Switch to Admin
+click "Admin"
+expect "role:2"
+
+# Check access
+click "Check"
+# Admin + verified: View Dashboard, Edit Profile, Admin Panel, API Access (4/7)
+expect "4/7 accessible"
+
+# Enable premium
+click "Free"
+expect "Premium ★"
+expect "premium:1"
+
+# Check access
+click "Check"
+# Admin + verified + premium: View Dashboard, Edit Profile, Admin Panel, Analytics, API Access, Custom Theme (6/7)
+expect "6/7 accessible"

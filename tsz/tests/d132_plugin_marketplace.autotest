@@ -1,0 +1,14 @@
+# d132_plugin_marketplace: Plugin marketplace UI
+# Tests: plugin install/remove
+
+// Verify plugins
+expect "Plugin Marketplace"
+expect "Plugin A"
+
+// Install
+click "Install"
+expect "installed: 1"
+
+// Remove
+click "Remove"
+expect "installed: 0"

@@ -1,0 +1,14 @@
+# d154_sync_direction: Sync direction UI
+# Tests: sync direction toggle
+
+// Verify renders
+expect "Sync Direction"
+expect "direction: push"
+
+// Reverse
+click "Reverse"
+expect "direction: pull"
+
+// Reverse again
+click "Reverse"
+expect "direction: push"

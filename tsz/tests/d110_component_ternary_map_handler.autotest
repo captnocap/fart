@@ -1,0 +1,27 @@
+# d110_component_ternary_map_handler: Component returning ternary, used in map, with handler captures
+# Tests: component inlining with ternary inside, map scope, handler captures from prop scope
+
+# Verify title
+expect "User Roster"
+
+# Verify initial state
+expect "last: 0"
+expect "actions: 0"
+expect "mode: 0"
+
+# Verify mode toggle
+expect "compact"
+
+# Note: This test imports data from d110_component_ternary_map_handler.script.tsz
+# EntryRow component has ternary branches for active/inactive state
+
+# Test clicking an active entry (green dot, pressable)
+# Test clicking mode toggle
+click "compact"
+expect "detailed"
+expect "mode: 1"
+
+# Click back to compact
+click "detailed"
+expect "compact"
+expect "mode: 0"

@@ -1,0 +1,45 @@
+# d56_multiple_maps_nested: Multiple independent maps
+# Tests: three sibling maps over different arrays
+
+# Verify title
+expect "Multi-Panel Dashboard"
+
+# Verify Alerts panel (red header)
+expect "Alerts"
+expect "CPU high"
+expect "Disk 80%"
+expect "Memory OK"
+expect "Network timeout"
+
+# Verify severity labels
+expect "CRIT"
+expect "WARN"
+expect "OK"
+
+# Verify Tasks panel (blue header)
+expect "Tasks"
+expect "Deploy v3"
+expect "Fix login"
+expect "Add tests"
+expect "Update deps"
+expect "Write docs"
+
+# Verify done markers
+expect "[x]"
+expect "[ ]"
+
+# Verify Logs panel (green header)
+expect "Logs"
+expect "10:01"
+expect "deploy started"
+expect "10:02"
+expect "build passed"
+expect "10:03"
+expect "tests green"
+expect "10:04"
+expect "deployed to prod"
+
+# All panels visible simultaneously
+expect "CPU high"
+expect "Fix login"
+expect "deployed to prod"

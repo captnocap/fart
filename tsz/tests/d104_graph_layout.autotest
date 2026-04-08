@@ -1,0 +1,18 @@
+# d104_graph_layout: Polygon Edge Comparison
+# Tests: Graph component with Path, various stroke configurations
+
+# Verify title
+expect "Polygon Edge Comparison"
+
+# Verify test case labels
+expect "A: Fill only (no stroke)"
+expect "B: Fill + 1px dark stroke"
+expect "C: Fill + 2px dark stroke"
+expect "D: Fill + 1px fill-color stroke"
+expect "E: Fill + 2px fill-color stroke"
+expect "F: Fill + 2px lighter stroke"
+expect "G: Fill + 3px dark stroke"
+expect "H: Fill + 1px white stroke"
+
+# Note: Graph/Path components render visual graphics
+# The test verifies all text labels render correctly

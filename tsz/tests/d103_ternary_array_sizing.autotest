@@ -1,0 +1,6 @@
+# d103_ternary_array_sizing: Ternary with array sizing
+# Tests conditional array sizing
+
+expect "Ternary Array"
+click "Expand"
+expect "3 items"

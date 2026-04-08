@@ -1,0 +1,44 @@
+# d05_dynamic_style_in_map: Dynamic style values inside map
+# Tests: style properties depending on item fields AND index
+
+# Verify title
+expect "Dynamic Bars"
+
+# Verify all labels from script data
+expect "Rust"
+expect "Zig"
+expect "C"
+expect "Go"
+expect "JS"
+
+# Verify percentage labels from template: `${bar.pct}%`
+expect "85%"
+expect "72%"
+expect "60%"
+expect "45%"
+expect "30%"
+
+# Initially highlight is 0, so Rust (index 0) should show *
+expect "*"
+
+# Click Zig (index 1) - * should move to Zig
+click "Zig"
+
+# Click C (index 2)
+click "C"
+
+# Click Go (index 3)
+click "Go"
+
+# Click JS (index 4)
+click "JS"
+
+# Click back to Rust
+click "Rust"
+
+# Verify all labels still visible after interactions
+expect "Rust"
+expect "Zig"
+expect "C"
+expect "Go"
+expect "JS"

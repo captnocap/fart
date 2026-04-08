@@ -1,0 +1,56 @@
+# d27a_array_methods_script: Array methods — <script> variant
+# Tests: filter, sort, reduce patterns in script block
+
+# Verify title
+expect "Inventory"
+
+# Verify filter buttons
+expect "Food"
+expect "Tools"
+expect "All"
+expect "Sort $"
+expect "Sort A-Z"
+
+# Verify items
+expect "Hammer"
+expect "Apples"
+expect "Wrench"
+expect "Bread"
+expect "Drill"
+expect "Cheese"
+expect "Pliers"
+expect "Rice"
+expect "Saw"
+expect "Milk"
+
+# Verify categories
+expect "tool"
+expect "food"
+
+# Verify prices
+expect "$25"
+expect "$3"
+expect "$18"
+expect "$89"
+
+# Verify quantities
+expect "x4"
+expect "x12"
+expect "x7"
+
+# Verify footer stats
+expect "10 items"
+expect "total:"
+
+# Test filtering
+click "Food"
+expect "Apples"
+expect "Bread"
+reject "Hammer"
+
+click "Tools"
+expect "Hammer"
+expect "Wrench"
+reject "Apples"
+
+click "All"

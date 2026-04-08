@@ -1,0 +1,67 @@
+# d100_named_slots: JSX-valued props used as named slots
+# Tests: header, sidebar, footer props passed to Shell layout component
+
+# Verify title
+expect "Named Slots"
+
+# Verify header
+expect "Inbox"
+expect "Dark"
+
+# Verify sidebar navigation
+expect "Inbox"
+expect "Builds"
+expect "Cleanup"
+
+# Verify footer
+expect "Selection"
+expect "0 shell actions"
+
+# Verify description text
+expect "The header, sidebar, and footer are JSX nodes passed as props."
+
+# Verify initial notices (group 0 - Inbox tab)
+expect "Review the launch checklist"
+expect "Reply to support thread #288"
+
+# Test navigation - switch to Builds tab
+click "Builds"
+expect "1 shell actions"
+expect "Builds"
+
+# Verify Builds items
+expect "Patch billing dashboard padding"
+expect "Ship analytics export to staging"
+
+# Test navigation - switch to Cleanup tab
+click "Cleanup"
+expect "2 shell actions"
+expect "Cleanup"
+
+# Verify Cleanup items
+expect "Trim stale feature flags"
+
+# Test theme toggle
+click "Dark"
+expect "3 shell actions"
+expect "Light"
+
+# Switch back to Inbox
+click "Inbox"
+expect "4 shell actions"
+
+# Test selecting a notice
+click "Review the launch checklist"
+expect "5 shell actions"
+
+# Verify selection updated
+expect "Review the launch checklist"
+
+# Click another notice
+click "Reply to support thread #288"
+expect "6 shell actions"
+
+# Toggle theme back
+click "Light"
+expect "7 shell actions"
+expect "Dark"

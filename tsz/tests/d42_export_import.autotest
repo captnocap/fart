@@ -1,0 +1,52 @@
+# d42_export_import: Import/export patterns
+# Tests: named imports from script files
+
+# Verify title
+expect "Import / Export"
+
+# Verify buttons
+expect "Sort by Score"
+expect "Sort by Name"
+expect "Reset"
+
+# Verify initial data (unsorted from script)
+expect "Alice"
+expect "A"
+expect "88"
+expect "Bob"
+expect "B"
+expect "72"
+expect "Carol"
+expect "95"
+expect "Dave"
+expect "61"
+expect "Eve"
+expect "79"
+expect "Frank"
+expect "C"
+expect "84"
+
+# Initial mode and output
+expect "mode: 0"
+
+# Sort by score (descending: Carol 95, Alice 88, Frank 84, Eve 79, Bob 72, Dave 61)
+click "Sort by Score"
+expect "mode: 1"
+expect "sorted by score desc"
+
+# Verify order after sort (Carol should be first)
+# Note: The map renders in order, so first item in list appears first
+
+# Sort by name (ascending: Alice, Bob, Carol, Dave, Eve, Frank)
+click "Sort by Name"
+expect "mode: 2"
+expect "sorted by name asc"
+
+# Reset
+click "Reset"
+expect "mode: 0"
+expect "reset to original"
+
+# Verify Alice is back in original position (first)
+expect "Alice"
+expect "88"

@@ -1,0 +1,47 @@
+# d30a_math_derived_script: Math utilities + derived state — <script> variant
+# Tests: Math.floor, Math.round, Math.min, Math.max, Math.random, computed stats
+
+# Verify title
+expect "Stats Dashboard"
+
+# Verify action buttons
+expect "+ Random"
+expect "- First"
+expect "x2 All"
+expect "Normalize"
+
+# Verify data values
+expect "A"
+expect "B"
+expect "C"
+expect "D"
+expect "E"
+expect "F"
+expect "G"
+expect "H"
+
+# Verify stats labels
+expect "count"
+expect "sum"
+expect "mean"
+expect "median"
+expect "min / max"
+expect "range"
+
+# Verify initial stats (8 values)
+expect "8"
+
+# Test adding random value
+click "+ Random"
+expect "9"
+
+# Test removing first
+click "- First"
+expect "8"
+
+# Test doubling
+click "x2 All"
+
+# Test normalize
+click "Normalize"
+expect "100"

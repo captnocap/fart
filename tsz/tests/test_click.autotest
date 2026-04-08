@@ -1,0 +1,20 @@
+# test_click: Basic click counter test
+# Tests: useState, onPress handler, state updates
+
+# Verify initial count
+expect "Count: 0"
+
+# Verify button
+expect "Click Me"
+
+# Test clicking
+click "Click Me"
+expect "Count: 1"
+
+click "Click Me"
+expect "Count: 2"
+
+click "Click Me"
+click "Click Me"
+click "Click Me"
+expect "Count: 5"

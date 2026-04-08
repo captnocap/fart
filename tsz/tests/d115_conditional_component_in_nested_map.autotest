@@ -1,0 +1,29 @@
+# d115_conditional_component_in_nested_map: Conditional rendering of component that contains a map
+# Tests: component-with-map inside conditional inside another map
+
+# Verify title
+expect "Expandable Table"
+
+# Verify initial state
+expect "expanded: 0"
+expect "detail: 0"
+expect "clicks: 0"
+
+# Note: This test imports data from d115_conditional_component_in_nested_map.script.tsz
+# DetailPanel component contains a .map() and is conditionally rendered
+
+# Verify row expand indicators
+expect ">"
+
+# Test expanding a row
+# When expanded, shows "v" indicator and DetailPanel
+
+# Verify status indicators (colored dots)
+# Status 0 = gray, Status 1 = green, Status 2 = red
+
+# Verify DetailPanel shows when expanded
+expect "Details for:"
+
+# Test selecting a detail item
+
+# Verify detail selection state updates

@@ -1,0 +1,62 @@
+# d32_deep_nesting: 10 levels of nesting inside a map
+# Tests: arbitrary depth parsing
+
+# Verify title
+expect "Deep Nesting Test"
+
+# Verify cards from script data
+expect "Auth Redesign"
+expect "OAuth2 + PKCE flow"
+expect "Dark Mode"
+expect "Theme token system"
+expect "API Rate Limit"
+expect "Redis sliding window"
+expect "Mobile Nav"
+expect "Bottom sheet + gestures"
+expect "CI Pipeline"
+expect "Matrix builds + caching"
+
+# Verify assignees (single letters from script)
+expect "A"
+expect "B"
+expect "C"
+expect "D"
+expect "E"
+
+# Verify priority badges (based on priority value)
+# priority=2 -> HIGH, priority=1 -> MED, priority=0 -> LOW
+expect "HIGH"
+expect "MED"
+expect "LOW"
+
+# Verify team names
+expect "Platform"
+expect "Frontend"
+expect "Infra"
+
+# Verify tags
+expect "security"
+expect "design"
+expect "backend"
+expect "mobile"
+expect "devops"
+
+# Verify progress percentages
+expect "65%"
+expect "40%"
+expect "10%"
+expect "90%"
+expect "100%"
+
+# Verify View and Edit buttons
+expect "View"
+expect "Edit"
+
+# Click View and verify selection
+expect "selected:"
+click "View"
+expect "selected: Auth Redesign"
+
+# Click Edit on another card
+click "Edit" #3
+expect "selected: edit:API Rate Limit"

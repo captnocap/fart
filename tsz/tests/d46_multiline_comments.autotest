@@ -1,0 +1,32 @@
+# d46_multiline_comments: Multi-line comments /* ... */
+# Tests: block comments are correctly ignored by lexer
+
+# Verify title
+expect "Block Comments"
+
+# Verify initial count is 0
+expect "0"
+
+# Verify initial output from script: setOutput('ready')
+expect "ready"
+
+# Click +1 button
+click "+1"
+expect "1"
+expect "incremented to 1"
+
+# Click +1 again
+click "+1"
+expect "2"
+expect "incremented to 2"
+
+# Click +1 multiple times
+click "+1"
+click "+1"
+click "+1"
+expect "5"
+
+# Reset
+click "Reset"
+expect "0"
+expect "reset"

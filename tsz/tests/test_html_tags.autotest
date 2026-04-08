@@ -1,0 +1,15 @@
+# test_html_tags: HTML Tag Test
+# Tests: HTML tag compatibility (div, span, h1, section, nav, button, footer)
+
+# Verify title
+expect "HTML Tag Test"
+
+# Verify boxes
+expect "Red Box"
+expect "Teal Box"
+
+# Verify button
+expect "Click Me"
+
+# Verify footer
+expect "Footer text"

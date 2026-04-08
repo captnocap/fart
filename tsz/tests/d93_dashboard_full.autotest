@@ -1,0 +1,82 @@
+# d93_dashboard_full: Full dashboard — the final boss
+# Tests: combines EVERY pattern from every test
+
+# Verify sidebar and nav
+expect "Dashboard"
+expect "Overview"
+expect "Users"
+expect "Events"
+expect "Light"
+expect "3 new"
+
+# Verify sidebar toggle
+expect "◀"
+
+# Overview tab active by default - verify metrics
+expect "Users"
+expect "1420"
+expect "Revenue"
+expect "89400"
+expect "Orders"
+expect "342"
+expect "Tickets"
+expect "17"
+expect "Uptime"
+expect "99"
+expect "Latency"
+expect "42"
+
+# Verify delta indicators (+12%, +8%, -3%, -22%, 0%, +5%)
+expect "+12%"
+expect "+8%"
+expect "-3%"
+expect "-22%"
+expect "0%"
+expect "+5%"
+
+# Verify Recent Events section
+expect "Recent Events"
+expect "Deploy v2.4.1 completed"
+expect "Alert: CPU spike on worker-3"
+expect "User alice promoted to admin"
+expect "INFO"
+expect "ALERT"
+
+# Switch to Users tab
+click "Users"
+expect "Sort"
+expect "Active Only"
+expect "6 users"
+
+# Verify users list
+expect "Alice Chen"
+expect "admin"
+expect "Bob Kim"
+expect "dev"
+expect "ON"
+expect "OFF"
+
+# Toggle filter
+click "Active Only"
+expect "Show All"
+
+# Sort users
+click "Sort"
+expect "Sorted users"
+
+# Switch to Events tab
+click "Events"
+expect "Event Log"
+expect "+ Add"
+
+# Add an event
+click "+ Add"
+expect "Manual event"
+
+# Toggle dark mode
+click "Light"
+expect "Dark"
+
+# Toggle sidebar
+click "◀"
+expect "▶"

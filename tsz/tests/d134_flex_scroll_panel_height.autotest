@@ -1,0 +1,10 @@
+# d134_flex_scroll_panel_height: Flex scroll panel
+# Tests: scroll panel sizing
+
+// Verify renders
+expect "Flex Scroll"
+expect "Content"
+
+// Scroll
+click "Scroll Down"
+expect "scrolled: true"

@@ -1,0 +1,43 @@
+# d14_multiple_instances: Multiple instances of same component
+# Tests: each instance has independent state
+
+# Verify initial state
+expect "global clicks: 0"
+expect "Three counters — each must count independently"
+
+# Click Counter A three times
+click "+1"
+expect "1"
+click "+1"
+expect "2"
+click "+1"
+expect "3"
+
+# Counter B should still be at 0
+click "+1" #2
+expect "1"
+
+# Counter C should still be at 0
+click "+1" #3
+expect "1"
+
+# Global clicks should be 5 (3 + 1 + 1)
+expect "global clicks: 5"
+
+# Reset Counter A
+click "Reset"
+expect "0"
+
+# Counter B and C should be unchanged
+expect "global clicks: 6"
+
+# Test badges - click to dismiss
+click "Info"
+expect "dismissed"
+click "Success"
+expect "dismissed"
+
+# Test outer counters
+click "+1" #6
+click "+1" #7
+nexpect "global clicks: 8"

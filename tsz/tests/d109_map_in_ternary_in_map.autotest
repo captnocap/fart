@@ -1,0 +1,15 @@
+# d109_map_in_ternary_in_map: Map inside ternary inside map
+# Tests: nested .map() with ternary gate, dual-scope capture, template literals
+
+# Verify title
+expect "Accordion Sections"
+
+# Verify initial state
+expect "expanded: 0"
+expect "last: 0"
+
+# Note: This test imports data from d109_map_in_ternary_in_map.script.tsz
+# Sections are accordion panels that expand to show items
+
+# Test clicking a section header to expand
+# (Section data loaded from script import)

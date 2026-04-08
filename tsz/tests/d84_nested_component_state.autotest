@@ -1,0 +1,49 @@
+# d84_nested_component_state: Components with independent useState
+# Tests: child components with local state, parent + child coexistence
+
+# Verify initial state
+expect "Component State"
+expect "global: 0"
+expect "Section A"
+expect "Section B"
+expect "Section C"
+
+# Section A starts open (▼)
+expect "▼"
+
+# Click Section A to close
+click "Section A"
+expect "▶"
+expect "1 clicks"
+expect "global: 1"
+
+# Click Section B to open
+click "Section B"
+expect "▼" #2
+expect "1 clicks"
+expect "global: 2"
+
+# Click Section C
+click "Section C"
+expect "global: 3"
+
+# Click counters
+click "+"
+click "+" #2
+nclick "+" #3
+nexpect "global: 6"
+
+# Each counter should be independent
+click "+"
+expect "1"
+click "+"
+expect "2"
+
+# Reset one counter
+click "reset"
+expect "0"
+expect "global: 7"
+
+# Other counters unchanged
+click "+" #2
+expect "1"

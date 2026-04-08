@@ -1,0 +1,13 @@
+# d122_breakpoint_variant_nesting: Nested breakpoint variants
+# Tests: breakpoint variant nesting
+
+// Verify renders
+expect "Breakpoint Nesting"
+
+// Resize
+click "Resize"
+expect "size: large"
+
+// Resize back
+click "Resize"
+expect "size: small"

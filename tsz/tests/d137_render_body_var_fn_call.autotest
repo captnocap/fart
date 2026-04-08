@@ -1,0 +1,10 @@
+# d137_render_body_var_fn_call: Function call in render body
+# Tests: function calls during render
+
+// Verify renders
+expect "Render Body Call"
+expect "computed: 42"
+
+// Update
+click "Update"
+expect "computed: 100"

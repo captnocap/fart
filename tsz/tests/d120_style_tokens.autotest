@@ -1,0 +1,13 @@
+# d120_style_tokens: Style token system
+# Tests: design token integration
+
+// Verify tokens applied
+expect "Style Tokens"
+expect "Primary Button"
+
+// Click
+click "Action"
+expect "clicked: true"
+
+// Verify secondary button
+expect "Secondary Button"

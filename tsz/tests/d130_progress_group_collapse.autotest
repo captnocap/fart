@@ -1,0 +1,14 @@
+# d130_progress_group_collapse: Collapsible progress groups
+# Tests: group expand/collapse
+
+// Verify groups
+expect "Progress Groups"
+expect "Details"
+
+// Collapse
+click "Collapse"
+reject "Details"
+
+// Expand
+click "Expand"
+expect "Details"

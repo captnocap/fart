@@ -1,0 +1,13 @@
+# d129_message_type_dispatch: Message type dispatch
+# Tests: message routing by type
+
+// Verify renders
+expect "Message Dispatch"
+
+// Send message
+click "Send"
+expect "dispatched: true"
+
+// Send another type
+click "Send Alert"
+expect "type: alert"

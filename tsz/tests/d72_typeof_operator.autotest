@@ -1,0 +1,25 @@
+# d72_typeof_operator: typeof checks
+# Tests: typeof operator in expressions
+
+# Verify typeof checks work
+expect "Typeof"
+
+# Check string
+click "Check String"
+expect "type: string"
+
+# Check number
+click "Check Number"
+expect "type: number"
+
+# Check boolean
+click "Check Bool"
+expect "type: boolean"
+
+# Check object
+click "Check Object"
+expect "type: object"
+
+# Check undefined
+click "Check Undefined"
+expect "type: undefined"

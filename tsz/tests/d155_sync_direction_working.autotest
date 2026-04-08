@@ -1,0 +1,10 @@
+# d155_sync_direction_working: Working sync direction
+# Tests: functional sync direction
+
+// Verify renders
+expect "Sync Working"
+
+// Sync
+click "Sync"
+expect "synced: true"
+expect "status: complete"

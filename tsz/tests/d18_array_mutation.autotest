@@ -1,0 +1,43 @@
+# d18_array_mutation: Add and remove items from rendered list
+# Tests: array mutation and re-rendering
+
+# Verify title
+expect "Shopping List"
+
+# Verify initial items from script with format: `${i + 1}. ${item.label}`
+expect "1. Eggs"
+expect "2. Bread"
+expect "3. Milk"
+expect "4. Butter"
+
+# Verify last removed is empty initially
+expect "last removed:"
+
+# Add new items (cycles through: Cheese, Apples, Rice, Pasta, Juice, Coffee)
+click "Add Item"
+expect "5. Cheese"
+click "Add Item"
+expect "6. Apples"
+click "Add Item"
+expect "7. Rice"
+
+# Remove an item (removes by id, so click X on first item)
+click "X"
+expect "last removed: Eggs"
+reject "1. Eggs"
+
+# Remove another
+click "X"
+expect "last removed: Bread"
+reject "1. Bread"
+
+# Clear all
+click "Clear All"
+expect "last removed: all"
+reject "Milk"
+reject "Butter"
+reject "Cheese"
+
+# Add after clear
+click "Add Item"
+expect "1. Pasta"

@@ -1,0 +1,42 @@
+# d02_component_returning_map: Component returning a map directly
+# Tests: TagList component returns tags.map() as root JSX
+
+# Verify title renders
+expect "Tags"
+
+# Verify all tag names from script data
+expect "bug"
+expect "feature"
+expect "docs"
+expect "wontfix"
+expect "duplicate"
+
+# Verify initial picked state
+expect "picked: 0"
+
+# Click each tag and verify picked updates to index
+click "bug"
+expect "picked: 0"
+
+click "feature"
+expect "picked: 1"
+
+click "docs"
+expect "picked: 2"
+
+click "wontfix"
+expect "picked: 3"
+
+click "duplicate"
+expect "picked: 4"
+
+# Click back to verify state updates correctly
+click "bug"
+expect "picked: 0"
+
+# All tags still visible after interactions
+expect "bug"
+expect "feature"
+expect "docs"
+expect "wontfix"
+expect "duplicate"

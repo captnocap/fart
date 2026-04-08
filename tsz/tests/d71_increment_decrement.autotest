@@ -1,0 +1,29 @@
+# d71_increment_decrement: ++ and -- operators
+# Tests: increment/decrement syntax
+
+# Verify initial state
+expect "Increment/Decrement"
+expect "count: 0"
+
+# Test increment
+click "++"
+expect "count: 1"
+click "++"
+expect "count: 2"
+click "++"
+expect "count: 3"
+
+# Test decrement
+click "--"
+expect "count: 2"
+click "--"
+expect "count: 1"
+click "--"
+expect "count: 0"
+click "--"
+expect "count: -1"
+
+# Back to positive
+click "++"
+click "++"
+expect "count: 1"

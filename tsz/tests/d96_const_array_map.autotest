@@ -1,0 +1,125 @@
+# d96_const_array_map: .map() over top-level const object arrays
+# Tests: const arrays mapped in JSX, multiple const iteration contexts
+
+# Verify title
+expect "Const Array Map Test"
+
+# Verify initial state (0 clicks, no actions)
+expect "0 clicks"
+expect "nav:0 status:0 member: clicks:0"
+
+# Verify sidebar navigation (const array navItems)
+expect "Navigation"
+expect "Dashboard"
+expect "Projects"
+expect "Settings"
+expect "Help"
+
+# Verify icons
+expect "D"
+expect "P"
+expect "S"
+expect "?"
+
+# Verify status options (const array statusOptions)
+expect "Status Filter (const array)"
+expect "Open"
+expect "In Progress"
+expect "Closed"
+
+# Verify team members (const array teamMembers)
+expect "Team (const array)"
+expect "Alice"
+expect "Bob"
+expect "Carol"
+expect "Dave"
+expect "Eve"
+expect "Lead"
+expect "Dev"
+expect "Design"
+expect "QA"
+expect "DevOps"
+
+# Verify avatars
+expect "A"
+expect "B"
+expect "C"
+expect "D"
+expect "E"
+
+# Verify quick actions (const array quickActions)
+expect "Quick Actions (const array)"
+expect "New Project"
+expect "Search"
+expect "Import"
+expect "Export"
+expect "Refresh"
+
+# Verify action keys
+expect "N"
+expect "/"
+expect "I"
+expect "E"
+expect "R"
+
+# Verify priorities (const array priorities)
+expect "Priorities (const array in component context)"
+expect "Low"
+expect "Medium"
+expect "High"
+expect "Critical"
+expect "Level 0"
+expect "Level 1"
+expect "Level 2"
+expect "Level 3"
+
+# Test navigation interactions
+click "Projects"
+expect "1 clicks"
+expect "nav: Projects"
+
+click "Settings"
+expect "2 clicks"
+expect "nav: Settings"
+
+# Test status filter
+click "Open"
+expect "3 clicks"
+expect "status: Open"
+
+click "Closed"
+expect "4 clicks"
+expect "status: Closed"
+
+# Test team member selection
+click "Alice"
+expect "5 clicks"
+expect "member: Alice (Lead)"
+
+click "Bob"
+expect "6 clicks"
+expect "member: Bob (Dev)"
+
+click "Carol"
+expect "7 clicks"
+
+# Test quick actions
+click "New Project"
+expect "8 clicks"
+expect "action: New Project"
+
+click "Search"
+expect "9 clicks"
+expect "action: Search"
+
+# Test priority selection
+click "High"
+expect "10 clicks"
+expect "priority: High"
+
+click "Critical"
+expect "11 clicks"
+expect "priority: Critical"
+
+# Verify state summary reflects all interactions
+expect "nav:2 status:2 member:Carol clicks:11"

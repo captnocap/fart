@@ -1,0 +1,54 @@
+# d54_util_functions: Utility functions
+# Tests: helper functions at module level
+
+# Verify title
+expect "Utility Functions"
+
+# Verify products from script with template: `${item.price} ea · ${item.discount}% off`
+expect "Widget A"
+expect "1299 ea · 10% off"
+expect "Gadget B"
+expect "4999 ea · 0% off"
+expect "Tool C"
+expect "799 ea · 15% off"
+expect "Part D"
+expect "249 ea · 5% off"
+
+# Verify initial quantities
+expect "3"
+expect "1"
+expect "5"
+expect "10"
+
+# Verify +/- buttons
+expect "-"
+expect "+"
+
+# Cart total should be calculated by recalcCart() on init
+# Widget A: 1299 * 0.9 * 3 = 3507.3 -> 3507
+# Gadget B: 4999 * 1 * 1 = 4999
+# Tool C: 799 * 0.85 * 5 = 3395.75 -> 3395
+# Part D: 249 * 0.95 * 10 = 2365.5 -> 2365
+# Total: 14266 cents = $142.66
+expect "14266"
+expect "cart total: $142.66"
+
+# Add quantity
+click "+" # First + button for Widget A
+expect "4"
+
+# Recalculated total
+expect "cart total: $154.65"
+
+# Remove quantity
+click "-"
+expect "3"
+expect "cart total: $142.66"
+
+# Add to another product
+click "+" #3
+click "+" #3
+expect "7"
+
+# Cart should update
+expect "cart total: $176.62"

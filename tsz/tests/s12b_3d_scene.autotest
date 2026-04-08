@@ -1,0 +1,51 @@
+# s12b_3d_scene: 3D Scene — mixed tier
+# Tests: 3D projection, camera movement, object transforms
+
+# Verify title
+expect "3D Viewport"
+
+# Verify camera stats
+expect "cam(0,0,5)"
+expect "rot=0"
+expect "s=1"
+
+# Verify control buttons
+expect "←"
+expect "▲ Fwd"
+expect "▼ Back"
+expect "→"
+expect "↺ Rot"
+expect "- Scale"
+expect "+ Scale"
+expect "Rot ↻"
+expect "Reset"
+
+# Verify scene label
+expect "Scene3D"
+
+# Test camera movement
+click "▲ Fwd"
+expect "cam(0,0,4)"
+
+click "▼ Back"
+expect "cam(0,0,5)"
+
+# Test rotation
+click "↺ Rot"
+expect "rot=-15"
+
+click "Rot ↻"
+expect "rot=0"
+
+# Test scaling
+click "+ Scale"
+expect "s=1.25"
+
+click "- Scale"
+expect "s=1"
+
+# Test reset
+click "Reset"
+expect "cam(0,0,5)"
+expect "rot=0"
+expect "s=1"

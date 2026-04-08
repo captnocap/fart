@@ -1,0 +1,55 @@
+# ifttt_lab: IFTTT Function Builder & Capability Demo
+# Tests: useIFTTT triggers (mount, timer, key, condition, click), actions, FFI
+
+# Verify title
+expect "IFTTT Lab"
+
+# Verify system info
+expect "PID"
+expect "Boot"
+expect "FPS"
+
+# Verify trigger sections
+expect "Triggers + Actions"
+expect "timer:every:1000"
+expect "Ticks: 0"
+expect "RUNNING"
+
+expect "condition: ticks > 10"
+expect "Fired: 0x"
+
+expect "key:WASD + Space + R"
+expect "Last: 0"
+
+expect "key:C chain composition"
+expect "Chain: 0"
+
+expect "timer:every:100 mouse poll"
+expect "Zone: 0"
+
+expect "timer:once:2000 (FFI)"
+
+# Verify FFI + Network section
+expect "key:F fetch | key:Tab exec uname"
+
+# Verify Event Log section
+expect "Event Log"
+
+# Verify Controls section
+expect "SPACE  toggle pause"
+expect "WASD   key triggers"
+expect "F      fetch network"
+expect "C      chain compose"
+expect "Tab    exec uname -r"
+expect "R      reset counters"
+
+# Verify connected features
+expect "Connected"
+expect "key:space  named keys"
+expect "key:ctrl+s  combos"
+
+# Verify not yet implemented
+expect "Not Yet"
+expect "gamepad triggers"
+expect "midi triggers"
+expect "cross-cart rules"

@@ -1,0 +1,19 @@
+# d78_for_in: For-in loops
+# Tests: for-in over objects
+
+# Verify for-in works
+expect "For-In"
+
+# List keys
+click "List Keys"
+expect "keys: 3"
+expect "name"
+expect "age"
+
+# List values
+click "List Values"
+expect "values: Alice, 25, true"
+
+# Build map from object
+click "To Map"
+expect "pairs: 3"

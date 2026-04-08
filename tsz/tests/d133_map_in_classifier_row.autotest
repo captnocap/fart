@@ -1,0 +1,14 @@
+# d133_map_in_classifier_row: Map inside classifier row
+# Tests: map inside classifier component
+
+// Verify renders
+expect "Map in Classifier"
+expect "Item"
+
+// Click
+click "Item"
+expect "selected: Item"
+
+// Click another
+click "Item" #2
+expect "selected: Item 2"

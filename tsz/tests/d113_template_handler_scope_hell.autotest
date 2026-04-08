@@ -1,0 +1,44 @@
+# d113_template_handler_scope_hell: Template literal + handler expression scope hell
+# Tests: template literals combining 5+ variable sources, handlers with 5+ captures
+
+# Verify counter control
+expect "counter: 0"
+
+# Verify mode toggle
+expect "normal"
+
+# Verify calc display
+expect "calc: 0"
+
+# Note: This test imports data from d113_template_handler_scope_hell.script.tsz
+# Template literals combine: global counter/mode, outer map (group), inner map (entry)
+# Handler captures: gi, ei, group.weight, entry.val, counter
+
+# Test incrementing counter
+click "counter: 0"
+expect "counter: 1"
+
+# Test mode toggle
+click "normal"
+expect "debug"
+
+# In debug mode, should show scope variables
+expect "gi="
+expect "ei="
+expect "w="
+expect "v="
+expect "c="
+
+# Toggle back to normal
+click "debug"
+expect "normal"
+
+# Verify group headers format: [gi] label (w=weight)
+expect "(w="
+expect ")"
+
+# Verify entry format: group/entry: val=
+expect "val="
+
+# Verify score calculation display
+expect "score:"

@@ -1,0 +1,48 @@
+# d08_map_classifier_components: Map calling user component with props
+# Tests: component invocation inside map, prop forwarding from map closure
+
+# Verify title
+expect "Status Board"
+
+# Verify all card titles from script
+expect "Database"
+expect "API Gateway"
+expect "Cache"
+expect "CDN"
+expect "Auth"
+
+# Verify badges rendered by Badge component based on kind
+# kind=0 -> OK, kind=1 -> WARN, kind=2 -> CRIT
+expect "OK: 99"
+expect "WARN: 47"
+expect "CRIT: 12"
+expect "OK: 100"
+expect "WARN: 65"
+
+# Verify initial active state
+expect "active: 0"
+
+# Click each card and verify active updates to index
+click "Database"
+expect "active: 0"
+
+click "API Gateway"
+expect "active: 1"
+
+click "Cache"
+expect "active: 2"
+
+click "CDN"
+expect "active: 3"
+
+click "Auth"
+expect "active: 4"
+
+# Click back to first
+click "Database"
+expect "active: 0"
+
+# Verify badges still show after interactions
+expect "OK: 99"
+expect "WARN: 47"
+expect "CRIT: 12"

@@ -1,0 +1,14 @@
+# d146_permission_rule_list: Permission rules
+# Tests: permission list management
+
+// Verify renders
+expect "Permission Rules"
+expect "rules: 2"
+
+// Add rule
+click "Add Rule"
+expect "rules: 3"
+
+// Remove rule
+click "Remove"
+expect "rules: 2"

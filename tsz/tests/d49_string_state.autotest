@@ -1,0 +1,46 @@
+# d49_string_state: String state and comparisons
+# Tests: string useState, equality, filtering
+
+# Verify initial state
+expect "String State"
+expect "tab: home"
+expect "7 shown"
+
+# Click different tabs
+click "Admin"
+expect "tab: admin"
+expect "visibleCount: 3"
+
+click "Dev"
+expect "tab: dev"
+expect "visibleCount: 2"
+
+click "Home"
+expect "tab: home"
+expect "visibleCount: 2"
+
+click "All"
+expect "tab: all"
+expect "visibleCount: 7"
+
+# Search
+click "Search \"User\""
+expect "query: User"
+expect "visibleCount: 1"
+expect "User List"
+
+# Search for API
+click "Search \"API\""
+expect "query: API"
+expect "API Keys"
+
+# Clear search
+click "Clear"
+expect "query:"
+expect "visibleCount: 7"
+
+# Verify items change based on tab
+click "Dev"
+reject "Dashboard"
+expect "API Keys"
+expect "Webhooks"

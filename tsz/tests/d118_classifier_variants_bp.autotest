@@ -1,0 +1,13 @@
+# d118_classifier_variants_bp: Classifier variants with breakpoints
+# Tests: responsive classifier variants
+
+// Verify renders
+expect "Classifier Variants"
+
+// Toggle
+click "Toggle"
+expect "variant: compact"
+
+// Toggle back
+click "Toggle"
+expect "variant: full"

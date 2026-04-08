@@ -1,0 +1,44 @@
+# d09_nested_template_scope: Template literal scope in nested maps
+# Tests: template literal interpolation with item fields, index, outer state
+
+# Verify initial offset from script: setOffset(100)
+expect "offset: 100"
+
+# Verify rows render with template: `[${ri}] ${row.label}: x=${row.x} y=${row.y} sum=${row.x + row.y + ri + offset}`
+# Calculations: x + y + ri + offset (100)
+# point-a: 10 + 20 + 0 + 100 = 130
+# point-b: 30 + 40 + 1 + 100 = 171
+# point-c: 50 + 60 + 2 + 100 = 212
+# point-d: 70 + 80 + 3 + 100 = 253
+expect "[0] point-a: x=10 y=20 sum=130"
+expect "[1] point-b: x=30 y=40 sum=171"
+expect "[2] point-c: x=50 y=60 sum=212"
+expect "[3] point-d: x=70 y=80 sum=253"
+
+# Click rows and verify log calculation: row.x + row.y + ri + offset
+click "[0] point-a"
+expect "log: 130"
+
+click "[1] point-b"
+expect "log: 171"
+
+click "[2] point-c"
+expect "log: 212"
+
+click "[3] point-d"
+expect "log: 253"
+
+# Increase offset (100 -> 101)
+click "offset: 100"
+expect "offset: 101"
+
+# Sums should update in display
+expect "[0] point-a: x=10 y=20 sum=131"
+
+# Click with new offset
+click "[0] point-a"
+expect "log: 131"
+
+click "[3] point-d"
+# New calculation: 70 + 80 + 3 + 101 = 254
+expect "log: 254"

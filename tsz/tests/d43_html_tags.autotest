@@ -1,0 +1,44 @@
+# d43_html_tags: HTML tag resolution
+# Tests: HTML tags mapped to TSZ primitives
+
+# Verify title (h1)
+expect "HTML Tags Test"
+
+# Verify paragraph text
+expect "This uses div, h1, p, span, button, ul, li"
+
+# Verify section headings (h2, h3)
+expect "Navigation"
+expect "Feature List"
+
+# Verify buttons
+expect "Home"
+expect "About"
+expect "Contact"
+
+# Verify click counter initially
+expect "0 clicks"
+
+# Click buttons
+click "Home"
+expect "1 clicks"
+
+click "About"
+expect "2 clicks"
+
+click "Contact"
+expect "3 clicks"
+
+# Verify last clicked tracking
+expect "last clicked: contact"
+
+# Click Home again
+click "Home"
+expect "last clicked: home"
+
+# Verify list items (li elements)
+expect "✓"
+expect "div → Box"
+expect "span/p/h1 → Text"
+expect "button → Pressable"
+expect "section/article/nav/header → Box"

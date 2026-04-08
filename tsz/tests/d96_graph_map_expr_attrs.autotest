@@ -1,0 +1,11 @@
+# d96_graph_map_expr_attrs: Graph map expression attributes
+# Tests: Graph props accepting mapped member access like token.zoom inside .map()
+
+# Verify title
+expect "d96 graph map expr attrs"
+
+# Verify description
+expect "Graph props should accept mapped member access like token.zoom inside a .map() template."
+
+# Note: This test renders 3 Graph components with different viewZoom values
+# based on token.zoom from the mapped array [0.24, 0.48, 0.96]

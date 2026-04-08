@@ -1,0 +1,35 @@
+# d69_chat_ui: Chat interface
+# Tests: array append, scroll list, sender-based alignment
+
+# Verify initial messages
+expect "Chat"
+expect "3 messages"
+expect "Hey, how is the project going?"
+expect "Pretty good! Just passed 45 conformance tests"
+expect "Nice. Any blockers?"
+
+# Send message as me
+click "Send (me)"
+expect "4 messages"
+expect "Working on it!"
+
+# Send message as them
+click "Send (them)"
+expect "5 messages"
+
+# Send more messages
+click "Send (me)"
+expect "6 messages"
+click "Send (them)"
+expect "7 messages"
+
+# Clear chat
+click "Clear"
+expect "0 messages"
+expect "No messages yet"
+reject "Hey, how is the project going?"
+
+# Send after clear
+click "Send (me)"
+expect "1 messages"
+expect "Tests passing now"

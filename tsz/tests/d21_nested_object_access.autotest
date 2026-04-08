@@ -1,0 +1,41 @@
+# d21_nested_object_access: Deeply nested object field access in map
+# Tests: items have nested objects accessed in templates, styles, conditionals
+
+# Verify title
+expect "Team"
+
+# Verify users from script data - names shown in Text with color={user.config.theme.fg}
+expect "Alice"
+expect "Bob"
+expect "Carol"
+expect "Dave"
+
+# Verify stats display with template: `${user.stats.posts} posts · ${user.stats.likes} likes`
+# Alice: posts=142, likes=891
+# Bob: posts=37, likes=203
+# Carol: posts=256, likes=1420
+# Dave: posts=8, likes=12
+expect "142 posts · 891 likes"
+expect "37 posts · 203 likes"
+expect "256 posts · 1420 likes"
+expect "8 posts · 12 likes"
+
+# Verify ADMIN badge shown for users with role==1 (Alice and Carol)
+expect "ADMIN"
+
+# Verify layout info shown for non-compact users (compact==0): `${user.config.layout.cols}-col layout`
+# Alice: 3-col, Carol: 4-col, Dave: 1-col (Bob has compact=1 so no layout shown)
+expect "3-col layout"
+expect "4-col layout"
+expect "1-col layout"
+
+# Click users and verify selection
+expect "selected:"
+click "Alice"
+expect "selected: Alice"
+
+click "Bob"
+expect "selected: Bob"
+
+click "Carol"
+expect "selected: Carol"

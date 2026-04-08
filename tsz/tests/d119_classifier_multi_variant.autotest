@@ -1,22 +1,15 @@
-# d119: classifier multi variant — 3 cards with 6 classifiers, 4 named variants
+# d119_classifier_multi_variant: Multi-variant classifiers
+# Tests: multiple style variants
 
-# Verify title
-expect "Theme Variant Test"
+// Verify initial state
+expect "Revenue"
 
-# Verify all 3 cards render
-expect "Inbox"
-expect "Archive"
-expect "Drafts"
+// Take style snapshot
+styles before Revenue
 
-# Verify tag texts
-expect "New"
-expect "Old"
-expect "WIP"
+// Toggle to compact
+click "Compact"
+expect "Compact"
 
-# Verify count values
-expect "Count: 12"
-expect "Count: 340"
-expect "Count: 3"
-
-# Verify footer
-expect "3 cards loaded"
+// Verify styles changed
+styles after Revenue

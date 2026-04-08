@@ -1,0 +1,13 @@
+# d142_messages_filter_chain: Message filter chain
+# Tests: chained filter operations
+
+// Verify renders
+expect "Message Filter"
+
+// Apply filter
+click "Apply"
+expect "result: 3"
+
+// Apply stricter filter
+click "Strict"
+expect "result: 1"

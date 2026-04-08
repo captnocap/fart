@@ -1,0 +1,45 @@
+# d37_destructuring: Object and array destructuring
+# Tests: destructuring patterns in params and loops
+
+# Verify title
+expect "Destructuring Test"
+
+# Verify buttons
+expect "Sum Active"
+expect "Find Farthest"
+
+# Verify points from script data shown with template: `(${x}, ${y})`
+expect "Origin"
+expect "(0, 0)"
+expect "TopRight"
+expect "(100, 100)"
+expect "Center"
+expect "(50, 50)"
+expect "BottomLeft"
+expect "(-30, -40)"
+
+# Active indicators (active==1 shows green dot, active==0 shows gray)
+# Origin, TopRight, BottomLeft are active; Center is not
+
+# Click points and verify selection with template: name + ' (' + x + ',' + y + ')'
+expect "selected:"
+click "Origin"
+expect "selected: Origin (0,0)"
+
+click "TopRight"
+expect "selected: TopRight (100,100)"
+
+click "Center"
+expect "selected: Center (50,50)"
+
+click "BottomLeft"
+expect "selected: BottomLeft (-30,-40)"
+
+# Sum active points (Origin: 0+0, TopRight: 100+100, BottomLeft: -30+-40 = 130)
+click "Sum Active"
+expect "total: 130"
+expect "selected: active sum = 130"
+
+# Find farthest from origin (TopRight has max distance: 100*100+100*100=20000)
+click "Find Farthest"
+expect "selected: farthest: TopRight d2=20000"

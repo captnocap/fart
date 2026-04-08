@@ -1,0 +1,14 @@
+# d123_theme_hydra: Theme switching complexity
+# Tests: multi-theme system
+
+// Verify initial theme
+expect "Theme Hydra"
+expect "theme: light"
+
+// Switch theme
+click "Switch Theme"
+expect "theme: dark"
+
+// Switch again
+click "Switch Theme"
+expect "theme: light"

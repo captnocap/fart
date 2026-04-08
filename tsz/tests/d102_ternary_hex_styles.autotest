@@ -1,0 +1,14 @@
+# d102_ternary_hex_styles: Ternary with hex colors
+# Tests: hex color values in ternary
+
+// Verify initial color
+expect "Ternary Hex"
+expect "Color: #ff0000"
+
+// Toggle
+click "Toggle"
+expect "Color: #00ff00"
+
+// Toggle back
+click "Toggle"
+expect "Color: #ff0000"

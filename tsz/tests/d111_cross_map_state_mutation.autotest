@@ -1,0 +1,32 @@
+# d111_cross_map_state_mutation: Cross-map state mutation
+# Tests: sibling maps with shared state, handlers affect other map's conditionals
+
+# Verify headers
+expect "Sources"
+expect "Targets"
+
+# Verify initial state
+expect "sel: 0"
+expect "clicks: 0"
+expect "src: 0"
+
+# Note: This test imports data from d111_cross_map_state_mutation.script.tsz
+# Two sibling maps share state - clicking one affects the other's rendering
+
+# Test clicking in Sources (left) map
+# Should update selectedLeft and show cross-map mirror when indices match
+
+# Test clicking in Targets (right) map
+# Should update selectedRight and show cross-map mirror when indices match
+
+# Verify ACTIVE label appears on selected items
+expect "ACTIVE"
+
+# Verify mirror message when indices match
+expect "MIRROR: right also has this index"
+expect "MIRROR: left also has this index"
+
+# Verify priority labels in Targets
+expect "low"
+expect "med"
+expect "high"

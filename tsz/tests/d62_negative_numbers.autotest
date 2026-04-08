@@ -1,0 +1,45 @@
+# d62_negative_numbers: Negative numbers and float state
+# Tests: negative literals, arithmetic with negatives
+
+# Verify title
+expect "Negatives & Floats"
+
+# Calculate balance from script:
+# 5000 + (-1200) + 3500 + (-280) + 150 + (-95) + 800 + (-450) = 7025
+expect "7025"
+
+# Verify transactions with negative amounts
+expect "Deposit"
+expect "5000"
+expect "Rent"
+expect "-1200"
+expect "Salary"
+expect "3500"
+expect "Groceries"
+expect "-280"
+expect "Refund"
+expect "150"
+expect "Electric"
+expect "-95"
+expect "Side gig"
+expect "800"
+expect "Insurance"
+expect "-450"
+
+# Verify green for positive, red for negative amounts
+
+# Add negative transaction
+click "-$5 Coffee"
+expect "-5"
+expect "7020"
+expect "added Coffee: -5 → 7020"
+
+# Add positive transaction
+click "+$20 Tip"
+expect "20"
+expect "7040"
+expect "added Tip: 20 → 7040"
+
+# Add larger negative
+click "-$300 Bill"
+expect "6740"

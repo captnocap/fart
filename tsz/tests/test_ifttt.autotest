@@ -1,0 +1,21 @@
+# test_ifttt: Smoke test for useIFTTT in all three tiers
+# Tests: mount trigger, timer trigger, key trigger, condition trigger
+
+# Verify title
+expect "IFTTT Test"
+
+# Verify initial state
+expect "Count: 0"
+expect "RUNNING"
+
+# Verify instructions
+expect "Press SPACE to toggle pause"
+
+# Note: This test uses useIFTTT hooks for:
+# - mount: log on mount
+# - timer:every:1000: increment count
+# - key:44 (space): toggle paused state
+# - condition: log when count > 5
+
+# The count auto-increments via timer
+# PAUSED state toggled via space key

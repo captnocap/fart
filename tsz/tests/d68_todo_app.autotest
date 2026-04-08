@@ -1,0 +1,60 @@
+# d68_todo_app: Classic TodoMVC
+# Tests: CRUD, filtering, derived counts, toggle all
+
+# Verify initial todos
+expect "todos"
+expect "All (4)"
+expect "Active (2)"
+expect "Done (2)"
+expect "[x] Learn TSZ"
+expect "[x] Write conformance tests"
+expect "[ ] Pass all tests"
+expect "[ ] Ship v1"
+
+# Toggle a todo
+click "[x] Learn TSZ"
+expect "[ ] Learn TSZ"
+expect "Active (3)"
+expect "Done (1)"
+
+# Toggle back
+click "[ ] Learn TSZ"
+expect "[x] Learn TSZ"
+expect "Active (2)"
+expect "Done (2)"
+
+# Remove a todo
+click "X"
+reject "Learn TSZ"
+expect "All (3)"
+
+# Add a new todo
+click "Add"
+expect "New task 4"
+expect "All (4)"
+expect "Active (3)"
+
+# Filter to Active only
+click "Active (3)"
+reject "[x]"
+expect "[ ] Write conformance tests"
+
+# Filter to Done only
+click "Done (2)"
+expect "[x]"
+reject "[ ]"
+
+# Back to All
+click "All (4)"
+
+# Toggle All
+click "Toggle All"
+expect "[x]"
+
+# Toggle All again
+click "Toggle All"
+expect "[ ]"
+
+# Clear completed
+click "Clear Done"
+expect "All (2)"

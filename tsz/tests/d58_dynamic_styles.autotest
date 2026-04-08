@@ -1,0 +1,57 @@
+# d58_dynamic_styles: Dynamic style values from state
+# Tests: state-driven width, height, padding, borderRadius
+
+# Verify title
+expect "Dynamic Styles"
+
+# Verify control buttons with initial values
+expect "Size: 60"
+expect "Radius: 8"
+expect "Pad: 12"
+expect "Color: 0"
+
+# Verify main box shows size
+expect "60x60"
+
+# Verify derived box
+expect "derived"
+
+# Verify status line
+expect "size:60 radius:8 pad:12 color:0"
+
+# Click Size button to increase
+click "Size: 60"
+expect "Size: 80"
+expect "80x80"
+
+# Click again
+click "Size: 80"
+expect "Size: 100"
+
+# Click Radius
+click "Radius: 8"
+expect "Radius: 14"
+
+# Click Padding
+click "Pad: 12"
+expect "Pad: 16"
+
+# Click Color to cycle (0->1->2->3->4->0)
+click "Color: 0"
+expect "Color: 1"
+
+click "Color: 1"
+expect "Color: 2"
+
+click "Color: 2"
+expect "Color: 3"
+
+click "Color: 3"
+expect "Color: 4"
+
+click "Color: 4"
+expect "Color: 0"
+
+# Verify all three bars with width multipliers
+# width: size*3, size*2, size
+# At size=80: 240, 160, 80

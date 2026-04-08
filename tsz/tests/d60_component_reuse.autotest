@@ -1,0 +1,54 @@
+# d60_component_reuse: Heavy component reuse (16 instances)
+# Tests: same Metric component used 12 times, Dot 8 times
+
+# Verify title
+expect "Component Reuse (16 instances)"
+
+# Verify initial state
+expect "active: 0"
+expect "clicks: 0"
+
+# Verify all Metric instances with different props
+expect "CPU"
+expect "72"
+expect "Memory"
+expect "58"
+expect "Disk"
+expect "91"
+expect "Network"
+expect "34"
+expect "GPU"
+expect "45"
+expect "Threads"
+expect "128"
+expect "Handles"
+expect "892"
+expect "Uptime"
+expect "99"
+expect "Latency"
+expect "12"
+expect "Errors"
+expect "3"
+expect "Queue"
+expect "47"
+expect "Cache"
+expect "86"
+
+# Click metrics and verify active state
+click "72"
+expect "active: 1"
+expect "clicks: 1"
+expect "selected"
+
+click "58"
+expect "active: 2"
+expect "clicks: 2"
+
+click "128"
+expect "active: 6"
+expect "clicks: 3"
+
+# Click more
+click "892"
+expect "active: 7"
+expect "clicks: 4"

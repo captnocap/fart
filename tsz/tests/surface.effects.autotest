@@ -1,0 +1,9 @@
+# surface.effects: Named effect sources — reusable render materials
+# Tests: Effect definitions with math.* patterns (plasma, turbulence, waves, etc.)
+
+# Note: This file defines named effect sources that can be referenced by other components
+# Effects: plasma, lava, ocean
+# Math utilities: math.plasma, math.turbulence, math.waves, math.hue, math.ramp
+
+# This is an effects definition file - no interactive elements to test
+# Effects are used by other carts via fillEffect="plasma" etc.

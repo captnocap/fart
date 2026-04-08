@@ -1,0 +1,13 @@
+# d139_fallback_in_classifier: Fallback content in classifier
+# Tests: default/fallback content
+
+// Verify renders
+expect "Classifier Fallback"
+
+// Click missing
+click "Missing"
+expect "fallback shown"
+
+// Click present
+click "Present"
+expect "content shown"

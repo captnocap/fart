@@ -1,0 +1,38 @@
+# d114_mode_switch_component_swap: Handler cascade — mode switch swaps entire component tree
+# Tests: ternary selecting between 3 different components, each with own map and handlers
+
+# Verify view tabs
+expect "List"
+expect "Grid"
+expect "Table"
+
+# Verify initial state (List view active)
+expect "sel: 0"
+expect "log: 0"
+
+# Note: This test imports data from d114_mode_switch_component_swap.script.tsz
+# Three view components: ListView, GridView, TableView
+
+# Verify List view styling (blue)
+# List view has horizontal row layout
+
+# Switch to Grid view
+click "Grid"
+expect "Grid"
+
+# Grid view adds +10 to log
+
+# Switch to Table view
+click "Table"
+expect "Table"
+
+# Table view adds +100 to log
+# Table has column headers
+expect "#"
+expect "Name"
+expect "Value"
+expect "Category"
+
+# Switch back to List
+click "List"
+expect "List"

@@ -1,0 +1,27 @@
+# d35_jsx_fragments: Fragment syntax <>...</>
+# Tests: fragments as root and nested
+
+# Verify initial state
+expect "Fragments"
+expect "count: 0"
+expect "items: 0"
+
+# Add items
+click "Add Item"
+expect "count: 1"
+expect "items: 1"
+
+click "Add Item"
+expect "count: 2"
+expect "items: 2"
+
+click "Add Item"
+expect "count: 3"
+
+# Remove items
+click "Remove"
+expect "count: 2"
+
+click "Remove"
+click "Remove"
+expect "count: 0"

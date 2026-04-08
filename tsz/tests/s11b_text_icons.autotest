@@ -1,0 +1,25 @@
+# s11b_text_icons: Text Icons — mixed tier
+# Tests: inline decorative elements, text with colored indicators
+
+# Verify title
+expect "Text with Inline Decorative Elements"
+
+# Verify word list
+expect "Launch"
+expect "Warning"
+expect "Success"
+expect "Delete"
+expect "Info"
+
+# Verify inline runs section
+expect "Inline runs:"
+expect "Status:"
+expect "Online"
+expect "Away"
+expect "Offline"
+
+# Test toggling items
+click "Launch"
+expect "selected"
+
+click "Success"

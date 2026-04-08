@@ -1,0 +1,16 @@
+# d76_new_expression: New keyword
+# Tests: new expressions for objects
+
+# Verify new expressions work
+expect "New Expression"
+expect "created: false"
+
+# Create object
+click "Create"
+expect "created: true"
+expect "date:"
+
+# Create multiple
+click "Create"
+click "Create"
+expect "created: true"

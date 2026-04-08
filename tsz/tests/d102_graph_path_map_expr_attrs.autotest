@@ -1,0 +1,7 @@
+# d102_graph_path_map_expr_attrs: Graph path expressions
+# Tests complex path expressions
+
+expect "Graph Path"
+expect "Node A"
+click "Node A"
+expect "selected: A"

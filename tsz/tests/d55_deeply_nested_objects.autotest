@@ -1,0 +1,49 @@
+# d55_deeply_nested_objects: Deeply nested object field access
+# Tests: 3-4 level deep property access
+
+# Verify title
+expect "Deep Object Access"
+
+# Verify apps from script
+expect "Dashboard"
+expect "Analytics"
+expect "Legacy CRM"
+
+# Verify status badges
+expect "LIVE"
+expect "DOWN"
+
+# Verify stats with templates
+# Dashboard: 1420 users, $89000 rev, 12% growth
+expect "1420 users"
+expect "$89000"
+expect "12%"
+
+# Analytics: 530 users, $42000 rev, 8% growth
+expect "530 users"
+expect "$42000"
+expect "8%"
+
+# Legacy CRM: 90 users, $5000 rev, -3% growth (negative shows red)
+expect "90 users"
+expect "$5000"
+expect "-3%"
+
+# Verify layout info with template: `layout: ${a.config.layout.cols}col, gap:${a.config.layout.gap}`
+expect "layout: 3col, gap:16"
+expect "layout: 2col, gap:24"
+expect "layout: 1col, gap:8"
+
+# Verify initial selection
+expect "selected:"
+expect "detail:"
+
+# Click Dashboard
+click "Dashboard"
+expect "selected: Dashboard"
+expect "Dashboard: 1420 users, $89000 rev, 12% growth"
+
+# Click Legacy CRM
+click "Legacy CRM"
+expect "selected: Legacy CRM"
+expect "Legacy CRM: 90 users, $5000 rev, -3% growth"

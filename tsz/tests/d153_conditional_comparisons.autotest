@@ -1,0 +1,17 @@
+# d153_conditional_comparisons: Comparison operators
+# Tests: comparison word operators
+
+// Verify renders
+expect "Comparisons"
+
+// Check comparisons
+click "Check"
+expect "result: true"
+
+// Check above
+click "Above"
+expect "above: true"
+
+// Check below
+click "Below"
+expect "below: true"
