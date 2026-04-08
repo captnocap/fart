@@ -1,124 +1,80 @@
 // Cursor IDE — Agentic coding environment (Cursor clone)
-// Extended: SQLite project index, FS watch, HTTP agent API, PTY terminal, Canvas viz
+// Real file editing, icons, line numbers, create/save
 
 import { Sidebar } from './Sidebar.c';
-import { Editor, Minimap } from './Editor.c';
+import { Editor } from './Editor.c';
 import { ChatPanel } from './ChatPanel.c';
 import { StatusBar } from './StatusBar.c';
-import { TopBar, Breadcrumbs } from './TopBar.c';
+import { TopBar } from './TopBar.c';
 import { TabBar } from './TabBar.c';
 import { TerminalPanel } from './Terminal.c';
-import { AgentTools } from './AgentTools.c';
-import { CanvasViz } from './CanvasViz.c';
 import { SearchPanel } from './SearchPanel.c';
-import { initData, selectFile, activateTab, closeTab, setCurrentInput, sendMessage, openTerminal, execCommand, searchProject, indexProject, fetchAgent } from './cursor.script';
+import { initData, selectFile, activateTab, closeTab, openFile, setCurrentInput, sendMessage, openTerminal, execCommand, searchProject, indexProject, fetchAgent, saveCurrentFile, createNewFile, updateEditorContent } from './cursor.script';
 
 import {
   Shell, Workspace, Editor as EditorShell, Sidebar as SidebarShell, ChatPanel as ChatPanelShell,
   TopBar as TopBarShell, TabBar as TabBarShell, Breadcrumbs as BreadcrumbsShell, StatusBar as StatusBarShell,
-  TerminalPanel as TerminalPanelShell, AgentTools as AgentToolsShell, SearchPanel as SearchPanelShell
+  TerminalPanel as TerminalPanelShell, SearchPanel as SearchPanelShell
 } from './cursor_cls';
 
 // === CORE STATE ===
 const [activeTabId, setActiveTabId] = useState('1');
 const [currentInput, setCurrentInputState] = useState('');
 const [isGenerating, setIsGenerating] = useState(0);
-const [cursorPosition, setCursorPosition] = useState({ line: 10, column: 24 });
+const [cursorPosition, setCursorPosition] = useState({ line: 1, column: 1 });
 const [ready, setReady] = useState(0);
 
 // === PANEL VISIBILITY ===
 const [showChat, setShowChat] = useState(1);
 const [showTerminal, setShowTerminal] = useState(0);
 const [showSearch, setShowSearch] = useState(0);
-const [showAgentTools, setShowAgentTools] = useState(0);
-const [showCanvasViz, setShowCanvasViz] = useState(0);
 
 // === FILE TREE STATE ===
 const [files, setFiles] = useState([
-  { name: 'cursor-ide', indent: 0, icon: 'folderOpen', selected: 0 },
-  { name: 'src', indent: 1, icon: 'folder', selected: 0 },
-  { name: 'components', indent: 2, icon: 'folderOpen', selected: 0 },
-  { name: 'Sidebar.tsx', indent: 3, icon: 'tsx', selected: 1 },
-  { name: 'Editor.tsx', indent: 3, icon: 'tsx', selected: 0 },
-  { name: 'ChatPanel.tsx', indent: 3, icon: 'tsx', selected: 0 },
-  { name: 'StatusBar.tsx', indent: 3, icon: 'tsx', selected: 0 },
-  { name: 'Terminal.tsx', indent: 3, icon: 'tsx', selected: 0 },
-  { name: 'AgentTools.tsx', indent: 3, icon: 'tsx', selected: 0 },
-  { name: 'CanvasViz.tsx', indent: 3, icon: 'tsx', selected: 0 },
-  { name: 'hooks', indent: 2, icon: 'folder', selected: 0 },
-  { name: 'useAgent.ts', indent: 3, icon: 'ts', selected: 0 },
-  { name: 'useFSWatch.ts', indent: 3, icon: 'ts', selected: 0 },
-  { name: 'useSQLite.ts', indent: 3, icon: 'ts', selected: 0 },
-  { name: 'utils', indent: 1, icon: 'folder', selected: 0 },
-  { name: 'index.ts', indent: 2, icon: 'ts', selected: 0 },
-  { name: 'styles', indent: 1, icon: 'folder', selected: 0 },
-  { name: 'theme.css', indent: 2, icon: 'css', selected: 0 },
-  { name: 'package.json', indent: 1, icon: 'json', selected: 0 },
-  { name: 'README.md', indent: 1, icon: 'md', selected: 0 },
-  { name: 'tsconfig.json', indent: 1, icon: 'json', selected: 0 },
+  { name: 'cursor-ide', type: 'dir', indent: 0, expanded: 1, selected: 0, path: '.' },
+  { name: 'src', type: 'dir', indent: 1, expanded: 1, selected: 0, path: 'src' },
+  { name: 'components', type: 'dir', indent: 2, expanded: 1, selected: 0, path: 'src/components' },
+  { name: 'Sidebar.tsx', type: 'tsx', indent: 3, selected: 1, path: 'src/components/Sidebar.tsx' },
+  { name: 'Editor.tsx', type: 'tsx', indent: 3, selected: 0, path: 'src/components/Editor.tsx' },
+  { name: 'ChatPanel.tsx', type: 'tsx', indent: 3, selected: 0, path: 'src/components/ChatPanel.tsx' },
+  { name: 'StatusBar.tsx', type: 'tsx', indent: 3, selected: 0, path: 'src/components/StatusBar.tsx' },
+  { name: 'Terminal.tsx', type: 'tsx', indent: 3, selected: 0, path: 'src/components/Terminal.tsx' },
+  { name: 'hooks', type: 'dir', indent: 2, expanded: 0, selected: 0, path: 'src/hooks' },
+  { name: 'useAgent.ts', type: 'ts', indent: 3, selected: 0, path: 'src/hooks/useAgent.ts' },
+  { name: 'useFSWatch.ts', type: 'ts', indent: 3, selected: 0, path: 'src/hooks/useFSWatch.ts' },
+  { name: 'useSQLite.ts', type: 'ts', indent: 3, selected: 0, path: 'src/hooks/useSQLite.ts' },
+  { name: 'utils', type: 'dir', indent: 1, expanded: 0, selected: 0, path: 'utils' },
+  { name: 'index.ts', type: 'ts', indent: 2, selected: 0, path: 'utils/index.ts' },
+  { name: 'styles', type: 'dir', indent: 1, expanded: 0, selected: 0, path: 'styles' },
+  { name: 'theme.css', type: 'css', indent: 2, selected: 0, path: 'styles/theme.css' },
+  { name: 'package.json', type: 'json', indent: 1, selected: 0, path: 'package.json' },
+  { name: 'README.md', type: 'md', indent: 1, selected: 0, path: 'README.md' },
+  { name: 'tsconfig.json', type: 'json', indent: 1, selected: 0, path: 'tsconfig.json' },
 ]);
 
-const [recentFiles, setRecentFiles] = useState([
-  { name: 'cursor_cls.tsz', indent: 0, icon: 'file' },
-  { name: 'cursor.script.tsz', indent: 0, icon: 'file' },
-  { name: 'useSQLite.ts', indent: 0, icon: 'file' },
-]);
-
-const [outline, setOutline] = useState([
-  { name: 'imports', indent: 0, icon: ' ' },
-  { name: 'SidebarSection', indent: 0, icon: 'f' },
-  { name: 'Sidebar', indent: 0, icon: 'f' },
-  { name: 'useAgent hook', indent: 0, icon: 'f' },
-  { name: 'SQLite bridge', indent: 0, icon: 'f' },
-]);
+// === EDITOR STATE ===
+const [editorContent, setEditorContent] = useState('// Cursor IDE - Agentic Coding Environment\n\nimport { useState, useEffect } from "react";\n\n// SQLite bridge for project indexing\nconst db = __sqlite_open("project.db");\n\n// File system watcher\nconst watcher = __fs_watch("./src");\n\nfunction Sidebar() {\n  const [files, setFiles] = useState([]);\n\n  useEffect(() => {\n    // Index project files in SQLite\n    __sqlite_exec(db, "CREATE TABLE IF NOT EXISTS files...");\n  }, []);\n\n  return <FileTree />;\n}');
+const [editorModified, setEditorModified] = useState(0);
+const [currentFilePath, setCurrentFilePath] = useState('src/components/Sidebar.tsx');
+const [lineCount, setLineCount] = useState(20);
+const [totalLines, setTotalLines] = useState(20);
 
 // === TABS ===
 const [openTabs, setOpenTabs] = useState([
-  { id: '1', name: 'Sidebar.c.tsz', modified: 0 },
-  { id: '2', name: 'cursor_cls.tsz', modified: 1 },
-  { id: '3', name: 'cursor.script.tsz', modified: 0 },
-  { id: '4', name: 'useSQLite.ts', modified: 1 },
-]);
-
-// === EDITOR CONTENT ===
-const [editorLines, setEditorLines] = useState([
-  { num: 1, text: '// Cursor IDE - Agentic Coding Environment' },
-  { num: 2, text: '' },
-  { num: 3, text: 'import { useState, useEffect } from "react";' },
-  { num: 4, text: '' },
-  { num: 5, text: '// SQLite bridge for project indexing' },
-  { num: 6, text: 'const db = __sqlite_open("project.db");' },
-  { num: 7, text: '' },
-  { num: 8, text: '// File system watcher' },
-  { num: 9, text: 'const watcher = __fs_watch("./src");' },
-  { num: 10, text: '' },
-  { num: 11, text: 'function Sidebar() {' },
-  { num: 12, text: '  const [files, setFiles] = useState([]);' },
-  { num: 13, text: '' },
-  { num: 14, text: '  useEffect(() => {' },
-  { num: 15, text: '    // Index project files in SQLite' },
-  { num: 16, text: '    __sqlite_exec(db, "CREATE TABLE IF NOT EXISTS files...");' },
-  { num: 17, text: '  }, []);' },
-  { num: 18, text: '' },
-  { num: 19, text: '  return <FileTree />;' },
-  { num: 20, text: '}' },
+  { id: '1', name: 'Sidebar.tsx', path: 'src/components/Sidebar.tsx', modified: 0 },
 ]);
 
 // === CHAT ===
 const [chatMessages, setChatMessages] = useState([
-  { role: 'assistant', time: '2:34 PM', text: 'I\'ve analyzed the codebase using SQLite index. Found 47 files with 12,340 lines of TypeScript.' },
+  { role: 'assistant', time: '2:34 PM', text: 'I have analyzed the codebase. Found 19 files across 5 directories.' },
   { role: 'user', time: '2:36 PM', text: 'Search for all components using the SQLite bridge' },
-  { role: 'assistant', time: '2:36 PM', text: 'Found 3 files: useSQLite.ts, SearchPanel.tsx, and AgentTools.tsx. Index updated in 12ms.' },
+  { role: 'assistant', time: '2:36 PM', text: 'Found 3 files: useSQLite.ts, SearchPanel.tsx, and AgentTools.tsx.' },
 ]);
 
 // === TERMINAL STATE ===
 const [terminalLines, setTerminalLines] = useState([
   { text: '$ cursor-ide --version', type: 'command' },
-  { text: 'cursor-ide v0.1.0-alpha (SQLite: 3.42.0, PTY: enabled)', type: 'output' },
-  { text: '$ __sqlite_query "SELECT COUNT(*) FROM files"', type: 'command' },
-  { text: '47', type: 'output' },
-  { text: '$ __fs_scandir "./src"', type: 'command' },
-  { text: '["components", "hooks", "utils", "styles"]', type: 'output' },
+  { text: 'cursor-ide v0.1.0 (ReactJIT native)', type: 'output' },
   { text: '$', type: 'prompt' },
 ]);
 
@@ -126,77 +82,52 @@ const [terminalLines, setTerminalLines] = useState([
 const [searchQuery, setSearchQuery] = useState('');
 const [searchResults, setSearchResults] = useState([
   { file: 'useSQLite.ts', line: 15, text: 'const db = __sqlite_open("project.db");', matches: 3 },
-  { file: 'SearchPanel.tsx', line: 42, text: 'function __sqlite_exec(db, sql) {', matches: 2 },
-  { file: 'AgentTools.tsx', line: 88, text: 'const results = __sqlite_query(db, query);', matches: 1 },
+  { file: 'SearchPanel.tsx', line: 42, text: 'function searchProject(query) {', matches: 2 },
 ]);
-
-// === AGENT TOOLS STATE ===
-const [agentStatus, setAgentStatus] = useState('idle');
-const [agentProgress, setAgentProgress] = useState(0);
-const [indexedFiles, setIndexedFiles] = useState(47);
-const [totalFiles, setTotalFiles] = useState(52);
-
-// === CANVAS VIZ STATE ===
-const [nodeCount, setNodeCount] = useState(12);
-const [edgeCount, setEdgeCount] = useState(18);
-const [selectedNode, setSelectedNode] = useState(3);
 
 // === STATUS BAR ===
 const [gitBranch, setGitBranch] = useState('main');
-const [gitStatus, setGitStatus] = useState('*2');
+const [gitStatus, setGitStatus] = useState('*1');
 const [errors, setErrors] = useState(0);
-const [warnings, setWarnings] = useState(3);
-const [windowTitle, setWindowTitle] = useState('cursor-ide — cursor_cls.tsz');
+const [warnings, setWarnings] = useState(0);
 const [languageMode, setLanguageMode] = useState('TypeScript TSX');
-const [dbStatus, setDbStatus] = useState('connected');
 
-// Breadcrumbs
+// Breadcrumbs derived from current file path
 const [breadcrumbs, setBreadcrumbs] = useState([
-  { label: 'cursor-ide' },
   { label: 'src' },
   { label: 'components' },
+  { label: 'Sidebar.tsx' },
 ]);
 
-// Initialize data on first render
+// Initialize on first render
 if (ready == 0) {
   initData();
   setReady(1);
 }
 
-// Cursor position simulation
-setInterval(function() {
-  setCursorPosition({ line: 10 + Math.floor(Math.random() * 5), column: 20 + Math.floor(Math.random() * 10) });
-}, 5000);
-
-// Terminal output simulation when visible
-setInterval(function() {
-  if (showTerminal == 1 && Math.random() > 0.7) {
-    var lines = terminalLines;
-    lines.push({ text: '[watch] File changed: src/components/Sidebar.tsx', type: 'info' });
-    setTerminalLines(lines);
-  }
-}, 3000);
-
 function App() {
   return (
     <C.Shell>
-      <TopBar title={windowTitle} onToggleChat={function() { setShowChat(1 - showChat); }} onToggleTerminal={function() { setShowTerminal(1 - showTerminal); }} onToggleSearch={function() { setShowSearch(1 - showSearch); }} />
+      <TopBar title={currentFilePath} onToggleChat={function() { setShowChat(1 - showChat); }} onToggleTerminal={function() { setShowTerminal(1 - showTerminal); }} onToggleSearch={function() { setShowSearch(1 - showSearch); }} />
 
       <C.Workspace>
-        <Sidebar files={files} recentFiles={recentFiles} outline={outline} />
+        <Sidebar files={files} onSelectFile={function(idx) { openFile(idx); }} />
 
         <C.Editor>
           <TabBar tabs={openTabs} activeId={activeTabId} />
-          <Breadcrumbs items={breadcrumbs} />
+          <C.Breadcrumbs>
+            {breadcrumbs.map(function(crumb, idx) {
+              return (
+                <C.BreadcrumbItem>
+                  <C.BreadcrumbText>{crumb.label}</C.BreadcrumbText>
+                </C.BreadcrumbItem>
+              );
+            })}
+          </C.Breadcrumbs>
 
-          <Box style={{ flexGrow: 1, flexBasis: 0, flexDirection: 'row' }}>
-            <Editor lines={editorLines} cursorLine={cursorPosition.line} />
-            {showCanvasViz == 1 && <CanvasViz nodeCount={nodeCount} edgeCount={edgeCount} selectedNode={selectedNode} />}
-            {showCanvasViz == 0 && <Minimap lines={editorLines} />}
-          </Box>
+          <Editor content={editorContent} lineCount={totalLines} cursorLine={cursorPosition.line} modified={editorModified} onChange={function(text) { updateEditorContent(text); }} />
 
           {showTerminal == 1 && <TerminalPanel lines={terminalLines} />}
-          {showAgentTools == 1 && <AgentTools status={agentStatus} progress={agentProgress} indexedFiles={indexedFiles} totalFiles={totalFiles} />}
         </C.Editor>
 
         {showChat == 1 && <ChatPanel messages={chatMessages} isGenerating={isGenerating} />}
@@ -211,7 +142,8 @@ function App() {
         languageMode={languageMode}
         errors={errors}
         warnings={warnings}
-        dbStatus={dbStatus}
+        modified={editorModified}
+        fileName={currentFilePath}
       />
     </C.Shell>
   );

@@ -1,50 +1,23 @@
-// Editor Component
-
-function EditorLine(props) {
-  return (
-    <C.EditorLine>
-      <C.LineNumber>
-        {props.isActive == 1 && <C.LineNumberActive>{props.num}</C.LineNumberActive>}
-        {props.isActive == 0 && <C.LineNumberText>{props.num}</C.LineNumberText>}
-      </C.LineNumber>
-      <C.LineContent>
-        <C.TokenText>{props.text}</C.TokenText>
-      </C.LineContent>
-    </C.EditorLine>
-  );
-}
+// Editor Component — real editable text area with line count
 
 function Editor(props) {
   return (
-    <C.Editor>
-      <C.EditorContent>
-        <C.EditorLines>
-          {props.lines.map(function(line, idx) {
-            return (
-              <EditorLine
-                num={line.num}
-                text={line.text}
-                isActive={line.num == props.cursorLine ? 1 : 0}
-              />
-            );
-          })}
-        </C.EditorLines>
-      </C.EditorContent>
-    </C.Editor>
+    <Box style={{ flexGrow: 1, flexBasis: 0, flexDirection: 'row', backgroundColor: '#0d0d0d' }}>
+      <Box style={{ width: 50, flexDirection: 'column', paddingTop: 8, alignItems: 'flex-end', paddingRight: 12 }}>
+        <Text fontSize={11} color="#3d3d3d">{props.lineCount}</Text>
+        <Text fontSize={11} color="#3d3d3d">lines</Text>
+      </Box>
+      <Box style={{ flexGrow: 1, flexBasis: 0 }}>
+        <TextInput
+          value={props.content}
+          onChange={props.onChange}
+          fontSize={13}
+          color="#b0b0b0"
+          style={{ flexGrow: 1, flexBasis: 0, paddingTop: 8, paddingLeft: 4, paddingRight: 8, backgroundColor: '#0d0d0d' }}
+        />
+      </Box>
+    </Box>
   );
 }
 
-function Minimap(props) {
-  return (
-    <C.Minimap>
-      <C.MinimapContent>
-        {props.lines.slice(0, 40).map(function(line, idx) {
-          var width = Math.min(72, Math.max(16, line.text.length * 2));
-          return <C.MinimapLine style={{ width: width, backgroundColor: '#3d3d3d' }} />;
-        })}
-      </C.MinimapContent>
-    </C.Minimap>
-  );
-}
-
-export { Editor, Minimap };
+export { Editor };

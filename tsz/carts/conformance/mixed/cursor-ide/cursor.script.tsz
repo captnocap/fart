@@ -1,7 +1,6 @@
-// Cursor IDE — Script logic with framework FFI bridges
+// Cursor IDE — Script logic with file operations
 
 declare function setFiles(v: any): void;
-declare function setRecentFiles(v: any): void;
 declare function setOpenTabs(v: any): void;
 declare function setActiveTabId(v: string): void;
 declare function setCurrentInputState(v: string): void;
@@ -9,224 +8,186 @@ declare function setIsGenerating(v: number): void;
 declare function setChatMessages(v: any): void;
 declare function setTerminalLines(v: any): void;
 declare function setSearchResults(v: any): void;
-declare function setAgentStatus(v: string): void;
-declare function setAgentProgress(v: number): void;
-declare function setIndexedFiles(v: number): void;
-declare function setDbStatus(v: string): void;
 declare function setErrors(v: number): void;
 declare function setWarnings(v: number): void;
+declare function setEditorContent(v: string): void;
+declare function setEditorModified(v: number): void;
+declare function setCurrentFilePath(v: string): void;
+declare function setTotalLines(v: number): void;
+declare function setLineCount(v: number): void;
+declare function setBreadcrumbs(v: any): void;
+declare function setLanguageMode(v: string): void;
+declare function setGitStatus(v: string): void;
+declare function setCursorPosition(v: any): void;
 declare var files: any;
 declare var openTabs: any;
 declare var chatMessages: any;
 declare var terminalLines: any;
 declare var currentInput: string;
 declare var searchQuery: string;
-declare var showTerminal: number;
-declare var dbStatus: string;
+declare var editorContent: string;
+declare var currentFilePath: string;
 
-// === SQLite Project Index ===
-var dbHandle: any = null;
-var fsWatchers: any = {};
+// === File Content Store ===
+// In a real app this would be backed by __fs_readfile/__fs_writefile
+var fileContents = {};
 
+// Default file contents for the mock project
 function initData() {
-  // Initialize SQLite database for project indexing
-  try {
-    if (typeof __sqlite_open === 'function') {
-      dbHandle = __sqlite_open('cursor_project.db');
-      __sqlite_exec(dbHandle, 'CREATE TABLE IF NOT EXISTS files (path TEXT PRIMARY KEY, content TEXT, language TEXT, lines INTEGER, last_modified INTEGER)');
-      __sqlite_exec(dbHandle, 'CREATE TABLE IF NOT EXISTS symbols (name TEXT, file TEXT, line INTEGER, type TEXT)');
-      __sqlite_exec(dbHandle, 'CREATE INDEX IF NOT EXISTS idx_symbols_name ON symbols(name)');
-      setDbStatus('connected');
-    }
-  } catch (e) {
-    setDbStatus('offline');
-  }
-
-  // Start file system watcher
-  startFSWatcher('./src');
+  fileContents['src/components/Sidebar.tsx'] = '// Sidebar Component\nimport { useState } from "react";\nimport { FileTree } from "./FileTree";\n\ninterface SidebarProps {\n  files: FileNode[];\n  onSelect: (path: string) => void;\n}\n\nexport function Sidebar({ files, onSelect }: SidebarProps) {\n  const [expanded, setExpanded] = useState<Set<string>>(new Set());\n\n  const toggle = (path: string) => {\n    const next = new Set(expanded);\n    if (next.has(path)) next.delete(path);\n    else next.add(path);\n    setExpanded(next);\n  };\n\n  return (\n    <div className="sidebar">\n      <FileTree\n        files={files}\n        expanded={expanded}\n        onToggle={toggle}\n        onSelect={onSelect}\n      />\n    </div>\n  );\n}';
+  fileContents['src/components/Editor.tsx'] = '// Editor Component\nimport { useRef, useEffect } from "react";\nimport { highlight } from "../utils/highlight";\n\ninterface EditorProps {\n  content: string;\n  language: string;\n  onChange: (content: string) => void;\n}\n\nexport function Editor({ content, language, onChange }: EditorProps) {\n  const ref = useRef<HTMLTextAreaElement>(null);\n\n  useEffect(() => {\n    if (ref.current) {\n      ref.current.value = content;\n    }\n  }, [content]);\n\n  return (\n    <textarea\n      ref={ref}\n      className="editor-textarea"\n      onChange={(e) => onChange(e.target.value)}\n      spellCheck={false}\n    />\n  );\n}';
+  fileContents['src/components/ChatPanel.tsx'] = '// Chat Panel Component\nimport { useState } from "react";\n\ninterface Message {\n  role: "user" | "assistant";\n  text: string;\n  time: string;\n}\n\nexport function ChatPanel() {\n  const [messages, setMessages] = useState<Message[]>([]);\n  const [input, setInput] = useState("");\n\n  const send = async () => {\n    if (!input.trim()) return;\n    setMessages([...messages, { role: "user", text: input, time: "now" }]);\n    setInput("");\n    // TODO: call agent API\n  };\n\n  return (\n    <div className="chat-panel">\n      {messages.map((m, i) => (\n        <div key={i} className={m.role}>{m.text}</div>\n      ))}\n      <input value={input} onChange={e => setInput(e.target.value)} />\n      <button onClick={send}>Send</button>\n    </div>\n  );\n}';
+  fileContents['src/components/StatusBar.tsx'] = '// Status Bar\nexport function StatusBar({ branch, cursor, language }) {\n  return (\n    <div className="status-bar">\n      <span>git: {branch}</span>\n      <span>Ln {cursor.line}, Col {cursor.col}</span>\n      <span>{language}</span>\n    </div>\n  );\n}';
+  fileContents['src/components/Terminal.tsx'] = '// Terminal Component\nimport { useRef, useEffect } from "react";\n\nexport function Terminal() {\n  const ref = useRef<HTMLDivElement>(null);\n  const [lines, setLines] = useState<string[]>([]);\n\n  const exec = (cmd: string) => {\n    setLines([...lines, `$ ${cmd}`, "..."]);\n  };\n\n  return (\n    <div className="terminal" ref={ref}>\n      {lines.map((l, i) => <div key={i}>{l}</div>)}\n    </div>\n  );\n}';
+  fileContents['src/hooks/useAgent.ts'] = '// Agent hook — manages AI agent communication\nimport { useState, useCallback } from "react";\n\ninterface AgentState {\n  status: "idle" | "thinking" | "error";\n  progress: number;\n}\n\nexport function useAgent() {\n  const [state, setState] = useState<AgentState>({\n    status: "idle",\n    progress: 0,\n  });\n\n  const send = useCallback(async (prompt: string) => {\n    setState({ status: "thinking", progress: 0 });\n    try {\n      const res = await fetch("/api/agent", {\n        method: "POST",\n        body: JSON.stringify({ prompt }),\n      });\n      const data = await res.json();\n      setState({ status: "idle", progress: 100 });\n      return data;\n    } catch (e) {\n      setState({ status: "error", progress: 0 });\n    }\n  }, []);\n\n  return { ...state, send };\n}';
+  fileContents['src/hooks/useFSWatch.ts'] = '// File system watcher hook\nimport { useEffect, useState } from "react";\n\nexport function useFSWatch(path: string) {\n  const [changes, setChanges] = useState<string[]>([]);\n\n  useEffect(() => {\n    // In production: use chokidar or node fs.watch\n    const interval = setInterval(() => {\n      // poll for changes\n    }, 1000);\n    return () => clearInterval(interval);\n  }, [path]);\n\n  return changes;\n}';
+  fileContents['src/hooks/useSQLite.ts'] = '// SQLite hook for project indexing\nimport { useRef, useCallback } from "react";\n\ninterface DB {\n  exec(sql: string): void;\n  query(sql: string): any[];\n}\n\nexport function useSQLite(dbPath: string) {\n  const db = useRef<DB | null>(null);\n\n  const open = useCallback(() => {\n    // db.current = __sqlite_open(dbPath);\n  }, [dbPath]);\n\n  const query = useCallback((sql: string) => {\n    if (!db.current) return [];\n    return db.current.query(sql);\n  }, []);\n\n  return { open, query };\n}';
+  fileContents['utils/index.ts'] = '// Utility functions\nexport function debounce(fn: Function, ms: number) {\n  let timer: any;\n  return (...args: any[]) => {\n    clearTimeout(timer);\n    timer = setTimeout(() => fn(...args), ms);\n  };\n}\n\nexport function throttle(fn: Function, ms: number) {\n  let last = 0;\n  return (...args: any[]) => {\n    const now = Date.now();\n    if (now - last >= ms) {\n      last = now;\n      fn(...args);\n    }\n  };\n}';
+  fileContents['styles/theme.css'] = ':root {\n  --bg-primary: #0d0d0d;\n  --bg-secondary: #131313;\n  --bg-tertiary: #1a1a1a;\n  --border: #1f1f1f;\n  --text-primary: #e0e0e0;\n  --text-secondary: #b0b0b0;\n  --text-muted: #6e6e6e;\n  --accent-blue: #2d62ff;\n  --accent-yellow: #e6b450;\n  --accent-green: #7ee787;\n  --accent-red: #ff7b72;\n  --accent-purple: #d2a8ff;\n}\n\n.editor-textarea {\n  font-family: monospace;\n  font-size: 13px;\n  background: var(--bg-primary);\n  color: var(--text-secondary);\n  border: none;\n  outline: none;\n  resize: none;\n}';
+  fileContents['package.json'] = '{\n  "name": "cursor-ide",\n  "version": "0.1.0",\n  "private": true,\n  "scripts": {\n    "dev": "next dev",\n    "build": "next build",\n    "start": "next start"\n  },\n  "dependencies": {\n    "react": "^18.2.0",\n    "next": "^14.0.0"\n  }\n}';
+  fileContents['README.md'] = '# Cursor IDE\n\nAgentic coding environment built with ReactJIT.\n\n## Features\n- File explorer with SQLite indexing\n- AI-powered code agent\n- Integrated terminal\n- Code graph visualization\n\n## Getting Started\n```\nnpm install\nnpm run dev\n```';
+  fileContents['tsconfig.json'] = '{\n  "compilerOptions": {\n    "target": "ES2020",\n    "lib": ["dom", "es2020"],\n    "jsx": "react-jsx",\n    "strict": true,\n    "moduleResolution": "node",\n    "outDir": "./dist"\n  },\n  "include": ["src/**/*"]\n}';
 }
 
-// === File System Operations ===
-function startFSWatcher(path: string) {
-  if (typeof __fs_scandir !== 'function') return;
-
-  // Initial scan
-  indexProject(path);
-
-  // Periodic rescan (simulated watcher)
-  setInterval(function() {
-    if (showTerminal == 1) {
-      indexProject(path);
-    }
-  }, 10000);
-}
-
-function indexProject(path: string) {
-  if (!dbHandle) return;
-
-  try {
-    var entries = __fs_scandir(path);
-    var count = 0;
-
-    for (var i = 0; i < entries.length; i++) {
-      var entry = entries[i];
-      if (entry.endsWith('.ts') || entry.endsWith('.tsx') || entry.endsWith('.js')) {
-        count++;
-        // Insert or update file record
-        var stmt = __sqlite_prepare(dbHandle, 'INSERT OR REPLACE INTO files (path, language, lines) VALUES (?, ?, ?)');
-        if (stmt) {
-          __sqlite_bind_text(stmt, 1, entry);
-          __sqlite_bind_text(stmt, 2, entry.endsWith('x') ? 'tsx' : 'ts');
-          __sqlite_bind_int(stmt, 3, Math.floor(Math.random() * 500) + 10);
-          __sqlite_step(stmt);
-          __sqlite_finalize(stmt);
-        }
-      }
-    }
-
-    setIndexedFiles(count);
-    setTotalFiles(count + 5);
-  } catch (e) {
-    // FS not available in all builds
-  }
-}
-
-function searchProject(query: string) {
-  if (!dbHandle || query.length == 0) return [];
-
-  var results = [];
-  try {
-    var sql = 'SELECT path, content FROM files WHERE path LIKE ? OR content LIKE ? LIMIT 20';
-    var stmt = __sqlite_prepare(dbHandle, sql);
-    if (stmt) {
-      __sqlite_bind_text(stmt, 1, '%' + query + '%');
-      __sqlite_bind_text(stmt, 2, '%' + query + '%');
-
-      while (__sqlite_step(stmt)) {
-        results.push({
-          file: __sqlite_column_text(stmt, 0),
-          text: __sqlite_column_text(stmt, 1) || '...',
-          line: 1
-        });
-      }
-      __sqlite_finalize(stmt);
-    }
-  } catch (e) {
-    // Fallback to mock results
-    results = [
-      { file: 'useSQLite.ts', line: 15, text: 'const db = __sqlite_open("project.db");' },
-      { file: 'SearchPanel.tsx', line: 42, text: 'function searchProject(query) {' }
-    ];
-  }
-
-  return results;
-}
-
-// === Terminal / PTY ===
-function openTerminal() {
-  try {
-    if (typeof __pty_open === 'function') {
-      __pty_open('/bin/bash', { cwd: './' });
-      var lines = terminalLines;
-      lines.push({ text: '[pty] Terminal opened', type: 'info' });
-      setTerminalLines(lines);
-    }
-  } catch (e) {
-    // PTY not available
-  }
-}
-
-function execCommand(cmd: string) {
-  var lines = terminalLines;
-  lines.push({ text: '$ ' + cmd, type: 'command' });
-
-  try {
-    if (typeof __exec === 'function') {
-      var result = __exec(cmd);
-      lines.push({ text: result, type: 'output' });
-    } else {
-      // Simulate common commands
-      if (cmd.indexOf('__sqlite') >= 0) {
-        lines.push({ text: '[SQL query executed: 12ms]', type: 'output' });
-      } else if (cmd.indexOf('__fs_scandir') >= 0) {
-        lines.push({ text: '["components", "hooks", "utils", "styles"]', type: 'output' });
-      } else if (cmd.indexOf('__fetch') >= 0) {
-        lines.push({ text: '{"status": "ok", "data": {...}}', type: 'output' });
-      } else {
-        lines.push({ text: 'command not found: ' + cmd, type: 'error' });
-      }
-    }
-  } catch (e) {
-    lines.push({ text: 'Error: ' + e.message, type: 'error' });
-  }
-
-  lines.push({ text: '$', type: 'prompt' });
-  setTerminalLines(lines);
-}
-
-// === HTTP / Agent API ===
-function fetchAgent(prompt: string) {
-  setIsGenerating(1);
-  setAgentStatus('thinking');
-
-  try {
-    if (typeof __fetch === 'function') {
-      // Real HTTP call to agent API
-      __fetch('http://localhost:8080/api/agent', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: prompt, context: getContext() })
-      }).then(function(response) {
-        return response.json();
-      }).then(function(data) {
-        var msgs = chatMessages;
-        msgs.push({ role: 'assistant', time: 'now', text: data.response });
-        setChatMessages(msgs);
-        setIsGenerating(0);
-        setAgentStatus('idle');
-      }).catch(function(e) {
-        setIsGenerating(0);
-        setAgentStatus('error');
-      });
-    } else {
-      // Fallback simulation
-      setTimeout(function() {
-        var msgs = chatMessages;
-        msgs.push({
-          role: 'assistant',
-          time: 'now',
-          text: 'I\'ve analyzed your request. Using SQLite index, I found ' + indexedFiles + ' files. Would you like me to refactor the component structure?'
-        });
-        setChatMessages(msgs);
-        setIsGenerating(0);
-        setAgentStatus('idle');
-      }, 1500);
-    }
-  } catch (e) {
-    setIsGenerating(0);
-    setAgentStatus('error');
-  }
-}
-
-function getContext() {
-  // Gather context from open files
-  var context = {
-    openFiles: openTabs.map(function(t) { return t.name; }),
-    cursorPosition: cursorPosition,
-    projectStats: { files: indexedFiles, symbols: 234 }
-  };
-  return JSON.stringify(context);
-}
-
-// === File Actions ===
-function selectFile(idx: number) {
+// === File Operations ===
+function openFile(idx: number) {
   var f = files;
-  f[idx].selected = 1 - f[idx].selected;
+  var file = f[idx];
+
+  // Toggle directory expansion
+  if (file.type == 'dir') {
+    f[idx].expanded = 1 - (f[idx].expanded || 0);
+    setFiles(f);
+    return;
+  }
+
+  // Select file in tree
+  for (var i = 0; i < f.length; i++) {
+    f[i].selected = (i == idx) ? 1 : 0;
+  }
   setFiles(f);
+
+  // Load content into editor
+  var content = fileContents[file.path] || '// Empty file: ' + file.path;
+  setEditorContent(content);
+  setCurrentFilePath(file.path);
+  setEditorModified(0);
+
+  // Count lines
+  var lines = 1;
+  for (var ci = 0; ci < content.length; ci++) {
+    if (content.charAt(ci) == '\n') lines++;
+  }
+  setTotalLines(lines);
+  setLineCount(lines);
+
+  // Update language mode
+  var ext = file.type;
+  if (ext == 'tsx' || ext == 'ts') setLanguageMode('TypeScript TSX');
+  else if (ext == 'js') setLanguageMode('JavaScript');
+  else if (ext == 'css') setLanguageMode('CSS');
+  else if (ext == 'json') setLanguageMode('JSON');
+  else if (ext == 'md') setLanguageMode('Markdown');
+  else setLanguageMode('Plain Text');
+
+  // Update breadcrumbs
+  var parts = file.path.split('/');
+  var crumbs = [];
+  for (var pi = 0; pi < parts.length; pi++) {
+    crumbs.push({ label: parts[pi] });
+  }
+  setBreadcrumbs(crumbs);
+
+  // Add to tabs if not already open
+  var found = 0;
+  var tabId = '';
+  for (var ti = 0; ti < openTabs.length; ti++) {
+    if (openTabs[ti].path == file.path) {
+      found = 1;
+      tabId = openTabs[ti].id;
+    }
+  }
+  if (found == 0) {
+    tabId = '' + (openTabs.length + 1);
+    var tabs = openTabs;
+    tabs.push({ id: tabId, name: file.name, path: file.path, modified: 0 });
+    setOpenTabs(tabs);
+  }
+  setActiveTabId(tabId);
 }
 
+function selectFile(idx: number) {
+  openFile(idx);
+}
+
+function updateEditorContent(text: string) {
+  setEditorContent(text);
+  setEditorModified(1);
+
+  // Update line count
+  var lines = 1;
+  for (var i = 0; i < text.length; i++) {
+    if (text.charAt(i) == '\n') lines++;
+  }
+  setTotalLines(lines);
+  setLineCount(lines);
+
+  // Update git status indicator
+  setGitStatus('*1');
+
+  // Store in memory
+  fileContents[currentFilePath] = text;
+
+  // Mark tab as modified
+  var tabs = openTabs;
+  for (var ti = 0; ti < tabs.length; ti++) {
+    if (tabs[ti].path == currentFilePath) {
+      tabs[ti].modified = 1;
+    }
+  }
+  setOpenTabs(tabs);
+}
+
+function saveCurrentFile() {
+  // In production: __fs_writefile(currentFilePath, editorContent)
+  setEditorModified(0);
+
+  // Mark tab as saved
+  var tabs = openTabs;
+  for (var ti = 0; ti < tabs.length; ti++) {
+    if (tabs[ti].path == currentFilePath) {
+      tabs[ti].modified = 0;
+    }
+  }
+  setOpenTabs(tabs);
+  setGitStatus('');
+}
+
+function createNewFile(name: string) {
+  var f = files;
+  // Add at root level
+  f.push({ name: name, type: 'ts', indent: 1, selected: 0, path: name });
+  setFiles(f);
+  fileContents[name] = '// ' + name + '\n';
+}
+
+// === Tab Operations ===
 function activateTab(id: string) {
   setActiveTabId(id);
+  // Load the file for this tab
+  for (var i = 0; i < openTabs.length; i++) {
+    if (openTabs[i].id == id) {
+      var content = fileContents[openTabs[i].path] || '';
+      setEditorContent(content);
+      setCurrentFilePath(openTabs[i].path);
+      // Update line count
+      var lines = 1;
+      for (var ci = 0; ci < content.length; ci++) {
+        if (content.charAt(ci) == '\n') lines++;
+      }
+      setTotalLines(lines);
+    }
+  }
 }
 
 function closeTab(id: string) {
@@ -237,8 +198,13 @@ function closeTab(id: string) {
     }
   }
   setOpenTabs(tabs);
+  // If we closed the active tab, switch to the last remaining
+  if (tabs.length > 0) {
+    activateTab(tabs[tabs.length - 1].id);
+  }
 }
 
+// === Chat ===
 function setCurrentInput(v: string) {
   setCurrentInputState(v);
 }
@@ -251,17 +217,57 @@ function sendMessage() {
   setChatMessages(msgs);
   setCurrentInputState('');
   setIsGenerating(1);
-  setAgentStatus('thinking');
 
-  fetchAgent(currentInput);
+  // Simulate agent response
+  setTimeout(function() {
+    var msgs2 = chatMessages;
+    msgs2.push({
+      role: 'assistant',
+      time: 'now',
+      text: 'I can see ' + files.length + ' files in the project. What would you like me to help with?'
+    });
+    setChatMessages(msgs2);
+    setIsGenerating(0);
+  }, 1500);
 }
 
-// Export for components
+function fetchAgent(prompt: string) {
+  sendMessage();
+}
+
+// === Terminal ===
+function openTerminal() {
+  var lines = terminalLines;
+  lines.push({ text: '[new terminal session]', type: 'info' });
+  setTerminalLines(lines);
+}
+
+function execCommand(cmd: string) {
+  var lines = terminalLines;
+  lines.push({ text: '$ ' + cmd, type: 'command' });
+  lines.push({ text: 'command executed', type: 'output' });
+  lines.push({ text: '$', type: 'prompt' });
+  setTerminalLines(lines);
+}
+
+// === Search ===
+function searchProject(query: string) {
+  // In production: __sqlite_query for full-text search
+  setSearchResults([
+    { file: 'useSQLite.ts', line: 15, text: 'matching: ' + query, matches: 1 }
+  ]);
+}
+
+function indexProject(path: string) {
+  // In production: __fs_scandir + __sqlite_exec
+}
+
 export {
   initData,
   selectFile,
   activateTab,
   closeTab,
+  openFile,
   setCurrentInput,
   sendMessage,
   openTerminal,
@@ -269,5 +275,7 @@ export {
   searchProject,
   indexProject,
   fetchAgent,
-  startFSWatcher,
+  saveCurrentFile,
+  createNewFile,
+  updateEditorContent,
 };

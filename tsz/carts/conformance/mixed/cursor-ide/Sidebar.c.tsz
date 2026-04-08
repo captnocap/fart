@@ -1,32 +1,31 @@
-// Sidebar Component — File explorer
+// Sidebar Component — File explorer with type icons
 
-function SidebarSection(props) {
-  return (
-    <C.SidebarSection>
-      <C.SidebarSectionHeader>
-        <C.SidebarChevron>{props.expanded ? 'v' : '>'}</C.SidebarChevron>
-        <C.SidebarSectionTitle>{props.title}</C.SidebarSectionTitle>
-      </C.SidebarSectionHeader>
-      {props.expanded == 1 && props.children}
-    </C.SidebarSection>
-  );
+function FileIcon(props) {
+  var t = props.type;
+  // Directories get chevron
+  if (t == 'dir') {
+    return <Text fontSize={10} color="#6e6e6e">{props.expanded == 1 ? 'v' : '>'}</Text>;
+  }
+  // File type badges
+  if (t == 'tsx') return <Text fontSize={9} color="#3b82f6">TS</Text>;
+  if (t == 'ts') return <Text fontSize={9} color="#3b82f6">TS</Text>;
+  if (t == 'js') return <Text fontSize={9} color="#eab308">JS</Text>;
+  if (t == 'css') return <Text fontSize={9} color="#a855f7">CS</Text>;
+  if (t == 'json') return <Text fontSize={9} color="#22c55e">{ }</Text>;
+  if (t == 'md') return <Text fontSize={9} color="#6e6e6e">MD</Text>;
+  return <Text fontSize={9} color="#6e6e6e">--</Text>;
 }
 
 function FileRow(props) {
+  var file = props.file;
+  var isSelected = file.selected == 1;
+  var nameColor = isSelected ? '#ffffff' : (file.type == 'dir' ? '#b0b0b0' : '#9ca3af');
+  var bgColor = isSelected ? '#1f1f1f' : '#00000000';
+
   return (
-    <Pressable onPress={props.onPress}>
-      {props.selected == 1 && (
-        <C.FileRowSelected>
-          <C.FileIconSelected>{props.file.icon}</C.FileIconSelected>
-          <C.FileNameSelected>{props.file.name}</C.FileNameSelected>
-        </C.FileRowSelected>
-      )}
-      {props.selected == 0 && (
-        <C.FileRow>
-          <C.FileIcon>{props.file.icon}</C.FileIcon>
-          <C.FileName>{props.file.name}</C.FileName>
-        </C.FileRow>
-      )}
+    <Pressable onPress={props.onPress} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 12 + file.indent * 12, paddingRight: 12, paddingTop: 3, paddingBottom: 3, backgroundColor: bgColor }}>
+      <FileIcon type={file.type} expanded={file.expanded} />
+      <Text fontSize={12} color={nameColor}>{file.name}</Text>
     </Pressable>
   );
 }
@@ -40,49 +39,19 @@ function Sidebar(props) {
           <C.SidebarActionBtn>
             <C.SidebarActionIcon>+</C.SidebarActionIcon>
           </C.SidebarActionBtn>
-          <C.SidebarActionBtn>
-            <C.SidebarActionIcon>...</C.SidebarActionIcon>
-          </C.SidebarActionBtn>
         </C.SidebarActions>
       </C.SidebarHeader>
 
       <C.FileTree>
         <C.FileTreeStack>
-          <SidebarSection title="PROJECT" expanded={1}>
-            {props.files.map(function(file, idx) {
-              return (
-                <FileRow
-                  file={file}
-                  selected={file.selected}
-                  onPress={function() { selectFile(idx); }}
-                />
-              );
-            })}
-          </SidebarSection>
-
-          <SidebarSection title="RECENT" expanded={0}>
-            {props.recentFiles.map(function(file, idx) {
-              return (
-                <FileRow
-                  file={file}
-                  selected={0}
-                  onPress={function() { }}
-                />
-              );
-            })}
-          </SidebarSection>
-
-          <SidebarSection title="OUTLINE" expanded={0}>
-            {props.outline.map(function(item, idx) {
-              return (
-                <C.FileRow>
-                  <C.FileIndent repeat={item.indent} />
-                  <C.FileIcon>{item.icon}</C.FileIcon>
-                  <C.FileName>{item.name}</C.FileName>
-                </C.FileRow>
-              );
-            })}
-          </SidebarSection>
+          {props.files.map(function(file, idx) {
+            return (
+              <FileRow
+                file={file}
+                onPress={function() { props.onSelectFile(idx); }}
+              />
+            );
+          })}
         </C.FileTreeStack>
       </C.FileTree>
     </C.Sidebar>

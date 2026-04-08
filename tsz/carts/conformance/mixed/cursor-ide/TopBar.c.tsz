@@ -7,32 +7,18 @@ function TopBar(props) {
         <C.WindowTitle>{props.title}</C.WindowTitle>
       </C.TopBarLeft>
       <C.TopBarRight>
-        <C.ToolbarBtn>
-          <C.ToolbarBtnLabel>-</C.ToolbarBtnLabel>
-        </C.ToolbarBtn>
-        <C.ToolbarBtn>
-          <C.ToolbarBtnLabel>□</C.ToolbarBtnLabel>
-        </C.ToolbarBtn>
-        <C.ToolbarBtn>
-          <C.ToolbarBtnLabel>x</C.ToolbarBtnLabel>
-        </C.ToolbarBtn>
+        <Pressable onPress={props.onToggleSearch} style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 5, paddingBottom: 5, borderRadius: 4 }}>
+          <Text fontSize={11} color="#b0b0b0">Search</Text>
+        </Pressable>
+        <Pressable onPress={props.onToggleTerminal} style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 5, paddingBottom: 5, borderRadius: 4 }}>
+          <Text fontSize={11} color="#b0b0b0">Terminal</Text>
+        </Pressable>
+        <Pressable onPress={props.onToggleChat} style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 5, paddingBottom: 5, borderRadius: 4 }}>
+          <Text fontSize={11} color="#b0b0b0">Chat</Text>
+        </Pressable>
       </C.TopBarRight>
     </C.TopBar>
   );
 }
 
-function Breadcrumbs(props) {
-  return (
-    <C.Breadcrumbs>
-      {props.items.map(function(crumb, idx) {
-        return (
-          <C.BreadcrumbItem>
-            <C.BreadcrumbText>{crumb.label}</C.BreadcrumbText>
-          </C.BreadcrumbItem>
-        );
-      })}
-    </C.Breadcrumbs>
-  );
-}
-
-export { TopBar, Breadcrumbs };
+export { TopBar };
