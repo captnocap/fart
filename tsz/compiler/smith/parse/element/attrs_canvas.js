@@ -29,6 +29,9 @@ function tryParseCanvasAttr(c, attr, rawTag, nodeFields) {
           ctx.currentMap._deferredCanvasAttrs.push({ zigField: 'canvas_stroke_width', oaField: fieldName, type: 'number' });
           nodeFields.push('.canvas_stroke_width = _item.' + fieldName);
         }
+      } else {
+        const value = parseSignedNumberToken(c);
+        if (value !== null) nodeFields.push(`.canvas_stroke_width = ${value}`);
       }
       if (c.kind() === TK.rbrace) c.advance();
     } else {

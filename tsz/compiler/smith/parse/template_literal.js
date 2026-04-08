@@ -43,9 +43,22 @@ function _resolveTemplateExpr(expr) {
   if (expr.endsWith('.length')) {
     var baseName = expr.slice(0, -7);
     if (/^[A-Za-z_]\w*$/.test(baseName)) {
+      var directOa = ctx.objectArrays ? ctx.objectArrays.find(function(o) { return o.getter === baseName; }) : null;
+      if (directOa) {
+        return { spec: '{d}', arg: '@as(i64, @intCast(_oa' + directOa.oaIdx + '_len))' };
+      }
       var resolved = resolveIdentity(baseName, ctx);
       if (resolved.kind === 'oa') {
         return { spec: '{d}', arg: '@as(i64, @intCast(_oa' + resolved.oa.oaIdx + '_len))' };
+      }
+      if (resolved.kind === 'slot') {
+        var slotOa = ctx.objectArrays ? ctx.objectArrays.find(function(o) { return o.getter === baseName; }) : null;
+        if (slotOa) {
+          return { spec: '{d}', arg: '@as(i64, @intCast(_oa' + slotOa.oaIdx + '_len))' };
+        }
+        if (ctx.scriptBlock || globalThis.__scriptContent) {
+          return { spec: '{s}', arg: buildEval(expr, ctx) };
+        }
       }
       if (resolved.kind === 'render_local') {
         if (ctx.scriptBlock || globalThis.__scriptContent) {

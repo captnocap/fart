@@ -6,7 +6,7 @@
 // Uses _hexToLua, _jsExprToLua from lua_map_subs.js.
 
 // If a condition contains function calls that aren't Lua builtins, wrap in __eval
-var _luaBuiltins = { tostring:1, tonumber:1, type:1, pairs:1, ipairs:1, print:1, pcall:1, math:1, string:1, table:1, unpack:1, not:1, band:1, bor:1, bxor:1, bnot:1, lshift:1, rshift:1, bit:1 };
+var _luaBuiltins = { tostring:1, tonumber:1, type:1, pairs:1, ipairs:1, print:1, pcall:1, math:1, string:1, table:1, unpack:1, not:1, band:1, bor:1, bxor:1, bnot:1, lshift:1, rshift:1, bit:1, __eval:1 };
 function _cleanCondForEval(expr) {
   // State slot refs → getter names
   expr = expr.replace(/state\.getSlot(?:Int|Float|Bool)?\((\d+)\)/g, function(_, idx) {
@@ -152,10 +152,19 @@ function _nodeToLua(node, itemParam, indexParam, indent, _luaIdxExpr) {
     }
   }
 
-  // TextInput: emit text_input flag and value binding
+  // Terminal: emit terminal flag and terminal_id
+  if (node.terminal) {
+    fields.push('terminal = true');
+    fields.push('terminal_id = ' + (node.terminal_id || 0));
+  }
+
+  // TextInput: emit text_input flag, input_id, and multiline
   if (node.text_input) {
     fields.push('text_input = true');
     fields.push('input_id = ' + (node.input_id || 0));
+    if (node.multiline) {
+      fields.push('multiline = true');
+    }
   }
 
   if (node.handler) {

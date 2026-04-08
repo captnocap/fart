@@ -37,12 +37,32 @@ function _spliceDynamicHandler(h, _ixStr) {
     var argDyn = args.indexOf('_item') >= 0 || args.indexOf('(_i - 1)') >= 0 || (_ixStr && args.indexOf(_ixStr) >= 0);
     out += h.slice(i, fnNameStart);
     if (argDyn && fnName) {
-      // If the arg is a bare _item.field (no arithmetic), wrap in quotes for string safety
-      if (/^_item\.\w+$/.test(args) || /^_nitem\.\w+$/.test(args)) {
-        out += fnName + '(\'" .. (' + args + ') .. "\')';
-      } else {
-        out += fnName + '(" .. (' + args + ') .. ")';
+      // Split multi-arg calls: "removeItem(_item.id, _item.label)" → each arg spliced separately
+      var _splitArgs = [];
+      var _ad = 0, _aStart = 0;
+      for (var _ai = 0; _ai <= args.length; _ai++) {
+        if (_ai < args.length && args[_ai] === '(') _ad++;
+        if (_ai < args.length && args[_ai] === ')') _ad--;
+        if ((_ai === args.length || (args[_ai] === ',' && _ad === 0))) {
+          _splitArgs.push(args.slice(_aStart, _ai).trim());
+          _aStart = _ai + 1;
+        }
       }
+      var _splicedArgs = [];
+      for (var _si = 0; _si < _splitArgs.length; _si++) {
+        var _sa = _splitArgs[_si];
+        var _isDyn = _sa.indexOf('_item') >= 0 || _sa.indexOf('(_i - 1)') >= 0 || (_ixStr && _sa.indexOf(_ixStr) >= 0);
+        if (_isDyn) {
+          if (/^_n?item\.\w+$/.test(_sa)) {
+            _splicedArgs.push('\'" .. (' + _sa + ') .. "\'');
+          } else {
+            _splicedArgs.push('" .. (' + _sa + ') .. "');
+          }
+        } else {
+          _splicedArgs.push(_sa.replace(/"/g, '\\"'));
+        }
+      }
+      out += fnName + '(' + _splicedArgs.join(', ') + ')';
     } else {
       // Escape string args so inner quotes don't break the outer lua_on_press = "..." wrapper
       var escapedArgs = args.replace(/"/g, '\\"');

@@ -90,6 +90,9 @@ function _jsExprToLua(expr, itemParam, indexParam, _luaIdxExpr) {
       return _s ? _s.getter : '_slot' + idx;
     });
   }
+  // std.mem.eql → Lua string compare
+  expr = expr.replace(/!std\.mem\.eql\(u8,\s*([^,]+),\s*([^)]+)\)/g, '($1 ~= $2)');
+  expr = expr.replace(/std\.mem\.eql\(u8,\s*([^,]+),\s*([^)]+)\)/g, '($1 == $2)');
   // Zig qjs_runtime.evalToString → __eval (JS function calls from Lua)
   // Pattern 1: "String(expr)" → __eval("expr")
   expr = expr.replace(/qjs_runtime\.evalToString\("String\(([^"]+)\)"[^)]*\)/g, '__eval("$1")');

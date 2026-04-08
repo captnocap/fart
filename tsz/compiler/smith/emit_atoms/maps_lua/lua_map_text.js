@@ -2,9 +2,66 @@
 // Turns text content into a Lua string expression.
 // Uses _jsExprToLua from lua_map_subs.js.
 
+var _luaTextBuiltins = { tostring:1, tonumber:1, type:1, pairs:1, ipairs:1, print:1, pcall:1, math:1, string:1, table:1, unpack:1, __eval:1 };
+function _escapeLuaTextEval(expr) {
+  return String(expr).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
+function _needsLuaTextEval(expr) {
+  if (!expr) return false;
+  if (expr.indexOf('__eval(') >= 0) return false;
+  var re = /(^|[^.\w])([A-Za-z_]\w*)\s*\(/g;
+  var m;
+  while ((m = re.exec(expr)) !== null) {
+    if (!_luaTextBuiltins[m[2]]) return true;
+  }
+  return false;
+}
+
+function _luaTextValueExpr(expr, itemParam, indexParam, _luaIdxExpr) {
+  var luaExpr = _jsExprToLua(expr, itemParam, indexParam, _luaIdxExpr);
+  luaExpr = luaExpr.replace(/(\w+(?:\.\w+)*)\.length\b/g, '#$1');
+  luaExpr = luaExpr.replace(/_oa\d+_(\w+)\[_i\]\[0\.\._oa\d+_\w+_lens\[_i\]\]/g, '_item.$1');
+  luaExpr = luaExpr.replace(/_oa\d+_(\w+)\[_i\]/g, '_item.$1');
+  luaExpr = luaExpr.trim();
+  if (_needsLuaTextEval(luaExpr)) {
+    return '__eval("' + _escapeLuaTextEval(luaExpr) + '")';
+  }
+  return luaExpr;
+}
+
+function _wrapLuaTextTostringCalls(expr, itemParam, indexParam, _luaIdxExpr) {
+  var out = '';
+  var cursor = 0;
+  while (cursor < expr.length) {
+    var start = expr.indexOf('tostring(', cursor);
+    if (start < 0) {
+      out += expr.slice(cursor);
+      break;
+    }
+    out += expr.slice(cursor, start);
+    var innerStart = start + 9;
+    var depth = 1;
+    var i = innerStart;
+    while (i < expr.length && depth > 0) {
+      if (expr[i] === '(') depth++;
+      else if (expr[i] === ')') depth--;
+      i++;
+    }
+    if (depth !== 0) {
+      out += expr.slice(start);
+      break;
+    }
+    var inner = expr.slice(innerStart, i - 1);
+    var luaInner = _luaTextValueExpr(inner, itemParam, indexParam, _luaIdxExpr);
+    out += 'tostring(' + luaInner + ')';
+    cursor = i;
+  }
+  return out;
+}
+
 function _textToLua(text, itemParam, indexParam, _luaIdxExpr) {
   if (!text) return '""';
-
   // Normalize pre-escaped quotes from parser (prevents double-escaping: \" → \\")
   if (typeof text === 'string') text = text.replace(/\\"/g, '"');
 
@@ -71,8 +128,23 @@ function _textToLua(text, itemParam, indexParam, _luaIdxExpr) {
       while (_close > _open && _sv.endsWith(')')) { _sv = _sv.slice(0, -1); _close--; }
       // If clean Lua now (no Zig syntax left), emit bare
       if (!/[@?]/.test(_sv) && !/\bif\b/.test(_sv) && !/qjs_runtime/.test(_sv)) {
+        if (_needsLuaTextEval(_sv)) {
+          return 'tostring(__eval("' + _sv.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"))';
+        }
+        var _litPfx2 = _sv.match(/^([^a-zA-Z_(\d#]+)(.+)$/);
+        if (_litPfx2 && _litPfx2[1].trim().length > 0) {
+          return '"' + _litPfx2[1].replace(/"/g, '\\"') + '" .. tostring(' + _litPfx2[2] + ')';
+        }
         return 'tostring(' + _sv + ')';
       }
+      return 'tostring(__eval("' + _sv.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"))';
+    }
+    // Detect literal prefix before expression (e.g. "= _item.weight * ..." from template "= ${expr}")
+    var _litPfxMatch = _sv.match(/^([^a-zA-Z_(\d#]+)(.+)$/);
+    if (_litPfxMatch && _litPfxMatch[1].trim().length > 0) {
+      return '"' + _litPfxMatch[1].replace(/"/g, '\\"') + '" .. tostring(' + _litPfxMatch[2] + ')';
+    }
+    if (_needsLuaTextEval(_sv)) {
       return 'tostring(__eval("' + _sv.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"))';
     }
     return 'tostring(' + _sv + ')';
@@ -80,7 +152,7 @@ function _textToLua(text, itemParam, indexParam, _luaIdxExpr) {
 
   // Lua expression: { luaExpr: "(mode == 0) and \"A\" or \"B\"" }
   if (typeof text === 'object' && text.luaExpr) {
-    return text.luaExpr;
+    return _wrapLuaTextTostringCalls(text.luaExpr, itemParam, indexParam, _luaIdxExpr);
   }
 
   // Template literal: { parts: [{literal: "hi "}, {expr: "item.x"}] }
@@ -91,7 +163,7 @@ function _textToLua(text, itemParam, indexParam, _luaIdxExpr) {
       if (part.literal) {
         luaParts.push('"' + part.literal.replace(/"/g, '\\"') + '"');
       } else if (part.expr) {
-        luaParts.push('tostring(' + _jsExprToLua(part.expr, itemParam, indexParam, _luaIdxExpr) + ')');
+        luaParts.push('tostring(' + _luaTextValueExpr(part.expr, itemParam, indexParam, _luaIdxExpr) + ')');
       }
     }
     return luaParts.join(' .. ');
@@ -111,7 +183,7 @@ function _textToLua(text, itemParam, indexParam, _luaIdxExpr) {
           tj++;
         }
         var tExpr = text.slice(ti + 2, tj - 1).trim();
-        tExpr = _jsExprToLua(tExpr, itemParam, indexParam, _luaIdxExpr);
+        tExpr = _luaTextValueExpr(tExpr, itemParam, indexParam, _luaIdxExpr);
         tParts.push('tostring(' + tExpr + ')');
         ti = tj;
       } else {
@@ -164,6 +236,18 @@ function _textToLua(text, itemParam, indexParam, _luaIdxExpr) {
   luaExpr = luaExpr.trim();
   if (luaExpr.indexOf('_item') >= 0 || luaExpr.indexOf('(_i - 1)') >= 0 ||
       luaExpr.indexOf('#') >= 0 || luaExpr.indexOf('(') >= 0) {
+    // Detect literal prefix before expression (e.g. "= _item.weight * ..." from template "= ${expr}")
+    var _litPfx = luaExpr.match(/^([^a-zA-Z_(\d#]+)(.+)$/);
+    if (_litPfx && _litPfx[1].trim().length > 0) {
+      var _litTail = _litPfx[2].trim();
+      if (_needsLuaTextEval(_litTail)) {
+        _litTail = '__eval("' + _escapeLuaTextEval(_litTail) + '")';
+      }
+      return '"' + _litPfx[1].replace(/"/g, '\\"') + '" .. tostring(' + _litTail + ')';
+    }
+    if (_needsLuaTextEval(luaExpr)) {
+      return 'tostring(__eval("' + _escapeLuaTextEval(luaExpr) + '"))';
+    }
     return 'tostring(' + luaExpr + ')';
   }
   return '"' + luaExpr.replace(/"/g, '\\"') + '"';

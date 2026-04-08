@@ -330,8 +330,17 @@ function emitLuaTreeApp(ctx, rootExpr, file) {
     for (var oai = 0; oai < ctx.objectArrays.length; oai++) {
       var oa = ctx.objectArrays[oai];
       if (oa.isConst || oa.isNested) continue;
-      var oaGetter = oa.getter.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-      zig += '        qjs_runtime.evalLuaMapData(' + _oaTickIdx + ', "' + oaGetter + '");\n';
+      var oaSourceExpr = oa.getter;
+      if (ctx._luaMapRebuilders &&
+          ctx._luaMapRebuilders[_oaTickIdx] &&
+          ctx._luaMapRebuilders[_oaTickIdx].dataVar === oa.getter &&
+          ctx._luaMapRebuilders[_oaTickIdx].rawSource) {
+        oaSourceExpr = ctx._luaMapRebuilders[_oaTickIdx].rawSource;
+      } else if (oa._computedExpr) {
+        oaSourceExpr = oa._computedExpr;
+      }
+      var oaSource = oaSourceExpr.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+      zig += '        qjs_runtime.evalLuaMapData(' + _oaTickIdx + ', "' + oaSource + '");\n';
       _oaTickIdx++;
     }
   }
@@ -387,6 +396,7 @@ function emitLuaTreeApp(ctx, rootExpr, file) {
   zig += '        .tick = _appTick,\n';
   zig += '        .js_logic = JS_LOGIC,\n';
   zig += '        .lua_logic = LUA_LOGIC,\n';
+  if (ctx.borderless) zig += '        .borderless = true,\n';
   zig += '    });\n';
   zig += '}\n';
 

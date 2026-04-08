@@ -52,6 +52,7 @@ function compileAppLane(source, tokens, file) {
 
   resetCtx();
   ctx._source = source;
+  if (source.indexOf('// @borderless') !== -1) ctx.borderless = true;
   assignSurfaceTier(source, file);
   collectCompilerInputs(c);
 

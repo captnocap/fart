@@ -181,6 +181,8 @@ function clsNodeFields(def) {
   const fields = [];
   if (def.fontSize !== undefined) fields.push(`.font_size = ${resolveThemeToken(def.fontSize)}`);
   if (def.color !== undefined) fields.push(`.text_color = ${parseColor(String(resolveThemeToken(def.color)))}`);
+  if (def.window_drag) fields.push('.window_drag = true');
+  if (def.window_resize) fields.push('.window_resize = true');
   return fields;
 }
 
