@@ -902,9 +902,8 @@ if [ "$n" -gt 0 ]; then ZIG_LEAK=$((ZIG_LEAK + n)); ZIG_LEAK_DETAILS="$ZIG_LEAK_
 n=$(gocount '_oa[0-9]+_' "$LUA_BLOB")
 if [ "$n" -gt 0 ]; then ZIG_LEAK=$((ZIG_LEAK + n)); ZIG_LEAK_DETAILS="$ZIG_LEAK_DETAILS oa_ref/$n"; fi
 
-# __eval("...") — Zig bridge call that should be a Lua ternary
-n=$(gocount '__eval\(' "$LUA_BLOB")
-if [ "$n" -gt 0 ]; then ZIG_LEAK=$((ZIG_LEAK + n)); ZIG_LEAK_DETAILS="$ZIG_LEAK_DETAILS __eval/$n"; fi
+# __eval("...") is a valid lua-tree bridge helper implemented by the runtime.
+# Do not flag it as a Zig leak.
 
 # Color.rgb(...) — Zig Color type leaked into Lua (should be 0xHEXHEX)
 n=$(gocount 'Color\.rgb\(' "$LUA_BLOB")

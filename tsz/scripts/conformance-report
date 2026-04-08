@@ -543,31 +543,7 @@ case "$MODE" in
         ;;
 
     --summary|*)
-        DISK_TOTAL=0
-        DISK_BY_LANE=""
-        while read -r path; do
-            DISK_TOTAL=$((DISK_TOTAL + 1))
-            lane=$(lane_from_path "$path")
-            DISK_BY_LANE="${DISK_BY_LANE}${lane}\n"
-        done < <(disk_tests)
-
-        DB_COMPILED=$(sqlite3 "$DB" \
-            "SELECT COUNT(*) FROM builds
-             WHERE id IN (SELECT MAX(id) FROM builds GROUP BY test_name)
-               AND status = 'compiled';")
-        DB_FAILED=$(sqlite3 "$DB" \
-            "SELECT COUNT(*) FROM builds
-             WHERE id IN (SELECT MAX(id) FROM builds GROUP BY test_name)
-               AND status != 'compiled';")
-        DB_VERIFIED=$(sqlite3 "$DB" \
-            "SELECT COUNT(DISTINCT test_name) FROM verified_sources;")
-        DB_TOTAL=$((DB_COMPILED + DB_FAILED))
-        UNTESTED=$((DISK_TOTAL - DB_TOTAL))
-        [ "$UNTESTED" -lt 0 ] && UNTESTED=0
-
-        LATEST=$(sqlite3 "$DB" "SELECT built_at FROM builds ORDER BY id DESC LIMIT 1;")
-
-        # Witness stats
+        # Ensure witness table exists
         sqlite3 "$DB" ".timeout 5000" \
             "CREATE TABLE IF NOT EXISTS witness_replays (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -578,84 +554,99 @@ case "$MODE" in
                 total       INTEGER NOT NULL,
                 source_sha  TEXT
             );" 2>/dev/null
-        WITNESS_TOTAL=$(sqlite3 "$DB" \
-            "SELECT COUNT(DISTINCT test_name) FROM witness_replays;" 2>/dev/null || echo "0")
-        WITNESS_PASS=$(sqlite3 "$DB" \
+
+        LATEST=$(sqlite3 "$DB" "SELECT built_at FROM builds ORDER BY id DESC LIMIT 1;" 2>/dev/null || echo "-")
+
+        echo ""
+        echo "=== CONFORMANCE REPORT === ($LATEST)"
+        echo ""
+
+        # Full table — every test on disk
+        printf "%-38s %-10s %-12s %-10s %-8s %s\n" "TEST" "LANE" "BUILD" "WITNESS" "HUMAN" "NOTE"
+        printf "%-38s %-10s %-12s %-10s %-8s %s\n" "---" "----" "-----" "-------" "-----" "----"
+
+        total=0; compiled=0; failed=0; untested=0; verified=0
+        wit_recorded=0; wit_pass=0; wit_fail=0
+
+        disk_tests | sort | while read -r path; do
+            tname=$(name_from_path "$path")
+            lane=$(lane_from_path "$path")
+            safe_tname=$(sql_escape "$tname")
+
+            # Build status
+            row=$(sqlite3 "$DB" \
+                "SELECT status, substr(error_log, 1, 60) FROM builds
+                 WHERE test_name = '$safe_tname'
+                 ORDER BY id DESC LIMIT 1;" 2>/dev/null || true)
+            if [ -n "$row" ]; then
+                build_status=$(echo "$row" | cut -d'|' -f1)
+                build_err=$(echo "$row" | cut -d'|' -f2-)
+            else
+                build_status="-"
+                build_err=""
+            fi
+
+            # Human verified
+            human="-"
+            v=$(sqlite3 "$DB" \
+                "SELECT COUNT(*) FROM verified_sources WHERE test_name = '$safe_tname';" 2>/dev/null || echo "0")
+            [ "$v" -gt 0 ] && human="yes"
+
+            # Witness
+            witness="-"
+            has_wfile=0
+            [ -f "witnesses/${tname}.witness" ] && has_wfile=1
+            # Also check by basename for nested paths
+            bname=$(basename "$tname")
+            [ -f "witnesses/${bname}.witness" ] && has_wfile=1
+
+            wrow=$(sqlite3 "$DB" \
+                "SELECT status, passed, total FROM witness_replays
+                 WHERE test_name = '$safe_tname'
+                 ORDER BY id DESC LIMIT 1;" 2>/dev/null || true)
+            if [ -n "$wrow" ]; then
+                wstatus=$(echo "$wrow" | cut -d'|' -f1)
+                wpassed=$(echo "$wrow" | cut -d'|' -f2)
+                wtotal=$(echo "$wrow" | cut -d'|' -f3)
+                witness="${wstatus} ${wpassed}/${wtotal}"
+            elif [ "$has_wfile" -eq 1 ]; then
+                witness="recorded"
+            fi
+
+            # Failure note
+            note=$(sqlite3 "$DB" "SELECT substr(note,1,40) FROM failure_notes WHERE test_name = '$safe_tname';" 2>/dev/null || true)
+
+            printf "%-38s %-10s %-12s %-10s %-8s %s\n" "$tname" "$lane" "$build_status" "$witness" "$human" "$note"
+        done
+
+        # Totals
+        total=$(disk_tests | wc -l)
+        compiled=$(sqlite3 "$DB" \
+            "SELECT COUNT(*) FROM builds
+             WHERE id IN (SELECT MAX(id) FROM builds GROUP BY test_name)
+               AND status = 'compiled';" 2>/dev/null || echo "0")
+        failed=$(sqlite3 "$DB" \
+            "SELECT COUNT(*) FROM builds
+             WHERE id IN (SELECT MAX(id) FROM builds GROUP BY test_name)
+               AND status != 'compiled';" 2>/dev/null || echo "0")
+        verified=$(sqlite3 "$DB" \
+            "SELECT COUNT(DISTINCT test_name) FROM verified_sources;" 2>/dev/null || echo "0")
+        wit_files=$(ls witnesses/*.witness 2>/dev/null | wc -l || echo "0")
+        wit_pass=$(sqlite3 "$DB" \
             "SELECT COUNT(*) FROM witness_replays
              WHERE id IN (SELECT MAX(id) FROM witness_replays GROUP BY test_name)
                AND status = 'pass';" 2>/dev/null || echo "0")
-        WITNESS_FAIL=$(sqlite3 "$DB" \
+        wit_fail=$(sqlite3 "$DB" \
             "SELECT COUNT(*) FROM witness_replays
              WHERE id IN (SELECT MAX(id) FROM witness_replays GROUP BY test_name)
                AND status != 'pass';" 2>/dev/null || echo "0")
-        WITNESS_FILES=$(ls witnesses/*.witness 2>/dev/null | wc -l || echo "0")
+        untested=$((total - compiled - failed))
+        [ "$untested" -lt 0 ] && untested=0
 
-        echo "=== CONFORMANCE REPORT ==="
         echo ""
-        echo "Latest build: $LATEST"
+        echo "───────────────────────────────────────────────────────"
+        printf "  %-14s %-8s %-8s %-8s %-10s %-8s\n" "TOTAL" "BUILD" "FAIL" "HUMAN" "WITNESS" "UNTESTED"
+        printf "  %-14s %-8s %-8s %-8s %-10s %-8s\n" "$total" "$compiled" "$failed" "$verified" "${wit_pass}/${wit_files}" "$untested"
         echo ""
-        printf "  %-20s %s\n" "On disk:" "$DISK_TOTAL"
-        printf "  %-20s %s\n" "Compiled:" "$DB_COMPILED"
-        printf "  %-20s %s\n" "Human verified:" "$DB_VERIFIED"
-        printf "  %-20s %s\n" "Witness recorded:" "$WITNESS_FILES"
-        printf "  %-20s %s\n" "Witness pass:" "$WITNESS_PASS"
-        [ "$WITNESS_FAIL" -gt 0 ] && printf "  %-20s %s\n" "Witness fail:" "$WITNESS_FAIL"
-        printf "  %-20s %s\n" "Build failures:" "$DB_FAILED"
-        printf "  %-20s %s\n" "Untested:" "$UNTESTED"
-        DB_NOTES=$(sqlite3 "$DB" "SELECT COUNT(*) FROM failure_notes;" 2>/dev/null || echo "0")
-        [ "$DB_NOTES" -gt 0 ] && printf "  %-20s %s\n" "Failure notes:" "$DB_NOTES (run --notes)"
-        echo ""
-        echo "Pass rate: ${DB_COMPILED}/${DISK_TOTAL} ($(( DB_COMPILED * 100 / (DISK_TOTAL > 0 ? DISK_TOTAL : 1) ))%)"
-        echo ""
-
-        # By lane (from disk, cross-ref db)
-        echo "By lane:"
-        printf "  %-12s %6s %8s %8s %6s %8s\n" "LANE" "DISK" "COMPILED" "VERIFIED" "FAIL" "UNTESTED"
-        printf "  %-12s %6s %8s %8s %6s %8s\n" "----" "----" "--------" "--------" "----" "--------"
-        echo -e "$DISK_BY_LANE" | sort | uniq -c | sort -rn | while read -r count lane; do
-            [ -z "$lane" ] && continue
-            compiled=0
-            failed=0
-            untested=0
-            verified=0
-            while read -r path; do
-                tname=$(name_from_path "$path")
-                plane=$(lane_from_path "$path")
-                [ "$plane" != "$lane" ] && continue
-                safe_tname=$(sql_escape "$tname")
-                row=$(sqlite3 "$DB" \
-                    "SELECT status, verified_at FROM builds
-                     WHERE test_name = '$safe_tname'
-                     ORDER BY id DESC LIMIT 1;" 2>/dev/null || true)
-                if [ -z "$row" ]; then
-                    untested=$((untested + 1))
-                else
-                    s=$(echo "$row" | cut -d'|' -f1)
-                    if [ "$s" = "compiled" ]; then
-                        compiled=$((compiled + 1))
-                        v=$(sqlite3 "$DB" \
-                            "SELECT COUNT(*) FROM verified_sources WHERE test_name = '$safe_tname';" 2>/dev/null || echo "0")
-                        [ "$v" -gt 0 ] && verified=$((verified + 1))
-                    else
-                        failed=$((failed + 1))
-                    fi
-                fi
-            done < <(disk_tests)
-            printf "  %-12s %6s %8s %8s %6s %8s\n" "$lane" "$count" "$compiled" "$verified" "$failed" "$untested"
-        done
-        echo ""
-
-        # Build failures detail
-        if [ "$DB_FAILED" -gt 0 ]; then
-            echo "Build failures:"
-            sqlite3 "$DB" \
-                "SELECT test_name, status, substr(error_log, 1, 80)
-                 FROM builds
-                 WHERE id IN (SELECT MAX(id) FROM builds GROUP BY test_name)
-                   AND status != 'compiled'
-                 ORDER BY test_name;" | while IFS='|' read -r name status err; do
-                printf "  %-30s %-18s %s\n" "$name" "$status" "$err"
-            done
-        fi
         ;;
 esac

@@ -73,8 +73,8 @@ The `.tsz` compiler and native rendering framework. TypeScript + JSX compiles to
 
 The compiler is split into two parts:
 
-- **Forge** — small Zig kernel (~485 lines). Lexer, QuickJS bridge, file I/O. Built once, rarely changes. Tokenizes `.tsz` source and hands flat token arrays to Smith. Generated code outputs to `/tmp/tsz-gen/` by default (overridable with `--out-dir=`).
-- **Smith** — JS compiler intelligence (~33,300 lines across 276 files in 42 directories) running inside Forge via QuickJS. Lives in `compiler/smith/` with scoped subdirs: `parse/` (element/brace/map/template parsing), `emit/` (Zig codegen), `collect/` (preflight collection passes), `preflight/` (tier detection), `lanes/` (app/page/module/soup dispatch). Edit without rebuilding Forge.
+- **Forge** — small Zig kernel (~503 lines). Lexer, QuickJS bridge, file I/O. Built once, rarely changes. Tokenizes `.tsz` source and hands flat token arrays to Smith. Generated code outputs to `/tmp/tsz-gen/` by default (overridable with `--out-dir=`).
+- **Smith** — JS compiler intelligence (~42,000 lines across 371 files in 45 directories) running inside Forge via QuickJS. Lives in `compiler/smith/` with scoped subdirs: `patterns/` (140 JSX pattern recognizers), `parse/` (element/brace/map/template parsing), `emit_atoms/` (structured Zig codegen atoms), `emit_ops/` (emit helpers), `emit/` (top-level emitters), `collect/` (preflight collection passes), `preflight/` (tier detection + validation), `lanes/` (app/page/module/soup dispatch), `mod/` (module block compiler), `resolve/` (expression resolution). Edit without rebuilding Forge.
 
 ```
 app.tsz → [Forge: lex] → tokens → [Smith: parse + emit] → .zig source → native binary
@@ -82,9 +82,9 @@ app.tsz → [Forge: lex] → tokens → [Smith: parse + emit] → .zig source �
 
 Smith emits **`LUA_LOGIC` by default** for app UI and handlers (lua-tree): `.map()`, closures, and per-item dispatch live in LuaJIT. Example: `.map()` handlers become Lua functions like `__mapPress_0_0(idx)` with `lua_on_press` strings baked per item — no Zig closures. **`<script>`** blocks add **`JS_LOGIC`** on QuickJS; **`__eval`** / **`evalLuaMapData`** also use QuickJS from Lua. The author writes plain `.tsz`; the stack is **Lua-first for UI logic**, Zig for layout/paint/stamping.
 
-- **Compiler** — 5 Zig modules + 276 JS modules (Smith, ~33,300 lines). Components, useState, useEffect, .map(), conditionals, template literals, classifiers, script imports, HTML tags, FFI, lscript/LuaJIT, `<page>` blocks, `<module>` blocks, Physics/3D shorthands, JSX prop spread
+- **Compiler** — 5 Zig modules (~2,860 lines) + 371 JS modules (Smith, ~42,000 lines). Components, useState, useEffect, .map(), conditionals, template literals, classifiers, script imports, HTML tags, FFI, lscript/LuaJIT, `<page>` blocks, `<module>` blocks, Physics/3D shorthands, JSX prop spread, 140 pattern recognizers
 - **GPU renderer** — wgpu pipeline: SDF text, rounded rects, borders, shadows, images, video, 3D (Blinn-Phong), custom effects
-- **Layout engine** — Flexbox (1400 lines), CSS-spec-aligned, WPT-tested
+- **Layout engine** — Flexbox (1,787 lines), CSS-spec-aligned, 76 WPT tests passing
 - **Networking** — HTTP client/server, WebSocket client/server, IPC, SOCKS5, Tor — all pure Zig
 - **Cryptography** — HMAC-SHA256 (RFC 4231), HKDF-SHA256 (RFC 5869), Shamir Secret Sharing (GF256), XChaCha20-Poly1305 envelope encryption, PII detection + sanitization
 - **Physics** — Box2D 2.4.1 (2D) and 3D rigid body simulation
@@ -285,13 +285,13 @@ Apps are called "carts." Each is a `.tsz` entry point with optional components, 
 
 ```
 carts/
-  conformance/          Conformance test suites (432 tests), organized by lane:
-    mixed/              Exhaustive feature + torture tests (256 tests)
-    wpt-flex/           W3C Web Platform Tests for flexbox (75 tests)
+  conformance/          Conformance test suites (452 tests), organized by lane:
+    mixed/              Exhaustive feature + torture tests (262 tests)
+    wpt-flex/           W3C Web Platform Tests for flexbox (76 tests)
     lscript/            LuaJIT script backend tests (37 tests)
-    chad/               Intent dictionary syntax tests (35 tests)
-    soup/               End-to-end apps in real-world syntax (21 tests)
-    parity/             React parity demos — TodoMVC, Slack, VS Code, etc. (7 tests)
+    chad/               Intent dictionary syntax tests (44 tests)
+    soup/               End-to-end apps in real-world syntax (25 tests)
+    parity/             React parity demos — TodoMVC, Slack, VS Code, etc. (8 tests)
     ws/                 WebSocket conformance (Autobahn + protocol)
     http/               HTTP conformance test harness
     ipc/                IPC conformance tests
@@ -316,7 +316,7 @@ carts/
 
 ## Framework Modules
 
-86 modules in the framework runtime:
+107 modules in the framework runtime (~53,200 lines of Zig):
 
 | Category | Modules |
 |----------|---------|
@@ -337,15 +337,17 @@ carts/
 
 | Suite | Disk | Compiled | Verified | What |
 |-------|------|----------|----------|------|
-| Mixed (feature + torture) | 255 | 185 | 115 | Exhaustive compiler coverage |
-| WPT Flexbox | 76 | 76 | 72 | W3C CSS flex spec |
-| Lscript | 37 | 12 | 5 | LuaJIT script backend |
-| Chad (intent syntax) | 27 | 6 | 0 | Dictionary-based intent syntax |
-| Soup (real-world) | 25 | 16 | 4 | End-to-end apps in messy real-world syntax |
-| Parity | 7 | 5 | 0 | React parity demos (TodoMVC, Slack, VS Code, etc.) |
-| **Overall** | **428** | **335 (78%)** | **225** | |
+| Mixed (feature + torture) | 262 | 223 | 177 | Exhaustive compiler coverage |
+| WPT Flexbox | 76 | 76 | 76 | W3C CSS flex spec |
+| Lscript | 37 | 13 | 13 | LuaJIT script backend |
+| Chad (intent syntax) | 44 | 6 | 7 | Dictionary-based intent syntax |
+| Soup (real-world) | 25 | 3 | 3 | End-to-end apps in messy real-world syntax |
+| Parity | 8 | 4 | 2 | React parity demos (TodoMVC, Slack, VS Code, etc.) |
+| **Overall** | **452** | **325 (72%)** | **278** | |
 
-Conformance is tracked by a SQLite-backed ledger (`scripts/ledger`). A post-commit hook auto-runs regression sweeps when compiler or framework files change, reporting newly broken vs already broken vs newly fixed.
+12,121 total builds across two conformance databases (8,804 current + 3,317 v4). 186 automated pixel-verification tests (`tests/*.autotest`).
+
+Conformance is tracked by a SQLite-backed build ledger (`conformance.db`). Every `scripts/build` on a conformance cart auto-records pass/fail with engine and compiler SHAs. Two-channel blessing system: engine and compiler are independently verified. `--proveIBrokeIt` tests against the blessed engine, `--proveMyCompilerBrokeIt` tests against the blessed compiler.
 
 ## Performance
 

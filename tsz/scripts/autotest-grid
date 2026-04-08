@@ -37,6 +37,8 @@ def main():
             # Skip non-step lines
             if line.startswith("COLOR") or line.startswith("SOURCE") or line.startswith("RESULT") or line.startswith("BORDER_PIXEL"):
                 continue
+            if "|" not in line:
+                continue
             first_pipe = line.index("|")
             idx = int(line[:first_pipe])
             rest = line[first_pipe + 1:]
