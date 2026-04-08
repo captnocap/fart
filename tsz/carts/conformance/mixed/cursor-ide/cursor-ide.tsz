@@ -70,7 +70,7 @@ const [files, setFiles] = useState([
 ]);
 
 // === EDITOR STATE ===
-const [editorContent, setEditorContent] = useState('// Cursor IDE - Agentic Coding Environment\n\nimport { useState, useEffect } from "react";\n\n// SQLite bridge for project indexing\nconst db = __sqlite_open("project.db");\n\n// File system watcher\nconst watcher = __fs_watch("./src");\n\nfunction Sidebar() {\n  const [files, setFiles] = useState([]);\n\n  useEffect(() => {\n    // Index project files in SQLite\n    __sqlite_exec(db, "CREATE TABLE IF NOT EXISTS files...");\n  }, []);\n\n  return <FileTree />;\n}');
+const [editorContent, setEditorContent] = useState('');
 const [editorModified, setEditorModified] = useState(0);
 const [currentFilePath, setCurrentFilePath] = useState('src/components/Sidebar.tsx');
 const [totalLines, setTotalLines] = useState(20);

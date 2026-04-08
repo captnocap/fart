@@ -127,6 +127,13 @@ function initData() {
     lines.push({ text: 'cursor-ide ready. Ctrl+S to save, F3 to search, Ctrl+` for terminal.', type: 'info' });
     setTerminalLines(lines);
   });
+
+  // Load initial file into editor
+  var initialContent = fileContents['src/components/Sidebar.tsx'];
+  if (initialContent) {
+    setEditorContent(initialContent);
+    rebuildLineNumbers(initialContent);
+  }
 }
 
 // === Tool Execution Tracking ===
