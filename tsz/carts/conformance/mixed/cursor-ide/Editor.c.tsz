@@ -4,7 +4,7 @@
 function GutterLine(props) {
   return (
     <Box style={{ height: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', paddingRight: 12, paddingLeft: 8 }}>
-      <Text fontSize={12} color={props.isActive == 1 ? '#c0c0c0' : '#3d3d3d'}>{props.num}</Text>
+      <Text fontSize={12} color="#5a5a5a">{props.num}</Text>
     </Box>
   );
 }

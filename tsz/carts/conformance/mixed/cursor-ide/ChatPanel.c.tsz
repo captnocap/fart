@@ -4,48 +4,17 @@
 // === Tool Call Card ===
 // Shows live tool executions inline (bash/$, grep/S, readFile/R, writeFile/W, glob/G, LLM/A)
 // Mirrors ProgressUpdate stream from tool_framework.zig ToolExecutor
+// Tool call card — all static, no local vars (compiler drops them in lua-tree)
 function ToolCallCard(props) {
-  var exec = props.exec;
-  var isRunning = exec.status == 'running';
-  var isDone = exec.status == 'completed';
-  var isError = exec.status == 'error';
-
-  var statusColor = '#6e6e6e';
-  if (isRunning) statusColor = '#2d62ff';
-  if (isDone) statusColor = '#7ee787';
-  if (isError) statusColor = '#ff7b72';
-
-  var icon = '>';
-  if (exec.name == 'bash') icon = '$';
-  else if (exec.name == 'grep') icon = '/';
-  else if (exec.name == 'readFile') icon = 'R';
-  else if (exec.name == 'writeFile') icon = 'W';
-  else if (exec.name == 'glob') icon = '*';
-  else if (exec.name == 'LLM') icon = 'A';
-
   return (
     <C.ToolCallCard>
       <C.ToolCallHeader>
-        <C.ToolCallIcon style={{ color: statusColor }}>{icon}</C.ToolCallIcon>
-        <C.ToolCallName>{exec.name}</C.ToolCallName>
-        <C.ToolCallInput>{exec.input.length > 38 ? exec.input.substring(0, 38) + '...' : exec.input}</C.ToolCallInput>
-        <C.ToolCallStatus style={{ color: statusColor }}>{exec.status}</C.ToolCallStatus>
+        <C.ToolCallName>{props.exec.name}</C.ToolCallName>
+        <C.ToolCallStatus>{props.exec.status}</C.ToolCallStatus>
       </C.ToolCallHeader>
-      {isRunning && (
-        <C.ToolCallProgress>
-          <C.ToolCallProgressFill style={{ width: exec.percent + '%' }} />
-        </C.ToolCallProgress>
-      )}
-      {isDone && exec.result.length > 0 && (
-        <C.ToolCallOutput>
-          <C.ToolCallOutputText>{exec.result.length > 100 ? exec.result.substring(0, 100) + '...' : exec.result}</C.ToolCallOutputText>
-        </C.ToolCallOutput>
-      )}
-      {isError && exec.result.length > 0 && (
-        <C.ToolCallOutput>
-          <C.ToolCallOutputText style={{ color: '#ff7b72' }}>{exec.result}</C.ToolCallOutputText>
-        </C.ToolCallOutput>
-      )}
+      <C.ToolCallOutput>
+        <C.ToolCallOutputText>{props.exec.result}</C.ToolCallOutputText>
+      </C.ToolCallOutput>
     </C.ToolCallCard>
   );
 }
@@ -196,17 +165,12 @@ function AttachmentBar() {
   );
 }
 
-// Toggle button for tool capabilities (Web, Terminal, Auto-apply)
+// Toggle button for tool capabilities — no ternary styles (compiler drops local vars)
 function ToolToggle(props) {
-  var isActive = props.active == 1;
-
   return (
-    <C.InputToolToggle
-      onPress={props.onToggle}
-      style={isActive ? { borderColor: '#2d62ff', backgroundColor: '#0d1a2e' } : {}}
-    >
-      <C.InputToolToggleIcon style={isActive ? { color: '#79c0ff' } : {}}>{props.icon}</C.InputToolToggleIcon>
-      <C.InputToolToggleLabel style={isActive ? { color: '#79c0ff' } : {}}>{props.label}</C.InputToolToggleLabel>
+    <C.InputToolToggle onPress={props.onToggle}>
+      <C.InputToolToggleIcon>{props.icon}</C.InputToolToggleIcon>
+      <C.InputToolToggleLabel>{props.label}</C.InputToolToggleLabel>
     </C.InputToolToggle>
   );
 }
