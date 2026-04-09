@@ -15,7 +15,6 @@ function _a005_applies(ctx, meta) {
 }
 
 function _a005_emit(ctx, meta) {
-  void meta;
   var out = 'fn _initState() void {\n';
   for (var i = 0; i < ctx.stateSlots.length; i++) {
     var s = ctx.stateSlots[i];
@@ -25,7 +24,8 @@ function _a005_emit(ctx, meta) {
     else if (s.type === 'string') out += '    _ = state.createSlotString("' + s.initial + '");\n';
   }
   out += '}\n\n';
-  return out;
+  meta._deferredInitState = out;
+  return '';
 }
 
 _emitAtoms[5] = {

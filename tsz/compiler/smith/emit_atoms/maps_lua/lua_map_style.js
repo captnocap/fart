@@ -99,6 +99,25 @@ function _styleToLua(style, itemParam, indexParam, _luaIdxExpr) {
       // 2b. JS logical operators → Lua
       _jsExpr = _jsExpr.replace(/&&/g, ' and ').replace(/\|\|/g, ' or ');
       _jsExpr = _jsExpr.replace(/===/g, '==').replace(/!==/g, '~=');
+      _jsExpr = _jsExpr.replace(/\B#([0-9a-fA-F]{3,8})\b/g, '0x$1');
+      // 2c. Trailing JS ternary after an already-lowered `... and X or ...` tail.
+      for (var _ti2 = 0; _ti2 < 4 && _jsExpr.indexOf('?') >= 0; _ti2++) {
+        var _tailMatch = _jsExpr.match(/^(.*\sor\s)([^?][^?:]*?)\s*\?\s*([^:]+?)\s*:\s*(.+)$/);
+        if (_tailMatch) {
+          _jsExpr = _tailMatch[1] + '((' + _tailMatch[2].trim() + ') and ' + _tailMatch[3].trim() + ' or ' + _tailMatch[4].trim() + ')';
+          continue;
+        }
+        var _plainMatch = _jsExpr.match(/^([^?][^?:]*?)\s*\?\s*([^:]+?)\s*:\s*(.+)$/);
+        if (_plainMatch) {
+          _jsExpr = '((' + _plainMatch[1].trim() + ') and ' + _plainMatch[2].trim() + ' or ' + _plainMatch[3].trim() + ')';
+          continue;
+        }
+        break;
+      }
+      // 2d. Embedded Zig enum literals inside expressions → Lua strings
+      _jsExpr = _jsExpr.replace(/(^|[\s(])\.(center|row|column|row_reverse|column_reverse|flex_start|flex_end|space_between|space_around|space_evenly|stretch|baseline|wrap|wrap_reverse|nowrap|no_wrap|hidden|visible|scroll|auto|absolute|relative|none|flex|left|right|justify|vertical|horizontal)(?=[\s),]|$)/g, function(_, prefix, name) {
+        return prefix + '"' + name + '"';
+      });
       // 3. State slot refs → getter names
       _jsExpr = _jsExpr.replace(/state\.getSlot(?:Int|Float|Bool|String)?\((\d+)\)/g, function(_, idx) {
         return (ctx && ctx.stateSlots && ctx.stateSlots[+idx]) ? ctx.stateSlots[+idx].getter : '_slot' + idx;
@@ -194,7 +213,7 @@ function _styleToLua(style, itemParam, indexParam, _luaIdxExpr) {
     }
 
     // String keyword BEFORE dynamic item ref check — prevents "row" item param collision
-    var _enumPattern = /^(center|row|column|start|end|stretch|baseline|wrap|nowrap|hidden|scroll|auto|none|flex|absolute|relative|spaceBetween|spaceAround|space_between|space_around|flex_start|flex_end|row_reverse|column_reverse|space_evenly)$/;
+    var _enumPattern = /^(center|row|column|start|end|stretch|baseline|wrap|wrap_reverse|nowrap|no_wrap|hidden|visible|scroll|auto|none|flex|absolute|relative|left|right|justify|vertical|horizontal|spaceBetween|spaceAround|space_between|space_around|flex_start|flex_end|row_reverse|column_reverse|space_evenly)$/;
     if (typeof val === 'string' && _enumPattern.test(val)) {
       parts.push(luaKey + ' = "' + val + '"');
       continue;
@@ -224,6 +243,14 @@ function _styleToLua(style, itemParam, indexParam, _luaIdxExpr) {
   }
   // Post-process: quote any bare enum values that slipped through
   var result = '{ ' + parts.join(', ') + ' }';
-  result = result.replace(/= (center|row|column|row_reverse|column_reverse|flex_start|flex_end|space_between|space_around|space_evenly|stretch|baseline|wrap|nowrap|hidden|visible|scroll|auto|absolute|relative|none)([,} ])/g, '= "$1"$2');
+  result = result.replace(/\B#([0-9a-fA-F]{3,8})\b/g, '0x$1');
+  for (var _rt = 0; _rt < 4 && result.indexOf('?') >= 0; _rt++) {
+    var _nextResult = result
+      .replace(/ or ([^?{},]+?)\?([^:,}]+):([^,}]+)([,}])/g, ' or (($1) and $2 or $3)$4')
+      .replace(/= ([^?{},]+?)\?([^:,}]+):([^,}]+)([,}])/g, '= (($1) and $2 or $3)$4');
+    if (_nextResult === result) break;
+    result = _nextResult;
+  }
+  result = result.replace(/= \.?(center|row|column|row_reverse|column_reverse|flex_start|flex_end|space_between|space_around|space_evenly|stretch|baseline|wrap|wrap_reverse|nowrap|no_wrap|hidden|visible|scroll|auto|absolute|relative|none|left|right|justify|vertical|horizontal)([,} ])/g, '= "$1"$2');
   return result;
 }

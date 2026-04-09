@@ -21,7 +21,7 @@ function _a008_applies(ctx, meta) {
 function _a008_emit(ctx, meta) {
   void meta;
   var nonMapDynTexts = ctx.dynTexts.filter(function(dt) { return !dt.inMap; });
-  var out = '\n// \u2500\u2500 Dynamic text buffers \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n';
+  var out = '\n// ── Dynamic text buffers ─────────────────────────────────────────\n';
   for (var i = 0; i < nonMapDynTexts.length; i++) {
     var dt = nonMapDynTexts[i];
     var bs = dt.bufSize || 64;

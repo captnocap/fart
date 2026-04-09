@@ -24,10 +24,16 @@
 function _a026_applies(ctx, meta) {
   void meta;
   if (!ctx.maps || ctx.maps.length === 0) return false;
-  return ctx.maps.some(function(m) { return !m.isNested && !m.isInline; });
+  return ctx.maps.some(function(m) {
+    return !m.isNested && !m.isInline && m.mapBackend !== 'lua_runtime';
+  });
 }
 
 function _a026_emit(ctx, meta) {
+  return rebuildMap(ctx, meta);
+}
+
+function __a026_emit_DEAD(ctx, meta) {
   var _mapMeta = meta.mapMeta;
   var mapOrder = meta.mapOrder;
   var _promotedToPerItem = meta.promotedToPerItem;

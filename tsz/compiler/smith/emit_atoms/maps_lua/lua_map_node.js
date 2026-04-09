@@ -59,6 +59,39 @@ function _wrapCondEval(cond) {
   return cond;
 }
 
+function _inlineGlyphColorToLua(val) {
+  if (val === undefined || val === null || val === '') return '"transparent"';
+  if (typeof val === 'number') return String(val);
+  var asString = String(val);
+  if (asString === 'transparent') return '"transparent"';
+  var zigHex = _zigColorToLuaHex(asString);
+  if (zigHex) return zigHex;
+  var hexVal = _hexToLua(asString);
+  if (typeof hexVal === 'string' && /^0x[0-9a-f]+$/i.test(hexVal)) return hexVal;
+  return '"' + asString.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
+}
+
+function _inlineGlyphToLua(glyph) {
+  if (!glyph) return '{ d = "" }';
+  var parts = [];
+  parts.push('d = "' + String(glyph.d || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"');
+  parts.push('fill = ' + _inlineGlyphColorToLua(glyph.fill));
+  parts.push('stroke = ' + _inlineGlyphColorToLua(glyph.stroke));
+  parts.push('stroke_width = ' + (glyph.stroke_width !== undefined ? glyph.stroke_width : 0));
+  parts.push('scale = ' + (glyph.scale !== undefined ? glyph.scale : 1.0));
+  if (glyph.fill_effect) {
+    parts.push('fill_effect = "' + String(glyph.fill_effect).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"');
+  }
+  return '{ ' + parts.join(', ') + ' }';
+}
+
+function _inlineGlyphSentinelText(glyphs) {
+  if (!glyphs || glyphs.length <= 0) return '"\\x01"';
+  var sentinels = '';
+  for (var i = 0; i < glyphs.length; i++) sentinels += '\\x01';
+  return '"' + sentinels + '"';
+}
+
 function _nodeToLua(node, itemParam, indexParam, indent, _luaIdxExpr) {
   if (!node) return '{}';
   if (!indent) indent = '      ';
@@ -78,6 +111,17 @@ function _nodeToLua(node, itemParam, indexParam, indent, _luaIdxExpr) {
 
   if (node.text !== undefined && node.text !== null) {
     fields.push('text = ' + _textToLua(node.text, itemParam, indexParam, _luaIdxExpr));
+  }
+
+  if (node.inline_glyphs && node.inline_glyphs.length > 0) {
+    if (node.text === undefined || node.text === null || node.text === '') {
+      fields.push('text = ' + _inlineGlyphSentinelText(node.inline_glyphs));
+    }
+    var _glyphParts = [];
+    for (var _gi = 0; _gi < node.inline_glyphs.length; _gi++) {
+      _glyphParts.push(_inlineGlyphToLua(node.inline_glyphs[_gi]));
+    }
+    fields.push('inline_glyphs = { ' + _glyphParts.join(', ') + ' }');
   }
 
   if (node.fontSize) {
@@ -237,6 +281,7 @@ function _nodeToLua(node, itemParam, indexParam, indent, _luaIdxExpr) {
       } else if (child.luaMapLoop) {
         // Inline map loop — emits as a Lua function call that returns children
         var ml = child.luaMapLoop;
+        var loopDataVar = _jsExprToLua(ml.dataVar || '[]', itemParam, indexParam, _luaIdxExpr);
         // Nested maps use _nitem/_ni to avoid shadowing outer _item/_i
         var _isNested = !!itemParam;
         var _innerFnItem = _isNested ? '_nitem' : '_item';
@@ -258,7 +303,18 @@ function _nodeToLua(node, itemParam, indexParam, indent, _luaIdxExpr) {
         } else {
           loopBody = '{}';
         }
-        childLua.push('__mapLoop(' + ml.dataVar + ', function(' + _innerFnItem + ', ' + _innerFnIdx + ')\n' +
+        if (ml.filterConditions && ml.filterConditions.length > 0) {
+          var _filterParts = [];
+          for (var _fci = 0; _fci < ml.filterConditions.length; _fci++) {
+            var _fc = ml.filterConditions[_fci];
+            var _filterCond = _jsExprToLua(_fc.raw, ml.itemParam, _fc.indexParam || _innerIdxP, _innerLuaIdx);
+            _filterCond = _wrapCondEval(_filterCond);
+            if (_isNested) _filterCond = _filterCond.replace(/\b_item\b/g, _innerFnItem);
+            _filterParts.push('(' + _filterCond + ')');
+          }
+          loopBody = _filterParts.join(' and ') + ' and ' + loopBody + ' or nil';
+        }
+        childLua.push('__mapLoop(' + loopDataVar + ', function(' + _innerFnItem + ', ' + _innerFnIdx + ')\n' +
           indent + '    return ' + loopBody + '\n' +
           indent + '  end)');
       } else {

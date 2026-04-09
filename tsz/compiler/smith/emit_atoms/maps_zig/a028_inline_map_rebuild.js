@@ -351,21 +351,9 @@ function _a028_appendOrphanedMapArrays(out, ctx) {
 }
 
 function _a028_emit(ctx, meta) {
-  // In practice, inline rebuilds are emitted per-parent-map by calling
-  // _a028_emitInlineRebuild(ctx, meta, mi, m, _mapMeta, _promotedToPerItem)
-  // from the parent loop in atom 026 / map_pools.js. This top-level _emit
-  // produces the full output for all parent maps that have inline children.
-  if (!ctx.maps || ctx.maps.length === 0) return '';
-  var _mapMeta = meta.mapMeta;
-  var _promotedToPerItem = meta.promotedToPerItem;
-  var out = '';
-  for (var mi = 0; mi < ctx.maps.length; mi++) {
-    var m = ctx.maps[mi];
-    if (m.isNested || m.isInline) continue;
-    var fragment = _a028_emitInlineRebuild(ctx, meta, mi, m, _mapMeta, _promotedToPerItem);
-    if (fragment) out += fragment;
-  }
-  return out;
+  void ctx;
+  void meta;
+  return '';
 }
 
 _emitAtoms[28] = {

@@ -96,9 +96,7 @@
         _emitAtoms[46] = null;
         var atomOut = runEmitAtoms(ctx, meta);
         _emitAtoms[46] = saved46;
-
-        // Apply a046 post-pass (debug appendix + undefined-zeroing)
-        if (saved46 && saved46.applies(ctx, meta)) {
+        if (saved46 && typeof saved46.emit === 'function') {
           atomOut = saved46.emit(atomOut, ctx, file);
         }
 

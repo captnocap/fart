@@ -40,9 +40,8 @@ function _a030_emit(ctx) {
     var indexParam = lmr.indexParam || null;
     var bodyNode = lmr.bodyNode || null;
 
-    lines.push('-- [a030] lmr keys: ' + Object.keys(lmr).join(',') + ' bodyNode=' + (bodyNode ? 'yes' : 'null') + ' luaCode=' + (lmr.luaCode ? 'yes(' + lmr.luaCode.length + ')' : 'null'));
+    if (!bodyNode && !lmr.luaCode) continue;
     if (bodyNode) {
-      lines.push('-- [a030] bodyNode keys: ' + Object.keys(bodyNode).join(',') + ' children=' + (bodyNode.children ? bodyNode.children.length : 'none'));
       var bodyLua = _nodeToLua(bodyNode, itemParam, indexParam, '      ');
       lines.push('function __rebuildLuaMap' + idx + '()');
       lines.push('  __clearLuaNodes()');
@@ -68,7 +67,7 @@ function _a030_emit(ctx) {
       }
     }
   }
-  return lines;
+  return lines.join('\n') + '\n';
 }
 
 _emitAtoms[30] = {

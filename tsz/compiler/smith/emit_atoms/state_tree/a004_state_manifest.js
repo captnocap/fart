@@ -15,7 +15,7 @@ function _a004_applies(ctx, meta) {
 
 function _a004_emit(ctx, meta) {
   void meta;
-  var out = '// \u2500\u2500 State manifest \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n';
+  var out = '// ── State manifest ──────────────────────────────────────────────\n';
   ctx.stateSlots.forEach(function(s, i) {
     var typeLabel = s.type === 'boolean' ? 'bool' : s.type;
     out += '// slot ' + i + ': ' + s.getter + ' (' + typeLabel + ')\n';

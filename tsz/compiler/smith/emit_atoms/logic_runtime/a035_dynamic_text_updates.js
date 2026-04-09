@@ -7,7 +7,7 @@
 //
 // Trigger: ctx.dynTexts has non-map entries, or ctx.dynColors/dynStyles
 //   have entries needing runtime updates.
-// Output target: fn _updateDynamicTexts() void { ... }
+// Output target: fn _updateDynamicText() void { ... }
 //
 // Notes:
 //   Emits a Zig function that updates dynamic text buffers and
@@ -26,7 +26,7 @@
 
 function _a035_applies(ctx, meta) {
   void meta;
-  // _updateDynamicTexts is always emitted (even if body is empty)
+  // _updateDynamicText is always emitted (even if body is empty)
   return !!ctx;
 }
 
@@ -46,17 +46,18 @@ function _a035_emit(ctx, meta) {
     }
   }
 
-  var out = 'fn _updateDynamicTexts() void {\n';
+  var out = '';
+  if (meta._deferredInitState) out += meta._deferredInitState;
+  out += 'fn _updateDynamicText() void {\n';
   for (var di = 0; di < ctx.dynTexts.length; di++) {
     var dt = ctx.dynTexts[di];
     if (dt.inMap) continue;
     if (dt.arrName && mapPoolArrayNames.has(dt.arrName)) continue;
-    out += '    _dyn_text_' + dt.bufId + ' = std.fmt.bufPrint(&_dyn_buf_' + dt.bufId + ', "' + dt.fmtString + '", .{ ' + dt.fmtArgs + ' }) catch "";\n';
     var dtField = dt.targetField || 'text';
     if (dt.arrName) {
-      out += '    ' + dt.arrName + '[' + dt.arrIndex + '].' + dtField + ' = _dyn_text_' + dt.bufId + ';\n';
+      out += '    ' + dt.arrName + '[' + dt.arrIndex + '].' + dtField + ' = std.fmt.bufPrint(&_dyn_buf_' + dt.bufId + ', "' + dt.fmtString + '", .{ ' + dt.fmtArgs + ' }) catch "";\n';
     } else {
-      out += '    _root.' + dtField + ' = _dyn_text_' + dt.bufId + ';\n';
+      out += '    _root.' + dtField + ' = std.fmt.bufPrint(&_dyn_buf_' + dt.bufId + ', "' + dt.fmtString + '", .{ ' + dt.fmtArgs + ' }) catch "";\n';
     }
   }
 

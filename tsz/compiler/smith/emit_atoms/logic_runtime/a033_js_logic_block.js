@@ -39,10 +39,30 @@ function _a033_applies(ctx, meta) {
 
 function _a033_emit(ctx, meta) {
   void meta;
-  // Reference scaffolding — live emit is in emit_split.js emitLogicBlocks()
-  // (~370 lines covering ambient namespaces, OA setters, script blocks,
-  // map handlers, delegated handlers, and periodic updaters).
-  return '';
+  var jsLines = [];
+
+  // Script content → JS_LOGIC
+  if (ctx.scriptBlock) {
+    var jsBlock = jsTransform(ctx.scriptBlock);
+    jsLines.push(jsBlock);
+  }
+  if (globalThis.__scriptContent) {
+    jsLines.push(jsTransform(globalThis.__scriptContent));
+  }
+
+  // Emit JS_LOGIC
+  var out = '';
+  if (jsLines.length > 0) {
+    out += 'const JS_LOGIC =\n';
+    for (var ji = 0; ji < jsLines.length; ji++) {
+      out += '    \\\\' + jsLines[ji] + '\n';
+    }
+    out += ';\n\n';
+  } else {
+    out += 'const JS_LOGIC = "";\n\n';
+  }
+
+  return out;
 }
 
 _emitAtoms[33] = {

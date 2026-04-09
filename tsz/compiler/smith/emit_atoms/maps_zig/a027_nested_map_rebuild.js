@@ -158,20 +158,9 @@ function _a027_emitNestedRebuild(ctx, meta, mi, m, _mapMeta) {
 }
 
 function _a027_emit(ctx, meta) {
-  // In practice, nested rebuilds are emitted per-parent-map by calling
-  // _a027_emitNestedRebuild(ctx, meta, mi, m, _mapMeta) from the parent
-  // loop in atom 026 / map_pools.js. This top-level _emit produces the
-  // full output for all parent maps that have nested children.
-  if (!ctx.maps || ctx.maps.length === 0) return '';
-  var _mapMeta = meta.mapMeta;
-  var out = '';
-  for (var mi = 0; mi < ctx.maps.length; mi++) {
-    var m = ctx.maps[mi];
-    if (m.isNested || m.isInline) continue;
-    var fragment = _a027_emitNestedRebuild(ctx, meta, mi, m, _mapMeta);
-    if (fragment) out += fragment;
-  }
-  return out;
+  void ctx;
+  void meta;
+  return '';
 }
 
 _emitAtoms[27] = {

@@ -58,13 +58,13 @@ function _a036_emit(ctx, meta) {
       cond.condExpr.includes(' > ') || cond.condExpr.includes(' < ') ||
       cond.condExpr.includes('getBool') || cond.condExpr.includes('getSlotBool') || cond.condExpr.includes('std.mem.eql'));
     var wrapped = isOuterEval ? '((' + cond.condExpr + ').len > 0)' :
-      isComparison ? '((' + cond.condExpr + '))' :
+      isComparison ? '(' + cond.condExpr + ')' :
       '((' + cond.condExpr + ') != 0)';
     if (cond.kind === 'show_hide') {
       out += '    ' + cond.arrName + '[' + cond.trueIdx + '].style.display = if ' + wrapped + ' .flex else .none;\n';
     } else if (cond.kind === 'ternary_jsx') {
       out += '    ' + cond.arrName + '[' + cond.trueIdx + '].style.display = if ' + wrapped + ' .flex else .none;\n';
-      out += '    ' + cond.arrName + '[' + cond.falseIdx + '].style.display = if ' + wrapped + ' .none else .flex;\n';
+      out += '    ' + cond.arrName + '[' + cond.falseIdx + '].style.display = if !' + wrapped + ' .flex else .none;\n';
     }
   }
   out += '}\n\n';

@@ -16,6 +16,7 @@ function _a002_applies(ctx, meta) {
 function _a002_emit(ctx, meta) {
   void ctx;
   var out = 'const std = @import("std");\n';
+  if (meta.hasRuntimeLog) out += 'const smith_log = @import("' + meta.prefix + 'log.zig");\n';
   if (meta.fastBuild) {
     out += 'const api = @import("' + meta.prefix + 'api.zig");\n';
     out += 'const layout = api;\n';
@@ -25,8 +26,6 @@ function _a002_emit(ctx, meta) {
     out += 'const IS_LIB = if (@hasDecl(build_options, "is_lib")) build_options.is_lib else false;\n\n';
     out += 'const layout = @import("' + meta.prefix + 'layout.zig");\n';
     out += 'const Node = layout.Node;\nconst Style = layout.Style;\nconst Color = layout.Color;\n';
-    // Ensure core.zig export symbols (rjit_state_*) are in the link unit for monolithic builds
-    out += 'comptime { _ = @import("' + meta.prefix + 'core.zig"); }\n';
   }
   return out;
 }

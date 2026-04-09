@@ -22,14 +22,13 @@ function _a019_applies(ctx, meta) {
 }
 
 function _a019_emit(ctx, meta) {
-  void meta;
   const promotedToPerItem = computePromotedMapArrays(ctx);
   const mapOrder = buildMapEmitOrder(ctx);
   ensureMapHandlerFieldRefs(ctx);
-  ctx._mapEmitMeta = {
-    promotedToPerItem: promotedToPerItem,
-    mapOrder: mapOrder,
-  };
+  if (!meta.mapMeta) meta.mapMeta = [];
+  meta.promotedToPerItem = promotedToPerItem;
+  meta.mapOrder = mapOrder;
+  ctx._mapEmitMeta = meta;
   return "";
 }
 

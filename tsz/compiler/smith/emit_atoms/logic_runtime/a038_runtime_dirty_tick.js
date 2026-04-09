@@ -6,26 +6,17 @@
 // Current owner: emit/entrypoints.js, emit/runtime_updates.js
 //
 // Trigger: any state, OA, or Lua map activity that requires dirty-driven refresh.
-// Output target: the state.isDirty() gate inside _appTick() that calls
-//   _updateDynamicTexts, _updateConditionals, map rebuilds, Lua map rebuilds,
-//   and state.clearDirty().
+// Output target: fn _dirtyTick() void { ... } with runtime refresh
+//   calls for dynamic text, conditionals, map rebuilds, and Lua rebuilds.
 //
 // Notes:
-//   This atom captures the dirty-tick dispatch logic inside _appTick().
-//   The tick function is emitted by entrypoints.js, but the dirty gate
-//   orchestrates calls to functions defined by runtime_updates.js.
+//   This atom captures the body of the legacy _dirtyTick() helper from
+//   runtime_updates.js. The entry/tick wrappers are emitted elsewhere.
 //
 //   Three code paths based on what the app uses:
-//     1. hasDynStyles (dynamic style properties):
-//        if (state.isDirty()) { _updateDynamicTexts(); [_updateConditionals();]
-//          [arena reset;] [_rebuildMapN();] [luajit __rebuildLuaMaps;]
-//          state.clearDirty(); }
-//
-//     2. has maps (but no dyn styles):
-//        Same structure but triggered by map presence instead of dyn styles.
-//
-//     3. state-only (no maps, no dyn styles):
-//        Compact single-line: if (state.isDirty()) { updates; clearDirty(); }
+//     1. dynamic text / conditionals / styles / colors
+//     2. flat map rebuilds with arena reset
+//     3. Lua map data evaluation + __rebuildLuaMaps dispatch
 //
 //   Variant updates (_updateVariants) run OUTSIDE the dirty gate —
 //   they execute every tick unconditionally.
@@ -39,37 +30,26 @@ function _a038_applies(ctx, meta) {
 
 function _a038_emit(ctx, meta) {
   var hasLuaMaps = ctx._luaMapRebuilders && ctx._luaMapRebuilders.length > 0;
-  var out = '';
+  var out = 'fn _dirtyTick() void {\n';
 
-  if (meta.hasDynStyles) {
-    out += '    if (state.isDirty()) { _updateDynamicTexts();';
-    if (meta.hasConds) out += ' _updateConditionals();';
-    out += '\n';
-    if (meta.hasFlatMaps) out += '        _ = _pool_arena.reset(.retain_capacity);\n';
-    for (var mi = 0; mi < ctx.maps.length; mi++) {
-      if (ctx.maps[mi].isNested || ctx.maps[mi].isInline) continue;
-      out += '        _rebuildMap' + mi + '();\n';
-    }
-    if (hasLuaMaps) out += '        luajit_runtime.callGlobal("__rebuildLuaMaps");\n';
-    out += ' state.clearDirty(); }\n';
-  } else if (ctx.maps.length > 0 || hasLuaMaps) {
-    out += '    if (state.isDirty()) { _updateDynamicTexts();';
-    if (meta.hasConds) out += ' _updateConditionals();';
-    out += '\n';
-    if (meta.hasFlatMaps) out += '        _ = _pool_arena.reset(.retain_capacity);\n';
-    for (var mi2 = 0; mi2 < ctx.maps.length; mi2++) {
-      if (ctx.maps[mi2].isNested || ctx.maps[mi2].isInline) continue;
-      out += '        _rebuildMap' + mi2 + '();\n';
-    }
-    if (hasLuaMaps) out += '        luajit_runtime.callGlobal("__rebuildLuaMaps");\n';
-    out += ' state.clearDirty(); }\n';
-  } else {
-    out += '    if (state.isDirty()) {';
-    out += ' _updateDynamicTexts();';
-    if (meta.hasConds) out += ' _updateConditionals();';
-    if (hasLuaMaps) out += ' luajit_runtime.callGlobal("__rebuildLuaMaps");';
-    out += ' state.clearDirty(); }\n';
+  out += '    _updateDynamicText();\n';
+  if (meta.hasConds) out += '    _updateConditionals();\n';
+  if (meta.hasDynStyles && meta.hasDynText) out += '    _updateDynamicStyles();\n';
+  if (meta.hasVariants) out += '    _updateVariants();\n';
+  if (meta.hasFlatMaps) out += '    _ = _pool_arena.reset(.retain_capacity);\n';
+  for (var mi = 0; mi < ctx.maps.length; mi++) {
+    if (ctx.maps[mi].isNested || ctx.maps[mi].isInline) continue;
+    out += '    _rebuildMap' + mi + '();\n';
   }
+  if (hasLuaMaps) {
+    for (var ldi = 0; ldi < ctx._luaMapRebuilders.length; ldi++) {
+      if (ctx._luaMapRebuilders[ldi].isNested) continue;
+      var ldSrc = (ctx._luaMapRebuilders[ldi].rawSource || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+      out += '    qjs_runtime.evalLuaMapData(' + ldi + ', "' + ldSrc + '");\n';
+    }
+    out += '    luajit_runtime.callGlobal("__rebuildLuaMaps");\n';
+  }
+  out += '}\n\n';
 
   return out;
 }

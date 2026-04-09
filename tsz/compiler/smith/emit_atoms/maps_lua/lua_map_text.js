@@ -7,6 +7,48 @@ function _escapeLuaTextEval(expr) {
   return String(expr).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
 
+function _normalizeJsEvalPayload(expr) {
+  if (!expr) return '';
+  return String(expr)
+    .replace(/\\n/g, '\n')
+    .replace(/\\r/g, '\r')
+    .replace(/\\"/g, '"')
+    .replace(/\\\\/g, '\\')
+    .replace(/\band\b/g, '&&')
+    .replace(/\bor\b/g, '||')
+    .replace(/\bnot\b/g, '!')
+    .replace(/~=/g, '!=')
+    .replace(/\.len\b/g, '.length')
+    .trim();
+}
+
+function _jsEvalExpr(expr) {
+  return '__eval("' + _escapeLuaTextEval(_normalizeJsEvalPayload(expr)) + '")';
+}
+
+function _normalizeEmbeddedJsEval(expr) {
+  if (!expr || String(expr).indexOf('__eval("') < 0) return expr;
+  return String(expr).replace(/__eval\("((?:[^"\\]|\\.)*)"\)/g, function(_, inner) {
+    return _jsEvalExpr(inner);
+  });
+}
+
+function _maybeInlineJsEvalExpr(expr) {
+  if (!expr) return null;
+  var m = String(expr).trim().match(/^__eval\("((?:[^"\\]|\\.)*)"\)$/);
+  if (!m) return null;
+  var jsExpr = _normalizeJsEvalPayload(m[1]);
+  var falseBranch = jsExpr.match(/^\(?\s*(?:0\s*==\s*1|1\s*==\s*0|false)\s*\)?\s*&&\s*[^?]+\?\s*([^:]+)\s*:\s*(.+)$/);
+  if (falseBranch) jsExpr = falseBranch[2].trim();
+  var trueBranch = jsExpr.match(/^\(?\s*(?:1\s*==\s*1|0\s*==\s*0|true)\s*\)?\s*&&\s*([^?]+)\?\s*([^:]+)\s*:\s*(.+)$/);
+  if (trueBranch) jsExpr = '(' + trueBranch[1].trim() + ')?' + trueBranch[2].trim() + ':' + trueBranch[3].trim();
+  if (/^_item\.\w+$/.test(jsExpr) || /^_nitem\.\w+$/.test(jsExpr)) return jsExpr;
+  if (/^\d+(?:\.\d+)?$/.test(jsExpr)) return jsExpr;
+  if (/^"(?:[^"\\]|\\.)*"$/.test(jsExpr)) return jsExpr;
+  if (/^'(?:[^'\\]|\\.)*'$/.test(jsExpr)) return '"' + jsExpr.slice(1, -1).replace(/"/g, '\\"') + '"';
+  return null;
+}
+
 function _needsLuaTextEval(expr) {
   if (!expr) return false;
   if (expr.indexOf('__eval(') >= 0) return false;
@@ -23,9 +65,12 @@ function _luaTextValueExpr(expr, itemParam, indexParam, _luaIdxExpr) {
   luaExpr = luaExpr.replace(/(\w+(?:\.\w+)*)\.length\b/g, '#$1');
   luaExpr = luaExpr.replace(/_oa\d+_(\w+)\[_i\]\[0\.\._oa\d+_\w+_lens\[_i\]\]/g, '_item.$1');
   luaExpr = luaExpr.replace(/_oa\d+_(\w+)\[_i\]/g, '_item.$1');
+  luaExpr = _normalizeEmbeddedJsEval(luaExpr);
+  var _inlineEval = _maybeInlineJsEvalExpr(luaExpr);
+  if (_inlineEval) return _inlineEval;
   luaExpr = luaExpr.trim();
   if (_needsLuaTextEval(luaExpr)) {
-    return '__eval("' + _escapeLuaTextEval(luaExpr) + '")';
+    return _jsEvalExpr(luaExpr);
   }
   return luaExpr;
 }
@@ -75,6 +120,9 @@ function _textToLua(text, itemParam, indexParam, _luaIdxExpr) {
     var _sv = text.stateVar;
     // Resolve component props — bare prop names need _item.field substitution
     _sv = _jsExprToLua(_sv, itemParam, indexParam, _luaIdxExpr);
+    _sv = _normalizeEmbeddedJsEval(_sv);
+    var _inlineStateEval = _maybeInlineJsEvalExpr(_sv);
+    if (_inlineStateEval) _sv = _inlineStateEval;
     // If stateVar still has Zig syntax, clean it up
     if (/@|state\.getSlot|\bif\b/.test(_sv)) {
       // Color.rgb → 0xHEX
@@ -129,7 +177,7 @@ function _textToLua(text, itemParam, indexParam, _luaIdxExpr) {
       // If clean Lua now (no Zig syntax left), emit bare
       if (!/[@?]/.test(_sv) && !/\bif\b/.test(_sv) && !/qjs_runtime/.test(_sv)) {
         if (_needsLuaTextEval(_sv)) {
-          return 'tostring(__eval("' + _sv.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"))';
+          return 'tostring(' + _jsEvalExpr(_sv) + ')';
         }
         var _litPfx2 = _sv.match(/^([^a-zA-Z_(\d#]+)(.+)$/);
         if (_litPfx2 && _litPfx2[1].trim().length > 0) {
@@ -137,7 +185,7 @@ function _textToLua(text, itemParam, indexParam, _luaIdxExpr) {
         }
         return 'tostring(' + _sv + ')';
       }
-      return 'tostring(__eval("' + _sv.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"))';
+      return 'tostring(' + _jsEvalExpr(_sv) + ')';
     }
     // Detect literal prefix before expression (e.g. "= _item.weight * ..." from template "= ${expr}")
     var _litPfxMatch = _sv.match(/^([^a-zA-Z_(\d#]+)(.+)$/);
@@ -145,7 +193,7 @@ function _textToLua(text, itemParam, indexParam, _luaIdxExpr) {
       return '"' + _litPfxMatch[1].replace(/"/g, '\\"') + '" .. tostring(' + _litPfxMatch[2] + ')';
     }
     if (_needsLuaTextEval(_sv)) {
-      return 'tostring(__eval("' + _sv.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"))';
+      return 'tostring(' + _jsEvalExpr(_sv) + ')';
     }
     return 'tostring(' + _sv + ')';
   }
@@ -207,7 +255,7 @@ function _textToLua(text, itemParam, indexParam, _luaIdxExpr) {
     _expr = _expr.replace(/\.length\b/g, '.length');
     // If expr has brackets or dots, use __eval for safety
     if (/[\[\].]/.test(_expr)) {
-      return '"' + _label + '" .. tostring(__eval("' + _expr.replace(/"/g, '\\"') + '"))';
+      return '"' + _label + '" .. tostring(' + _jsEvalExpr(_expr) + ')';
     }
     return '"' + _label + '" .. tostring(' + _expr + ')';
   }
@@ -223,6 +271,9 @@ function _textToLua(text, itemParam, indexParam, _luaIdxExpr) {
   luaExpr = luaExpr.replace(/(\w+(?:\.\w+)*)\.length\b/g, '#$1');
   luaExpr = luaExpr.replace(/_oa\d+_(\w+)\[_i\]\[0\.\._oa\d+_\w+_lens\[_i\]\]/g, '_item.$1');
   luaExpr = luaExpr.replace(/_oa\d+_(\w+)\[_i\]/g, '_item.$1');
+  luaExpr = _normalizeEmbeddedJsEval(luaExpr);
+  var _inlineGenericEval = _maybeInlineJsEvalExpr(luaExpr);
+  if (_inlineGenericEval) return 'tostring(' + _inlineGenericEval + ')';
   // If still has Zig/JS syntax or broken expressions → __eval with original source
   if (/@|state\.get|getSlot|\bconst\b|\blet\b|=>/.test(luaExpr) ||
       /\)\s+\w/.test(luaExpr) || /\w+\s+\w+/.test(luaExpr.replace(/\band\b|\bor\b|\bnot\b|\btostring\b/g, '').trim())) {
@@ -231,7 +282,7 @@ function _textToLua(text, itemParam, indexParam, _luaIdxExpr) {
     _jsText = _jsText.replace(/_oa\d+_(\w+)\[_i\]\[0\.\._oa\d+_\w+_lens\[_i\]\]/g, '_item.$1');
     _jsText = _jsText.replace(/_oa\d+_(\w+)\[_i\]/g, '_item.$1');
     _jsText = _jsText.replace(/@as\([^,]+,\s*/g, '').replace(/@intCast\(/g, '(');
-    return 'tostring(__eval("' + _jsText.replace(/\\/g, '\\\\').replace(/"/g, '\\"').trim() + '"))';
+    return 'tostring(' + _jsEvalExpr(_jsText) + ')';
   }
   luaExpr = luaExpr.trim();
   if (luaExpr.indexOf('_item') >= 0 || luaExpr.indexOf('(_i - 1)') >= 0 ||
@@ -241,12 +292,12 @@ function _textToLua(text, itemParam, indexParam, _luaIdxExpr) {
     if (_litPfx && _litPfx[1].trim().length > 0) {
       var _litTail = _litPfx[2].trim();
       if (_needsLuaTextEval(_litTail)) {
-        _litTail = '__eval("' + _escapeLuaTextEval(_litTail) + '")';
+        _litTail = _jsEvalExpr(_litTail);
       }
       return '"' + _litPfx[1].replace(/"/g, '\\"') + '" .. tostring(' + _litTail + ')';
     }
     if (_needsLuaTextEval(luaExpr)) {
-      return 'tostring(__eval("' + _escapeLuaTextEval(luaExpr) + '"))';
+      return 'tostring(' + _jsEvalExpr(luaExpr) + ')';
     }
     return 'tostring(' + luaExpr + ')';
   }

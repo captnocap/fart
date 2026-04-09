@@ -20,6 +20,8 @@ function _a029_applies(ctx) {
 function _a029_emit(ctx) {
   var out = '';
   for (var lmi = 0; lmi < ctx._luaMapRebuilders.length; lmi++) {
+    var lmr = ctx._luaMapRebuilders[lmi];
+    if (!lmr.bodyNode && !lmr.luaCode) continue;
     // Scan arrayDecls to find the wrapper node by __lmw tag
     for (var ai = 0; ai < ctx.arrayDecls.length; ai++) {
       var decl = ctx.arrayDecls[ai];
@@ -31,7 +33,8 @@ function _a029_emit(ctx) {
           // Count which element in the array contains the tag
           var before = decl.substring(0, tagIdx);
           var elemIdx = (before.match(/}, \.\{/g) || []).length;
-          out += `    luajit_runtime.setMapWrapper(${lmi}, @ptrCast(&nodes.${arrMatch[1]}[${elemIdx}]));\n`;
+          out += `            // Lua map ${lmi} wrapper registration\n`;
+          out += `            luajit_runtime.setMapWrapper(${lmi}, @ptrCast(&${arrMatch[1]}[${elemIdx}]));\n`;
         }
         break;
       }

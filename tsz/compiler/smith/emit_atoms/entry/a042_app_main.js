@@ -14,6 +14,7 @@ function _a042_applies(ctx, meta) {
 }
 
 function _a042_emit(ctx, meta) {
+  if (globalThis.__parityMode) return '';
   void ctx;
   var out = '\npub fn main() !void {\n';
   if (!meta.fastBuild) out += '    if (IS_LIB) return;\n';

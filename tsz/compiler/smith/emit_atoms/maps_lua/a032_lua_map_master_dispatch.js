@@ -22,11 +22,13 @@ function _a032_emit(ctx) {
   lines.push('function __rebuildLuaMaps()');
   lines.push('  __clearLuaNodes()');
   for (var lmi = 0; lmi < ctx._luaMapRebuilders.length; lmi++) {
-    lines.push('  __rebuildLuaMap' + lmi + '()');
+    var lmr = ctx._luaMapRebuilders[lmi];
+    if (!lmr.bodyNode && !lmr.luaCode) continue;
+    lines.push('  __rebuildLuaMap' + lmr.index + '()');
   }
   lines.push('end');
   lines.push('');
-  return lines;
+  return lines.join('\n') + '\n';
 }
 
 _emitAtoms[32] = {

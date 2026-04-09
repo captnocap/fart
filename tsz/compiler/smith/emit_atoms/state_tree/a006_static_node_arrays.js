@@ -15,7 +15,7 @@ function _a006_applies(ctx, meta) {
 
 function _a006_emit(ctx, meta) {
   var promotedToPerItem = meta.promotedToPerItem || new Set();
-  var out = '// \u2500\u2500 Generated node tree \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n';
+  var out = '// ── Generated node tree ─────────────────────────────────────────\n';
   for (var i = 0; i < ctx.arrayDecls.length; i++) {
     var nm = ctx.arrayDecls[i].match(/^var (_arr_\d+)/);
     if (nm && promotedToPerItem.has(nm[1])) continue;

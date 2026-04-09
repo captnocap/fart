@@ -14,12 +14,14 @@ function _a039_applies(ctx, meta) {
 }
 
 function _a039_emit(ctx, meta) {
+  if (globalThis.__parityMode) return '';
   var out = 'fn _appInit() void {\n    _initState();\n';
 
   for (var oi = 0; oi < ctx.objectArrays.length; oi++) {
     var oa = ctx.objectArrays[oi];
     if (oa.isNested || oa.isConst) continue;
     out += '    qjs_runtime.registerHostFn("__setObjArr' + oa.oaIdx + '", @ptrCast(&_oa' + oa.oaIdx + '_unpack), 1);\n';
+    out += '    luajit_runtime.registerHostFn("__setObjArr' + oa.oaIdx + '", @ptrCast(&_oa' + oa.oaIdx + '_unpack), 1);\n';
     // NOTE: _oa_unpack is QuickJS ABI (JSContext, JSValue, ...) — NOT lua_CFunction.
     // Lua handlers receive OA field values as args from Zig, not by indexing Lua tables.
   }
@@ -43,7 +45,7 @@ function _a039_emit(ctx, meta) {
     }
   }
 
-  if (meta.hasDynText) out += '    _updateDynamicTexts();\n';
+  if (meta.hasDynText) out += '    _updateDynamicText();\n';
   if (meta.hasConds) out += '    _updateConditionals();\n';
   if (meta.hasVariants) out += '    _updateVariants();\n';
 
@@ -74,13 +76,23 @@ function _a039_emit(ctx, meta) {
           var arrMatch = decl.match(/^(?:pub )?var (_arr_\d+)/);
           if (arrMatch) {
             var before = decl.substring(0, tagIdx);
-            var elemIdx = (before.match(/}, \.\{/g) || []).length;
-            out += '    luajit_runtime.setMapWrapper(' + lmi + ', @ptrCast(&nodes.' + arrMatch[1] + '[' + elemIdx + ']));\n';
+            var elemIdx = 0;
+            var commaCount = (before.match(/\.{/g) || []).length - 1;
+            if (commaCount >= 0) elemIdx = commaCount;
+            out += '    luajit_runtime.setMapWrapper(' + lmi + ', @ptrCast(&' + arrMatch[1] + '[' + elemIdx + ']));\n';
           }
           break;
         }
       }
     }
+
+    // Initial data evaluation + rebuild
+    for (var ldi = 0; ldi < ctx._luaMapRebuilders.length; ldi++) {
+      if (ctx._luaMapRebuilders[ldi].isNested) continue;
+      var ldSrc = (ctx._luaMapRebuilders[ldi].rawSource || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+      out += '            qjs_runtime.evalLuaMapData(' + ldi + ', "' + ldSrc + '");\n';
+    }
+    out += '            luajit_runtime.callGlobal("__rebuildLuaMaps");\n';
   }
 
   out += '}\n\n';

@@ -33,7 +33,7 @@ function _a031_emit() {
   lines.push('  end');
   lines.push('  return { children = result }');
   lines.push('end');
-  return lines;
+  return lines.join('\n') + '\n';
 }
 
 _emitAtoms[31] = {
