@@ -393,9 +393,9 @@ Conformance tests are organized into lanes under `carts/conformance/`:
 | Lane | What it proves |
 |------|----------------|
 | **`soup/`** | End-to-end apps in real-world syntax (HTML tags, DOM patterns, CSS hallucinations). Tests compiler resilience. Thin — only full app tests, no isolated features. (25 tests) |
-| **`mixed/`** | The exhaustive proving ground. Every feature, every edge case, every torture test. Uses framework primitives with inline styles. Most former standalone carts live here now. If it works in mixed, the other lanes just prove their translation layers don't break. (255 tests) |
-| **`chad/`** | End-to-end apps in intent dictionary syntax. Classifiers, script blocks, theme tokens, named resources. The golden path. Fastest compile path. (27 tests) |
-| **`parity/`** | React parity demos — TodoMVC, Slack, VS Code, Gmail, Figma. Proves the framework can replicate real-world UIs. (7 tests) |
+| **`mixed/`** | The exhaustive proving ground. Every feature, every edge case, every torture test. Uses framework primitives with inline styles. Most former standalone carts live here now. If it works in mixed, the other lanes just prove their translation layers don't break. (262 tests) |
+| **`chad/`** | End-to-end apps in intent dictionary syntax. Classifiers, script blocks, theme tokens, named resources. The golden path. Fastest compile path. (44 tests) |
+| **`parity/`** | React parity demos — TodoMVC, Slack, VS Code, Gmail, Figma. Proves the framework can replicate real-world UIs. (8 tests) |
 
 Mixed is the ground truth. Soup and chad are thin wrappers proving the compiler's translation layers work on top of what mixed already validates. The tier system isn't just readability — it's compiler architecture. Clean code compiles faster because the compiler does less work.
 

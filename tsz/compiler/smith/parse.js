@@ -2,12 +2,14 @@
 
 function parseJSXElement(c) {
   if (c.kind() !== TK.lt) return { nodeExpr: '.{}' };
+  var _jsxStartPos = c.pos;
   c.advance(); // <
 
   const fragmentNode = tryParseFragmentElement(c);
   if (fragmentNode) return fragmentNode;
 
   let rawTag = readTagToken(c);
+  const originalRawTag = rawTag;
 
   if (rawTag === 'script') return skipScriptElement(c);
   if (rawTag === 'lscript') return skipLScriptElement(c);
@@ -16,6 +18,12 @@ function parseJSXElement(c) {
   rawTag = normalizedTag.rawTag;
   let clsDef = normalizedTag.clsDef;
   let clsName = normalizedTag.clsName;
+  var displayTag = clsName ? ('C.' + clsName) : originalRawTag;
+
+  if (ctx.inlineComponent && (ctx.inlineComponent === 'TopBar' || ctx.inlineComponent === 'Sidebar' || ctx.inlineComponent === 'MainSurfacePane')) {
+    globalThis.__dbg = globalThis.__dbg || [];
+    globalThis.__dbg.push('[INLINE_JSX_OPEN] owner=' + ctx.inlineComponent + ' tag=' + displayTag + ' start=' + _jsxStartPos + ' cursor=' + c.pos);
+  }
 
   // Check if this is a component call
   const comp = findComponent(rawTag);
@@ -33,7 +41,12 @@ function parseJSXElement(c) {
     tracePattern(73, 'direct_component', rawTag);
     const propValues = collectComponentPropValues(c);
     const compChildren = parseComponentCallChildren(c);
-    return inlineComponentCall(c, comp, rawTag, propValues, compChildren);
+    const compResult = inlineComponentCall(c, comp, rawTag, propValues, compChildren);
+    if (ctx.inlineComponent && (ctx.inlineComponent === 'TopBar' || ctx.inlineComponent === 'Sidebar' || ctx.inlineComponent === 'MainSurfacePane')) {
+      globalThis.__dbg = globalThis.__dbg || [];
+      globalThis.__dbg.push('[INLINE_JSX_DONE] owner=' + ctx.inlineComponent + ' tag=' + displayTag + ' end=' + c.pos + ' next=' + (c.pos < c.count ? c.text().substring(0, 24) : 'EOF'));
+    }
+    return compResult;
   }
 
   tracePattern(6, 'jsx_element', rawTag);
@@ -55,10 +68,19 @@ function parseJSXElement(c) {
   while (c.kind() !== TK.gt && c.kind() !== TK.slash_gt && c.kind() !== TK.eof) {
     if (c.kind() === TK.identifier) {
       const attr = c.text();
+      var _attrStartPos = c.pos;
       c.advance();
       if (c.kind() === TK.equals) {
         c.advance();
+        if (ctx.inlineComponent && (ctx.inlineComponent === 'TopBar' || ctx.inlineComponent === 'Sidebar' || ctx.inlineComponent === 'MainSurfacePane') && (displayTag === 'C.TopBar' || displayTag === 'C.Sidebar' || displayTag === 'C.Editor')) {
+          globalThis.__dbg = globalThis.__dbg || [];
+          globalThis.__dbg.push('[ATTR_BEFORE] owner=' + ctx.inlineComponent + ' tag=' + displayTag + ' attr=' + attr + ' start=' + _attrStartPos + ' pos=' + c.pos + ' kind=' + c.kind());
+        }
         parseElementAttr(c, attr, rawTag, attrState);
+        if (ctx.inlineComponent && (ctx.inlineComponent === 'TopBar' || ctx.inlineComponent === 'Sidebar' || ctx.inlineComponent === 'MainSurfacePane') && (displayTag === 'C.TopBar' || displayTag === 'C.Sidebar' || displayTag === 'C.Editor')) {
+          globalThis.__dbg = globalThis.__dbg || [];
+          globalThis.__dbg.push('[ATTR_AFTER] owner=' + ctx.inlineComponent + ' tag=' + displayTag + ' attr=' + attr + ' end=' + c.pos + ' kind=' + c.kind() + ' next=' + (c.pos < c.count ? c.text().substring(0, 24) : 'EOF'));
+        }
       } else {
         if (attr === 'l') {
           // Bare `l` prop — literal text mode, skip glyph resolution
@@ -78,6 +100,11 @@ function parseJSXElement(c) {
   var prevLiteral = ctx._literalTextMode;
   if (attrState._literalText) ctx._literalTextMode = true;
 
+  var _prevDebugParentTag = ctx._debugParentTag;
+  if (ctx.inlineComponent && (ctx.inlineComponent === 'TopBar' || ctx.inlineComponent === 'Sidebar' || ctx.inlineComponent === 'MainSurfacePane')) {
+    ctx._debugParentTag = displayTag;
+  }
+
   var result = finishParsedElement(
     c,
     rawTag,
@@ -89,6 +116,12 @@ function parseJSXElement(c) {
     clsDef,
     tagSrcOffset
   );
+  ctx._debugParentTag = _prevDebugParentTag;
+
+  if (ctx.inlineComponent && (ctx.inlineComponent === 'TopBar' || ctx.inlineComponent === 'Sidebar' || ctx.inlineComponent === 'MainSurfacePane')) {
+    globalThis.__dbg = globalThis.__dbg || [];
+    globalThis.__dbg.push('[INLINE_JSX_DONE] owner=' + ctx.inlineComponent + ' tag=' + displayTag + ' end=' + c.pos + ' next=' + (c.pos < c.count ? c.text().substring(0, 24) : 'EOF'));
+  }
 
   ctx._literalTextMode = prevLiteral;
   return result;
@@ -99,6 +132,16 @@ function parseChildren(c) {
   traceEnter();
   while (c.kind() !== TK.lt_slash && c.kind() !== TK.eof) {
     var _prePos = c.pos;
+    if (ctx.inlineComponent && ctx._debugParentTag &&
+        (ctx.inlineComponent === 'TopBar' || ctx.inlineComponent === 'Sidebar' || ctx.inlineComponent === 'MainSurfacePane')) {
+      globalThis.__dbg = globalThis.__dbg || [];
+      if (!ctx._inlineChildTraceCount) ctx._inlineChildTraceCount = 0;
+      if (ctx._inlineChildTraceCount < 80) {
+        globalThis.__dbg.push('[CHILD_LOOP] owner=' + ctx.inlineComponent + ' parent=' + ctx._debugParentTag +
+          ' pos=' + c.pos + ' kind=' + c.kind() + ' text=' + (c.pos < c.count ? c.text().substring(0, 24) : 'EOF'));
+        ctx._inlineChildTraceCount++;
+      }
+    }
     if (tryParseElementChild(c, children)) continue;
     if (tryParseBraceChild(c, children)) continue;
     if (tryParseTextChild(c, children)) continue;

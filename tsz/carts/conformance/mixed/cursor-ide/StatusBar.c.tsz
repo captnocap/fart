@@ -1,38 +1,57 @@
 // StatusBar — git health, cursor, file mode, and agent context
 
 function StatusBar(props) {
+  var compactBand = 0;
+  var mediumBand = 0;
+  var showSync = 1;
+  var showFile = 1;
+  var dirtyText = 'dirty ' + props.changedCount;
+  var stagedText = 'staged ' + props.stagedCount;
+  var syncText = '+' + props.branchAhead + ' / -' + props.branchBehind;
+  var lineText = 'Ln ' + props.cursorLine;
+  var columnText = 'Col ' + props.cursorColumn;
+
+  if (props.widthBand == 'narrow' || props.widthBand == 'widget' || props.widthBand == 'minimum') compactBand = 1;
+  if (props.widthBand == 'medium') {
+    mediumBand = 1;
+    showSync = 0;
+    showFile = 0;
+  }
+  if (compactBand == 1) showSync = 0;
+
   return (
-    <C.StatusBar>
+    <C.StatusBar style={props.style}>
       <C.StatusLeft>
         <C.StatusBranch>
           <Box style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#7ee787' }} />
           <C.StatusTextHighlight>{props.gitBranch}</C.StatusTextHighlight>
-          <C.StatusText>{props.gitRemote}</C.StatusText>
+          {compactBand != 1 && <C.StatusText>{props.gitRemote}</C.StatusText>}
         </C.StatusBranch>
 
         <C.StatusSeparator />
 
         <C.StatusItem>
-          <C.StatusText>{'dirty ' + props.changedCount}</C.StatusText>
-          <C.StatusText>{'staged ' + props.stagedCount}</C.StatusText>
-          <C.StatusText>{'+' + props.branchAhead + ' / -' + props.branchBehind}</C.StatusText>
+          <C.StatusText>{dirtyText}</C.StatusText>
+          {mediumBand != 1 && <C.StatusText>{stagedText}</C.StatusText>}
+          {showSync == 1 && <C.StatusText>{syncText}</C.StatusText>}
         </C.StatusItem>
 
         <C.StatusSeparator />
 
         <C.StatusItem>
-          <C.StatusText>{'Ln ' + props.cursorLine}</C.StatusText>
-          <C.StatusText>{'Col ' + props.cursorColumn}</C.StatusText>
+          <C.StatusText>{lineText}</C.StatusText>
+          <C.StatusText>{columnText}</C.StatusText>
         </C.StatusItem>
       </C.StatusLeft>
 
       <C.StatusRight>
         <C.StatusItem>
-          {props.fileName == '__landing__' && <C.StatusText>{props.workDir}</C.StatusText>}
-          {props.fileName != '__landing__' && <C.StatusText>{props.fileName}</C.StatusText>}
+          {props.fileName == '__landing__' && showFile == 1 && <C.StatusText>{props.workDir}</C.StatusText>}
+          {props.fileName == '__settings__' && showFile == 1 && <C.StatusText>Settings</C.StatusText>}
+          {props.fileName != '__landing__' && props.fileName != '__settings__' && showFile == 1 && <C.StatusText>{props.fileName}</C.StatusText>}
         </C.StatusItem>
 
-        <C.StatusSeparator />
+        {showFile == 1 && <C.StatusSeparator />}
 
         <C.StatusItem>
           <C.StatusText>{props.languageMode}</C.StatusText>

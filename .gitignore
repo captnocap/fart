@@ -222,3 +222,15 @@ tsz/nodes.zig
 tsz/state.zig
 tsz/test_*.zig
 tsz/test_min
+
+
+# Test Screenshots
+tsz/tests/screenshots/*
+deps/tinyemu
+love2d/deps/love
+deps/tinyemu
+love2d/deps/love
+tsz/tests/d121_check.png
+tsz/tests/flex_proof.html
+tsz/docs/CURSOR_IDE_TSZ_STRICT_AUTHORING_PLAN.md
+tsz/docs/CURSOR_IDE_PRODUCT_SURFACE_OVERVIEW.md

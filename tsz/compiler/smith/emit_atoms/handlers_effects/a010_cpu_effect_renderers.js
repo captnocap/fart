@@ -28,18 +28,6 @@ function _a010_emit(ctx, meta) {
     out += 'pub fn _effect_render_' + effectRender.id + '(ctx_e: *effect_ctx.EffectContext) void {\n';
     out += transpileEffectBody(effectRender.body, effectRender.param);
     out += '}\n\n';
-    var result = transpileEffectToWGSL(effectRender.body, effectRender.param);
-    if (result && result.wgsl) {
-      var wgslLines = result.wgsl.split('\n');
-      out += 'pub const _effect_wgsl_' + effectRender.id + ': []const u8 =\n';
-      wgslLines.forEach(function(wgslLine) {
-        out += '    \\\\' + wgslLine + '\n';
-      });
-      out += ';\n';
-      out += 'pub const _effect_shader_' + effectRender.id + ' = api.GpuShaderDesc{ .wgsl = _effect_wgsl_' + effectRender.id + ' };\n\n';
-    } else {
-      out += 'pub const _effect_shader_' + effectRender.id + ': ?api.GpuShaderDesc = null;  // CPU-only effect\n\n';
-    }
   });
   return out;
 }

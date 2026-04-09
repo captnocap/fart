@@ -1,48 +1,38 @@
 // Sidebar — workspace explorer with open editors and git change rails
 
+import {
+  HouseIcon, PackageIcon, FolderIcon, FolderOpenIcon, FileCodeIcon, FileJsonIcon, FileTextIcon,
+  PaletteIcon, BracesIcon, TerminalIcon, PanelLeftIcon, ChevronDownIcon, ChevronRightIcon,
+  RefreshCcwIcon, PlusIcon
+} from './Icon.c';
+
 function FileTypeBadge(props) {
-  var label = '#';
-  var bg = '#1a1a1a';
-  var fg = '#6e6e6e';
+  var type = props.type;
 
-  if (props.type == 'workspace') { label = 'W'; bg = '#0d2a1a'; fg = '#7ee787'; }
-  else if (props.type == 'component') { label = 'C'; bg = '#10213d'; fg = '#79c0ff'; }
-  else if (props.type == 'cls') { label = 'CL'; bg = '#241233'; fg = '#d2a8ff'; }
-  else if (props.type == 'script') { label = 'JS'; bg = '#102214'; fg = '#7ee787'; }
-  else if (props.type == 'mod') { label = 'MD'; bg = '#331608'; fg = '#ffa657'; }
-  else if (props.type == 'app') { label = 'AP'; bg = '#341316'; fg = '#ff7b72'; }
-  else if (props.type == 'tsz') { label = 'TZ'; bg = '#112016'; fg = '#56d364'; }
-  else if (props.type == 'dir') { label = 'D'; bg = '#1a1f2b'; fg = '#8b949e'; }
-  else if (props.type == 'ts' || props.type == 'tsx') { label = 'TS'; bg = '#0d2040'; fg = '#79c0ff'; }
-  else if (props.type == 'js' || props.type == 'jsx') { label = 'JS'; bg = '#332600'; fg = '#e6b450'; }
-  else if (props.type == 'zig') { label = 'ZG'; bg = '#331608'; fg = '#ffa657'; }
-  else if (props.type == 'md') { label = 'MD'; bg = '#102214'; fg = '#7ee787'; }
-  else if (props.type == 'css') { label = 'CS'; bg = '#241233'; fg = '#d2a8ff'; }
-  else if (props.type == 'json') { label = '{}'; bg = '#112016'; fg = '#56d364'; }
-  else if (props.type == 'home') { label = 'P'; bg = '#10213d'; fg = '#79c0ff'; }
-
-  return (
-    <Box style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 5, backgroundColor: bg }}>
-      <Text fontSize={9} color={fg}>{label}</Text>
-    </Box>
-  );
+  if (type == 'workspace') return <Box style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 5, backgroundColor: '#0d2a1a' }}><PackageIcon size={10} /></Box>;
+  if (type == 'home') return <Box style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 5, backgroundColor: '#10213d' }}><HouseIcon size={10} /></Box>;
+  if (type == 'dir') return <Box style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 5, backgroundColor: '#1a1f2b' }}><FolderIcon size={10} /></Box>;
+  if (type == 'folder-open') return <Box style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 5, backgroundColor: '#1a1f2b' }}><FolderOpenIcon size={10} /></Box>;
+  if (type == 'component' || type == 'tsz' || type == 'zig') return <Box style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 5, backgroundColor: type == 'zig' ? '#331608' : type == 'tsz' ? '#112016' : '#10213d' }}><BracesIcon size={10} /></Box>;
+  if (type == 'cls' || type == 'css') return <Box style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 5, backgroundColor: '#241233' }}><PaletteIcon size={10} /></Box>;
+  if (type == 'script' || type == 'ts' || type == 'tsx') return <Box style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 5, backgroundColor: type == 'script' ? '#102214' : '#0d2040' }}><FileCodeIcon size={10} /></Box>;
+  if (type == 'js' || type == 'jsx') return <Box style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 5, backgroundColor: '#332600' }}><FileCodeIcon size={10} /></Box>;
+  if (type == 'mod') return <Box style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 5, backgroundColor: '#331608' }}><PackageIcon size={10} /></Box>;
+  if (type == 'app') return <Box style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 5, backgroundColor: '#341316' }}><PanelLeftIcon size={10} /></Box>;
+  if (type == 'json') return <Box style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 5, backgroundColor: '#112016' }}><FileJsonIcon size={10} /></Box>;
+  if (type == 'md') return <Box style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 5, backgroundColor: '#102214' }}><FileTextIcon size={10} /></Box>;
+  if (type == 'sh') return <Box style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 5, backgroundColor: '#0d2040' }}><TerminalIcon size={10} /></Box>;
+  return <Box style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 5, backgroundColor: '#1a1a1a' }}><FileTextIcon size={10} /></Box>;
 }
 
 function GitBadge(props) {
   if (!props.status || props.status.length == 0) return null;
 
-  var bg = '#262626';
-  var fg = '#8b949e';
-  if (props.status == 'dirty' || props.status.indexOf('M') >= 0) { bg = '#332200'; fg = '#e6b450'; }
-  if (props.status == '??' || props.status == 'new') { bg = '#10213d'; fg = '#79c0ff'; }
-  if (props.status.indexOf('A') >= 0) { bg = '#0d2a1a'; fg = '#7ee787'; }
-  if (props.status.indexOf('D') >= 0) { bg = '#341316'; fg = '#ff7b72'; }
-
-  return (
-    <Box style={{ paddingLeft: 5, paddingRight: 5, paddingTop: 2, paddingBottom: 2, borderRadius: 999, backgroundColor: bg }}>
-      <Text fontSize={9} color={fg}>{props.status}</Text>
-    </Box>
-  );
+  if (props.status.indexOf('D') >= 0) return <Box style={{ paddingLeft: 5, paddingRight: 5, paddingTop: 2, paddingBottom: 2, borderRadius: 999, backgroundColor: '#341316' }}><Text fontSize={9} color="#ff7b72">{props.status}</Text></Box>;
+  if (props.status.indexOf('A') >= 0) return <Box style={{ paddingLeft: 5, paddingRight: 5, paddingTop: 2, paddingBottom: 2, borderRadius: 999, backgroundColor: '#0d2a1a' }}><Text fontSize={9} color="#7ee787">{props.status}</Text></Box>;
+  if (props.status == '??' || props.status == 'new') return <Box style={{ paddingLeft: 5, paddingRight: 5, paddingTop: 2, paddingBottom: 2, borderRadius: 999, backgroundColor: '#10213d' }}><Text fontSize={9} color="#79c0ff">{props.status}</Text></Box>;
+  if (props.status == 'dirty' || props.status.indexOf('M') >= 0) return <Box style={{ paddingLeft: 5, paddingRight: 5, paddingTop: 2, paddingBottom: 2, borderRadius: 999, backgroundColor: '#332200' }}><Text fontSize={9} color="#e6b450">{props.status}</Text></Box>;
+  return <Box style={{ paddingLeft: 5, paddingRight: 5, paddingTop: 2, paddingBottom: 2, borderRadius: 999, backgroundColor: '#262626' }}><Text fontSize={9} color="#8b949e">{props.status}</Text></Box>;
 }
 
 function OpenEditorRow(props) {
@@ -51,10 +41,31 @@ function OpenEditorRow(props) {
 
   return (
     <C.SidebarMiniRow onPress={function() { props.onSelectPath(tab.path); }}>
-      <FileTypeBadge type={tab.type} />
+      {tab.type == 'workspace' && <Box style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 5, backgroundColor: '#0d2a1a' }}><PackageIcon size={10} /></Box>}
+      {tab.type == 'home' && <Box style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 5, backgroundColor: '#10213d' }}><HouseIcon size={10} /></Box>}
+      {tab.type == 'dir' && <Box style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 5, backgroundColor: '#1a1f2b' }}><FolderIcon size={10} /></Box>}
+      {tab.type == 'folder-open' && <Box style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 5, backgroundColor: '#1a1f2b' }}><FolderOpenIcon size={10} /></Box>}
+      {tab.type == 'component' && <Box style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 5, backgroundColor: '#10213d' }}><BracesIcon size={10} /></Box>}
+      {tab.type == 'tsz' && <Box style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 5, backgroundColor: '#112016' }}><BracesIcon size={10} /></Box>}
+      {tab.type == 'zig' && <Box style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 5, backgroundColor: '#331608' }}><BracesIcon size={10} /></Box>}
+      {(tab.type == 'cls' || tab.type == 'css') && <Box style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 5, backgroundColor: '#241233' }}><PaletteIcon size={10} /></Box>}
+      {tab.type == 'script' && <Box style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 5, backgroundColor: '#102214' }}><FileCodeIcon size={10} /></Box>}
+      {tab.type == 'settings' && <Box style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 5, backgroundColor: '#241233' }}><PaletteIcon size={10} /></Box>}
+      {(tab.type == 'ts' || tab.type == 'tsx') && <Box style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 5, backgroundColor: '#0d2040' }}><FileCodeIcon size={10} /></Box>}
+      {(tab.type == 'js' || tab.type == 'jsx') && <Box style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 5, backgroundColor: '#332600' }}><FileCodeIcon size={10} /></Box>}
+      {tab.type == 'mod' && <Box style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 5, backgroundColor: '#331608' }}><PackageIcon size={10} /></Box>}
+      {tab.type == 'app' && <Box style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 5, backgroundColor: '#341316' }}><PanelLeftIcon size={10} /></Box>}
+      {tab.type == 'json' && <Box style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 5, backgroundColor: '#112016' }}><FileJsonIcon size={10} /></Box>}
+      {tab.type == 'md' && <Box style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 5, backgroundColor: '#102214' }}><FileTextIcon size={10} /></Box>}
+      {tab.type == 'sh' && <Box style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 5, backgroundColor: '#0d2040' }}><TerminalIcon size={10} /></Box>}
+      {tab.type != 'workspace' && tab.type != 'home' && tab.type != 'dir' && tab.type != 'folder-open' && tab.type != 'component' && tab.type != 'tsz' && tab.type != 'zig' && tab.type != 'cls' && tab.type != 'css' && tab.type != 'script' && tab.type != 'settings' && tab.type != 'ts' && tab.type != 'tsx' && tab.type != 'js' && tab.type != 'jsx' && tab.type != 'mod' && tab.type != 'app' && tab.type != 'json' && tab.type != 'md' && tab.type != 'sh' && <Box style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 5, backgroundColor: '#1a1a1a' }}><FileTextIcon size={10} /></Box>}
       <C.SidebarMiniLabel>{tab.name}</C.SidebarMiniLabel>
       {tab.modified == 1 && <C.SidebarMiniDot style={{ backgroundColor: '#e6b450' }} />}
-      {tab.git && <GitBadge status={tab.git} />}
+      {tab.git && tab.git.length > 0 && tab.git.indexOf('D') >= 0 && <Box style={{ paddingLeft: 5, paddingRight: 5, paddingTop: 2, paddingBottom: 2, borderRadius: 999, backgroundColor: '#341316' }}><Text fontSize={9} color="#ff7b72">{tab.git}</Text></Box>}
+      {tab.git && tab.git.length > 0 && tab.git.indexOf('D') < 0 && tab.git.indexOf('A') >= 0 && <Box style={{ paddingLeft: 5, paddingRight: 5, paddingTop: 2, paddingBottom: 2, borderRadius: 999, backgroundColor: '#0d2a1a' }}><Text fontSize={9} color="#7ee787">{tab.git}</Text></Box>}
+      {tab.git && tab.git.length > 0 && tab.git.indexOf('D') < 0 && tab.git.indexOf('A') < 0 && (tab.git == '??' || tab.git == 'new') && <Box style={{ paddingLeft: 5, paddingRight: 5, paddingTop: 2, paddingBottom: 2, borderRadius: 999, backgroundColor: '#10213d' }}><Text fontSize={9} color="#79c0ff">{tab.git}</Text></Box>}
+      {tab.git && tab.git.length > 0 && tab.git.indexOf('D') < 0 && tab.git.indexOf('A') < 0 && tab.git != '??' && tab.git != 'new' && (tab.git == 'dirty' || tab.git.indexOf('M') >= 0) && <Box style={{ paddingLeft: 5, paddingRight: 5, paddingTop: 2, paddingBottom: 2, borderRadius: 999, backgroundColor: '#332200' }}><Text fontSize={9} color="#e6b450">{tab.git}</Text></Box>}
+      {tab.git && tab.git.length > 0 && tab.git.indexOf('D') < 0 && tab.git.indexOf('A') < 0 && tab.git != '??' && tab.git != 'new' && tab.git != 'dirty' && tab.git.indexOf('M') < 0 && <Box style={{ paddingLeft: 5, paddingRight: 5, paddingTop: 2, paddingBottom: 2, borderRadius: 999, backgroundColor: '#262626' }}><Text fontSize={9} color="#8b949e">{tab.git}</Text></Box>}
     </C.SidebarMiniRow>
   );
 }
@@ -75,51 +86,101 @@ function ExplorerNodeRow(props) {
   var file = props.file;
   if (file.visible != 1) return null;
 
-  var bg = '#00000000';
-  if (file.selected == 1) bg = '#182235';
-  else if (file.hot == 1) bg = '#12171f';
-
   return (
-    <Pressable onPress={function() { props.onSelectPath(file.path); }} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingLeft: 12 + file.indent * 12, paddingRight: 10, paddingTop: 5, paddingBottom: 5, backgroundColor: bg }}>
-      {file.type == 'dir' && <Text fontSize={10} color="#4a5568">{file.expanded == 1 ? 'v' : '>'}</Text>}
+    <Pressable onPress={function() { props.onSelectPath(file.path); }} style={file.selected == 1 ? { flexDirection: 'row', alignItems: 'center', gap: 8, paddingLeft: 12 + file.indent * 12, paddingRight: 10, paddingTop: 5, paddingBottom: 5, borderRadius: 8, backgroundColor: '#182235' } : file.hot == 1 ? { flexDirection: 'row', alignItems: 'center', gap: 8, paddingLeft: 12 + file.indent * 12, paddingRight: 10, paddingTop: 5, paddingBottom: 5, borderRadius: 8, backgroundColor: '#12171f' } : { flexDirection: 'row', alignItems: 'center', gap: 8, paddingLeft: 12 + file.indent * 12, paddingRight: 10, paddingTop: 5, paddingBottom: 5, borderRadius: 8 }}>
+      {file.type == 'dir' && (
+        <Box style={{ width: 10, height: 10, alignItems: 'center', justifyContent: 'center' }}>
+          {file.expanded == 1 && <ChevronDownIcon size={9} />}
+          {file.expanded != 1 && <ChevronRightIcon size={9} />}
+        </Box>
+      )}
       {file.type != 'dir' && <Box style={{ width: 8 }} />}
-      <FileTypeBadge type={file.type} />
-      <Text fontSize={12} color={file.selected == 1 ? '#f3f4f6' : '#a7b1c2'}>{file.name}</Text>
+      {file.type == 'workspace' && <Box style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 5, backgroundColor: '#0d2a1a' }}><PackageIcon size={10} /></Box>}
+      {file.type == 'home' && <Box style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 5, backgroundColor: '#10213d' }}><HouseIcon size={10} /></Box>}
+      {file.type == 'dir' && file.expanded != 1 && <Box style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 5, backgroundColor: '#1a1f2b' }}><FolderIcon size={10} /></Box>}
+      {file.type == 'dir' && file.expanded == 1 && <Box style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 5, backgroundColor: '#1a1f2b' }}><FolderOpenIcon size={10} /></Box>}
+      {file.type == 'component' && <Box style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 5, backgroundColor: '#10213d' }}><BracesIcon size={10} /></Box>}
+      {file.type == 'tsz' && <Box style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 5, backgroundColor: '#112016' }}><BracesIcon size={10} /></Box>}
+      {file.type == 'zig' && <Box style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 5, backgroundColor: '#331608' }}><BracesIcon size={10} /></Box>}
+      {(file.type == 'cls' || file.type == 'css') && <Box style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 5, backgroundColor: '#241233' }}><PaletteIcon size={10} /></Box>}
+      {file.type == 'script' && <Box style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 5, backgroundColor: '#102214' }}><FileCodeIcon size={10} /></Box>}
+      {(file.type == 'ts' || file.type == 'tsx') && <Box style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 5, backgroundColor: '#0d2040' }}><FileCodeIcon size={10} /></Box>}
+      {(file.type == 'js' || file.type == 'jsx') && <Box style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 5, backgroundColor: '#332600' }}><FileCodeIcon size={10} /></Box>}
+      {file.type == 'mod' && <Box style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 5, backgroundColor: '#331608' }}><PackageIcon size={10} /></Box>}
+      {file.type == 'app' && <Box style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 5, backgroundColor: '#341316' }}><PanelLeftIcon size={10} /></Box>}
+      {file.type == 'json' && <Box style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 5, backgroundColor: '#112016' }}><FileJsonIcon size={10} /></Box>}
+      {file.type == 'md' && <Box style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 5, backgroundColor: '#102214' }}><FileTextIcon size={10} /></Box>}
+      {file.type == 'sh' && <Box style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 5, backgroundColor: '#0d2040' }}><TerminalIcon size={10} /></Box>}
+      {file.type != 'workspace' && file.type != 'home' && file.type != 'dir' && file.type != 'component' && file.type != 'tsz' && file.type != 'zig' && file.type != 'cls' && file.type != 'css' && file.type != 'script' && file.type != 'ts' && file.type != 'tsx' && file.type != 'js' && file.type != 'jsx' && file.type != 'mod' && file.type != 'app' && file.type != 'json' && file.type != 'md' && file.type != 'sh' && <Box style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 5, backgroundColor: '#1a1a1a' }}><FileTextIcon size={10} /></Box>}
+      {file.selected == 1 && <Text fontSize={12} color="#f3f4f6">{file.name}</Text>}
+      {file.selected != 1 && <Text fontSize={12} color="#a7b1c2">{file.name}</Text>}
       {file.hot == 1 && <C.SidebarMiniDot style={{ backgroundColor: '#2d62ff' }} />}
       <Box style={{ flexGrow: 1 }} />
-      {file.git && <GitBadge status={file.git} />}
+      {file.git && file.git.length > 0 && file.git.indexOf('D') >= 0 && <Box style={{ paddingLeft: 5, paddingRight: 5, paddingTop: 2, paddingBottom: 2, borderRadius: 999, backgroundColor: '#341316' }}><Text fontSize={9} color="#ff7b72">{file.git}</Text></Box>}
+      {file.git && file.git.length > 0 && file.git.indexOf('D') < 0 && file.git.indexOf('A') >= 0 && <Box style={{ paddingLeft: 5, paddingRight: 5, paddingTop: 2, paddingBottom: 2, borderRadius: 999, backgroundColor: '#0d2a1a' }}><Text fontSize={9} color="#7ee787">{file.git}</Text></Box>}
+      {file.git && file.git.length > 0 && file.git.indexOf('D') < 0 && file.git.indexOf('A') < 0 && (file.git == '??' || file.git == 'new') && <Box style={{ paddingLeft: 5, paddingRight: 5, paddingTop: 2, paddingBottom: 2, borderRadius: 999, backgroundColor: '#10213d' }}><Text fontSize={9} color="#79c0ff">{file.git}</Text></Box>}
+      {file.git && file.git.length > 0 && file.git.indexOf('D') < 0 && file.git.indexOf('A') < 0 && file.git != '??' && file.git != 'new' && (file.git == 'dirty' || file.git.indexOf('M') >= 0) && <Box style={{ paddingLeft: 5, paddingRight: 5, paddingTop: 2, paddingBottom: 2, borderRadius: 999, backgroundColor: '#332200' }}><Text fontSize={9} color="#e6b450">{file.git}</Text></Box>}
+      {file.git && file.git.length > 0 && file.git.indexOf('D') < 0 && file.git.indexOf('A') < 0 && file.git != '??' && file.git != 'new' && file.git != 'dirty' && file.git.indexOf('M') < 0 && <Box style={{ paddingLeft: 5, paddingRight: 5, paddingTop: 2, paddingBottom: 2, borderRadius: 999, backgroundColor: '#262626' }}><Text fontSize={9} color="#8b949e">{file.git}</Text></Box>}
     </Pressable>
   );
 }
 
 function Sidebar(props) {
+  var compactBand = 0;
+  var mediumBand = 0;
+  var showWorkspacePath = 0;
+  var openEditorLimit = 6;
+  var changeLimit = 6;
+
+  if (props.widthBand == 'narrow' || props.widthBand == 'widget' || props.widthBand == 'minimum') {
+    compactBand = 1;
+    openEditorLimit = 8;
+    changeLimit = 8;
+  }
+  if (props.widthBand == 'medium') {
+    mediumBand = 1;
+    openEditorLimit = 4;
+    changeLimit = 4;
+  }
+  if (props.widthBand == 'desktop') showWorkspacePath = 1;
+
   return (
-    <C.Sidebar>
+    <C.Sidebar style={props.style}>
       <C.SidebarHeader>
-        <C.SidebarTitle>WORKSPACE</C.SidebarTitle>
+        {compactBand == 1 && <C.SidebarTitle>FILES</C.SidebarTitle>}
+        {compactBand != 1 && <C.SidebarTitle>WORKSPACE</C.SidebarTitle>}
         <C.SidebarActions>
           <C.SidebarActionBtn onPress={function() { props.onRefreshWorkspace(); }}>
-            <C.SidebarActionIcon>R</C.SidebarActionIcon>
+            <RefreshCcwIcon size={11} />
           </C.SidebarActionBtn>
           <C.SidebarActionBtn onPress={function() { createNewFile('scratch.mod.tsz'); }}>
-            <C.SidebarActionIcon>+</C.SidebarActionIcon>
+            <PlusIcon size={11} />
           </C.SidebarActionBtn>
         </C.SidebarActions>
       </C.SidebarHeader>
 
       <C.SidebarWorkspaceCard onPress={function() { props.onOpenHome(); }}>
         <C.SidebarWorkspaceName>{props.workspaceName}</C.SidebarWorkspaceName>
-        <C.SidebarWorkspaceMeta>{props.gitBranch + '  ' + props.changedCount + ' dirty  ' + props.stagedCount + ' staged'}</C.SidebarWorkspaceMeta>
-        <C.SidebarWorkspacePath>{props.workDir}</C.SidebarWorkspacePath>
+        <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          <C.SidebarWorkspaceMeta>{props.gitBranch}</C.SidebarWorkspaceMeta>
+          <C.SidebarWorkspaceMeta>{props.changedCount}</C.SidebarWorkspaceMeta>
+          <C.SidebarWorkspaceMeta>dirty</C.SidebarWorkspaceMeta>
+          {mediumBand != 1 && <C.SidebarWorkspaceMeta>{props.stagedCount}</C.SidebarWorkspaceMeta>}
+          {mediumBand != 1 && <C.SidebarWorkspaceMeta>staged</C.SidebarWorkspaceMeta>}
+        </Box>
+        {showWorkspacePath == 1 && <C.SidebarWorkspacePath>{props.workDir}</C.SidebarWorkspacePath>}
       </C.SidebarWorkspaceCard>
 
       <C.SidebarSection>
         <C.SidebarSectionHeader>
-          <C.SidebarChevron>v</C.SidebarChevron>
+          <Box style={{ width: 10, height: 10, alignItems: 'center', justifyContent: 'center' }}>
+            <ChevronDownIcon size={9} />
+          </Box>
           <C.SidebarSectionTitle>OPEN EDITORS</C.SidebarSectionTitle>
         </C.SidebarSectionHeader>
         <C.SidebarMiniList>
           {props.tabs.map(function(tab, idx) {
+            if (idx >= openEditorLimit) return null;
             return <OpenEditorRow key={idx} tab={tab} onSelectPath={props.onSelectPath} />;
           })}
         </C.SidebarMiniList>
@@ -127,12 +188,15 @@ function Sidebar(props) {
 
       <C.SidebarSection>
         <C.SidebarSectionHeader>
-          <C.SidebarChevron>v</C.SidebarChevron>
-          <C.SidebarSectionTitle>{'SOURCE CONTROL  ' + props.changedCount}</C.SidebarSectionTitle>
+          <Box style={{ width: 10, height: 10, alignItems: 'center', justifyContent: 'center' }}>
+            <ChevronDownIcon size={9} />
+          </Box>
+          <C.SidebarSectionTitle>SOURCE CONTROL</C.SidebarSectionTitle>
+          <Text fontSize={11} color="#778395">{props.changedCount}</Text>
         </C.SidebarSectionHeader>
         <C.SidebarMiniList>
           {props.gitChanges.map(function(item, idx) {
-            if (idx > 5) return null;
+            if (idx >= changeLimit) return null;
             return <GitChangeRow key={idx} item={item} onSelectPath={props.onSelectPath} />;
           })}
         </C.SidebarMiniList>
@@ -140,7 +204,9 @@ function Sidebar(props) {
 
       <C.SidebarSection>
         <C.SidebarSectionHeader>
-          <C.SidebarChevron>v</C.SidebarChevron>
+          <Box style={{ width: 10, height: 10, alignItems: 'center', justifyContent: 'center' }}>
+            <ChevronDownIcon size={9} />
+          </Box>
           <C.SidebarSectionTitle>EXPLORER</C.SidebarSectionTitle>
         </C.SidebarSectionHeader>
       </C.SidebarSection>

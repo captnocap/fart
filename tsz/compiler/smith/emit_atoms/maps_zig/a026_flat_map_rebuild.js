@@ -912,3 +912,14 @@ function __a026_emit_DEAD(ctx, meta) {
 
   return out;
 }
+
+_emitAtoms[26] = {
+  id: 26,
+  name: 'flat_map_rebuild',
+  group: 'maps_zig',
+  target: 'zig',
+  status: 'complete',
+  currentOwner: 'emit/map_pools.js',
+  applies: _a026_applies,
+  emit: _a026_emit,
+};

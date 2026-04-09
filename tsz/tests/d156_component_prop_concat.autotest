@@ -1,0 +1,9 @@
+# d156_component_prop_concat: string concat through component prop should render and update
+
+expect "Component Prop Concat"
+expect "model Opus 4"
+expect "cycles: 0"
+
+click "Toggle Model"
+expect "model Sonnet 4"
+expect "cycles: 1"

@@ -81,18 +81,66 @@ declare function setActiveAgentId(v: string): void;
 declare function setAgentStatusText(v: string): void;
 declare function setWorkDir(v: string): void;
 declare function setModelDisplayName(v: string): void;
+declare function setWindowWidth(v: number): void;
+declare function setWindowHeight(v: number): void;
+declare function setWidthBand(v: string): void;
+declare function setCompactSurfaceState(v: string): void;
 declare var toolExecutions: any;
 declare var streamingText: string;
 declare var agentSessionId: string;
 declare var activeAgentId: string;
 declare var agentStatusText: string;
 declare var modelDisplayName: string;
+declare var windowWidth: number;
+declare var windowHeight: number;
+declare var widthBand: string;
+declare var compactSurface: string;
 
 var fileContents = {};
 var gitStatusByPath = {};
 var cachedTreePaths = [];
 var workspaceBootstrapped = 0;
 var ptyStarted = 0;
+
+function widthBandForSize(w: number, h: number) {
+  if (w <= 360 || h <= 250) return 'minimum';
+  if (w <= 560 || h <= 360) return 'widget';
+  if (w <= 920) return 'narrow';
+  if (w <= 1260) return 'medium';
+  return 'desktop';
+}
+
+function primarySurface() {
+  if (activeView == 'landing' || currentFilePath == '__landing__') return 'landing';
+  if (activeView == 'settings' || currentFilePath == '__settings__') return 'settings';
+  return 'editor';
+}
+
+function syncWindowMetrics() {
+  var sys = __tel_system();
+  if (!sys) return;
+
+  var w = sys.window_w || windowWidth || 1280;
+  var h = sys.window_h || windowHeight || 800;
+  var band = widthBandForSize(w, h);
+  var mainSurface = primarySurface();
+
+  if (w != windowWidth) setWindowWidth(w);
+  if (h != windowHeight) setWindowHeight(h);
+  if (band != widthBand) setWidthBand(band);
+
+  if (band == 'narrow' || band == 'widget' || band == 'minimum') {
+    var nextSurface = compactSurface;
+    if (!nextSurface || nextSurface.length == 0) nextSurface = mainSurface;
+    if (nextSurface == 'editor' && mainSurface == 'landing') nextSurface = 'landing';
+    if (nextSurface == 'landing' && mainSurface == 'editor') nextSurface = 'editor';
+    if ((nextSurface == 'landing' || nextSurface == 'editor' || nextSurface == 'settings') && mainSurface == 'settings') nextSurface = 'settings';
+    if (nextSurface == 'settings' && mainSurface != 'settings') nextSurface = mainSurface;
+    if (nextSurface != compactSurface) setCompactSurfaceState(nextSurface);
+  } else if (mainSurface != compactSurface && (compactSurface == 'landing' || compactSurface == 'editor' || compactSurface == 'settings')) {
+    setCompactSurfaceState(mainSurface);
+  }
+}
 
 function stripDotSlash(path: string) {
   if (!path) return '';
@@ -119,6 +167,7 @@ function parentPath(path: string) {
 
 function inferFileType(path: string) {
   if (path == '__landing__') return 'home';
+  if (path == '__settings__') return 'settings';
   if (path == '.' || path.length == 0) return 'workspace';
   var name = baseName(path);
   if (name.indexOf('.c.tsz') >= 0) return 'component';
@@ -133,6 +182,7 @@ function inferFileType(path: string) {
 }
 
 function languageForType(type: string) {
+  if (type == 'settings') return 'Settings';
   if (type == 'component' || type == 'cls' || type == 'script' || type == 'mod' || type == 'app' || type == 'tsz') return 'TSZ';
   if (type == 'ts' || type == 'tsx') return 'TypeScript';
   if (type == 'js' || type == 'jsx') return 'JavaScript';
@@ -146,6 +196,7 @@ function languageForType(type: string) {
 }
 
 function fileTone(type: string) {
+  if (type == 'settings') return '#d2a8ff';
   if (type == 'component') return '#79c0ff';
   if (type == 'cls') return '#d2a8ff';
   if (type == 'script') return '#7ee787';
@@ -166,23 +217,24 @@ function fileTone(type: string) {
 }
 
 function fileGlyph(type: string) {
-  if (type == 'component') return 'C';
-  if (type == 'cls') return 'CL';
-  if (type == 'script') return 'JS';
-  if (type == 'mod') return 'MD';
-  if (type == 'app') return 'AP';
-  if (type == 'tsz') return 'TZ';
-  if (type == 'ts' || type == 'tsx') return 'TS';
-  if (type == 'js' || type == 'jsx') return 'JS';
-  if (type == 'zig') return 'ZG';
-  if (type == 'md') return 'MD';
-  if (type == 'json') return '{}';
-  if (type == 'css') return 'CS';
-  if (type == 'sh') return 'SH';
-  if (type == 'home') return 'P';
-  if (type == 'workspace') return 'W';
-  if (type == 'dir') return 'D';
-  return '#';
+  if (type == 'settings') return 'palette';
+  if (type == 'component') return 'braces';
+  if (type == 'cls') return 'palette';
+  if (type == 'script') return 'file-code';
+  if (type == 'mod') return 'package';
+  if (type == 'app') return 'panel-left';
+  if (type == 'tsz') return 'braces';
+  if (type == 'ts' || type == 'tsx') return 'file-code';
+  if (type == 'js' || type == 'jsx') return 'file-code';
+  if (type == 'zig') return 'braces';
+  if (type == 'md') return 'file-text';
+  if (type == 'json') return 'file-json';
+  if (type == 'css') return 'palette';
+  if (type == 'sh') return 'terminal';
+  if (type == 'home') return 'house';
+  if (type == 'workspace') return 'package';
+  if (type == 'dir') return 'folder';
+  return 'file-text';
 }
 
 function statusLabel(code: string) {
@@ -326,6 +378,7 @@ function fallbackWorkspacePaths() {
     'tsz/carts/conformance/mixed/cursor-ide/cursor-ide.tsz',
     'tsz/carts/conformance/mixed/cursor-ide/cursor.script.tsz',
     'tsz/carts/conformance/mixed/cursor-ide/cursor.cls.tsz',
+    'tsz/carts/conformance/mixed/cursor-ide/Icon.c.tsz',
     'tsz/carts/conformance/mixed/cursor-ide/Sidebar.c.tsz',
     'tsz/carts/conformance/mixed/cursor-ide/Editor.c.tsz',
     'tsz/carts/conformance/mixed/cursor-ide/ChatPanel.c.tsz',
@@ -530,6 +583,13 @@ function buildLandingProjects(paths: any, info: any) {
       badge: 'focus',
       accent: '#7ee787',
     },
+    {
+      name: 'settings surface',
+      path: '__settings__',
+      summary: 'Provider routing, context layering, memory orchestration, plugin runtimes, and capability references in one dense shell.',
+      badge: 'surface',
+      accent: '#d2a8ff',
+    },
   ];
 
   if (hasPath(paths, 'tsz/docs/ARCHITECTURE.md') == 1) {
@@ -557,31 +617,35 @@ function buildLandingProjects(paths: any, info: any) {
 
 function buildLandingRecentFiles(paths: any, info: any) {
   var recent = [];
-  for (var i = 0; i < info.changes.length && recent.length < 4; i++) {
+  var seen = {};
+
+  function pushRecent(path: string, label: string, reason: string) {
+    var clean = stripDotSlash(path);
+    if (!clean || seen[clean]) return;
+    seen[clean] = 1;
+    var type = inferFileType(clean);
     recent.push({
-      path: info.changes[i].path,
-      label: baseName(info.changes[i].path),
-      reason: info.changes[i].status,
+      path: clean,
+      label: label,
+      reason: reason,
+      icon: fileGlyph(type),
+      tone: fileTone(type),
     });
   }
 
-  for (var ti = 0; ti < openTabs.length && recent.length < 7; ti++) {
+  for (var i = 0; i < info.changes.length && recent.length < 4; i++) {
+    pushRecent(info.changes[i].path, baseName(info.changes[i].path), info.changes[i].status);
+  }
+
+  for (var ti = 0; ti < openTabs.length && recent.length < 6; ti++) {
     if (openTabs[ti].path != '__landing__') {
-      recent.push({
-        path: openTabs[ti].path,
-        label: openTabs[ti].name,
-        reason: 'open tab',
-      });
+      pushRecent(openTabs[ti].path, openTabs[ti].name, 'open tab');
     }
   }
 
-  for (var pi = 0; pi < paths.length && recent.length < 10; pi++) {
+  for (var pi = 0; pi < paths.length && recent.length < 8; pi++) {
     if (paths[pi].indexOf('cursor-ide') >= 0) {
-      recent.push({
-        path: paths[pi],
-        label: baseName(paths[pi]),
-        reason: 'focus surface',
-      });
+      pushRecent(paths[pi], baseName(paths[pi]), 'focus surface');
     }
   }
 
@@ -589,6 +653,7 @@ function buildLandingRecentFiles(paths: any, info: any) {
 }
 
 function refreshWorkspace() {
+  syncWindowMetrics();
   var pwd = __exec('pwd 2>/dev/null');
   pwd = pwd ? pwd.trim() : '.';
   if (pwd.length == 0) pwd = '.';
@@ -621,9 +686,12 @@ function refreshWorkspace() {
 
   if (activeView == 'landing' || currentFilePath == '__landing__' || currentFilePath.length == 0) {
     setBreadcrumbs([
-      { label: 'Projects', icon: 'P', tone: '#2d62ff', active: 0, kind: 'home' },
-      { label: baseName(pwd) || 'workspace', icon: 'W', tone: '#7ee787', active: 1, kind: 'workspace', meta: gitInfo.branch },
+      { label: 'Projects', icon: 'house', tone: '#2d62ff', active: 0, kind: 'home' },
+      { label: baseName(pwd) || 'workspace', icon: 'package', tone: '#7ee787', active: 1, kind: 'workspace', meta: gitInfo.branch },
     ]);
+    markSelectedPath('__landing__');
+  } else if (activeView == 'settings' || currentFilePath == '__settings__') {
+    buildBreadcrumbs('__settings__');
     markSelectedPath('__landing__');
   } else {
     buildBreadcrumbs(currentFilePath);
@@ -808,15 +876,24 @@ function rebuildEditorPresentation(content: string, path: string) {
 function buildBreadcrumbs(path: string) {
   if (path == '__landing__') {
     setBreadcrumbs([
-      { label: 'Projects', icon: 'P', tone: '#2d62ff', active: 0, kind: 'home' },
-      { label: workspaceName, icon: 'W', tone: '#7ee787', active: 1, kind: 'workspace', meta: gitBranch },
+      { label: 'Projects', icon: 'house', tone: '#2d62ff', active: 0, kind: 'home' },
+      { label: workspaceName, icon: 'package', tone: '#7ee787', active: 1, kind: 'workspace', meta: gitBranch },
+    ]);
+    return;
+  }
+
+  if (path == '__settings__') {
+    setBreadcrumbs([
+      { label: 'Projects', icon: 'house', tone: '#2d62ff', active: 0, kind: 'home' },
+      { label: workspaceName, icon: 'package', tone: '#7ee787', active: 0, kind: 'workspace', meta: gitBranch },
+      { label: 'Settings', icon: 'palette', tone: '#d2a8ff', active: 1, kind: 'settings', meta: 'providers / memory' },
     ]);
     return;
   }
 
   var crumbs = [
-    { label: 'Projects', icon: 'P', tone: '#2d62ff', active: 0, kind: 'home' },
-    { label: workspaceName, icon: 'W', tone: '#7ee787', active: 0, kind: 'workspace', meta: gitBranch },
+    { label: 'Projects', icon: 'house', tone: '#2d62ff', active: 0, kind: 'home' },
+    { label: workspaceName, icon: 'package', tone: '#7ee787', active: 0, kind: 'workspace', meta: gitBranch },
   ];
 
   var parts = path.split('/');
@@ -876,6 +953,46 @@ function ensureTabForPath(path: string) {
   setActiveTabId(tabId);
 }
 
+function openSettingsSurface() {
+  ensureHomeTab();
+  var tabs = openTabs;
+  var tabId = 'settings';
+  var found = 0;
+  for (var i = 0; i < tabs.length; i++) {
+    if (tabs[i].path == '__settings__') {
+      tabId = tabs[i].id;
+      found = 1;
+    }
+  }
+
+  if (found == 0) {
+    tabs.push({
+      id: 'settings',
+      name: 'Settings',
+      path: '__settings__',
+      type: 'settings',
+      modified: 0,
+      pinned: 1,
+      git: '',
+    });
+  }
+
+  setOpenTabs(tabs);
+  setActiveView('settings');
+  if (widthBand == 'narrow' || widthBand == 'widget' || widthBand == 'minimum') setCompactSurfaceState('settings');
+  setCurrentFilePath('__settings__');
+  setEditorContent('');
+  setEditorRows([]);
+  setEditorModified(0);
+  setTotalLines(0);
+  setLineNumbers([{ num: '1' }]);
+  setLanguageMode('Settings');
+  setCursorPosition({ line: 1, column: 1 });
+  setActiveTabId(tabId);
+  buildBreadcrumbs('__settings__');
+  markSelectedPath('__landing__');
+}
+
 function chooseFocusLine(content: string) {
   var lines = content.split('\n');
   for (var i = 0; i < lines.length; i++) {
@@ -885,6 +1002,10 @@ function chooseFocusLine(content: string) {
 }
 
 function loadFileByPath(path: string, requestedLine: number) {
+  if (path == '__settings__') {
+    openSettingsSurface();
+    return;
+  }
   if (path == '__landing__' || path == '.' || inferFileType(path) == 'workspace') {
     openLandingPage();
     return;
@@ -902,6 +1023,7 @@ function loadFileByPath(path: string, requestedLine: number) {
   }
 
   setActiveView('editor');
+  if (widthBand == 'narrow' || widthBand == 'widget' || widthBand == 'minimum') setCompactSurfaceState('editor');
   setEditorContent(content);
   setCurrentFilePath(path);
   setEditorModified(0);
@@ -916,6 +1038,7 @@ function loadFileByPath(path: string, requestedLine: number) {
 }
 
 function initData() {
+  syncWindowMetrics();
   refreshWorkspace();
   openLandingPage();
 
@@ -976,6 +1099,10 @@ function openFile(idx: number) {
 }
 
 function openFileByPath(path: string) {
+  if (path == '__settings__') {
+    openSettingsSurface();
+    return;
+  }
   if (path == '__landing__' || path == '.' || path.length == 0) {
     openLandingPage();
     return;
@@ -994,6 +1121,7 @@ function openFileByPath(path: string) {
 function openSearchResult(path: string, line: number) {
   loadFileByPath(path, line);
   setShowSearch(0);
+  if (widthBand == 'narrow' || widthBand == 'widget' || widthBand == 'minimum') setCompactSurfaceState('editor');
 }
 
 function selectFile(idx: number) {
@@ -1001,7 +1129,7 @@ function selectFile(idx: number) {
 }
 
 function updateEditorContent(text: string) {
-  if (currentFilePath == '__landing__') return;
+  if (currentFilePath == '__landing__' || currentFilePath == '__settings__') return;
 
   setEditorContent(text);
   setEditorModified(1);
@@ -1017,7 +1145,7 @@ function updateEditorContent(text: string) {
 }
 
 function saveCurrentFile() {
-  if (currentFilePath == '__landing__') return;
+  if (currentFilePath == '__landing__' || currentFilePath == '__settings__') return;
 
   var execId = 'write_' + Date.now();
   addToolExecution(execId, 'writeFile', currentFilePath);
@@ -1060,6 +1188,7 @@ function createNewFile(name: string) {
 function openLandingPage() {
   ensureHomeTab();
   setActiveView('landing');
+  if (widthBand == 'narrow' || widthBand == 'widget' || widthBand == 'minimum') setCompactSurfaceState('landing');
   setCurrentFilePath('__landing__');
   setEditorContent('');
   setEditorRows([]);
@@ -1070,8 +1199,8 @@ function openLandingPage() {
   setCursorPosition({ line: 1, column: 1 });
   setActiveTabId('home');
   setBreadcrumbs([
-    { label: 'Projects', icon: 'P', tone: '#2d62ff', active: 0, kind: 'home' },
-    { label: workspaceName, icon: 'W', tone: '#7ee787', active: 1, kind: 'workspace', meta: gitBranch },
+    { label: 'Projects', icon: 'house', tone: '#2d62ff', active: 0, kind: 'home' },
+    { label: workspaceName, icon: 'package', tone: '#7ee787', active: 1, kind: 'workspace', meta: gitBranch },
   ]);
   markSelectedPath('__landing__');
 }
@@ -1080,6 +1209,10 @@ function openLandingPage() {
 function activateTab(id: string) {
   if (id == 'home') {
     openLandingPage();
+    return;
+  }
+  if (id == 'settings') {
+    openSettingsSurface();
     return;
   }
 
@@ -1247,6 +1380,7 @@ function sendMessage() {
 
 function fetchAgent(prompt: string) {
   setCurrentInput(prompt);
+  if (widthBand == 'narrow' || widthBand == 'widget' || widthBand == 'minimum') setCompactSurfaceState('agent');
   sendMessage();
 }
 
@@ -1265,6 +1399,7 @@ function openTerminal() {
     __pty_open(110, 28);
     ptyStarted = 1;
   }
+  if (widthBand == 'narrow' || widthBand == 'widget' || widthBand == 'minimum') setCompactSurfaceState('terminal');
 }
 
 function execCommand(cmd: string) {
@@ -1310,6 +1445,7 @@ function recentSearchFallback() {
 }
 
 function searchProject(query: string) {
+  if (widthBand == 'narrow' || widthBand == 'widget' || widthBand == 'minimum') setCompactSurfaceState('search');
   setSearchQuery(query);
   if (!query || query.length == 0) {
     setSearchResults(recentSearchFallback());
@@ -1385,6 +1521,10 @@ function attachCurrentFile() {
     addAttachment('workspace', workspaceName, workDir);
     return;
   }
+  if (currentFilePath == '__settings__') {
+    addAttachment('surface', 'Settings', '__settings__');
+    return;
+  }
   addAttachment('file', baseName(currentFilePath), currentFilePath);
 }
 
@@ -1397,7 +1537,7 @@ function triggerFileMention() {
 }
 
 function triggerSymbolMention() {
-  if (currentFilePath != '__landing__') addAttachment('symbol', baseName(currentFilePath) + ':focus', currentFilePath);
+  if (currentFilePath != '__landing__' && currentFilePath != '__settings__') addAttachment('symbol', baseName(currentFilePath) + ':focus', currentFilePath);
 }
 
 function toggleWebSearch() {
@@ -1430,7 +1570,14 @@ function startNewConversation() {
   setCurrentInputState('');
   setIsGenerating(0);
   setInputTokenEstimateState(0);
+  if (widthBand == 'narrow' || widthBand == 'widget' || widthBand == 'minimum') setCompactSurfaceState('agent');
 }
+
+if (!globalThis._cursorWindowPollRegistered) {
+  setInterval(syncWindowMetrics, 120);
+  globalThis._cursorWindowPollRegistered = true;
+}
+syncWindowMetrics();
 
 function selectSlashCommand(cmd: string) {
   setCurrentInput(cmd + ' ');
@@ -1440,6 +1587,7 @@ export {
   initData,
   refreshWorkspace,
   openLandingPage,
+  openSettingsSurface,
   selectFile,
   activateTab,
   closeTab,

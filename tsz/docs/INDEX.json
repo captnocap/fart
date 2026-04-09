@@ -1,5 +1,19 @@
 [
   {
+    "file": "CURSOR_IDE_PRODUCT_SURFACE_OVERVIEW.md",
+    "title": "Cursor IDE Product Surface Overview",
+    "category": "planning",
+    "tags": ["cursor-ide", "conformance", "product-surface", "multi-agent", "plugins", "memory", "monaco"],
+    "summary": "Catalog of the current cursor-ide cart, Bun product references, and a phased plan to turn it into a real IDE-scale compiler stress surface"
+  },
+  {
+    "file": "CURSOR_IDE_TSZ_STRICT_AUTHORING_PLAN.md",
+    "title": "Cursor IDE TSZ Strict Authoring Plan",
+    "category": "planning",
+    "tags": ["cursor-ide", "tsz", "authoring", "components", "scripts", "plugins", "editor"],
+    "summary": "TSZ-first implementation map for authoring the entire Cursor IDE product surface as cart files, components, classifiers, and script logic"
+  },
+  {
     "file": "systems/compiler-pipeline.md",
     "title": "Compiler Pipeline",
     "category": "core",

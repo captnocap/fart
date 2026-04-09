@@ -1,17 +1,20 @@
 // ChatPanel — agent console that shares workspace, git, and editor context
 
+import {
+  XIcon, BotIcon, UserRoundIcon, FileCodeIcon, AtSignIcon, GitBranchIcon, ChevronDownIcon,
+  HashIcon, PlusIcon, GlobeIcon, TerminalIcon, SparklesIcon, SendIcon, AlertTriangleIcon,
+  BadgeInfoIcon, RefreshCcwIcon
+} from './Icon.c';
+
 function ToolCallCard(props) {
   var exec = props.exec;
-  var tone = '#79c0ff';
-  if (exec.status == 'completed') tone = '#7ee787';
-  if (exec.status == 'error') tone = '#ff7b72';
 
   return (
     <C.ToolCallCard>
       <C.ToolCallHeader>
         <C.ToolCallName>{exec.name}</C.ToolCallName>
         <C.ToolCallInput>{exec.input}</C.ToolCallInput>
-        <C.ToolCallStatus style={{ color: tone }}>{exec.status}</C.ToolCallStatus>
+        <C.ToolCallStatus style={{ color: exec.status == 'completed' ? '#7ee787' : exec.status == 'error' ? '#ff7b72' : '#79c0ff' }}>{exec.status}</C.ToolCallStatus>
       </C.ToolCallHeader>
       <C.ToolCallOutput>
         <C.ToolCallOutputText>{exec.result}</C.ToolCallOutputText>
@@ -24,20 +27,18 @@ function AgentSessionBanner() {
   var isStreaming = agentStatusText == 'streaming';
   var isExecuting = agentStatusText == 'executing';
   var hasAgent = activeAgentId.length > 0;
-  var isActive = isStreaming || isExecuting || hasAgent;
-
-  if (!isActive) return null;
-
-  var dotColor = '#4a4a4a';
-  var label = 'idle';
-  if (isStreaming) { dotColor = '#2d62ff'; label = 'streaming response'; }
-  else if (isExecuting) { dotColor = '#e6b450'; label = 'running tools'; }
-  else if (hasAgent) { dotColor = '#7ee787'; label = 'background agent ' + activeAgentId.substring(6, 18); }
+  var isActive = 0;
+  if (isStreaming || isExecuting || hasAgent) isActive = 1;
+  if (isActive != 1) return null;
 
   return (
     <C.SessionBanner>
-      <C.SessionBannerDot style={{ backgroundColor: dotColor }} />
-      <C.SessionBannerText>{label}</C.SessionBannerText>
+      {isStreaming == 1 && <C.SessionBannerDot style={{ backgroundColor: '#2d62ff' }} />}
+      {isStreaming != 1 && isExecuting == 1 && <C.SessionBannerDot style={{ backgroundColor: '#e6b450' }} />}
+      {isStreaming != 1 && isExecuting != 1 && hasAgent && <C.SessionBannerDot style={{ backgroundColor: '#7ee787' }} />}
+      {isStreaming == 1 && <C.SessionBannerText>streaming response</C.SessionBannerText>}
+      {isStreaming != 1 && isExecuting == 1 && <C.SessionBannerText>running tools</C.SessionBannerText>}
+      {isStreaming != 1 && isExecuting != 1 && hasAgent && <C.SessionBannerText>background agent active</C.SessionBannerText>}
       {hasAgent && (
         <C.SessionBannerStop onPress={function() { stopBackgroundAgent(); }}>
           <C.SessionBannerStopText>Stop</C.SessionBannerStopText>
@@ -48,69 +49,104 @@ function AgentSessionBanner() {
 }
 
 function ContextStrip(props) {
+  var compactBand = 0;
+  var minimumBand = 0;
+  var showViewChip = 1;
+  var showFocusChip = 1;
+  var focusLabel = props.currentFilePath == '__landing__' ? props.workspaceName : props.currentFilePath == '__settings__' ? 'Settings' : props.currentFilePath;
+  var dirtyCountText = props.changedCount;
+
+  if (props.widthBand == 'narrow' || props.widthBand == 'widget' || props.widthBand == 'minimum') {
+    compactBand = 1;
+    showViewChip = 0;
+  }
+  if (props.widthBand == 'minimum') {
+    minimumBand = 1;
+    showFocusChip = 0;
+  }
+
+  if (compactBand == 1 && props.currentFilePath != '__landing__' && props.currentFilePath != '__settings__') {
+    var parts = props.currentFilePath.split('/');
+    focusLabel = parts[parts.length - 1];
+  }
+
   return (
-    <C.ChatContextStrip>
-      <C.ChatContextChip>
+    <C.ChatContextStrip style={compactBand == 1 ? { paddingLeft: 10, paddingRight: 10, paddingTop: 8, paddingBottom: 8, gap: 6 } : {}}>
+      {showViewChip == 1 && <C.ChatContextChip>
         <C.ChatContextChipLabel>view</C.ChatContextChipLabel>
         <C.ChatContextChipValue>{props.activeView}</C.ChatContextChipValue>
-      </C.ChatContextChip>
+      </C.ChatContextChip>}
       <C.ChatContextChip>
         <C.ChatContextChipLabel>branch</C.ChatContextChipLabel>
         <C.ChatContextChipValue>{props.gitBranch}</C.ChatContextChipValue>
       </C.ChatContextChip>
-      <C.ChatContextChip>
+      {showFocusChip == 1 && <C.ChatContextChip>
         <C.ChatContextChipLabel>focus</C.ChatContextChipLabel>
-        <C.ChatContextChipValue>{props.currentFilePath == '__landing__' ? props.workspaceName : props.currentFilePath}</C.ChatContextChipValue>
-      </C.ChatContextChip>
+        <C.ChatContextChipValue>{focusLabel}</C.ChatContextChipValue>
+      </C.ChatContextChip>}
       <C.ChatContextChip>
         <C.ChatContextChipLabel>dirty</C.ChatContextChipLabel>
-        <C.ChatContextChipValue>{'' + props.changedCount}</C.ChatContextChipValue>
+        <C.ChatContextChipValue>{dirtyCountText}</C.ChatContextChipValue>
       </C.ChatContextChip>
     </C.ChatContextStrip>
+  );
+}
+
+function BubbleContent(props) {
+  var msg = props.msg;
+  var showAttachments = 0;
+  var showTools = 0;
+
+  if (msg.attachments && msg.attachments.length > 0) showAttachments = 1;
+  if (msg.toolSnapshot && msg.toolSnapshot.length > 0) showTools = 1;
+
+  return (
+    <Box style={{ flexDirection: 'column', gap: 8 }}>
+      <C.MessageText>{msg.text}</C.MessageText>
+
+      {showAttachments == 1 && <C.ContextBar>
+        {msg.attachments.map(function(a, i) {
+          return (
+            <C.ContextChip key={i}>
+              <C.ContextChipFile>{a.name}</C.ContextChipFile>
+            </C.ContextChip>
+          );
+        })}
+      </C.ContextBar>}
+
+      {showTools == 1 && <C.MessageToolList>
+        {msg.toolSnapshot.map(function(exec, idx) {
+          return <ToolCallCard key={idx} exec={exec} />;
+        })}
+      </C.MessageToolList>}
+    </Box>
   );
 }
 
 function Message(props) {
   var msg = props.msg;
   var isUser = msg.role == 'user';
-  var bubbleBg = isUser ? '#101827' : '#10141c';
-  var bubbleBorder = isUser ? '#20324f' : '#1c2531';
+  var showMode = 0;
+  var showModel = 0;
+  var authorLabel = isUser == 1 ? 'You' : 'Agent';
+
+  if (msg.mode) showMode = 1;
+  if (msg.model) showModel = 1;
 
   return (
     <C.Message>
       <C.MessageHeader>
-        <C.MessageAvatar style={{ backgroundColor: isUser ? '#17345d' : '#143120' }}>
-          <C.MessageAvatarText>{isUser ? 'U' : 'A'}</C.MessageAvatarText>
-        </C.MessageAvatar>
-        <C.MessageAuthor>{isUser ? 'You' : 'Agent'}</C.MessageAuthor>
+        {isUser == 1 && <C.MessageAvatar style={{ backgroundColor: '#17345d' }}><UserRoundIcon size={11} /></C.MessageAvatar>}
+        {isUser != 1 && <C.MessageAvatar style={{ backgroundColor: '#143120' }}><BotIcon size={11} /></C.MessageAvatar>}
+        {isUser == 1 && <C.MessageAuthor>You</C.MessageAuthor>}
+        {isUser != 1 && <C.MessageAuthor>Agent</C.MessageAuthor>}
         <C.MessageTime>{msg.time}</C.MessageTime>
-        {msg.mode && <C.MessageModeBadge><C.MessageModeText>{msg.mode}</C.MessageModeText></C.MessageModeBadge>}
-        {msg.model && <C.MessageModelBadge><C.MessageModelText>{msg.model}</C.MessageModelText></C.MessageModelBadge>}
+        {showMode == 1 && <C.MessageModeBadge><C.MessageModeText>{msg.mode}</C.MessageModeText></C.MessageModeBadge>}
+        {showModel == 1 && <C.MessageModelBadge><C.MessageModelText>{msg.model}</C.MessageModelText></C.MessageModelBadge>}
       </C.MessageHeader>
 
-      <C.MessageBubble style={{ backgroundColor: bubbleBg, borderColor: bubbleBorder }}>
-        <C.MessageText>{msg.text}</C.MessageText>
-
-        {msg.attachments && msg.attachments.length > 0 && (
-          <C.ContextBar>
-            {msg.attachments.map(function(a, i) {
-              return (
-                <C.ContextChip key={i}>
-                  <C.ContextChipFile>{a.name}</C.ContextChipFile>
-                </C.ContextChip>
-              );
-            })}
-          </C.ContextBar>
-        )}
-
-        {msg.toolSnapshot && msg.toolSnapshot.length > 0 && (
-          <C.MessageToolList>
-            {msg.toolSnapshot.map(function(exec, idx) {
-              return <ToolCallCard key={idx} exec={exec} />;
-            })}
-          </C.MessageToolList>
-        )}
-      </C.MessageBubble>
+      {isUser == 1 && <C.MessageBubble style={{ backgroundColor: '#101827', borderColor: '#20324f' }}><BubbleContent msg={msg} /></C.MessageBubble>}
+      {isUser != 1 && <C.MessageBubble style={{ backgroundColor: '#10141c', borderColor: '#1c2531' }}><BubbleContent msg={msg} /></C.MessageBubble>}
     </C.Message>
   );
 }
@@ -124,7 +160,7 @@ function ThinkingIndicator() {
   return (
     <C.ThinkingRow>
       <C.ThinkingAvatar>
-        <C.ThinkingAvatarText>AI</C.ThinkingAvatarText>
+        <BotIcon size={11} />
       </C.ThinkingAvatar>
       <C.ThinkingBubble>
         <C.ThinkingDot />
@@ -157,17 +193,15 @@ function ModePillBar() {
 
 function AttachBadge(props) {
   var a = props.attachment;
-  var icon = '#';
-  var tone = '#79c0ff';
-  if (a.type == 'symbol') { icon = '@'; tone = '#d2a8ff'; }
-  if (a.type == 'git') { icon = 'G'; tone = '#7ee787'; }
 
   return (
     <C.AttachBadge>
-      <C.AttachBadgeIcon style={{ color: tone }}>{icon}</C.AttachBadgeIcon>
+      {a.type == 'symbol' && <AtSignIcon size={10} />}
+      {a.type == 'git' && <GitBranchIcon size={10} />}
+      {a.type != 'symbol' && a.type != 'git' && <FileCodeIcon size={10} />}
       <C.AttachBadgeName>{a.name}</C.AttachBadgeName>
       <C.AttachBadgeRemove onPress={function() { removeAttachment(a.id); }}>
-        <C.AttachBadgeRemoveIcon>x</C.AttachBadgeRemoveIcon>
+        <XIcon size={9} />
       </C.AttachBadgeRemove>
     </C.AttachBadge>
   );
@@ -192,33 +226,35 @@ function AttachmentBar() {
 
 function ToolToggle(props) {
   return (
-    <C.InputToolToggle onPress={props.onToggle} style={props.active == 1 ? { backgroundColor: '#10213d', borderColor: '#2d62ff' } : {}}>
-      <C.InputToolToggleIcon style={props.active == 1 ? { color: '#79c0ff' } : {}}>{props.icon}</C.InputToolToggleIcon>
-      <C.InputToolToggleLabel style={props.active == 1 ? { color: '#79c0ff' } : {}}>{props.label}</C.InputToolToggleLabel>
+    <C.InputToolToggle onPress={props.onToggle} style={props.active == 1 ? { backgroundColor: '#10213d', borderColor: '#2d62ff' } : props.iconOnly == 1 ? { paddingLeft: 6, paddingRight: 6 } : {}}>
+      <Box style={{ width: 10, alignItems: 'center', justifyContent: 'center' }}>
+        {props.children}
+      </Box>
+      {props.iconOnly != 1 && <C.InputToolToggleLabel style={props.active == 1 ? { color: '#79c0ff' } : {}}>{props.label}</C.InputToolToggleLabel>}
     </C.InputToolToggle>
   );
 }
 
-function ModelPicker() {
+function ModelPicker(props) {
+  var showLabel = 1;
+  if (props.widthBand == 'minimum') showLabel = 0;
+
   return (
     <C.ModelPickerBtn onPress={function() { cycleModel(); }}>
       <C.ModelPickerDot style={{ backgroundColor: '#ff7b72' }} />
-      <C.ModelPickerLabel>{modelDisplayName}</C.ModelPickerLabel>
-      <C.ModelPickerChevron>v</C.ModelPickerChevron>
+      {showLabel == 1 && <C.ModelPickerLabel>{modelDisplayName}</C.ModelPickerLabel>}
+      <ChevronDownIcon size={9} />
     </C.ModelPickerBtn>
   );
 }
 
 function TokenCountBadge() {
+  var tokenText = inputTokenEstimate + ' tkns';
   if (inputTokenEstimate == 0) return null;
-
-  var color = '#4a4a4a';
-  if (inputTokenEstimate > 8000) color = '#e6b450';
-  if (inputTokenEstimate > 16000) color = '#ff7b72';
 
   return (
     <C.TokenCount>
-      <C.TokenCountText style={{ color: color }}>{inputTokenEstimate + ' tkns'}</C.TokenCountText>
+      <C.TokenCountText style={{ color: inputTokenEstimate > 16000 ? '#ff7b72' : inputTokenEstimate > 8000 ? '#e6b450' : '#4a4a4a' }}>{tokenText}</C.TokenCountText>
     </C.TokenCount>
   );
 }
@@ -253,17 +289,35 @@ function SlashHints() {
   );
 }
 
-function ChatInput() {
+function ChatInput(props) {
+  var compactBand = 0;
+  var minimumBand = 0;
+  var iconOnly = 0;
+  var showComposerMeta = 1;
+  var showDivider = 1;
+  var showSendLabel = 1;
+  var composerContextText = currentFilePath == '__landing__' ? workspaceName : currentFilePath == '__settings__' ? 'Settings' : currentFilePath;
+  var composerMetaText = gitBranch + ' / ' + gitRemote;
+
+  if (props.widthBand == 'narrow' || props.widthBand == 'widget' || props.widthBand == 'minimum') compactBand = 1;
+  if (props.widthBand == 'minimum') {
+    minimumBand = 1;
+    iconOnly = 1;
+    showComposerMeta = 0;
+    showDivider = 0;
+    showSendLabel = 0;
+  }
+
   return (
-    <C.ChatInputArea>
+    <C.ChatInputArea style={compactBand == 1 ? { padding: 10, gap: 6 } : {}}>
       <ModePillBar />
 
       {currentInput.indexOf('/') == 0 && <SlashHints />}
 
       <C.ChatInputBox>
         <C.ChatComposerSummary>
-          <C.ChatComposerContext>{currentFilePath == '__landing__' ? workspaceName : currentFilePath}</C.ChatComposerContext>
-          <C.ChatComposerMeta>{gitBranch + ' / ' + gitRemote}</C.ChatComposerMeta>
+          <C.ChatComposerContext>{composerContextText}</C.ChatComposerContext>
+          {showComposerMeta == 1 && <C.ChatComposerMeta>{composerMetaText}</C.ChatComposerMeta>}
         </C.ChatComposerSummary>
 
         <AttachmentBar />
@@ -277,28 +331,34 @@ function ChatInput() {
         <C.ChatInputToolbar>
           <C.ChatInputToolsLeft>
             <C.ChatToolBtnCompact onPress={function() { triggerFileMention(); }}>
-              <C.ChatToolIconCompact>#</C.ChatToolIconCompact>
+              <HashIcon size={11} />
             </C.ChatToolBtnCompact>
             <C.ChatToolBtnCompact onPress={function() { triggerSymbolMention(); }}>
-              <C.ChatToolIconCompact>@</C.ChatToolIconCompact>
+              <AtSignIcon size={11} />
             </C.ChatToolBtnCompact>
             <C.ChatToolBtnCompact onPress={function() { attachGitContext(); }}>
-              <C.ChatToolIconCompact>G</C.ChatToolIconCompact>
+              <GitBranchIcon size={11} />
             </C.ChatToolBtnCompact>
             <C.ChatToolBtnCompact onPress={function() { attachCurrentFile(); }}>
-              <C.ChatToolIconCompact>+</C.ChatToolIconCompact>
+              <PlusIcon size={11} />
             </C.ChatToolBtnCompact>
-            <C.InputToolDivider />
-            <ToolToggle icon="W" label="Web" active={webSearch} onToggle={function() { toggleWebSearch(); }} />
-            <ToolToggle icon=">" label="Term" active={termAccess} onToggle={function() { toggleTermAccess(); }} />
-            <ToolToggle icon="A" label="Auto" active={autoApply} onToggle={function() { toggleAutoApply(); }} />
+            {showDivider == 1 && <C.InputToolDivider />}
+            <ToolToggle label="Web" iconOnly={iconOnly} active={webSearch} onToggle={function() { toggleWebSearch(); }}><GlobeIcon size={10} /></ToolToggle>
+            <ToolToggle label="Term" iconOnly={iconOnly} active={termAccess} onToggle={function() { toggleTermAccess(); }}><TerminalIcon size={10} /></ToolToggle>
+            <ToolToggle label="Auto" iconOnly={iconOnly} active={autoApply} onToggle={function() { toggleAutoApply(); }}><SparklesIcon size={10} /></ToolToggle>
           </C.ChatInputToolsLeft>
 
           <C.ChatInputToolsRight>
             <TokenCountBadge />
-            <ModelPicker />
+            <ModelPicker widthBand={props.widthBand} />
             <C.ChatSendBtn onPress={function() { sendMessage(); }}>
-              <C.ChatSendLabel>{agentMode == 'agent' ? 'Launch' : agentMode == 'task' ? 'Run Task' : agentMode == 'plan' ? 'Plan' : 'Send'}</C.ChatSendLabel>
+              <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
+                <SendIcon size={11} />
+                {showSendLabel == 1 && agentMode == 'agent' && <C.ChatSendLabel>Launch</C.ChatSendLabel>}
+                {showSendLabel == 1 && agentMode == 'task' && <C.ChatSendLabel>Run Task</C.ChatSendLabel>}
+                {showSendLabel == 1 && agentMode == 'plan' && <C.ChatSendLabel>Plan</C.ChatSendLabel>}
+                {showSendLabel == 1 && agentMode != 'agent' && agentMode != 'task' && agentMode != 'plan' && <C.ChatSendLabel>Send</C.ChatSendLabel>}
+              </Box>
             </C.ChatSendBtn>
           </C.ChatInputToolsRight>
         </C.ChatInputToolbar>
@@ -306,14 +366,14 @@ function ChatInput() {
 
       {agentMode == 'task' && (
         <C.TaskModeHint>
-          <C.TaskModeHintIcon>!</C.TaskModeHintIcon>
+          <AlertTriangleIcon size={11} />
           <C.TaskModeHintText>Task mode can read the workspace, inspect git, and use the terminal.</C.TaskModeHintText>
         </C.TaskModeHint>
       )}
 
       {agentMode == 'plan' && (
         <C.PlanModeHint>
-          <C.PlanModeHintIcon>i</C.PlanModeHintIcon>
+          <BadgeInfoIcon size={11} />
           <C.PlanModeHintText>Plan mode stays descriptive first, edit second.</C.PlanModeHintText>
         </C.PlanModeHint>
       )}
@@ -335,22 +395,44 @@ function ToolFeed() {
 }
 
 function ChatPanel(props) {
+  var compactBand = 0;
+  var minimumBand = 0;
+  var showModelLabel = 1;
+  var showActionLabels = 1;
+  var showWelcome = 1;
+  var welcomeTitle = props.workspaceName + ' agent session';
+  var welcomeText = props.gitBranch + ' / ' + props.gitRemote + ' / ' + props.changedCount + ' dirty paths';
+
+  if (props.widthBand == 'narrow' || props.widthBand == 'widget' || props.widthBand == 'minimum') compactBand = 1;
+  if (props.widthBand == 'minimum') {
+    minimumBand = 1;
+    showModelLabel = 0;
+    showActionLabels = 0;
+    showWelcome = 0;
+  }
+
   return (
-    <C.ChatPanel>
-      <C.ChatHeader>
+    <C.ChatPanel style={props.style}>
+      <C.ChatHeader style={compactBand == 1 ? { paddingLeft: 10, paddingRight: 10, paddingTop: 10, paddingBottom: 10 } : {}}>
         <C.ChatHeaderLeft>
           <C.ChatTitle>Agent Console</C.ChatTitle>
           <C.ChatModelBadge>
             <C.ChatModelDot />
-            <C.ChatModelLabel>{selectedModel}</C.ChatModelLabel>
+            {showModelLabel == 1 && <C.ChatModelLabel>{selectedModel}</C.ChatModelLabel>}
           </C.ChatModelBadge>
         </C.ChatHeaderLeft>
         <C.ChatActions>
           <C.ChatActionBtn onPress={function() { startNewConversation(); }}>
-            <C.ChatActionLabel>New</C.ChatActionLabel>
+            <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <PlusIcon size={10} />
+              {showActionLabels == 1 && <C.ChatActionLabel>New</C.ChatActionLabel>}
+            </Box>
           </C.ChatActionBtn>
           <C.ChatActionBtn onPress={function() { indexProject('.'); }}>
-            <C.ChatActionLabel>Index</C.ChatActionLabel>
+            <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <RefreshCcwIcon size={10} />
+              {showActionLabels == 1 && <C.ChatActionLabel>Index</C.ChatActionLabel>}
+            </Box>
           </C.ChatActionBtn>
         </C.ChatActions>
       </C.ChatHeader>
@@ -362,16 +444,17 @@ function ChatPanel(props) {
         gitBranch={props.gitBranch}
         gitRemote={props.gitRemote}
         changedCount={props.changedCount}
+        widthBand={props.widthBand}
       />
 
       <AgentSessionBanner />
 
       <C.ChatMessages>
         <C.ChatStack>
-          <C.ChatWelcome>
-            <C.ChatWelcomeTitle>{props.workspaceName + ' agent session'}</C.ChatWelcomeTitle>
-            <C.ChatWelcomeText>{props.gitBranch + ' / ' + props.gitRemote + ' / ' + props.changedCount + ' dirty paths'}</C.ChatWelcomeText>
-          </C.ChatWelcome>
+          {showWelcome == 1 && <C.ChatWelcome>
+            <C.ChatWelcomeTitle>{welcomeTitle}</C.ChatWelcomeTitle>
+            <C.ChatWelcomeText>{welcomeText}</C.ChatWelcomeText>
+          </C.ChatWelcome>}
 
           {props.messages.map(function(msg, idx) {
             return <Message key={idx} msg={msg} />;
@@ -382,7 +465,7 @@ function ChatPanel(props) {
         </C.ChatStack>
       </C.ChatMessages>
 
-      <ChatInput />
+      <ChatInput widthBand={props.widthBand} />
     </C.ChatPanel>
   );
 }

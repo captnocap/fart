@@ -1,181 +1,123 @@
-# Cursor IDE — full baseline test
-# Verifies rendering, file operations, tabs, icons, editing, panels
+# Cursor IDE — landing, workspace chrome, editor, and agent shell
 
-# === SHELL & TOP BAR ===
-expect "src/components/Sidebar.tsx"
-
-# === SIDEBAR ===
+# === BASELINE SHELL ===
+expect "Project landing"
+expect "reactjit"
 expect "EXPLORER"
-expect "+"
-
-# === FILE TREE — directories with chevrons ===
-expect "cursor-ide"
-expect "src"
-expect "components"
-expect "hooks"
-expect "utils"
-expect "styles"
-
-# === FILE TREE — files with type badges ===
-expect "Sidebar.tsx"
-expect "Editor.tsx"
-expect "ChatPanel.tsx"
-expect "StatusBar.tsx"
-expect "Terminal.tsx"
-expect "useAgent.ts"
-expect "package.json"
-expect "README.md"
-expect "tsconfig.json"
-expect "theme.css"
-
-# === FILE TYPE ICONS (colored badges) ===
-expect "TS"
-expect "MD"
-expect "CS"
-
-# === TABS ===
-expect "Sidebar.tsx"
-
-# === BREADCRUMBS ===
-expect "components"
-
-# === EDITOR ===
-# Line number gutter visible (real line numbers)
-expect "1"
-expect "10"
-expect "20"
-
-# === CHAT PANEL ===
-expect "Agent"
-expect "claude-opus-4"
-expect "Cursor Agent"
-expect "I have analyzed the codebase"
-expect "Search for all components"
-expect "Found 3 files"
-expect "Send"
-expect "#"
-
-# === STATUS BAR ===
+expect "OPEN EDITORS"
+expect "SOURCE CONTROL  0"
+expect "Agent Console"
+expect "Index Workspace"
+expect "Open cursor-ide cart"
+expect "Projects"
+expect "Git Connections"
+expect "Recent Focus"
+expect "Settings"
 expect "main"
-expect "No problems"
-expect "Ln"
-expect "TypeScript TSX"
-expect "UTF-8"
-expect "Copilot"
+expect "Ln 1"
+expect "Workspace"
+expect "Send"
+reject "nil"
 
-# === PANEL TOGGLES ===
-expect "Search"
-expect "Terminal"
-expect "Chat"
+# === VISUAL REGRESSION CHECK ===
+color "EXPLORER" #778395
 
-# === CLICK FILE — open Editor.tsx ===
-click "Editor.tsx"
-# New tab should appear
-expect "Editor.tsx"
-# Editor content changes to Editor.tsx file
-expect "Editor Component"
+# === OLD MOCK UI MUST STAY GONE ===
+reject "src/components/Sidebar.tsx"
+reject "Cursor Agent"
+reject "I have analyzed the codebase"
+reject "TypeScript TSX"
+reject "Copilot"
 
-# === CLICK FILE — open package.json ===
-click "package.json"
-expect "package.json"
-expect "0.1.0"
-
-# === CLICK FILE — open README.md ===
-click "README.md"
-expect "README.md"
-expect "Agentic coding environment"
-
-# === CLICK FILE — open theme.css ===
-click "theme.css"
-expect "theme.css"
-expect "--bg-primary"
-
-# === TAB SWITCHING — go back to Sidebar.tsx ===
-click "Sidebar.tsx"
-expect "FileTree"
-
-# === COLORS ===
-color "EXPLORER" #6e6e6e
-
-# === HIDDEN PANELS ===
-reject "Project Search"
-reject "$"
-
-# =============================================================
-# === AGENT INPUT — POWER USER COMPOSER ===
-# =============================================================
-
-# Mode pills all present
+# === AGENT CONTROLS ===
 expect "Ask"
 expect "Plan"
 expect "Task"
 expect "Agent"
-
-# Tool toggles
 expect "Web"
 expect "Term"
-
-# Capability toggles
-expect "Web"
-expect "Term"
-
-# Model picker shows initial model
+expect "Auto"
 expect "Opus 4"
-
-# Chat header new conversation + history buttons
-expect "+ New"
+expect "New"
 expect "Index"
 
-# === MODE SWITCHING — Plan ===
-# Click Plan pill — plan hint should appear, send label should change
 click "Plan"
 expect "Plan mode"
 reject "Task mode"
 reject "Run Task"
-reject "Launch"
+reject "nil"
 
-# === MODE SWITCHING — Task ===
-# Task mode adds the Auto-apply toggle and Run Task button
 click "Task"
 expect "Task mode"
 expect "Run Task"
 reject "Plan mode"
+reject "nil"
 
-# Back to Ask — everything task-specific disappears
 click "Ask"
-reject "Task mode"
+expect "Send"
 reject "Run Task"
-expect "Send"
+reject "Plan mode"
+reject "nil"
 
-# === MODE SWITCHING — Agent ===
-# "Agent" appears many times; pill is last — use #6
-click "Agent" #7
-expect "Launch"
-reject "Task mode"
-# Return to Ask for remaining tests
-click "Ask"
-reject "Launch"
-expect "Send"
-
-# === TOOL TOGGLES ===
-click "Web"
-click "Term"
-
-# === ATTACHMENT FLOW ===
-expect "Clear all"
-# Click the + icon to attach current file
-click "+" #2
-expect "Clear all"
-# Remove all attachments
-click "Clear all"
-# Clear all stays visible (static tree — OA clear doesn't remove it yet)
-expect "Clear all"
-
-# === NEW CONVERSATION ===
-click "+ New"
-
-# === MODEL CYCLING ===
-expect "Opus 4"
 click "Opus 4"
 expect "Sonnet 4"
 reject "Opus 4"
+reject "nil"
+
+# === TERMINAL PANEL TOGGLE ===
+reject "pty attached to workspace shell"
+click "Terminal" #1
+expect "pty attached to workspace shell"
+click "Terminal" #1
+reject "pty attached to workspace shell"
+
+# === SEARCH PANEL TOGGLE ===
+click "Search" #1
+expect "Project Search"
+expect "repo"
+expect "case"
+expect "regex"
+click "Search" #1
+reject "Project Search"
+
+# === OPEN REAL FILE FROM LANDING ===
+click "Open cursor-ide cart"
+expect "cursor-ide.tsz"
+expect "native view"
+expect "Scratch Buffer"
+expect "Quiet input, no giant focus frame"
+expect "TSZ"
+reject "nil"
+
+# === RETURN TO LANDING ===
+click "Project landing"
+expect "PROJECT LANDING"
+expect "Index Workspace"
+expect "Open cursor-ide cart"
+
+# === SETTINGS SURFACE ===
+click "Settings"
+expect "SETTINGS SURFACE"
+expect "Model Providers"
+expect "Provider routing, context layers, memory, and plugin runtimes"
+expect "Compiler Stress Map"
+expect "Anthropic"
+expect "OpenAI"
+reject "nil"
+
+click "Plugins"
+expect "Plugin Runtimes"
+expect "Lua Runtime"
+expect "QJS Runtime"
+reject "nil"
+
+click "Capabilities"
+expect "SQLite Memory Stores"
+expect "File Drop Intake"
+expect "Formatting / Syntax Surfaces"
+reject "nil"
+
+# === CHAT HEADER ACTIONS ===
+click "New"
+expect "Send"
+reject "nil"

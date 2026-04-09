@@ -1,0 +1,11 @@
+# d157_component_prop_expressions: computed child props should evaluate, not literalize
+
+expect "Component Prop Expressions"
+expect "Anthropic Routing"
+expect "Policy aware provider surface"
+expect "2 providers"
+
+click "OpenAI"
+expect "OpenAI Routing"
+expect "Tool heavy provider surface"
+expect "2 providers"

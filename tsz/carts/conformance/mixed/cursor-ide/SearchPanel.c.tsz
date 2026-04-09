@@ -1,5 +1,7 @@
 // SearchPanel — repo search with click-through results and workspace scope
 
+import { XIcon, SearchIcon, RefreshCcwIcon } from './Icon.c';
+
 function SearchResult(props) {
   var result = props.result;
 
@@ -17,27 +19,38 @@ function SearchResult(props) {
 }
 
 function SearchPanel(props) {
+  var compactBand = 0;
+  var minimumBand = 0;
+  var searchScopeText = props.workspaceName + ' / ' + props.gitBranch;
+
+  if (props.widthBand == 'narrow' || props.widthBand == 'widget' || props.widthBand == 'minimum') compactBand = 1;
+  if (props.widthBand == 'minimum') minimumBand = 1;
+
   return (
-    <C.SearchPanel>
-      <C.SearchHeader>
+    <C.SearchPanel style={props.style}>
+      <C.SearchHeader style={compactBand == 1 ? { padding: 12, gap: 8 } : {}}>
         <C.SearchTopRow>
           <C.SearchTitle>Project Search</C.SearchTitle>
-          <C.SearchScope>{props.workspaceName + ' / ' + props.gitBranch}</C.SearchScope>
-          <Pressable onPress={function() { setShowSearch(0); }} style={{ paddingLeft: 6, paddingRight: 6, paddingTop: 2, paddingBottom: 2 }}>
-            <Text fontSize={12} color="#6e6e6e">x</Text>
+          {minimumBand != 1 && <C.SearchScope>{searchScopeText}</C.SearchScope>}
+          <Pressable onPress={props.onClose ? props.onClose : function() { setShowSearch(0); }} style={{ paddingLeft: 6, paddingRight: 6, paddingTop: 2, paddingBottom: 2 }}>
+            <Box style={{ width: 11, height: 11, alignItems: 'center', justifyContent: 'center' }}>
+              <XIcon size={11} />
+            </Box>
           </Pressable>
         </C.SearchTopRow>
 
         <C.SearchInputBox>
-          <C.SearchInputIcon>?</C.SearchInputIcon>
+          <Box style={{ width: 11, height: 11, alignItems: 'center', justifyContent: 'center' }}>
+            <SearchIcon size={11} />
+          </Box>
           <C.SearchInput value={searchQuery} onChange={function(v) { searchProject(v); }} />
         </C.SearchInputBox>
 
-        <C.SearchOptions>
+        {minimumBand != 1 && <C.SearchOptions>
           <C.SearchOption><Text fontSize={10} color="#79c0ff">repo</Text></C.SearchOption>
           <C.SearchOption><Text fontSize={10} color="#6e6e6e">case</Text></C.SearchOption>
           <C.SearchOption><Text fontSize={10} color="#6e6e6e">regex</Text></C.SearchOption>
-        </C.SearchOptions>
+        </C.SearchOptions>}
       </C.SearchHeader>
 
       <C.SearchResults>
@@ -48,12 +61,17 @@ function SearchPanel(props) {
         </C.SearchResultsStack>
       </C.SearchResults>
 
-      <C.SearchFooter>
-        <C.SearchFooterText>{props.results.length + ' results in workspace'}</C.SearchFooterText>
+      {minimumBand != 1 && <C.SearchFooter>
+        <C.SearchFooterText>results in workspace</C.SearchFooterText>
         <C.SearchActionBtn onPress={function() { searchProject(searchQuery); }}>
-          <Text fontSize={10} color="#9db1c9">Refresh</Text>
+          <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Box style={{ width: 10, height: 10, alignItems: 'center', justifyContent: 'center' }}>
+              <RefreshCcwIcon size={10} />
+            </Box>
+            <Text fontSize={10} color="#9db1c9">Refresh</Text>
+          </Box>
         </C.SearchActionBtn>
-      </C.SearchFooter>
+      </C.SearchFooter>}
     </C.SearchPanel>
   );
 }

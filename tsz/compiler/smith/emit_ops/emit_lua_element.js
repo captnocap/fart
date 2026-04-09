@@ -128,7 +128,7 @@ function emitLuaElement(c, itemParam, indent, indexParam) {
     }
   }
 
-  var node = { style: null, fontSize: null, color: null, children: [], text: null, handler: null, _nodeFields: {} };
+  var node = { style: null, fontSize: null, color: null, children: [], text: null, inlineGlyphs: null, handler: null, _nodeFields: {} };
 
   // Tag-based flags for canvas/graph/3D/physics subsystems
   if (tagName === 'Graph.Path' || tagName === 'Canvas.Path') node._nodeFields.canvas_path = 'true';
@@ -323,8 +323,12 @@ function emitLuaElement(c, itemParam, indent, indexParam) {
 
   if (!selfClosing) {
     if (tagName === 'Text') {
-      // Text element: collect text content
-      node.text = emitLuaTextContent(c, itemParam);
+      // Text element: collect text content + inline glyphs
+      var textInfo = emitLuaTextContent(c, itemParam);
+      node.text = textInfo.textExpr;
+      if (textInfo.inlineGlyphExprs && textInfo.inlineGlyphExprs.length > 0) {
+        node.inlineGlyphs = '{ ' + textInfo.inlineGlyphExprs.join(', ') + ' }';
+      }
     } else {
       // Container: collect children
       node.children = emitLuaChildren(c, itemParam, indent + '  ');
@@ -341,6 +345,7 @@ function emitLuaElement(c, itemParam, indent, indexParam) {
   var fields = [];
   if (node.style) fields.push('style = ' + node.style);
   if (node.text) fields.push('text = ' + node.text);
+  if (node.inlineGlyphs) fields.push('inline_glyphs = ' + node.inlineGlyphs);
   if (node.fontSize) fields.push('font_size = ' + node.fontSize);
   if (node.color) fields.push('text_color = ' + node.color);
   if (node.handler) {

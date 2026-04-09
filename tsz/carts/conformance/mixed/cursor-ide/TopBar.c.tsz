@@ -1,47 +1,80 @@
 // TopBar — workspace chrome, git summary, and panel toggles
 
+import { PackageIcon, GitBranchIcon, RefreshCcwIcon, SearchIcon, TerminalIcon, MessageSquareIcon, PaletteIcon } from './Icon.c';
+
 function TopBarAction(props) {
   return (
-    <C.TopBarAction onPress={props.onPress}>
-      <C.TopBarActionLabel>{props.label}</C.TopBarActionLabel>
-      {props.meta && <C.TopBarActionMeta>{props.meta}</C.TopBarActionMeta>}
+    <C.TopBarAction onPress={props.onPress} style={props.active == 1 ? props.iconOnly == 1 ? { paddingLeft: 8, paddingRight: 8, backgroundColor: '#10213d', borderColor: '#2d62ff' } : { backgroundColor: '#10213d', borderColor: '#2d62ff' } : props.iconOnly == 1 ? { paddingLeft: 8, paddingRight: 8 } : {}}>
+      <Box style={{ width: 10, height: 10, alignItems: 'center', justifyContent: 'center' }}>
+        {props.children}
+      </Box>
+      {props.iconOnly != 1 && <C.TopBarActionLabel>{props.label}</C.TopBarActionLabel>}
+      {props.iconOnly != 1 && props.meta && <C.TopBarActionMeta>{props.meta}</C.TopBarActionMeta>}
     </C.TopBarAction>
   );
 }
 
 function TopBar(props) {
+  var compactBand = 0;
+  var minimumBand = 0;
+  var showCommandHint = 1;
+  var showWorkspaceText = 1;
+  var showGitMeta = 1;
+  var gitMetaText = props.changedCount + ' dirty / ' + props.stagedCount + ' staged';
+
+  if (props.widthBand == 'narrow' || props.widthBand == 'widget' || props.widthBand == 'minimum') {
+    compactBand = 1;
+    showGitMeta = 0;
+    showCommandHint = 0;
+  }
+
+  if (props.widthBand == 'minimum') {
+    minimumBand = 1;
+    showWorkspaceText = 0;
+  }
+
   return (
-    <C.TopBar>
+    <C.TopBar style={props.style}>
       <C.TopBarLeft>
         <C.TopBarTraffic>
-          <C.TopBarTrafficDot style={{ backgroundColor: '#ff5f57' }} />
-          <C.TopBarTrafficDot style={{ backgroundColor: '#febc2e' }} />
-          <C.TopBarTrafficDot style={{ backgroundColor: '#28c840' }} />
+          <C.TopBarTrafficBtn onPress={function() { __windowClose(); }}>
+            <C.TopBarTrafficDot style={{ backgroundColor: '#ff5f57' }} />
+          </C.TopBarTrafficBtn>
+          <C.TopBarTrafficBtn onPress={function() { __windowMinimize(); }}>
+            <C.TopBarTrafficDot style={{ backgroundColor: '#febc2e' }} />
+          </C.TopBarTrafficBtn>
+          <C.TopBarTrafficBtn onPress={function() { __windowMaximize(); }}>
+            <C.TopBarTrafficDot style={{ backgroundColor: '#28c840' }} />
+          </C.TopBarTrafficBtn>
         </C.TopBarTraffic>
 
-        <C.TopBarWorkspaceBtn onPress={props.onOpenHome}>
-          <C.TopBarWorkspaceGlyph>{props.workspaceName.charAt(0)}</C.TopBarWorkspaceGlyph>
-          <C.TopBarWorkspaceText>{props.workspaceName}</C.TopBarWorkspaceText>
+        <C.TopBarWorkspaceBtn onPress={props.onOpenHome} style={minimumBand == 1 ? { paddingLeft: 8, paddingRight: 8 } : {}}>
+          <Box style={{ width: 10, height: 10, alignItems: 'center', justifyContent: 'center' }}>
+            <PackageIcon size={10} />
+          </Box>
+          {showWorkspaceText == 1 && <C.TopBarWorkspaceText>{props.workspaceName}</C.TopBarWorkspaceText>}
         </C.TopBarWorkspaceBtn>
 
         <C.TopBarCommandBar onPress={props.onOpenHome}>
-          <C.TopBarCommandHint>Project landing</C.TopBarCommandHint>
-          {props.title == '__landing__' && <C.TopBarCommandLabel>{props.workspaceTagline}</C.TopBarCommandLabel>}
-          {props.title != '__landing__' && <C.TopBarCommandLabel>{props.title}</C.TopBarCommandLabel>}
+          {showCommandHint == 1 && <C.TopBarCommandHint>Project landing</C.TopBarCommandHint>}
+          <C.TopBarCommandLabel>{props.displayTitle}</C.TopBarCommandLabel>
         </C.TopBarCommandBar>
       </C.TopBarLeft>
 
       <C.TopBarRight>
         <C.TopBarGitChip>
-          <C.TopBarGitDot />
+          <Box style={{ width: 9, height: 9, alignItems: 'center', justifyContent: 'center' }}>
+            <GitBranchIcon size={9} />
+          </Box>
           <C.TopBarGitText>{props.gitBranch}</C.TopBarGitText>
-          <C.TopBarGitMeta>{props.changedCount + ' dirty / ' + props.stagedCount + ' staged'}</C.TopBarGitMeta>
+          {showGitMeta == 1 && <C.TopBarGitMeta>{gitMetaText}</C.TopBarGitMeta>}
         </C.TopBarGitChip>
 
-        <TopBarAction label="Refresh" meta="R" onPress={props.onRefreshWorkspace} />
-        <TopBarAction label="Search" meta="F3" onPress={props.onToggleSearch} />
-        <TopBarAction label="Terminal" meta="~" onPress={props.onToggleTerminal} />
-        <TopBarAction label="Agent" onPress={props.onToggleChat} />
+        <TopBarAction label="Refresh" meta="R" iconOnly={compactBand} onPress={props.onRefreshWorkspace}><RefreshCcwIcon size={10} /></TopBarAction>
+        <TopBarAction label="Settings" meta="S" iconOnly={compactBand} active={props.settingsActive} onPress={props.onOpenSettings}><PaletteIcon size={10} /></TopBarAction>
+        <TopBarAction label="Search" meta="F3" iconOnly={compactBand} active={props.searchActive} onPress={props.onToggleSearch}><SearchIcon size={10} /></TopBarAction>
+        <TopBarAction label="Terminal" meta="~" iconOnly={compactBand} active={props.terminalActive} onPress={props.onToggleTerminal}><TerminalIcon size={10} /></TopBarAction>
+        <TopBarAction label="Agent" iconOnly={compactBand} active={props.chatActive} onPress={props.onToggleChat}><MessageSquareIcon size={10} /></TopBarAction>
       </C.TopBarRight>
     </C.TopBar>
   );

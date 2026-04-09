@@ -1,46 +1,42 @@
 // Editor — highlighted code viewport with active row treatment and quiet scratch buffer
 
-function Token(props) {
-  var token = props.token;
-
-  if (token.kind == 'keyword') return <C.TokenKeyword>{token.text}</C.TokenKeyword>;
-  if (token.kind == 'string') return <C.TokenString>{token.text}</C.TokenString>;
-  if (token.kind == 'comment') return <C.TokenComment>{token.text}</C.TokenComment>;
-  if (token.kind == 'function') return <C.TokenFunction>{token.text}</C.TokenFunction>;
-  if (token.kind == 'number') return <C.TokenNumber>{token.text}</C.TokenNumber>;
-  if (token.kind == 'type') return <C.TokenType>{token.text}</C.TokenType>;
-  if (token.kind == 'variable') return <C.TokenVariable>{token.text}</C.TokenVariable>;
-  if (token.kind == 'operator') return <C.TokenOperator>{token.text}</C.TokenOperator>;
-  if (token.kind == 'tag') return <C.TokenTag>{token.text}</C.TokenTag>;
-  if (token.kind == 'attr') return <C.TokenAttr>{token.text}</C.TokenAttr>;
-  return <C.TokenText>{token.text}</C.TokenText>;
-}
-
-function RowMarker(props) {
-  var bg = '#00000000';
-  if (props.marker == 'todo') bg = '#ff7b72';
-  if (props.marker == 'symbol') bg = '#2d62ff';
-  if (props.marker == 'tool') bg = '#7ee787';
-  if (props.marker == 'flow') bg = '#d2a8ff';
-
-  return <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: bg }} />;
-}
-
 function CodeRow(props) {
   var row = props.row;
   var isActive = row.line == props.cursorLine;
   var bg = isActive ? '#111b2d' : row.line % 2 == 0 ? '#0f1218' : '#0d1015';
+  var gutterWidth = props.compactBand == 1 ? 52 : 64;
+  var rowHeight = props.compactBand == 1 ? 20 : 22;
+  var gutterPad = props.compactBand == 1 ? 10 : 12;
 
   return (
-    <Box style={{ flexDirection: 'row', minHeight: 22, backgroundColor: bg }}>
-      <Box style={{ width: 64, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 8, paddingRight: 12 }}>
-        <RowMarker marker={row.marker} />
-        <Text fontSize={11} color={isActive ? '#79c0ff' : '#4f5b6b'}>{row.line}</Text>
+    <Box style={{ flexDirection: 'row', minHeight: rowHeight, backgroundColor: bg }}>
+      <Box style={{ width: gutterWidth, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 8, paddingRight: gutterPad }}>
+        {row.marker == 'todo' && <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#ff7b72' }} />}
+        {row.marker == 'symbol' && <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#2d62ff' }} />}
+        {row.marker == 'tool' && <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#7ee787' }} />}
+        {row.marker == 'flow' && <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#d2a8ff' }} />}
+        {row.marker != 'todo' && row.marker != 'symbol' && row.marker != 'tool' && row.marker != 'flow' && <Box style={{ width: 6, height: 6 }} />}
+        {isActive == 1 && <Text fontSize={11} color="#79c0ff">{row.line}</Text>}
+        {isActive != 1 && <Text fontSize={11} color="#4f5b6b">{row.line}</Text>}
       </Box>
 
       <Box style={{ flexGrow: 1, flexBasis: 0, flexDirection: 'row', paddingTop: 3, paddingBottom: 3, paddingRight: 18, overflow: 'hidden' }}>
         {row.tokens.map(function(token, idx) {
-          return <Token key={idx} token={token} />;
+          return (
+            <Box key={idx} style={{ flexDirection: 'row' }}>
+              {token.kind == 'keyword' && <C.TokenKeyword>{token.text}</C.TokenKeyword>}
+              {token.kind == 'string' && <C.TokenString>{token.text}</C.TokenString>}
+              {token.kind == 'comment' && <C.TokenComment>{token.text}</C.TokenComment>}
+              {token.kind == 'function' && <C.TokenFunction>{token.text}</C.TokenFunction>}
+              {token.kind == 'number' && <C.TokenNumber>{token.text}</C.TokenNumber>}
+              {token.kind == 'type' && <C.TokenType>{token.text}</C.TokenType>}
+              {token.kind == 'variable' && <C.TokenVariable>{token.text}</C.TokenVariable>}
+              {token.kind == 'operator' && <C.TokenOperator>{token.text}</C.TokenOperator>}
+              {token.kind == 'tag' && <C.TokenTag>{token.text}</C.TokenTag>}
+              {token.kind == 'attr' && <C.TokenAttr>{token.text}</C.TokenAttr>}
+              {token.kind != 'keyword' && token.kind != 'string' && token.kind != 'comment' && token.kind != 'function' && token.kind != 'number' && token.kind != 'type' && token.kind != 'variable' && token.kind != 'operator' && token.kind != 'tag' && token.kind != 'attr' && <C.TokenText>{token.text}</C.TokenText>}
+            </Box>
+          );
         })}
       </Box>
     </Box>
@@ -49,42 +45,67 @@ function CodeRow(props) {
 
 function MinimapLine(props) {
   var row = props.row;
-  var color = row.line == props.cursorLine ? '#2d62ff' : '#2a3440';
-  if (row.marker == 'todo') color = '#ff7b72';
-  if (row.marker == 'tool') color = '#7ee787';
 
   return (
     <Box style={{ height: 3, marginBottom: 2, flexDirection: 'row' }}>
-      <Box style={{ height: 3, borderRadius: 2, width: row.previewWidth, backgroundColor: color }} />
+      {row.marker == 'todo' && <Box style={{ height: 3, borderRadius: 2, width: row.previewWidth, backgroundColor: '#ff7b72' }} />}
+      {row.marker != 'todo' && row.marker == 'tool' && <Box style={{ height: 3, borderRadius: 2, width: row.previewWidth, backgroundColor: '#7ee787' }} />}
+      {row.marker != 'todo' && row.marker != 'tool' && row.line == props.cursorLine && <Box style={{ height: 3, borderRadius: 2, width: row.previewWidth, backgroundColor: '#2d62ff' }} />}
+      {row.marker != 'todo' && row.marker != 'tool' && row.line != props.cursorLine && <Box style={{ height: 3, borderRadius: 2, width: row.previewWidth, backgroundColor: '#2a3440' }} />}
     </Box>
   );
 }
 
 function Editor(props) {
+  var compactBand = 0;
+  var minimumBand = 0;
+  var widgetBand = 0;
+  var showMinimap = 1;
+  var showScratch = 1;
+  var showBadges = 1;
+  var lineCountText = props.totalLines + ' lines';
+
+  if (props.widthBand == 'narrow') {
+    compactBand = 1;
+  }
+  if (props.widthBand == 'widget') {
+    compactBand = 1;
+    widgetBand = 1;
+  }
+  if (props.widthBand == 'minimum') {
+    compactBand = 1;
+    minimumBand = 1;
+    widgetBand = 1;
+  }
+
+  if (compactBand == 1 || props.windowHeight < 440) showMinimap = 0;
+  if (widgetBand == 1 || minimumBand == 1 || props.windowHeight < 420) showScratch = 0;
+  if (minimumBand == 1) showBadges = 0;
+
   return (
     <C.EditorViewportShell>
-      <C.EditorHeaderBar>
+      <C.EditorHeaderBar style={compactBand == 1 ? { paddingLeft: 10, paddingRight: 10, paddingTop: 8, paddingBottom: 8 } : {}}>
         <C.EditorHeaderLeft>
           <C.EditorHeaderTitle>{props.currentFilePath}</C.EditorHeaderTitle>
-          <C.EditorHeaderMeta>{props.totalLines + ' lines'}</C.EditorHeaderMeta>
+          <C.EditorHeaderMeta>{lineCountText}</C.EditorHeaderMeta>
         </C.EditorHeaderLeft>
-        <C.EditorHeaderRight>
+        {showBadges == 1 && <C.EditorHeaderRight>
           {props.modified == 1 && <C.EditorHeaderBadge style={{ backgroundColor: '#332200' }}><C.EditorHeaderBadgeText style={{ color: '#e6b450' }}>modified</C.EditorHeaderBadgeText></C.EditorHeaderBadge>}
           <C.EditorHeaderBadge><C.EditorHeaderBadgeText>native view</C.EditorHeaderBadgeText></C.EditorHeaderBadge>
-          <C.EditorHeaderBadge><C.EditorHeaderBadgeText>scratch buffer below</C.EditorHeaderBadgeText></C.EditorHeaderBadge>
-        </C.EditorHeaderRight>
+          {showScratch == 1 && <C.EditorHeaderBadge><C.EditorHeaderBadgeText>scratch buffer below</C.EditorHeaderBadgeText></C.EditorHeaderBadge>}
+        </C.EditorHeaderRight>}
       </C.EditorHeaderBar>
 
       <C.EditorViewport>
         <C.EditorCodeScroll>
           <C.EditorCodeStack>
             {props.editorRows.map(function(row, idx) {
-              return <CodeRow key={idx} row={row} cursorLine={props.cursorLine} />;
+              return <CodeRow key={idx} row={row} cursorLine={props.cursorLine} compactBand={compactBand} />;
             })}
           </C.EditorCodeStack>
         </C.EditorCodeScroll>
 
-        <C.EditorMinimap>
+        {showMinimap == 1 && <C.EditorMinimap>
           <C.EditorMinimapHeader />
           <C.EditorMinimapScroll>
             <C.EditorMinimapStack>
@@ -93,10 +114,10 @@ function Editor(props) {
               })}
             </C.EditorMinimapStack>
           </C.EditorMinimapScroll>
-        </C.EditorMinimap>
+        </C.EditorMinimap>}
       </C.EditorViewport>
 
-      <C.EditorScratchPane>
+      {showScratch == 1 && <C.EditorScratchPane>
         <C.EditorScratchHeader>
           <C.EditorScratchTitle>Scratch Buffer</C.EditorScratchTitle>
           <C.EditorScratchMeta>Quiet input, no giant focus frame</C.EditorScratchMeta>
@@ -109,7 +130,7 @@ function Editor(props) {
           color="#c9d2df"
           style={{ minHeight: 92, paddingTop: 10, paddingBottom: 10, paddingLeft: 12, paddingRight: 12, backgroundColor: '#0f1218', borderWidth: 0 }}
         />
-      </C.EditorScratchPane>
+      </C.EditorScratchPane>}
     </C.EditorViewportShell>
   );
 }

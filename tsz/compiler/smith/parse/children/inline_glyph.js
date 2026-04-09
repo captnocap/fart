@@ -57,5 +57,17 @@ function parseInlineGlyph(c) {
     : 'Color.rgba(0, 0, 0, 0)';
   const fillEffectStr = fillEffect ? `, .fill_effect = "${fillEffect}"` : '';
   const glyphExpr = `.{ .d = "${d}", .fill = ${fillColor}, .stroke = ${strokeColor}, .stroke_width = ${strokeWidth}, .scale = ${scale}${fillEffectStr} }`;
-  return { nodeExpr: '.{ .text = "\\x01" }', isGlyph: true, glyphExpr };
+  return {
+    nodeExpr: '.{ .text = "\\x01" }',
+    isGlyph: true,
+    glyphExpr,
+    glyphData: {
+      d,
+      fill,
+      stroke: stroke || 'transparent',
+      stroke_width: strokeWidth,
+      scale,
+      fill_effect: fillEffect || null,
+    },
+  };
 }

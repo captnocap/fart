@@ -6,6 +6,8 @@ function ToolHistoryRow(props) {
   var exec = props.exec;
   var isRunning = exec.status == 'running';
   var isError = exec.status == 'error';
+  var messageText = exec.input.length > 28 ? exec.input.substring(0, 28) + '..' : exec.input;
+  var timeText = isRunning ? exec.percent + '%' : exec.status;
 
   var dotColor = '#4a4a4a';
   if (isRunning) dotColor = '#2d62ff';
@@ -15,8 +17,8 @@ function ToolHistoryRow(props) {
   return (
     <C.AgentLogEntry>
       <C.AgentLogLevel style={{ color: dotColor }}>{exec.name}</C.AgentLogLevel>
-      <C.AgentLogMessage>{exec.input.length > 28 ? exec.input.substring(0, 28) + '..' : exec.input}</C.AgentLogMessage>
-      <C.AgentLogTime>{isRunning ? exec.percent + '%' : exec.status}</C.AgentLogTime>
+      <C.AgentLogMessage>{messageText}</C.AgentLogMessage>
+      <C.AgentLogTime>{timeText}</C.AgentLogTime>
     </C.AgentLogEntry>
   );
 }
@@ -25,17 +27,20 @@ function AgentTools(props) {
   var hasTool = toolExecutions.length > 0;
   var running = 0;
   var done = 0;
+  var statusText = '0 done';
   for (var i = 0; i < toolExecutions.length; i++) {
     if (toolExecutions[i].status == 'running') running++;
     else if (toolExecutions[i].status == 'completed') done++;
   }
+  if (running > 0) statusText = running + ' running';
+  else statusText = done + ' done';
 
   return (
     <C.AgentToolsPanel>
       <C.AgentToolsHeader>
         <C.AgentToolsTitle>Tools</C.AgentToolsTitle>
         <C.AgentStatus style={{ color: running > 0 ? '#2d62ff' : '#4a4a4a' }}>
-          {running > 0 ? running + ' running' : done + ' done'}
+          {statusText}
         </C.AgentStatus>
       </C.AgentToolsHeader>
 

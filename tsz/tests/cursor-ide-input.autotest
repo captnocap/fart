@@ -1,54 +1,71 @@
-# Cursor IDE — Input & Agent Integration Test
-# Exercises: type, key, focus, clear + agent flow + file switching
+# Cursor IDE — navigation and agent input shell smoke test
 
 # === BASELINE ===
-expect "Agent"
-expect "Sidebar.tsx"
+expect "Agent Console"
+expect "PROJECT LANDING"
 expect "Send"
 expect "Ask"
+reject "nil"
 
-# === MODE SWITCHING — verify pills work ===
-click "Task"
-expect "Task mode"
-expect "Run Task"
+# === LANDING TO EDITOR ===
+click "Open cursor-ide cart"
+expect "cursor-ide.tsz"
+expect "Scratch Buffer"
+expect "native view"
+expect "TSZ"
+reject "nil"
 
-click "Ask"
-reject "Task mode"
-expect "Send"
+# === BACK TO LANDING ===
+click "Project landing"
+expect "Index Workspace"
+expect "Recent Focus"
 
-# === FILE SWITCHING ===
-click "Editor.tsx"
-expect "Editor Component"
+# === SETTINGS SURFACE ===
+click "Settings"
+expect "SETTINGS SURFACE"
+expect "Providers"
+expect "Context"
+expect "Memory"
+expect "Plugins"
+expect "Automations"
+expect "Capabilities"
+reject "nil"
 
-click "package.json"
-expect "0.1.0"
-
-click "README.md"
-expect "Agentic coding environment"
-
-# Back to Sidebar
-click "Sidebar.tsx"
-expect "FileTree"
+click "Memory"
+expect "Memory Orchestration"
+expect "Workspace Memory"
+expect "Agent Transcript Index"
+reject "nil"
 
 # === TERMINAL TOGGLE ===
-click "Terminal"
-expect "bash"
+expect "pty attached to workspace shell"
+click "Terminal" #1
+reject "pty attached to workspace shell"
+click "Terminal" #1
+expect "pty attached to workspace shell"
 
-# === TOOL TOGGLES ===
-click "Web"
-click "Term"
+# === SEARCH PANEL ===
+click "Search" #1
+expect "Project Search"
+expect "results in workspace"
+click "Search" #1
+reject "Project Search"
 
-# === ATTACHMENT ===
-click "Attach"
-expect "Clear all"
+# === MODE SWITCHING ===
+click "Task"
+expect "Run Task"
+expect "Task mode"
+reject "nil"
 
-# === NEW CONVERSATION ===
-expect "I have analyzed the codebase"
-click "+ New"
-reject "I have analyzed the codebase"
-
-# === AGENT MODE (after + New, fewer Agent matches) ===
-click "Agent" #4
-expect "Launch"
 click "Ask"
 expect "Send"
+reject "Run Task"
+reject "nil"
+
+# === NEW CONVERSATION + MODEL CYCLE ===
+click "New"
+expect "Send"
+click "Opus 4"
+expect "Sonnet 4"
+reject "Opus 4"
+reject "nil"
