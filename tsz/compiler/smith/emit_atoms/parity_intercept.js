@@ -9,6 +9,17 @@
 (function() {
   if (typeof emitOutput !== 'function') return;
   if (typeof runEmitAtoms !== 'function') return;
+  if (typeof finalizeEmitOutput !== 'function') return;
+
+  // Wrap finalizeEmitOutput to capture legacy output BEFORE split.
+  // This gives us the same pipeline stage as atom output for fair comparison.
+  var _origFinalize = finalizeEmitOutput;
+  finalizeEmitOutput = function(out, file) {
+    if (globalThis.__parityMode) {
+      globalThis.__parityLegacyPreSplit = out;
+    }
+    return _origFinalize(out, file);
+  };
 
   var _origEmitOutput = emitOutput;
 

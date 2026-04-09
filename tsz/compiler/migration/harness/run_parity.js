@@ -44,9 +44,10 @@ function hashString(str) {
 
 function runLegacyEmit(cart) {
   try {
-    // BUG FIX 1: Delete stale atom output BEFORE invoking forge
-    // so a previous run's atom output is never mistaken for this run's.
+    // Delete stale parity output BEFORE invoking forge
+    // so a previous run's output is never mistaken for this run's.
     try { fs.unlinkSync(ATOM_OUTPUT_PATH); } catch (_) {}
+    try { fs.unlinkSync('/tmp/tsz-gen/parity_legacy_presplit.zig'); } catch (_) {}
 
     const forgeCmd = './zig-out/bin/forge build --parity ' + cart;
     // Merge stderr into stdout so we can parse forge's [forge] Wrote... message
@@ -56,47 +57,28 @@ function runLegacyEmit(cart) {
       encoding: 'utf8',
     });
 
-    // BUG FIX 2: Parse actual output directory from forge stderr
-    // instead of computing from basename (forge may strip prefixes differently).
-    // Forge prints: [forge] Wrote N files (M bytes) to /tmp/tsz-gen/generated_NAME/
+    // Read pre-split legacy output written by forge --parity.
+    // This is the monolithic output BEFORE splitOutput() runs,
+    // matching the same pipeline stage as atom output from runEmitAtoms().
+    const legacyPreSplitPath = '/tmp/tsz-gen/parity_legacy_presplit.zig';
+    if (!fs.existsSync(legacyPreSplitPath)) {
+      return { output: null, error: 'legacy pre-split not found: ' + legacyPreSplitPath + '. forge output: ' + (forgeOut || '').slice(0, 200) };
+    }
+
+    const legacyOutput = fs.readFileSync(legacyPreSplitPath, 'utf8');
+
+    // Also detect split files for metadata
     const allOutput = forgeOut || '';
     const writeMatch = allOutput.match(/Wrote \d+ files .* to ([^\s]+)/);
-    let genDir;
+    let files = [];
     if (writeMatch) {
-      genDir = writeMatch[1].replace(/\/$/, ''); // strip trailing slash
-    } else {
-      // Fallback: find most recent generated_* dir under /tmp/tsz-gen/
-      const tszGen = '/tmp/tsz-gen';
-      if (fs.existsSync(tszGen)) {
-        const dirs = fs.readdirSync(tszGen)
-          .filter(d => d.startsWith('generated_'))
-          .map(d => ({ name: d, mtime: fs.statSync(path.join(tszGen, d)).mtimeMs }))
-          .sort((a, b) => b.mtime - a.mtime);
-        genDir = dirs.length > 0 ? path.join(tszGen, dirs[0].name) : null;
+      const genDir = writeMatch[1].replace(/\/$/, '');
+      if (fs.existsSync(genDir)) {
+        files = fs.readdirSync(genDir).filter(f => f.endsWith('.zig')).sort();
       }
     }
 
-    if (!genDir || !fs.existsSync(genDir)) {
-      return { output: null, error: 'generated dir not found. forge output: ' + allOutput.slice(0, 200) };
-    }
-
-    // Collect all generated .zig files, sorted by name for deterministic order
-    const zigFiles = fs.readdirSync(genDir)
-      .filter(f => f.endsWith('.zig'))
-      .sort();
-
-    if (zigFiles.length === 0) {
-      return { output: null, error: 'no .zig files in ' + genDir };
-    }
-
-    // Concatenate all .zig files in sorted order — no separators,
-    // so output is comparable to raw atom output from runEmitAtoms().
-    let combined = '';
-    for (const zf of zigFiles) {
-      combined += fs.readFileSync(path.join(genDir, zf), 'utf8');
-    }
-
-    return { output: combined, error: null, files: zigFiles };
+    return { output: legacyOutput, error: null, files: files };
   } catch (err) {
     return { output: null, error: err.message };
   }

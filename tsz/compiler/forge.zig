@@ -402,6 +402,17 @@ pub fn main() !void {
         } else {
             std.debug.print("[forge:parity] No atom output produced\n", .{});
         }
+        // Write pre-split legacy output so harness compares at the same pipeline stage
+        if (smith.getGlobalString("__parityLegacyPreSplit")) |legacy_pre| {
+            const legacy_path = std.fmt.allocPrint(Alloc, "{s}/parity_legacy_presplit.zig", .{out_dir}) catch "/tmp/parity_legacy_presplit.zig";
+            const legacy_file = std.fs.cwd().createFile(legacy_path, .{}) catch |err| {
+                std.debug.print("[forge:parity] Cannot write legacy pre-split: {}\n", .{err});
+                return;
+            };
+            defer legacy_file.close();
+            legacy_file.writeAll(legacy_pre) catch {};
+            std.debug.print("[forge:parity] Legacy pre-split written to {s} ({d} bytes)\n", .{ legacy_path, legacy_pre.len });
+        }
     }
 
     // 7. Extract stem for output path, ensure out_dir exists
