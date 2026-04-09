@@ -234,7 +234,7 @@ pub fn isRecording() bool {
 }
 
 pub fn isReplaying() bool {
-    return mode == .replay or mode == .autotest;
+    return mode == .replay or mode == .autotest or mode == .snapshot;
 }
 
 /// Exit code: 0 if recording or all checks passed, 1 if any failed.
@@ -1095,6 +1095,269 @@ fn colorToHex(col: layout.Color, buf: *[7]u8) []const u8 {
 
 fn colorEql(a: layout.Color, b: layout.Color) bool {
     return a.r == b.r and a.g == b.g and a.b == b.b;
+}
+
+// ── Snapshot logic ─────────────────────────────────────────────────────
+// Auto-generates a full autotest from the running binary:
+//   1. Collect initial text expects + health metrics (node/handler/state counts)
+//   2. Click every pressable node, settle, collect new text after each click
+//   3. Write the complete autotest to ZIGOS_WITNESS_FILE
+// The autotest is a build artifact — never hand-written.
+
+const SNAP_MAX_CLICKS = 64;
+const SNAP_MAX_LINES = 512;
+
+const SnapPhase = enum { wait_settle, collect_initial, clicking, settle_after_click, done };
+
+var snap_phase: SnapPhase = .wait_settle;
+var snap_settle_countdown: u8 = 0;
+
+// Pressable nodes discovered on initial render
+var snap_pressables: [SNAP_MAX_CLICKS]query.QueryResult = undefined;
+var snap_press_labels: [SNAP_MAX_CLICKS][64]u8 = undefined;
+var snap_press_label_lens: [SNAP_MAX_CLICKS]u8 = undefined;
+var snap_pressable_count: u16 = 0;
+var snap_click_idx: u16 = 0;
+
+// Output buffer — lines of autotest content
+var snap_lines: [SNAP_MAX_LINES][128]u8 = undefined;
+var snap_line_lens: [SNAP_MAX_LINES]u16 = undefined;
+var snap_line_count: u16 = 0;
+
+// Health counters
+var snap_node_count: u16 = 0;
+var snap_text_count: u16 = 0;
+var snap_handler_count: u16 = 0;
+
+fn snapAddLine(line: []const u8) void {
+    if (snap_line_count >= SNAP_MAX_LINES) return;
+    const idx = snap_line_count;
+    const clen = @min(line.len, 128);
+    @memcpy(snap_lines[idx][0..clen], line[0..clen]);
+    snap_line_lens[idx] = @intCast(clen);
+    snap_line_count += 1;
+}
+
+fn snapAddFmt(comptime fmt: []const u8, args: anytype) void {
+    var buf: [128]u8 = undefined;
+    const s = std.fmt.bufPrint(&buf, fmt, args) catch return;
+    snapAddLine(s);
+}
+
+fn snapCountTree(node: *Node) void {
+    if (node.style.display == .none) return;
+    snap_node_count += 1;
+    if (node.text != null) snap_text_count += 1;
+    const h = node.handlers;
+    if (h.on_press != null or h.js_on_press != null or h.lua_on_press != null) {
+        snap_handler_count += 1;
+    }
+    for (node.children) |*child| {
+        snapCountTree(child);
+    }
+}
+
+fn snapCollectTexts(root: *Node) void {
+    collectSeenTexts(root);
+    for (0..auto_seen_count) |i| {
+        const txt = auto_seen_texts[i][0..auto_seen_lens[i]];
+        if (txt.len < 2) continue;
+        var all_space = true;
+        for (txt) |ch| {
+            if (ch != ' ' and ch != '\t') {
+                all_space = false;
+                break;
+            }
+        }
+        if (all_space) continue;
+        snapAddFmt("expect \"{s}\"", .{txt});
+    }
+}
+
+fn snapFindPressables(root: *Node) void {
+    // Find all nodes that have press handlers AND have text (so we can label the click)
+    snapFindPressRecurse(root, 0);
+}
+
+fn snapFindPressRecurse(node: *Node, scroll_y: f32) void {
+    if (node.style.display == .none) return;
+    if (snap_pressable_count >= SNAP_MAX_CLICKS) return;
+
+    const h = node.handlers;
+    const has_press = (h.on_press != null or h.js_on_press != null or h.lua_on_press != null);
+
+    if (has_press) {
+        // Find a text label — either this node's text or first child text
+        var label: ?[]const u8 = node.text;
+        if (label == null) {
+            label = findFirstChildText(node);
+        }
+        if (label) |lbl| {
+            if (lbl.len >= 2 and lbl.len <= 64) {
+                const idx = snap_pressable_count;
+                snap_pressables[idx] = .{
+                    .node = node,
+                    .x = node.computed.x,
+                    .y = node.computed.y - scroll_y,
+                    .w = node.computed.w,
+                    .h = node.computed.h,
+                    .cx = node.computed.x + node.computed.w / 2.0,
+                    .cy = node.computed.y - scroll_y + node.computed.h / 2.0,
+                };
+                const clen = @min(lbl.len, 64);
+                @memcpy(snap_press_labels[idx][0..clen], lbl[0..clen]);
+                snap_press_label_lens[idx] = @intCast(clen);
+                snap_pressable_count += 1;
+            }
+        }
+    }
+
+    const child_scroll = scroll_y + node.scroll_y;
+    for (node.children) |*child| {
+        if (snap_pressable_count >= SNAP_MAX_CLICKS) return;
+        snapFindPressRecurse(child, child_scroll);
+    }
+}
+
+fn findFirstChildText(node: *Node) ?[]const u8 {
+    for (node.children) |*child| {
+        if (child.style.display == .none) continue;
+        if (child.text) |t| return t;
+        const sub = findFirstChildText(child);
+        if (sub != null) return sub;
+    }
+    return null;
+}
+
+fn snapshotTick(root: *Node) bool {
+    if (frame_count < 8 and snap_phase == .wait_settle) return false;
+
+    switch (snap_phase) {
+        .wait_settle => {
+            snap_phase = .collect_initial;
+            return false;
+        },
+        .collect_initial => {
+            // Count tree health
+            snapCountTree(root);
+            const slot_count = state_mod.slotCount();
+
+            // Header
+            snapAddLine("# Verify all visible text on initial render");
+            snapAddFmt("# health: {d} nodes, {d} text, {d} pressable, {d} state slots", .{
+                snap_node_count, snap_text_count, snap_handler_count, slot_count,
+            });
+            snapAddLine("");
+
+            // Collect initial text expects
+            snapAddLine("# Initial render");
+            snapCollectTexts(root);
+
+            // Find pressable nodes for click-through
+            snapFindPressables(root);
+
+            if (snap_pressable_count > 0) {
+                snapAddLine("");
+                snapAddFmt("# Click-through: {d} pressable nodes", .{snap_pressable_count});
+                snap_click_idx = 0;
+                snap_phase = .clicking;
+            } else {
+                snap_phase = .done;
+            }
+            return false;
+        },
+        .clicking => {
+            if (snap_click_idx >= snap_pressable_count) {
+                snap_phase = .done;
+                return false;
+            }
+
+            const label = snap_press_labels[snap_click_idx][0..snap_press_label_lens[snap_click_idx]];
+
+            // Re-find this pressable by its label text (coordinates may have shifted)
+            if (query.find(root, .{ .text_contains = label })) |result| {
+                snapAddLine("");
+                snapAddFmt("click \"{s}\"", .{label});
+                testdriver.click(result.cx, result.cy);
+                snap_settle_countdown = 3;
+                snap_phase = .settle_after_click;
+            } else {
+                // Node disappeared — skip
+                snap_click_idx += 1;
+            }
+            return false;
+        },
+        .settle_after_click => {
+            if (snap_settle_countdown > 0) {
+                snap_settle_countdown -= 1;
+                return false;
+            }
+
+            // Reset seen texts and re-collect after click
+            auto_seen_count = 0;
+            snapCollectTexts(root);
+
+            snap_click_idx += 1;
+            if (snap_click_idx >= snap_pressable_count) {
+                snap_phase = .done;
+            } else {
+                snap_phase = .clicking;
+            }
+            return false;
+        },
+        .done => {
+            snapWriteFile();
+            return true;
+        },
+    }
+}
+
+fn snapWriteFile() void {
+    const path = witness_path orelse {
+        std.debug.print("[snapshot] no ZIGOS_WITNESS_FILE, printing to stderr\n", .{});
+        for (0..snap_line_count) |i| {
+            std.debug.print("{s}\n", .{snap_lines[i][0..snap_line_lens[i]]});
+        }
+        return;
+    };
+
+    const file = std.fs.cwd().createFile(path, .{}) catch |err| {
+        std.debug.print("[snapshot] cannot create {s}: {}\n", .{ path, err });
+        return;
+    };
+    defer file.close();
+
+    // Derive test name
+    var test_name: []const u8 = path;
+    if (std.mem.lastIndexOfScalar(u8, path, '/')) |slash| {
+        test_name = path[slash + 1 ..];
+    }
+    if (std.mem.indexOf(u8, test_name, ".autotest")) |dot| {
+        test_name = test_name[0..dot];
+    }
+
+    // Write header + all lines
+    var out_buf: [65536]u8 = undefined;
+    var pos: usize = 0;
+
+    pos += (std.fmt.bufPrint(out_buf[pos..], "# {s}: auto-generated from runtime snapshot\n", .{test_name}) catch "").len;
+    pos += (std.fmt.bufPrint(out_buf[pos..], "# Generated by ZIGOS_WITNESS=snapshot — do not edit by hand\n\n", .{}) catch "").len;
+
+    var expect_count: u16 = 0;
+    var click_count: u16 = 0;
+    for (0..snap_line_count) |i| {
+        const line = snap_lines[i][0..snap_line_lens[i]];
+        if (pos + line.len + 1 >= out_buf.len) break;
+        @memcpy(out_buf[pos .. pos + line.len], line);
+        pos += line.len;
+        out_buf[pos] = '\n';
+        pos += 1;
+        if (line.len > 7 and std.mem.startsWith(u8, line, "expect ")) expect_count += 1;
+        if (line.len > 6 and std.mem.startsWith(u8, line, "click ")) click_count += 1;
+    }
+
+    file.writeAll(out_buf[0..pos]) catch {};
+    std.debug.print("[snapshot] wrote {d} expects + {d} clicks to {s}\n", .{ expect_count, click_count, path });
 }
 
 fn autotestTick(root: *Node) bool {
@@ -2332,10 +2595,3 @@ fn loadWitness() void {
     });
 }
 
-// ── Snapshot mode stub ──────────────────────────────────────────────────
-
-fn snapshotTick(root: *Node) bool {
-    _ = root;
-    // TODO: implement snapshot mode
-    return false;
-}

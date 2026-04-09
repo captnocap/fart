@@ -1,13 +1,13 @@
 //! Forge — the Zig kernel that hosts Smith (JS compiler intelligence).
 //!
-//! Usage: forge build <file.tsz>
+//! Usage: forge build|check|contract <file.tsz>
 //!
 //! 1. Reads .tsz source
 //! 2. Resolves imports recursively (components merged into source, cls/script separated)
 //! 3. Lexes merged source into tokens (fast, Zig)
 //! 4. Passes tokens + source to Smith via QuickJS
-//! 5. Smith returns complete .zig source
-//! 6. Writes .zig file
+//! 5. Smith returns complete .zig source or a source-contract snapshot
+//! 6. Writes .zig file or prints/writes the contract JSON
 
 const std = @import("std");
 const lexer_mod = @import("lexer.zig");
@@ -221,14 +221,15 @@ pub fn main() !void {
     _ = args.next(); // skip argv[0]
 
     const cmd = args.next() orelse {
-        std.debug.print("Usage: forge build <file.tsz>\n", .{});
+        std.debug.print("Usage: forge build|check|contract <file.tsz>\n", .{});
         return;
     };
 
     const is_check = std.mem.eql(u8, cmd, "check");
+    const is_contract = std.mem.eql(u8, cmd, "contract");
     // forge check runs Smith predict path only (route scan + atoms). NOT the legacy Generator in cli.zig.
-    if (!std.mem.eql(u8, cmd, "build") and !is_check) {
-        std.debug.print("Unknown command: {s}\nUsage: forge build|check <file.tsz>\n", .{cmd});
+    if (!std.mem.eql(u8, cmd, "build") and !is_check and !is_contract) {
+        std.debug.print("Unknown command: {s}\nUsage: forge build|check|contract <file.tsz>\n", .{cmd});
         return;
     }
 
@@ -285,7 +286,7 @@ pub fn main() !void {
         }
     }
     if (!got_path) {
-        std.debug.print("Usage: forge build [--fast] [--mod] <file.tsz>\n", .{});
+        std.debug.print("Usage: forge build|check|contract [--fast] [--mod] <file.tsz>\n", .{});
         return;
     }
 
@@ -364,7 +365,7 @@ pub fn main() !void {
         return;
     }
 
-    // 6. Call compile() or smithCheck()
+    // 6. Call compile(), smithCheck(), or sourceContract()
     if (is_check) {
         const report = smith.callCheck(Alloc) orelse {
             std.debug.print("[forge] Smith smithCheck() failed\n", .{});
@@ -377,6 +378,40 @@ pub fn main() !void {
         if (blocking != 0) {
             std.process.exit(1);
         }
+        return;
+    }
+
+    if (is_contract) {
+        const contract_json = smith.callSourceContract(Alloc) orelse {
+            std.debug.print("[forge] Smith sourceContract() failed\n", .{});
+            return;
+        };
+
+        std.fs.cwd().makePath(out_dir) catch |err| {
+            std.debug.print("[forge] Cannot create out-dir '{s}': {}\n", .{ out_dir, err });
+            return;
+        };
+
+        const basename_contract = std.fs.path.basename(input_path);
+        const dot_pos_contract = std.mem.lastIndexOfScalar(u8, basename_contract, '.') orelse basename_contract.len;
+        const stem_contract = basename_contract[0..dot_pos_contract];
+        const contract_path = std.fmt.allocPrint(Alloc, "{s}/source_contract_{s}.json", .{ out_dir, stem_contract }) catch {
+            std.debug.print("{s}\n", .{contract_json});
+            return;
+        };
+
+        const contract_file = std.fs.cwd().createFile(contract_path, .{}) catch |err| {
+            std.debug.print("[forge] Cannot write contract '{s}': {}\n", .{ contract_path, err });
+            std.debug.print("{s}\n", .{contract_json});
+            return;
+        };
+        defer contract_file.close();
+        contract_file.writeAll(contract_json) catch |err| {
+            std.debug.print("[forge] Cannot write contract '{s}': {}\n", .{ contract_path, err });
+            return;
+        };
+        std.debug.print("[forge] Source contract written to {s} ({d} bytes)\n", .{ contract_path, contract_json.len });
+        std.debug.print("{s}\n", .{contract_json});
         return;
     }
 

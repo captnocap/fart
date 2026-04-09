@@ -203,6 +203,9 @@ function emitLuaTreeLuaSource(ctx) {
   result = result.replace(/!=/g, '~=');
   result = result.replace(/\|\|/g, ' or ');
   result = result.replace(/&&/g, ' and ');
+  // Fix broken string concats: "text "+varName) → "text " .. tostring(varName))
+  result = result.replace(/"([^"]*) "\+(\w+)\)/g, '"$1 " .. tostring($2))');
+  result = result.replace(/"([^"]*)"(\+)(\w+)/g, '"$1" .. tostring($3)');
   // Restore protected JS strings
   for (var _pi = 0; _pi < protected.length; _pi++) {
     result = result.replace('__JSPROTECT_' + _pi + '__', protected[_pi]);

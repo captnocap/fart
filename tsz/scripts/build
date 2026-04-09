@@ -165,7 +165,26 @@ if [[ "$CART" == *carts/conformance/* ]] && [[ "$CART" != *.script.tsz ]] && [[ 
         bytes_per_line REAL   NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_perf_test ON build_perf(test_name);
-    CREATE INDEX IF NOT EXISTS idx_perf_date ON build_perf(built_at);"
+    CREATE INDEX IF NOT EXISTS idx_perf_date ON build_perf(built_at);
+    CREATE TABLE IF NOT EXISTS snapshots (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        test_name       TEXT    NOT NULL,
+        lane            TEXT    NOT NULL,
+        snapped_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%d %I:%M:%S %p', 'now', 'localtime')),
+        expect_count    INTEGER NOT NULL DEFAULT 0,
+        click_count     INTEGER NOT NULL DEFAULT 0,
+        node_count      INTEGER NOT NULL DEFAULT 0,
+        text_count      INTEGER NOT NULL DEFAULT 0,
+        pressable_count INTEGER NOT NULL DEFAULT 0,
+        state_slots     INTEGER NOT NULL DEFAULT 0,
+        snap_ms         INTEGER NOT NULL DEFAULT 0,
+        contract_clean  INTEGER NOT NULL DEFAULT 1,
+        engine_sha      TEXT,
+        compiler_sha    TEXT,
+        source_sha      TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_snap_test ON snapshots(test_name, snapped_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_snap_lane ON snapshots(lane);"
     # Migrations: add columns to existing tables (no-op if already present)
     cdb "ALTER TABLE builds ADD COLUMN engine_sha TEXT;" 2>/dev/null || true
     cdb "ALTER TABLE verified_sources ADD COLUMN engine_sha TEXT;" 2>/dev/null || true
@@ -970,6 +989,70 @@ if [ "$IS_CONFORMANCE" -eq 1 ] && [ "${SOURCE_LINES:-0}" -gt 0 ]; then
     cdb "INSERT INTO build_perf (test_name, lane, source_lines, generated_bytes, forge_ms, zig_ms, total_ms, lines_per_sec, bytes_per_line)
         VALUES ('$SAFE_PERF_NAME', '$CONF_LANE', $SOURCE_LINES, $GENERATED_BYTES, $FORGE_MS, $ZIG_MS, $TOTAL_MS, $LINES_PER_SEC, $BYTES_PER_LINE);"
     echo "[$NAME] perf: ${SOURCE_LINES} lines in → ${GENERATED_BYTES} bytes out | forge ${FORGE_MS}ms + zig ${ZIG_MS}ms = ${TOTAL_MS}ms (${LINES_PER_SEC} lines/sec)"
+fi
+
+# ── Auto-generate autotest from runtime snapshot ─────────────────
+# After successful conformance build, run the binary headless to capture
+# all visible text nodes and write them as expect lines. The autotest
+# becomes a build artifact — never hand-written, always in sync.
+if [ "$IS_CONFORMANCE" -eq 1 ]; then
+    AUTOTEST_FILE="tests/${CONF_BASENAME}.autotest"
+    BINARY="zig-out/bin/$NAME"
+    if [ -x "$BINARY" ]; then
+        # Run snapshot
+        SNAP_T0=$(date +%s%N)
+        ZIGOS_HEADLESS=1 ZIGOS_WITNESS=snapshot ZIGOS_WITNESS_FILE="$AUTOTEST_FILE" \
+            timeout -s KILL 5 "$BINARY" >/dev/null 2>&1 || true
+        SNAP_T1=$(date +%s%N)
+        SNAP_MS=$(( (SNAP_T1 - SNAP_T0) / 1000000 ))
+
+        # Extract metrics from generated autotest
+        EXPECT_COUNT=0; CLICK_COUNT=0
+        NODE_COUNT=0; TEXT_COUNT=0; PRESSABLE_COUNT=0; STATE_SLOTS=0
+        if [ -f "$AUTOTEST_FILE" ]; then
+            EXPECT_COUNT=$(grep -c '^expect ' "$AUTOTEST_FILE" 2>/dev/null || echo "0")
+            CLICK_COUNT=$(grep -c '^click ' "$AUTOTEST_FILE" 2>/dev/null || echo "0")
+            # Parse health line: # health: N nodes, N text, N pressable, N state slots
+            HEALTH_LINE=$(grep '^# health:' "$AUTOTEST_FILE" 2>/dev/null || true)
+            if [ -n "$HEALTH_LINE" ]; then
+                NODE_COUNT=$(echo "$HEALTH_LINE" | grep -oP '\d+(?= nodes)' 2>/dev/null || true)
+                TEXT_COUNT=$(echo "$HEALTH_LINE" | grep -oP '\d+(?= text)' 2>/dev/null || true)
+                PRESSABLE_COUNT=$(echo "$HEALTH_LINE" | grep -oP '\d+(?= pressable)' 2>/dev/null || true)
+                STATE_SLOTS=$(echo "$HEALTH_LINE" | grep -oP '\d+(?= state)' 2>/dev/null || true)
+            fi
+            # Ensure all counts are valid integers (empty grep → 0)
+            NODE_COUNT=${NODE_COUNT:-0}; [ -z "$NODE_COUNT" ] && NODE_COUNT=0
+            TEXT_COUNT=${TEXT_COUNT:-0}; [ -z "$TEXT_COUNT" ] && TEXT_COUNT=0
+            PRESSABLE_COUNT=${PRESSABLE_COUNT:-0}; [ -z "$PRESSABLE_COUNT" ] && PRESSABLE_COUNT=0
+            STATE_SLOTS=${STATE_SLOTS:-0}; [ -z "$STATE_SLOTS" ] && STATE_SLOTS=0
+            echo "[$NAME] snapshot: ${EXPECT_COUNT} expects + ${CLICK_COUNT} clicks in ${SNAP_MS}ms → $AUTOTEST_FILE"
+        else
+            echo "[$NAME] snapshot: failed to generate autotest (${SNAP_MS}ms)"
+        fi
+
+        # Run contract check (fast — no build, just parse)
+        CONTRACT_CLEAN=1
+        CONTRACT_JSON="/tmp/tsz-gen/source_contract_${CONF_BASENAME}.json"
+        if ./zig-out/bin/forge contract "$CART" > /dev/null 2>&1 && [ -f "$CONTRACT_JSON" ]; then
+            if grep -qE '"</(Text|Box|Pressable|ScrollView|Image)' "$CONTRACT_JSON" 2>/dev/null; then
+                CONTRACT_CLEAN=0
+                echo "[$NAME] contract: JSX CONTAMINATION detected"
+            fi
+        fi
+
+        # Record to DB
+        SNAP_SRC_SHA=""
+        [ -f "$CART" ] && SNAP_SRC_SHA=$(sha256sum "$CART" | cut -c1-16)
+        SNAP_ENG_SHA="${REACTJIT_ENGINE_SHA:-}"
+        if [ -z "$SNAP_ENG_SHA" ]; then
+            [ -f "zig-out/lib/libreactjit-core.so" ] && SNAP_ENG_SHA=$(sha256sum "zig-out/lib/libreactjit-core.so" | cut -c1-16)
+        fi
+        SNAP_COMP_SHA=""
+        [ -f "zig-out/bin/forge" ] && SNAP_COMP_SHA=$(sha256sum "zig-out/bin/forge" | cut -c1-16)
+        SAFE_SNAP_NAME=$(printf '%s' "$CONF_NAME" | sed "s/'/''/g")
+        cdb "INSERT INTO snapshots (test_name, lane, expect_count, click_count, node_count, text_count, pressable_count, state_slots, snap_ms, contract_clean, engine_sha, compiler_sha, source_sha)
+            VALUES ('$SAFE_SNAP_NAME', '$CONF_LANE', ${EXPECT_COUNT:-0}, ${CLICK_COUNT:-0}, ${NODE_COUNT:-0}, ${TEXT_COUNT:-0}, ${PRESSABLE_COUNT:-0}, ${STATE_SLOTS:-0}, ${SNAP_MS:-0}, ${CONTRACT_CLEAN:-1}, '${SNAP_ENG_SHA:-}', '${SNAP_COMP_SHA:-}', '${SNAP_SRC_SHA:-}');" 2>/dev/null || true
+    fi
 fi
 
 echo "[$NAME] done → zig-out/bin/$NAME"
