@@ -366,12 +366,28 @@ function _normalizePropValueForLua(propValue, _luaIdxExpr, _currentOaIdx) {
 
 function _getMapIdentity(_luaIdxExpr) {
   // Determine canonical map identity variables based on context
-  // _luaIdxExpr is set for nested maps, null/undefined for top-level maps
-  var isNested = !!_luaIdxExpr;
+  // _luaIdxExpr === '(_ni - 1)' indicates nested map context
+  var isNested = _luaIdxExpr === '(_ni - 1)';
   return {
     itemVar: isNested ? '_nitem' : '_item',
+    idxVar: isNested ? '_ni' : '_i',
     idxExpr: _luaIdxExpr || '(_i - 1)'
   };
+}
+
+// Resolve OA field reference to the correct item variable based on map context
+function _resolveOaFieldRef(oaIdx, field, _luaIdxExpr, _currentOaIdx) {
+  var id = _getMapIdentity(_luaIdxExpr);
+  // If this OA matches the current map context, use canonical item variable
+  if (_currentOaIdx !== undefined && _currentOaIdx !== null && +oaIdx === +_currentOaIdx) {
+    return id.itemVar + '.' + field;
+  }
+  // Otherwise fall back to OA getter lookup
+  var _oa = ctx && ctx.objectArrays ? ctx.objectArrays.find(function(o) { return o.oaIdx === +oaIdx; }) : null;
+  if (_oa) {
+    return _oa.getter + '[' + id.idxVar + '].' + field;
+  }
+  return id.itemVar + '.' + field;
 }
 
 function _jsExprToLua(expr, itemParam, indexParam, _luaIdxExpr, _currentOaIdx) {
@@ -549,6 +565,12 @@ function _jsExprToLua(expr, itemParam, indexParam, _luaIdxExpr, _currentOaIdx) {
   }
   expr = expr.replace(/'#([0-9a-fA-F]{3,8})'/g, '0x$1');
   expr = expr.replace(/"#([0-9a-fA-F]{3,8})"/g, '0x$1');
+  // DEFENSIVE: _item._item is a bug — collapse to single _item
+  expr = expr.replace(/\b_item\._item\b/g, '_item');
+  expr = expr.replace(/\b_nitem\._nitem\b/g, '_nitem');
+  // DEFENSIVE: mixed nested item refs are bugs too
+  expr = expr.replace(/\b_item\._nitem\b/g, '_nitem');
+  expr = expr.replace(/\b_nitem\._item\b/g, '_item');
   if (expr.indexOf('_item.0') >= 0 || expr.indexOf('0.0') >= 0) {
     print('[MAP_SUB_DEBUG] before=' + _origExpr + ' after=' + expr + ' item=' + (itemParam || '') + ' idx=' + (indexParam || '') + ' props=' + JSON.stringify((ctx && ctx.propStack) || {}));
   }
