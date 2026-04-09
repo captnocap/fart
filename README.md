@@ -73,8 +73,8 @@ The `.tsz` compiler and native rendering framework. TypeScript + JSX compiles to
 
 The compiler is split into two parts:
 
-- **Forge** — small Zig kernel (~503 lines). Lexer, QuickJS bridge, file I/O. Built once, rarely changes. Tokenizes `.tsz` source and hands flat token arrays to Smith. Generated code outputs to `/tmp/tsz-gen/` by default (overridable with `--out-dir=`).
-- **Smith** — JS compiler intelligence (~42,000 lines across 371 files in 45 directories) running inside Forge via QuickJS. Lives in `compiler/smith/` with scoped subdirs: `patterns/` (140 JSX pattern recognizers), `parse/` (element/brace/map/template parsing), `emit_atoms/` (structured Zig codegen atoms), `emit_ops/` (emit helpers), `emit/` (top-level emitters), `collect/` (preflight collection passes), `preflight/` (tier detection + validation), `lanes/` (app/page/module/soup dispatch), `mod/` (module block compiler), `resolve/` (expression resolution). Edit without rebuilding Forge.
+- **Forge** — small Zig kernel (~595 lines). Lexer, QuickJS bridge, file I/O. Built once, rarely changes. Tokenizes `.tsz` source and hands flat token arrays to Smith. Generated code outputs to `/tmp/tsz-gen/` by default (overridable with `--out-dir=`).
+- **Smith** — JS compiler intelligence (~43,200 lines across 354 files in 48 directories) running inside Forge via QuickJS. Lives in `compiler/smith/` with scoped subdirs: `patterns/` (140 JSX pattern recognizers), `parse/` (element/brace/map/template parsing), `emit_atoms/` (structured Zig codegen atoms), `emit_ops/` (emit helpers), `emit/` (top-level emitters), `collect/` (preflight collection passes), `preflight/` (tier detection + validation), `lanes/` (app/page/module/soup dispatch), `mod/` (module block compiler), `resolve/` (expression resolution), `contract/` (three-phase Lua emit contracts). Edit without rebuilding Forge.
 
 ```
 app.tsz → [Forge: lex] → tokens → [Smith: parse + emit] → .zig source → native binary
@@ -82,7 +82,7 @@ app.tsz → [Forge: lex] → tokens → [Smith: parse + emit] → .zig source �
 
 Smith emits **`LUA_LOGIC` by default** for app UI and handlers (lua-tree): `.map()`, closures, and per-item dispatch live in LuaJIT. Example: `.map()` handlers become Lua functions like `__mapPress_0_0(idx)` with `lua_on_press` strings baked per item — no Zig closures. **`<script>`** blocks add **`JS_LOGIC`** on QuickJS; **`__eval`** / **`evalLuaMapData`** also use QuickJS from Lua. The author writes plain `.tsz`; the stack is **Lua-first for UI logic**, Zig for layout/paint/stamping.
 
-- **Compiler** — 5 Zig modules (~2,860 lines) + 371 JS modules (Smith, ~42,000 lines). Components, useState, useEffect, .map(), conditionals, template literals, classifiers, script imports, HTML tags, FFI, lscript/LuaJIT, `<page>` blocks, `<module>` blocks, Physics/3D shorthands, JSX prop spread, 140 pattern recognizers
+- **Compiler** — 6 Zig modules (~3,084 lines) + 354 JS modules (Smith, ~43,200 lines). Components, useState, useEffect, .map(), conditionals, template literals, classifiers, script imports, HTML tags, FFI, lscript/LuaJIT, `<page>` blocks, `<module>` blocks, Physics/3D shorthands, JSX prop spread, 140 pattern recognizers
 - **GPU renderer** — wgpu pipeline: SDF text, rounded rects, borders, shadows, images, video, 3D (Blinn-Phong), custom effects
 - **Layout engine** — Flexbox (1,787 lines), CSS-spec-aligned, 76 WPT tests passing
 - **Networking** — HTTP client/server, WebSocket client/server, IPC, SOCKS5, Tor — all pure Zig
@@ -285,18 +285,15 @@ Apps are called "carts." Each is a `.tsz` entry point with optional components, 
 
 ```
 carts/
-  conformance/          Conformance test suites (452 tests), organized by lane:
-    mixed/              Exhaustive feature + torture tests (262 tests)
+  conformance/          Conformance test suites, organized by lane:
+    mixed/              Exhaustive feature + torture tests (263 tests)
     wpt-flex/           W3C Web Platform Tests for flexbox (76 tests)
-    lscript/            LuaJIT script backend tests (37 tests)
-    chad/               Intent dictionary syntax tests (44 tests)
+    chad/               Intent dictionary syntax tests — apps, libs, widgets (27 tests)
     soup/               End-to-end apps in real-world syntax (25 tests)
-    parity/             React parity demos — TodoMVC, Slack, VS Code, etc. (8 tests)
     ws/                 WebSocket conformance (Autobahn + protocol)
     http/               HTTP conformance test harness
     ipc/                IPC conformance tests
     socks5/             SOCKS5 conformance tests
-    zscript/            Zig script backend tests
   storybook/            Component catalog + infinite canvas + theme demo
   inspector/            Built-in devtools (element tree, styles, perf)
   supervisor-dashboard/ Task board, terminal, search, violations
@@ -316,36 +313,36 @@ carts/
 
 ## Framework Modules
 
-107 modules in the framework runtime (~53,200 lines of Zig):
+88 modules in the framework runtime (~45,055 lines of Zig):
 
 | Category | Modules |
 |----------|---------|
-| Core | engine, state, events, input, layout, text, geometry, math, random |
+| Core | engine, engine_paint, state, events, input, layout, text, geometry, math, random, lib |
 | Rendering | render_surfaces, render_surfaces_vm, effects, effect_ctx, effect_shader, easing, transition, canvas, svg_path, blend2d, vello, engine_web |
-| UI | theme, classifier, selection, tooltip, context_menu, router, query, windows |
+| UI | theme, classifier, selection, tooltip, context_menu, router, query, windows, applescript |
 | Cartridge | cartridge, cartpack, dev_shell, devtools, devtools_state, api, core |
 | Terminal | pty, pty_client, pty_remote, vterm, semantic |
-| Networking | http, httpserver, websocket, wsserver, ipc, qjs_ipc, socks5, tor |
+| Networking | qjs_ipc |
 | Media | audio, player, videos, recorder, capture |
 | Data | fs, fswatch, sqlite, localstore, archive, crypto, privacy |
-| Scripting | qjs_runtime, qjs_value, qjs_semantic, luajit_runtime, luajit_worker, lua_guard |
-| Dev | telemetry, log, log_export, testharness, testdriver, testassert, debug_client, debug_server |
+| Scripting | qjs_runtime, qjs_value, qjs_semantic, qjs_c, luajit_runtime, luajit_worker, lua_guard |
+| Agent | agent_core, agent_session, agent_spawner |
+| Tools | tool_framework, tools_builtin |
+| Dev | telemetry, log, log_export, testharness, testdriver, testassert, debug_client, debug_server, watchdog, witness |
 | Automation | ifttt |
-| System | process, child_engine, physics2d, physics3d, filedrop, breakpoint, crashlog |
+| System | process, child_engine, physics2d, physics3d, filedrop, breakpoint, crashlog, c |
 
 ## Conformance
 
 | Suite | Disk | Compiled | Verified | What |
 |-------|------|----------|----------|------|
-| Mixed (feature + torture) | 262 | 223 | 177 | Exhaustive compiler coverage |
+| Mixed (feature + torture) | 263 | 243 | 139 | Exhaustive compiler coverage |
 | WPT Flexbox | 76 | 76 | 76 | W3C CSS flex spec |
-| Lscript | 37 | 13 | 13 | LuaJIT script backend |
-| Chad (intent syntax) | 44 | 6 | 7 | Dictionary-based intent syntax |
-| Soup (real-world) | 25 | 3 | 3 | End-to-end apps in messy real-world syntax |
-| Parity | 8 | 4 | 2 | React parity demos (TodoMVC, Slack, VS Code, etc.) |
-| **Overall** | **452** | **325 (72%)** | **278** | |
+| Chad (intent syntax) | 27 | 6 | 6 | Dictionary-based intent syntax |
+| Soup (real-world) | 25 | 19 | 3 | End-to-end apps in messy real-world syntax |
+| **Overall** | **391** | **344 (88%)** | **224** | |
 
-12,121 total builds across two conformance databases (8,804 current + 3,317 v4). 186 automated pixel-verification tests (`tests/*.autotest`).
+11,028 total builds in the conformance database. 262 automated pixel-verification tests (`tests/*.autotest`).
 
 Conformance is tracked by a SQLite-backed build ledger (`conformance.db`). Every `scripts/build` on a conformance cart auto-records pass/fail with engine and compiler SHAs. Two-channel blessing system: engine and compiler are independently verified. `--proveIBrokeIt` tests against the blessed engine, `--proveMyCompilerBrokeIt` tests against the blessed compiler.
 
@@ -393,9 +390,8 @@ Conformance tests are organized into lanes under `carts/conformance/`:
 | Lane | What it proves |
 |------|----------------|
 | **`soup/`** | End-to-end apps in real-world syntax (HTML tags, DOM patterns, CSS hallucinations). Tests compiler resilience. Thin — only full app tests, no isolated features. (25 tests) |
-| **`mixed/`** | The exhaustive proving ground. Every feature, every edge case, every torture test. Uses framework primitives with inline styles. Most former standalone carts live here now. If it works in mixed, the other lanes just prove their translation layers don't break. (262 tests) |
-| **`chad/`** | End-to-end apps in intent dictionary syntax. Classifiers, script blocks, theme tokens, named resources. The golden path. Fastest compile path. (44 tests) |
-| **`parity/`** | React parity demos — TodoMVC, Slack, VS Code, Gmail, Figma. Proves the framework can replicate real-world UIs. (8 tests) |
+| **`mixed/`** | The exhaustive proving ground. Every feature, every edge case, every torture test. Uses framework primitives with inline styles. Most former standalone carts live here now. If it works in mixed, the other lanes just prove their translation layers don't break. (263 tests) |
+| **`chad/`** | End-to-end apps in intent dictionary syntax. Classifiers, script blocks, theme tokens, named resources. The golden path. Fastest compile path. (27 tests) |
 
 Mixed is the ground truth. Soup and chad are thin wrappers proving the compiler's translation layers work on top of what mixed already validates. The tier system isn't just readability — it's compiler architecture. Clean code compiles faster because the compiler does less work.
 
