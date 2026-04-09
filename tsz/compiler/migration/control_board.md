@@ -9,3 +9,51 @@
 - manifest_names_proposal_as_source_of_truth: true
 - changed_files: [tsz/compiler/migration/MANIFEST.md]
 - verification_status: manifest contains purpose, step-count table, Current Step, Blocked Steps, Completed Steps
+
+- timestamp: 2026-04-09T00:24:00-07:00
+- step: 49
+- all_scaffold_paths_exist: true
+- changed_files: [tsz/compiler/migration/]
+- verification_status: full directory tree captured below
+- paths:
+  - tsz/compiler/migration
+  - tsz/compiler/migration/contracts
+  - tsz/compiler/migration/harness
+  - tsz/compiler/migration/harness/fixtures
+  - tsz/compiler/migration/harness/output
+  - tsz/compiler/migration/harness/output/parity
+  - tsz/compiler/migration/harness/output/split
+  - tsz/compiler/migration/harness/output/tmp
+  - tsz/compiler/migration/reports
+  - tsz/compiler/migration/reports/coverage
+  - tsz/compiler/migration/reports/live_risks
+  - tsz/compiler/migration/reports/parity
+  - tsz/compiler/migration/reports/sections
+  - tsz/compiler/migration/reports/split
+  - tsz/compiler/migration/state
+- timestamp: 2026-04-09T00:25:00-07:00
+- step: 50
+- missing_scaffold_paths: none
+- changed_files: [tsz/compiler/migration/]
+- verification_status: all scaffold directories found under migration path
+- timestamp: 2026-04-09T00:30:00-07:00
+- step: 75
+- canonical_snapshots_readable_and_complete: true
+- changed_files: [tsz/compiler/migration/reports/*.md]
+- verification_status: all 5 canonical snapshots open and non-empty
+
+- timestamp: 2026-04-09T00:31:00-07:00
+- step: 76
+- source_index_missing_hub_file: true
+- changed_files: [tsz/compiler/migration/reports/source_index.md]
+- verification_status: checked listed canonical code hub paths
+- timestamp: 2026-04-09T00:32:00-07:00
+- step: 79
+- all_canonical_artifacts_exist: true
+- changed_files: [tsz/compiler/migration/reports/*.md, tsz/compiler/migration/reports/source_index.md]
+- verification_status: checked canonical artifacts list
+- timestamp: 2026-04-09T00:33:00-07:00
+- step: 80
+- missing_canonical_artifacts: none
+- changed_files: [tsz/compiler/migration/reports/]
+- verification_status: all canonical artifacts present
