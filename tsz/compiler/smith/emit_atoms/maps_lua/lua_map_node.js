@@ -32,6 +32,19 @@ function _cleanCondForEval(expr) {
 }
 
 function _wrapCondEval(cond) {
+  if (typeof cond === 'string') cond = cond.trim();
+  if (typeof cond === 'string' && cond.indexOf('__eval("') >= 0) {
+    return cond;
+  }
+  if (typeof cond === 'string' && cond.indexOf('__eval("') === 0) {
+    var _outerInner = cond.slice(8).replace(/"\)$/, '').replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+    var _nonEmpty = _outerInner.match(/^\(__eval\("([^"]+)"\)\s*~=\s*""\)$/);
+    if (_nonEmpty) return '(__eval("' + _nonEmpty[1] + '") ~= "")';
+    var _empty = _outerInner.match(/^\(__eval\("([^"]+)"\)\s*==\s*""\)$/);
+    if (_empty) return '(__eval("' + _empty[1] + '") == "")';
+  }
+  cond = cond.replace(/__eval\("\(__eval\\\("([^"]+)"\\\)\s*~=\s*\\\"\\\"\)"\)/g, '(__eval("$1") ~= "")');
+  cond = cond.replace(/__eval\("\(__eval\\\("([^"]+)"\\\)\s*==\s*\\\"\\\"\)"\)/g, '(__eval("$1") == "")');
   // Check for function calls: word( where word isn't a Lua builtin
   var m = cond.match(/\b([a-zA-Z_]\w*)\s*\(/g);
   if (m) {
@@ -92,7 +105,7 @@ function _inlineGlyphSentinelText(glyphs) {
   return '"' + sentinels + '"';
 }
 
-function _nodeToLua(node, itemParam, indexParam, indent, _luaIdxExpr) {
+function _nodeToLua(node, itemParam, indexParam, indent, _luaIdxExpr, _currentOaIdx) {
   if (!node) return '{}';
   if (!indent) indent = '      ';
   var fields = [];
@@ -101,16 +114,16 @@ function _nodeToLua(node, itemParam, indexParam, indent, _luaIdxExpr) {
     // Emit variant-conditional style: (__variant == 1) and {compact} or (__variant == 2) and {spacious} or {default}
     var _vParts = [];
     for (var _vi = 1; _vi < node._variantStyles.length; _vi++) {
-      _vParts.push('(__variant == ' + _vi + ') and ' + _styleToLua(node._variantStyles[_vi], itemParam, indexParam, _luaIdxExpr));
+      _vParts.push('(__variant == ' + _vi + ') and ' + _styleToLua(node._variantStyles[_vi], itemParam, indexParam, _luaIdxExpr, _currentOaIdx));
     }
-    _vParts.push(_styleToLua(node._variantStyles[0], itemParam, indexParam, _luaIdxExpr));
+    _vParts.push(_styleToLua(node._variantStyles[0], itemParam, indexParam, _luaIdxExpr, _currentOaIdx));
     fields.push('style = (' + _vParts.join(' or ') + ')');
   } else if (node.style && Object.keys(node.style).length > 0) {
-    fields.push('style = ' + _styleToLua(node.style, itemParam, indexParam, _luaIdxExpr));
+    fields.push('style = ' + _styleToLua(node.style, itemParam, indexParam, _luaIdxExpr, _currentOaIdx));
   }
 
   if (node.text !== undefined && node.text !== null) {
-    fields.push('text = ' + _textToLua(node.text, itemParam, indexParam, _luaIdxExpr));
+    fields.push('text = ' + _textToLua(node.text, itemParam, indexParam, _luaIdxExpr, _currentOaIdx));
   }
 
   if (node.inline_glyphs && node.inline_glyphs.length > 0) {
@@ -136,7 +149,7 @@ function _nodeToLua(node, itemParam, indexParam, indent, _luaIdxExpr) {
   }
   if (node.color) {
     var _cv = node.color;
-    if (typeof _cv === 'string' && (_cv.indexOf('if ') === 0 || _cv.indexOf('@') >= 0 || _cv.indexOf('state.get') >= 0 || _cv.indexOf(' and ') >= 0)) {
+    if (typeof _cv === 'string' && (_cv.indexOf('if ') === 0 || _cv.indexOf('@') >= 0 || _cv.indexOf('state.get') >= 0 || _cv.indexOf(' and ') >= 0 || /\b[A-Za-z_]\w*\s*\(/.test(_cv))) {
       // OA ref in color → _item.field
       var _oaColor = _cv.match(/_oa\d+_(\w+)\[_i\]/);
       if (_oaColor) {
@@ -152,12 +165,17 @@ function _nodeToLua(node, itemParam, indexParam, indent, _luaIdxExpr) {
           _jsColor = _jsColor.replace(/@as\([^,]+,\s*([^)]*)\)/g, '$1');
         }
         _jsColor = _jsColor.replace(/@intCast\(/g, '(');
+        _jsColor = _jsColor.replace(/qjs_runtime\.evalToString\("String\(([^"]+)\)"[^)]*\)/g, '$1');
+        _jsColor = _jsColor.replace(/qjs_runtime\.evalToString\("([^"]+)"[^)]*\)/g, '$1');
+        _jsColor = _jsColor.replace(/,\s*&_eval_buf_\d+/g, '');
+        _jsColor = _jsColor.replace(/&_eval_buf_\d+/g, '');
         // State slots → getter names
         _jsColor = _jsColor.replace(/state\.getSlot(?:Int|Float|Bool|String)?\((\d+)\)/g, function(_, idx) {
           return (ctx && ctx.stateSlots && ctx.stateSlots[+idx]) ? ctx.stateSlots[+idx].getter : '_slot' + idx;
         });
         // OA refs
         _jsColor = _jsColor.replace(/_oa\d+_(\w+)\[_i\]/g, '_item.$1');
+        _jsColor = _jsColor.replace(/([A-Za-z_]\w*(?:\.[A-Za-z_]\w+)*)\.len\b/g, '#$1');
         // Zig if/else → Lua and/or (iterative for nested ternaries)
         for (var _cifIter = 0; _cifIter < 10; _cifIter++) {
           var _cifPos = _jsColor.indexOf('if (');
@@ -215,20 +233,25 @@ function _nodeToLua(node, itemParam, indexParam, indent, _luaIdxExpr) {
     if (node.handlerIsJs) {
       // Apply same prop/index substitution as lua_on_press so map index props
       // (e.g. idx={i}) get resolved to the correct 0-based value in the string.
-      var _jh = _jsExprToLua(node.handler, itemParam, indexParam, _luaIdxExpr);
+      var _jh = _jsExprToLua(node.handler, itemParam, indexParam, _luaIdxExpr, _currentOaIdx);
       // Resolve Zig index casts embedded at parse time into 0-based Lua expressions
       var _ixStr = _luaIdxExpr || '(_i - 1)';
       _jh = _jh.replace(/@as\(i64,\s*@intCast\((_\w+)\)\)/g, function(_, v) {
-        return v === '_i' ? _ixStr : '(' + v + ' - 1)';
+        if (v === '_i') return _ixStr;
+        if (v === '_ni') return '(_ni - 1)';
+        return '(' + v + ' - 1)';
       });
-      var _jhDyn = _jh.indexOf('_item') >= 0 || _jh.indexOf(_ixStr) >= 0 || _jh.indexOf('(_i - 1)') >= 0;
+      if (typeof _normalizeHandlerIndexExprs === 'function') {
+        _jh = _normalizeHandlerIndexExprs(_jh, _ixStr);
+      }
+      var _jhDyn = _jh.indexOf('_item') >= 0 || _jh.indexOf('_nitem') >= 0 || _jh.indexOf(_ixStr) >= 0 || _jh.indexOf('(_i - 1)') >= 0 || _jh.indexOf('(_ni - 1)') >= 0;
       if (_jhDyn) {
         fields.push('js_on_press = "' + _spliceDynamicHandler(_jh, _ixStr) + '"');
       } else {
         fields.push('js_on_press = "' + _jh.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"');
       }
     } else {
-      fields.push('lua_on_press = ' + _handlerToLua(node.handler, itemParam, indexParam, _luaIdxExpr));
+      fields.push('lua_on_press = ' + _handlerToLua(node.handler, itemParam, indexParam, _luaIdxExpr, _currentOaIdx));
     }
   }
 
@@ -241,6 +264,9 @@ function _nodeToLua(node, itemParam, indexParam, indent, _luaIdxExpr) {
         _nv = _nv.replace(/Color\.rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*\d+)?\)/g, function(_, r, g, b) {
           return '0x' + ((+r << 16) | (+g << 8) | +b).toString(16).padStart(6, '0');
         });
+        _nv = _nv.replace(/qjs_runtime\.evalToString\("String\(([^"]+)\)"[^)]*\)/g, '__eval("$1")');
+        _nv = _nv.replace(/qjs_runtime\.evalToString\("([^"]+)"[^)]*\)/g, '__eval("$1")');
+        _nv = _nv.replace(/&_eval_buf_\d+/g, '');
         // OA refs: _oaN_field[_i] → _item.field
         _nv = _nv.replace(/_oa\d+_(\w+)\[_i\]\[0\.\._oa\d+_\w+_lens\[_i\]\]/g, '_item.$1');
         _nv = _nv.replace(/_oa\d+_(\w+)\[_i\]/g, '_item.$1');
@@ -254,11 +280,13 @@ function _nodeToLua(node, itemParam, indexParam, indent, _luaIdxExpr) {
     for (var ci = 0; ci < node.children.length; ci++) {
       var child = node.children[ci];
       if (child.condition) {
-        var cond = _jsExprToLua(child.condition, itemParam, indexParam, _luaIdxExpr);
+        var cond = (typeof child.condition === 'string' && child.condition.indexOf('__eval("') >= 0)
+          ? child.condition
+          : _jsExprToLua(child.condition, itemParam, indexParam, _luaIdxExpr, _currentOaIdx);
         cond = _wrapCondEval(cond);
         // In Lua, 0 is truthy — bitwise results need explicit ~= 0 check
         if (/\bbit\./.test(cond)) cond = cond + ' ~= 0';
-        var body = _nodeToLua(child.node, itemParam, indexParam, indent + '  ', _luaIdxExpr);
+        var body = _nodeToLua(child.node, itemParam, indexParam, indent + '  ', _luaIdxExpr, _currentOaIdx);
         // If body is already a conditional ending with 'or nil' (from unwrap), don't double-wrap
         if (body.lastIndexOf(' or nil') === body.length - 7) {
           childLua.push('(' + cond + ') and ' + body);
@@ -266,22 +294,24 @@ function _nodeToLua(node, itemParam, indexParam, indent, _luaIdxExpr) {
           childLua.push('(' + cond + ') and ' + body + ' or nil');
         }
       } else if (child.ternaryCondition) {
-        var tcond = _jsExprToLua(child.ternaryCondition, itemParam, indexParam, _luaIdxExpr);
+        var tcond = (typeof child.ternaryCondition === 'string' && child.ternaryCondition.indexOf('__eval("') >= 0)
+          ? child.ternaryCondition
+          : _jsExprToLua(child.ternaryCondition, itemParam, indexParam, _luaIdxExpr, _currentOaIdx);
         tcond = _wrapCondEval(tcond);
-        var trueBranch = _nodeToLua(child.trueNode, itemParam, indexParam, indent + '  ', _luaIdxExpr);
-        var falseBranch = _nodeToLua(child.falseNode, itemParam, indexParam, indent + '  ', _luaIdxExpr);
+        var trueBranch = _nodeToLua(child.trueNode, itemParam, indexParam, indent + '  ', _luaIdxExpr, _currentOaIdx);
+        var falseBranch = _nodeToLua(child.falseNode, itemParam, indexParam, indent + '  ', _luaIdxExpr, _currentOaIdx);
         childLua.push('(' + tcond + ') and ' + trueBranch + ' or nil');
         childLua.push('(not (' + tcond + ')) and ' + falseBranch + ' or nil');
       } else if (child.nestedMap) {
         var nm = child.nestedMap;
-        var innerBody = _nodeToLua(nm.bodyNode, nm.itemParam || '_nitem', nm.indexParam, indent + '  ');
+        var innerBody = _nodeToLua(nm.bodyNode, nm.itemParam || '_nitem', nm.indexParam, indent + '  ', null, null);
         childLua.push('__luaNestedMap(_item.' + nm.field + ', function(_nitem, _ni)\n' +
           indent + '    return ' + innerBody + '\n' +
           indent + '  end)');
       } else if (child.luaMapLoop) {
         // Inline map loop — emits as a Lua function call that returns children
         var ml = child.luaMapLoop;
-        var loopDataVar = _jsExprToLua(ml.dataVar || '[]', itemParam, indexParam, _luaIdxExpr);
+        var loopDataVar = _jsExprToLua(ml.dataVar || '[]', itemParam, indexParam, _luaIdxExpr, _currentOaIdx);
         // Nested maps use _nitem/_ni to avoid shadowing outer _item/_i
         var _isNested = !!itemParam;
         var _innerFnItem = _isNested ? '_nitem' : '_item';
@@ -295,7 +325,7 @@ function _nodeToLua(node, itemParam, indexParam, indent, _luaIdxExpr) {
           // Pre-built Lua from token walker (nested maps)
           loopBody = ml.bodyLua;
         } else if (ml.bodyNode) {
-          loopBody = _nodeToLua(ml.bodyNode, ml.itemParam, _innerIdxP, indent + '    ', _innerLuaIdx);
+          loopBody = _nodeToLua(ml.bodyNode, ml.itemParam, _innerIdxP, indent + '    ', _innerLuaIdx, ml.oaIdx);
           // For nested maps: _nodeToLua always emits _item — replace with _nitem
           if (_isNested) {
             loopBody = loopBody.replace(/\b_item\b/g, _innerFnItem);
@@ -303,13 +333,35 @@ function _nodeToLua(node, itemParam, indexParam, indent, _luaIdxExpr) {
         } else {
           loopBody = '{}';
         }
+        if (_isNested && ml.parentIndexParam) {
+          var _parentIdxExpr = _luaIdxExpr || '(_i - 1)';
+          loopBody = loopBody.replace(new RegExp('\\b' + ml.parentIndexParam + '\\b', 'g'), _parentIdxExpr);
+        }
+        if (_isNested && indexParam) {
+          var _parentIdxExprDirect = _luaIdxExpr || '(_i - 1)';
+          loopBody = loopBody.replace(new RegExp('\\b' + indexParam + '\\b', 'g'), _parentIdxExprDirect);
+        }
+        if (_isNested && ml.parentItemParam) {
+          loopBody = loopBody.replace(new RegExp('\\b' + ml.parentItemParam + '\\b', 'g'), '_item');
+        }
+        if (_isNested && itemParam) {
+          loopBody = loopBody.replace(new RegExp('\\b' + itemParam + '\\b', 'g'), '_item');
+        }
         if (ml.filterConditions && ml.filterConditions.length > 0) {
           var _filterParts = [];
           for (var _fci = 0; _fci < ml.filterConditions.length; _fci++) {
             var _fc = ml.filterConditions[_fci];
-            var _filterCond = _jsExprToLua(_fc.raw, ml.itemParam, _fc.indexParam || _innerIdxP, _innerLuaIdx);
+            var _filterCond = _jsExprToLua(_fc.raw, ml.itemParam, _fc.indexParam || _innerIdxP, _innerLuaIdx, ml.oaIdx);
             _filterCond = _wrapCondEval(_filterCond);
             if (_isNested) _filterCond = _filterCond.replace(/\b_item\b/g, _innerFnItem);
+            if (_isNested && ml.parentIndexParam) {
+              var _parentIdxExpr2 = _luaIdxExpr || '(_i - 1)';
+              _filterCond = _filterCond.replace(new RegExp('\\b' + ml.parentIndexParam + '\\b', 'g'), _parentIdxExpr2);
+            }
+            if (_isNested && indexParam) {
+              var _parentIdxExpr3 = _luaIdxExpr || '(_i - 1)';
+              _filterCond = _filterCond.replace(new RegExp('\\b' + indexParam + '\\b', 'g'), _parentIdxExpr3);
+            }
             _filterParts.push('(' + _filterCond + ')');
           }
           loopBody = _filterParts.join(' and ') + ' and ' + loopBody + ' or nil';
@@ -318,7 +370,7 @@ function _nodeToLua(node, itemParam, indexParam, indent, _luaIdxExpr) {
           indent + '    return ' + loopBody + '\n' +
           indent + '  end)');
       } else {
-        childLua.push(_nodeToLua(child, itemParam, indexParam, indent + '  ', _luaIdxExpr));
+        childLua.push(_nodeToLua(child, itemParam, indexParam, indent + '  ', _luaIdxExpr, _currentOaIdx));
       }
     }
     // Unwrap: if node has no style/text/handler and all children are conditionals,

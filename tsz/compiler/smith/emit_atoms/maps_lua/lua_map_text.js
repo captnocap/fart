@@ -33,7 +33,74 @@ function _normalizeEmbeddedJsEval(expr) {
   });
 }
 
-function _maybeInlineJsEvalExpr(expr) {
+function _splitTopLevelTextTernary(expr) {
+  if (!expr || expr.indexOf('?') < 0) return null;
+  var depthParen = 0;
+  var depthBracket = 0;
+  var depthBrace = 0;
+  var quote = '';
+  var escape = false;
+  var question = -1;
+  for (var i = 0; i < expr.length; i++) {
+    var ch = expr.charAt(i);
+    if (quote) {
+      if (escape) { escape = false; continue; }
+      if (ch === '\\') { escape = true; continue; }
+      if (ch === quote) quote = '';
+      continue;
+    }
+    if (ch === '"' || ch === "'") { quote = ch; continue; }
+    if (ch === '(') { depthParen++; continue; }
+    if (ch === ')') { if (depthParen > 0) depthParen--; continue; }
+    if (ch === '[') { depthBracket++; continue; }
+    if (ch === ']') { if (depthBracket > 0) depthBracket--; continue; }
+    if (ch === '{') { depthBrace++; continue; }
+    if (ch === '}') { if (depthBrace > 0) depthBrace--; continue; }
+    if (depthParen === 0 && depthBracket === 0 && depthBrace === 0 && ch === '?') {
+      question = i;
+      break;
+    }
+  }
+  if (question < 0) return null;
+  depthParen = 0;
+  depthBracket = 0;
+  depthBrace = 0;
+  quote = '';
+  escape = false;
+  var ternaryDepth = 0;
+  var colon = -1;
+  for (var j = question + 1; j < expr.length; j++) {
+    var ch2 = expr.charAt(j);
+    if (quote) {
+      if (escape) { escape = false; continue; }
+      if (ch2 === '\\') { escape = true; continue; }
+      if (ch2 === quote) quote = '';
+      continue;
+    }
+    if (ch2 === '"' || ch2 === "'") { quote = ch2; continue; }
+    if (ch2 === '(') { depthParen++; continue; }
+    if (ch2 === ')') { if (depthParen > 0) depthParen--; continue; }
+    if (ch2 === '[') { depthBracket++; continue; }
+    if (ch2 === ']') { if (depthBracket > 0) depthBracket--; continue; }
+    if (ch2 === '{') { depthBrace++; continue; }
+    if (ch2 === '}') { if (depthBrace > 0) depthBrace--; continue; }
+    if (depthParen === 0 && depthBracket === 0 && depthBrace === 0) {
+      if (ch2 === '?') { ternaryDepth++; continue; }
+      if (ch2 === ':') {
+        if (ternaryDepth === 0) { colon = j; break; }
+        ternaryDepth--;
+      }
+    }
+  }
+  if (colon < 0) return null;
+  return {
+    cond: expr.slice(0, question).trim(),
+    whenTrue: expr.slice(question + 1, colon).trim(),
+    whenFalse: expr.slice(colon + 1).trim()
+  };
+}
+
+function _maybeInlineJsEvalExpr(expr, itemParam, indexParam, _luaIdxExpr, _currentOaIdx) {
   if (!expr) return null;
   var m = String(expr).trim().match(/^__eval\("((?:[^"\\]|\\.)*)"\)$/);
   if (!m) return null;
@@ -43,6 +110,9 @@ function _maybeInlineJsEvalExpr(expr) {
   var trueBranch = jsExpr.match(/^\(?\s*(?:1\s*==\s*1|0\s*==\s*0|true)\s*\)?\s*&&\s*([^?]+)\?\s*([^:]+)\s*:\s*(.+)$/);
   if (trueBranch) jsExpr = '(' + trueBranch[1].trim() + ')?' + trueBranch[2].trim() + ':' + trueBranch[3].trim();
   if (/^_item\.\w+$/.test(jsExpr) || /^_nitem\.\w+$/.test(jsExpr)) return jsExpr;
+  if (/^[A-Za-z_]\w*\s*\[[^\]]+\]\s*\.\s*[A-Za-z_]\w+$/.test(jsExpr)) {
+    return _jsExprToLua(jsExpr, itemParam, indexParam, _luaIdxExpr, _currentOaIdx);
+  }
   if (/^\d+(?:\.\d+)?$/.test(jsExpr)) return jsExpr;
   if (/^"(?:[^"\\]|\\.)*"$/.test(jsExpr)) return jsExpr;
   if (/^'(?:[^'\\]|\\.)*'$/.test(jsExpr)) return '"' + jsExpr.slice(1, -1).replace(/"/g, '\\"') + '"';
@@ -60,13 +130,13 @@ function _needsLuaTextEval(expr) {
   return false;
 }
 
-function _luaTextValueExpr(expr, itemParam, indexParam, _luaIdxExpr) {
-  var luaExpr = _jsExprToLua(expr, itemParam, indexParam, _luaIdxExpr);
+function _luaTextValueExpr(expr, itemParam, indexParam, _luaIdxExpr, _currentOaIdx) {
+  var luaExpr = _jsExprToLua(expr, itemParam, indexParam, _luaIdxExpr, _currentOaIdx);
   luaExpr = luaExpr.replace(/(\w+(?:\.\w+)*)\.length\b/g, '#$1');
   luaExpr = luaExpr.replace(/_oa\d+_(\w+)\[_i\]\[0\.\._oa\d+_\w+_lens\[_i\]\]/g, '_item.$1');
   luaExpr = luaExpr.replace(/_oa\d+_(\w+)\[_i\]/g, '_item.$1');
   luaExpr = _normalizeEmbeddedJsEval(luaExpr);
-  var _inlineEval = _maybeInlineJsEvalExpr(luaExpr);
+  var _inlineEval = _maybeInlineJsEvalExpr(luaExpr, itemParam, indexParam, _luaIdxExpr, _currentOaIdx);
   if (_inlineEval) return _inlineEval;
   luaExpr = luaExpr.trim();
   if (_needsLuaTextEval(luaExpr)) {
@@ -75,7 +145,7 @@ function _luaTextValueExpr(expr, itemParam, indexParam, _luaIdxExpr) {
   return luaExpr;
 }
 
-function _wrapLuaTextTostringCalls(expr, itemParam, indexParam, _luaIdxExpr) {
+function _wrapLuaTextTostringCalls(expr, itemParam, indexParam, _luaIdxExpr, _currentOaIdx) {
   var out = '';
   var cursor = 0;
   while (cursor < expr.length) {
@@ -98,15 +168,79 @@ function _wrapLuaTextTostringCalls(expr, itemParam, indexParam, _luaIdxExpr) {
       break;
     }
     var inner = expr.slice(innerStart, i - 1);
-    var luaInner = _luaTextValueExpr(inner, itemParam, indexParam, _luaIdxExpr);
+    var luaInner = _luaTextValueExpr(inner, itemParam, indexParam, _luaIdxExpr, _currentOaIdx);
     out += 'tostring(' + luaInner + ')';
     cursor = i;
   }
   return out;
 }
 
-function _textToLua(text, itemParam, indexParam, _luaIdxExpr) {
+function _lowerTextTernaryExpr(raw, itemParam, indexParam, _luaIdxExpr, _currentOaIdx) {
+  if (!raw || typeof raw !== 'string' || raw.indexOf('?') < 0 || raw.indexOf(':') < 0) return null;
+  var _fieldTern = raw.match(/^([A-Za-z_]\w*(?:\.[A-Za-z_]\w+)?)\s*!==?\s*(['"])\2\s*\?\s*([A-Za-z_]\w*(?:\.[A-Za-z_]\w+)?)\s*:\s*("[^"]*"|'[^']*')$/);
+  if (_fieldTern) {
+    var _condExpr = _jsExprToLua(_fieldTern[1] + ' !== ""', itemParam, indexParam, _luaIdxExpr, _currentOaIdx);
+    var _trueExpr = _luaTextValueExpr(_fieldTern[3], itemParam, indexParam, _luaIdxExpr, _currentOaIdx);
+    var _falseExpr = _luaTextValueExpr(_fieldTern[4], itemParam, indexParam, _luaIdxExpr, _currentOaIdx);
+    return 'tostring(((' + _condExpr + ') and (' + _trueExpr + ') or (' + _falseExpr + ')))';
+  }
+  var _tern = _splitTopLevelTextTernary(raw);
+  if (!_tern) return null;
+  var _condExpr2 = _jsExprToLua(_tern.cond, itemParam, indexParam, _luaIdxExpr, _currentOaIdx);
+  var _trueExpr2 = _luaTextValueExpr(_tern.whenTrue, itemParam, indexParam, _luaIdxExpr, _currentOaIdx);
+  var _falseExpr2 = _luaTextValueExpr(_tern.whenFalse, itemParam, indexParam, _luaIdxExpr, _currentOaIdx);
+  return 'tostring(((' + _condExpr2 + ') and (' + _trueExpr2 + ') or (' + _falseExpr2 + ')))';
+}
+
+function _repairConcatTernaryLuaExpr(raw, itemParam, indexParam, _luaIdxExpr, _currentOaIdx) {
+  if (!raw || typeof raw !== 'string') return null;
+  var normalized = raw.replace(/\\"/g, '"');
+  var outer = normalized.match(/^tostring\(([^)]+)\)\s*\.\.\s*"(.*)"\s*$/);
+  if (!outer) return null;
+  var lhsExpr = outer[1].trim();
+  var body = outer[2].trim();
+  var inner = body.match(/^(!==|===|!=|==)\s*''\s*\?\s*([A-Za-z_]\w*(?:\.[A-Za-z_]\w+)?)\s*:\s*"([^"]*)"$/);
+  if (!inner) return null;
+  var op = inner[1];
+  var trueExprRaw = inner[2].trim();
+  var falseLit = '"' + inner[3].replace(/"/g, '\\"') + '"';
+  if (/^[A-Za-z_]\w+$/.test(lhsExpr)) {
+    var _tf = trueExprRaw.match(/\.([A-Za-z_]\w+)$/);
+    if (_tf && _tf[1] === lhsExpr) lhsExpr = trueExprRaw;
+  }
+  var condExpr = _jsExprToLua(lhsExpr + ' ' + op + ' ""', itemParam, indexParam, _luaIdxExpr, _currentOaIdx);
+  var trueExpr = _luaTextValueExpr(trueExprRaw, itemParam, indexParam, _luaIdxExpr, _currentOaIdx);
+  var falseExpr = _luaTextValueExpr(falseLit, itemParam, indexParam, _luaIdxExpr, _currentOaIdx);
+  return 'tostring(((' + condExpr + ') and (' + trueExpr + ') or (' + falseExpr + ')))';
+}
+
+function _repairTemplateTernaryExpr(raw, itemParam, indexParam, _luaIdxExpr, _currentOaIdx) {
+  if (!raw || typeof raw !== 'string') return null;
+  var normalized = raw.replace(/\\"/g, '"');
+  var m = normalized.match(/^\$\{([^}]+)\}\s*(!==|===|!=|==)\s*''\s*\?\s*([A-Za-z_]\w*(?:\.[A-Za-z_]\w+)?)\s*:\s*"([^"]*)"$/);
+  if (!m) return null;
+  var lhsExpr = m[1].trim();
+  var op = m[2];
+  var trueExprRaw = m[3].trim();
+  var falseLit = '"' + m[4].replace(/"/g, '\\"') + '"';
+  if (/^[A-Za-z_]\w+$/.test(lhsExpr)) {
+    var _tf = trueExprRaw.match(/\.([A-Za-z_]\w+)$/);
+    if (_tf && _tf[1] === lhsExpr) lhsExpr = trueExprRaw;
+  }
+  var condExpr = _jsExprToLua(lhsExpr + ' ' + op + ' ""', itemParam, indexParam, _luaIdxExpr, _currentOaIdx);
+  var trueExpr = _luaTextValueExpr(trueExprRaw, itemParam, indexParam, _luaIdxExpr, _currentOaIdx);
+  var falseExpr = _luaTextValueExpr(falseLit, itemParam, indexParam, _luaIdxExpr, _currentOaIdx);
+  return 'tostring(((' + condExpr + ') and (' + trueExpr + ') or (' + falseExpr + ')))';
+}
+
+function _textToLua(text, itemParam, indexParam, _luaIdxExpr, _currentOaIdx) {
   if (!text) return '""';
+  if (typeof text === 'string') {
+    var _repairedTextExpr = _repairConcatTernaryLuaExpr(text, itemParam, indexParam, _luaIdxExpr, _currentOaIdx);
+    if (_repairedTextExpr) return _repairedTextExpr;
+    var _repairedTemplateTern = _repairTemplateTernaryExpr(text, itemParam, indexParam, _luaIdxExpr, _currentOaIdx);
+    if (_repairedTemplateTern) return _repairedTemplateTern;
+  }
   // Normalize pre-escaped quotes from parser (prevents double-escaping: \" → \\")
   if (typeof text === 'string') text = text.replace(/\\"/g, '"');
 
@@ -117,12 +251,16 @@ function _textToLua(text, itemParam, indexParam, _luaIdxExpr) {
 
   // State variable: { stateVar: "count" } → tostring(count)
   if (typeof text === 'object' && text.stateVar) {
+    var _rawStateTern = _lowerTextTernaryExpr(text.stateVar, itemParam, indexParam, _luaIdxExpr, _currentOaIdx);
+    if (_rawStateTern) return _rawStateTern;
     var _sv = text.stateVar;
     // Resolve component props — bare prop names need _item.field substitution
-    _sv = _jsExprToLua(_sv, itemParam, indexParam, _luaIdxExpr);
+    _sv = _jsExprToLua(_sv, itemParam, indexParam, _luaIdxExpr, _currentOaIdx);
     _sv = _normalizeEmbeddedJsEval(_sv);
-    var _inlineStateEval = _maybeInlineJsEvalExpr(_sv);
+    var _inlineStateEval = _maybeInlineJsEvalExpr(_sv, itemParam, indexParam, _luaIdxExpr, _currentOaIdx);
     if (_inlineStateEval) _sv = _inlineStateEval;
+    var _stateTernary = _lowerTextTernaryExpr(_sv, itemParam, indexParam, _luaIdxExpr, _currentOaIdx);
+    if (_stateTernary) return _stateTernary;
     // If stateVar still has Zig syntax, clean it up
     if (/@|state\.getSlot|\bif\b/.test(_sv)) {
       // Color.rgb → 0xHEX
@@ -200,7 +338,9 @@ function _textToLua(text, itemParam, indexParam, _luaIdxExpr) {
 
   // Lua expression: { luaExpr: "(mode == 0) and \"A\" or \"B\"" }
   if (typeof text === 'object' && text.luaExpr) {
-    return _wrapLuaTextTostringCalls(text.luaExpr, itemParam, indexParam, _luaIdxExpr);
+    var _repairedLuaExpr = _repairConcatTernaryLuaExpr(text.luaExpr, itemParam, indexParam, _luaIdxExpr, _currentOaIdx);
+    if (_repairedLuaExpr) return _repairedLuaExpr;
+    return _wrapLuaTextTostringCalls(text.luaExpr, itemParam, indexParam, _luaIdxExpr, _currentOaIdx);
   }
 
   // Template literal: { parts: [{literal: "hi "}, {expr: "item.x"}] }
@@ -211,7 +351,7 @@ function _textToLua(text, itemParam, indexParam, _luaIdxExpr) {
       if (part.literal) {
         luaParts.push('"' + part.literal.replace(/"/g, '\\"') + '"');
       } else if (part.expr) {
-        luaParts.push('tostring(' + _luaTextValueExpr(part.expr, itemParam, indexParam, _luaIdxExpr) + ')');
+        luaParts.push('tostring(' + _luaTextValueExpr(part.expr, itemParam, indexParam, _luaIdxExpr, _currentOaIdx) + ')');
       }
     }
     return luaParts.join(' .. ');
@@ -231,7 +371,7 @@ function _textToLua(text, itemParam, indexParam, _luaIdxExpr) {
           tj++;
         }
         var tExpr = text.slice(ti + 2, tj - 1).trim();
-        tExpr = _luaTextValueExpr(tExpr, itemParam, indexParam, _luaIdxExpr);
+        tExpr = _luaTextValueExpr(tExpr, itemParam, indexParam, _luaIdxExpr, _currentOaIdx);
         tParts.push('tostring(' + tExpr + ')');
         ti = tj;
       } else {
@@ -242,6 +382,20 @@ function _textToLua(text, itemParam, indexParam, _luaIdxExpr) {
       }
     }
     return tParts.join(' .. ');
+  }
+
+  // Expression followed by a literal suffix, e.g. "questions[ai].header:"
+  if (typeof text === 'string' && /[\].\w]\:$/.test(text) && text.indexOf('${') < 0) {
+    var _suffixExpr = text.slice(0, -1).trim();
+    if (_suffixExpr.length > 0) {
+      return 'tostring(' + _luaTextValueExpr(_suffixExpr, itemParam, indexParam, _luaIdxExpr, _currentOaIdx) + ') .. ":"';
+    }
+  }
+
+  // Plain JS ternary text expression: cond ? a : b
+  if (typeof text === 'string' && text.indexOf('?') >= 0 && text.indexOf(':') >= 0 && text.indexOf('${') < 0) {
+    var _plainTernary = _lowerTextTernaryExpr(text, itemParam, indexParam, _luaIdxExpr, _currentOaIdx);
+    if (_plainTernary) return _plainTernary;
   }
 
   // "label: expr" pattern — template literal was unwrapped, label text + expression mashed together
@@ -266,13 +420,13 @@ function _textToLua(text, itemParam, indexParam, _luaIdxExpr) {
   }
 
   // Expression string with dynamic refs
-  var luaExpr = _jsExprToLua(String(text), itemParam, indexParam, _luaIdxExpr);
+  var luaExpr = _jsExprToLua(String(text), itemParam, indexParam, _luaIdxExpr, _currentOaIdx);
   // Simple cleanups
   luaExpr = luaExpr.replace(/(\w+(?:\.\w+)*)\.length\b/g, '#$1');
   luaExpr = luaExpr.replace(/_oa\d+_(\w+)\[_i\]\[0\.\._oa\d+_\w+_lens\[_i\]\]/g, '_item.$1');
   luaExpr = luaExpr.replace(/_oa\d+_(\w+)\[_i\]/g, '_item.$1');
   luaExpr = _normalizeEmbeddedJsEval(luaExpr);
-  var _inlineGenericEval = _maybeInlineJsEvalExpr(luaExpr);
+  var _inlineGenericEval = _maybeInlineJsEvalExpr(luaExpr, itemParam, indexParam, _luaIdxExpr, _currentOaIdx);
   if (_inlineGenericEval) return 'tostring(' + _inlineGenericEval + ')';
   // If still has Zig/JS syntax or broken expressions → __eval with original source
   if (/@|state\.get|getSlot|\bconst\b|\blet\b|=>/.test(luaExpr) ||

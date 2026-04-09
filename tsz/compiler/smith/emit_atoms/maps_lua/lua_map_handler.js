@@ -2,15 +2,45 @@
 // Turns an onPress handler body into a Lua string expression.
 // Uses _jsExprToLua from lua_map_subs.js.
 
-function _handlerToLua(handler, itemParam, indexParam, _luaIdxExpr) {
+function _handlerToLua(handler, itemParam, indexParam, _luaIdxExpr, _currentOaIdx) {
   if (!handler) return null;
-  var h = _jsExprToLua(handler, itemParam, indexParam, _luaIdxExpr);
+  var h = _jsExprToLua(handler, itemParam, indexParam, _luaIdxExpr, _currentOaIdx);
   var _ixStr = _luaIdxExpr || '(_i - 1)';
-  var hasDynamic = h.indexOf('_item') >= 0 || h.indexOf(_ixStr) >= 0 || h.indexOf('(_i - 1)') >= 0;
-  if (hasDynamic) {
-    return '"' + _spliceDynamicHandler(h, _ixStr) + '"';
+  // Safety pass: inlined component props can still leave bare callback param
+  // names behind here. Normalize them before deciding whether the handler is
+  // static so mapped clicks always receive a concrete row-specific payload.
+  if (itemParam) h = h.replace(new RegExp('\\b' + itemParam + '\\b', 'g'), '_item');
+  if (indexParam) h = h.replace(new RegExp('\\b' + indexParam + '\\b', 'g'), _ixStr);
+  h = _normalizeHandlerIndexExprs(h, _ixStr);
+  var hasDynamic = h.indexOf('_item') >= 0 || h.indexOf('_nitem') >= 0 || h.indexOf(_ixStr) >= 0 || h.indexOf('(_i - 1)') >= 0 || h.indexOf('(_ni - 1)') >= 0 || /(^|[^A-Za-z0-9_])_i\s*-\s*1(?=[^A-Za-z0-9_]|$)/.test(h) || /(^|[^A-Za-z0-9_])_ni\s*-\s*1(?=[^A-Za-z0-9_]|$)/.test(h);
+  var spliced = _spliceDynamicHandler(h, _ixStr);
+  if (hasDynamic || spliced !== h) {
+    return '"' + spliced + '"';
   }
   return '"' + h.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
+}
+
+function _normalizeHandlerIndexExprs(h, _ixStr) {
+  if (!h) return h;
+  var out = String(h);
+  function _replaceBare(expr, name, repl) {
+    return expr.replace(new RegExp('(^|[^A-Za-z0-9_])' + name.replace(/[$]/g, '\\$&') + '(?=[^A-Za-z0-9_]|$)', 'g'), function(_, pfx) {
+      return pfx + repl;
+    });
+  }
+  out = out.replace(/\(_ni\s*-\s*1\)/g, '__HANDLER_NI0__');
+  out = out.replace(/\(_i\s*-\s*1\)/g, '__HANDLER_I0__');
+  out = out.replace(/(^|[^A-Za-z0-9_])_ni\s*-\s*1(?=[^A-Za-z0-9_]|$)/g, function(_, pfx) {
+    return pfx + '__HANDLER_NI0__';
+  });
+  out = out.replace(/(^|[^A-Za-z0-9_])_i\s*-\s*1(?=[^A-Za-z0-9_]|$)/g, function(_, pfx) {
+    return pfx + '__HANDLER_I0__';
+  });
+  out = _replaceBare(out, '_ni', '(_ni - 1)');
+  out = _replaceBare(out, '_i', _ixStr || '(_i - 1)');
+  out = out.replace(/__HANDLER_NI0__/g, '(_ni - 1)');
+  out = out.replace(/__HANDLER_I0__/g, _ixStr || '(_i - 1)');
+  return out;
 }
 
 // "toggleTodo(_item.id)" → 'toggleTodo(" .. (_item.id) .. ")'
@@ -34,7 +64,7 @@ function _spliceDynamicHandler(h, _ixStr) {
       argEnd++;
     }
     var args = h.slice(argStart, argEnd - 1).trim();
-    var argDyn = args.indexOf('_item') >= 0 || args.indexOf('(_i - 1)') >= 0 || (_ixStr && args.indexOf(_ixStr) >= 0);
+    var argDyn = args.indexOf('_item') >= 0 || args.indexOf('_nitem') >= 0 || args.indexOf('(_i - 1)') >= 0 || args.indexOf('(_ni - 1)') >= 0 || (_ixStr && args.indexOf(_ixStr) >= 0) || /(^|[^A-Za-z0-9_])_i\s*-\s*1(?=[^A-Za-z0-9_]|$)/.test(args) || /(^|[^A-Za-z0-9_])_ni\s*-\s*1(?=[^A-Za-z0-9_]|$)/.test(args);
     out += h.slice(i, fnNameStart);
     if (argDyn && fnName) {
       // Split multi-arg calls: "removeItem(_item.id, _item.label)" → each arg spliced separately
@@ -51,9 +81,9 @@ function _spliceDynamicHandler(h, _ixStr) {
       var _splicedArgs = [];
       for (var _si = 0; _si < _splitArgs.length; _si++) {
         var _sa = _splitArgs[_si];
-        var _isDyn = _sa.indexOf('_item') >= 0 || _sa.indexOf('(_i - 1)') >= 0 || (_ixStr && _sa.indexOf(_ixStr) >= 0);
+        var _isDyn = _sa.indexOf('_item') >= 0 || _sa.indexOf('_nitem') >= 0 || _sa.indexOf('(_i - 1)') >= 0 || _sa.indexOf('(_ni - 1)') >= 0 || (_ixStr && _sa.indexOf(_ixStr) >= 0) || /(^|[^A-Za-z0-9_])_i\s*-\s*1(?=[^A-Za-z0-9_]|$)/.test(_sa) || /(^|[^A-Za-z0-9_])_ni\s*-\s*1(?=[^A-Za-z0-9_]|$)/.test(_sa);
         if (_isDyn) {
-          if (/^_n?item\.\w+$/.test(_sa)) {
+          if (/^_n?item\s*\.\s*\w+$/.test(_sa)) {
             _splicedArgs.push('\'" .. (' + _sa + ') .. "\'');
           } else {
             _splicedArgs.push('" .. (' + _sa + ') .. "');

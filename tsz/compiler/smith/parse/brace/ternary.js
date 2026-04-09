@@ -194,6 +194,15 @@ function _parseTernaryCondParts(c) {
         }
       } else if (ctx.propStack && ctx.propStack[name] !== undefined) {
         var pv = ctx.propStack[name];
+        if (typeof pv === 'string' && pv.charCodeAt && pv.charCodeAt(0) === 2 &&
+            c.pos + 2 < c.count && c.kindAt(c.pos + 1) === TK.dot && c.kindAt(c.pos + 2) === TK.identifier) {
+          c.advance(); // skip prop name
+          c.advance(); // skip dot
+          var _pvField = c.text();
+          c.advance(); // skip field
+          condParts.push('_item.' + _pvField);
+          continue;
+        }
         // If prop is a map-item ref and next is .field, resolve as OA field access
         if (ctx.currentMap && ctx.currentMap.oa &&
             typeof pv === 'string' && pv.includes('@intCast(') &&
@@ -460,18 +469,47 @@ function _normalizeLuaTernaryCond(luaCond) {
   return luaCond;
 }
 
+function _ternaryCondExprToLua(condExpr) {
+  if (!condExpr || typeof condExpr !== 'string') return 'false';
+  var out = _resolveTernaryTextMarkers(condExpr);
+  out = out.replace(/!std\.mem\.eql\(u8,\s*([^,]+),\s*([^)]+)\)/g, '($1 ~= $2)');
+  out = out.replace(/std\.mem\.eql\(u8,\s*([^,]+),\s*([^)]+)\)/g, '($1 == $2)');
+  out = out.replace(/state\.getSlot(?:Int|Float|Bool)?\((\d+)\)/g, function(_, idx) {
+    var _s = ctx.stateSlots[+idx];
+    return _s ? _s.getter : '_slot' + idx;
+  });
+  out = out.replace(/state\.getSlotString\((\d+)\)/g, function(_, idx) {
+    var _s = ctx.stateSlots[+idx];
+    return _s ? _s.getter : '_slot' + idx;
+  });
+  out = out.replace(/_oa\d+_(\w+)\[_j\]\[0\.\._oa\d+_\w+_lens\[_j\]\]/g, '_nitem.$1');
+  out = out.replace(/_oa\d+_(\w+)\[_j\]/g, '_nitem.$1');
+  out = out.replace(/_oa\d+_(\w+)\[_i\]\[0\.\._oa\d+_\w+_lens\[_i\]\]/g, '_item.$1');
+  out = out.replace(/_oa\d+_(\w+)\[_i\]/g, '_item.$1');
+  out = out.replace(/\b_j\b/g, '_ni');
+  out = out.replace(/([A-Za-z_]\w*(?:\.[A-Za-z_]\w+)*)\.len\b/g, '#$1');
+  for (var i = 0; i < 3; i++) {
+    out = out.replace(/@as\([^,]+,\s*([^)]+)\)/g, '$1');
+    out = out.replace(/@intCast\(([^)]+)\)/g, '$1');
+    out = out.replace(/@floatFromInt\(([^)]+)\)/g, '$1');
+  }
+  out = out.replace(/\s+!=\s+/g, ' ~= ');
+  return _normalizeLuaTernaryCond(out);
+}
+
 function _resolveTernaryTextMarkers(expr) {
   if (!expr || expr.indexOf('\x02') === -1) return expr;
   return expr.replace(/\x02OA_ITEM:\d+:[^:]+:(\w+)\s*\.\s*(\w+)/g, function(_, itemParam, field) {
-    return itemParam + '.' + field;
+    void itemParam;
+    return '_item.' + field;
   }).replace(/\x02OA_ITEM:\d+:[^:]+:(\w+)/g, function(_, itemParam) {
-    return itemParam;
+    void itemParam;
+    return '_item';
   });
 }
 
 function _parseNestedTernaryTextExpr(c) {
   var saved = c.save();
-  var luaSaved = c.save();
   var condParts = _parseTernaryCondParts(c);
   if (!condParts) {
     c.restore(saved);
@@ -505,14 +543,11 @@ function _parseNestedTernaryTextExpr(c) {
   }
 
   var condExpr = _resolveTernaryTextMarkers(_resolveStringComparison(condParts.join('')));
-  var luaCond = (typeof _buildLuaCondFromTokens === 'function')
-    ? _buildLuaCondFromTokens(c, luaSaved)
-    : condParts.join('').replace(/!==/g, '~=').replace(/===/g, '==');
-  luaCond = _resolveTernaryTextMarkers(luaCond);
+  var luaCond = _ternaryCondExprToLua(condExpr);
 
   return {
     condExpr: condExpr,
-    luaCond: _normalizeLuaTernaryCond(luaCond),
+    luaCond: luaCond,
     trueVal: trueVal,
     falseBranch: falseBranch,
   };
@@ -549,7 +584,7 @@ function tryParseTernaryText(c, children) {
     const mapBufId = ctx.mapDynCount || 0;
     ctx.mapDynCount = mapBufId + 1;
     ctx.dynTexts.push({ bufId: mapBufId, fmtString: '{s}', fmtArgs, arrName: '', arrIndex: 0, bufSize: 256, inMap: true, mapIdx: ctx.maps.indexOf(ctx.currentMap) });
-    children.push({ nodeExpr: `.{ .text = "__mt${mapBufId}__" }`, dynBufId: mapBufId, inMap: true });
+    children.push({ nodeExpr: `.{ .text = "__mt${mapBufId}__" }`, dynBufId: mapBufId, inMap: true, _luaTernaryText: _nestedTernaryTextToLua(parsed) });
   } else {
     const bufId = ctx.dynCount;
     ctx.dynTexts.push({ bufId, fmtString: '{s}', fmtArgs, arrName: '', arrIndex: 0, bufSize: 64 });
