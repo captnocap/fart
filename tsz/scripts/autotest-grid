@@ -205,6 +205,51 @@ def main():
         except Exception:
             pass
 
+    # ── Pixel verification for expect steps ──
+    # If the tree says text exists (expect PASS) but the node's region in the
+    # screenshot has no rendered content, the text wasn't actually painted.
+    # Detection: anti-aliased text always creates 10+ unique RGB colors in its
+    # region. A blank region (no text rendered) has 1-3 unique colors (just
+    # background). Threshold < 4 has zero false positives across 630 test steps.
+    TEXT_UNIQ_THRESHOLD = 4
+
+    for step in steps:
+        if step["kind"] != "expect" or step["result"] != "PASS":
+            continue
+        region = step.get("region")
+        if not region:
+            continue
+        rx, ry, rw, rh = region
+        if rw <= 0 or rh <= 0:
+            step["result"] = "PIXEL_FAIL"
+            print(f"[autotest] PIXEL_FAIL: expect \"{step['text']}\" — not visible in pixels")
+            continue
+        ss_idx = step["idx"] + 1
+        ss_path = ss_dir / f"step_{ss_idx:02d}.png"
+        if not ss_path.exists():
+            continue
+        try:
+            img = Image.open(ss_path)
+            cx1 = max(0, rx)
+            cy1 = max(0, ry)
+            cx2 = min(img.width, rx + rw)
+            cy2 = min(img.height, ry + rh)
+            if cx2 <= cx1 or cy2 <= cy1:
+                step["result"] = "PIXEL_FAIL"
+                print(f"[autotest] PIXEL_FAIL: expect \"{step['text']}\" — not visible in pixels")
+                img.close()
+                continue
+            crop = img.crop((cx1, cy1, cx2, cy2))
+            pixels = list(crop.getdata())  # returns list of RGBA tuples
+            uniq = len(set(tuple(p[:3]) for p in pixels))
+            if uniq < TEXT_UNIQ_THRESHOLD:
+                step["result"] = "PIXEL_FAIL"
+                print(f"[autotest] PIXEL_FAIL: expect \"{step['text']}\" — not visible in pixels")
+            crop.close()
+            img.close()
+        except Exception as e:
+            print(f"[autotest] pixel check warning: {e}")
+
     # Read the authoritative RESULT line from manifest, fall back to step counts
     result_passed = 0
     result_total = 0
@@ -267,14 +312,23 @@ def main():
         y = header_h + pad + row * cell_h
 
         passed = step["result"] == "PASS"
-        bar_color = (30, 120, 30) if passed else (160, 30, 30)
-        icon = "\u2713" if passed else "\u2717"
+        is_pixel_fail = step["result"] == "PIXEL_FAIL"
+        if passed:
+            bar_color = (30, 120, 30)
+            icon = "\u2713"
+        elif is_pixel_fail:
+            bar_color = (180, 100, 0)  # orange — tree says yes, pixels say no
+            icon = "\u2717"
+        else:
+            bar_color = (160, 30, 30)
+            icon = "\u2717"
 
         # Label bar
         draw.rectangle([x, y, x + cell_w - pad, y + label_h], fill=bar_color)
-        label = f"{icon} {i+1}. {step['kind']} \"{step['text']}\""
-        if len(label) > 42:
-            label = label[:39] + "..."
+        ocr_tag = " [NOT IN PIXELS]" if is_pixel_fail else ""
+        label = f"{icon} {i+1}. {step['kind']} \"{step['text']}\"{ocr_tag}"
+        if len(label) > 48:
+            label = label[:45] + "..."
         draw.text((x + 4, y + 6), label, fill=(255, 255, 255), font=font)
 
         # Screenshot thumbnail

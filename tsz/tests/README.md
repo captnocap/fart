@@ -91,9 +91,11 @@ Each run produces a single `proof.png` image containing:
 
 - A header with pass/fail count, source file, test script, date, and compiler/engine/source hashes
 - One cell per step showing:
-  - Green bar = PASS, red bar = FAIL
+  - Green bar = PASS, red bar = FAIL, orange bar = PIXEL_FAIL
   - Step number and the command (e.g., `3. click "Hide"`)
   - Screenshot cropped and zoomed around the node being tested
+
+**PIXEL_FAIL** (orange) means the node tree says the text exists, but the actual screenshot pixels show nothing rendered. The tree lied — the text is not visible to a human. This catches paint bugs, off-screen nodes, and zero-size nodes that would otherwise silently pass.
 
 The grid is the proof artifact. If 13/13 shows green with readable screenshots showing the correct state, the test is real. If something is wrong, you can see exactly which step failed and what the screen looked like.
 
