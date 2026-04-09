@@ -388,10 +388,13 @@ pub fn main() !void {
         }
     }
 
-    // 6c. Write parity atom output if --parity was used
+    // 6c. Write parity output if --parity was used (cart-specific filenames to avoid race conditions)
+    const parity_basename = std.fs.path.basename(input_path);
+    const parity_dot = std.mem.lastIndexOfScalar(u8, parity_basename, '.') orelse parity_basename.len;
+    const parity_stem = parity_basename[0..parity_dot];
     if (parity_mode) {
         if (smith.getGlobalString("__parityAtomOutput")) |atom_out| {
-            const atom_path = std.fmt.allocPrint(Alloc, "{s}/parity_atom_output.zig", .{out_dir}) catch "/tmp/parity_atom_output.zig";
+            const atom_path = std.fmt.allocPrint(Alloc, "{s}/parity_atom_{s}.zig", .{ out_dir, parity_stem }) catch "/tmp/parity_atom_output.zig";
             const atom_file = std.fs.cwd().createFile(atom_path, .{}) catch |err| {
                 std.debug.print("[forge:parity] Cannot write atom output: {}\n", .{err});
                 return;
@@ -404,7 +407,7 @@ pub fn main() !void {
         }
         // Write pre-split legacy output so harness compares at the same pipeline stage
         if (smith.getGlobalString("__parityLegacyPreSplit")) |legacy_pre| {
-            const legacy_path = std.fmt.allocPrint(Alloc, "{s}/parity_legacy_presplit.zig", .{out_dir}) catch "/tmp/parity_legacy_presplit.zig";
+            const legacy_path = std.fmt.allocPrint(Alloc, "{s}/parity_legacy_{s}.zig", .{ out_dir, parity_stem }) catch "/tmp/parity_legacy_presplit.zig";
             const legacy_file = std.fs.cwd().createFile(legacy_path, .{}) catch |err| {
                 std.debug.print("[forge:parity] Cannot write legacy pre-split: {}\n", .{err});
                 return;

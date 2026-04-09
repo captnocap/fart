@@ -32,7 +32,10 @@ if (!fs.existsSync(cartPath)) {
   process.exit(1);
 }
 
-const ATOM_OUTPUT_PATH = '/tmp/tsz-gen/parity_atom_output.zig';
+// Cart-specific parity file paths to avoid race conditions between parallel workers
+const cartStem = path.basename(cartPath, '.tsz');
+const ATOM_OUTPUT_PATH = '/tmp/tsz-gen/parity_atom_' + cartStem + '.zig';
+const LEGACY_PRESPLIT_PATH = '/tmp/tsz-gen/parity_legacy_' + cartStem + '.zig';
 
 // ── Step 97: String hashing ──
 
@@ -45,9 +48,8 @@ function hashString(str) {
 function runLegacyEmit(cart) {
   try {
     // Delete stale parity output BEFORE invoking forge
-    // so a previous run's output is never mistaken for this run's.
     try { fs.unlinkSync(ATOM_OUTPUT_PATH); } catch (_) {}
-    try { fs.unlinkSync('/tmp/tsz-gen/parity_legacy_presplit.zig'); } catch (_) {}
+    try { fs.unlinkSync(LEGACY_PRESPLIT_PATH); } catch (_) {}
 
     const forgeCmd = './zig-out/bin/forge build --parity ' + cart;
     // Merge stderr into stdout so we can parse forge's [forge] Wrote... message
@@ -60,12 +62,11 @@ function runLegacyEmit(cart) {
     // Read pre-split legacy output written by forge --parity.
     // This is the monolithic output BEFORE splitOutput() runs,
     // matching the same pipeline stage as atom output from runEmitAtoms().
-    const legacyPreSplitPath = '/tmp/tsz-gen/parity_legacy_presplit.zig';
-    if (!fs.existsSync(legacyPreSplitPath)) {
-      return { output: null, error: 'legacy pre-split not found: ' + legacyPreSplitPath + '. forge output: ' + (forgeOut || '').slice(0, 200) };
+    if (!fs.existsSync(LEGACY_PRESPLIT_PATH)) {
+      return { output: null, error: 'legacy pre-split not found: ' + LEGACY_PRESPLIT_PATH + '. forge output: ' + (forgeOut || '').slice(0, 200) };
     }
 
-    const legacyOutput = fs.readFileSync(legacyPreSplitPath, 'utf8');
+    const legacyOutput = fs.readFileSync(LEGACY_PRESPLIT_PATH, 'utf8');
 
     // Also detect split files for metadata
     const allOutput = forgeOut || '';
