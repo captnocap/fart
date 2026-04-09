@@ -21,3 +21,4 @@ template_literal_imports_attrs_js_directly_before_patch: false
 press_imports_attrs_js_directly_before_patch: false
 collect_classifiers_imports_attrs_js_directly_before_patch: false
 final_report_drift: false
+proposal_full_span_reread_complete: true
