@@ -84,13 +84,34 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // Delegates to tryParseLazyComponent() which:
-  // 1. Extracts loader arrow function
-  // 2. Parses import() call to get module path
-  // 3. Maps path to cartridge source
-  // 4. Emits Cartridge node with lazy loading flag
-  // 5. Associates with Suspense fallback when wrapped
-  return null;
+  // Extract import path from: lazy(() => import('./path'))
+  // Maps to a Cartridge node with the .so path derived from the import.
+  if (c.kind() === TK.identifier && c.text() === 'React') {
+    c.advance(); if (c.kind() === TK.dot) c.advance();
+  }
+  if (c.kind() === TK.identifier) c.advance(); // lazy
+  var importPath = '';
+  if (c.kind() === TK.lparen) {
+    var depth = 1; c.advance();
+    // Scan for import('path') inside the arrow function
+    while (c.kind() !== TK.eof && depth > 0) {
+      if (c.kind() === TK.lparen) depth++;
+      if (c.kind() === TK.rparen) { depth--; if (depth === 0) break; }
+      if (c.kind() === TK.identifier && c.text() === 'import' &&
+          c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.lparen) {
+        c.advance(); c.advance(); // import (
+        if (c.kind() === TK.string) {
+          importPath = c.text().slice(1, -1);
+          c.advance();
+        }
+      }
+      c.advance();
+    }
+    if (c.kind() === TK.rparen) c.advance();
+  }
+  // Map import path to cartridge .so name
+  var soName = importPath.split('/').pop().replace(/\.\w+$/, '') + '.so';
+  return { nodeExpr: '.{ .src = "' + soName + '" }' };
 }
 
 _patterns[79] = {

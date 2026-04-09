@@ -53,19 +53,16 @@ function match(c, ctx) {
   // <Suspense> element
   if (c.kind() !== TK.lt) return false;
   if (c.pos + 1 >= c.count) return false;
-  var next = c.tokenAt(c.pos + 1);
-  if (next.kind !== TK.identifier) return false;
-  return next.text === 'Suspense';
+  if (c.kindAt(c.pos + 1) !== TK.identifier) return false;
+  return c.textAt(c.pos + 1) === 'Suspense';
 }
 
 function compile(c, ctx) {
-  // Delegates to parseJSXElement() with Suspense handling:
-  // 1. Parses fallback prop (required JSX expression)
-  // 2. Parses children (typically lazy components or async content)
-  // 3. Emits Suspense boundary node
-  // 4. Wires fallback display during loading states
-  // 5. Associates with lazy cartridge triggers
-  return null;
+  // Delegate to parseJSXElement — Suspense is treated as a regular
+  // container element. The fallback prop is parsed as a JSX expression
+  // prop. Children are parsed normally. The runtime handles loading
+  // boundary behavior via the Cartridge system.
+  return parseJSXElement(c);
 }
 
 _patterns[80] = {

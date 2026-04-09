@@ -41,12 +41,31 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // Delegates to tryParseArrayLiteralChildren() which:
-  // 1. Consumes { and [
-  // 2. Parses each element (JSX, expression, spread)
-  // 3. Flattens results into parent's children array
-  // 4. Consumes ] and }
-  return null;
+  // Array literal children {[<A/>, <B/>]} — flatten into parent's child list.
+  // Returns an array of child nodeExprs rather than a single nodeExpr.
+  // The caller (parseChildren loop) should spread these into the children array.
+  if (c.kind() !== TK.lbrace) return null;
+  c.advance(); // {
+  if (c.kind() !== TK.lbracket) return null;
+  c.advance(); // [
+  var items = [];
+  while (c.kind() !== TK.rbracket && c.kind() !== TK.eof) {
+    if (c.kind() === TK.comma) { c.advance(); continue; }
+    if (c.kind() === TK.lt) {
+      var child = parseJSXElement(c);
+      if (child) items.push(child);
+    } else {
+      c.advance(); // skip non-JSX tokens
+    }
+  }
+  if (c.kind() === TK.rbracket) c.advance(); // ]
+  if (c.kind() === TK.rbrace) c.advance(); // }
+  // Return first child or empty — full array flattening is handled by the
+  // consumer (parseChildren adds each item individually).
+  if (items.length === 0) return null;
+  if (items.length === 1) return items[0];
+  // Multiple children: return as a wrapper with .arrayChildren
+  return { nodeExpr: items[0].nodeExpr, arrayChildren: items };
 }
 
 _patterns[71] = {

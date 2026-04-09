@@ -48,20 +48,19 @@ function match(c, ctx) {
   // Component tag: <Name ... where Name starts with uppercase
   if (c.kind() !== TK.lt) return false;
   if (c.pos + 1 >= c.count) return false;
-  var next = c.tokenAt(c.pos + 1);
-  if (next.kind !== TK.identifier) return false;
-  // First character must be uppercase A-Z
-  var firstChar = next.text[0];
-  return firstChar >= 'A' && firstChar <= 'Z';
+  if (c.kindAt(c.pos + 1) !== TK.identifier) return false;
+  var name = c.textAt(c.pos + 1);
+  var ch = name.charCodeAt(0);
+  // Uppercase A-Z, and not a dot-notation component (handled by p074)
+  if (ch < 65 || ch > 90) return false;
+  if (c.pos + 2 < c.count && c.kindAt(c.pos + 2) === TK.dot) return false;
+  return true;
 }
 
 function compile(c, ctx) {
-  // Delegates to parseJSXElement() which:
-  // 1. Detects uppercase tag name
-  // 2. Calls findComponent() to resolve the component
-  // 3. Either inlines via inlineComponentCall() or emits Cartridge
-  // 4. Handles prop passing and children insertion
-  return null;
+  // Delegate to parseJSXElement which detects uppercase tag,
+  // resolves via findComponent(), and inlines or emits Cartridge.
+  return parseJSXElement(c);
 }
 
 _patterns[73] = {

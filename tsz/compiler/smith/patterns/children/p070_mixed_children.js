@@ -83,8 +83,10 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // Owned by parseChildren() + buildNode().
-  return null;
+  // Delegate to parseJSXElement which calls parseChildren() internally.
+  // parseChildren() interleaves element, brace, and text children in
+  // source order; buildNode() emits them all into a single _arr_N.
+  return parseJSXElement(c);
 }
 
 _patterns[70] = { id: 70, match: match, compile: compile };

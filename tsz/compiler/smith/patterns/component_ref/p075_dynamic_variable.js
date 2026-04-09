@@ -44,27 +44,29 @@
 //   trace the variable definition or falls back to error.
 
 function match(c, ctx) {
-  // Variable component: uppercase identifier that doesn't resolve
-  // to a static component definition. parseJSXElement handles this
-  // by checking ctx.components registry.
+  // Dynamic variable component: uppercase identifier NOT in the static
+  // component registry. p073 handles known components; this handles
+  // the case where the tag is a variable holding a component reference.
   if (c.kind() !== TK.lt) return false;
   if (c.pos + 1 >= c.count) return false;
-  var next = c.tokenAt(c.pos + 1);
-  if (next.kind !== TK.identifier) return false;
-  var firstChar = next.text[0];
-  if (firstChar < 'A' || firstChar > 'Z') return false;
-  // Check if it's NOT a known component
-  // (Actual resolution happens in compile phase)
-  return true; // Will be resolved during compile
+  if (c.kindAt(c.pos + 1) !== TK.identifier) return false;
+  var name = c.textAt(c.pos + 1);
+  var ch = name.charCodeAt(0);
+  if (ch < 65 || ch > 90) return false;
+  // Dot notation is p074
+  if (c.pos + 2 < c.count && c.kindAt(c.pos + 2) === TK.dot) return false;
+  // Check if NOT a known component — that's p073's territory
+  if (typeof findComponent === 'function') {
+    var comp = findComponent(name);
+    if (comp) return false;
+  }
+  return true;
 }
 
 function compile(c, ctx) {
-  // parseJSXElement() attempts to resolve the identifier:
-  // 1. Check ctx.components for static match
-  // 2. Check imports
-  // 3. If unresolved, check if it's a render local with component value
-  // 4. If still unresolved, emit error for unknown component
-  return null;
+  // Delegate to parseJSXElement which handles unknown uppercase tags
+  // by tracing the variable binding or emitting a placeholder.
+  return parseJSXElement(c);
 }
 
 _patterns[75] = {

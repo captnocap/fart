@@ -53,9 +53,8 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // parseJSXElement handles self-closing detection.
-// When /> is found, children parsing is skipped.
-  return null;
+  // Delegate to parseJSXElement which detects /> and skips child parsing.
+  return parseJSXElement(c);
 }
 
 _patterns[72] = {

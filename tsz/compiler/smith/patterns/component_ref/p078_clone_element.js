@@ -67,12 +67,23 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // Delegates to tryParseCloneElement() which:
-  // 1. Extracts element, extraProps, children arguments
-  // 2. Attempts to resolve element if static
-  // 3. Merges props (handling className/style specially)
-  // 4. Emits merged element or dynamic clone operation
-  return null;
+  // cloneElement(element, extraProps, ...children) — skip the call,
+  // consuming all tokens through the matching ), and emit a placeholder.
+  // Full prop-merge cloning is future work.
+  if (c.kind() === TK.identifier && c.text() === 'React') {
+    c.advance(); if (c.kind() === TK.dot) c.advance();
+  }
+  if (c.kind() === TK.identifier) c.advance(); // cloneElement
+  if (c.kind() === TK.lparen) {
+    var depth = 1; c.advance();
+    while (c.kind() !== TK.eof && depth > 0) {
+      if (c.kind() === TK.lparen) depth++;
+      if (c.kind() === TK.rparen) depth--;
+      if (depth > 0) c.advance();
+    }
+    if (c.kind() === TK.rparen) c.advance();
+  }
+  return { nodeExpr: '.{ .text = "[cloneElement]" }' };
 }
 
 _patterns[78] = {

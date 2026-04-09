@@ -72,13 +72,17 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // Delegates to tryParseTernaryJSX() which:
+  // The cursor is at { — delegate to tryParseBraceChild which routes
+  // through tryParseTernaryJSX(). That function:
   // 1. Parses condition expression
   // 2. Parses true branch component via parseJSXElement()
-  // 3. Expects : separator
-  // 4. Parses false branch component via parseJSXElement()
-  // 5. Registers 'ternary_jsx' conditional
-  // 6. Pushes both branch nodes with condIdx/branch markers
+  // 3. Parses false branch component via parseJSXElement()
+  // 4. Registers conditional in ctx.conditionals
+  // 5. Returns both branch nodes with display toggle markers
+  var children = [];
+  if (tryParseBraceChild(c, children) && children.length > 0) {
+    return children[0];
+  }
   return null;
 }
 

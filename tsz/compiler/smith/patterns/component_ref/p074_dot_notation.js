@@ -43,22 +43,18 @@ function match(c, ctx) {
   // <Namespace.Component pattern
   if (c.kind() !== TK.lt) return false;
   if (c.pos + 3 >= c.count) return false;
-  // Check for Identifier . Identifier sequence
   if (c.kindAt(c.pos + 1) !== TK.identifier) return false;
   if (c.kindAt(c.pos + 2) !== TK.dot) return false;
   if (c.kindAt(c.pos + 3) !== TK.identifier) return false;
-  // First part should start with uppercase (namespace convention)
-  var first = c.tokenAt(c.pos + 1).text;
-  return first[0] >= 'A' && first[0] <= 'Z';
+  var first = c.textAt(c.pos + 1);
+  return first.charCodeAt(0) >= 65 && first.charCodeAt(0) <= 90;
 }
 
 function compile(c, ctx) {
-  // Delegates to parseJSXElement() which:
-  // 1. Splits tag name on '.'
-  // 2. Resolves namespace object
-  // 3. Looks up component property
-  // 4. Proceeds with resolved component as in p073
-  return null;
+  // Delegate to parseJSXElement which handles dot-notation tags
+  // by reading Tag.Sub as a qualified name and resolving through
+  // the component registry or classifier system.
+  return parseJSXElement(c);
 }
 
 _patterns[74] = {

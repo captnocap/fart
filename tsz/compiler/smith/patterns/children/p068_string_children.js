@@ -44,7 +44,8 @@ function compile(c, ctx) {
   }
   var text = c._byteSlice(textStart, textEnd).trim();
   if (!text) return null;
-  return { nodeExpr: '.{ .text = "' + text.replace(/"/g, '\\"') + '" }' };
+  var escaped = text.replace(/"/g, '\\"');
+  return { nodeExpr: '.{ .text = "' + escaped + '" }', luaNode: { text: escaped } };
 }
 
 _patterns[68] = { id: 68, match: match, compile: compile };
