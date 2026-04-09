@@ -203,9 +203,14 @@ function emitLuaTreeLuaSource(ctx) {
   result = result.replace(/!=/g, '~=');
   result = result.replace(/\|\|/g, ' or ');
   result = result.replace(/&&/g, ' and ');
-  // Fix broken string concats: "text "+varName) → "text " .. tostring(varName))
-  result = result.replace(/"([^"]*) "\+(\w+)\)/g, '"$1 " .. tostring($2))');
-  result = result.replace(/"([^"]*)"(\+)(\w+)/g, '"$1" .. tostring($3)');
+  // Fix broken prop inlining: tostring(word "+varName) or tostring(word "text) → tostring(varName)
+  result = result.replace(/tostring\(\w+ "[\+"][^)]*\)/g, function(m) {
+    var ids = m.match(/[A-Za-z_]\w*/g);
+    if (ids && ids.length > 1) return 'tostring(' + ids[ids.length - 1] + ')';
+    return '"?"';
+  });
+  // Catch Zig enum literals the sanitizer missed (e.g. `or .start }`)
+  result = result.replace(/([\s(,=])\.(center|row|column|row_reverse|column_reverse|flex_start|flex_end|space_between|space_around|space_evenly|stretch|baseline|wrap|wrap_reverse|nowrap|no_wrap|hidden|visible|scroll|auto|absolute|relative|none|flex|left|right|justify|vertical|horizontal|start|end)(?=[\s),}])/g, '$1"$2"');
   // Restore protected JS strings
   for (var _pi = 0; _pi < protected.length; _pi++) {
     result = result.replace('__JSPROTECT_' + _pi + '__', protected[_pi]);
