@@ -74,3 +74,8 @@ rollback_plan_describes_reversible_change_not_reconstruction: true
 ## 493-517 Legacy Emit Deletion
 
 legacy_emit_deletion_status_names_deleted_and_kept_files: true
+
+## 588-660 Attrs Decomposition + Final Verification
+
+final_status_names_attrs_extraction_and_three_post_split_reports: true
+blocked_txt_empty_or_only_contains_resolved_entries: true

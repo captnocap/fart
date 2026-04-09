@@ -16,3 +16,8 @@ parseHandler_moved_cleanly: true
 luaParseHandler_moved_cleanly: true
 parseValueExpr_moved_cleanly: true
 luaParseValueExpr_moved_cleanly: true
+attrs_js_is_thin_and_explicit_after_extraction: true
+template_literal_imports_attrs_js_directly_before_patch: false
+press_imports_attrs_js_directly_before_patch: false
+collect_classifiers_imports_attrs_js_directly_before_patch: false
+final_report_drift: false

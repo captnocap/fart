@@ -1,5 +1,6 @@
 021-046 scaffolded
 051-076 canonical source capture complete
+081-110 harness scaffolding complete (per control_board.md)
 111-134 coverage and live-risk baseline complete
 0191-0215 handlers effects parity contract executed
 0141-0165 preamble parity contract executed
@@ -21,3 +22,4 @@
 0493-0517 legacy emit deletion: deleted 11 files (preamble/state_manifest/node_tree/dyn_text/handlers/effects/object_arrays/map_pools/runtime_updates/entrypoints/logic_blocks), kept 6 files (effect_transpile/effect_wgsl/transforms/lua_tree_emit/split/finalize). Reports: reports/sections/legacy_emit_deletion_status.md
 0518-0547 duplicate cleanup: deleted emit_ops/effect_transpile.js, emit_ops/effect_wgsl.js, emit_ops/transforms.js, emit_ops/js_expr_to_lua.js. Winners: emit/effect_transpile.js, emit/effect_wgsl.js, emit/transforms.js, emit_atoms/maps_lua/lua_map_subs.js. Reports: reports/sections/duplicate_cleanup_status.md, reports/sections/_jsExprToLua_collision.md, reports/parity/js_expr_to_lua_post_cleanup.json
 0548-0587 structural cleanup: moved resolveConstOaAccess/resolveConstOaFieldFromRef to resolve/const_oa.js, tryResolveObjectStateAccess to resolve/state_access.js, cursor helpers to parse/cursor.js. Reports: reports/sections/structural_cleanup_status.md, reports/sections/cursor_consolidation_status.md, reports/sections/resolve_contract.md, reports/sections/style_contract.md, reports/sections/handler_contract.md, reports/sections/eval_contract.md, reports/parity/structural_foundation_smoke.json
+0588-0635 attrs decomposition: extracted 1683-line attrs.js into 15 files under parse/attrs/. Reports: reports/sections/final_status.md, reports/parity/attrs_post_split.json, reports/parity/handlers_post_split.json, reports/parity/eval_post_split.json
