@@ -32,3 +32,5 @@ post_deletion_smoke_build: PASS (d01_nested_maps, 278ms, 7 split files, 6932 byt
 - smith/emit/lua_tree_emit.js
 - smith/emit/split.js
 - smith/emit/finalize.js
+
+deleted_emit_files_absent_from_load_order_and_live_imports: true
