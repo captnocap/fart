@@ -12,6 +12,8 @@ smith/resolve/comparison.js
 smith/resolve/truthiness.js
 smith/resolve/field_access.js
 smith/resolve/ternary.js
+smith/resolve/const_oa.js
+smith/resolve/state_access.js
 
 smith/patterns/index.js
 smith/patterns/array_construction/p039_array_fill_map.js
@@ -214,6 +216,7 @@ smith/mod/index.js
 smith/page.js
 smith/attrs.js
 
+smith/parse/cursor.js
 smith/parse/handlers/press.js
 smith/parse/utils.js
 smith/parse/template_literal.js
