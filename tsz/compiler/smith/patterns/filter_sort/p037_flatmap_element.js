@@ -74,9 +74,10 @@ function compile(c, ctx) {
   //   - Use nested .map() (p021) for the variable-count case
   //   - Restructure data so each item maps to a single element
   //
-  // This pattern is documented for completeness. match() detects it so the
-  // compiler can produce a meaningful diagnostic rather than a cryptic failure.
-  return null;
+  // match() detects it so the compiler can produce a diagnostic.
+  return { type: 'unsupported', pattern: 'flatmap_element', id: 37,
+    message: '.flatMap() is not supported. Use .map() with multiple children instead.',
+    workaround: 'Replace items.flatMap(item => [<A/>, <B/>]) with items.map(item => <Box><A/><B/></Box>)' };
 }
 
 _patterns[37] = { id: 37, match: match, compile: compile };

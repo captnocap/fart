@@ -81,18 +81,11 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // Handled by the map pipeline — tryParseMapHeader (header.js:40-75)
-  // processes the full chain left-to-right:
-  //   1. .filter() → captures { param, raw } into filterConditions[]
-  //   2. .sort() → skips body entirely (runtime concern via QuickJS)
-  //   3. .slice() → skips body entirely (runtime concern)
-  //   4. Multiple .filter() calls accumulate — all ANDed in emit
-  //   5. The emit phase (map_pools.js) wraps iteration body in
-  //      if(filterExpr) guard using resolved OA field references
-  //   6. Sort order comes from _computedExpr evaluated by QuickJS
-  //
-  // No compile action needed — the map pipeline owns this end-to-end.
-  return null;
+  var baseName = c.text();
+  var children = [];
+  var ok = _tryParseComputedChainMap(c, children, baseName, null, true);
+  if (!ok) return null;
+  return { type: 'children', entries: children };
 }
 
 _patterns[32] = { id: 32, match: match, compile: compile };

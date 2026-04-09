@@ -42,10 +42,20 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // Handled by component_brace_values.js:143 which calls
-  // parseTemplateLiteral() on the raw template string. The result
-  // flows through propStack into the inlined component.
-  return null;
+  var raw = c.text().slice(1, -1);
+  var parsed = parseTemplateLiteral(raw);
+  c.advance();
+  if (c.kind() === TK.rbrace) c.advance();
+
+  if (!parsed.args || parsed.args.length === 0) {
+    return { value: parsed.fmt };
+  }
+
+  return {
+    fmtString: parsed.fmt,
+    fmtArgs: parsed.args.join(', '),
+    value: buildEval('`' + raw.replace(/\\/g, '\\\\').replace(/`/g, '\\`') + '`', ctx),
+  };
 }
 
 _patterns[122] = { id: 122, match: match, compile: compile };

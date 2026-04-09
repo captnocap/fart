@@ -33,8 +33,36 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // Blocked on first-class SVG support; intentionally not compiled today.
-  return null;
+  var parts = [];
+  while (c.kind() !== TK.eof) {
+    if (c.kind() === TK.gt || c.kind() === TK.slash_gt) break;
+    parts.push(c.text());
+    if (c.kind() === TK.equals) {
+      c.advance();
+      if (c.kind() === TK.lbrace) {
+        var depth = 1;
+        parts.push(c.text());
+        c.advance();
+        while (c.kind() !== TK.eof && depth > 0) {
+          if (c.kind() === TK.lbrace) depth++;
+          if (c.kind() === TK.rbrace) depth--;
+          parts.push(c.text());
+          c.advance();
+        }
+        break;
+      }
+      if (c.kind() === TK.string || c.kind() === TK.identifier || c.kind() === TK.number) {
+        parts.push(c.text());
+        c.advance();
+      }
+      break;
+    }
+    c.advance();
+  }
+  return {
+    ignoredAttr: parts.join(''),
+    attrKind: 'namespaced_attribute',
+  };
 }
 
 _patterns[137] = { id: 137, match: match, compile: compile };

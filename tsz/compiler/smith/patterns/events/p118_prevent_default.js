@@ -70,30 +70,20 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // preventDefault() is a DOM concept with no native equivalent.
-  // In this framework there are no default behaviors to prevent:
-  //   - No form auto-submission
-  //   - No link auto-navigation
-  //   - No browser default actions
-  //
-  // This pattern is handled by the attribute handler dispatch in
-  // attrs_handlers.js. When the handler body contains e.preventDefault():
-  //
-  //   For TextInput onSubmit/onChange: parseTextInputHandlerAttr captures
-  //   the full body as JS. The preventDefault() call is harmless in the
-  //   QuickJS context — it calls a no-op on the event param.
-  //
-  //   For Pressable/Box onPress: the handler body is processed by
-  //   parseElementPressAttr → bindPressHandlerExpression. The
-  //   e.preventDefault() statement is either:
-  //     a) Skipped as an unrecognized expression during statement parsing
-  //     b) Passed through in the JS eval body where it's harmless
-  //
-  // The rest of the handler (the actual logic after preventDefault())
-  // compiles normally through the standard handler path.
-  //
-  // Cannot self-contain: requires element attribute context.
-  return null;
+  // React's preventDefault() concept is recognized, but native widgets here
+  // do not have browser default actions to cancel. We still compile the
+  // containing handler through the regular press-handler path so the real
+  // logic after the preventDefault() call is preserved.
+  var handlerRef = '_handler_press_' + ctx.handlerCount;
+  var result = bindPressHandlerExpression(c, handlerRef);
+  if (result === handlerRef) ctx.handlerCount++;
+  return {
+    handlerRef: result,
+    eventKind: 'prevent_default',
+    suppressesDefault: true,
+    nativePreventDefault: false,
+    inMap: !!ctx.currentMap,
+  };
 }
 
 _patterns[118] = { id: 118, match: match, compile: compile };

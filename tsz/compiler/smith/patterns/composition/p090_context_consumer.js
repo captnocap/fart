@@ -71,10 +71,36 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // useContext values are resolved during component inlining.
-  // By the time JSX parsing runs, the context value is already a
-  // render local that attribute/child resolution uses directly.
-  return null;
+  if (c.kind() !== TK.identifier || c.text() !== 'useContext') return null;
+  c.advance();
+  if (c.kind() !== TK.lparen) return null;
+
+  c.advance(); // (
+  var parts = [];
+  var depth = 1;
+  while (c.pos < c.count && depth > 0) {
+    if (c.kind() === TK.lparen) {
+      depth++;
+      parts.push(c.text());
+      c.advance();
+      continue;
+    }
+    if (c.kind() === TK.rparen) {
+      depth--;
+      if (depth === 0) break;
+      parts.push(c.text());
+      c.advance();
+      continue;
+    }
+    parts.push(c.text());
+    c.advance();
+  }
+  if (c.kind() === TK.rparen) c.advance();
+
+  return {
+    useContext: true,
+    contextExpr: parts.join(' ').trim(),
+  };
 }
 
 _patterns[90] = { id: 90, match: match, compile: compile };

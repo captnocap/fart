@@ -63,12 +63,23 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // Compilation via component inlining:
-  //   1. Prop value parsed as JSX → node expression
-  //   2. Component body inlined with prop substitution
-  //   3. {props.slotName} replaced with the compiled JSX node
-  //   4. Slot content becomes children in the flattened tree
-  return null;
+  if (c.kind() !== TK.lbrace) return null;
+
+  c.advance(); // {
+  if (c.kind() !== TK.lt) {
+    // Keep cursor consistent even for non-JSX brace payloads.
+    while (c.pos < c.count && c.kind() !== TK.rbrace && c.kind() !== TK.eof) c.advance();
+    if (c.kind() === TK.rbrace) c.advance();
+    return { slot: true, result: null };
+  }
+
+  var jsxResult = parseJSXElement(c);
+  if (c.kind() === TK.rbrace) c.advance();
+
+  return {
+    slot: true,
+    result: jsxResult,
+  };
 }
 
 _patterns[93] = { id: 93, match: match, compile: compile };

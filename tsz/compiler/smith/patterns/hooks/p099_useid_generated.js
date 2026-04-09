@@ -52,48 +52,66 @@
 function match(c, ctx) {
   // const X = useId()
   var saved = c.save();
-  if (c.kind() !== 6) { c.restore(saved); return false; }
+  if (c.kind() !== TK.identifier) { c.restore(saved); return false; }
   var kw = c.text();
   if (kw !== 'const' && kw !== 'let') { c.restore(saved); return false; }
   c.advance();
-  if (c.kind() !== 6) { c.restore(saved); return false; }
+  if (c.kind() !== TK.identifier) { c.restore(saved); return false; }
   c.advance(); // variable name
-  if (c.kind() !== 16 /* TK.equals */) { c.restore(saved); return false; }
+  if (c.kind() !== TK.equals) { c.restore(saved); return false; }
   c.advance();
-  var isUseId = c.kind() === 6 && c.text() === 'useId';
+  var isUseId = false;
+  if (c.kind() === TK.identifier && c.text() === 'useId') {
+    isUseId = true;
+  } else if (c.kind() === TK.identifier && c.text() === 'React') {
+    c.advance();
+    if (c.kind() === TK.dot) c.advance();
+    if (c.kind() === TK.identifier && c.text() === 'useId') isUseId = true;
+  }
   c.restore(saved);
   return isUseId;
 }
 
 function compile(c, ctx) {
-  // 1. Parse: const varName = useId()
-  c.advance(); // const/let
-  var varName = c.text();
-  c.advance(); // variable name
-  c.advance(); // =
-  c.advance(); // useId
-  c.advance(); // (
-  if (c.kind() === 9 /* TK.rparen */) c.advance(); // )
+  var saved = c.save();
+  var out = {
+    kind: 'hook_use_id',
+    varName: null,
+    generated: null,
+    source: null,
+  };
 
-  // 2. Generate a unique ID string for this compilation unit.
+  if (!(c.kind() === TK.identifier && (c.text() === 'const' || c.text() === 'let'))) {
+    c.restore(saved);
+    return null;
+  }
+  c.advance();
+  if (c.kind() !== TK.identifier) { c.restore(saved); return null; }
+  out.varName = c.text();
+  c.advance();
+  if (c.kind() !== TK.equals) { c.restore(saved); return null; }
+  c.advance();
+
+  if (c.kind() === TK.identifier && c.text() === 'React') {
+    out.source = 'React.useId';
+    c.advance();
+    if (c.kind() === TK.dot) c.advance();
+  }
+  if (!(c.kind() === TK.identifier && c.text() === 'useId')) { c.restore(saved); return null; }
+  if (!out.source) out.source = 'useId';
+  c.advance();
+  if (c.kind() !== TK.lparen) { c.restore(saved); return null; }
+  c.advance();
+  if (c.kind() === TK.rparen) c.advance();
+
   if (!ctx._useIdCounter) ctx._useIdCounter = 0;
-  var uid = '__uid_' + ctx._useIdCounter;
+  out.generated = '__uid_' + ctx._useIdCounter;
   ctx._useIdCounter++;
 
-  // 3. Register as a render local with the generated string.
-  //    Any reference to {varName} in JSX resolves to this string.
-  ctx.renderLocals[varName] = '"' + uid + '"';
+  if (!ctx.renderLocals) ctx.renderLocals = {};
+  ctx.renderLocals[out.varName] = '"' + out.generated + '"';
 
-  // 4. In text nodes: {id} → .{ .text = "__uid_0" }
-  //    Static text, no dynamic buffer needed.
-
-  // 5. As prop value: id={id} → attribute with string value "__uid_0"
-  //    Most id/htmlFor/aria props compile to string props on the node.
-
-  // 6. In template literals: {`label-${id}`} → bufPrint with the
-  //    render local, which resolves to the static string.
-
-  return null; // Declaration, not JSX — no node emitted.
+  return out;
 }
 
 _patterns[99] = { id: 99, match: match, compile: compile };

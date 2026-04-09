@@ -87,9 +87,10 @@ function compile(c, ctx) {
   //   - For _computedExpr OAs via render local, QuickJS handles .flat() at
   //     runtime, but OA field types must match the flattened structure
   //
-  // This pattern is documented for completeness. match() detects it so the
-  // compiler can produce a meaningful diagnostic rather than a cryptic failure.
-  return null;
+  // match() detects it so the compiler can produce a diagnostic.
+  return { type: 'unsupported', pattern: 'flat_map', id: 36,
+    message: '.flat().map() is not supported. Flatten data in a render local before .map().',
+    workaround: 'const flattened = items.flat(); then {flattened.map(item => <X/>)}' };
 }
 
 _patterns[36] = { id: 36, match: match, compile: compile };

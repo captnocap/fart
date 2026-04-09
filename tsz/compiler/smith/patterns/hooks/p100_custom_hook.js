@@ -97,46 +97,102 @@ function match(c, ctx) {
   // 'use' prefix (React convention) and resolves to a function in
   // the same file (or imported) that contains useState.
   var saved = c.save();
-  if (c.kind() !== 6) { c.restore(saved); return false; }
+  if (c.kind() !== TK.identifier) { c.restore(saved); return false; }
   var kw = c.text();
   if (kw !== 'const' && kw !== 'let') { c.restore(saved); return false; }
   c.advance();
   // Skip destructured pattern { ... } or [ ... ]
-  if (c.kind() !== 12 /* TK.lbrace */ && c.kind() !== 10 /* TK.lbracket */) {
+  if (c.kind() !== TK.lbrace && c.kind() !== TK.lbracket) {
     // Could also be: const result = useHook()
-    if (c.kind() === 6) c.advance();
+    if (c.kind() === TK.identifier) c.advance();
     else { c.restore(saved); return false; }
   } else {
     var depth = 1;
     c.advance();
     while (c.pos < c.count && depth > 0) {
-      if (c.kind() === 12 || c.kind() === 10) depth++;
-      if (c.kind() === 13 || c.kind() === 11) depth--;
+      if (c.kind() === TK.lbrace || c.kind() === TK.lbracket) depth++;
+      if (c.kind() === TK.rbrace || c.kind() === TK.rbracket) depth--;
       if (depth > 0) c.advance();
     }
     if (depth === 0) c.advance();
   }
-  if (c.kind() !== 16 /* TK.equals */) { c.restore(saved); return false; }
+  if (c.kind() !== TK.equals) { c.restore(saved); return false; }
   c.advance();
-  var isHook = c.kind() === 6 && c.text().startsWith('use') && c.text().length > 3;
+  var isHook = c.kind() === TK.identifier && c.text().startsWith('use') && c.text().length > 3;
   c.restore(saved);
   return isHook;
 }
 
 function compile(c, ctx) {
-  // Compilation: inline hook body at call site.
-  //   1. Resolve hook function by name
-  //   2. Enter hook body scope
-  //   3. Collect useState → state slots (collect/state.js)
-  //   4. Collect const bindings → render locals
-  //   5. Collect useMemo/useCallback → strip wrappers
-  //   6. Map return value fields to collected values
-  //   7. At call site, destructured names → render locals
-  //   8. State getters → slot accessors in Zig
-  //   9. State setters → handler body capture for events
-  //  10. useEffect bodies → <script>-equivalent init eval
-  //  11. Exit hook scope, merge into parent context
-  return null;
+  var saved = c.save();
+  var out = {
+    kind: 'hook_custom',
+    hookName: null,
+    bindingKind: null, // object | array | identifier
+    bindings: [],
+    argsRaw: '',
+  };
+
+  if (!(c.kind() === TK.identifier && (c.text() === 'const' || c.text() === 'let'))) {
+    c.restore(saved);
+    return null;
+  }
+  c.advance();
+
+  if (c.kind() === TK.lbrace) {
+    out.bindingKind = 'object';
+    c.advance();
+    while (c.pos < c.count && c.kind() !== TK.rbrace) {
+      if (c.kind() === TK.identifier) out.bindings.push(c.text());
+      c.advance();
+    }
+    if (c.kind() === TK.rbrace) c.advance();
+  } else if (c.kind() === TK.lbracket) {
+    out.bindingKind = 'array';
+    c.advance();
+    while (c.pos < c.count && c.kind() !== TK.rbracket) {
+      if (c.kind() === TK.identifier) out.bindings.push(c.text());
+      c.advance();
+    }
+    if (c.kind() === TK.rbracket) c.advance();
+  } else if (c.kind() === TK.identifier) {
+    out.bindingKind = 'identifier';
+    out.bindings.push(c.text());
+    c.advance();
+  } else {
+    c.restore(saved);
+    return null;
+  }
+
+  if (c.kind() !== TK.equals) { c.restore(saved); return null; }
+  c.advance();
+  if (!(c.kind() === TK.identifier && c.text().startsWith('use') && c.text().length > 3)) {
+    c.restore(saved);
+    return null;
+  }
+  out.hookName = c.text();
+  c.advance();
+  if (c.kind() !== TK.lparen) { c.restore(saved); return null; }
+  c.advance();
+
+  var args = [];
+  var depth = 1;
+  while (c.pos < c.count && depth > 0) {
+    if (c.kind() === TK.lparen || c.kind() === TK.lbracket || c.kind() === TK.lbrace) depth++;
+    if (c.kind() === TK.rparen || c.kind() === TK.rbracket || c.kind() === TK.rbrace) {
+      depth--;
+      if (depth === 0) break;
+    }
+    args.push(c.text());
+    c.advance();
+  }
+  if (c.kind() === TK.rparen) c.advance();
+  out.argsRaw = args.join(' ').trim();
+
+  if (!ctx._customHookCalls) ctx._customHookCalls = [];
+  ctx._customHookCalls.push(out);
+
+  return out;
 }
 
 _patterns[100] = { id: 100, match: match, compile: compile };

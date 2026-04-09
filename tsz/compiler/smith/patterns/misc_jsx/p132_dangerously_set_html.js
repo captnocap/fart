@@ -32,8 +32,23 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // Intentionally not compiled in this runtime model.
-  return null;
+  var parts = [];
+  var depth = 0;
+  while (c.kind() !== TK.eof) {
+    if (c.kind() === TK.lbrace) depth++;
+    if (c.kind() === TK.rbrace) {
+      if (depth === 0) break;
+      depth--;
+    }
+    parts.push(c.text());
+    c.advance();
+  }
+  if (c.kind() === TK.rbrace) c.advance();
+  return {
+    unsupported: 'dangerouslySetInnerHTML',
+    reason: 'raw_html_not_supported',
+    value: parts.join(''),
+  };
 }
 
 _patterns[132] = { id: 132, match: match, compile: compile };

@@ -75,8 +75,74 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // Not applicable — no ref concept in our compilation model.
-  return null;
+  var saved = c.save();
+  var receiver = null;
+  if (c.kind() === TK.identifier && c.text() === 'React') {
+    receiver = 'React';
+    c.advance();
+    if (c.kind() !== TK.dot) { c.restore(saved); return null; }
+    c.advance();
+  }
+
+  if (c.kind() !== TK.identifier || c.text() !== 'forwardRef') {
+    c.restore(saved);
+    return null;
+  }
+  c.advance();
+  if (c.kind() !== TK.lparen) {
+    c.restore(saved);
+    return null;
+  }
+
+  c.advance(); // forwardRef(
+
+  var propsParam = null;
+  var refParam = null;
+
+  if (c.kind() === TK.lparen) {
+    c.advance();
+    if (c.kind() === TK.identifier) {
+      propsParam = c.text();
+      c.advance();
+    }
+    if (c.kind() === TK.comma) {
+      c.advance();
+      if (c.kind() === TK.identifier) {
+        refParam = c.text();
+        c.advance();
+      }
+    }
+  } else if (c.kind() === TK.identifier && c.text() === 'function') {
+    c.advance();
+    if (c.kind() === TK.lparen) {
+      c.advance();
+      if (c.kind() === TK.identifier) {
+        propsParam = c.text();
+        c.advance();
+      }
+      if (c.kind() === TK.comma) {
+        c.advance();
+        if (c.kind() === TK.identifier) {
+          refParam = c.text();
+          c.advance();
+        }
+      }
+    }
+  }
+
+  var depth = 1;
+  while (c.pos < c.count && depth > 0) {
+    if (c.kind() === TK.lparen) depth++;
+    else if (c.kind() === TK.rparen) depth--;
+    c.advance();
+  }
+
+  return {
+    forwardRef: true,
+    receiver: receiver,
+    propsParam: propsParam,
+    refParam: refParam,
+  };
 }
 
 _patterns[88] = { id: 88, match: match, compile: compile };

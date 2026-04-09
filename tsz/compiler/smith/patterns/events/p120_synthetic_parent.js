@@ -68,26 +68,66 @@ function match(c, ctx) {
     c.restore(saved);
     return true;
   }
-  // Case B: () => props.onSelect(item) — arrow with props access in body
-  // This is detected during compile, not match. Falls through to p115.
+  // Case B: () => props.onSelect(item) or () => onPress()
+  // Treat handler-prop invocation as part of the forwarding/wrapping family
+  // instead of forcing it to fall through to the generic inline-arrow case.
+  if (c.kind() === TK.lparen) {
+    var depth = 1;
+    c.advance();
+    while (depth > 0 && c.kind() !== TK.eof) {
+      if (c.kind() === TK.lparen) depth++;
+      if (c.kind() === TK.rparen) depth--;
+      if (depth > 0) c.advance();
+    }
+    if (c.kind() === TK.rparen) c.advance();
+    if (c.kind() === TK.arrow) {
+      c.advance();
+      if (c.kind() === TK.lbrace) c.advance();
+      while (c.kind() !== TK.rbrace && c.kind() !== TK.eof) {
+        if (peekPropsAccess(c)) {
+          c.restore(saved);
+          return true;
+        }
+        if (
+          c.kind() === TK.identifier &&
+          ctx.propStack &&
+          typeof ctx.propStack[c.text()] === 'string' &&
+          ctx.propStack[c.text()].indexOf('_handler_press_') === 0
+        ) {
+          c.restore(saved);
+          return true;
+        }
+        c.advance();
+      }
+    }
+  }
   c.restore(saved);
   return false;
 }
 
-function compile(c, children, ctx) {
+function compile(c, ctx) {
   // tryConsumeForwardedPressHandler checks for direct handler ref forwarding.
   // If found, returns the parent's handler ref directly (no new handler).
   // Otherwise falls through to bindPressHandlerExpression (p115 path).
   if (c.kind() === TK.lbrace) c.advance();
   var forwarded = tryConsumeForwardedPressHandler(c);
   if (forwarded) {
-    return { handlerRef: forwarded };
+    return {
+      handlerRef: forwarded,
+      eventKind: 'synthetic_parent',
+      forwarded: true,
+    };
   }
   // Not a direct forward — delegate to inline arrow handler path
   var handlerRef = '_handler_press_' + ctx.handlerCount;
   var result = bindPressHandlerExpression(c, handlerRef);
   if (result === handlerRef) ctx.handlerCount++;
-  return { handlerRef: result };
+  return {
+    handlerRef: result,
+    eventKind: 'synthetic_parent',
+    forwarded: false,
+    inMap: !!ctx.currentMap,
+  };
 }
 
 _patterns[120] = { id: 120, match: match, compile: compile };

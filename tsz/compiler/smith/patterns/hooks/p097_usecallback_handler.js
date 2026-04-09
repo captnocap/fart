@@ -72,33 +72,87 @@
 //     - The dependency array is irrelevant in our model
 
 function match(c, ctx) {
-  // const X = useCallback(() => { ... }, [deps])
-  // Detected during render local collection.
+  // const X = useCallback(...) / React.useCallback(...)
   var saved = c.save();
-  if (c.kind() !== 6) { c.restore(saved); return false; }
+  if (c.kind() !== TK.identifier) { c.restore(saved); return false; }
   var kw = c.text();
   if (kw !== 'const' && kw !== 'let') { c.restore(saved); return false; }
   c.advance();
-  if (c.kind() !== 6) { c.restore(saved); return false; }
+  if (c.kind() !== TK.identifier) { c.restore(saved); return false; }
   c.advance();
-  if (c.kind() !== 16 /* TK.equals */) { c.restore(saved); return false; }
+  if (c.kind() !== TK.equals) { c.restore(saved); return false; }
   c.advance();
-  var isCb = c.text() === 'useCallback';
+  var isCb = false;
+  if (c.kind() === TK.identifier && c.text() === 'useCallback') {
+    isCb = true;
+  } else if (c.kind() === TK.identifier && c.text() === 'React') {
+    c.advance();
+    if (c.kind() === TK.dot) c.advance();
+    if (c.kind() === TK.identifier && c.text() === 'useCallback') isCb = true;
+  }
   c.restore(saved);
   return isCb;
 }
 
 function compile(c, ctx) {
-  // Compilation: strip wrapper, register inner function as render local.
-  //   1. Detect useCallback in const X = useCallback(...)
-  //   2. Skip useCallback( token
-  //   3. Extract inner function: () => { body } or (args) => { body }
-  //   4. Skip , [deps]) — discard dependency array
-  //   5. Register X = function expression as render local
-  //   6. onPress={X} resolves through render locals → handler body
-  //   7. Handler body compiled via normal handler pipeline
-  //   8. Produces identical output to onPress={() => { body }}
-  return null;
+  var saved = c.save();
+  var out = {
+    kind: 'hook_use_callback',
+    target: null,
+    callbackExprRaw: '',
+    depsRaw: '',
+    source: null,
+  };
+
+  if (!(c.kind() === TK.identifier && (c.text() === 'const' || c.text() === 'let'))) {
+    c.restore(saved);
+    return null;
+  }
+  c.advance();
+  if (c.kind() !== TK.identifier) { c.restore(saved); return null; }
+  out.target = c.text();
+  c.advance();
+  if (c.kind() !== TK.equals) { c.restore(saved); return null; }
+  c.advance();
+
+  if (c.kind() === TK.identifier && c.text() === 'React') {
+    out.source = 'React.useCallback';
+    c.advance();
+    if (c.kind() === TK.dot) c.advance();
+  }
+  if (!(c.kind() === TK.identifier && c.text() === 'useCallback')) { c.restore(saved); return null; }
+  if (!out.source) out.source = 'useCallback';
+  c.advance();
+  if (c.kind() !== TK.lparen) { c.restore(saved); return null; }
+  c.advance();
+
+  var cbParts = [];
+  var depth = 1;
+  while (c.pos < c.count && depth > 0) {
+    if (c.kind() === TK.comma && depth === 1) break;
+    if (c.kind() === TK.lparen || c.kind() === TK.lbracket || c.kind() === TK.lbrace) depth++;
+    if (c.kind() === TK.rparen || c.kind() === TK.rbracket || c.kind() === TK.rbrace) depth--;
+    cbParts.push(c.text());
+    c.advance();
+  }
+  out.callbackExprRaw = cbParts.join(' ').trim();
+
+  if (c.kind() === TK.comma) c.advance();
+  var depsParts = [];
+  depth = 1;
+  while (c.pos < c.count && depth > 0) {
+    if (c.kind() === TK.lparen || c.kind() === TK.lbracket || c.kind() === TK.lbrace) depth++;
+    if (c.kind() === TK.rparen || c.kind() === TK.rbracket || c.kind() === TK.rbrace) {
+      depth--;
+      if (depth === 0) break;
+    }
+    depsParts.push(c.text());
+    c.advance();
+  }
+  if (c.kind() === TK.rparen) c.advance();
+  out.depsRaw = depsParts.join(' ').trim();
+
+  return out;
 }
 
 _patterns[97] = { id: 97, match: match, compile: compile };

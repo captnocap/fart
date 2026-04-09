@@ -53,27 +53,70 @@
 //   Our block syntax (<if>/<else>) is strictly superior.
 
 function match(c, ctx) {
-  // Detect (() => { ... })() or (function() { ... })() — IIFE in brace position
   if (c.kind() !== TK.lparen) return false;
-  var saved = c.save();
-  c.advance(); // skip opening (
-  // Arrow IIFE: ((...) => { ... })()
-  if (c.kind() === TK.lparen) {
-    c.restore(saved);
-    return true;
+
+  var start = c.pos;
+  var depth = 0;
+  var end = -1;
+  for (var i = start; i < c.count; i++) {
+    var kind = c.kindAt(i);
+    if (kind === TK.lparen) depth++;
+    if (kind === TK.rparen) {
+      depth--;
+      if (depth === 0) { end = i; break; }
+    }
   }
-  // Function IIFE: (function(...) { ... })()
-  if (c.kind() === TK.identifier && c.text() === 'function') {
-    c.restore(saved);
-    return true;
+
+  if (end < 0) return false;
+  if (end + 2 >= c.count) return false;
+  if (c.kindAt(end + 1) !== TK.lparen || c.kindAt(end + 2) !== TK.rparen) return false;
+
+  var hasArrow = false;
+  var hasFunction = false;
+  for (var j = start + 1; j < end; j++) {
+    if (c.kindAt(j) === TK.arrow) hasArrow = true;
+    if (c.kindAt(j) === TK.identifier && c.textAt(j) === 'function') hasFunction = true;
+    if (hasArrow || hasFunction) break;
   }
-  c.restore(saved);
-  return false;
+
+  return hasArrow || hasFunction;
 }
 
 function compile(c, ctx) {
-  // Not applicable — refactored to <if>/<else> blocks at the source level.
-  return null;
+  var start = c.save();
+  if (c.kind() !== TK.lparen) return null;
+
+  var openDepth = 0;
+  var end = -1;
+  for (var i = start; i < c.count; i++) {
+    var kind = c.kindAt(i);
+    if (kind === TK.lparen) openDepth++;
+    if (kind === TK.rparen) {
+      openDepth--;
+      if (openDepth === 0) { end = i; break; }
+    }
+  }
+  if (end < 0) return null;
+
+  var parsedNode = null;
+  for (var j = start + 1; j < end; j++) {
+    if (c.kindAt(j) === TK.identifier && c.textAt(j) === 'return') {
+      var k = j + 1;
+      while (k < end && c.kindAt(k) === TK.lparen) k++;
+      if (k < end && c.kindAt(k) === TK.lt) {
+        c.restore(k);
+        parsedNode = parseJSXElement(c);
+      }
+      break;
+    }
+  }
+
+  var after = end + 1;
+  if (after + 1 < c.count && c.kindAt(after) === TK.lparen && c.kindAt(after + 1) === TK.rparen) after += 2;
+  c.restore(after);
+
+  if (parsedNode) return parsedNode;
+  return { iife: true, children: [] };
 }
 
 _patterns[85] = { id: 85, match: match, compile: compile };

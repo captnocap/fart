@@ -79,8 +79,11 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // Owned by parseChildren() + buildNode().
-  return null;
+  // Delegate to the standard JSX element parser.
+  // parseJSXElement handles the full <Tag attrs>child</Tag> flow,
+  // including parseChildren() which produces the single child,
+  // and buildNode() which assembles it with .children = &_arr_N.
+  return parseJSXElement(c);
 }
 
 _patterns[66] = { id: 66, match: match, compile: compile };

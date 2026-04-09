@@ -46,10 +46,27 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // Not applicable. TypeScript non-null assertions are erased during
-  // TS compilation and have no runtime equivalent. .tsz code should
-  // use explicit null checks or optional chaining instead.
-  return null;
+  var parts = [];
+  while (c.kind() !== TK.eof && c.kind() !== TK.rbrace) {
+    if (c.kind() === TK.bang &&
+        c.pos > 0 &&
+        c.pos + 1 < c.count &&
+        (c.kindAt(c.pos + 1) === TK.dot || c.kindAt(c.pos + 1) === TK.rbrace ||
+         c.kindAt(c.pos + 1) === TK.comma || c.kindAt(c.pos + 1) === TK.rparen ||
+         c.kindAt(c.pos + 1) === TK.colon || c.kindAt(c.pos + 1) === TK.question)) {
+      c.advance();
+      continue;
+    }
+    parts.push(c.text());
+    c.advance();
+  }
+  if (c.kind() === TK.rbrace) c.advance();
+
+  var expr = parts.join('');
+  if (expr.indexOf('.') >= 0 || expr.indexOf('[') >= 0) {
+    return { value: expr };
+  }
+  return { value: buildEval(expr, ctx) };
 }
 
 _patterns[129] = { id: 129, match: match, compile: compile };

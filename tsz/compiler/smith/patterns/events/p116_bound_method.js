@@ -53,9 +53,9 @@ function match(c, ctx) {
   return false;
 }
 
-function compile(c, children, ctx) {
-  // Delegates to parseElementPressAttr which detects bare identifier,
-  // calls pushBarePressHandler, and returns the handler ref.
+function compile(c, ctx) {
+  // Bare handler refs compile to the same named press-handler shape used
+  // by the live element-attribute parser.
   if (c.kind() === TK.lbrace) c.advance();
   var fname = c.text();
   c.advance();
@@ -63,7 +63,12 @@ function compile(c, children, ctx) {
   pushBarePressHandler(handlerRef, fname);
   ctx.handlerCount++;
   if (c.kind() === TK.rbrace) c.advance();
-  return { handlerRef: handlerRef };
+  return {
+    handlerRef: handlerRef,
+    eventKind: 'bound_method',
+    callee: fname,
+    inMap: !!ctx.currentMap,
+  };
 }
 
 _patterns[116] = { id: 116, match: match, compile: compile };

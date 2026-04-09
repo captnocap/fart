@@ -66,7 +66,77 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  return null;
+  var saved = c.save();
+  if (c.kind() !== TK.lt) { c.restore(saved); return null; }
+  c.advance();
+
+  var fragKind = null;
+  if (c.kind() === TK.identifier && c.text() === 'React') {
+    c.advance();
+    if (c.kind() !== TK.dot) { c.restore(saved); return null; }
+    c.advance();
+    if (!(c.kind() === TK.identifier && c.text() === 'Fragment')) { c.restore(saved); return null; }
+    c.advance();
+    fragKind = 'React.Fragment';
+  } else if (c.kind() === TK.identifier && c.text() === 'Fragment') {
+    c.advance();
+    fragKind = 'Fragment';
+  } else {
+    c.restore(saved);
+    return null;
+  }
+
+  var keyRaw = '';
+  var keyKind = 'missing';
+  while (c.pos < c.count) {
+    if (c.kind() === TK.gt || c.kind() === TK.slash_gt || c.kind() === TK.eof) break;
+    if (c.kind() === TK.identifier && c.text() === 'key' && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.equals) {
+      c.advance(); // key
+      c.advance(); // =
+      if (c.kind() === TK.string) {
+        keyKind = 'string';
+        keyRaw = c.text().slice(1, -1);
+        c.advance();
+      } else if (c.kind() === TK.lbrace) {
+        keyKind = 'expr';
+        c.advance();
+        var parts = [];
+        var depth = 1;
+        while (c.pos < c.count && depth > 0) {
+          if (c.kind() === TK.lbrace || c.kind() === TK.lparen || c.kind() === TK.lbracket) depth++;
+          if (c.kind() === TK.rbrace || c.kind() === TK.rparen || c.kind() === TK.rbracket) {
+            depth--;
+            if (depth === 0) break;
+          }
+          parts.push(c.text());
+          c.advance();
+        }
+        if (c.kind() === TK.rbrace) c.advance();
+        keyRaw = parts.join(' ').trim();
+      } else if (c.kind() === TK.identifier || c.kind() === TK.number) {
+        keyKind = 'bare';
+        keyRaw = c.text();
+        c.advance();
+      }
+      continue;
+    }
+    c.advance();
+  }
+  if (c.kind() === TK.gt || c.kind() === TK.slash_gt) c.advance();
+
+  var out = {
+    kind: 'key_fragment',
+    fragment: fragKind,
+    keyKind: keyKind,
+    keyRaw: keyRaw,
+    dropped: true,
+    mapScope: !!ctx.currentMap,
+    mapItemParam: ctx.currentMap ? (ctx.currentMap.itemParam || '_item') : null,
+    mapIndexParam: ctx.currentMap ? (ctx.currentMap.indexParam || '_i') : null,
+  };
+  if (!ctx._keyHints) ctx._keyHints = [];
+  ctx._keyHints.push(out);
+  return out;
 }
 
 _patterns[102] = { id: 102, match: match, compile: compile };

@@ -86,23 +86,11 @@ function match(c, ctx) {
   return false;
 }
 
-function compile(c, children, ctx) {
-  // Delegates to the map parsing infrastructure in brace.js which:
-  // 1. Identifies getter name → resolves to state slot or OA
-  // 2. Parses .map( callback ) — extracts item param and optional index param
-  // 3. Scans callback body to infer field shapes (item.x usages)
-  // 4. Creates OA entry in ctx.objectArrays with field definitions
-  // 5. Sets ctx.currentMap for nested parsing context
-  // 6. Parses callback body JSX (single element for this pattern)
-  // 7. Registers map in ctx.maps with all metadata
-  // 8. Restores ctx.currentMap
-  // 9. Pushes map wrapper node to children
-  // The emit phase (map_pools.js) then generates:
-  //   - OA pool declarations (typed arrays per field)
-  //   - Map pool array for rendered nodes
-  //   - Rebuild function with for loop
-  //   - Per-item dynamic text buffers
-  return null; // Handled by brace.js map dispatcher
+function compile(c, children) {
+  // Delegate to _tryParseIdentifierMapExpression which handles:
+  //   identifier.map((item) => <Element>...</Element>)
+  // This covers the basic .map() → single element pattern.
+  return _tryParseIdentifierMapExpression(c, children, false);
 }
 
 _patterns[19] = { id: 19, match: match, compile: compile };

@@ -65,25 +65,29 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // Event parameter handlers are attribute-context patterns, not child-context.
-  // They are dispatched by tryParseElementHandlerAttr() in attrs_handlers.js
-  // during element attribute parsing.
-  //
-  // For TextInput onChange/onSubmit: parseTextInputHandlerAttr captures the
-  // full arrow function body as JS and stores it in _inputChangeHandlers or
-  // _inputSubmitHandlers. The event param (e) is available in the JS context,
-  // with e.target.value rewritten to getInputText(N) by the soup lane.
-  //
-  // For Pressable/Box onPress: parseElementPressAttr captures the handler
-  // body. The event param is parsed but not forwarded — native handlers
-  // don't construct DOM-style event objects.
-  //
-  // This pattern's compile() cannot self-contain because handler registration
-  // requires element context (tag name, handler index, input ID). The actual
-  // work happens in attrs_handlers.js dispatch during parseJSXElement.
-  //
-  // Returning null signals that the caller's attribute parsing path handles it.
-  return null;
+  // React exposes a SyntheticEvent parameter. Our native handler path does
+  // not synthesize a browser event object, but the inline handler still
+  // compiles through the normal press-handler registration path and retains
+  // the closure parameter names in luaParseHandler().
+  var saved = c.save();
+  var eventParam = null;
+  if (c.kind() === TK.lbrace) c.advance();
+  if (c.kind() === TK.lparen) {
+    c.advance();
+    if (c.kind() === TK.identifier) eventParam = c.text();
+  }
+  c.restore(saved);
+
+  var handlerRef = '_handler_press_' + ctx.handlerCount;
+  var result = bindPressHandlerExpression(c, handlerRef);
+  if (result === handlerRef) ctx.handlerCount++;
+  return {
+    handlerRef: result,
+    eventKind: 'event_param',
+    eventParam: eventParam,
+    forwardsSyntheticEvent: false,
+    inMap: !!ctx.currentMap,
+  };
 }
 
 _patterns[117] = { id: 117, match: match, compile: compile };

@@ -69,17 +69,11 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // Compilation is handled by the existing map pipeline:
-  //   1. _identifierStartsMapCall (brace.js) skips .sort() to find .map()
-  //   2. tryParseMapHeader (header.js:40-75) skips .sort() body entirely
-  //   3. The sort comparator is discarded at parse time
-  //   4. For _computedExpr OAs, the JS expression includes .sort() so
-  //      QuickJS evaluates it at runtime — data arrives pre-sorted
-  //   5. For static/prop-driven OAs, sort order is whatever the host provides
-  //   6. The .map() body is parsed normally after the chain is consumed
-  //
-  // No compile action needed — the map pipeline owns this end-to-end.
-  return null;
+  var baseName = c.text();
+  var children = [];
+  var ok = _tryParseComputedChainMap(c, children, baseName, null, true);
+  if (!ok) return null;
+  return { type: 'children', entries: children };
 }
 
 _patterns[31] = { id: 31, match: match, compile: compile };

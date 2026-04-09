@@ -78,8 +78,32 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // Not applicable — refactored to wrapper + conditional at source level.
-  return null;
+  var saved = c.save();
+  if (c.kind() !== TK.identifier) return null;
+
+  var enhancer = c.text();
+  c.advance();
+  if (c.kind() !== TK.lparen) {
+    c.restore(saved);
+    return null;
+  }
+
+  c.advance(); // (
+  var wrapped = null;
+  if (c.kind() === TK.identifier) wrapped = c.text();
+
+  var depth = 1;
+  while (c.pos < c.count && depth > 0) {
+    if (c.kind() === TK.lparen) depth++;
+    else if (c.kind() === TK.rparen) depth--;
+    c.advance();
+  }
+
+  return {
+    hoc: true,
+    enhancer: enhancer,
+    wrapped: wrapped,
+  };
 }
 
 _patterns[87] = { id: 87, match: match, compile: compile };

@@ -52,15 +52,41 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // Implemented inline in brace.js:594-621.
-  // The consumer reads TK.template_literal, calls parseTemplateLiteral(),
-  // and emits either a static text node (no interpolations) or a dynText
-  // entry (with interpolations). Map-context templates get special mapDynText
-  // treatment with __mtN__ placeholders.
-  //
-  // This compile function is not called directly — the consumer handles
-  // template literals before reaching pattern dispatch.
-  return null;
+  var raw = c.text().slice(1, -1);
+  var parsed = parseTemplateLiteral(raw);
+  c.advance();
+  if (c.kind() === TK.rbrace) c.advance();
+
+  if (!parsed.args || parsed.args.length === 0) {
+    return {
+      nodeExpr: '.{ .text = "' + parsed.fmt.replace(/"/g, '\\"') + '" }',
+      luaNode: { text: parsed.fmt },
+    };
+  }
+
+  var bufId = ctx.dynCount;
+  var isMap = !!ctx.currentMap;
+  ctx.dynTexts.push({
+    bufId: bufId,
+    fmtString: parsed.fmt,
+    fmtArgs: parsed.args.join(', '),
+    arrName: '',
+    arrIndex: 0,
+    bufSize: 256,
+    inMap: isMap,
+    mapIdx: isMap && typeof ctx.currentMap.mapIdx === 'number' ? ctx.currentMap.mapIdx : -1,
+  });
+  ctx.dynCount++;
+
+  if (isMap) {
+    return {
+      nodeExpr: '.{ .text = "__mt' + bufId + '__" }',
+      dynBufId: bufId,
+      inMap: true,
+    };
+  }
+
+  return { nodeExpr: '.{ .text = "" }', dynBufId: bufId };
 }
 
 _patterns[121] = { id: 121, match: match, compile: compile };

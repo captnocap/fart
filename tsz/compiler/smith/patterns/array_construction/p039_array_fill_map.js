@@ -105,10 +105,10 @@ function compile(c, ctx) {
   //   This goes through _tryParseComputedChainMap with the full expression
   //   as _computedExpr, letting QuickJS handle Array(n).fill() at runtime.
   //
-  // True compile-time support would extract N from Array(N), skip .fill(),
-  // and emit a simple for(0..N) loop. If N is a state variable, emit
-  // for(0..@intCast(state.getSlot(X))) with a pool size cap.
-  return null;
+  // match() detects it so the compiler can produce a diagnostic.
+  return { type: 'unsupported', pattern: 'array_fill_map', id: 39,
+    message: 'Array(n).fill().map() is not supported inline. Assign to a render local first.',
+    workaround: 'const stars = Array(5).fill(0); then {stars.map((_, i) => <Star/>)}' };
 }
 
 _patterns[39] = { id: 39, match: match, compile: compile };

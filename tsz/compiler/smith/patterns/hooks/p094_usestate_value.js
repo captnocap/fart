@@ -53,43 +53,98 @@
 //   See: virtually every conformance test uses useState.
 
 function match(c, ctx) {
-  // Detect: const/let [getter, setter] = useState(
-  if (c.kind() !== TK.identifier) return false;
-  var kw = c.text();
-  if (kw !== 'const' && kw !== 'let') return false;
+  // Detect: const/let [getter, setter] = useState(...) / React.useState(...)
   var saved = c.save();
-  c.advance(); // skip const/let
+  if (c.kind() !== TK.identifier) { c.restore(saved); return false; }
+  var kw = c.text();
+  if (kw !== 'const' && kw !== 'let') { c.restore(saved); return false; }
+  c.advance();
   if (c.kind() !== TK.lbracket) { c.restore(saved); return false; }
-  c.advance(); // skip [
+  c.advance();
   if (c.kind() !== TK.identifier) { c.restore(saved); return false; }
-  c.advance(); // skip getter
+  c.advance();
   if (c.kind() !== TK.comma) { c.restore(saved); return false; }
-  c.advance(); // skip ,
+  c.advance();
   if (c.kind() !== TK.identifier) { c.restore(saved); return false; }
-  c.advance(); // skip setter
+  c.advance();
   if (c.kind() !== TK.rbracket) { c.restore(saved); return false; }
-  c.advance(); // skip ]
+  c.advance();
   if (c.kind() !== TK.equals) { c.restore(saved); return false; }
-  c.advance(); // skip =
-  var isUseState = (c.kind() === TK.identifier && c.text() === 'useState');
+  c.advance();
+
+  var isUseState = false;
+  if (c.kind() === TK.identifier && c.text() === 'useState') {
+    isUseState = true;
+  } else if (c.kind() === TK.identifier && c.text() === 'React') {
+    c.advance();
+    if (c.kind() === TK.dot) c.advance();
+    if (c.kind() === TK.identifier && c.text() === 'useState') isUseState = true;
+  }
+
   if (!isUseState) { c.restore(saved); return false; }
-  c.advance(); // skip useState
+  if (c.kind() === TK.identifier) c.advance();
   if (c.kind() !== TK.lparen) { c.restore(saved); return false; }
   c.restore(saved);
   return true;
 }
 
 function compile(c, ctx) {
-  // Compilation:
-  //   1. Collection pass creates the slot (collect/state.js)
-  //   2. In JSX, findSlot(getter) returns slot index
-  //   3. Brace parser emits dynamic text:
-  //      - Allocates _dyn_buf_N
-  //      - Creates dynText entry with fmt/args
-  //      - Node gets .text = buf slice
-  //   4. Rebuild pass calls bufPrint with slot accessor
-  //   5. Event handlers use state.setSlot(N, value)
-  return null;
+  // Parse declaration and return a concrete hook descriptor.
+  var saved = c.save();
+  var out = {
+    kind: 'hook_use_state',
+    getter: null,
+    setter: null,
+    initialRaw: '0',
+    source: null,
+  };
+
+  if (!(c.kind() === TK.identifier && (c.text() === 'const' || c.text() === 'let'))) {
+    c.restore(saved);
+    return null;
+  }
+  c.advance();
+  if (c.kind() !== TK.lbracket) { c.restore(saved); return null; }
+  c.advance();
+  if (c.kind() !== TK.identifier) { c.restore(saved); return null; }
+  out.getter = c.text();
+  c.advance();
+  if (c.kind() !== TK.comma) { c.restore(saved); return null; }
+  c.advance();
+  if (c.kind() !== TK.identifier) { c.restore(saved); return null; }
+  out.setter = c.text();
+  c.advance();
+  if (c.kind() !== TK.rbracket) { c.restore(saved); return null; }
+  c.advance();
+  if (c.kind() !== TK.equals) { c.restore(saved); return null; }
+  c.advance();
+
+  if (c.kind() === TK.identifier && c.text() === 'React') {
+    out.source = 'React.useState';
+    c.advance();
+    if (c.kind() === TK.dot) c.advance();
+  }
+  if (!(c.kind() === TK.identifier && c.text() === 'useState')) { c.restore(saved); return null; }
+  if (!out.source) out.source = 'useState';
+  c.advance();
+  if (c.kind() !== TK.lparen) { c.restore(saved); return null; }
+  c.advance();
+
+  var parts = [];
+  var depth = 1;
+  while (c.pos < c.count && depth > 0) {
+    if (c.kind() === TK.lparen || c.kind() === TK.lbracket || c.kind() === TK.lbrace) depth++;
+    if (c.kind() === TK.rparen || c.kind() === TK.rbracket || c.kind() === TK.rbrace) {
+      depth--;
+      if (depth === 0) break;
+    }
+    parts.push(c.text());
+    c.advance();
+  }
+  if (c.kind() === TK.rparen) c.advance();
+  out.initialRaw = parts.join(' ').trim() || '0';
+
+  return out;
 }
 
 _patterns[94] = { id: 94, match: match, compile: compile };

@@ -85,16 +85,15 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // Not yet implemented as a unified pattern. Currently handled as:
-  // - slice().map() → p034 path (slice body skipped, QuickJS eval)
-  // - {limit < items.length && <Button>} → p016 && short-circuit
-  // - onPress={() => setLimit(...)} → p115 inline arrow handler
-  //
-  // A unified implementation would:
-  // 1. Detect slice(0, stateGetter) in header parsing
-  // 2. Emit _i < state.getSlot(N) display condition on pool items
-  // 3. Emit button visibility tied to same slot vs OA length
-  return null;
+  // Composite pattern — decompose into existing primitives:
+  // slice().map() goes through p034 (computed chain),
+  // the "show more" button is a separate && conditional (p016).
+  // Delegate the slice.map part to the computed chain pipeline.
+  var baseName = c.text();
+  var children = [];
+  var ok = _tryParseComputedChainMap(c, children, baseName, null, true);
+  if (!ok) return null;
+  return { type: 'children', entries: children };
 }
 
 _patterns[35] = { id: 35, match: match, compile: compile };

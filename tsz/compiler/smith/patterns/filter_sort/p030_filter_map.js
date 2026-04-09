@@ -89,15 +89,14 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  // Compilation is handled by the standard map pipeline:
-  //   1. tryParseMapHeader encounters .filter() before .map()
-  //   2. Parses filter callback, captures condition in filterConditions[]
-  //   3. Continues to parse .map() header normally
-  //   4. filterConditions stored on mapInfo
-  //   5. Emit pass generates if() guard inside for loop
-  //   6. _map_count only incremented when filter passes
-  //   7. Nodes beyond count get .display = .none
-  return null;
+  // Delegate to the existing computed-chain map pipeline in brace_maps.js.
+  // _tryParseComputedChainMap handles: scan for .map(), parse header,
+  // create synthetic OA, route to Lua rebuilder, register wrapper node.
+  var baseName = c.text();
+  var children = [];
+  var ok = _tryParseComputedChainMap(c, children, baseName, null, true);
+  if (!ok) return null;
+  return { type: 'children', entries: children };
 }
 
 _patterns[30] = { id: 30, match: match, compile: compile };

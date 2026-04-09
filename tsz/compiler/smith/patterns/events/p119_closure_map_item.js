@@ -76,14 +76,19 @@ function match(c, ctx) {
   return false;
 }
 
-function compile(c, children, ctx) {
-  // Same path as p115 (inline arrow) but ctx.currentMap is active.
-  // pushInlinePressHandler automatically tags the handler with
-  // inMap: true and mapIdx, enabling the map-aware emit path.
+function compile(c, ctx) {
+  // Map-item closures compile through the same live handler path as p115,
+  // but with ctx.currentMap populated so the generated handler records its
+  // map index and captured OA field references.
   var handlerRef = '_handler_press_' + ctx.handlerCount;
   var result = bindPressHandlerExpression(c, handlerRef);
   if (result === handlerRef) ctx.handlerCount++;
-  return { handlerRef: result };
+  return {
+    handlerRef: result,
+    eventKind: 'closure_map_item',
+    inMap: true,
+    mapIdx: ctx.currentMap ? ctx.maps.indexOf(ctx.currentMap) : -1,
+  };
 }
 
 _patterns[119] = { id: 119, match: match, compile: compile };

@@ -62,62 +62,77 @@ function match(c, ctx) {
   // const X = useRef(initialValue)
   // Note: useRef uses const X = pattern, NOT [getter, setter] =
   var saved = c.save();
-  if (c.kind() !== 6) { c.restore(saved); return false; }
+  if (c.kind() !== TK.identifier) { c.restore(saved); return false; }
   var kw = c.text();
   if (kw !== 'const' && kw !== 'let') { c.restore(saved); return false; }
   c.advance();
-  if (c.kind() !== 6) { c.restore(saved); return false; }
-  var varName = c.text();
+  if (c.kind() !== TK.identifier) { c.restore(saved); return false; }
   c.advance();
-  if (c.kind() !== 16 /* TK.equals */) { c.restore(saved); return false; }
+  if (c.kind() !== TK.equals) { c.restore(saved); return false; }
   c.advance();
-  var isRef = c.kind() === 6 && c.text() === 'useRef';
+  var isRef = false;
+  if (c.kind() === TK.identifier && c.text() === 'useRef') {
+    isRef = true;
+  } else if (c.kind() === TK.identifier && c.text() === 'React') {
+    c.advance();
+    if (c.kind() === TK.dot) c.advance();
+    if (c.kind() === TK.identifier && c.text() === 'useRef') isRef = true;
+  }
   c.restore(saved);
   return isRef;
 }
 
 function compile(c, ctx) {
-  // 1. Parse: const refName = useRef(initialValue)
-  c.advance(); // const/let
-  var refName = c.text();
-  c.advance(); // variable name
-  c.advance(); // =
-  c.advance(); // useRef
-  c.advance(); // (
+  var saved = c.save();
+  var out = {
+    kind: 'hook_use_ref',
+    refName: null,
+    initialRaw: 'null',
+    source: null,
+  };
 
-  // 2. Capture initial value
+  if (!(c.kind() === TK.identifier && (c.text() === 'const' || c.text() === 'let'))) {
+    c.restore(saved);
+    return null;
+  }
+  c.advance();
+  if (c.kind() !== TK.identifier) { c.restore(saved); return null; }
+  out.refName = c.text();
+  c.advance();
+  if (c.kind() !== TK.equals) { c.restore(saved); return null; }
+  c.advance();
+
+  if (c.kind() === TK.identifier && c.text() === 'React') {
+    out.source = 'React.useRef';
+    c.advance();
+    if (c.kind() === TK.dot) c.advance();
+  }
+  if (!(c.kind() === TK.identifier && c.text() === 'useRef')) { c.restore(saved); return null; }
+  if (!out.source) out.source = 'useRef';
+  c.advance();
+  if (c.kind() !== TK.lparen) { c.restore(saved); return null; }
+  c.advance();
+
   var initialParts = [];
   var depth = 1;
   while (c.pos < c.count && depth > 0) {
-    if (c.kind() === 8 /* TK.lparen */) depth++;
-    if (c.kind() === 9 /* TK.rparen */) {
+    if (c.kind() === TK.lparen || c.kind() === TK.lbracket || c.kind() === TK.lbrace) depth++;
+    if (c.kind() === TK.rparen || c.kind() === TK.rbracket || c.kind() === TK.rbrace) {
       depth--;
       if (depth === 0) break;
     }
     initialParts.push(c.text());
     c.advance();
   }
-  if (c.kind() === 9) c.advance(); // )
-  var initialValue = initialParts.join('');
+  if (c.kind() === TK.rparen) c.advance();
+  out.initialRaw = initialParts.join(' ').trim() || 'null';
 
-  // 3. Register as opaque state in QuickJS.
-  //    The ref object { current: initialValue } lives in JS runtime.
-  //    registerOpaqueStateMarker handles this.
-  registerOpaqueStateMarker(refName, null);
-
-  // 4. Register render local for refName.current access patterns.
-  //    When JSX references {refName.current}, resolve/field_access.js
-  //    maps it through the opaque state bridge.
+  // Bridge ref object through opaque state marker.
+  registerOpaqueStateMarker(out.refName, null);
   if (!ctx._refInitials) ctx._refInitials = {};
-  ctx._refInitials[refName] = initialValue;
+  ctx._refInitials[out.refName] = out.initialRaw;
 
-  // 5. The ref prop (ref={refName}) is stripped during attribute
-  //    parsing — attrs_basic.js already skips attrName === 'ref'.
-
-  // 6. In handlers, refName.current = value works because the
-  //    handler body executes in QuickJS where the ref object exists.
-
-  return null; // No node emitted — this is a declaration, not JSX.
+  return out;
 }
 
 _patterns[98] = { id: 98, match: match, compile: compile };

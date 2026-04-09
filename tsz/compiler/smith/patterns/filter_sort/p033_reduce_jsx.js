@@ -70,9 +70,10 @@ function compile(c, ctx) {
   // be rewritten as .map() by the developer. More complex reduce patterns
   // (grouping, aggregation) would need dedicated emit paths not yet designed.
   //
-  // This pattern is documented for completeness. match() detects it so the
-  // compiler can produce a meaningful diagnostic rather than a cryptic failure.
-  return null;
+  // match() detects it so the compiler can produce a diagnostic.
+  return { type: 'unsupported', pattern: 'reduce_jsx', id: 33,
+    message: '.reduce() producing JSX is not supported. Rewrite as .map() or use a render local.',
+    workaround: 'Replace items.reduce((acc, item) => [...acc, <X/>], []) with items.map(item => <X/>)' };
 }
 
 _patterns[33] = { id: 33, match: match, compile: compile };

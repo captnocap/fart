@@ -83,47 +83,106 @@
 //       as a const — QuickJS holds it as a JS function
 
 function match(c, ctx) {
-  // const [state, dispatch] = useReducer(reducer, initialState)
-  // Detected by collectState when it sees useReducer after the
-  // [getter, setter] = pattern. The initial state argument (second
-  // arg) is parsed as an object literal → collectObjectState.
+  // const [state, dispatch] = useReducer(...) / React.useReducer(...)
   var saved = c.save();
-  if (c.kind() !== 6 /* TK.identifier */) { c.restore(saved); return false; }
+  if (c.kind() !== TK.identifier) { c.restore(saved); return false; }
   var kw = c.text();
   if (kw !== 'const' && kw !== 'let') { c.restore(saved); return false; }
   c.advance();
-  if (c.kind() !== 10 /* TK.lbracket */) { c.restore(saved); return false; }
-  c.advance(); // skip [
-  // Skip state param
-  if (c.kind() === 6) c.advance();
-  if (c.kind() === 15 /* TK.comma */) c.advance();
-  // Skip dispatch param
-  if (c.kind() === 6) c.advance();
-  if (c.kind() !== 11 /* TK.rbracket */) { c.restore(saved); return false; }
-  c.advance(); // skip ]
-  if (c.kind() !== 16 /* TK.equals */) { c.restore(saved); return false; }
-  c.advance(); // skip =
-  var isReducer = c.text() === 'useReducer';
+  if (c.kind() !== TK.lbracket) { c.restore(saved); return false; }
+  c.advance();
+  if (c.kind() !== TK.identifier) { c.restore(saved); return false; }
+  c.advance();
+  if (c.kind() !== TK.comma) { c.restore(saved); return false; }
+  c.advance();
+  if (c.kind() !== TK.identifier) { c.restore(saved); return false; }
+  c.advance();
+  if (c.kind() !== TK.rbracket) { c.restore(saved); return false; }
+  c.advance();
+  if (c.kind() !== TK.equals) { c.restore(saved); return false; }
+  c.advance();
+
+  var isReducer = false;
+  if (c.kind() === TK.identifier && c.text() === 'useReducer') {
+    isReducer = true;
+  } else if (c.kind() === TK.identifier && c.text() === 'React') {
+    c.advance();
+    if (c.kind() === TK.dot) c.advance();
+    if (c.kind() === TK.identifier && c.text() === 'useReducer') isReducer = true;
+  }
   c.restore(saved);
   return isReducer;
 }
 
 function compile(c, ctx) {
-  // Compilation:
-  //   1. collectState detects useReducer, parses initial state object
-  //   2. collectObjectState flattens { field: val } → per-field slots
-  //   3. registerOpaqueStateMarker creates bridge marker for dispatch
-  //   4. In JSX, state.field → resolve through field_access → getSlot(N)
-  //   5. dispatch({...}) in handlers → QuickJS eval with reducer
-  //   6. QuickJS runs reducer(currentState, action) → new state
-  //   7. Bridge writes result fields back to slots via setSlot
-  //
-  // The reducer function is either:
-  //   - Defined in the same file (const reducer = ...) → captured
-  //     as a render local, available in QuickJS scope
-  //   - In a <script> block → already in QuickJS scope
-  //   - Imported → resolved through module system
-  return null;
+  var saved = c.save();
+  var out = {
+    kind: 'hook_use_reducer',
+    stateVar: null,
+    dispatchVar: null,
+    reducerExprRaw: '',
+    initialExprRaw: '',
+    source: null,
+  };
+
+  if (!(c.kind() === TK.identifier && (c.text() === 'const' || c.text() === 'let'))) {
+    c.restore(saved);
+    return null;
+  }
+  c.advance();
+  if (c.kind() !== TK.lbracket) { c.restore(saved); return null; }
+  c.advance();
+  if (c.kind() !== TK.identifier) { c.restore(saved); return null; }
+  out.stateVar = c.text();
+  c.advance();
+  if (c.kind() !== TK.comma) { c.restore(saved); return null; }
+  c.advance();
+  if (c.kind() !== TK.identifier) { c.restore(saved); return null; }
+  out.dispatchVar = c.text();
+  c.advance();
+  if (c.kind() !== TK.rbracket) { c.restore(saved); return null; }
+  c.advance();
+  if (c.kind() !== TK.equals) { c.restore(saved); return null; }
+  c.advance();
+
+  if (c.kind() === TK.identifier && c.text() === 'React') {
+    out.source = 'React.useReducer';
+    c.advance();
+    if (c.kind() === TK.dot) c.advance();
+  }
+  if (!(c.kind() === TK.identifier && c.text() === 'useReducer')) { c.restore(saved); return null; }
+  if (!out.source) out.source = 'useReducer';
+  c.advance();
+  if (c.kind() !== TK.lparen) { c.restore(saved); return null; }
+  c.advance();
+
+  var reducerParts = [];
+  var depth = 1;
+  while (c.pos < c.count && depth > 0) {
+    if (c.kind() === TK.comma && depth === 1) break;
+    if (c.kind() === TK.lparen || c.kind() === TK.lbracket || c.kind() === TK.lbrace) depth++;
+    if (c.kind() === TK.rparen || c.kind() === TK.rbracket || c.kind() === TK.rbrace) depth--;
+    reducerParts.push(c.text());
+    c.advance();
+  }
+  out.reducerExprRaw = reducerParts.join(' ').trim();
+
+  if (c.kind() === TK.comma) c.advance();
+  var initParts = [];
+  depth = 1;
+  while (c.pos < c.count && depth > 0) {
+    if (c.kind() === TK.lparen || c.kind() === TK.lbracket || c.kind() === TK.lbrace) depth++;
+    if (c.kind() === TK.rparen || c.kind() === TK.rbracket || c.kind() === TK.rbrace) {
+      depth--;
+      if (depth === 0) break;
+    }
+    initParts.push(c.text());
+    c.advance();
+  }
+  if (c.kind() === TK.rparen) c.advance();
+  out.initialExprRaw = initParts.join(' ').trim();
+
+  return out;
 }
 
 _patterns[95] = { id: 95, match: match, compile: compile };

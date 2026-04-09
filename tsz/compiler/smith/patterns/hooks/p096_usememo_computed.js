@@ -73,34 +73,87 @@
 //   paths.
 
 function match(c, ctx) {
-  // const X = useMemo(() => expr, [deps])
-  // Detected during render local collection when the RHS starts
-  // with useMemo( and contains an arrow/function body.
+  // const X = useMemo(...) / React.useMemo(...)
   var saved = c.save();
-  if (c.kind() !== 6) { c.restore(saved); return false; }
+  if (c.kind() !== TK.identifier) { c.restore(saved); return false; }
   var kw = c.text();
   if (kw !== 'const' && kw !== 'let') { c.restore(saved); return false; }
   c.advance();
-  if (c.kind() !== 6) { c.restore(saved); return false; }
-  c.advance(); // skip variable name
-  if (c.kind() !== 16 /* TK.equals */) { c.restore(saved); return false; }
+  if (c.kind() !== TK.identifier) { c.restore(saved); return false; }
   c.advance();
-  var isMemo = c.text() === 'useMemo';
+  if (c.kind() !== TK.equals) { c.restore(saved); return false; }
+  c.advance();
+  var isMemo = false;
+  if (c.kind() === TK.identifier && c.text() === 'useMemo') {
+    isMemo = true;
+  } else if (c.kind() === TK.identifier && c.text() === 'React') {
+    c.advance();
+    if (c.kind() === TK.dot) c.advance();
+    if (c.kind() === TK.identifier && c.text() === 'useMemo') isMemo = true;
+  }
   c.restore(saved);
   return isMemo;
 }
 
 function compile(c, ctx) {
-  // Compilation: strip wrapper, register inner expression as render local.
-  //   1. Detect useMemo in const X = useMemo(...)
-  //   2. Skip useMemo token and opening (
-  //   3. Parse inner: () => EXPR  or  () => { return EXPR; }
-  //   4. Skip , [deps]) — discard dependency array
-  //   5. Register X = EXPR as a render local in ctx.renderLocals
-  //   6. All subsequent references to X resolve through render locals
-  //   7. If EXPR produces an array, it becomes a computed OA
-  //   8. If EXPR produces a scalar, it's a direct expression
-  return null;
+  var saved = c.save();
+  var out = {
+    kind: 'hook_use_memo',
+    target: null,
+    computeExprRaw: '',
+    depsRaw: '',
+    source: null,
+  };
+
+  if (!(c.kind() === TK.identifier && (c.text() === 'const' || c.text() === 'let'))) {
+    c.restore(saved);
+    return null;
+  }
+  c.advance();
+  if (c.kind() !== TK.identifier) { c.restore(saved); return null; }
+  out.target = c.text();
+  c.advance();
+  if (c.kind() !== TK.equals) { c.restore(saved); return null; }
+  c.advance();
+
+  if (c.kind() === TK.identifier && c.text() === 'React') {
+    out.source = 'React.useMemo';
+    c.advance();
+    if (c.kind() === TK.dot) c.advance();
+  }
+  if (!(c.kind() === TK.identifier && c.text() === 'useMemo')) { c.restore(saved); return null; }
+  if (!out.source) out.source = 'useMemo';
+  c.advance();
+  if (c.kind() !== TK.lparen) { c.restore(saved); return null; }
+  c.advance();
+
+  var computeParts = [];
+  var depth = 1;
+  while (c.pos < c.count && depth > 0) {
+    if (c.kind() === TK.comma && depth === 1) break;
+    if (c.kind() === TK.lparen || c.kind() === TK.lbracket || c.kind() === TK.lbrace) depth++;
+    if (c.kind() === TK.rparen || c.kind() === TK.rbracket || c.kind() === TK.rbrace) depth--;
+    computeParts.push(c.text());
+    c.advance();
+  }
+  out.computeExprRaw = computeParts.join(' ').trim();
+
+  if (c.kind() === TK.comma) c.advance();
+  var depsParts = [];
+  depth = 1;
+  while (c.pos < c.count && depth > 0) {
+    if (c.kind() === TK.lparen || c.kind() === TK.lbracket || c.kind() === TK.lbrace) depth++;
+    if (c.kind() === TK.rparen || c.kind() === TK.rbracket || c.kind() === TK.rbrace) {
+      depth--;
+      if (depth === 0) break;
+    }
+    depsParts.push(c.text());
+    c.advance();
+  }
+  if (c.kind() === TK.rparen) c.advance();
+  out.depsRaw = depsParts.join(' ').trim();
+
+  return out;
 }
 
 _patterns[96] = { id: 96, match: match, compile: compile };

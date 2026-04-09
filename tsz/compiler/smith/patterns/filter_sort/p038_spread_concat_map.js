@@ -92,9 +92,10 @@ function compile(c, ctx) {
   //   expression as _computedExpr, letting QuickJS handle the concatenation
   //   at runtime.
   //
-  // This pattern is documented for completeness. match() detects it so the
-  // compiler can produce a meaningful diagnostic rather than a cryptic failure.
-  return null;
+  // match() detects it so the compiler can produce a diagnostic.
+  return { type: 'unsupported', pattern: 'spread_concat_map', id: 38,
+    message: '[...a, ...b].map() is not supported inline. Concatenate in a render local first.',
+    workaround: 'const merged = [...listA, ...listB]; then {merged.map(item => <X/>)}' };
 }
 
 _patterns[38] = { id: 38, match: match, compile: compile };

@@ -59,86 +59,54 @@
 //   fallback" — which is exactly what the crash handler does.
 
 function match(c, ctx) {
-  // Two match cases:
-  // 1. Class definition: class X extends React.Component
-  // 2. JSX usage: <ErrorBoundary> (detected by component name)
-  var saved = c.save();
-
-  // Case 1: class definition
-  if (c.kind() === 6 && c.text() === 'class') {
+  // Case 1: class ErrorBoundary extends ...
+  if (c.kind() === TK.identifier && c.text() === 'class') {
+    var savedClass = c.save();
     c.advance();
-    if (c.kind() === 6) c.advance(); // class name
-    if (c.kind() === 6 && c.text() === 'extends') {
-      c.restore(saved);
+    if (c.kind() === TK.identifier) c.advance();
+    if (c.kind() === TK.identifier && c.text() === 'extends') {
+      c.restore(savedClass);
       return true;
     }
+    c.restore(savedClass);
   }
 
-  c.restore(saved);
+  // Case 2: JSX usage <ErrorBoundary ...>
+  if (c.kind() === TK.lt &&
+      c.pos + 1 < c.count &&
+      c.kindAt(c.pos + 1) === TK.identifier &&
+      c.textAt(c.pos + 1) === 'ErrorBoundary') {
+    return true;
+  }
+
   return false;
 }
 
 function compile(c, ctx) {
-  // Case 1: Class definition — extract render() method's return JSX.
-  //
-  // 1. Skip class header: class Name extends React.Component {
-  c.advance(); // class
-  var className = c.text();
-  c.advance(); // name
-  c.advance(); // extends
-  // Skip React.Component or Component
-  while (c.pos < c.count && c.kind() !== 12 /* TK.lbrace */) c.advance();
-  c.advance(); // {
-  //
-  // 2. Scan class body for render() method
-  var classDepth = 1;
-  var renderFound = false;
-  while (c.pos < c.count && classDepth > 0) {
-    if (c.kind() === 12) classDepth++;
-    if (c.kind() === 13 /* TK.rbrace */) {
-      classDepth--;
-      if (classDepth === 0) break;
+  if (c.kind() === TK.identifier && c.text() === 'class') {
+    c.advance(); // class
+    var className = null;
+    if (c.kind() === TK.identifier) {
+      className = c.text();
+      c.advance();
     }
-    // Look for: render() { or render() {
-    if (classDepth === 1 && c.kind() === 6 && c.text() === 'render') {
-      c.advance(); // render
-      if (c.kind() === 8 /* TK.lparen */) {
-        c.advance(); // (
-        if (c.kind() === 9 /* TK.rparen */) c.advance(); // )
-        if (c.kind() === 12) {
-          c.advance(); // {
-          // Now inside render() body — find return statement
-          var renderDepth = 1;
-          while (c.pos < c.count && renderDepth > 0) {
-            if (renderDepth === 1 && c.kind() === 6 && c.text() === 'return') {
-              c.advance(); // return
-              if (c.kind() === 8) c.advance(); // optional (
-              // Parse the returned JSX
-              var resultNode = parseJSXElement(c);
-              // Skip to end of class
-              while (c.pos < c.count && classDepth > 0) {
-                if (c.kind() === 12) classDepth++;
-                if (c.kind() === 13) classDepth--;
-                c.advance();
-              }
-              // Register className as a component that renders resultNode
-              // When <ErrorBoundary> is used, it inlines to children passthrough
-              return resultNode;
-            }
-            if (c.kind() === 12) renderDepth++;
-            if (c.kind() === 13) renderDepth--;
-            c.advance();
-          }
-        }
-      }
-      continue;
+    while (c.pos < c.count && c.kind() !== TK.lbrace && c.kind() !== TK.eof) c.advance();
+    if (c.kind() !== TK.lbrace) return { errorBoundaryClass: className, skipped: true };
+    c.advance(); // {
+    var depth = 1;
+    while (c.pos < c.count && depth > 0) {
+      if (c.kind() === TK.lbrace) depth++;
+      else if (c.kind() === TK.rbrace) depth--;
+      c.advance();
     }
-    c.advance();
+    return { errorBoundaryClass: className, skipped: true };
   }
-  if (c.kind() === 13) c.advance(); // closing }
-  //
-  // If no render method found, skip the class entirely
-  return null;
+
+  if (c.kind() === TK.lt) {
+    return parseJSXElement(c);
+  }
+
+  return { errorBoundary: true };
 }
 
 _patterns[92] = { id: 92, match: match, compile: compile };

@@ -72,14 +72,19 @@ function match(c, ctx) {
   return false;
 }
 
-function compile(c, children, ctx) {
-  // Delegates to bindPressHandlerExpression which detects arrow syntax,
-  // calls pushInlinePressHandler, and returns the handler reference name.
-  // The handler ref is attached to the node via .cb_press field.
+function compile(c, ctx) {
+  // Inline arrow handlers map directly to the live press-handler path.
+  // The handler body is compiled through parseHandler/luaParseHandler
+  // so setter calls, script calls, and closure reads keep parity with
+  // parseElementPressAttr().
   var handlerRef = '_handler_press_' + ctx.handlerCount;
   var result = bindPressHandlerExpression(c, handlerRef);
   if (result === handlerRef) ctx.handlerCount++;
-  return { handlerRef: result };
+  return {
+    handlerRef: result,
+    eventKind: 'inline_arrow',
+    inMap: !!ctx.currentMap,
+  };
 }
 
 _patterns[115] = { id: 115, match: match, compile: compile };
