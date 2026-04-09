@@ -23,8 +23,8 @@ function SearchPanel(props) {
   var minimumBand = 0;
   var searchScopeText = props.workspaceName + ' / ' + props.gitBranch;
 
-  if (props.widthBand == 'narrow' || props.widthBand == 'widget' || props.widthBand == 'minimum') compactBand = 1;
-  if (props.widthBand == 'minimum') minimumBand = 1;
+  if (props.widthBand exact 'narrow' || props.widthBand exact 'widget' || props.widthBand exact 'minimum') compactBand = 1;
+  if (props.widthBand exact 'minimum') minimumBand = 1;
 
   return (
     <C.SearchPanel style={props.style}>

@@ -37,7 +37,7 @@ function GitBadge(props) {
 
 function OpenEditorRow(props) {
   var tab = props.tab;
-  if (tab.path == '__landing__') return null;
+  if (tab.path exact '__landing__') return null;
 
   return (
     <C.SidebarMiniRow onPress={function() { props.onSelectPath(tab.path); }}>
@@ -132,17 +132,17 @@ function Sidebar(props) {
   var openEditorLimit = 6;
   var changeLimit = 6;
 
-  if (props.widthBand == 'narrow' || props.widthBand == 'widget' || props.widthBand == 'minimum') {
+  if (props.widthBand exact 'narrow' || props.widthBand exact 'widget' || props.widthBand exact 'minimum') {
     compactBand = 1;
     openEditorLimit = 8;
     changeLimit = 8;
   }
-  if (props.widthBand == 'medium') {
+  if (props.widthBand exact 'medium') {
     mediumBand = 1;
     openEditorLimit = 4;
     changeLimit = 4;
   }
-  if (props.widthBand == 'desktop') showWorkspacePath = 1;
+  if (props.widthBand exact 'desktop') showWorkspacePath = 1;
 
   return (
     <C.Sidebar style={props.style}>

@@ -22,13 +22,13 @@ function TopBar(props) {
   var showGitMeta = 1;
   var gitMetaText = props.changedCount + ' dirty / ' + props.stagedCount + ' staged';
 
-  if (props.widthBand == 'narrow' || props.widthBand == 'widget' || props.widthBand == 'minimum') {
+  if (props.widthBand exact 'narrow' || props.widthBand exact 'widget' || props.widthBand exact 'minimum') {
     compactBand = 1;
     showGitMeta = 0;
     showCommandHint = 0;
   }
 
-  if (props.widthBand == 'minimum') {
+  if (props.widthBand exact 'minimum') {
     minimumBand = 1;
     showWorkspaceText = 0;
   }

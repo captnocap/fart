@@ -14,7 +14,7 @@ function ToolCallCard(props) {
       <C.ToolCallHeader>
         <C.ToolCallName>{exec.name}</C.ToolCallName>
         <C.ToolCallInput>{exec.input}</C.ToolCallInput>
-        <C.ToolCallStatus style={{ color: exec.status == 'completed' ? '#7ee787' : exec.status == 'error' ? '#ff7b72' : '#79c0ff' }}>{exec.status}</C.ToolCallStatus>
+        <C.ToolCallStatus style={{ color: exec.status exact 'completed' ? '#7ee787' : exec.status exact 'error' ? '#ff7b72' : '#79c0ff' }}>{exec.status}</C.ToolCallStatus>
       </C.ToolCallHeader>
       <C.ToolCallOutput>
         <C.ToolCallOutputText>{exec.result}</C.ToolCallOutputText>
@@ -24,8 +24,8 @@ function ToolCallCard(props) {
 }
 
 function AgentSessionBanner() {
-  var isStreaming = agentStatusText == 'streaming';
-  var isExecuting = agentStatusText == 'executing';
+  var isStreaming = agentStatusText exact 'streaming';
+  var isExecuting = agentStatusText exact 'executing';
   var hasAgent = activeAgentId.length > 0;
   var isActive = 0;
   if (isStreaming || isExecuting || hasAgent) isActive = 1;
@@ -53,14 +53,14 @@ function ContextStrip(props) {
   var minimumBand = 0;
   var showViewChip = 1;
   var showFocusChip = 1;
-  var focusLabel = props.currentFilePath == '__landing__' ? props.workspaceName : props.currentFilePath == '__settings__' ? 'Settings' : props.currentFilePath;
+  var focusLabel = props.currentFilePath exact '__landing__' ? props.workspaceName : props.currentFilePath exact '__settings__' ? 'Settings' : props.currentFilePath;
   var dirtyCountText = props.changedCount;
 
-  if (props.widthBand == 'narrow' || props.widthBand == 'widget' || props.widthBand == 'minimum') {
+  if (props.widthBand exact 'narrow' || props.widthBand exact 'widget' || props.widthBand exact 'minimum') {
     compactBand = 1;
     showViewChip = 0;
   }
-  if (props.widthBand == 'minimum') {
+  if (props.widthBand exact 'minimum') {
     minimumBand = 1;
     showFocusChip = 0;
   }
@@ -125,7 +125,7 @@ function BubbleContent(props) {
 
 function Message(props) {
   var msg = props.msg;
-  var isUser = msg.role == 'user';
+  var isUser = msg.role exact 'user';
   var showMode = 0;
   var showModel = 0;
   var authorLabel = isUser == 1 ? 'You' : 'Agent';
@@ -154,7 +154,7 @@ function Message(props) {
 function ThinkingIndicator() {
   var activeLabel = 'thinking';
   for (var ti = 0; ti < toolExecutions.length; ti++) {
-    if (toolExecutions[ti].status == 'running') activeLabel = 'running ' + toolExecutions[ti].name;
+    if (toolExecutions[ti].status exact 'running') activeLabel = 'running ' + toolExecutions[ti].name;
   }
 
   return (
@@ -175,17 +175,17 @@ function ThinkingIndicator() {
 function ModePillBar() {
   return (
     <C.ModePillBar>
-      <C.ModePill onPress={function() { setAgentMode('ask'); }} style={agentMode == 'ask' ? { backgroundColor: '#10213d', borderColor: '#2d62ff' } : {}}>
-        <C.ModePillLabel style={agentMode == 'ask' ? { color: '#79c0ff' } : {}}>Ask</C.ModePillLabel>
+      <C.ModePill onPress={function() { setAgentMode('ask'); }} style={agentMode exact 'ask' ? { backgroundColor: '#10213d', borderColor: '#2d62ff' } : {}}>
+        <C.ModePillLabel style={agentMode exact 'ask' ? { color: '#79c0ff' } : {}}>Ask</C.ModePillLabel>
       </C.ModePill>
-      <C.ModePill onPress={function() { setAgentMode('plan'); }} style={agentMode == 'plan' ? { backgroundColor: '#10213d', borderColor: '#2d62ff' } : {}}>
-        <C.ModePillLabel style={agentMode == 'plan' ? { color: '#79c0ff' } : {}}>Plan</C.ModePillLabel>
+      <C.ModePill onPress={function() { setAgentMode('plan'); }} style={agentMode exact 'plan' ? { backgroundColor: '#10213d', borderColor: '#2d62ff' } : {}}>
+        <C.ModePillLabel style={agentMode exact 'plan' ? { color: '#79c0ff' } : {}}>Plan</C.ModePillLabel>
       </C.ModePill>
-      <C.ModePill onPress={function() { setAgentMode('task'); }} style={agentMode == 'task' ? { backgroundColor: '#182510', borderColor: '#7ee787' } : {}}>
-        <C.ModePillLabel style={agentMode == 'task' ? { color: '#7ee787' } : {}}>Task</C.ModePillLabel>
+      <C.ModePill onPress={function() { setAgentMode('task'); }} style={agentMode exact 'task' ? { backgroundColor: '#182510', borderColor: '#7ee787' } : {}}>
+        <C.ModePillLabel style={agentMode exact 'task' ? { color: '#7ee787' } : {}}>Task</C.ModePillLabel>
       </C.ModePill>
-      <C.ModePill onPress={function() { setAgentMode('agent'); }} style={agentMode == 'agent' ? { backgroundColor: '#26180f', borderColor: '#ffa657' } : {}}>
-        <C.ModePillLabel style={agentMode == 'agent' ? { color: '#ffa657' } : {}}>Agent</C.ModePillLabel>
+      <C.ModePill onPress={function() { setAgentMode('agent'); }} style={agentMode exact 'agent' ? { backgroundColor: '#26180f', borderColor: '#ffa657' } : {}}>
+        <C.ModePillLabel style={agentMode exact 'agent' ? { color: '#ffa657' } : {}}>Agent</C.ModePillLabel>
       </C.ModePill>
     </C.ModePillBar>
   );
@@ -237,7 +237,7 @@ function ToolToggle(props) {
 
 function ModelPicker(props) {
   var showLabel = 1;
-  if (props.widthBand == 'minimum') showLabel = 0;
+  if (props.widthBand exact 'minimum') showLabel = 0;
 
   return (
     <C.ModelPickerBtn onPress={function() { cycleModel(); }}>
@@ -296,11 +296,11 @@ function ChatInput(props) {
   var showComposerMeta = 1;
   var showDivider = 1;
   var showSendLabel = 1;
-  var composerContextText = currentFilePath == '__landing__' ? workspaceName : currentFilePath == '__settings__' ? 'Settings' : currentFilePath;
+  var composerContextText = currentFilePath exact '__landing__' ? workspaceName : currentFilePath exact '__settings__' ? 'Settings' : currentFilePath;
   var composerMetaText = gitBranch + ' / ' + gitRemote;
 
-  if (props.widthBand == 'narrow' || props.widthBand == 'widget' || props.widthBand == 'minimum') compactBand = 1;
-  if (props.widthBand == 'minimum') {
+  if (props.widthBand exact 'narrow' || props.widthBand exact 'widget' || props.widthBand exact 'minimum') compactBand = 1;
+  if (props.widthBand exact 'minimum') {
     minimumBand = 1;
     iconOnly = 1;
     showComposerMeta = 0;
@@ -354,9 +354,9 @@ function ChatInput(props) {
             <C.ChatSendBtn onPress={function() { sendMessage(); }}>
               <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
                 <SendIcon size={11} />
-                {showSendLabel == 1 && agentMode == 'agent' && <C.ChatSendLabel>Launch</C.ChatSendLabel>}
-                {showSendLabel == 1 && agentMode == 'task' && <C.ChatSendLabel>Run Task</C.ChatSendLabel>}
-                {showSendLabel == 1 && agentMode == 'plan' && <C.ChatSendLabel>Plan</C.ChatSendLabel>}
+                {showSendLabel == 1 && agentMode exact 'agent' && <C.ChatSendLabel>Launch</C.ChatSendLabel>}
+                {showSendLabel == 1 && agentMode exact 'task' && <C.ChatSendLabel>Run Task</C.ChatSendLabel>}
+                {showSendLabel == 1 && agentMode exact 'plan' && <C.ChatSendLabel>Plan</C.ChatSendLabel>}
                 {showSendLabel == 1 && agentMode != 'agent' && agentMode != 'task' && agentMode != 'plan' && <C.ChatSendLabel>Send</C.ChatSendLabel>}
               </Box>
             </C.ChatSendBtn>
@@ -364,14 +364,14 @@ function ChatInput(props) {
         </C.ChatInputToolbar>
       </C.ChatInputBox>
 
-      {agentMode == 'task' && (
+      {agentMode exact 'task' && (
         <C.TaskModeHint>
           <AlertTriangleIcon size={11} />
           <C.TaskModeHintText>Task mode can read the workspace, inspect git, and use the terminal.</C.TaskModeHintText>
         </C.TaskModeHint>
       )}
 
-      {agentMode == 'plan' && (
+      {agentMode exact 'plan' && (
         <C.PlanModeHint>
           <BadgeInfoIcon size={11} />
           <C.PlanModeHintText>Plan mode stays descriptive first, edit second.</C.PlanModeHintText>
@@ -403,8 +403,8 @@ function ChatPanel(props) {
   var welcomeTitle = props.workspaceName + ' agent session';
   var welcomeText = props.gitBranch + ' / ' + props.gitRemote + ' / ' + props.changedCount + ' dirty paths';
 
-  if (props.widthBand == 'narrow' || props.widthBand == 'widget' || props.widthBand == 'minimum') compactBand = 1;
-  if (props.widthBand == 'minimum') {
+  if (props.widthBand exact 'narrow' || props.widthBand exact 'widget' || props.widthBand exact 'minimum') compactBand = 1;
+  if (props.widthBand exact 'minimum') {
     minimumBand = 1;
     showModelLabel = 0;
     showActionLabels = 0;

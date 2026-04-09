@@ -24,6 +24,110 @@ import {
   TerminalPanel as TerminalPanelShell, SearchPanel as SearchPanelShell, LandingPage as LandingPageShell
 } from './cursor_cls';
 
+// === NEW INFRASTRUCTURE IMPORTS ===
+import {
+  createTab, createFileItem, createMessage, createAgentCard, createProvider,
+  createContextItem, createMemoryBank, deriveWidthBand, derivePrimaryView
+} from './cursor.state.c';
+import { ROUTES, settingsSections, breadcrumbsForPath } from './cursor.routes.c';
+import { Icon, FileIcon, iconForFileType, iconForProvider } from './cursor.icons.c';
+
+// === NEW SHELL COMPONENT IMPORTS ===
+import {
+  ShellFrame, ShellFrameMiddle, WindowResizeHandles, WindowResizeSides,
+  ShellContent, Workspace as NewWorkspace
+} from './ShellFrame.c';
+import {
+  ShellSidebar, SidebarHeader, SidebarTitle, SidebarActions,
+  SidebarActionBtn, SidebarSection, SidebarSectionHeader, SidebarSectionTitle
+} from './ShellSidebar.c';
+import {
+  ShellTopbar, TopbarLeft, TopbarTrafficLights, TopbarWorkspaceBtn,
+  TopbarCommandBar, TopbarRight, TopbarGitChip, TopbarAction
+} from './ShellTopbar.c';
+import {
+  ShellStatusbar, StatusbarLeft, StatusbarRight, StatusItem,
+  StatusSeparator, StatusBranch, StatusGitSummary, StatusCursorPosition,
+  StatusLanguage, StatusModel, StatusAgentState
+} from './ShellStatusbar.c';
+import {
+  ShellDock, DockHeader, DockBody, DockFooter, DockActionBtn
+} from './ShellDock.c';
+import {
+  ShellOverlay, OverlayPanel, OverlayHeader, OverlayBody, OverlayFooter, SlideOverPanel
+} from './ShellOverlay.c';
+import {
+  ShellCommandPalette, CommandPaletteInput, CommandPaletteSection,
+  CommandPaletteItem, CommandPaletteEmpty
+} from './ShellCommandPalette.c';
+
+// === NEW EDITOR COMPONENT IMPORTS ===
+import { EditorSurface, EditorPane, EditorContent } from './EditorSurface.c';
+import { EditorHeader, EditorHeaderLeft, EditorHeaderTitle, EditorHeaderMeta, EditorHeaderRight, EditorHeaderBadge, EditorPathBreadcrumbs } from './EditorHeader.c';
+import { EditorTabs, EditorTab, EditorTabNew } from './EditorTabs.c';
+import { EditorViewport, EditorCodeScroll, EditorCodeStack, EditorRow, EditorEmptyState } from './EditorViewport.c';
+import { EditorGutter, GutterMarker, GutterLineNumber, GutterFoldControl } from './EditorGutter.c';
+import { EditorMinimap, MinimapLine, MinimapViewport } from './EditorMinimap.c';
+import { EditorInlineActions, InlineActionBtn, InlineActionGroup, InlineActionSeparator } from './EditorInlineActions.c';
+import { EditorReviewRail, ReviewRailHeader, ReviewThread, ReviewThreadHeader, ReviewComment, ReviewSuggestion, ReviewActions, ReviewActionBtn } from './EditorReviewRail.c';
+import { EditorBreadcrumbs, BreadcrumbItem, BreadcrumbRow } from './EditorBreadcrumbs.c';
+
+// === NEW SEARCH/TERMINAL/TOOLING IMPORTS ===
+import { SearchSurface, SearchHeader, SearchTitle, SearchInputBox, SearchOptions, SearchOption, SearchResults, SearchResult, SearchFooter } from './SearchSurface.c';
+import { TerminalSurface, TerminalHeader, TerminalBody, TerminalFooter, TerminalLine, TerminalInput, TerminalActionBtn } from './TerminalSurface.c';
+import { ToolExecutionPanel, ToolExecutionHeader, ToolExecutionItem, ToolExecutionList } from './ToolExecutionPanel.c';
+import { ArtifactPanel, ArtifactHeader, ArtifactBody, ArtifactCodeBlock, ArtifactTextBlock, ArtifactImagePreview, ArtifactActionBtn } from './ArtifactPanel.c';
+
+// === NEW AGENT ORCHESTRATION IMPORTS ===
+import { AgentWorkspace, AgentWorkspaceHeader, AgentWorkspaceBody } from './AgentWorkspace.c';
+import { AgentGrid, AgentGridItem, AgentLane, AgentLaneHeader } from './AgentGrid.c';
+import { AgentCard, AgentCardHeader, AgentCardProgress, AgentCardMeta, AgentCardActions, AgentActionBtn } from './AgentCard.c';
+import { AgentTranscript, TranscriptHeader, TranscriptMessages, TranscriptMessage, TranscriptToolCall } from './AgentTranscript.c';
+import { AgentInputBar, AgentModePills, AgentInputBox, AgentInputField, AgentInputToolbar, AgentInputToolsLeft, AgentInputToolsRight, AgentToolBtn, AgentSendBtn, AgentAttachmentBar } from './AgentInputBar.c';
+import { AgentPlanPanel, PlanPanelHeader, PlanSteps, PlanStep, PlanProgressBar } from './AgentPlanPanel.c';
+import { AgentToolsPanel, AgentToolsHeader, AgentToolsContent, AgentToolSection, AgentToolButton, AgentToolGrid, AgentLog } from './AgentToolsPanel.c';
+import { AgentTaskGraph, TaskGraphHeader, TaskGraphCanvas, TaskNode, TaskEdge, TaskGraphLegend } from './AgentTaskGraph.c';
+
+// === NEW SETTINGS IMPORTS ===
+import { SettingsSurface, SettingsLayout, SettingsHero, SettingsHeroChips, SettingsDenseChip } from './SettingsSurface.c';
+import { SettingsNav, SettingsSectionRow, SettingsNavFooter } from './SettingsNav.c';
+import { SettingsGeneralPage, SettingsPagePanel, SettingsToggleRow, SettingsToggle } from './SettingsGeneralPage.c';
+import { SettingsProvidersPage, ProviderRow } from './SettingsProvidersPage.c';
+import { SettingsMemoryPage, MemoryRow } from './SettingsMemoryPage.c';
+import { SettingsPromptAssemblyPage, AssemblySection, AssemblyPriorityList, AssemblyTokenBudgets, AssemblyToggleList } from './SettingsPromptAssemblyPage.c';
+import { SettingsShortcutsPage, ShortcutCategory, ShortcutRow } from './SettingsShortcutsPage.c';
+import { SettingsPluginsPage, PluginRow } from './SettingsPluginsPage.c';
+
+// === NEW PROVIDER IMPORTS ===
+import { ProviderRail, ProviderRailItem } from './ProviderRail.c';
+import { ProviderCredentialForm, CredentialField, CredentialActions, CredentialSaveBtn, CredentialTestBtn } from './ProviderCredentialForm.c';
+import { ProviderEndpointForm, EndpointRow } from './ProviderEndpointForm.c';
+import { ProviderModelGrid, ModelCard } from './ProviderModelGrid.c';
+import { ProviderModelCard, ModelSpec } from './ProviderModelCard.c';
+import { ProviderBatchBar, BatchActionBtn, BatchSelectAll } from './ProviderBatchBar.c';
+import { ProviderFieldModal, FieldModalHeader, FieldModalBody, FieldModalFooter, ModalField, ModalSelect, ModalActionBtn } from './ProviderFieldModal.c';
+
+// === NEW CONTEXT/MEMORY IMPORTS ===
+import { ContextWorkbench, ContextWorkbenchSidebar, ContextWorkbenchMain, ContextWorkbenchHeader } from './ContextWorkbench.c';
+import { ContextBar, ContextChip } from './ContextBar.c';
+import { ContextAttachments, AttachmentSection, AttachmentItem, AttachmentPicker } from './ContextAttachments.c';
+import { PromptAssemblyList, AssemblyConfigItem, AssemblyAddButton } from './PromptAssemblyList.c';
+import { PromptAssemblyPreview, AssemblyPreviewHeader, AssemblyPreviewContent, AssemblySectionPreview, AssemblyPreviewEmpty } from './PromptAssemblyPreview.c';
+import { MemoryPanel, MemoryPanelHeader, MemoryPanelContent, MemoryBankSection, MemoryEntry } from './MemoryPanel.c';
+import { MemoryInspector, MemoryInspectorHeader, MemoryInspectorContent, MemoryEntryHeader, MemoryMeta, MemoryEntryContent, MemoryEntryTags } from './MemoryInspector.c';
+import { MemoryFilters, MemorySearchInput, MemoryFilterChips, MemoryFilterChip, MemoryTypeFilter } from './MemoryFilters.c';
+import { MemoryTimeline, MemoryTimelineSection, MemoryTimelineItem } from './MemoryTimeline.c';
+
+// === NEW MARKETPLACE/PLUGIN IMPORTS ===
+import { MarketplaceSurface, MarketplaceHeader, MarketplaceSearch, MarketplaceContent, MarketplaceTabs } from './MarketplaceSurface.c';
+import { MarketplaceList, MarketplaceCategory, MarketplaceItemRow } from './MarketplaceList.c';
+import { MarketplaceCard, MarketplaceCardGrid } from './MarketplaceCard.c';
+import { ExtensionDetail, ExtensionDetailHeader, ExtensionDetailContent, ExtensionDetailSection, ExtensionDetailReadme } from './ExtensionDetail.c';
+import { PluginDetail, PluginDetailHeader, PluginCapabilities, CapabilitySection, PluginPermissions } from './PluginDetail.c';
+import { PluginRegistryPanel, PluginRegistryHeader, PluginRegistryContent, PluginRegistryItem } from './PluginRegistryPanel.c';
+import { PluginAuthoringSurface, PluginAuthoringHeader, PluginAuthoringWorkspace, PluginFileTree, PluginFileTreeHeader, PluginFileTreeItem, PluginEditor, PluginEditorTabs, PluginEditorTab, PluginEditorContent } from './PluginAuthoringSurface.c';
+import { PluginPermissionsPanel, PluginPermissionsHeader, PluginPermissionsContent, PermissionItem, PermissionCategory } from './PluginPermissionsPanel.c';
+
 // === CORE STATE ===
 const [activeTabId, setActiveTabId] = useState('home');
 const [currentInput, setCurrentInputState] = useState('');

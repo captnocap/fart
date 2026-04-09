@@ -141,9 +141,9 @@ function SettingsPanel(props) {
     if (props.providers[pi].id == props.selectedProviderId) selectedProvider = props.providers[pi];
   }
 
-  var desktopBand = props.widthBand == 'desktop' ? 1 : 0;
+  var desktopBand = props.widthBand exact 'desktop' ? 1 : 0;
   var navWidth = desktopBand == 1 ? 240 : 0;
-  var stackedLayout = props.widthBand == 'narrow' || props.widthBand == 'widget' || props.widthBand == 'minimum';
+  var stackedLayout = props.widthBand exact 'narrow' || props.widthBand exact 'widget' || props.widthBand exact 'minimum';
 
   return (
     <ScrollView style={{ flexGrow: 1, flexBasis: 0, backgroundColor: '#0d1015' }}>

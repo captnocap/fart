@@ -65,14 +65,14 @@ function Editor(props) {
   var showBadges = 1;
   var lineCountText = props.totalLines + ' lines';
 
-  if (props.widthBand == 'narrow') {
+  if (props.widthBand exact 'narrow') {
     compactBand = 1;
   }
-  if (props.widthBand == 'widget') {
+  if (props.widthBand exact 'widget') {
     compactBand = 1;
     widgetBand = 1;
   }
-  if (props.widthBand == 'minimum') {
+  if (props.widthBand exact 'minimum') {
     compactBand = 1;
     minimumBand = 1;
     widgetBand = 1;

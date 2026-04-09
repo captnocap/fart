@@ -11,8 +11,8 @@ function StatusBar(props) {
   var lineText = 'Ln ' + props.cursorLine;
   var columnText = 'Col ' + props.cursorColumn;
 
-  if (props.widthBand == 'narrow' || props.widthBand == 'widget' || props.widthBand == 'minimum') compactBand = 1;
-  if (props.widthBand == 'medium') {
+  if (props.widthBand exact 'narrow' || props.widthBand exact 'widget' || props.widthBand exact 'minimum') compactBand = 1;
+  if (props.widthBand exact 'medium') {
     mediumBand = 1;
     showSync = 0;
     showFile = 0;
@@ -46,8 +46,8 @@ function StatusBar(props) {
 
       <C.StatusRight>
         <C.StatusItem>
-          {props.fileName == '__landing__' && showFile == 1 && <C.StatusText>{props.workDir}</C.StatusText>}
-          {props.fileName == '__settings__' && showFile == 1 && <C.StatusText>Settings</C.StatusText>}
+          {props.fileName exact '__landing__' && showFile == 1 && <C.StatusText>{props.workDir}</C.StatusText>}
+          {props.fileName exact '__settings__' && showFile == 1 && <C.StatusText>Settings</C.StatusText>}
           {props.fileName != '__landing__' && props.fileName != '__settings__' && showFile == 1 && <C.StatusText>{props.fileName}</C.StatusText>}
         </C.StatusItem>
 

@@ -4,14 +4,14 @@
 // Recent tool executions feed (maps to ToolExecutor progress stream)
 function ToolHistoryRow(props) {
   var exec = props.exec;
-  var isRunning = exec.status == 'running';
-  var isError = exec.status == 'error';
+  var isRunning = exec.status exact 'running';
+  var isError = exec.status exact 'error';
   var messageText = exec.input.length > 28 ? exec.input.substring(0, 28) + '..' : exec.input;
   var timeText = isRunning ? exec.percent + '%' : exec.status;
 
   var dotColor = '#4a4a4a';
   if (isRunning) dotColor = '#2d62ff';
-  else if (exec.status == 'completed') dotColor = '#7ee787';
+  else if (exec.status exact 'completed') dotColor = '#7ee787';
   else if (isError) dotColor = '#ff7b72';
 
   return (
@@ -29,8 +29,8 @@ function AgentTools(props) {
   var done = 0;
   var statusText = '0 done';
   for (var i = 0; i < toolExecutions.length; i++) {
-    if (toolExecutions[i].status == 'running') running++;
-    else if (toolExecutions[i].status == 'completed') done++;
+    if (toolExecutions[i].status exact 'running') running++;
+    else if (toolExecutions[i].status exact 'completed') done++;
   }
   if (running > 0) statusText = running + ' running';
   else statusText = done + ' done';

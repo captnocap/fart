@@ -79,8 +79,8 @@ function ProjectLanding(props) {
   var syncText = '+' + props.branchAhead + ' / -' + props.branchBehind;
   var dirtyText = props.changedCount + ' dirty / ' + props.stagedCount + ' staged';
 
-  if (props.widthBand == 'narrow' || props.widthBand == 'widget' || props.widthBand == 'minimum') compactBand = 1;
-  if (props.widthBand == 'minimum') minimumBand = 1;
+  if (props.widthBand exact 'narrow' || props.widthBand exact 'widget' || props.widthBand exact 'minimum') compactBand = 1;
+  if (props.widthBand exact 'minimum') minimumBand = 1;
 
   return (
     <C.LandingPage>
