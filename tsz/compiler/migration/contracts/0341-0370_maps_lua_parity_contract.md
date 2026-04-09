@@ -1,7 +1,7 @@
-# Contract 0311-0340 — Maps Lua Parity
+# Contract 0341-0370 — Maps Lua Parity
 
 Purpose:
-- This contract expands base steps `311-340` from [MIGRATION_SINGLE_AGENT_EXECUTION_PROPOSAL.md](/home/siah/creative/reactjit/tsz/compiler/MIGRATION_SINGLE_AGENT_EXECUTION_PROPOSAL.md).
+- This contract expands base steps `341-370` from [MIGRATION_SINGLE_AGENT_EXECUTION_PROPOSAL.md](/home/siah/creative/reactjit/tsz/compiler/MIGRATION_SINGLE_AGENT_EXECUTION_PROPOSAL.md).
 - This contract is written as a zero-inference microstep list for the Lua-tree map group.
 - This contract treats Lua realization as the intentional backend for this slice, not as a fallback to Zig map pools.
 
@@ -271,7 +271,7 @@ Completion criteria:
 - [ ] ML041. If `maps_lua_rebuilder.json` has `diff_status` not equal to `match`, copy the exact `first_diff_hunk` text into `maps_lua_status.md` under the rebuilder cart path.
 - [ ] ML042. If `maps_lua_master.json` has `diff_status` not equal to `match`, copy the exact `first_diff_hunk` text into `maps_lua_status.md` under the master cart path.
 - [ ] ML043. If both byte-parity reports have `diff_status` equal to `match`, add the line `Maps lua smoke parity: MATCH on rebuilder and master dispatch carts` to `maps_lua_status.md`.
-- [ ] ML044. Ensure the visual capture harness exists before continuing to visual verification. If it does not exist, append `0311-0340 maps-lua visual harness missing` to `blocked.txt` and stop.
+- [ ] ML044. Ensure the visual capture harness exists before continuing to visual verification. If it does not exist, append `0341-0370 maps-lua visual harness missing` to `blocked.txt` and stop.
 - [ ] ML045. Capture visual parity for the rebuilder cart and write the report to `tsz/compiler/migration/reports/visual/maps_lua_rebuilder_visual.json`.
 - [ ] ML046. Capture visual parity for the master-dispatch cart and write the report to `tsz/compiler/migration/reports/visual/maps_lua_master_visual.json`.
 - [ ] ML047. Open both visual reports and confirm each one contains the fields listed in [VISUAL_PARITY_METHOD.md](/home/siah/creative/reactjit/tsz/compiler/migration/contracts/VISUAL_PARITY_METHOD.md).
@@ -284,5 +284,5 @@ Completion criteria:
 - [ ] ML054. Re-open [a029_lua_map_wrapper_registration.js](/home/siah/creative/reactjit/tsz/compiler/smith/emit_atoms/maps_lua/a029_lua_map_wrapper_registration.js), [a030_lua_map_rebuilder_functions.js](/home/siah/creative/reactjit/tsz/compiler/smith/emit_atoms/maps_lua/a030_lua_map_rebuilder_functions.js), [a031_lua_nested_helpers.js](/home/siah/creative/reactjit/tsz/compiler/smith/emit_atoms/maps_lua/a031_lua_nested_helpers.js), and [a032_lua_map_master_dispatch.js](/home/siah/creative/reactjit/tsz/compiler/smith/emit_atoms/maps_lua/a032_lua_map_master_dispatch.js) and confirm only the lines named in this contract were touched if a patch occurred.
 - [ ] ML055. Re-open [emit_lua_rebuild.js](/home/siah/creative/reactjit/tsz/compiler/smith/emit_ops/emit_lua_rebuild.js) and [emit_lua_element.js](/home/siah/creative/reactjit/tsz/compiler/smith/emit_ops/emit_lua_element.js) and confirm only the lines named in this contract were touched if a patch occurred.
 - [ ] ML056. Re-run the byte-parity harness on both Lua carts and compare rerun hashes to `maps_lua_rebuilder.json` and `maps_lua_master.json`.
-- [ ] ML057. If either rerun hash differs from the saved report hash, append `0311-0340 maps-lua rerun hash mismatch` to `blocked.txt` and stop.
-- [ ] ML058. Append `0311-0340 maps-lua parity complete` to `completed.txt`.
+- [ ] ML057. If either rerun hash differs from the saved report hash, append `0341-0370 maps-lua rerun hash mismatch` to `blocked.txt` and stop.
+- [ ] ML058. Append `0341-0370 maps-lua parity complete` to `completed.txt`.

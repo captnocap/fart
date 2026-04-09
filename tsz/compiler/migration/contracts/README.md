@@ -30,7 +30,8 @@ Expanded ranges:
 - `0191-0215` -> [0191-0215_handlers_effects_parity_contract.md](/home/siah/creative/reactjit/tsz/compiler/migration/contracts/0191-0215_handlers_effects_parity_contract.md)
 - `0216-0250` -> [0216-0250_object_arrays_parity_contract.md](/home/siah/creative/reactjit/tsz/compiler/migration/contracts/0216-0250_object_arrays_parity_contract.md)
 - `0251-0310` -> [0251-0310_maps_zig_parity_contract.md](/home/siah/creative/reactjit/tsz/compiler/migration/contracts/0251-0310_maps_zig_parity_contract.md)
-- `0311-0340` -> [0311-0340_maps_lua_parity_contract.md](/home/siah/creative/reactjit/tsz/compiler/migration/contracts/0311-0340_maps_lua_parity_contract.md)
+- `0341-0370` -> [0341-0370_maps_lua_parity_contract.md](/home/siah/creative/reactjit/tsz/compiler/migration/contracts/0341-0370_maps_lua_parity_contract.md)
+- `0371-0410` -> [0371-0410_logic_runtime_parity_contract.md](/home/siah/creative/reactjit/tsz/compiler/migration/contracts/0371-0410_logic_runtime_parity_contract.md)
+- `0411-0458` -> [0411-0458_entry_split_finalize_parity_contract.md](/home/siah/creative/reactjit/tsz/compiler/migration/contracts/0411-0458_entry_split_finalize_parity_contract.md)
 
-Next range not yet expanded:
-- `0341-0380` logic / runtime parity
+All parity sections now have expanded contracts.
