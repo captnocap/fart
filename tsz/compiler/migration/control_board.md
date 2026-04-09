@@ -52,6 +52,9 @@ missing_canonical_artifacts: none
 
 harness_scaffold_complete: true
 
+harness_parity_verified: true
+harness_parity_proof: counter/mixed/counter.tsz diff_status=DIFF legacy_hash=3fcb277a10f7 atom_hash=8db099fc10d3 both_errors=null
+
 ## 111-140 Coverage And Live-Risk Baseline
 
 all_live_risk_reports_have_concrete_findings: true
