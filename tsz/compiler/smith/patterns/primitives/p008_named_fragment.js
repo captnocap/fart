@@ -45,7 +45,7 @@ function match(c, ctx) {
   return false;
 }
 
-function compile(c, ctx) {
+function compile(c, children, ctx) {
   // Delegate to parseJSXElement which already knows how to handle
   // Fragment tags — it resolves them through normalizeRawTag/resolveTag.
   return parseJSXElement(c);

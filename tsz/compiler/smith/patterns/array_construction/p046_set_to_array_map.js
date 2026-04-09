@@ -77,9 +77,10 @@ function compile(c, ctx) {
   //   Array.from(set) at runtime, producing a simple array. The Zig-side
   //   OA unpacker treats it as a simple-array with text values.
   //
-  // Simple-array item values are strongest in child text position, same
-  // limitation as p043 (Object.values).
-  return null;
+  // match() detects it so the compiler can produce a diagnostic.
+  return { type: 'unsupported', pattern: 'set_to_array_map', id: 46,
+    message: 'Array.from(set).map() is not supported inline. Assign to a render local first.',
+    workaround: 'const values = Array.from(set); then {values.map(v => <Text>{v}</Text>)}' };
 }
 
 _patterns[46] = { id: 46, match: match, compile: compile };

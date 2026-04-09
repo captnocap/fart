@@ -77,7 +77,7 @@ function match(c, ctx) {
   return true;
 }
 
-function compile(c, ctx) {
+function compile(c, children, ctx) {
   // Collect all tokens until matching }
   var parts = [];
   var braceDepth = 0;

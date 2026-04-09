@@ -64,20 +64,11 @@ function match(c, ctx) {
   return false;
 }
 
-function compile(c, ctx) {
-  // Compilation happens through the normal map + ternary pipeline:
-  //   1. tryParsePlainMap() parses the map header
-  //   2. parseJSXElement() is called for the template body
-  //   3. Inside the template, brace child parsing encounters the ternary
-  //   4. brace/ternary.js compiles it with resolve/ternary.js
-  //   5. The condition gets OA field resolution (item.active → _oa0_active[_i])
-  //   6. _wrapMapCondition() ensures valid Zig bool expression
-  //   7. Both branches produce node expressions
-  //   8. The emit pass generates if/else inside the for loop
-  //
-  // The OA may need _computedHasTernary flag for .none/.flex handling
-  // when ternary branches produce elements vs null.
-  return null;
+function compile(c, children) {
+  // Map with ternary inside — _tryParseIdentifierMapExpression handles
+  // the map header, then parseJSXElement parses the template which
+  // contains the ternary. brace/ternary.js handles the inner ternary.
+  return _tryParseIdentifierMapExpression(c, children, false);
 }
 
 _patterns[22] = { id: 22, match: match, compile: compile };

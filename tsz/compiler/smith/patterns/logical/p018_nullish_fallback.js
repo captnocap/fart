@@ -58,7 +58,7 @@ function match(c, ctx) {
   return false;
 }
 
-function compile(c, ctx) {
+function compile(c, children, ctx) {
   // ?? (nullish coalescing) only falls back for null/undefined, not falsy.
   // For state slots that are always initialized, the LHS always wins.
   // For unresolvable expressions, route through QuickJS which handles ?? natively.

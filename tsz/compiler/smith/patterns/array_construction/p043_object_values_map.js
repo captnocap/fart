@@ -79,10 +79,10 @@ function compile(c, ctx) {
   //   _tryParseComputedChainMap creates a computed simple-array OA whose
   //   runtime data is pushed from QuickJS before the Zig map emit runs.
   //
-  // Simple-array item values are strongest in child text position. Passing
-  // bare v through component brace props can degrade into index-like behavior
-  // depending on how the downstream resolver interprets it.
-  return null;
+  // match() detects it so the compiler can produce a diagnostic.
+  return { type: 'unsupported', pattern: 'object_values_map', id: 43,
+    message: 'Object.values().map() is not supported inline. Assign to a render local first.',
+    workaround: 'const values = Object.values(obj); then {values.map(v => <Text>{v}</Text>)}' };
 }
 
 _patterns[43] = { id: 43, match: match, compile: compile };

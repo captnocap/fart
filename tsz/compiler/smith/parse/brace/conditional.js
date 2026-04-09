@@ -1,11 +1,261 @@
 // ── Brace conditional parsing ─────────────────────────────────────
 
+function _luaQuoteCondString(value) {
+  return '"' + String(value)
+    .replace(/\\/g, '\\\\')
+    .replace(/"/g, '\\"')
+    .replace(/\n/g, '\\n')
+    .replace(/\r/g, '\\r') + '"';
+}
+
+function _looksDynamicJsExpr(value) {
+  if (typeof value !== 'string') return false;
+  var trimmed = value.trim();
+  if (trimmed.length === 0) return false;
+  if (trimmed.startsWith('_handler_press_')) return false;
+  return /(?:===|!==|==|!=|>=|<=|&&|\|\||[?:()<>])/.test(trimmed);
+}
+
+function _splitTopLevelJsTernary(expr) {
+  if (typeof expr !== 'string') return null;
+  var depthParen = 0;
+  var depthBracket = 0;
+  var depthBrace = 0;
+  var quote = '';
+  var escape = false;
+  var question = -1;
+  for (var i = 0; i < expr.length; i++) {
+    var ch = expr.charAt(i);
+    if (quote) {
+      if (escape) {
+        escape = false;
+        continue;
+      }
+      if (ch === '\\') {
+        escape = true;
+        continue;
+      }
+      if (ch === quote) quote = '';
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      continue;
+    }
+    if (ch === '(') { depthParen++; continue; }
+    if (ch === ')') { if (depthParen > 0) depthParen--; continue; }
+    if (ch === '[') { depthBracket++; continue; }
+    if (ch === ']') { if (depthBracket > 0) depthBracket--; continue; }
+    if (ch === '{') { depthBrace++; continue; }
+    if (ch === '}') { if (depthBrace > 0) depthBrace--; continue; }
+    if (depthParen === 0 && depthBracket === 0 && depthBrace === 0 && ch === '?') {
+      question = i;
+      break;
+    }
+  }
+  if (question < 0) return null;
+
+  depthParen = 0;
+  depthBracket = 0;
+  depthBrace = 0;
+  quote = '';
+  escape = false;
+  var ternaryDepth = 0;
+  var colon = -1;
+  for (var j = question + 1; j < expr.length; j++) {
+    var ch2 = expr.charAt(j);
+    if (quote) {
+      if (escape) {
+        escape = false;
+        continue;
+      }
+      if (ch2 === '\\') {
+        escape = true;
+        continue;
+      }
+      if (ch2 === quote) quote = '';
+      continue;
+    }
+    if (ch2 === '"' || ch2 === "'") {
+      quote = ch2;
+      continue;
+    }
+    if (ch2 === '(') { depthParen++; continue; }
+    if (ch2 === ')') { if (depthParen > 0) depthParen--; continue; }
+    if (ch2 === '[') { depthBracket++; continue; }
+    if (ch2 === ']') { if (depthBracket > 0) depthBracket--; continue; }
+    if (ch2 === '{') { depthBrace++; continue; }
+    if (ch2 === '}') { if (depthBrace > 0) depthBrace--; continue; }
+    if (depthParen === 0 && depthBracket === 0 && depthBrace === 0) {
+      if (ch2 === '?') {
+        ternaryDepth++;
+        continue;
+      }
+      if (ch2 === ':') {
+        if (ternaryDepth === 0) {
+          colon = j;
+          break;
+        }
+        ternaryDepth--;
+      }
+    }
+  }
+  if (colon < 0) return null;
+  return {
+    cond: expr.slice(0, question).trim(),
+    whenTrue: expr.slice(question + 1, colon).trim(),
+    whenFalse: expr.slice(colon + 1).trim(),
+  };
+}
+
+function _normalizeLuaRuntimeExpr(expr) {
+  if (typeof expr !== 'string') return expr;
+  var trimmed = expr.trim();
+  if (trimmed.length === 0) return trimmed;
+
+  var ternary = _splitTopLevelJsTernary(trimmed);
+  if (ternary) {
+    return '((' + _normalizeLuaRuntimeExpr(ternary.cond) + ') and ' +
+      _normalizeLuaRuntimeExpr(ternary.whenTrue) + ' or ' +
+      _normalizeLuaRuntimeExpr(ternary.whenFalse) + ')';
+  }
+
+  return trimmed
+    .replace(/!==/g, '~=')
+    .replace(/===/g, '==')
+    .replace(/!=/g, '~=')
+    .replace(/&&/g, ' and ')
+    .replace(/\|\|/g, ' or ')
+    .replace(/!\s*(?!=)/g, 'not ');
+}
+
+function _looksBooleanLikeRuntimeExpr(expr) {
+  if (typeof expr !== 'string') return false;
+  return /(?:==|~=|>=|<=|\band\b|\bor\b|\bnot\b|[<>])/.test(expr);
+}
+
+function _peekNumericComparison(c, startPos) {
+  if (startPos >= c.count) return null;
+  var opKind = c.kindAt(startPos);
+  if (opKind !== TK.eq_eq && opKind !== TK.not_eq) return null;
+  var op = opKind === TK.eq_eq ? '==' : '!=';
+  var pos = startPos + 1;
+  if (pos < c.count && c.kindAt(pos) === TK.equals) pos++;
+  if (pos >= c.count || c.kindAt(pos) !== TK.number) return null;
+  return { op: op, value: c.textAt(pos), endPos: pos };
+}
+
+function _luaBoolNumericComparison(expr, cmp) {
+  if (!cmp) return null;
+  if (!expr || !_looksBooleanLikeRuntimeExpr(expr)) return null;
+  if (cmp.value !== '0' && cmp.value !== '1') return null;
+  var wrapped = '(' + expr + ')';
+  if ((cmp.op === '==' && cmp.value === '1') || (cmp.op === '!=' && cmp.value === '0')) return wrapped;
+  if ((cmp.op === '!=' && cmp.value === '1') || (cmp.op === '==' && cmp.value === '0')) return '(not ' + wrapped + ')';
+  return null;
+}
+
+function _splitCondAtLastLogical(parts) {
+  var splitAt = -1;
+  for (var i = parts.length - 1; i >= 0; i--) {
+    if (parts[i] === ' and ' || parts[i] === ' or ') {
+      splitAt = i;
+      break;
+    }
+  }
+  return {
+    prefix: splitAt >= 0 ? parts.slice(0, splitAt + 1) : [],
+    tail: splitAt >= 0 ? parts.slice(splitAt + 1) : parts.slice(),
+  };
+}
+
+function _isStaticStringPropValue(pv) {
+  if (typeof pv !== 'string') return false;
+  if (pv.length === 0) return true;
+  if (/^-?\d+(\.\d+)?$/.test(pv)) return false;
+  if (pv.startsWith('_handler_press_')) return false;
+  if (pv.startsWith('if (')) return false;
+  if (pv.startsWith('state.')) return false;
+  if (pv.startsWith('_oa')) return false;
+  if (pv.startsWith('@as(')) return false;
+  if (pv.startsWith('@intCast(')) return false;
+  if (_looksDynamicJsExpr(pv)) return false;
+  if (pv.charCodeAt(0) === 2) return false;
+  return true;
+}
+
+function _isStringLikePropExpr(pv) {
+  if (_isStaticStringPropValue(pv)) return true;
+  if (typeof pv !== 'string') return false;
+  if (pv.indexOf('state.getSlotString(') >= 0) return true;
+  if (pv.indexOf('@as([]const u8') >= 0) return true;
+  if (/\[0\.\._oa\d+_\w+_lens\[/.test(pv)) return true;
+  return false;
+}
+
+function _condComparatorContext(c, parts, nextPos) {
+  var prev = parts.length > 0 ? String(parts[parts.length - 1]).trim() : '';
+  if (prev === '==' || prev === '~=' || prev === '>' || prev === '<' || prev === '>=' || prev === '<=') return true;
+  if (nextPos >= c.count) return false;
+  var nextKind = c.kindAt(nextPos);
+  return nextKind === TK.eq_eq || nextKind === TK.not_eq ||
+    nextKind === TK.gt || nextKind === TK.gt_eq ||
+    nextKind === TK.lt || nextKind === TK.lt_eq;
+}
+
+function _luaCondPropExpr(rawPv, normalizedPv, valueContext) {
+  if (rawPv === undefined) return 'false';
+  if (typeof rawPv !== 'string') return 'true';
+  if (/^-?\d+(\.\d+)?$/.test(rawPv)) return normalizedPv;
+  if (rawPv.startsWith('_handler_press_')) return 'true';
+
+  if (_isStaticStringPropValue(rawPv)) {
+    var quoted = _luaQuoteCondString(rawPv);
+    return valueContext ? quoted : '(' + quoted + ' ~= "" and ' + quoted + ' or false)';
+  }
+
+  if (_isStringLikePropExpr(rawPv)) {
+    return valueContext ? normalizedPv : '((' + normalizedPv + ') ~= "" and (' + normalizedPv + ') or false)';
+  }
+
+  return normalizedPv;
+}
+
+function _luaCondPropLengthExpr(rawPv, normalizedPv) {
+  if (rawPv === undefined) return '0';
+  if (_isStaticStringPropValue(rawPv)) return String(rawPv.length);
+  if (_isStringLikePropExpr(rawPv)) return '#(' + normalizedPv + ')';
+  // Computed prop values like visibleTabs(...) are real runtime collections even
+  // when we can't project a direct Lua length expression here. Treat them as
+  // present so the surrounding container can render and let the nested map
+  // decide whether it contributes any children.
+  return '1';
+}
+
+function _condDirectLengthExpr(rawPv) {
+  if (rawPv === undefined) return '0';
+  if (typeof rawPv !== 'string') return '1';
+  if (/^-?\d+(\.\d+)?$/.test(rawPv)) return '0';
+  if (_isStaticStringPropValue(rawPv)) return String(rawPv.length);
+  if (_isStringLikePropExpr(rawPv)) return rawPv + '.len';
+  if (rawPv.startsWith('state.') || rawPv.startsWith('_oa') ||
+      rawPv.startsWith('@as(') || rawPv.startsWith('@intCast(')) {
+    return rawPv + '.len';
+  }
+  // Computed runtime props do not have a direct Zig length expression here.
+  // Keep them truthy instead of generating invalid `1.len` output.
+  return '1';
+}
+
 // Build Lua condition by reading raw tokens from saved position.
 function _buildLuaCondFromTokens(c, savedStart) {
   var _cur = c.save();
+  var _stopAmp = _findLastTopLevelAmpAmp(c, savedStart.pos, _cur.pos);
   c.restore(savedStart);
   var parts = [];
-  while (c.pos < c.count && c.kind() !== TK.amp_amp && c.kind() !== TK.rbrace && c.kind() !== TK.question) {
+  while (c.pos < _cur.pos && c.kind() !== TK.rbrace && c.kind() !== TK.question) {
+    if (c.pos === _stopAmp) break;
+    if (c.kind() === TK.amp_amp) { parts.push('and'); c.advance(); continue; }
     if (c.kind() === TK.eq_eq) { parts.push('=='); c.advance(); if (c.kind() === TK.equals) c.advance(); continue; }
     if (c.kind() === TK.not_eq) { parts.push('~='); c.advance(); if (c.kind() === TK.equals) c.advance(); continue; }
     if (c.kind() === TK.bang) { parts.push('not'); c.advance(); continue; }
@@ -20,8 +270,16 @@ function _buildLuaCondFromTokens(c, savedStart) {
     if (c.kind() === TK.identifier && ctx.propsObjectName && c.text() === ctx.propsObjectName &&
         c.pos + 2 < c.count && c.kindAt(c.pos + 1) === TK.dot && c.kindAt(c.pos + 2) === TK.identifier) {
       var _ppField = c.textAt(c.pos + 2);
-      if (ctx.propStack && ctx.propStack[_ppField] !== undefined) {
-        var _ppv = String(ctx.propStack[_ppField]);
+      var _hasProp = ctx.propStack && ctx.propStack[_ppField] !== undefined;
+      var _nextIsLength = c.pos + 4 < c.count && c.kindAt(c.pos + 3) === TK.dot && c.textAt(c.pos + 4) === 'length';
+      if (_hasProp) {
+        var _ppRaw = ctx.propStack[_ppField];
+        var _ppv = String(_ppRaw);
+        if (isEval(_ppv)) {
+          var _ppExpr = extractRuntimeJsExpr(_ppv, null, null);
+          if (_ppExpr) _ppv = _ppExpr;
+        }
+        _ppv = _normalizeLuaRuntimeExpr(_ppv);
         _ppv = _ppv.replace(/_oa\d+_(\w+)\[_i\]\[0\.\._oa\d+_\w+_lens\[_i\]\]/g, '_item.$1');
         _ppv = _ppv.replace(/_oa\d+_(\w+)\[_i\]/g, '_item.$1');
         for (var _ppi = 0; _ppi < 3; _ppi++) {
@@ -34,23 +292,44 @@ function _buildLuaCondFromTokens(c, savedStart) {
         _ppv = _ppv.replace(/state\.getSlotString\((\d+)\)/g, function(_, idx) {
           return (ctx.stateSlots && ctx.stateSlots[+idx]) ? ctx.stateSlots[+idx].getter : '_slot' + idx;
         });
-        // Handle .length after props access: props.X.length → #resolved (Lua string length)
-        if (c.pos + 4 < c.count && c.kindAt(c.pos + 3) === TK.dot && c.textAt(c.pos + 4) === 'length') {
-          parts.push('#' + _ppv);
+        if (/[?:]/.test(_ppv) || _ppv.indexOf('&&') >= 0 || _ppv.indexOf('||') >= 0) {
+          _ppv = '(' + _ppv + ')';
+        }
+        if (!_nextIsLength) {
+          var _ppCmp = _peekNumericComparison(c, c.pos + 3);
+          var _ppBoolCmp = _luaBoolNumericComparison(_ppv, _ppCmp);
+          if (_ppBoolCmp) {
+            parts.push(_ppBoolCmp);
+            while (c.pos <= _ppCmp.endPos) c.advance();
+            continue;
+          }
+        }
+        if (_nextIsLength) {
+          parts.push(_luaCondPropLengthExpr(_ppRaw, _ppv));
           c.advance(); c.advance(); c.advance(); c.advance(); c.advance(); // skip props . field . length
         } else {
-          parts.push(_ppv);
+          parts.push(_luaCondPropExpr(_ppRaw, _ppv, _condComparatorContext(c, parts, c.pos + 3)));
           c.advance(); c.advance(); c.advance(); // skip props . field
         }
         continue;
       }
+      parts.push(_nextIsLength ? '0' : 'false');
+      if (_nextIsLength) c.advance(), c.advance(), c.advance(), c.advance(), c.advance();
+      else c.advance(), c.advance(), c.advance();
+      continue;
     }
     // Resolve component prop names to their values (OA refs cleaned for Lua)
     // Skip if preceded by a dot (field access like _nitem.deptIdx — not a prop ref)
     var _isPropRef = c.kind() === TK.identifier && ctx.propStack && ctx.propStack[c.text()] !== undefined;
     if (_isPropRef && parts.length > 0 && parts[parts.length - 1] === '.') _isPropRef = false;
     if (_isPropRef) {
-      var _pv = String(ctx.propStack[c.text()]);
+      var _rawPv = ctx.propStack[c.text()];
+      var _pv = String(_rawPv);
+      if (isEval(_pv)) {
+        var _pvExpr = extractRuntimeJsExpr(_pv, null, null);
+        if (_pvExpr) _pv = _pvExpr;
+      }
+      _pv = _normalizeLuaRuntimeExpr(_pv);
       // OA field refs → _item.field or _nitem.field
       _pv = _pv.replace(/_oa\d+_(\w+)\[_j\]\[0\.\._oa\d+_\w+_lens\[_j\]\]/g, '_nitem.$1');
       _pv = _pv.replace(/_oa\d+_(\w+)\[_j\]/g, '_nitem.$1');
@@ -72,13 +351,30 @@ function _buildLuaCondFromTokens(c, savedStart) {
         _pv = _pv.replace(/@intCast\(([^)]+)\)/g, '$1');
         _pv = _pv.replace(/@floatFromInt\(([^)]+)\)/g, '$1');
       }
-      parts.push(_pv);
+      if (/[?:]/.test(_pv) || _pv.indexOf('&&') >= 0 || _pv.indexOf('||') >= 0) {
+        _pv = '(' + _pv + ')';
+      }
+      var _pvCmp = _peekNumericComparison(c, c.pos + 1);
+      var _pvBoolCmp = _luaBoolNumericComparison(_pv, _pvCmp);
+      if (_pvBoolCmp) {
+        parts.push(_pvBoolCmp);
+        while (c.pos <= _pvCmp.endPos) c.advance();
+        continue;
+      }
+      parts.push(_luaCondPropExpr(_rawPv, _pv, _condComparatorContext(c, parts, c.pos + 1)));
       c.advance(); continue;
     }
     // Resolve render-local aliased to map item param: var tab = props.tab where tab → itemParam
     // When tab.modified is encountered, resolve via renderLocals → itemParam → _item.field
     if (c.kind() === TK.identifier && ctx.renderLocals && ctx.renderLocals[c.text()] !== undefined) {
-      var _rlv2 = ctx.renderLocals[c.text()];
+      var _rlName2 = c.text();
+      var _rlv2 = ctx.renderLocals[_rlName2];
+      var _rlRaw2 = ctx._renderLocalRaw && ctx._renderLocalRaw[_rlName2];
+      if (isEval(_rlv2)) {
+        var _rlExpr2 = extractRuntimeJsExpr(_rlv2, _rlRaw2, _rlName2);
+        if (_rlExpr2) _rlv2 = _rlExpr2;
+      }
+      if (typeof _rlv2 === 'string') _rlv2 = _normalizeLuaRuntimeExpr(_rlv2);
       if (ctx.currentMap && _rlv2 === ctx.currentMap.itemParam &&
           c.pos + 2 < c.count && c.kindAt(c.pos + 1) === TK.dot && c.kindAt(c.pos + 2) === TK.identifier) {
         parts.push('_item');
@@ -101,6 +397,13 @@ function _buildLuaCondFromTokens(c, savedStart) {
         // Wrap compound expressions in parens for correct Lua precedence (not X > 0 → not (X > 0))
         if (/[><=!~+\-*\/%]/.test(_rlv2) || /\band\b|\bor\b/.test(_rlv2)) {
           _rlv2 = '(' + _rlv2 + ')';
+        }
+        var _rlCmp = _peekNumericComparison(c, c.pos + 1);
+        var _rlBoolCmp = _luaBoolNumericComparison(_rlv2, _rlCmp);
+        if (_rlBoolCmp) {
+          parts.push(_rlBoolCmp);
+          while (c.pos <= _rlCmp.endPos) c.advance();
+          continue;
         }
         parts.push(_rlv2);
         c.advance(); continue;
@@ -133,7 +436,11 @@ function _buildLuaCondFromTokens(c, savedStart) {
     c.advance();
   }
   c.restore(_cur);
-  return parts.join(' ').trim();
+  var _joined = parts.join(' ').trim();
+  if (_joined.indexOf('.0') >= 0 || _joined.indexOf('0.0') >= 0) {
+    print('[LUA_COND_DEBUG] raw=' + _joined);
+  }
+  return _joined;
 }
 
 // Try to parse {expr && <JSX>} conditional — returns true if consumed
@@ -331,17 +638,30 @@ function tryParseConditional(c, children) {
       continue;
     }
     // props.X dot-access in conditional condition
+    if (ctx.propsObjectName && c.kind() === TK.identifier && c.text() === ctx.propsObjectName &&
+        c.pos + 2 < c.count && c.kindAt(c.pos + 1) === TK.dot && c.kindAt(c.pos + 2) === TK.identifier) {
+      const _missingProp = c.textAt(c.pos + 2);
+      if (!(ctx.propStack && ctx.propStack[_missingProp] !== undefined)) {
+        condParts.push('0');
+        c.advance(); c.advance(); c.advance();
+        if (c.kind() === TK.dot && c.pos + 1 < c.count && c.textAt(c.pos + 1) === 'length') {
+          c.advance();
+          c.advance();
+        }
+        continue;
+      }
+    }
     {
       const pa = peekPropsAccess(c);
       if (pa) {
         skipPropsAccess(c, pa);
-        const pav = _condPropValue(pa.value);
         // Handle .length after props access: props.X.length → resolved.len
         if (c.kind() === TK.dot && c.pos + 1 < c.count && c.textAt(c.pos + 1) === 'length') {
-          condParts.push(pav + '.len');
+          condParts.push(_condDirectLengthExpr(pa.value));
           c.advance(); // skip .
           c.advance(); // skip length
         } else {
+          const pav = _condPropValue(pa.value);
           condParts.push(pav);
         }
         continue;
@@ -349,6 +669,12 @@ function tryParseConditional(c, children) {
     }
     if (c.kind() === TK.identifier) {
       const name = c.text();
+      const prevPart = condParts.length > 0 ? String(condParts[condParts.length - 1]).trim() : '';
+      if (prevPart === '.') {
+        condParts.push(name);
+        c.advance();
+        continue;
+      }
       if (globalThis.__SMITH_DEBUG_INLINE && (name === 'activeTab' || name === 'connectedApp' || name === 'selectedIdx' || name === 'crashCount' || name === 'copied')) {
         globalThis.__dbg = globalThis.__dbg || [];
         globalThis.__dbg.push('[COND] name=' + name + ' isGetter=' + isGetter(name) + ' slot=' + findSlot(name) + ' inline=' + (ctx.inlineComponent || 'App') + ' pos=' + c.pos);
@@ -413,18 +739,37 @@ function tryParseConditional(c, children) {
         const nextKind = c.pos + 1 < c.count ? c.kindAt(c.pos + 1) : TK.eof;
         const hasExplicitComparison = nextKind === TK.eq_eq || nextKind === TK.not_eq ||
           nextKind === TK.gt || nextKind === TK.gt_eq || nextKind === TK.lt || nextKind === TK.lt_eq;
-        if (rawExpr && c.pos + 2 < c.count && c.kindAt(c.pos + 1) === TK.lparen && c.kindAt(c.pos + 2) === TK.rparen) {
-          condParts.push(zigBool(buildEval('( ' + rawExpr + ' )()', ctx), ctx));
+      if (rawExpr && c.pos + 2 < c.count && c.kindAt(c.pos + 1) === TK.lparen && c.kindAt(c.pos + 2) === TK.rparen) {
+        condParts.push(zigBool(buildEval('( ' + rawExpr + ' )()', ctx), ctx));
+        c.advance();
+        c.advance();
+        c.advance();
+        continue;
+      }
+      if (ctx.currentMap && rlVal === ctx.currentMap.itemParam &&
+          c.pos + 2 < c.count && c.kindAt(c.pos + 1) === TK.dot && c.kindAt(c.pos + 2) === TK.identifier) {
+        c.advance();
+        c.advance();
+        let rlField = c.text();
+        c.advance();
+        while (c.kind() === TK.dot && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.identifier) {
           c.advance();
+          rlField += '_' + c.text();
           c.advance();
-          c.advance();
-          continue;
         }
-        if (rawExpr && c.pos + 2 < c.count && c.kindAt(c.pos + 1) === TK.dot && c.kindAt(c.pos + 2) === TK.identifier) {
-          const field = c.textAt(c.pos + 2);
-          condParts.push(zigBool(buildFieldEval(rawExpr, field, ctx), ctx));
-          c.advance();
-          c.advance();
+        const mapOa = ctx.currentMap.oa;
+        if (mapOa) {
+          condParts.push(`_oa${mapOa.oaIdx}_${rlField}[${ctx.currentMap.iterVar || '_i'}]`);
+        } else {
+          condParts.push('0');
+        }
+        continue;
+      }
+      if (rawExpr && c.pos + 2 < c.count && c.kindAt(c.pos + 1) === TK.dot && c.kindAt(c.pos + 2) === TK.identifier) {
+        const field = c.textAt(c.pos + 2);
+        condParts.push(zigBool(buildFieldEval(rawExpr, field, ctx), ctx));
+        c.advance();
+        c.advance();
           c.advance();
           continue;
         }
@@ -545,14 +890,16 @@ function tryParseConditional(c, children) {
       const sv = c.text().slice(1, -1);
       const lastOp = condParts.length > 0 ? condParts[condParts.length - 1] : '';
       if (sv === '' && (lastOp === ' == ' || lastOp === ' != ')) {
-        condParts.pop();
-        const lhs = condParts.join('');
+        const split = _splitCondAtLastLogical(condParts);
+        const lhs = split.tail.slice(0, -1).join('');
         condParts.length = 0;
+        for (var _pi = 0; _pi < split.prefix.length; _pi++) condParts.push(split.prefix[_pi]);
         condParts.push(lastOp === ' == ' ? `${lhs}.len == 0` : `${lhs}.len > 0`);
       } else if (lastOp === ' == ' || lastOp === ' != ') {
-        condParts.pop();
-        const lhs = condParts.join('');
+        const split = _splitCondAtLastLogical(condParts);
+        const lhs = split.tail.slice(0, -1).join('');
         condParts.length = 0;
+        for (var _pj = 0; _pj < split.prefix.length; _pj++) condParts.push(split.prefix[_pj]);
         const eql = `std.mem.eql(u8, ${lhs}, "${sv}")`;
         condParts.push(lastOp === ' == ' ? eql : `!${eql}`);
       } else {

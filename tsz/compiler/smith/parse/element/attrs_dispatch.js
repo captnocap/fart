@@ -2,6 +2,16 @@
 
 function parseElementAttr(c, attr, rawTag, state) {
   if (attr === 'style') {
+    if (c.kind() === TK.lbrace && !(c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.lbrace)) {
+      const styleExprSaved = c.save();
+      const pendingStyleExpr = parseStyleExpressionAttr(c);
+      if (pendingStyleExpr) {
+        if (!state.pendingStyleExprs) state.pendingStyleExprs = [];
+        state.pendingStyleExprs.push(pendingStyleExpr);
+        return;
+      }
+      c.restore(styleExprSaved);
+    }
     const inlineStyles = parseStyleBlock(c);
     const preInjected = state.styleFields.filter(f => !inlineStyles.some(s => s.split(' = ')[0] === f.split(' = ')[0]));
     state.styleFields = preInjected.concat(inlineStyles);

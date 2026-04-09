@@ -3,6 +3,7 @@
 function finalizeElementAttrState(rawTag, clsDef, clsName, state) {
   applyCanvasDerivedFields(rawTag, state.nodeFields);
   applyClassifierDefaults(clsDef, state);
+  applyPendingStyleExprs(state);
   bindVariantState(clsDef, clsName, state);
   ensureAscriptAutoHandler(rawTag, state);
 }

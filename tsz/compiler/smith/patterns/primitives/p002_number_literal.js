@@ -31,7 +31,7 @@ function match(c, ctx) {
   return isMatch;
 }
 
-function compile(c, ctx) {
+function compile(c, children, ctx) {
   var value = c.text();
   c.advance(); // consume number
   if (c.kind() === TK.rbrace) c.advance(); // consume }

@@ -40,7 +40,7 @@ function match(c, ctx) {
   return nextKind === TK.identifier;
 }
 
-function compile(c, ctx) {
+function compile(c, children, ctx) {
   // Delegate to the main parseJSXElement which handles the full
   // element lifecycle: tag resolution, attrs, children, closing tag.
   return parseJSXElement(c);

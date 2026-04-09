@@ -26,6 +26,12 @@ function tryParseBraceChild(c, children) {
     globalThis.__dbg.push(`BRACE kind=${c.kind()} text=${c.text()} pos=${c.pos}`);
   }
 
+  // Pattern system dispatch — gives registered patterns first crack at
+  // recognizing React idioms before the inline dispatchers below.
+  if (typeof tryPatternMatch === 'function' && tryPatternMatch(c, children)) {
+    return true;
+  }
+
   const condResult = tryParseConditional(c, children);
   if (condResult) {
     tracePattern(16, 'and_short_circuit', '');
@@ -56,7 +62,23 @@ function tryParseBraceChild(c, children) {
         c.kindAt(c.pos + 2) === TK.identifier && c.kindAt(c.pos + 3) === TK.dot) {
       const propField = c.textAt(c.pos + 2);
       const propVal = ctx.propStack && ctx.propStack[propField];
-      const resolvedName = (propVal && typeof propVal === 'string') ? propVal : propField;
+      let propExpr = null;
+      if (propVal && typeof propVal === 'string') {
+        propExpr = isEval(propVal) ? extractRuntimeJsExpr(propVal, null, null) : propVal;
+      }
+      let baseGetter = null;
+      if (propExpr && ctx.objectArrays) {
+        const oaNames = ctx.objectArrays.map(function(o) { return o.getter; }).sort(function(a, b) { return b.length - a.length; });
+        for (let oi = 0; oi < oaNames.length; oi++) {
+          const getterName = oaNames[oi];
+          if (new RegExp('\\b' + getterName + '\\b').test(propExpr)) {
+            baseGetter = getterName;
+            break;
+          }
+        }
+      }
+      const resolvedName = baseGetter || ((propVal && typeof propVal === 'string') ? propVal : propField);
+      const isResolvedIdent = typeof resolvedName === 'string' && /^[A-Za-z_]\w*$/.test(resolvedName);
       // Peek ahead past props.field. to check for .map()
       const savedPropsPeek = c.save();
       c.advance(); c.advance(); c.advance(); c.advance(); // skip props . field .
@@ -75,8 +97,16 @@ function tryParseBraceChild(c, children) {
       }
       c.restore(savedPropsPeek);
       if (isPropsMapCall) {
-        let oa = ctx.objectArrays.find(o => o.getter === resolvedName);
-        if (!oa) oa = inferOaFromSource(c, resolvedName);
+        let oa = isResolvedIdent ? ctx.objectArrays.find(o => o.getter === resolvedName) : null;
+        if (!oa && isResolvedIdent) oa = inferOaFromSource(c, resolvedName);
+        if (!oa && propExpr) {
+          c.advance(); // props
+          c.advance(); // .
+          // Cursor now points at the field name; route computed props like
+          // props.crumbs.map(...) through the computed-chain Lua map path.
+          if (_tryParseComputedChainMap(c, children, propField, propExpr, true)) return true;
+          c.restore(savedPropsPeek);
+        }
         if (oa) {
           // Skip props. to position cursor at field name for tryParseMap
           c.advance(); // props
@@ -95,6 +125,7 @@ function tryParseBraceChild(c, children) {
                 bodyNode: mapResult.luaNode || (_mapInfo2 && _mapInfo2._luaBodyNode) || null,
                 itemParam: _mapInfo2 ? _mapInfo2.itemParam : '_item',
                 indexParam: _mapInfo2 ? _mapInfo2.indexParam : null,
+                filterConditions: _mapInfo2 ? _mapInfo2.filterConditions : null,
                 rawSource: resolvedName,
                 varName: resolvedName,
                 isNested: !!ctx.currentMap
@@ -296,7 +327,7 @@ function tryParseBraceChild(c, children) {
       if (c.kind() === TK.rbrace) c.advance();
       let fullExpr = _normalizeJoinedJsExpr(_joinTokenText(c, _brExprStart, _brExprEnd));
       fullExpr = _normalizeJoinedJsExpr(_expandRenderLocalJs(fullExpr));
-      if (ctx.scriptBlock && fullExpr.length > 0) {
+      if ((ctx.scriptBlock || globalThis.__scriptContent) && fullExpr.length > 0) {
         const slotIdx = ctx.stateSlots.length;
         ctx.stateSlots.push({ getter: '__jsExpr_' + slotIdx, setter: '__setJsExpr_' + slotIdx, initial: '', type: 'string' });
         const isInMap = !!ctx.currentMap;
@@ -319,7 +350,25 @@ function tryParseBraceChild(c, children) {
     c.advance();
     const isEvalExpr = isEval(_brRlVal);
     const isPureEvalExpr = isEvalExpr && _brRlVal.trimStart().startsWith('qjs_runtime.evalToString(');
-    if (isEvalExpr && !isPureEvalExpr && _brRlRaw && ctx.scriptBlock) {
+    if (!isEvalExpr && _brRlRaw && (ctx.scriptBlock || globalThis.__scriptContent) &&
+        typeof shouldEvalRenderLocal === 'function' && shouldEvalRenderLocal(_normalizeJoinedJsExpr(_brRlRaw))) {
+      const slotIdx = ctx.stateSlots.length;
+      ctx.stateSlots.push({ getter: '__jsExpr_' + slotIdx, setter: '__setJsExpr_' + slotIdx, initial: '', type: 'string' });
+      const isInMap = !!ctx.currentMap;
+      let bufId;
+      if (isInMap) {
+        bufId = ctx.mapDynCount || 0;
+        ctx.mapDynCount = bufId + 1;
+      } else {
+        bufId = ctx.dynCount;
+        ctx.dynCount++;
+      }
+      ctx.dynTexts.push({ bufId, fmtString: '{s}', fmtArgs: 'state.getSlotString(' + slotIdx + ')', arrName: '', arrIndex: 0, bufSize: 256, inMap: isInMap, mapIdx: isInMap ? ctx.maps.indexOf(ctx.currentMap) : -1 });
+      ctx._jsDynTexts.push({ slotIdx: slotIdx, jsExpr: _expandRenderLocalJs(_normalizeJoinedJsExpr(_brRlRaw)) });
+      children.push({ nodeExpr: isInMap ? '.{ .text = "__mt' + bufId + '__" }' : '.{ .text = "" }', dynBufId: bufId, inMap: isInMap });
+      return true;
+    }
+    if (isEvalExpr && !isPureEvalExpr && _brRlRaw && (ctx.scriptBlock || globalThis.__scriptContent)) {
       const slotIdx = ctx.stateSlots.length;
       ctx.stateSlots.push({ getter: '__jsExpr_' + slotIdx, setter: '__setJsExpr_' + slotIdx, initial: '', type: 'string' });
       const isInMap = !!ctx.currentMap;
@@ -370,9 +419,10 @@ function tryParseBraceChild(c, children) {
     if (c.kindAt(c.pos + 1) === TK.rbrace) {
       c.advance();
       if (c.kind() === TK.rbrace) c.advance();
-      const isZigExpr = typeof propVal === 'string' && (propVal.includes('state.get') || propVal.includes('getSlot') || propVal.includes('_oa') || propVal.includes('@as'));
+      const isEvalExpr = typeof propVal === 'string' && isEval(propVal);
+      const isZigExpr = isEvalExpr || (typeof propVal === 'string' && (propVal.includes('state.get') || propVal.includes('getSlot') || propVal.includes('_oa') || propVal.includes('@as')));
       if (isZigExpr) {
-        const isStr = propVal.includes('getSlotString') || propVal.includes('..') || propVal.includes('@as([]const u8');
+        const isStr = isEvalExpr || propVal.includes('getSlotString') || propVal.includes('..') || propVal.includes('@as([]const u8');
         const fmt = isStr ? '{s}' : '{d}';
         const args = isStr ? propVal : leftFoldExpr(propVal);
         if (ctx.currentMap) {
@@ -406,9 +456,10 @@ function tryParseBraceChild(c, children) {
           children.push(propVal.result);
           return true;
         }
-        const isZigExpr = typeof propVal === 'string' && (propVal.includes('state.get') || propVal.includes('getSlot') || propVal.includes('_oa') || propVal.includes('@as'));
+        const isEvalExpr = typeof propVal === 'string' && isEval(propVal);
+        const isZigExpr = isEvalExpr || (typeof propVal === 'string' && (propVal.includes('state.get') || propVal.includes('getSlot') || propVal.includes('_oa') || propVal.includes('@as')));
         if (isZigExpr) {
-          const isStr = typeof propVal === 'string' && (propVal.includes('getSlotString') || propVal.includes('..') || propVal.includes('@as([]const u8'));
+          const isStr = typeof propVal === 'string' && (isEvalExpr || propVal.includes('getSlotString') || propVal.includes('..') || propVal.includes('@as([]const u8'));
           const fmt = isStr ? '{s}' : '{d}';
           const args = isStr ? propVal : leftFoldExpr(propVal);
           if (ctx.currentMap) {
@@ -462,7 +513,7 @@ function tryParseBraceChild(c, children) {
       }
       if (c.kind() === TK.rbrace) c.advance();
       const exprText2 = dropTokens2.join(' ');
-      if (ctx.scriptBlock && exprText2.length > 0) {
+      if ((ctx.scriptBlock || globalThis.__scriptContent) && exprText2.length > 0) {
         const jsExpr2 = _normalizeJoinedJsExpr(exprText2);
         const slotIdx2 = ctx.stateSlots.length;
         ctx.stateSlots.push({ getter: '__jsExpr_' + slotIdx2, setter: '__setJsExpr_' + slotIdx2, initial: '', type: 'string' });
@@ -806,7 +857,7 @@ function tryParseBraceChild(c, children) {
   if (c.kind() === TK.rbrace) c.advance();
   const exprText = dropTokens.join(' ');
 
-  if (ctx.scriptBlock && exprText.length > 0) {
+  if ((ctx.scriptBlock || globalThis.__scriptContent) && exprText.length > 0) {
     let jsExpr = _normalizeJoinedJsExpr(exprText);
     if (/^\w+$/.test(jsExpr) && ctx.scriptFuncs && ctx.scriptFuncs.indexOf(jsExpr) >= 0) {
       jsExpr = jsExpr + '()';

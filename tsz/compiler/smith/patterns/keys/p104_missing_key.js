@@ -57,11 +57,25 @@ function match(c, ctx) {
     c.advance();
   }
   c.restore(saved);
+  // This warning pattern is only meaningful while parsing map item templates.
+  if (!ctx.currentMap) return false;
   return !foundKey;
 }
 
 function compile(c, ctx) {
-  return null;
+  var out = {
+    kind: 'missing_key',
+    warned: false,
+    mapScope: !!ctx.currentMap,
+    mapItemParam: ctx.currentMap ? (ctx.currentMap.itemParam || '_item') : null,
+    mapIndexParam: ctx.currentMap ? (ctx.currentMap.indexParam || '_i') : null,
+    mapHasFilterGuards: !!(ctx.currentMap && ctx.currentMap.filterConditions && ctx.currentMap.filterConditions.length),
+  };
+  if (!ctx.currentMap) return out;
+  if (!ctx._keyWarnings) ctx._keyWarnings = [];
+  ctx._keyWarnings.push(out);
+  out.warned = true;
+  return out;
 }
 
 _patterns[104] = { id: 104, match: match, compile: compile };

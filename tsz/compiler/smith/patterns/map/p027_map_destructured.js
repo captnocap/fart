@@ -72,15 +72,10 @@ function match(c, ctx) {
   return false;
 }
 
-function compile(c, ctx) {
-  // Compilation:
-  //   1. readMapParamList detects destructuring, collects alias names
-  //   2. _buildDestructuredComputedPlan maps aliases → OA fields
-  //   3. _attachMapRenderLocalAliases wires into renderLocals
-  //   4. Template body resolves bare names through renderLocals
-  //   5. Each alias becomes a direct OA field accessor in Zig
-  //   6. No runtime destructuring — compile-time field mapping
-  return null;
+function compile(c, children) {
+  // Destructured params ({name, id}) are handled by tryParseMapHeader
+  // which detects { and collects aliases → OA field mappings.
+  return _tryParseIdentifierMapExpression(c, children, false);
 }
 
 _patterns[27] = { id: 27, match: match, compile: compile };

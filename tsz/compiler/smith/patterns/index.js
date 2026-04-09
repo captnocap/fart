@@ -10,19 +10,37 @@
 var _patterns = {};
 
 // Try all registered patterns against the current cursor.
-// Returns the compile() result if a pattern matches, null otherwise.
-function tryPatternMatch(c, ctx) {
+// Returns true if a pattern matched and handled the brace child, false otherwise.
+// Patterns either push to children directly (ternary/conditional) or return
+// a { nodeExpr } result which we push here.
+function tryPatternMatch(c, children) {
+  var before = children.length;
   for (var key in _patterns) {
     var p = _patterns[key];
     if (p && typeof p.match === 'function') {
       var saved = c.save();
       if (p.match(c, ctx)) {
         c.restore(saved);
-        var result = p.compile(c, ctx);
-        if (result !== null) return result;
+        var posBefore = c.pos;
+        var result = p.compile(c, children, ctx);
+        // Pattern pushed to children itself (ternary/conditional delegates)
+        if (children.length > before) {
+          if (c.kind() === TK.rbrace) c.advance();
+          return true;
+        }
+        // Pattern returned a result — push it
+        if (result !== null && result !== undefined && result.nodeExpr) {
+          children.push(result);
+          if (c.kind() === TK.rbrace) c.advance();
+          return true;
+        }
+        // Pattern consumed tokens but returned null (swallow: bool/null/undefined)
+        if (c.pos > posBefore) {
+          return true;
+        }
       }
       c.restore(saved);
     }
   }
-  return null;
+  return false;
 }

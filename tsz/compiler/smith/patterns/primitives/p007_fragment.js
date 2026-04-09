@@ -34,7 +34,7 @@ function match(c, ctx) {
   return c.kindAt(c.pos + 1) === TK.gt;
 }
 
-function compile(c, ctx) {
+function compile(c, children, ctx) {
   c.advance(); // consume <
   // Now cursor is on > — tryParseFragmentElement expects cursor on >
   return tryParseFragmentElement(c);

@@ -56,7 +56,19 @@ function _resolveGlyphShortcodes(text, children) {
     var fillColor = glyph.fill.startsWith('#') ? parseColor(glyph.fill) : 'Color.rgb(255, 255, 255)';
     var fillEffectStr = effectOverride ? ', .fill_effect = "' + effectOverride + '"' : '';
     var glyphExpr = '.{ .d = "' + glyph.d + '", .fill = ' + fillColor + ', .stroke = Color.rgba(0, 0, 0, 0), .stroke_width = 0, .scale = 1.0' + fillEffectStr + ' }';
-    children.push({ nodeExpr: '.{ .text = "\\x01" }', isGlyph: true, glyphExpr: glyphExpr });
+    children.push({
+      nodeExpr: '.{ .text = "\\x01" }',
+      isGlyph: true,
+      glyphExpr: glyphExpr,
+      glyphData: {
+        d: glyph.d,
+        fill: glyph.fill,
+        stroke: 'transparent',
+        stroke_width: '0',
+        scale: '1.0',
+        fill_effect: effectOverride || null,
+      },
+    });
     lastIdx = match.index + match[0].length;
   }
   // Emit remaining text after last glyph

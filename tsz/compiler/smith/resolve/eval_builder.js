@@ -74,6 +74,18 @@ function extractInner(evalStr) {
   return null;
 }
 
+// Prefer the original render-local JS when available, expanded through any
+// dependent render-locals. Falls back to extracting from an eval string.
+function extractRuntimeJsExpr(evalStr, rawJs, renderLocalName) {
+  if (rawJs) {
+    if (typeof expandRenderLocalRawExpr === 'function') {
+      return expandRenderLocalRawExpr(rawJs, renderLocalName);
+    }
+    return rawJs;
+  }
+  return extractInner(evalStr);
+}
+
 // Build a var-decl eval: assigns to a named JS variable then returns it as string.
 // Used for render locals where the variable name must be visible in the JS scope.
 // qjs_runtime.evalToString("var varName = jsExpr; String(varName)", &_eval_buf_N)

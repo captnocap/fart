@@ -88,9 +88,10 @@ function compile(c, ctx) {
   //   a computed OA. QuickJS materializes the array at runtime.
   //
   // The item value is undefined ([...Array(n)] produces undefined elements).
-  // Only the index param is useful. Simple-array OAs store element text via
-  // JS_ToCString, so the index is the reliable piece of data.
-  return null;
+  // match() detects it so the compiler can produce a diagnostic.
+  return { type: 'unsupported', pattern: 'spread_array_map', id: 41,
+    message: '[...Array(n)].map() is not supported inline. Assign to a render local first.',
+    workaround: 'const slots = [...Array(n)]; then {slots.map((_, i) => <X/>)}' };
 }
 
 _patterns[41] = { id: 41, match: match, compile: compile };

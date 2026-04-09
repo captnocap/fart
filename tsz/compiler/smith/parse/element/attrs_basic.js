@@ -77,7 +77,15 @@ function tryParseBasicElementAttr(c, attr, rawTag, nodeFields, currentState) {
           // Store both Zig and raw getter name — build_node.js will resolve for Lua
           _valParts.push(slotGet(c.text()));
         } else if (c.kind() === TK.identifier && ctx.renderLocals && ctx.renderLocals[c.text()] !== undefined) {
-          _valParts.push(ctx.renderLocals[c.text()]);
+          var _renderName = c.text();
+          var _renderVal = ctx.renderLocals[_renderName];
+          if (isEval(_renderVal)) {
+            var _renderRaw = ctx._renderLocalRaw && ctx._renderLocalRaw[_renderName];
+            var _renderJs = extractRuntimeJsExpr(_renderVal, _renderRaw, _renderName);
+            _valParts.push(_renderJs ? buildEval(_renderJs, ctx) : _renderVal);
+          } else {
+            _valParts.push(_renderVal);
+          }
         } else {
           _valParts.push(c.text());
         }

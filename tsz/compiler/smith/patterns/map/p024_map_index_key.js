@@ -57,11 +57,10 @@ function match(c, ctx) {
   return false;
 }
 
-function compile(c, ctx) {
-  // No special compilation. The key attribute is consumed and discarded.
-  // The index parameter is available as the iteration variable.
-  // Pool index = item identity. No reconciliation needed.
-  return null;
+function compile(c, children) {
+  // Key={i} is consumed and discarded by the map infrastructure.
+  // No reconciliation in static Zig pools.
+  return _tryParseIdentifierMapExpression(c, children, false);
 }
 
 _patterns[24] = { id: 24, match: match, compile: compile };

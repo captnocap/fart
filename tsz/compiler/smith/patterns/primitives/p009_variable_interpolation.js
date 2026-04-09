@@ -52,7 +52,7 @@ function match(c, ctx) {
   return isMatch;
 }
 
-function compile(c, ctx) {
+function compile(c, children, ctx) {
   var name = c.text();
   c.advance(); // consume identifier
 

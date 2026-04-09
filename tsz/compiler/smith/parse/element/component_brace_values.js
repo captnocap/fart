@@ -1,5 +1,16 @@
 // ── JSX component prop brace-value helpers ───────────────────────
 
+function resolveComponentRenderLocalValue(name) {
+  if (!(ctx.renderLocals && ctx.renderLocals[name] !== undefined)) return null;
+  var rlVal = ctx.renderLocals[name];
+  if (!isEval(rlVal)) return rlVal;
+
+  var rawExpr = ctx._renderLocalRaw && ctx._renderLocalRaw[name];
+  var jsExpr = extractRuntimeJsExpr(rlVal, rawExpr, name);
+  if (jsExpr) return buildEval(jsExpr, ctx);
+  return rlVal;
+}
+
 function tryParseComponentBraceProp(c, attr, propValues) {
   if (c.kind() !== TK.lbrace) return false;
 
@@ -174,7 +185,7 @@ function parseComponentBraceValue(c) {
         }
         c.advance(); c.advance(); // skip name and dot; field advanced below
       } else {
-        val += _rlv;
+        val += resolveComponentRenderLocalValue(c.text());
       }
     } else if (c.kind() === TK.identifier && ctx.currentMap && c.text() === ctx.currentMap.indexParam) {
       val += '@as(i64, @intCast(' + (ctx.currentMap.iterVar || '_i') + '))';
@@ -250,7 +261,7 @@ function resolveComponentTemplateLiteralValue(c) {
           }
         }
         if (isGetter(expr)) return slotGet(expr);
-        if (ctx.renderLocals && ctx.renderLocals[expr] !== undefined) return ctx.renderLocals[expr];
+        if (ctx.renderLocals && ctx.renderLocals[expr] !== undefined) return resolveComponentRenderLocalValue(expr);
       }
       break;
     }
@@ -279,21 +290,123 @@ function resolveComponentIdentifierValue(c) {
   }
 
   if (resolved !== null) return resolved;
-  if (c.kind() === TK.identifier && ctx.renderLocals && ctx.renderLocals[c.text()] !== undefined) return ctx.renderLocals[c.text()];
+  if (c.kind() === TK.identifier && ctx.renderLocals && ctx.renderLocals[c.text()] !== undefined) return resolveComponentRenderLocalValue(c.text());
   if (c.kind() === TK.identifier && ctx.propStack && ctx.propStack[c.text()] !== undefined && typeof ctx.propStack[c.text()] === 'string') return ctx.propStack[c.text()];
   return null;
 }
 
+function _splitTopLevelComponentTernary(expr) {
+  if (typeof expr !== 'string') return null;
+  var depthParen = 0;
+  var depthBracket = 0;
+  var depthBrace = 0;
+  var quote = '';
+  var escape = false;
+  var question = -1;
+  for (var i = 0; i < expr.length; i++) {
+    var ch = expr.charAt(i);
+    if (quote) {
+      if (escape) {
+        escape = false;
+        continue;
+      }
+      if (ch === '\\') {
+        escape = true;
+        continue;
+      }
+      if (ch === quote) quote = '';
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      continue;
+    }
+    if (ch === '(') { depthParen++; continue; }
+    if (ch === ')') { if (depthParen > 0) depthParen--; continue; }
+    if (ch === '[') { depthBracket++; continue; }
+    if (ch === ']') { if (depthBracket > 0) depthBracket--; continue; }
+    if (ch === '{') { depthBrace++; continue; }
+    if (ch === '}') { if (depthBrace > 0) depthBrace--; continue; }
+    if (depthParen === 0 && depthBracket === 0 && depthBrace === 0 && ch === '?') {
+      question = i;
+      break;
+    }
+  }
+  if (question < 0) return null;
+
+  depthParen = 0;
+  depthBracket = 0;
+  depthBrace = 0;
+  quote = '';
+  escape = false;
+  var ternaryDepth = 0;
+  var colon = -1;
+  for (var j = question + 1; j < expr.length; j++) {
+    var ch2 = expr.charAt(j);
+    if (quote) {
+      if (escape) {
+        escape = false;
+        continue;
+      }
+      if (ch2 === '\\') {
+        escape = true;
+        continue;
+      }
+      if (ch2 === quote) quote = '';
+      continue;
+    }
+    if (ch2 === '"' || ch2 === "'") {
+      quote = ch2;
+      continue;
+    }
+    if (ch2 === '(') { depthParen++; continue; }
+    if (ch2 === ')') { if (depthParen > 0) depthParen--; continue; }
+    if (ch2 === '[') { depthBracket++; continue; }
+    if (ch2 === ']') { if (depthBracket > 0) depthBracket--; continue; }
+    if (ch2 === '{') { depthBrace++; continue; }
+    if (ch2 === '}') { if (depthBrace > 0) depthBrace--; continue; }
+    if (depthParen === 0 && depthBracket === 0 && depthBrace === 0) {
+      if (ch2 === '?') {
+        ternaryDepth++;
+        continue;
+      }
+      if (ch2 === ':') {
+        if (ternaryDepth === 0) {
+          colon = j;
+          break;
+        }
+        ternaryDepth--;
+      }
+    }
+  }
+  if (colon < 0) return null;
+  return {
+    cond: expr.slice(0, question).trim(),
+    whenTrue: expr.slice(question + 1, colon).trim(),
+    whenFalse: expr.slice(colon + 1).trim(),
+  };
+}
+
+function _normalizeComponentStringLiteral(value) {
+  if (/^"[^"]*"$/.test(value)) return value;
+  if (/^'[^']*'$/.test(value)) {
+    return '"' + value.slice(1, -1).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
+  }
+  return value;
+}
+
 function normalizeComponentTernaryValue(val) {
-  if (val.indexOf('?') < 0 || val.indexOf(':') < 0) return val;
+  const split = _splitTopLevelComponentTernary(val);
+  if (!split) return val;
 
-  const qIdx = val.indexOf('?');
-  const cIdx = val.indexOf(':', qIdx);
-  if (!(qIdx > 0 && cIdx > qIdx)) return val;
-
-  var cond = val.substring(0, qIdx).trim();
-  const thenVal = val.substring(qIdx + 1, cIdx).trim();
-  const elseVal = val.substring(cIdx + 1).trim();
+  var cond = split.cond;
+  const thenVal = normalizeComponentTernaryValue(split.whenTrue);
+  const elseVal = normalizeComponentTernaryValue(split.whenFalse);
+  const thenLooksObject = thenVal.trim().charAt(0) === '{';
+  const elseLooksObject = elseVal.trim().charAt(0) === '{';
+  if (thenLooksObject || elseLooksObject) {
+    return val.trim();
+  }
   cond = cond.replace(/===/g, '==').replace(/!==/g, '!=');
   // Resolve comparison or bare truthiness via resolve layer
   var _eqMatch = cond.match(/^(.+?)\s*(==|!=)\s*(.+)$/);
@@ -303,12 +416,14 @@ function normalizeComponentTernaryValue(val) {
     cond = zigBool(cond, ctx);
   }
   // String branches need @as([]const u8, ...) for Zig type unification
-  const thenIsStr = /^"[^"]*"$/.test(thenVal);
-  const elseIsStr = /^"[^"]*"$/.test(elseVal);
+  const zigThenLit = _normalizeComponentStringLiteral(thenVal);
+  const zigElseLit = _normalizeComponentStringLiteral(elseVal);
+  const thenIsStr = /^"[^"]*"$/.test(zigThenLit);
+  const elseIsStr = /^"[^"]*"$/.test(zigElseLit);
   if (thenIsStr && elseIsStr) {
-    return 'if (' + cond + ') @as([]const u8, ' + thenVal + ') else @as([]const u8, ' + elseVal + ')';
+    return 'if (' + cond + ') @as([]const u8, ' + zigThenLit + ') else @as([]const u8, ' + zigElseLit + ')';
   }
-  const zigThen = /^-?\d+$/.test(thenVal) ? '@as(i64, ' + thenVal + ')' : thenVal;
-  const zigElse = /^-?\d+$/.test(elseVal) ? '@as(i64, ' + elseVal + ')' : elseVal;
+  const zigThen = /^-?\d+$/.test(zigThenLit) ? '@as(i64, ' + zigThenLit + ')' : zigThenLit;
+  const zigElse = /^-?\d+$/.test(zigElseLit) ? '@as(i64, ' + zigElseLit + ')' : zigElseLit;
   return 'if (' + cond + ') ' + zigThen + ' else ' + zigElse;
 }

@@ -73,6 +73,7 @@ function _tryParseComputedChainMap(c, children, baseName, baseExpr, consumeClosi
 
     // Let the normal Zig path parse the JSX and create the OA.
     var oa = _ensureSyntheticComputedOa(getterName, mapExpr, mapSnippet, header);
+    if (ctx.currentMap) oa.isNested = true;
     c.restore(mapPos);
     var mapResult = tryParsePlainMapFromMethod(c, oa, oa._computedHeader || header);
     if (!mapResult) { c.restore(saved); return false; }
@@ -90,7 +91,7 @@ function _tryParseComputedChainMap(c, children, baseName, baseExpr, consumeClosi
     // Use the PARSED node result — convert Zig template → Lua table
     if (!ctx._luaMapRebuilders) ctx._luaMapRebuilders = [];
     var _luaIdx = ctx._luaMapRebuilders.length;
-    var _luaRaw = expandRenderLocalRawExpr(ctx._renderLocalRaw[baseName] || baseName, baseName);
+    var _luaRaw = mapExpr;
     var _luaTemplateExpr = (mapIdx >= 0 && ctx.maps[mapIdx].templateExpr) || mapResult.templateNodeExpr || '.{}';
     var _luaBody = _nodeResultToLuaRebuilder(_luaIdx, { templateNodeExpr: _luaTemplateExpr }, oa);
     ctx._luaMapRebuilders.push({
@@ -99,7 +100,8 @@ function _tryParseComputedChainMap(c, children, baseName, baseExpr, consumeClosi
       bodyNode: mapResult.luaNode || null,
       itemParam: header.itemParam || '_item',
       indexParam: header.indexParam || null,
-      dataVar: oa.getter,
+      filterConditions: mapIdx >= 0 ? ctx.maps[mapIdx].filterConditions : null,
+      dataVar: ctx.currentMap ? null : oa.getter,
       rawSource: _luaRaw,
       varName: baseName,
       isNested: !!ctx.currentMap
@@ -112,6 +114,7 @@ function _tryParseComputedChainMap(c, children, baseName, baseExpr, consumeClosi
   // All computed chain maps go to Lua — same pattern as render-local path above.
   var _ccLuaJsxPos = c.save();
   var oa = _ensureSyntheticComputedOa(getterName, mapExpr, mapSnippet, header);
+  if (ctx.currentMap) oa.isNested = true;
 
   c.restore(mapPos);
   var mapResult = tryParsePlainMapFromMethod(c, oa, oa._computedHeader || header);
@@ -138,7 +141,8 @@ function _tryParseComputedChainMap(c, children, baseName, baseExpr, consumeClosi
     bodyNode: mapResult.luaNode || null,
     itemParam: header.itemParam || '_item',
     indexParam: header.indexParam || null,
-    dataVar: oa.getter,
+    filterConditions: _ccMapIdx >= 0 ? ctx.maps[_ccMapIdx].filterConditions : null,
+    dataVar: ctx.currentMap ? null : oa.getter,
     rawSource: _ccRawSource,
     varName: baseName,
     isNested: !!ctx.currentMap
@@ -406,6 +410,7 @@ function _tryParseIdentifierMapExpression(c, children, consumeClosingBrace) {
         bodyLua: _nmBodyLua,
         itemParam: _nmParam || '_item',
         indexParam: _nmIdxParam || null,
+        filterConditions: null,
         rawSource: _nmRawSource,
         varName: maybeArr,
         isNested: !!ctx.currentMap
@@ -499,6 +504,7 @@ function _tryParseIdentifierMapExpression(c, children, consumeClosingBrace) {
       bodyNode: _zigMapResult.luaNode || null,
       itemParam: _dynItemParam || '_item',
       indexParam: _dynIdxParam || null,
+      filterConditions: _dynMapIdx >= 0 ? ctx.maps[_dynMapIdx].filterConditions : null,
       rawSource: maybeArr,
       varName: maybeArr,
       isNested: !!ctx.currentMap

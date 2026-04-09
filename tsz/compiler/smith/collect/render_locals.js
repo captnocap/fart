@@ -250,17 +250,17 @@ function collectRenderLocals(c, appStart) {
           for (var _coi = 0; _coi < ctx.objectArrays.length; _coi++) {
             if (ctx.objectArrays[_coi].getter === varName && ctx.objectArrays[_coi].isConst) { _isConstOa = true; break; }
           }
-          if (!_isConstOa) {
-            if (shouldEvalRenderLocal(rawExpr)) {
-              var expandedRaw = expandRenderLocalRawExpr(rawExpr, varName);
-              ctx.renderLocals[varName] = buildVarEval(varName, expandedRaw, ctx);
+            if (!_isConstOa) {
+              if (shouldEvalRenderLocal(rawExpr)) {
+                var expandedRaw = expandRenderLocalRawExpr(rawExpr, varName);
+                ctx.renderLocals[varName] = buildEval(expandedRaw, ctx);
             // Check if value is a JS function call — route through QJS eval
             } else if (c.kind() === TK.identifier && !isGetter(c.text()) && !isSetter(c.text()) &&
                 !(ctx.renderLocals[c.text()] !== undefined) &&
                 c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.lparen) {
               var rawJs = readRawJsExpression(c);
               var expandedRawJs = expandRenderLocalRawExpr(rawJs, varName);
-              ctx.renderLocals[varName] = buildVarEval(varName, expandedRawJs, ctx);
+              ctx.renderLocals[varName] = buildEval(expandedRawJs, ctx);
             } else {
               const valStr = readRenderLocalValue(c);
               if (!valStr.includes('useState')) ctx.renderLocals[varName] = valStr;
@@ -314,7 +314,7 @@ function collectRenderLocals(c, appStart) {
             var expandedIife = expandRenderLocalRawExpr(iife, reassignedVar);
             // Store the EXPANDED IIFE so further expansions don't re-expand shotStatsData → nested IIFEs
             ctx._renderLocalRaw[reassignedVar] = expandedIife;
-            ctx.renderLocals[reassignedVar] = buildVarEval(reassignedVar, expandedIife, ctx);
+            ctx.renderLocals[reassignedVar] = buildEval(expandedIife, ctx);
             continue;
           }
         }

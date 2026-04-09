@@ -70,7 +70,7 @@ function match(c, ctx) {
   return false;
 }
 
-function compile(c, ctx) {
+function compile(c, children, ctx) {
   // Parse LHS: collect tokens before ||
   var lhsParts = [];
   var lhsRaw = [];

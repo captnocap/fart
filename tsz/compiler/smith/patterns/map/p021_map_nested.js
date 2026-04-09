@@ -63,22 +63,11 @@ function match(c, ctx) {
   return false;
 }
 
-function compile(c, ctx) {
-  // Compilation is handled by tryParseNestedMap() in parse/map/nested.js.
-  // It:
-  //   1. Parses the map header (item param, index param)
-  //   2. Creates a mapInfo with isNested=true, parentMapIdx, parentOaIdx
-  //   3. Enters nested map context (pushes to ctx.maps)
-  //   4. Parses the JSX template body
-  //   5. Exits map context, consumes closing tokens
-  //   6. Returns { nodeExpr: '.{}', mapIdx: N }
-  //
-  // The emit pass (map_pools.js) then generates:
-  //   - MAX_MAP_N, MAX_FLAT_N, MAX_NESTED_OUTER_N constants
-  //   - _map_pool_N: [MAX_NESTED_OUTER][MAX_MAP]Node = undefined
-  //   - _map_count_N: [MAX_NESTED_OUTER]usize = undefined
-  //   - rebuild loop nested inside parent's rebuild loop
-  return null;
+function compile(c, children) {
+  // Nested maps (item.field.map inside a parent .map) are dispatched
+  // through _tryParseIdentifierMapExpression which detects nested OA
+  // fields and calls tryParseNestedMap() in parse/map/nested.js.
+  return _tryParseIdentifierMapExpression(c, children, false);
 }
 
 _patterns[21] = { id: 21, match: match, compile: compile };

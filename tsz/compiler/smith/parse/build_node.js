@@ -12,6 +12,54 @@ function _resolveOaItemMarkers(expr) {
   });
 }
 
+function _normalizeLuaConditionExpr(expr) {
+  if (!expr || typeof expr !== 'string') return expr;
+  var out = _resolveOaItemMarkers(expr);
+  if (ctx && ctx.stateSlots) {
+    out = out.replace(/state\.getSlot(?:Int|Float|Bool)?\((\d+)\)/g, function(_, idx) {
+      return ctx.stateSlots[+idx] ? ctx.stateSlots[+idx].getter : '_slot' + idx;
+    });
+    out = out.replace(/state\.getSlotString\((\d+)\)/g, function(_, idx) {
+      return ctx.stateSlots[+idx] ? ctx.stateSlots[+idx].getter : '_slot' + idx;
+    });
+  }
+  for (var i = 0; i < 3; i++) {
+    out = out.replace(/@as\([^,]+,\s*([^)]+)\)/g, '$1');
+    out = out.replace(/@intCast\(([^)]+)\)/g, '$1');
+  }
+  out = out.replace(/\s+!=\s+/g, ' ~= ');
+  out = out.replace(/(\w+)\.len\b/g, '#$1');
+  return out;
+}
+
+function _wrapJsTernaryTextExpr(expr) {
+  if (!expr || typeof expr !== 'string' || expr.indexOf('?') < 0) return expr;
+  var jsExpr = String(expr)
+    .replace(/\band\b/g, '&&')
+    .replace(/\bor\b/g, '||')
+    .replace(/\bnot\b/g, '!')
+    .replace(/~=/g, '!=')
+    .replace(/\.len\b/g, '.length');
+  return '__eval("' + jsExpr.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '")';
+}
+
+function _normalizeEmbeddedJsEval(expr) {
+  if (!expr || typeof expr !== 'string' || expr.indexOf('__eval("') < 0) return expr;
+  return expr.replace(/__eval\("((?:[^"\\]|\\.)*)"\)/g, function(_, inner) {
+    var jsExpr = inner
+      .replace(/\\n/g, '\n')
+      .replace(/\\r/g, '\r')
+      .replace(/\\"/g, '"')
+      .replace(/\\\\/g, '\\')
+      .replace(/\band\b/g, '&&')
+      .replace(/\bor\b/g, '||')
+      .replace(/\bnot\b/g, '!')
+      .replace(/~=/g, '!=')
+      .replace(/\.len\b/g, '.length');
+    return '__eval("' + jsExpr.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n').replace(/\r/g, '\\r') + '")';
+  });
+}
+
 function _cloneInlineGlyphData(glyphData) {
   if (!glyphData) return null;
   var out = {
@@ -267,6 +315,8 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
                   var _ao = (_argClean.match(/\(/g) || []).length;
                   var _ac = (_argClean.match(/\)/g) || []).length;
                   while (_ac > _ao && _argClean.endsWith(')')) { _argClean = _argClean.slice(0, -1); _ac--; }
+                  _argClean = _wrapJsTernaryTextExpr(_argClean);
+                  _argClean = _normalizeEmbeddedJsEval(_argClean);
                   _luaParts.push('tostring(' + _argClean + ')');
                 }
               }
@@ -304,6 +354,8 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
               var _sco = (_singleClean.match(/\(/g) || []).length;
               var _scc = (_singleClean.match(/\)/g) || []).length;
               while (_scc > _sco && _singleClean.endsWith(')')) { _singleClean = _singleClean.slice(0, -1); _scc--; }
+              _singleClean = _wrapJsTernaryTextExpr(_singleClean);
+              _singleClean = _normalizeEmbeddedJsEval(_singleClean);
               _dln.text = { stateVar: _singleClean };
             }
           }
@@ -536,6 +588,7 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
     var _ln = {};
     // Helper: clean Zig expressions to Lua-friendly form
     var _cleanZigExpr = function(expr) {
+      expr = expr.replace(/\bColor\{\}/g, '0x000000');
       // JS logical operators → Lua
       expr = expr.replace(/&&/g, ' and ').replace(/\|\|/g, ' or ');
       expr = expr.replace(/===/g, '==').replace(/!==/g, '~=');
@@ -604,6 +657,7 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
         if (_sv === 'std.math.inf(f32)') _sv = 'auto';
         // .enum_value → strip leading dot
         if (_sv.charAt(0) === '.') _sv = _sv.slice(1);
+        if (_sv === 'Color{}') _sv = '0x000000';
         // Resolve state.getSlot references to getter names
         if (_sv.indexOf('state.getSlot') >= 0) {
           _sv = _sv.replace(/state\.getSlot(?:Int|Float|Bool)?\((\d+)\)/g, function(_, idx) {
@@ -886,10 +940,10 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
           // Conditionals
           if (_ch.condIdx !== undefined && ctx.conditionals[_ch.condIdx]) {
             var _cond = ctx.conditionals[_ch.condIdx];
-            _ln.children.push({ condition: _resolveOaItemMarkers(_cond.luaCondExpr || _cond.condExpr), node: _ch.luaNode });
+            _ln.children.push({ condition: _normalizeLuaConditionExpr(_cond.luaCondExpr || _cond.condExpr), node: _ch.luaNode });
           } else if (_ch.ternaryCondIdx !== undefined && ctx.conditionals[_ch.ternaryCondIdx]) {
             var _tc = ctx.conditionals[_ch.ternaryCondIdx];
-            var _tcLua = _resolveOaItemMarkers(_tc.luaCondExpr || _tc.condExpr);
+            var _tcLua = _normalizeLuaConditionExpr(_tc.luaCondExpr || _tc.condExpr);
             if (_ch.ternaryBranch === 'true') {
               _ln.children.push({ ternaryCondition: _tcLua, trueNode: _ch.luaNode, falseNode: null });
             } else if (_ch.ternaryBranch === 'false') {

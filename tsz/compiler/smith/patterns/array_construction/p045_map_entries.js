@@ -77,8 +77,10 @@ function compile(c, ctx) {
   //   _tryParseIdentifierMapExpression sees the render-local identifier,
   //   notices the raw JS contains 'Array.from', and _tryParseComputedChainMap
   //   synthesizes a computed OA. QuickJS evaluates Array.from(map.entries())
-  //   at runtime. Destructured [k, v] params work the same as p044.
-  return null;
+  // match() detects it so the compiler can produce a diagnostic.
+  return { type: 'unsupported', pattern: 'map_entries', id: 45,
+    message: 'Array.from(map.entries()).map() is not supported inline. Assign to a render local first.',
+    workaround: 'const entries = Array.from(map.entries()); then {entries.map(([k, v]) => <X/>)}' };
 }
 
 _patterns[45] = { id: 45, match: match, compile: compile };

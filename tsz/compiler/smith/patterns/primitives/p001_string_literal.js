@@ -29,7 +29,7 @@ function match(c, ctx) {
          k !== TK.rbrace && k !== TK.eof && k !== TK.comment;
 }
 
-function compile(c, ctx) {
+function compile(c, children, ctx) {
   // Collect contiguous text tokens into a single string, trim, and emit
   // as a static .text node field.
   var textStart = c.starts[c.pos];

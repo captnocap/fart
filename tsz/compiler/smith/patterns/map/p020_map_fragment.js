@@ -75,12 +75,10 @@ function match(c, ctx) {
   return false;
 }
 
-function compile(c, children, ctx) {
-  // Same dispatch as p019. The map infrastructure in brace.js handles
-  // both single-element and fragment callbacks transparently.
-  // parseJSXElement detects <> and returns a fragment node.
-  // The map emitter sizes pools based on actual children count per item.
-  return null; // Handled by brace.js map dispatcher
+function compile(c, children) {
+  // Same as p019 — _tryParseIdentifierMapExpression handles fragment
+  // callbacks transparently (parseJSXElement detects <> fragments).
+  return _tryParseIdentifierMapExpression(c, children, false);
 }
 
 _patterns[20] = { id: 20, match: match, compile: compile };

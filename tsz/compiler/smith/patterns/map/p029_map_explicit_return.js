@@ -99,15 +99,10 @@ function match(c, ctx) {
   return false;
 }
 
-function compile(c, ctx) {
-  // Compilation:
-  //   1. Header parser detects { after => or function keyword
-  //   2. Scans for return at bodyDepth === 1
-  //   3. Advances past return, optional (
-  //   4. parseJSXElement for template body (same as implicit return)
-  //   5. consumeMapClose handles }  ) closings
-  //   6. Zig output identical to implicit return
-  return null;
+function compile(c, children) {
+  // Explicit return (=> { return <JSX> }) — header parser detects
+  // the block body and scans for return before parsing JSX.
+  return _tryParseIdentifierMapExpression(c, children, false);
 }
 
 _patterns[29] = { id: 29, match: match, compile: compile };

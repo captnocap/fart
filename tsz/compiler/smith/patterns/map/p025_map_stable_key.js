@@ -55,11 +55,10 @@ function match(c, ctx) {
   return false;
 }
 
-function compile(c, ctx) {
-  // No special compilation needed. Key is consumed and discarded.
-  // The field used as key (item.id) may still be referenced
-  // elsewhere and will be a normal OA field.
-  return null;
+function compile(c, children) {
+  // Key={item.id} consumed and discarded. The id field becomes a
+  // normal OA field if referenced elsewhere in the template.
+  return _tryParseIdentifierMapExpression(c, children, false);
 }
 
 _patterns[25] = { id: 25, match: match, compile: compile };

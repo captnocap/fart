@@ -55,10 +55,9 @@ function match(c, ctx) {
   return false;
 }
 
-function compile(c, ctx) {
-  // No special compilation. Key is consumed and discarded.
-  // Template literal in key position is never emitted.
-  return null;
+function compile(c, children) {
+  // Compound key (template literal) consumed and discarded.
+  return _tryParseIdentifierMapExpression(c, children, false);
 }
 
 _patterns[26] = { id: 26, match: match, compile: compile };

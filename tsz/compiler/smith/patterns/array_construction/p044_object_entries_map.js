@@ -80,10 +80,10 @@ function compile(c, ctx) {
   //   _buildDestructuredComputedPlan synthesizes fields plus render-local
   //   aliases so bare k/v references inside the JSX body resolve cleanly.
   //
-  // Destructured aliases only become useful when the callback body actually
-  // references them. If unused, the OA falls back toward a simple-array
-  // shape with no direct key/value fields.
-  return null;
+  // match() detects it so the compiler can produce a diagnostic.
+  return { type: 'unsupported', pattern: 'object_entries_map', id: 44,
+    message: 'Object.entries().map() is not supported inline. Assign to a render local first.',
+    workaround: 'const entries = Object.entries(obj); then {entries.map(([k, v]) => <Row label={k} value={v}/>)}' };
 }
 
 _patterns[44] = { id: 44, match: match, compile: compile };

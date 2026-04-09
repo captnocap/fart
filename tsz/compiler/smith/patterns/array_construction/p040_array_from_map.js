@@ -93,8 +93,10 @@ function compile(c, ctx) {
   //   and _tryParseComputedChainMap creates a computed OA. QuickJS evaluates
   //   the Array.from() call at runtime before Zig-side OA unpacking.
   //
-  // Functionally identical to p039 (Array(n).fill().map()) for rendering.
-  return null;
+  // match() detects it so the compiler can produce a diagnostic.
+  return { type: 'unsupported', pattern: 'array_from_map', id: 40,
+    message: 'Array.from().map() is not supported inline. Assign to a render local first.',
+    workaround: 'const items = Array.from({length: count}); then {items.map((_, i) => <X/>)}' };
 }
 
 _patterns[40] = { id: 40, match: match, compile: compile };

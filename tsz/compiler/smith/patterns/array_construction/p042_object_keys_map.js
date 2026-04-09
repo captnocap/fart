@@ -83,10 +83,10 @@ function compile(c, ctx) {
   //   produces a simple string array where bare k resolves to text children
   //   via _oa0__v[_i][0.._oa0__v_lens[_i]].
   //
-  // Prop passthrough of bare item values is weaker than text rendering in
-  // simple-array maps; the resolver primarily treats bare item params as
-  // index-like unless they arrive through render-local aliases.
-  return null;
+  // match() detects it so the compiler can produce a diagnostic.
+  return { type: 'unsupported', pattern: 'object_keys_map', id: 42,
+    message: 'Object.keys().map() is not supported inline. Assign to a render local first.',
+    workaround: 'const keys = Object.keys(obj); then {keys.map(k => <Text>{k}</Text>)}' };
 }
 
 _patterns[42] = { id: 42, match: match, compile: compile };

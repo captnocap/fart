@@ -61,16 +61,10 @@ function match(c, ctx) {
   return false;
 }
 
-function compile(c, ctx) {
-  // Compilation:
-  //   1. Map header parsed normally by tryParsePlainMap
-  //   2. Template body encounters && expression in brace children
-  //   3. Left side: condition → OA field lookup + _wrapMapCondition
-  //   4. Right side: JSX element → normal node compilation
-  //   5. Emit wraps in if() inside the for loop
-  //   6. _map_count only incremented when condition passes
-  //   7. Nodes after the conditional count are .display = .none
-  return null;
+function compile(c, children) {
+  // Map with && filter inside — handled transparently by the map
+  // infrastructure. brace/conditional.js compiles the && inside the template.
+  return _tryParseIdentifierMapExpression(c, children, false);
 }
 
 _patterns[23] = { id: 23, match: match, compile: compile };

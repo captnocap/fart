@@ -110,6 +110,21 @@ function _parseTernaryCondParts(c) {
       continue;
     }
     // props.X dot-access in ternary condition
+    if (ctx.propsObjectName && c.kind() === TK.identifier && c.text() === ctx.propsObjectName &&
+        c.pos + 2 < c.count && c.kindAt(c.pos + 1) === TK.dot && c.kindAt(c.pos + 2) === TK.identifier) {
+      var _missingProp = c.textAt(c.pos + 2);
+      if (!(ctx.propStack && ctx.propStack[_missingProp] !== undefined)) {
+        condParts.push('0');
+        c.advance();
+        c.advance();
+        c.advance();
+        if (c.kind() === TK.dot && c.pos + 1 < c.count && c.textAt(c.pos + 1) === 'length') {
+          c.advance();
+          c.advance();
+        }
+        continue;
+      }
+    }
     var pa = peekPropsAccess(c);
     if (pa) {
       skipPropsAccess(c, pa);
@@ -118,6 +133,12 @@ function _parseTernaryCondParts(c) {
     }
     if (c.kind() === TK.identifier) {
       var name = c.text();
+      var prevPart = condParts.length > 0 ? String(condParts[condParts.length - 1]).trim() : '';
+      if (prevPart === '.') {
+        condParts.push(name);
+        c.advance();
+        continue;
+      }
       // OA getter followed by .length → _oaN_len
       var _ternOa = ctx.objectArrays ? ctx.objectArrays.find(function(o) { return o.getter === name; }) : null;
       if (_ternOa && c.pos + 2 < c.count && c.kindAt(c.pos + 1) === TK.dot && c.textAt(c.pos + 2) === 'length') {
@@ -422,199 +443,109 @@ function tryParseTernaryJSX(c, children) {
   return true;
 }
 
+function _escapeTernaryTextLiteral(value) {
+  return String(value)
+    .replace(/\\/g, '\\\\')
+    .replace(/"/g, '\\"')
+    .replace(/\n/g, '\\n')
+    .replace(/\r/g, '\\r');
+}
+
+function _normalizeLuaTernaryCond(luaCond) {
+  if (!luaCond) return 'false';
+  luaCond = luaCond.trim();
+  if (!/[=~<>]/.test(luaCond) && !/\band\b|\bor\b|\bnot\b/.test(luaCond)) {
+    luaCond = luaCond + ' ~= 0';
+  }
+  return luaCond;
+}
+
+function _resolveTernaryTextMarkers(expr) {
+  if (!expr || expr.indexOf('\x02') === -1) return expr;
+  return expr.replace(/\x02OA_ITEM:\d+:[^:]+:(\w+)\s*\.\s*(\w+)/g, function(_, itemParam, field) {
+    return itemParam + '.' + field;
+  }).replace(/\x02OA_ITEM:\d+:[^:]+:(\w+)/g, function(_, itemParam) {
+    return itemParam;
+  });
+}
+
+function _parseNestedTernaryTextExpr(c) {
+  var saved = c.save();
+  var luaSaved = c.save();
+  var condParts = _parseTernaryCondParts(c);
+  if (!condParts) {
+    c.restore(saved);
+    return null;
+  }
+
+  if (c.kind() !== TK.string) {
+    c.restore(saved);
+    return null;
+  }
+  var trueVal = c.text().slice(1, -1);
+  c.advance();
+
+  if (c.kind() !== TK.colon) {
+    c.restore(saved);
+    return null;
+  }
+  c.advance();
+
+  var falseBranch = null;
+  if (c.kind() === TK.string) {
+    falseBranch = { kind: 'string', value: c.text().slice(1, -1) };
+    c.advance();
+  } else {
+    var nested = _parseNestedTernaryTextExpr(c);
+    if (!nested) {
+      c.restore(saved);
+      return null;
+    }
+    falseBranch = { kind: 'expr', value: nested };
+  }
+
+  var condExpr = _resolveTernaryTextMarkers(_resolveStringComparison(condParts.join('')));
+  var luaCond = (typeof _buildLuaCondFromTokens === 'function')
+    ? _buildLuaCondFromTokens(c, luaSaved)
+    : condParts.join('').replace(/!==/g, '~=').replace(/===/g, '==');
+  luaCond = _resolveTernaryTextMarkers(luaCond);
+
+  return {
+    condExpr: condExpr,
+    luaCond: _normalizeLuaTernaryCond(luaCond),
+    trueVal: trueVal,
+    falseBranch: falseBranch,
+  };
+}
+
+function _nestedTernaryTextToZig(expr) {
+  var zigCond = zigBool(expr.condExpr, ctx);
+  var trueLit = '@as([]const u8, "' + _escapeTernaryTextLiteral(expr.trueVal) + '")';
+  var falseLit = expr.falseBranch.kind === 'string'
+    ? '@as([]const u8, "' + _escapeTernaryTextLiteral(expr.falseBranch.value) + '")'
+    : _nestedTernaryTextToZig(expr.falseBranch.value);
+  return 'if ' + zigCond + ' ' + trueLit + ' else ' + falseLit;
+}
+
+function _nestedTernaryTextToLua(expr) {
+  var trueLit = '"' + _escapeTernaryTextLiteral(expr.trueVal) + '"';
+  var falseLit = expr.falseBranch.kind === 'string'
+    ? '"' + _escapeTernaryTextLiteral(expr.falseBranch.value) + '"'
+    : _nestedTernaryTextToLua(expr.falseBranch.value);
+  return '(' + expr.luaCond + ') and ' + trueLit + ' or ' + falseLit;
+}
+
 // Try to parse {expr == val ? "a" : "b"} ternary text
 function tryParseTernaryText(c, children) {
   const saved = c.save();
-  const _luaTernSaved = c.save(); // for building Lua condition from raw tokens
-  let condParts = [];
-  let foundQuestion = false;
-  while (c.kind() !== TK.eof && c.kind() !== TK.rbrace) {
-    if (c.kind() === TK.question) {
-      foundQuestion = true;
-      c.advance();
-      break;
-    }
-    if (c.kind() === TK.lparen || c.kind() === TK.lt || c.kind() === TK.arrow || c.kind() === TK.lbrace) {
-      c.restore(saved);
-      return false;
-    }
-    // props.X dot-access in ternary condition
-    {
-      const pa = peekPropsAccess(c);
-      if (pa) {
-        skipPropsAccess(c, pa);
-        condParts.push(_condPropValue(pa.value));
-        continue;
-      }
-    }
-    if (c.kind() === TK.identifier) {
-      const name = c.text();
-      const oa = ctx.objectArrays.find(o => o.getter === name);
-      if (oa && c.pos + 2 < c.count && c.kindAt(c.pos + 1) === TK.dot && c.textAt(c.pos + 2) === 'length') {
-        condParts.push(`_oa${oa.oaIdx}_len`);
-        c.advance();
-        c.advance();
-        c.advance();
-        continue;
-      }
-      if (name === 'exact') {
-        condParts.push(' == ');
-        c.advance();
-        if (c.kind() === TK.equals) c.advance();
-        continue;
-      }
-      // OA getter followed by [expr] — primitive array or object array bracket access
-      var _ternOa2 = ctx.objectArrays ? ctx.objectArrays.find(function(o) { return o.getter === name; }) : null;
-      if (_ternOa2 && c.pos + 3 < c.count && c.kindAt(c.pos + 1) === TK.lbracket) {
-        var _tIdx2 = _resolveOaBracketIdx(c.textAt(c.pos + 2));
-        if (_tIdx2 !== null && c.kindAt(c.pos + 3) === TK.rbracket) {
-          if (_ternOa2.isPrimitiveArray) {
-            condParts.push('_oa' + _ternOa2.oaIdx + '_value[' + _tIdx2 + ']');
-            c.advance(); c.advance(); c.advance(); c.advance();
-            continue;
-          }
-          if (c.pos + 5 < c.count && c.kindAt(c.pos + 4) === TK.dot && c.kindAt(c.pos + 5) === TK.identifier) {
-            var _tf2 = c.textAt(c.pos + 5);
-            condParts.push('_oa' + _ternOa2.oaIdx + '_' + _tf2 + '[' + _tIdx2 + ']');
-            c.advance(); c.advance(); c.advance(); c.advance(); c.advance(); c.advance();
-            continue;
-          }
-        }
-      }
-      if (isGetter(name)) {
-        condParts.push(slotGet(name));
-      } else if (ctx.renderLocals && ctx.renderLocals[name] !== undefined) {
-        const rlVal = ctx.renderLocals[name];
-        // If renderLocal resolves to map itemParam, treat as item field access
-        if (ctx.currentMap && rlVal === ctx.currentMap.itemParam &&
-            c.pos + 2 < c.count && c.kindAt(c.pos + 1) === TK.dot && c.kindAt(c.pos + 2) === TK.identifier) {
-          c.advance(); // skip name
-          c.advance(); // skip .
-          const field = c.text();
-          c.advance(); // skip field
-          const mapOa = ctx.currentMap.oa;
-          const fieldInfo = mapOa ? mapOa.fields.find(function(f) { return f.name === field; }) : null;
-          if (mapOa && fieldInfo && fieldInfo.type === 'string') {
-            condParts.push(`_oa${mapOa.oaIdx}_${field}[${ctx.currentMap.iterVar || '_i'}][0.._oa${mapOa.oaIdx}_${field}_lens[${ctx.currentMap.iterVar || '_i'}]]`);
-          } else if (mapOa) {
-            condParts.push(`_oa${mapOa.oaIdx}_${field}[${ctx.currentMap.iterVar || '_i'}]`);
-          } else {
-            condParts.push('0');
-          }
-          continue;
-        }
-        condParts.push(rlVal);
-      } else if (ctx.propStack && ctx.propStack[name] !== undefined) {
-        const _pv2 = ctx.propStack[name];
-        // If prop is a map-item ref and next is .field, resolve as OA field access
-        if (ctx.currentMap && ctx.currentMap.oa &&
-            typeof _pv2 === 'string' && _pv2.includes('@intCast(') &&
-            c.pos + 2 < c.count && c.kindAt(c.pos + 1) === TK.dot && c.kindAt(c.pos + 2) === TK.identifier) {
-          c.advance(); // skip prop name
-          c.advance(); // skip dot
-          const _f2 = c.text();
-          const _moa2 = ctx.currentMap.oa;
-          const _iv2 = ctx.currentMap.iterVar || '_i';
-          c.advance(); // skip field
-          // Consume .length after OA field — nested arrays store count directly
-          if (c.kind() === TK.dot && c.pos + 1 < c.count && c.textAt(c.pos + 1) === 'length') {
-            c.advance(); // skip .
-            c.advance(); // skip length
-          }
-          condParts.push(`_oa${_moa2.oaIdx}_${_f2}[${_iv2}]`);
-          continue;
-        }
-        condParts.push(_condPropValue(_pv2));
-      } else if (ctx.currentMap && name === ctx.currentMap.itemParam) {
-        c.advance();
-        if (c.kind() === TK.dot) {
-          c.advance();
-          if (c.kind() === TK.identifier) {
-            let field = c.text();
-            c.advance();
-            while (c.kind() === TK.dot && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.identifier) {
-              c.advance();
-              field += '_' + c.text();
-              c.advance();
-            }
-            const mapOa = ctx.currentMap.oa;
-            if (mapOa) {
-              condParts.push(`_oa${mapOa.oaIdx}_${field}[${ctx.currentMap.iterVar || '_i'}]`);
-            } else {
-              condParts.push('0');
-            }
-            continue;
-          }
-        } else {
-          condParts.push('@as(i64, @intCast(' + (ctx.currentMap.iterVar || '_i') + '))');
-        }
-      } else if (ctx.currentMap && name === ctx.currentMap.indexParam) {
-        condParts.push('@as(i64, @intCast(' + (ctx.currentMap.iterVar || '_i') + '))');
-      } else {
-        condParts.push(name);
-      }
-    } else if (c.kind() === TK.eq_eq) {
-      condParts.push(' == ');
-      c.advance();
-      if (c.kind() === TK.equals) c.advance();
-      continue;
-    } else if (c.kind() === TK.not_eq) {
-      condParts.push(' != ');
-      c.advance();
-      if (c.kind() === TK.equals) c.advance();
-      continue;
-    } else if (c.kind() === TK.number) {
-      condParts.push(c.text());
-    } else if (c.kind() === TK.gt) {
-      condParts.push(' > ');
-    } else {
-      condParts.push(c.text());
-    }
-    c.advance();
-  }
-  if (!foundQuestion) {
-    c.restore(saved);
-    return false;
-  }
-  let trueVal = '';
-  if (c.kind() === TK.string) {
-    trueVal = c.text().slice(1, -1);
-    c.advance();
-  } else {
-    c.restore(saved);
-    return false;
-  }
-  if (c.kind() !== TK.colon) {
-    c.restore(saved);
-    return false;
-  }
-  c.advance();
-  let falseVal = '';
-  if (c.kind() === TK.string) {
-    falseVal = c.text().slice(1, -1);
-    c.advance();
-  } else {
+  var parsed = _parseNestedTernaryTextExpr(c);
+  if (!parsed) {
     c.restore(saved);
     return false;
   }
   if (c.kind() === TK.rbrace) c.advance();
-  var condExpr = condParts.join('');
-  var strEqlMatch = condExpr.match(/^(.+?)\s*==\s*['"]([^'"]+)['"]$/);
-  if (strEqlMatch) {
-    var lhs = strEqlMatch[1].trim();
-    var rhs = strEqlMatch[2];
-    if (lhs.includes('[_i]') && lhs.includes('_oa') && !lhs.includes('[0..')) {
-      var lenField = lhs.replace(/\[_i\]$/, '_lens[_i]');
-      condExpr = `std.mem.eql(u8, ${lhs}[0..${lenField}], "${rhs}")`;
-    } else if (lhs.includes('getSlotString')) {
-      condExpr = `std.mem.eql(u8, ${lhs}, "${rhs}")`;
-    } else {
-      condExpr = `std.mem.eql(u8, ${lhs}, "${rhs}")`;
-    }
-  }
-  var zigCond = zigBool(condExpr, ctx);
-  const fmtArgs = `if ${zigCond} @as([]const u8, "${trueVal}") else @as([]const u8, "${falseVal}")`;
-  if (ctx.currentMap && (fmtArgs.includes('_oa') || condExpr.includes('_oa'))) {
+  const fmtArgs = _nestedTernaryTextToZig(parsed);
+  if (ctx.currentMap && fmtArgs.includes('_oa')) {
     const mapBufId = ctx.mapDynCount || 0;
     ctx.mapDynCount = mapBufId + 1;
     ctx.dynTexts.push({ bufId: mapBufId, fmtString: '{s}', fmtArgs, arrName: '', arrIndex: 0, bufSize: 256, inMap: true, mapIdx: ctx.maps.indexOf(ctx.currentMap) });
@@ -623,16 +554,7 @@ function tryParseTernaryText(c, children) {
     const bufId = ctx.dynCount;
     ctx.dynTexts.push({ bufId, fmtString: '{s}', fmtArgs, arrName: '', arrIndex: 0, bufSize: 64 });
     ctx.dynCount++;
-    // Build Lua ternary from raw tokens (avoids Zig-ified condParts)
-    var _luaTernCond = (typeof _buildLuaCondFromTokens === 'function')
-      ? _buildLuaCondFromTokens(c, _luaTernSaved)
-      : condParts.join('').replace(/!==/g, '~=').replace(/===/g, '==');
-    // Lua truthiness fix: 0 is truthy in Lua but falsy in JS
-    // If condition is a simple expression without comparison operators, add ~= 0
-    if (_luaTernCond && !/[=~<>]/.test(_luaTernCond) && !/\band\b|\bor\b|\bnot\b/.test(_luaTernCond)) {
-      _luaTernCond = _luaTernCond.trim() + ' ~= 0';
-    }
-    children.push({ nodeExpr: `.{ .text = "" }`, dynBufId: bufId, _luaTernaryText: '(' + _luaTernCond + ') and "' + trueVal + '" or "' + falseVal + '"' });
+    children.push({ nodeExpr: `.{ .text = "" }`, dynBufId: bufId, _luaTernaryText: _nestedTernaryTextToLua(parsed) });
   }
   return true;
 }

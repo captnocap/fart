@@ -43,7 +43,58 @@ function match(c, ctx) {
 }
 
 function compile(c, ctx) {
-  return null;
+  var saved = c.save();
+  if (!(c.kind() === TK.identifier && c.text() === 'key')) {
+    c.restore(saved);
+    return null;
+  }
+  c.advance();
+  if (c.kind() !== TK.equals) {
+    c.restore(saved);
+    return null;
+  }
+  c.advance();
+
+  var valueRaw = '';
+  var valueKind = 'bare';
+  if (c.kind() === TK.string) {
+    valueKind = 'string';
+    valueRaw = c.text().slice(1, -1);
+    c.advance();
+  } else if (c.kind() === TK.lbrace) {
+    valueKind = 'expr';
+    c.advance();
+    var parts = [];
+    var depth = 1;
+    while (c.pos < c.count && depth > 0) {
+      if (c.kind() === TK.lbrace || c.kind() === TK.lparen || c.kind() === TK.lbracket) depth++;
+      if (c.kind() === TK.rbrace || c.kind() === TK.rparen || c.kind() === TK.rbracket) {
+        depth--;
+        if (depth === 0) break;
+      }
+      parts.push(c.text());
+      c.advance();
+    }
+    if (c.kind() === TK.rbrace) c.advance();
+    valueRaw = parts.join(' ').trim();
+  } else if (c.kind() === TK.identifier || c.kind() === TK.number) {
+    valueRaw = c.text();
+    c.advance();
+  }
+
+  var out = {
+    kind: 'key_remount',
+    valueKind: valueKind,
+    valueRaw: valueRaw,
+    dropped: true,
+    remountSemanticUnsupported: true,
+    mapScope: !!ctx.currentMap,
+    mapItemParam: ctx.currentMap ? (ctx.currentMap.itemParam || '_item') : null,
+    mapIndexParam: ctx.currentMap ? (ctx.currentMap.indexParam || '_i') : null,
+  };
+  if (!ctx._keyHints) ctx._keyHints = [];
+  ctx._keyHints.push(out);
+  return out;
 }
 
 _patterns[103] = { id: 103, match: match, compile: compile };

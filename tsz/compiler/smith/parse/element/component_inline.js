@@ -36,6 +36,9 @@ function inlineComponentCall(c, comp, rawTag, propValues, compChildren) {
   ctx.inlineComponent = rawTag;
   ctx.componentChildren = compChildren;
   if (globalThis.__SMITH_DEBUG) print('[INLINE] ' + rawTag + ' propStack: ' + JSON.stringify(propValues) + ' inMap: ' + !!ctx.currentMap);
+  if (rawTag === 'TopBar' || rawTag === 'Sidebar' || rawTag === 'MainSurfacePane' || rawTag === 'TopBarAction' || rawTag === 'ExplorerNodeRow' || rawTag === 'GitBadge') {
+    print('[PROP_STACK ' + rawTag + '] ' + JSON.stringify(propValues));
+  }
 
   // Set propsObjectName for bare-param components: function Comp(props) { ... props.X ... }
   const savedPropsObjectName = ctx.propsObjectName;
@@ -65,6 +68,9 @@ function inlineComponentCall(c, comp, rawTag, propValues, compChildren) {
   // Collect render locals for inlined component body (between funcBodyPos and bodyPos)
   // Handles patterns like: const isActive = props.active === 1;
   const savedRenderLocals = Object.assign({}, ctx.renderLocals);
+  const savedRenderLocalRaw = Object.assign({}, ctx._renderLocalRaw || {});
+  ctx.renderLocals = {};
+  ctx._renderLocalRaw = {};
   if (comp.funcBodyPos >= 0 && comp.bodyPos > comp.funcBodyPos) {
     const rlSaved = c.save();
     c.pos = comp.funcBodyPos;
@@ -184,6 +190,7 @@ function inlineComponentCall(c, comp, rawTag, propValues, compChildren) {
                 if (ctx.objectArrays[_coi2].getter === varName && ctx.objectArrays[_coi2].isConst) { _isConstOa2 = true; break; }
               }
               if (!_isConstOa2) {
+                ctx._renderLocalRaw[varName] = valStr;
                 ctx.renderLocals[varName] = valStr;
               }
             }
@@ -195,10 +202,18 @@ function inlineComponentCall(c, comp, rawTag, propValues, compChildren) {
     }
     c.restore(rlSaved);
   }
+  if (rawTag === 'TopBarAction' || rawTag === 'ExplorerNodeRow' || rawTag === 'GitBadge') {
+    print('[RENDER_LOCALS ' + rawTag + '] ' + JSON.stringify(ctx.renderLocals));
+  }
 
   c.pos = comp.bodyPos;
   // -> PROBE INJECTED HERE
   print('[INLINE PROBE] Inlining component: ' + comp.name + ' bodyPos: ' + comp.bodyPos + ' token: ' + c.text() + ' kind: ' + c.kind());
+  if (comp.name === 'TopBar' || comp.name === 'Sidebar' || comp.name === 'MainSurfacePane' || comp.name === 'TopBarAction' || comp.name === 'ExplorerNodeRow' || comp.name === 'GitBadge') {
+    for (var _tdi = comp.bodyPos; _tdi < Math.min(comp.bodyPos + 40, c.count); _tdi++) {
+      print('[INLINE TOK ' + comp.name + ' @' + _tdi + '] kind=' + c.kindAt(_tdi) + ' text=' + c.textAt(_tdi));
+    }
+  }
   
   let result;
   if (c.kind() === TK.identifier) {
@@ -271,6 +286,7 @@ function inlineComponentCall(c, comp, rawTag, propValues, compChildren) {
           bodyNode: result.luaNode || null,
           itemParam: _ciItemParam || '_item',
           indexParam: _ciIdxParam || null,
+          filterConditions: _ciMapIdx >= 0 ? ctx.maps[_ciMapIdx].filterConditions : null,
           rawSource: maybeArr,
           varName: maybeArr,
           isNested: !!ctx.currentMap
@@ -295,6 +311,7 @@ function inlineComponentCall(c, comp, rawTag, propValues, compChildren) {
   ctx.nameRemap = savedNameRemap;
   ctx.propsObjectName = savedPropsObjectName;
   ctx.renderLocals = savedRenderLocals;
+  ctx._renderLocalRaw = savedRenderLocalRaw;
   c.restore(savedPos);
   return result;
 }

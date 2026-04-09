@@ -83,14 +83,9 @@ function match(c, ctx) {
   return false;
 }
 
-function compile(c, ctx) {
-  // Standard map compilation path:
-  //   1. Header parsed by tryParseMapHeader
-  //   2. => consumed, optional ( consumed
-  //   3. parseJSXElement called for template body
-  //   4. consumeMapClose handles ) ) closings
-  //   5. Normal map pool emission
-  return null;
+function compile(c, children) {
+  // Implicit return (=> <JSX>) — standard map path.
+  return _tryParseIdentifierMapExpression(c, children, false);
 }
 
 _patterns[28] = { id: 28, match: match, compile: compile };

@@ -29,6 +29,73 @@ function readMapParamList(c, defaultItemParam, defaultIndexParam) {
   return { itemParam, indexParam, destructuredAliases };
 }
 
+function _invertMapNullGuard(raw) {
+  var m = String(raw || '').trim().match(/^(.+?)\s*(===|!==|==|!=|>=|<=|>|<)\s*(.+)$/);
+  if (!m) return '!(' + String(raw || '').trim() + ')';
+  var inv = {
+    '===': '!==',
+    '!==': '===',
+    '==': '!=',
+    '!=': '==',
+    '>=': '<',
+    '<=': '>',
+    '>': '<=',
+    '<': '>='
+  };
+  return m[1].trim() + ' ' + inv[m[2]] + ' ' + m[3].trim();
+}
+
+function _consumeMapNullGuard(c, filterConditions, itemParam, indexParam) {
+  const saved = c.save();
+  if (!c.isIdent('if')) return false;
+  c.advance();
+  if (c.kind() !== TK.lparen) { c.restore(saved); return false; }
+  c.advance();
+
+  var condParts = [];
+  var parenDepth = 1;
+  while (c.pos < c.count && parenDepth > 0) {
+    if (c.kind() === TK.lparen) {
+      parenDepth++;
+      condParts.push(c.text());
+      c.advance();
+      continue;
+    }
+    if (c.kind() === TK.rparen) {
+      parenDepth--;
+      if (parenDepth === 0) break;
+      condParts.push(c.text());
+      c.advance();
+      continue;
+    }
+    condParts.push(c.text());
+    c.advance();
+  }
+  if (c.kind() !== TK.rparen) { c.restore(saved); return false; }
+  c.advance();
+
+  var hasBlock = false;
+  if (c.kind() === TK.lbrace) { hasBlock = true; c.advance(); }
+  if (!c.isIdent('return')) { c.restore(saved); return false; }
+  c.advance();
+  if (!(c.isIdent('null') || c.isIdent('undefined') || c.isIdent('false'))) { c.restore(saved); return false; }
+  c.advance();
+  if (c.kind() === TK.semicolon) c.advance();
+  if (hasBlock) {
+    if (c.kind() !== TK.rbrace) { c.restore(saved); return false; }
+    c.advance();
+  }
+
+  var _rawGuard = _invertMapNullGuard(condParts.join(' '));
+  if (typeof expandRenderLocalRawExpr === 'function') _rawGuard = expandRenderLocalRawExpr(_rawGuard);
+  filterConditions.push({
+    param: itemParam,
+    indexParam: indexParam,
+    raw: _rawGuard
+  });
+  return true;
+}
+
 function tryParseMapHeader(c, defaultItemParam, defaultIndexParam) {
   const saved = c.save();
   c.advance(); // skip array or field identifier
@@ -58,7 +125,9 @@ function tryParseMapHeader(c, defaultItemParam, defaultIndexParam) {
         condParts.push(c.text());
         c.advance();
       }
-      filterConditions.push({ param: filterParam, raw: condParts.join(' ') });
+      var _rawFilter = condParts.join(' ');
+      if (typeof expandRenderLocalRawExpr === 'function') _rawFilter = expandRenderLocalRawExpr(_rawFilter);
+      filterConditions.push({ param: filterParam, raw: _rawFilter });
     } else {
       // slice/sort — skip body
       var pd = 1;
@@ -97,8 +166,14 @@ function tryParseMapHeader(c, defaultItemParam, defaultIndexParam) {
     c.advance(); // skip {
     var bodyDepth = 1;
     while (c.pos < c.count && bodyDepth > 0) {
+      if (bodyDepth === 1 && _consumeMapNullGuard(c, filterConditions, itemParam, indexParam)) continue;
       if (bodyDepth === 1 && c.isIdent('return')) {
         c.advance();
+        if (c.isIdent('null') || c.isIdent('undefined') || c.isIdent('false')) {
+          while (c.pos < c.count && c.kind() !== TK.semicolon && !(c.kind() === TK.rbrace && bodyDepth === 1)) c.advance();
+          if (c.kind() === TK.semicolon) c.advance();
+          continue;
+        }
         break;
       }
       if (c.kind() === TK.lbrace) bodyDepth++;
@@ -113,6 +188,7 @@ function tryParseMapHeader(c, defaultItemParam, defaultIndexParam) {
 
 function tryParseMapHeaderFromMethod(c, defaultItemParam, defaultIndexParam) {
   const saved = c.save();
+  var filterConditions = [];
   if (!c.isIdent('map')) { c.restore(saved); return null; }
   c.advance(); // skip map
   if (c.kind() !== TK.lparen) { c.restore(saved); return null; }
@@ -133,8 +209,14 @@ function tryParseMapHeaderFromMethod(c, defaultItemParam, defaultIndexParam) {
     c.advance();
     var bodyDepth = 1;
     while (c.pos < c.count && bodyDepth > 0) {
+      if (bodyDepth === 1 && _consumeMapNullGuard(c, filterConditions, itemParam, indexParam)) continue;
       if (bodyDepth === 1 && c.isIdent('return')) {
         c.advance();
+        if (c.isIdent('null') || c.isIdent('undefined') || c.isIdent('false')) {
+          while (c.pos < c.count && c.kind() !== TK.semicolon && !(c.kind() === TK.rbrace && bodyDepth === 1)) c.advance();
+          if (c.kind() === TK.semicolon) c.advance();
+          continue;
+        }
         break;
       }
       if (c.kind() === TK.lbrace) bodyDepth++;
@@ -144,5 +226,5 @@ function tryParseMapHeaderFromMethod(c, defaultItemParam, defaultIndexParam) {
   }
   if (c.kind() === TK.lparen) c.advance();
 
-  return { itemParam, indexParam, destructuredAliases: params.destructuredAliases, filterConditions: [] };
+  return { itemParam, indexParam, destructuredAliases: params.destructuredAliases, filterConditions };
 }

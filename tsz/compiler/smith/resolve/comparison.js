@@ -6,6 +6,24 @@
 // Every consumer that currently has inline regex for === or
 // std.mem.eql construction should call this instead.
 
+function _looksBoolLikeComparisonExpr(expr) {
+  if (typeof expr !== 'string') return false;
+  var trimmed = expr.trim();
+  if (trimmed.length === 0) return false;
+  if (trimmed === 'true' || trimmed === 'false') return true;
+  if (trimmed.indexOf('?') >= 0) return false;
+  if (trimmed.indexOf('getSlotBool') >= 0) return true;
+  if (trimmed.indexOf('std.mem.eql') >= 0) return true;
+  return /(?:==|!=|>=|<=|\band\b|\bor\b|\bnot\b|[<>])/.test(trimmed) || trimmed.charAt(0) === '!';
+}
+
+function _resolveBoolNumericComparison(expr, op, rhs) {
+  var wrapped = '(' + expr + ')';
+  if ((op === '==' && rhs === '1') || (op === '!=' && rhs === '0')) return wrapped;
+  if ((op === '!=' && rhs === '1') || (op === '==' && rhs === '0')) return '(!' + wrapped + ')';
+  return '(' + expr + ' ' + op + ' ' + rhs + ')';
+}
+
 // Normalize a comparison expression to valid Zig.
 // Input: lhs (Zig expr), op (JS operator string), rhs (Zig expr or literal)
 // Returns: Zig bool expression string
@@ -21,6 +39,11 @@ function resolveComparison(lhs, op, rhs, ctx) {
   var rhsIsStr = !rhsIsQjs && (rhs.includes('getSlotString') || rhs.includes('[0..') || rhs.includes('getString') || /^"[^"]*"$/.test(rhs));
   var rhsIsEmptyStr = /^['"]['"]$/.test(rhs) || rhs === '""';
   var rhsIsNum = /^-?\d+(\.\d+)?$/.test(rhs);
+
+  // 2.5. Bool expr vs 0/1 — preserve JS truthiness semantics.
+  if ((rhs === '0' || rhs === '1') && _looksBoolLikeComparisonExpr(lhs)) {
+    return _resolveBoolNumericComparison(lhs, op, rhs);
+  }
 
   // 3. QJS eval vs number → do comparison in JS
   if (lhsIsQjs && rhsIsNum) {
