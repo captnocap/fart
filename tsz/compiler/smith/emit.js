@@ -39,6 +39,15 @@ function emitOutput(rootExpr, file) {
   // ── Lua-tree path: if we have a parsed luaNode, emit Lua-first ──
   if (ctx._luaRootNode && typeof emitLuaTreeApp === 'function') {
     sanitizeLuaNodeTree(ctx._luaRootNode);
+    // Contract validation — stop build if contract is broken
+    var _contractErrors = validateContract(ctx._luaRootNode);
+    if (_contractErrors.length > 0) {
+      print('[CONTRACT FAIL] ' + _contractErrors.length + ' error(s) in source contract:');
+      for (var _cei = 0; _cei < _contractErrors.length; _cei++) {
+        print('  ' + _contractErrors[_cei]);
+      }
+      return '__CONTRACT_FAIL__';
+    }
     var _ltOut = emitLuaTreeApp(ctx, rootExpr, file);
     return finalizeEmitOutput(_ltOut, file);
   }

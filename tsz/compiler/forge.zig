@@ -420,6 +420,13 @@ pub fn main() !void {
         return;
     };
 
+    // Contract validation — if the contract is broken, stop the build
+    if (zig_output.len >= 18 and std.mem.startsWith(u8, zig_output, "__CONTRACT_FAIL__")) {
+        std.debug.print("[forge] CONTRACT VALIDATION FAILED — build stopped\n", .{});
+        std.debug.print("[forge] Fix the compiler. The contract has errors that would produce broken output.\n", .{});
+        std.process.exit(1);
+    }
+
     // 6b-trace. Dump line-level coverage if --trace was used
     if (trace_mode) {
         // Serialize coverage to a global string, then read it via the bridge

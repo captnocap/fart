@@ -1128,6 +1128,7 @@ var snap_line_count: u16 = 0;
 var snap_node_count: u16 = 0;
 var snap_text_count: u16 = 0;
 var snap_handler_count: u16 = 0;
+var snap_nil_count: u16 = 0;
 
 fn snapAddLine(line: []const u8) void {
     if (snap_line_count >= SNAP_MAX_LINES) return;
@@ -1170,6 +1171,35 @@ fn snapCollectTexts(root: *Node) void {
             }
         }
         if (all_space) continue;
+        // Detect nil values — broken Lua expressions that rendered as "nil"
+        if (std.mem.eql(u8, txt, "nil") or
+            std.mem.indexOf(u8, txt, "nil ") != null or
+            std.mem.indexOf(u8, txt, " nil") != null or
+            std.mem.indexOf(u8, txt, ": nil") != null or
+            std.mem.indexOf(u8, txt, "nil,") != null)
+        {
+            snap_nil_count += 1;
+            snapAddFmt("# FAIL: nil in rendered text: \"{s}\"", .{txt});
+            continue;
+        }
+        // Detect \x01 glyph placeholders — glyph system failed to resolve
+        var has_glyph_placeholder = false;
+        for (txt) |ch| {
+            if (ch == 0x01) { has_glyph_placeholder = true; break; }
+        }
+        if (has_glyph_placeholder) {
+            snap_nil_count += 1;
+            snapAddFmt("# FAIL: unresolved glyph placeholder in: \"{s}\"", .{txt});
+            continue;
+        }
+        // Detect internal markers leaking as visible text (__name__)
+        if (txt.len > 4 and txt[0] == '_' and txt[1] == '_' and
+            txt[txt.len - 1] == '_' and txt[txt.len - 2] == '_')
+        {
+            snap_nil_count += 1;
+            snapAddFmt("# FAIL: internal marker leaked: \"{s}\"", .{txt});
+            continue;
+        }
         snapAddFmt("expect \"{s}\"", .{txt});
     }
 }
@@ -1242,16 +1272,52 @@ fn snapshotTick(root: *Node) bool {
             snapCountTree(root);
             const slot_count = state_mod.slotCount();
 
-            // Header
-            snapAddLine("# Verify all visible text on initial render");
-            snapAddFmt("# health: {d} nodes, {d} text, {d} pressable, {d} state slots", .{
-                snap_node_count, snap_text_count, snap_handler_count, slot_count,
-            });
-            snapAddLine("");
-
-            // Collect initial text expects
-            snapAddLine("# Initial render");
+            // Collect initial text expects first (populates snap_nil_count)
             snapCollectTexts(root);
+
+            // Header — emitted after collection so fail count is accurate
+            // Insert at position 0 by shifting lines down
+            var header_lines: [3][128]u8 = undefined;
+            var header_lens: [3]u16 = undefined;
+            var hdr_buf0: [128]u8 = undefined;
+            const hdr0 = std.fmt.bufPrint(&hdr_buf0, "# Verify all visible text on initial render", .{}) catch "";
+            var hdr_buf1: [128]u8 = undefined;
+            const hdr1 = std.fmt.bufPrint(&hdr_buf1, "# health: {d} nodes, {d} text, {d} pressable, {d} state slots, {d} fails", .{
+                snap_node_count, snap_text_count, snap_handler_count, slot_count, snap_nil_count,
+            }) catch "";
+            const hdr2 = "# Initial render";
+
+            // Prepend header lines before the expects
+            const existing_count = snap_line_count;
+            if (existing_count + 4 < SNAP_MAX_LINES) {
+                // Shift existing lines forward by 4 (3 header + 1 blank)
+                var si: u16 = existing_count;
+                while (si > 0) {
+                    si -= 1;
+                    snap_lines[si + 4] = snap_lines[si];
+                    snap_line_lens[si + 4] = snap_line_lens[si];
+                }
+                @memcpy(header_lines[0][0..hdr0.len], hdr0);
+                header_lens[0] = @intCast(hdr0.len);
+                snap_lines[0] = header_lines[0];
+                snap_line_lens[0] = header_lens[0];
+
+                @memcpy(header_lines[1][0..hdr1.len], hdr1);
+                header_lens[1] = @intCast(hdr1.len);
+                snap_lines[1] = header_lines[1];
+                snap_line_lens[1] = header_lens[1];
+
+                // blank line
+                snap_lines[2] = undefined;
+                snap_line_lens[2] = 0;
+
+                @memcpy(header_lines[2][0..hdr2.len], hdr2);
+                header_lens[2] = @intCast(hdr2.len);
+                snap_lines[3] = header_lines[2];
+                snap_line_lens[3] = header_lens[2];
+
+                snap_line_count = existing_count + 4;
+            }
 
             // Find pressable nodes for click-through
             snapFindPressables(root);

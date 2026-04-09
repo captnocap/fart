@@ -304,3 +304,80 @@ function sanitizeLuaNodeTree(node) {
 function sanitizeJsExprForLua(expr) {
   return _jsToLua(expr);
 }
+
+// ── Contract Validator ─────────────────────────────────────────
+// Walks the luaNode tree AFTER sanitization and checks for broken
+// contract data. If this fails, the build stops — no Zig, no link.
+//
+// Returns an array of error strings. Empty = clean.
+
+function validateContract(node) {
+  var errors = [];
+  _validateNode(node, 'root', errors);
+  return errors;
+}
+
+function _validateNode(node, path, errors) {
+  if (!node || typeof node !== 'object') return;
+
+  // JSX contamination — close tags in any string field
+  for (var key in node) {
+    var val = node[key];
+    if (typeof val === 'string' && (val.indexOf('</Text') >= 0 || val.indexOf('</Box') >= 0 ||
+        val.indexOf('</Pressable') >= 0 || val.indexOf('</ScrollView') >= 0 || val.indexOf('</Image') >= 0)) {
+      errors.push(path + '.' + key + ': JSX close tag in contract value');
+    }
+  }
+
+  // Condition field should not contain JSX
+  if (typeof node.condition === 'string' && node.condition.indexOf('<') >= 0) {
+    errors.push(path + '.condition: contains "<" — likely unparsed JSX');
+  }
+
+  // Text should not be raw JS operators
+  if (typeof node.text === 'string') {
+    if (node.text.indexOf('||') >= 0) errors.push(path + '.text: contains JS "||" operator');
+    if (node.text.indexOf('&&') >= 0) errors.push(path + '.text: contains JS "&&" operator');
+    if (node.text.indexOf('!==') >= 0) errors.push(path + '.text: contains JS "!==" operator');
+    if (node.text.indexOf('props.') >= 0 && node.text.indexOf('props.') === 0) errors.push(path + '.text: unresolved props reference');
+  }
+
+  // Handler should not have Zig builtins
+  if (typeof node.handler === 'string') {
+    if (node.handler.indexOf('@intCast') >= 0) errors.push(path + '.handler: contains Zig @intCast');
+    if (node.handler.indexOf('@as(') >= 0) errors.push(path + '.handler: contains Zig @as()');
+    if (node.handler.indexOf('state.getSlot') >= 0) errors.push(path + '.handler: unresolved state.getSlot');
+  }
+
+  // Style values should not have raw Zig
+  if (node.style && typeof node.style === 'object') {
+    for (var sk in node.style) {
+      var sv = node.style[sk];
+      if (typeof sv === 'string' && sv.indexOf('@intCast') >= 0) {
+        errors.push(path + '.style.' + sk + ': contains Zig @intCast');
+      }
+    }
+  }
+
+  // Recurse children
+  if (node.children && Array.isArray(node.children)) {
+    for (var ci = 0; ci < node.children.length; ci++) {
+      var child = node.children[ci];
+      if (!child) continue;
+      var cp = path + '.children[' + ci + ']';
+      if (child.tag || child.style || child.text !== undefined) _validateNode(child, cp, errors);
+      if (child.node) _validateNode(child.node, cp + '.node', errors);
+      if (child.trueNode) _validateNode(child.trueNode, cp + '.trueNode', errors);
+      if (child.falseNode) _validateNode(child.falseNode, cp + '.falseNode', errors);
+      if (child.condition && typeof child.condition === 'string' && child.condition.indexOf('<') >= 0) {
+        errors.push(cp + '.condition: contains "<" — likely unparsed JSX');
+      }
+      // Map loop body
+      var ml = child.luaMapLoop || child;
+      if (ml.bodyNode) _validateNode(ml.bodyNode, cp + '.bodyNode', errors);
+      if (child.nestedMap && child.nestedMap.bodyNode) {
+        _validateNode(child.nestedMap.bodyNode, cp + '.nestedMap.bodyNode', errors);
+      }
+    }
+  }
+}
