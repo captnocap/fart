@@ -32,9 +32,7 @@ if (!fs.existsSync(cartPath)) {
   process.exit(1);
 }
 
-// Derive cart name from path
-const basename = path.basename(cartPath, '.tsz');
-const genDir = '/tmp/tsz-gen/generated_' + basename;
+const ATOM_OUTPUT_PATH = '/tmp/tsz-gen/parity_atom_output.zig';
 
 // ── Step 97: String hashing ──
 
@@ -46,19 +44,43 @@ function hashString(str) {
 
 function runLegacyEmit(cart) {
   try {
+    // BUG FIX 1: Delete stale atom output BEFORE invoking forge
+    // so a previous run's atom output is never mistaken for this run's.
+    try { fs.unlinkSync(ATOM_OUTPUT_PATH); } catch (_) {}
+
     const forgeCmd = './zig-out/bin/forge build --parity ' + cart;
-    const forgeOut = execSync(forgeCmd, {
+    // Merge stderr into stdout so we can parse forge's [forge] Wrote... message
+    const forgeOut = execSync(forgeCmd + ' 2>&1', {
       cwd: path.resolve(__dirname, '../../..'),
       timeout: 30000,
       encoding: 'utf8',
-      stdio: ['pipe', 'pipe', 'pipe'],
     });
 
-    // Collect all generated .zig files, sorted by name for deterministic order
-    if (!fs.existsSync(genDir)) {
-      return { output: null, error: 'generated dir not found: ' + genDir, stderr: forgeOut };
+    // BUG FIX 2: Parse actual output directory from forge stderr
+    // instead of computing from basename (forge may strip prefixes differently).
+    // Forge prints: [forge] Wrote N files (M bytes) to /tmp/tsz-gen/generated_NAME/
+    const allOutput = forgeOut || '';
+    const writeMatch = allOutput.match(/Wrote \d+ files .* to ([^\s]+)/);
+    let genDir;
+    if (writeMatch) {
+      genDir = writeMatch[1].replace(/\/$/, ''); // strip trailing slash
+    } else {
+      // Fallback: find most recent generated_* dir under /tmp/tsz-gen/
+      const tszGen = '/tmp/tsz-gen';
+      if (fs.existsSync(tszGen)) {
+        const dirs = fs.readdirSync(tszGen)
+          .filter(d => d.startsWith('generated_'))
+          .map(d => ({ name: d, mtime: fs.statSync(path.join(tszGen, d)).mtimeMs }))
+          .sort((a, b) => b.mtime - a.mtime);
+        genDir = dirs.length > 0 ? path.join(tszGen, dirs[0].name) : null;
+      }
     }
 
+    if (!genDir || !fs.existsSync(genDir)) {
+      return { output: null, error: 'generated dir not found. forge output: ' + allOutput.slice(0, 200) };
+    }
+
+    // Collect all generated .zig files, sorted by name for deterministic order
     const zigFiles = fs.readdirSync(genDir)
       .filter(f => f.endsWith('.zig'))
       .sort();
@@ -86,7 +108,7 @@ function runLegacyEmit(cart) {
 function runAtomEmit(cart) {
   // forge --parity runs both emitOutput() and runEmitAtoms() inside QuickJS.
   // The atom output is written to /tmp/tsz-gen/parity_atom_output.zig by forge.
-  const atomFile = '/tmp/tsz-gen/parity_atom_output.zig';
+  const atomFile = ATOM_OUTPUT_PATH;
   try {
     if (!fs.existsSync(atomFile)) {
       return { output: null, error: 'atom output file not found: ' + atomFile };
@@ -99,14 +121,6 @@ function runAtomEmit(cart) {
   } catch (err) {
     return { output: null, error: err.message };
   }
-}
-
-// ── Step 100: Split-output detection ──
-
-function detectSplitOutput(genDir) {
-  if (!fs.existsSync(genDir)) return false;
-  const zigFiles = fs.readdirSync(genDir).filter(f => f.endsWith('.zig'));
-  return zigFiles.length > 1;
 }
 
 // ── Step 101: Backend tag capture ──
@@ -200,7 +214,7 @@ const result = {
   atom_hash: atomHash,
   diff_status: diffStatus,
   first_diff_hunk: (diffStatus === 'DIFF') ? firstDiffHunk(legacy.output, atoms.output) : null,
-  split_output: detectSplitOutput(genDir),
+  split_output: legacy.files ? legacy.files.length > 1 : false,
   backend_tags: captureBackendTags(legacy.output),
   predicted_atoms: capturePredictedAtoms(cartPath),
   verification_time: new Date().toISOString(),
