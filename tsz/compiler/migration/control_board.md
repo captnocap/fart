@@ -51,3 +51,7 @@ missing_canonical_artifacts: none
 ## 081-110 Harness Scaffolding
 
 harness_scaffold_complete: true
+
+## 111-140 Coverage And Live-Risk Baseline
+
+all_live_risk_reports_have_concrete_findings: true

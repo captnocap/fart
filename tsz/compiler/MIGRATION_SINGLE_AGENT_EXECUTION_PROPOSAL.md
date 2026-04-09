@@ -230,35 +230,35 @@ Implication:
 - [x] 107. In `run_split_check.sh`, verify module files are produced.
 - [x] 108. In `run_split_check.sh`, run `zig build` on the produced split output.
 - [x] 109. In `run_split_check.sh`, emit a structured report into `reports/split/`.
-- [ ] 110. Re-open `parity_schema.json`, `run_parity.js`, and `run_split_check.sh`, write `harness_scaffold_complete: true|false` plus any missing surface names to `migration/control_board.md`, then commit with message `migration(single-agent): S081-110 step-110 harness-scaffolding`.
+- [x] 110. Re-open `parity_schema.json`, `run_parity.js`, and `run_split_check.sh`, write `harness_scaffold_complete: true|false` plus any missing surface names to `migration/control_board.md`, then commit with message `migration(single-agent): S081-110 step-110 harness-scaffolding`.
 
 ## 111-140 Coverage And Live-Risk Baseline
 
-- [ ] 111. Create `migration/reports/coverage/coverage_matrix.json`.
-- [ ] 112. Create `migration/reports/coverage/coverage_matrix.md`.
-- [ ] 113. Enumerate carts under `tsz/carts/conformance/` into `coverage_matrix.md`.
-- [ ] 114. Add lane column for each cart in `coverage_matrix.md`.
-- [ ] 115. Add `lua_map` column.
-- [ ] 116. Add `zig_map` column.
-- [ ] 117. Add `nested_map` column.
-- [ ] 118. Add `inline_map` column.
-- [ ] 119. Add `dyn_text` column.
-- [ ] 120. Add `handlers` column.
-- [ ] 121. Add `effects` column.
-- [ ] 122. Add `variants` column.
-- [ ] 123. Add `split_output` column.
-- [ ] 124. Create `migration/reports/live_risks/_jsExprToLua_collision.md`.
-- [ ] 125. Create `migration/reports/live_risks/evalLuaMapData_gap.md`.
-- [ ] 126. Create `migration/reports/live_risks/atom26_reachability.md`.
-- [ ] 127. Create `migration/reports/live_risks/split_finalize_handoff.md`.
-- [ ] 128. Search for `_jsExprToLua` definitions and write the result locations into `_jsExprToLua_collision.md`.
-- [ ] 129. Search `smith_LOAD_ORDER.txt` for the relative load order of `emit_ops/js_expr_to_lua.js` and `emit_atoms/maps_lua/lua_map_subs.js`.
-- [ ] 130. Record the likely winning `_jsExprToLua` definition in `_jsExprToLua_collision.md`.
-- [ ] 131. Search for `evalLuaMapData` references and write all current call sites into `evalLuaMapData_gap.md`.
-- [ ] 132. Search for `mapBackend` checks and write all Zig vs Lua backend branch points into `atom26_reachability.md`.
-- [ ] 133. Search for split handoff logic in `emit/finalize.js`, `emit/split.js`, and atoms 43-46 and summarize it in `split_finalize_handoff.md`.
-- [ ] 134. Re-open all four live-risk reports and write `all_live_risk_reports_have_concrete_findings: true|false` plus any empty report paths to `migration/control_board.md`.
-- [ ] 135. Append `111-134 coverage and live-risk baseline complete` to `completed.txt`.
+- [x] 111. Create `migration/reports/coverage/coverage_matrix.json`.
+- [x] 112. Create `migration/reports/coverage/coverage_matrix.md`.
+- [x] 113. Enumerate carts under `tsz/carts/conformance/` into `coverage_matrix.md`.
+- [x] 114. Add lane column for each cart in `coverage_matrix.md`.
+- [x] 115. Add `lua_map` column.
+- [x] 116. Add `zig_map` column.
+- [x] 117. Add `nested_map` column.
+- [x] 118. Add `inline_map` column.
+- [x] 119. Add `dyn_text` column.
+- [x] 120. Add `handlers` column.
+- [x] 121. Add `effects` column.
+- [x] 122. Add `variants` column.
+- [x] 123. Add `split_output` column.
+- [x] 124. Create `migration/reports/live_risks/_jsExprToLua_collision.md`.
+- [x] 125. Create `migration/reports/live_risks/evalLuaMapData_gap.md`.
+- [x] 126. Create `migration/reports/live_risks/atom26_reachability.md`.
+- [x] 127. Create `migration/reports/live_risks/split_finalize_handoff.md`.
+- [x] 128. Search for `_jsExprToLua` definitions and write the result locations into `_jsExprToLua_collision.md`.
+- [x] 129. Search `smith_LOAD_ORDER.txt` for the relative load order of `emit_ops/js_expr_to_lua.js` and `emit_atoms/maps_lua/lua_map_subs.js`.
+- [x] 130. Record the likely winning `_jsExprToLua` definition in `_jsExprToLua_collision.md`.
+- [x] 131. Search for `evalLuaMapData` references and write all current call sites into `evalLuaMapData_gap.md`.
+- [x] 132. Search for `mapBackend` checks and write all Zig vs Lua backend branch points into `atom26_reachability.md`.
+- [x] 133. Search for split handoff logic in `emit/finalize.js`, `emit/split.js`, and atoms 43-46 and summarize it in `split_finalize_handoff.md`.
+- [x] 134. Re-open all four live-risk reports and write `all_live_risk_reports_have_concrete_findings: true|false` plus any empty report paths to `migration/control_board.md`.
+- [x] 135. Append `111-134 coverage and live-risk baseline complete` to `completed.txt`.
 - [ ] 136. Update `current_step.txt` to `136`, then commit with message `migration(single-agent): S111-140 step-136 coverage-live-risk-baseline`.
 - [ ] 137. Re-open `coverage_matrix.md` and write `coverage_matrix_has_feature_columns_115_123: true|false` to `migration/control_board.md`.
 - [ ] 138. Re-open `_jsExprToLua_collision.md` and write `js_expr_to_lua_collision_names_both_files: true|false` to `migration/control_board.md`.
