@@ -1,0 +1,11 @@
+- timestamp: 2026-04-09T00:00:00-07:00
+- step: 20
+- loop_discipline_explicit: true
+- changed_files: -
+- verification_status: read this file section index before any code changes
+
+- timestamp: 2026-04-09T00:21:00-07:00
+- step: 46
+- manifest_names_proposal_as_source_of_truth: true
+- changed_files: [tsz/compiler/migration/MANIFEST.md]
+- verification_status: manifest contains purpose, step-count table, Current Step, Blocked Steps, Completed Steps
