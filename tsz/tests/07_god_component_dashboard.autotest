@@ -1,0 +1,92 @@
+# 07_god_component_dashboard: God component with 15+ useState, sidebar, modal, notifications
+# Verifies sidebar navigation, user list, theme toggle, notifications, modal
+
+# Sidebar navigation (expanded by default)
+expect "NAVIGATION"
+expect "Dashboard"
+expect "Users"
+expect "Analytics"
+expect "Settings"
+expect "Logs"
+
+# Sidebar stats
+expect "STATS"
+expect "4 active users"
+expect "2 admins"
+expect "2 editors"
+
+# Top bar
+expect "Dashboard"
+expect "Light"
+expect "2 unread"
+
+# Search bar
+expect "Search users..."
+expect "Search"
+
+# Sort controls
+expect "Sort by:"
+expect "name"
+expect "role"
+expect "status"
+
+# User list
+expect "Alice Chen"
+expect "Bob Rivera"
+expect "Carol Wu"
+expect "Dan Kim"
+expect "Eve Park"
+expect "Deactivate"
+expect "Delete"
+
+# Notifications
+expect "Notifications"
+expect "New user registered"
+expect "Server CPU at 92%"
+expect "Backup completed"
+expect "Read"
+
+# Footer
+expect "5 users"
+expect "4 active"
+expect "theme: dark"
+expect "sidebar: expanded"
+
+# Toggle theme
+click "Light"
+expect "Dark"
+expect "theme: light"
+
+# Mark all notifications read
+click "2 unread"
+expect "All read"
+
+# Collapse sidebar
+click "<"
+expect "sidebar: collapsed"
+reject "NAVIGATION"
+
+# Expand sidebar
+click ">"
+expect "NAVIGATION"
+expect "sidebar: expanded"
+
+# Click a user to open modal
+click "Alice Chen"
+expect "Role"
+expect "Admin"
+expect "Email"
+expect "alice@example.com"
+expect "profile"
+expect "activity"
+expect "settings"
+
+# Switch modal tab
+click "activity"
+expect "Last login: 2 hours ago"
+expect "Sessions: 3 active"
+expect "API calls today: 847"
+
+# Close modal
+click "X"
+reject "Last login: 2 hours ago"

@@ -1,0 +1,21 @@
+# 11_padding_margin: WPT flex padding and margin interactions
+# Tests: container padding insets items, item margins add spacing, padding reduces grow space
+
+# Verify title and description
+expect "WPT: padding and margin interactions"
+expect "VERIFY: Container padding insets items, item margins add spacing, padding reduces grow space"
+
+# Verify WPT reference link text
+expect "WPT"
+expect "padding+margin"
+
+# Verify section labels
+expect "Container padding — items positioned inside padding"
+expect "Item margin — space around individual items"
+expect "Mixed padding on container + margin on items"
+expect "Padding + flexGrow — padding reduces available space for grow"
+expect "Per-side padding"
+
+# Verify text content inside flex items
+expect "grow"
+expect "60px"

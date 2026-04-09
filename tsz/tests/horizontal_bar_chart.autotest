@@ -1,0 +1,19 @@
+# horizontal_bar_chart: Horizontal bar chart with monthly revenue
+# Verifies title, subtitle, month labels, and bar values render
+
+expect "Horizontal Bar Chart"
+expect "Monthly revenue"
+expect "Jan"
+expect "Feb"
+expect "Mar"
+expect "Apr"
+expect "May"
+expect "Jun"
+expect "Jul"
+expect "42"
+expect "78"
+expect "55"
+expect "90"
+expect "35"
+expect "67"
+expect "82"

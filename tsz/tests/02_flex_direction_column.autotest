@@ -1,0 +1,13 @@
+# 02_flex_direction_column: WPT flex-direction column
+# Tests: three boxes laid out vertically top-to-bottom
+
+// Verify header and description
+expect "WPT: flex-direction column"
+expect "WPT"
+expect "flex-direction-column"
+expect "Three 50x50 boxes should be laid out vertically top-to-bottom"
+
+// Verify numbered box labels
+expect "1"
+expect "2"
+expect "3"

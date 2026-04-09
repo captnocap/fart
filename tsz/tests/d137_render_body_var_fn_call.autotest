@@ -1,10 +1,6 @@
-# d137_render_body_var_fn_call: Function call in render body
-# Tests: function calls during render
+# d137_render_body_var_fn_call: Render-body local vars from function calls
+# Tests: render-body function calls survive into visible text
 
-// Verify renders
-expect "Render Body Call"
-expect "computed: 42"
-
-// Update
-click "Update"
-expect "computed: 100"
+expect "d137 — render body var from fn call"
+expect "peak 25 | 3 points"
+expect "peak value: 25"

@@ -95,7 +95,7 @@ function routeScan(ctx, source) {
   // ║  Zig cannot handle dynamic mapped JSX. It can do static maps but  ║
   // ║  even that is more than it needs to. LuaJIT handles all map       ║
   // ║  content — nested maps, conditionals in maps, JSX templates,      ║
-  // ║  everything. lua_maps.js emitLuaRebuildList() does the work.      ║
+  // ║  everything. emit_atoms/maps_lua/* handle the generation.         ║
   // ║                                                                    ║
   // ║  If you are reading this and thinking "maybe I can route map       ║
   // ║  content to Zig" — NO. You will eat shit. Every time it has been  ║

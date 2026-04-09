@@ -1,13 +1,11 @@
 # d120_style_tokens: Style token system
-# Tests: design token integration
+# Tests: real source-backed tokenized content
 
-// Verify tokens applied
-expect "Style Tokens"
-expect "Primary Button"
+// Verify section headers and mapped field content
+expect "User Profile"
+expect "Username"
+expect "admin@example.com"
 
-// Click
-click "Action"
-expect "clicked: true"
-
-// Verify secondary button
-expect "Secondary Button"
+// Verify tag chip section
+expect "Tags"
+expect "Verified"

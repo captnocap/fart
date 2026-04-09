@@ -1,13 +1,14 @@
 # d124_variant_switcher: Variant switcher component
-# Tests: dynamic variant switching
+# Tests: real source-backed variant switching
 
-// Verify initial
-expect "Revenue"
+// Verify initial content
+expect "Variant Switcher"
+expect "Inbox"
+expect "3 cards loaded | variant: 0"
 
-// Switch to compact
-click "Compact"
-expect "Compact"
+// Switch across actual variants
+click "Magazine"
+expect "3 cards loaded | variant: 1"
 
-// Switch back
-click "Comfortable"
-expect "Comfortable"
+click "Win95"
+expect "3 cards loaded | variant: 4"

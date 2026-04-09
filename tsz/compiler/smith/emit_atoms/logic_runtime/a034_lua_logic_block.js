@@ -2,36 +2,29 @@
 // Index: 34
 // Group: logic_runtime
 // Target: lua_in_zig
-// Status: complete
-// Current owner: emit_split.js
+// Status: DISABLED — Lua-tree path owns LUA_LOGIC generation
+// Current owner: lua_tree_nodes.js::emitLuaTreeLuaSource()
 //
-// Trigger: every emitOutput() call (LUA_LOGIC is always emitted).
-// Output target: const LUA_LOGIC = multiline Zig string containing
-//   Lua state vars, setter functions, OA loaders, map handlers,
-//   <lscript> block, dynamic text evaluators, Lua map rebuilders.
+// This atom is DISABLED. The Lua-tree emit path (emit/lua_tree_nodes.js)
+// is the active path for all modern carts. It generates LUA_LOGIC as a
+// complete Lua source string directly, without delegating to atoms.
 //
-// Notes:
-//   Lua state setters/OA loaders only emit when ctx.luaBlock exists.
-//   Map handlers emit when handler has luaBody and wasn't emitted in JS.
-//   luaTransform() converts JS syntax to Lua equivalents.
+// This file remains as a structural placeholder to preserve atom indices.
+// The _a034_applies() function always returns false.
 //
-//   Emit order within LUA_LOGIC:
-//     1. State variable declarations (mirroring Zig state slots)
-//     2. State setter functions (__setState / __setStateString bridge)
-//     3. OA local vars + setter functions (when <lscript> exists)
-//     4. Map handler functions (__mapPress_N_M) — Lua-only handlers
-//        - Nested: receives (parent_idx, item_idx)
-//        - Top-level: receives (idx, ...field_refs), stores _handlerFieldRefsMap
-//     5. <lscript> block content (raw Lua)
-//     6. __evalDynTexts (Lua-side dynamic text, 16ms interval)
-//     7. Lua map rebuilders + __rebuildLuaMaps master dispatch
+// For the actual LUA_LOGIC implementation, see:
+//   - emit/lua_tree_nodes.js     (Lua source generation)
+//   - emit/lua_tree_emit.js      (Zig string wrapping)
 //
-//   Lines emitted as Zig multiline string: \\line\n
-//   Terminated with \\\n;\n
+// Deleted: All emit logic. This file does not emit anything.
+//
 
+// DISABLED — Lua-tree path is the active emit path.
+// LUA_LOGIC generation is owned by lua_tree_nodes.js::emitLuaTreeLuaSource().
+// This atom is kept as a structural placeholder; it never applies.
 function _a034_applies(ctx, meta) {
-  void meta;
-  return !!ctx;
+  void ctx; void meta;
+  return false;
 }
 
 function _a034_emit(ctx, meta) {

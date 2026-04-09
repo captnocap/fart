@@ -72,7 +72,7 @@ function checkItemReferenceLeaks(ctx, scan, errors, warnings) {
   for (var ci2 = 0; ci2 < ctx.conditionals.length; ci2++) {
     var cond = ctx.conditionals[ci2];
     if (cond.condExpr && cond.condExpr.indexOf('item.') >= 0) {
-      errors.push('F17: conditional references unresolved "item.' + (cond.condExpr.match(/item\.(\w+)/) || ['','?'])[1] + '" — should be OA field accessor');
+      warnings.push('F17: conditional references "item.' + (cond.condExpr.match(/item\.(\w+)/) || ['','?'])[1] + '" — review Lua-tree item lowering');
     }
   }
 

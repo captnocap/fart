@@ -1,0 +1,38 @@
+# RedditClone: Reddit-style feed with sidebar, posts, vote controls
+# Tests: header, sidebar communities/rules, post feed with .map(), static layout
+
+# Header
+expect "reddit"
+expect "Search Reddit"
+expect "Log In"
+
+# First few posts (loaded from script)
+expect "TIL that mass of all ants equals mass of all humans"
+expect "r/todayilearned"
+expect "1247 comments"
+
+expect "Scientists discover high-temp room superconductor (for real this time)"
+expect "r/science"
+
+expect "New Zelda game announced for Switch 2"
+expect "r/gaming"
+
+# Vote arrows present
+expect "^"
+expect "v"
+
+# Sidebar — Top Communities
+expect "Top Communities"
+expect "1. r/AskReddit"
+expect "2. r/gaming"
+expect "3. r/worldnews"
+expect "10. r/food"
+
+# Sidebar — Rules
+expect "r/popular Rules"
+expect "1. No harassment or bullying"
+expect "5. No reposts within 30 days"
+
+# Sidebar — About
+expect "About"
+expect "Reddit parity test for ReactJIT tsz compiler"

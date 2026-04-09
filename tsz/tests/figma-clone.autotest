@@ -1,0 +1,77 @@
+# figma-clone: Figma design tool parity
+# Verifies: toolbar, layers panel, canvas content, property inspector, zoom controls
+
+# Toolbar icons
+expect "V"
+expect "F"
+expect "R"
+expect "O"
+expect "T"
+expect "P"
+
+# File name
+expect "Untitled"
+expect "Drafts"
+
+# Zoom
+expect "100%"
+
+# Layers panel
+expect "Layers"
+expect "Frame 1"
+expect "Header"
+expect "Logo"
+expect "Nav Links"
+expect "Hero Section"
+expect "Background"
+expect "Heading"
+expect "CTA Button"
+expect "Card Grid"
+expect "Card 1"
+
+# Canvas content
+expect "Home"
+expect "About"
+expect "Contact"
+expect "Build something amazing"
+expect "The modern design platform for teams"
+expect "Get Started"
+expect "Feature One"
+expect "Feature Two"
+expect "Feature Three"
+expect "Description text here"
+
+# Property inspector
+expect "Design"
+expect "X"
+expect "Y"
+expect "W"
+expect "H"
+expect "120"
+expect "80"
+expect "360"
+expect "240"
+
+# Fill
+expect "Fill"
+expect "#E94560"
+expect "100%"
+
+# Opacity
+expect "Opacity"
+
+# Corner radius
+expect "Corner Radius"
+
+# Stroke and Effects
+expect "Stroke"
+expect "Effects"
+expect "None"
+
+# Zoom in
+click "+"
+expect "125%"
+
+# Zoom out
+click "-"
+expect "100%"

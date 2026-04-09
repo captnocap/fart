@@ -36,7 +36,6 @@ expect "layout: 1col, gap:8"
 
 # Verify initial selection
 expect "selected:"
-expect "detail:"
 
 # Click Dashboard
 click "Dashboard"

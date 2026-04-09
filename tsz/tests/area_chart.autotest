@@ -1,0 +1,15 @@
+# area_chart: Area chart with tessellated mesh fill
+# Verifies title, subtitle, and x-axis data labels render
+
+expect "Area Chart"
+expect "Filled area"
+expect "20"
+expect "45"
+expect "35"
+expect "70"
+expect "55"
+expect "80"
+expect "60"
+expect "90"
+expect "75"
+expect "85"

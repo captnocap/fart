@@ -1,0 +1,53 @@
+# ecommerce-shop: Shopify-style product page parity
+# Verifies: header, product details, size/color selectors, add to cart, related products
+
+# Header
+expect "SHOP"
+expect "Search products..."
+expect "Cart"
+
+# Breadcrumb
+expect "Home / Bags / Backpacks"
+
+# Product info
+expect "Classic Leather Backpack"
+expect "$49.99"
+expect "reviews"
+expect "In stock - ships in 1-2 business days"
+
+# Size selector
+expect "Size"
+expect "S"
+expect "M"
+expect "L"
+expect "XL"
+
+# Color selector
+expect "Color"
+
+# Action buttons
+expect "Add to Cart"
+expect "Buy Now"
+
+# Description
+expect "Description"
+
+# Related products
+expect "You might also like"
+expect "Canvas Messenger Bag"
+expect "$34.99"
+expect "Slim Laptop Sleeve"
+expect "$24.99"
+expect "Weekender Duffel"
+expect "$79.99"
+expect "Crossbody Sling Pack"
+expect "$29.99"
+
+# Select a different size
+click "L"
+
+# Add to cart
+click "Add to Cart"
+
+# Add another to cart
+click "Add to Cart"

@@ -1,0 +1,4 @@
+# smith_test_hello: Static text rendering - Hello from Smith
+
+# Verify the greeting text renders
+expect "Hello from Smith!"

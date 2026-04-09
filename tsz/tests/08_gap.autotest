@@ -1,0 +1,14 @@
+# 08_gap: WPT gap
+# Tests: gap:0, gap:10, gap:20, column gap, wrap gap
+
+// Verify header
+expect "WPT: gap"
+expect "WPT"
+expect "gap"
+
+// Verify section labels
+expect "gap: 0"
+expect "gap: 10"
+expect "gap: 20"
+expect "gap in column direction"
+expect "gap with flex-wrap"

@@ -1,0 +1,19 @@
+# 06_flex_shrink: WPT flex-shrink
+# Tests: default shrink, proportional shrink, shrink:0 refusal
+
+// Verify header
+expect "WPT: flex-shrink"
+expect "WPT"
+expect "flex-shrink"
+
+// Verify section labels
+expect "Default shrink"
+expect "Shrink 1:2:1"
+expect "Shrink 0"
+
+// Verify box content labels
+expect "100"
+expect "s:1"
+expect "s:2"
+expect "no shrink"
+expect "shrink"

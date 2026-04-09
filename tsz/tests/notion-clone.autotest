@@ -1,0 +1,68 @@
+# notion-clone: Notion page editor parity
+# Verifies: sidebar pages, breadcrumbs, block types (h1, h2, paragraph, bullet, numbered, todo, code, callout)
+
+# Sidebar
+expect "My Workspace"
+
+# Pages in sidebar
+expect "Getting Started"
+expect "Quick Start Guide"
+expect "API Reference"
+expect "Team Wiki"
+expect "Engineering"
+expect "Onboarding"
+expect "Runbooks"
+expect "Design"
+expect "Brand Guidelines"
+expect "Projects"
+expect "Q1 Roadmap"
+expect "Launch Checklist"
+
+# Block count
+expect "21 blocks"
+
+# Breadcrumbs
+expect "/"
+
+# Page title (heading1)
+expect "Getting Started with React"
+expect "Last edited 2 hours ago"
+
+# Heading2 blocks
+expect "Installation"
+expect "Core Concepts"
+expect "Setup Checklist"
+expect "Next Steps"
+
+# Paragraph content
+expect "React is a JavaScript library for building user interfaces"
+
+# Callout
+expect "This guide assumes you have intermediate JavaScript knowledge"
+
+# Code block
+expect "npx create-next-app@latest my-app"
+
+# Bullet items
+expect "Components are the building blocks of any React app"
+expect "Props let you pass data from parent to child components"
+expect "State allows components to manage their own data"
+expect "Hooks let you use state and lifecycle in function components"
+
+# Todo items
+expect "Install Node.js 18+"
+expect "Create project with create-next-app"
+expect "Configure TypeScript"
+expect "Set up ESLint and Prettier"
+expect "Deploy to Vercel"
+
+# Numbered items
+expect "Read the official React documentation"
+expect "Build a small todo app for practice"
+expect "Learn about React Server Components"
+
+# Click a sidebar page
+click "Team Wiki"
+
+# Toggle a todo checkbox
+click "Configure TypeScript"

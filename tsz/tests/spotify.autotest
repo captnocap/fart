@@ -1,0 +1,44 @@
+# spotify: Spotify clone with sidebar, track list, now-playing bar
+# Tests: sidebar nav/playlists, playlist header, track list, bottom player controls
+
+# Sidebar — branding and nav
+expect "Spotify"
+expect "Home"
+expect "Search"
+expect "Your Library"
+
+# Sidebar — playlists
+expect "PLAYLISTS"
+expect "Discover Weekly"
+expect "Release Radar"
+expect "Chill Vibes"
+expect "Workout Mix"
+expect "Road Trip"
+expect "Late Night Jazz"
+expect "90s Throwback"
+expect "Focus Flow"
+
+# Sidebar — liked songs
+expect "LIKED SONGS"
+expect "342 songs"
+
+# Main — playlist header
+expect "PLAYLIST"
+expect "Greatest Hits"
+
+# Track list headers
+expect "TITLE"
+expect "DURATION"
+
+# Tracks (spot check from script data)
+expect "Bohemian Rhapsody"
+expect "Queen"
+expect "5:55"
+expect "Blinding Lights"
+expect "The Weeknd"
+expect "Shape of You"
+expect "Hotel California"
+
+# Bottom bar — now playing
+expect "1:42"
+expect "Vol"

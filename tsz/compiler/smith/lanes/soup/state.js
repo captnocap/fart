@@ -86,17 +86,26 @@ function soupCollectHandlers(source, warns) {
 }
 
 function soupExtractReturn(source) {
-  var idx = source.lastIndexOf('return (');
+  // Find the App function body first — otherwise helper component returns
+  // (TypeIcon, ToolCard, etc.) get picked up instead of App's return.
+  var appBody = source;
+  var appMatch = source.match(/function\s+App\s*\([^)]*\)\s*\{/);
+  if (appMatch) {
+    var bodyStart = appMatch.index + appMatch[0].length - 1;
+    appBody = soupBlock(source, bodyStart);
+  }
+
+  var idx = appBody.lastIndexOf('return (');
   if (idx >= 0) {
     var start = idx + 8, depth = 1, i = start;
-    while (i < source.length && depth > 0) {
-      if (source.charAt(i) === '(') depth++;
-      else if (source.charAt(i) === ')') depth--;
+    while (i < appBody.length && depth > 0) {
+      if (appBody.charAt(i) === '(') depth++;
+      else if (appBody.charAt(i) === ')') depth--;
       if (depth > 0) i++; else break;
     }
-    return source.slice(start, i).trim();
+    return appBody.slice(start, i).trim();
   }
-  var idx2 = source.search(/return\s+</);
-  if (idx2 >= 0) return source.slice(source.indexOf('<', idx2)).trim();
+  var idx2 = appBody.search(/return\s+</);
+  if (idx2 >= 0) return appBody.slice(appBody.indexOf('<', idx2)).trim();
   return null;
 }

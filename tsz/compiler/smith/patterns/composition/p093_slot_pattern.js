@@ -62,7 +62,8 @@ function match(c, ctx) {
   return false;
 }
 
-function compile(c, ctx) {
+function compile(c, children, ctx) {
+  void children;
   if (c.kind() !== TK.lbrace) return null;
 
   c.advance(); // {
@@ -70,16 +71,21 @@ function compile(c, ctx) {
     // Keep cursor consistent even for non-JSX brace payloads.
     while (c.pos < c.count && c.kind() !== TK.rbrace && c.kind() !== TK.eof) c.advance();
     if (c.kind() === TK.rbrace) c.advance();
-    return { slot: true, result: null };
+    return { __jsxSlot: true, result: null };
   }
 
   var jsxResult = parseJSXElement(c);
   if (c.kind() === TK.rbrace) c.advance();
-
-  return {
-    slot: true,
-    result: jsxResult,
+  var slotInfo = {
+    kind: 'slot_prop',
+    loweredTo: 'component_prop_values',
+    fallbackAtoms: ['a006_static_node_arrays', 'a007_root_node_init'],
   };
+  if (!ctx._slotHints) ctx._slotHints = [];
+  ctx._slotHints.push(slotInfo);
+  if (jsxResult && typeof jsxResult === 'object') jsxResult._slotInfo = slotInfo;
+
+  return { __jsxSlot: true, result: jsxResult, _slotInfo: slotInfo };
 }
 
 _patterns[93] = { id: 93, match: match, compile: compile };

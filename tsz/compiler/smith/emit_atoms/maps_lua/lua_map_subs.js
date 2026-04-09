@@ -31,6 +31,12 @@ function _convertSimpleJsTernary(expr) {
       /\(([^()?:]+(?:\s+(?:and|or)\s+[^()?:]+)*)\s*\?\s*("[^"]*"|'[^']*'|\d+)\s*:\s*("[^"]*"|'[^']*'|\d+)\)/g,
       '(($1) and $2 or $3)'
     );
+    next = next.replace(
+      /(^|[=(]\s*)([^?:()]+?)\s*\?\s*([^:]+?)\s*:\s*([^)=]+)(?=$|[),])/g,
+      function(_, prefix, cond, whenTrue, whenFalse) {
+        return prefix + '((' + cond.trim() + ') and (' + whenTrue.trim() + ') or (' + whenFalse.trim() + '))';
+      }
+    );
     if (next === expr) break;
     expr = next;
   }
@@ -290,13 +296,59 @@ function _rewriteJsStringConcatToLua(expr) {
   return rewritten.isConcat ? rewritten.expr : expr;
 }
 
-function _normalizePropValueForLua(propValue, _luaIdxExpr) {
+function _findObjectArrayByIdx(oaIdx) {
+  if (!ctx || !ctx.objectArrays || oaIdx === undefined || oaIdx === null) return null;
+  for (var i = 0; i < ctx.objectArrays.length; i++) {
+    if (+ctx.objectArrays[i].oaIdx === +oaIdx) return ctx.objectArrays[i];
+  }
+  return null;
+}
+
+function _normalizeFlatItemFieldAccess(expr, itemVar, oaIdx) {
+  if (!expr || !itemVar) return expr;
+  var oa = _findObjectArrayByIdx(oaIdx);
+  if (!oa || !oa.fields || !oa.fields.length) return expr;
+  var fieldSet = {};
+  for (var fi = 0; fi < oa.fields.length; fi++) fieldSet[oa.fields[fi].name] = true;
+  var itemPattern = new RegExp('\\b' + itemVar + '\\s*\\.\\s*([A-Za-z_]\\w*(?:\\s*\\.\\s*[A-Za-z_]\\w+)+)', 'g');
+  return expr.replace(itemPattern, function(full, chain) {
+    var segments = chain.split(/\s*\.\s*/g).filter(Boolean);
+    if (segments.length < 2) return full;
+    var flat = segments.join('_');
+    if (!fieldSet[flat]) return full;
+    return itemVar + '.' + flat;
+  });
+}
+
+function _normalizePropValueForLua(propValue, _luaIdxExpr, _currentOaIdx) {
   if (typeof propValue !== 'string') return String(propValue);
   var _pv = propValue;
-  _pv = _pv.replace(/_oa\d+_(\w+)\[_j\]\[0\.\._oa\d+_\w+_lens\[_j\]\]/g, '_nitem.$1');
-  _pv = _pv.replace(/_oa\d+_(\w+)\[_j\]/g, '_nitem.$1');
-  _pv = _pv.replace(/_oa\d+_(\w+)\[_i\]\[0\.\._oa\d+_\w+_lens\[_i\]\]/g, '_item.$1');
-  _pv = _pv.replace(/_oa\d+_(\w+)\[_i\]/g, '_item.$1');
+  if (_pv.charCodeAt && _pv.charCodeAt(0) === 2) {
+    // Whole map item passed through an inlined component prop.
+    // In Lua-tree emit we bind the active item to `_item`/`_nitem`, not the
+    // original JS callback param name stored in the marker.
+    return _luaIdxExpr === '(_ni - 1)' ? '_nitem' : '_item';
+  }
+  _pv = _pv.replace(/_oa(\d+)_(\w+)\[_j\]\[0\.\._oa\d+_\w+_lens\[_j\]\]/g, function(_, oaIdx, field) {
+    if (_currentOaIdx !== undefined && _currentOaIdx !== null && +oaIdx === +_currentOaIdx) return '_nitem.' + field;
+    var _oa = ctx && ctx.objectArrays ? ctx.objectArrays.find(function(o) { return o.oaIdx === +oaIdx; }) : null;
+    return _oa ? (_oa.getter + '[_ni].' + field) : ('_nitem.' + field);
+  });
+  _pv = _pv.replace(/_oa(\d+)_(\w+)\[_j\]/g, function(_, oaIdx, field) {
+    if (_currentOaIdx !== undefined && _currentOaIdx !== null && +oaIdx === +_currentOaIdx) return '_nitem.' + field;
+    var _oa = ctx && ctx.objectArrays ? ctx.objectArrays.find(function(o) { return o.oaIdx === +oaIdx; }) : null;
+    return _oa ? (_oa.getter + '[_ni].' + field) : ('_nitem.' + field);
+  });
+  _pv = _pv.replace(/_oa(\d+)_(\w+)\[_i\]\[0\.\._oa\d+_\w+_lens\[_i\]\]/g, function(_, oaIdx, field) {
+    if (_currentOaIdx !== undefined && _currentOaIdx !== null && +oaIdx === +_currentOaIdx) return '_item.' + field;
+    var _oa = ctx && ctx.objectArrays ? ctx.objectArrays.find(function(o) { return o.oaIdx === +oaIdx; }) : null;
+    return _oa ? (_oa.getter + '[_i].' + field) : ('_item.' + field);
+  });
+  _pv = _pv.replace(/_oa(\d+)_(\w+)\[_i\]/g, function(_, oaIdx, field) {
+    if (_currentOaIdx !== undefined && _currentOaIdx !== null && +oaIdx === +_currentOaIdx) return '_item.' + field;
+    var _oa = ctx && ctx.objectArrays ? ctx.objectArrays.find(function(o) { return o.oaIdx === +oaIdx; }) : null;
+    return _oa ? (_oa.getter + '[_i].' + field) : ('_item.' + field);
+  });
   if (/@as\(i64,\s*@intCast\((_\w+)\)\)/.test(_pv)) {
     _pv = _pv.replace(/@as\(i64,\s*@intCast\((_\w+)\)\)/g, function(_, v) {
       if (v === '_i') return '(_i - 1)';
@@ -312,32 +364,63 @@ function _normalizePropValueForLua(propValue, _luaIdxExpr) {
   return _pv;
 }
 
-function _jsExprToLua(expr, itemParam, indexParam, _luaIdxExpr) {
+function _jsExprToLua(expr, itemParam, indexParam, _luaIdxExpr, _currentOaIdx) {
   var _origExpr = expr;
-  // _luaIdxExpr: override for the Lua index expression. Defaults to '(_i - 1)'.
-  // For nested maps, caller passes '(_ni - 1)' so inner index params resolve correctly.
-  var _idxExpr = _luaIdxExpr || '(_i - 1)';
+  var id = _getMapIdentity(_luaIdxExpr);
+  var _idxExpr = id.idxExpr;
+  
   if (typeof expandRenderLocalRawExpr === 'function' && ctx && ctx._renderLocalRaw) {
     expr = expandRenderLocalRawExpr(expr);
   }
-  if (itemParam) expr = expr.replace(new RegExp('\\b' + itemParam + '\\b', 'g'), '_item');
+  // Replace callback param names with canonical item variable (_item or _nitem)
+  if (itemParam) expr = expr.replace(new RegExp('\\b' + itemParam + '\\b', 'g'), id.itemVar);
   if (indexParam) expr = expr.replace(new RegExp('\\b' + indexParam + '\\b', 'g'), _idxExpr);
+  
+  // Resolve props from inlined components
   if (ctx && ctx.propStack && ctx.propsObjectName) {
     expr = expr.replace(new RegExp('\\b' + ctx.propsObjectName + '\\.(\\w+)\\b', 'g'), function(_, field) {
       if (ctx.propStack[field] === undefined) return ctx.propsObjectName + '.' + field;
-      return _normalizePropValueForLua(ctx.propStack[field], _luaIdxExpr);
+      return _normalizePropValueForLua(ctx.propStack[field], _luaIdxExpr, _currentOaIdx);
     });
   }
-  // Resolve component props — bare prop names from inlined components
-  // need to be replaced with the actual value (OA ref cleaned for Lua)
+  // Resolve whole-item props (marker char \x02)
   if (ctx && ctx.propStack) {
-    for (var _pk in ctx.propStack) {
-      if (new RegExp('\\b' + _pk + '\\b').test(expr)) {
-        expr = expr.replace(new RegExp('\\b' + _pk + '\\b', 'g'), _normalizePropValueForLua(ctx.propStack[_pk], _luaIdxExpr));
+    for (var _pkf in ctx.propStack) {
+      var _pvf = ctx.propStack[_pkf];
+      if (typeof _pvf === 'string' && _pvf.charCodeAt && _pvf.charCodeAt(0) === 2) {
+        var _itemRef = _normalizePropValueForLua(_pvf, _luaIdxExpr, _currentOaIdx);
+        expr = expr.replace(new RegExp('\\b' + _pkf + '\\s*\\.\\s*(\\w+)\\b', 'g'), _itemRef + '.$1');
       }
     }
   }
-  // Strip Zig builtins that leak from parseTemplateLiteral into Lua expressions
+  // Resolve component props
+  if (ctx && ctx.propStack) {
+    for (var _pk in ctx.propStack) {
+      if (new RegExp('\\b' + _pk + '\\b').test(expr)) {
+        expr = expr.replace(new RegExp('\\b' + _pk + '\\b', 'g'), _normalizePropValueForLua(ctx.propStack[_pk], _luaIdxExpr, _currentOaIdx));
+      }
+    }
+  }
+  // OA array access with field: arr[idx].field → arr[(idx + 1)].field
+  if (typeof ctx !== 'undefined' && ctx.objectArrays) {
+    expr = expr.replace(/\b([A-Za-z_]\w*)\s*\[\s*([^\]]+)\s*\]\s*\.\s*([A-Za-z_]\w+)\b/g, function(full, arrName, idxExpr, field) {
+      var _oaArr = null;
+      for (var _oi = 0; _oi < ctx.objectArrays.length; _oi++) {
+        if (ctx.objectArrays[_oi].getter === arrName) { _oaArr = ctx.objectArrays[_oi]; break; }
+      }
+      if (!_oaArr) return full;
+      return arrName + '[((' + idxExpr.trim() + ') + 1)].' + field;
+    });
+    expr = expr.replace(/\b([A-Za-z_]\w*)\s*\[\s*([^\]]+)\s*\]\b/g, function(full, arrName, idxExpr) {
+      var _oaArr2 = null;
+      for (var _oi2 = 0; _oi2 < ctx.objectArrays.length; _oi2++) {
+        if (ctx.objectArrays[_oi2].getter === arrName) { _oaArr2 = ctx.objectArrays[_oi2]; break; }
+      }
+      if (!_oaArr2) return full;
+      return arrName + '[((' + idxExpr.trim() + ') + 1)]';
+    });
+  }
+  // Strip Zig builtins
   expr = expr.replace(/@divTrunc\(([^,]+),\s*([^)]+)\)/g, 'math.floor($1 / $2)');
   expr = expr.replace(/@mod\(([^,]+),\s*([^)]+)\)/g, '($1 % $2)');
   for (var _zi = 0; _zi < 3; _zi++) {
@@ -353,13 +436,39 @@ function _jsExprToLua(expr, itemParam, indexParam, _luaIdxExpr) {
       return _oa ? '#' + _oa.getter : '#_oa' + oaIdx;
     });
   }
-  // OA field refs that leaked through: _oa0_field[_i] → _item.field, _oa0_field[_j] → _nitem.field
-  expr = expr.replace(/_oa\d+_(\w+)\[_i\]\[0\.\._oa\d+_\w+_lens\[_i\]\]/g, '_item.$1');
-  expr = expr.replace(/_oa\d+_(\w+)\[_i\]/g, '_item.$1');
-  expr = expr.replace(/_oa\d+_(\w+)\[_j\]\[0\.\._oa\d+_\w+_lens\[_j\]\]/g, '_nitem.$1');
-  expr = expr.replace(/_oa\d+_(\w+)\[_j\]/g, '_nitem.$1');
-  // Zig inner map iterator _j → Lua _ni (nested index)
+  // OA field refs: unified through _resolveOaFieldRef
+  expr = expr.replace(/_oa(\d+)_(\w+)\[_i\]\[0\.\._oa\d+_\w+_lens\[_i\]\]/g, function(_, oaIdx, field) {
+    return _resolveOaFieldRef(oaIdx, field, _luaIdxExpr, _currentOaIdx);
+  });
+  expr = expr.replace(/_oa(\d+)_(\w+)\[_i\]/g, function(_, oaIdx, field) {
+    return _resolveOaFieldRef(oaIdx, field, _luaIdxExpr, _currentOaIdx);
+  });
+  expr = expr.replace(/_oa(\d+)_(\w+)\[_j\]\[0\.\._oa\d+_\w+_lens\[_j\]\]/g, function(_, oaIdx, field) {
+    return _resolveOaFieldRef(oaIdx, field, '(_ni - 1)', _currentOaIdx);
+  });
+  expr = expr.replace(/_oa(\d+)_(\w+)\[_j\]/g, function(_, oaIdx, field) {
+    return _resolveOaFieldRef(oaIdx, field, '(_ni - 1)', _currentOaIdx);
+  });
+  // Flat field access normalization (for nested fields like _item.foo_bar)
+  expr = _normalizeFlatItemFieldAccess(expr, id.itemVar, _currentOaIdx);
+  if (id.itemVar === '_nitem') {
+    expr = _normalizeFlatItemFieldAccess(expr, '_item', _currentOaIdx);
+  }
+  // Zig inner map iterator _j → Lua _ni
   expr = expr.replace(/\b_j\b/g, '_ni');
+  // .len → # (Lua length operator)
+  expr = expr.replace(/([A-Za-z_]\w*(?:\.[A-Za-z_]\w+)*)\.len\b/g, '#$1');
+  expr = expr.replace(/([A-Za-z_]\w*\[[^\]]+\]\.[A-Za-z_]\w+)\.len\b/g, '#$1');
+  expr = expr.replace(/([A-Za-z_]\w*\[[^\]]+\]\.[A-Za-z_]\w+)\.length\b/g, '#$1');
+  expr = expr.replace(/([A-Za-z_]\w*)\.\#([A-Za-z_]\w+)/g, '#$1.$2');
+  expr = expr.replace(/([A-Za-z_]\w*\[[^\]]+\])\.\#([A-Za-z_]\w+)/g, '#$1.$2');
+  // Index variable comparison normalization
+  if (_idxExpr) {
+    expr = expr.replace(/([=!<>]=?)\s*_i\b/g, '$1 ' + _idxExpr);
+    expr = expr.replace(/\b_i\s*([=!<>]=?)/g, _idxExpr + ' $1');
+    expr = expr.replace(/([=!<>]=?)\s*_ni\b/g, '$1 (_ni - 1)');
+    expr = expr.replace(/\b_ni\s*([=!<>]=?)/g, '(_ni - 1) $1');
+  }
   // Zig state.getSlot* → Lua getter name
   if (typeof ctx !== 'undefined' && ctx.stateSlots) {
     expr = expr.replace(/state\.getSlot(?:Int|Float|Bool)?\((\d+)\)/g, function(_, idx) {

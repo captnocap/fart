@@ -1,0 +1,13 @@
+# 01_flex_direction_row: WPT flex-direction row
+# Tests: three boxes laid out horizontally left-to-right
+
+// Verify header and description
+expect "WPT: flex-direction row"
+expect "WPT"
+expect "flex-direction"
+expect "Three 50x50 boxes should be laid out horizontally left-to-right"
+
+// Verify numbered box labels
+expect "1"
+expect "2"
+expect "3"

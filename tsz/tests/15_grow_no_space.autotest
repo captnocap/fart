@@ -1,0 +1,30 @@
+# 15_grow_no_space: WPT flex-grow edge cases
+# Tests: grow:0 keeps natural size, no remaining space, fractional grow, large ratio, grow+basis
+
+# Verify title and description
+expect "WPT: flex-grow edge cases"
+expect "VERIFY: grow:0 keeps natural size, no remaining space means grow has no effect, fractional grow ratios"
+
+# Verify WPT reference link text
+expect "WPT"
+expect "flex-grow edge cases"
+
+# Verify section labels
+expect "grow:0 — items keep natural size (WPT flex-grow-002)"
+expect "No remaining space — grow has no effect (WPT flex-grow-004)"
+expect "Fractional grow values — 0.5 : 1.5 : 1"
+expect "Large grow ratio — 1:10 distribution"
+expect "Grow with basis — basis:50 + grow distributes remainder"
+
+# Verify fractional grow labels
+expect "0.5"
+expect "1.5"
+expect "1.0"
+
+# Verify large ratio labels
+expect "1"
+expect "10"
+
+# Verify basis+grow labels
+expect "b50+g1"
+expect "b50+g3"

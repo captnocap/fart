@@ -2,6 +2,7 @@ function findAppStart(c) {
   var exactAppStart = -1;
   var appStart = -1;
   for (var i = 0; i < c.count - 2; i++) {
+    // Match: function Name(
     if (c.kindAt(i) === TK.identifier && c.textAt(i) === 'function' &&
         c.kindAt(i + 1) === TK.identifier && c.kindAt(i + 2) === TK.lparen) {
       var name = c.textAt(i + 1);
@@ -10,6 +11,23 @@ function findAppStart(c) {
         break;
       }
       if (name[0] >= 'A' && name[0] <= 'Z') appStart = i;
+    }
+    // Match: const Name = (...) => {  OR  const Name = () => {
+    if (c.kindAt(i) === TK.identifier && c.textAt(i) === 'const' &&
+        c.kindAt(i + 1) === TK.identifier && c.kindAt(i + 2) === TK.equals) {
+      var aName = c.textAt(i + 1);
+      if (aName[0] >= 'A' && aName[0] <= 'Z') {
+        // Scan ahead to check for => before the next { body
+        for (var j = i + 3; j < c.count && j < i + 20; j++) {
+          if (c.kindAt(j) === TK.arrow) {
+            if (aName === 'App') { exactAppStart = i; break; }
+            appStart = i;
+            break;
+          }
+          if (c.kindAt(j) === TK.lbrace) break;
+        }
+        if (exactAppStart >= 0) break;
+      }
     }
   }
   return exactAppStart >= 0 ? exactAppStart : appStart;

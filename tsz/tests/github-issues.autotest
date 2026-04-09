@@ -1,0 +1,71 @@
+# github-issues: GitHub Issues list parity
+# Verifies: repo header, nav tabs, filters, issue list, label filtering, open/closed toggle
+
+# Repo header
+expect "facebook"
+expect "react"
+
+# Nav tabs
+expect "Code"
+expect "Issues"
+expect "Pull requests"
+
+# Sidebar filters
+expect "Filters"
+expect "bug"
+expect "enhancement"
+expect "rfc"
+expect "documentation"
+expect "Clear filter"
+
+# Issue titles (open by default)
+expect "Bug: useEffect cleanup runs twice in StrictMode"
+expect "Feature: Add server actions support"
+expect "Hydration mismatch with Suspense boundaries"
+expect "RFC: React Forget compiler"
+expect "Concurrent rendering causes flicker on slow devices"
+expect "Add TypeScript 5.4 support to types"
+expect "Support CSS-in-JS with zero runtime"
+expect "Add useFormStatus hook"
+expect "Scheduler priority inversion on iOS Safari"
+expect "Add React.lazy preload API"
+
+# Issue metadata
+expect "devguy42"
+expect "2h ago"
+expect "sarahdev"
+expect "danabramov"
+
+# Closed issues should NOT appear initially
+reject "Fix: key prop warning false positive in fragments"
+reject "Update React DevTools protocol"
+reject "Remove legacy context API"
+
+# Filter to closed issues
+click "C"
+expect "Closed"
+expect "Fix: key prop warning false positive in fragments"
+expect "Update React DevTools protocol"
+expect "Docs: Migrate to RSC examples"
+expect "Remove legacy context API"
+expect "Fix SSR streaming with error boundaries"
+expect "Tree-shaking improvements for production builds"
+reject "Bug: useEffect cleanup runs twice in StrictMode"
+
+# Back to open
+click "O"
+expect "Bug: useEffect cleanup runs twice in StrictMode"
+
+# Filter by label: bug
+click "bug"
+expect "Bug: useEffect cleanup runs twice in StrictMode"
+expect "Hydration mismatch with Suspense boundaries"
+expect "Concurrent rendering causes flicker on slow devices"
+expect "Memory leak in useCallback with closures"
+reject "Feature: Add server actions support"
+reject "RFC: React Forget compiler"
+
+# Clear filter
+click "Clear filter"
+expect "Feature: Add server actions support"
+expect "RFC: React Forget compiler"

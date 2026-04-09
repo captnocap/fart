@@ -1,0 +1,14 @@
+# depth_chart: Cumulative order book depth chart
+# Verifies title, subtitle, price labels, volume labels, and legend text render
+
+expect "Depth Chart"
+expect "Cumulative order book"
+expect "$100"
+expect "$96"
+expect "$104"
+expect "100"
+expect "70"
+expect "90"
+expect "62"
+expect "Bids (cumulative)"
+expect "Asks (cumulative)"

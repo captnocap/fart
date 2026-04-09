@@ -58,8 +58,8 @@ function _tryParseComputedChainMap(c, children, baseName, baseExpr, consumeClosi
 
   // ── Lua detour: if the source is render-local/computed, route to LuaJIT ──
   // .map() content ALWAYS goes to Lua. Use the normal parser for Zig side
-  // effects (OA registration, map context), then use the token-walking
-  // emitLuaRebuildList for the Lua template (it handles nested JSX trees).
+  // effects (OA registration, map context), then emit_atoms/maps_lua
+  // for the Lua template generation (handles nested JSX trees).
   var _isRenderLocal = ctx._renderLocalRaw && ctx._renderLocalRaw[baseName] !== undefined;
   var _isStateOa = false;
   for (var _oai = 0; _oai < ctx.objectArrays.length; _oai++) {
@@ -68,7 +68,7 @@ function _tryParseComputedChainMap(c, children, baseName, baseExpr, consumeClosi
     }
   }
   if (_isRenderLocal && !_isStateOa) {
-    // Save cursor at JSX body start for the token-walking Lua emitter
+    // Save cursor at JSX body start for the Lua emitter
     var _luaJsxPos = c.save();
 
     // Let the normal Zig path parse the JSX and create the OA.
@@ -97,9 +97,12 @@ function _tryParseComputedChainMap(c, children, baseName, baseExpr, consumeClosi
     ctx._luaMapRebuilders.push({
       index: _luaIdx,
       luaCode: _luaBody,
+      oaIdx: oa.oaIdx,
       bodyNode: mapResult.luaNode || null,
       itemParam: header.itemParam || '_item',
       indexParam: header.indexParam || null,
+      parentItemParam: ctx.currentMap ? ctx.currentMap.itemParam : null,
+      parentIndexParam: ctx.currentMap ? ctx.currentMap.indexParam : null,
       filterConditions: mapIdx >= 0 ? ctx.maps[mapIdx].filterConditions : null,
       dataVar: ctx.currentMap ? null : oa.getter,
       rawSource: _luaRaw,
@@ -138,9 +141,12 @@ function _tryParseComputedChainMap(c, children, baseName, baseExpr, consumeClosi
   ctx._luaMapRebuilders.push({
     index: _ccLuaIdx,
     luaCode: _ccLuaBody,
+    oaIdx: oa.oaIdx,
     bodyNode: mapResult.luaNode || null,
     itemParam: header.itemParam || '_item',
     indexParam: header.indexParam || null,
+    parentItemParam: ctx.currentMap ? ctx.currentMap.itemParam : null,
+    parentIndexParam: ctx.currentMap ? ctx.currentMap.indexParam : null,
     filterConditions: _ccMapIdx >= 0 ? ctx.maps[_ccMapIdx].filterConditions : null,
     dataVar: ctx.currentMap ? null : oa.getter,
     rawSource: _ccRawSource,
@@ -346,59 +352,18 @@ function _tryParseIdentifierMapExpression(c, children, consumeClosingBrace) {
       }
       // Clean spaces around dots: "_item . items" → "_item.items"
       _nmRawSource = _nmRawSource.replace(/\s*\.\s*/g, '.');
-      // Build inner map body via token walker (emitLuaElement)
-      // This avoids parser scoping issues with nested map variable shadowing
-      var _nmBodyLua = null;
+      // Parse JSX body into a node structure for emit_atoms/maps_lua to convert
+      // Substitution of param names (_item→_nitem, etc) happens in _nodeToLua
+      var _nmBodyNode = null;
       if (c.kind() === TK.lt || c.kind() === TK.lparen) {
         if (c.kind() === TK.lparen) c.advance(); // skip ( wrapping JSX
-        _luaEmitIter = 0;
-        _luaEmitDepth = 0;
-        _nmBodyLua = emitLuaElement(c, _nmParam, '          ', _nmIdxParam);
+        // Temporarily set nested map context for parsing
+        var _savedCtxMap = ctx.currentMap;
+        ctx.currentMap = { itemParam: _nmParam, indexParam: _nmIdxParam, isNested: true };
+        // Parse the JSX element using the standard element parser
+        _nmBodyNode = _parseJsxForLuaMapBody(c);
+        ctx.currentMap = _savedCtxMap;
         if (c.kind() === TK.rparen) c.advance(); // close ( wrapper
-      }
-      // Substitute source param names → Lua param names
-      if (_nmBodyLua) {
-        // Inner item param: item → _nitem (or whatever source param was)
-        if (_nmParam && _nmParam !== '_item') {
-          _nmBodyLua = _nmBodyLua.replace(new RegExp('\\b_item \\. ' + '(\\w+)', 'g'), '_nitem.$1');
-          _nmBodyLua = _nmBodyLua.replace(new RegExp('\\b_item\\.(\\w+)', 'g'), '_nitem.$1');
-        }
-        // Inner index: ii → (_ni - 1)
-        if (_nmIdxParam) {
-          _nmBodyLua = _nmBodyLua.replace(new RegExp('\\b' + _nmIdxParam + '\\b', 'g'), '(_ni - 1)');
-        }
-        // Outer index: gi → (_i - 1)
-        if (ctx.currentMap && ctx.currentMap.indexParam) {
-          _nmBodyLua = _nmBodyLua.replace(new RegExp('\\b' + ctx.currentMap.indexParam + '\\b', 'g'), '(_i - 1)');
-        }
-        // Splice dynamic handler args: lua_on_press = "fn(expr)" → "fn(" .. (expr) .. ")"
-        // Loop vars (_i, _ni, _nitem) in handler strings must be evaluated at render time
-        _nmBodyLua = _nmBodyLua.replace(/lua_on_press = "([^"]+)"/g, function(match, body) {
-          if (/\b(_i|_ni|_nitem|_item)\b/.test(body)) {
-            // Find the function name and extract args with balanced parens
-            var fnMatch = body.match(/^(\w+)\s*\(/);
-            if (fnMatch) {
-              var fn = fnMatch[1];
-              var argsStart = body.indexOf('(', fn.length) + 1;
-              // Find matching close paren (handle nested parens)
-              var depth = 1;
-              var argsEnd = argsStart;
-              while (argsEnd < body.length && depth > 0) {
-                if (body[argsEnd] === '(') depth++;
-                if (body[argsEnd] === ')') depth--;
-                if (depth > 0) argsEnd++;
-              }
-              var args = body.substring(argsStart, argsEnd).trim();
-              var rest = body.substring(argsEnd + 1).trim();
-              // Multiple statements separated by ;
-              if (rest) {
-                return 'lua_on_press = "' + fn + '(" .. (' + args + ') .. ")' + rest + '"';
-              }
-              return 'lua_on_press = "' + fn + '(" .. (' + args + ') .. ")"';
-            }
-          }
-          return match;
-        });
       }
       // Consume closing parens/braces from the .map() call
       while (c.kind() === TK.rparen) c.advance();
@@ -406,8 +371,7 @@ function _tryParseIdentifierMapExpression(c, children, consumeClosingBrace) {
       ctx._luaMapRebuilders.push({
         index: _nmIdx,
         luaCode: '',
-        bodyNode: null,
-        bodyLua: _nmBodyLua,
+        bodyNode: _nmBodyNode,
         itemParam: _nmParam || '_item',
         indexParam: _nmIdxParam || null,
         filterConditions: null,
@@ -505,9 +469,12 @@ function _tryParseIdentifierMapExpression(c, children, consumeClosingBrace) {
     ctx._luaMapRebuilders.push({
       index: _dynLuaIdx,
       luaCode: _dynLuaBody,
+      oaIdx: oa.oaIdx,
       bodyNode: _zigMapResult.luaNode || null,
       itemParam: _dynItemParam || '_item',
       indexParam: _dynIdxParam || null,
+      parentItemParam: ctx.currentMap ? ctx.currentMap.itemParam : null,
+      parentIndexParam: ctx.currentMap ? ctx.currentMap.indexParam : null,
       filterConditions: _dynMapIdx >= 0 ? ctx.maps[_dynMapIdx].filterConditions : null,
       rawSource: maybeArr,
       varName: maybeArr,

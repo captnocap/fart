@@ -1,0 +1,12 @@
+# stacked_bar_chart: Stacked bar chart with quarterly revenue
+# Verifies title, subtitle, month labels, and legend quarter labels render
+
+expect "Stacked Bar Chart"
+expect "Quarterly revenue by month"
+expect "Jan"
+expect "Feb"
+expect "Mar"
+expect "Apr"
+expect "Q1"
+expect "Q2"
+expect "Q3"

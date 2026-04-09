@@ -82,7 +82,23 @@ function match(c, ctx) {
   return hasArrow || hasFunction;
 }
 
-function compile(c, ctx) {
+function _p085_collectReturns(c, start, end) {
+  var returns = [];
+  for (var j = start + 1; j < end; j++) {
+    if (!(c.kindAt(j) === TK.identifier && c.textAt(j) === 'return')) continue;
+    var k = j + 1;
+    while (k < end && c.kindAt(k) === TK.lparen) k++;
+    returns.push({
+      returnPos: j,
+      exprPos: k,
+      isJSX: k < end && c.kindAt(k) === TK.lt,
+    });
+  }
+  return returns;
+}
+
+function compile(c, children, ctx) {
+  void children;
   var start = c.save();
   if (c.kind() !== TK.lparen) return null;
 
@@ -98,25 +114,36 @@ function compile(c, ctx) {
   }
   if (end < 0) return null;
 
+  var returns = _p085_collectReturns(c, start, end);
+  var jsxReturns = returns.filter(function(r) { return r.isJSX; });
   var parsedNode = null;
-  for (var j = start + 1; j < end; j++) {
-    if (c.kindAt(j) === TK.identifier && c.textAt(j) === 'return') {
-      var k = j + 1;
-      while (k < end && c.kindAt(k) === TK.lparen) k++;
-      if (k < end && c.kindAt(k) === TK.lt) {
-        c.restore(k);
-        parsedNode = parseJSXElement(c);
-      }
-      break;
-    }
+  if (jsxReturns.length > 0) {
+    c.restore(jsxReturns[0].exprPos);
+    parsedNode = parseJSXElement(c);
   }
 
   var after = end + 1;
   if (after + 1 < c.count && c.kindAt(after) === TK.lparen && c.kindAt(after + 1) === TK.rparen) after += 2;
   c.restore(after);
 
-  if (parsedNode) return parsedNode;
-  return { iife: true, children: [] };
+  var iifeInfo = {
+    kind: 'iife_conditional',
+    returnCount: returns.length,
+    jsxReturnCount: jsxReturns.length,
+    branchStyle: returns.length > 1 ? 'multi_branch' : 'single_branch',
+    loweredTo: 'conditional_rendering',
+    fallbackAtoms: ['a036_conditional_updates', 'a006_static_node_arrays', 'a007_root_node_init'],
+  };
+  if (!ctx._iifeHints) ctx._iifeHints = [];
+  ctx._iifeHints.push(iifeInfo);
+
+  if (parsedNode) {
+    parsedNode._iifeInfo = iifeInfo;
+    return parsedNode;
+  }
+  if (!ctx._droppedExpressions) ctx._droppedExpressions = [];
+  ctx._droppedExpressions.push({ expr: 'iife_no_jsx_return', line: 0, returnCount: returns.length });
+  return { nodeExpr: '.{ .text = "" }', _iifeInfo: iifeInfo };
 }
 
 _patterns[85] = { id: 85, match: match, compile: compile };

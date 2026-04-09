@@ -1,0 +1,4 @@
+# cursor_ide_mini_test: Component with props.array.map() - ItemRow/ItemList composition
+
+# Initial state - header text renders
+expect "Cursor Mini Test"

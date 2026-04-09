@@ -1,0 +1,15 @@
+# pie_chart: Filled pie chart with legend
+# Verifies title, subtitle, category labels, and percentage values render
+
+expect "Pie Chart"
+expect "Proportional slices"
+expect "Infra"
+expect "30%"
+expect "Auth"
+expect "20%"
+expect "UI"
+expect "25%"
+expect "Data"
+expect "15%"
+expect "Other"
+expect "10%"

@@ -1,0 +1,25 @@
+# 20_real_world_layouts: WPT real-world layout patterns
+# Tests: holy grail layout, card grid with wrap, toolbar with spacer
+
+# Verify title and description
+expect "WPT: real-world layout patterns"
+expect "VERIFY: Holy grail layout (header/sidebar/main/aside/footer), card grid wraps, toolbar with spacer"
+
+# Verify section labels
+expect "Holy grail layout — header, sidebar+main+aside, footer"
+expect "Card grid with wrap — responsive card layout"
+expect "Toolbar — icon buttons with spacer"
+
+# Verify holy grail layout regions
+expect "Header"
+expect "Sidebar"
+expect "Main Content"
+expect "Aside"
+expect "Footer"
+
+# Verify card grid labels
+expect "Card 1"
+expect "Card 2"
+expect "Card 3"
+expect "Card 4"
+expect "Card 5"

@@ -65,7 +65,8 @@ function match(c, ctx) {
   return false;
 }
 
-function compile(c, ctx) {
+function compile(c, children, ctx) {
+  void children;
   var saved = c.save();
   if (c.kind() !== TK.lt) { c.restore(saved); return null; }
   c.advance();
@@ -130,13 +131,19 @@ function compile(c, ctx) {
     keyKind: keyKind,
     keyRaw: keyRaw,
     dropped: true,
+    loweredTo: 'fragment_children_flattened',
+    fallbackAtoms: ['a006_static_node_arrays', 'a019_map_metadata', 'a026_flat_map_rebuild'],
     mapScope: !!ctx.currentMap,
     mapItemParam: ctx.currentMap ? (ctx.currentMap.itemParam || '_item') : null,
     mapIndexParam: ctx.currentMap ? (ctx.currentMap.indexParam || '_i') : null,
   };
   if (!ctx._keyHints) ctx._keyHints = [];
   ctx._keyHints.push(out);
-  return out;
+
+  c.restore(saved);
+  var parsed = parseJSXElement(c);
+  if (parsed && typeof parsed === 'object') parsed._keyHint = out;
+  return parsed || { nodeExpr: '.{ .text = "" }', _keyHint: out };
 }
 
 _patterns[102] = { id: 102, match: match, compile: compile };

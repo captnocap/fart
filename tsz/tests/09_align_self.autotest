@@ -1,0 +1,19 @@
+# 09_align_self: WPT align-self
+# Tests: per-item alignment override (start/center/end/stretch)
+
+// Verify header
+expect "WPT: align-self"
+expect "WPT"
+expect "align-self"
+
+// Verify section labels
+expect "Each item overrides the container alignItems:start"
+expect "Container alignItems:end, items override individually"
+expect "Column direction with align-self"
+
+// Verify box content labels
+expect "start"
+expect "center"
+expect "end"
+expect "stretch"
+expect "auto"

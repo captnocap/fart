@@ -3,7 +3,7 @@
 // Group: maps_lua
 // Target: lua_in_zig
 // Status: complete
-// Current owner: emit/lua_maps.js
+// Current owner: emit_atoms/maps_lua/a030_lua_map_rebuilder_functions.js
 //
 // Trigger: Lua-side nested mapped children.
 // Output target: __luaNestedMap() helper function in LUA_LOGIC.
@@ -13,7 +13,7 @@
 // iterates the sub-array and wraps results in { children = result }.
 //
 // This helper is emitted once per cart that has any Lua map rebuilder,
-// inside emitLuaRebuildList() in emit/lua_maps.js. It is included
+// by a030_lua_map_rebuilder_functions.js. It is included
 // at the end of each rebuilder's luaCode output.
 
 function _a031_applies(ctx) {
@@ -23,8 +23,8 @@ function _a031_applies(ctx) {
 }
 
 function _a031_emit() {
-  // The __luaNestedMap helper is already included in the luaCode
-  // output from emitLuaRebuildList. This atom documents its shape.
+  // The __luaNestedMap helper is emitted by a030.
+  // This atom documents its shape (currently disabled).
   var lines = [];
   lines.push('-- Nested map helper');
   lines.push('function __luaNestedMap(arr, fn)');
@@ -44,7 +44,7 @@ _emitAtoms[31] = {
   group: 'maps_lua',
   target: 'lua_in_zig',
   status: 'complete',
-  currentOwner: 'emit/lua_maps.js',
+  currentOwner: 'emit_atoms/maps_lua/a030_lua_map_rebuilder_functions.js',
   applies: _a031_applies,
   emit: _a031_emit,
 };

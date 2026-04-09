@@ -1,0 +1,64 @@
+# 08_hoc_wrapper_hell: 5 nested HOC wrappers around a user profile component
+# Verifies auth gate, tracking, error boundary, data wrapper, memo wrapper, profile
+
+# Memo wrapper header
+expect "MEMO keys: userId, data"
+
+# Tracking strip
+expect "TRACKING: UserProfile"
+expect "log event"
+
+# User profile content
+expect "Alice Chen"
+expect "alice@example.com"
+
+# Stats from data wrapper
+expect "12"
+expect "Posts"
+expect "340"
+expect "Followers"
+expect "2024-01-15"
+expect "Joined"
+
+# Action buttons
+expect "Actions"
+expect "Edit Profile"
+expect "Trigger Error"
+expect "Log Out"
+expect "Simulate Fetch Error"
+
+# DevTools tree visualization
+expect "DevTools component tree:"
+expect "UserProfile"
+
+# Click Edit Profile (increments render count)
+click "Edit Profile"
+
+# Trigger error boundary
+click "Trigger Error"
+expect "Something went wrong"
+expect "An error occurred while rendering this component"
+expect "Try Again"
+
+# Recover from error
+click "Try Again"
+expect "Alice Chen"
+
+# Log out to see auth gate
+click "Log Out"
+expect "Login Required"
+expect "You must be logged in to view this page"
+expect "Sign In"
+
+# Sign back in
+click "Sign In"
+expect "Alice Chen"
+
+# Simulate fetch error
+click "Simulate Fetch Error"
+expect "Data fetch error"
+expect "Retry"
+
+# Retry fetch
+click "Retry"
+expect "Alice Chen"

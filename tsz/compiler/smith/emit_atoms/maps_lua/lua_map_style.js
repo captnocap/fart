@@ -29,7 +29,7 @@ function _zigOaToLuaItem(val) {
   return null;
 }
 
-function _styleToLua(style, itemParam, indexParam, _luaIdxExpr) {
+function _styleToLua(style, itemParam, indexParam, _luaIdxExpr, _currentOaIdx) {
   if (!style) return null;
   var parts = [];
   for (var key in style) {
@@ -123,8 +123,16 @@ function _styleToLua(style, itemParam, indexParam, _luaIdxExpr) {
         return (ctx && ctx.stateSlots && ctx.stateSlots[+idx]) ? ctx.stateSlots[+idx].getter : '_slot' + idx;
       });
       // 4. OA refs → _item.field
-      _jsExpr = _jsExpr.replace(/_oa\d+_(\w+)\[_i\]\[0\.\._oa\d+_\w+_lens\[_i\]\]/g, '_item.$1');
-      _jsExpr = _jsExpr.replace(/_oa\d+_(\w+)\[_i\]/g, '_item.$1');
+      _jsExpr = _jsExpr.replace(/_oa(\d+)_(\w+)\[_i\]\[0\.\._oa\d+_\w+_lens\[_i\]\]/g, function(_, oaIdx, field) {
+        if (_currentOaIdx !== undefined && _currentOaIdx !== null && +oaIdx === +_currentOaIdx) return '_item.' + field;
+        var _oa = ctx && ctx.objectArrays ? ctx.objectArrays.find(function(o) { return o.oaIdx === +oaIdx; }) : null;
+        return _oa ? (_oa.getter + '[_i].' + field) : ('_item.' + field);
+      });
+      _jsExpr = _jsExpr.replace(/_oa(\d+)_(\w+)\[_i\]/g, function(_, oaIdx, field) {
+        if (_currentOaIdx !== undefined && _currentOaIdx !== null && +oaIdx === +_currentOaIdx) return '_item.' + field;
+        var _oa = ctx && ctx.objectArrays ? ctx.objectArrays.find(function(o) { return o.oaIdx === +oaIdx; }) : null;
+        return _oa ? (_oa.getter + '[_i].' + field) : ('_item.' + field);
+      });
       // 4b. std.mem.eql → Lua string compare
       _jsExpr = _jsExpr.replace(/!std\.mem\.eql\(u8,\s*([^,]+),\s*([^)]+)\)/g, '($1 ~= $2)');
       _jsExpr = _jsExpr.replace(/std\.mem\.eql\(u8,\s*([^,]+),\s*([^)]+)\)/g, '($1 == $2)');
@@ -221,11 +229,11 @@ function _styleToLua(style, itemParam, indexParam, _luaIdxExpr) {
 
     // Dynamic item reference
     if (typeof val === 'string' && itemParam && val.indexOf(itemParam) >= 0) {
-      parts.push(luaKey + ' = ' + _jsExprToLua(val, itemParam, indexParam, _luaIdxExpr));
+      parts.push(luaKey + ' = ' + _jsExprToLua(val, itemParam, indexParam, _luaIdxExpr, _currentOaIdx));
       continue;
     }
     if (typeof val === 'string' && indexParam && val.indexOf(indexParam) >= 0) {
-      parts.push(luaKey + ' = ' + _jsExprToLua(val, itemParam, indexParam, _luaIdxExpr));
+      parts.push(luaKey + ' = ' + _jsExprToLua(val, itemParam, indexParam, _luaIdxExpr, _currentOaIdx));
       continue;
     }
 

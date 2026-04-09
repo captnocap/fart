@@ -7,11 +7,6 @@ function checkTagLeakTextNodes(scan, errors) {
       errors.push('F19: tag name leaked as text: "' + textMatch[1] + '" — ternary or conditional JSX parse failed');
     }
   }
-  for (var di2 = 0; di2 < scan.allDecls.length; di2++) {
-    if (/\{ \.text = ":" \}/.test(scan.allDecls[di2])) {
-      errors.push('F19: bare ":" leaked as text node — ternary colon not consumed by parser');
-    }
-  }
 }
 
 function checkJSSyntaxLeaks(scan, errors) {

@@ -60,33 +60,40 @@
 //   with conditional logic (p081). The refactoring is mechanical.
 
 function match(c, ctx) {
-  // Detect: identifier(Component) where identifier starts lowercase, Component starts uppercase
-  // e.g. withAuth(Dashboard), connect(App)
+  // Detect enhancer(Component), including member helpers like React.memo(App).
   if (c.kind() !== TK.identifier) return false;
-  var name = c.text();
-  if (name.length === 0 || name.charCodeAt(0) < 97 || name.charCodeAt(0) > 122) return false; // must start lowercase
   var saved = c.save();
-  c.advance(); // skip identifier
-  if (c.kind() !== TK.lparen) { c.restore(saved); return false; }
-  c.advance(); // skip (
+  var sawEnhancer = false;
+  while (c.kind() === TK.identifier) {
+    var seg = c.text();
+    if (seg.length > 0 && seg.charCodeAt(0) >= 97 && seg.charCodeAt(0) <= 122) sawEnhancer = true;
+    c.advance();
+    if (c.kind() !== TK.dot) break;
+    c.advance();
+  }
+  if (!sawEnhancer || c.kind() !== TK.lparen) { c.restore(saved); return false; }
+  c.advance();
   if (c.kind() !== TK.identifier) { c.restore(saved); return false; }
   var arg = c.text();
   c.restore(saved);
-  // Argument must start with uppercase (PascalCase component)
-  if (arg.length === 0 || arg.charCodeAt(0) < 65 || arg.charCodeAt(0) > 90) return false;
-  return true;
+  return arg.length > 0 && arg.charCodeAt(0) >= 65 && arg.charCodeAt(0) <= 90;
 }
 
-function compile(c, ctx) {
+function compile(c, children, ctx) {
+  void children;
   var saved = c.save();
   if (c.kind() !== TK.identifier) return null;
 
-  var enhancer = c.text();
-  c.advance();
-  if (c.kind() !== TK.lparen) {
-    c.restore(saved);
-    return null;
+  var enhancerParts = [];
+  while (c.kind() === TK.identifier) {
+    enhancerParts.push(c.text());
+    c.advance();
+    if (c.kind() !== TK.dot) break;
+    enhancerParts.push('.');
+    c.advance();
   }
+  var enhancer = enhancerParts.join('');
+  if (c.kind() !== TK.lparen) { c.restore(saved); return null; }
 
   c.advance(); // (
   var wrapped = null;
@@ -99,11 +106,30 @@ function compile(c, ctx) {
     c.advance();
   }
 
-  return {
+  var out = null;
+  if (wrapped && typeof findComponent === 'function') {
+    var comp = findComponent(wrapped);
+    if (comp && typeof inlineComponentCall === 'function') {
+      out = inlineComponentCall(c, comp, wrapped, {}, null);
+    }
+  }
+
+  if (!ctx._hocHints) ctx._hocHints = [];
+  var hocInfo = {
     hoc: true,
     enhancer: enhancer,
     wrapped: wrapped,
+    inlined: !!out,
+    loweredTo: out ? 'wrapper_component_inline' : 'composition_hint',
+    fallbackAtoms: ['a006_static_node_arrays', 'a007_root_node_init', 'a036_conditional_updates'],
   };
+  ctx._hocHints.push(hocInfo);
+
+  if (out) {
+    out._hocInfo = hocInfo;
+    return out;
+  }
+  return { nodeExpr: '.{ .text = "" }', _hocInfo: hocInfo };
 }
 
 _patterns[87] = { id: 87, match: match, compile: compile };

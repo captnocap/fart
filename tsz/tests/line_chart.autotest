@@ -1,0 +1,5 @@
+# line_chart: Smooth cubic bezier line chart
+# Verifies title and subtitle render (chart is purely graphical with no text labels)
+
+expect "Line Chart"
+expect "Smooth cubic bezier curve"

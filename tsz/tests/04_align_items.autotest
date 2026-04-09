@@ -1,0 +1,13 @@
+# 04_align_items: WPT align-items
+# Tests: stretch/start/center/end alignment modes
+
+// Verify header
+expect "WPT: align-items"
+expect "WPT"
+expect "align-items"
+
+// Verify all four align-items mode labels
+expect "stretch (default)"
+expect "start"
+expect "center"
+expect "end"

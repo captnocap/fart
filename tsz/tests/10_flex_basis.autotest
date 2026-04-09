@@ -1,0 +1,26 @@
+# 10_flex_basis: WPT flex-basis
+# Tests: basis sets initial size, basis+grow, basis:0 pure ratio, basis in column
+
+// Verify header
+expect "WPT: flex-basis"
+expect "WPT"
+expect "flex-basis"
+
+// Verify section labels
+expect "flex-basis sets initial main size before grow/shrink"
+expect "flex-basis with flex-grow"
+expect "flex-basis 0 with grow"
+expect "flex-basis in column direction"
+
+// Verify box content labels
+expect "basis:100"
+expect "basis:50"
+expect "basis:150"
+expect "b50+g1"
+expect "b100+g1"
+expect "b50+g2"
+expect "1/6"
+expect "2/6"
+expect "3/6"
+expect "b:40"
+expect "b:80"

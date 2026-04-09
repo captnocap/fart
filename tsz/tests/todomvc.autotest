@@ -1,0 +1,37 @@
+# todomvc: TodoMVC (mixed/parity version) with state, filtering, CRUD
+# Tests: header, initial todos, filter buttons, add/toggle/remove interactions
+
+# Header
+expect "todos"
+
+# Initial todos (from script: Learn tsz done=1, Build something done=0, Ship it done=0)
+expect "Learn tsz"
+expect "Build something"
+expect "Ship it"
+
+# Footer — item count and filters
+expect "2 items left"
+expect "All"
+expect "Active"
+expect "Done"
+
+# Add button present
+expect "Add"
+
+# Filter to Active
+click "Active"
+reject "Learn tsz"
+expect "Build something"
+expect "Ship it"
+
+# Filter to Done
+click "Done"
+expect "Learn tsz"
+reject "Build something"
+reject "Ship it"
+
+# Back to All
+click "All"
+expect "Learn tsz"
+expect "Build something"
+expect "Ship it"

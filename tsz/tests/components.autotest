@@ -1,0 +1,7 @@
+# smith_test_components: Component composition with props (Button component + counter state)
+
+# Initial state - count starts at 0
+expect "0"
+
+# Button component renders with label prop
+expect "Click me"

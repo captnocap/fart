@@ -1,0 +1,16 @@
+# 13_nested_flex: WPT nested flex containers
+# Tests: row-in-column, column-in-row, 3-level dashboard nesting
+
+# Verify title and description
+expect "WPT: nested flex containers"
+expect "VERIFY: Row-in-column and column-in-row nest correctly, 3-level dashboard layout works"
+
+# Verify section labels
+expect "Row inside column — inner row lays out horizontally"
+expect "Column inside row — inner columns stack vertically"
+expect "3-level nesting — dashboard-like layout"
+
+# Verify dashboard navigation text
+expect "Nav 1"
+expect "Nav 2"
+expect "Menu"

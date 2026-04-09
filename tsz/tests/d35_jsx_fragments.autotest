@@ -1,27 +1,10 @@
-# d35_jsx_fragments: Fragment syntax <>...</>
-# Tests: fragments as root and nested
+# d35_jsx_fragments: Fragment wrappers and conditional fragment groups
+# Tests fragment siblings, nested component fragments, and toggled extras
 
-# Verify initial state
-expect "Fragments"
-expect "count: 0"
-expect "items: 0"
-
-# Add items
-click "Add Item"
-expect "count: 1"
-expect "items: 1"
-
-click "Add Item"
-expect "count: 2"
-expect "items: 2"
-
-click "Add Item"
-expect "count: 3"
-
-# Remove items
-click "Remove"
-expect "count: 2"
-
-click "Remove"
-click "Remove"
-expect "count: 0"
+expect "Fragment Test"
+expect "These three lines are inside a fragment"
+expect "No wrapping Box element"
+expect "Hide extras"
+expect "Extra info line 1"
+click "Hide extras"
+expect "Show extras"

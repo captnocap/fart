@@ -6,15 +6,20 @@ function _resolveOaItemMarkers(expr) {
   if (!expr || expr.indexOf('\x02') === -1) return expr;
   // Pattern: \x02OA_ITEM:N:iterVar:itemParam followed by optional " . field"
   return expr.replace(/\x02OA_ITEM:\d+:[^:]+:(\w+)\s*\.\s*(\w+)/g, function(_, itemParam, field) {
-    return itemParam + '.' + field;
+    void itemParam;
+    return '_item.' + field;
   }).replace(/\x02OA_ITEM:\d+:[^:]+:(\w+)/g, function(_, itemParam) {
-    return itemParam;
+    void itemParam;
+    return '_item';
   });
 }
 
 function _normalizeLuaConditionExpr(expr) {
   if (!expr || typeof expr !== 'string') return expr;
   var out = _resolveOaItemMarkers(expr);
+  out = out.replace(/qjs_runtime\.evalToString\("String\(([^"]+)\)"[^)]*\)/g, '__eval("$1")');
+  out = out.replace(/qjs_runtime\.evalToString\("([^"]+)"[^)]*\)/g, '__eval("$1")');
+  out = out.replace(/&_eval_buf_\d+/g, '');
   if (ctx && ctx.stateSlots) {
     out = out.replace(/state\.getSlot(?:Int|Float|Bool)?\((\d+)\)/g, function(_, idx) {
       return ctx.stateSlots[+idx] ? ctx.stateSlots[+idx].getter : '_slot' + idx;
@@ -28,7 +33,11 @@ function _normalizeLuaConditionExpr(expr) {
     out = out.replace(/@intCast\(([^)]+)\)/g, '$1');
   }
   out = out.replace(/\s+!=\s+/g, ' ~= ');
-  out = out.replace(/(\w+)\.len\b/g, '#$1');
+  out = out.replace(/__eval\("(\(__eval\\\(\"((?:[^"\\]|\\.)*)\\\"\)\s*~=\s*\\\"\\\"\))"\)/g, '(__eval("$2") ~= "")');
+  out = out.replace(/__eval\("(\(__eval\\\(\"((?:[^"\\]|\\.)*)\\\"\)\s*==\s*\\\"\\\"\))"\)/g, '(__eval("$2") == "")');
+  out = out.replace(/(__eval\("(?:(?:[^"\\]|\\.)*)"\))\.len\s*>\s*0/g, '($1 ~= "")');
+  out = out.replace(/(__eval\("(?:(?:[^"\\]|\\.)*)"\))\.len\s*==\s*0/g, '($1 == "")');
+  out = out.replace(/([A-Za-z_]\w*(?:\.[A-Za-z_]\w+)*)\.len\b/g, '#$1');
   return out;
 }
 
@@ -58,6 +67,53 @@ function _normalizeEmbeddedJsEval(expr) {
       .replace(/\.len\b/g, '.length');
     return '__eval("' + jsExpr.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n').replace(/\r/g, '\\r') + '")';
   });
+}
+
+function _splitTopLevelCommaArgs(expr) {
+  if (!expr || typeof expr !== 'string') return [];
+  var parts = [];
+  var cur = '';
+  var paren = 0;
+  var bracket = 0;
+  var brace = 0;
+  var quote = '';
+  var escape = false;
+  for (var i = 0; i < expr.length; i++) {
+    var ch = expr[i];
+    if (escape) {
+      cur += ch;
+      escape = false;
+      continue;
+    }
+    if (quote) {
+      cur += ch;
+      if (ch === '\\') {
+        escape = true;
+      } else if (ch === quote) {
+        quote = '';
+      }
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      cur += ch;
+      continue;
+    }
+    if (ch === '(') paren++;
+    else if (ch === ')') paren = Math.max(0, paren - 1);
+    else if (ch === '[') bracket++;
+    else if (ch === ']') bracket = Math.max(0, bracket - 1);
+    else if (ch === '{') brace++;
+    else if (ch === '}') brace = Math.max(0, brace - 1);
+    if (ch === ',' && paren === 0 && bracket === 0 && brace === 0) {
+      parts.push(cur.trim());
+      cur = '';
+      continue;
+    }
+    cur += ch;
+  }
+  if (cur.trim()) parts.push(cur.trim());
+  return parts;
 }
 
 function _cloneInlineGlyphData(glyphData) {
@@ -131,6 +187,22 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
     }
 
     if (dynChild) {
+      var _mixedLuaRaw = null;
+      if (dynChild.inMap && children.some(ch => !ch.isGlyph && ch !== dynChild && ch.nodeExpr && ch.nodeExpr.indexOf('.text = "') >= 0)) {
+        var _mixedParts = [];
+        for (const ch of children) {
+          if (ch === dynChild) {
+            if (ch._luaTemplateRaw) _mixedParts.push('${' + ch._luaTemplateRaw + '}');
+            else if (ch._luaTextField) _mixedParts.push('${' + ch._luaTextField + '}');
+            else if (ch._luaStateGetter) _mixedParts.push('${' + ch._luaStateGetter + '}');
+            else if (ch._luaTernaryText) _mixedParts.push('${' + ch._luaTernaryText + '}');
+          } else if (!ch.isGlyph && ch.nodeExpr) {
+            const _sm = ch.nodeExpr.match(/\.text = "(.*)"/);
+            if (_sm) _mixedParts.push(_sm[1]);
+          }
+        }
+        if (_mixedParts.length > 0) _mixedLuaRaw = _mixedParts.join('');
+      }
       parts.push(dynChild.inMap ? `.text = "__mt${dynChild.dynBufId}__"` : `.text = ""`);
       if (nodeFields) for (const nf of nodeFields) parts.push(nf);
       children = [];
@@ -173,6 +245,7 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
                 _tcv = _tcv.replace(/_oa\d+_(\w+)\[_j\]\[0\.\._oa\d+_\w+_lens\[_j\]\]/g, '_nitem.$1');
                 _tcv = _tcv.replace(/_oa\d+_(\w+)\[_j\]/g, '_nitem.$1');
                 _tcv = _tcv.replace(/\b_j\b/g, '_ni');
+                _tcv = _tcv.replace(/([A-Za-z_]\w*(?:\.[A-Za-z_]\w+)*)\.len\b/g, '#$1');
                 _tcv = _tcv.replace(/Color\.rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*\d+)?\)/g, function(_, r, g, b) {
                   return '0x' + ((+r << 16) | (+g << 8) | +b).toString(16).padStart(6, '0');
                 });
@@ -207,7 +280,9 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
           }
         }
         // Text: use raw field, template, state getter, or ternary from brace parser
-        if (dynChild._luaTextField) {
+        if (_mixedLuaRaw) {
+          _dln.text = _mixedLuaRaw;
+        } else if (dynChild._luaTextField) {
           _dln.text = { field: dynChild._luaTextField };
         } else if (dynChild._luaTemplateRaw) {
           _dln.text = dynChild._luaTemplateRaw;
@@ -276,7 +351,7 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
                 var _sf3 = _af3.substring(_el3 + 6).trim();
                 _cleanedArgs = _pf3 + '(' + _cd3 + ') and ' + _tv3 + ' or ' + _sf3;
               }
-              var _args = _cleanedArgs.split(/,\s*/);
+              var _args = _splitTopLevelCommaArgs(_cleanedArgs);
               var _luaParts = [];
               for (var _pi = 0; _pi < _parts.length; _pi++) {
                 if (_parts[_pi]) _luaParts.push('"' + _parts[_pi] + '"');
@@ -971,8 +1046,11 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
             _ln.children.push({
               luaMapLoop: {
                 dataVar: _lmr.dataVar || _lmr.rawSource || _lmr.varName,
+                oaIdx: _lmr.oaIdx,
                 itemParam: _lmr.itemParam || '_item',
                 indexParam: _lmr.indexParam || null,
+                parentItemParam: _lmr.parentItemParam || null,
+                parentIndexParam: _lmr.parentIndexParam || null,
                 filterConditions: _lmr.filterConditions || null,
                 bodyNode: _lmr.bodyNode || null,
                 bodyLua: _lmr.bodyLua || null

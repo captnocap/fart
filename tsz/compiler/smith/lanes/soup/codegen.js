@@ -67,7 +67,9 @@ function soupToZig(node, warns, inPressable) {
     styleFields = soupParseStyle(styleAttr.expr, warns);
 
   // Handler — skip onchange for input elements (routed to inputChangeHandlers instead)
-  var hKeys = (kind === 'input') ? ['onclick', 'onpress'] : ['onclick', 'onpress', 'onchange'];
+  // For box-kind elements (form, div, etc.), also check onsubmit — native UI has no
+  // form submission, so onSubmit is treated as a press handler (same as p118 pattern).
+  var hKeys = (kind === 'input') ? ['onclick', 'onpress'] : ['onclick', 'onpress', 'onchange', 'onsubmit'];
   for (var hi = 0; hi < hKeys.length; hi++) {
     if (hKeys[hi] in attrs) {
       var hv = attrs[hKeys[hi]];
@@ -175,37 +177,88 @@ function soupToZig(node, warns, inPressable) {
 
     // Check children: could be text, expr, or mixed
     var textContent = '';
-    var exprChild = null;
+    var exprChildren = [];
     for (var ci = 0; ci < node.children.length; ci++) {
       if (node.children[ci].type === 'text') textContent += node.children[ci].text;
-      if (node.children[ci].type === 'expr') exprChild = node.children[ci];
+      if (node.children[ci].type === 'expr') exprChildren.push(node.children[ci]);
     }
 
-    // Expr child (e.g. <p>{count}</p> or <p>mode: {mode} · done</p>) → dynText
-    if (exprChild) {
-      var exResult = soupExprToZig(exprChild.expr, warns, false);
-      if (exResult.dynBufId >= 0) {
-        // Incorporate surrounding static text into the dynText format string
-        if (textContent.trim()) {
-          var prefix = '', suffix = '';
-          var foundExpr = false;
-          for (var ci2 = 0; ci2 < node.children.length; ci2++) {
-            if (node.children[ci2] === exprChild) { foundExpr = true; continue; }
-            if (node.children[ci2].type === 'text') {
-              if (!foundExpr) prefix += node.children[ci2].text;
-              else suffix += node.children[ci2].text;
+    // Expr child(ren) (e.g. <p>{count}</p> or <p>key="{userId}-{cacheKey}"</p>) → dynText
+    if (exprChildren.length > 0) {
+      // Resolve all expr children to Zig
+      var exResults = [];
+      var allResolved = true;
+      for (var ei = 0; ei < exprChildren.length; ei++) {
+        var exr = soupExprToZig(exprChildren[ei].expr, warns, false);
+        exResults.push(exr);
+        if (exr.dynBufId < 0) allResolved = false;
+      }
+
+      if (allResolved) {
+        if (exprChildren.length === 1) {
+          // Single expression — original path: merge surrounding static text
+          var exResult = exResults[0];
+          if (textContent.trim()) {
+            var prefix = '', suffix = '';
+            var foundExpr = false;
+            for (var ci2 = 0; ci2 < node.children.length; ci2++) {
+              if (node.children[ci2] === exprChildren[0]) { foundExpr = true; continue; }
+              if (node.children[ci2].type === 'text') {
+                if (!foundExpr) prefix += node.children[ci2].text;
+                else suffix += node.children[ci2].text;
+              }
+            }
+            for (var di = 0; di < ctx.dynTexts.length; di++) {
+              if (ctx.dynTexts[di].bufId === exResult.dynBufId) {
+                if (prefix) ctx.dynTexts[di].fmtString = prefix.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + ctx.dynTexts[di].fmtString;
+                if (suffix) ctx.dynTexts[di].fmtString = ctx.dynTexts[di].fmtString + suffix.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+                if (ctx.dynTexts[di].bufSize < 256) ctx.dynTexts[di].bufSize = 256;
+                break;
+              }
             }
           }
-          for (var di = 0; di < ctx.dynTexts.length; di++) {
-            if (ctx.dynTexts[di].bufId === exResult.dynBufId) {
-              if (prefix) ctx.dynTexts[di].fmtString = prefix.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + ctx.dynTexts[di].fmtString;
-              if (suffix) ctx.dynTexts[di].fmtString = ctx.dynTexts[di].fmtString + suffix.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-              if (ctx.dynTexts[di].bufSize < 256) ctx.dynTexts[di].bufSize = 256;
-              break;
+          return { str: '.{ .text = "", .font_size = ' + fs + ', .text_color = Color.rgb(' + tc + ') }', dynBufId: exResult.dynBufId };
+        } else {
+          // Multiple expressions — merge all into a single combined dynText entry.
+          // Walk children in order, building a combined format string + args list.
+          var mergedFmt = '';
+          var mergedArgs = [];
+          for (var mi = 0; mi < node.children.length; mi++) {
+            var mch = node.children[mi];
+            if (mch.type === 'text') {
+              mergedFmt += mch.text.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+            } else if (mch.type === 'expr') {
+              var mIdx = exprChildren.indexOf(mch);
+              var mExr = exResults[mIdx];
+              // Look up the dynText entry for this expression
+              var mdt = null;
+              for (var mdi = 0; mdi < ctx.dynTexts.length; mdi++) {
+                if (ctx.dynTexts[mdi].bufId === mExr.dynBufId) { mdt = ctx.dynTexts[mdi]; break; }
+              }
+              if (mdt) {
+                mergedFmt += mdt.fmtString;
+                mergedArgs.push(mdt.fmtArgs);
+              }
             }
           }
+          // Remove old individual dynText entries
+          for (var ri = exResults.length - 1; ri >= 0; ri--) {
+            for (var rdi = 0; rdi < ctx.dynTexts.length; rdi++) {
+              if (ctx.dynTexts[rdi].bufId === exResults[ri].dynBufId) {
+                ctx.dynTexts.splice(rdi, 1);
+                break;
+              }
+            }
+          }
+          // Create a single merged dynText entry
+          var mergedBufId = ctx.dynCount;
+          ctx.dynCount++;
+          ctx.dynTexts.push({
+            bufId: mergedBufId, fmtString: mergedFmt, fmtArgs: mergedArgs.join(', '),
+            arrName: '', arrIndex: 0, bufSize: 256
+          });
+          return { str: '.{ .text = "", .font_size = ' + fs + ', .text_color = Color.rgb(' + tc + ') }', dynBufId: mergedBufId };
         }
-        return { str: '.{ .text = "", .font_size = ' + fs + ', .text_color = Color.rgb(' + tc + ') }', dynBufId: exResult.dynBufId };
       }
     }
 

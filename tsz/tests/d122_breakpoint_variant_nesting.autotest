@@ -1,13 +1,14 @@
 # d122_breakpoint_variant_nesting: Nested breakpoint variants
-# Tests: breakpoint variant nesting
+# Tests: real source-backed nav + card rendering
 
-// Verify renders
-expect "Breakpoint Nesting"
+// Verify initial render
+expect "Home"
+expect "Page: 0"
+expect "Welcome"
 
-// Resize
-click "Resize"
-expect "size: large"
+// Navigate through real sidebar entries
+click "Inbox"
+expect "Page: 1"
 
-// Resize back
-click "Resize"
-expect "size: small"
+click "Settings"
+expect "Page: 2"

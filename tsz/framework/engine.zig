@@ -1879,7 +1879,9 @@ pub fn run(config_in: AppConfig) !void {
                                 if (h.handlers.js_on_press) |js_expr| {
                                     const expr = std.mem.span(js_expr);
                                     std.debug.print("[press] +js: '{s}'\n", .{expr});
+                                    qjs_runtime.callGlobal("__beginJsEvent");
                                     qjs_runtime.evalExpr(expr);
+                                    qjs_runtime.callGlobal("__endJsEvent");
                                     state_mod.markDirty();
                                     std.debug.print("[press] +js done\n", .{});
                                 }
@@ -1896,7 +1898,9 @@ pub fn run(config_in: AppConfig) !void {
                                 input.unfocus();
                                 const expr = std.mem.span(js_expr);
                                 std.debug.print("[js_on_press] eval: '{s}'\n", .{expr});
+                                qjs_runtime.callGlobal("__beginJsEvent");
                                 qjs_runtime.evalExpr(expr);
+                                qjs_runtime.callGlobal("__endJsEvent");
                                 state_mod.markDirty();
                                 std.debug.print("[js_on_press] done\n", .{});
                             } else if (h.href) |url| {
@@ -1943,7 +1947,9 @@ pub fn run(config_in: AppConfig) !void {
                                 } else if (h.handlers.on_press) |handler| {
                                     handler();
                                     if (h.handlers.js_on_press) |js_expr| {
+                                        qjs_runtime.callGlobal("__beginJsEvent");
                                         qjs_runtime.evalExpr(std.mem.span(js_expr));
+                                        qjs_runtime.callGlobal("__endJsEvent");
                                         state_mod.markDirty();
                                     }
                                     if (h.handlers.lua_on_press) |lua_expr| {
@@ -1954,7 +1960,9 @@ pub fn run(config_in: AppConfig) !void {
                                     luajit_runtime.evalExpr(std.mem.span(lua_expr));
                                     handled_interactive = true;
                                 } else if (h.handlers.js_on_press) |js_expr| {
+                                    qjs_runtime.callGlobal("__beginJsEvent");
                                     qjs_runtime.evalExpr(std.mem.span(js_expr));
+                                    qjs_runtime.callGlobal("__endJsEvent");
                                     state_mod.markDirty();
                                     handled_interactive = true;
                                 } else if (h.href) |url| {

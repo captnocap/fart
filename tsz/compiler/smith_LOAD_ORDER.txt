@@ -24,36 +24,6 @@ smith/patterns/array_construction/p043_object_values_map.js
 smith/patterns/array_construction/p044_object_entries_map.js
 smith/patterns/array_construction/p045_map_entries.js
 smith/patterns/array_construction/p046_set_to_array_map.js
-smith/patterns/c001_blocks.js
-smith/patterns/c002_var.js
-smith/patterns/c003_is.js
-smith/patterns/c004_exact.js
-smith/patterns/c005_types.js
-smith/patterns/c006_props.js
-smith/patterns/c007_if.js
-smith/patterns/c008_else.js
-smith/patterns/c009_for.js
-smith/patterns/c010_during.js
-smith/patterns/c011_while.js
-smith/patterns/c012_switch.js
-smith/patterns/c013_functions.js
-smith/patterns/c014_composition.js
-smith/patterns/c015_stop.js
-smith/patterns/c016_every.js
-smith/patterns/c017_set.js
-smith/patterns/c018_data_blocks.js
-smith/patterns/c019_ffi.js
-smith/patterns/c020_log.js
-smith/patterns/c021_classifiers.js
-smith/patterns/c022_effects.js
-smith/patterns/c023_glyphs.js
-smith/patterns/c024_tokens.js
-smith/patterns/c025_colors.js
-smith/patterns/c026_animations.js
-smith/patterns/c027_hatches.js
-smith/patterns/c028_where.js
-smith/patterns/c029_without.js
-smith/patterns/c030_concat.js
 smith/patterns/children/p066_single_child.js
 smith/patterns/children/p067_multiple_children.js
 smith/patterns/children/p068_string_children.js
@@ -310,10 +280,7 @@ smith/emit_ops/emit_state_setters.js
 smith/emit_ops/emit_oa_bridge.js
 smith/emit_ops/emit_orphan_arrays.js
 smith/emit_ops/emit_map_press.js
-smith/emit_ops/emit_lua_style.js
-smith/emit_ops/emit_lua_text.js
-smith/emit_ops/emit_lua_element.js
-smith/emit_ops/emit_lua_rebuild.js
+# OLD LUA EMIT PATH REMOVED - now handled by emit_atoms/maps_lua/*
 smith/emit_ops/wire_handler_ptrs.js
 smith/emit_ops/rebuild_map.js
 smith/emit_ops/compute_map_meta.js
@@ -334,6 +301,10 @@ smith/emit_ops/zig_node_to_lua.js
 # smith/emit/logic_blocks.js
 smith/emit/split.js
 smith/emit/finalize.js
+smith/emit/lua_tree_preamble.js
+smith/emit/lua_tree_nodes.js
+smith/emit/lua_tree_logic.js
+smith/emit/lua_tree_entry.js
 smith/emit/lua_tree_emit.js
 smith/emit.js
 

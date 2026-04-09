@@ -1,0 +1,15 @@
+# smith_test_multi: Multiple state variables with counter, name, and active toggle
+
+# Initial state
+expect "Hello World!"
+expect "0"
+expect "+1"
+expect "Disable"
+
+# Click +1 to increment counter
+click "+1"
+expect "1"
+
+# Click +1 again
+click "+1"
+expect "2"

@@ -1,0 +1,70 @@
+# 01_ecommerce_dashboard: Ecommerce dashboard with earnings, revenue, transactions
+# Verifies initial render of static text, sections, and button interactions
+
+# Header earnings card
+expect "Earnings"
+expect "$63,448.78"
+expect "$"
+expect "Download"
+
+# Revenue Updates section
+expect "Revenue Updates"
+expect "Expense"
+expect "Budget"
+expect "$93,438"
+expect "23%"
+expect "$48,487"
+expect "Download Report"
+
+# Chart placeholders
+expect "Sparkline chart area"
+expect "Stacked chart area"
+expect "Line chart area"
+
+# Monthly revenue sidebar
+expect "Monthly revenue"
+
+# Yearly sales
+expect "$43,246"
+expect "Yearly sales"
+expect "Pie chart"
+
+# Recent Transactions section
+expect "Recent Transactions"
+expect "This Month"
+expect "Add"
+expect "36 Recent Transactions"
+
+# Sales Overview
+expect "Sales Overview"
+
+# Weekly Stats
+expect "Weekly Stats"
+
+# MedicalPro Branding
+expect "MedicalPro Branding"
+expect "16 APR, 2021"
+expect "Due Date"
+expect "Oct 23, 2021"
+expect "$98,500"
+expect "$63,000"
+expect "Teams"
+expect "Bootstrap"
+expect "Angular"
+expect "Leaders"
+
+# Daily Activities
+expect "Daily Activities"
+expect "Product image area"
+expect "React 18 coming soon!"
+expect "By Johnathan Doe"
+expect "Read More"
+
+# Click Download button
+click "Download"
+
+# Click Download Report button
+click "Download Report"
+
+# Click Read More button
+click "Read More"

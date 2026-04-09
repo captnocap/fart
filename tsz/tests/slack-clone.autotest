@@ -1,0 +1,43 @@
+# slack-clone: Slack workspace with sidebar channels/DMs and message feed
+# Tests: workspace header, channel list, DM list, message rendering, input bar
+
+# Workspace header
+expect "Acme Corp"
+expect "acme-corp.slack.com"
+
+# Channel list
+expect "Channels"
+expect "# general"
+expect "# random"
+expect "# engineering"
+expect "# design"
+expect "# product"
+expect "# devops"
+expect "# standup"
+expect "# releases"
+
+# DM list
+expect "Direct Messages"
+expect "Alice Chen"
+expect "Bob Park"
+expect "Carol Diaz"
+expect "Dan Kim"
+expect "Eve Zhang"
+
+# Channel header
+expect "# general"
+expect "30 messages"
+
+# Messages (spot check)
+expect "Good morning everyone! Ready for standup?"
+expect "9:01 AM"
+expect "AC"
+
+expect "I pushed the new auth middleware last night. Can someone review PR #847?"
+expect "DK"
+
+# Thread reply indicators
+expect "3 replies"
+
+# Message input placeholder
+expect "Message #general"

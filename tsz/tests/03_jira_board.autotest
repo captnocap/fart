@@ -1,0 +1,30 @@
+# 03_jira_board: Jira-style kanban board with issue cards and detail panel
+# Verifies board columns, filter controls, and issue detail modal
+
+# Board title
+expect "Kanban board"
+
+# Search and filters
+expect "Search board..."
+expect "Only My Issues"
+expect "Recently Updated"
+
+# Board columns
+expect "BACKLOG 4"
+expect "SELECTED FOR DEVELOPMENT 2"
+expect "IN PROGRESS 3"
+expect "DONE 2"
+
+# Detail panel should NOT be open initially
+reject "TASK-29"
+reject "Description"
+reject "STATUS"
+
+# Toggle Only My Issues filter
+click "Only My Issues"
+
+# Toggle Recently Updated filter
+click "Recently Updated"
+
+# Close detail panel (X) after opening
+# Detail panel opens when clicking an issue card - we can test the X close

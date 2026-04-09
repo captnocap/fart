@@ -1,0 +1,13 @@
+# smith_test_template: Template literal rendering with interpolated state
+
+# Initial state - template literal combines name and count
+expect "Hello World! Count: 0"
+expect "+1"
+
+# Click +1 to increment
+click "+1"
+expect "Hello World! Count: 1"
+
+# Click +1 again
+click "+1"
+expect "Hello World! Count: 2"

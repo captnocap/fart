@@ -1,0 +1,40 @@
+# twitter-clone: Twitter/X feed with composer, tabs, tweet cards
+# Tests: header tabs, composer, tweet feed with avatars and engagement
+
+# Header tabs
+expect "For you"
+expect "Following"
+expect "Search"
+expect "Notifs"
+
+# Composer
+expect "What is happening?!"
+expect "You"
+expect "Post"
+
+# Tweets (spot check from script data)
+expect "Elon Musk"
+expect "@elonmusk"
+expect "EM"
+
+expect "Sarah Chen"
+expect "@sarahcodes"
+
+expect "The Verge"
+expect "@verge"
+
+expect "Dan Abramov"
+expect "@dan_abramov"
+
+expect "NASA"
+expect "@NASA"
+
+# Engagement indicators
+expect "Reply"
+expect "RT"
+expect "Like"
+expect "Share"
+
+# Later tweets
+expect "Linus Torvalds"
+expect "ThePrimeagen"

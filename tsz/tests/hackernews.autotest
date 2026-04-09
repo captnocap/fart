@@ -1,0 +1,57 @@
+# hackernews: Hacker News front page parity
+# Verifies: header nav, story list with ranks/domains/meta, footer
+
+# Header
+expect "Hacker News"
+expect "new"
+expect "past"
+expect "comments"
+expect "ask"
+expect "show"
+expect "jobs"
+expect "submit"
+expect "login"
+
+# Top stories
+expect "Show HN: I built a TS-to-native compiler that outputs Zig"
+expect "github.com"
+expect "847 points by siah 3 hours ago"
+expect "312 comments"
+
+expect "The curious case of disappearing CPU cycles in modern VMs"
+expect "blog.cloudflare.com"
+
+expect "SQLite as a document database"
+expect "sqlite.org"
+
+expect "The FTC is investigating cloud computing market dominance"
+expect "reuters.com"
+
+expect "Writing a GPU-driven text renderer from scratch"
+expect "gpuopen.com"
+
+expect "Zig 0.15 released with async/await and improved comptime"
+expect "ziglang.org"
+
+expect "The Internet Archive has been fully restored"
+expect "archive.org"
+
+# Story without domain (Ask HN)
+expect "Ask HN: What are you working on this weekend?"
+
+# Later stories
+expect "The joy of building things nobody needs"
+expect "blog.jvns.ca"
+
+# Footer
+expect "More"
+expect "Guidelines"
+
+# Rank numbers
+expect "1."
+expect "10."
+expect "20."
+expect "30."
+
+# Upvote arrows present
+expect "Y"

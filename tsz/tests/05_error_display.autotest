@@ -1,0 +1,43 @@
+# 05_error_display: Error message display with severity levels and expand/collapse
+# Verifies error list, severity badges, verbose toggle, and dismiss
+
+# Title
+expect "Errors & Warnings"
+
+# Mode toggle
+expect "Compact"
+
+# Severity counts
+expect "1 critical"
+expect "2 errors"
+expect "2 warnings"
+
+# Error type labels
+expect "tool"
+expect "rate_limit"
+expect "validation"
+expect "network"
+expect "api"
+
+# Dismiss buttons
+expect "dismiss"
+
+# Truncated messages visible
+expect "Error: ENOENT: no such file or directory"
+expect "Rate limit exceeded"
+expect "InputValidationError"
+expect "Connection reset by peer"
+expect "Error: 529 API Overloaded"
+
+# Footer
+expect "5 total"
+expect "verbose: off"
+
+# Toggle verbose mode
+click "Compact"
+expect "Verbose"
+expect "verbose: on"
+
+# Dismiss an error
+click "dismiss"
+expect "4 total"

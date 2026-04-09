@@ -1,0 +1,30 @@
+# counter: Soup-tier counter with increment/decrement/reset
+# Tests: initial render, increment, decrement, reset, negative state
+
+# Initial state
+expect "Counter"
+expect "Zero"
+expect "0"
+
+# Increment
+click "+"
+expect "1"
+expect "Positive"
+
+# Increment again
+click "+"
+expect "2"
+
+# Decrement
+click "-"
+expect "1"
+
+# Reset
+click "Reset"
+expect "0"
+expect "Zero"
+
+# Decrement to negative
+click "-"
+expect "-1"
+expect "Negative"

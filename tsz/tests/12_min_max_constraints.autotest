@@ -1,0 +1,24 @@
+# 12_min_max_constraints: WPT min/max width/height constraints
+# Tests: minWidth prevents shrinking, maxWidth caps growth, min/max in column direction
+
+# Verify title and description
+expect "WPT: min/max width/height constraints"
+expect "VERIFY: minWidth prevents shrinking below limit, maxWidth caps growth, works in column too"
+
+# Verify WPT reference link text
+expect "WPT"
+expect "min/max constraints"
+
+# Verify section labels
+expect "minWidth prevents shrinking below minimum"
+expect "maxWidth prevents growing beyond maximum"
+expect "minHeight in column"
+expect "maxHeight in column — limits growth"
+
+# Verify text content inside flex items
+expect "min:100"
+expect "shrink"
+expect "max:80"
+expect "grow"
+expect "min:60"
+expect "max:50"

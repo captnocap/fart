@@ -1,0 +1,16 @@
+# 07_flex_wrap: WPT flex-wrap
+# Tests: no-wrap shrinks items, wrap flows to next line, wrap+grow fills lines
+
+// Verify header
+expect "WPT: flex-wrap"
+expect "WPT"
+expect "flex-wrap"
+
+// Verify section labels
+expect "no-wrap (default)"
+expect "wrap"
+expect "wrap with grow"
+
+// Verify box content labels
+expect "80"
+expect "grow"

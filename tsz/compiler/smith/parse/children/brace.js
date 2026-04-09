@@ -1,6 +1,49 @@
 // -- Child parsing: brace expressions (entry point) --
 // Helpers in: brace_util.js, brace_computed.js, brace_maps.js, brace_render_local.js
 
+function _pushLuaRawDynText(children, rawExpr) {
+  if (!rawExpr || !rawExpr.length) return;
+  var isInMap = !!ctx.currentMap;
+  var bufId;
+  if (isInMap) {
+    bufId = ctx.mapDynCount || 0;
+    ctx.mapDynCount = bufId + 1;
+  } else {
+    bufId = ctx.dynCount;
+    ctx.dynCount++;
+  }
+  var resolved = (typeof _resolveTemplateExpr === 'function') ? _resolveTemplateExpr(rawExpr) : null;
+  var fmt = '{s}';
+  var fmtArgs = null;
+  var bufSize = 256;
+  if (resolved && resolved.arg !== null) {
+    fmt = resolved.spec === '{d}' ? '{d}' : '{s}';
+    fmtArgs = resolved.spec === '{d}' ? leftFoldExpr(resolved.arg) : resolved.arg;
+    bufSize = fmt === '{s}' ? 256 : 64;
+  } else if (typeof buildEval === 'function') {
+    fmt = '{s}';
+    fmtArgs = buildEval(rawExpr, ctx);
+  }
+  if (fmtArgs) {
+    ctx.dynTexts.push({
+      bufId: bufId,
+      fmtString: fmt,
+      fmtArgs: fmtArgs,
+      arrName: '',
+      arrIndex: 0,
+      bufSize: bufSize,
+      inMap: isInMap,
+      mapIdx: isInMap ? ctx.maps.indexOf(ctx.currentMap) : -1
+    });
+  }
+  children.push({
+    nodeExpr: isInMap ? '.{ .text = "__mt' + bufId + '__" }' : '.{ .text = "" }',
+    dynBufId: bufId,
+    inMap: isInMap,
+    _luaTemplateRaw: rawExpr
+  });
+}
+
 
 function tryParseBraceChild(c, children) {
   if (c.kind() !== TK.lbrace) return false;
@@ -24,12 +67,6 @@ function tryParseBraceChild(c, children) {
   if (globalThis.__SMITH_DEBUG_MAP_DETECT) {
     if (!globalThis.__dbg) globalThis.__dbg = [];
     globalThis.__dbg.push(`BRACE kind=${c.kind()} text=${c.text()} pos=${c.pos}`);
-  }
-
-  // Pattern system dispatch — gives registered patterns first crack at
-  // recognizing React idioms before the inline dispatchers below.
-  if (typeof tryPatternMatch === 'function' && tryPatternMatch(c, children)) {
-    return true;
   }
 
   const condResult = tryParseConditional(c, children);
@@ -122,9 +159,12 @@ function tryParseBraceChild(c, children) {
               ctx._luaMapRebuilders.push({
                 index: _pmLuaIdx,
                 luaCode: null,
+                oaIdx: _mapInfo2 && _mapInfo2.oa ? _mapInfo2.oa.oaIdx : undefined,
                 bodyNode: mapResult.luaNode || (_mapInfo2 && _mapInfo2._luaBodyNode) || null,
                 itemParam: _mapInfo2 ? _mapInfo2.itemParam : '_item',
                 indexParam: _mapInfo2 ? _mapInfo2.indexParam : null,
+                parentItemParam: ctx.currentMap ? ctx.currentMap.itemParam : null,
+                parentIndexParam: ctx.currentMap ? ctx.currentMap.indexParam : null,
                 filterConditions: _mapInfo2 ? _mapInfo2.filterConditions : null,
                 rawSource: resolvedName,
                 varName: resolvedName,
@@ -343,7 +383,7 @@ function tryParseBraceChild(c, children) {
         ctx._jsDynTexts.push({ slotIdx: slotIdx, jsExpr: fullExpr });
         children.push({ nodeExpr: isInMap ? '.{ .text = "__mt' + bufId + '__" }' : '.{ .text = "" }', dynBufId: bufId, inMap: isInMap });
       } else if (fullExpr.length > 0) {
-        ctx._droppedExpressions.push({ expr: fullExpr, line: exprLine });
+        _pushLuaRawDynText(children, fullExpr);
       }
       return true;
     }
@@ -523,7 +563,7 @@ function tryParseBraceChild(c, children) {
         ctx._jsDynTexts.push({ slotIdx: slotIdx2, jsExpr: jsExpr2 });
         children.push({ nodeExpr: '.{ .text = "" }', dynBufId: bufId2 });
       } else if (exprText2.length > 0) {
-        ctx._droppedExpressions.push({ expr: exprText2, line: 0 });
+        _pushLuaRawDynText(children, _normalizeJoinedJsExpr(exprText2));
       }
       return true;
     }
@@ -674,9 +714,16 @@ function tryParseBraceChild(c, children) {
       }
       if (c.kind() === TK.rbrace) c.advance();
       if (tailTokens.length > 0 && (ctx.scriptBlock || ctx.luaBlock)) {
+        const fullExpr = _normalizeJoinedJsExpr(getter + ' ' + tailTokens.join(' '));
+        var _getterOa = ctx.objectArrays && ctx.objectArrays.find(function(o) { return o.getter === getter; });
+        if (_getterOa && /[\[\].?:]/.test(fullExpr)) {
+          ctx.dynTexts.pop();
+          ctx.dynCount--;
+          _pushLuaRawDynText(children, fullExpr);
+          return true;
+        }
         ctx.dynTexts.pop();
         ctx.dynCount--;
-        const fullExpr = _normalizeJoinedJsExpr(getter + ' ' + tailTokens.join(' '));
         const jsSlotIdx = ctx.stateSlots.length;
         ctx.stateSlots.push({ getter: '__jsExpr_' + jsSlotIdx, setter: '__setJsExpr_' + jsSlotIdx, initial: '', type: 'string' });
         const jsBufId = ctx.dynCount;
@@ -843,6 +890,39 @@ function tryParseBraceChild(c, children) {
     return true;
   }
 
+  // Pattern system — runs after structural dispatchers (conditional, ternary,
+  // map, template, identifier, concat) but before generic token-drop fallback.
+  // Structural dispatchers must have priority because they consume complex multi-
+  // token sequences that patterns would mismatch (e.g. .map() expressions).
+  if (c.kind() === TK.identifier) {
+    var _exprHead = c.text();
+    var _isCurrentItemExpr = !!(ctx.currentMap && _exprHead === ctx.currentMap.itemParam);
+    var _isOaExpr = !!(ctx.objectArrays && ctx.objectArrays.some(function(o) { return o.getter === _exprHead; }));
+    if (_isCurrentItemExpr || _isOaExpr) {
+      var _rawStart = c.save();
+      var _rawDepth = 0;
+      while (c.kind() !== TK.eof) {
+        if (c.kind() === TK.lbrace) _rawDepth++;
+        if (c.kind() === TK.rbrace) {
+          if (_rawDepth === 0) break;
+          _rawDepth--;
+        }
+        c.advance();
+      }
+      var _rawEnd = c.save();
+      var _rawExpr = _normalizeJoinedJsExpr(_joinTokenText(c, _rawStart, _rawEnd));
+      if (c.kind() === TK.rbrace) c.advance();
+      if (_rawExpr.indexOf('.map(') < 0 && _rawExpr.length > 0) {
+        _pushLuaRawDynText(children, _rawExpr);
+        return true;
+      }
+    }
+  }
+  if (typeof tryPatternMatch === 'function' && tryPatternMatch(c, children)) {
+    return true;
+  }
+
+  // All dispatchers exhausted — fall through to generic token-drop handler.
   const dropStart = c.pos;
   const dropTokens = [];
   let depth = 1;
@@ -881,7 +961,7 @@ function tryParseBraceChild(c, children) {
 
     children.push({ nodeExpr: isInMap ? '.{ .text = "__mt' + bufId + '__" }' : '.{ .text = "" }', dynBufId: bufId, inMap: isInMap });
   } else if (exprText.length > 0) {
-    ctx._droppedExpressions.push({ expr: exprText, line: c.starts[dropStart] || 0 });
+    _pushLuaRawDynText(children, _normalizeJoinedJsExpr(_expandRenderLocalJs(exprText)));
   }
 
   return true;

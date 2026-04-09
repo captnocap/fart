@@ -1,6 +1,10 @@
-# d45_union_type_alias: Type aliases and unions
-# Tests type syntax
+# d45_union_type_alias: Union-like discriminated feed filtering
+# Tests conditional rendering and script-driven filters
 
-expect "Type Aliases"
-click "Set Status"
-expect "status: ready"
+expect "Union / Discriminated Types"
+expect "Login success"
+expect "Disk warning"
+click "Payment"
+expect "Payment received"
+expect "Refund issued"
+expect "2 shown · filtered kind=1"

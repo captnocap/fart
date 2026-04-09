@@ -107,24 +107,28 @@ function _resolveTemplateExpr(expr) {
     return _resolveMapItemField(expr, ctx.currentMap.parentMap);
   }
 
-  // 6. Ternary expression
+  // 6. Indexed object-array field access: answers[qi].answer
+  var indexedOa = _resolveIndexedOaField(expr);
+  if (indexedOa) return indexedOa;
+
+  // 7. Ternary expression
   if (expr.includes('?') && expr.includes(':')) {
     return _resolveTernaryExpr(expr);
   }
 
-  // 7. Map-context wrapper functions and expressions
+  // 8. Map-context wrapper functions and expressions
   if (ctx.currentMap) {
     return _resolveMapContextExpr(expr);
   }
 
-  // 8. Function calls, logical ops, or script context → QuickJS eval
+  // 9. Function calls, logical ops, or script context → QuickJS eval
   if (expr.includes('(') || expr.includes('||') || expr.includes('&&') || ctx.scriptBlock || globalThis.__scriptContent) {
     var expanded = (typeof expandRenderLocalRawExpr === 'function' && ctx._renderLocalRaw)
       ? expandRenderLocalRawExpr(expr) : expr;
     return { spec: '{s}', arg: buildEval(expanded, ctx) };
   }
 
-  // 9. Non-resolvable — embed as literal text
+  // 10. Non-resolvable — embed as literal text
   return { spec: expr, arg: null };
 }
 
@@ -194,21 +198,46 @@ function _resolveMapItemField(expr, mapCtx) {
     orFallback = orMatch[2];
   }
 
-  var fi = oa ? oa.fields.find(function(f) { return f.name === fieldPart; }) : null;
+  var normalizedField = fieldPart.replace(/\s*\.\s*/g, '_');
+  var fi = oa ? oa.fields.find(function(f) { return f.name === normalizedField; }) : null;
   if (fi) {
     var oaIdx = oa.oaIdx;
     if (fi.type === 'string') {
       var arg;
       if (orFallback !== null) {
-        arg = 'if (_oa' + oaIdx + '_' + fieldPart + '_lens[' + iv + '] > 0) _oa' + oaIdx + '_' + fieldPart + '[' + iv + '][0.._oa' + oaIdx + '_' + fieldPart + '_lens[' + iv + ']] else "' + orFallback + '"';
+        arg = 'if (_oa' + oaIdx + '_' + normalizedField + '_lens[' + iv + '] > 0) _oa' + oaIdx + '_' + normalizedField + '[' + iv + '][0.._oa' + oaIdx + '_' + normalizedField + '_lens[' + iv + ']] else "' + orFallback + '"';
       } else {
-        arg = '_oa' + oaIdx + '_' + fieldPart + '[' + iv + '][0.._oa' + oaIdx + '_' + fieldPart + '_lens[' + iv + ']]';
+        arg = '_oa' + oaIdx + '_' + normalizedField + '[' + iv + '][0.._oa' + oaIdx + '_' + normalizedField + '_lens[' + iv + ']]';
       }
       return { spec: '{s}', arg: arg };
     }
-    return { spec: '{d}', arg: '_oa' + oaIdx + '_' + fieldPart + '[' + iv + ']' };
+    return { spec: '{d}', arg: '_oa' + oaIdx + '_' + normalizedField + '[' + iv + ']' };
   }
   return { spec: expr, arg: null };
+}
+
+function _resolveIndexedOaField(expr) {
+  if (!ctx.currentMap || !ctx.objectArrays) return null;
+  var m = expr.match(/^([A-Za-z_]\w*)\s*\[\s*([A-Za-z_]\w*)\s*\]\s*\.\s*([A-Za-z_]\w*)$/);
+  if (!m) return null;
+  var getterName = m[1];
+  var idxName = m[2];
+  var fieldName = m[3];
+  var mapCursor = ctx.currentMap;
+  while (mapCursor) {
+    if (idxName === mapCursor.indexParam) {
+      var oa = ctx.objectArrays.find(function(o) { return o.getter === getterName; });
+      if (!oa) return null;
+      var fi = oa.fields ? oa.fields.find(function(f) { return f.name === fieldName; }) : null;
+      var iv = mapCursor.iterVar || '_i';
+      if (fi && fi.type === 'string') {
+        return { spec: '{s}', arg: '_oa' + oa.oaIdx + '_' + fieldName + '[' + iv + '][0.._oa' + oa.oaIdx + '_' + fieldName + '_lens[' + iv + ']]' };
+      }
+      return { spec: '{d}', arg: '_oa' + oa.oaIdx + '_' + fieldName + '[' + iv + ']' };
+    }
+    mapCursor = mapCursor.parentMap || null;
+  }
+  return null;
 }
 
 function _resolveTernaryExpr(expr) {

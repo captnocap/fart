@@ -1,0 +1,12 @@
+# 19_wrap_align_justify: WPT wrap + justify + align combinations
+# Tests: wrap+justify:center, wrap+space-between, wrap+align:center, wrap+justify:end
+
+# Verify title and description
+expect "WPT: wrap + justify + align combo"
+expect "VERIFY: wrap+justify:center centers each line, wrap+space-between spreads per line"
+
+# Verify section labels
+expect "wrap + justify:center — each line centered"
+expect "wrap + justify:space-between — items spread per line"
+expect "wrap + align:center — items centered on cross axis per line"
+expect "wrap + justify:end — items packed to end per line"

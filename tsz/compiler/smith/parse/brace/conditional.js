@@ -372,7 +372,7 @@ function _buildLuaCondFromTokens(c, savedStart) {
       var _rlRaw2 = ctx._renderLocalRaw && ctx._renderLocalRaw[_rlName2];
       if (isEval(_rlv2)) {
         var _rlExpr2 = extractRuntimeJsExpr(_rlv2, _rlRaw2, _rlName2);
-        if (_rlExpr2) _rlv2 = _rlExpr2;
+        if (_rlExpr2) _rlv2 = '__eval("' + String(_rlExpr2).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '")';
       }
       if (typeof _rlv2 === 'string') _rlv2 = _normalizeLuaRuntimeExpr(_rlv2);
       if (ctx.currentMap && _rlv2 === ctx.currentMap.itemParam &&
@@ -447,6 +447,12 @@ function _buildLuaCondFromTokens(c, savedStart) {
 function tryParseConditional(c, children) {
   // Look ahead: identifier (op identifier/number)* && <
   const saved = c.save();
+  // Map expressions own their own callback-local conditionals. If we scan them
+  // here, a nested `&&` inside the callback can hijack the whole brace expr.
+  if (c.kind() === TK.identifier && typeof _identifierStartsMapCall === 'function' && _identifierStartsMapCall(c)) {
+    c.restore(saved);
+    return false;
+  }
   const _luaCondStart = c.save(); // save position for lua-tree expr conversion
   let condParts = [];
   // Collect condition expression until && or }
@@ -778,6 +784,15 @@ function tryParseConditional(c, children) {
         else condParts.push(rlVal);
       } else if (ctx.propStack && ctx.propStack[name] !== undefined) {
         const pv = ctx.propStack[name];
+        if (typeof pv === 'string' && pv.charCodeAt && pv.charCodeAt(0) === 2 &&
+            c.pos + 2 < c.count && c.kindAt(c.pos + 1) === TK.dot && c.kindAt(c.pos + 2) === TK.identifier) {
+          c.advance(); // skip prop name
+          c.advance(); // skip dot
+          const field = c.text();
+          c.advance(); // skip field
+          condParts.push(`_item.${field}`);
+          continue;
+        }
         // If prop is a map-item ref and next is .field, resolve as OA field access
         if (ctx.currentMap && ctx.currentMap.oa &&
             typeof pv === 'string' && pv.includes('@intCast(') &&
@@ -894,7 +909,11 @@ function tryParseConditional(c, children) {
         const lhs = split.tail.slice(0, -1).join('');
         condParts.length = 0;
         for (var _pi = 0; _pi < split.prefix.length; _pi++) condParts.push(split.prefix[_pi]);
-        condParts.push(lastOp === ' == ' ? `${lhs}.len == 0` : `${lhs}.len > 0`);
+        if (/^__eval\("/.test(lhs)) {
+          condParts.push(lastOp === ' == ' ? `(${lhs} == "")` : `(${lhs} ~= "")`);
+        } else {
+          condParts.push(lastOp === ' == ' ? `${lhs}.len == 0` : `${lhs}.len > 0`);
+        }
       } else if (lastOp === ' == ' || lastOp === ' != ') {
         const split = _splitCondAtLastLogical(condParts);
         const lhs = split.tail.slice(0, -1).join('');

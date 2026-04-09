@@ -1,0 +1,4 @@
+# smith_test_map: Array.map() rendering with items list
+
+# Initial state - header and map-rendered items
+expect "Items"

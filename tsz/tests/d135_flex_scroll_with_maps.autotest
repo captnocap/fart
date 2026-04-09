@@ -1,14 +1,9 @@
-# d135_flex_scroll_with_maps: Flex scroll with mapped content
-# Tests: scrolling with dynamic content
+# d135_flex_scroll_with_maps: Flex scroll panels with mapped classifier content
+# Tests: mapped sections render visible source text
 
-// Verify initial
-expect "Flex Scroll Maps"
-expect "Item 0"
-
-// Add items
-click "Add"
-expect "Item 10"
-
-// Scroll
-click "Scroll"
-expect "scrolled: true"
+expect "d135: Flex scroll with maps"
+expect "Commit Density"
+expect "Failure Categories"
+expect "Files by Area"
+expect "Recent Failures"
+expect "status bar"

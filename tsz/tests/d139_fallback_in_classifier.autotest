@@ -1,13 +1,10 @@
-# d139_fallback_in_classifier: Fallback content in classifier
-# Tests: default/fallback content
+# d139_fallback_in_classifier: Fallback text inside classifier content
+# Tests: classifier text and fallback values render cleanly
 
-// Verify renders
-expect "Classifier Fallback"
-
-// Click missing
-click "Missing"
-expect "fallback shown"
-
-// Click present
-click "Present"
-expect "content shown"
+expect "d139 — fallback in classifier"
+expect "test_alpha"
+expect "mixed"
+expect "pass"
+expect "--"
+expect "verified"
+expect "detail panel"

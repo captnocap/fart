@@ -294,10 +294,6 @@ smith/emit_ops/emit_state_setters.js
 smith/emit_ops/emit_oa_bridge.js
 smith/emit_ops/emit_orphan_arrays.js
 smith/emit_ops/emit_map_press.js
-smith/emit_ops/emit_lua_style.js
-smith/emit_ops/emit_lua_text.js
-smith/emit_ops/emit_lua_element.js
-smith/emit_ops/emit_lua_rebuild.js
 smith/emit_ops/wire_handler_ptrs.js
 smith/emit_ops/rebuild_map.js
 smith/emit_ops/compute_map_meta.js

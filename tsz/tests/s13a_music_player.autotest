@@ -1,0 +1,14 @@
+# s13a_music_player: Music player UI with transport controls and progress
+# Verifies title, play/pause button, and progress display
+
+# Title
+expect "Music Player UI"
+
+# Transport controls
+expect "Play/Pause"
+
+# Progress display
+expect "0%"
+
+# Toggle play/pause
+click "Play/Pause"

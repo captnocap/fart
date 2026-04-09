@@ -70,7 +70,8 @@ function match(c, ctx) {
   return false;
 }
 
-function compile(c, ctx) {
+function compile(c, children, ctx) {
+  void children;
   if (c.kind() !== TK.identifier || c.text() !== 'useContext') return null;
   c.advance();
   if (c.kind() !== TK.lparen) return null;
@@ -97,10 +98,48 @@ function compile(c, ctx) {
   }
   if (c.kind() === TK.rparen) c.advance();
 
-  return {
-    useContext: true,
-    contextExpr: parts.join(' ').trim(),
+  var expr = 'useContext(' + parts.join(' ').trim() + ')';
+  var fieldChain = [];
+  while (c.kind() === TK.dot && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.identifier) {
+    c.advance();
+    fieldChain.push(c.text());
+    expr += '.' + c.text();
+    c.advance();
+  }
+
+  if (c.kind() === TK.rbrace) c.advance();
+
+  var contextInfo = {
+    kind: 'context_consumer',
+    contextExpr: expr,
+    fieldChain: fieldChain,
+    loweredTo: 'render_local_or_prop',
+    fallbackAtoms: ['a033_js_logic_block', 'a034_lua_logic_block', 'a035_dynamic_text_updates'],
   };
+  if (!ctx._contextHints) ctx._contextHints = [];
+  ctx._contextHints.push(contextInfo);
+
+  if (ctx.scriptBlock || globalThis.__scriptContent) {
+    var slotIdx = ctx.stateSlots.length;
+    ctx.stateSlots.push({ getter: '__ctxExpr_' + slotIdx, setter: '__setCtxExpr_' + slotIdx, initial: '', type: 'string' });
+    var bufId = ctx.dynCount;
+    ctx.dynCount++;
+    ctx.dynTexts.push({
+      bufId: bufId,
+      fmtString: '{s}',
+      fmtArgs: 'state.getSlotString(' + slotIdx + ')',
+      arrName: '',
+      arrIndex: 0,
+      bufSize: 256,
+    });
+    if (!ctx._jsDynTexts) ctx._jsDynTexts = [];
+    ctx._jsDynTexts.push({ slotIdx: slotIdx, jsExpr: expr });
+    contextInfo.slotIdx = slotIdx;
+    contextInfo.dynBufId = bufId;
+    return { nodeExpr: '.{ .text = "" }', dynBufId: bufId, _contextInfo: contextInfo };
+  }
+
+  return { nodeExpr: '.{ .text = "" }', _contextInfo: contextInfo };
 }
 
 _patterns[90] = { id: 90, match: match, compile: compile };

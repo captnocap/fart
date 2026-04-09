@@ -13,6 +13,21 @@ function tryParseTextColorAttr(c, attr, nodeFields) {
   if (c.kind() !== TK.lbrace) return true;
 
   c.advance();
+  if (c.kind() === TK.identifier && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.lparen) {
+    var _rawParts = [];
+    var _depth = 0;
+    while (c.kind() !== TK.eof) {
+      if (c.kind() === TK.rbrace && _depth === 0) break;
+      if (c.kind() === TK.lbrace) _depth++;
+      if (c.kind() === TK.rbrace) _depth--;
+      _rawParts.push(c.text());
+      c.advance();
+    }
+    var _rawExpr = _rawParts.join(' ').replace(/\s*\.\s*/g, '.').replace(/\s*\(\s*/g, '(').replace(/\s*\)\s*/g, ')').replace(/\s*,\s*/g, ', ');
+    nodeFields.push(`.text_color = ${buildEval(_rawExpr, ctx)}`);
+    if (c.kind() === TK.rbrace) c.advance();
+    return true;
+  }
   if (c.kind() === TK.identifier) {
     const propName = c.text();
     c.advance();

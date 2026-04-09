@@ -1,0 +1,23 @@
+# 14_percentage_sizing: WPT percentage-based sizing
+# Tests: 50% = half, 33%+33%+34% fills, percentage in column, mixed px+%+grow
+
+# Verify title and description
+expect "WPT: percentage sizing"
+expect "VERIFY: 50% = half container, 33%+33%+34% fills, % in column works, mixed px+%+grow"
+
+# Verify section labels
+expect "width: 50% — each item half of container"
+expect "width: 33% + 33% + 34% — fills container"
+expect "height: 25% in column container"
+expect "Mixed: fixed + percentage + grow"
+
+# Verify percentage labels inside items
+expect "50%"
+expect "33%"
+expect "34%"
+expect "25%"
+
+# Verify mixed sizing labels
+expect "60px"
+expect "30%"
+expect "grow"

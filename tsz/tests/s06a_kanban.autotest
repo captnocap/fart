@@ -1,0 +1,17 @@
+# s06a_kanban: Kanban board with columns and card creation
+# Verifies column titles, add card buttons, and card creation
+
+# Title
+expect "Kanban Board"
+
+# Column titles
+expect "Todo"
+expect "In Progress"
+expect "Done"
+
+# Add Card buttons
+expect "Add Card"
+
+# Add a card to Todo column
+click "Add Card"
+expect "New Card"

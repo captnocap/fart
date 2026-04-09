@@ -1,0 +1,11 @@
+# radar_chart: 5-axis spider/radar chart
+# Verifies title, subtitle, axis labels, and legend stats render
+
+expect "Radar Chart"
+expect "5-axis spider chart"
+expect "Speed"
+expect "Power"
+expect "Defense"
+expect "Magic"
+expect "Luck"
+expect "Speed 85  Power 70  Defense 60  Magic 90  Luck 50"

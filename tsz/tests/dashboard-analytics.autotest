@@ -1,0 +1,59 @@
+# dashboard-analytics: Analytics dashboard with KPI cards, chart, product table
+# Verifies: title, range toggles, KPI cards, chart, product table, interactions
+
+# Title and range selector
+expect "Analytics Dashboard"
+expect "7 days"
+expect "30 days"
+expect "90 days"
+
+# KPI cards
+expect "Revenue"
+expect "$128,430"
+expect "+12.5%"
+expect "Users"
+expect "24,521"
+expect "+8.2%"
+expect "Orders"
+expect "3,847"
+expect "-2.1%"
+expect "Conversion"
+expect "3.24%"
+expect "+0.8%"
+expect "vs prev period"
+
+# Chart section
+expect "Revenue by Day"
+expect "Mon"
+expect "Tue"
+expect "Wed"
+expect "Thu"
+expect "Fri"
+expect "Sat"
+expect "Sun"
+
+# Product table
+expect "Top Products"
+expect "10 products"
+expect "#"
+expect "Product"
+expect "Revenue"
+expect "Units"
+expect "Trend"
+expect "Wireless Headphones Pro"
+expect "$34,200"
+expect "Smart Watch Ultra"
+expect "USB-C Hub 7-in-1"
+expect "Mechanical Keyboard RGB"
+expect "Portable SSD 2TB"
+expect "Ergonomic Mouse"
+expect "Cable Management Kit"
+
+# Toggle to 30 days range
+click "30 days"
+
+# Toggle to 90 days range
+click "90 days"
+
+# Back to 7 days
+click "7 days"

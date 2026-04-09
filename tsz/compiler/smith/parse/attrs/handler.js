@@ -2,6 +2,7 @@
 
 function _condPropValue(pv) {
   if (typeof pv !== 'string') return '1'; // JSX slot objects are always truthy
+  if (pv.charCodeAt && pv.charCodeAt(0) === 2) return '_item'; // whole map item prop
   if (/^-?\d+(\.\d+)?$/.test(pv)) return pv; // numeric literal
   if (pv.startsWith('if (')) return '(' + pv + ')'; // Zig if-else needs parens for correct precedence
   if (pv.startsWith('state.') || pv.startsWith('_oa') || pv.startsWith('@as(') || pv.startsWith('@intCast(')) return pv; // Zig expression

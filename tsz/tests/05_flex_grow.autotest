@@ -1,0 +1,17 @@
+# 05_flex_grow: WPT flex-grow
+# Tests: equal grow, proportional grow, fixed+grow, no grow
+
+// Verify header
+expect "WPT: flex-grow"
+expect "WPT"
+expect "flex-grow"
+
+// Verify section labels
+expect "All items flexGrow:1"
+expect "Grow 1:2:1"
+expect "One item grows, others fixed"
+expect "No grow (all 0)"
+
+// Verify box content labels
+expect "50px"
+expect "grow"

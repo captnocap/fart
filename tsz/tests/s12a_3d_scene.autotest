@@ -1,0 +1,17 @@
+# s12a_3d_scene: Simple 3D viewport with camera controls and cube
+# Verifies title, camera controls, and position display
+
+# Title
+expect "Simple 3D Viewport"
+
+# Camera control buttons
+expect "Move Forward"
+expect "Move Backward"
+expect "Move Up"
+expect "Move Down"
+
+# Move camera forward
+click "Move Forward"
+
+# Move camera up
+click "Move Up"

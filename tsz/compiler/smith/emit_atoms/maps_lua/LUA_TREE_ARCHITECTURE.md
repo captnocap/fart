@@ -1,183 +1,131 @@
-# Lua Tree Architecture
+# Lua Tree Emit Architecture
 
-**Smith’s default app emit:** `**LUA_LOGIC`** builds the UI as **Lua tables**; `**__declareChildren`** stamps them into Zig `**layout.Node**`; **layout and paint** run in Zig.
+## Three-Phase Model
 
-**Important:** “State” is **not** only Zig `state.zig` slots. Carts often have **Lua-local** `_state` / globals, **and** `**JS_LOGIC`** vars in QuickJS, **and** Zig slots when bridged. See [ARCHITECTURE.md](../../../../docs/ARCHITECTURE.md) § *Where runtime work actually happens*.
+This directory implements the emit phase of a strict three-phase architecture:
 
-## Three layers (compile → runtime)
+### Phase 1: Patterns (Syntax Recognition)
+**Location:** `tsz/compiler/smith/patterns/*`
+**Responsibility:** Recognize .tsz syntax patterns only
+**Output:** Markers and metadata attached to parse context
 
-```
-┌─────────────────────────────────────┐
-│  .tsz source (author writes this)   │
-│  Box, Text, Pressable, .map(), etc  │
-└──────────────┬──────────────────────┘
-               │ Forge + Smith
-               ▼
-┌─────────────────────────────────────┐
-│  LuaJIT — LUA_LOGIC                 │
-│  Tree tables, lua_on_press, __render│
-│  Lua heap state + __markDirty → Zig │
-└──────────────┬──────────────────────┘
-               │ host FFI (stamp, dirty)
-               ▼
-┌─────────────────────────────────────┐
-│  Zig — Node graph, layout, paint    │
-│  engine, layout.zig, gpu, SDL3      │
-└─────────────────────────────────────┘
-         ▲
-         │ __eval, evalLuaMapData, JS_LOGIC
-┌────────┴────────────────────────────┐
-│  QuickJS — JS_LOGIC + eval harness    │
-└─────────────────────────────────────┘
-```
+**Files:**
+- `p019_map_element.js` — recognizes `array.map((item) => <JSX>)`
+- `p022_map_nested.js` — recognizes nested map patterns
+- `p011_ternary_element.js` — recognizes `{cond ? <A/> : <B/>}`
+- etc.
 
-## What the compiler emits
+### Phase 2: Contract (Semantic Data)
+**Location:** `tsz/compiler/smith/contract/*`
+**Responsibility:** Own normalized semantic data only
+**Input:** Parse results from Phase 1
+**Output:** Structured contracts (luaNode objects)
 
-One Lua file per .tsz app. The Lua file contains:
+**Key Contract Files:**
+- `node_contract.js` — schema for text nodes, map loops, handlers, conditionals
+- `emit_contract.js` — interface between parse and emit
 
-1. **Component functions** — each component is a Lua function that returns a node table
-2. **State in Lua** — `_state = {}` and/or globals the emitter mirrors; values live in the **Lua VM** until restamp
-3. **Optional `JS_LOGIC`** — parallel **QuickJS** vars/setters; map data may flow **QJS → Lua** via `__luaMapData*` / `evalLuaMapData`
-4. **Root render** — `__render` clears/stamps, may pull `__luaMapData*` before `App()`
-5. **Dirty** — `__markDirty()` calls into **Zig** so the engine re-layouts after Lua/JS updates
+**Parse files that BUILD contracts:**
+- `tsz/compiler/smith/parse/build_node.js` — builds luaNode for each element
+- `tsz/compiler/smith/parse/children/brace_maps.js` — builds map loop contracts
+- `tsz/compiler/smith/parse/element/component_inline.js` — builds inlined component contracts
 
-## State: where values actually live
+### Phase 3: Emit (Final Assembly)
+**Location:** `tsz/compiler/smith/emit_atoms/maps_lua/*`
+**Responsibility:** Own final Lua/JS/Zig assembly only
+**Input:** Contracts from Phase 2
+**Output:** Lua source strings
 
-Emitters may combine **all** of the following in one cart:
+**Emit Atom Files:**
+- `lua_map_subs.js` — `_jsExprToLua()`: ONLY js→lua expression conversion
+- `lua_map_node.js` — `_nodeToLua()`: consumes full node contracts
+- `lua_map_text.js` — `_textToLua()`: consumes text contracts
+- `lua_map_style.js` — `_styleToLua()`: consumes style contracts
+- `lua_map_handler.js` — `_handlerToLua()`: consumes handler contracts
 
+## Contract Boundaries
 
-| Location                  | Example                                                          | Notes                                                                     |
-| ------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| **Lua heap**              | `local _state = {}`, `expandedProject`, `projects = {}`          | Primary for many lua-tree UIs; `setX(v)` updates Lua then `__markDirty()` |
-| **QJS heap**              | `var projects = []; function setProjects(v) { … }` in `JS_LOGIC` | Init / script-side data; may feed Lua through eval bridges                |
-| **Zig `state.zig` slots** | `__setState(slot, n)` from JS/Lua when wired                     | O(1) bridge when the compiler emits slot IDs                              |
+### What Emit Atoms Can Access
+✅ `ctx.stateSlots` — state getter/setter metadata
+✅ `ctx.objectArrays` — OA field definitions
+✅ `ctx._luaRootNode` — the full lua tree contract
+✅ `ctx._luaMapRebuilders` — map loop contracts
+✅ `ctx.handlers` — handler contracts
+✅ Other emit atoms via shared functions (e.g., `_jsExprToLua`)
 
+### What Emit Atoms Must NOT Do
+❌ Parse strings to extract field names
+❌ Resolve prop references from ctx.propStack
+❌ Re-infer map identities from source text
+❌ Access `globalThis.__source`
+❌ Call token cursor methods (c.kind(), c.advance())
 
-Zig does **not** automatically mirror every Lua key into slots — **read the generated `logic.zig`** for the cart. Stamping reads **Lua tables** to build **Zig `Node`** fields (text, style, handler strings).
+## File Status
 
-Host access uses `**luajit_runtime**` (Lua C API; optional **zluajit** per [ZLUAJIT_EVALUATION.md](../../../../docs/ZLUAJIT_EVALUATION.md)).
+### Active (Source of Truth)
+| File | Role | Status |
+|------|------|--------|
+| lua_map_subs.js | Expression conversion | ✅ Active |
+| lua_map_node.js | Node emission | ✅ Active |
+| lua_map_text.js | Text emission | ✅ Active |
+| lua_map_style.js | Style emission | ✅ Active |
+| lua_map_handler.js | Handler emission | ✅ Active |
 
-```lua
-local _state = {}
-function setExpandedProject(v)
-  _state["expandedProject"] = v
-  expandedProject = v
-  __markDirty()  -- → Zig
-end
-```
+### Deprecated (Being Disconnected)
+| File | Replacement | Status |
+|------|-------------|--------|
+| emit_ops/emit_lua_element.js | lua_map_node.js | 🚫 Deprecated |
+| emit_ops/emit_lua_text.js | lua_map_text.js | 🚫 Deprecated |
+| emit_ops/emit_lua_style.js | lua_map_style.js | 🚫 Deprecated |
+| emit_ops/emit_lua_rebuild.js | a034_lua_logic_block.js | 🚫 Deprecated |
 
-## Tree: Lua tables → Zig Node pointers
+### Wrapper (Being Reduced)
+| File | Current Role | Future |
+|------|--------------|--------|
+| a034_lua_logic_block.js | LUA_LOGIC wrapper + delegator | Wrapper only |
 
-Lua builds a tree of tables:
+## Usage Pattern
 
-```lua
-{ style = { ... }, text = "hello", children = { ... } }
-```
+### Parse Phase (build_node.js)
+```javascript
+// Build the semantic contract
+const luaNode = {
+  tag: 'Text',
+  text: { type: 'field', field: 'title' },  // Text contract
+  style: { font_size: '16' },                // Style contract
+  handler: 'toggle(item.id)',                // Handler contract
+  children: []
+};
 
-`__declareChildren(parent_ptr, children_table)` walks the Lua table and stamps
-Zig `Node` structs. This function already exists in `luajit_runtime.zig`.
-
-## Components: just Lua functions
-
-```lua
--- Compiler emits this from: function Button({label}) { return <Pressable>... }
-function Button(props)
-  return {
-    style = { padding = 12, background_color = 0x3b82f6, border_radius = 8 },
-    children = {
-      { text = tostring(props.label), text_color = 0xffffff }
-    }
-  }
-end
-```
-
-## Maps: just Lua loops
-
-```lua
--- Compiler emits this from: {items.map((item) => <Box>...)}
-local tmpl = {}
-for _i, _item in ipairs(getState("items")) do
-  tmpl[#tmpl + 1] = {
-    style = { padding = 12, background_color = 0x0f3460 },
-    children = {
-      { text = tostring(_item.label) },
-      { text = tostring(_item.count) }
-    }
-  }
-end
-__declareChildren(wrapper, tmpl)
+return { nodeExpr: zigExpr, luaNode: luaNode };
 ```
 
-No map pools. No OA arrays. No rebuild functions. Just a loop.
-
-## Recursive components: just Lua recursion
-
-```lua
-function RecursiveCard(node, depth)
-  local children = {}
-  for _, child in ipairs(node.children) do
-    children[#children + 1] = RecursiveCard(child, depth + 1)
-  end
-  return {
-    style = { padding = 8, margin = 4, border_width = 1 },
-    text = tostring(node.value),
-    children = children
-  }
-end
+### Emit Phase (lua_map_node.js)
+```javascript
+// Consume the contract — NO REPARSING
+function _nodeToLua(node, itemParam, indexParam, indent) {
+  // Use _textToLua for text contracts
+  const textLua = node.text ? _textToLua(node.text, itemParam, indexParam) : null;
+  
+  // Use _styleToLua for style contracts
+  const styleLua = node.style ? _styleToLua(node.style, itemParam, indexParam) : null;
+  
+  // Use _handlerToLua for handler contracts
+  const handlerLua = node.handler ? _handlerToLua(node.handler, itemParam, indexParam) : null;
+  
+  // Assemble final Lua table
+  return '{ ' + [textLua, styleLua, handlerLua].filter(Boolean).join(', ') + ' }';
+}
 ```
 
-No depth limits. No pre-allocated slots. Lua's stack handles it.
+## Migration Checklist
 
-## Conditionals: just Lua if/else
+- [x] Create lua_map_*.js with proper contract consumption
+- [x] Establish contract schema in contract/*
+- [ ] Disconnect emit_ops/emit_lua_*.js from load order
+- [ ] Verify a034_lua_logic_block.js only wraps, doesn't translate
+- [ ] Delete emit_ops/emit_lua_*.js files
+- [ ] Document contract schema in AGENTS.md
 
-```lua
--- from: {mode === 0 ? <BoxA/> : <BoxB/>}
-local child
-if getState("mode") == 0 then
-  child = { style = { background_color = 0x0f3460 }, text = "Mode A" }
-else
-  child = { style = { background_color = 0x533483 }, text = "Mode B" }
-end
-```
-
-## Handlers: Lua closures
-
-```lua
--- from: onPress={() => setCount(count + 1)}
-lua_on_press = function()
-  setState("count", getState("count") + 1)
-end
-```
-
-## What Zig does
-
-1. Call `luajit_runtime.init()` — loads the emitted Lua
-2. Each frame: check if Lua marked dirty
-3. If dirty: Lua already rebuilt the tree via `__declareChildren`
-4. Layout pass on the Zig Node tree (unchanged — layout.zig)
-5. Paint pass (unchanged — painter/wgpu)
-6. Event dispatch: on press → call the Lua closure
-
-## What changes from current architecture
-
-
-| Current                              | New                                  |
-| ------------------------------------ | ------------------------------------ |
-| State in Zig (`state.zig` slots)     | State in Lua (`_state = {}`)         |
-| Static node tree in Zig              | Lua builds tree, stamps to Zig Nodes |
-| Map content: complex OA/pool/rebuild | Map content: Lua loop                |
-| Conditionals: Zig display toggle     | Conditionals: Lua if/else, re-stamp  |
-| Dynamic text: Zig bufPrint           | Dynamic text: Lua tostring           |
-| Handlers: Zig fn ptrs or eval        | Handlers: Lua closures               |
-| 800-line lua_maps.js                 | Lua loop with substitution table     |
-
-
-## What stays the same
-
-- layout.zig (flexbox engine)
-- painter/wgpu (GPU rendering)
-- SDL3 (window, input, events)
-- FreeType (text measurement)
-- .tsz syntax (author-facing)
-- Substitution rules (the napkin)
-
+## Co-Authored-By
+Kimi-K2-5 <noreply@moondream.ai>

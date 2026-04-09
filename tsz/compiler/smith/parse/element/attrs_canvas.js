@@ -200,6 +200,17 @@ function parseCanvasPathDataAttr(c, nodeFields) {
     }
     if (dTokens.length > 0) {
       const jsExpr = dTokens.join(' ').replace(/\bexact\b/g, '===');
+      let runtimeJsExpr = jsExpr;
+      if (/^[A-Za-z_]\w*$/.test(jsExpr) && ctx.renderLocals && ctx.renderLocals[jsExpr] !== undefined) {
+        runtimeJsExpr = extractRuntimeJsExpr(
+          ctx.renderLocals[jsExpr],
+          ctx._renderLocalRaw && ctx._renderLocalRaw[jsExpr],
+          jsExpr
+        ) || jsExpr;
+      } else if (typeof expandRenderLocalRawExpr === 'function') {
+        runtimeJsExpr = expandRenderLocalRawExpr(jsExpr);
+      }
+      nodeFields.push(`.canvas_path_d = ${buildEval(runtimeJsExpr, ctx)}`);
       const slotIdx = ctx.stateSlots.length;
       ctx.stateSlots.push({ getter: '__jsExpr_' + slotIdx, setter: '__setJsExpr_' + slotIdx, initial: '', type: 'string' });
       const bufId = ctx.dynCount;

@@ -1,6 +1,8 @@
-# d33_extreme_nesting: Extreme nesting beyond normal React patterns
-# Tests parser handles deep nesting gracefully
+# d33_extreme_nesting: Deep project-card nesting inside a map
+# Tests nested boxes, conditionals, template literals, and button handlers
 
-expect "Extreme Nesting"
-click "Level 0"
-expect "Depth: 20"
+expect "Project Dashboard"
+expect "reactjit"
+expect "auth-svc"
+expect "infra-mon"
+expect "98%"

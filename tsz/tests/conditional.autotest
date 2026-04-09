@@ -1,0 +1,16 @@
+# smith_test_conditional: Conditional rendering with toggle between Mode A and Mode B
+
+# Initial state - mode is 0, so Mode A is visible
+expect "Toggle"
+expect "Mode A"
+reject "Mode B"
+
+# Click toggle to switch to Mode B
+click "Toggle"
+expect "Mode B"
+reject "Mode A"
+
+# Click toggle again to switch back to Mode A
+click "Toggle"
+expect "Mode A"
+reject "Mode B"

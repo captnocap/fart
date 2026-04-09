@@ -1,0 +1,32 @@
+# TodoMVC: Classic TodoMVC (todomvc/ directory version) with filters
+# Tests: title, seeded todos, filter buttons, toggle all, clear completed
+
+# Title
+expect "todos"
+
+# Seeded demo todos (from script: Buy groceries, Learn React, Build TodoMVC in tsz)
+expect "Buy groceries"
+expect "Learn React"
+
+# Footer — counts and filters
+expect "2 items left"
+expect "All"
+expect "Active"
+expect "Completed"
+expect "Clear completed"
+
+# Info text
+expect "Ported from tastejs/todomvc React implementation"
+
+# Filter to Active
+click "Active"
+expect "Buy groceries"
+expect "Learn React"
+
+# Filter to Completed
+click "Completed"
+
+# Back to All
+click "All"
+expect "Buy groceries"
+expect "Learn React"

@@ -699,7 +699,7 @@ if [ -n "$BAD_QUOTES" ]; then
 fi
 
 if grep -q '^const JS_LOGIC =' "$GEN" 2>/dev/null; then
-    BAD_JS=$(sed -n '/^const JS_LOGIC =/,/^;$/p' "$GEN" | grep -v '^\s*\\\\' | grep -v '^const \|^;$' | head -5 || true)
+    BAD_JS=$(sed -n '/^const JS_LOGIC =/,/^;$/p' "$GEN" | grep -v '^\s*\\\\' | grep -v '^const \|^;$' | grep -v '^\s*$' | grep -v '^\s*//' | head -5 || true)
     if [ -n "$BAD_JS" ]; then
         echo "[$NAME] LINT FAIL: raw JS leaked into JS_LOGIC Zig string:"
         echo "$BAD_JS"

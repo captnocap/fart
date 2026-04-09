@@ -554,7 +554,9 @@ if [ "$BARE_FMTS" -gt 0 ]; then
         PREFIX=$(echo "$mt" | cut -d'{' -f1 | sed 's/[[:space:]]*$//')
         [ -z "$PREFIX" ] && continue
         [ ${#PREFIX} -lt 3 ] && continue
-        if ! grep -qF -- "$PREFIX" <<< "$GEN_BLOB"; then
+        # Also try escaped-quote form (source has " but Zig escapes as \")
+        ESCAPED_PREFIX=$(echo "$PREFIX" | sed 's/"/\\"/g')
+        if ! grep -qF -- "$PREFIX" <<< "$GEN_BLOB" && ! grep -qF -- "$ESCAPED_PREFIX" <<< "$GEN_BLOB"; then
             TRUNCATED=$((TRUNCATED + 1))
         fi
     done <<< "$MIXED_TEXTS"

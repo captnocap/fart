@@ -1,0 +1,18 @@
+# 17_justify_single_item: WPT justify-content with single item
+# Tests: single item positioning for each justify-content value
+
+# Verify title and description
+expect "WPT: justify-content with single item"
+expect "VERIFY: Single item: start=left, center=middle, end=right, space-between=left, space-around/evenly=center"
+
+# Verify edge case description
+expect "Edge case: how justify-content behaves with only 1 item"
+
+# Verify all justify-content labels
+expect "start"
+expect "center"
+expect "end"
+expect "space-between (1 item = start)"
+expect "space-around (1 item = center)"
+expect "space-evenly (1 item = center)"
+expect "Two items, space-between"

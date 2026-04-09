@@ -53,6 +53,10 @@ function _a033_stripTsForLuaTree(jsSource) {
 function _a033_emitLuaTreeJsLogic(ctx) {
   var jsStateBindings = '';
   jsStateBindings += 'function __luaEscStr(s) { var r = "", i, c; for (i = 0; i < s.length; i++) { c = s.charCodeAt(i); if (c === 92) r += "\\\\\\\\"; else if (c === 39) r += "\\\\\\\'"; else if (c === 10) r += "\\\\n"; else if (c === 13) r += ""; else r += s.charAt(i); } return r; }\n';
+  jsStateBindings += 'var __batching = false;\n';
+  jsStateBindings += 'var __pendingState = [];\n';
+  jsStateBindings += 'function __beginJsEvent() { __batching = true; __pendingState = []; }\n';
+  jsStateBindings += 'function __endJsEvent() { if (!__batching) return; __batching = false; var q = __pendingState; __pendingState = []; for (var i = 0; i < q.length; i++) q[i](); }\n';
 
   if (ctx.stateSlots && ctx.stateSlots.length > 0) {
     for (var jsi = 0; jsi < ctx.stateSlots.length; jsi++) {
@@ -63,7 +67,7 @@ function _a033_emitLuaTreeJsLogic(ctx) {
       var luaSetCall = js.type === 'string'
         ? '__luaEval("' + js.setter + '(\\\'" + __luaEscStr(v) + "\\\')")'
         : '__luaEval("' + js.setter + '(" + v + ")")';
-      jsStateBindings += 'function ' + js.setter + '(v) { ' + js.getter + ' = v; if (__luaReady) ' + luaSetCall + '; else __markDirty(); }\n';
+      jsStateBindings += 'function ' + js.setter + '(v) { if (__batching) { __pendingState.push(function(){ ' + js.getter + ' = v; if (__luaReady) { ' + luaSetCall + '; } else { __markDirty(); } }); return; } ' + js.getter + ' = v; if (__luaReady) { ' + luaSetCall + '; } else { __markDirty(); } }\n';
     }
   }
 

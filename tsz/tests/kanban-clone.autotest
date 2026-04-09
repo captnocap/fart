@@ -1,0 +1,70 @@
+# kanban-clone: Kanban board with 4 columns and 25 cards
+# Verifies: header, column headers with counts, card titles, labels, assignees
+
+# Header
+expect "Kanban Board"
+expect "Sprint 14"
+
+# Column headers
+expect "BACKLOG"
+expect "IN PROGRESS"
+expect "REVIEW"
+expect "DONE"
+
+# Backlog cards
+expect "Add dark mode toggle"
+expect "Fix login redirect loop"
+expect "Upgrade React to v19"
+expect "Design system audit"
+expect "Add rate limiting to API"
+expect "Write onboarding docs"
+expect "Migrate to TypeScript 5"
+
+# In Progress cards
+expect "Implement search filters"
+expect "Fix dashboard chart crash"
+expect "Redesign settings page"
+expect "Add WebSocket reconnect"
+expect "Optimize image pipeline"
+expect "Add e2e test for checkout"
+
+# Review cards
+expect "Refactor auth middleware"
+expect "Add CSV export feature"
+expect "Fix timezone display bug"
+expect "Update privacy policy page"
+expect "Lazy-load dashboard panels"
+expect "Add aria labels to nav"
+
+# Done cards
+expect "Setup CI/CD pipeline"
+expect "Fix mobile nav overlay"
+expect "Add user avatar upload"
+expect "Improve error messages"
+expect "Add Sentry integration"
+expect "Write API changelog"
+
+# Labels
+expect "Feature"
+expect "Bug"
+expect "Chore"
+expect "Design"
+expect "Docs"
+expect "Perf"
+expect "Test"
+expect "A11y"
+expect "UX"
+
+# Assignees
+expect "AK"
+expect "SM"
+expect "JL"
+expect "RW"
+expect "KP"
+expect "EM"
+
+# Comment counts
+expect "3 comments"
+expect "7 comments"
+expect "12 comments"
+expect "15 comments"

@@ -27,6 +27,18 @@ function _editDistance(a, b) {
   return matrix[b.length][a.length];
 }
 
+function _decodeJsxTextEntities(text) {
+  if (!text || text.indexOf('&') < 0) return text;
+  return text
+    .replace(/&gt;/g, '>')
+    .replace(/&lt;/g, '<')
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&#39;/g, "'")
+    .replace(/&#34;/g, '"');
+}
+
 // Resolve :name: glyph shortcodes in text content.
 // Splits "Status :check: ok" into [text "Status ", glyph check, text " ok"]
 function _resolveGlyphShortcodes(text, children) {
@@ -90,6 +102,21 @@ function tryParseTextChild(c, children) {
     return true;
   }
 
+  // Recovery path: some mixed carts can leave the cursor sitting on the
+  // head token of a child expression after the opening `{` was consumed
+  // upstream. Re-run the structural child dispatchers before treating the
+  // sequence as literal text.
+  if (c.kind() === TK.identifier) {
+    if (typeof tryParseConditional === 'function' && tryParseConditional(c, children)) return true;
+    if (typeof tryParseTernaryJSX === 'function' && tryParseTernaryJSX(c, children)) return true;
+    if (typeof tryParseTernaryText === 'function' && tryParseTernaryText(c, children)) return true;
+    if (typeof _identifierStartsMapCall === 'function' &&
+        _identifierStartsMapCall(c) &&
+        typeof _tryParseIdentifierMapExpression === 'function') {
+      if (_tryParseIdentifierMapExpression(c, children, true)) return true;
+    }
+  }
+
   if (c.kind() !== TK.rbrace) {
     const textStart = c.starts[c.pos];
     let textEnd = textStart;
@@ -99,6 +126,7 @@ function tryParseTextChild(c, children) {
     }
     const text = c._byteSlice(textStart, textEnd).trim();
     if (text.trim()) {
+      const decodedText = _decodeJsxTextEntities(text.trim());
       if (globalThis.__SMITH_DEBUG_INLINE && (text.includes('import') || text.includes('function ') || text.includes('setMyPid'))) {
         globalThis.__dbg = globalThis.__dbg || [];
         globalThis.__dbg.push('[TEXT_LEAK] text="' + text.substring(0, 80) + '" pos=' + c.pos + ' inline=' + (ctx.inlineComponent || 'none'));
@@ -111,7 +139,7 @@ function tryParseTextChild(c, children) {
         }
       }
       // Resolve :name: glyph shortcodes in text (unless `l` prop = literal mode)
-      var trimText = text.trim();
+      var trimText = decodedText;
       if (!ctx._literalTextMode && ctx._glyphRegistry && Object.keys(ctx._glyphRegistry).length > 0 && /:([a-zA-Z]\w*):/.test(trimText)) {
         _resolveGlyphShortcodes(trimText, children);
       } else {

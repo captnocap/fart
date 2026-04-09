@@ -1,0 +1,63 @@
+# calendar-app: Google Calendar week view parity
+# Verifies: mini month, calendar list, day headers, hour labels, events, toolbar
+
+# Toolbar
+expect "+ Create"
+expect "Today"
+expect "March 23 - 29, 2026"
+expect "Week"
+
+# Mini month
+expect "March 2026"
+expect "S"
+expect "M"
+expect "T"
+expect "W"
+expect "F"
+
+# Calendar list
+expect "My calendars"
+expect "Personal"
+expect "Work"
+expect "Family"
+expect "Birthdays"
+expect "Holidays"
+
+# Day headers
+expect "MON"
+expect "TUE"
+expect "WED"
+expect "THU"
+expect "FRI"
+expect "SAT"
+expect "SUN"
+expect "23"
+expect "24"
+expect "25"
+expect "26"
+expect "27"
+expect "28"
+expect "29"
+
+# Hour labels
+expect "6 AM"
+expect "9 AM"
+expect "12 PM"
+expect "3 PM"
+expect "6 PM"
+
+# Events
+expect "Team Standup"
+expect "Design Review"
+expect "1:1 with Manager"
+expect "Sprint Planning"
+expect "Dentist Appt"
+expect "Lunch with Alice"
+expect "Code Review"
+expect "Product Demo"
+expect "Gym"
+expect "Family Dinner"
+
+# Nav arrows
+expect "<"
+expect ">"

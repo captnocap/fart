@@ -39,7 +39,7 @@ const TEXT_LEN = 256;
 
 // ── Types ───────────────────────────────────────────────────────────────
 
-const Mode = enum { off, record, replay, autotest };
+const Mode = enum { off, record, replay, autotest, snapshot };
 
 const SlotSnapshot = struct {
     kind: state_mod.SlotKind = .int,
@@ -205,6 +205,9 @@ pub fn init() void {
     } else if (std.mem.eql(u8, env, "autotest")) {
         mode = .autotest;
         std.debug.print("[witness] AUTOTEST mode — discovering and clicking all interactive nodes\n", .{});
+    } else if (std.mem.eql(u8, env, "snapshot")) {
+        mode = .snapshot;
+        std.debug.print("[witness] SNAPSHOT mode — dumping rendered text to autotest file\n", .{});
     }
 
     // Witness file path
@@ -587,6 +590,10 @@ pub fn tick(root: *Node) bool {
 
     if (mode == .autotest) {
         return autotestTick(root);
+    }
+
+    if (mode == .snapshot) {
+        return snapshotTick(root);
     }
 
     return false;

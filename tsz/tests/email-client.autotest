@@ -1,0 +1,63 @@
+# email-client: Gmail-style email client parity
+# Verifies: sidebar folders, toolbar, category tabs, email list, star toggle, mark read
+
+# Sidebar
+expect "Compose"
+expect "Starred"
+expect "Sent"
+expect "Drafts"
+expect "Trash"
+expect "15 emails"
+expect "0.12 GB of 15 GB"
+
+# Toolbar
+expect "Archive"
+expect "Label"
+expect "Move"
+expect "Search mail"
+
+# Category tabs
+expect "Primary"
+expect "Promotions"
+expect "Social"
+expect "Updates"
+
+# Email senders
+expect "GitHub"
+expect "Alice Chen"
+expect "Stripe"
+expect "Bob Martinez"
+expect "Linear"
+expect "Vercel"
+expect "Carol Wright"
+expect "Figma"
+expect "Dave Kim"
+expect "AWS"
+expect "Eve Santos"
+expect "Slack"
+expect "Frank Liu"
+expect "Notion"
+expect "Grace Park"
+
+# Email subjects
+expect "Your pull request was merged"
+expect "Re: Q2 Planning Doc"
+expect "Your invoice is ready"
+expect "Design review feedback"
+expect "Lunch tomorrow?"
+expect "Conference talk accepted!"
+
+# Email dates
+expect "10:32 AM"
+expect "10:15 AM"
+expect "Yesterday"
+expect "Mar 24"
+
+# Navigate to Starred folder
+click "Starred"
+
+# Navigate to Drafts folder
+click "Drafts"
+
+# Back to Inbox
+click "Inbox"

@@ -1,7 +1,5 @@
 # d102_graph_path_map_expr_attrs: Graph path expressions
-# Tests complex path expressions
+# Tests complex path expressions with mapped Graph.Path props
 
-expect "Graph Path"
-expect "Node A"
-click "Node A"
-expect "selected: A"
+expect "d102 graph path map expr attrs"
+expect "Mapped Graph.Path props"

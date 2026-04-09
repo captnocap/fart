@@ -1,10 +1,9 @@
-# d136_render_fn_calls: Function call in render
-# Tests: function calls during render
+# d136_render_fn_calls: Function calls inside rendered text
+# Tests: render-time function calls produce real text
 
-// Verify renders
-expect "Render Calls"
-expect "computed: 42"
-
-// Click to update
-click "Update"
-expect "computed: 84"
+expect "Dashboard"
+expect "last 5 days"
+expect "Total Commits"
+expect "Files"
+expect "Passing"
+expect "dashboard"
