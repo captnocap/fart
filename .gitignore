@@ -234,3 +234,8 @@ tsz/tests/d121_check.png
 tsz/tests/flex_proof.html
 tsz/docs/CURSOR_IDE_TSZ_STRICT_AUTHORING_PLAN.md
 tsz/docs/CURSOR_IDE_PRODUCT_SURFACE_OVERVIEW.md
+
+# ── External deps / submodules (not ours) ───────────────
+deps/tinyemu
+deps/llama.cpp.zig
+love2d/deps/love
