@@ -85,6 +85,16 @@ function scanLScriptFunctionNames(luaText) {
       ctx.scriptFuncs.push(funcName);
     }
   }
+  // LScript hatch function declarations:
+  // name:
+  // name every N:
+  const hatchFuncRegex = /(?:^|\n)\s*([A-Za-z_]\w*)(?:\s+every\s+[^:\n]+)?\s*:\s*(?=$|\n)/g;
+  while ((match = hatchFuncRegex.exec(luaText)) !== null) {
+    const funcName = match[1];
+    if (funcName && !ctx.scriptFuncs.includes(funcName)) {
+      ctx.scriptFuncs.push(funcName);
+    }
+  }
 }
 
 function scanScriptFunctionNames(scriptText, dedupeOnly) {

@@ -12,9 +12,10 @@ Reference for the live Smith compiler at `tsz/compiler/smith/`.
      - sets QuickJS globals (__source, __tokens, __file, __scriptContent, __clsContent, flags)
      - calls Smith compile(), smithCheck(), or sourceContract()
 
-  -> Smith (JS compiler, ~43,200 lines across 354 files in 48 directories)
-     - entry-lane dispatch: soup / module / page / app
-     - surface-tier scan: soup / mixed / chad
+  -> Smith (JS compiler, ~45,559 lines across 366 files in 49 directories)
+     - authored lanes: soup / mixed / intent-abstract (`chad` in current code labels)
+     - internal implementation branches: soup / module-build / legacy-page-compat / intent-block / legacy-app-fallback
+     - coarse source-family heuristic (`_sourceTier`): soup / mixed / chad
      - collection + parse fill ctx
      - preflight validates ctx
      - contract mode returns a JSON source-contract snapshot before emit
@@ -31,18 +32,18 @@ QuickJS does not resolve runtime imports. Forge embeds one generated Smith bundl
 
 All Smith source lives under `tsz/compiler/smith/`:
 
-### Root coordinators (11 files, ~2,536 lines)
+### Root files (11 files, ~2,545 lines)
 
 | File | Role |
 |------|------|
-| `index.js` | Entry point: `compile()`, `sourceContract()`, `stampIntegrity()`, `compileMod()`, `compileModLua()` |
+| `index.js` | Entry point: `compile()`, `sourceContract()`, `smithCheck()`, `stampIntegrity()`, `compileMod()`, `compileModLua()`, `compileModJS()` |
 | `core.js` | Shared cursor helpers, ctx reset, slot helpers, runtime-log wrappers |
 | `rules.js` | Token enums, style keys, color tables, soup constants |
 | `attrs.js` | Thin entry surface — delegates to `parse/attrs/*.js` |
 | `parse.js` | Public JSX coordinator: `parseJSXElement()`, `parseChildren()` |
 | `parse_map.js` | Map entry: `tryParseMap()` |
 | `emit.js` | Top-level emit coordinator |
-| `page.js` | `<page>` block compiler: `<var>`, `<state>`, `<functions>`, `<timer>` |
+| `page.js` | Legacy compat helper plus shared block parsers/lowerers reused by intent compilation; it is not the syntax authority for current named pages/apps/widgets |
 | `validate.js` | Post-parse linting (Class A/B validation, runs before emit) |
 | `logs.js` | Log dictionary — every log entry registered with ID and category |
 | `debug.js` | Build-flag-activated debug output (`-c` flag) |
@@ -52,12 +53,12 @@ All Smith source lives under `tsz/compiler/smith/`:
 | Directory | Files | Lines | Role |
 |-----------|-------|-------|------|
 | `collect/` | 6 | ~1,329 | Collection pass: classifiers, components, state, script, render_locals |
-| `contract/` | 3 | ~589 | Three-phase Lua emit contracts: emit_contract, node_contract, sanitize_for_lua |
+| `contract/` | 6 | ~1,400 | Contract surfaces: Lua emit contracts plus `module_contract.js` for module-route source contracts |
 | `emit/` | 10 | ~1,540 | Lua-tree emit pipeline: entry, preamble, nodes, logic, plus split output and effect transpile |
-| `emit_atoms/` | 60 | ~7,247 | Structured codegen atoms organized by phase (see Emit Atoms below) |
+| `emit_atoms/` | 74 | ~7,700 | Structured codegen atoms organized by phase, including dedicated `module/` atoms for `.mod.tsz` block output plus intent timer / cleanup manifests (see Emit Atoms below) |
 | `emit_ops/` | 24 | ~1,916 | Emit helpers: map decls, OA bridge, handler storage, text storage, pool nodes |
-| `lanes/` | 7 | ~686 | Entry-lane dispatch + surface-tier assignment |
-| `mod/` | 10 | ~1,442 | `<module>` block compiler: expr, ffi, functions, types, state, imports |
+| `lanes/` | 7 | ~686 | Dispatcher branching + shared source-family heuristic assignment |
+| `mod/` | 12 | ~2,400 | Module emit helpers: compatibility block compiler plus intent-module normalization/inference helpers, expr/statement lowering, pointer inference, and block/function emit support |
 | `parse/` | 55 | ~10,614 | JSX/map/element parsing (see Parse below) |
 | `patterns/` | 141 | ~12,273 | JSX pattern recognizers across 18 categories |
 | `preflight/` | 4 | ~617 | Route scan, pattern atoms, routing check, context |
@@ -149,22 +150,42 @@ SELECT test_name, expect_count, click_count, node_count, contract_clean
 FROM snapshots ORDER BY snapped_at DESC;
 ```
 
-## Entry Lanes vs Surface Tiers
+## Lanes, Branches, and Heuristics
 
-Entry lanes (which compiler path runs):
+Authoritative authored lanes:
 
-- `soup` — HTML/DOM soup compiler
-- `module` — `.mod.tsz` block compiler
-- `page` — `<page>` block compiler
-- `app` — default JSX pipeline
+- `soup` — HTML/DOM soup sources handled by the dedicated soup compiler path.
+- `mixed` — legacy JSX/framework-primitive sources handled by the old `App` fallback path.
+- `intent-abstract` — the intent dictionary lane. In current code and historical naming this often appears as `chad`.
 
-Surface tiers (source shape):
+Intent-abstract subpaths:
 
-- `soup` — copy-paste React, HTML tags, CSS hallucinations
-- `mixed` — framework primitives with inline styles
-- `chad` — intent dictionary syntax, classifiers, theme tokens
+- Named UI/data blocks such as `<my app>`, `<home page>`, `<weather widget>`, `<button component>`, `<backend lib>`, `<lava effect>`, and `<icon glyph>` are all forms inside the intent-abstract lane.
+- Named modules (`<engine module>`) are also intent-abstract syntax, but module builds fork into the module contract/build path because they emit a different target surface.
+- These are not peer top-level lanes. They are lane-local forms specific to the intent-abstract lane.
 
-The entry lane decides which compiler path runs. The surface tier describes the source family. `module` is orthogonal to tiers. `soup` lane always produces `soup` tier. `page` lane usually carries `chad`-style source. `app` lane can scan as `mixed` or `chad`.
+Internal implementation branches in the current dispatcher:
+
+- `soup` branch — `isSoupLaneSource(source, file)` matched.
+- `module-build` branch — `globalThis.__modBuild === 1`; used for `.mod.tsz` compilation targets.
+- `legacy-page-compat` branch — `isPageLaneSource(source)` matched on the old `<page ...>` wrapper path still present in Smith.
+- `intent-block` branch — `isChadBlockSource(source)` matched on named intent blocks.
+- `legacy-app-fallback` branch — `compileAppLane(...)` when none of the earlier branches matched.
+
+Coarse source-family heuristic (`_sourceTier`):
+
+- `detectSurfaceTier()` in `lanes/shared.js` returns only `soup`, `mixed`, or `chad`.
+- This is coarse metadata used by preflight, route planning, and source-contract payloads.
+- `chad` here means the intent-abstract family.
+- `_sourceTier` is not the authoritative lane model and should not be read as ownership of syntax.
+- The module build route currently emits `sourceTier: "module"` in `lanes/module.js` source-contract payloads. That is route-local contract metadata, not part of the shared three-lane model.
+
+Important clarity rule:
+
+- `page.js` is not its own authored lane.
+- `page.js` is not the syntax authority for current pages.
+- Current dictionary pages/apps/widgets belong to the intent-abstract lane and are routed through the intent-block branch.
+- The separate `page` branch exists only as leftover compat plumbing for an older wrapper surface, which is exactly why it feels islanded.
 
 ## Compile Flow
 
@@ -174,8 +195,9 @@ The entry lane decides which compiler path runs. The surface tier describes the 
 
 - `compile()` -> reads Forge globals, calls `compileLane(source, tokens, file)`
 - `sourceContract()` -> toggles contract-only mode, then runs `compileLane(...)`
+- `smithCheck()` -> predicts route plan / atom chain without parse+emit
 - `stampIntegrity(out)` -> prefixes generated output before Forge finalizes body hash
-- `compileMod()` / `compileModLua()` -> line-based module transpilers
+- `compileMod()` / `compileModLua()` / `compileModJS()` -> module emit entrypoints; `compileMod()` consults the module contract path first, then falls back to the legacy line-mode transpiler only when contract-backed emit cannot take the source
 
 Forge front-door commands:
 
@@ -183,9 +205,9 @@ Forge front-door commands:
 - `forge check <file.tsz>` -> route scan / predicted atom report only
 - `forge contract <file.tsz>` -> parse + preflight + source contract JSON, no emit
 
-### App lane
+### Mixed lane branch
 
-`lanes/app.js` is the default JSX pipeline:
+`lanes/app.js` is the mixed-lane fallback JSX pipeline for function-style `App` sources and similar mixed-era input. It is not the current intent `<name app>` syntax path.
 
 1. `mkCursor(tokens, source)`
 2. `resetCtx()`
@@ -197,24 +219,81 @@ Forge front-door commands:
 8. `parseJSXElement(c)`
 9. `finishParsedLane(root.nodeExpr, file, opts)`
 
-### Page lane
+### Legacy page compat branch
 
-`lanes/page.js` delegates to `page.js` which owns `<var>`, `<state>`, `<functions>`, `<timer>`, and `return(...)` extraction before normal JSX parsing.
+`lanes/page.js` handles the legacy compat page-wrapper path and delegates to `page.js`.
 
-### Module lane
+Important boundary:
 
-`lanes/module.js` delegates to:
+- This branch is not the authoritative dictionary page syntax.
+- The current dictionary page surface is named-block form: `<home page> ... </home>`.
+- Named pages therefore enter through `lanes/chad.js`, not `lanes/page.js`.
+- `page.js` still contains stale compat assumptions such as old `<page ...>` matching and legacy `<timer>` support. Those are implementation leftovers, not current language truth.
 
-- Line mode in `index.js`
-- Block mode in `mod/index.js` (10 files: expr, ffi, functions, helpers, imports, params, state, statements, types)
+### Module build branch
 
-### Soup lane
+`lanes/module.js` is the build-target branch for `.mod.tsz` compilation and now builds module-route source-contract state first:
 
-`lanes/soup.js` — separate compiler path with its own tokenizer, tree builder, and emitter.
+- `contract/module_contract.js` owns `module-contract-v1` for all `.mod.tsz` sources.
+- `lanes/module.js` attaches `moduleContract` to `source-contract-v1` payloads.
+- `index.js` asks the module-contract layer for an emit path before any legacy fallback.
+- `mod/index.js` consumes compatibility block contracts (`<module name>`) and builds the emit ctx from contract data instead of re-extracting blocks during dispatcher branching.
+- `mod/intent_types.js` and `mod/intent_functions.js` normalize active dictionary modules (`<name module>`) into the older atom-fed block surface without collapsing everything into one god file.
 
-### Chad lane
+Exact syntax audit:
 
-`lanes/chad.js` — intent-dictionary compiler. `<if>/<else>/<during>/<For>` in JSX, data blocks, type variants, glyph shortcodes, ambient namespaces, computed field resolution.
+- Active dictionary module syntax is intent-style `<name module> ... </name>` with `<uses>`, per-library `<libname ffi>`, `<var>` using `set_` for reactive state, and block control flow inside `<functions>` (`<if>`, `<for>`, `<while>`, `<switch>`, `<during>`). This is the syntax described in `tsz/docs/INTENT_DICTIONARY.md`.
+- Compatibility block-module syntax is `<module name> ... </module>` with `<imports>`, `<ffi>`, `<const>`, `<state>`, and line-oriented function bodies. This is a compiler-owned compatibility surface used by the current layout/module atom path. It is not the primary dictionary contract.
+- The legacy line-by-line transpiler in `index.js` is a TS/JS imperative compatibility path. It is not intent-module codegen.
+- `contract/module_contract.js` now emits explicit module-route contract data for both surfaces:
+  - compat block modules: `sections`, raw block bodies, compat ffi/state/function summaries
+  - intent named modules: `sections`, `uses`, `ffi`, `types`, `vars`, `functions`, `topLevelDurings`, `legacyExtensions`, `unsupportedForEmit`
+- `unsupportedForEmit` on intent contracts is no longer a placeholder. It now reflects the same safe-subset support gate used by the named-module emitter (`assessIntentModuleSupport(...)` + `buildIntentModuleEnv(...)`).
+- `preflight/intent_patterns.js` remains source-contract metadata only. It does not itself provide final Zig emit for active intent modules.
+
+Live compatibility block-module path:
+
+- `contract/module_contract.js` detects module surface, extracts balanced top-level sections, and normalizes them into `module-contract-v1`.
+- `mod/index.js` resets per-module globals, reads `contract.blocks.imports|ffi|types|consts|state|functions`, builds a module ctx, then dispatches to `runModuleEmitAtoms(ctx, meta)`.
+- `emit_atoms/module/index.js` is the block-module atom orchestrator. It owns the ordered pass through banner, preamble, imports, ffi, types, consts, state, and functions.
+- `emit_atoms/module/a055_module_intent_timers.js` emits the `SmithEvery` manifest for `name every N:` functions accepted by the intent-module path.
+- `emit_atoms/module/a056_module_intent_cleanup.js` emits the `SmithCleanup` manifest for `name cleanup:` pairs accepted by the intent-module path.
+- `mod/helpers.js` owns shared imperative helpers: range parsing, top-level statement splitting, ternary classification, null-guard tracking, pointer-call detection, loop-substitution support, and Zig-keyword-safe function call rewriting.
+- `mod/expr.js` owns Zig expression lowering for module code: type/default transpile, struct literals, ambient `math.*` lowering, field-aware `.length`/`.count` preservation versus collection `.len`, keyword escaping, call-argument ternaries, parenthesized ternaries, and known function-call rewrites.
+- `mod/params.js` owns param parsing plus pointer-param inference for mutating module functions.
+- `mod/statements.js` owns imperative statement lowering: mutable local detection, addressable local lifting, inline statement ternaries, inline one-line loops, assignment normalization, and local-type capture for typed imperative declarations.
+- `mod/functions.js` owns function splitting plus recursive block lowering for `if`-style ternaries, `while`, `for ... as ... at ...`, `switch`, multi-line struct init bodies, branch-local scope isolation, and Zig-safe function identifier emission.
+
+Current active intent-module status:
+
+- `forge contract --mod` now reports a real module contract for named modules such as `query.mod.tsz` and `engine.mod.tsz`.
+- Build-mode emit is now contract-backed for a safe subset of active named modules. Verified contract-backed outputs currently include conformance modules such as `connection.mod.tsz`, `http.mod.tsz`, `text.mod.tsz`, `measure.mod.tsz`, `flex.mod.tsz`, and `playback.mod.tsz`.
+- The named-module safe subset currently accepts: `<uses>`, per-lib `<ffi>`, struct/enum/union `<types>`, top-level `<var>` with `set_`, block control flow inside `<functions>`, conditional binding (`<if ... as name>` / `<while ... as name>`), cleanup pairs, and timer manifests.
+- Intent modules still fall back when the support gate sees surfaces the current normalizer cannot lower exactly. The current explicit buckets are:
+  - `top-level-during`
+  - `legacy-state-block`
+  - `multiple-functions-blocks`
+  - `function-hatch`
+  - `collection-helper`
+  - `function-composition`
+  - `string-switch-case`
+  - `dynamic-var-collection`
+  - `nested-has-var:<name>`
+- Example: `socket.mod.tsz` still reports `unsupportedForEmit = ["collection-helper", "dynamic-var-collection"]` and therefore falls back to the older legacy line-mode transpiler.
+- Remaining drift is now mostly semantic inference inside the contract-backed path, not routing. The ambient math path, scoped-local emission, field-aware `.length` preservation, Zig-keyword function names, and terminal-expression return inference for branchy helper functions are now wired through the source-contract-backed emitter. The current weak spots are still parameter/field typing in more complex modules plus some emitted Zig expressions around optional/value semantics, but those are generator-quality gaps rather than missing source-contract or routing seams.
+
+### Soup lane branch
+
+`lanes/soup/index.js` — separate compiler path with its own tokenizer, tree builder, and emitter.
+
+### Intent block branch
+
+`lanes/chad.js` — named intent-block compiler. Handles `<name widget|page|app|component|lib|effect|glyph>` sources, including the current dictionary page/app/widget entry syntax, `<if>/<else>/<during>/<For>` in JSX, data blocks, type variants, glyph shortcodes, ambient namespaces, and computed field resolution.
+
+Timer note:
+
+- Current scheduled-function syntax is `name every N:` inside `<functions>`, per `tsz/docs/INTENT_DICTIONARY.md`.
+- Smith still carries legacy `<timer>` parsing in shared page helpers, but that is compatibility behavior, not the active dictionary contract.
 
 ### Finish path
 
@@ -230,7 +309,7 @@ Contract output shape:
 
 - Versioned JSON snapshot: `source-contract-v1`
 - Written by Forge to `/tmp/tsz-gen/source_contract_<stem>.json` by default
-- Includes: `routePlan`, `preflight`, `rootExpr`, `luaRootNode`, `luaMapRebuilders`, `stateSlots`, `objectArrays`, `maps`, `handlers`, `dynTexts`, `scriptBlock`, and compiler debug buckets
+- Includes: `inputPatterns`, `routePlan`, `preflight`, `rootExpr`, `luaRootNode`, `luaMapRebuilders`, `stateSlots`, `objectArrays`, `maps`, `handlers`, `dynTexts`, `scriptBlock`, and compiler debug buckets
 
 ## Parse (55 files, ~10,614 lines)
 
@@ -244,7 +323,7 @@ Contract output shape:
 | `map/` | 7 | Map parsing: context, for_loop, header, infer_oa, info, nested, plain |
 | root | 4 | build_node, cursor, template_literal, utils |
 
-## Emit Atoms (60 files, ~7,247 lines)
+## Emit Atoms (72 files, ~7,498 lines)
 
 Structured Zig codegen organized into numbered phases:
 
@@ -259,6 +338,7 @@ Structured Zig codegen organized into numbered phases:
 | Logic/runtime (a033-a038) | js_logic_block, lua_logic_block, dynamic_text_updates, conditional_updates, variant_updates, runtime_dirty_tick | Runtime update logic |
 | Entry (a039-a042) | app_init, app_tick, app_exports, app_main | Application lifecycle |
 | Split/finalize (a043-a046) | split_section_extraction, split_namespace_prefixing, split_module_headers, finalize_postpass | Multi-file output |
+| Module (a047-a056) | module_banner, module_preamble, module_imports, module_ffi, module_types, module_consts, module_state, module_functions, module_intent_timers, module_intent_cleanup | `.mod.tsz` block output routed through split atoms instead of a single god-file emitter |
 
 ## Patterns (141 files, ~12,273 lines)
 
@@ -285,7 +365,7 @@ Each pattern file recognizes a specific JSX/TS pattern and maps it to the compil
 | `scriptBlock` / `scriptFuncs` | JS logic payload and callable names |
 | `classifiers` | Loaded classifier definitions |
 | `renderLocals` | Pre-return locals eligible for JSX substitution |
-| `_sourceTier` | Explicit source tier: `soup`, `mixed`, or `chad` |
+| `_sourceTier` | Coarse source-family heuristic label: `soup`, `mixed`, or `chad` (`chad` = intent-abstract family) |
 | `_preflight` | Cached preflight result consumed by emit |
 | `_needsRuntimeLog` / `_runtimeLogCounter` | Generated Zig logging support bookkeeping |
 

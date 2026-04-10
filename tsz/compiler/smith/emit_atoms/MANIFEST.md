@@ -80,6 +80,7 @@ module.exports = {
 - `logic_runtime` — embedded JS/Lua logic blocks and runtime updaters
 - `entry` — init/tick/export/main scaffolding
 - `split_finalize` — split-output partitioning and post-pass cleanup
+- `module` — imperative/module-lane Zig emission blocks
 
 ## Atom Registry
 
@@ -131,4 +132,11 @@ module.exports = {
 | 44 | `split_finalize/a044_split_namespace_prefixing.js` | Split namespace prefixing | `split` | `emit_split.js` |
 | 45 | `split_finalize/a045_split_module_headers.js` | Split module headers | `split` | `emit_split.js` |
 | 46 | `split_finalize/a046_finalize_postpass.js` | Finalize post-pass | `zig` | `emit/finalize.js` |
-
+| 47 | `module/a047_module_banner.js` | Module banner | `module_zig` | `mod/index.js` |
+| 48 | `module/a048_module_preamble.js` | Module preamble | `module_zig` | `mod/index.js` |
+| 49 | `module/a049_module_imports.js` | Module imports | `module_zig` | `mod/imports.js` |
+| 50 | `module/a050_module_ffi.js` | Module FFI imports | `module_zig` | `mod/ffi.js` |
+| 51 | `module/a051_module_types.js` | Module types | `module_zig` | `mod/types.js` |
+| 52 | `module/a052_module_consts.js` | Module consts | `module_zig` | `mod/state.js` |
+| 53 | `module/a053_module_state.js` | Module state | `module_zig` | `mod/state.js` |
+| 54 | `module/a054_module_functions.js` | Module functions | `module_zig` | `mod/functions.js` |

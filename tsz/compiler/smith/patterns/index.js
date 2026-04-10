@@ -3,8 +3,9 @@
 // Global registry for all patterns. Each pattern file wraps itself
 // in an IIFE and registers into _patterns[N] when loaded.
 // This file declares the registry and must be loaded FIRST.
-// Registry ids are intentionally sparse; retired c001-c030 contract
-// patterns were removed from the bundle and do not register here.
+// Registry ids are intentionally sparse; the c001-c030 intent catalog
+// now lives in preflight/intent_patterns.js and is surfaced through
+// source-contract metadata rather than the token-pattern registry here.
 //
 // Pattern dispatch: consumers call tryPatternMatch(c, ctx) to check
 // if any registered pattern matches the current cursor position.

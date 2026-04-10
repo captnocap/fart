@@ -38,7 +38,42 @@ function _normalizeLuaConditionExpr(expr) {
   out = out.replace(/(__eval\("(?:(?:[^"\\]|\\.)*)"\))\.len\s*>\s*0/g, '($1 ~= "")');
   out = out.replace(/(__eval\("(?:(?:[^"\\]|\\.)*)"\))\.len\s*==\s*0/g, '($1 == "")');
   out = out.replace(/([A-Za-z_]\w*(?:\.[A-Za-z_]\w+)*)\.len\b/g, '#$1');
+  out = _unwrapLuaSafeEvalCondition(out);
   return out;
+}
+
+function _rewriteLuaSafeStringHelpers(expr) {
+  if (!expr || typeof expr !== 'string') return expr;
+  var out = expr;
+  out = out.replace(/\b((?:_(?:n)?item|[A-Za-z_]\w*)(?:\.[A-Za-z_]\w+)*)_length\b/g, '#($1)');
+  out = out.replace(/\b((?:_(?:n)?item|[A-Za-z_]\w*)(?:\.[A-Za-z_]\w+)*(?:\.[A-Za-z_]\w+)?)\.length\b/g, '#($1)');
+  out = out.replace(/\b((?:_(?:n)?item|[A-Za-z_]\w*)(?:\.[A-Za-z_]\w+)*)_indexOf\(([^)]+)\)\s*>=\s*0\b/g, '(string.find($1, $2, 1, true) ~= nil)');
+  out = out.replace(/\b((?:_(?:n)?item|[A-Za-z_]\w*)(?:\.[A-Za-z_]\w+)*)_indexOf\(([^)]+)\)\s*<\s*0\b/g, '(string.find($1, $2, 1, true) == nil)');
+  out = out.replace(/\b((?:_(?:n)?item|[A-Za-z_]\w*)(?:\.[A-Za-z_]\w+)*)_indexOf\(([^)]+)\)\s*==\s*0\b/g, '(string.find($1, $2, 1, true) == 1)');
+  out = out.replace(/\b((?:_(?:n)?item|[A-Za-z_]\w*)(?:\.[A-Za-z_]\w+)*)\.indexOf\(([^)]+)\)\s*>=\s*0\b/g, '(string.find($1, $2, 1, true) ~= nil)');
+  out = out.replace(/\b((?:_(?:n)?item|[A-Za-z_]\w*)(?:\.[A-Za-z_]\w+)*)\.indexOf\(([^)]+)\)\s*<\s*0\b/g, '(string.find($1, $2, 1, true) == nil)');
+  out = out.replace(/\b((?:_(?:n)?item|[A-Za-z_]\w*)(?:\.[A-Za-z_]\w+)*)\.indexOf\(([^)]+)\)\s*==\s*0\b/g, '(string.find($1, $2, 1, true) == 1)');
+  return out;
+}
+
+function _unwrapLuaSafeEvalCondition(expr) {
+  if (!expr || typeof expr !== 'string' || expr.indexOf('__eval("') < 0) return expr;
+  return expr.replace(/__eval\("((?:[^"\\]|\\.)*)"\)/g, function(_, inner) {
+    var decoded = inner
+      .replace(/\\n/g, '\n')
+      .replace(/\\r/g, '\r')
+      .replace(/\\"/g, '"')
+      .replace(/\\\\/g, '\\');
+    decoded = _rewriteLuaSafeStringHelpers(decoded);
+    if (decoded.indexOf('&&') >= 0 || decoded.indexOf('||') >= 0 ||
+        decoded.indexOf('===') >= 0 || decoded.indexOf('!==') >= 0 ||
+        decoded.indexOf('?') >= 0 || decoded.indexOf(':') >= 0 ||
+        decoded.indexOf('_indexOf(') >= 0 || decoded.indexOf('.indexOf(') >= 0 ||
+        decoded.indexOf('_length') >= 0 || decoded.indexOf('.length') >= 0) {
+      return '__eval("' + inner + '")';
+    }
+    return decoded;
+  });
 }
 
 function _wrapJsTernaryTextExpr(expr) {
@@ -458,7 +493,7 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
     // Inline glyphs: Text with mixed text + <Glyph> children
     const hasGlyphs = children.some(ch => ch.isGlyph);
     if (hasGlyphs && children.length > 0) {
-      // Build combined text with \x01 sentinels at glyph positions
+      // Build combined text with \1 sentinels at glyph positions
       let combinedText = '';
       const glyphExprs = [];
       const glyphData = [];
@@ -875,7 +910,8 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
     if (handlerRef) {
       var _handler = ctx.handlers.find(function(h) { return h.name === handlerRef; });
       if (_handler) {
-        var _hasScriptBlock = !!(ctx.scriptBlock || globalThis.__scriptContent);
+        var _hasLuaBlock = !!ctx.luaBlock;
+        var _hasScriptBlock = !!(ctx.scriptBlock || ctx.luaBlock || globalThis.__scriptContent);
         var _hasScriptFuncs = ctx.scriptFuncs && ctx.scriptFuncs.length > 0;
         var _needsJs = false;
         // PROBE: route to JS for handlers calling script functions in JS-mode scripts
@@ -900,6 +936,7 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
             var _isLua = false;
             if (ctx.stateSlots) { for (var _hsi = 0; _hsi < ctx.stateSlots.length; _hsi++) { if (ctx.stateSlots[_hsi].setter === _hfn) { _isLua = true; break; } } }
             if (!_isLua && ctx.objectArrays) { for (var _hoi = 0; _hoi < ctx.objectArrays.length; _hoi++) { if (ctx.objectArrays[_hoi].setter === _hfn) { _isLua = true; break; } } }
+            if (!_isLua && _hasLuaBlock && isScriptFunc(_hfn)) { _isLua = true; }
             // Script block routed to Lua (FFI decls present) — all script funcs are Lua-safe
             if (!_isLua && ctx._scriptBlockIsLua && isScriptFunc(_hfn)) { _isLua = true; }
             // FFI-declared functions live in Lua (LuaJIT FFI wrappers)
@@ -907,7 +944,7 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
             // Handler refs (_handler_press_N) are JS-dispatched — never Lua
             if (!_isLua && /^_handler_press_\d+$/.test(_hfn)) { _needsJs = true; break; }
             // Script function NOT routed to Lua → must go through JS
-            if (!_isLua && !ctx._scriptBlockIsLua && isScriptFunc(_hfn)) { _needsJs = true; break; }
+            if (!_isLua && !_hasLuaBlock && !ctx._scriptBlockIsLua && isScriptFunc(_hfn)) { _needsJs = true; break; }
             if (!_isLua) { _needsJs = true; break; }
           }
         }

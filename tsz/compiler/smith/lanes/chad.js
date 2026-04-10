@@ -14,9 +14,9 @@
 //
 // Block syntax inside:
 //   <var>       → state slots + ambient reads
-//   <state>     → setter name declarations
-//   <functions> → JS_LOGIC script block
-//   <timer>     → setInterval
+//   <state>     → legacy/compat setter declarations still recognized by helpers
+//   <functions> → JS_LOGIC script block, including `name every N:` scheduling
+//   <timer>     → legacy compat scheduling block still recognized by shared helpers
 //   return(...) → JSX tree (classifier components, dictionary props)
 //
 // Merges onto the highway at finishParsedLane().

@@ -184,6 +184,7 @@ function resetCtx() {
     _patternTraceEnabled: !!globalThis.__DBG_COMPILER,
     // Route plan — built by preflight route scan, read by emit + routing check
     _source: null,
+    _inputPatterns: null,
     _routePlan: null,
     // Monotonic id for Lua-tree ScrollView scroll offset persistence (_scrollY[id])
     nextScrollPersistSlot: 0,

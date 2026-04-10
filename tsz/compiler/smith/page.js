@@ -1,10 +1,13 @@
-// ── Page block compiler ─────────────────────────────────────────
-// Handles <page route=name> with <var>, <state>, <functions>, <timer> blocks.
+// ── Legacy page-wrapper helper ──────────────────────────────────
+// This file still serves two roles:
+//   1. legacy compat compile path for old `<page ...>` wrappers
+//   2. shared block parsers/lowerers reused by named-block chad sources
 //
-// Pre-processes page syntax into ctx fields, then delegates JSX parsing
-// to the existing parseJSXElement machinery. This is a source-level
-// pre-processor — it reads raw source text for block extraction, then
-// uses the token cursor for JSX.
+// Current dictionary page syntax is named-block form (`<home page> ... </home>`),
+// which enters through `lanes/chad.js`, not this compat route.
+//
+// Scheduled functions in the active dictionary use `name every N:` inside
+// `<functions>`. Legacy `<timer>` blocks are only compatibility behavior here.
 //
 // Manifest target: manifest/s00c_manifest.tsz
 //
@@ -12,7 +15,8 @@
 //   <var>       → state slots + ambient reads
 //   <state>     → setter name validation
 //   <functions> → JS_LOGIC script block
-//   <timer>     → setInterval appended to script block
+//   `name every N:` in <functions> → scheduled function
+//   <timer>     → legacy compat scheduling block
 //   return(...) → JSX (handled by existing parse.js)
 
 // ── Block extraction (source-level) ──
@@ -518,7 +522,7 @@ function buildPageJSLogic(stateVars, ambients, functionsBlock, timerBlocks) {
     }
   }
 
-  // ── Timer blocks → setInterval ──
+  // ── Legacy compat timer blocks → setInterval ──
   for (var ti = 0; ti < timerBlocks.length; ti++) {
     var timer = timerBlocks[ti];
     var intervalMatch = timer.attrs.match(/interval=(\d+)/);
@@ -576,10 +580,9 @@ function buildPageJSLogic(stateVars, ambients, functionsBlock, timerBlocks) {
   return { scriptBlock: jsLines.join('\n'), funcNames: funcNames };
 }
 
-// ── Page compilation entry point ──
-// Called from compile() when <page is detected in source.
-// Populates ctx with state/script from declarative blocks,
-// then delegates JSX parsing to existing machinery.
+// ── Legacy page-wrapper compilation entry point ──
+// Called only when the old `<page ...>` compat wrapper route is detected.
+// Current named dictionary pages (`<home page>`) do not enter here.
 
 function compilePage(source, c, file) {
   // Extract route name

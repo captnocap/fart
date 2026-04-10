@@ -19,6 +19,10 @@ function emitFunctionsBlock(content, typeNames, allVariants) {
     if (current) current.body.push(raw);
   }
   if (current) funcs.push(current);
+  for (let f = 0; f < funcs.length; f++) {
+    const sigMatch = funcs[f].sig.match(/^(\w+)\(/);
+    if (sigMatch && _modReservedNames.indexOf(sigMatch[1]) === -1) _modReservedNames.push(sigMatch[1]);
+  }
   for (let f = 0; f < funcs.length; f++) out += emitOneFunction(funcs[f].sig, funcs[f].body, typeNames, allVariants);
   return out;
 }
@@ -27,9 +31,12 @@ function emitOneFunction(sig, rawBodyLines, typeNames, allVariants) {
   if (!fnMatch) return '';
   const fname = fnMatch[1]; const params = fnMatch[2]; const ret = fnMatch[3] || 'void';
   const paramInfo = parseModParams(params);
+  inferModParamPointerFlags(fname, paramInfo, rawBodyLines, typeNames);
   const zigParams = emitModParams(paramInfo, fname); const zigRet = modTranspileType(ret);
   const paramNames = paramInfo.map(function(p) { return p.name; });
-  const ptrVars = paramInfo.filter(function(p) { return p.isPtr; }).map(function(p) { return p.name; });
+  const ptrVars = paramInfo.filter(function(p, idx) {
+    return !!(p.isPtr || (_modFnPtrParams[fname] && _modFnPtrParams[fname][idx]));
+  }).map(function(p) { return p.name; });
   const bodyLines = [];
   for (let i = 0; i < rawBodyLines.length; i++) {
     const raw = rawBodyLines[i]; const trimmed = raw.trim();
@@ -42,16 +49,18 @@ function emitOneFunction(sig, rawBodyLines, typeNames, allVariants) {
   }
   const ctx = {
     knownVars: (_modStateVars || []).concat(paramNames),
-    localNames: [],
+    localNames: paramNames.slice(),
     ptrVars: ptrVars,
+    paramTypes: buildModParamTypeMap(paramInfo),
+    localTypes: {},
     narrowedVars: [],
   };
-  let out = 'pub fn ' + fname + '(' + zigParams + ') ' + zigRet + ' {\n';
+  let out = 'pub fn ' + zigEscape(fname) + '(' + zigParams + ') ' + zigRet + ' {\n';
   out += emitModBody(bodyLines, 0, typeNames, 1, allVariants, zigRet, ctx);
   out += '}\n\n';
   return out;
 }
-function prescanModFunctionSigs(content) {
+function prescanModFunctionSigs(content, typeNames) {
   _modFnPtrParams = {};
   const lines = content.split('\n');
   for (let i = 0; i < lines.length; i++) {
@@ -62,9 +71,17 @@ function prescanModFunctionSigs(content) {
     if (!sigMatch) continue;
     const fnName = sigMatch[1];
     const paramInfo = parseModParams(sigMatch[2]);
-    for (let p = 0; p < paramInfo.length; p++) {
-      if (paramInfo[p].isPtr) registerModPtrParam(fnName, p);
+    const bodyLines = [];
+    let j = i + 1;
+    while (j < lines.length) {
+      const nextRaw = lines[j];
+      const nextTrimmed = nextRaw.trim();
+      const nextIndent = nextRaw.match(/^(\s*)/)[1].length;
+      if (nextIndent <= 4 && nextTrimmed.match(/^\w+\([^)]*\)\s*(?::\s*.+)?$/)) break;
+      bodyLines.push(nextRaw);
+      j += 1;
     }
+    inferModParamPointerFlags(fnName, paramInfo, bodyLines, typeNames || []);
   }
 }
 
@@ -282,68 +299,80 @@ function emitModBody(lines, startIdx, typeNames, depth, allVariants, retType, ct
     if (guardMatch) { out += ind + 'if (' + modTranspileExpr(applyOptionalUnwraps(guardMatch[1], narrowedVars), activeCtx) + ') ' + guardRetVal + ';\n'; i++; continue; }
     // Return
     if (text.startsWith('return ')) { out += ind + 'return ' + modTranspileValue(text.slice(7), activeCtx) + ';\n'; i++; continue; }
+    // Multi-line struct init: target = { ... }
+    const structBlockMatch = text.match(/^(.+?)\s*=\s*\{$/);
+    if (structBlockMatch && !isComparison(structBlockMatch[1])) {
+      const target = normalizeAssignTarget(structBlockMatch[1].trim());
+      const blockIndent = L.indent;
+      i++;
+      const fieldLines = [];
+      while (i < lines.length) {
+        if (lines[i].indent === blockIndent && lines[i].text === '}') break;
+        fieldLines.push(lines[i].text);
+        i++;
+      }
+      if (i < lines.length && lines[i].indent === blockIndent && lines[i].text === '}') i++;
+      out += ind + target + ' = ' + transpileStructLiteral(fieldLines.join(', ')) + ';\n';
+      continue;
+    }
     // Struct init: target = { field: val }
     const structAssign = text.match(/^(.+?)\s*=\s*\{(.+)\}\s*$/);
     if (structAssign && !isComparison(structAssign[1])) {
-      const target = structAssign[1].trim();
+      const target = normalizeAssignTarget(structAssign[1].trim());
       out += ind + target + ' = ' + transpileStructLiteral(structAssign[2]) + ';\n'; i++; continue;
     }
+    const inlineStmtTernary = splitInlineStatementTernary(text);
     // Assignment: target = expr (not >= <= == !=)
     const assignMatch = text.match(/^([^=!<>]+?)\s*=\s*([^=].*)$/);
-    if (assignMatch && !assignMatch[1].includes('(') && !isComparison(assignMatch[1])) {
+    if (!inlineStmtTernary && assignMatch && !assignMatch[1].includes('(') && !isComparison(assignMatch[1])) {
       out += emitSingleStatement(text, depth, typeNames, lines, i, guardRetVal, activeCtx);
       i++; continue;
     }
-    // Single-line ternary
-    const ternaryMatch = text.match(/^(.+?)\s*\?\s*(.+?)\s*:\s*(.+)$/);
-    if (ternaryMatch) {
-      const cond = ternaryMatch[1];
-      const thenCtx = extendModCtx(ctx, { narrowedVars: narrowedVars.concat(extractNonNullVars(cond)) });
-      const elseCtx = extendModCtx(ctx, { narrowedVars: narrowedVars.concat(extractNullGuardedVars(cond)) });
-      const elseExpr = ternaryMatch[3].trim();
+    // Statement ternary / block ternary
+    const ternary = readModStatementTernary(lines, i);
+    if (ternary) {
+      const cond = ternary.cond;
+      const thenCtx = extendModCtx(ctx, { scopeLocals: true, narrowedVars: narrowedVars.concat(extractNonNullVars(cond)) });
+      const elseCtx = extendModCtx(ctx, { scopeLocals: true, narrowedVars: narrowedVars.concat(extractNullGuardedVars(cond)) });
       out += ind + 'if (' + modTranspileExpr(applyOptionalUnwraps(cond, narrowedVars), activeCtx) + ') {\n';
-      out += emitInlineStatements(ternaryMatch[2], depth + 1, typeNames, lines, i, guardRetVal, thenCtx);
-      if (elseExpr !== 'go' && !(activeCtx.inLoop && elseExpr === 'continue')) {
+      out += emitModBranchBody(ternary.thenLines, depth + 1, typeNames, allVariants, retType, thenCtx);
+      if (ternary.elseLines.length > 0 && !modBranchIsNoop(ternary.elseLines, activeCtx)) {
         out += ind + '} else {\n';
-        out += emitInlineStatements(ternaryMatch[3], depth + 1, typeNames, lines, i, guardRetVal, elseCtx);
+        out += emitModBranchBody(ternary.elseLines, depth + 1, typeNames, allVariants, retType, elseCtx);
       }
       out += ind + '}\n';
-      if (elseExpr === 'go' && isEarlyExitBranch(ternaryMatch[2])) {
+      if (ternary.elseLines.length === 0 && modBranchIsEarlyExit(ternary.thenLines)) {
         narrowedVars = addUniqueVars(narrowedVars, extractNullGuardedVars(cond));
       }
-      i++; continue;
+      i = ternary.nextIdx;
+      continue;
     }
-    // Multi-line ternary
-    if (i + 2 < lines.length && lines[i + 1].text.startsWith('? ') && lines[i + 2].text.startsWith(': ')) {
-      const cond = text;
-      const thenExpr = lines[i + 1].text.slice(2).trim();
-      const elseExpr = lines[i + 2].text.slice(2).trim();
-      const thenCtx = extendModCtx(ctx, { narrowedVars: narrowedVars.concat(extractNonNullVars(cond)) });
-      const elseCtx = extendModCtx(ctx, { narrowedVars: narrowedVars.concat(extractNullGuardedVars(cond)) });
-      out += ind + 'if (' + modTranspileExpr(applyOptionalUnwraps(cond, narrowedVars), activeCtx) + ') {\n';
-      out += emitInlineStatements(thenExpr, depth + 1, typeNames, lines, i, guardRetVal, thenCtx);
-      if (elseExpr !== 'go' && !(activeCtx.inLoop && elseExpr === 'continue')) {
-        out += ind + '} else {\n';
-        out += emitInlineStatements(elseExpr, depth + 1, typeNames, lines, i, guardRetVal, elseCtx);
-      }
-      out += ind + '}\n';
-      if (elseExpr === 'go' && isEarlyExitBranch(thenExpr)) {
-        narrowedVars = addUniqueVars(narrowedVars, extractNullGuardedVars(cond));
-      }
-      i += 3; continue;
+    // While loop
+    const whileMatch = text.match(/^while\s+(.+):$/);
+    if (whileMatch) {
+      const whileIndent = L.indent; i++;
+      const whileBody = [];
+      while (i < lines.length && lines[i].indent > whileIndent) { whileBody.push(lines[i]); i++; }
+      out += emitWhileLoopV2(whileMatch[1], whileBody, typeNames, depth, allVariants, retType, extendModCtx(ctx, { scopeLocals: true, narrowedVars: narrowedVars, inLoop: true }));
+      continue;
     }
     // Switch
     const switchMatch = text.match(/^switch\s+(.+):$/);
     if (switchMatch) {
       out += ind + 'switch (' + switchMatch[1] + ') {\n'; i++;
       while (i < lines.length) {
-        const armMatch = lines[i].text.match(/^(\w+):$/);
+        const armMatch = lines[i].text.match(/^(.+):$/);
         if (!armMatch) break;
         const armIndent = lines[i].indent;
-        out += ind + '    .' + armMatch[1] + ' => {\n'; i++;
+        const armKey = armMatch[1].trim() === 'else'
+          ? 'else'
+          : (/^['"]/.test(armMatch[1].trim()) || /^-?\d/.test(armMatch[1].trim())
+            ? armMatch[1].trim()
+            : '.' + armMatch[1].trim());
+        out += ind + '    ' + armKey + ' => {\n'; i++;
         const armBody = [];
-        while (i < lines.length && !lines[i].text.match(/^\w+:$/) && lines[i].indent > armIndent) { armBody.push(lines[i]); i++; }
-        out += emitArmBodyV2(armBody, typeNames, depth + 2, extendModCtx(ctx, { narrowedVars: narrowedVars }));
+        while (i < lines.length && !lines[i].text.match(/^.+:$/) && lines[i].indent > armIndent) { armBody.push(lines[i]); i++; }
+        out += emitArmBodyV2(armBody, typeNames, depth + 2, extendModCtx(ctx, { scopeLocals: true, narrowedVars: narrowedVars }));
         out += ind + '    },\n';
       }
       out += ind + '}\n'; continue;
@@ -354,7 +383,7 @@ function emitModBody(lines, startIdx, typeNames, depth, allVariants, retType, ct
       const forIndent = L.indent; i++;
       const forBody = [];
       while (i < lines.length && lines[i].indent > forIndent) { forBody.push(lines[i]); i++; }
-      out += emitForLoopV2(forMatch[1], forMatch[2], forMatch[3] || null, forBody, typeNames, depth, extendModCtx(ctx, { narrowedVars: narrowedVars })); continue;
+      out += emitForLoopV2(forMatch[1], forMatch[2], forMatch[3] || null, forBody, typeNames, depth, extendModCtx(ctx, { scopeLocals: true, narrowedVars: narrowedVars })); continue;
     }
     out += emitSingleStatement(text, depth, typeNames, lines, i, guardRetVal, activeCtx); i++;
   }
@@ -377,7 +406,7 @@ function emitArmBodyV2(lines, typeNames, depth, ctx) {
   for (let i = 0; i < lines.length; i++) {
     const text = applyOptionalUnwraps(lines[i].text, ctx.narrowedVars || []);
     const am = text.match(/^([^=!<>]+?)\s*=\s*([^=].*)$/);
-    if (am) { out += ind + am[1].trim() + ' = ' + modTranspileExpr(am[2].trim(), ctx) + ';\n'; }
+    if (am) { out += ind + modTranspileExpr(normalizeAssignTarget(am[1].trim()), ctx) + ' = ' + modTranspileValue(am[2].trim(), ctx) + ';\n'; }
     else { out += ind + modTranspileExpr(text, ctx) + ';\n'; }
   }
   return out;
@@ -385,11 +414,11 @@ function emitArmBodyV2(lines, typeNames, depth, ctx) {
 function emitForLoopV2(arrExpr, itemVar, indexVar, bodyLines, typeNames, depth, ctx) {
   let out = ''; const ind = '    '.repeat(depth);
   const spec = parseForExprSpec(arrExpr);
-  const iterVar = (!spec.reverse && indexVar) ? indexVar : '_i';
+  const iterVar = (!spec.reverse && indexVar) ? indexVar : nextModLoopVar();
   const accessIndexExpr = spec.reverse
     ? buildReverseIndexExpr(spec.startExpr, spec.endExpr, iterVar)
     : iterVar;
-  const itemAccessExpr = spec.baseExpr + '[' + accessIndexExpr + ']';
+  const itemAccessExpr = spec.range ? accessIndexExpr : spec.baseExpr + '[' + accessIndexExpr + ']';
 
   out += ind + 'var ' + iterVar + ': usize = ' + spec.startExpr + ';\n';
   out += ind + 'while (' + iterVar + ' < ' + spec.endExpr + ') : (' + iterVar + ' += 1) {\n';
@@ -398,6 +427,7 @@ function emitForLoopV2(arrExpr, itemVar, indexVar, bodyLines, typeNames, depth, 
   }
 
   const loopCtx = extendModCtx(ctx, {
+    scopeLocals: true,
     knownVars: addUniqueVars(ctx.knownVars || [], [itemVar].concat(indexVar ? [indexVar] : [])),
     localNames: addUniqueVars(ctx.localNames || [], indexVar ? [indexVar] : []),
     inLoop: true,
@@ -412,11 +442,111 @@ function emitForLoopV2(arrExpr, itemVar, indexVar, bodyLines, typeNames, depth, 
   out += ind + '}\n';
   return out;
 }
+
+function nextModLoopVar() {
+  _modLoopSerial += 1;
+  return '_mi' + _modLoopSerial;
+}
+
+function emitWhileLoopV2(condExpr, bodyLines, typeNames, depth, allVariants, retType, ctx) {
+  let out = '';
+  const ind = '    '.repeat(depth);
+  out += ind + 'while (' + modTranspileExpr(applyOptionalUnwraps(condExpr, (ctx && ctx.narrowedVars) || []), ctx) + ') {\n';
+  out += emitModBody(bodyLines, 0, typeNames, depth + 1, allVariants || [], retType || 'void', ctx);
+  out += ind + '}\n';
+  return out;
+}
+
+function emitModBranchBody(branchLines, depth, typeNames, allVariants, retType, ctx) {
+  if (!branchLines || branchLines.length === 0) return '';
+  if (branchLines.length === 1) {
+    return emitInlineStatements(branchLines[0].text, depth, typeNames, branchLines, 0, 'return', ctx);
+  }
+  return emitModBody(branchLines, 0, typeNames, depth, allVariants || [], retType || 'void', ctx);
+}
+
+function modBranchIsNoop(branchLines, ctx) {
+  if (!branchLines || branchLines.length === 0) return true;
+  if (branchLines.length !== 1) return false;
+  const text = (branchLines[0].text || '').trim();
+  if (text === 'go') return true;
+  if ((ctx && ctx.inLoop) && text === 'continue') return true;
+  return false;
+}
+
+function modBranchIsEarlyExit(branchLines) {
+  if (!branchLines || branchLines.length === 0) return false;
+  if (branchLines.length === 1 && branchLines[0].indent == null) return isEarlyExitBranch(branchLines[0].text);
+  for (let i = 0; i < branchLines.length; i++) {
+    const text = (branchLines[i].text || '').trim();
+    if (!text) continue;
+    if (!(text.startsWith('return ') || text === 'return' || text === 'stop' || text === 'continue')) return false;
+  }
+  return true;
+}
+
+function readModStatementTernary(lines, startIdx) {
+  if (startIdx >= lines.length) return null;
+  const first = lines[startIdx];
+  if (!first || !first.text) return null;
+
+  const inlineParts = splitInlineStatementTernary(first.text);
+  if (inlineParts) {
+    return {
+      cond: inlineParts.cond,
+      thenLines: [{ indent: null, text: inlineParts.thenExpr }],
+      elseLines: inlineParts.elseExpr === 'go' ? [] : [{ indent: null, text: inlineParts.elseExpr }],
+      nextIdx: startIdx + 1,
+    };
+  }
+
+  if (startIdx + 1 >= lines.length || !lines[startIdx + 1].text.startsWith('? ')) return null;
+
+  const markerIndent = lines[startIdx + 1].indent;
+  let idx = startIdx + 1;
+  const thenLines = [];
+  const elseLines = [];
+  const firstThen = lines[idx].text.slice(2).trim();
+  if (firstThen) thenLines.push({ indent: lines[idx].indent, text: firstThen });
+  idx += 1;
+
+  while (idx < lines.length) {
+    const line = lines[idx];
+    if (line.indent === markerIndent && line.text.startsWith(': ')) break;
+    if (line.indent <= first.indent) break;
+    thenLines.push(line);
+    idx += 1;
+  }
+
+  if (idx >= lines.length || lines[idx].indent !== markerIndent || !lines[idx].text.startsWith(': ')) {
+    return {
+      cond: first.text,
+      thenLines: thenLines,
+      elseLines: [],
+      nextIdx: idx,
+    };
+  }
+  const firstElse = lines[idx].text.slice(2).trim();
+  if (firstElse && firstElse !== 'go') elseLines.push({ indent: lines[idx].indent, text: firstElse });
+  idx += 1;
+  while (idx < lines.length && lines[idx].indent > first.indent) {
+    elseLines.push(lines[idx]);
+    idx += 1;
+  }
+
+  return {
+    cond: first.text,
+    thenLines: thenLines,
+    elseLines: elseLines,
+    nextIdx: idx,
+  };
+}
+
 function emitMapFunction(fname, zigParams, zigRet, bodyText, typeNames) {
   const mapMatch = bodyText.match(/return\s+(\w+)\[(\d+)\.\.(\w+)\]\.map\((\w+)\s*=>\s*(\w+)\.(\w+)\)/);
   if (mapMatch) {
     const arr = mapMatch[1]; const end = mapMatch[3]; const field = mapMatch[6];
-    let out = 'pub fn ' + fname + '(buf: []i64) []i64 {\n';
+    let out = 'pub fn ' + zigEscape(fname) + '(buf: []i64) []i64 {\n';
     out += '    var i: usize = 0;\n';
     out += '    while (i < ' + end + ') : (i += 1) {\n';
     out += '        buf[i] = ' + arr + '[i].' + field + ';\n';
@@ -425,5 +555,5 @@ function emitMapFunction(fname, zigParams, zigRet, bodyText, typeNames) {
     out += '}\n\n';
     return out;
   }
-  return 'pub fn ' + fname + '(' + zigParams + ') ' + zigRet + ' {\n    // TODO: map\n}\n\n';
+  return 'pub fn ' + zigEscape(fname) + '(' + zigParams + ') ' + zigRet + ' {\n    // TODO: map\n}\n\n';
 }

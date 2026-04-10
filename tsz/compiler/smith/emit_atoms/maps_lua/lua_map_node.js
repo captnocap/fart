@@ -273,6 +273,7 @@ function _emitConditionalChild(cond, nodeLua, itemParam, indexParam, _luaIdxExpr
   var luaCond = (typeof cond === 'string' && cond.indexOf('__eval("') >= 0)
     ? cond
     : _jsExprToLua(cond, itemParam, indexParam, _luaIdxExpr, _currentOaIdx);
+  luaCond = _unwrapLuaMapConditionEval(luaCond);
   luaCond = _wrapCondEval(luaCond);
 
   // Bitwise results need explicit ~= 0 check in Lua
@@ -292,6 +293,7 @@ function _emitTernaryChildren(tcond, trueNodeLua, falseNodeLua, itemParam, index
   var luaCond = (typeof tcond === 'string' && tcond.indexOf('__eval("') >= 0)
     ? tcond
     : _jsExprToLua(tcond, itemParam, indexParam, _luaIdxExpr, _currentOaIdx);
+  luaCond = _unwrapLuaMapConditionEval(luaCond);
   luaCond = _wrapCondEval(luaCond);
 
   var results = [];
@@ -439,7 +441,48 @@ var _luaBuiltins = {
   bnot:1, lshift:1, rshift:1, bit:1, __eval:1
 };
 
+function _rewriteLuaMapStringHelpers(expr) {
+  if (!expr || typeof expr !== 'string') return expr;
+  var out = expr;
+  out = out.replace(/\b((?:_(?:n)?item|[A-Za-z_]\w*)(?:\.[A-Za-z_]\w+)*)_length\b/g, '#($1)');
+  out = out.replace(/\b((?:_(?:n)?item|[A-Za-z_]\w*)(?:\.[A-Za-z_]\w+)*)\.length\b/g, '#($1)');
+  out = out.replace(/\b((?:_(?:n)?item|[A-Za-z_]\w*)(?:\.[A-Za-z_]\w+)*)_indexOf\(([^)]+)\)\s*>=\s*0\b/g, '(string.find($1, $2, 1, true) ~= nil)');
+  out = out.replace(/\b((?:_(?:n)?item|[A-Za-z_]\w*)(?:\.[A-Za-z_]\w+)*)_indexOf\(([^)]+)\)\s*<\s*0\b/g, '(string.find($1, $2, 1, true) == nil)');
+  out = out.replace(/\b((?:_(?:n)?item|[A-Za-z_]\w*)(?:\.[A-Za-z_]\w+)*)_indexOf\(([^)]+)\)\s*==\s*0\b/g, '(string.find($1, $2, 1, true) == 1)');
+  out = out.replace(/\b((?:_(?:n)?item|[A-Za-z_]\w*)(?:\.[A-Za-z_]\w+)*)\.indexOf\(([^)]+)\)\s*>=\s*0\b/g, '(string.find($1, $2, 1, true) ~= nil)');
+  out = out.replace(/\b((?:_(?:n)?item|[A-Za-z_]\w*)(?:\.[A-Za-z_]\w+)*)\.indexOf\(([^)]+)\)\s*<\s*0\b/g, '(string.find($1, $2, 1, true) == nil)');
+  out = out.replace(/\b((?:_(?:n)?item|[A-Za-z_]\w*)(?:\.[A-Za-z_]\w+)*)\.indexOf\(([^)]+)\)\s*==\s*0\b/g, '(string.find($1, $2, 1, true) == 1)');
+  return out;
+}
+
+function _unwrapLuaMapConditionEval(cond) {
+  if (!cond || typeof cond !== 'string' || cond.indexOf('__eval("') < 0) return cond;
+  var trimmed = cond.trim();
+  var wrapped = false;
+  if (trimmed.charAt(0) === '(' && trimmed.charAt(trimmed.length - 1) === ')') {
+    trimmed = trimmed.slice(1, -1).trim();
+    wrapped = true;
+  }
+  var m = trimmed.match(/^__eval\("((?:[^"\\]|\\.)*)"\)$/);
+  if (!m) return cond;
+  var decoded = m[1]
+    .replace(/\\n/g, '\n')
+    .replace(/\\r/g, '\r')
+    .replace(/\\"/g, '"')
+    .replace(/\\\\/g, '\\');
+  decoded = _rewriteLuaMapStringHelpers(decoded);
+  if (decoded.indexOf('&&') >= 0 || decoded.indexOf('||') >= 0 ||
+      decoded.indexOf('===') >= 0 || decoded.indexOf('!==') >= 0 ||
+      decoded.indexOf('?') >= 0 || decoded.indexOf(':') >= 0 ||
+      decoded.indexOf('_indexOf(') >= 0 || decoded.indexOf('.indexOf(') >= 0 ||
+      decoded.indexOf('_length') >= 0 || decoded.indexOf('.length') >= 0) {
+    return cond;
+  }
+  return wrapped ? '(' + decoded + ')' : decoded;
+}
+
 function _cleanCondForEval(expr) {
+  expr = _unwrapLuaMapConditionEval(expr);
   // State slot refs → getter names
   expr = expr.replace(/state\.getSlot(?:Int|Float|Bool)?\((\d+)\)/g, function(_, idx) {
     return (typeof ctx !== 'undefined' && ctx.stateSlots && ctx.stateSlots[+idx])

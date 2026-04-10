@@ -165,7 +165,9 @@ smith/collect/render_locals.js
 smith/collect/pipeline.js
 
 smith/contract/sanitize_for_lua.js
+smith/contract/module_contract.js
 
+smith/preflight/intent_patterns.js
 smith/lanes/shared.js
 smith/lanes/app.js
 smith/lanes/page.js
@@ -184,7 +186,20 @@ smith/mod/statements.js
 smith/mod/expr.js
 smith/mod/functions.js
 smith/mod/helpers.js
+smith/mod/intent_types.js
+smith/mod/intent_functions.js
 smith/mod/index.js
+smith/emit_atoms/module/index.js
+smith/emit_atoms/module/a047_module_banner.js
+smith/emit_atoms/module/a048_module_preamble.js
+smith/emit_atoms/module/a049_module_imports.js
+smith/emit_atoms/module/a050_module_ffi.js
+smith/emit_atoms/module/a051_module_types.js
+smith/emit_atoms/module/a052_module_consts.js
+smith/emit_atoms/module/a053_module_state.js
+smith/emit_atoms/module/a054_module_functions.js
+smith/emit_atoms/module/a055_module_intent_timers.js
+smith/emit_atoms/module/a056_module_intent_cleanup.js
 smith/page.js
 smith/parse/attrs/color.js
 smith/parse/attrs/style_value.js

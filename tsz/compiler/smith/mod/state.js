@@ -11,7 +11,9 @@ function emitStateBlock(content, typeNames) {
     if (!m) continue;
     const vname = m[1];
     _modStateVars.push(vname);
+    if (_modReservedNames.indexOf(vname) === -1) _modReservedNames.push(vname);
     const rawType = m[2].trim();
+    _modStateVarTypes[vname] = rawType;
     const vdefault = m[3] ? m[3].trim() : null;
     const zigType = modTranspileType(rawType);
 
@@ -48,6 +50,8 @@ function emitConstBlock(content, typeNames) {
     if (!line || line.startsWith('//')) continue;
     const m = line.match(/^(\w+):\s*([^=]+?)\s*=\s*(.+)$/);
     if (!m) continue;
+    if (_modReservedNames.indexOf(m[1]) === -1) _modReservedNames.push(m[1]);
+    _modConstVarTypes[m[1]] = m[2].trim();
     out += 'const ' + m[1] + ': ' + modTranspileType(m[2].trim()) + ' = ' + modTranspileDefault(m[3].trim(), modTranspileType(m[2].trim()), typeNames) + ';\n';
   }
   return out;

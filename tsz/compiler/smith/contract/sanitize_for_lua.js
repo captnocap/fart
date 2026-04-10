@@ -14,6 +14,16 @@
 function _jsToLua(expr) {
   if (!expr || typeof expr !== 'string') return expr;
 
+  // Resolve simple props.field references when the prop value is already known.
+  if (typeof ctx !== 'undefined' && ctx && ctx.propStack) {
+    expr = expr.replace(/\bprops\.(\w+)\b/g, function(_, field) {
+      if (ctx.propStack[field] === undefined) return 'props.' + field;
+      var pv = ctx.propStack[field];
+      if (pv && typeof pv === 'object' && pv.expr) return _jsToLua(String(pv.expr));
+      return _jsToLua(String(pv));
+    });
+  }
+
   // Protect __eval("...") blocks — they stay as JS inside the quotes
   var evalBlocks = [];
   expr = expr.replace(/__eval\(([^)]+)\)/g, function(m) {
@@ -37,6 +47,15 @@ function _jsToLua(expr) {
   // 3. Zig std.mem.eql → Lua comparison
   expr = expr.replace(/!std\.mem\.eql\(u8,\s*([^,]+),\s*([^)]+)\)/g, '($1 ~= $2)');
   expr = expr.replace(/std\.mem\.eql\(u8,\s*([^,]+),\s*([^)]+)\)/g, '($1 == $2)');
+  // Broken contract shapes from chained string comparisons in map conditions.
+  expr = expr.replace(
+    /std\.mem\.eql\(u8,\s*\(([^,]+),\s*("[^"]+")\)\s*or\s*std\.mem\.eql\(u8,\s*\1,\s*("[^"]+")\)\)/g,
+    '(($1 == $2) or ($1 == $3))'
+  );
+  expr = expr.replace(
+    /std\.mem\.eql\(u8,\s*\(([^,]+),\s*("[^"]+")\)\s*or\s*([^)]+)\)/g,
+    '(($1 == $2) or ($3))'
+  );
 
   // 4. JS ternary → Lua and/or (iterate for nested)
   for (var ti = 0; ti < 8; ti++) {
@@ -81,6 +100,15 @@ function _jsToLua(expr) {
   // 7. .length → # (Lua length operator)
   expr = expr.replace(/([A-Za-z_]\w*(?:\.[A-Za-z_]\w+)*)\.length\b/g, '#$1');
   expr = expr.replace(/([A-Za-z_]\w*(?:\.[A-Za-z_]\w+)*)\.len\b/g, '#$1');
+  // OA helper arrays captured in contract mode
+  expr = expr.replace(/(_oa\d+_\w+)_length\[_i\]/g, '#($1[_i])');
+  expr = expr.replace(/(_oa\d+_\w+)_length\[_j\]/g, '#($1[_j])');
+  expr = expr.replace(/(_oa\d+_\w+)_indexOf\[_i\]\(([^)]+)\)\s*>=\s*0/g, '(string.find($1[_i], $2, 1, true) ~= nil)');
+  expr = expr.replace(/(_oa\d+_\w+)_indexOf\[_i\]\(([^)]+)\)\s*<\s*0/g, '(string.find($1[_i], $2, 1, true) == nil)');
+  expr = expr.replace(/(_oa\d+_\w+)_indexOf\[_i\]\(([^)]+)\)\s*==\s*0/g, '(string.find($1[_i], $2, 1, true) == 1)');
+  expr = expr.replace(/(_oa\d+_\w+)_indexOf\[_j\]\(([^)]+)\)\s*>=\s*0/g, '(string.find($1[_j], $2, 1, true) ~= nil)');
+  expr = expr.replace(/(_oa\d+_\w+)_indexOf\[_j\]\(([^)]+)\)\s*<\s*0/g, '(string.find($1[_j], $2, 1, true) == nil)');
+  expr = expr.replace(/(_oa\d+_\w+)_indexOf\[_j\]\(([^)]+)\)\s*==\s*0/g, '(string.find($1[_j], $2, 1, true) == 1)');
 
   // 8. Comparison operators (MUST be before && || to avoid mangling)
   expr = expr.replace(/!==/g, '~=');
@@ -118,6 +146,14 @@ function _jsToLua(expr) {
   expr = expr.replace(/Color\.rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*\d+)?\)/g, function(_, r, g, b) {
     return '0x' + ((+r << 16) | (+g << 8) | +b).toString(16).padStart(6, '0');
   });
+  // Dynamic packed color ints already stored as 0xRRGGBB-compatible numbers.
+  expr = expr.replace(
+    /Color\.rgb\(@intCast\(\(([^)]+)\s*>>\s*16\)\s*&\s*0xFF\),\s*@intCast\(\(([^)]+)\s*>>\s*8\)\s*&\s*0xFF\),\s*@intCast\(([^)]+)\s*&\s*0xFF\)\)/g,
+    function(_, hi, mid, lo) {
+      if (hi.trim() === mid.trim() && mid.trim() === lo.trim()) return hi.trim();
+      return 'Color.rgb(@intCast((' + hi + ' >> 16) & 0xFF), @intCast((' + mid + ' >> 8) & 0xFF), @intCast(' + lo + ' & 0xFF))';
+    }
+  );
   // Zig: Color{} placeholder → 0x000000
   expr = expr.replace(/\bColor\{\}/g, '0x000000');
 
@@ -317,6 +353,23 @@ function validateContract(node) {
   return errors;
 }
 
+function _looksLikeJsxTag(str) {
+  return typeof str === 'string' && /<\/?[A-Za-z]/.test(str);
+}
+
+function _isSupportedPackedColorExpr(str) {
+  return typeof str === 'string' &&
+    /^Color\.rgb\(@intCast\(\((.+)\s*>>\s*16\)\s*&\s*0xFF\),\s*@intCast\(\((.+)\s*>>\s*8\)\s*&\s*0xFF\),\s*@intCast\((.+)\s*&\s*0xFF\)\)$/.test(str);
+}
+
+function _isDefinitelyFalse(cond) {
+  if (typeof cond !== 'string') return false;
+  var c = cond.replace(/\s+/g, ' ').trim();
+  return c === '0' || c === 'false' || c === '(0)' || c === '(false)' ||
+    c === '0 ~= 1 and 0' || c === '(0 ~= 1 and 0)' ||
+    /(^| )and 0$/.test(c);
+}
+
 function _validateNode(node, path, errors) {
   if (!node || typeof node !== 'object') return;
 
@@ -330,7 +383,7 @@ function _validateNode(node, path, errors) {
   }
 
   // Condition field should not contain JSX
-  if (typeof node.condition === 'string' && node.condition.indexOf('<') >= 0) {
+  if (_looksLikeJsxTag(node.condition)) {
     errors.push(path + '.condition: contains "<" — likely unparsed JSX');
   }
 
@@ -353,7 +406,7 @@ function _validateNode(node, path, errors) {
   if (node.style && typeof node.style === 'object') {
     for (var sk in node.style) {
       var sv = node.style[sk];
-      if (typeof sv === 'string' && sv.indexOf('@intCast') >= 0) {
+      if (typeof sv === 'string' && sv.indexOf('@intCast') >= 0 && !_isSupportedPackedColorExpr(sv)) {
         errors.push(path + '.style.' + sk + ': contains Zig @intCast');
       }
     }
@@ -365,16 +418,17 @@ function _validateNode(node, path, errors) {
       var child = node.children[ci];
       if (!child) continue;
       var cp = path + '.children[' + ci + ']';
+      var childDefinitelyFalse = _isDefinitelyFalse(child.condition);
       if (child.tag || child.style || child.text !== undefined) _validateNode(child, cp, errors);
-      if (child.node) _validateNode(child.node, cp + '.node', errors);
-      if (child.trueNode) _validateNode(child.trueNode, cp + '.trueNode', errors);
-      if (child.falseNode) _validateNode(child.falseNode, cp + '.falseNode', errors);
-      if (child.condition && typeof child.condition === 'string' && child.condition.indexOf('<') >= 0) {
+      if (!childDefinitelyFalse && child.node) _validateNode(child.node, cp + '.node', errors);
+      if (!childDefinitelyFalse && child.trueNode) _validateNode(child.trueNode, cp + '.trueNode', errors);
+      if (!childDefinitelyFalse && child.falseNode) _validateNode(child.falseNode, cp + '.falseNode', errors);
+      if (_looksLikeJsxTag(child.condition)) {
         errors.push(cp + '.condition: contains "<" — likely unparsed JSX');
       }
       // Map loop body
       var ml = child.luaMapLoop || child;
-      if (ml.bodyNode) _validateNode(ml.bodyNode, cp + '.bodyNode', errors);
+      if (!childDefinitelyFalse && ml.bodyNode) _validateNode(ml.bodyNode, cp + '.bodyNode', errors);
       if (child.nestedMap && child.nestedMap.bodyNode) {
         _validateNode(child.nestedMap.bodyNode, cp + '.nestedMap.bodyNode', errors);
       }

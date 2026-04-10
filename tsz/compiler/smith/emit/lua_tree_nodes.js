@@ -5,6 +5,108 @@
 function emitLuaTreeLuaSource(ctx) {
   var lua = [];
 
+  function _looksLikeRawLua(src) {
+    if (!src) return false;
+    if (/ffi\.cdef\s*\[\[/.test(src)) {
+      return true;
+    }
+    if (/\b(?:const|let|var)\b|===|!==|&&|\|\||=>|console\.|Math\.|\bif\s*\(|\bfor\s*\(|\bwhile\s*\(|\bfunction\s+\w+\s*\([^)]*\)\s*\{|\}\s*else(?:\s+if)?\s*\{/.test(src)) {
+      return false;
+    }
+    if (/(?:^|\n)\s*(?:<[/]?(?:if|for|during|else)\b|\w+(?:\s+every\s+[^:]+)?\s*:\s*$|set_[A-Za-z_]\w*\s+is\b|[A-Za-z_][\w.\[\]]*\s+is\s+)/m.test(src)) {
+      return false;
+    }
+    return /(?:^|\n)\s*(?:local\s+\w+|function\s+\w+\s*\(|ffi\.cdef|return\b|if\b.+\bthen\b|elseif\b|for\b.+\bdo\b|while\b.+\bdo\b|end\b|require\s*\(|(?:local\s+)?[A-Za-z_]\w*\s*=\s*\{)/m.test(src);
+  }
+
+  function _lowerLscriptHatch(src) {
+    var lines = src.split('\n');
+    var out = [];
+    var stack = [];
+
+    function closeFunctions(indent) {
+      while (stack.length > 0) {
+        var top = stack[stack.length - 1];
+        if (top.kind !== 'function' || indent > top.indent) break;
+        out.push(' '.repeat(top.indent) + 'end');
+        stack.pop();
+      }
+    }
+
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i];
+      var padMatch = line.match(/^\s*/);
+      var pad = padMatch ? padMatch[0] : '';
+      var indent = pad.length;
+      var trimmed = line.trim();
+      if (!trimmed) {
+        out.push('');
+        continue;
+      }
+
+      var m;
+      if ((m = trimmed.match(/^<\/(?:if|for|during)>$/))) {
+        out.push(pad + 'end');
+        if (stack.length > 0) stack.pop();
+        continue;
+      }
+      if ((m = trimmed.match(/^<else if\s+(.+)>$/))) {
+        out.push(pad + 'elseif ' + m[1] + ' then');
+        continue;
+      }
+      if (trimmed === '<else>') {
+        out.push(pad + 'else');
+        continue;
+      }
+      if ((m = trimmed.match(/^(\w+)(?:\s+every\s+[^:]+)?\s*:\s*$/))) {
+        closeFunctions(indent);
+        out.push(pad + 'function ' + m[1] + '()');
+        stack.push({ kind: 'function', indent: indent });
+        continue;
+      }
+      if ((m = trimmed.match(/^<if\s+(.+)>$/))) {
+        out.push(pad + 'if ' + m[1] + ' then');
+        stack.push({ kind: 'tag', indent: indent });
+        continue;
+      }
+      if ((m = trimmed.match(/^<during\s+(.+)>$/))) {
+        out.push(pad + 'if ' + m[1] + ' then');
+        stack.push({ kind: 'tag', indent: indent });
+        continue;
+      }
+      if ((m = trimmed.match(/^<for\s+(.+)\s+as\s+(\w+)\s*,\s*(\w+)>$/))) {
+        out.push(pad + 'for ' + m[2] + ', ' + m[3] + ' in pairs(' + m[1] + ') do');
+        stack.push({ kind: 'tag', indent: indent });
+        continue;
+      }
+      if ((m = trimmed.match(/^<for\s+(.+)\s+as\s+(\w+)>$/))) {
+        out.push(pad + 'for _, ' + m[2] + ' in ipairs(' + m[1] + ') do');
+        stack.push({ kind: 'tag', indent: indent });
+        continue;
+      }
+
+      var lowered = trimmed.replace(/^((?:set_[A-Za-z_]\w*))\s+is\s+(.+)$/, '$1($2)');
+      if (lowered === trimmed) {
+        lowered = trimmed.replace(/^([A-Za-z_][\w.\[\]]*)\s+is\s+(.+)$/, '$1 = $2');
+      }
+      out.push(pad + lowered);
+    }
+
+    while (stack.length > 0) {
+      var top = stack.pop();
+      out.push(' '.repeat(top.indent) + 'end');
+    }
+
+    return out.join('\n');
+  }
+
+  function _compileLscript(src) {
+    var cleaned = (src || '').replace(/^<\/?lscript>$/gm, '').trim();
+    if (!cleaned) return '';
+    if (_looksLikeRawLua(cleaned)) return cleaned;
+    return luaTransform(_lowerLscriptHatch(cleaned));
+  }
+
   // State atom pool
   lua.push('local _state = {}');
   lua.push('function _getState(k) return _state[k] end');
@@ -107,6 +209,17 @@ function emitLuaTreeLuaSource(ctx) {
     }
   }
 
+  // Explicit <lscript> blocks — collected separately from <script>.
+  if (ctx.luaBlock) {
+    var _compiledLscript = _compileLscript(ctx.luaBlock);
+    if (_compiledLscript) {
+      lua.push('-- <lscript> block');
+      var _lscriptLines = _compiledLscript.split('\n');
+      for (var lsi = 0; lsi < _lscriptLines.length; lsi++) lua.push(_lscriptLines[lsi]);
+      lua.push('');
+    }
+  }
+
   // OA setters (arrays)
   if (ctx.objectArrays && ctx.objectArrays.length > 0) {
     for (var oi = 0; oi < ctx.objectArrays.length; oi++) {
@@ -190,9 +303,59 @@ function emitLuaTreeLuaSource(ctx) {
   // This is the LAST stop before LUA_LOGIC becomes a string literal.
   // Protect __eval("...") and js_on_press = "..." strings first.
   var result = lua.join('\n');
+  function _rewriteLuaSafeEvalAtGate(entry) {
+    if (!entry || entry.indexOf('__eval("') !== 0) return entry;
+    var m = entry.match(/^__eval\("((?:[^"\\]|\\.)*)"\)$/);
+    if (!m) return entry;
+    var decoded = m[1]
+      .replace(/\\n/g, '\n')
+      .replace(/\\r/g, '\r')
+      .replace(/\\"/g, '"')
+      .replace(/\\\\/g, '\\');
+    function _stripQuotedStrings(str) {
+      return str
+        .replace(/"(?:[^"\\]|\\.)*"/g, '""')
+        .replace(/'(?:[^'\\]|\\.)*'/g, "''");
+    }
+    function _rewriteInlineIfExpr(str) {
+      var out = str;
+      for (var iter = 0; iter < 8; iter++) {
+        var mIf = out.match(/\(if\s*\(([^()]*(?:\([^()]*\)[^()]*)*)\)\s*([^()?:]+?)\s*else\s*([^()?:]+?)\)/);
+        if (!mIf) break;
+        out = out.replace(mIf[0], '((' + mIf[1].trim() + ') and ' + mIf[2].trim() + ' or ' + mIf[3].trim() + ')');
+      }
+      return out;
+    }
+    decoded = decoded.replace(/\b((?:_(?:n)?item|[A-Za-z_]\w*)(?:\.[A-Za-z_]\w+)*)_length\b/g, '#($1)');
+    decoded = decoded.replace(/\b((?:_(?:n)?item|[A-Za-z_]\w*)(?:\.[A-Za-z_]\w+)*)\.length\b/g, '#($1)');
+    decoded = decoded.replace(/\b((?:_(?:n)?item|[A-Za-z_]\w*)(?:\.[A-Za-z_]\w+)*)_indexOf\(([^)]+)\)\s*>=\s*0\b/g, '(string.find($1, $2, 1, true) ~= nil)');
+    decoded = decoded.replace(/\b((?:_(?:n)?item|[A-Za-z_]\w*)(?:\.[A-Za-z_]\w+)*)_indexOf\(([^)]+)\)\s*<\s*0\b/g, '(string.find($1, $2, 1, true) == nil)');
+    decoded = decoded.replace(/\b((?:_(?:n)?item|[A-Za-z_]\w*)(?:\.[A-Za-z_]\w+)*)_indexOf\(([^)]+)\)\s*==\s*0\b/g, '(string.find($1, $2, 1, true) == 1)');
+    decoded = decoded.replace(/\b((?:_(?:n)?item|[A-Za-z_]\w*)(?:\.[A-Za-z_]\w+)*)\.indexOf\(([^)]+)\)\s*>=\s*0\b/g, '(string.find($1, $2, 1, true) ~= nil)');
+    decoded = decoded.replace(/\b((?:_(?:n)?item|[A-Za-z_]\w*)(?:\.[A-Za-z_]\w+)*)\.indexOf\(([^)]+)\)\s*<\s*0\b/g, '(string.find($1, $2, 1, true) == nil)');
+    decoded = decoded.replace(/\b((?:_(?:n)?item|[A-Za-z_]\w*)(?:\.[A-Za-z_]\w+)*)\.indexOf\(([^)]+)\)\s*==\s*0\b/g, '(string.find($1, $2, 1, true) == 1)');
+    decoded = decoded.replace(/!std\.mem\.eql\(u8,\s*([^,]+),\s*([^)]+)\)/g, '($1 ~= $2)');
+    decoded = decoded.replace(/std\.mem\.eql\(u8,\s*([^,]+),\s*([^)]+)\)/g, '($1 == $2)');
+    decoded = _rewriteInlineIfExpr(decoded);
+    var scrubbed = _stripQuotedStrings(decoded);
+    if (scrubbed.indexOf('&&') >= 0) decoded = decoded.replace(/&&/g, ' and ');
+    if (scrubbed.indexOf('||') >= 0) decoded = decoded.replace(/\|\|/g, ' or ');
+    if (scrubbed.indexOf('!==') >= 0) decoded = decoded.replace(/!==/g, '~=');
+    if (scrubbed.indexOf('===') >= 0) decoded = decoded.replace(/===/g, '==');
+    scrubbed = _stripQuotedStrings(decoded);
+    if (scrubbed.indexOf('&&') >= 0 || scrubbed.indexOf('||') >= 0 ||
+        scrubbed.indexOf('===') >= 0 || scrubbed.indexOf('!==') >= 0 ||
+        /\?[^)]*:/.test(scrubbed) ||
+        scrubbed.indexOf('_indexOf(') >= 0 || scrubbed.indexOf('.indexOf(') >= 0 ||
+        scrubbed.indexOf('_length') >= 0 || scrubbed.indexOf('.length') >= 0 ||
+        scrubbed.indexOf('.charAt(') >= 0 || scrubbed.indexOf('||{}') >= 0) {
+      return entry;
+    }
+    return decoded;
+  }
   var protected = [];
-  result = result.replace(/__eval\("[^"]*"\)/g, function(m) {
-    protected.push(m); return '__JSPROTECT_' + (protected.length - 1) + '__';
+  result = result.replace(/__eval\("((?:[^"\\]|\\.)*)"\)/g, function(m) {
+    protected.push(_rewriteLuaSafeEvalAtGate(m)); return '__JSPROTECT_' + (protected.length - 1) + '__';
   });
   result = result.replace(/js_on_press = "[^"]*"/g, function(m) {
     protected.push(m); return '__JSPROTECT_' + (protected.length - 1) + '__';

@@ -2,7 +2,25 @@ function detectSurfaceTier(source, file) {
   if (!source) return 'mixed';
   if (typeof isSoupSource === 'function' && isSoupSource(source, file)) return 'soup';
 
-  const hasIntentBlocks = /<(page|widget|var|state|functions|timer)\b/.test(source);
+  var intentScan = null;
+  if (typeof scanIntentInputPatterns === 'function') {
+    intentScan = scanIntentInputPatterns(source);
+    ctx._inputPatterns = intentScan;
+  }
+  var strongIntentIds = {
+    c001: 1, c002: 1, c005: 1, c006: 1, c007: 1, c008: 1, c009: 1,
+    c013: 1, c014: 1, c015: 1, c016: 1, c017: 1, c018: 1,
+    c020: 1, c023: 1, c024: 1, c025: 1, c026: 1, c027: 1, c028: 1, c029: 1,
+  };
+  var hasIntentBlocks = false;
+  if (intentScan && intentScan.matchedIds) {
+    for (var ii = 0; ii < intentScan.matchedIds.length; ii++) {
+      if (strongIntentIds[intentScan.matchedIds[ii]]) {
+        hasIntentBlocks = true;
+        break;
+      }
+    }
+  }
   const hasClassifierTags = /<C\.[A-Za-z]/.test(source);
   const hasClassifierImport = /(?:^|\n)\s*from\s+['"][^'"]*(?:manifest|_cls|\.cls(?:\.tsz)?|\.tcls(?:\.tsz)?|\.vcls(?:\.tsz)?|\.effects(?:\.tsz)?|\.glyphs(?:\.tsz)?)[^'"]*['"]/.test(source);
   if (hasIntentBlocks || hasClassifierTags || hasClassifierImport) return 'chad';
@@ -48,10 +66,16 @@ function buildRoutePlan(source) {
 
 function buildSourceContractSnapshot(nodeExpr, file, extra) {
   extra = extra || {};
+  var inputPatterns = ctx._inputPatterns;
+  if (!inputPatterns && typeof scanIntentInputPatterns === 'function') {
+    inputPatterns = scanIntentInputPatterns(ctx._source || '');
+    ctx._inputPatterns = inputPatterns;
+  }
   var snapshot = {
     version: 'source-contract-v1',
     file: file,
     sourceTier: ctx._sourceTier || null,
+    inputPatterns: inputPatterns || null,
     routePlan: ctx._routePlan || null,
     preflight: ctx._preflight || null,
     rootExpr: nodeExpr || null,

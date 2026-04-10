@@ -14,12 +14,13 @@ function emitTypesBlock(content, typeNames, enumVariants, allVariants) {
     if (!line || line.startsWith('//')) { i++; continue; }
 
     // Type declaration: Name: ...
-    const declMatch = line.match(/^([A-Z]\w*):\s*(.*)$/);
+    const declMatch = line.match(/^([A-Za-z_]\w*):\s*(.*)$/);
     if (!declMatch) { i++; continue; }
 
     const name = declMatch[1];
     const rest = declMatch[2].trim();
     typeNames.push(name);
+    if (_modReservedNames.indexOf(name) === -1) _modReservedNames.push(name);
 
     // Tagged union: Name: union { ... }
     if (rest.startsWith('union')) {
@@ -37,7 +38,7 @@ function emitTypesBlock(content, typeNames, enumVariants, allVariants) {
         i++;
       }
       i++; // skip closing }
-      out += emitUnionDecl(name, bodyLines, typeNames);
+      out += emitUnionDecl(name, bodyLines, typeNames, allVariants);
       continue;
     }
 
@@ -76,10 +77,12 @@ function emitTypesBlock(content, typeNames, enumVariants, allVariants) {
 }
 
 function emitTypeAliasDecl(name, rest) {
+  _modTypeFieldMap[name] = null;
   return 'pub const ' + name + ' = ' + modTranspileType(rest) + ';\n\n';
 }
 
 function emitEnumDecl(name, rest, allVariants) {
+  _modTypeFieldMap[name] = null;
   const variants = rest.split('|').map(function(v) { return v.trim(); }).filter(Boolean);
   if (allVariants) { for (let v = 0; v < variants.length; v++) allVariants.push(variants[v]); }
   let out = 'pub const ' + name + ' = enum {\n';
@@ -91,6 +94,7 @@ function emitEnumDecl(name, rest, allVariants) {
 }
 
 function emitStructDecl(name, bodyLines, typeNames) {
+  _modTypeFieldMap[name] = {};
   let out = 'pub const ' + name + ' = struct {\n';
   for (let b = 0; b < bodyLines.length; b++) {
     const field = bodyLines[b].replace(/,\s*$/, '').trim();
@@ -98,6 +102,7 @@ function emitStructDecl(name, bodyLines, typeNames) {
     if (!fm) continue;
     const fname = fm[1];
     const rawType = fm[2].trim();
+    _modTypeFieldMap[name][fname] = rawType;
     const ftype = modTranspileType(rawType);
     let fdefault = fm[3] ? fm[3].trim() : null;
 
@@ -140,12 +145,16 @@ function inferDefault(rawType, zigType, typeNames) {
   return null;
 }
 
-function emitUnionDecl(name, bodyLines, typeNames) {
+function emitUnionDecl(name, bodyLines, typeNames, allVariants) {
+  void typeNames;
+  _modTypeFieldMap[name] = {};
   let out = 'pub const ' + name + ' = union(enum) {\n';
   for (let b = 0; b < bodyLines.length; b++) {
     const field = bodyLines[b].replace(/,\s*$/, '').trim();
     const fm = field.match(/^(\w+):\s*(.+)$/);
     if (!fm) continue;
+    if (allVariants) allVariants.push(fm[1]);
+    _modTypeFieldMap[name][fm[1]] = fm[2].trim();
     out += '    ' + zigEscape(fm[1]) + ': ' + modTranspileType(fm[2].trim()) + ',\n';
   }
   out += '};\n\n';

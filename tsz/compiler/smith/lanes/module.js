@@ -3,6 +3,10 @@ function isModuleLaneBuild() {
 }
 
 function compileModuleLane(source, file) {
+  var inputPatterns = typeof scanIntentInputPatterns === 'function' ? scanIntentInputPatterns(source) : null;
+  var moduleContract = typeof buildModuleSourceContract === 'function'
+    ? buildModuleSourceContract(source, file)
+    : null;
   if (globalThis.__SOURCE_CONTRACT_MODE === 1) {
     return JSON.stringify({
       version: 'source-contract-v1',
@@ -10,6 +14,8 @@ function compileModuleLane(source, file) {
       lane: 'module',
       target: globalThis.__modTarget || 'zig',
       sourceTier: 'module',
+      inputPatterns: inputPatterns,
+      moduleContract: moduleContract,
       sourceBytes: source ? source.length : 0,
     }, null, 2);
   }
