@@ -241,6 +241,7 @@ pub fn isReplaying() bool {
 pub fn exitCode() u8 {
     if (mode == .replay and replay_failed > 0) return 1;
     if (mode == .autotest and auto_failed > 0) return 1;
+    if (mode == .snapshot and snap_nil_count > 0) return 1;
     return 0;
 }
 
@@ -1204,6 +1205,12 @@ fn snapCollectTexts(root: *Node) void {
             snapAddFmt("# FAIL: internal marker leaked: \"{s}\"", .{txt});
             continue;
         }
+        // Detect unresolved prop references (props.field rendered as literal text)
+        if (txt.len >= 6 and std.mem.startsWith(u8, txt, "props.")) {
+            snap_nil_count += 1;
+            snapAddFmt("# FAIL: unresolved prop reference: \"{s}\"", .{txt});
+            continue;
+        }
         snapAddFmt("expect \"{s}\"", .{txt});
     }
 }
@@ -1440,7 +1447,11 @@ fn snapWriteFile() void {
     }
 
     file.writeAll(out_buf[0..pos]) catch {};
-    std.debug.print("[snapshot] wrote {d} expects + {d} clicks to {s}\n", .{ expect_count, click_count, path });
+    if (snap_nil_count > 0) {
+        std.debug.print("[snapshot] wrote {d} expects + {d} clicks + {d} FAILS to {s}\n", .{ expect_count, click_count, snap_nil_count, path });
+    } else {
+        std.debug.print("[snapshot] wrote {d} expects + {d} clicks to {s}\n", .{ expect_count, click_count, path });
+    }
 }
 
 fn autotestTick(root: *Node) bool {

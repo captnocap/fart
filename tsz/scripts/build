@@ -1012,6 +1012,7 @@ if [ "$IS_CONFORMANCE" -eq 1 ]; then
         if [ -f "$AUTOTEST_FILE" ]; then
             EXPECT_COUNT=$(grep -c '^expect ' "$AUTOTEST_FILE" 2>/dev/null || echo "0")
             CLICK_COUNT=$(grep -c '^click ' "$AUTOTEST_FILE" 2>/dev/null || echo "0")
+            FAIL_COUNT=$(grep -c '^# FAIL' "$AUTOTEST_FILE" 2>/dev/null || echo "0")
             # Parse health line: # health: N nodes, N text, N pressable, N state slots
             HEALTH_LINE=$(grep '^# health:' "$AUTOTEST_FILE" 2>/dev/null || true)
             if [ -n "$HEALTH_LINE" ]; then
@@ -1025,7 +1026,11 @@ if [ "$IS_CONFORMANCE" -eq 1 ]; then
             TEXT_COUNT=${TEXT_COUNT:-0}; [ -z "$TEXT_COUNT" ] && TEXT_COUNT=0
             PRESSABLE_COUNT=${PRESSABLE_COUNT:-0}; [ -z "$PRESSABLE_COUNT" ] && PRESSABLE_COUNT=0
             STATE_SLOTS=${STATE_SLOTS:-0}; [ -z "$STATE_SLOTS" ] && STATE_SLOTS=0
-            echo "[$NAME] snapshot: ${EXPECT_COUNT} expects + ${CLICK_COUNT} clicks in ${SNAP_MS}ms → $AUTOTEST_FILE"
+            if [ "${FAIL_COUNT:-0}" -gt 0 ]; then
+                echo "[$NAME] snapshot: ${EXPECT_COUNT} expects + ${CLICK_COUNT} clicks + ${FAIL_COUNT} FAILS in ${SNAP_MS}ms → $AUTOTEST_FILE"
+            else
+                echo "[$NAME] snapshot: ${EXPECT_COUNT} expects + ${CLICK_COUNT} clicks in ${SNAP_MS}ms → $AUTOTEST_FILE"
+            fi
         else
             echo "[$NAME] snapshot: failed to generate autotest (${SNAP_MS}ms)"
         fi
