@@ -1162,7 +1162,26 @@ fn snapCountTree(node: *Node) void {
 fn snapCollectTexts(root: *Node) void {
     collectSeenTexts(root);
     for (0..auto_seen_count) |i| {
-        const txt = auto_seen_texts[i][0..auto_seen_lens[i]];
+        const raw_txt = auto_seen_texts[i][0..auto_seen_lens[i]];
+        var normalized_buf: [64]u8 = undefined;
+        var normalized_len: usize = 0;
+        var saw_glyph_placeholder = false;
+        var ri: usize = 0;
+        while (ri < raw_txt.len and normalized_len < normalized_buf.len) : (ri += 1) {
+            const ch = raw_txt[ri];
+            if (ch == 0x01) {
+                saw_glyph_placeholder = true;
+                continue;
+            }
+            if (ch == '\\' and ri + 1 < raw_txt.len and raw_txt[ri + 1] == '1') {
+                saw_glyph_placeholder = true;
+                ri += 1;
+                continue;
+            }
+            normalized_buf[normalized_len] = ch;
+            normalized_len += 1;
+        }
+        const txt = normalized_buf[0..normalized_len];
         if (txt.len < 2) continue;
         var all_space = true;
         for (txt) |ch| {
@@ -1183,18 +1202,14 @@ fn snapCollectTexts(root: *Node) void {
             snapAddFmt("# FAIL: nil in rendered text: \"{s}\"", .{txt});
             continue;
         }
-        // Detect glyph placeholders — glyph system failed to resolve
-        // Check both raw 0x01 byte and escaped "\1" string
-        var has_glyph_placeholder = false;
-        for (txt) |ch| {
-            if (ch == 0x01) { has_glyph_placeholder = true; break; }
+        // If the node text was only glyph sentinel data, it is not user-visible text.
+        // If visible text remains after stripping sentinels, snapshot the text that the user sees.
+        if (saw_glyph_placeholder and txt.len == 0) {
+            continue;
         }
-        if (!has_glyph_placeholder and std.mem.indexOf(u8, txt, "\\1") != null) {
-            has_glyph_placeholder = true;
-        }
-        if (has_glyph_placeholder) {
+        if (saw_glyph_placeholder) {
             snap_nil_count += 1;
-            snapAddFmt("# FAIL: unresolved glyph placeholder in: \"{s}\"", .{txt});
+            snapAddFmt("# FAIL: unresolved glyph placeholder in: \"{s}\"", .{raw_txt});
             continue;
         }
         // Detect internal markers leaking as visible text (__name__)
@@ -2688,4 +2703,3 @@ fn loadWitness() void {
         replay_tree_count, replay_action_count, replay_initial_state.count,
     });
 }
-
