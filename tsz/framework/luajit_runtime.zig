@@ -703,6 +703,8 @@ fn stampLuaNode(L: ?*lua.lua_State, idx: c_int, alloc: std.mem.Allocator) Node {
         }
     }
     lua.lua_pop(L, 1);
+    // test_id (for snapshot click discovery)
+    node.test_id = readLuaOptString(L, idx, "test_id", alloc);
     // ── Window chrome fields ──
     node.window_drag = readLuaBool(L, idx, "window_drag");
     node.window_resize = readLuaBool(L, idx, "window_resize");

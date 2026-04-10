@@ -604,7 +604,18 @@ function _nodeToLua(node, itemParam, indexParam, indent, _luaIdxExpr, _currentOa
 
   // Handler
   var handlerField = _emitNodeHandler(node, itemParam, indexParam, _luaIdxExpr, _currentOaIdx);
-  if (handlerField) fields.push(handlerField);
+  if (handlerField) {
+    fields.push(handlerField);
+    // Auto-inject test_id from handler for snapshot click discovery
+    var _tid = node.handler || '';
+    if (typeof _tid === 'string' && _tid.length > 0) {
+      // Extract function name: "openTerminal ( )" → "openTerminal"
+      var _tidMatch = _tid.match(/^([a-zA-Z_]\w*)/);
+      if (_tidMatch) {
+        fields.push('test_id = ' + luaStringLiteral('press:' + _tidMatch[1]));
+      }
+    }
+  }
 
   // Canvas/Graph/3D fields
   var canvasFields = _emitNodeCanvasFields(node);
