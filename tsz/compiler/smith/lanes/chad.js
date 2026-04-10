@@ -78,11 +78,15 @@ function chadSourcePreflight(source, block) {
 function extractChadInner(source, block) {
   var openRe = new RegExp('<' + block.name + '\\s+' + block.type + '\\s*>');
   var openMatch = source.match(openRe);
-  if (!openMatch) return source;
+  if (!openMatch) return { body: source, start: 0, end: source.length };
   var startIdx = openMatch.index + openMatch[0].length;
   var endIdx = source.indexOf(block.closeTag, startIdx);
-  if (endIdx < 0) return source;
-  return source.slice(startIdx, endIdx);
+  if (endIdx < 0) return { body: source, start: 0, end: source.length };
+  return {
+    body: source.slice(startIdx, endIdx),
+    start: startIdx,
+    end: endIdx,
+  };
 }
 
 // ── Chad lane entry point ──
@@ -104,7 +108,12 @@ function compileChadLane(source, tokens, file) {
   }
 
   // ── Extract inner content ──
-  var inner = extractChadInner(source, block);
+  var innerInfo = extractChadInner(source, block);
+  var inner = innerInfo.body;
+
+  // ── Strict dictionary validation (hard fail on drift) ──
+  var strictReport = validateChadStrictSyntax(source, block, innerInfo);
+  if (!strictReport.ok) return renderChadStrictValidationError(strictReport);
 
   // ── Extract declarative blocks from inner source ──
   var varBlock = extractPageBlock(inner, 'var');

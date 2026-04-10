@@ -171,6 +171,7 @@ smith/preflight/intent_patterns.js
 smith/lanes/shared.js
 smith/lanes/app.js
 smith/lanes/page.js
+smith/lanes/chad/strict_validator.js
 smith/lanes/chad.js
 smith/lanes/module.js
 smith/lanes/soup.js

@@ -25,12 +25,12 @@ Track implementation work for strict intent/chad syntax alignment, hatch behavio
 - `[!]` blocked
 
 ## Phase 0: Guardrails
-- [ ] Add strict chad syntax validator pass.
-- [ ] Hard-fail on `<For each=...>` in chad lane with migration hint to `<for ...>`.
-- [ ] Hard-fail on `<state>` in chad lane with migration hint to `<var> set_*`.
-- [ ] Hard-fail on `<timer>` in chad lane with migration hint to `name every N:`.
-- [ ] Hard-fail on uppercase intent tag variants in chad lane.
-- [ ] Add diagnostics for backend-language leakage inside hatched intent functions.
+- [x] Add strict chad syntax validator pass.
+- [x] Hard-fail on `<For each=...>` in chad lane with migration hint to `<for ...>`.
+- [x] Hard-fail on `<state>` in chad lane with migration hint to `<var> set_*`.
+- [x] Hard-fail on `<timer>` in chad lane with migration hint to `name every N:`.
+- [x] Hard-fail on uppercase intent tag variants in chad lane.
+- [x] Add diagnostics for backend-language leakage inside hatched intent functions.
 
 ## Phase 1: Conformance Source Cleanup
 - [ ] Rewrite `tsz/carts/conformance/chad/apps/` to dictionary-correct syntax.
@@ -80,9 +80,11 @@ Track implementation work for strict intent/chad syntax alignment, hatch behavio
 
 ## Active Work Queue
 - [x] Create persistent task board file for multi-turn tracking.
-- [ ] Start Phase 0 implementation.
+- [x] Start Phase 0 implementation.
+- [ ] Start Phase 1 chad app syntax rewrites.
 
 ## Notes
 - Mixed lane remains operational bridge lane.
 - Soup remains React-proxy lane.
 - Chad lane remains strict explicit intent lane with dictionary authority.
+- Phase 0 implementation lives in `tsz/compiler/smith/lanes/chad/strict_validator.js` and is wired in `tsz/compiler/smith/lanes/chad.js`.
