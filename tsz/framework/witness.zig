@@ -1263,9 +1263,16 @@ fn snapFindPressRecurse(node: *Node, scroll_y: f32) void {
         if (label == null) {
             label = findFirstChildText(node);
         }
+        // Fallback: use any available identifier for unlabeled pressables
+        if (label == null) {
+            if (node.test_id) |tid| label = tid
+            else if (node.debug_name) |dn| label = dn
+            else if (h.js_on_press) |jp| label = std.mem.span(jp)
+            else if (h.lua_on_press) |lp| label = std.mem.span(lp);
+        }
         if (label) |lbl| {
             // Skip glyph placeholders (\x01 byte, "\1"/"\\1", or "\x01"/"\\x01" escaped strings) and non-printable labels
-            var is_valid_label = lbl.len >= 2 and lbl.len <= 64;
+            var is_valid_label = lbl.len >= 2;
             if (is_valid_label) {
                 // Check for raw 0x01 byte
                 for (lbl) |ch| {
