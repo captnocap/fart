@@ -42,11 +42,13 @@ function emitOutput(rootExpr, file) {
     // Contract validation — stop build if contract is broken
     var _contractErrors = validateContract(ctx._luaRootNode);
     if (_contractErrors.length > 0) {
-      print('[CONTRACT FAIL] ' + _contractErrors.length + ' error(s) in source contract:');
+      // Embed errors in the return string so forge can print them
+      var _errMsg = '__CONTRACT_FAIL__\n';
+      _errMsg += _contractErrors.length + ' error(s) in source contract:\n';
       for (var _cei = 0; _cei < _contractErrors.length; _cei++) {
-        print('  ' + _contractErrors[_cei]);
+        _errMsg += '  ' + _contractErrors[_cei] + '\n';
       }
-      return '__CONTRACT_FAIL__';
+      return _errMsg;
     }
     var _ltOut = emitLuaTreeApp(ctx, rootExpr, file);
     return finalizeEmitOutput(_ltOut, file);

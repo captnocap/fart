@@ -421,9 +421,13 @@ pub fn main() !void {
     };
 
     // Contract validation — if the contract is broken, stop the build
-    if (std.mem.indexOf(u8, zig_output, "__CONTRACT_FAIL__") != null) {
+    if (std.mem.indexOf(u8, zig_output, "__CONTRACT_FAIL__")) |fail_pos| {
         std.debug.print("[forge] CONTRACT VALIDATION FAILED — build stopped\n", .{});
-        std.debug.print("[forge] Fix the compiler. The contract has errors that would produce broken output.\n", .{});
+        // Print the embedded error details (everything after __CONTRACT_FAIL__\n)
+        const detail_start = fail_pos + "__CONTRACT_FAIL__\n".len;
+        if (detail_start < zig_output.len) {
+            std.debug.print("{s}", .{zig_output[detail_start..]});
+        }
         std.process.exit(1);
     }
 
