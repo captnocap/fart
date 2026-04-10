@@ -10,18 +10,19 @@ Reference for the live Smith compiler at `tsz/compiler/smith/`.
      - resolves imports and merges source
      - lexes merged source into flat token triplets
      - sets QuickJS globals (__source, __tokens, __file, __scriptContent, __clsContent, flags)
-     - calls Smith compile()
+     - calls Smith compile(), smithCheck(), or sourceContract()
 
   -> Smith (JS compiler, ~43,200 lines across 354 files in 48 directories)
      - entry-lane dispatch: soup / module / page / app
      - surface-tier scan: soup / mixed / chad
      - collection + parse fill ctx
      - preflight validates ctx
+     - contract mode returns a JSON source-contract snapshot before emit
      - emit returns Zig + LUA_LOGIC (default) or split-output payloads
 
   -> Forge
-     - stamps integrity header
-     - writes generated output
+     - stamps integrity header for build mode
+     - writes generated output or `source_contract_<stem>.json`
 ```
 
 QuickJS does not resolve runtime imports. Forge embeds one generated Smith bundle from `smith_LOAD_ORDER.txt`.
@@ -34,7 +35,7 @@ All Smith source lives under `tsz/compiler/smith/`:
 
 | File | Role |
 |------|------|
-| `index.js` | Entry point: `compile()`, `stampIntegrity()`, `compileMod()`, `compileModLua()` |
+| `index.js` | Entry point: `compile()`, `sourceContract()`, `stampIntegrity()`, `compileMod()`, `compileModLua()` |
 | `core.js` | Shared cursor helpers, ctx reset, slot helpers, runtime-log wrappers |
 | `rules.js` | Token enums, style keys, color tables, soup constants |
 | `attrs.js` | Thin entry surface — delegates to `parse/attrs/*.js` |
@@ -75,9 +76,78 @@ Commands:
 zig build smith-sync      # verify manifest coverage
 zig build smith-bundle    # rebuild bundle
 zig build forge           # rebuild forge (embeds bundle)
+./scripts/contract path/to/app.tsz   # capture source contract JSON without emit/build
+./zig-out/bin/forge contract path/to/app.tsz
 ```
 
 All native Zig tools. No Node runtime required.
+
+## Contract Validation Pipeline
+
+The compiler has a three-stage gate between parse and emit:
+
+```text
+Parse → Contract (luaNode tree)
+           ↓
+       Sanitize (JS→Lua conversion — single source of truth)
+           ↓
+       Validate (stop build if contract is broken)
+           ↓
+       Emit (Zig + LUA_LOGIC)
+```
+
+### Sanitizer (`contract/sanitize_for_lua.js`)
+
+**The ONLY place that converts JS operators to Lua.** Runs on the entire luaNode tree before emit sees it. Handles:
+
+- JS operators: `||` → `or`, `&&` → `and`, `!==` → `~=`, `!` → `not`
+- JS ternary: `a ? b : c` → `(a) and b or c`
+- JS comments: `//` → `--`
+- JS string concat: `+` → `..` (when string operands detected)
+- JS `.length` → Lua `#`
+- Zig builtins: `@as()`, `@intCast()`, `@floatFromInt()` → stripped
+- Zig `std.mem.eql` → Lua `==`/`~=`
+- Zig `if/else` → Lua `and/or`
+- Colors: `#hex` → `0xhex`, `Color.rgb()` → `0xhex`, `Color{}` → `0x000000`
+- Zig enums: `.row` → `"row"`
+- Bitwise: `&`/`|`/`^`/`>>`/`<<` → `bit.*`
+
+No emit atom should perform these conversions. If you see an operator leak in generated Lua, fix the sanitizer — not the emit atom.
+
+### Validator (`contract/sanitize_for_lua.js` → `validateContract()`)
+
+Walks the contract tree and checks for:
+
+- **JSX contamination**: close tags (`</Text>`, `</Box>`) in any string field
+- **Unparsed JSX**: `<` in condition expressions
+- **JS operators in text**: `||`, `&&`, `!==` that survived sanitization
+- **Unresolved props**: `props.` references that weren't inlined
+- **Zig builtins**: `@intCast`, `@as()`, `state.getSlot` that weren't converted
+
+If validation finds errors, forge returns `__CONTRACT_FAIL__` and exits with code 1. **The build stops.** No Zig compilation, no linking, no wasted time.
+
+### Final Gate (`emit/lua_tree_nodes.js`)
+
+After emit assembles the LUA_LOGIC string, a final pass catches any operators that slipped through emit's own string assembly (e.g. handler concat, text fallback chains). Protects `__eval()` and `js_on_press` strings from conversion since those run in QJS, not Lua.
+
+## Build Script Integration
+
+`scripts/build` runs after forge:
+
+1. **Snapshot** (`ZIGOS_WITNESS=snapshot`): runs binary headless, collects all rendered text + clicks every pressable node, writes `.autotest` file
+2. **Contract check**: runs `forge contract`, checks for JSX contamination
+3. **DB record**: writes expect/click counts, node health metrics, contract status to `conformance.db` snapshots table
+
+The autotest detects broken output:
+- `nil` in rendered text → FAIL (Lua expression returned nil)
+- `\x01` in rendered text → FAIL (unresolved glyph placeholder)
+- `__marker__` in rendered text → FAIL (internal marker leaked)
+
+Query snapshot health:
+```sql
+SELECT test_name, expect_count, click_count, node_count, contract_clean
+FROM snapshots ORDER BY snapped_at DESC;
+```
 
 ## Entry Lanes vs Surface Tiers
 
@@ -103,8 +173,15 @@ The entry lane decides which compiler path runs. The surface tier describes the 
 `index.js` owns:
 
 - `compile()` -> reads Forge globals, calls `compileLane(source, tokens, file)`
+- `sourceContract()` -> toggles contract-only mode, then runs `compileLane(...)`
 - `stampIntegrity(out)` -> prefixes generated output before Forge finalizes body hash
 - `compileMod()` / `compileModLua()` -> line-based module transpilers
+
+Forge front-door commands:
+
+- `forge build <file.tsz>` -> full compile path through emit and generated Zig
+- `forge check <file.tsz>` -> route scan / predicted atom report only
+- `forge contract <file.tsz>` -> parse + preflight + source contract JSON, no emit
 
 ### App lane
 
@@ -145,8 +222,15 @@ The entry lane decides which compiler path runs. The surface tier describes the 
 
 1. `preflight(ctx)` — via `validate.js`
 2. `preflightErrorZig(...)` on failure
-3. `emitOutput(nodeExpr, file)` on success
-4. `stampIntegrity(...)` unless split output already bypassed wrapping
+3. `buildSourceContractSnapshot(nodeExpr, file)` when `__SOURCE_CONTRACT_MODE === 1`
+4. `emitOutput(nodeExpr, file)` on success in normal build mode
+5. `stampIntegrity(...)` unless split output already bypassed wrapping
+
+Contract output shape:
+
+- Versioned JSON snapshot: `source-contract-v1`
+- Written by Forge to `/tmp/tsz-gen/source_contract_<stem>.json` by default
+- Includes: `routePlan`, `preflight`, `rootExpr`, `luaRootNode`, `luaMapRebuilders`, `stateSlots`, `objectArrays`, `maps`, `handlers`, `dynTexts`, `scriptBlock`, and compiler debug buckets
 
 ## Parse (55 files, ~10,614 lines)
 
