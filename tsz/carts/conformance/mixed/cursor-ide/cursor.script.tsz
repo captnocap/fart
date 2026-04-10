@@ -578,6 +578,7 @@ function buildLandingProjects(paths: any, info: any) {
     {
       name: workspaceName,
       path: '__landing__',
+      displayPath: 'Project landing',
       summary: 'Branch ' + info.branch + ' with ' + info.dirty + ' dirty paths and ' + paths.length + ' indexed files.',
       badge: 'workspace',
       accent: '#2d62ff',
@@ -585,6 +586,7 @@ function buildLandingProjects(paths: any, info: any) {
     {
       name: 'cursor-ide cart',
       path: 'tsz/carts/conformance/mixed/cursor-ide/cursor-ide.tsz',
+      displayPath: 'tsz/carts/conformance/mixed/cursor-ide/cursor-ide.tsz',
       summary: 'Mixed-lane IDE clone where aggressive UI ideas are allowed to break the compiler.',
       badge: 'focus',
       accent: '#7ee787',
@@ -592,6 +594,7 @@ function buildLandingProjects(paths: any, info: any) {
     {
       name: 'settings surface',
       path: '__settings__',
+      displayPath: 'Settings',
       summary: 'Provider routing, context layering, memory orchestration, plugin runtimes, and capability references in one dense shell.',
       badge: 'surface',
       accent: '#d2a8ff',
@@ -602,6 +605,7 @@ function buildLandingProjects(paths: any, info: any) {
     projects.push({
       name: 'architecture',
       path: 'tsz/docs/ARCHITECTURE.md',
+      displayPath: 'tsz/docs/ARCHITECTURE.md',
       summary: 'Runtime split notes for Zig, LuaJIT, and QuickJS.',
       badge: 'docs',
       accent: '#d2a8ff',
@@ -612,6 +616,7 @@ function buildLandingProjects(paths: any, info: any) {
     projects.push({
       name: 'smith dictionary',
       path: 'tsz/compiler/smith_DICTIONARY.md',
+      displayPath: 'tsz/compiler/smith_DICTIONARY.md',
       summary: 'Compiler map for the active Smith layout and emit stack.',
       badge: 'compiler',
       accent: '#ffa657',
@@ -628,10 +633,14 @@ function buildLandingRecentFiles(paths: any, info: any) {
   function pushRecent(path: string, label: string, reason: string) {
     var clean = stripDotSlash(path);
     if (!clean || seen[clean]) return;
+    var displayPath = clean;
+    if (clean == '__landing__') displayPath = 'Project landing';
+    if (clean == '__settings__') displayPath = 'Settings';
     seen[clean] = 1;
     var type = inferFileType(clean);
     recent.push({
       path: clean,
+      displayPath: displayPath,
       label: label,
       reason: reason,
       icon: fileGlyph(type),

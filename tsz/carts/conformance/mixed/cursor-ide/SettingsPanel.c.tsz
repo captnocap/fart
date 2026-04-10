@@ -156,7 +156,8 @@ function SettingsPanel(props) {
           <Text fontSize={11} color="#c9d2df" lineHeight={18}>This page is deliberately product-dense. It pulls compiler pressure into one surface instead of scattering it across toy carts: model providers, orchestrated context, SQLite-backed memory, Lua/QJS plugin runtimes, automation rules, and capability references.</Text>
 
           <Box style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
-            <DenseChip label={'model ' + props.selectedModelName} color="#ff7b72" borderColor="#5a1f24" backgroundColor="#181015" />
+            <DenseChip label="model" color="#ff7b72" borderColor="#5a1f24" backgroundColor="#181015" />
+            <DenseChip label={props.selectedModelName} color="#ff7b72" borderColor="#5a1f24" backgroundColor="#181015" />
             <DenseChip label={props.workspaceName} color="#79c0ff" />
             <DenseChip label={props.gitBranch} color="#7ee787" />
             <DenseChip label={props.agentStatusText} color="#d2a8ff" />
@@ -182,7 +183,7 @@ function SettingsPanel(props) {
           <Box style={{ flexDirection: 'column', gap: 14, flexGrow: 1, flexBasis: 0 }}>
             {props.activeSection == 'providers' && <Box style={{ flexDirection: 'column', gap: 14 }}>
               <Box style={{ padding: 14, borderRadius: 14, borderWidth: 1, borderColor: '#1f2935', backgroundColor: '#10151d', gap: 12 }}>
-                <PanelHeader icon="package" title="Model Providers" meta="Real routing, auth, and policy surfaces instead of one hard-coded picker." trailing={props.providers.length + ' providers'} />
+                <PanelHeader icon="package" title="Model Providers" meta="Real routing, auth, and policy surfaces instead of one hard-coded picker." trailing={props.providers.length} />
                 <Box style={{ flexDirection: 'column', gap: 10 }}>
                   {props.providers.map(function(provider, idx) {
                     return <ProviderRow key={idx} provider={provider} active={provider.id == props.selectedProviderId ? 1 : 0} onSelect={props.onSelectProvider} />;
@@ -214,7 +215,7 @@ function SettingsPanel(props) {
 
             {props.activeSection == 'context' && <Box style={{ flexDirection: 'column', gap: 14 }}>
               <Box style={{ padding: 14, borderRadius: 14, borderWidth: 1, borderColor: '#1f2935', backgroundColor: '#10151d', gap: 12 }}>
-                <PanelHeader icon="folder" title="Context Components" meta="Workspace, MCP-like sources, git, and focus surfaces that should be sharable across chat, editor, landing, and automations." trailing={props.contextRows.length + ' sources'} />
+                <PanelHeader icon="folder" title="Context Components" meta="Workspace, MCP-like sources, git, and focus surfaces that should be sharable across chat, editor, landing, and automations." trailing={props.contextRows.length} />
                 <Box style={{ flexDirection: 'column', gap: 10 }}>
                   {props.contextRows.map(function(item, idx) {
                     return <InfoRow key={idx} item={item} />;
@@ -225,7 +226,7 @@ function SettingsPanel(props) {
 
             {props.activeSection == 'memory' && <Box style={{ flexDirection: 'column', gap: 14 }}>
               <Box style={{ padding: 14, borderRadius: 14, borderWidth: 1, borderColor: '#1f2935', backgroundColor: '#10151d', gap: 12 }}>
-                <PanelHeader icon="bot" title="Memory Orchestration" meta="Session, workspace, and durable stores should coordinate instead of duplicating context." trailing={props.memoryRows.length + ' banks'} />
+                <PanelHeader icon="bot" title="Memory Orchestration" meta="Session, workspace, and durable stores should coordinate instead of duplicating context." trailing={props.memoryRows.length} />
                 <Box style={{ flexDirection: 'column', gap: 10 }}>
                   {props.memoryRows.map(function(item, idx) {
                     return <InfoRow key={idx} item={item} />;
@@ -236,7 +237,7 @@ function SettingsPanel(props) {
 
             {props.activeSection == 'plugins' && <Box style={{ flexDirection: 'column', gap: 14 }}>
               <Box style={{ padding: 14, borderRadius: 14, borderWidth: 1, borderColor: '#1f2935', backgroundColor: '#10151d', gap: 12 }}>
-                <PanelHeader icon="palette" title="Plugin Runtimes" meta="Cursor / VS Code parity has to be modeled as real runtime surfaces, not just docs." trailing={props.pluginRows.length + ' runtimes'} />
+                <PanelHeader icon="palette" title="Plugin Runtimes" meta="Cursor / VS Code parity has to be modeled as real runtime surfaces, not just docs." trailing={props.pluginRows.length} />
                 <Box style={{ flexDirection: 'column', gap: 10 }}>
                   {props.pluginRows.map(function(item, idx) {
                     return <InfoRow key={idx} item={item} />;
@@ -247,7 +248,7 @@ function SettingsPanel(props) {
 
             {props.activeSection == 'automations' && <Box style={{ flexDirection: 'column', gap: 14 }}>
               <Box style={{ padding: 14, borderRadius: 14, borderWidth: 1, borderColor: '#1f2935', backgroundColor: '#10151d', gap: 12 }}>
-                <PanelHeader icon="sparkles" title="Automation Rules" meta="IFTTT-style orchestration belongs in the product surface so plugins and runtime hooks can consume the same rule graph." trailing={props.automationRows.length + ' rules'} />
+                <PanelHeader icon="sparkles" title="Automation Rules" meta="IFTTT-style orchestration belongs in the product surface so plugins and runtime hooks can consume the same rule graph." trailing={props.automationRows.length} />
                 <Box style={{ flexDirection: 'column', gap: 10 }}>
                   {props.automationRows.map(function(item, idx) {
                     return <InfoRow key={idx} item={item} />;
@@ -258,7 +259,7 @@ function SettingsPanel(props) {
 
             {props.activeSection == 'capabilities' && <Box style={{ flexDirection: 'column', gap: 14 }}>
               <Box style={{ padding: 14, borderRadius: 14, borderWidth: 1, borderColor: '#1f2935', backgroundColor: '#10151d', gap: 12 }}>
-                <PanelHeader icon="alert" title="Compiler Stress Map" meta="Feature references already present in ReactJIT that should be pulled into the IDE cart as real production affordances." trailing={props.capabilityRows.length + ' capabilities'} />
+                <PanelHeader icon="alert" title="Compiler Stress Map" meta="Feature references already present in ReactJIT that should be pulled into the IDE cart as real production affordances." trailing={props.capabilityRows.length} />
                 <Box style={{ flexDirection: 'column', gap: 10 }}>
                   {props.capabilityRows.map(function(item, idx) {
                     return <CapabilityRow key={idx} item={item} />;

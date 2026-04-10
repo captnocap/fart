@@ -30,6 +30,14 @@ function emitLuaTreeApp(ctx, rootExpr, file) {
   zig += '// ── Generated node tree ──\n';
   zig += 'var _root = Node{ .style = .{ .width = -1, .height = -1 } };\n\n';
 
+  // Native zscript helpers and runtime wrappers
+  var nativeSection = emitNativeZscriptSection(ctx);
+  if (nativeSection) {
+    zig += nativeSection;
+    if (nativeSection.charAt(nativeSection.length - 1) !== '\n') zig += '\n';
+    zig += '\n';
+  }
+
   // JS_LOGIC
   zig += '// ── Embedded JS logic ──\n';
   var jsContent = emitLuaTreeJsLogic(ctx);

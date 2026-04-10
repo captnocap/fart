@@ -42,6 +42,8 @@ fn inlineGlyphSentinelLen(text: []const u8, i: usize) usize {
     if (i >= text.len) return 0;
     if (text[i] == 0x01) return 1;
     if (text[i] != '\\') return 0;
+    if (i + 2 < text.len and text[i + 1] == '\\' and text[i + 2] == '1') return 3;
+    if (i + 4 < text.len and text[i + 1] == '\\' and text[i + 2] == 'x' and text[i + 3] == '0' and text[i + 4] == '1') return 5;
     if (i + 1 < text.len and text[i + 1] == '1') return 2;
     if (i + 3 < text.len and text[i + 1] == 'x' and text[i + 2] == '0' and text[i + 3] == '1') return 4;
     return 0;

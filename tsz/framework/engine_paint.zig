@@ -193,10 +193,25 @@ pub fn paintNode(node: *Node) void {
 }
 
 /// Paint a Canvas.Path node (SVG stroke curves + optional blend2d fill).
+/// Standalone path nodes (canvas_path_d set, canvas_path false) auto-scale
+/// their 24×24 viewbox paths to fit the node's computed rect — used for icons.
 pub fn paintCanvasPath(node: *Node) callconv(.auto) void {
     @setRuntimeSafety(false);
     if (node.canvas_path_d) |d| {
         const tc = node.text_color orelse Color.rgb(255, 255, 255);
+
+        // Standalone path (icon mode): scale path to fit node bounds
+        const r = node.computed;
+        const is_icon = !node.canvas_path and r.w > 0 and r.h > 0;
+        if (is_icon) {
+            // Lucide icons use a 24×24 viewbox
+            const vb: f32 = 24.0;
+            const scale = @min(r.w / vb, r.h / vb);
+            const ox = r.x + (r.w - vb * scale) / 2;
+            const oy = r.y + (r.h - vb * scale) / 2;
+            gpu.setTransform(0, 0, ox, oy, scale);
+        }
+
         // Fill pass — either from named effect texture or flat color
         if (node.canvas_fill_effect) |ename| {
             // Look up the named effect's pixel buffer and fill triangles with sampled colors
@@ -288,6 +303,8 @@ pub fn paintCanvasPath(node: *Node) callconv(.auto) void {
             @as(f32, @floatFromInt(tc.a)) / 255.0 * g_paint_opacity,
             node.canvas_stroke_width, flow, ticks,
         );
+
+        if (is_icon) gpu.resetTransform();
     }
 }
 

@@ -529,6 +529,18 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
       // Otherwise, detect if handler calls non-setter functions → js_on_press.
       // Default: lua_on_press (state setters exist in both runtimes).
       var _useJs = !!(ctx.scriptBlock || globalThis.__scriptContent);
+      if (_useJs) {
+        var _nativeOnly = true;
+        var _nativeCalls = handler.luaBody.match(/\b([a-zA-Z_]\w*)\s*\(/g) || [];
+        for (var _nci = 0; _nci < _nativeCalls.length; _nci++) {
+          var _nfn = _nativeCalls[_nci].replace(/\s*\($/, '');
+          if (/^(print|tostring|tonumber|pcall|setVariant)$/.test(_nfn)) continue;
+          if (typeof isNativeFunc === 'function' && isNativeFunc(_nfn)) continue;
+          _nativeOnly = false;
+          break;
+        }
+        if (_nativeOnly && _nativeCalls.length > 0) _useJs = false;
+      }
       if (!_useJs) {
         var _luaBodyCalls = handler.luaBody.match(/\b([a-zA-Z_]\w*)\s*\(/g) || [];
         for (var _ci = 0; _ci < _luaBodyCalls.length; _ci++) {
@@ -544,6 +556,7 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
               if (ctx.objectArrays[_oi].setter === _fname) { _isLuaAvail = true; break; }
             }
           }
+          if (!_isLuaAvail && typeof isNativeFunc === 'function' && isNativeFunc(_fname)) _isLuaAvail = true;
           if (!_isLuaAvail && /^(print|tostring|tonumber|pcall|setVariant)$/.test(_fname)) _isLuaAvail = true;
           if (!_isLuaAvail) { _useJs = true; break; }
         }
@@ -923,6 +936,7 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
             var _isSetterOrOa = false;
             if (ctx.stateSlots) { for (var _s2 = 0; _s2 < ctx.stateSlots.length; _s2++) { if (ctx.stateSlots[_s2].setter === _hfn2) { _isSetterOrOa = true; break; } } }
             if (!_isSetterOrOa && ctx.objectArrays) { for (var _o2 = 0; _o2 < ctx.objectArrays.length; _o2++) { if (ctx.objectArrays[_o2].setter === _hfn2) { _isSetterOrOa = true; break; } } }
+            if (!_isSetterOrOa && typeof isNativeFunc === 'function' && isNativeFunc(_hfn2)) { _isSetterOrOa = true; }
             // Handler refs (_handler_press_N) are JS-dispatched handlers
             if (!_isSetterOrOa && /^_handler_press_\d+$/.test(_hfn2)) { _needsJs = true; break; }
             if (!_isSetterOrOa) { _needsJs = true; break; }
@@ -936,6 +950,7 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
             var _isLua = false;
             if (ctx.stateSlots) { for (var _hsi = 0; _hsi < ctx.stateSlots.length; _hsi++) { if (ctx.stateSlots[_hsi].setter === _hfn) { _isLua = true; break; } } }
             if (!_isLua && ctx.objectArrays) { for (var _hoi = 0; _hoi < ctx.objectArrays.length; _hoi++) { if (ctx.objectArrays[_hoi].setter === _hfn) { _isLua = true; break; } } }
+            if (!_isLua && typeof isNativeFunc === 'function' && isNativeFunc(_hfn)) { _isLua = true; }
             if (!_isLua && _hasLuaBlock && isScriptFunc(_hfn)) { _isLua = true; }
             // Script block routed to Lua (FFI decls present) — all script funcs are Lua-safe
             if (!_isLua && ctx._scriptBlockIsLua && isScriptFunc(_hfn)) { _isLua = true; }

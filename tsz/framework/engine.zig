@@ -831,7 +831,7 @@ fn paintNode(node: *Node) void {
     }
 
     // Canvas.Path: draw before size check
-    if (node.canvas_path) { paintCanvasPath(node); return; }
+    if (node.canvas_path or node.canvas_path_d != null) { paintCanvasPath(node); return; }
 
     const r = node.computed;
     if (r.w <= 0 or r.h <= 0) { g_zero_count += 1; return; }

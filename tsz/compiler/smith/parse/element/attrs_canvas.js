@@ -1,22 +1,24 @@
 // ── JSX canvas and graph attr helpers ────────────────────────────
 
 function tryParseCanvasAttr(c, attr, rawTag, nodeFields) {
-  if (attr === 'd' && (rawTag === 'Graph.Path' || rawTag === 'Canvas.Path')) {
+  var isPathElement = rawTag === 'Graph.Path' || rawTag === 'Canvas.Path' || rawTag === 'Box';
+
+  if (attr === 'd' && isPathElement) {
     parseCanvasPathDataAttr(c, nodeFields);
     return true;
   }
 
-  if (attr === 'fill' && (rawTag === 'Graph.Path' || rawTag === 'Canvas.Path')) {
+  if (attr === 'fill' && isPathElement) {
     parseCanvasColorAttr(c, nodeFields, 'canvas_fill_color');
     return true;
   }
 
-  if (attr === 'stroke' && (rawTag === 'Graph.Path' || rawTag === 'Canvas.Path')) {
+  if (attr === 'stroke' && isPathElement) {
     parseCanvasColorAttr(c, nodeFields, 'text_color');
     return true;
   }
 
-  if (attr === 'strokeWidth' && (rawTag === 'Graph.Path' || rawTag === 'Canvas.Path')) {
+  if (attr === 'strokeWidth' && isPathElement) {
     if (c.kind() === TK.lbrace && ctx.currentMap) {
       c.advance();
       if (c.kind() === TK.identifier && c.text() === ctx.currentMap.itemParam) {
@@ -41,13 +43,13 @@ function tryParseCanvasAttr(c, attr, rawTag, nodeFields) {
     return true;
   }
 
-  if (attr === 'flowSpeed' && (rawTag === 'Graph.Path' || rawTag === 'Canvas.Path')) {
+  if (attr === 'flowSpeed' && isPathElement) {
     const value = parseNumericAttrValue(c, true);
     if (value !== null) nodeFields.push(`.canvas_flow_speed = ${value}`);
     return true;
   }
 
-  if (attr === 'fillEffect' && (rawTag === 'Graph.Path' || rawTag === 'Canvas.Path')) {
+  if (attr === 'fillEffect' && isPathElement) {
     if (c.kind() === TK.string) {
       nodeFields.push(`.canvas_fill_effect = "${c.text().slice(1, -1)}"`);
       c.advance();

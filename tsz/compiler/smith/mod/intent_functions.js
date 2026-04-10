@@ -187,6 +187,7 @@ function lowerIntentFunctionEntry(entry, env, fnReturnTypes, knownFunctionNames)
     header: header,
     lines: compatLines,
     returnType: returnType,
+    paramTypes: Object.assign({}, fnEnv.paramTypes),
   };
 }
 

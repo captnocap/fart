@@ -94,8 +94,10 @@ Parse → Contract (luaNode tree)
            ↓
        Validate (stop build if contract is broken)
            ↓
-       Emit (Zig + LUA_LOGIC)
+       Emit (generated Zig + LUA_LOGIC + optional JS_LOGIC)
 ```
+
+This pipeline describes the app/UI contract path specifically: sanitize + validate operate on the lua-tree contract before emit, while `JS_LOGIC` may still be emitted alongside the generated Zig and `LUA_LOGIC` when script-backed/runtime-QJS paths are present.
 
 ### Sanitizer (`contract/sanitize_for_lua.js`)
 
@@ -311,6 +313,44 @@ Contract output shape:
 - Written by Forge to `/tmp/tsz-gen/source_contract_<stem>.json` by default
 - Includes: `inputPatterns`, `routePlan`, `preflight`, `rootExpr`, `luaRootNode`, `luaMapRebuilders`, `stateSlots`, `objectArrays`, `maps`, `handlers`, `dynTexts`, `scriptBlock`, and compiler debug buckets
 
+### Handler Dispatch Ownership
+
+`parse/build_node.js` is where Smith decides which press-dispatch surface a node gets:
+
+- `on_press` — direct Zig function pointer when the handler is emitted as a native callable.
+- `lua_on_press` — Lua expression string when the handler can stay in the Lua runtime path.
+- `js_on_press` — JS expression string when the handler must execute through QuickJS.
+
+Current rule of thumb in live code:
+
+- If the cart has JS script content, Smith tends to route press handlers through `js_on_press` so JS-side state stays coherent.
+- Otherwise Smith prefers `lua_on_press` unless the handler body requires JS-only callable surfaces.
+- Direct `on_press` is still used for native handler refs that do not go through string-eval dispatch.
+
+This matters because `js_on_press` is not just a runtime footnote from the README. It is an active compiler ownership boundary in Smith itself, chosen during node build and later consumed by Zig/QJS runtime dispatch.
+
+### Script Hatches and AppleScript Tag
+
+These are related surfaces, but they are not all the same kind of compiler feature:
+
+- `<script>` — QuickJS runtime hatch
+- `<lscript>` — LuaJIT runtime hatch
+- `<zscript>` — Zig/native hatch declared by the dictionary and README lineage
+- `<ascript>` — AppleScript tag surface; not a backend hatch in the same sense
+
+Current active Smith ownership:
+
+- `<script>` is collected by `collect/script.js::collectScript()`, skipped during JSX node parsing via `skipScriptElement()`, stored on `ctx.scriptBlock`, and later emitted into `JS_LOGIC`.
+- `<lscript>` is collected by `collect/script.js::collectLScript()`, skipped during JSX node parsing via `skipLScriptElement()`, stored on `ctx.luaBlock`, and later emitted into `LUA_LOGIC` by `emit/lua_tree_nodes.js`.
+- `<zscript>` is recognized by the intent dictionary, README, preflight pattern scanning, and `_zscript.tsz` file classification in `compiler/cli.zig`, but active Smith does not currently show a symmetric inline app-lane owner for it alongside `<script>` / `<lscript>`. In the module intent path, hatch usage is currently tracked as `function-hatch` and can force fallback rather than contract-backed emit.
+- `<ascript>` is implemented as a special tag path in element parsing: it lowers to an effective `Pressable`, parses `run` and `onResult`, auto-creates a handler in `parse/element/postprocess.js`, calls `framework/applescript.zig`, and enables result polling through `ctx.usesApplescript`.
+
+Practical rule:
+
+- Document `<script>` and `<lscript>` as live runtime hatches in active Smith.
+- Document `<ascript>` as the AppleScript interaction tag.
+- Document `<zscript>` as a real language/compiler surface that is currently underrepresented in active Smith’s documented ownership and is a candidate gap for restoration/cleanup work.
+
 ## Parse (55 files, ~10,614 lines)
 
 | Subdir | Files | What |
@@ -322,6 +362,12 @@ Contract output shape:
 | `handlers/` | 1 | Handler parsing: press |
 | `map/` | 7 | Map parsing: context, for_loop, header, infer_oa, info, nested, plain |
 | root | 4 | build_node, cursor, template_literal, utils |
+
+`build_node.js` is especially important for handler lowering and runtime ownership:
+
+- chooses `on_press` vs `lua_on_press` vs `js_on_press`
+- assembles node literals and handler fields
+- preserves QJS-owned strings so later Lua-oriented cleanup does not corrupt them
 
 ## Emit Atoms (72 files, ~7,498 lines)
 
@@ -356,15 +402,17 @@ Each pattern file recognizes a specific JSX/TS pattern and maps it to the compil
 |-------|---------|
 | `stateSlots` | Scalar state slots: `{ getter, setter, initial, type }` |
 | `components` | Collected component bodies and slot metadata |
-| `handlers` | Handler metadata for Zig / JS / Lua dispatch |
+| `handlers` | Handler metadata that later lowers into `on_press`, `lua_on_press`, or `js_on_press` |
 | `dynTexts` | Runtime text buffers and node targets |
 | `dynColors` / `dynStyles` | Runtime-updated colors and styles |
 | `objectArrays` | SoA backing for mapped data |
 | `maps` | Map templates and rebuild metadata |
 | `arrayDecls` / `arrayComments` / `arrayCounter` | Static node-array build state |
 | `scriptBlock` / `scriptFuncs` | JS logic payload and callable names |
+| `luaBlock` | Explicit `<lscript>` payload destined for `LUA_LOGIC` |
 | `classifiers` | Loaded classifier definitions |
 | `renderLocals` | Pre-return locals eligible for JSX substitution |
+| `usesApplescript` | Enables AppleScript result polling/runtime wiring for `<ascript>` |
 | `_sourceTier` | Coarse source-family heuristic label: `soup`, `mixed`, or `chad` (`chad` = intent-abstract family) |
 | `_preflight` | Cached preflight result consumed by emit |
 | `_needsRuntimeLog` / `_runtimeLogCounter` | Generated Zig logging support bookkeeping |

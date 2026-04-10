@@ -93,6 +93,10 @@ function buildSourceContractSnapshot(nodeExpr, file, extra) {
     classifiers: ctx.classifiers || {},
     scriptBlock: ctx.scriptBlock || null,
     luaBlock: ctx.luaBlock || null,
+    functionEntries: ctx.functionEntries || [],
+    functionBackends: ctx.functionBackends || null,
+    nativeFunctions: ctx.nativePlan ? (ctx.nativePlan.contractFunctions || []) : [],
+    nativeErrors: ctx.nativePlan ? (ctx.nativePlan.errors || []) : [],
     renderLocals: ctx.renderLocals || {},
     debug: {
       droppedExpressions: ctx._droppedExpressions || [],

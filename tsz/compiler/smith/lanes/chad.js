@@ -263,10 +263,23 @@ function compileChadLane(source, tokens, file) {
     }
   }
 
-  // ── Build JS_LOGIC from <functions>, <timer>, state declarations ──
-  var jsLogic = buildPageJSLogic(stateVars, ambients, functionsBlock, timerBlocks);
+  // ── Parse backend-tagged function entries at the source-contract boundary ──
+  var functionEntries = preparePageFunctionEntries(functionsBlock, stateVars, ambients, typesBlock);
+  if (ctx.nativePlan && ctx.nativePlan.errors && ctx.nativePlan.errors.length > 0) {
+    return nativePlanCompileError(ctx.nativePlan);
+  }
+
+  // ── Build JS_LOGIC from JS-owned <functions>, <timer>, and state declarations ──
+  var jsLogic = buildPageJSLogic(stateVars, ambients, functionEntries, timerBlocks);
+  var existingScriptFuncs = ctx.scriptFuncs ? ctx.scriptFuncs.slice() : [];
   ctx.scriptBlock = jsLogic.scriptBlock;
-  ctx.scriptFuncs = jsLogic.funcNames;
+  ctx.scriptFuncs = jsLogic.funcNames.slice();
+  for (var efi = 0; efi < existingScriptFuncs.length; efi++) {
+    if (ctx.scriptFuncs.indexOf(existingScriptFuncs[efi]) < 0) ctx.scriptFuncs.push(existingScriptFuncs[efi]);
+  }
+  for (var nfi = 0; nfi < ctx.nativeFuncs.length; nfi++) {
+    if (ctx.scriptFuncs.indexOf(ctx.nativeFuncs[nfi]) < 0) ctx.scriptFuncs.push(ctx.nativeFuncs[nfi]);
+  }
 
   // Register declared setters as script funcs (handler resolution)
   for (var di = 0; di < declaredSetters.length; di++) {

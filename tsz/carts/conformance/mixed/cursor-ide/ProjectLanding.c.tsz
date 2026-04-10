@@ -16,8 +16,6 @@ function LandingStat(props) {
 
 function LandingProjectCard(props) {
   var item = props.item;
-  var metaPath = item.path;
-  if (item.path == '__landing__') metaPath = 'Project landing';
 
   return (
     <C.LandingProjectCard onPress={function() { props.onOpenPath(item.path); }}>
@@ -27,7 +25,7 @@ function LandingProjectCard(props) {
         <C.LandingProjectBadge>{item.badge}</C.LandingProjectBadge>
       </C.LandingProjectHeader>
       <C.LandingProjectSummary>{item.summary}</C.LandingProjectSummary>
-      <C.LandingProjectMeta>{metaPath}</C.LandingProjectMeta>
+      <C.LandingProjectMeta>{item.displayPath}</C.LandingProjectMeta>
     </C.LandingProjectCard>
   );
 }
@@ -70,7 +68,7 @@ function RecentRow(props) {
         <Box style={{ flexGrow: 1 }} />
         <C.LandingRecentReason>{item.reason}</C.LandingRecentReason>
       </Box>
-      {props.minimumBand != 1 && <C.LandingRecentPath>{item.path}</C.LandingRecentPath>}
+      {props.minimumBand != 1 && <C.LandingRecentPath>{item.displayPath}</C.LandingRecentPath>}
     </C.LandingRecentRow>
   );
 }

@@ -211,35 +211,23 @@ function parsePageStateBlock(block) {
 //     funcA + funcB
 
 function parsePageFunctionsBlock(block) {
-  if (!block) return [];
-  var funcs = [];
-  var lines = block.split('\n');
-  var current = null;
+  return filterFunctionEntriesByBackend(parsePageFunctionEntries(block), ['auto', 'script']);
+}
 
-  for (var i = 0; i < lines.length; i++) {
-    var trimmed = lines[i].trim();
-    if (!trimmed) continue;
-    // Skip section comment headers
-    if (trimmed.startsWith('// ──') || trimmed.startsWith('// ══')) continue;
-    // Skip regular comments
-    if (trimmed.startsWith('//')) continue;
+function preparePageFunctionEntries(functionsBlock, stateVars, ambients, typesBlock) {
+  var entries = parsePageFunctionEntries(functionsBlock);
+  ctx.functionEntries = entries;
+  ctx.functionBackends = buildFunctionBackendMap(entries);
 
-    // Function header: name: or name(params): or name every N: or name requires X, Y:
-    var funcMatch = trimmed.match(/^(\w+)(?:\s+every\s+(\d+))?(?:\s+requires\s+[\w\s,]+)?(\(([^)]*)\))?\s*:$/);
-    if (funcMatch) {
-      if (current) funcs.push(current);
-      var params = funcMatch[4] ? funcMatch[4].split(',').map(function(p) { return p.trim(); }) : [];
-      current = { name: funcMatch[1], params: params, bodyLines: [], interval: funcMatch[2] ? parseInt(funcMatch[2]) : 0 };
-      continue;
-    }
+  var luaBlock = renderFunctionEntriesBlock(entries, 'lscript');
+  ctx.luaBlock = luaBlock || null;
+  if (ctx.luaBlock) scanLScriptFunctionNames(ctx.luaBlock);
 
-    // Body line
-    if (current) {
-      current.bodyLines.push(trimmed);
-    }
-  }
-  if (current) funcs.push(current);
-  return funcs;
+  var nativePlan = buildNativeZscriptPlan(entries, stateVars, ambients, typesBlock);
+  ctx.nativePlan = nativePlan;
+  ctx.nativeFuncs = nativePlan && nativePlan.funcNames ? nativePlan.funcNames.slice() : [];
+
+  return entries;
 }
 
 // ── Line transpiler: page function body → JS ──
@@ -426,9 +414,13 @@ function transpilePageBody(bodyLines, setterNames, jsLines, indent, isComputed) 
 // ── JS_LOGIC builder ──
 // Assembles the complete JS logic block from parsed page blocks.
 
-function buildPageJSLogic(stateVars, ambients, functionsBlock, timerBlocks) {
+function buildPageJSLogic(stateVars, ambients, functionEntries, timerBlocks) {
   var jsLines = [];
   var funcNames = [];
+  var allEntries = Array.isArray(functionEntries)
+    ? functionEntries
+    : parsePageFunctionEntries(functionEntries);
+  var funcs = filterFunctionEntriesByBackend(allEntries, ['auto', 'script']);
 
   // ── State variable declarations + setters ──
   // NOTE: Primitive state vars (int, float, boolean, string) are in ctx.stateSlots.
@@ -464,8 +456,6 @@ function buildPageJSLogic(stateVars, ambients, functionsBlock, timerBlocks) {
     jsLines.push('var ' + amb.name + " = __ambient('" + amb.namespace + "', '" + amb.field + "');");
   }
 
-  // ── Parse and transpile <functions> ──
-  var funcs = parsePageFunctionsBlock(functionsBlock);
   var setterNames = funcNames.slice(); // setters known so far
 
   for (var fi = 0; fi < funcs.length; fi++) {
@@ -554,9 +544,11 @@ function buildPageJSLogic(stateVars, ambients, functionsBlock, timerBlocks) {
   // All funcNames + setter names that were emitted
   var definedFuncs = {};
   for (var df = 0; df < funcNames.length; df++) definedFuncs[funcNames[df]] = true;
-  // Also count functions parsed from <functions> block
-  var parsedFuncs = parsePageFunctionsBlock(functionsBlock);
-  for (var pf2 = 0; pf2 < parsedFuncs.length; pf2++) definedFuncs[parsedFuncs[pf2].name] = true;
+  // Native zscript functions are callable from JS; lscript functions are not.
+  for (var pf2 = 0; pf2 < allEntries.length; pf2++) {
+    var backend = allEntries[pf2].backend || 'auto';
+    if (backend !== 'lscript') definedFuncs[allEntries[pf2].name] = true;
+  }
   // Scan JS lines for function calls: word( pattern
   var allJS = jsLines.join('\n');
   var callRe = /\b(\w+)\s*\(/g;
@@ -635,9 +627,21 @@ function compilePage(source, c, file) {
   }
 
   // Build JS_LOGIC from <functions>, <timer>, and state declarations
-  var jsLogic = buildPageJSLogic(stateVars, ambients, functionsBlock, timerBlocks);
+  var functionEntries = preparePageFunctionEntries(functionsBlock, stateVars, ambients, null);
+  if (ctx.nativePlan && ctx.nativePlan.errors && ctx.nativePlan.errors.length > 0) {
+    return nativePlanCompileError(ctx.nativePlan);
+  }
+
+  var jsLogic = buildPageJSLogic(stateVars, ambients, functionEntries, timerBlocks);
+  var existingScriptFuncs = ctx.scriptFuncs ? ctx.scriptFuncs.slice() : [];
   ctx.scriptBlock = jsLogic.scriptBlock;
-  ctx.scriptFuncs = jsLogic.funcNames;
+  ctx.scriptFuncs = jsLogic.funcNames.slice();
+  for (var efi = 0; efi < existingScriptFuncs.length; efi++) {
+    if (ctx.scriptFuncs.indexOf(existingScriptFuncs[efi]) < 0) ctx.scriptFuncs.push(existingScriptFuncs[efi]);
+  }
+  for (var nfi = 0; nfi < ctx.nativeFuncs.length; nfi++) {
+    if (ctx.scriptFuncs.indexOf(ctx.nativeFuncs[nfi]) < 0) ctx.scriptFuncs.push(ctx.nativeFuncs[nfi]);
+  }
 
   // Also register setter names as script funcs (so handler resolution works)
   for (var di = 0; di < declaredSetters.length; di++) {

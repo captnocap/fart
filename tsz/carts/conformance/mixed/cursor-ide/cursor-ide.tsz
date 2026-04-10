@@ -162,7 +162,7 @@ const [workspaceStats, setWorkspaceStats] = useState([
   { label: 'agents', value: 'idle', tone: '#d2a8ff' },
 ]);
 const [landingProjects, setLandingProjects] = useState([
-  { name: 'reactjit', path: '__landing__', summary: 'Live workspace overview', badge: 'workspace', accent: '#2d62ff' },
+  { name: 'reactjit', path: '__landing__', displayPath: 'Project landing', summary: 'Live workspace overview', badge: 'workspace', accent: '#2d62ff' },
 ]);
 const [landingRecentFiles, setLandingRecentFiles] = useState([]);
 const [gitConnections, setGitConnections] = useState([]);

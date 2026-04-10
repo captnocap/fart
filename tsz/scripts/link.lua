@@ -129,6 +129,9 @@ if is_macos then
     }
     for so in extra_sos:gmatch("%S+") do
         io.write("[link] + " .. so:match("[^/]+$") .. "\n")
+        -- --no-as-needed forces the linker to keep the .so as NEEDED even when
+        -- no compiled code references its symbols (they're called via LuaJIT ffi.C)
+        table.insert(parts, "'-Wl,--no-as-needed'")
         table.insert(parts, so)
     end
     for lib in extra_libs:gmatch("%S+") do
@@ -148,6 +151,7 @@ else
     }
     for so in extra_sos:gmatch("%S+") do
         io.write("[link] + " .. so:match("[^/]+$") .. "\n")
+        table.insert(parts, "'-Wl,--no-as-needed'")
         table.insert(parts, so)
     end
     for lib in extra_libs:gmatch("%S+") do

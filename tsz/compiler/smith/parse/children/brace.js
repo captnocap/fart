@@ -62,6 +62,12 @@ function _pushLuaRawDynText(children, rawExpr) {
   });
 }
 
+function _braceShouldUseJsDynText(expr) {
+  if (!(ctx.scriptBlock || globalThis.__scriptContent)) return false;
+  if (typeof nativeExprNeedsLua === 'function' && nativeExprNeedsLua(expr)) return false;
+  return true;
+}
+
 
 function tryParseBraceChild(c, children) {
   if (c.kind() !== TK.lbrace) return false;
@@ -385,7 +391,7 @@ function tryParseBraceChild(c, children) {
       if (c.kind() === TK.rbrace) c.advance();
       let fullExpr = _normalizeJoinedJsExpr(_joinTokenText(c, _brExprStart, _brExprEnd));
       fullExpr = _normalizeJoinedJsExpr(_expandRenderLocalJs(fullExpr));
-      if ((ctx.scriptBlock || globalThis.__scriptContent) && fullExpr.length > 0) {
+      if (_braceShouldUseJsDynText(fullExpr) && fullExpr.length > 0) {
         const slotIdx = ctx.stateSlots.length;
         ctx.stateSlots.push({ getter: '__jsExpr_' + slotIdx, setter: '__setJsExpr_' + slotIdx, initial: '', type: 'string' });
         const isInMap = !!ctx.currentMap;
@@ -408,7 +414,7 @@ function tryParseBraceChild(c, children) {
     c.advance();
     const isEvalExpr = isEval(_brRlVal);
     const isPureEvalExpr = isEvalExpr && _brRlVal.trimStart().startsWith('qjs_runtime.evalToString(');
-    if (!isEvalExpr && _brRlRaw && (ctx.scriptBlock || globalThis.__scriptContent) &&
+    if (!isEvalExpr && _brRlRaw && _braceShouldUseJsDynText(_expandRenderLocalJs(_normalizeJoinedJsExpr(_brRlRaw))) &&
         typeof shouldEvalRenderLocal === 'function' && shouldEvalRenderLocal(_normalizeJoinedJsExpr(_brRlRaw))) {
       const slotIdx = ctx.stateSlots.length;
       ctx.stateSlots.push({ getter: '__jsExpr_' + slotIdx, setter: '__setJsExpr_' + slotIdx, initial: '', type: 'string' });
@@ -426,7 +432,7 @@ function tryParseBraceChild(c, children) {
       children.push({ nodeExpr: isInMap ? '.{ .text = "__mt' + bufId + '__" }' : '.{ .text = "" }', dynBufId: bufId, inMap: isInMap });
       return true;
     }
-    if (isEvalExpr && !isPureEvalExpr && _brRlRaw && (ctx.scriptBlock || globalThis.__scriptContent)) {
+    if (isEvalExpr && !isPureEvalExpr && _brRlRaw && _braceShouldUseJsDynText(_expandRenderLocalJs(_normalizeJoinedJsExpr(_brRlRaw)))) {
       const slotIdx = ctx.stateSlots.length;
       ctx.stateSlots.push({ getter: '__jsExpr_' + slotIdx, setter: '__setJsExpr_' + slotIdx, initial: '', type: 'string' });
       const isInMap = !!ctx.currentMap;
@@ -571,7 +577,7 @@ function tryParseBraceChild(c, children) {
       }
       if (c.kind() === TK.rbrace) c.advance();
       const exprText2 = dropTokens2.join(' ');
-      if ((ctx.scriptBlock || globalThis.__scriptContent) && exprText2.length > 0) {
+      if (_braceShouldUseJsDynText(_normalizeJoinedJsExpr(exprText2)) && exprText2.length > 0) {
         const jsExpr2 = _normalizeJoinedJsExpr(exprText2);
         const slotIdx2 = ctx.stateSlots.length;
         ctx.stateSlots.push({ getter: '__jsExpr_' + slotIdx2, setter: '__setJsExpr_' + slotIdx2, initial: '', type: 'string' });
@@ -742,13 +748,17 @@ function tryParseBraceChild(c, children) {
         }
         ctx.dynTexts.pop();
         ctx.dynCount--;
+        if (typeof nativeExprNeedsLua === 'function' && nativeExprNeedsLua(fullExpr)) {
+          _pushLuaRawDynText(children, fullExpr);
+          return true;
+        }
         const jsSlotIdx = ctx.stateSlots.length;
         ctx.stateSlots.push({ getter: '__jsExpr_' + jsSlotIdx, setter: '__setJsExpr_' + jsSlotIdx, initial: '', type: 'string' });
         const jsBufId = ctx.dynCount;
         ctx.dynTexts.push({ bufId: jsBufId, fmtString: '{s}', fmtArgs: 'state.getSlotString(' + jsSlotIdx + ')', arrName: '', arrIndex: 0, bufSize: 256 });
         ctx.dynCount++;
         // Route to JS or Lua based on what's available
-        if (ctx.scriptBlock) {
+        if (_braceShouldUseJsDynText(fullExpr)) {
           ctx._jsDynTexts.push({ slotIdx: jsSlotIdx, jsExpr: fullExpr });
         } else if (ctx.luaBlock) {
           // Convert JS operators to Lua operators, and single-quoted strings to double-quoted
@@ -980,7 +990,7 @@ function tryParseBraceChild(c, children) {
   const exprText = dropTokens.join(' ');
 
   // Pure JS expression (no JSX) — route to __eval via state slot
-  if ((ctx.scriptBlock || globalThis.__scriptContent) && exprText.length > 0) {
+  if (_braceShouldUseJsDynText(_normalizeJoinedJsExpr(exprText)) && exprText.length > 0) {
     let jsExpr = _normalizeJoinedJsExpr(exprText);
     if (/^\w+$/.test(jsExpr) && ctx.scriptFuncs && ctx.scriptFuncs.indexOf(jsExpr) >= 0) {
       jsExpr = jsExpr + '()';

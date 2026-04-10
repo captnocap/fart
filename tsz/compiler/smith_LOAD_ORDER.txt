@@ -201,6 +201,8 @@ smith/emit_atoms/module/a054_module_functions.js
 smith/emit_atoms/module/a055_module_intent_timers.js
 smith/emit_atoms/module/a056_module_intent_cleanup.js
 smith/page.js
+smith/function_hatches.js
+smith/zscript_native.js
 smith/parse/attrs/color.js
 smith/parse/attrs/style_value.js
 smith/parse/attrs/style_block.js

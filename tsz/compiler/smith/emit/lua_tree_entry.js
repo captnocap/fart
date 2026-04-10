@@ -3,10 +3,23 @@
 
 function emitLuaTreeEntry(ctx, appName, prefix) {
   var zig = '';
+  var nativePlan = ctx.nativePlan;
 
   // Init + tick functions (v4 pattern)
   zig += 'fn _appInit() void {\n';
   zig += '    luajit_runtime.setMapWrapper(0, @ptrCast(&_root));\n';
+  if (nativePlan && nativePlan.registrations && nativePlan.registrations.length > 0) {
+    for (var nri = 0; nri < nativePlan.registrations.length; nri++) {
+      var reg = nativePlan.registrations[nri];
+      zig += '    qjs_runtime.registerHostFn(' + zigStringLiteral(reg.name) + ', @ptrCast(&' + reg.qjsWrapper + '), ' + reg.argCount + ');\n';
+      zig += '    luajit_runtime.registerHostFn(' + zigStringLiteral(reg.name) + ', @ptrCast(&' + reg.luaWrapper + '), ' + reg.argCount + ');\n';
+    }
+  }
+  if (nativePlan && nativePlan.initJsExprs && nativePlan.initJsExprs.length > 0) {
+    for (var nei = 0; nei < nativePlan.initJsExprs.length; nei++) {
+      zig += '    qjs_runtime.evalExpr(' + zigStringLiteral(nativePlan.initJsExprs[nei]) + ');\n';
+    }
+  }
   zig += '    // OA data synced on first tick (after JS_LOGIC loads)\n';
   zig += '    state.markDirty();\n';
   zig += '}\n\n';
