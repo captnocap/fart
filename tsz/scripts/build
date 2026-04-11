@@ -191,6 +191,10 @@ if [[ "$CART" == *carts/conformance/* ]] && [[ "$CART" != *.script.tsz ]] && [[ 
     cdb "ALTER TABLE engine_builds ADD COLUMN last_good_at TEXT;" 2>/dev/null || true
     cdb "ALTER TABLE builds ADD COLUMN compiler_sha TEXT;" 2>/dev/null || true
     cdb "ALTER TABLE verified_sources ADD COLUMN compiler_sha TEXT;" 2>/dev/null || true
+    # edit_commit: gitea edit-trail branch HEAD (fine-grained per-edit commits)
+    # Used by the failure receipt to diff exactly what changed vs last-known-good.
+    cdb "ALTER TABLE engine_builds ADD COLUMN edit_commit TEXT;" 2>/dev/null || true
+    cdb "ALTER TABLE compiler_builds ADD COLUMN edit_commit TEXT;" 2>/dev/null || true
 fi
 
 record_build() {
@@ -215,13 +219,20 @@ record_build() {
         [ -f "$engine_so" ] && eng_sha=$(sha256sum "$engine_so" | awk '{print $1}')
     fi
 
+    # Gitea edit-trail branch head — fine-grained per-edit commits.
+    # Falls back to main HEAD if edit-trail doesn't exist.
+    local edit_head=$(git rev-parse edit-trail 2>/dev/null || git rev-parse HEAD 2>/dev/null || echo "unknown")
+
     # Register this engine in engine_builds if not already known
     local fw_hash_now=$(find framework/ -name '*.zig' -exec sha256sum {} + 2>/dev/null | sort | sha256sum | cut -c1-64)
     if [ -n "$eng_sha" ]; then
         local safe_eng=$(printf '%s' "$eng_sha" | sed "s/'/''/g")
         local commit=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
-        cdb "INSERT OR IGNORE INTO engine_builds (engine_sha, commit_sha, source_hash)
-            VALUES ('$safe_eng', '$commit', '$fw_hash_now');"
+        cdb "INSERT OR IGNORE INTO engine_builds (engine_sha, commit_sha, source_hash, edit_commit)
+            VALUES ('$safe_eng', '$commit', '$fw_hash_now', '$edit_head');"
+        # Update edit_commit on subsequent records of the same engine — the
+        # edit-trail advances on every edit, so the last recorded value wins.
+        cdb "UPDATE engine_builds SET edit_commit = '$edit_head' WHERE engine_sha = '$safe_eng';"
     fi
 
     # On success: update this engine as "last known good" (compiled something)
@@ -244,8 +255,9 @@ record_build() {
     if [ -n "$comp_sha" ]; then
         local safe_comp=$(printf '%s' "$comp_sha" | sed "s/'/''/g")
         local commit=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
-        cdb "INSERT OR IGNORE INTO compiler_builds (compiler_sha, commit_sha, source_hash)
-            VALUES ('$safe_comp', '$commit', '$smith_hash_now');"
+        cdb "INSERT OR IGNORE INTO compiler_builds (compiler_sha, commit_sha, source_hash, edit_commit)
+            VALUES ('$safe_comp', '$commit', '$smith_hash_now', '$edit_head');"
+        cdb "UPDATE compiler_builds SET edit_commit = '$edit_head' WHERE compiler_sha = '$safe_comp';"
     fi
 
     # On success: update this compiler as "last known good"
@@ -300,9 +312,11 @@ report_failure() {
         FROM builds WHERE test_name = '$safe_name' AND status = 'compiled'
         ORDER BY id DESC LIMIT 1;" 2>/dev/null || true)
 
-    # Last good engine's framework source hash
+    # Last good engine's framework source hash + edit-trail commit
     local lg_fw_hash=""
     local lg_comp_hash=""
+    local lg_eng_edit=""
+    local lg_comp_edit=""
     if [ -n "$last_good" ]; then
         local lg_eng_full=$(echo "$last_good" | cut -d'|' -f2)
         local lg_comp_full=$(echo "$last_good" | cut -d'|' -f4)
@@ -310,13 +324,19 @@ report_failure() {
             local safe_lg_eng=$(printf '%s' "$lg_eng_full" | sed "s/'/''/g")
             lg_fw_hash=$(cdb "SELECT substr(source_hash,1,16) FROM engine_builds
                 WHERE engine_sha = '$safe_lg_eng';" 2>/dev/null || true)
+            lg_eng_edit=$(cdb "SELECT edit_commit FROM engine_builds
+                WHERE engine_sha = '$safe_lg_eng';" 2>/dev/null || true)
         fi
         if [ -n "$lg_comp_full" ]; then
             local safe_lg_comp=$(printf '%s' "$lg_comp_full" | sed "s/'/''/g")
             lg_comp_hash=$(cdb "SELECT substr(source_hash,1,16) FROM compiler_builds
                 WHERE compiler_sha = '$safe_lg_comp';" 2>/dev/null || true)
+            lg_comp_edit=$(cdb "SELECT edit_commit FROM compiler_builds
+                WHERE compiler_sha = '$safe_lg_comp';" 2>/dev/null || true)
         fi
     fi
+    # Current edit-trail HEAD for diffing against last-known-good
+    local cur_edit=$(git rev-parse edit-trail 2>/dev/null || git rev-parse HEAD 2>/dev/null || echo "")
 
     # How many distinct engines and compilers this test has passed on
     local engine_count=$(cdb "SELECT COUNT(DISTINCT engine_sha)
@@ -423,6 +443,95 @@ report_failure() {
         echo "║  Smith src:       ${lac_smith}..."
         if [ "$lac_smith" != "$smith_hash_now" ]; then
             echo "║  vs your code:    DIFFERENT ← your compiler/ changes broke it"
+        fi
+    fi
+
+    # ── What actually changed — diff against last-known-good edit-trail ──
+    # The gitea edit-trail branch records every edit as a separate commit,
+    # tagged with the session ID that made it. If the framework or compiler
+    # hash changed, we can show EXACTLY which files changed and which session
+    # touched them.
+    local fw_changed=0
+    local comp_changed=0
+    [ -n "$lg_fw_hash" ] && [ "$lg_fw_hash" != "$fw_hash_now" ] && fw_changed=1
+    [ -n "$lg_comp_hash" ] && [ "$lg_comp_hash" != "$smith_hash_now" ] && comp_changed=1
+
+    if [ -n "$cur_edit" ] && { [ "$fw_changed" = "1" ] || [ "$comp_changed" = "1" ]; }; then
+        echo "║"
+        echo "║  ── WHAT CHANGED (edit-trail diff) ──"
+        # last-known-good built_at timestamp — used as a fallback when
+        # edit_commit is NULL (historical rows from before this column existed).
+        local lg_time_iso=""
+        if [ -n "$last_good" ]; then
+            lg_time_iso=$(echo "$last_good" | cut -d'|' -f1)
+        fi
+
+        # Resolve the "base" commit to diff against:
+        # 1. Prefer the explicit edit_commit stored at last-good build time
+        # 2. Fall back to the edit-trail commit closest to lg_time_iso
+        resolve_base() {
+            local stored="$1"
+            local dir_filter="$2"
+            if [ -n "$stored" ] && git cat-file -e "${stored}^{commit}" 2>/dev/null; then
+                echo "$stored"
+                return
+            fi
+            # Fallback: find the edit-trail commit at or just before the
+            # last-good build time, narrowed to commits that touched this dir
+            if [ -n "$lg_time_iso" ]; then
+                git log --before="$lg_time_iso" -1 --format=%H edit-trail -- "$dir_filter" 2>/dev/null
+            fi
+        }
+
+        if [ "$fw_changed" = "1" ]; then
+            local fw_base=$(resolve_base "$lg_eng_edit" "framework/")
+            if [ -n "$fw_base" ] && [ "$fw_base" != "$cur_edit" ]; then
+                local base_label="${fw_base:0:10}"
+                [ -z "$lg_eng_edit" ] && base_label="${base_label} (resolved by timestamp)"
+                echo "║  Framework files changed since $base_label:"
+                local fw_stat=$(git diff --stat "$fw_base" "$cur_edit" -- framework/ 2>/dev/null | head -20)
+                if [ -n "$fw_stat" ]; then
+                    echo "$fw_stat" | sed 's/^/║    /'
+                else
+                    echo "║    (no file-level changes detected)"
+                fi
+                echo "║"
+                echo "║  Edit-trail commits that touched framework/:"
+                local fw_log=$(git log --oneline "$fw_base..$cur_edit" -- framework/ 2>/dev/null | head -10)
+                if [ -n "$fw_log" ]; then
+                    echo "$fw_log" | sed 's/^/║    /'
+                else
+                    echo "║    (no commits between base and HEAD)"
+                fi
+            else
+                echo "║  Framework: couldn't resolve last-known-good commit (stored=${lg_eng_edit:-none})"
+            fi
+        fi
+
+        if [ "$comp_changed" = "1" ]; then
+            local comp_base=$(resolve_base "$lg_comp_edit" "compiler/")
+            if [ -n "$comp_base" ] && [ "$comp_base" != "$cur_edit" ]; then
+                local base_label="${comp_base:0:10}"
+                [ -z "$lg_comp_edit" ] && base_label="${base_label} (resolved by timestamp)"
+                echo "║"
+                echo "║  Compiler files changed since $base_label:"
+                local comp_stat=$(git diff --stat "$comp_base" "$cur_edit" -- compiler/ 2>/dev/null | head -20)
+                if [ -n "$comp_stat" ]; then
+                    echo "$comp_stat" | sed 's/^/║    /'
+                else
+                    echo "║    (no file-level changes detected)"
+                fi
+                echo "║"
+                echo "║  Edit-trail commits that touched compiler/:"
+                local comp_log=$(git log --oneline "$comp_base..$cur_edit" -- compiler/ 2>/dev/null | head -10)
+                if [ -n "$comp_log" ]; then
+                    echo "$comp_log" | sed 's/^/║    /'
+                else
+                    echo "║    (no commits between base and HEAD)"
+                fi
+            else
+                echo "║  Compiler: couldn't resolve last-known-good commit (stored=${lg_comp_edit:-none})"
+            fi
         fi
     fi
 
