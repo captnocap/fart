@@ -1,8 +1,5 @@
 // Dashboard users page — user table, search, filters.
 
-from '../../theme.cls'
-from '../../icons.glyphs'
-
 <users page>
   <var>
     userList is objects

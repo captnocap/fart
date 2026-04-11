@@ -1,8 +1,5 @@
 // Dashboard overview — stat cards, recent activity table.
 
-from '../../theme.cls'
-from '../../icons.glyphs'
-
 <overview page>
   <var>
     totalUsers is 12847

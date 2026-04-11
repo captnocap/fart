@@ -1,8 +1,5 @@
 // Dashboard analytics page — time-series stats, scheduled refresh.
 
-from '../../theme.cls'
-from '../../icons.glyphs'
-
 <analytics page>
   <var>
     set_period is type
