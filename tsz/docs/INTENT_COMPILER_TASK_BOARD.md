@@ -38,6 +38,7 @@ Track implementation work for strict intent/chad syntax alignment, hatch behavio
 - [x] Normalize loops in apps to lowercase `<for ...>` forms.
 - [x] Remove `<state>` usage in apps; migrate to `<var>` with `set_` declarations.
 - [x] Remove `<timer>` usage in apps; migrate to `every` headers in `<functions>`.
+- [x] Remove all `import`/`from` usage from `tsz/carts/conformance/chad/apps/` (ambient namespace mode).
 - [!] Re-run chad conformance carts and record pass/fail deltas. (blocked by conformance tamper gate until human override)
 
 ## Phase 2: Chad Parser Architecture Simplification
@@ -94,3 +95,4 @@ Track implementation work for strict intent/chad syntax alignment, hatch behavio
 - Phase 1 app rewrite removed `<state>` and legacy `<For each=...>` across `tsz/carts/conformance/chad/apps/`.
 - Phase 2 in progress: chad lane now ignores legacy `<state>/<timer>` plumbing and shared `<var>` parsing canonicalizes `set_` declarations.
 - Forge now enforces import bans for intent/chad syntax files and switches intent entries to ambient root-tree source merge mode.
+- `tsz/carts/conformance/chad/apps/` is now import-free and compiling under ambient merge behavior (entry dir + nested `.tsz`, entry file last).
