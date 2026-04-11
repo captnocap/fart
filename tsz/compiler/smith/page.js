@@ -59,6 +59,34 @@ function extractPageBlocks(source, tag) {
 //   name                     → uninitialized (empty array)
 //   name is [...]            → array value (may span multiple lines)
 
+function normalizePageVarDeclName(rawName) {
+  var name = rawName;
+  var hasSetter = false;
+  if (name.indexOf('set_') === 0) {
+    name = name.slice(4);
+    hasSetter = true;
+  }
+  return { name: name, hasSetter: hasSetter };
+}
+
+function pageSetterNameForVar(stateVar) {
+  if (stateVar && stateVar.setterName) return stateVar.setterName;
+  return 'set_' + stateVar.name;
+}
+
+function buildDeclaredSetterSet(declaredSetters) {
+  var out = {};
+  for (var i = 0; i < (declaredSetters || []).length; i++) out[declaredSetters[i]] = true;
+  return out;
+}
+
+function pageVarHasSetter(stateVar, declaredSetterSet) {
+  if (!stateVar) return false;
+  if (stateVar.hasSetter) return true;
+  var setter = pageSetterNameForVar(stateVar);
+  return !!(declaredSetterSet && declaredSetterSet[setter]);
+}
+
 function parsePageVarBlock(block) {
   if (!block) return [];
   var vars = [];
@@ -73,24 +101,25 @@ function parsePageVarBlock(block) {
     // name exact type/value — immutable, constrained
     var exactMatch = line.match(/^(\w+)\s+exact\s+(.+)$/);
     if (exactMatch) {
-      var ename = exactMatch[1];
+      var ebase = normalizePageVarDeclName(exactMatch[1]);
+      var ename = ebase.name;
       var econstraint = exactMatch[2].trim();
       // Quoted string
       if ((econstraint[0] === "'" && econstraint[econstraint.length - 1] === "'") ||
           (econstraint[0] === '"' && econstraint[econstraint.length - 1] === '"')) {
-        vars.push({ name: ename, initial: econstraint.slice(1, -1), type: 'string' });
+        vars.push({ name: ename, initial: econstraint.slice(1, -1), type: 'string', hasSetter: false });
       }
       // Number
       else if (/^-?\d+(\.\d+)?$/.test(econstraint)) {
-        vars.push({ name: ename, initial: parseFloat(econstraint), type: econstraint.indexOf('.') >= 0 ? 'float' : 'int' });
+        vars.push({ name: ename, initial: parseFloat(econstraint), type: econstraint.indexOf('.') >= 0 ? 'float' : 'int', hasSetter: false });
       }
       // Boolean
       else if (econstraint === 'true' || econstraint === 'false') {
-        vars.push({ name: ename, initial: econstraint === 'true', type: 'boolean' });
+        vars.push({ name: ename, initial: econstraint === 'true', type: 'boolean', hasSetter: false });
       }
       // Type reference (e.g., "type") → default empty string for enum-like types
       else {
-        vars.push({ name: ename, initial: '', type: 'string' });
+        vars.push({ name: ename, initial: '', type: 'string', hasSetter: false });
       }
       continue;
     }
@@ -98,7 +127,9 @@ function parsePageVarBlock(block) {
     // name is value
     var isMatch = line.match(/^(\w+)\s+is\s+(.+)$/);
     if (isMatch) {
-      var name = isMatch[1];
+      var decl = normalizePageVarDeclName(isMatch[1]);
+      var name = decl.name;
+      var hasSetter = decl.hasSetter;
       var value = isMatch[2].trim();
 
       // Multi-line value: track bracket depth
@@ -127,7 +158,7 @@ function parsePageVarBlock(block) {
       if (dotIdx > 0) {
         var ns = value.slice(0, dotIdx);
         if (ambientNs.indexOf(ns) >= 0) {
-          vars.push({ name: name, ambient: true, namespace: ns, field: value.slice(dotIdx + 1), type: 'ambient' });
+          vars.push({ name: name, ambient: true, namespace: ns, field: value.slice(dotIdx + 1), type: 'ambient', hasSetter: hasSetter, setterName: hasSetter ? ('set_' + name) : null });
           continue;
         }
       }
@@ -135,50 +166,55 @@ function parsePageVarBlock(block) {
       // String literal
       if ((value[0] === "'" && value[value.length - 1] === "'") ||
           (value[0] === '"' && value[value.length - 1] === '"')) {
-        vars.push({ name: name, initial: value.slice(1, -1), type: 'string' });
+        vars.push({ name: name, initial: value.slice(1, -1), type: 'string', hasSetter: hasSetter, setterName: hasSetter ? ('set_' + name) : null });
         continue;
       }
 
       // Boolean
-      if (value === 'true') { vars.push({ name: name, initial: true, type: 'boolean' }); continue; }
-      if (value === 'false') { vars.push({ name: name, initial: false, type: 'boolean' }); continue; }
+      if (value === 'true') { vars.push({ name: name, initial: true, type: 'boolean', hasSetter: hasSetter, setterName: hasSetter ? ('set_' + name) : null }); continue; }
+      if (value === 'false') { vars.push({ name: name, initial: false, type: 'boolean', hasSetter: hasSetter, setterName: hasSetter ? ('set_' + name) : null }); continue; }
 
       // Number
       if (/^-?\d+(\.\d+)?$/.test(value)) {
         var isFloat = value.indexOf('.') >= 0;
-        vars.push({ name: name, initial: isFloat ? parseFloat(value) : parseInt(value), type: isFloat ? 'float' : 'int' });
+        vars.push({ name: name, initial: isFloat ? parseFloat(value) : parseInt(value), type: isFloat ? 'float' : 'int', hasSetter: hasSetter, setterName: hasSetter ? ('set_' + name) : null });
         continue;
       }
 
       // Array/object literal
       if (value[0] === '[') {
-        vars.push({ name: name, initial: value, type: 'object_array' });
+        vars.push({ name: name, initial: value, type: 'object_array', hasSetter: hasSetter, setterName: hasSetter ? ('set_' + name) : null });
         continue;
       }
 
       // Dictionary data types: array, TYPE array, object, objects
       if (value === 'array' || /^\w+\s+array$/.test(value)) {
-        vars.push({ name: name, initial: null, type: 'array', dataKind: value });
+        vars.push({ name: name, initial: null, type: 'array', dataKind: value, hasSetter: hasSetter, setterName: hasSetter ? ('set_' + name) : null });
         continue;
       }
       if (value === 'object') {
-        vars.push({ name: name, initial: null, type: 'expression', dataKind: 'object' });
+        vars.push({ name: name, initial: null, type: 'expression', dataKind: 'object', hasSetter: hasSetter, setterName: hasSetter ? ('set_' + name) : null });
         continue;
       }
       if (value === 'objects') {
-        vars.push({ name: name, initial: null, type: 'object_array', dataKind: 'objects' });
+        vars.push({ name: name, initial: null, type: 'object_array', dataKind: 'objects', hasSetter: hasSetter, setterName: hasSetter ? ('set_' + name) : null });
         continue;
       }
 
       // Fallback: expression
-      vars.push({ name: name, initial: value, type: 'expression' });
+      vars.push({ name: name, initial: value, type: 'expression', hasSetter: hasSetter, setterName: hasSetter ? ('set_' + name) : null });
       continue;
     }
 
     // Bare name — uninitialized (empty array by convention)
     var bareMatch = line.match(/^(\w+)$/);
     if (bareMatch) {
-      vars.push({ name: bareMatch[1], initial: null, type: 'array' });
+      var bareDecl = normalizePageVarDeclName(bareMatch[1]);
+      if (bareDecl.hasSetter) {
+        vars.push({ name: bareDecl.name, initial: 'null', type: 'expression', hasSetter: true, setterName: 'set_' + bareDecl.name });
+      } else {
+        vars.push({ name: bareDecl.name, initial: null, type: 'array', hasSetter: false });
+      }
     }
   }
   return vars;
@@ -414,9 +450,10 @@ function transpilePageBody(bodyLines, setterNames, jsLines, indent, isComputed) 
 // ── JS_LOGIC builder ──
 // Assembles the complete JS logic block from parsed page blocks.
 
-function buildPageJSLogic(stateVars, ambients, functionEntries, timerBlocks) {
+function buildPageJSLogic(stateVars, ambients, functionEntries, timerBlocks, declaredSetters) {
   var jsLines = [];
   var funcNames = [];
+  var declaredSetterSet = buildDeclaredSetterSet(declaredSetters);
   var allEntries = Array.isArray(functionEntries)
     ? functionEntries
     : parsePageFunctionEntries(functionEntries);
@@ -431,7 +468,9 @@ function buildPageJSLogic(stateVars, ambients, functionEntries, timerBlocks) {
 
     // Primitives handled by emit — skip
     if (sv.type === 'int' || sv.type === 'float' || sv.type === 'boolean' || sv.type === 'string') {
-      funcNames.push('set_' + sv.name);
+      if (pageVarHasSetter(sv, declaredSetterSet)) {
+        funcNames.push(pageSetterNameForVar(sv));
+      }
       continue;
     }
 
@@ -444,9 +483,11 @@ function buildPageJSLogic(stateVars, ambients, functionEntries, timerBlocks) {
       jsLines.push('var ' + sv.name + ' = ' + (sv.initial || '0') + ';');
     }
 
-    var setterName = 'set_' + sv.name;
-    jsLines.push('function ' + setterName + '(v) { ' + sv.name + ' = v; }');
-    funcNames.push(setterName);
+    if (pageVarHasSetter(sv, declaredSetterSet)) {
+      var setterName = pageSetterNameForVar(sv);
+      jsLines.push('function ' + setterName + '(v) { ' + sv.name + ' = v; }');
+      funcNames.push(setterName);
+    }
   }
 
   // ── Ambient variable declarations ──
@@ -632,7 +673,7 @@ function compilePage(source, c, file) {
     return nativePlanCompileError(ctx.nativePlan);
   }
 
-  var jsLogic = buildPageJSLogic(stateVars, ambients, functionEntries, timerBlocks);
+  var jsLogic = buildPageJSLogic(stateVars, ambients, functionEntries, timerBlocks, declaredSetters);
   var existingScriptFuncs = ctx.scriptFuncs ? ctx.scriptFuncs.slice() : [];
   ctx.scriptBlock = jsLogic.scriptBlock;
   ctx.scriptFuncs = jsLogic.funcNames.slice();

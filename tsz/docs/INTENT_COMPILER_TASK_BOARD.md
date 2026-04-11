@@ -41,10 +41,10 @@ Track implementation work for strict intent/chad syntax alignment, hatch behavio
 
 ## Phase 2: Chad Parser Architecture Simplification
 - [ ] Refactor top-level chad artifact parsing to a unified block contract.
-- [ ] Reduce `page.js` special-case behavior for intent/chad lane.
+- [-] Reduce `page.js` special-case behavior for intent/chad lane.
 - [ ] Consolidate shared intent function/body lowering for app/page/widget/component/lib.
-- [ ] Remove chad-lane legacy compatibility behavior not in dictionary.
-- [ ] Ensure parser behavior is driven by top-most block type + allowed child blocks.
+- [x] Remove chad-lane legacy compatibility behavior not in dictionary.
+- [-] Ensure parser behavior is driven by top-most block type + allowed child blocks.
 
 ## Phase 3: Hatch Semantics And Parity
 - [ ] Keep `<script>` as router surface (not JS-only).
@@ -82,7 +82,7 @@ Track implementation work for strict intent/chad syntax alignment, hatch behavio
 - [x] Create persistent task board file for multi-turn tracking.
 - [x] Start Phase 0 implementation.
 - [x] Start Phase 1 chad app syntax rewrites.
-- [ ] Start Phase 2 parser architecture simplification.
+- [-] Start Phase 2 parser architecture simplification.
 
 ## Notes
 - Mixed lane remains operational bridge lane.
@@ -90,3 +90,4 @@ Track implementation work for strict intent/chad syntax alignment, hatch behavio
 - Chad lane remains strict explicit intent lane with dictionary authority.
 - Phase 0 implementation lives in `tsz/compiler/smith/lanes/chad/strict_validator.js` and is wired in `tsz/compiler/smith/lanes/chad.js`.
 - Phase 1 app rewrite removed `<state>` and legacy `<For each=...>` across `tsz/carts/conformance/chad/apps/`.
+- Phase 2 in progress: chad lane now ignores legacy `<state>/<timer>` plumbing and shared `<var>` parsing canonicalizes `set_` declarations.

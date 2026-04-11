@@ -14,9 +14,7 @@
 //
 // Block syntax inside:
 //   <var>       → state slots + ambient reads
-//   <state>     → legacy/compat setter declarations still recognized by helpers
 //   <functions> → JS_LOGIC script block, including `name every N:` scheduling
-//   <timer>     → legacy compat scheduling block still recognized by shared helpers
 //   return(...) → JSX tree (classifier components, dictionary props)
 //
 // Merges onto the highway at finishParsedLane().
@@ -117,9 +115,7 @@ function compileChadLane(source, tokens, file) {
 
   // ── Extract declarative blocks from inner source ──
   var varBlock = extractPageBlock(inner, 'var');
-  var stateBlock = extractPageBlock(inner, 'state');
   var functionsBlock = extractPageBlock(inner, 'functions');
-  var timerBlocks = extractPageBlocks(inner, 'timer');
 
   // ── Parse <types> block → type variant values ──
   // These are string enums: <types><mode>time\ndate\nsystem</mode></types>
@@ -256,9 +252,6 @@ function compileChadLane(source, tokens, file) {
     }
   }
 
-  // ── Parse <state> block → setter names ──
-  var declaredSetters = parsePageStateBlock(stateBlock);
-
   // ── Populate ctx.stateSlots from primitive state vars ──
   for (var si = 0; si < stateVars.length; si++) {
     var sv = stateVars[si];
@@ -279,7 +272,7 @@ function compileChadLane(source, tokens, file) {
   }
 
   // ── Build JS_LOGIC from JS-owned <functions>, <timer>, and state declarations ──
-  var jsLogic = buildPageJSLogic(stateVars, ambients, functionEntries, timerBlocks);
+  var jsLogic = buildPageJSLogic(stateVars, ambients, functionEntries, [], []);
   var existingScriptFuncs = ctx.scriptFuncs ? ctx.scriptFuncs.slice() : [];
   ctx.scriptBlock = jsLogic.scriptBlock;
   ctx.scriptFuncs = jsLogic.funcNames.slice();
@@ -288,13 +281,6 @@ function compileChadLane(source, tokens, file) {
   }
   for (var nfi = 0; nfi < ctx.nativeFuncs.length; nfi++) {
     if (ctx.scriptFuncs.indexOf(ctx.nativeFuncs[nfi]) < 0) ctx.scriptFuncs.push(ctx.nativeFuncs[nfi]);
-  }
-
-  // Register declared setters as script funcs (handler resolution)
-  for (var di = 0; di < declaredSetters.length; di++) {
-    if (ctx.scriptFuncs.indexOf(declaredSetters[di]) < 0) {
-      ctx.scriptFuncs.push(declaredSetters[di]);
-    }
   }
 
   // ── Register OAs for object_array state vars (skip if data block already registered) ──

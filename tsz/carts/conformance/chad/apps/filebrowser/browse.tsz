@@ -13,7 +13,7 @@ from './file_row.c'
     set_loading is false
     set_ready is false
     set_pathParts is array
-    set_sortBy exact type
+    set_sortBy is type
   </var>
 
   <entries>

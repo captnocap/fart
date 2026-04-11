@@ -7,7 +7,7 @@ from '../../icons.glyphs'
   <var>
     userList is objects
     set_search is ''
-    set_roleFilter exact type
+    set_roleFilter is type
   </var>
 
   <userList>
