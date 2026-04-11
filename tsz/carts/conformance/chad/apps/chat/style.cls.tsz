@@ -7,6 +7,7 @@ classifier({
   PanelNarrow: { type: 'Box', style: { width: 240, gap: 8, padding: 10, borderRadius: 10, backgroundColor: '#161b22' } },
   Row: { type: 'Box', style: { flexDirection: 'row', alignItems: 'center', gap: 8 } },
   Scroll: { type: 'Box', style: { flexDirection: 'column', gap: 6, flexGrow: 1 } },
+  Button: { type: 'Pressable', style: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 8, borderRadius: 8, backgroundColor: '#21262d' } },
   ListItem: { type: 'Box', style: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 8, borderRadius: 8, backgroundColor: '#21262d' } },
   MessageRow: { type: 'Box', style: { flexDirection: 'row', gap: 8, padding: 8, borderRadius: 8, backgroundColor: '#0d1117' } },
   MessageBody: { type: 'Box', style: { flexDirection: 'column', gap: 2, flexGrow: 1 } },

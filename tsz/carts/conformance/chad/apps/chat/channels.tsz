@@ -65,20 +65,18 @@
       <C.PanelNarrow>
         <C.Subtitle>Channels</C.Subtitle>
         <for channelList>
-          <Pressable onPress=switchChannel>
-            <C.ListItem>
-              <if item.id exact activeChannel>
-                <C.NavLabelActive>{'# ' + item.name}</C.NavLabelActive>
-              </if>
-              <else>
-                <C.NavLabel>{'# ' + item.name}</C.NavLabel>
-              </else>
-              <C.Spacer />
-              <if item.unread above 0>
-                <C.BadgeGreen><C.BadgeText>{item.unread}</C.BadgeText></C.BadgeGreen>
-              </if>
-            </C.ListItem>
-          </Pressable>
+          <C.Button switchChannel>
+            <if item.id exact activeChannel>
+              <C.NavLabelActive>{'# ' + item.name}</C.NavLabelActive>
+            </if>
+            <else>
+              <C.NavLabel>{'# ' + item.name}</C.NavLabel>
+            </else>
+            <C.Spacer />
+            <if item.unread above 0>
+              <C.BadgeGreen><C.BadgeText>{item.unread}</C.BadgeText></C.BadgeGreen>
+            </if>
+          </C.Button>
         </for>
       </C.PanelNarrow>
 
