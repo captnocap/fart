@@ -19,6 +19,7 @@ const SMITH_JS = @embedFile("dist/smith.bundle.js");
 
 const MAX_IMPORTS = 64;
 const Alloc = std.heap.page_allocator;
+const IntentImportError = error{IntentImportsForbidden};
 
 const FileClass = enum { component, classifier, script, unknown };
 
@@ -127,6 +128,65 @@ fn findImportPaths(source: []const u8, paths_out: *[MAX_IMPORTS][]const u8) u32 
     return count;
 }
 
+fn isIdentStart(c: u8) bool {
+    return (c >= 'a' and c <= 'z') or (c >= 'A' and c <= 'Z') or c == '_';
+}
+
+fn isIdentContinue(c: u8) bool {
+    return isIdentStart(c) or (c >= '0' and c <= '9');
+}
+
+fn isIntentBlockType(token: []const u8) bool {
+    return std.mem.eql(u8, token, "widget") or
+        std.mem.eql(u8, token, "page") or
+        std.mem.eql(u8, token, "app") or
+        std.mem.eql(u8, token, "component") or
+        std.mem.eql(u8, token, "lib") or
+        std.mem.eql(u8, token, "effect") or
+        std.mem.eql(u8, token, "glyph");
+}
+
+/// Detects intent/chad block headers in canonical form: <name app|page|widget|component|lib...>
+fn isIntentSyntaxSource(source: []const u8) bool {
+    var i: usize = 0;
+    while (i < source.len) : (i += 1) {
+        if (source[i] != '<') continue;
+        var j = i + 1;
+        if (j >= source.len) continue;
+        if (source[j] == '/') continue; // closing tag
+        if (!isIdentStart(source[j])) continue;
+        while (j < source.len and isIdentContinue(source[j])) j += 1; // block name
+        while (j < source.len and (source[j] == ' ' or source[j] == '\t' or source[j] == '\n' or source[j] == '\r')) j += 1;
+        const type_start = j;
+        while (j < source.len and isIdentContinue(source[j])) j += 1; // block type
+        if (type_start == j) continue;
+        const block_type = source[type_start..j];
+        if (!isIntentBlockType(block_type)) continue;
+        while (j < source.len and (source[j] == ' ' or source[j] == '\t' or source[j] == '\n' or source[j] == '\r')) j += 1;
+        if (j < source.len and source[j] == '>') return true;
+    }
+    return false;
+}
+
+fn findFirstImportLine(source: []const u8) ?usize {
+    var line_no: usize = 1;
+    var line_start: usize = 0;
+    while (line_start <= source.len) : (line_no += 1) {
+        var line_end = line_start;
+        while (line_end < source.len and source[line_end] != '\n') line_end += 1;
+        const line = source[line_start..line_end];
+        const trimmed = std.mem.trim(u8, line, " \t\r");
+        if (trimmed.len > 0 and !std.mem.startsWith(u8, trimmed, "//")) {
+            if (std.mem.startsWith(u8, trimmed, "from ") or std.mem.startsWith(u8, trimmed, "import ")) {
+                return line_no;
+            }
+        }
+        if (line_end == source.len) break;
+        line_start = line_end + 1;
+    }
+    return null;
+}
+
 /// Strip `function App() { ... }` test stubs from component files.
 /// Component files often have a standalone App() for testing. When merged into
 /// a larger app, these stubs confuse the parser (multiple App definitions,
@@ -159,7 +219,7 @@ fn mergeImports(
     component_buf: *std.ArrayListUnmanaged(u8),
     cls_buf: *std.ArrayListUnmanaged(u8),
     script_buf: *std.ArrayListUnmanaged(u8),
-) void {
+) IntentImportError!void {
     // Cycle check
     for (visited.*[0..visited_count.*]) |v| {
         if (std.mem.eql(u8, v, file_path)) return;
@@ -171,6 +231,22 @@ fn mergeImports(
     // Find import paths in this file
     var paths: [MAX_IMPORTS][]const u8 = undefined;
     const path_count = findImportPaths(source, &paths);
+    const is_intent_source = isIntentSyntaxSource(source);
+    if (is_intent_source) {
+        const first_import_line = findFirstImportLine(source);
+        if (path_count > 0 or first_import_line != null) {
+            const line_no = first_import_line orelse 1;
+            std.debug.print(
+                "[forge] Intent syntax import violation: {s}:{d}\n",
+                .{ file_path, line_no },
+            );
+            std.debug.print(
+                "[forge] Import statements are forbidden in intent/chad syntax files. Ambient namespace is required.\n",
+                .{},
+            );
+            return error.IntentImportsForbidden;
+        }
+    }
 
     std.debug.print("[forge:merge] {s} class={s} imports={d}\n", .{ file_path, @tagName(classifyFile(file_path)), path_count });
 
@@ -185,7 +261,7 @@ fn mergeImports(
         switch (class) {
             .classifier => {
                 // Recursively resolve imports from classifier files (e.g. .cls imports .tcls)
-                mergeImports(resolved, imp_source, visited, visited_count, component_buf, cls_buf, script_buf);
+                try mergeImports(resolved, imp_source, visited, visited_count, component_buf, cls_buf, script_buf);
                 cls_buf.appendSlice(Alloc, imp_source) catch {};
                 cls_buf.append(Alloc, '\n') catch {};
             },
@@ -195,7 +271,7 @@ fn mergeImports(
             },
             .component, .unknown => {
                 // Recursively resolve this file's imports first (depth-first)
-                mergeImports(resolved, imp_source, visited, visited_count, component_buf, cls_buf, script_buf);
+                try mergeImports(resolved, imp_source, visited, visited_count, component_buf, cls_buf, script_buf);
             },
         }
     }
@@ -303,7 +379,12 @@ pub fn main() !void {
     var cls_buf: std.ArrayListUnmanaged(u8) = .{};
     var script_buf: std.ArrayListUnmanaged(u8) = .{};
 
-    mergeImports(input_path, source, &visited, &visited_count, &component_buf, &cls_buf, &script_buf);
+    mergeImports(input_path, source, &visited, &visited_count, &component_buf, &cls_buf, &script_buf) catch |err| {
+        if (err == error.IntentImportsForbidden) {
+            std.process.exit(1);
+        }
+        return err;
+    };
 
     // Build merged source: component deps first, then main app source
     // (mergeImports already added the main source to component_buf via the recursive call)
