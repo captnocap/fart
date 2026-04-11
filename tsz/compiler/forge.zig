@@ -146,16 +146,58 @@ fn isIntentBlockType(token: []const u8) bool {
         std.mem.eql(u8, token, "glyph");
 }
 
-/// Detects intent/chad block headers in canonical form: <name app|page|widget|component|lib...>
+fn hasMatchingIntentCloseTag(source: []const u8, name: []const u8, search_from: usize) bool {
+    var i = search_from;
+    while (i < source.len) : (i += 1) {
+        if (source[i] == '/' and i + 1 < source.len and source[i + 1] == '/') {
+            i += 2;
+            while (i < source.len and source[i] != '\n') i += 1;
+            continue;
+        }
+        if (source[i] == '/' and i + 1 < source.len and source[i + 1] == '*') {
+            i += 2;
+            while (i + 1 < source.len and !(source[i] == '*' and source[i + 1] == '/')) i += 1;
+            if (i + 1 < source.len) i += 1;
+            continue;
+        }
+        if (source[i] != '<') continue;
+        var j = i + 1;
+        if (j >= source.len or source[j] != '/') continue;
+        j += 1;
+        while (j < source.len and (source[j] == ' ' or source[j] == '\t' or source[j] == '\n' or source[j] == '\r')) j += 1;
+        if (j + name.len > source.len) continue;
+        if (!std.mem.eql(u8, source[j .. j + name.len], name)) continue;
+        j += name.len;
+        while (j < source.len and (source[j] == ' ' or source[j] == '\t' or source[j] == '\n' or source[j] == '\r')) j += 1;
+        if (j < source.len and source[j] == '>') return true;
+    }
+    return false;
+}
+
+/// Detects intent/chad block headers in canonical form:
+/// <name app|page|widget|component|lib...> ... </name>
 fn isIntentSyntaxSource(source: []const u8) bool {
     var i: usize = 0;
     while (i < source.len) : (i += 1) {
+        if (source[i] == '/' and i + 1 < source.len and source[i + 1] == '/') {
+            i += 2;
+            while (i < source.len and source[i] != '\n') i += 1;
+            continue;
+        }
+        if (source[i] == '/' and i + 1 < source.len and source[i + 1] == '*') {
+            i += 2;
+            while (i + 1 < source.len and !(source[i] == '*' and source[i + 1] == '/')) i += 1;
+            if (i + 1 < source.len) i += 1;
+            continue;
+        }
         if (source[i] != '<') continue;
         var j = i + 1;
         if (j >= source.len) continue;
         if (source[j] == '/') continue; // closing tag
         if (!isIdentStart(source[j])) continue;
+        const name_start = j;
         while (j < source.len and isIdentContinue(source[j])) j += 1; // block name
+        const block_name = source[name_start..j];
         while (j < source.len and (source[j] == ' ' or source[j] == '\t' or source[j] == '\n' or source[j] == '\r')) j += 1;
         const type_start = j;
         while (j < source.len and isIdentContinue(source[j])) j += 1; // block type
@@ -163,7 +205,9 @@ fn isIntentSyntaxSource(source: []const u8) bool {
         const block_type = source[type_start..j];
         if (!isIntentBlockType(block_type)) continue;
         while (j < source.len and (source[j] == ' ' or source[j] == '\t' or source[j] == '\n' or source[j] == '\r')) j += 1;
-        if (j < source.len and source[j] == '>') return true;
+        if (j < source.len and source[j] == '>' and hasMatchingIntentCloseTag(source, block_name, j + 1)) {
+            return true;
+        }
     }
     return false;
 }
