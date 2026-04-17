@@ -710,6 +710,9 @@ fn stampLuaNode(L: ?*lua.lua_State, idx: c_int, alloc: std.mem.Allocator) Node {
     node.window_resize = readLuaBool(L, idx, "window_resize");
     // ── Canvas/Graph fields ──
     node.graph_container = readLuaBool(L, idx, "graph_container");
+    node.canvas_type = readLuaOptString(L, idx, "canvas_type", alloc);
+    node.canvas_id = @intFromFloat(readLuaFloat(L, idx, "canvas_id", 0));
+    node.canvas_clamp = readLuaBool(L, idx, "canvas_clamp");
     node.canvas_path = readLuaBool(L, idx, "canvas_path");
     node.canvas_node = readLuaBool(L, idx, "canvas_node");
     node.canvas_path_d = readLuaOptString(L, idx, "canvas_path_d", alloc);

@@ -709,11 +709,10 @@ pub fn drawStrokeCurves(path: *const Path, stroke_r: f32, stroke_g: f32, stroke_
         const seg = &path.curves[i];
         switch (seg.kind) {
             .line => {
-                // Degenerate quadratic curve — control point at midpoint gives a straight line
-                // with proper SDF anti-aliased stroke (no AABB rect artifacts)
-                const mx = (seg.x0 + seg.x3) * 0.5;
-                const my = (seg.y0 + seg.y3) * 0.5;
-                gpu.drawCurve(seg.x0, seg.y0, mx, my, seg.x3, seg.y3, stroke_r, stroke_g, stroke_b, stroke_a, stroke_width);
+                // Collinear p0/p1/p2 makes the SDF bezier shader's cross-product math
+                // degenerate → periodic dot artifacts at certain zooms. Route straight
+                // lines through the AABB rect primitive instead.
+                drawLineSegment(seg.x0, seg.y0, seg.x3, seg.y3, stroke_width, stroke_r, stroke_g, stroke_b, stroke_a);
             },
             .quadratic => {
                 gpu.drawCurve(seg.x0, seg.y0, seg.x1, seg.y1, seg.x3, seg.y3, stroke_r, stroke_g, stroke_b, stroke_a, stroke_width);

@@ -1,5 +1,14 @@
 from './style_cls'
 from './Legend.c'
+import { graph } from './graph.script';
+
+const [filterRoot, setFilterRoot] = useState(false);
+const [filterParent, setFilterParent] = useState(false);
+const [filterChild, setFilterChild] = useState(false);
+const [filterFixed, setFilterFixed] = useState(false);
+const [filterFlex, setFilterFlex] = useState(false);
+const [filterDynamic, setFilterDynamic] = useState(false);
+const [flowOn, setFlowOn] = useState(true);
 
 function App() {
   return (

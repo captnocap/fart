@@ -33,53 +33,101 @@ function Legend() {
       <C.Sep />
 
       <Pressable onPress={() => toggleFilter('Root')}>
-        <C.FilterChipActive>
-          <C.Dot style={{ backgroundColor: '#14b8a6' }} />
-          <Text fontSize={11} color="#e0e6f0">Root</Text>
-        </C.FilterChipActive>
+        {filterRoot ? (
+          <C.FilterChipActive>
+            <C.Dot style={{ backgroundColor: '#14b8a6' }} />
+            <Text fontSize={11} color="#e0e6f0">Root</Text>
+          </C.FilterChipActive>
+        ) : (
+          <C.FilterChip>
+            <C.Dot style={{ backgroundColor: '#14b8a6' }} />
+            <Text fontSize={11} color="#4a5568">Root</Text>
+          </C.FilterChip>
+        )}
       </Pressable>
 
       <Pressable onPress={() => toggleFilter('Parent')}>
-        <C.FilterChipActive>
-          <C.Dot style={{ backgroundColor: '#a855f7' }} />
-          <Text fontSize={11} color="#e0e6f0">Parent</Text>
-        </C.FilterChipActive>
+        {filterParent ? (
+          <C.FilterChipActive>
+            <C.Dot style={{ backgroundColor: '#a855f7' }} />
+            <Text fontSize={11} color="#e0e6f0">Parent</Text>
+          </C.FilterChipActive>
+        ) : (
+          <C.FilterChip>
+            <C.Dot style={{ backgroundColor: '#a855f7' }} />
+            <Text fontSize={11} color="#4a5568">Parent</Text>
+          </C.FilterChip>
+        )}
       </Pressable>
 
       <Pressable onPress={() => toggleFilter('Child')}>
-        <C.FilterChipActive>
-          <C.Dot style={{ backgroundColor: '#f97316' }} />
-          <Text fontSize={11} color="#e0e6f0">Child</Text>
-        </C.FilterChipActive>
+        {filterChild ? (
+          <C.FilterChipActive>
+            <C.Dot style={{ backgroundColor: '#f97316' }} />
+            <Text fontSize={11} color="#e0e6f0">Child</Text>
+          </C.FilterChipActive>
+        ) : (
+          <C.FilterChip>
+            <C.Dot style={{ backgroundColor: '#f97316' }} />
+            <Text fontSize={11} color="#4a5568">Child</Text>
+          </C.FilterChip>
+        )}
       </Pressable>
 
       <Pressable onPress={() => toggleFilter('Fixed')}>
-        <C.FilterChipActive>
-          <C.Dot style={{ backgroundColor: '#4ade80' }} />
-          <Text fontSize={11} color="#e0e6f0">Fixed</Text>
-        </C.FilterChipActive>
+        {filterFixed ? (
+          <C.FilterChipActive>
+            <C.Dot style={{ backgroundColor: '#4ade80' }} />
+            <Text fontSize={11} color="#e0e6f0">Fixed</Text>
+          </C.FilterChipActive>
+        ) : (
+          <C.FilterChip>
+            <C.Dot style={{ backgroundColor: '#4ade80' }} />
+            <Text fontSize={11} color="#4a5568">Fixed</Text>
+          </C.FilterChip>
+        )}
       </Pressable>
 
       <Pressable onPress={() => toggleFilter('Flex')}>
-        <C.FilterChipActive>
-          <C.Dot style={{ backgroundColor: '#3b82f6' }} />
-          <Text fontSize={11} color="#e0e6f0">Flex</Text>
-        </C.FilterChipActive>
+        {filterFlex ? (
+          <C.FilterChipActive>
+            <C.Dot style={{ backgroundColor: '#3b82f6' }} />
+            <Text fontSize={11} color="#e0e6f0">Flex</Text>
+          </C.FilterChipActive>
+        ) : (
+          <C.FilterChip>
+            <C.Dot style={{ backgroundColor: '#3b82f6' }} />
+            <Text fontSize={11} color="#4a5568">Flex</Text>
+          </C.FilterChip>
+        )}
       </Pressable>
 
       <Pressable onPress={() => toggleFilter('Dynamic')}>
-        <C.FilterChipActive>
-          <C.Dot style={{ backgroundColor: '#fbbf24' }} />
-          <Text fontSize={11} color="#e0e6f0">Dynamic</Text>
-        </C.FilterChipActive>
+        {filterDynamic ? (
+          <C.FilterChipActive>
+            <C.Dot style={{ backgroundColor: '#fbbf24' }} />
+            <Text fontSize={11} color="#e0e6f0">Dynamic</Text>
+          </C.FilterChipActive>
+        ) : (
+          <C.FilterChip>
+            <C.Dot style={{ backgroundColor: '#fbbf24' }} />
+            <Text fontSize={11} color="#4a5568">Dynamic</Text>
+          </C.FilterChip>
+        )}
       </Pressable>
 
       <C.Sep />
 
       <Pressable onPress={() => toggleFlow()}>
-        <C.FilterChipActive>
-          <Text fontSize={11} color="#a855f7">Flow</Text>
-        </C.FilterChipActive>
+        {flowOn ? (
+          <C.FilterChipActive>
+            <Text fontSize={11} color="#a855f7">Flow</Text>
+          </C.FilterChipActive>
+        ) : (
+          <C.FilterChip>
+            <Text fontSize={11} color="#4a5568">Flow</Text>
+          </C.FilterChip>
+        )}
       </Pressable>
     </C.LegendBar>
     </Box>
