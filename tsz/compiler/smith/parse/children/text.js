@@ -116,9 +116,21 @@ function tryParseTextChild(c, children) {
       textEnd = c.ends[c.pos];
       c.advance();
     }
-    const text = c._byteSlice(textStart, textEnd).trim();
+    // Extend textEnd to the start of the terminating token so inter-token
+    // whitespace (e.g. the space in "Pane {worker.pane}") survives lexing.
+    if (c.pos < c.count && c.starts[c.pos] > textEnd) textEnd = c.starts[c.pos];
+    const rawSlice = c._byteSlice(textStart, textEnd);
+    // Preserve JSX-style significant whitespace: a single leading/trailing
+    // space adjacent to an expression/tag survives the collapse. Newlines
+    // and intra-space runs still collapse to nothing so pretty-printed JSX
+    // doesn't leak indentation into rendered text.
+    let collapsed = rawSlice.replace(/\r?\n\s*/g, ' ').replace(/[ \t]+/g, ' ');
+    let trimmedCollapsed = collapsed.trim();
+    let leadSpace = /^\s/.test(rawSlice) && trimmedCollapsed.length > 0 ? ' ' : '';
+    let trailSpace = /\s$/.test(rawSlice) && trimmedCollapsed.length > 0 ? ' ' : '';
+    const text = leadSpace + trimmedCollapsed + trailSpace;
     if (text.trim()) {
-      const decodedText = _decodeJsxTextEntities(text.trim());
+      const decodedText = _decodeJsxTextEntities(text);
       if (globalThis.__SMITH_DEBUG_INLINE && (text.includes('import') || text.includes('function ') || text.includes('setMyPid'))) {
         globalThis.__dbg = globalThis.__dbg || [];
         globalThis.__dbg.push('[TEXT_LEAK] text="' + text.substring(0, 80) + '" pos=' + c.pos + ' inline=' + (ctx.inlineComponent || 'none'));
