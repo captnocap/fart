@@ -413,7 +413,7 @@ function tryParseBraceChild(c, children) {
         }
         ctx.dynTexts.push({ bufId, fmtString: '{s}', fmtArgs: 'state.getSlotString(' + slotIdx + ')', arrName: '', arrIndex: 0, bufSize: 256, inMap: isInMap, mapIdx: isInMap ? ctx.maps.indexOf(ctx.currentMap) : -1 });
         ctx._jsDynTexts.push({ slotIdx: slotIdx, jsExpr: fullExpr });
-        children.push({ nodeExpr: isInMap ? '.{ .text = "__mt' + bufId + '__" }' : '.{ .text = "" }', dynBufId: bufId, inMap: isInMap });
+        children.push({ nodeExpr: isInMap ? '.{ .text = "__mt' + bufId + '__" }' : '.{ .text = "" }', dynBufId: bufId, inMap: isInMap, _luaStateGetter: '__jsExpr_' + slotIdx });
       } else if (fullExpr.length > 0) {
         _pushLuaRawDynText(children, fullExpr);
       }
@@ -435,9 +435,10 @@ function tryParseBraceChild(c, children) {
         bufId = ctx.dynCount;
         ctx.dynCount++;
       }
+      var _rlJsExpr1 = _expandRenderLocalJs(_normalizeJoinedJsExpr(_brRlRaw));
       ctx.dynTexts.push({ bufId, fmtString: '{s}', fmtArgs: 'state.getSlotString(' + slotIdx + ')', arrName: '', arrIndex: 0, bufSize: 256, inMap: isInMap, mapIdx: isInMap ? ctx.maps.indexOf(ctx.currentMap) : -1 });
-      ctx._jsDynTexts.push({ slotIdx: slotIdx, jsExpr: _expandRenderLocalJs(_normalizeJoinedJsExpr(_brRlRaw)) });
-      children.push({ nodeExpr: isInMap ? '.{ .text = "__mt' + bufId + '__" }' : '.{ .text = "" }', dynBufId: bufId, inMap: isInMap });
+      ctx._jsDynTexts.push({ slotIdx: slotIdx, jsExpr: _rlJsExpr1 });
+      children.push({ nodeExpr: isInMap ? '.{ .text = "__mt' + bufId + '__" }' : '.{ .text = "" }', dynBufId: bufId, inMap: isInMap, _luaStateGetter: '__jsExpr_' + slotIdx });
       return true;
     }
     if (isEvalExpr && !isPureEvalExpr && _brRlRaw && _braceShouldUseJsDynText(_expandRenderLocalJs(_normalizeJoinedJsExpr(_brRlRaw)))) {
@@ -452,9 +453,10 @@ function tryParseBraceChild(c, children) {
         bufId = ctx.dynCount;
         ctx.dynCount++;
       }
+      var _rlJsExpr2 = _expandRenderLocalJs(_normalizeJoinedJsExpr(_brRlRaw));
       ctx.dynTexts.push({ bufId, fmtString: '{s}', fmtArgs: 'state.getSlotString(' + slotIdx + ')', arrName: '', arrIndex: 0, bufSize: 256, inMap: isInMap, mapIdx: isInMap ? ctx.maps.indexOf(ctx.currentMap) : -1 });
-      ctx._jsDynTexts.push({ slotIdx: slotIdx, jsExpr: _expandRenderLocalJs(_normalizeJoinedJsExpr(_brRlRaw)) });
-      children.push({ nodeExpr: isInMap ? '.{ .text = "__mt' + bufId + '__" }' : '.{ .text = "" }', dynBufId: bufId, inMap: isInMap });
+      ctx._jsDynTexts.push({ slotIdx: slotIdx, jsExpr: _rlJsExpr2 });
+      children.push({ nodeExpr: isInMap ? '.{ .text = "__mt' + bufId + '__" }' : '.{ .text = "" }', dynBufId: bufId, inMap: isInMap, _luaStateGetter: '__jsExpr_' + slotIdx });
       return true;
     }
     const isZigExpr = isEvalExpr || (typeof _brRlVal === 'string' && (_brRlVal.includes('state.get') || _brRlVal.includes('getSlot') || _brRlVal.includes('_oa') || _brRlVal.includes('@as')));

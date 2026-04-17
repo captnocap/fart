@@ -227,14 +227,23 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
       if (dynChild.inMap && children.some(ch => !ch.isGlyph && ch !== dynChild && ch.nodeExpr && ch.nodeExpr.indexOf('.text = "') >= 0)) {
         var _mixedParts = [];
         for (const ch of children) {
-          if (ch === dynChild) {
-            if (ch._luaTemplateRaw) _mixedParts.push(ch._luaTemplateRaw.indexOf('${') >= 0 ? ch._luaTemplateRaw : '${' + ch._luaTemplateRaw + '}');
-            else if (ch._luaTextField) _mixedParts.push('${_item.' + ch._luaTextField + '}');
-            else if (ch._luaStateGetter) _mixedParts.push('${' + ch._luaStateGetter + '}');
-            else if (ch._luaTernaryText) _mixedParts.push('${' + ch._luaTernaryText + '}');
+          // Any child carrying a dyn-text contract (the primary dynChild OR a
+          // sibling brace that also emitted one) contributes its resolved expr
+          // as a ${...} template slot. Otherwise it's static text — extract.
+          if (ch._luaTemplateRaw) {
+            _mixedParts.push(ch._luaTemplateRaw.indexOf('${') >= 0 ? ch._luaTemplateRaw : '${' + ch._luaTemplateRaw + '}');
+          } else if (ch._luaTextField) {
+            _mixedParts.push('${_item.' + ch._luaTextField + '}');
+          } else if (ch._luaStateGetter) {
+            _mixedParts.push('${' + ch._luaStateGetter + '}');
+          } else if (ch._luaTernaryText) {
+            _mixedParts.push('${' + ch._luaTernaryText + '}');
           } else if (!ch.isGlyph && ch.nodeExpr) {
             const _sm = ch.nodeExpr.match(/\.text = "(.*)"/);
-            if (_sm) _mixedParts.push(_sm[1]);
+            // Skip bare __mtN__ placeholders — those belong to dyn children
+            // whose contract fields above already contributed. Emitting the
+            // raw placeholder leaks it into the rendered string.
+            if (_sm && !/^__mt\d+__$/.test(_sm[1])) _mixedParts.push(_sm[1]);
           }
         }
         if (_mixedParts.length > 0) _mixedLuaRaw = _mixedParts.join('');
