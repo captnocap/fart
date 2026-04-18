@@ -334,7 +334,8 @@ function _tryParseIdentifierMapExpression(c, children, consumeClosingBrace) {
     if (c.text() === 'map' && c.pos + 1 < c.count && c.kindAt(c.pos + 1) === TK.lparen) {
       c.advance(); // skip 'map'
       c.advance(); // skip (
-      // Parse the callback header: (param) => or (param, idx) =>
+      // Parse the callback header: (param) =>, (param, idx) =>, or function(param, idx) { ... }
+      if (c.isIdent('function')) c.advance(); // skip 'function' keyword
       if (c.kind() === TK.lparen) c.advance(); // skip inner ( for destructured params
       var _nmParam = c.kind() === TK.identifier ? c.text() : '_item';
       c.advance(); // skip param
@@ -342,6 +343,17 @@ function _tryParseIdentifierMapExpression(c, children, consumeClosingBrace) {
       if (c.kind() === TK.comma) { c.advance(); if (c.kind() === TK.identifier) { _nmIdxParam = c.text(); c.advance(); } } // capture optional index param
       if (c.kind() === TK.rparen) c.advance(); // )
       if (c.kind() === TK.arrow) c.advance(); // =>
+      // function-form body: skip into the brace-block until the inner JSX `return`
+      if (c.kind() === TK.lbrace) {
+        c.advance();
+        var _fnDepth = 0;
+        while (c.pos < c.count) {
+          if (c.kind() === TK.lbrace) _fnDepth++;
+          else if (c.kind() === TK.rbrace) { if (_fnDepth === 0) break; _fnDepth--; }
+          if (_fnDepth === 0 && c.isIdent('return')) { c.advance(); break; }
+          c.advance();
+        }
+      }
       // Now at the JSX body — use the token walker for Lua template
       if (!ctx._luaMapRebuilders) ctx._luaMapRebuilders = [];
       var _nmIdx = ctx._luaMapRebuilders.length;
