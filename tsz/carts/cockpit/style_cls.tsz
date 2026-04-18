@@ -129,4 +129,39 @@ classifier({
   },
   ThemePickLabel: { type: 'Text', fontSize: 'theme-fontXxs', color: 'theme-textPrimary' },
   ThemePickLabelActive: { type: 'Text', fontSize: 'theme-fontXxs', color: 'theme-textOnAccent' },
+
+  NavRow: { type: 'Box', style: { flexDirection: 'row', gap: 'theme-spaceSm' } },
+  NavPick: {
+    type: 'Pressable',
+    style: {
+      paddingLeft: 'theme-spaceSm', paddingRight: 'theme-spaceSm',
+      paddingTop: 2, paddingBottom: 2,
+      borderRadius: 'theme-radiusSm',
+      borderWidth: 'theme-borderW1', borderColor: 'theme-borderHair',
+      backgroundColor: 'theme-bgRaised',
+    },
+  },
+  NavPickActive: {
+    type: 'Pressable',
+    style: {
+      paddingLeft: 'theme-spaceSm', paddingRight: 'theme-spaceSm',
+      paddingTop: 2, paddingBottom: 2,
+      borderRadius: 'theme-radiusSm',
+      borderWidth: 'theme-borderW1', borderColor: 'theme-borderFocus',
+      backgroundColor: 'theme-primary',
+    },
+  },
+  NavLabel: { type: 'Text', fontSize: 'theme-fontXxs', color: 'theme-textPrimary' },
+  NavLabelActive: { type: 'Text', fontSize: 'theme-fontXxs', color: 'theme-textOnAccent' },
+
+  TypeRow: { type: 'Box', style: { flexDirection: 'row', alignItems: 'center', gap: 'theme-spaceMd' } },
+  TypeLabel: { type: 'Text', fontSize: 'theme-fontXxs', color: 'theme-textDim' },
+  TypeHuge: { type: 'Text', fontSize: 'theme-fontHuge', color: 'theme-textPrimary' },
+  TypeXxl:  { type: 'Text', fontSize: 'theme-fontXxl',  color: 'theme-textPrimary' },
+  TypeXl:   { type: 'Text', fontSize: 'theme-fontXl',   color: 'theme-textPrimary' },
+  TypeLg:   { type: 'Text', fontSize: 'theme-fontLg',   color: 'theme-textPrimary' },
+  TypeMd:   { type: 'Text', fontSize: 'theme-fontMd',   color: 'theme-textPrimary' },
+  TypeSm:   { type: 'Text', fontSize: 'theme-fontSm',   color: 'theme-textPrimary' },
+  TypeXs:   { type: 'Text', fontSize: 'theme-fontXs',   color: 'theme-textPrimary' },
+  TypeXxs:  { type: 'Text', fontSize: 'theme-fontXxs',  color: 'theme-textPrimary' },
 })
