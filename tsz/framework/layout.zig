@@ -936,9 +936,18 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
         return;
     }
     if (node.canvas_path_d != null) {
+        const pin_w: f32 = node._parent_inner_w orelse 0;
+        const pin_h: f32 = node._parent_inner_h orelse 0;
         const fb_w: f32 = if (s.flex_basis) |fb| fb else 0;
-        const w_pref = if (s.width) |v| v else if (fb_w > 0) fb_w else if (pw > 0) pw else 24;
-        const h_pref = if (s.height) |v| v else if (ph > 0) ph else 24;
+        const w_pref = if (s.width) |v| v
+            else if (fb_w > 0) fb_w
+            else if (pw > 0) pw
+            else if (pin_w > 0) pin_w
+            else 24;
+        const h_pref = if (s.height) |v| v
+            else if (ph > 0) ph
+            else if (pin_h > 0) pin_h
+            else 24;
         node.computed = .{ .x = px, .y = py, .w = w_pref, .h = h_pref };
         return;
     }
