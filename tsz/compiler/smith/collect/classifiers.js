@@ -76,6 +76,7 @@ function collectClassifiers() {
     }
 
     if (themeNames.length > 1) {
+      const userOverride = _themeRegistry['user'] || {};
       for (const key of Object.keys(ctx.classifiers)) {
         const entry = ctx.classifiers[key];
         if (!entry || typeof entry !== 'object') continue;
@@ -83,7 +84,9 @@ function collectClassifiers() {
         if (!entry.variants) entry.variants = {};
         for (let i = 1; i < themeNames.length; i++) {
           const vname = themeNames[i];
-          const tmap = _themeRegistry[vname];
+          // user override cascades onto every variant so personal token
+          // tweaks survive a setVariant(N) theme swap.
+          const tmap = Object.assign({}, _themeRegistry[vname], userOverride);
           if (entry.variants[vname]) continue;
           const v = {};
           if (entry.style) v.style = _applyThemeToStyle(entry.style, tmap);
