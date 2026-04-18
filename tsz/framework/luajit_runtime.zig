@@ -17,9 +17,29 @@ const state = @import("state.zig");
 const input_mod = @import("input.zig");
 const qjs_runtime = @import("qjs_runtime.zig");
 const layout = @import("layout.zig");
+const effect_ctx = @import("effect_ctx.zig");
+const effect_shader_mod = @import("effect_shader.zig");
 const Node = layout.Node;
 const Style = layout.Style;
 const Color = layout.Color;
+
+// ── Effect lookup tables (populated by cart _appInit) ──────────────────
+// Cart generators emit setEffectRender(id, fn) + setEffectShader(id, shader)
+// calls so the Lua→Node decoder can resolve effect_id back to function ptrs
+// without the framework knowing cart-specific symbol names.
+pub const MAX_EFFECTS: usize = 64;
+var g_effect_renders: [MAX_EFFECTS]?effect_ctx.RenderFn = [_]?effect_ctx.RenderFn{null} ** MAX_EFFECTS;
+var g_effect_shaders: [MAX_EFFECTS]?*const ?effect_shader_mod.GpuShaderDesc = [_]?*const ?effect_shader_mod.GpuShaderDesc{null} ** MAX_EFFECTS;
+
+pub fn setEffectRender(id: usize, fn_ptr: effect_ctx.RenderFn) void {
+    if (id >= MAX_EFFECTS) return;
+    g_effect_renders[id] = fn_ptr;
+}
+
+pub fn setEffectShader(id: usize, shader_ptr: *const ?effect_shader_mod.GpuShaderDesc) void {
+    if (id >= MAX_EFFECTS) return;
+    g_effect_shaders[id] = shader_ptr;
+}
 
 pub const lua = @cImport({
     @cInclude("lua.h");
@@ -767,6 +787,23 @@ fn stampLuaNode(L: ?*lua.lua_State, idx: c_int, alloc: std.mem.Allocator) Node {
     node.scene3d_size_x = readLuaFloat(L, idx, "scene3d_size_x", 1);
     node.scene3d_size_y = readLuaFloat(L, idx, "scene3d_size_y", 1);
     node.scene3d_size_z = readLuaFloat(L, idx, "scene3d_size_z", 1);
+    // ── Effect fields ──
+    if (readLuaOptFloat(L, idx, "effect_id")) |eid_f| {
+        const eid: usize = @intFromFloat(eid_f);
+        if (eid < MAX_EFFECTS) {
+            node.effect_render = g_effect_renders[eid];
+            if (g_effect_shaders[eid]) |shader_ptr| {
+                node.effect_shader = shader_ptr.*;
+            }
+            std.debug.print("[effect-decode] id={d} render_set={} shader_set={} bg_flag={}\n", .{
+                eid,
+                node.effect_render != null,
+                node.effect_shader != null,
+                readLuaBool(L, idx, "effect_background"),
+            });
+        }
+    }
+    node.effect_background = readLuaBool(L, idx, "effect_background");
     // ── Physics fields ──
     node.physics_world = readLuaBool(L, idx, "physics_world");
     node.physics_body = readLuaBool(L, idx, "physics_body");

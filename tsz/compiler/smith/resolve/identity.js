@@ -15,6 +15,19 @@
 //   slot: the slot object if kind === 'slot', null otherwise
 
 function resolveIdentity(name, ctx) {
+  function _resolvedBareGetter(expr) {
+    if (typeof expr !== 'string') return null;
+    if (!/^[A-Za-z_]\w*$/.test(expr)) return null;
+    var innerSlotIdx = findSlot(expr);
+    if (innerSlotIdx < 0) return null;
+    var innerSlot = ctx.stateSlots[innerSlotIdx];
+    return {
+      zigExpr: slotGet(expr),
+      type: innerSlot.type || 'int',
+      slot: innerSlot,
+    };
+  }
+
   // 1. State slot getter
   var slotIdx = findSlot(name);
   if (slotIdx >= 0) {
@@ -47,13 +60,14 @@ function resolveIdentity(name, ctx) {
     var rlVal = ctx.renderLocals[name];
     var rawJs = ctx._renderLocalRaw ? ctx._renderLocalRaw[name] : null;
     var isQjsEval = typeof rlVal === 'string' && rlVal.includes('qjs_runtime.evalToString');
+    var resolvedGetter = _resolvedBareGetter(rlVal);
     return {
       kind: 'render_local',
-      zigExpr: rlVal,
+      zigExpr: resolvedGetter ? resolvedGetter.zigExpr : rlVal,
       rawJs: rawJs,
-      type: isQjsEval ? 'qjs_eval' : /^-?\d+(\.\d+)?$/.test(rlVal) ? 'int' : null,
+      type: resolvedGetter ? resolvedGetter.type : (isQjsEval ? 'qjs_eval' : /^-?\d+(\.\d+)?$/.test(rlVal) ? 'int' : null),
       oa: null,
-      slot: null
+      slot: resolvedGetter ? resolvedGetter.slot : null
     };
   }
 
@@ -61,13 +75,14 @@ function resolveIdentity(name, ctx) {
   if (ctx.propStack && ctx.propStack[name] !== undefined) {
     var pv = ctx.propStack[name];
     var isQjs = typeof pv === 'string' && pv.includes('qjs_runtime.evalToString');
+    var resolvedPropGetter = _resolvedBareGetter(pv);
     return {
       kind: 'prop',
-      zigExpr: pv,
+      zigExpr: resolvedPropGetter ? resolvedPropGetter.zigExpr : pv,
       rawJs: null,
-      type: isQjs ? 'qjs_eval' : /^-?\d+(\.\d+)?$/.test(pv) ? 'int' : null,
+      type: resolvedPropGetter ? resolvedPropGetter.type : (isQjs ? 'qjs_eval' : /^-?\d+(\.\d+)?$/.test(pv) ? 'int' : null),
       oa: null,
-      slot: null
+      slot: resolvedPropGetter ? resolvedPropGetter.slot : null
     };
   }
 

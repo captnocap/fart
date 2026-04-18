@@ -16,6 +16,12 @@ function parseComponentCallChildren(c) {
   return compChildren;
 }
 
+function _normalizeInlineComponentPropValue(value) {
+  if (typeof value !== 'string') return value;
+  if (/^[A-Za-z_]\w*$/.test(value) && isGetter(value)) return slotGet(value);
+  return value;
+}
+
 function inlineComponentCall(c, comp, rawTag, propValues, compChildren) {
   // Guard against recursive component inlining (e.g. RecursiveCard calls itself)
   if (!ctx._inliningStack) ctx._inliningStack = [];
@@ -103,11 +109,36 @@ function inlineComponentCall(c, comp, rawTag, propValues, compChildren) {
               if (c.kind() === TK.rparen || c.kind() === TK.rbracket || c.kind() === TK.rbrace) { depth--; if (depth < 0) break; }
               const pa = peekPropsAccess(c);
               if (pa) {
-                let pv = typeof pa.value === 'string' ? pa.value : String(pa.value);
+                let pv = _normalizeInlineComponentPropValue(typeof pa.value === 'string' ? pa.value : String(pa.value));
                 // Wrap if-expressions in parens so Zig operator precedence works
                 if (pv.includes('if (') && pv.includes(' else ')) pv = '(' + pv + ')';
-                valParts.push(pv);
                 skipPropsAccess(c, pa);
+                if (c.kind() === TK.eq_eq || c.kind() === TK.not_eq) {
+                  var _pvCmpOp = c.kind() === TK.eq_eq ? '==' : '!=';
+                  c.advance();
+                  if (c.kind() === TK.equals) c.advance();
+                  if (c.kind() === TK.number || c.kind() === TK.string) {
+                    valParts.push(resolveComparison(pv, _pvCmpOp, c.text(), ctx));
+                    c.advance();
+                    continue;
+                  }
+                  valParts.push(pv);
+                  valParts.push(' ' + _pvCmpOp + ' ');
+                  continue;
+                }
+                if (c.kind() === TK.identifier && c.text() === 'exact') {
+                  c.advance();
+                  if (c.kind() === TK.equals) c.advance();
+                  if (c.kind() === TK.string) {
+                    valParts.push(resolveComparison(pv, '==', c.text(), ctx));
+                    c.advance();
+                    continue;
+                  }
+                  valParts.push(pv);
+                  valParts.push(' == ');
+                  continue;
+                }
+                valParts.push(pv);
                 continue;
               }
               // Const OA bracket access: nodes[0] or nodes[0].field
@@ -120,6 +151,30 @@ function inlineComponentCall(c, comp, rawTag, propValues, compChildren) {
               }
               if (c.kind() === TK.identifier && ctx.renderLocals[c.text()] !== undefined) {
                 const rlv = ctx.renderLocals[c.text()];
+                if (typeof rlv === 'string' && /(?:===|!==|==|!=|>=|<=|&&|\|\||[?:<>])/.test(rlv)) {
+                  var _rlCmpPos = c.pos + 1;
+                  if (_rlCmpPos < c.count) {
+                    var _rlCmpKind = c.kindAt(_rlCmpPos);
+                    if (_rlCmpKind === TK.eq_eq || _rlCmpKind === TK.not_eq) {
+                      var _rlNumPos = _rlCmpPos + 1;
+                      if (_rlNumPos < c.count && c.kindAt(_rlNumPos) === TK.equals) _rlNumPos++;
+                      if (_rlNumPos < c.count && c.kindAt(_rlNumPos) === TK.number) {
+                        var _rlNum = c.textAt(_rlNumPos);
+                        if ((_rlCmpKind === TK.eq_eq && _rlNum === '1') || (_rlCmpKind === TK.not_eq && _rlNum === '0')) {
+                          valParts.push('(' + rlv + ')');
+                          while (c.pos <= _rlNumPos) c.advance();
+                          continue;
+                        }
+                      }
+                    }
+                  }
+                }
+                var _rlInline = rlv;
+                if (typeof _rlInline === 'string' &&
+                    ((_rlInline.includes('if (') && _rlInline.includes(' else ')) ||
+                     /(?:===|!==|==|!=|>=|<=|&&|\|\||[?:<>])/.test(_rlInline))) {
+                  _rlInline = '(' + _rlInline + ')';
+                }
                 // Const OA row ref with .field access
                 if (typeof rlv === 'string' && rlv.charCodeAt(0) === 1 &&
                     c.pos + 2 < c.count && c.kindAt(c.pos + 1) === TK.dot && c.kindAt(c.pos + 2) === TK.identifier) {
@@ -143,10 +198,10 @@ function inlineComponentCall(c, comp, rawTag, propValues, compChildren) {
                   } else if (mapOa) {
                     valParts.push(`_oa${mapOa.oaIdx}_${rlField}[${ctx.currentMap.iterVar || '_i'}]`);
                   } else {
-                    valParts.push(rlv + '.' + rlField);
+                    valParts.push(_rlInline + '.' + rlField);
                   }
                 } else {
-                  valParts.push(rlv);
+                  valParts.push(_rlInline);
                 }
               } else if (c.kind() === TK.identifier && isGetter(c.text())) {
                 valParts.push(slotGet(c.text()));
@@ -164,13 +219,9 @@ function inlineComponentCall(c, comp, rawTag, propValues, compChildren) {
                          c.kind() === TK.gt || c.kind() === TK.lt || c.kind() === TK.gt_eq || c.kind() === TK.lt_eq) {
                 valParts.push(' ' + c.text() + ' ');
               } else {
-                // Convert .length to .len for Zig slice compatibility
-                if (c.kind() === TK.identifier && c.text() === 'length' && valParts.length > 0 && valParts[valParts.length - 1] === '.') {
-                  valParts.pop();
-                  valParts.push('.len');
-                } else {
-                  valParts.push(c.text());
-                }
+                // Preserve JS .length in render-local expressions; Zig-only length lowering
+                // happens later in dedicated condition/style paths.
+                valParts.push(c.text());
               }
               c.advance();
             }

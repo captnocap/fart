@@ -66,7 +66,11 @@ function _luaTextString(text, itemParam, indexParam, _luaIdxExpr, _currentOaIdx)
   }
 
   // Category: Expression followed by literal suffix (e.g. "field:")
-  if (/[\].\w]\:$/.test(text)) {
+  // Only route here when text actually contains an expression reference —
+  // plain user text like "Pick a name:" should fall through to _luaTextPlain.
+  if (/[\].\w]\:$/.test(text) &&
+      (text.indexOf('_item') >= 0 || text.indexOf('_nitem') >= 0 || text.indexOf('[') >= 0 ||
+       text.indexOf('${') >= 0 || text.indexOf('(') >= 0)) {
     return _luaTextSuffixExpr(text, itemParam, indexParam, _luaIdxExpr, _currentOaIdx);
   }
 

@@ -8,6 +8,7 @@
     "apps/settings/settings.app.tsz",
     "apps/creative/creative.app.tsz",
     "apps/games/games.app.tsz",
+    "apps/youtube/youtube.app.tsz",
     "escape/escape.app.tsz",
     "folder/folder.app.tsz"
   ]

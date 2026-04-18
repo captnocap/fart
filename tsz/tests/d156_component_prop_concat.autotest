@@ -13,7 +13,7 @@ expect "cycles: 0"
 
 # Click-through: 1 pressable nodes
 
-click "Toggle Model"
+click "press:setModelName"
 expect "Component Prop Concat"
 expect "Dynamic string concat should survive component prop forwarding."
 expect ""Sonnet 4"

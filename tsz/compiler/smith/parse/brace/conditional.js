@@ -134,6 +134,12 @@ function _looksBooleanLikeRuntimeExpr(expr) {
   return /(?:==|~=|>=|<=|\band\b|\bor\b|\bnot\b|[<>])/.test(expr);
 }
 
+function _looksBooleanLikeCondExpr(expr) {
+  if (typeof expr !== 'string') return false;
+  if (expr.startsWith('if (')) return true;
+  return /(?:===|!==|==|!=|>=|<=|&&|\|\||[?:<>])/.test(expr);
+}
+
 function _peekNumericComparison(c, startPos) {
   if (startPos >= c.count) return null;
   var opKind = c.kindAt(startPos);
@@ -155,6 +161,15 @@ function _luaBoolNumericComparison(expr, cmp) {
   return null;
 }
 
+function _condBoolNumericComparison(expr, cmp) {
+  if (!cmp) return null;
+  if (!expr || !_looksBooleanLikeCondExpr(expr)) return null;
+  if ((cmp.op === '==' && cmp.value === '1') || (cmp.op === '!=' && cmp.value === '0')) {
+    return '(' + expr + ')';
+  }
+  return null;
+}
+
 function _splitCondAtLastLogical(parts) {
   var splitAt = -1;
   for (var i = parts.length - 1; i >= 0; i--) {
@@ -169,10 +184,24 @@ function _splitCondAtLastLogical(parts) {
   };
 }
 
+function _rebalanceCondComparisonLhs(prefix, lhs) {
+  var nextPrefix = prefix.slice();
+  var nextLhs = lhs;
+  while (typeof nextLhs === 'string' && nextLhs.charAt(0) === '(') {
+    var openCount = (nextLhs.match(/\(/g) || []).length;
+    var closeCount = (nextLhs.match(/\)/g) || []).length;
+    if (openCount <= closeCount) break;
+    nextPrefix.push('(');
+    nextLhs = nextLhs.slice(1).trimStart();
+  }
+  return { prefix: nextPrefix, lhs: nextLhs };
+}
+
 function _isStaticStringPropValue(pv) {
   if (typeof pv !== 'string') return false;
   if (pv.length === 0) return true;
   if (/^-?\d+(\.\d+)?$/.test(pv)) return false;
+  if (/^[A-Za-z_]\w*$/.test(pv) && isGetter(pv)) return false;
   if (pv.startsWith('_handler_press_')) return false;
   if (pv.startsWith('if (')) return false;
   if (pv.startsWith('state.')) return false;
@@ -187,6 +216,10 @@ function _isStaticStringPropValue(pv) {
 function _isStringLikePropExpr(pv) {
   if (_isStaticStringPropValue(pv)) return true;
   if (typeof pv !== 'string') return false;
+  if (/^[A-Za-z_]\w*$/.test(pv)) {
+    var _slotIdx = findSlot(pv);
+    if (_slotIdx >= 0 && ctx && ctx.stateSlots && ctx.stateSlots[_slotIdx] && ctx.stateSlots[_slotIdx].type === 'string') return true;
+  }
   if (pv.indexOf('state.getSlotString(') >= 0) return true;
   if (pv.indexOf('@as([]const u8') >= 0) return true;
   if (/\[0\.\._oa\d+_\w+_lens\[/.test(pv)) return true;
@@ -258,6 +291,7 @@ function _buildLuaCondFromTokens(c, savedStart) {
     if (c.kind() === TK.amp_amp) { parts.push('and'); c.advance(); continue; }
     if (c.kind() === TK.eq_eq) { parts.push('=='); c.advance(); if (c.kind() === TK.equals) c.advance(); continue; }
     if (c.kind() === TK.not_eq) { parts.push('~='); c.advance(); if (c.kind() === TK.equals) c.advance(); continue; }
+    if (c.kind() === TK.identifier && c.text() === 'exact') { parts.push('=='); c.advance(); if (c.kind() === TK.equals) c.advance(); continue; }
     if (c.kind() === TK.bang) { parts.push('not'); c.advance(); continue; }
     if (c.kind() === TK.pipe_pipe) { parts.push('or'); c.advance(); continue; }
     if (c.kind() === TK.string) {
@@ -675,7 +709,14 @@ function tryParseConditional(c, children) {
           c.advance(); // skip length
         } else {
           const pav = _condPropValue(pa.value);
+          const pavCmp = _peekNumericComparison(c, c.pos);
+          const pavBoolCmp = _condBoolNumericComparison(pav, pavCmp);
+          if (pavBoolCmp) {
+            condParts.push(pavBoolCmp);
+            while (c.pos <= pavCmp.endPos) c.advance();
+          } else {
           condParts.push(pav);
+          }
         }
         continue;
       }
@@ -752,6 +793,13 @@ function tryParseConditional(c, children) {
         const nextKind = c.pos + 1 < c.count ? c.kindAt(c.pos + 1) : TK.eof;
         const hasExplicitComparison = nextKind === TK.eq_eq || nextKind === TK.not_eq ||
           nextKind === TK.gt || nextKind === TK.gt_eq || nextKind === TK.lt || nextKind === TK.lt_eq;
+      const rlCmp = _peekNumericComparison(c, c.pos + 1);
+      const rlBoolCmp = _condBoolNumericComparison(rlVal, rlCmp);
+      if (rlBoolCmp) {
+        condParts.push(rlBoolCmp);
+        while (c.pos <= rlCmp.endPos) c.advance();
+        continue;
+      }
       if (rawExpr && c.pos + 2 < c.count && c.kindAt(c.pos + 1) === TK.lparen && c.kindAt(c.pos + 2) === TK.rparen) {
         condParts.push(zigBool(buildEval('( ' + rawExpr + ' )()', ctx), ctx));
         c.advance();
@@ -832,7 +880,15 @@ function tryParseConditional(c, children) {
           condParts.push(`_oa${mapOa.oaIdx}_${field}[${iterVar}]`);
           continue;
         }
-        condParts.push(_condPropValue(pv));
+        const pvCond = _condPropValue(pv);
+        const pvCmp = _peekNumericComparison(c, c.pos + 1);
+        const pvBoolCmp = _condBoolNumericComparison(pvCond, pvCmp);
+        if (pvBoolCmp) {
+          condParts.push(pvBoolCmp);
+          while (c.pos <= pvCmp.endPos) c.advance();
+          continue;
+        }
+        condParts.push(pvCond);
       } else if (ctx.currentMap && name === ctx.currentMap.indexParam) {
         condParts.push('@as(i64, @intCast(' + (ctx.currentMap.iterVar || '_i') + '))');
       } else if (ctx.currentMap && name === ctx.currentMap.itemParam) {
@@ -911,23 +967,12 @@ function tryParseConditional(c, children) {
     } else if (c.kind() === TK.string) {
       const sv = c.text().slice(1, -1);
       const lastOp = condParts.length > 0 ? condParts[condParts.length - 1] : '';
-      if (sv === '' && (lastOp === ' == ' || lastOp === ' != ')) {
+      if (lastOp === ' == ' || lastOp === ' != ') {
         const split = _splitCondAtLastLogical(condParts);
-        const lhs = split.tail.slice(0, -1).join('');
+        const rebalanced = _rebalanceCondComparisonLhs(split.prefix, split.tail.slice(0, -1).join(''));
         condParts.length = 0;
-        for (var _pi = 0; _pi < split.prefix.length; _pi++) condParts.push(split.prefix[_pi]);
-        if (/^__eval\("/.test(lhs)) {
-          condParts.push(lastOp === ' == ' ? `(${lhs} == "")` : `(${lhs} ~= "")`);
-        } else {
-          condParts.push(lastOp === ' == ' ? `${lhs}.len == 0` : `${lhs}.len > 0`);
-        }
-      } else if (lastOp === ' == ' || lastOp === ' != ') {
-        const split = _splitCondAtLastLogical(condParts);
-        const lhs = split.tail.slice(0, -1).join('');
-        condParts.length = 0;
-        for (var _pj = 0; _pj < split.prefix.length; _pj++) condParts.push(split.prefix[_pj]);
-        const eql = `std.mem.eql(u8, ${lhs}, "${sv}")`;
-        condParts.push(lastOp === ' == ' ? eql : `!${eql}`);
+        for (var _pi = 0; _pi < rebalanced.prefix.length; _pi++) condParts.push(rebalanced.prefix[_pi]);
+        condParts.push(resolveComparison(rebalanced.lhs, lastOp.trim(), '"' + sv.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"', ctx));
       } else {
         condParts.push(`"${sv}"`);
       }

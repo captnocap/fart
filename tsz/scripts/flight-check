@@ -436,6 +436,7 @@ if [ "$SRC_LOOPS" -gt 0 ]; then
     if [ "$CALLBACK_TEXTS" -gt 0 ]; then
         fail "$CALLBACK_TEXTS callback fragment text node(s) in generated output — callback syntax leaked into UI:$CALLBACK_SAMPLES"
     fi
+
 fi
 
 # ── 6a2. Raw JSX leaked into Lua map templates ──────────────
@@ -922,6 +923,67 @@ if [ "$n" -gt 0 ]; then ZIG_LEAK=$((ZIG_LEAK + n)); ZIG_LEAK_DETAILS="$ZIG_LEAK_
 
 if [ "$ZIG_LEAK" -gt 0 ]; then
     lt_fail "$ZIG_LEAK Zig syntax leaked into LUA_LOGIC:$ZIG_LEAK_DETAILS"
+fi
+
+# ── LT1a. Callback params leaked as text ─────────────────────
+# This is a structural compiler leak, not a runtime warning: when a lua-tree
+# map emits text nodes like "color, colIdx)", callback params escaped into UI.
+LUA_LOOP_CALLBACKS=$(gcount '__mapLoop\(' "$LUA_BLOB")
+if [ "$LUA_LOOP_CALLBACKS" -gt 0 ]; then
+    CALLBACK_PARAM_MATCHES=$(printf '%s\n' "$LUA_BLOB" | sed 's/\\"/"/g' | grep -oE 'text = "[^"]*"' 2>/dev/null | grep -E '[A-Za-z_][A-Za-z0-9_]*,[[:space:]]*([_[:alnum:]]*(Idx|idx|Index|index)|_[ij]|[ij])\)' || true)
+    CALLBACK_PARAM_TEXTS=0
+    CALLBACK_PARAM_SAMPLES=""
+    while IFS= read -r cm; do
+        [ -z "$cm" ] && continue
+        TEXT_VAL=$(echo "$cm" | sed 's/^text = "//; s/"$//')
+        [ -z "$TEXT_VAL" ] && continue
+        CALLBACK_PARAM_TEXTS=$((CALLBACK_PARAM_TEXTS + 1))
+        CALLBACK_PARAM_SAMPLES="$CALLBACK_PARAM_SAMPLES \"$TEXT_VAL\""
+    done <<< "$CALLBACK_PARAM_MATCHES"
+    if [ "$CALLBACK_PARAM_TEXTS" -gt 0 ]; then
+        fail "$CALLBACK_PARAM_TEXTS callback param text fragment(s) in LUA_LOGIC — loop params leaked into UI:$CALLBACK_PARAM_SAMPLES"
+    fi
+fi
+
+# ── LT1b. Nested map callback tail leaked as text ────────────
+# The current Sweatshop leak shifted from the callback params to the callback
+# tail, leaving literal "; " and ")" nodes immediately after a nested map.
+if [ "$LUA_LOOP_CALLBACKS" -gt 0 ]; then
+    LUA_FLAT=$(printf '%s\n' "$LUA_BLOB" | tr '\n' ' ' | sed 's/[[:space:]]\+/ /g')
+    CALLBACK_TAIL_MATCHES=$(printf '%s\n' "$LUA_FLAT" | grep -oE 'end\), \{ text = "; ?" \}, \{ text = "\)" \}' 2>/dev/null || true)
+    CALLBACK_TAIL_COUNT=0
+    while IFS= read -r tm; do
+        [ -z "$tm" ] && continue
+        CALLBACK_TAIL_COUNT=$((CALLBACK_TAIL_COUNT + 1))
+    done <<< "$CALLBACK_TAIL_MATCHES"
+    if [ "$CALLBACK_TAIL_COUNT" -gt 0 ]; then
+        fail "$CALLBACK_TAIL_COUNT nested map callback tail fragment(s) in LUA_LOGIC — leaked '; )' text after map return"
+    fi
+fi
+
+# ── LT1c. JS `.len` leaked into eval strings ─────────────────
+# JS/QJS eval paths must use `.length`; `.len` is a Zig/Lua lowering leak that
+# becomes the literal string "undefined" at runtime.
+JS_LEN_EVAL_MATCHES=$(printf '%s\n' "$GEN_BLOB" | grep -oE '(__eval|eval|evalToString)\("[^"]*\.len\b[^"]*"' 2>/dev/null || true)
+JS_LEN_EVAL_COUNT=0
+JS_LEN_EVAL_SAMPLES=""
+while IFS= read -r jm; do
+    [ -z "$jm" ] && continue
+    JS_LEN_EVAL_COUNT=$((JS_LEN_EVAL_COUNT + 1))
+    if [ "$JS_LEN_EVAL_COUNT" -le 3 ]; then
+        JS_LEN_EVAL_SAMPLES="$JS_LEN_EVAL_SAMPLES \"$jm\""
+    fi
+done <<< "$JS_LEN_EVAL_MATCHES"
+if [ "$JS_LEN_EVAL_COUNT" -gt 0 ]; then
+    fail "$JS_LEN_EVAL_COUNT JS eval expression(s) contain '.len' — JS length leaked from Zig/Lua lowering:$JS_LEN_EVAL_SAMPLES"
+fi
+
+# ── LT1d. Malformed boolean/numeric rewrites ────────────────
+# These shapes come from double-wrapping already-boolean expressions and cause
+# conditionals to behave as if everything is open at once.
+BAD_BOOL_NUMERIC=$(gocount '([!~]=)[[:space:]]*0[[:space:]]*==|==[[:space:]]*1[[:space:]]*==[[:space:]]*1' "$GEN_BLOB")
+if [ "$BAD_BOOL_NUMERIC" -gt 0 ]; then
+    fail "$BAD_BOOL_NUMERIC malformed boolean/numeric conditional rewrite(s) in generated output — leaked chains like '!= 0 == 1' or '== 1==1'"
 fi
 
 # ── LT2. Unquoted enum values in Lua tables ──────────────────

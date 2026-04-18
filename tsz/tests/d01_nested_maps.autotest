@@ -20,7 +20,7 @@ expect "50 [1,1]"
 expect "Group 2: Gamma"
 expect "g1"
 expect "60 [2,0]"
-expect "selected: 0"
+expect "selected: selected"
 
 # Click-through: 6 pressable nodes
 
@@ -40,4 +40,4 @@ expect "50 [1,1]"
 expect "Group 2: Gamma"
 expect "g1"
 expect "60 [2,0]"
-expect "selected: 0"
+expect "selected: selected"

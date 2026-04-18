@@ -14,6 +14,11 @@
 function _jsToLua(expr) {
   if (!expr || typeof expr !== 'string') return expr;
 
+  // NOTE: OA_ITEM sentinels are resolved in emit/finalize.js as a final
+  // pass — doing it here would break cases where the sentinel is embedded
+  // inside a quoted string literal ('...'.field access), leaving invalid
+  // Lua. Finalize can see the quotes and unwrap them.
+
   // Resolve simple props.field references when the prop value is already known.
   if (typeof ctx !== 'undefined' && ctx && ctx.propStack) {
     expr = expr.replace(/\bprops\.(\w+)\b/g, function(_, field) {
@@ -296,8 +301,9 @@ function sanitizeLuaNodeTree(node) {
     for (var ci = 0; ci < node.children.length; ci++) {
       var child = node.children[ci];
       if (!child) continue;
-      // Direct node child
-      if (child.tag) sanitizeLuaNodeTree(child);
+      // Direct node child — match validator's recursion gate
+      // (validator walks on tag OR style OR text, not just tag)
+      if (child.tag || child.style || child.text !== undefined) sanitizeLuaNodeTree(child);
       // Wrapped node types
       if (child.node) sanitizeLuaNodeTree(child.node);
       if (child.trueNode) sanitizeLuaNodeTree(child.trueNode);
@@ -309,10 +315,13 @@ function sanitizeLuaNodeTree(node) {
       if (child.ternaryCondition && typeof child.ternaryCondition === 'string') {
         child.ternaryCondition = _jsToLua(child.ternaryCondition);
       }
-      // Map loop children
+      // Map loop body — sanitize whenever bodyNode is present so the
+      // sanitizer walks every node the validator walks (validator gates
+      // bodyNode only on `ml.bodyNode`, not on `type === 'mapLoop'`).
+      var ml = child.luaMapLoop || child;
+      if (ml.bodyNode) sanitizeLuaNodeTree(ml.bodyNode);
+      // filterConditions only exist on real mapLoop children.
       if (child.type === 'mapLoop' || child.luaMapLoop) {
-        var ml = child.luaMapLoop || child;
-        if (ml.bodyNode) sanitizeLuaNodeTree(ml.bodyNode);
         if (ml.filterConditions) {
           for (var fi = 0; fi < ml.filterConditions.length; fi++) {
             if (typeof ml.filterConditions[fi] === 'string') {

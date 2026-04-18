@@ -54,6 +54,13 @@ function _styleToLua(style, itemParam, indexParam, _luaIdxExpr, _currentOaIdx) {
     // Color{} placeholder → 0x000000
     if (typeof val === 'string' && val === 'Color{}') val = '0x000000';
 
+    // Normalize broken `== =` / `!= =` that can arise from upstream ternary
+    // cond parsers pushing `==` + ` = ` as separate tokens when encountering
+    // `===`/`!==`. Always safe: `X == = Y` is invalid Lua and always intends `==`.
+    if (typeof val === 'string') {
+      val = val.replace(/==\s*=/g, '==').replace(/!=\s*=/g, '~=');
+    }
+
     // JS ternary in style: cond ? valA : valB → (cond) and valA or valB
     // SKIP if val contains an eval call — buildBoolEval/buildComparisonEval embed
     // their own `? 'T' : ''` templates inside the eval string literal, and a naive

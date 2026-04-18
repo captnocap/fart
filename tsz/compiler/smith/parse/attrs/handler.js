@@ -4,9 +4,12 @@ function _condPropValue(pv) {
   if (typeof pv !== 'string') return '1'; // JSX slot objects are always truthy
   if (pv.charCodeAt && pv.charCodeAt(0) === 2) return '_item'; // whole map item prop
   if (/^-?\d+(\.\d+)?$/.test(pv)) return pv; // numeric literal
+  if (pv === 'null' || pv === 'undefined') return '0';
+  if (/^[A-Za-z_]\w*$/.test(pv) && isGetter(pv)) return slotGet(pv); // bare state getter name
   if (pv.startsWith('if (')) return '(' + pv + ')'; // Zig if-else needs parens for correct precedence
   if (pv.startsWith('state.') || pv.startsWith('_oa') || pv.startsWith('@as(') || pv.startsWith('@intCast(')) return pv; // Zig expression
   if (pv.startsWith('_handler_press_')) return '1'; // handler ref = truthy
+  if (/(?:===|!==|==|!=|>=|<=|&&|\|\||[?:<>])/.test(pv)) return '(' + pv + ')'; // preserve runtime expression truthiness
   // String literal — non-empty means truthy (1), empty means falsy (0)
   return pv.length > 0 ? '1' : '0';
 }

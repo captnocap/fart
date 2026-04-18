@@ -16,3 +16,18 @@ expect "47"
 expect "Spam"
 expect "156"
 expect "selected:  · taps: 0"
+
+# Click-through: 5 pressable nodes
+
+click "press:setSelected"
+expect "Component Props"
+expect "Inbox"
+expect "12"
+expect "Sent"
+expect "empty"
+expect "Drafts"
+expect "Trash"
+expect "47"
+expect "Spam"
+expect "156"
+expect "selected: Inbox · taps: 1"

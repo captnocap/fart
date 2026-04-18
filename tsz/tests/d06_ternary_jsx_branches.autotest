@@ -11,7 +11,12 @@ expect "A taps: 0"
 
 # Click-through: 2 pressable nodes
 
-click "Switch to B"
+click "press:setMode"
 expect "Switch to A"
 expect "Branch B"
 expect "B taps: 0"
+
+click "press:setTaps"
+expect "Switch to A"
+expect "Branch B"
+expect "B taps: 10"

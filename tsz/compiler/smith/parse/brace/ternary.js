@@ -70,6 +70,26 @@ function _resolveStringComparison(condExpr) {
   return condExpr;
 }
 
+function _ternaryPeekNumericComparison(c, startPos) {
+  if (startPos >= c.count) return null;
+  var opKind = c.kindAt(startPos);
+  if (opKind !== TK.eq_eq && opKind !== TK.not_eq) return null;
+  var op = opKind === TK.eq_eq ? '==' : '!=';
+  var pos = startPos + 1;
+  if (pos < c.count && c.kindAt(pos) === TK.equals) pos++;
+  if (pos >= c.count || c.kindAt(pos) !== TK.number) return null;
+  return { op: op, value: c.textAt(pos), endPos: pos };
+}
+
+function _ternaryCollapseBoolNumericComparison(expr, cmp) {
+  if (!cmp || typeof expr !== 'string') return null;
+  if (!/(?:===|!==|==|!=|>=|<=|&&|\|\||[?:<>])/.test(expr) && !expr.startsWith('if (')) return null;
+  if ((cmp.op === '==' && cmp.value === '1') || (cmp.op === '!=' && cmp.value === '0')) {
+    return '(' + expr + ')';
+  }
+  return null;
+}
+
 // Parse ternary condition tokens until ? is found. Returns condParts array or null.
 function _parseTernaryCondParts(c) {
   var condParts = [];
@@ -128,7 +148,15 @@ function _parseTernaryCondParts(c) {
     var pa = peekPropsAccess(c);
     if (pa) {
       skipPropsAccess(c, pa);
-      condParts.push(_condPropValue(pa.value));
+      var _paCond = _condPropValue(pa.value);
+      var _paCmp = _ternaryPeekNumericComparison(c, c.pos);
+      var _paBoolCmp = _ternaryCollapseBoolNumericComparison(_paCond, _paCmp);
+      if (_paBoolCmp) {
+        condParts.push(_paBoolCmp);
+        while (c.pos <= _paCmp.endPos) c.advance();
+      } else {
+        condParts.push(_paCond);
+      }
       continue;
     }
     if (c.kind() === TK.identifier) {
@@ -167,6 +195,13 @@ function _parseTernaryCondParts(c) {
         condParts.push(slotGet(name));
       } else if (ctx.renderLocals && ctx.renderLocals[name] !== undefined) {
         var rlVal = ctx.renderLocals[name];
+        var _rlCmp = _ternaryPeekNumericComparison(c, c.pos + 1);
+        var _rlBoolCmp = _ternaryCollapseBoolNumericComparison(rlVal, _rlCmp);
+        if (_rlBoolCmp) {
+          condParts.push(_rlBoolCmp);
+          while (c.pos <= _rlCmp.endPos) c.advance();
+          continue;
+        }
         if (c.pos + 2 < c.count && c.kindAt(c.pos + 1) === TK.dot && c.textAt(c.pos + 2) === 'length') {
           condParts.push(rlVal + '.len');
           c.advance();
@@ -221,7 +256,15 @@ function _parseTernaryCondParts(c) {
           condParts.push('_oa' + mapOa.oaIdx + '_' + field + '[' + iterVar + ']');
           continue;
         }
-        condParts.push(_condPropValue(pv));
+        var _pvCond = _condPropValue(pv);
+        var _pvCmp = _ternaryPeekNumericComparison(c, c.pos + 1);
+        var _pvBoolCmp = _ternaryCollapseBoolNumericComparison(_pvCond, _pvCmp);
+        if (_pvBoolCmp) {
+          condParts.push(_pvBoolCmp);
+          while (c.pos <= _pvCmp.endPos) c.advance();
+          continue;
+        }
+        condParts.push(_pvCond);
       } else if (ctx.currentMap && name === ctx.currentMap.indexParam) {
         condParts.push('@as(i64, @intCast(' + (ctx.currentMap.iterVar || '_i') + '))');
       } else if (ctx.currentMap && name === ctx.currentMap.itemParam) {

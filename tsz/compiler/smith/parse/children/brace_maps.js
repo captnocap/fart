@@ -389,8 +389,9 @@ function _tryParseIdentifierMapExpression(c, children, consumeClosingBrace) {
         ctx.currentMap = _savedCtxMap;
         if (c.kind() === TK.rparen) c.advance(); // close ( wrapper
       }
-      // Consume closing parens/braces from the .map() call
-      while (c.kind() === TK.rparen) c.advance();
+      // Match the standard map parser cleanup so callback tail tokens like
+      // `; })` do not leak into sibling text nodes.
+      consumeMapClose(c);
       if (consumeClosingBrace && c.kind() === TK.rbrace) c.advance();
       ctx._luaMapRebuilders.push({
         index: _nmIdx,

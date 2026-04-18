@@ -24,6 +24,32 @@ function _resolveBoolNumericComparison(expr, op, rhs) {
   return '(' + expr + ' ' + op + ' ' + rhs + ')';
 }
 
+function _isQuotedStringLiteral(expr) {
+  return typeof expr === 'string' && (/^"[^"]*"$/.test(expr) || /^'[^']*'$/.test(expr));
+}
+
+function _isBareStringSlotGetter(expr, ctx) {
+  if (typeof expr !== 'string') return false;
+  var trimmed = expr.trim();
+  if (!/^[A-Za-z_]\w*$/.test(trimmed)) return false;
+  var slotIdx = findSlot(trimmed);
+  return slotIdx >= 0 && ctx && ctx.stateSlots && ctx.stateSlots[slotIdx] && ctx.stateSlots[slotIdx].type === 'string';
+}
+
+function _normalizeStringComparisonOperand(expr, ctx) {
+  var value = String(expr).trim();
+  if (_isBareStringSlotGetter(value, ctx)) {
+    return slotGet(value);
+  }
+  if (_isQuotedStringLiteral(value)) {
+    if (value.charAt(0) === "'") {
+      return '"' + value.slice(1, -1).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
+    }
+    return value;
+  }
+  return value;
+}
+
 // Normalize a comparison expression to valid Zig.
 // Input: lhs (Zig expr), op (JS operator string), rhs (Zig expr or literal)
 // Returns: Zig bool expression string
@@ -35,8 +61,8 @@ function resolveComparison(lhs, op, rhs, ctx) {
   // 2. Detect types
   var lhsIsQjs = isEval(lhs);
   var rhsIsQjs = isEval(rhs);
-  var lhsIsStr = !lhsIsQjs && (lhs.includes('getSlotString') || lhs.includes('[0..') || lhs.includes('getString'));
-  var rhsIsStr = !rhsIsQjs && (rhs.includes('getSlotString') || rhs.includes('[0..') || rhs.includes('getString') || /^"[^"]*"$/.test(rhs));
+  var lhsIsStr = !lhsIsQjs && (lhs.includes('getSlotString') || lhs.includes('[0..') || lhs.includes('getString') || _isBareStringSlotGetter(lhs, ctx));
+  var rhsIsStr = !rhsIsQjs && (rhs.includes('getSlotString') || rhs.includes('[0..') || rhs.includes('getString') || _isBareStringSlotGetter(rhs, ctx) || /^"[^"]*"$/.test(rhs));
   var rhsIsEmptyStr = /^['"]['"]$/.test(rhs) || rhs === '""';
   var rhsIsNum = /^-?\d+(\.\d+)?$/.test(rhs);
 
@@ -73,8 +99,9 @@ function resolveComparison(lhs, op, rhs, ctx) {
 
   // 6. String comparison → std.mem.eql
   if (lhsIsStr || rhsIsStr) {
-    var rhsQuoted = /^"[^"]*"$/.test(rhs) ? rhs : '"' + rhs + '"';
-    var eql = 'std.mem.eql(u8, ' + lhs + ', ' + rhsQuoted + ')';
+    var lhsExpr = _normalizeStringComparisonOperand(lhs, ctx);
+    var rhsExpr = _normalizeStringComparisonOperand(rhs, ctx);
+    var eql = 'std.mem.eql(u8, ' + lhsExpr + ', ' + rhsExpr + ')';
     return op === '!=' ? '(!' + eql + ')' : '(' + eql + ')';
   }
 

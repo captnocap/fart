@@ -23,7 +23,7 @@ expect "count: 6 · ran 6 tests"
 
 # Click-through: 2 pressable nodes
 
-click "Run Tests"
+click "press:runTests"
 expect "Arrow + Default Params"
 expect "Run Tests"
 expect "Add More"
@@ -40,7 +40,7 @@ expect "clamp(75, 80, 100)"
 expect "80"
 expect "count: 6 · ran 6 tests"
 
-click "Add More"
+click "press:addMore"
 expect "Arrow + Default Params"
 expect "Run Tests"
 expect "Add More"

@@ -11,6 +11,12 @@ function resolveComponentRenderLocalValue(name) {
   return rlVal;
 }
 
+function _normalizeComponentPropValue(value) {
+  if (typeof value !== 'string') return value;
+  if (/^[A-Za-z_]\w*$/.test(value) && isGetter(value)) return slotGet(value);
+  return value;
+}
+
 function tryParseComponentBraceProp(c, attr, propValues) {
   if (c.kind() !== TK.lbrace) return false;
 
@@ -54,11 +60,15 @@ function tryResolveMappedComponentProp(c, attr, propValues) {
     return false; // Let normal brace value parser handle row[col.key]
   }
   if (c.kind() !== TK.dot) {
+    if (c.kind() !== TK.rbrace) {
+      c.restore(saved);
+      return false;
+    }
     // Whole map item passed as prop (e.g., file={file}) — store OA item ref marker
     // Format: \x02OA_ITEM:oaIdx:iterVar:itemParam
     // peekPropsAccess resolves props.X.field → OA field access (skip: 5)
     // peekPropsAccess resolves props.X (no field) → itemParam name (for render-local aliasing)
-    if (c.kind() === TK.rbrace) c.advance();
+    c.advance();
     propValues[attr] = '\x02OA_ITEM:' + matchMap.oa.oaIdx + ':' + (matchMap.iterVar || '_i') + ':' + matchMap.itemParam;
     return true;
   }
@@ -90,7 +100,11 @@ function tryResolveMappedComponentProp(c, attr, propValues) {
   }
 
   c.advance();
-  if (c.kind() === TK.rbrace) c.advance();
+  if (c.kind() !== TK.rbrace) {
+    c.restore(saved);
+    return false;
+  }
+  c.advance();
   return true;
 }
 
@@ -130,7 +144,7 @@ function parseComponentBraceValue(c) {
     const propAccess = peekPropsAccess(c);
     if (propAccess) {
       skipPropsAccess(c, propAccess);
-      val += typeof propAccess.value === 'string' ? propAccess.value : String(propAccess.value);
+      val += _normalizeComponentPropValue(typeof propAccess.value === 'string' ? propAccess.value : String(propAccess.value));
       continue;
     }
 
@@ -320,7 +334,7 @@ function resolveComponentIdentifierValue(c) {
 
   if (resolved !== null) return resolved;
   if (c.kind() === TK.identifier && ctx.renderLocals && ctx.renderLocals[c.text()] !== undefined) return resolveComponentRenderLocalValue(c.text());
-  if (c.kind() === TK.identifier && ctx.propStack && ctx.propStack[c.text()] !== undefined && typeof ctx.propStack[c.text()] === 'string') return ctx.propStack[c.text()];
+  if (c.kind() === TK.identifier && ctx.propStack && ctx.propStack[c.text()] !== undefined && typeof ctx.propStack[c.text()] === 'string') return _normalizeComponentPropValue(ctx.propStack[c.text()]);
   return null;
 }
 

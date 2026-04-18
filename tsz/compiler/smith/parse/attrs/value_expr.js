@@ -27,11 +27,29 @@ function parseValueExpr(c) {
       if (_osRef) { parts.push(_osRef); continue; }
       if (isGetter(name)) {
         parts.push(slotGet(name));
+      } else if (ctx.renderLocals && ctx.renderLocals[name] !== undefined) {
+        const rlv = ctx.renderLocals[name];
+        if (typeof rlv === 'string' && /^[A-Za-z_]\w*$/.test(rlv) && isGetter(rlv)) {
+          parts.push(slotGet(rlv));
+        } else if (typeof rlv === 'string' && rlv.length > 0) {
+          parts.push(rlv);
+        } else {
+          parts.push('0');
+        }
       } else if (ctx.currentMap && name === ctx.currentMap.indexParam) {
         parts.push('0');
       } else if (ctx.propStack && ctx.propStack[name] !== undefined) {
         const pv = ctx.propStack[name];
-        parts.push(/^-?\d+(\.\d+)?$/.test(pv) ? pv : '0');
+        if (typeof pv === 'string' && /^[A-Za-z_]\w*$/.test(pv) && isGetter(pv)) {
+          parts.push(slotGet(pv));
+        } else if (typeof pv === 'string' && (/^-?\d+(\.\d+)?$/.test(pv) ||
+                   pv.startsWith('state.') || pv.startsWith('_oa') || pv.startsWith('@as(') || pv.startsWith('@intCast(') ||
+                   pv.startsWith('if (') || pv.startsWith('"') || pv.startsWith("'") ||
+                   /(?:===|!==|==|!=|>=|<=|&&|\|\||[?:<>])/.test(pv))) {
+          parts.push(pv);
+        } else {
+          parts.push('0');
+        }
       } else {
         // Unknown identifier (e.g. handler closure param) — emit 0 for valid Zig
         // The JS handler body provides the actual runtime behavior

@@ -477,7 +477,14 @@ function tryParseBraceChild(c, children) {
         children.push({ nodeExpr: `.{ .text = "" }`, dynBufId: bufId });
       }
     } else {
-      children.push({ nodeExpr: `.{ .text = ${zigStringLiteral(_brRlVal)} }` });
+      var _brStaticText = _brRlVal;
+      if (typeof _brStaticText === 'string' && /^"(?:[^"\\]|\\.)*"$/.test(_brStaticText)) {
+        _brStaticText = _brStaticText
+          .slice(1, -1)
+          .replace(/\\"/g, '"')
+          .replace(/\\\\/g, '\\');
+      }
+      children.push({ nodeExpr: `.{ .text = ${zigStringLiteral(_brStaticText)} }` });
     }
     return true;
   }

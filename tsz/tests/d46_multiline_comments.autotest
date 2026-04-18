@@ -12,13 +12,13 @@ expect "ready"
 
 # Click-through: 2 pressable nodes
 
-click "+1"
+click "press:increment"
 expect "Block Comments"
 expect "+1"
 expect "Reset"
 expect "incremented to 1"
 
-click "Reset"
+click "press:reset"
 expect "Block Comments"
 expect "+1"
 expect "Reset"

@@ -93,6 +93,10 @@ const MAX_UPLOAD_BYTES: u32 = 8 * 1024 * 1024; // 8MB texture uploads per frame
 var g_frame_effect_pixels: u32 = 0;
 var g_frame_upload_bytes: u32 = 0;
 var g_effect_budget_logged: bool = false;
+var g_effect_debug_logged: bool = false;
+var g_effect_gpu_result_logged: bool = false;
+var g_effect_cpu_result_logged: bool = false;
+var g_effect_queue_logged: bool = false;
 
 // ════════════════════════════════════════════════════════════════════════
 // Instances — shared between registry and custom render paths
@@ -692,6 +696,7 @@ pub fn paintEffect(effect_type: []const u8, x: f32, y: f32, w: f32, h: f32, opac
 /// Paint a custom effect (node has effect_render and optional effect_shader).
 /// GPU is used when a shader-safe lowering exists; otherwise this falls back to CPU.
 pub fn paintCustomEffect(node: *const Node, x: f32, y: f32, w: f32, h: f32, opacity: f32) bool {
+    std.debug.print("[PCE ENTER] node={x} xy=({d:.0},{d:.0}) wh=({d:.0},{d:.0})\n", .{ @intFromPtr(node), x, y, w, h });
     var inst = findInstanceByNode(@intFromPtr(node));
     if (inst == null) {
         inst = createCustomInstance(node);
@@ -717,11 +722,19 @@ pub fn paintCustomEffect(node: *const Node, x: f32, y: f32, w: f32, h: f32, opac
         node_name, @intFromPtr(node), x, y, w, h, shouldTryGpu(node), i.gpu_failed, node.effect_shader != null, node.effect_background,
     });
 
+    if (!g_effect_debug_logged) {
+        g_effect_debug_logged = true;
+        std.debug.print("[effect-paint] node={x} rect=({d:.0},{d:.0},{d:.0},{d:.0}) shouldTryGpu={} shader_set={}\n", .{ @intFromPtr(node), x, y, w, h, shouldTryGpu(node), node.effect_shader != null });
+    }
     if (shouldTryGpu(node) and !i.gpu_failed) {
         i.backend = .gpu;
         const size_ok = ensureGpuSize(i, iw, ih);
         const pipe_ok = size_ok and ensureGpuPipeline(i);
         const render_ok = pipe_ok and renderGpu(i);
+        if (!g_effect_gpu_result_logged) {
+            g_effect_gpu_result_logged = true;
+            std.debug.print("[effect-gpu] size_ok={} pipe_ok={} render_ok={}\n", .{ size_ok, pipe_ok, render_ok });
+        }
         log.info(.render, "custom effect gpu node={s} size_ok={} pipe_ok={} render_ok={} tex={d}x{d} bind_group={} target={} pipeline={}", .{
             node_name,
             size_ok,
@@ -749,16 +762,21 @@ pub fn paintCustomEffect(node: *const Node, x: f32, y: f32, w: f32, h: f32, opac
         log.warn(.render, "custom effect cpu zero-sized node={s}", .{node_name});
         return false;
     }
-    if (!renderCpuNow(i)) {
-        log.warn(.render, "custom effect cpu render failed node={s} tex={d}x{d} bind_group={} pixel_buf={}", .{
-            node_name, i.width, i.height, i.bind_group != null, i.pixel_buf != null,
-        });
+    const cpu_ok = renderCpuNow(i);
+    if (!g_effect_cpu_result_logged) {
+        g_effect_cpu_result_logged = true;
+        std.debug.print("[effect-cpu] render_ok={} tex={d}x{d} bind_group={} pixel_buf={}\n", .{ cpu_ok, i.width, i.height, i.bind_group != null, i.pixel_buf != null });
+    }
+    if (!cpu_ok) {
         return false;
     }
     const bg = i.bind_group orelse return false;
 
     images.queueQuad(x, y, w, h, opacity, bg);
-    log.info(.render, "custom effect cpu queued node={s} tex={d}x{d}", .{ node_name, i.width, i.height });
+    if (!g_effect_queue_logged) {
+        g_effect_queue_logged = true;
+        std.debug.print("[effect-queued] backend={s} tex={d}x{d}\n", .{ @tagName(i.backend), i.width, i.height });
+    }
     return true;
 }
 

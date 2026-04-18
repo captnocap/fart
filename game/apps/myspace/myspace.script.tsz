@@ -1,378 +1,328 @@
-// MySpace Profile Database — document store pattern
-// Each profile is a JSON blob keyed by ID
-// Theme colors use hex numbers (0xRRGGBB) for dynamic style binding
+var channelData = [
+  { id: 'ch_nova', name: 'Nova Builds', subscribers: '680K', badge: 'NB', badgeBg: '#ff6d01' },
+  { id: 'ch_omega', name: 'Omega Stream', subscribers: '1.4M', badge: 'OS', badgeBg: '#3ddc84' },
+  { id: 'ch_mel', name: 'Melody Deck', subscribers: '920K', badge: 'MD', badgeBg: '#8f7dff' },
+  { id: 'ch_craft', name: 'Pixel Craft', subscribers: '420K', badge: 'PC', badgeBg: '#ff6e95' },
+  { id: 'ch_relay', name: 'Relay Labs', subscribers: '330K', badge: 'RL', badgeBg: '#00bcd4' }
+];
 
-var profiles = {};
+var homePrimary = [
+  'v101',
+  'v102',
+  'v103',
+  'v104',
+  'v105'
+];
 
-profiles.tom = {
-  id: 'tom',
-  name: 'Tom', age: 32, loc: 'Los Angeles, California',
-  lastLogin: '3/28/2006', online: 1, mood: 'chipper',
-  about: "Hey, I am Tom! Founder of MySpace. Thanks for joining. Let me know if you need anything!",
-  meet: 'Anyone and everyone! I love meeting new people. Just say hi, I always respond.',
-  intGeneral: 'The internet, coding, meeting new people, photography',
-  intMusic: 'Incubus, Foo Fighters, Coldplay, The Shins, Postal Service',
-  intMovies: 'The Matrix, Garden State, Napoleon Dynamite, Eternal Sunshine',
-  intTv: 'The OC, Lost, Arrested Development',
-  intBooks: 'The Catcher in the Rye, 1984, Freakonomics',
-  intHeroes: 'The users who make MySpace great',
-  detStatus: 'Single', detHereFor: 'Networking, Friends',
-  detHometown: 'Escondido, CA', detBody: '6\' 0" / Athletic',
-  detZodiac: 'Cancer', detSmoke: 'No / Sometimes',
-  detEdu: 'Grad / professional school', detOccupation: 'Internet Entrepreneur',
-  song: 'The Reason', artist: 'Hoobastank',
-  friends: ['xravenwing', 'brittney', 'djphresh'],
-  bgColor: 0xffffff, textColor: 0x333333, linkColor: 0x003399,
-  hdrBg: 0x003399, hdrText: 0xffffff, borderColor: 0xb0b0b0, secBg: 0xffffff,
-  avLetter: 'T', avBg: 0x003399,
-  comments: [
-    { from: 'brittney', text: 'Thanks for the add Tom!! Love ur profile!! xoxo', time: '3/27 11:42pm' },
-    { from: 'djphresh', text: 'yo tom check out my new beats bro, link on my page', time: '3/27 8:15pm' },
-    { from: 'xravenwing', text: '...thanks i guess', time: '3/26 6:33pm' }
+var continuePrimary = [
+  'v106',
+  'v107',
+  'v108'
+];
+
+var shortsPrimary = [
+  's201',
+  's202',
+  's203'
+];
+
+var searchBuckets = {
+  all: ['v101', 'v102', 'v103', 'v104', 'v105', 'v106', 'v107', 'v108', 's201', 's202', 's203'],
+  coding: ['v101', 'v106', 'v107', 'v108'],
+  music: ['v102', 'v109', 'v110'],
+  gaming: ['v103', 'v105', 's202'],
+  tech: ['v101', 'v109', 'v107', 'v108'],
+  short: ['s201', 's202', 's203'],
+  news: ['v104', 'v110']
+};
+
+var relatedMap = {
+  v101: ['v106', 'v107', 'v102'],
+  v102: ['v110', 'v101', 'v103'],
+  v103: ['v105', 's202', 'v102'],
+  v104: ['v110', 'v109', 'v107'],
+  v105: ['v103', 's201', 'v106'],
+  v106: ['v107', 'v108', 'v101'],
+  v107: ['v108', 'v102', 'v101'],
+  v108: ['v107', 'v105', 'v110'],
+  s201: ['s203', 'v102', 'v105'],
+  s202: ['s201', 'v106', 'v103'],
+  s203: ['s202', 'v105', 'v109'],
+  v109: ['v102', 'v104', 'v106'],
+  v110: ['v104', 'v102', 's203']
+};
+
+var videos = {
+  v101: {
+    id: 'v101',
+    title: 'How I built a desktop in pure C in one night',
+    channelId: 'ch_nova',
+    channelName: 'Nova Builds',
+    views: '1.9M views',
+    uploaded: '2 hours ago',
+    duration: '16:42',
+    badge: 'NB',
+    tint: '#ff6d01',
+    description: 'A practical build log of a fast boot OS prototype.',
+    topic: 'coding'
+  },
+  v102: {
+    id: 'v102',
+    title: 'Midnight Lo-fi Mix // No comments, just vibes',
+    channelId: 'ch_mel',
+    channelName: 'Melody Deck',
+    views: '3.4M views',
+    uploaded: '11 hours ago',
+    duration: '0:58',
+    badge: 'MD',
+    tint: '#8f7dff',
+    description: 'A short mood set for focus nights and late debugging sessions.',
+    topic: 'music'
+  },
+  v103: {
+    id: 'v103',
+    title: 'Retro FPS rig setup for zero-lag streaming',
+    channelId: 'ch_relay',
+    channelName: 'Relay Labs',
+    views: '812K views',
+    uploaded: '1 day ago',
+    duration: '22:11',
+    badge: 'RL',
+    tint: '#00bcd4',
+    description: 'Optimizing old hardware without sacrificing frame stability.',
+    topic: 'gaming'
+  },
+  v104: {
+    id: 'v104',
+    title: 'The strange rise of nostalgia apps on the early internet',
+    channelId: 'ch_omega',
+    channelName: 'Omega Stream',
+    views: '2.3M views',
+    uploaded: '3 days ago',
+    duration: '19:26',
+    badge: 'OS',
+    tint: '#3ddc84',
+    description: 'A slow walk through interface history and social design patterns.',
+    topic: 'tech'
+  },
+  v105: {
+    id: 'v105',
+    title: 'Designing UI kits for small crews',
+    channelId: 'ch_craft',
+    channelName: 'Pixel Craft',
+    views: '1.1M views',
+    uploaded: '5 hours ago',
+    duration: '14:04',
+    badge: 'PC',
+    tint: '#ff6e95',
+    description: 'A process video for making fast style systems that stay readable.',
+    topic: 'tech'
+  },
+  v106: {
+    id: 'v106',
+    title: 'Can we ship before dawn? Team sprint breakdown',
+    channelId: 'ch_nova',
+    channelName: 'Nova Builds',
+    views: '670K views',
+    uploaded: 'Yesterday',
+    duration: '11:03',
+    badge: 'NB',
+    tint: '#ff6d01',
+    description: 'How to turn rough notes into a playable feature with limited time.',
+    topic: 'coding'
+  },
+  v107: {
+    id: 'v107',
+    title: 'Quick state handling patterns for local multiplayer UI',
+    channelId: 'ch_omega',
+    channelName: 'Omega Stream',
+    views: '2.0M views',
+    uploaded: '6 days ago',
+    duration: '31:09',
+    badge: 'OS',
+    tint: '#3ddc84',
+    description: 'A practical guide to state lifecycles without global spaghetti.',
+    topic: 'coding'
+  },
+  v108: {
+    id: 'v108',
+    title: 'Event buses at 2AM: what breaks first?',
+    channelId: 'ch_relay',
+    channelName: 'Relay Labs',
+    views: '1.4M views',
+    uploaded: '8 hours ago',
+    duration: '27:33',
+    badge: 'RL',
+    tint: '#00bcd4',
+    description: 'Debugging architecture when components keep firing in the wrong order.',
+    topic: 'coding'
+  },
+  s201: {
+    id: 's201',
+    title: 'One shortcut that saves 3 minutes every build',
+    channelId: 'ch_mel',
+    channelName: 'Melody Deck',
+    views: '210K views',
+    uploaded: '4 hours ago',
+    duration: '0:31',
+    badge: 'MD',
+    tint: '#8f7dff',
+    description: 'A short clip on a repeated workflow tweak for faster iteration.',
+    topic: 'short'
+  },
+  s202: {
+    id: 's202',
+    title: 'When a shader overdraws 3x too much',
+    channelId: 'ch_craft',
+    channelName: 'Pixel Craft',
+    views: '180K views',
+    uploaded: '9 hours ago',
+    duration: '0:47',
+    badge: 'PC',
+    tint: '#ff6e95',
+    description: 'A short breakdown of a common render performance trap.',
+    topic: 'short'
+  },
+  s203: {
+    id: 's203',
+    title: 'This one button changed my menu UX',
+    channelId: 'ch_relay',
+    channelName: 'Relay Labs',
+    views: '143K views',
+    uploaded: 'Today',
+    duration: '0:54',
+    badge: 'RL',
+    tint: '#00bcd4',
+    description: 'Tiny UI interaction with a huge effect on discoverability.',
+    topic: 'short'
+  },
+  v109: {
+    id: 'v109',
+    title: 'Open-source game tooling after midnight',
+    channelId: 'ch_omega',
+    channelName: 'Omega Stream',
+    views: '760K views',
+    uploaded: '2 days ago',
+    duration: '28:11',
+    badge: 'OS',
+    tint: '#3ddc84',
+    description: 'How I keep local tooling fast when projects get huge.',
+    topic: 'tech'
+  },
+  v110: {
+    id: 'v110',
+    title: 'Can AI generate music with emotional arcs?',
+    channelId: 'ch_mel',
+    channelName: 'Melody Deck',
+    views: '900K views',
+    uploaded: '7 days ago',
+    duration: '25:44',
+    badge: 'MD',
+    tint: '#8f7dff',
+    description: 'An informal test of melody generation constraints with real feedback.',
+    topic: 'music'
+  }
+};
+
+var channelVideos = {
+  ch_nova: ['v101', 'v106', 'v107'],
+  ch_omega: ['v104', 'v107', 'v109'],
+  ch_mel: ['v102', 'v110', 's201'],
+  ch_craft: ['v105', 's202', 'v108'],
+  ch_relay: ['v103', 'v108', 's203', 's202']
+};
+
+var comments = {
+  v101: [
+    { author: 'Melody Deck', text: 'That boot pipeline looked way cleaner than my old one.', time: '1h', likes: '33' },
+    { author: 'Relay Labs', text: 'Could you share the command you used for the fast build checks?', time: '45m', likes: '18' }
   ],
-  blogPosts: [
-    { title: 'Welcome to MySpace!', date: '3/15/2006', excerpt: 'Just wanted to say thanks to everyone...' },
-    { title: 'New Features Coming Soon', date: '3/10/2006', excerpt: 'We are working on some amazing new stuff...' }
+  v102: [
+    { author: 'Nova Builds', text: 'Perfect for late-night focus sessions. Saved the queue.', time: '10m', likes: '7' },
+    { author: 'Pixel Craft', text: 'The mix section in the first 20 seconds is unreal.', time: '2h', likes: '12' }
+  ],
+  v103: [
+    { author: 'Omega Stream', text: 'This helped me squeeze 12ms off end-to-end render.', time: '3h', likes: '41' }
+  ],
+  v104: [
+    { author: 'Pixel Craft', text: 'Great context on interface nostalgia for 2005-era social pages.', time: '6h', likes: '58' }
+  ],
+  v105: [
+    { author: 'Nova Builds', text: 'Nice breakdown on consistency systems. Pinning this.', time: '1d', likes: '22' }
+  ],
+  v106: [
+    { author: 'Relay Labs', text: 'You can ship with this discipline and not burn out.', time: '5h', likes: '16' }
+  ],
+  v107: [
+    { author: 'Melody Deck', text: 'I am using this state pattern in the new dashboard tomorrow.', time: '1d', likes: '20' }
+  ],
+  v108: [
+    { author: 'Nova Builds', text: 'The call stack trace example at 4:09 is gold.', time: '3h', likes: '9' }
+  ],
+  s201: [
+    { author: 'Omega Stream', text: 'Shorts version of that shortcut is the best tip in this stack.', time: '30m', likes: '3' }
+  ],
+  v109: [
+    { author: 'Pixel Craft', text: 'Very practical and honest about failures.', time: '2h', likes: '17' }
+  ],
+  v110: [
+    { author: 'Nova Builds', text: 'Love the emotional transitions at the turn, exactly right.', time: '8h', likes: '26' }
   ]
 };
 
-profiles.xravenwing = {
-  id: 'xravenwing',
-  name: 'xX_RavenWing_Xx', age: 19, loc: 'Portland, Oregon',
-  lastLogin: '3/28/2006', online: 1, mood: 'contemplative',
-  about: "I walk alone through the corridors of my mind. Currently listening to MCR on repeat. Dont talk to me unless youre real.",
-  meet: 'People who understand the darkness. Gerard Way. Tim Burton. Someone who actually reads.',
-  intGeneral: 'Writing poetry, drawing, going to shows, thrifting, hot topic',
-  intMusic: 'My Chemical Romance, Evanescence, AFI, The Used, Saosin, Hawthorne Heights, Taking Back Sunday',
-  intMovies: 'Donnie Darko, The Crow, Edward Scissorhands, Corpse Bride, Nightmare Before Christmas',
-  intTv: 'Invader Zim, Death Note, Fuse',
-  intBooks: 'The Perks of Being a Wallflower, A Clockwork Orange, anything by Sylvia Plath',
-  intHeroes: 'Gerard Way, Edgar Allan Poe, Tim Burton, Hayley Williams',
-  detStatus: 'Single', detHereFor: 'Friends',
-  detHometown: 'Portland, OR', detBody: '5\' 4" / Slim',
-  detZodiac: 'Scorpio', detSmoke: 'Sometimes / No',
-  detEdu: 'Some college', detOccupation: 'Barista / Artist',
-  song: 'Helena', artist: 'My Chemical Romance',
-  friends: ['tom', 'brittney', 'djphresh'],
-  bgColor: 0x0a0000, textColor: 0xcc3333, linkColor: 0xff4444,
-  hdrBg: 0x1a0000, hdrText: 0xff6666, borderColor: 0x330000, secBg: 0x0f0000,
-  avLetter: 'R', avBg: 0x990000,
-  comments: [
-    { from: 'brittney', text: 'ur profile is SO cool omg i love the dark colors!! rawr XD', time: '3/28 1:20am' },
-    { from: 'tom', text: 'Welcome to MySpace! Love the profile customization. Rock on!', time: '3/25 4:00pm' }
-  ],
-  blogPosts: [
-    { title: 'My Dark Soul', date: '3/20/2006', excerpt: 'Another poem about the void...' }
-  ]
-};
-
-profiles.brittney = {
-  id: 'brittney',
-  name: '~*BrItTnEy*~', age: 17, loc: 'Tampa, Florida',
-  lastLogin: '3/28/2006', online: 0, mood: 'excited!!',
-  about: "hiii!! im brittney!! i love my friends SO much!! PC4PC?? add me i add back!! rawr XD!! LYLAS",
-  meet: "MORE FRIENDS!! anyone whos fun and not boring lol. pete wentz CALL ME haha jk",
-  intGeneral: 'Shopping, texting, sleepovers, taking pics, MySpace, the mall',
-  intMusic: 'Hellogoodbye, Metro Station, Paramore, Fall Out Boy, Panic! At The Disco, All Time Low',
-  intMovies: 'Mean Girls, A Walk to Remember, The Notebook, 13 Going On 30',
-  intTv: 'Laguna Beach, The Hills, Degrassi, One Tree Hill',
-  intBooks: 'lol does Cosmo count?? Twilight!! A Walk to Remember',
-  intHeroes: 'My mom, my besties, Paris Hilton, Hayley Williams',
-  detStatus: 'Single', detHereFor: 'Dating, Friends',
-  detHometown: 'Tampa, FL', detBody: '5\' 2" / Petite',
-  detZodiac: 'Leo', detSmoke: 'No / No',
-  detEdu: 'High school', detOccupation: 'Student',
-  song: 'Here (In Your Arms)', artist: 'Hellogoodbye',
-  friends: ['tom', 'xravenwing', 'djphresh'],
-  bgColor: 0xffe0f0, textColor: 0xcc0066, linkColor: 0xff3399,
-  hdrBg: 0xff69b4, hdrText: 0xffffff, borderColor: 0xffaacc, secBg: 0xfff0f5,
-  avLetter: 'B', avBg: 0xff69b4,
-  comments: [
-    { from: 'xravenwing', text: 'your profile is aggressively pink', time: '3/27 9:45pm' },
-    { from: 'tom', text: 'Thanks for being on MySpace, Brittney! Have fun!', time: '3/24 2:30pm' },
-    { from: 'djphresh', text: 'heyyy check out my music page, new beats up', time: '3/26 5:12pm' }
-  ],
-  blogPosts: [
-    { title: 'OMG Weekend!!!', date: '3/25/2006', excerpt: 'So much fun at the mall with my girls!!!' },
-    { title: 'New Pics Up!!', date: '3/22/2006', excerpt: 'PC4PC everyone!! Comment my pics!!' }
-  ]
-};
-
-profiles.djphresh = {
-  id: 'djphresh',
-  name: 'DJ PhreshBeatz', age: 22, loc: 'Miami, Florida',
-  lastLogin: '3/28/2006', online: 1, mood: 'productive',
-  about: "OFFICIAL DJ PhreshBeatz. New mixtape FRIDAY. 50k plays. South Beach every Saturday. VIP - hit me up.",
-  meet: 'Club promoters, DJs, A+R reps. Timbaland, Pharrell. SERIOUS INQUIRIES ONLY.',
-  intGeneral: 'Music production, DJing, vinyl collecting, studio sessions, cars',
-  intMusic: 'Kanye West, Daft Punk, Justice, Tiesto, DJ Shadow, J Dilla, Pharrell',
-  intMovies: 'Scratch, Juice, 8 Mile, Wild Style, Belly',
-  intTv: 'Pimp My Ride, Cribs, Making the Band',
-  intBooks: 'The 48 Laws of Power, How To Make It In The New Music Business',
-  intHeroes: 'J Dilla, Timbaland, Pharrell, DJ Premier, Pete Rock',
-  detStatus: 'Single', detHereFor: 'Networking',
-  detHometown: 'Miami, FL', detBody: '5\' 11" / Average',
-  detZodiac: 'Aquarius', detSmoke: 'No / Social',
-  detEdu: 'Some college', detOccupation: 'DJ / Producer',
-  song: 'Stronger', artist: 'Kanye West',
-  friends: ['tom', 'brittney', 'xravenwing'],
-  bgColor: 0x0a0a14, textColor: 0xccccee, linkColor: 0x00ccff,
-  hdrBg: 0x0d0d2b, hdrText: 0x00ccff, borderColor: 0x1a1a44, secBg: 0x0f0f1e,
-  avLetter: 'D', avBg: 0x0066cc,
-  comments: [
-    { from: 'brittney', text: 'omg ur music is SO good!! play at my bday party??', time: '3/28 2:00am' },
-    { from: 'tom', text: 'Keep making great music, man! MySpace loves DJs.', time: '3/26 11:00am' }
-  ],
-  blogPosts: [
-    { title: 'New Mixtape Dropping Friday', date: '3/27/2006', excerpt: '50k plays already! Get ready...' }
-  ]
-};
-
-// === Router ===
-
-var routes = {
-  HOME: 'home',
-  BROWSE: 'browse',
-  SEARCH: 'search',
-  INVITE: 'invite',
-  MAIL: 'mail',
-  BLOG: 'blog',
-  FAVORITES: 'favorites',
-  FORUM: 'forum',
-  GROUPS: 'groups',
-  MUSIC: 'music',
-  PROFILE: 'profile'
-};
-
-function navigateTo(route, params) {
-  setCurrentRoute(route);
-  if (params && params.userId) {
-    viewProfile(params.userId);
-  }
+function getAllVideos() {
+  return Object.values(videos);
 }
 
-function goHome() {
-  navigateTo(routes.HOME);
+function getHomeVideos() {
+  return getVideosByIds(homePrimary);
 }
 
-function goBrowse() {
-  navigateTo(routes.BROWSE);
+function getContinueVideos() {
+  return getVideosByIds(continuePrimary);
 }
 
-function goSearch() {
-  navigateTo(routes.SEARCH);
+function getShortsVideos() {
+  return getVideosByIds(shortsPrimary);
 }
 
-function goInvite() {
-  navigateTo(routes.INVITE);
+function getChannels() {
+  return channelData;
 }
 
-function goMail() {
-  navigateTo(routes.MAIL);
+function getSearchTopics() {
+  return ['all', 'coding', 'music', 'gaming', 'tech', 'short'];
 }
 
-function goBlog() {
-  navigateTo(routes.BLOG);
+function getSearchResults(topic) {
+  var key = topic;
+  var ids = searchBuckets[key];
+  if (!ids) return getHomeVideos();
+  return getVideosByIds(ids);
 }
 
-function goFavorites() {
-  navigateTo(routes.FAVORITES);
+function getVideosByChannel(channelId) {
+  var ids = channelVideos[channelId];
+  if (!ids) return [];
+  return getVideosByIds(ids);
 }
 
-function goForum() {
-  navigateTo(routes.FORUM);
+function getVideoById(videoId) {
+  return videos[videoId] || videos.v101;
 }
 
-function goGroups() {
-  navigateTo(routes.GROUPS);
+function getRelatedVideos(videoId) {
+  var ids = relatedMap[videoId];
+  if (!ids) return [];
+  return getVideosByIds(ids);
 }
 
-function goMusic() {
-  navigateTo(routes.MUSIC);
+function getVideoComments(videoId) {
+  var c = comments[videoId];
+  if (!c) return [];
+  return c;
 }
 
-// === Navigation ===
-
-function viewProfile(id) {
-  var p = profiles[id];
-  if (!p) return;
-
-  setCurrentRoute(routes.PROFILE);
-  setCurrentUserId(id);
-
-  setPName(p.name);
-  setPAge(p.age);
-  setPLoc(p.loc);
-  setPMood(p.mood);
-  setPAbout(p.about);
-  setPMeet(p.meet);
-  setPSong(p.song);
-  setPArtist(p.artist);
-  setPOnline(p.online);
-  setPLogin(p.lastLogin);
-  setPAvLetter(p.avLetter);
-  setPAvBg(p.avBg);
-
-  setTBg(p.bgColor);
-  setTText(p.textColor);
-  setTLink(p.linkColor);
-  setTHdrBg(p.hdrBg);
-  setTHdrText(p.hdrText);
-  setTBorder(p.borderColor);
-  setTSecBg(p.secBg);
-
-  setInterests([
-    { label: 'General', value: p.intGeneral },
-    { label: 'Music', value: p.intMusic },
-    { label: 'Movies', value: p.intMovies },
-    { label: 'Television', value: p.intTv },
-    { label: 'Books', value: p.intBooks },
-    { label: 'Heroes', value: p.intHeroes }
-  ]);
-
-  setDetails([
-    { label: 'Status', value: p.detStatus },
-    { label: 'Here For', value: p.detHereFor },
-    { label: 'Hometown', value: p.detHometown },
-    { label: 'Body Type', value: p.detBody },
-    { label: 'Zodiac Sign', value: p.detZodiac },
-    { label: 'Smoke / Drink', value: p.detSmoke },
-    { label: 'Education', value: p.detEdu },
-    { label: 'Occupation', value: p.detOccupation }
-  ]);
-
-  // Build top friends array from IDs
-  var fr = [];
-  var i = 0;
-  while (p.friends.length > i) {
-    var fid = p.friends[i];
-    var fp = profiles[fid];
-    if (fp) {
-      fr.push({ id: fid, name: fp.name, avatarLetter: fp.avLetter, avatarBg: fp.avBg });
-    }
-    i = i + 1;
-  }
-  setTopFriends(fr);
-
-  // Build comments array with resolved author info
-  var cm = [];
-  var j = 0;
-  while (p.comments.length > j) {
-    var c = p.comments[j];
-    var ap = profiles[c.from];
-    var aName = 'Unknown';
-    var aLetter = '?';
-    var aBg = 0x999999;
-    if (ap) {
-      aName = ap.name;
-      aLetter = ap.avLetter;
-      aBg = ap.avBg;
-    }
-    cm.push({ authorName: aName, avatarLetter: aLetter, avatarBg: aBg, text: c.text, time: c.time, authorId: c.from });
-    j = j + 1;
-  }
-  setComments(cm);
-
-  // Build blog posts
-  var bp = [];
-  var k = 0;
-  while (p.blogPosts.length > k) {
-    var post = p.blogPosts[k];
-    bp.push({ title: post.title, date: post.date, excerpt: post.excerpt, author: p.name });
-    k = k + 1;
-  }
-  setUserBlogPosts(bp);
+function getVideosByIds(list) {
+  return list.map((id) => { return videos[id]; });
 }
-
-// === Mock Data for Pages ===
-
-function getAllUsers() {
-  var all = [];
-  var keys = Object.keys(profiles);
-  var i = 0;
-  while (keys.length > i) {
-    var k = keys[i];
-    var p = profiles[k];
-    all.push({
-      id: k,
-      name: p.name,
-      age: p.age,
-      loc: p.loc,
-      avLetter: p.avLetter,
-      avBg: p.avBg,
-      online: p.online,
-      mood: p.mood
-    });
-    i = i + 1;
-  }
-  return all;
-}
-
-function getAllBlogPosts() {
-  var all = [];
-  var keys = Object.keys(profiles);
-  var i = 0;
-  while (keys.length > i) {
-    var k = keys[i];
-    var p = profiles[k];
-    var j = 0;
-    while (p.blogPosts.length > j) {
-      var post = p.blogPosts[j];
-      all.push({
-        title: post.title,
-        date: post.date,
-        excerpt: post.excerpt,
-        author: p.name,
-        authorId: k,
-        avLetter: p.avLetter,
-        avBg: p.avBg
-      });
-      j = j + 1;
-    }
-    i = i + 1;
-  }
-  return all;
-}
-
-function getMockGroups() {
-  return [
-    { name: 'Music Lovers', members: 15420, category: 'Music' },
-    { name: 'Photography', members: 8932, category: 'Hobbies' },
-    { name: 'Los Angeles', members: 42153, category: 'Regional' },
-    { name: 'Single & Looking', members: 67891, category: 'Dating' },
-    { name: 'Gaming', members: 34521, category: 'Entertainment' },
-    { name: 'Film Buffs', members: 12340, category: 'Movies' }
-  ];
-}
-
-function getMockForums() {
-  return [
-    { name: 'General Discussion', topics: 4521, posts: 89234 },
-    { name: 'Music Talk', topics: 8921, posts: 156789 },
-    { name: 'Dating & Relationships', topics: 12345, posts: 234567 },
-    { name: 'Tech Support', topics: 3210, posts: 45678 },
-    { name: 'Creative Corner', topics: 5678, posts: 89012 }
-  ];
-}
-
-function getMockSongs() {
-  return [
-    { title: 'The Reason', artist: 'Hoobastank', plays: 1234567 },
-    { title: 'Helena', artist: 'My Chemical Romance', plays: 2345678 },
-    { title: 'Here (In Your Arms)', artist: 'Hellogoodbye', plays: 987654 },
-    { title: 'Stronger', artist: 'Kanye West', plays: 3456789 },
-    { title: 'Sugar We\'re Goin Down', artist: 'Fall Out Boy', plays: 4567890 },
-    { title: 'I Write Sins Not Tragedies', artist: 'Panic! At The Disco', plays: 5678901 }
-  ];
-}
-
-function getMockMail() {
-  return [
-    { from: 'brittney', subject: 'RE: PC4PC??', preview: 'omg yes!! lets do pic comments!!', time: '2:30pm', unread: 1 },
-    { from: 'djphresh', subject: 'New beats', preview: 'Check out my new mixtape bro', time: 'Yesterday', unread: 1 },
-    { from: 'MySpace Team', subject: 'Welcome to MySpace!', preview: 'Thanks for joining the largest...', time: '3/25', unread: 0 }
-  ];
-}
-
-// Load Tom's profile on startup — everyone's first friend
-viewProfile('tom');

@@ -73,6 +73,8 @@ pub var g_zero_count: u32 = 0;
 pub var g_budget_exceeded: bool = false;
 pub var g_dt_sec: f32 = 0;
 pub var g_paint_opacity: f32 = 1.0; // global opacity multiplier for dim/highlight
+var g_effect_bg_logged: bool = false;
+var g_effect_child_seen: bool = false;
 pub var g_flow_enabled: bool = true; // per-child flow override for hover mode
 pub var g_hover_changed: bool = false; // debug flag
 pub var g_semantic_overlay: bool = false; // Ctrl+Shift+D toggles semantic color overlay
@@ -124,7 +126,15 @@ pub fn paintNode(node: *Node) void {
 
     // Background effects — children with effect_background paint behind siblings
     for (node.children) |*child| {
+        if (child.effect_render != null and !g_effect_child_seen) {
+            g_effect_child_seen = true;
+            std.debug.print("[effect-child-seen] parent={x} child={x} bg={} parent_rect={d}x{d} child_rect={d}x{d}\n", .{ @intFromPtr(node), @intFromPtr(child), child.effect_background, r.w, r.h, child.computed.w, child.computed.h });
+        }
         if (child.effect_background and child.effect_render != null) {
+            if (!g_effect_bg_logged) {
+                g_effect_bg_logged = true;
+                std.debug.print("[effect-bg-paint] firing parent={x} child={x} rect={d}x{d}\n", .{ @intFromPtr(node), @intFromPtr(child), r.w, r.h });
+            }
             _ = effects.paintCustomEffect(child, r.x, r.y, r.w, r.h, g_paint_opacity);
         }
     }

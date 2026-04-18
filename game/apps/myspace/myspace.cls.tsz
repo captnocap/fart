@@ -1,302 +1,75 @@
-// MySpace classifier atoms with per-profile theme variants + responsive breakpoints
-//
-// Variants (switched via setVariant(N) in viewProfile):
-//   0 = default (Tom — classic MySpace blue)
-//   1 = emo     (xX_RavenWing_Xx — dark/crimson)
-//   2 = pink    (~*BrItTnEy*~ — hot pink/pastel)
-//   3 = neon    (DJ PhreshBeatz — dark/cyan)
-//
-// Breakpoints:
-//   sm = narrow window (browser resized small in-game)
-//
-// NOTE: Smith currently only reads default style. Variants + bp activate
-// once Smith gets variant emit support ported from the reference compiler.
-
 classifier({
-  // === Nav Bar — always blue, not themed ===
-  Nav: { type: 'Box', style: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#003366', paddingLeft: 8, paddingRight: 8, paddingTop: 5, paddingBottom: 5, gap: 2, flexWrap: 'wrap' } },
-  NavBrand: { type: 'Text', fontSize: 14, color: '#ffffff' },
-  NavSep: { type: 'Text', fontSize: 10, color: '#336699' },
-  NavLink: { type: 'Pressable', style: { paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2 } },
-  NavLinkText: { type: 'Text', fontSize: 10, color: '#99ccff' },
-  NavLinkActive: { type: 'Text', fontSize: 10, color: '#ffffff', fontWeight: 'bold' },
-  NavRight: { type: 'Box', style: { flexGrow: 1, flexDirection: 'row', justifyContent: 'flexEnd', alignItems: 'center', gap: 4 } },
-  NavSearchBox: { type: 'Box', style: { backgroundColor: '#ffffff', borderRadius: 2, paddingLeft: 6, paddingRight: 6, paddingTop: 2, paddingBottom: 2 } },
-  NavSearchText: { type: 'Text', fontSize: 9, color: '#999999' },
+  // --- App shell ---
+  Shell: { type: 'Box', style: { flexDirection: 'column', width: '100%', height: '100%', backgroundColor: '#0f0f0f', gap: 0 } },
+  TopBar: { type: 'Box', style: { flexDirection: 'row', alignItems: 'center', gap: 10, height: 52, paddingLeft: 12, paddingRight: 12, backgroundColor: '#212121' } },
+  Logo: { type: 'Text', fontSize: 20, color: '#ff0000', fontWeight: 'bold' },
+  LogoAccent: { type: 'Text', fontSize: 12, color: '#ffffff', marginTop: 6 },
+  SearchPill: { type: 'Box', style: { flexGrow: 1, backgroundColor: '#121212', borderWidth: 1, borderColor: '#333333', borderRadius: 999, paddingLeft: 12, paddingTop: 8, paddingBottom: 8, paddingRight: 10 } },
+  SearchPillText: { type: 'Text', fontSize: 12, color: '#9e9e9e' },
 
-  // === Layout ===
-  ProfileColumns: {
-    type: 'Box',
-    style: { flexDirection: 'row', gap: 8 },
-    bp: {
-      sm: { style: { flexDirection: 'column', gap: 8 } },
-    }
-  },
-  LeftCol: {
-    type: 'Box',
-    style: { flexDirection: 'column', width: 280, gap: 8 },
-    bp: {
-      sm: { style: { flexDirection: 'column', width: '100%', gap: 8 } },
-    }
-  },
-  RightCol: { type: 'Box', style: { flexDirection: 'column', flexGrow: 1, gap: 8 } },
+  // --- Tabs ---
+  PrimaryTabs: { type: 'Box', style: { flexDirection: 'row', alignItems: 'center', gap: 2, paddingLeft: 10, paddingRight: 10, backgroundColor: '#181818', borderBottomWidth: 1, borderColor: '#282828' } },
+  PrimaryTab: { type: 'Pressable', style: { paddingLeft: 12, paddingRight: 12, paddingTop: 10, paddingBottom: 10 } },
+  PrimaryTabText: { type: 'Text', fontSize: 12, color: '#aaaaaa' },
+  PrimaryTabActive: { type: 'Text', fontSize: 12, color: '#ffffff', fontWeight: 'bold' },
 
-  // === Page Container ===
-  PageContainer: { type: 'Box', style: { flexGrow: 1, flexDirection: 'column', backgroundColor: '#ffffff' } },
-  PageContent: { type: 'Box', style: { padding: 16, gap: 12, flexDirection: 'column' } },
-  PageTitle: { type: 'Text', fontSize: 20, color: '#003399', fontWeight: 'bold' },
-  PageSubtitle: { type: 'Text', fontSize: 12, color: '#666666' },
+  // --- Layout ---
+  ContentArea: { type: 'Box', style: { flexGrow: 1, flexDirection: 'row', gap: 8, paddingLeft: 10, paddingRight: 10, paddingTop: 10 }, },
+  Sidebar: { type: 'Box', style: { width: 220, paddingTop: 4, paddingBottom: 4, gap: 8 } },
+  SidebarSection: { type: 'Box', style: { flexDirection: 'column', gap: 6, paddingBottom: 8, borderBottomWidth: 1, borderColor: '#2d2d2d' } },
+  SidebarTitle: { type: 'Text', fontSize: 10, color: '#888888', paddingBottom: 2, paddingLeft: 8 },
+  SidebarItem: { type: 'Box', style: { flexDirection: 'row', paddingTop: 6, paddingBottom: 6, paddingLeft: 8, paddingRight: 8, gap: 8, alignItems: 'center' } },
+  SidebarItemText: { type: 'Text', fontSize: 12, color: '#b3b3b3' },
+  SidebarItemActive: { type: 'Box', style: { flexDirection: 'row', paddingTop: 6, paddingBottom: 6, paddingLeft: 8, paddingRight: 8, borderRadius: 6, backgroundColor: '#303030' } },
+  SidebarItemActiveText: { type: 'Text', fontSize: 12, color: '#ffffff', fontWeight: 'bold' },
 
-  // === Section panel ===
-  Section: {
-    type: 'Box',
-    style: { borderWidth: 1, borderColor: '#b0b0b0', flexDirection: 'column' },
-    variants: {
-      emo:  { style: { borderWidth: 1, borderColor: '#330000', flexDirection: 'column' } },
-      pink: { style: { borderWidth: 1, borderColor: '#ffaacc', flexDirection: 'column' } },
-      neon: { style: { borderWidth: 1, borderColor: '#1a1a44', flexDirection: 'column' } },
-    }
-  },
-  SectionHead: {
-    type: 'Box',
-    style: { backgroundColor: '#003399', paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3 },
-    variants: {
-      emo:  { style: { backgroundColor: '#1a0000', paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3 } },
-      pink: { style: { backgroundColor: '#ff69b4', paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3 } },
-      neon: { style: { backgroundColor: '#0d0d2b', paddingLeft: 8, paddingRight: 8, paddingTop: 3, paddingBottom: 3 } },
-    }
-  },
-  SectionHeadText: {
-    type: 'Text', fontSize: 10, color: '#ffffff',
-    variants: {
-      emo:  { color: '#ff6666' },
-      pink: { color: '#ffffff' },
-      neon: { color: '#00ccff' },
-    }
-  },
-  SectionBody: {
-    type: 'Box',
-    style: { padding: 8, backgroundColor: '#ffffff' },
-    variants: {
-      emo:  { style: { padding: 8, backgroundColor: '#0f0000' } },
-      pink: { style: { padding: 8, backgroundColor: '#fff0f5' } },
-      neon: { style: { padding: 8, backgroundColor: '#0f0f1e' } },
-    }
-  },
-  SectionBodyTight: {
-    type: 'Box',
-    style: { padding: 6, backgroundColor: '#ffffff' },
-    variants: {
-      emo:  { style: { padding: 6, backgroundColor: '#0f0000' } },
-      pink: { style: { padding: 6, backgroundColor: '#fff0f5' } },
-      neon: { style: { padding: 6, backgroundColor: '#0f0f1e' } },
-    }
-  },
+  // --- Feed layout ---
+  Feed: { type: 'Box', style: { flexDirection: 'column', gap: 10, paddingBottom: 24, paddingLeft: 12, paddingRight: 12 } },
+  FeedSection: { type: 'Box', style: { flexDirection: 'column', gap: 8 } },
+  FeedSectionHead: { type: 'Box', style: { paddingTop: 4, paddingBottom: 4, paddingLeft: 2, borderBottomWidth: 1, borderColor: '#282828' } },
+  FeedSectionTitle: { type: 'Text', fontSize: 16, color: '#ffffff', fontWeight: 'bold' },
+  FeedSectionBodyWrap: { type: 'Box', style: { paddingTop: 6, paddingBottom: 4 } },
+  FeedSectionBody: { type: 'Box', style: { flexDirection: 'column', gap: 8 } },
+  SectionTitle: { type: 'Text', fontSize: 18, color: '#f1f1f1', fontWeight: 'bold', paddingLeft: 4, paddingBottom: 4 },
 
-  // === Network banner ===
-  NetworkBanner: { type: 'Box', style: { backgroundColor: '#eeeeff', paddingLeft: 10, paddingRight: 10, paddingTop: 3, paddingBottom: 3, borderWidth: 1, borderColor: '#ccccdd' } },
-  NetworkBannerText: { type: 'Text', fontSize: 11, color: '#336699' },
+  // --- Video cards ---
+  HeroVideo: { type: 'Box', style: { flexDirection: 'row', gap: 10, backgroundColor: '#191919', borderRadius: 8, borderWidth: 1, borderColor: '#303030', padding: 10, alignItems: 'center' } },
+  HeroVideoMeta: { type: 'Box', style: { flexGrow: 1, gap: 6 } },
+  HeroVideoTitle: { type: 'Text', fontSize: 18, color: '#ffffff', fontWeight: 'bold' },
+  HeroVideoMetaText: { type: 'Text', fontSize: 11, color: '#b5b5b5' },
+  VideoCard: { type: 'Box', style: { flexDirection: 'row', backgroundColor: '#1f1f1f', borderWidth: 1, borderColor: '#2d2d2d', borderRadius: 6, padding: 8, gap: 10 } },
+  VideoThumb: { type: 'Box', style: { width: 150, height: 84, borderRadius: 6, alignItems: 'center', justifyContent: 'center', position: 'relative' } },
+  VideoThumbText: { type: 'Text', color: '#ffffff', fontSize: 20, fontWeight: 'bold' },
+  DurationBadge: { type: 'Box', style: { position: 'absolute', bottom: 6, right: 6, backgroundColor: '#000000', paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 2 } },
+  VideoMeta: { type: 'Box', style: { flexDirection: 'column', flexGrow: 1, gap: 4 } },
+  VideoTitleText: { type: 'Text', fontSize: 13, color: '#ffffff', fontWeight: 'bold' },
+  VideoSubText: { type: 'Text', fontSize: 10, color: '#a5a5a5' },
+  VideoActionRow: { type: 'Box', style: { flexDirection: 'row', gap: 8 } },
+  VideoActionText: { type: 'Text', fontSize: 11, color: '#111111' },
+  WatchActionText: { type: 'Text', fontSize: 11, color: '#111111' },
 
-  // === Profile avatar ===
-  Avatar: {
-    type: 'Box',
-    style: { width: 200, height: 200, borderWidth: 2, borderColor: '#b0b0b0', backgroundColor: '#003399', alignItems: 'center', justifyContent: 'center' },
-    bp: {
-      sm: { style: { width: 120, height: 120, borderWidth: 2, borderColor: '#b0b0b0', backgroundColor: '#003399', alignItems: 'center', justifyContent: 'center' } },
-    }
-  },
-  AvatarLetter: {
-    type: 'Text', fontSize: 72, color: '#ffffff',
-    bp: {
-      sm: { fontSize: 40, color: '#ffffff' },
-    }
-  },
-  OnlineRow: { type: 'Box', style: { flexDirection: 'row', alignItems: 'center', gap: 4 } },
-  OnlineDot: { type: 'Box', style: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#00cc00' } },
+  // --- Watch screen ---
+  WatchViewport: { type: 'Box', style: { width: '100%', height: 260, backgroundColor: '#2a2a2a', borderRadius: 8, alignItems: 'center', justifyContent: 'center' } },
+  WatchTitle: { type: 'Text', fontSize: 18, color: '#ffffff', fontWeight: 'bold' },
+  WatchMeta: { type: 'Box', style: { flexDirection: 'column', gap: 4, paddingLeft: 4, paddingRight: 4 } },
+  WatchMetaText: { type: 'Text', fontSize: 11, color: '#a2a2a2' },
+  WatchActions: { type: 'Box', style: { flexDirection: 'row', gap: 8 } },
+  WatchAction: { type: 'Pressable', style: { paddingLeft: 14, paddingRight: 14, paddingTop: 8, paddingBottom: 8, backgroundColor: '#f1f1f1', borderRadius: 4 } },
 
-  // === Music player ===
-  MusicBar: { type: 'Box', style: { backgroundColor: '#1a1a1a', borderRadius: 3, paddingLeft: 8, paddingRight: 8, paddingTop: 5, paddingBottom: 5, flexDirection: 'row', alignItems: 'center', gap: 6 } },
+  // --- Comment + states ---
+  CommentList: { type: 'Box', style: { flexDirection: 'column', gap: 8, paddingLeft: 4, paddingRight: 4 } },
+  CommentItem: { type: 'Box', style: { padding: 8, backgroundColor: '#191919', borderRadius: 6, borderWidth: 1, borderColor: '#2c2c2c' } },
+  CommentAuthor: { type: 'Text', fontSize: 11, color: '#dddddd', fontWeight: 'bold' },
+  CommentTime: { type: 'Text', fontSize: 9, color: '#7f7f7f' },
+  CommentText: { type: 'Text', fontSize: 11, color: '#bdbdbd' },
 
-  // === View My row ===
-  ViewMyRow: { type: 'Box', style: { flexDirection: 'row', gap: 6 } },
+  SearchChip: { type: 'Box', style: { borderWidth: 1, borderColor: '#3d3d3d', borderRadius: 999, paddingLeft: 10, paddingRight: 10, paddingTop: 6, paddingBottom: 6 } },
+  SearchChipActive: { type: 'Box', style: { borderRadius: 999, paddingLeft: 10, paddingRight: 10, paddingTop: 6, paddingBottom: 6, backgroundColor: '#ff0000' } },
+  SearchChipText: { type: 'Text', fontSize: 10, color: '#ffffff' },
 
-  // === Data table (interests + details) ===
-  DataRow: {
-    type: 'Box',
-    style: { flexDirection: 'row', paddingTop: 3, paddingBottom: 3, borderBottomWidth: 1, borderColor: '#e0e0e0' },
-    variants: {
-      emo:  { style: { flexDirection: 'row', paddingTop: 3, paddingBottom: 3, borderBottomWidth: 1, borderColor: '#330000' } },
-      pink: { style: { flexDirection: 'row', paddingTop: 3, paddingBottom: 3, borderBottomWidth: 1, borderColor: '#ffaacc' } },
-      neon: { style: { flexDirection: 'row', paddingTop: 3, paddingBottom: 3, borderBottomWidth: 1, borderColor: '#1a1a44' } },
-    }
-  },
-  DataLabel: { type: 'Box', style: { width: 80 } },
-  DataValue: { type: 'Box', style: { flexGrow: 1 } },
+  EmptyState: { type: 'Box', style: { padding: 24, alignItems: 'center' } },
+  EmptyStateText: { type: 'Text', fontSize: 12, color: '#8a8a8a' },
 
-  // === Friend grid ===
-  FriendGrid: { type: 'Box', style: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 } },
-  FriendCell: { type: 'Pressable', style: { flexDirection: 'column', alignItems: 'center', width: 72, gap: 2 } },
-
-  // === Comment wall ===
-  CommentRow: {
-    type: 'Box',
-    style: { flexDirection: 'row', gap: 8, paddingTop: 6, paddingBottom: 6, borderBottomWidth: 1, borderColor: '#e0e0e0' },
-    variants: {
-      emo:  { style: { flexDirection: 'row', gap: 8, paddingTop: 6, paddingBottom: 6, borderBottomWidth: 1, borderColor: '#330000' } },
-      pink: { style: { flexDirection: 'row', gap: 8, paddingTop: 6, paddingBottom: 6, borderBottomWidth: 1, borderColor: '#ffaacc' } },
-      neon: { style: { flexDirection: 'row', gap: 8, paddingTop: 6, paddingBottom: 6, borderBottomWidth: 1, borderColor: '#1a1a44' } },
-    }
-  },
-  CommentAuthor: { type: 'Pressable', style: { flexDirection: 'column', alignItems: 'center', width: 52 } },
-  CommentBody: { type: 'Box', style: { flexGrow: 1, gap: 2 } },
-
-  // === Typography — themed per profile ===
-  TitleText: {
-    type: 'Text', fontSize: 18, color: '#333333',
-    variants: {
-      emo:  { color: '#cc3333' },
-      pink: { color: '#cc0066' },
-      neon: { color: '#ccccee' },
-    }
-  },
-  SubTitle: {
-    type: 'Text', fontSize: 14, color: '#333333',
-    variants: {
-      emo:  { color: '#cc3333' },
-      pink: { color: '#cc0066' },
-      neon: { color: '#ccccee' },
-    }
-  },
-  BodyText: {
-    type: 'Text', fontSize: 11, color: '#333333',
-    variants: {
-      emo:  { color: '#cc3333' },
-      pink: { color: '#cc0066' },
-      neon: { color: '#ccccee' },
-    }
-  },
-  LinkText: {
-    type: 'Text', fontSize: 10, color: '#003399',
-    variants: {
-      emo:  { color: '#ff4444' },
-      pink: { color: '#ff3399' },
-      neon: { color: '#00ccff' },
-    }
-  },
-  LabelText: {
-    type: 'Text', fontSize: 10, color: '#666666',
-    variants: {
-      emo:  { color: '#993333' },
-      pink: { color: '#cc6699' },
-      neon: { color: '#8888aa' },
-    }
-  },
-  DimText: {
-    type: 'Text', fontSize: 9, color: '#999999',
-    variants: {
-      emo:  { color: '#663333' },
-      pink: { color: '#cc99aa' },
-      neon: { color: '#666688' },
-    }
-  },
-  SmallLink: {
-    type: 'Text', fontSize: 9, color: '#003399',
-    variants: {
-      emo:  { color: '#ff4444' },
-      pink: { color: '#ff3399' },
-      neon: { color: '#00ccff' },
-    }
-  },
-  SmallText: {
-    type: 'Text', fontSize: 8, color: '#003399',
-    variants: {
-      emo:  { color: '#ff4444' },
-      pink: { color: '#ff3399' },
-      neon: { color: '#00ccff' },
-    }
-  },
-  WhiteText28: { type: 'Text', fontSize: 28, color: '#ffffff' },
-  WhiteText20: { type: 'Text', fontSize: 20, color: '#ffffff' },
-
-  // === Page background (wraps the ScrollView content) ===
-  ProfileBg: {
-    type: 'ScrollView',
-    style: { flexGrow: 1, backgroundColor: '#ffffff' },
-    variants: {
-      emo:  { style: { flexGrow: 1, backgroundColor: '#0a0000' } },
-      pink: { style: { flexGrow: 1, backgroundColor: '#ffe0f0' } },
-      neon: { style: { flexGrow: 1, backgroundColor: '#0a0a14' } },
-    }
-  },
-
-  // === Footer ===
-  Footer: { type: 'Box', style: { flexDirection: 'row', justifyContent: 'center', paddingTop: 12, paddingBottom: 16, gap: 8 } },
-  FooterText: { type: 'Text', fontSize: 8, color: '#999999' },
-
-  // === Browse Page Components ===
-  UserList: { type: 'Box', style: { flexDirection: 'column', gap: 8 } },
-  UserListItem: { type: 'Pressable', style: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 8, borderBottomWidth: 1, borderColor: '#e0e0e0' } },
-  UserListAvatar: { type: 'Box', style: { width: 48, height: 48, borderWidth: 1, borderColor: '#cccccc', alignItems: 'center', justifyContent: 'center' } },
-  UserListInfo: { type: 'Box', style: { flexDirection: 'column', flexGrow: 1, gap: 2 } },
-  UserListName: { type: 'Text', fontSize: 12, color: '#003399' },
-  UserListMeta: { type: 'Text', fontSize: 10, color: '#666666' },
-  UserStatus: { type: 'Box', style: { flexDirection: 'row', alignItems: 'center', gap: 4 } },
-
-  // === Search Page Components ===
-  SearchBox: { type: 'Box', style: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12, backgroundColor: '#f0f0f0', borderRadius: 4 } },
-  SearchInput: { type: 'Box', style: { flexGrow: 1, height: 32, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#cccccc', paddingLeft: 8 } },
-  SearchButton: { type: 'Pressable', style: { paddingLeft: 16, paddingRight: 16, paddingTop: 8, paddingBottom: 8, backgroundColor: '#003399', borderRadius: 4 } },
-  SearchButtonText: { type: 'Text', fontSize: 11, color: '#ffffff' },
-
-  // === Mail Page Components ===
-  MailList: { type: 'Box', style: { flexDirection: 'column' } },
-  MailItem: { type: 'Pressable', style: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 10, borderBottomWidth: 1, borderColor: '#e0e0e0' } },
-  MailUnread: { type: 'Box', style: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#ff0000' } },
-  MailRead: { type: 'Box', style: { width: 8, height: 8 } },
-  MailSender: { type: 'Text', fontSize: 11, color: '#003399', fontWeight: 'bold' },
-  MailSubject: { type: 'Text', fontSize: 11, color: '#333333' },
-  MailPreview: { type: 'Text', fontSize: 10, color: '#666666' },
-  MailTime: { type: 'Text', fontSize: 9, color: '#999999' },
-
-  // === Blog Page Components ===
-  BlogList: { type: 'Box', style: { flexDirection: 'column', gap: 12 } },
-  BlogPost: { type: 'Box', style: { flexDirection: 'column', gap: 6, padding: 12, backgroundColor: '#f8f8f8', borderRadius: 4 } },
-  BlogPostTitle: { type: 'Text', fontSize: 14, color: '#003399', fontWeight: 'bold' },
-  BlogPostMeta: { type: 'Text', fontSize: 9, color: '#666666' },
-  BlogPostExcerpt: { type: 'Text', fontSize: 11, color: '#333333' },
-
-  // === Groups/Forum Components ===
-  CategoryList: { type: 'Box', style: { flexDirection: 'column', gap: 8 } },
-  CategoryItem: { type: 'Pressable', style: { flexDirection: 'row', alignItems: 'center', justifyContent: 'spaceBetween', padding: 12, backgroundColor: '#f5f5f5', borderRadius: 4 } },
-  CategoryName: { type: 'Text', fontSize: 12, color: '#003399' },
-  CategoryStats: { type: 'Text', fontSize: 10, color: '#666666' },
-
-  // === Music Page Components ===
-  SongList: { type: 'Box', style: { flexDirection: 'column', gap: 8 } },
-  SongItem: { type: 'Box', style: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 10, backgroundColor: '#f5f5f5', borderRadius: 4 } },
-  SongNumber: { type: 'Text', fontSize: 11, color: '#999999', width: 24 },
-  SongInfo: { type: 'Box', style: { flexDirection: 'column', flexGrow: 1, gap: 2 } },
-  SongTitle: { type: 'Text', fontSize: 12, color: '#333333' },
-  SongArtist: { type: 'Text', fontSize: 10, color: '#666666' },
-  SongPlays: { type: 'Text', fontSize: 10, color: '#999999' },
-  PlayButton: { type: 'Pressable', style: { paddingLeft: 12, paddingRight: 12, paddingTop: 6, paddingBottom: 6, backgroundColor: '#00cc00', borderRadius: 4 } },
-  PlayButtonText: { type: 'Text', fontSize: 10, color: '#ffffff' },
-
-  // === Favorites Page Components ===
-  FavGrid: { type: 'Box', style: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 } },
-  FavItem: { type: 'Pressable', style: { flexDirection: 'column', alignItems: 'center', gap: 4, width: 80 } },
-  FavAvatar: { type: 'Box', style: { width: 64, height: 64, borderWidth: 1, borderColor: '#cccccc', alignItems: 'center', justifyContent: 'center' } },
-  FavName: { type: 'Text', fontSize: 10, color: '#003399' },
-
-  // === Invite Page Components ===
-  InviteForm: { type: 'Box', style: { flexDirection: 'column', gap: 12, maxWidth: 400 } },
-  InviteInput: { type: 'Box', style: { height: 36, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#cccccc', paddingLeft: 8 } },
-  InviteTextArea: { type: 'Box', style: { height: 80, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#cccccc', paddingLeft: 8, paddingTop: 8 } },
-  InviteLabel: { type: 'Text', fontSize: 11, color: '#333333', fontWeight: 'bold' },
-  InviteButton: { type: 'Pressable', style: { paddingLeft: 20, paddingRight: 20, paddingTop: 10, paddingBottom: 10, backgroundColor: '#003399', borderRadius: 4, alignSelf: 'flexStart' } },
-  InviteButtonText: { type: 'Text', fontSize: 12, color: '#ffffff' },
-
-  // === Empty State ===
-  EmptyState: { type: 'Box', style: { flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 40, gap: 8 } },
-  EmptyStateText: { type: 'Text', fontSize: 14, color: '#999999' },
+  FooterBar: { type: 'Box', style: { flexDirection: 'row', justifyContent: 'space-between', padding: 8, backgroundColor: '#181818', borderTopWidth: 1, borderColor: '#2a2a2a' } },
+  FooterText: { type: 'Text', fontSize: 9, color: '#777777' }
 })

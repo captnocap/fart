@@ -25,7 +25,7 @@ expect "mode: 0 · "
 
 # Click-through: 3 pressable nodes
 
-click "Sort by Score"
+click "press:sortByScore"
 expect "Import / Export"
 expect "Sort by Score"
 expect "Sort by Name"
@@ -44,7 +44,7 @@ expect "Dave"
 expect "61"
 expect "mode: 1 · sorted by score desc"
 
-click "Sort by Name"
+click "press:sortByName"
 expect "Import / Export"
 expect "Sort by Score"
 expect "Sort by Name"
@@ -63,7 +63,7 @@ expect "Frank"
 expect "84"
 expect "mode: 2 · sorted by name asc"
 
-click "Reset"
+click "press:resetSort"
 expect "Import / Export"
 expect "Sort by Score"
 expect "Sort by Name"

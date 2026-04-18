@@ -213,7 +213,10 @@ function _resolveMapItemField(expr, mapCtx) {
     }
     return { spec: '{d}', arg: '_oa' + oaIdx + '_' + normalizedField + '[' + iv + ']' };
   }
-  return { spec: expr, arg: null };
+  // Field not directly in OA (nested chain, .length, etc.) — fall back to
+  // QuickJS eval so the template slot stays dynamic. Returning arg:null here
+  // would collapse expression + trailing literals into one static string.
+  return { spec: '{s}', arg: buildEval(expr, ctx) };
 }
 
 function _resolveIndexedOaField(expr) {
@@ -332,11 +335,10 @@ function _resolveMapContextExpr(expr) {
     return { spec: expr, arg: null };
   }
 
-  // Function call expression in map context → QuickJS eval
-  if (expr.includes('(') && expr.includes(')')) {
-    return { spec: '{s}', arg: buildEval(expr, ctx) };
-  }
-
-  // Non-resolvable — literal text
-  return { spec: expr, arg: null };
+  // Map-context fallback: QuickJS eval for any expression that didn't match
+  // a specific pattern above. Using the literal text (arg: null) collapses
+  // the expression + literal suffix into a bare string which breaks template
+  // splitting downstream. buildEval emits a runtime eval that keeps the
+  // template slot dynamic so the suffix stays a separate literal part.
+  return { spec: '{s}', arg: buildEval(expr, ctx) };
 }

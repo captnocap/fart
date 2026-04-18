@@ -133,6 +133,12 @@ export fn rjit_lua_register_host_fn(name: [*:0]const u8, func: ?*const anyopaque
 export fn rjit_lua_set_global_int(name: [*:0]const u8, val: i64) void {
     luajit_runtime_mod.setGlobalInt(name, val);
 }
+export fn rjit_lua_set_effect_render(id: usize, fn_ptr: ?*const anyopaque) void {
+    if (fn_ptr) |p| luajit_runtime_mod.setEffectRender(id, @ptrCast(@alignCast(p)));
+}
+export fn rjit_lua_set_effect_shader(id: usize, shader_ptr: ?*const anyopaque) void {
+    if (shader_ptr) |p| luajit_runtime_mod.setEffectShader(id, @ptrCast(@alignCast(p)));
+}
 
 // ── Engine C-ABI export ──────��────────────────────────────────────���─
 

@@ -13,21 +13,21 @@ expect "Reset"
 
 # Click-through: 3 pressable nodes
 
-click "+1"
+click "press:increment"
 expect "LuaJIT Runtime Test"
 expect "Click me"
 expect "+1"
 expect "-1"
 expect "Reset"
 
-click "-1"
+click "press:decrement"
 expect "LuaJIT Runtime Test"
 expect "Click me"
 expect "+1"
 expect "-1"
 expect "Reset"
 
-click "Reset"
+click "press:reset"
 expect "LuaJIT Runtime Test"
 expect "Click me"
 expect "+1"

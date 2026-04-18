@@ -14,7 +14,7 @@ expect "mode: 0 · count: 0"
 
 # Click-through: 3 pressable nodes
 
-click "Load inbox"
+click "press:loadInbox"
 expect "Inbox"
 expect "Load inbox"
 expect "Load spam"
@@ -27,7 +27,7 @@ expect "Carol"
 expect "Deployed to staging"
 expect "mode: 1 · count: 3"
 
-click "Load spam"
+click "press:loadSpam"
 expect "Inbox"
 expect "Load inbox"
 expect "Load spam"
@@ -38,7 +38,7 @@ expect "Casino"
 expect "Free spins today only"
 expect "mode: 2 · count: 2"
 
-click "Clear"
+click "press:clearAll"
 expect "Inbox"
 expect "Load inbox"
 expect "Load spam"

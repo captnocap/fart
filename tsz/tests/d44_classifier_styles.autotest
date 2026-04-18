@@ -24,7 +24,7 @@ expect "selected: "
 
 # Click-through: 1 pressable nodes
 
-click "Actions: 0"
+click "press:setCount"
 expect "Classifier Styles"
 expect "Setup CI"
 expect "DONE"

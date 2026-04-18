@@ -6,3 +6,18 @@
 
 # Initial render
 expect "Calculator"
+
+# Click-through: 16 pressable nodes
+
+click "press:pressClear"
+expect "Calculator"
+
+click "press:pressOp"
+expect "Calculator"
+
+click "press:pressDigit"
+expect "Calculator"
+
+click "press:pressEquals"
+expect "Calculator"
+expect "0 / 7 = 0"

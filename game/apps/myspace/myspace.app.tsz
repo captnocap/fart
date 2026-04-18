@@ -1,563 +1,508 @@
-import { viewProfile, goHome, goBrowse, goSearch, goInvite, goMail, goBlog, goFavorites, goForum, goGroups, goMusic, getAllUsers, getAllBlogPosts, getMockGroups, getMockForums, getMockSongs, getMockMail } from "./myspace.script";
-import { Nav, NavBrand, NavSep, NavLink, NavLinkText, NavLinkActive, NavRight, NavSearchBox, NavSearchText, ProfileColumns, LeftCol, RightCol, Section, SectionHead, SectionHeadText, SectionBody, SectionBodyTight, NetworkBanner, NetworkBannerText, Avatar, AvatarLetter, OnlineRow, OnlineDot, MusicBar, ViewMyRow, DataRow, DataLabel, DataValue, FriendGrid, FriendCell, CommentRow, CommentAuthor, CommentBody, TitleText, SubTitle, BodyText, LinkText, LabelText, DimText, SmallLink, SmallText, WhiteText28, WhiteText20, Footer, FooterText, PageContainer, PageContent, PageTitle, PageSubtitle, UserList, UserListItem, UserListAvatar, UserListInfo, UserListName, UserListMeta, UserStatus, SearchBox, SearchInput, SearchButton, SearchButtonText, MailList, MailItem, MailUnread, MailRead, MailSender, MailSubject, MailPreview, MailTime, BlogList, BlogPost, BlogPostTitle, BlogPostMeta, BlogPostExcerpt, CategoryList, CategoryItem, CategoryName, CategoryStats, SongList, SongItem, SongNumber, SongInfo, SongTitle, SongArtist, SongPlays, PlayButton, PlayButtonText, FavGrid, FavItem, FavAvatar, FavName, InviteForm, InviteInput, InviteTextArea, InviteLabel, InviteButton, InviteButtonText, EmptyState, EmptyStateText } from "./myspace.cls";
+import {
+  getAllVideos,
+  getHomeVideos,
+  getContinueVideos,
+  getShortsVideos,
+  getChannels,
+  getSearchTopics,
+  getSearchResults,
+  getVideosByChannel,
+  getVideoById,
+  getVideoComments,
+  getRelatedVideos
+} from "./myspace.script";
+import { Page, Row, Column, Spacer, Surface, SurfaceAlt, ListItem, ListItemText, ListItemMeta } from "../shared/base.cls";
+import {
+  Shell,
+  TopBar,
+  Logo,
+  LogoAccent,
+  SearchPill,
+  SearchPillText,
+  SearchChip,
+  SearchChipActive,
+  SearchChipText,
+  PrimaryTabs,
+  PrimaryTab,
+  PrimaryTabText,
+  PrimaryTabActive,
+  ContentArea,
+  Sidebar,
+  SidebarSection,
+  SidebarTitle,
+  SidebarItem,
+  SidebarItemText,
+  SidebarItemActive,
+  SidebarItemActiveText,
+  Feed,
+  FeedSection,
+  FeedSectionHead,
+  FeedSectionTitle,
+  FeedSectionBody,
+  FeedSectionBodyWrap,
+  HeroVideo,
+  HeroVideoMeta,
+  HeroVideoTitle,
+  HeroVideoMetaText,
+  SectionTitle,
+  VideoCard,
+  VideoThumb,
+  VideoThumbText,
+  DurationBadge,
+  VideoMeta,
+  VideoTitleText,
+  VideoSubText,
+  VideoActionRow,
+  VideoActionText,
+  WatchViewport,
+  WatchTitle,
+  WatchMeta,
+  WatchMetaText,
+  WatchActions,
+  WatchAction,
+  WatchActionText,
+  CommentList,
+  CommentItem,
+  CommentAuthor,
+  CommentTime,
+  CommentText,
+  FooterBar,
+  FooterText,
+  EmptyState,
+  EmptyStateText
+} from "./myspace.cls";
 
-// === Profile state ===
-const [pName, setPName] = useState('');
-const [pAge, setPAge] = useState(0);
-const [pLoc, setPLoc] = useState('');
-const [pMood, setPMood] = useState('');
-const [pAbout, setPAbout] = useState('');
-const [pMeet, setPMeet] = useState('');
-const [pSong, setPSong] = useState('');
-const [pArtist, setPArtist] = useState('');
-const [pOnline, setPOnline] = useState(0);
-const [pLogin, setPLogin] = useState('');
-const [pAvLetter, setPAvLetter] = useState('');
-const [pAvBg, setPAvBg] = useState(0x003399);
+const [route, setRoute] = useState('home');
+const [activeVideoId, setActiveVideoId] = useState('v101');
+const [searchTopic, setSearchTopic] = useState('all');
+const [activeChannelId, setActiveChannelId] = useState('');
 
-// === Theme state ===
-const [tBg, setTBg] = useState(0xffffff);
-const [tText, setTText] = useState(0x333333);
-const [tLink, setTLink] = useState(0x003399);
-const [tHdrBg, setTHdrBg] = useState(0x003399);
-const [tHdrText, setTHdrText] = useState(0xffffff);
-const [tBorder, setTBorder] = useState(0xb0b0b0);
-const [tSecBg, setTSecBg] = useState(0xffffff);
+const homeVideos = getHomeVideos();
+const continueVideos = getContinueVideos();
+const shortsVideos = getShortsVideos();
+const channels = getChannels();
+const topics = getSearchTopics();
+const allVideos = getAllVideos();
 
-// === Array state ===
-const [interests, setInterests] = useState([{ label: '', value: '' }]);
-const [details, setDetails] = useState([{ label: '', value: '' }]);
-const [topFriends, setTopFriends] = useState([{ id: '', name: '', avatarLetter: '', avatarBg: 0x000000 }]);
-const [comments, setComments] = useState([{ authorName: '', avatarLetter: '', avatarBg: 0x000000, text: '', time: '', authorId: '' }]);
-const [userBlogPosts, setUserBlogPosts] = useState([{ title: '', date: '', excerpt: '', author: '' }]);
-
-// === Router state ===
-const [currentRoute, setCurrentRoute] = useState('profile');
-const [currentUserId, setCurrentUserId] = useState('tom');
-
-// === Data for pages ===
-const [allUsers, setAllUsers] = useState([{ id: '', name: '', age: 0, loc: '', avLetter: '', avBg: 0, online: 0, mood: '' }]);
-const [allBlogPosts, setAllBlogPosts] = useState([{ title: '', date: '', excerpt: '', author: '', authorId: '', avLetter: '', avBg: 0 }]);
-const [groups, setGroups] = useState([{ name: '', members: 0, category: '' }]);
-const [forums, setForums] = useState([{ name: '', topics: 0, posts: 0 }]);
-const [songs, setSongs] = useState([{ title: '', artist: '', plays: 0 }]);
-const [mails, setMails] = useState([{ from: '', subject: '', preview: '', time: '', unread: 0 }]);
-
-function NavItem(props) {
+function TopNavButton(props) {
   const isActive = props.active === 1;
   return (
-    <NavLink onPress={props.onPress}>
-      {isActive ? <NavLinkActive>{props.label}</NavLinkActive> : <NavLinkText>{props.label}</NavLinkText>}
-    </NavLink>
+    <PrimaryTab onPress={props.onPress}>
+      {isActive ? <PrimaryTabActive>{props.label}</PrimaryTabActive> : <PrimaryTabText>{props.label}</PrimaryTabText>}
+    </PrimaryTab>
   );
 }
 
-function HomePage() {
+function VideoListItem(props) {
   return (
-    <PageContent>
-      <PageTitle>Home</PageTitle>
-      <PageSubtitle>Welcome back, {pName}! Here is what is happening on MySpace.</PageSubtitle>
-      <Section>
-        <SectionHead><SectionHeadText>Recent Updates</SectionHeadText></SectionHead>
-        <SectionBody>
-          <BodyText>Your friends have been busy! Check out their new blog posts and photos.</BodyText>
-          <Box style={{ marginTop: 12, gap: 8 }}>
-            {topFriends.map((f) => (
-              <Pressable onPress={() => { viewProfile(f.id) }} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <Box style={{ width: 32, height: 32, backgroundColor: f.avatarBg, alignItems: 'center', justifyContent: 'center' }}>
-                  <Text fontSize={14} color="#ffffff">{f.avatarLetter}</Text>
-                </Box>
-                <LinkText>{f.name}</LinkText>
-                <DimText>posted a new blog entry</DimText>
-              </Pressable>
-            ))}
-          </Box>
-        </SectionBody>
-      </Section>
-      <Section>
-        <SectionHead><SectionHeadText>New People</SectionHeadText></SectionHead>
-        <SectionBody>
-          <BodyText>Meet new friends on MySpace!</BodyText>
-          <Box style={{ marginTop: 12 }}>
-            <FriendGrid>
-              {allUsers.slice(0, 4).map((u) => (
-                <FriendCell onPress={() => { viewProfile(u.id) }}>
-                  <Box style={{ width: 64, height: 64, borderWidth: 1, borderColor: '#cccccc', backgroundColor: u.avBg, alignItems: 'center', justifyContent: 'center' }}>
-                    <WhiteText28>{u.avLetter}</WhiteText28>
-                  </Box>
-                  <SmallLink>{u.name}</SmallLink>
-                </FriendCell>
-              ))}
-            </FriendGrid>
-          </Box>
-        </SectionBody>
-      </Section>
-    </PageContent>
+    <Pressable onPress={props.onPress}>
+      <ListItem>
+        <ListItemText>{props.title}</ListItemText>
+        <ListItemMeta>{props.meta}</ListItemMeta>
+      </ListItem>
+    </Pressable>
   );
 }
 
-function BrowsePage() {
+function SearchChipRow(props) {
   return (
-    <PageContent>
-      <PageTitle>Browse</PageTitle>
-      <PageSubtitle>Find friends and interesting people on MySpace.</PageSubtitle>
-      <Section>
-        <SectionHead><SectionHeadText>All Users</SectionHeadText></SectionHead>
-        <SectionBody>
-          <UserList>
-            {allUsers.map((u) => (
-              <UserListItem onPress={() => { viewProfile(u.id) }}>
-                <UserListAvatar style={{ backgroundColor: u.avBg }}>
-                  <Text fontSize={20} color="#ffffff">{u.avLetter}</Text>
-                </UserListAvatar>
-                <UserListInfo>
-                  <UserListName>{u.name}</UserListName>
-                  <UserListMeta>{`${u.age} · ${u.loc}`}</UserListMeta>
-                </UserListInfo>
-                <UserStatus>
-                  {u.online === 1 && <OnlineDot />}
-                  {u.online === 1 && <LinkText>Online</LinkText>}
-                </UserStatus>
-              </UserListItem>
-            ))}
-          </UserList>
-        </SectionBody>
-      </Section>
-    </PageContent>
+    <Row style={{ gap: 8, flexWrap: 'wrap' }}>
+      {props.topics.map((topic) => (
+        <Pressable onPress={() => { props.onSelect(topic); }}>
+          {props.active === topic ? (
+            <SearchChipActive>
+              <SearchChipText>{topic}</SearchChipText>
+            </SearchChipActive>
+          ) : (
+            <SearchChip>
+              <SearchChipText>{topic}</SearchChipText>
+            </SearchChip>
+          )}
+        </Pressable>
+      ))}
+    </Row>
   );
 }
 
-function SearchPage() {
+function SideList(props) {
   return (
-    <PageContent>
-      <PageTitle>Search</PageTitle>
-      <PageSubtitle>Find people, groups, and content on MySpace.</PageSubtitle>
-      <SearchBox>
-        <SearchInput>
-          <Text fontSize={12} color="#999999">Search by name, email, or interest...</Text>
-        </SearchInput>
-        <SearchButton onPress={() => {}}>
-          <SearchButtonText>Search</SearchButtonText>
-        </SearchButton>
-      </SearchBox>
-      <Section>
-        <SectionHead><SectionHeadText>Search Tips</SectionHeadText></SectionHead>
-        <SectionBody>
-          <Box style={{ gap: 8 }}>
-            <BodyText>• Search by name to find specific people</BodyText>
-            <BodyText>• Search by location to find friends in your area</BodyText>
-            <BodyText>• Search by interest to meet people who like the same things</BodyText>
-          </Box>
-        </SectionBody>
-      </Section>
-    </PageContent>
-  );
-}
+    <Sidebar>
+      <SidebarSection>
+        <SidebarTitle>Main</SidebarTitle>
+        <SidebarItem onPress={() => { props.setRoute('home'); props.setActiveChannel(''); }}>
+          <SidebarItemText>Home</SidebarItemText>
+        </SidebarItem>
+        <SidebarItem onPress={() => { props.setRoute('shorts'); props.setActiveChannel(''); }}>
+          <SidebarItemText>Shorts</SidebarItemText>
+        </SidebarItem>
+        <SidebarItem onPress={() => { props.setRoute('search'); props.setActiveChannel(''); }}>
+          <SidebarItemText>Search</SidebarItemText>
+        </SidebarItem>
+      </SidebarSection>
 
-function InvitePage() {
-  return (
-    <PageContent>
-      <PageTitle>Invite</PageTitle>
-      <PageSubtitle>Invite your friends to join MySpace!</PageSubtitle>
-      <InviteForm>
-        <Box style={{ gap: 4 }}>
-          <InviteLabel>Friend's Email Address:</InviteLabel>
-          <InviteInput>
-            <Text fontSize={12} color="#999999">enter email address...</Text>
-          </InviteInput>
-        </Box>
-        <Box style={{ gap: 4 }}>
-          <InviteLabel>Your Message:</InviteLabel>
-          <InviteTextArea>
-            <Text fontSize={12} color="#999999">Check out my profile on MySpace!</Text>
-          </InviteTextArea>
-        </Box>
-        <InviteButton onPress={() => {}}>
-          <InviteButtonText>Send Invite</InviteButtonText>
-        </InviteButton>
-      </InviteForm>
-      <Section>
-        <SectionHead><SectionHeadText>Your Invite Stats</SectionHeadText></SectionHead>
-        <SectionBody>
-          <DataRow>
-            <DataLabel><LabelText>Invites Sent:</LabelText></DataLabel>
-            <DataValue><BodyText>0</BodyText></DataValue>
-          </DataRow>
-          <DataRow>
-            <DataLabel><LabelText>Friends Joined:</LabelText></DataLabel>
-            <DataValue><BodyText>0</BodyText></DataValue>
-          </DataRow>
-        </SectionBody>
-      </Section>
-    </PageContent>
-  );
-}
+      <SidebarSection>
+        <SidebarTitle>Library</SidebarTitle>
+        <SidebarItem onPress={() => { props.setRoute('library'); props.setActiveChannel(''); }}>
+          <SidebarItemText>Watch Later</SidebarItemText>
+        </SidebarItem>
+        <SidebarItem onPress={() => { props.setRoute('subscriptions'); props.setActiveChannel(''); }}>
+          <SidebarItemText>Subscriptions</SidebarItemText>
+        </SidebarItem>
+      </SidebarSection>
 
-function MailPage() {
-  return (
-    <PageContent>
-      <PageTitle>Mail</PageTitle>
-      <PageSubtitle>Your MySpace messages.</PageSubtitle>
-      <Section>
-        <SectionHead><SectionHeadText>Inbox</SectionHeadText></SectionHead>
-        <SectionBodyTight>
-          <MailList>
-            {mails.map((m) => (
-              <MailItem onPress={() => {}}>
-                {m.unread === 1 ? <MailUnread /> : <MailRead />}
-                <Box style={{ flexDirection: 'column', flexGrow: 1, gap: 2 }}>
-                  <Box style={{ flexDirection: 'row', gap: 8 }}>
-                    <MailSender>{m.from}</MailSender>
-                    <MailSubject>- {m.subject}</MailSubject>
-                  </Box>
-                  <MailPreview>{m.preview}</MailPreview>
-                </Box>
-                <MailTime>{m.time}</MailTime>
-              </MailItem>
-            ))}
-          </MailList>
-        </SectionBodyTight>
-      </Section>
-    </PageContent>
-  );
-}
-
-function BlogPage() {
-  return (
-    <PageContent>
-      <PageTitle>Blog</PageTitle>
-      <PageSubtitle>Latest posts from the MySpace community.</PageSubtitle>
-      <BlogList>
-        {allBlogPosts.map((post) => (
-          <BlogPost>
-            <Pressable onPress={() => { viewProfile(post.authorId) }} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-              <Box style={{ width: 24, height: 24, backgroundColor: post.avBg, alignItems: 'center', justifyContent: 'center' }}>
-                <Text fontSize={12} color="#ffffff">{post.avLetter}</Text>
-              </Box>
-              <BlogPostMeta>by {post.author} on {post.date}</BlogPostMeta>
-            </Pressable>
-            <BlogPostTitle>{post.title}</BlogPostTitle>
-            <BlogPostExcerpt>{post.excerpt}</BlogPostExcerpt>
-          </BlogPost>
+      <SidebarSection>
+        <SidebarTitle>Channels</SidebarTitle>
+        {props.channels.map((channel) => (
+          <Pressable onPress={() => { props.setRoute('subscriptions'); props.setActiveChannel(channel.id); }}>
+            <SidebarItem>
+              <Row style={{ alignItems: 'center', gap: 8 }}>
+                <Surface style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: channel.badgeBg }}>
+                  <Text fontSize={10} color="#ffffff" style={{ textAlign: 'center', flexGrow: 1 }}>{channel.badge}</Text>
+                </Surface>
+                {props.activeChannel === channel.id ? (
+                  <SidebarItemActive>
+                    <SidebarItemActiveText>{channel.name}</SidebarItemActiveText>
+                  </SidebarItemActive>
+                ) : (
+                  <SidebarItemText>{channel.name}</SidebarItemText>
+                )}
+              </Row>
+            </SidebarItem>
+          </Pressable>
         ))}
-      </BlogList>
-    </PageContent>
+      </SidebarSection>
+    </Sidebar>
   );
 }
 
-function FavoritesPage() {
+function HeroPanel(props) {
   return (
-    <PageContent>
-      <PageTitle>Favorites</PageTitle>
-      <PageSubtitle>Your favorite profiles and content.</PageSubtitle>
-      <Section>
-        <SectionHead><SectionHeadText>Favorite People</SectionHeadText></SectionHead>
-        <SectionBody>
-          <FavGrid>
-            {topFriends.map((f) => (
-              <FavItem onPress={() => { viewProfile(f.id) }}>
-                <FavAvatar style={{ backgroundColor: f.avatarBg }}>
-                  <Text fontSize={24} color="#ffffff">{f.avatarLetter}</Text>
-                </FavAvatar>
-                <FavName>{f.name}</FavName>
-              </FavItem>
-            ))}
-          </FavGrid>
-        </SectionBody>
-      </Section>
-    </PageContent>
+    <HeroVideo>
+      <WatchViewport style={{ backgroundColor: props.video.tint }}>
+        <Text fontSize={26} color="#ffffff">▶</Text>
+        <Text fontSize={11} color="#ffffff">{props.video.duration}</Text>
+      </WatchViewport>
+      <HeroVideoMeta>
+        <HeroVideoTitle>{props.video.title}</HeroVideoTitle>
+        <HeroVideoMetaText>{`${props.video.channelName} • ${props.video.views} • ${props.video.uploaded}`}</HeroVideoMetaText>
+        <VideoActionRow>
+          <Pressable onPress={() => props.openVideo(props.video.id)}>
+            <WatchAction>
+              <WatchActionText>Play</WatchActionText>
+            </WatchAction>
+          </Pressable>
+          <Pressable>
+            <WatchAction>
+              <WatchActionText>Save</WatchActionText>
+            </WatchAction>
+          </Pressable>
+        </VideoActionRow>
+      </HeroVideoMeta>
+    </HeroVideo>
   );
 }
 
-function ForumPage() {
+function VideoTile(props) {
   return (
-    <PageContent>
-      <PageTitle>Forum</PageTitle>
-      <PageSubtitle>Discuss topics with the MySpace community.</PageSubtitle>
-      <Section>
-        <SectionHead><SectionHeadText>Discussion Boards</SectionHeadText></SectionHead>
-        <SectionBodyTight>
-          <CategoryList>
-            {forums.map((f) => (
-              <CategoryItem onPress={() => {}}>
-                <CategoryName>{f.name}</CategoryName>
-                <CategoryStats>{`${f.topics} topics · ${f.posts} posts`}</CategoryStats>
-              </CategoryItem>
-            ))}
-          </CategoryList>
-        </SectionBodyTight>
-      </Section>
-    </PageContent>
+    <Pressable onPress={() => props.openVideo(props.video.id)}>
+      <VideoCard>
+        <VideoThumb style={{ backgroundColor: props.video.tint }}>
+          <VideoThumbText fontSize={22}>{props.video.badge}</VideoThumbText>
+          <DurationBadge>
+            <Text fontSize={9} color="#ffffff">{props.video.duration}</Text>
+          </DurationBadge>
+        </VideoThumb>
+        <VideoMeta>
+          <VideoTitleText>{props.video.title}</VideoTitleText>
+          <VideoSubText>{props.video.channelName}</VideoSubText>
+          <VideoSubText>{`${props.video.views} • ${props.video.uploaded}`}</VideoSubText>
+        </VideoMeta>
+      </VideoCard>
+    </Pressable>
   );
 }
 
-function GroupsPage() {
+function FeedSectionComp(props) {
   return (
-    <PageContent>
-      <PageTitle>Groups</PageTitle>
-      <PageSubtitle>Join groups of people who share your interests.</PageSubtitle>
-      <Section>
-        <SectionHead><SectionHeadText>Popular Groups</SectionHeadText></SectionHead>
-        <SectionBodyTight>
-          <CategoryList>
-            {groups.map((g) => (
-              <CategoryItem onPress={() => {}}>
-                <Box style={{ flexDirection: 'column' }}>
-                  <CategoryName>{g.name}</CategoryName>
-                  <DimText>{g.category}</DimText>
-                </Box>
-                <CategoryStats>{`${g.members} members`}</CategoryStats>
-              </CategoryItem>
-            ))}
-          </CategoryList>
-        </SectionBodyTight>
-      </Section>
-    </PageContent>
+    <FeedSection>
+      <FeedSectionHead>
+        <FeedSectionTitle>{props.title}</FeedSectionTitle>
+      </FeedSectionHead>
+      <FeedSectionBodyWrap>
+        <FeedSectionBody>
+          {props.items.map((video) => (
+            <VideoTile video={video} openVideo={props.openVideo} />
+          ))}
+        </FeedSectionBody>
+      </FeedSectionBodyWrap>
+    </FeedSection>
   );
 }
 
-function MusicPage() {
+function HomePage(props) {
   return (
-    <PageContent>
-      <PageTitle>Music</PageTitle>
-      <PageSubtitle>Discover and share music on MySpace.</PageSubtitle>
-      <Section>
-        <SectionHead><SectionHeadText>Top Songs</SectionHeadText></SectionHead>
-        <SectionBody>
-          <SongList>
-            {songs.map((s, idx) => (
-              <SongItem>
-                <SongNumber>{`${idx + 1}.`}</SongNumber>
-                <SongInfo>
-                  <SongTitle>{s.title}</SongTitle>
-                  <SongArtist>{s.artist}</SongArtist>
-                </SongInfo>
-                <SongPlays>{`${s.plays} plays`}</SongPlays>
-                <PlayButton onPress={() => {}}>
-                  <PlayButtonText>Play</PlayButtonText>
-                </PlayButton>
-              </SongItem>
-            ))}
-          </SongList>
-        </SectionBody>
-      </Section>
-    </PageContent>
+    <Column style={{ gap: 10 }}>
+      <SectionTitle>Home</SectionTitle>
+      <HeroPanel video={props.hero} openVideo={props.openVideo} />
+      <FeedSectionComp title="Trending" items={props.homeVideos} openVideo={props.openVideo} />
+      <FeedSectionComp title="Continue Watching" items={props.continueVideos} openVideo={props.openVideo} />
+    </Column>
   );
 }
 
-function ProfilePage() {
+function SearchPage(props) {
   return (
-    <Box style={{ padding: 8, gap: 8 }}>
-      <NetworkBanner>
-        <NetworkBannerText>{`${pName} is in your extended network`}</NetworkBannerText>
-      </NetworkBanner>
+    <Column style={{ gap: 10 }}>
+      <SectionTitle>Search</SectionTitle>
+      <SearchChipRow topics={props.topics} active={props.topic} onSelect={props.onSearch} />
+      <Feed>
+        {props.results.map((video) => (
+          <VideoTile video={video} openVideo={props.openVideo} />
+        ))}
+        {props.results.length == 0 && (
+          <EmptyState>
+            <EmptyStateText>No matches for this topic.</EmptyStateText>
+          </EmptyState>
+        )}
+      </Feed>
+    </Column>
+  );
+}
 
-      <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-        <TitleText>{pName}</TitleText>
-        <SubTitle>{pAge}</SubTitle>
-        <SubTitle>{pLoc}</SubTitle>
-      </Box>
-      <LabelText>{`Last Login: ${pLogin}`}</LabelText>
+function ShortsPage(props) {
+  return (
+    <Column style={{ gap: 10 }}>
+      <SectionTitle>Shorts</SectionTitle>
+      <FeedSectionBodyWrap>
+        <FeedSectionBody>
+          {props.items.map((video) => (
+            <VideoTile video={video} openVideo={props.openVideo} />
+          ))}
+        </FeedSectionBody>
+      </FeedSectionBodyWrap>
+    </Column>
+  );
+}
 
-      <ProfileColumns>
-        <LeftCol>
-          <Avatar style={{ backgroundColor: pAvBg }}>
-            <AvatarLetter>{pAvLetter}</AvatarLetter>
-          </Avatar>
+function SubscriptionPage(props) {
+  const channelTitle = props.activeChannel
+    ? `Channel: ${props.channel.name}`
+    : 'Choose a channel';
 
-          {pOnline == 1 && <OnlineRow>
-            <OnlineDot />
-            <LinkText>Online Now!</LinkText>
-          </OnlineRow>}
+  return (
+    <Column style={{ gap: 10 }}>
+      <SectionTitle>{channelTitle}</SectionTitle>
+      {!props.activeChannel && (
+        <EmptyState>
+          <EmptyStateText>Select a channel from the side rail to load latest uploads.</EmptyStateText>
+        </EmptyState>
+      )}
+      {props.activeChannel && props.channelVideos.length === 0 && (
+        <EmptyState>
+          <EmptyStateText>No videos available.</EmptyStateText>
+        </EmptyState>
+      )}
+      <Feed>
+        {props.channelVideos.map((video) => (
+          <VideoTile video={video} openVideo={props.openVideo} />
+        ))}
+      </Feed>
+    </Column>
+  );
+}
 
-          <BodyText>{`Mood: ${pMood}`}</BodyText>
+function WatchPage(props) {
+  return (
+    <Column style={{ gap: 10 }}>
+      <SectionTitle>Now Playing</SectionTitle>
+      <VideoTile video={props.video} openVideo={() => {}} />
+      <WatchViewport style={{ minHeight: 0, height: 220, backgroundColor: props.video.tint }}>
+        <Column style={{ alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+          <Text fontSize={14} color="#ffffff">▶ PLAYING</Text>
+          <Text fontSize={10} color="#cccccc">This is a simulated playback surface.</Text>
+        </Column>
+      </WatchViewport>
+      <WatchMeta>
+        <WatchTitle>{props.video.title}</WatchTitle>
+        <WatchMetaText>{`${props.video.channelName} • ${props.video.views} • ${props.video.uploaded}`}</WatchMetaText>
+        <Text fontSize={11} color="#aaaaaa">{props.video.description}</Text>
+      </WatchMeta>
+      <WatchActions>
+        <WatchAction>
+          <WatchActionText>Like</WatchActionText>
+        </WatchAction>
+        <WatchAction>
+          <WatchActionText>Save</WatchActionText>
+        </WatchAction>
+        <WatchAction>
+          <WatchActionText>Share</WatchActionText>
+        </WatchAction>
+      </WatchActions>
+      <SectionTitle>Up next</SectionTitle>
+      <CommentList>
+        {props.related.length === 0 && (
+          <EmptyState>
+            <EmptyStateText>No related videos yet.</EmptyStateText>
+          </EmptyState>
+        )}
+        {props.related.map((video) => (
+          <VideoListItem title={video.title} meta={`${video.channelName} • ${video.views}`} onPress={() => props.openVideo(video.id)} />
+        ))}
+      </CommentList>
+      <SectionTitle>Comments</SectionTitle>
+      <CommentList>
+        {props.comments.length === 0 && (
+          <EmptyState>
+            <EmptyStateText>No comments yet.</EmptyStateText>
+          </EmptyState>
+        )}
+        {props.comments.map((comment) => (
+          <CommentItem>
+            <Row style={{ alignItems: 'center', gap: 8 }}>
+              <Surface style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: '#555555' }}>
+                <Text fontSize={10} color="#ffffff" style={{ textAlign: 'center', flexGrow: 1 }}>{comment.author[0]}</Text>
+              </Surface>
+              <Column style={{ flexGrow: 1 }}>
+                <Row style={{ alignItems: 'center', gap: 8 }}>
+                  <CommentAuthor>{comment.author}</CommentAuthor>
+                  <CommentTime>{comment.time}</CommentTime>
+                </Row>
+                <CommentText>{comment.text}</CommentText>
+              </Column>
+            </Row>
+          </CommentItem>
+        ))}
+      </CommentList>
+    </Column>
+  );
+}
 
-          <MusicBar>
-            <Text fontSize={10} color="#00cc00">NOW PLAYING</Text>
-            <Box style={{ flexDirection: 'column', gap: 1 }}>
-              <Text fontSize={9} color="#cccccc">{pSong}</Text>
-              <Text fontSize={8} color="#888888">{pArtist}</Text>
-            </Box>
-          </MusicBar>
-
-          <ViewMyRow>
-            <LabelText>View My:</LabelText>
-            <Pressable><LinkText>Pics</LinkText></Pressable>
-            <LabelText>|</LabelText>
-            <Pressable><LinkText>Videos</LinkText></Pressable>
-            <LabelText>|</LabelText>
-            <Pressable><LinkText>Blog</LinkText></Pressable>
-          </ViewMyRow>
-
-          <Section>
-            <SectionHead><SectionHeadText>{`Contacting ${pName}`}</SectionHeadText></SectionHead>
-            <SectionBody>
-              <Box style={{ gap: 4 }}>
-                <Pressable><LinkText>Send Message</LinkText></Pressable>
-                <Pressable><LinkText>Add to Friends</LinkText></Pressable>
-                <Pressable><LinkText>Add to Favorites</LinkText></Pressable>
-                <Pressable><LinkText>Block User</LinkText></Pressable>
-                <Pressable><LinkText>Rank User</LinkText></Pressable>
-              </Box>
-            </SectionBody>
-          </Section>
-
-          <DimText>{`myspace.com/${pName}`}</DimText>
-
-          <Section>
-            <SectionHead><SectionHeadText>{`${pName}'s Details`}</SectionHeadText></SectionHead>
-            <SectionBodyTight>
-              {details.map((d) => (
-                <DataRow>
-                  <DataLabel><LabelText>{d.label}</LabelText></DataLabel>
-                  <DataValue><BodyText>{d.value}</BodyText></DataValue>
-                </DataRow>
-              ))}
-            </SectionBodyTight>
-          </Section>
-        </LeftCol>
-
-        <RightCol>
-          <Section>
-            <SectionHead><SectionHeadText>{`${pName}'s Blurbs`}</SectionHeadText></SectionHead>
-            <SectionBody>
-              <Box style={{ gap: 10 }}>
-                <Box style={{ gap: 4 }}>
-                  <LinkText>About Me:</LinkText>
-                  <BodyText>{pAbout}</BodyText>
-                </Box>
-                <Box style={{ gap: 4 }}>
-                  <LinkText>Who I'd Like to Meet:</LinkText>
-                  <BodyText>{pMeet}</BodyText>
-                </Box>
-              </Box>
-            </SectionBody>
-          </Section>
-
-          <Section>
-            <SectionHead><SectionHeadText>{`${pName}'s Interests`}</SectionHeadText></SectionHead>
-            <SectionBodyTight>
-              {interests.map((item) => (
-                <DataRow>
-                  <DataLabel><LinkText>{item.label}</LinkText></DataLabel>
-                  <DataValue><BodyText>{item.value}</BodyText></DataValue>
-                </DataRow>
-              ))}
-            </SectionBodyTight>
-          </Section>
-
-          <Section>
-            <SectionHead><SectionHeadText>{`${pName}'s Friend Space`}</SectionHeadText></SectionHead>
-            <SectionBody>
-              <FriendGrid>
-                {topFriends.map((f) => (
-                  <FriendCell onPress={() => { viewProfile(f.id) }}>
-                    <Box style={{ width: 64, height: 64, borderWidth: 1, borderColor: '#cccccc', backgroundColor: f.avatarBg, alignItems: 'center', justifyContent: 'center' }}>
-                      <WhiteText28>{f.avatarLetter}</WhiteText28>
-                    </Box>
-                    <SmallLink>{f.name}</SmallLink>
-                  </FriendCell>
-                ))}
-              </FriendGrid>
-            </SectionBody>
-          </Section>
-
-          <Section>
-            <SectionHead><SectionHeadText>{`${pName}'s Comments`}</SectionHeadText></SectionHead>
-            <SectionBodyTight>
-              {comments.map((c) => (
-                <CommentRow>
-                  <CommentAuthor onPress={() => { viewProfile(c.authorId) }}>
-                    <Box style={{ width: 48, height: 48, borderWidth: 1, borderColor: '#cccccc', backgroundColor: c.avatarBg, alignItems: 'center', justifyContent: 'center' }}>
-                      <WhiteText20>{c.avatarLetter}</WhiteText20>
-                    </Box>
-                    <SmallText>{c.authorName}</SmallText>
-                  </CommentAuthor>
-                  <CommentBody>
-                    <DimText>{c.time}</DimText>
-                    <BodyText>{c.text}</BodyText>
-                  </CommentBody>
-                </CommentRow>
-              ))}
-            </SectionBodyTight>
-          </Section>
-        </RightCol>
-      </ProfileColumns>
-
-      <Footer>
-        <FooterText>2003-2006 MySpace.com. All Rights Reserved.</FooterText>
-      </Footer>
-    </Box>
+function LibraryPage(props) {
+  return (
+    <Column style={{ gap: 10 }}>
+      <SectionTitle>Watch Later</SectionTitle>
+      <Feed>
+        {props.videos.slice(0, 6).map((video) => (
+          <VideoTile video={video} openVideo={props.openVideo} />
+        ))}
+      </Feed>
+    </Column>
   );
 }
 
 function App() {
-  // Load data for pages on mount
-  useEffect(() => {
-    setAllUsers(getAllUsers());
-    setAllBlogPosts(getAllBlogPosts());
-    setGroups(getMockGroups());
-    setForums(getMockForums());
-    setSongs(getMockSongs());
-    setMails(getMockMail());
-  });
+  const hero = getHomeVideos()[0];
+  const results = getSearchResults(searchTopic);
+  const current = getVideoById(activeVideoId);
+  const searchItems = getSearchResults(searchTopic);
+  const selectedChannelVideos = getVideosByChannel(activeChannelId);
+  const selectedChannel = channels.find((c) => c.id == activeChannelId);
+  const related = getRelatedVideos(activeVideoId);
+  const comments = getVideoComments(activeVideoId);
 
-  const isHome = currentRoute === 'home';
-  const isBrowse = currentRoute === 'browse';
-  const isSearch = currentRoute === 'search';
-  const isInvite = currentRoute === 'invite';
-  const isMail = currentRoute === 'mail';
-  const isBlog = currentRoute === 'blog';
-  const isFavorites = currentRoute === 'favorites';
-  const isForum = currentRoute === 'forum';
-  const isGroups = currentRoute === 'groups';
-  const isMusic = currentRoute === 'music';
-  const isProfile = currentRoute === 'profile';
+  function setHome() {
+    setRoute('home');
+  }
+
+  function setSearch(topic) {
+    setSearchTopic(topic);
+    setRoute('search');
+  }
+
+  function setShorts() {
+    setRoute('shorts');
+  }
+
+  function setSubscriptions(channelId) {
+    setActiveChannelId(channelId || '');
+    setRoute('subscriptions');
+  }
+
+  function openVideo(video) {
+    setActiveVideoId(video);
+    setRoute('watch');
+  }
 
   return (
-    <Box style={{ width: '100%', height: '100%', flexDirection: 'column' }}>
-      <Nav>
-        <NavBrand>MySpace.com</NavBrand>
-        <NavSep>|</NavSep>
-        <NavItem label="Home" onPress={goHome} active={isHome ? 1 : 0} />
-        <NavSep>|</NavSep>
-        <NavItem label="Browse" onPress={goBrowse} active={isBrowse ? 1 : 0} />
-        <NavSep>|</NavSep>
-        <NavItem label="Search" onPress={goSearch} active={isSearch ? 1 : 0} />
-        <NavSep>|</NavSep>
-        <NavItem label="Invite" onPress={goInvite} active={isInvite ? 1 : 0} />
-        <NavSep>|</NavSep>
-        <NavItem label="Mail" onPress={goMail} active={isMail ? 1 : 0} />
-        <NavSep>|</NavSep>
-        <NavItem label="Blog" onPress={goBlog} active={isBlog ? 1 : 0} />
-        <NavSep>|</NavSep>
-        <NavItem label="Favorites" onPress={goFavorites} active={isFavorites ? 1 : 0} />
-        <NavSep>|</NavSep>
-        <NavItem label="Forum" onPress={goForum} active={isForum ? 1 : 0} />
-        <NavSep>|</NavSep>
-        <NavItem label="Groups" onPress={goGroups} active={isGroups ? 1 : 0} />
-        <NavSep>|</NavSep>
-        <NavItem label="Music" onPress={goMusic} active={isMusic ? 1 : 0} />
-        <NavRight>
-          <NavSearchBox><NavSearchText>Search MySpace</NavSearchText></NavSearchBox>
-        </NavRight>
-      </Nav>
+    <Page>
+      <Shell>
+        <TopBar>
+          <Logo>YouTube</Logo>
+          <LogoAccent>Lite</LogoAccent>
+          <SearchPill>
+            <SearchPillText>{`Search: ${searchTopic}`}</SearchPillText>
+          </SearchPill>
+          <Spacer />
+          <WatchAction>
+            <WatchActionText>Sign in</WatchActionText>
+          </WatchAction>
+        </TopBar>
 
-      <PageContainer>
-        <ScrollView style={{ flexGrow: 1 }}>
-          {isHome && <HomePage />}
-          {isBrowse && <BrowsePage />}
-          {isSearch && <SearchPage />}
-          {isInvite && <InvitePage />}
-          {isMail && <MailPage />}
-          {isBlog && <BlogPage />}
-          {isFavorites && <FavoritesPage />}
-          {isForum && <ForumPage />}
-          {isGroups && <GroupsPage />}
-          {isMusic && <MusicPage />}
-          {isProfile && <ProfilePage />}
-        </ScrollView>
-      </PageContainer>
-    </Box>
+        <PrimaryTabs>
+          <TopNavButton label="Home" onPress={setHome} active={route == 'home' ? 1 : 0} />
+          <TopNavButton label="Shorts" onPress={setShorts} active={route == 'shorts' ? 1 : 0} />
+          <TopNavButton label="Search" onPress={() => { setSearch('all'); }} active={route == 'search' ? 1 : 0} />
+          <TopNavButton label="Subscriptions" onPress={() => { setSubscriptions(activeChannelId); }} active={route == 'subscriptions' ? 1 : 0} />
+          <TopNavButton label="Library" onPress={() => { setRoute('library'); }} active={route == 'library' ? 1 : 0} />
+          <TopNavButton label="Watch" onPress={() => { setRoute('watch'); }} active={route == 'watch' ? 1 : 0} />
+        </PrimaryTabs>
+
+        <ContentArea>
+          <SideList channels={channels} setRoute={setRoute} setActiveChannel={setActiveChannelId} activeChannel={activeChannelId} />
+          <ScrollView style={{ flexGrow: 1 }}>
+            {route == 'home' && (
+              <HomePage
+                hero={hero}
+                homeVideos={homeVideos}
+                continueVideos={continueVideos}
+                openVideo={openVideo}
+              />
+            )}
+            {route == 'search' && (
+              <SearchPage
+                topic={searchTopic}
+                topics={topics}
+                results={results}
+                onSearch={setSearch}
+                openVideo={openVideo}
+              />
+            )}
+            {route == 'shorts' && (
+              <ShortsPage
+                items={shortsVideos}
+                openVideo={openVideo}
+              />
+            )}
+            {route == 'subscriptions' && (
+              <SubscriptionPage
+                activeChannel={activeChannelId}
+                channel={selectedChannel}
+                channelVideos={selectedChannelVideos}
+                openVideo={openVideo}
+              />
+            )}
+            {route == 'library' && (
+              <LibraryPage
+                videos={allVideos}
+                openVideo={openVideo}
+              />
+            )}
+            {route == 'watch' && (
+              <WatchPage
+                video={current}
+                related={related}
+                comments={comments}
+                openVideo={openVideo}
+              />
+            )}
+          </ScrollView>
+        </ContentArea>
+
+        <FooterBar>
+          <FooterText>Dead Internet Lab — YouTube-like mock interface</FooterText>
+          <FooterText>{`Videos in library: ${allVideos.length}`}</FooterText>
+        </FooterBar>
+      </Shell>
+    </Page>
   );
 }

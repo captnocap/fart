@@ -23,7 +23,7 @@ expect "5 ops · processed:   MiXeD CaSe   → mixed case"
 
 # Click-through: 3 pressable nodes
 
-click "Run Batch"
+click "press:runBatch"
 expect "String Methods"
 expect "Run Batch"
 expect "Process Test"
@@ -40,7 +40,7 @@ expect "in: "  MiXeD CaSe  ""
 expect "mixed case | first3:MiX | @:no"
 expect "5 ops · processed:   MiXeD CaSe   → mixed case"
 
-click "Process Test"
+click "press:processString"
 expect "String Methods"
 expect "Run Batch"
 expect "Process Test"
@@ -59,7 +59,7 @@ expect "in: "  TEST INPUT  ""
 expect "test input | first3:TES | @:no"
 expect "6 ops · processed:   TEST INPUT   → test input"
 
-click "Search"
+click "press:searchIn"
 expect "String Methods"
 expect "Run Batch"
 expect "Process Test"

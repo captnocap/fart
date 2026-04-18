@@ -522,9 +522,13 @@ pub const luajit_runtime = struct {
     pub extern fn rjit_lua_set_map_wrapper(index: usize, ptr: *anyopaque) void;
     pub extern fn rjit_lua_register_host_fn(name: [*:0]const u8, func: ?*const anyopaque, argc: c_int) void;
     pub extern fn rjit_lua_set_global_int(name: [*:0]const u8, val: i64) void;
+    pub extern fn rjit_lua_set_effect_render(id: usize, fn_ptr: ?*const anyopaque) void;
+    pub extern fn rjit_lua_set_effect_shader(id: usize, shader_ptr: ?*const anyopaque) void;
 
     pub fn callGlobal(name: [*:0]const u8) void { rjit_lua_call_global(name); }
     pub fn setMapWrapper(index: usize, ptr: *anyopaque) void { rjit_lua_set_map_wrapper(index, ptr); }
     pub fn registerHostFn(name: [*:0]const u8, func: ?*const anyopaque, argc: c_int) void { rjit_lua_register_host_fn(name, func, argc); }
     pub fn setGlobalInt(name: [*:0]const u8, val: i64) void { rjit_lua_set_global_int(name, val); }
+    pub fn setEffectRender(id: usize, fn_ptr: *const anyopaque) void { rjit_lua_set_effect_render(id, fn_ptr); }
+    pub fn setEffectShader(id: usize, shader_ptr: *const anyopaque) void { rjit_lua_set_effect_shader(id, shader_ptr); }
 };

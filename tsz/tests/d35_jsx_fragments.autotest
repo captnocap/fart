@@ -22,7 +22,20 @@ expect "tapped: 0"
 
 # Click-through: 2 pressable nodes
 
-click "Hide extras"
+click "press:setShowExtras"
+expect "Fragment Test"
+expect "These three lines are inside a fragment"
+expect "No wrapping Box element"
+expect "Just siblings"
+expect "CPU"
+expect "72"
+expect "Memory"
+expect "58"
+expect "Disk"
+expect "91"
+expect "Show extras"
+
+click "press:setCounter"
 expect "Fragment Test"
 expect "These three lines are inside a fragment"
 expect "No wrapping Box element"

@@ -14,9 +14,9 @@ expect "3. Milk"
 expect "4. Butter"
 expect "last removed: "
 
-# Click-through: 2 pressable nodes
+# Click-through: 6 pressable nodes
 
-click "Add Item"
+click "press:addItem"
 expect "Shopping List"
 expect "Add Item"
 expect "Clear All"
@@ -27,7 +27,13 @@ expect "4. Butter"
 expect "5. Juice"
 expect "last removed: "
 
-click "Clear All"
+click "press:clearAll"
+expect "Shopping List"
+expect "Add Item"
+expect "Clear All"
+expect "last removed: all"
+
+click "press:removeItem"
 expect "Shopping List"
 expect "Add Item"
 expect "Clear All"

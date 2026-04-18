@@ -12,7 +12,7 @@ expect "calls"
 
 # Click-through: 1 pressable nodes
 
-click "Get Time"
+click "press:getTime"
 expect "Declare Function (FFI)"
 expect "Get Time"
 expect "timestamp"

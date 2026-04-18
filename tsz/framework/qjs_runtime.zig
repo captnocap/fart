@@ -1735,6 +1735,168 @@ fn hostGetEnv(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.J
     return qjs.JS_NewStringLen(c2, val.ptr, @intCast(val.len));
 }
 
+// ── /proc enumeration ───────────────────────────────────────────
+
+fn appendJsonEscaped(list: *std.ArrayList(u8), alloc: std.mem.Allocator, s: []const u8) !void {
+    try list.append(alloc, '"');
+    for (s) |ch| {
+        switch (ch) {
+            '"' => try list.appendSlice(alloc, "\\\""),
+            '\\' => try list.appendSlice(alloc, "\\\\"),
+            '\n' => try list.appendSlice(alloc, "\\n"),
+            '\r' => try list.appendSlice(alloc, "\\r"),
+            '\t' => try list.appendSlice(alloc, "\\t"),
+            0...8, 11, 12, 14...31 => try list.writer(alloc).print("\\u{x:0>4}", .{ch}),
+            else => try list.append(alloc, ch),
+        }
+    }
+    try list.append(alloc, '"');
+}
+
+fn readProcField(pid: u32, field: []const u8, buf: []u8) ![]const u8 {
+    var path_buf: [256]u8 = undefined;
+    const path = try std.fmt.bufPrintZ(&path_buf, "/proc/{d}/{s}", .{ pid, field });
+    var file = std.fs.openFileAbsoluteZ(path, .{}) catch return error.NotFound;
+    defer file.close();
+    const n = file.readAll(buf) catch return error.NotFound;
+    var slice = buf[0..n];
+    while (slice.len > 0 and (slice[slice.len - 1] == '\n' or slice[slice.len - 1] == 0)) {
+        slice = slice[0 .. slice.len - 1];
+    }
+    return slice;
+}
+
+fn hostGetProcessesJson(ctx: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    const c2 = ctx orelse return QJS_UNDEFINED;
+    const alloc = std.heap.page_allocator;
+    var list: std.ArrayList(u8) = .{};
+    defer list.deinit(alloc);
+    list.append(alloc, '[') catch return qjs.JS_NewString(c2, "[]");
+
+    var proc_dir = std.fs.openDirAbsolute("/proc", .{ .iterate = true }) catch {
+        return qjs.JS_NewString(c2, "[]");
+    };
+    defer proc_dir.close();
+    var it = proc_dir.iterate();
+    var first = true;
+    while (it.next() catch null) |entry| {
+        if (entry.kind != .directory) continue;
+        const pid = std.fmt.parseInt(u32, entry.name, 10) catch continue;
+
+        var name_buf: [256]u8 = undefined;
+        const name = readProcField(pid, "comm", &name_buf) catch continue;
+
+        var task_path_buf: [256]u8 = undefined;
+        const task_path = std.fmt.bufPrintZ(&task_path_buf, "/proc/{d}/task", .{pid}) catch continue;
+        var task_dir = std.fs.openDirAbsoluteZ(task_path, .{ .iterate = true }) catch continue;
+        defer task_dir.close();
+        var nthreads: u32 = 0;
+        var tit = task_dir.iterate();
+        while (tit.next() catch null) |tentry| {
+            if (tentry.kind == .directory) nthreads += 1;
+        }
+
+        if (!first) list.append(alloc, ',') catch break;
+        first = false;
+        list.writer(alloc).print("{{\"pid\":{d},\"nthreads\":{d},\"name\":", .{ pid, nthreads }) catch break;
+        appendJsonEscaped(&list, alloc, name) catch break;
+        list.append(alloc, '}') catch break;
+    }
+    list.append(alloc, ']') catch {};
+    return qjs.JS_NewStringLen(c2, list.items.ptr, list.items.len);
+}
+
+const ThreadStat = struct { core: i32 = -1, cputime: u64 = 0 };
+
+fn readThreadStat(pid: u32, tid: u32) ThreadStat {
+    var stat_path_buf: [256]u8 = undefined;
+    const stat_path = std.fmt.bufPrintZ(&stat_path_buf, "/proc/{d}/task/{d}/stat", .{ pid, tid }) catch return .{};
+    var file = std.fs.openFileAbsoluteZ(stat_path, .{}) catch return .{};
+    defer file.close();
+    var buf: [1024]u8 = undefined;
+    const n = file.readAll(&buf) catch return .{};
+    const data = buf[0..n];
+    const rparen = std.mem.lastIndexOfScalar(u8, data, ')') orelse return .{};
+    var rest = data[rparen + 1 ..];
+    // After ")" fields are: state(3) ppid(4) pgrp(5) ... utime(14) stime(15) ... processor(39)
+    // We're pointing after the ')'; next token is state (field 3). Track 1-based field index.
+    var field: usize = 3;
+    var idx: usize = 0;
+    var utime: u64 = 0;
+    var stime: u64 = 0;
+    var core: i32 = -1;
+    while (idx < rest.len) {
+        while (idx < rest.len and rest[idx] == ' ') idx += 1;
+        const start = idx;
+        while (idx < rest.len and rest[idx] != ' ' and rest[idx] != '\n') idx += 1;
+        const tok = rest[start..idx];
+        if (tok.len == 0) break;
+        if (field == 14) utime = std.fmt.parseInt(u64, tok, 10) catch 0;
+        if (field == 15) stime = std.fmt.parseInt(u64, tok, 10) catch 0;
+        if (field == 39) core = std.fmt.parseInt(i32, tok, 10) catch -1;
+        field += 1;
+        if (field > 40) break;
+    }
+    return .{ .core = core, .cputime = utime + stime };
+}
+
+fn hostGetThreadsJson(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    const c2 = ctx orelse return QJS_UNDEFINED;
+    if (argc < 1) return qjs.JS_NewString(c2, "[]");
+    var pid_f: f64 = 0;
+    _ = qjs.JS_ToFloat64(c2, &pid_f, argv[0]);
+    const pid: u32 = @intFromFloat(pid_f);
+    const alloc = std.heap.page_allocator;
+    var list: std.ArrayList(u8) = .{};
+    defer list.deinit(alloc);
+    list.append(alloc, '[') catch return qjs.JS_NewString(c2, "[]");
+
+    var task_path_buf: [256]u8 = undefined;
+    const task_path = std.fmt.bufPrintZ(&task_path_buf, "/proc/{d}/task", .{pid}) catch return qjs.JS_NewString(c2, "[]");
+    var task_dir = std.fs.openDirAbsoluteZ(task_path, .{ .iterate = true }) catch return qjs.JS_NewString(c2, "[]");
+    defer task_dir.close();
+    var it = task_dir.iterate();
+    var first = true;
+    while (it.next() catch null) |entry| {
+        if (entry.kind != .directory) continue;
+        const tid = std.fmt.parseInt(u32, entry.name, 10) catch continue;
+        var comm_path_buf: [256]u8 = undefined;
+        const comm_path = std.fmt.bufPrintZ(&comm_path_buf, "/proc/{d}/task/{d}/comm", .{ pid, tid }) catch continue;
+        var file = std.fs.openFileAbsoluteZ(comm_path, .{}) catch continue;
+        defer file.close();
+        var name_buf: [256]u8 = undefined;
+        const n = file.readAll(&name_buf) catch continue;
+        var name = name_buf[0..n];
+        while (name.len > 0 and (name[name.len - 1] == '\n' or name[name.len - 1] == 0)) {
+            name = name[0 .. name.len - 1];
+        }
+        const tstat = readThreadStat(pid, tid);
+        if (!first) list.append(alloc, ',') catch break;
+        first = false;
+        list.writer(alloc).print("{{\"tid\":{d},\"core\":{d},\"cpu\":{d},\"name\":", .{ tid, tstat.core, tstat.cputime }) catch break;
+        appendJsonEscaped(&list, alloc, name) catch break;
+        list.append(alloc, '}') catch break;
+    }
+    list.append(alloc, ']') catch {};
+    return qjs.JS_NewStringLen(c2, list.items.ptr, list.items.len);
+}
+
+fn hostGetCoreCount(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    var count: u32 = 0;
+    var cpu_dir = std.fs.openDirAbsolute("/sys/devices/system/cpu", .{ .iterate = true }) catch return qjs.JS_NewFloat64(null, 1);
+    defer cpu_dir.close();
+    var it = cpu_dir.iterate();
+    while (it.next() catch null) |entry| {
+        if (entry.kind != .directory) continue;
+        if (entry.name.len < 4) continue;
+        if (!std.mem.startsWith(u8, entry.name, "cpu")) continue;
+        _ = std.fmt.parseInt(u32, entry.name[3..], 10) catch continue;
+        count += 1;
+    }
+    if (count == 0) count = 1;
+    return qjs.JS_NewFloat64(null, @floatFromInt(count));
+}
+
 // ── File write + exec host functions (Dashboard) ────────────────
 
 extern fn popen(command: [*:0]const u8, mode: [*:0]const u8) ?*anyopaque;
@@ -1921,6 +2083,9 @@ pub fn initVM() void {
     _ = qjs.JS_SetPropertyStr(ctx, global, "getLayoutUs", qjs.JS_NewCFunction(ctx, hostGetLayoutUs, "getLayoutUs", 0));
     _ = qjs.JS_SetPropertyStr(ctx, global, "getPaintUs", qjs.JS_NewCFunction(ctx, hostGetPaintUs, "getPaintUs", 0));
     _ = qjs.JS_SetPropertyStr(ctx, global, "getTickUs", qjs.JS_NewCFunction(ctx, hostGetTickUs, "getTickUs", 0));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "getProcessesJson", qjs.JS_NewCFunction(ctx, hostGetProcessesJson, "getProcessesJson", 0));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "getThreadsJson", qjs.JS_NewCFunction(ctx, hostGetThreadsJson, "getThreadsJson", 1));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "getCoreCount", qjs.JS_NewCFunction(ctx, hostGetCoreCount, "getCoreCount", 0));
     _ = qjs.JS_SetPropertyStr(ctx, global, "getMouseX", qjs.JS_NewCFunction(ctx, hostGetMouseX, "getMouseX", 0));
     _ = qjs.JS_SetPropertyStr(ctx, global, "getMouseY", qjs.JS_NewCFunction(ctx, hostGetMouseY, "getMouseY", 0));
     _ = qjs.JS_SetPropertyStr(ctx, global, "getMouseDown", qjs.JS_NewCFunction(ctx, hostGetMouseDown, "getMouseDown", 0));
