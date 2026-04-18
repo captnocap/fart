@@ -707,17 +707,30 @@ pub fn drawStrokeCurves(path: *const Path, stroke_r: f32, stroke_g: f32, stroke_
     // as the foreground. At rest (flow_speed == 0), draw full-opacity stroke.
     const flowing = flow_speed != 0;
     const base_a = if (flowing) stroke_a * 0.25 else stroke_a;
+    // Apply current canvas transform (set by gpu.setTransform) — used by icon
+    // paint to scale a 24×24 viewbox into the node's screen rect. drawLineSegment
+    // and the curve helpers go straight to the GPU and don't honor the transform
+    // themselves, so we bake it into each segment's coords here.
+    const t = gpu.getTransform();
+    const sx: f32 = if (t.active) t.scale else 1.0;
+    const ox: f32 = if (t.active) t.tx else 0.0;
+    const oy: f32 = if (t.active) t.ty else 0.0;
+    const sw = stroke_width * sx;
     for (0..path.curve_count) |i| {
         const seg = &path.curves[i];
+        const x0 = seg.x0 * sx + ox; const y0 = seg.y0 * sx + oy;
+        const x1 = seg.x1 * sx + ox; const y1 = seg.y1 * sx + oy;
+        const x2 = seg.x2 * sx + ox; const y2 = seg.y2 * sx + oy;
+        const x3 = seg.x3 * sx + ox; const y3 = seg.y3 * sx + oy;
         switch (seg.kind) {
             .line => {
-                drawLineSegment(seg.x0, seg.y0, seg.x3, seg.y3, stroke_width, stroke_r, stroke_g, stroke_b, base_a);
+                drawLineSegment(x0, y0, x3, y3, sw, stroke_r, stroke_g, stroke_b, base_a);
             },
             .quadratic => {
-                gpu.drawCurve(seg.x0, seg.y0, seg.x1, seg.y1, seg.x3, seg.y3, stroke_r, stroke_g, stroke_b, base_a, stroke_width);
+                gpu.drawCurve(x0, y0, x1, y1, x3, y3, stroke_r, stroke_g, stroke_b, base_a, sw);
             },
             .cubic => {
-                gpu.drawCubicCurve(seg.x0, seg.y0, seg.x1, seg.y1, seg.x2, seg.y2, seg.x3, seg.y3, stroke_r, stroke_g, stroke_b, base_a, stroke_width);
+                gpu.drawCubicCurve(x0, y0, x1, y1, x2, y2, x3, y3, stroke_r, stroke_g, stroke_b, base_a, sw);
             },
         }
         if (flowing) drawFlowParticles(seg, stroke_r, stroke_g, stroke_b, stroke_a, stroke_width, flow_speed, ticks);
