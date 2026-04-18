@@ -140,6 +140,19 @@ function emitLuaTreeLuaSource(ctx) {
   lua.push('end');
   lua.push('');
 
+  // Auto-noop fallback for __setJsExpr_N calls whose state slot isn't
+  // declared in this compile (e.g. handlers injected at runtime via
+  // event_subscribe.script that reference slot indexes the compiler didn't
+  // see). Without this, evalExpr throws "attempt to call global '__setJsExpr_N'
+  // (a nil value)" on every tick. Real declarations below override this.
+  lua.push('setmetatable(_G, { __index = function(_, k)');
+  lua.push('  if type(k) == "string" and k:match("^__setJsExpr_%d+$") then');
+  lua.push('    return function(_v) end');
+  lua.push('  end');
+  lua.push('  return nil');
+  lua.push('end })');
+  lua.push('');
+
   // State slot setters/getters (compatibility with existing useState pattern)
   if (ctx.stateSlots && ctx.stateSlots.length > 0) {
     for (var si = 0; si < ctx.stateSlots.length; si++) {
