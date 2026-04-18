@@ -48,6 +48,11 @@ function tryResolveMappedComponentProp(c, attr, propValues) {
   }
 
   c.advance();
+  // Handle bracket access after map item: row[col.key] → fall through to parseComponentBraceValue
+  if (c.kind() === TK.lbracket) {
+    c.restore(saved);
+    return false; // Let normal brace value parser handle row[col.key]
+  }
   if (c.kind() !== TK.dot) {
     // Whole map item passed as prop (e.g., file={file}) — store OA item ref marker
     // Format: \x02OA_ITEM:oaIdx:iterVar:itemParam
@@ -156,6 +161,30 @@ function parseComponentBraceValue(c) {
       val += slotGet(c.text());
     } else if (c.kind() === TK.identifier && ctx.renderLocals && ctx.renderLocals[c.text()] !== undefined) {
       var _rlv = ctx.renderLocals[c.text()];
+      if (typeof _rlv === 'string' && /(?:===|!==|==|!=|>=|<=|&&|\|\||[?:<>])/.test(_rlv)) {
+        var _rlCmpPos = c.pos + 1;
+        if (_rlCmpPos < c.count) {
+          var _rlCmpKind = c.kindAt(_rlCmpPos);
+          if (_rlCmpKind === TK.eq_eq || _rlCmpKind === TK.not_eq) {
+            var _rlNumPos = _rlCmpPos + 1;
+            if (_rlNumPos < c.count && c.kindAt(_rlNumPos) === TK.equals) _rlNumPos++;
+            if (_rlNumPos < c.count && c.kindAt(_rlNumPos) === TK.number) {
+              var _rlNum = c.textAt(_rlNumPos);
+              if ((_rlCmpKind === TK.eq_eq && _rlNum === '1') || (_rlCmpKind === TK.not_eq && _rlNum === '0')) {
+                val += '(' + _rlv + ')';
+                while (c.pos <= _rlNumPos) c.advance();
+                continue;
+              }
+            }
+          }
+        }
+      }
+      var _rlInline = resolveComponentRenderLocalValue(c.text());
+      if (typeof _rlInline === 'string' &&
+          ((_rlInline.includes('if (') && _rlInline.includes(' else ')) ||
+           /(?:===|!==|==|!=|>=|<=|&&|\|\||[?:<>])/.test(_rlInline))) {
+        _rlInline = '(' + _rlInline + ')';
+      }
       // Const OA row ref with .field access
       if (typeof _rlv === 'string' && _rlv.charCodeAt(0) === 1 &&
           c.pos + 2 < c.count && c.kindAt(c.pos + 1) === TK.dot && c.kindAt(c.pos + 2) === TK.identifier) {
@@ -185,7 +214,7 @@ function parseComponentBraceValue(c) {
         }
         c.advance(); c.advance(); // skip name and dot; field advanced below
       } else {
-        val += resolveComponentRenderLocalValue(c.text());
+        val += _rlInline;
       }
     } else if (c.kind() === TK.identifier && ctx.currentMap && c.text() === ctx.currentMap.indexParam) {
       val += '@as(i64, @intCast(' + (ctx.currentMap.iterVar || '_i') + '))';

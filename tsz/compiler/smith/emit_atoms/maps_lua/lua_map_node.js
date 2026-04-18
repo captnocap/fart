@@ -164,8 +164,10 @@ function _emitNodeHandler(node, itemParam, indexParam, _luaIdxExpr, _currentOaId
   if (!node || !node.handler) return null;
 
   if (node.handlerIsJs) {
-    // JS handler - apply index substitution
+    // JS handler - eval'd by QJS, needs JS operators not lua
     var jh = _jsExprToLua(node.handler, itemParam, indexParam, _luaIdxExpr, _currentOaIdx);
+    // Convert lua operators back to JS for QJS eval
+    jh = jh.replace(/\band\b/g, '&&').replace(/\bor\b/g, '||').replace(/\bnot\b/g, '!');
     var ixStr = _luaIdxExpr || '(_i - 1)';
 
     // Resolve Zig index casts
