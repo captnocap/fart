@@ -66,9 +66,16 @@ if [[ ! -f "$RAW_BIN" ]]; then
 fi
 
 # ── 3. Debug / --raw short-circuit ────────────────────────────────────
+# In debug or --raw mode, move the ELF to "$NAME-raw" so zig-out/bin/$NAME
+# stays reserved for the self-extracting wrapper. Prevents accidentally
+# shipping a blue-icon raw binary because someone (read: claude) forgot
+# the flag was still in scope.
 if [[ "$DEBUG" -eq 1 ]] || [[ "$RAW" -eq 1 ]]; then
-    SIZE_MB=$(du -m "$RAW_BIN" | cut -f1)
-    echo "[ship] done (raw ELF, ${SIZE_MB}MB) → $RAW_BIN"
+    RAW_OUT="zig-out/bin/${NAME}-raw"
+    mv -f "$RAW_BIN" "$RAW_OUT"
+    SIZE_MB=$(du -m "$RAW_OUT" | cut -f1)
+    echo "[ship] done (raw ELF, ${SIZE_MB}MB) → $RAW_OUT"
+    echo "[ship] note: zig-out/bin/$NAME left for wrapped build; run './scripts/ship $NAME' for the shippable form."
     exit 0
 fi
 
