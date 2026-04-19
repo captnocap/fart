@@ -1,9 +1,23 @@
 #!/bin/bash
-# ship — build a .tsx cart into a native binary via qjs_app.zig
+# ship — build a .tsx cart into a self-extracting native binary.
+#
+# Pipeline:
+#   1. esbuild cart/<name>.tsx → bundle.js
+#   2. zig build app → zig-out/bin/<name> (ELF, dynamic-linked, bundle embedded)
+#   3. Package as self-extracting shell wrapper:
+#      - ldd the binary, bundle every non-system .so into a lib/ dir
+#      - bundle ld-linux loader
+#      - tarball { app.bin, lib/, run } together
+#      - prepend shell wrapper that extracts to ~/.cache/reactjit-<name>/<sig>/
+#        on first run and execs the real binary via the bundled ld-linux
+#
+# Result: a single-file shippable binary with zero system dependencies.
+# LuaJIT stays dynamic at link time (fast builds) but ships bundled (portable).
 #
 # Usage:
-#   scripts/ship <cart-name>       # cart/<name>.tsx  → zig-out/bin/<name>
-#   scripts/ship <cart-name> -d    # debug build (unoptimized)
+#   scripts/ship <cart-name>          # release, self-extracting
+#   scripts/ship <cart-name> -d       # debug build, skips packaging (raw ELF)
+#   scripts/ship <cart-name> --raw    # release, skips packaging (raw ELF for ldd)
 
 set -euo pipefail
 
@@ -12,14 +26,16 @@ cd "$REPO_ROOT"
 
 NAME="${1:-}"
 DEBUG=0
+RAW=0
 for arg in "${@:2}"; do
     case "$arg" in
         -d|--debug) DEBUG=1 ;;
+        --raw)      RAW=1 ;;
     esac
 done
 
 if [[ -z "$NAME" ]]; then
-    echo "Usage: scripts/ship <cart-name> [-d]" >&2
+    echo "Usage: scripts/ship <cart-name> [-d|--raw]" >&2
     echo "  Cart expected at: cart/<cart-name>.tsx" >&2
     exit 1
 fi
@@ -30,11 +46,11 @@ if [[ ! -f "$CART_FILE" ]]; then
     exit 1
 fi
 
-# 1. Bundle cart/<name>.tsx via esbuild → bundle.js
+# ── 1. Bundle cart/<name>.tsx via esbuild → bundle.js ────────────────
 echo "[ship] bundling $CART_FILE..."
 node scripts/build-bundle.mjs "$CART_FILE"
 
-# 2. Compile qjs_app.zig → zig-out/bin/<name>
+# ── 2. Compile qjs_app.zig (bundle.js embedded via @embedFile) ───────
 OPT_FLAG="-Doptimize=ReleaseFast"
 if [[ "$DEBUG" -eq 1 ]]; then
     OPT_FLAG="-Doptimize=Debug"
@@ -43,4 +59,90 @@ fi
 echo "[ship] compiling native binary..."
 zig build app -Dapp-name="$NAME" -Dapp-source=qjs_app.zig $OPT_FLAG
 
-echo "[ship] done → zig-out/bin/$NAME"
+RAW_BIN="zig-out/bin/$NAME"
+if [[ ! -f "$RAW_BIN" ]]; then
+    echo "[ship] build produced no binary: $RAW_BIN" >&2
+    exit 1
+fi
+
+# ── 3. Debug / --raw short-circuit ────────────────────────────────────
+if [[ "$DEBUG" -eq 1 ]] || [[ "$RAW" -eq 1 ]]; then
+    SIZE_MB=$(du -m "$RAW_BIN" | cut -f1)
+    echo "[ship] done (raw ELF, ${SIZE_MB}MB) → $RAW_BIN"
+    exit 0
+fi
+
+# ── 4. Package as self-extracting binary (Linux) ──────────────────────
+OS="$(uname -s)"
+if [[ "$OS" != "Linux" ]]; then
+    echo "[ship] packaging not yet implemented for $OS — leaving raw ELF at $RAW_BIN"
+    exit 0
+fi
+
+echo "[ship] packaging self-extracting binary..."
+TMP_DIR="/tmp/reactjit-dist-$NAME"
+LIB_DIR="$TMP_DIR/lib"
+rm -rf "$TMP_DIR"
+mkdir -p "$LIB_DIR"
+cp "$RAW_BIN" "$TMP_DIR/app.bin"
+
+# Walk ldd output, bundle every non-system .so
+LIB_COUNT=0
+LDD_TMP=$(mktemp)
+ldd "$RAW_BIN" > "$LDD_TMP" 2>/dev/null || true
+while IFS= read -r line; do
+    case "$line" in *linux-vdso*) continue ;; esac
+    lib_path=$(echo "$line" | sed -n 's/.* => \([^ ]*\) .*/\1/p')
+    [[ -z "$lib_path" ]] && continue
+    [[ ! -f "$lib_path" ]] && continue
+    real_path=$(readlink -f "$lib_path")
+    soname=$(echo "$line" | sed 's/^[[:space:]]*//;s/[[:space:]]*=>.*//')
+    [[ -f "$LIB_DIR/$soname" ]] && continue
+    cp "$real_path" "$LIB_DIR/$soname"
+    LIB_COUNT=$((LIB_COUNT + 1))
+done < "$LDD_TMP"
+rm -f "$LDD_TMP"
+
+# Bundle the dynamic loader itself
+LD_LINUX=$(readlink -f /lib64/ld-linux-x86-64.so.2 2>/dev/null || readlink -f /lib/ld-linux-x86-64.so.2 2>/dev/null || echo "")
+if [[ -z "$LD_LINUX" ]] || [[ ! -f "$LD_LINUX" ]]; then
+    echo "[ship] WARNING: ld-linux-x86-64.so.2 not found — leaving raw ELF at $RAW_BIN"
+    rm -rf "$TMP_DIR"
+    exit 0
+fi
+cp "$LD_LINUX" "$LIB_DIR/ld-linux-x86-64.so.2"
+
+# Launcher that execs the real binary via the bundled loader
+cat > "$TMP_DIR/run" << 'LAUNCHER'
+#!/bin/sh
+DIR="$(cd "$(dirname "$0")" && pwd)"
+exec "$DIR/lib/ld-linux-x86-64.so.2" --inhibit-cache --library-path "$DIR/lib" "$DIR/app.bin" "$@"
+LAUNCHER
+chmod +x "$TMP_DIR/run"
+
+# Tarball + self-extracting wrapper
+TARBALL="/tmp/reactjit-${NAME}-payload.tar.gz"
+(cd "$TMP_DIR" && tar czf "$TARBALL" .)
+
+cat > "$RAW_BIN" << HEADER
+#!/bin/sh
+set -e
+APP_DIR=\${XDG_CACHE_HOME:-\$HOME/.cache}/reactjit-$NAME
+SIG=\$(md5sum "\$0" 2>/dev/null | cut -c1-8 || cksum "\$0" | cut -d" " -f1)
+CACHE="\$APP_DIR/\$SIG"
+if [ ! -f "\$CACHE/.ready" ]; then
+  rm -rf "\$APP_DIR"
+  mkdir -p "\$CACHE"
+  SKIP=\$(awk '/^__ARCHIVE__\$/{print NR + 1; exit}' "\$0")
+  tail -n+"\$SKIP" "\$0" | tar xz -C "\$CACHE"
+  touch "\$CACHE/.ready"
+fi
+exec "\$CACHE/run" "\$@"
+__ARCHIVE__
+HEADER
+cat "$TARBALL" >> "$RAW_BIN"
+chmod +x "$RAW_BIN"
+
+SIZE_MB=$(du -m "$RAW_BIN" | cut -f1)
+echo "[ship] done (${SIZE_MB}MB self-extracting, $LIB_COUNT libs bundled) → $RAW_BIN"
+rm -rf "$TMP_DIR" "$TARBALL"

@@ -27,7 +27,8 @@ const qjs = @cImport({
     @cInclude("quickjs.h");
 });
 
-const BUNDLE_PATH = "bundle.js";
+// bundle.js is embedded at compile time — binary is self-contained, no CWD lookup.
+const BUNDLE_BYTES = @embedFile("bundle.js");
 const QJS_UNDEFINED: qjs.JSValue = .{ .u = .{ .int32 = 0 }, .tag = 3 };
 
 // ── Globals ────────────────────────────────────────────────────────
@@ -952,15 +953,10 @@ pub fn main() !void {
 
     g_root = .{};
 
-    const bundle = std.fs.cwd().readFileAlloc(g_alloc, BUNDLE_PATH, 64 * 1024 * 1024) catch |err| {
-        std.debug.print("[qjs] failed to read bundle at {s}: {s}\n", .{ BUNDLE_PATH, @errorName(err) });
-        return err;
-    };
-
     try engine.run(.{
         .title = "qjs-d152",
         .root = &g_root,
-        .js_logic = bundle,
+        .js_logic = BUNDLE_BYTES,
         .lua_logic = "",
         .init = appInit,
         .tick = appTick,
