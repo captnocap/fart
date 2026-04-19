@@ -1,0 +1,285 @@
+#!/usr/bin/env python3
+"""
+ingest-quests — parse .sweatshop/quests/*.md + sibling .state.json into
+.sweatshop/supervisor.db. Idempotent: skips unchanged files on source_sha match.
+
+Plan file shape (see .sweatshop/quests/quest-log-tile.md for the canonical example):
+
+  ---
+  id: <stable-slug>
+  title: <one line>
+  goal: <one line>
+  author: <name>
+  planner: <model name>
+  created_at: <iso8601>
+  source: refactor-plan
+  depends_on: <optional quest id>
+  ---
+
+  # <title>
+  ## Thesis
+  ...free prose...
+  ## Done means
+  ...free prose...
+  ## Step 1 — <step title>
+  ...prose body...
+  ### Verify
+  ...bullets / prose...
+  ## Step 2 — ...
+
+Sibling <slug>.state.json carries the mutable runtime state (per-step state,
+party assignments, flight formation, audit log). Absent → every step stays
+pending and no parties exist yet.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import pathlib
+import re
+import sqlite3
+import sys
+from dataclasses import dataclass
+from datetime import datetime, timezone
+
+REPO = pathlib.Path(__file__).resolve().parent.parent
+QUEST_DIR = REPO / ".sweatshop" / "quests"
+DB_PATH = REPO / ".sweatshop" / "supervisor.db"
+
+FRONTMATTER_RE = re.compile(r"^---\n(.*?)\n---\n", re.DOTALL)
+FRONTMATTER_KEY_RE = re.compile(r"^([a-z_]+)\s*:\s*(.+?)\s*$", re.MULTILINE)
+STEP_HEADING_RE = re.compile(r"^##\s+Step\s+(\d+)\s*[—–-]\s*(.+?)\s*$", re.MULTILINE)
+VERIFY_HEADING_RE = re.compile(r"^###\s+Verify\s*$", re.MULTILINE)
+
+
+@dataclass
+class ParsedStep:
+    ord: int
+    title: str
+    text: str
+    verify_text: str | None
+
+
+@dataclass
+class ParsedQuest:
+    id: str
+    title: str
+    goal: str | None
+    author: str | None
+    planner: str | None
+    created_at: str | None
+    depends_on: str | None
+    source_sha: str
+    path: str
+    steps: list[ParsedStep]
+
+
+def sha256(content: bytes) -> str:
+    return hashlib.sha256(content).hexdigest()
+
+
+def parse_frontmatter(raw: str) -> dict[str, str]:
+    m = FRONTMATTER_RE.match(raw)
+    if not m:
+        return {}
+    return {k: v for k, v in FRONTMATTER_KEY_RE.findall(m.group(1))}
+
+
+def parse_steps(body: str) -> list[ParsedStep]:
+    matches = list(STEP_HEADING_RE.finditer(body))
+    steps: list[ParsedStep] = []
+    for i, m in enumerate(matches):
+        start = m.end()
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(body)
+        section = body[start:end]
+
+        # Split off the ### Verify subsection if present
+        vmatch = VERIFY_HEADING_RE.search(section)
+        if vmatch:
+            text = section[: vmatch.start()].strip()
+            verify_text: str | None = section[vmatch.end():].strip() or None
+        else:
+            text = section.strip()
+            verify_text = None
+
+        steps.append(
+            ParsedStep(
+                ord=int(m.group(1)) - 1,   # 1-indexed in prose, 0-indexed in db
+                title=m.group(2).strip(),
+                text=text,
+                verify_text=verify_text,
+            )
+        )
+    return steps
+
+
+def parse_quest_file(path: pathlib.Path) -> ParsedQuest:
+    raw_bytes = path.read_bytes()
+    raw = raw_bytes.decode("utf-8")
+    fm = parse_frontmatter(raw)
+
+    if "id" not in fm:
+        raise ValueError(f"{path}: frontmatter missing required `id` field")
+    if "title" not in fm:
+        raise ValueError(f"{path}: frontmatter missing required `title` field")
+
+    body = FRONTMATTER_RE.sub("", raw, count=1)
+    steps = parse_steps(body)
+
+    return ParsedQuest(
+        id=fm["id"],
+        title=fm["title"],
+        goal=fm.get("goal"),
+        author=fm.get("author"),
+        planner=fm.get("planner"),
+        created_at=fm.get("created_at"),
+        depends_on=fm.get("depends_on"),
+        source_sha=sha256(raw_bytes),
+        path=str(path.resolve()),
+        steps=steps,
+    )
+
+
+def load_state(md_path: pathlib.Path) -> tuple[dict | None, str | None]:
+    """Return (parsed_state, sha) for the sibling .state.json, or (None, None)."""
+    sibling = md_path.with_suffix(".state.json")
+    if not sibling.exists():
+        return None, None
+    raw = sibling.read_bytes()
+    try:
+        return json.loads(raw.decode("utf-8")), sha256(raw)
+    except json.JSONDecodeError as e:
+        print(f"[ingest-quests] WARN: {sibling}: invalid JSON ({e}) — ignoring")
+        return None, None
+
+
+def connect() -> sqlite3.Connection:
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute("PRAGMA foreign_keys = ON;")
+    return conn
+
+
+def upsert_quest(
+    conn: sqlite3.Connection,
+    q: ParsedQuest,
+    state: dict | None,
+    state_sha: str | None,
+) -> bool:
+    """Returns True if a write happened, False if skipped on sha match."""
+    existing = conn.execute(
+        "SELECT source_sha, state_sha FROM quests WHERE id = ?", (q.id,)
+    ).fetchone()
+
+    if existing and existing[0] == q.source_sha and existing[1] == state_sha:
+        # Both plan file and state file unchanged since last ingest — skip
+        return False
+
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+    overall_state = (state or {}).get("state", "pending")
+
+    conn.execute(
+        """
+        INSERT INTO quests (id, title, goal, state, path, source_sha, state_sha,
+                            author, planner, created_at, ingested_at, depends_on)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+            title       = excluded.title,
+            goal        = excluded.goal,
+            state       = excluded.state,
+            path        = excluded.path,
+            source_sha  = excluded.source_sha,
+            state_sha   = excluded.state_sha,
+            author      = excluded.author,
+            planner     = excluded.planner,
+            created_at  = excluded.created_at,
+            ingested_at = excluded.ingested_at,
+            depends_on  = excluded.depends_on
+        """,
+        (q.id, q.title, q.goal, overall_state, q.path, q.source_sha, state_sha,
+         q.author, q.planner, q.created_at, now, q.depends_on),
+    )
+
+    # Steps — wipe and re-insert. Overlay state file if present.
+    step_states: dict[int, dict] = {}
+    if state and "steps" in state:
+        for s in state["steps"]:
+            step_states[int(s["ord"])] = s
+
+    conn.execute("DELETE FROM quest_steps WHERE quest_id = ?", (q.id,))
+    for step in q.steps:
+        st = step_states.get(step.ord, {})
+        conn.execute(
+            """
+            INSERT INTO quest_steps
+                (quest_id, ord, title, text, verify_text, state, party_id,
+                 started_at, verify_passed_at, planner_confirmed_at, done_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                q.id, step.ord, step.title, step.text, step.verify_text,
+                st.get("state", "pending"),
+                st.get("party_id"),
+                st.get("started_at"),
+                st.get("verify_passed_at"),
+                st.get("planner_confirmed_at"),
+                st.get("done_at"),
+            ),
+        )
+
+    # Parties — wipe and re-insert from state file
+    conn.execute("DELETE FROM quest_parties WHERE quest_id = ?", (q.id,))
+    if state and "parties" in state:
+        for party_id, meta in state["parties"].items():
+            conn.execute(
+                "INSERT INTO quest_parties (quest_id, party_id, label, agents) VALUES (?, ?, ?, ?)",
+                (q.id, party_id, meta.get("label"), json.dumps(meta.get("agents", []))),
+            )
+
+    # Audit log — append-only in the db, but state file is authoritative.
+    # Wipe and re-insert so repeated state-file overwrites don't accumulate dupes.
+    conn.execute("DELETE FROM quest_audit_log WHERE quest_id = ?", (q.id,))
+    if state and "audit_log" in state:
+        for entry in state["audit_log"]:
+            conn.execute(
+                "INSERT INTO quest_audit_log (quest_id, step_ord, at, event, note) VALUES (?, ?, ?, ?, ?)",
+                (q.id, entry.get("step"), entry["at"], entry["event"], entry.get("note")),
+            )
+
+    return True
+
+
+def main() -> int:
+    if not QUEST_DIR.exists():
+        print(f"[ingest-quests] no quest dir at {QUEST_DIR}")
+        return 1
+
+    md_files = sorted(QUEST_DIR.glob("*.md"))
+    if not md_files:
+        print(f"[ingest-quests] no quest files in {QUEST_DIR}")
+        return 0
+
+    conn = connect()
+    wrote = 0
+    skipped = 0
+    for md in md_files:
+        try:
+            q = parse_quest_file(md)
+        except Exception as e:
+            print(f"[ingest-quests] FAIL {md.name}: {e}")
+            return 2
+        state, state_sha = load_state(md)
+        if upsert_quest(conn, q, state, state_sha):
+            wrote += 1
+            print(f"[ingest-quests] upsert {q.id} ({len(q.steps)} steps)")
+        else:
+            skipped += 1
+    conn.commit()
+    conn.close()
+
+    print(f"[ingest-quests] done — wrote {wrote}, skipped {skipped}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

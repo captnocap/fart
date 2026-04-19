@@ -9,8 +9,7 @@ function ShellCommandPalette(props) {
     <Box style={{
       position: 'absolute',
       top: 60,
-      left: '50%',
-      marginLeft: -300,
+      left: 240,
       width: 600,
       backgroundColor: '#0d1015',
       borderRadius: 12,
@@ -18,9 +17,6 @@ function ShellCommandPalette(props) {
       borderColor: '#171d26',
       flexDirection: 'column',
       zIndex: 1001,
-      shadowColor: '#000000',
-      shadowOffset: { width: 0, height: 8 },
-      shadowBlur: 32,
     }}>
       {props.children}
     </Box>
@@ -76,14 +72,9 @@ function CommandPaletteItem(props) {
         paddingRight: 14,
         paddingTop: 8,
         paddingBottom: 8,
-        backgroundColor: selected == 1 ? '#182235' : 'transparent',
+        backgroundColor: selected == 1 ? '#182235' : '#0d1015',
       }}
     >
-      {props.icon && (
-        <Box style={{ width: 20, alignItems: 'center' }}>
-          <Text fontSize={12} color="#79c0ff">{props.icon}</Text>
-        </Box>
-      )}
       <Box style={{ flexDirection: 'column', flexGrow: 1, flexBasis: 0 }}>
         <Text fontSize={12} color="#eef2f8">{props.label}</Text>
         {props.meta && <Text fontSize={10} color="#5d6a7c">{props.meta}</Text>}

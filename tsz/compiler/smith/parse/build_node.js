@@ -222,7 +222,191 @@ function _traceNodeResult(result, tag, srcTag, srcOffset, extra) {
   return result;
 }
 
-function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, srcOffset) {
+function buildNode(tag, styleFields, children, handlerRefs, nodeFields, srcTag, srcOffset) {
+  function _normalizeHandlerRefs(refs) {
+    if (!refs) return { press: null, hoverEnter: null, hoverExit: null };
+    if (typeof refs === 'string') return { press: refs, hoverEnter: null, hoverExit: null };
+    return {
+      press: refs.press || refs.handlerRef || null,
+      hoverEnter: refs.hoverEnter || refs.hoverEnterRef || null,
+      hoverExit: refs.hoverExit || refs.hoverExitRef || null,
+    };
+  }
+
+  function _emitHandlerField(handlerRef, ptrField, jsField, luaField) {
+    if (!handlerRef) return null;
+    const handler = ctx.handlers.find(h => h.name === handlerRef);
+    if (handler && handler.luaBody) {
+      var _useJs = !!(ctx.scriptBlock || globalThis.__scriptContent);
+      if (_useJs) {
+        var _nativeOnly = true;
+        var _nativeCalls = handler.luaBody.match(/\b([a-zA-Z_]\w*)\s*\(/g) || [];
+        for (var _nci = 0; _nci < _nativeCalls.length; _nci++) {
+          var _nfn = _nativeCalls[_nci].replace(/\s*\($/, '');
+          if (/^(print|tostring|tonumber|pcall|setVariant)$/.test(_nfn)) continue;
+          if (typeof isNativeFunc === 'function' && isNativeFunc(_nfn)) continue;
+          _nativeOnly = false;
+          break;
+        }
+        if (_nativeOnly && _nativeCalls.length > 0) _useJs = false;
+      }
+      if (!_useJs) {
+        var _luaBodyCalls = handler.luaBody.match(/\b([a-zA-Z_]\w*)\s*\(/g) || [];
+        for (var _ci = 0; _ci < _luaBodyCalls.length; _ci++) {
+          var _fname = _luaBodyCalls[_ci].replace(/\s*\($/, '');
+          var _isLuaAvail = false;
+          if (ctx.stateSlots) {
+            for (var _si = 0; _si < ctx.stateSlots.length; _si++) {
+              if (ctx.stateSlots[_si].setter === _fname) { _isLuaAvail = true; break; }
+            }
+          }
+          if (!_isLuaAvail && ctx.objectArrays) {
+            for (var _oi = 0; _oi < ctx.objectArrays.length; _oi++) {
+              if (ctx.objectArrays[_oi].setter === _fname) { _isLuaAvail = true; break; }
+            }
+          }
+          if (!_isLuaAvail && typeof isNativeFunc === 'function' && isNativeFunc(_fname)) _isLuaAvail = true;
+          if (!_isLuaAvail && /^(print|tostring|tonumber|pcall|setVariant)$/.test(_fname)) _isLuaAvail = true;
+          if (!_isLuaAvail) { _useJs = true; break; }
+        }
+      }
+      if (_useJs && handler.jsBody) {
+        handler._traceLastRoute = jsField;
+        const jsEscaped = handler.jsBody.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+        return `.${jsField} = "${jsEscaped}"`;
+      }
+      handler._traceLastRoute = luaField;
+      const escaped = luaTransform(handler.luaBody).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+      return `.${luaField} = "${escaped}"`;
+    }
+
+    if (handler) handler._traceLastRoute = ptrField;
+    return `.${ptrField} = handlers.${handlerRef}`;
+  }
+
+  function _applyLuaNodeHandler(_ln, handlerRef, handlerProp, handlerIsJsProp) {
+    if (!handlerRef) return;
+    var _handler = ctx.handlers.find(function(h) { return h.name === handlerRef; });
+    if (!_handler) return;
+
+    var _hasLuaBlock = !!ctx.luaBlock;
+    var _hasScriptBlock = !!(ctx.scriptBlock || ctx.luaBlock || globalThis.__scriptContent);
+    var _hasScriptFuncs = ctx.scriptFuncs && ctx.scriptFuncs.length > 0;
+    var _needsJs = false;
+    if (!_hasScriptBlock && !_hasScriptFuncs && _handler.luaBody) {
+      var _hCalls2 = _handler.luaBody.match(/\b([a-zA-Z_]\w*)\s*\(/g) || [];
+      for (var _hc2 = 0; _hc2 < _hCalls2.length; _hc2++) {
+        var _hfn2 = _hCalls2[_hc2].replace(/\s*\($/, '');
+        var _isSetterOrOa = false;
+        if (ctx.stateSlots) { for (var _s2 = 0; _s2 < ctx.stateSlots.length; _s2++) { if (ctx.stateSlots[_s2].setter === _hfn2) { _isSetterOrOa = true; break; } } }
+        if (!_isSetterOrOa && ctx.objectArrays) { for (var _o2 = 0; _o2 < ctx.objectArrays.length; _o2++) { if (ctx.objectArrays[_o2].setter === _hfn2) { _isSetterOrOa = true; break; } } }
+        if (!_isSetterOrOa && typeof isNativeFunc === 'function' && isNativeFunc(_hfn2)) { _isSetterOrOa = true; }
+        if (!_isSetterOrOa && /^_handler_(?:press|hover_enter|hover_exit)_\d+$/.test(_hfn2)) { _needsJs = true; break; }
+        if (!_isSetterOrOa) { _needsJs = true; break; }
+      }
+    }
+    if ((_hasScriptBlock || _hasScriptFuncs) && _handler.luaBody) {
+      var _hCalls = _handler.luaBody.match(/\b([a-zA-Z_]\w*)\s*\(/g) || [];
+      for (var _hci = 0; _hci < _hCalls.length; _hci++) {
+        var _hfn = _hCalls[_hci].replace(/\s*\($/, '');
+        var _isLua = false;
+        if (ctx.stateSlots) { for (var _hsi = 0; _hsi < ctx.stateSlots.length; _hsi++) { if (ctx.stateSlots[_hsi].setter === _hfn) { _isLua = true; break; } } }
+        if (!_isLua && ctx.objectArrays) { for (var _hoi = 0; _hoi < ctx.objectArrays.length; _hoi++) { if (ctx.objectArrays[_hoi].setter === _hfn) { _isLua = true; break; } } }
+        if (!_isLua && typeof isNativeFunc === 'function' && isNativeFunc(_hfn)) { _isLua = true; }
+        if (!_isLua && _hasLuaBlock && isScriptFunc(_hfn)) { _isLua = true; }
+        if (!_isLua && ctx._scriptBlockIsLua && isScriptFunc(_hfn)) { _isLua = true; }
+        if (!_isLua && ctx._ffiDecls) { for (var _fdi = 0; _fdi < ctx._ffiDecls.length; _fdi++) { if (ctx._ffiDecls[_fdi].name === _hfn) { _isLua = true; break; } } }
+        if (!_isLua && /^_handler_(?:press|hover_enter|hover_exit)_\d+$/.test(_hfn)) { _needsJs = true; break; }
+        if (!_isLua && !_hasLuaBlock && !ctx._scriptBlockIsLua && isScriptFunc(_hfn)) { _needsJs = true; break; }
+        if (!_isLua) { _needsJs = true; break; }
+      }
+    }
+    if (_needsJs && _handler.jsBody) {
+      var _jsBody = _handler.jsBody;
+      if (ctx.propStack) {
+        for (var _pbk in ctx.propStack) {
+          var _pbv = ctx.propStack[_pbk];
+          if (typeof _pbv === 'string' && new RegExp('\\b' + _pbk + '\\b').test(_jsBody)) {
+            if (_pbv.charCodeAt(0) === 2) {
+              var _pbParts = _pbv.substring(9).split(':');
+              _pbv = _pbParts[2] || '_item';
+            }
+            _jsBody = _jsBody.replace(new RegExp('\\b' + _pbk + '\\b', 'g'), _pbv);
+          }
+        }
+      }
+      _jsBody = _jsBody.replace(/\bprops\s*\.\s*(_handler_(?:press|hover_enter|hover_exit)_\d+)/g, '$1');
+      _jsBody = _jsBody.replace(/_handler_(press|hover_enter|hover_exit)_(\d+)\s*\(\s*([^)]*?)\s*\)/g, function(_m, _kind, _hIdx, _hArgs) {
+        var _rh = ctx.handlers.find(function(h) { return h.name === '_handler_' + _kind + '_' + _hIdx; });
+        if (_rh && _rh.jsBody) {
+          var _ib = _rh.jsBody;
+          if (_rh.closureParams && _rh.closureParams.length > 0) {
+            var _ca = _hArgs.split(/\s*,\s*/);
+            for (var _ci = 0; _ci < _rh.closureParams.length && _ci < _ca.length; _ci++) {
+              _ib = _ib.replace(new RegExp('\\b' + _rh.closureParams[_ci] + '\\b', 'g'), _ca[_ci].trim());
+            }
+          }
+          return _ib;
+        }
+        return _m;
+      });
+      if (_ln.text_input && _handler.closureParams && _handler.closureParams.length > 0) {
+        _jsBody = 'var ' + _handler.closureParams[0] + ' = getInputText(' + (_ln.input_id || 0) + '); ' + _jsBody;
+      }
+      _ln[handlerProp] = _jsBody;
+      _ln[handlerIsJsProp] = true;
+      return;
+    }
+
+    if (_handler.luaBody) {
+      var _luaH = (typeof luaTransform === 'function') ? luaTransform(_handler.luaBody) : _handler.luaBody;
+      if (ctx.propStack) {
+        for (var _lpk in ctx.propStack) {
+          var _lpv = ctx.propStack[_lpk];
+          if (typeof _lpv === 'string' && new RegExp('\\b' + _lpk + '\\b').test(_luaH)) {
+            if (_lpv.charCodeAt(0) === 2) { var _lpp = _lpv.substring(9).split(':'); _lpv = _lpp[2] || '_item'; }
+            _luaH = _luaH.replace(new RegExp('\\b' + _lpk + '\\b', 'g'), _lpv);
+          }
+        }
+      }
+      if (/_handler_(?:press|hover_enter|hover_exit)_\d+/.test(_luaH) && _handler.jsBody) {
+        var _jsH2 = _handler.jsBody;
+        if (ctx.propStack) {
+          for (var _jpk in ctx.propStack) {
+            var _jpv = ctx.propStack[_jpk];
+            if (typeof _jpv === 'string' && new RegExp('\\b' + _jpk + '\\b').test(_jsH2)) {
+              if (_jpv.charCodeAt(0) === 2) { var _jpp = _jpv.substring(9).split(':'); _jpv = _jpp[2] || '_item'; }
+              _jsH2 = _jsH2.replace(new RegExp('\\b' + _jpk + '\\b', 'g'), _jpv);
+            }
+          }
+        }
+        _jsH2 = _jsH2.replace(/\bprops\s*\.\s*(_handler_(?:press|hover_enter|hover_exit)_\d+)/g, '$1');
+        _jsH2 = _jsH2.replace(/_handler_(press|hover_enter|hover_exit)_(\d+)\s*\(\s*([^)]*?)\s*\)/g, function(_m, _kind, _hIdx, _hArgs) {
+          var _rh = ctx.handlers.find(function(h) { return h.name === '_handler_' + _kind + '_' + _hIdx; });
+          if (_rh && _rh.jsBody) {
+            var _ib = _rh.jsBody;
+            if (_rh.closureParams && _rh.closureParams.length > 0) {
+              var _ca = _hArgs.split(/\s*,\s*/);
+              for (var _ci = 0; _ci < _rh.closureParams.length && _ci < _ca.length; _ci++) {
+                _ib = _ib.replace(new RegExp('\\b' + _rh.closureParams[_ci] + '\\b', 'g'), _ca[_ci].trim());
+              }
+            }
+            return _ib;
+          }
+          return _m;
+        });
+        if (_ln.text_input && _handler.closureParams && _handler.closureParams.length > 0) {
+          _jsH2 = 'var ' + _handler.closureParams[0] + ' = getInputText(' + (_ln.input_id || 0) + '); ' + _jsH2;
+        }
+        _ln[handlerProp] = _jsH2;
+        _ln[handlerIsJsProp] = true;
+      } else {
+        _ln[handlerProp] = _luaH;
+      }
+    }
+  }
+
+  const _handlerRefs = _normalizeHandlerRefs(handlerRefs);
   // Auto-overflow: DISABLED — was causing scissor clipping that hid text in nested containers.
   // Only explicit overflow in the .tsz source or ScrollView primitives should clip.
   // Full-window containers (width:100% + height:100%) still get overflow:hidden.
@@ -596,62 +780,25 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
     for (const nf of nodeFields) parts.push(nf);
   }
 
+  var _handlerFields = [];
+  var _pressField = _emitHandlerField(_handlerRefs.press, 'on_press', 'js_on_press', 'lua_on_press');
+  if (_pressField) _handlerFields.push(_pressField);
+  var _hoverEnterField = _emitHandlerField(_handlerRefs.hoverEnter, 'on_hover_enter', 'js_on_hover_enter', 'lua_on_hover_enter');
+  if (_hoverEnterField) _handlerFields.push(_hoverEnterField);
+  var _hoverExitField = _emitHandlerField(_handlerRefs.hoverExit, 'on_hover_exit', 'js_on_hover_exit', 'lua_on_hover_exit');
+  if (_hoverExitField) _handlerFields.push(_hoverExitField);
   var _handlerTrace = null;
-  if (handlerRef) {
-    const handler = ctx.handlers.find(h => h.name === handlerRef);
-    _handlerTrace = handler || null;
-    if (handler && handler.luaBody) {
-      // Route decision: js_on_press vs lua_on_press
-      // If the app has JS script functions (scriptBlock or scriptContent),
-      // ALL handlers use js_on_press to keep JS variables in sync.
-      // Otherwise, detect if handler calls non-setter functions → js_on_press.
-      // Default: lua_on_press (state setters exist in both runtimes).
-      var _useJs = !!(ctx.scriptBlock || globalThis.__scriptContent);
-      if (_useJs) {
-        var _nativeOnly = true;
-        var _nativeCalls = handler.luaBody.match(/\b([a-zA-Z_]\w*)\s*\(/g) || [];
-        for (var _nci = 0; _nci < _nativeCalls.length; _nci++) {
-          var _nfn = _nativeCalls[_nci].replace(/\s*\($/, '');
-          if (/^(print|tostring|tonumber|pcall|setVariant)$/.test(_nfn)) continue;
-          if (typeof isNativeFunc === 'function' && isNativeFunc(_nfn)) continue;
-          _nativeOnly = false;
-          break;
-        }
-        if (_nativeOnly && _nativeCalls.length > 0) _useJs = false;
-      }
-      if (!_useJs) {
-        var _luaBodyCalls = handler.luaBody.match(/\b([a-zA-Z_]\w*)\s*\(/g) || [];
-        for (var _ci = 0; _ci < _luaBodyCalls.length; _ci++) {
-          var _fname = _luaBodyCalls[_ci].replace(/\s*\($/, '');
-          var _isLuaAvail = false;
-          if (ctx.stateSlots) {
-            for (var _si = 0; _si < ctx.stateSlots.length; _si++) {
-              if (ctx.stateSlots[_si].setter === _fname) { _isLuaAvail = true; break; }
-            }
-          }
-          if (!_isLuaAvail && ctx.objectArrays) {
-            for (var _oi = 0; _oi < ctx.objectArrays.length; _oi++) {
-              if (ctx.objectArrays[_oi].setter === _fname) { _isLuaAvail = true; break; }
-            }
-          }
-          if (!_isLuaAvail && typeof isNativeFunc === 'function' && isNativeFunc(_fname)) _isLuaAvail = true;
-          if (!_isLuaAvail && /^(print|tostring|tonumber|pcall|setVariant)$/.test(_fname)) _isLuaAvail = true;
-          if (!_isLuaAvail) { _useJs = true; break; }
-        }
-      }
-      if (_useJs && handler.jsBody) {
-        handler._traceLastRoute = 'js_on_press';
-        const jsEscaped = handler.jsBody.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-        parts.push(`.handlers = .{ .js_on_press = "${jsEscaped}" }`);
-      } else {
-        handler._traceLastRoute = 'lua_on_press';
-        const escaped = luaTransform(handler.luaBody).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-        parts.push(`.handlers = .{ .lua_on_press = "${escaped}" }`);
-      }
-    } else {
-      if (_handlerTrace) _handlerTrace._traceLastRoute = 'handler_ptr';
-      parts.push(`.handlers = .{ .on_press = handlers.${handlerRef} }`);
-    }
+  if (_handlerRefs.press) {
+    _handlerTrace = ctx.handlers.find(function(h) { return h.name === _handlerRefs.press; }) || null;
+  }
+  if (!_handlerTrace && _handlerRefs.hoverEnter) {
+    _handlerTrace = ctx.handlers.find(function(h) { return h.name === _handlerRefs.hoverEnter; }) || null;
+  }
+  if (!_handlerTrace && _handlerRefs.hoverExit) {
+    _handlerTrace = ctx.handlers.find(function(h) { return h.name === _handlerRefs.hoverExit; }) || null;
+  }
+  if (_handlerFields.length > 0) {
+    parts.push(`.handlers = .{ ${_handlerFields.join(', ')} }`);
   }
 
   var _childArrName = null;
@@ -957,9 +1104,35 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
       for (var _ni = 0; _ni < nodeFields.length; _ni++) {
         var _nf = nodeFields[_ni];
         if (typeof _nf === 'string') {
-          var _vsHead2 = (_ln._variantStyles && _ln._variantStyles[0]) || null;
-          if (_nf.startsWith('.font_size = ') && !(_vsHead2 && _vsHead2.font_size !== undefined)) _ln.fontSize = _nf.slice(13);
-          if (_nf.startsWith('.text_color = ') && !(_ln.style && _ln.style.text_color) && !(_vsHead2 && _vsHead2.text_color !== undefined)) _ln.color = _cleanZigExpr(_nf.slice(14));
+          var _vsArr = _ln._variantStyles;
+          var _vsHead2 = (_vsArr && _vsArr[0]) || null;
+          // When a Text node has variant styles carrying font_size/text_color,
+          // the Lua runtime only reads these at node level (not inside `style`).
+          // Build a conditional Lua expression at node level so theme swap works.
+          function _buildVariantCond(field) {
+            var parts = [];
+            for (var vi = 1; vi < _vsArr.length; vi++) {
+              var v = _vsArr[vi][field];
+              if (v === undefined) v = _vsArr[0][field];
+              parts.push('(__variant == ' + vi + ') and ' + v);
+            }
+            parts.push(_vsArr[0][field]);
+            return '(' + parts.join(' or ') + ')';
+          }
+          if (_nf.startsWith('.font_size = ')) {
+            if (_vsArr && _vsArr.length > 1 && _vsHead2 && _vsHead2.font_size !== undefined) {
+              _ln.fontSize = _buildVariantCond('font_size');
+            } else {
+              _ln.fontSize = _nf.slice(13);
+            }
+          }
+          if (_nf.startsWith('.text_color = ')) {
+            if (_vsArr && _vsArr.length > 1 && _vsHead2 && _vsHead2.text_color !== undefined) {
+              _ln.color = _buildVariantCond('text_color');
+            } else if (!(_ln.style && _ln.style.text_color)) {
+              _ln.color = _cleanZigExpr(_nf.slice(14));
+            }
+          }
           if (_nf.startsWith('.text = ')) {
             var _textVal = _nf.slice(8);
             var _isQuotedStr = _textVal.charAt(0) === '"' && _textVal.charAt(_textVal.length - 1) === '"';
@@ -1033,143 +1206,9 @@ function buildNode(tag, styleFields, children, handlerRef, nodeFields, srcTag, s
     // Prefer lua_on_press (works with Lua loop vars like _item, _i).
     // Only use js_on_press when the handler calls script functions that
     // don't exist in Lua.
-    if (handlerRef) {
-      var _handler = ctx.handlers.find(function(h) { return h.name === handlerRef; });
-      if (_handler) {
-        var _hasLuaBlock = !!ctx.luaBlock;
-        var _hasScriptBlock = !!(ctx.scriptBlock || ctx.luaBlock || globalThis.__scriptContent);
-        var _hasScriptFuncs = ctx.scriptFuncs && ctx.scriptFuncs.length > 0;
-        var _needsJs = false;
-        // PROBE: route to JS for handlers calling script functions in JS-mode scripts
-        if (!_hasScriptBlock && !_hasScriptFuncs && _handler.luaBody) {
-          // Neither scriptBlock nor scriptFuncs detected — check handler body for known JS-only patterns
-          var _hCalls2 = _handler.luaBody.match(/\b([a-zA-Z_]\w*)\s*\(/g) || [];
-          for (var _hc2 = 0; _hc2 < _hCalls2.length; _hc2++) {
-            var _hfn2 = _hCalls2[_hc2].replace(/\s*\($/, '');
-            var _isSetterOrOa = false;
-            if (ctx.stateSlots) { for (var _s2 = 0; _s2 < ctx.stateSlots.length; _s2++) { if (ctx.stateSlots[_s2].setter === _hfn2) { _isSetterOrOa = true; break; } } }
-            if (!_isSetterOrOa && ctx.objectArrays) { for (var _o2 = 0; _o2 < ctx.objectArrays.length; _o2++) { if (ctx.objectArrays[_o2].setter === _hfn2) { _isSetterOrOa = true; break; } } }
-            if (!_isSetterOrOa && typeof isNativeFunc === 'function' && isNativeFunc(_hfn2)) { _isSetterOrOa = true; }
-            // Handler refs (_handler_press_N) are JS-dispatched handlers
-            if (!_isSetterOrOa && /^_handler_press_\d+$/.test(_hfn2)) { _needsJs = true; break; }
-            if (!_isSetterOrOa) { _needsJs = true; break; }
-          }
-        }
-        if ((_hasScriptBlock || _hasScriptFuncs) && _handler.luaBody) {
-          // Check if handler calls any non-setter functions
-          var _hCalls = _handler.luaBody.match(/\b([a-zA-Z_]\w*)\s*\(/g) || [];
-          for (var _hci = 0; _hci < _hCalls.length; _hci++) {
-            var _hfn = _hCalls[_hci].replace(/\s*\($/, '');
-            var _isLua = false;
-            if (ctx.stateSlots) { for (var _hsi = 0; _hsi < ctx.stateSlots.length; _hsi++) { if (ctx.stateSlots[_hsi].setter === _hfn) { _isLua = true; break; } } }
-            if (!_isLua && ctx.objectArrays) { for (var _hoi = 0; _hoi < ctx.objectArrays.length; _hoi++) { if (ctx.objectArrays[_hoi].setter === _hfn) { _isLua = true; break; } } }
-            if (!_isLua && typeof isNativeFunc === 'function' && isNativeFunc(_hfn)) { _isLua = true; }
-            if (!_isLua && _hasLuaBlock && isScriptFunc(_hfn)) { _isLua = true; }
-            // Script block routed to Lua (FFI decls present) — all script funcs are Lua-safe
-            if (!_isLua && ctx._scriptBlockIsLua && isScriptFunc(_hfn)) { _isLua = true; }
-            // FFI-declared functions live in Lua (LuaJIT FFI wrappers)
-            if (!_isLua && ctx._ffiDecls) { for (var _fdi = 0; _fdi < ctx._ffiDecls.length; _fdi++) { if (ctx._ffiDecls[_fdi].name === _hfn) { _isLua = true; break; } } }
-            // Handler refs (_handler_press_N) are JS-dispatched — never Lua
-            if (!_isLua && /^_handler_press_\d+$/.test(_hfn)) { _needsJs = true; break; }
-            // Script function NOT routed to Lua → must go through JS
-            if (!_isLua && !_hasLuaBlock && !ctx._scriptBlockIsLua && isScriptFunc(_hfn)) { _needsJs = true; break; }
-            if (!_isLua) { _needsJs = true; break; }
-          }
-        }
-        if (_needsJs && _handler.jsBody) {
-          var _jsBody = _handler.jsBody;
-          // Resolve prop references while propStack is still populated (parse time).
-          // Index props (e.g. idx={i} from a map) need to be embedded as
-          // @as(i64, @intCast(_i)) so _nodeToLua can splice them into the string.
-          if (ctx.propStack) {
-            for (var _pbk in ctx.propStack) {
-              var _pbv = ctx.propStack[_pbk];
-              if (typeof _pbv === 'string' && new RegExp('\\b' + _pbk + '\\b').test(_jsBody)) {
-                // OA item ref marker → resolve to item param name for handler body
-                if (_pbv.charCodeAt(0) === 2) {
-                  var _pbParts = _pbv.substring(9).split(':');
-                  _pbv = _pbParts[2] || '_item'; // item param name
-                }
-                _jsBody = _jsBody.replace(new RegExp('\\b' + _pbk + '\\b', 'g'), _pbv);
-              }
-            }
-          }
-          // Strip orphaned 'props .' prefix before resolved handler refs
-          _jsBody = _jsBody.replace(/\bprops\s*\.\s*(_handler_press_\d+)/g, '$1');
-          // Inline _handler_press_N(args) calls with the referenced handler's body
-          _jsBody = _jsBody.replace(/_handler_press_(\d+)\s*\(\s*([^)]*?)\s*\)/g, function(_m, _hIdx, _hArgs) {
-            var _rh = ctx.handlers.find(function(h) { return h.name === '_handler_press_' + _hIdx; });
-            if (_rh && _rh.jsBody) {
-              var _ib = _rh.jsBody;
-              if (_rh.closureParams && _rh.closureParams.length > 0) {
-                var _ca = _hArgs.split(/\s*,\s*/);
-                for (var _ci = 0; _ci < _rh.closureParams.length && _ci < _ca.length; _ci++) {
-                  _ib = _ib.replace(new RegExp('\\b' + _rh.closureParams[_ci] + '\\b', 'g'), _ca[_ci].trim());
-                }
-              }
-              return _ib;
-            }
-            return _m;
-          });
-          // TextInput onChange: bind closure params to getInputText
-          if (_ln.text_input && _handler.closureParams && _handler.closureParams.length > 0) {
-            _jsBody = 'var ' + _handler.closureParams[0] + ' = getInputText(' + (_ln.input_id || 0) + '); ' + _jsBody;
-          }
-          _ln.handler = _jsBody;
-          _ln.handlerIsJs = true;
-        } else if (_handler.luaBody) {
-          var _luaH = (typeof luaTransform === 'function') ? luaTransform(_handler.luaBody) : _handler.luaBody;
-          // Resolve props in Lua handler body
-          if (ctx.propStack) {
-            for (var _lpk in ctx.propStack) {
-              var _lpv = ctx.propStack[_lpk];
-              if (typeof _lpv === 'string' && new RegExp('\\b' + _lpk + '\\b').test(_luaH)) {
-                if (_lpv.charCodeAt(0) === 2) { var _lpp = _lpv.substring(9).split(':'); _lpv = _lpp[2] || '_item'; }
-                _luaH = _luaH.replace(new RegExp('\\b' + _lpk + '\\b', 'g'), _lpv);
-              }
-            }
-          }
-          // If resolved handler calls a JS handler ref, switch to js_on_press
-          if (/_handler_press_\d+/.test(_luaH) && _handler.jsBody) {
-            var _jsH2 = _handler.jsBody;
-            if (ctx.propStack) {
-              for (var _jpk in ctx.propStack) {
-                var _jpv = ctx.propStack[_jpk];
-                if (typeof _jpv === 'string' && new RegExp('\\b' + _jpk + '\\b').test(_jsH2)) {
-                  if (_jpv.charCodeAt(0) === 2) { var _jpp = _jpv.substring(9).split(':'); _jpv = _jpp[2] || '_item'; }
-                  _jsH2 = _jsH2.replace(new RegExp('\\b' + _jpk + '\\b', 'g'), _jpv);
-                }
-              }
-            }
-            // Strip orphaned 'props .' prefix before resolved handler refs
-            _jsH2 = _jsH2.replace(/\bprops\s*\.\s*(_handler_press_\d+)/g, '$1');
-            // Inline _handler_press_N(args) calls with the referenced handler's body
-            _jsH2 = _jsH2.replace(/_handler_press_(\d+)\s*\(\s*([^)]*?)\s*\)/g, function(_m, _hIdx, _hArgs) {
-              var _rh = ctx.handlers.find(function(h) { return h.name === '_handler_press_' + _hIdx; });
-              if (_rh && _rh.jsBody) {
-                var _ib = _rh.jsBody;
-                if (_rh.closureParams && _rh.closureParams.length > 0) {
-                  var _ca = _hArgs.split(/\s*,\s*/);
-                  for (var _ci = 0; _ci < _rh.closureParams.length && _ci < _ca.length; _ci++) {
-                    _ib = _ib.replace(new RegExp('\\b' + _rh.closureParams[_ci] + '\\b', 'g'), _ca[_ci].trim());
-                  }
-                }
-                return _ib;
-              }
-              return _m;
-            });
-            // TextInput onChange: bind closure params to getInputText
-            if (_ln.text_input && _handler.closureParams && _handler.closureParams.length > 0) {
-              _jsH2 = 'var ' + _handler.closureParams[0] + ' = getInputText(' + (_ln.input_id || 0) + '); ' + _jsH2;
-            }
-            _ln.handler = _jsH2;
-            _ln.handlerIsJs = true;
-          } else {
-            _ln.handler = _luaH;
-          }
-        }
-      }
-    }
+    _applyLuaNodeHandler(_ln, _handlerRefs.press, 'handler', 'handlerIsJs');
+    _applyLuaNodeHandler(_ln, _handlerRefs.hoverEnter, 'hoverEnterHandler', 'hoverEnterHandlerIsJs');
+    _applyLuaNodeHandler(_ln, _handlerRefs.hoverExit, 'hoverExitHandler', 'hoverExitHandlerIsJs');
     // Children: collect luaNodes from child results
     if (children.length > 0) {
       _ln.children = [];

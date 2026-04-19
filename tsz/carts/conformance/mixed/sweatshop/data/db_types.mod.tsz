@@ -60,17 +60,19 @@ function asObject(value, fallback) {
 }
 
 function withDefaultQueryResult() {
-  return { ok: 1, data: [], error: null };
+  return { ok: 1, data: [], rows: [], error: null };
 }
 
 function queryOk(data) {
-  return { ok: 1, data: data || [], error: null };
+  var rows = data || [];
+  return { ok: 1, data: rows, rows: rows, error: null };
 }
 
 function queryErr(code, message, detail) {
   return {
     ok: 0,
     data: [],
+    rows: [],
     error: {
       code: toText(code, 'query_error'),
       message: toText(message, 'query failed'),

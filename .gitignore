@@ -13,6 +13,9 @@ bundle.js
 tsz/bench_lua_stress
 tsz/bench_lua_worker
 
+# Runtime state (sqlite dbs, supervisor queues)
+.sweatshop/
+
 # Third-party library downloads
 blend2d-*.tar.gz
 blend2d/

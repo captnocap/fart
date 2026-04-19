@@ -79,6 +79,6 @@ function initElementParseState(rawTag, tag) {
     ascriptScript: null,
     ascriptOnResult: null,
     effectiveTag: rawTag === 'ascript' ? 'Pressable' : tag,
-    handlerRef: null,
+    handlerRefs: { press: null, hoverEnter: null, hoverExit: null },
   };
 }

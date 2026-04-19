@@ -68,7 +68,7 @@ function playCue(cueName, payload) {
 
 function workerIdOf(payload) {
   if (!payload) return '';
-  return payload.worker_id || payload.workerId || payload.session_id || payload.sessionId || '';
+  return payload.worker_id || payload.workerId || payload.worker_name || payload.workerName || payload.session_id || payload.sessionId || '';
 }
 
 function rowsOf(payload) {
@@ -167,6 +167,34 @@ function runWorkerTurn(payload) {
   setLastVerdict(workerId, { kind: 'turn', endedAt: (payload && payload.ended_at) || '' });
 }
 
+function runSupervisorAction(payload) {
+  if (!payload) return;
+
+  var workerId = workerIdOf(payload);
+  var action = payload.action || '';
+  var summary = payload.summary || '';
+
+  if (action === 'approve') {
+    setWorkerAffect(workerId, 'confident');
+    playCue('real_green_verified', soundCuePayload('real_green_verified', workerId, '', '', summary, null, null, 'normal'));
+  } else if (action === 'reject') {
+    setWorkerAffect(workerId, 'frustrated');
+    playCue('fake_green_caught', soundCuePayload('fake_green_caught', workerId, '', '', summary, null, null, 'critical'));
+  } else if (action === 'rebuke') {
+    setWorkerAffect(workerId, 'frustrated');
+    playCue('ralph_injection', soundCuePayload('ralph_injection', workerId, '', '', summary, null, null, 'normal'));
+  } else if (action === 'snooze') {
+    setWorkerAffect(workerId, 'uncertain');
+  }
+
+  setLastVerdict(workerId, {
+    kind: 'supervisor_action',
+    action: action,
+    entryId: payload.entry_id || '',
+    signal: payload.signal_type || '',
+  });
+}
+
 function subscribeAllSweatshopClassifiers() {
   var handles = [];
   handles.push(subscribe('worker.classify', runWorkerClassify));
@@ -175,6 +203,7 @@ function subscribeAllSweatshopClassifiers() {
   handles.push(subscribe('worker.edit', runWorkerEdit));
   handles.push(subscribe('worker.mode', runWorkerMode));
   handles.push(subscribe('worker.turn', runWorkerTurn));
+  handles.push(subscribe('supervisor.action', runSupervisorAction));
   return handles;
 }
 
@@ -189,5 +218,6 @@ export {
   runWorkerEdit,
   runWorkerMode,
   runWorkerTurn,
+  runSupervisorAction,
   subscribeAllSweatshopClassifiers,
 };

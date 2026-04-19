@@ -1,0 +1,27 @@
+# cockpit launcher regression
+
+expect "unconfigured"
+expect "spawn agent"
+expect "click a lane to launch"
+expect "Opus 4.7"
+expect "Sonnet 4.6"
+expect "Haiku 4.5"
+expect "K2.5"
+expect "K2 Thinking"
+expect "GPT-5-Codex"
+expect "GPT-5.4"
+expect "Gemini 2.5 Pro"
+expect "raid · agents"
+expect "cockpit"
+
+click "Sonnet 4.6"
+expect "connected Claude · claude-sonnet-4-6"
+expect "active Claude · Sonnet 4.6"
+expect "ready"
+
+click "GPT-5-Codex"
+expect "OpenAI lane not wired yet · gpt-5-codex"
+
+click "K2.5"
+expect "connected Kimi · kimi-k2.5"
+expect "active Kimi · K2.5"

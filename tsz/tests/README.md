@@ -8,6 +8,9 @@ Automated UI tests that click buttons, verify text, and produce screenshot proof
 # Run a test
 scripts/autotest d03_conditional_wrapping_map
 
+# Run a QuickJS runtime bridge test
+scripts/autotest-qjs input_lab
+
 # Output: tests/screenshots/d03_conditional_wrapping_map/20260407_184736/proof.png
 ```
 
@@ -41,6 +44,8 @@ expect "B:1"
 | `expect "text"` | PASS if text is visible on screen. FAIL if not found. |
 | `reject "text"` | PASS if text is NOT on screen. FAIL if still visible. |
 | `click "text"` | Click the first node containing this text. PASS if found, FAIL if not. |
+| `hover "text"` | Move the mouse to the first node containing this text. |
+| `rightclick "text"` | Right-click the first node containing this text. |
 | `click "text" #N` | Click the Nth occurrence (1-indexed). Use when multiple buttons share a label. |
 | `color "text" #rrggbb` | PASS if the node's text_color matches the hex value. |
 | `bg "text" #rrggbb` | PASS if the node's background_color matches the hex value. |
@@ -51,6 +56,8 @@ expect "B:1"
 | `type "text" into "target"` | Focus the TextInput matching "target", then type "text" into it. |
 | `key "ctrl+s"` | Send a key event with optional modifiers. Supports `ctrl`, `shift`, `alt` combos. |
 | `clear` | Clear the currently focused TextInput. PASS if an input is focused. |
+| `wheel "text"` | Send a vertical mouse-wheel gesture over the matched node. |
+| `wheelx "text"` | Send a horizontal mouse-wheel gesture over the matched node. |
 | `# comment` | Ignored. Use freely. |
 
 ### How clicks work
@@ -76,6 +83,9 @@ click "+1" #3   # clicks the 3rd "+1" button
 ```bash
 # Run one test
 scripts/autotest d03_conditional_wrapping_map
+
+# Run one QuickJS runtime bridge test
+scripts/autotest-qjs input_lab
 
 # The proof grid lands in:
 #   tests/screenshots/<name>/<timestamp>/proof.png

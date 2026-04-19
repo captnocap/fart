@@ -333,7 +333,7 @@ function emitLuaTreeLuaSource(ctx) {
 
   // Final sanitization gate — catch any JS operators that emit let through.
   // This is the LAST stop before LUA_LOGIC becomes a string literal.
-  // Protect __eval("...") and js_on_press = "..." strings first.
+  // Protect __eval("...") and js_on_* strings first.
   var result = lua.join('\n');
   if (result.indexOf('widget') >= 0) {
     var _atJoin = result.indexOf('widget');
@@ -409,7 +409,7 @@ function emitLuaTreeLuaSource(ctx) {
     protected.push(_rewriteLuaSafeEvalAtGate(m));
     return '__JSPROTECT_' + (protected.length - 1) + '__';
   });
-  result = result.replace(/js_on_press = "[^"]*"/g, function(m) {
+  result = result.replace(/js_on_(?:press|hover_enter|hover_exit) = "[^"]*"/g, function(m) {
     protected.push(m); return '__JSPROTECT_' + (protected.length - 1) + '__';
   });
   // Convert remaining JS operators to Lua

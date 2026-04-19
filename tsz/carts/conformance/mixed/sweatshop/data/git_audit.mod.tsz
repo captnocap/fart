@@ -359,11 +359,11 @@ function parseMode(mode, raw) {
 
 function loadGitAudit(mode, repoRoot, trailRoot, limit) {
   if (!mode || String(mode).length === 0) {
-    return { ok: 0, mode: '', data: null, error: 'mode is required' };
+    return { ok: 0, mode: '', raw: '', data: null, error: 'mode is required' };
   }
 
   if (typeof __exec !== 'function') {
-    return { ok: 0, mode: mode, data: null, error: '__exec host unavailable' };
+    return { ok: 0, mode: mode, raw: '', data: null, error: '__exec host unavailable' };
   }
 
   var m = String(mode);
@@ -377,18 +377,19 @@ function loadGitAudit(mode, repoRoot, trailRoot, limit) {
   try {
     output = __exec(command);
   } catch (e) {
-    return { ok: 0, mode: m, data: null, error: toText(e && e.message, toText(e, 'command failure')) };
+    return { ok: 0, mode: m, raw: '', data: null, error: toText(e && e.message, toText(e, 'command failure')) };
   }
 
   var lines = splitLines(toText(output, '').trim());
   var parseErr = parseError(lines);
   if (parseErr.length > 0) {
-    return { ok: 0, mode: m, data: null, error: parseErr };
+    return { ok: 0, mode: m, raw: output, data: null, error: parseErr };
   }
 
   return {
     ok: 1,
     mode: m,
+    raw: output,
     data: parseMode(m, output),
     error: '',
   };

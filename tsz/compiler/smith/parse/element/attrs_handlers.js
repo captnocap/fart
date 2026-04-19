@@ -1,18 +1,27 @@
 // ── JSX element callback attribute helpers ───────────────────────
 
-function tryParseElementHandlerAttr(c, attr, rawTag, nodeFields, currentHandlerRef) {
+function tryParseElementHandlerAttr(c, attr, rawTag, nodeFields, currentHandlerRefs) {
+  var refs = currentHandlerRefs || {};
   if (attr === 'onPress' || attr === 'onTap' || attr === 'onToggle' || attr === 'onSelect' || attr === 'onChange') {
-    return { handlerRef: parseElementPressAttr(c, currentHandlerRef) };
+    return { pressRef: parseElementPressAttr(c, refs.press) };
+  }
+
+  if (attr === 'onHoverEnter' || attr === 'onMouseEnter') {
+    return { hoverEnterRef: parseElementPressAttr(c, refs.hoverEnter) };
+  }
+
+  if (attr === 'onHoverExit' || attr === 'onMouseLeave') {
+    return { hoverExitRef: parseElementPressAttr(c, refs.hoverExit) };
   }
 
   if (attr === 'onRender') {
     parseElementRenderAttr(c, nodeFields);
-    return { handlerRef: currentHandlerRef };
+    return { pressRef: refs.press, hoverEnterRef: refs.hoverEnter, hoverExitRef: refs.hoverExit };
   }
 
   if ((attr === 'onSubmit' || attr === 'onChangeText') && (rawTag === 'TextInput' || rawTag === 'TextArea')) {
     parseTextInputHandlerAttr(c, attr);
-    return { handlerRef: currentHandlerRef };
+    return { pressRef: refs.press, hoverEnterRef: refs.hoverEnter, hoverExitRef: refs.hoverExit };
   }
 
   return null;

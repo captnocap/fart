@@ -8,10 +8,10 @@ classifier({
     type: 'Box',
     style: {
       flexDirection: 'column',
+      flexGrow: 1,
+      flexBasis: 0,
       gap: 10,
-      width: 356,
-      minWidth: 356,
-      maxWidth: 356,
+      minWidth: 200,
       padding: 10,
       borderRadius: 12,
       backgroundColor: '#0c1016',

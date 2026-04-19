@@ -1,6 +1,6 @@
 {
   "llama": {
-    "detect": ["llama_backend_init", "ffi\\.C\\.llama_", "ffi\\.cdef.*llama_model"],
+    "detect": ["__localai_", "llama_backend_init", "ffi\\.C\\.llama_", "ffi\\.cdef.*llama_model"],
     "build_step": "zig build llama-so -Doptimize=ReleaseFast",
     "so": "libllama_ffi",
     "link_libs": ["vulkan"],

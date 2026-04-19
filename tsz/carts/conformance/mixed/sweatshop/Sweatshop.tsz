@@ -55,6 +55,9 @@ import { KernelTile, mockPayload } from './components/KernelTile.c';
 import { MemoryTile, defaultMemoryPayload } from './components/MemoryTile.c';
 import { GitAuditTile } from './components/GitAuditTile.c';
 import { StateBoardTile } from './components/StateBoardTile.c';
+import { loadCockpitWorkerSessions } from './data/cockpit_feed.mod';
+import { loadGitAudit } from './data/git_audit.mod';
+import { dispatchEvent } from './events/supervisor_events.mod';
 
 // Named classifier imports — register all classifier vocabularies the tiles + chrome reference.
 // Bare side-effect imports do NOT trigger smith's classifier collection — pull one named
@@ -98,18 +101,67 @@ function ChromeBar(props) {
   />;
 }
 
+function removeQueueEntry(entries, entryId) {
+  var next = [];
+  var i = 0;
+  while (i < entries.length) {
+    if (entries[i].id !== entryId) next.push(entries[i]);
+    i = i + 1;
+  }
+  return next;
+}
+
+function loadGitAuditRaw() {
+  var modes = [
+    { key: 'commitsRaw', mode: 'commits' },
+    { key: 'recentEditsRaw', mode: 'recent-edits' },
+    { key: 'restorePointsRaw', mode: 'restore-points' },
+    { key: 'workerLagRaw', mode: 'worker-lag' },
+  ];
+
+  var out = {};
+  var i = 0;
+  while (i < modes.length) {
+    var row = modes[i];
+    var result = loadGitAudit(row.mode, null, null, 120);
+    out[row.key] = result && result.ok === 1 ? (result.raw || '') : '';
+    i = i + 1;
+  }
+  return out;
+}
+
+function dispatchQueueAction(payload) {
+  if (!payload || !payload.entry) return 0;
+
+  return dispatchEvent('supervisor.action', {
+    action: payload.action,
+    entry_id: payload.entry.id || '',
+    severity_tier: payload.entry.severityTier || 'T4',
+    worker_name: payload.entry.workerName || '',
+    signal_type: payload.entry.signalType || '',
+    summary: payload.entry.summary || '',
+    timestamp: Date.now(),
+  });
+}
+
 function CockpitWorkspace(props) {
-  // TODO(claude-stitch): replace mockCodeSessions with workers data feed from data/database.mod
-  // when the worker registry table reader lands.
-  var sessions = props.sessions || mockCodeSessions || [];
-  var queueEntries = sortedQueue(props.queueEntries || defaultQueueEntries());
+  var liveSessions = loadCockpitWorkerSessions(6);
+  var sessions = props.sessions || liveSessions || [];
+  if (!sessions || sessions.length === 0) sessions = mockCodeSessions || [];
+
+  const [queueEntriesState, setQueueEntriesState] = useState(sortedQueue(defaultQueueEntries()));
+  var queueEntries = props.queueEntries || queueEntriesState;
   var spec = props.spec || defaultActiveSpec();
   var memoryPayload = props.memoryPayload || defaultMemoryPayload();
   var kernelPayload = props.kernelPayload || mockPayload();
-  // TODO(claude-stitch): wire git_audit raw props from data/git_audit.mod once data feed is live.
-  var gitRaw = props.gitRaw || {};
-  // TODO(claude-stitch): wire onAction in QueueTile to events/supervisor_events.dispatchEvent.
-  var onQueueAction = props.onQueueAction || function(action, entry) { return null; };
+  var gitRaw = props.gitRaw || loadGitAuditRaw();
+
+  var onQueueAction = props.onQueueAction || function(payload) {
+    if (!payload || !payload.entry) return 0;
+    dispatchQueueAction(payload);
+    setQueueEntriesState(removeQueueEntry(queueEntriesState, payload.entry.id));
+    return 1;
+  };
 
   return (
     <CockpitCanvas>

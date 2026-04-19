@@ -26,9 +26,11 @@ function parseElementAttr(c, attr, rawTag, state) {
     return;
   }
 
-  const handlerAttrResult = tryParseElementHandlerAttr(c, attr, rawTag, state.nodeFields, state.handlerRef);
+  const handlerAttrResult = tryParseElementHandlerAttr(c, attr, rawTag, state.nodeFields, state.handlerRefs);
   if (handlerAttrResult) {
-    state.handlerRef = handlerAttrResult.handlerRef;
+    if (handlerAttrResult.pressRef !== undefined) state.handlerRefs.press = handlerAttrResult.pressRef;
+    if (handlerAttrResult.hoverEnterRef !== undefined) state.handlerRefs.hoverEnter = handlerAttrResult.hoverEnterRef;
+    if (handlerAttrResult.hoverExitRef !== undefined) state.handlerRefs.hoverExit = handlerAttrResult.hoverExitRef;
     return;
   }
 

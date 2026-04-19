@@ -41,10 +41,10 @@ function skipLScriptElement(c) {
   return { nodeExpr: '.{}' };
 }
 
-function finishParsedElement(c, rawTag, effectiveTag, styleFields, children, handlerRef, nodeFields, clsDef, tagSrcOffset) {
+function finishParsedElement(c, rawTag, effectiveTag, styleFields, children, handlerRefs, nodeFields, clsDef, tagSrcOffset) {
   if (c.kind() === TK.slash_gt) {
     c.advance();
-    return buildNode(effectiveTag, styleFields, [], handlerRef, nodeFields, effectiveTag, tagSrcOffset);
+    return buildNode(effectiveTag, styleFields, [], handlerRefs, nodeFields, effectiveTag, tagSrcOffset);
   }
   if (c.kind() === TK.gt) c.advance();
 
@@ -66,5 +66,5 @@ function finishParsedElement(c, rawTag, effectiveTag, styleFields, children, han
     globalThis.__dbg.push('[NO_CLOSE] tag=' + rawTag + ' pos=' + c.pos + ' kind=' + c.kind() + ' text=' + (c.pos < c.count ? c.text().substring(0, 30) : 'EOF') + ' children=' + parsedChildren.length);
   }
 
-  return buildNode(effectiveTag, styleFields, parsedChildren, handlerRef, nodeFields, effectiveTag, tagSrcOffset);
+  return buildNode(effectiveTag, styleFields, parsedChildren, handlerRefs, nodeFields, effectiveTag, tagSrcOffset);
 }

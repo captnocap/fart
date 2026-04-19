@@ -1,0 +1,45 @@
+# QJS runtime regression for the d152 cascade configurator cart
+
+expect "Mathematical Cascade Configurator"
+expect "Root:"
+expect "Chain A (x pi)"
+expect "PRIME - REMOUNTING"
+expect "Chain B (squared)"
+expect "Chain C (sqrt + fib)"
+expect "FIBONACCI"
+expect "renders: 0"
+expect "[+] Expand"
+expect "2 children"
+expect "CASCADE DESTRUCTION"
+expect "root=1 · A=3 · B=9 · C=5 · remounts=1"
+expect "nodes: 1 root · void counter: 1"
+
+click "13"
+expect "ROOT (pi x 13)"
+expect "root=13 · A=40 · B=1600 · C=95 · remounts=1"
+reject "PRIME - REMOUNTING"
+reject "FIBONACCI"
+
+click "10" #1
+expect "renders: 0"
+
+click "sync"
+expect "renders: 0"
+
+click "MOD +51"
+expect "3 children"
+expect "nodes: 1 root · void counter: 2"
+
+click "[+] Expand"
+scroll "Child 2"
+expect "[-] Collapse"
+expect "Child 2"
+click "Child 2"
+
+scroll "value: -999"
+expect "id: void-1"
+expect "value: -999"
+expect "grandchildren: 0"
+
+click "CASCADE DESTRUCTION"
+expect "root=13 · A=40 · B=1600 · C=95 · remounts=2"

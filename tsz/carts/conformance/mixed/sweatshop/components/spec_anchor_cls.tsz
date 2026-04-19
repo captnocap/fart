@@ -5,6 +5,8 @@ classifier({
     type: 'Box',
     style: {
       flexDirection: 'column',
+      flexGrow: 1,
+      flexBasis: 0,
       backgroundColor: '#0c1016',
       borderWidth: 1,
       borderColor: '#1f2935',

@@ -16,6 +16,7 @@ const SUPERVISOR_STREAMS = [
   'worker.tool_call',
   'worker.edit',
   'worker.turn',
+  'supervisor.action',
 ];
 
 var nextHandle = 1;

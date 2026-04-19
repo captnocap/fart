@@ -160,12 +160,12 @@ function _emitNodeInputFlags(node) {
   return parts.join(', ');
 }
 
-function _emitNodeHandler(node, itemParam, indexParam, _luaIdxExpr, _currentOaIdx) {
-  if (!node || !node.handler) return null;
+function _emitNamedNodeHandler(node, handlerProp, handlerIsJsProp, jsField, luaField, itemParam, indexParam, _luaIdxExpr, _currentOaIdx) {
+  if (!node || !node[handlerProp]) return null;
 
-  if (node.handlerIsJs) {
+  if (node[handlerIsJsProp]) {
     // JS handler - eval'd by QJS, needs JS operators not lua
-    var jh = _jsExprToLua(node.handler, itemParam, indexParam, _luaIdxExpr, _currentOaIdx);
+    var jh = _jsExprToLua(node[handlerProp], itemParam, indexParam, _luaIdxExpr, _currentOaIdx);
     // Convert lua operators back to JS for QJS eval
     jh = jh.replace(/\band\b/g, '&&').replace(/\bor\b/g, '||').replace(/\bnot\b/g, '!');
     var ixStr = _luaIdxExpr || '(_i - 1)';
@@ -186,13 +186,13 @@ function _emitNodeHandler(node, itemParam, indexParam, _luaIdxExpr, _currentOaId
                     jh.indexOf('(_ni - 1)') >= 0;
 
     if (isDynamic) {
-      return 'js_on_press = "' + _spliceDynamicHandler(jh, ixStr) + '"';
+      return jsField + ' = "' + _spliceDynamicHandler(jh, ixStr) + '"';
     } else {
-      return 'js_on_press = ' + luaStringLiteral(jh);
+      return jsField + ' = ' + luaStringLiteral(jh);
     }
   } else {
     // Lua handler
-    return 'lua_on_press = ' + _handlerToLua(node.handler, itemParam, indexParam, _luaIdxExpr, _currentOaIdx);
+    return luaField + ' = ' + _handlerToLua(node[handlerProp], itemParam, indexParam, _luaIdxExpr, _currentOaIdx);
   }
 }
 
@@ -642,9 +642,15 @@ function _nodeToLua(node, itemParam, indexParam, indent, _luaIdxExpr, _currentOa
   if (inputFields) fields.push(inputFields);
 
   // Handler
-  var handlerField = _emitNodeHandler(node, itemParam, indexParam, _luaIdxExpr, _currentOaIdx);
-  if (handlerField) {
-    fields.push(handlerField);
+  var handlerFields = [];
+  var handlerField = _emitNamedNodeHandler(node, 'handler', 'handlerIsJs', 'js_on_press', 'lua_on_press', itemParam, indexParam, _luaIdxExpr, _currentOaIdx);
+  if (handlerField) handlerFields.push(handlerField);
+  var hoverEnterField = _emitNamedNodeHandler(node, 'hoverEnterHandler', 'hoverEnterHandlerIsJs', 'js_on_hover_enter', 'lua_on_hover_enter', itemParam, indexParam, _luaIdxExpr, _currentOaIdx);
+  if (hoverEnterField) handlerFields.push(hoverEnterField);
+  var hoverExitField = _emitNamedNodeHandler(node, 'hoverExitHandler', 'hoverExitHandlerIsJs', 'js_on_hover_exit', 'lua_on_hover_exit', itemParam, indexParam, _luaIdxExpr, _currentOaIdx);
+  if (hoverExitField) handlerFields.push(hoverExitField);
+  if (handlerFields.length > 0) {
+    for (var hfi = 0; hfi < handlerFields.length; hfi++) fields.push(handlerFields[hfi]);
     // Auto-inject test_id from handler for snapshot click discovery
     var _tid = node.handler || '';
     if (typeof _tid === 'string' && _tid.length > 0) {

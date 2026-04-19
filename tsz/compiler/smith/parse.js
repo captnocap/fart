@@ -60,7 +60,7 @@ function parseJSXElement(c) {
     nodeFields: elementState.nodeFields,
     ascriptScript: elementState.ascriptScript,
     ascriptOnResult: elementState.ascriptOnResult,
-    handlerRef: elementState.handlerRef,
+    handlerRefs: elementState.handlerRefs,
   };
   const effectiveTag = elementState.effectiveTag;
 
@@ -111,7 +111,7 @@ function parseJSXElement(c) {
     effectiveTag,
     attrState.styleFields,
     null,
-    attrState.handlerRef,
+    attrState.handlerRefs,
     attrState.nodeFields,
     clsDef,
     tagSrcOffset

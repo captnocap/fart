@@ -5,103 +5,104 @@ export const _cockpitDuskAnchor = 'cockpit_dusk';
 
 theme('cockpit_dusk', {
   // Backgrounds
-  bg: '#362F42',
-  bgAlt: '#553D4E',
-  bgRaised: '#504C54',
-  bgSunken: '#273143',
-  bgFloat: '#504C54',
-  bgOverlay: 'rgba(39, 49, 67, 0.70)',
-  bgTint: '#3E374A',
+  bg: '#1E2229',        // Deep slate-navy (not black)
+  bgAlt: '#262B33',     // Slightly lighter slate
+  bgRaised: '#2D323C',  // Elevated surface
+  bgSunken: '#181C22',  // Depressed surface
+  bgFloat: '#2A2F38',   // Floating cards
+  bgOverlay: 'rgba(24, 28, 34, 0.75)',
+  bgTint: '#23272E',    // Tinted overlay base
 
   // Text
-  textPrimary: '#E4E1FC',
-  textSecondary: '#D6C7E8',
-  textDim: '#A87965',
-  textAccent: '#F099C8',
-  textOnAccent: '#362F42',
-  textDisabled: '#7E5E55',
-  textError: '#ED7DBE',
-  textWarning: '#F2DB43',
-  textSuccess: '#4EB378',
+  textPrimary: '#E8EBF0', // Cool off-white, high readability
+  textSecondary: '#B0B8C4', // Muted cool grey
+  textDim: '#7A8594',     // Soft grey for disabled/secondary
+  textAccent: '#D4A89C',  // Washed terracotta pink/orange
+  textOnAccent: '#1E2229',
+  textDisabled: '#5A6370',
+  textError: '#D89B9B',   // Muted dusty red
+  textWarning: '#D4B87A', // Washed amber/gold
+  textSuccess: '#8BB8A6', // Muted sage green
+  textInfo: '#99B8C8',    // Washed steel blue
 
   // Borders
-  borderHair: '#504C54',
-  borderLight: '#504C54',
-  borderMid: '#7E5E55',
-  borderStrong: '#C4A8D4',
-  borderFocus: '#ED7DBE',
+  borderHair: '#2D323C',
+  borderLight: '#333945',
+  borderMid: '#4A5362',
+  borderStrong: '#5A6370',
+  borderFocus: '#D4A89C', // Terracotta focus ring
 
   // Semantic
-  primary: '#C09DF8',
-  accent: '#F099C8',
-  success: '#4EB378',
-  warning: '#F2DB43',
-  error: '#ED7DBE',
-  info: '#99C8F0',
+  primary: '#99B8C8',     // Washed steel blue
+  accent: '#D4A89C',      // Washed terracotta (orange/pink)
+  success: '#8BB8A6',     // Muted sage
+  warning: '#D4B87A',     // Washed amber
+  error: '#D89B9B',       // Muted dusty red
+  info: '#99B8C8',        // Washed steel blue
 
-  // Tiers
-  tier0: '#7E5E55',
-  tier1: '#ECC2C2',
-  tier2: '#F2DB43',
-  tier3: '#F27835',
-  tier4: '#ED7DBE',
+  // Tiers (Muted pastels)
+  tier0: '#5A6370',
+  tier1: '#E8D5D0',       // Dusty pink
+  tier2: '#D4B87A',       // Washed gold
+  tier3: '#C49A80',       // Muted clay/orange (accent)
+  tier4: '#B89BAE',       // Dusty lilac
 
   // Affect
-  affectConfident: '#A8D4BC',
-  affectUncertain: '#8BB8C8',
-  affectFrustrated: '#F094BB',
-  affectStuck: '#30414E',
-  affectRationalizing: '#F27835',
-  affectFocused: '#C09DF8',
-  affectDrifting: '#E9BFA0',
-  affectPerforming: '#F2DB43',
+  affectConfident: '#8BB8A6',
+  affectUncertain: '#99B8C8',
+  affectFrustrated: '#D89B9B',
+  affectStuck: '#3A404C',
+  affectRationalizing: '#C49A80',
+  affectFocused: '#99B8C8',
+  affectDrifting: '#D4B87A',
+  affectPerforming: '#8BB8A6',
 
   // Backend
-  backendClaude: '#99C8F0',
-  backendCodex: '#C09DF8',
-  backendKimi: '#A8D4BC',
+  backendClaude: '#99B8C8',
+  backendCodex: '#B89BAE',
+  backendKimi: '#8BB8A6',
 
   // Memory layers
-  l1River: '#8BB8C8',
-  l2Feeling: '#F09BA9',
-  l3Echo: '#BDB5F8',
-  l4Wound: '#B34E4E',
-  l5Cooccurrence: '#549696',
+  l1River: '#99B8C8',
+  l2Feeling: '#D4A89C',   // Terracotta wash
+  l3Echo: '#B89BAE',
+  l4Wound: '#C49A80',     // Muted clay
+  l5Cooccurrence: '#7A9696',
 
   // Worker slots
-  worker1: '#BDB5F8',
-  worker2: '#F3B5D2',
-  worker3: '#A8D4BC',
-  worker4: '#99C8F0',
-  worker5: '#E9BFA0',
-  worker6: '#F099C8',
-  worker7: '#549696',
-  worker8: '#C09DF8',
+  worker1: '#B89BAE',
+  worker2: '#D4A89C',
+  worker3: '#8BB8A6',
+  worker4: '#99B8C8',
+  worker5: '#D4B87A',
+  worker6: '#D4A89C',
+  worker7: '#7A9696',
+  worker8: '#B89BAE',
 
   // Tetris
-  tetrisSpec: '#BDB5F8',
-  tetrisWorker1: '#BDB5F8',
-  tetrisWorker2: '#F3B5D2',
-  tetrisWorker3: '#A8D4BC',
-  tetrisWorker4: '#99C8F0',
-  tetrisWorker5: '#E9BFA0',
-  tetrisWorker6: '#F099C8',
-  tetrisWorker7: '#549696',
-  tetrisWorker8: '#C09DF8',
-  tetrisRationalizationWound: '#B34E4E',
-  tetrisPinned: '#4EB378',
-  tetrisResonance3: '#F27835',
-  tetrisUserNote: '#F2DB43',
-  tetrisBreadcrumb: '#7E5E55',
-  tetrisFloor: '#273143',
-  tetrisScanline: 'rgba(0, 0, 0, 0.18)',
+  tetrisSpec: '#B89BAE',
+  tetrisWorker1: '#B89BAE',
+  tetrisWorker2: '#D4A89C',
+  tetrisWorker3: '#8BB8A6',
+  tetrisWorker4: '#99B8C8',
+  tetrisWorker5: '#D4B87A',
+  tetrisWorker6: '#D4A89C',
+  tetrisWorker7: '#7A9696',
+  tetrisWorker8: '#B89BAE',
+  tetrisRationalizationWound: '#C49A80',
+  tetrisPinned: '#8BB8A6',
+  tetrisResonance3: '#C49A80',
+  tetrisUserNote: '#D4B87A',
+  tetrisBreadcrumb: '#5A6370',
+  tetrisFloor: '#181C22',
+  tetrisScanline: 'rgba(0, 0, 0, 0.12)',
 
   // Law ticker
-  lawConstitutional: '#ED7DBE',
-  lawOperational: '#F2DB43',
-  lawFieldNote: '#ECC2C2',
+  lawConstitutional: '#D89B9B',
+  lawOperational: '#D4B87A',
+  lawFieldNote: '#E8D5D0',
 
-  // Spacing (shared with dawn — design constants)
+  // Spacing (shared)
   spaceXxs: 2, spaceXs: 4, spaceSm: 8, spaceMd: 12,
   spaceLg: 16, spaceXl: 24, spaceXxl: 32, spaceHuge: 48,
 
@@ -124,3 +125,4 @@ theme('cockpit_dusk', {
   lineHeightTight: 1.1, lineHeightNormal: 1.4, lineHeightLoose: 1.7,
   weightLight: 300, weightNormal: 400, weightMedium: 500, weightBold: 700,
 });
+

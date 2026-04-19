@@ -56,6 +56,16 @@ export type WorkerTurnEvent = {
   final_status: string;
 };
 
+export type SupervisorActionEvent = {
+  action: 'approve' | 'reject' | 'rebuke' | 'snooze';
+  entry_id: string;
+  severity_tier: string;
+  worker_name: string;
+  signal_type: string;
+  summary: string;
+  timestamp: number;
+};
+
 export type WorkerEventStream =
   | 'worker.damage'
   | 'worker.classify'
@@ -63,7 +73,8 @@ export type WorkerEventStream =
   | 'worker.mode'
   | 'worker.tool_call'
   | 'worker.edit'
-  | 'worker.turn';
+  | 'worker.turn'
+  | 'supervisor.action';
 
 export type WorkerEventPayloadMap = {
   'worker.damage': WorkerDamageEvent;
@@ -73,6 +84,7 @@ export type WorkerEventPayloadMap = {
   'worker.tool_call': WorkerToolCallEvent;
   'worker.edit': WorkerEditEvent;
   'worker.turn': WorkerTurnEvent;
+  'supervisor.action': SupervisorActionEvent;
 };
 
 export type WorkerEventPayload<T extends WorkerEventStream> = WorkerEventPayloadMap[T];
