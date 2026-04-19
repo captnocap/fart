@@ -1,1 +1,1 @@
-export { default } from '../cart/d152';
+export { default } from '../cart/spinner';

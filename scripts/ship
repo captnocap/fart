@@ -1,0 +1,46 @@
+#!/bin/bash
+# ship — build a .tsx cart into a native binary via qjs_app.zig
+#
+# Usage:
+#   scripts/ship <cart-name>       # cart/<name>.tsx  → zig-out/bin/<name>
+#   scripts/ship <cart-name> -d    # debug build (unoptimized)
+
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$REPO_ROOT"
+
+NAME="${1:-}"
+DEBUG=0
+for arg in "${@:2}"; do
+    case "$arg" in
+        -d|--debug) DEBUG=1 ;;
+    esac
+done
+
+if [[ -z "$NAME" ]]; then
+    echo "Usage: scripts/ship <cart-name> [-d]" >&2
+    echo "  Cart expected at: cart/<cart-name>.tsx" >&2
+    exit 1
+fi
+
+CART_FILE="cart/${NAME}.tsx"
+if [[ ! -f "$CART_FILE" ]]; then
+    echo "[ship] not found: $CART_FILE" >&2
+    exit 1
+fi
+
+# 1. Bundle cart/<name>.tsx via esbuild → bundle.js
+echo "[ship] bundling $CART_FILE..."
+node scripts/build-bundle.mjs "$CART_FILE"
+
+# 2. Compile qjs_app.zig → zig-out/bin/<name>
+OPT_FLAG="-Doptimize=ReleaseFast"
+if [[ "$DEBUG" -eq 1 ]]; then
+    OPT_FLAG="-Doptimize=Debug"
+fi
+
+echo "[ship] compiling native binary..."
+zig build app -Dapp-name="$NAME" -Dapp-source=qjs_app.zig $OPT_FLAG
+
+echo "[ship] done → zig-out/bin/$NAME"
