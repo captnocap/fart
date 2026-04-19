@@ -46,18 +46,49 @@ ReactJIT is a React-reconciler-driven UI framework. Apps are written in `.tsx` (
 
 ## Ship Path (the only path)
 
-1. Write/edit a `.tsx` cart in `cart/`.
-2. Bundle: `node scripts/build-bundle.mjs cart/<name>.tsx` → writes `bundle.js`.
-3. Build: `zig build app -Dapp-source=qjs_app.zig -Dapp-name=<name>` → `zig-out/bin/<name>`.
-4. Run: `./zig-out/bin/<name>`.
+One command — no steps to remember:
 
-Long-running goal: a single `scripts/ship <name>` that does steps 2+3.
+```bash
+./scripts/ship <cart-name>          # cart/<name>.tsx → zig-out/bin/<name> (self-extracting)
+./scripts/ship <cart-name> -d       # debug build, raw ELF
+./scripts/ship <cart-name> --raw    # release, raw ELF (for ldd inspection)
+```
+
+What happens: esbuild bundles `cart/<name>.tsx` → `bundle.js`, Zig compiles `qjs_app.zig` with `bundle.js` embedded via `@embedFile`, Linux packaging wraps the ELF + all its `.so` deps + `ld-linux` into a self-extracting tarball that extracts to `~/.cache/reactjit-<name>/<sig>/` on first run. macOS produces a `.app` bundle with `Frameworks/` dylib rewrites. Result: a single-file shippable binary with zero system dependencies.
 
 **No `.tsz`. No Smith. No d-suite conformance.** When you need a feature — inspector, classifier, theme, custom primitive — port the pattern from `love2d/packages/core/src/` or `love2d/lua/` by hand into `runtime/`, or regenerate it fresh in `.tsx` from a description. `love2d/` already solved every runtime pattern we need.
 
-## The Primitives
+## Primitives
 
-`Box`, `Text`, `Image`, `Pressable`, `ScrollView`, `TextInput`. Custom host-handled types (Cartridge, Audio, Video, Canvas, etc.) use the `<Native type="X" {...props} />` pattern from love2d — the reconciler emits CREATE with that type, the Zig host handles it.
+`Box`, `Row`, `Col`, `Text`, `Image`, `Pressable`, `ScrollView`, `TextInput`, `TextArea`, `TextEditor`, `Canvas`/`Canvas.Node`/`Canvas.Path`/`Canvas.Clamp`, `Graph`/`Graph.Path`/`Graph.Node`, and `Native` (universal escape hatch).
+
+`Canvas` and `Graph` pan-zoomable and static-viewport surfaces respectively, with `gx/gy/gw/gh` coordinate-space positioning and SVG `d`/`stroke`/`strokeWidth`/`fill` props on paths.
+
+Custom host-handled types (Audio, Video, Cartridge, LLMAgent, etc.) use `<Native type="X" {...props} />` — the reconciler emits CREATE with that type, the Zig host handles it.
+
+### HTML tags work too
+
+`renderer/hostConfig.ts` has `HTML_TYPE_MAP` that remaps all common HTML tags before CREATE. You can copy-paste standard React markup and it just works:
+
+```tsx
+<div className="p-4 flex-row gap-2">
+  <h1>Hello</h1>
+  <p>World</p>
+  <button onClick={...}>Go</button>
+</div>
+```
+
+Mapped: `div/section/article/main/nav/header/footer/form/ul/li/table/tr/td/a/button/dialog/menu → View`; `span/p/label/h1-6/strong/b/em/i/code/small → Text`; `img → Image`; `input/textarea → TextInput/TextEditor`; `pre → CodeBlock`; `video → Video`. HTML-only attrs (`alt`, `htmlFor`, `aria-*`, `data-*`, `tabIndex`, etc.) are stripped before the bridge. Headings get auto font-sizes (h1=32, h2=28, …, h6=16).
+
+### Tailwind via `className`
+
+`className` strings are parsed by `runtime/tw.ts` (ported from `love2d/packages/core/src/tw.ts`) and merged into `style` at CREATE time. Full utility coverage: spacing (`p-4`, `mx-8`), sizing (`w-full`, `h-[300]`), flex (`flex-row`, `gap-2`, `justify-center`, `items-start`), colors (`bg-blue-500`, `text-slate-200`), radius (`rounded-lg`), borders (`border-2`, `border-blue-400`), typography (`text-xl`, `font-bold`), and arbitrary values via brackets (`p-[20]`, `bg-[#ff6600]`, `w-[240]`).
+
+`style` props win on conflicts — mix them freely:
+
+```tsx
+<Box className="p-4 bg-blue-500 rounded-lg" style={{ borderWidth: 2 }}>
+```
 
 ## Layout Rules
 
