@@ -9,12 +9,7 @@ const layout = @import("../../layout.zig");
 const gpu = @import("../../gpu/gpu.zig");
 const Node = layout.Node;
 const Color = layout.Color;
-
-pub const MinimapRow = struct {
-    width: f32 = 0,
-    marker: ?Color = null,
-    active: bool = false,
-};
+const MinimapRow = layout.MinimapRow;
 
 /// Paint Minimap. Caller has already verified node.minimap_rows is active.
 pub fn paintMinimap(node: *Node, g_paint_opacity: f32) void {

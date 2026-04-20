@@ -9,11 +9,7 @@ const layout = @import("../../layout.zig");
 const gpu = @import("../../gpu/gpu.zig");
 const Node = layout.Node;
 const Color = layout.Color;
-
-pub const GutterRow = struct {
-    line: u32 = 0,
-    marker: ?Color = null,
-};
+const GutterRow = layout.GutterRow;
 
 /// Paint CodeGutter. Caller has already verified node.gutter_rows is active.
 pub fn paintCodeGutter(node: *Node, g_paint_opacity: f32) void {

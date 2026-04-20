@@ -405,48 +405,36 @@ fn parseColor(s: []const u8) ?Color {
     return null;
 }
 
+// tslx:GEN:PARSERS START
 fn parseGutterRows(v: std.json.Value) ?[]const layout.GutterRow {
     if (v != .array) return null;
-    const rows = g_alloc.alloc(layout.GutterRow, v.array.items.len) catch return null;
-    for (v.array.items, 0..) |row_v, row_idx| {
-        if (row_v != .object) {
-            rows[row_idx] = .{};
-            continue;
+    const out = g_alloc.alloc(layout.GutterRow, v.array.items.len) catch return null;
+    for (v.array.items, 0..) |row_v, idx| {
+        var row: layout.GutterRow = .{};
+        if (row_v == .object) {
+        if (row_v.object.get("line")) |v_| { if (jsonInt(v_)) |i| row.line = @intCast(@max(0, i)); }
+        if (row_v.object.get("marker")) |v_| { if (v_ == .string) row.marker = parseColor(v_.string); }
         }
-        var gr: layout.GutterRow = .{};
-        if (row_v.object.get("line")) |line_v| {
-            if (jsonInt(line_v)) |i| gr.line = @intCast(@max(0, i));
-        }
-        if (row_v.object.get("marker")) |mk_v| {
-            if (mk_v == .string) gr.marker = parseColor(mk_v.string);
-        }
-        rows[row_idx] = gr;
+        out[idx] = row;
     }
-    return rows;
+    return out;
 }
 
 fn parseMinimapRows(v: std.json.Value) ?[]const layout.MinimapRow {
     if (v != .array) return null;
-    const rows = g_alloc.alloc(layout.MinimapRow, v.array.items.len) catch return null;
-    for (v.array.items, 0..) |row_v, row_idx| {
-        if (row_v != .object) {
-            rows[row_idx] = .{};
-            continue;
+    const out = g_alloc.alloc(layout.MinimapRow, v.array.items.len) catch return null;
+    for (v.array.items, 0..) |row_v, idx| {
+        var row: layout.MinimapRow = .{};
+        if (row_v == .object) {
+        if (row_v.object.get("width")) |v_| { if (jsonFloat(v_)) |f| row.width = f; }
+        if (row_v.object.get("marker")) |v_| { if (v_ == .string) row.marker = parseColor(v_.string); }
+        if (row_v.object.get("active")) |v_| { if (jsonBool(v_)) |b| row.active = b; }
         }
-        var mr: layout.MinimapRow = .{};
-        if (row_v.object.get("width")) |w_v| {
-            if (jsonFloat(w_v)) |f| mr.width = f;
-        }
-        if (row_v.object.get("marker")) |mk_v| {
-            if (mk_v == .string) mr.marker = parseColor(mk_v.string);
-        }
-        if (row_v.object.get("active")) |a_v| {
-            if (jsonBool(a_v)) |b| mr.active = b;
-        }
-        rows[row_idx] = mr;
+        out[idx] = row;
     }
-    return rows;
+    return out;
 }
+// tslx:GEN:PARSERS END
 
 fn parseColorTextRows(v: std.json.Value) ?[]const layout.ColorTextRow {
     if (v != .array) return null;
@@ -787,16 +775,12 @@ fn applyTypeDefaults(node: *Node, id: u32, type_name: []const u8) void {
     const eq = std.mem.eql;
     if (eq(u8, type_name, "ScrollView")) {
         node.style.overflow = .scroll;
-    } else if (eq(u8, type_name, "CodeGutter")) {
-        // Bulk line-gutter primitive — cart passes `rows={[...]}` as data,
-        // framework paints all visible rows in one shot. Initialises with
-        // an empty rows slice so it behaves sanely before props land.
-        node.gutter_rows = &[_]layout.GutterRow{};
-    } else if (eq(u8, type_name, "Minimap")) {
-        // Bulk minimap-strip primitive. Sibling of CodeGutter — one host
-        // node paints up to ~220 sample rects natively instead of
-        // declaring one Box per sample on the React side.
-        node.minimap_rows = &[_]layout.MinimapRow{};
+    // tslx:GEN:TYPE_DEFAULTS START
+        } else if (eq(u8, type_name, "CodeGutter")) {
+            node.gutter_rows = &[_]layout.GutterRow{};
+        } else if (eq(u8, type_name, "Minimap")) {
+            node.minimap_rows = &[_]layout.MinimapRow{};
+    // tslx:GEN:TYPE_DEFAULTS END
     } else if (eq(u8, type_name, "Canvas")) {
         // Infinite pan/zoom surface. `canvas_type` is what wires engine paint,
         // hit-testing, drag-to-pan and wheel-to-zoom in events.zig / engine.zig.
@@ -840,32 +824,33 @@ fn applyProps(node: *Node, props: std.json.Value, type_name: ?[]const u8) void {
         } else if (is_input and std.mem.eql(u8, k, "colorRows")) {
             node.input_color_rows = parseColorTextRows(v);
         }
-        // ── CodeGutter primitive props ──
-        else if (node.gutter_rows != null and std.mem.eql(u8, k, "rows")) {
-            node.gutter_rows = parseGutterRows(v);
-        } else if (node.gutter_rows != null and std.mem.eql(u8, k, "rowHeight")) {
-            if (jsonFloat(v)) |f| node.gutter_row_height = f;
-        } else if (node.gutter_rows != null and std.mem.eql(u8, k, "cursorLine")) {
-            if (jsonInt(v)) |i| node.gutter_cursor_line = @intCast(@max(0, i));
-        } else if (node.gutter_rows != null and std.mem.eql(u8, k, "activeBg")) {
-            if (v == .string) node.gutter_active_bg = parseColor(v.string);
-        } else if (node.gutter_rows != null and std.mem.eql(u8, k, "activeText")) {
-            if (v == .string) node.gutter_active_text = parseColor(v.string);
-        } else if (node.gutter_rows != null and std.mem.eql(u8, k, "textColor")) {
-            if (v == .string) node.gutter_text = parseColor(v.string);
-        }
-        // ── Minimap primitive props ──
-        else if (node.minimap_rows != null and std.mem.eql(u8, k, "rows")) {
-            node.minimap_rows = parseMinimapRows(v);
-        } else if (node.minimap_rows != null and std.mem.eql(u8, k, "rowHeight")) {
-            if (jsonFloat(v)) |f| node.minimap_row_height = f;
-        } else if (node.minimap_rows != null and std.mem.eql(u8, k, "rowGap")) {
-            if (jsonFloat(v)) |f| node.minimap_row_gap = f;
-        } else if (node.minimap_rows != null and std.mem.eql(u8, k, "activeColor")) {
-            if (v == .string) node.minimap_active_color = parseColor(v.string);
-        } else if (node.minimap_rows != null and std.mem.eql(u8, k, "inactiveColor")) {
-            if (v == .string) node.minimap_inactive_color = parseColor(v.string);
-        } else if (is_input and std.mem.eql(u8, k, "placeholder")) {
+        // tslx:GEN:PROPS START
+                // ── CodeGutter primitive props ──
+                } else if (node.gutter_rows != null and std.mem.eql(u8, k, "rows")) {
+                    node.gutter_rows = parseGutterRows(v);
+                } else if (node.gutter_rows != null and std.mem.eql(u8, k, "rowHeight")) {
+                    if (jsonFloat(v)) |f| node.gutter_row_height = f;
+                } else if (node.gutter_rows != null and std.mem.eql(u8, k, "cursorLine")) {
+                    if (jsonInt(v)) |i| node.gutter_cursor_line = @intCast(@max(0, i));
+                } else if (node.gutter_rows != null and std.mem.eql(u8, k, "activeBg")) {
+                    if (v == .string) node.gutter_active_bg = parseColor(v.string);
+                } else if (node.gutter_rows != null and std.mem.eql(u8, k, "activeText")) {
+                    if (v == .string) node.gutter_active_text = parseColor(v.string);
+                } else if (node.gutter_rows != null and std.mem.eql(u8, k, "textColor")) {
+                    if (v == .string) node.gutter_text = parseColor(v.string);
+                // ── Minimap primitive props ──
+                } else if (node.minimap_rows != null and std.mem.eql(u8, k, "rows")) {
+                    node.minimap_rows = parseMinimapRows(v);
+                } else if (node.minimap_rows != null and std.mem.eql(u8, k, "rowHeight")) {
+                    if (jsonFloat(v)) |f| node.minimap_row_height = f;
+                } else if (node.minimap_rows != null and std.mem.eql(u8, k, "rowGap")) {
+                    if (jsonFloat(v)) |f| node.minimap_row_gap = f;
+                } else if (node.minimap_rows != null and std.mem.eql(u8, k, "activeColor")) {
+                    if (v == .string) node.minimap_active_color = parseColor(v.string);
+                } else if (node.minimap_rows != null and std.mem.eql(u8, k, "inactiveColor")) {
+                    if (v == .string) node.minimap_inactive_color = parseColor(v.string);
+        // tslx:GEN:PROPS END
+        else if (is_input and std.mem.eql(u8, k, "placeholder")) {
             if (dupJsonText(v)) |s| node.placeholder = s;
         } else if (is_input and std.mem.eql(u8, k, "value")) {
             if (dupJsonText(v)) |s| syncInputValue(node, s);
