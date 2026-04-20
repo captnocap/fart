@@ -119,6 +119,27 @@ pub const ColorTextRow = struct {
     spans: []const ColorTextSpan = &.{},
 };
 
+/// One entry in a CodeGutter primitive's rows array. Data-in, drawn natively
+/// in one shot so a 10,000-line file is a single host node instead of 10,000
+/// Row/Box/Text React trees.
+pub const GutterRow = struct {
+    /// Line number to display (1-based).
+    line: u32 = 0,
+    /// Optional marker dot color. If null, no marker is drawn.
+    marker: ?Color = null,
+};
+
+/// One entry in a Minimap primitive's rows array. Compact overview rect per
+/// sampled group of source lines.
+pub const MinimapRow = struct {
+    /// Rect width (used to hint "this line is wide"); clamped by paint.
+    width: f32 = 0,
+    /// Optional tone color. null → inactive_color.
+    marker: ?Color = null,
+    /// Whether this sample spans the current cursor line.
+    active: bool = false,
+};
+
 pub const MAX_INLINE_SLOTS = 8;
 pub const ImageDims = struct {
     width: f32 = 0,
@@ -287,6 +308,25 @@ pub const Node = struct {
     input_id: ?u8 = null,
     input_paint_text: bool = true,
     input_color_rows: ?[]const ColorTextRow = null,
+    /// CodeGutter — bulk line-gutter primitive. When set, the node paints
+    /// its own gutter (marker dot + line number per row) natively instead
+    /// of declaring one Row+Box+Text subtree per line. Height is computed
+    /// from rows.len * gutter_row_height; paint windows to the active
+    /// scissor so only visible rows are drawn.
+    gutter_rows: ?[]const GutterRow = null,
+    gutter_row_height: f32 = 17,
+    gutter_cursor_line: u32 = 0,
+    gutter_active_bg: ?Color = null,
+    gutter_active_text: ?Color = null,
+    gutter_text: ?Color = null,
+    /// Minimap — bulk overview-strip primitive. Sibling of CodeGutter; one
+    /// host node paints 220 sample rects via native paint. Cart passes the
+    /// already-grouped rows array (each row already covers a slice of lines).
+    minimap_rows: ?[]const MinimapRow = null,
+    minimap_row_height: f32 = 3,
+    minimap_row_gap: f32 = 1,
+    minimap_active_color: ?Color = null,
+    minimap_inactive_color: ?Color = null,
     placeholder: ?[]const u8 = null,
     debug_name: ?[]const u8 = null,
     test_id: ?[]const u8 = null,
@@ -758,6 +798,13 @@ fn estimateIntrinsicHeightUncached(node: *Node, availableWidth: f32) f32 {
     }
     if (node.input_id != null) {
         return @as(f32, @floatFromInt(node.font_size)) * 1.4 + pt + pb;
+    }
+    if (node.gutter_rows) |gr| {
+        return @as(f32, @floatFromInt(gr.len)) * node.gutter_row_height + pt + pb;
+    }
+    if (node.minimap_rows) |mr| {
+        const total_h = @as(f32, @floatFromInt(mr.len)) * (node.minimap_row_height + node.minimap_row_gap);
+        return total_h + pt + pb;
     }
     if (node.children.len == 0) {
         return pt + pb;
@@ -1692,6 +1739,10 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
     if (h == null) {
         if (node.input_id != null) {
             h = @as(f32, @floatFromInt(node.font_size)) + pt + pb;
+        } else if (node.gutter_rows) |gr| {
+            h = @as(f32, @floatFromInt(gr.len)) * node.gutter_row_height + pt + pb;
+        } else if (node.minimap_rows) |mr| {
+            h = @as(f32, @floatFromInt(mr.len)) * (node.minimap_row_height + node.minimap_row_gap) + pt + pb;
         } else if (node.text != null) {
             const m = measureNodeTextW(node, innerW);
             h = m.height + pt + pb;

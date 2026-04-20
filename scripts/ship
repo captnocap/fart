@@ -51,7 +51,16 @@ else
     exit 1
 fi
 
-# ── 1. Bundle cart entry via esbuild → bundle-<name>.js ──────────────
+# ── 1a. Recompile all primitive .tslx sources ────────────────────────
+# framework/primitives/*.tslx → framework/primitives/generated/*.zig
+#                            + runtime/primitives_gen/*.tsx
+# Idempotent + cheap; always run so a forgotten edit never gets shipped.
+if [[ -d "framework/primitives" ]] && compgen -G "framework/primitives/*.tslx" > /dev/null; then
+    echo "[ship] compiling primitives from framework/primitives/*.tslx..."
+    node scripts/tslx_compile.mjs --all > /dev/null
+fi
+
+# ── 1b. Bundle cart entry via esbuild → bundle-<name>.js ─────────────
 # Per-cart bundle path means two parallel ships can't overwrite each other's
 # output. qjs_app.zig embeds `bundle-<app-name>.js` at compile time.
 BUNDLE_OUT="bundle-${NAME}.js"

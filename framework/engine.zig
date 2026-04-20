@@ -1358,7 +1358,20 @@ noinline fn paintNodeVisuals(node: *Node) void {
         }
         paintTextInput(node, id);
     }
+
+    if (node.gutter_rows != null) {
+        code_gutter_gen.paintCodeGutter(node, g_paint_opacity);
+    }
+    if (node.minimap_rows != null) {
+        minimap_gen.paintMinimap(node, g_paint_opacity);
+    }
 }
+
+/// Bulk-rendering primitives — paint functions live in generated modules.
+/// Source-of-truth is `framework/primitives/*.tslx`; run
+/// `node scripts/tslx_compile.mjs --all` after editing a .tslx to regenerate.
+const code_gutter_gen = @import("primitives/generated/code_gutter.zig");
+const minimap_gen = @import("primitives/generated/minimap.zig");
 
 /// Render inline glyphs (polygons embedded in text) at their recorded slot positions.
 fn paintInlineGlyphs(glyphs: []const layout.InlineGlyph, font_size: u16) void {
@@ -2155,6 +2168,7 @@ pub fn run(config_in: AppConfig) !void {
                                 }
                             } else if (h.handlers.on_press) |handler| {
                                 input.unfocus();
+                                stampInputLatency("click");
                                 std.debug.print("[press] zig handler at ({d:.0},{d:.0})\n", .{ mx, my });
                                 handler();
                                 // Also run JS handler if present
@@ -2173,11 +2187,13 @@ pub fn run(config_in: AppConfig) !void {
                                 }
                             } else if (h.handlers.lua_on_press) |lua_expr| {
                                 input.unfocus();
+                                stampInputLatency("click");
                                 std.debug.print("[lua_on_press] eval: '{s}'\n", .{std.mem.span(lua_expr)});
                                 luajit_runtime.evalExpr(std.mem.span(lua_expr));
                                 std.debug.print("[lua_on_press] done\n", .{});
                             } else if (h.handlers.js_on_press) |js_expr| {
                                 input.unfocus();
+                                stampInputLatency("click");
                                 const expr = std.mem.span(js_expr);
                                 std.debug.print("[js_on_press] eval: '{s}'\n", .{expr});
                                 qjs_runtime.callGlobal("__beginJsEvent");
@@ -2186,6 +2202,7 @@ pub fn run(config_in: AppConfig) !void {
                                 state_mod.markDirty();
                                 std.debug.print("[js_on_press] done\n", .{});
                             } else if (h.href) |url| {
+                                stampInputLatency("click");
                                 openUrl(url);
                             }
                             // Witness: record the click with semantic target
@@ -2236,6 +2253,7 @@ pub fn run(config_in: AppConfig) !void {
                                     input_drag_line_height = h.line_height;
                                     handled_interactive = true;
                                 } else if (h.handlers.on_press) |handler| {
+                                    stampInputLatency("click");
                                     handler();
                                     if (h.handlers.js_on_press) |js_expr| {
                                         qjs_runtime.callGlobal("__beginJsEvent");
@@ -2248,15 +2266,18 @@ pub fn run(config_in: AppConfig) !void {
                                     }
                                     handled_interactive = true;
                                 } else if (h.handlers.lua_on_press) |lua_expr| {
+                                    stampInputLatency("click");
                                     luajit_runtime.evalExpr(std.mem.span(lua_expr));
                                     handled_interactive = true;
                                 } else if (h.handlers.js_on_press) |js_expr| {
+                                    stampInputLatency("click");
                                     qjs_runtime.callGlobal("__beginJsEvent");
                                     qjs_runtime.evalExpr(std.mem.span(js_expr));
                                     qjs_runtime.callGlobal("__endJsEvent");
                                     state_mod.markDirty();
                                     handled_interactive = true;
                                 } else if (h.href) |url| {
+                                    stampInputLatency("click");
                                     openUrl(url);
                                     handled_interactive = true;
                                 }
