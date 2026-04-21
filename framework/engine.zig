@@ -2381,6 +2381,14 @@ pub fn run(config_in: AppConfig) !void {
                     const my: f32 = event.motion.y;
                     qjs_runtime.updateMouse(mx, my);
                     luajit_runtime.updateMouse(mx, my);
+                    if (qjs_runtime.terminalDockResizeActive()) {
+                        if ((event.motion.state & c.SDL_BUTTON_LMASK) != 0) {
+                            const next_height = qjs_runtime.terminalDockResizeStartHeight() + (qjs_runtime.terminalDockResizeStartY() - my);
+                            qjs_runtime.callGlobalFloat("__setTerminalDockHeight", next_height);
+                        } else {
+                            qjs_runtime.endTerminalDockResize();
+                        }
+                    }
                     // Render surface mouse motion forwarding
                     if (render_surfaces.handleMouseMotion(mx, my)) continue;
                     // Physics drag update
@@ -2481,6 +2489,9 @@ pub fn run(config_in: AppConfig) !void {
                     qjs_runtime.updateMouse(event.button.x, event.button.y);
                     qjs_runtime.updateMouseButton(false, event.button.button == c.SDL_BUTTON_RIGHT);
                     luajit_runtime.updateMouseButton(false, event.button.button == c.SDL_BUTTON_RIGHT);
+                    if (event.button.button == c.SDL_BUTTON_LEFT) {
+                        qjs_runtime.endTerminalDockResize();
+                    }
                     // Render surface mouse up forwarding
                     {
                         const rmx: f32 = event.button.x;

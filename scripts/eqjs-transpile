@@ -1,5 +1,0 @@
-#!/usr/bin/env bash
-set -euo pipefail
-
-[ -x zig-out/bin/eqjs-transpiler ] || zig build-exe deps/eqjs/eqjs_transpiler.zig -femit-bin=zig-out/bin/eqjs-transpiler
-exec ./zig-out/bin/eqjs-transpiler "$@"

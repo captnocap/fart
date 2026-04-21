@@ -32,7 +32,7 @@ The decided VM direction is **JSRT**: a JavaScript evaluator in Lua, running ins
 
 - **JS inside Lua (JSRT — what we build):** JS is *data*. A Lua evaluator reads the JS (or its AST) and executes JS semantics. Semantics live in ONE place (the evaluator + runtime helpers). JS features = evaluator work, bounded by ECMAScript (finite, stable). LuaJIT trace-JITs the evaluator loop → effectively JITs the JS running through it. Nothing emits Lua code. Ever.
 
-- **JS turning into Lua (the trap — DO NOT BUILD):** An emitter reads JS and produces Lua source. Every JS feature becomes emitter code. Semantics scattered across every translated file. Drift vector: the emitter reaches above JS into framework territory (hooks / JSX / components) and grows unbounded. `deps/eqjs/eqjs_transpiler.zig` and `/home/siah/eqjs/compiler/` are both this shape. Quarantined. **Do not resurrect.**
+- **JS turning into Lua (the trap — DO NOT BUILD):** An emitter reads JS and produces Lua source. Every JS feature becomes emitter code. Semantics scattered across every translated file. Drift vector: the emitter reaches above JS into framework territory (hooks / JSX / components) and grows unbounded. The former `deps/eqjs/eqjs_transpiler.zig` was this shape (deleted 2026-04-21 along with all EQJS sources). `/home/siah/eqjs/compiler/` still exists outside the repo, quarantined. **Do not resurrect either.**
 
 **Scope guardrail for JSRT:** the evaluator implements ECMAScript semantics (var/let/const, function calls, closures, prototype chain, this, try/catch, Map/Set/WeakMap, Symbol, iterators). It does NOT know about React, hooks, JSX, components, or reconcilers. esbuild lowers JSX to `React.createElement(...)` calls before JSRT sees anything. The React library code is indistinguishable from any other JS program at the evaluator's level. **If you catch yourself writing evaluator code that names `useState`, `hook`, `fiber`, `component`, or any React concept — STOP. That is the trap.**
 
@@ -42,7 +42,7 @@ Live files: `framework/lua/jsrt/` — see `README.md` for the manifesto and `TAR
 ./framework/lua/jsrt/test/run_targets.sh
 ```
 
-When asked "where are we on JSRT," run that — don't guess. The old `deps/eqjs/` tree is reference only and should not be extended.
+When asked "where are we on JSRT," run that — don't guess.
 
 ## Who Maintains This
 
@@ -54,18 +54,19 @@ When asked "where are we on JSRT," run that — don't guess. The old `deps/eqjs/
 
 ReactJIT is a React-reconciler-driven UI framework. Apps are written in `.tsx` (standard React), bundled by esbuild.
 
-**Current runtime (being phased out):** JS runs in an embedded QuickJS VM via `qjs_app.zig`. Measured ceiling: QJS is an interpreter with no JIT, so a ~2000-fiber React reconcile walk takes 400ms+ and mounts scale linearly from there. This is why cursor-ide has 2-second file clicks.
+**Cart runtime:** JSRT — a JS evaluator in Lua, running inside LuaJIT. See `framework/lua/jsrt/`. JS source stays JS at every stage; the evaluator reads it as data and executes it. LuaJIT's trace JIT optimizes the evaluator's hot paths, effectively JITting the JS running through it. No tool ever translates JS to Lua. See the HARD RULE above.
 
-**Target runtime (active build — see `framework/lua/jsrt/`):** JSRT — a JS evaluator in Lua, running inside LuaJIT. JS source stays JS at every stage; the evaluator reads it as data and executes it. LuaJIT's trace JIT optimizes the evaluator's hot paths, effectively JITting the JS running through it. No tool ever translates JS to Lua. See the HARD RULE above.
+React's reconciler (running through the evaluator) emits CREATE/APPEND/UPDATE mutation commands; the Zig framework's layout, paint, hit-test, text, input, events, effects, and GPU machinery consumes them.
 
-Both paths emit the same CREATE/APPEND/UPDATE mutation command stream that the Zig framework's layout, paint, hit-test, text, input, events, effects, and GPU machinery consumes.
+`qjs_app.zig` at the repo root is **legacy** — a prior QuickJS-based host that hit a 2000ms-per-click ceiling on large React trees. Not extended. Do not build new work there.
 
-- **`framework/`** — Zig runtime. Layout, engine, GPU, events, input, state, effects, text, windows, QuickJS bridge.
-- **`qjs_app.zig`** — Host entry. Loads `bundle.js` into QuickJS, wires events, owns Node pool.
-- **`runtime/`** — JS entry point (`index.tsx`), JSX shim, primitives, host globals.
-- **`renderer/`** — React-reconciler host config. Emits mutation commands to `__hostFlush`.
+- **`framework/`** — Zig runtime. Layout, engine, GPU, events, input, state, effects, text, windows, LuaJIT runtime.
+- **`framework/lua/jsrt/`** — JSRT: the JS evaluator + builtins + host FFI. Cart runtime lives here.
+- **`runtime/`** — JS entry point, JSX shim, primitives, host globals.
+- **`renderer/`** — reconciler host config (`hostConfig.lua` + `reconciler.lua`). Receives the mutation command stream JSRT emits.
 - **`cart/`** — `.tsx` apps.
-- **`scripts/build-bundle.mjs`** — esbuild bundler. Takes a cart path, produces `bundle.js`.
+- **`scripts/build-bundle.mjs`** — esbuild bundler.
+- **`scripts/build-jsast.mjs`** — acorn JS → Lua AST literal. JSRT's input.
 - **`tsz/`** — FROZEN. Smith compiler + Smith-era carts. Reference only.
 - **`love2d/`** — FROZEN. The proven reconciler-on-Lua stack. Reference for every runtime pattern we need.
 - **`os/`** — CartridgeOS + Exodia (future).
@@ -80,7 +81,7 @@ One command — no steps to remember:
 ./scripts/ship <cart-name> --raw    # release, raw ELF (for ldd inspection)
 ```
 
-What happens: esbuild bundles `cart/<name>.tsx` → `bundle.js`, Zig compiles `qjs_app.zig` with `bundle.js` embedded via `@embedFile`, Linux packaging wraps the ELF + all its `.so` deps + `ld-linux` into a self-extracting tarball that extracts to `~/.cache/reactjit-<name>/<sig>/` on first run. macOS produces a `.app` bundle with `Frameworks/` dylib rewrites. Result: a single-file shippable binary with zero system dependencies.
+What happens: esbuild bundles `cart/<name>.tsx` → `bundle.js`, `scripts/build-jsast.mjs` emits `bundle.ast.lua` (AST as data), Zig compiles the cart host with the AST embedded via `@embedFile`, Linux packaging wraps the ELF + all its `.so` deps + `ld-linux` into a self-extracting tarball that extracts to `~/.cache/reactjit-<name>/<sig>/` on first run. macOS produces a `.app` bundle with `Frameworks/` dylib rewrites. Result: a single-file shippable binary with zero system dependencies.
 
 **No `.tsz`. No Smith. No d-suite conformance.** When you need a feature — inspector, classifier, theme, custom primitive — port the pattern from `love2d/packages/core/src/` or `love2d/lua/` by hand into `runtime/`, or regenerate it fresh in `.tsx` from a description. `love2d/` already solved every runtime pattern we need.
 
@@ -92,9 +93,9 @@ What happens: esbuild bundles `cart/<name>.tsx` → `bundle.js`, Zig compiles `q
 ```
 
 The dev host is a single persistent ReleaseFast binary with:
-- **Hot reload for React / TSX / TS** — editing any file under `cart/` or `runtime/` re-bundles through esbuild and pushes the new JS over `/tmp/reactjit.sock`. The host tears down the QJS context and re-evals in ~300ms. **You do NOT re-run `scripts/dev` or rebuild the binary for cart code changes.**
-- **Rebuild required for Zig / framework / build-pipeline changes** — anything under `framework/`, `qjs_app.zig`, `build.zig`, or `scripts/` needs the binary rebuilt (delete `zig-out/bin/reactjit-dev` then run `./scripts/dev <cart>` again, or `zig build app -Ddev-mode=true -Doptimize=ReleaseFast -Dapp-name=reactjit-dev`).
-- **Tabs in the titlebar** — the host is borderless; the top strip IS the window chrome. Each `./scripts/dev <cart>` push shows as a tab. Click a tab to switch active cart (full QJS teardown + re-eval each time). Double-click empty chrome toggles maximize. Drag empty chrome to move. Window controls (minimize / maximize / close) on the right.
+- **Hot reload for React / TSX / TS** — editing any file under `cart/` or `runtime/` re-bundles through esbuild and pushes the new bundle over `/tmp/reactjit.sock`. The host re-evals in ~300ms. **You do NOT re-run `scripts/dev` or rebuild the binary for cart code changes.**
+- **Rebuild required for Zig / framework / build-pipeline changes** — anything under `framework/`, `build.zig`, or `scripts/` needs the binary rebuilt (delete `zig-out/bin/reactjit-dev` then run `./scripts/dev <cart>` again, or `zig build app -Ddev-mode=true -Doptimize=ReleaseFast -Dapp-name=reactjit-dev`).
+- **Tabs in the titlebar** — the host is borderless; the top strip IS the window chrome. Each `./scripts/dev <cart>` push shows as a tab. Click a tab to switch active cart (the cart bundle re-evals from scratch each time). Double-click empty chrome toggles maximize. Drag empty chrome to move. Window controls (minimize / maximize / close) on the right.
 - **Debug builds silently crash on click.** Always use `ReleaseFast` (default in `scripts/dev`). Pre-existing framework bug in the Debug-mode click path; out of scope for dev-mode work.
 
 **State preservation across reloads is NOT working yet.** `useHotState` + `framework/hotstate.zig` are wired but in practice state still resets on every reload. Treat HMR as "save → see your change, lose local useState". Full fix is pending — don't assume atoms persist.

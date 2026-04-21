@@ -22,6 +22,53 @@ local M = {}
 M.NULL      = setmetatable({}, { __tostring = function() return "null" end })
 M.UNDEFINED = setmetatable({}, { __tostring = function() return "undefined" end })
 
+local function regexToLuaPattern(source)
+  local parts = {}
+  local i = 1
+  while i <= #source do
+    local c = source:sub(i, i)
+    if c == "\\" and i < #source then
+      local n = source:sub(i + 1, i + 1)
+      if n == "s" then parts[#parts + 1] = "%s"
+      elseif n == "S" then parts[#parts + 1] = "%S"
+      elseif n == "d" then parts[#parts + 1] = "%d"
+      elseif n == "D" then parts[#parts + 1] = "%D"
+      elseif n == "w" then parts[#parts + 1] = "%w"
+      elseif n == "W" then parts[#parts + 1] = "%W"
+      elseif n == "n" then parts[#parts + 1] = "\n"
+      elseif n == "r" then parts[#parts + 1] = "\r"
+      elseif n == "t" then parts[#parts + 1] = "\t"
+      elseif n == "f" then parts[#parts + 1] = "\f"
+      elseif n == "v" then parts[#parts + 1] = "\v"
+      else
+        parts[#parts + 1] = n
+      end
+      i = i + 2
+    elseif c == "%" then
+      parts[#parts + 1] = "%%"
+      i = i + 1
+    else
+      parts[#parts + 1] = c
+      i = i + 1
+    end
+  end
+  return table.concat(parts)
+end
+
+function M.regexToLuaPattern(source)
+  return regexToLuaPattern(source or "")
+end
+
+function M.newRegExp(source, flags)
+  return {
+    __kind = "regexp",
+    source = source or "",
+    flags = flags or "",
+    lua_pattern = regexToLuaPattern(source or ""),
+    global = type(flags) == "string" and flags:find("g", 1, true) ~= nil,
+  }
+end
+
 function M.typeof(v)
   if v == M.NULL then return "object" end       -- JS quirk: typeof null === "object"
   if v == M.UNDEFINED then return "undefined" end
@@ -30,6 +77,7 @@ function M.typeof(v)
   if t == "number" or t == "string" or t == "boolean" then return t end
   if t == "table" then
     if v.__kind == "function" then return "function" end
+    if v.__kind == "regexp" then return "object" end
     return "object"
   end
   return "object"

@@ -16,6 +16,34 @@ local function deep_clone(value, seen)
   return out
 end
 
+local function array_index_of(list, item)
+  for i, value in ipairs(list or {}) do
+    if value == item then
+      return i
+    end
+  end
+  return nil
+end
+
+local function remove_value(list, item)
+  local idx = array_index_of(list, item)
+  if idx then
+    table.remove(list, idx)
+  end
+end
+
+local function insert_before(list, item, before)
+  remove_value(list, item)
+  if before ~= nil then
+    local idx = array_index_of(list, before)
+    if idx then
+      table.insert(list, idx, item)
+      return
+    end
+  end
+  table.insert(list, item)
+end
+
 local function sorted_keys(map)
   local keys = {}
   for key in pairs(map or {}) do
@@ -312,6 +340,193 @@ function M.newEmitter()
   end
 
   return emitter
+end
+
+function M.newTreeState()
+  return {
+    children = {},
+    nodesById = {},
+  }
+end
+
+local function ensureTree(tree)
+  if type(tree) ~= "table" then
+    tree = nil
+  end
+  if tree == nil then
+    tree = M.newTreeState()
+  end
+  tree.children = tree.children or {}
+  tree.nodesById = tree.nodesById or {}
+  return tree
+end
+
+local function ensureNode(tree, id)
+  local node = tree.nodesById[id]
+  if node == nil then
+    node = {
+      _id = id,
+      children = {},
+    }
+    tree.nodesById[id] = node
+  elseif node.children == nil then
+    node.children = {}
+  end
+  return node
+end
+
+local function applyUpdate(node, cmd)
+  node.props = node.props or {}
+
+  for _, key in ipairs(cmd.removeKeys or {}) do
+    node.props[key] = nil
+  end
+
+  if node.props.style == nil and ((cmd.props or {}).style ~= nil or #(cmd.removeStyleKeys or {}) > 0) then
+    node.props.style = {}
+  end
+
+  if node.props.style ~= nil then
+    for _, key in ipairs(cmd.removeStyleKeys or {}) do
+      node.props.style[key] = nil
+    end
+  end
+
+  for key, value in pairs(cmd.props or {}) do
+    if key == "style" and type(value) == "table" then
+      local merged = deep_clone(node.props.style or {})
+      for style_key, style_value in pairs(value) do
+        merged[style_key] = deep_clone(style_value)
+      end
+      node.props.style = merged
+    else
+      node.props[key] = deep_clone(value)
+    end
+  end
+
+  if cmd.hasHandlers ~= nil then
+    node.hasHandlers = cmd.hasHandlers
+  end
+  if cmd.handlerNames ~= nil then
+    node.handlerNames = deep_clone(cmd.handlerNames)
+  end
+  if cmd.handlerMeta ~= nil then
+    node.handlerMeta = deep_clone(cmd.handlerMeta)
+  end
+end
+
+local function removeFromParentList(list, node)
+  remove_value(list, node)
+end
+
+function M.applyCommand(tree, cmd)
+  tree = ensureTree(tree)
+  if type(cmd) ~= "table" then
+    return tree
+  end
+
+  if cmd.op == "CREATE_TEXT" then
+    local node = ensureNode(tree, cmd.id)
+    node.type = nil
+    node.props = node.props or {}
+    node.children = nil
+    node._text = tostring(cmd.text)
+    return tree
+  end
+
+  if cmd.op == "CREATE" then
+    local node = ensureNode(tree, cmd.id)
+    node.type = cmd.type
+    node.props = deep_clone(cmd.props or {})
+    node.children = node.children or {}
+    node._text = nil
+    if cmd.hasHandlers ~= nil then
+      node.hasHandlers = cmd.hasHandlers
+    end
+    if cmd.handlerNames ~= nil then
+      node.handlerNames = deep_clone(cmd.handlerNames)
+    end
+    if cmd.handlerMeta ~= nil then
+      node.handlerMeta = deep_clone(cmd.handlerMeta)
+    end
+    return tree
+  end
+
+  if cmd.op == "APPEND" then
+    local parent = ensureNode(tree, cmd.parentId)
+    local child = ensureNode(tree, cmd.childId)
+    parent.children = parent.children or {}
+    insert_before(parent.children, child)
+    child._parentId = parent._id
+    return tree
+  end
+
+  if cmd.op == "APPEND_TO_ROOT" then
+    local child = ensureNode(tree, cmd.childId)
+    insert_before(tree.children, child)
+    child._parentId = nil
+    return tree
+  end
+
+  if cmd.op == "INSERT_BEFORE" then
+    local parent = ensureNode(tree, cmd.parentId)
+    local child = ensureNode(tree, cmd.childId)
+    local before = tree.nodesById[cmd.beforeId]
+    parent.children = parent.children or {}
+    insert_before(parent.children, child, before)
+    child._parentId = parent._id
+    return tree
+  end
+
+  if cmd.op == "INSERT_BEFORE_ROOT" then
+    local child = ensureNode(tree, cmd.childId)
+    local before = tree.nodesById[cmd.beforeId]
+    insert_before(tree.children, child, before)
+    child._parentId = nil
+    return tree
+  end
+
+  if cmd.op == "UPDATE" then
+    local node = ensureNode(tree, cmd.id)
+    applyUpdate(node, cmd)
+    return tree
+  end
+
+  if cmd.op == "UPDATE_TEXT" then
+    local node = ensureNode(tree, cmd.id)
+    node._text = tostring(cmd.text)
+    if type(node.children) == "table" and node.children[1] and node.children[1]._text ~= nil then
+      node.children[1]._text = tostring(cmd.text)
+    end
+    return tree
+  end
+
+  if cmd.op == "REMOVE" then
+    local parent = tree.nodesById[cmd.parentId]
+    local child = tree.nodesById[cmd.childId]
+    if parent and parent.children and child then
+      removeFromParentList(parent.children, child)
+    end
+    return tree
+  end
+
+  if cmd.op == "REMOVE_FROM_ROOT" then
+    local child = tree.nodesById[cmd.childId]
+    if child then
+      removeFromParentList(tree.children, child)
+    end
+    return tree
+  end
+
+  return tree
+end
+
+function M.applyCommands(tree, commands)
+  tree = ensureTree(tree)
+  for _, cmd in ipairs(commands or {}) do
+    M.applyCommand(tree, cmd)
+  end
+  return tree
 end
 
 return M

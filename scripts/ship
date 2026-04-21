@@ -18,6 +18,7 @@
 #   scripts/ship <cart-name>          # release, self-extracting
 #   scripts/ship <cart-name> -d       # debug build, skips packaging (raw ELF)
 #   scripts/ship <cart-name> --raw    # release, skips packaging (raw ELF for ldd)
+#   scripts/ship <cart-name> --jsrt   # build the JSRT runtime path instead of QJS
 
 set -euo pipefail
 
@@ -27,15 +28,17 @@ cd "$REPO_ROOT"
 NAME="${1:-}"
 DEBUG=0
 RAW=0
+JSRT=0
 for arg in "${@:2}"; do
     case "$arg" in
         -d|--debug) DEBUG=1 ;;
         --raw)      RAW=1 ;;
+        --jsrt)     JSRT=1 ;;
     esac
 done
 
 if [[ -z "$NAME" ]]; then
-    echo "Usage: scripts/ship <cart-name> [-d|--raw]" >&2
+    echo "Usage: scripts/ship <cart-name> [-d|--raw|--jsrt]" >&2
     echo "  Cart expected at: cart/<cart-name>.tsx" >&2
     exit 1
 fi
@@ -67,6 +70,13 @@ BUNDLE_OUT="bundle-${NAME}.js"
 echo "[ship] bundling $CART_FILE → $BUNDLE_OUT..."
 node scripts/build-bundle.mjs "$CART_FILE" --out "$BUNDLE_OUT"
 
+AST_OUT=""
+if [[ "$JSRT" -eq 1 ]]; then
+    AST_OUT="bundle-${NAME}.ast.lua"
+    echo "[ship] parsing $BUNDLE_OUT → $AST_OUT..."
+    node scripts/build-jsast.mjs "$BUNDLE_OUT" "$AST_OUT"
+fi
+
 # ── 2. Compile qjs_app.zig (bundle-<name>.js embedded via @embedFile) ─
 OPT_FLAG="-Doptimize=ReleaseFast"
 if [[ "$DEBUG" -eq 1 ]]; then
@@ -74,12 +84,29 @@ if [[ "$DEBUG" -eq 1 ]]; then
 fi
 
 echo "[ship] compiling native binary..."
-zig build app -Dapp-name="$NAME" -Dapp-source=qjs_app.zig $OPT_FLAG
+APP_SOURCE="qjs_app.zig"
+if [[ "$JSRT" -eq 1 ]]; then
+    APP_SOURCE="jsrt_app.zig"
+fi
+zig build app -Dapp-name="$NAME" -Dapp-source="$APP_SOURCE" $OPT_FLAG
 
 RAW_BIN="zig-out/bin/$NAME"
 if [[ ! -f "$RAW_BIN" ]]; then
     echo "[ship] build produced no binary: $RAW_BIN" >&2
     exit 1
+fi
+
+if [[ "$JSRT" -eq 1 ]]; then
+    VERIFY_OUT="$(mktemp)"
+    trap 'rm -f "$VERIFY_OUT"' EXIT
+    "$RAW_BIN" --dump-ast > "$VERIFY_OUT"
+    if ! cmp -s "$AST_OUT" "$VERIFY_OUT"; then
+        echo "[ship] JSRT AST verification failed: $RAW_BIN --dump-ast does not match $AST_OUT" >&2
+        exit 1
+    fi
+    rm -f "$VERIFY_OUT"
+    trap - EXIT
+    echo "[ship] JSRT AST verification passed"
 fi
 
 # ── 3. Debug / --raw short-circuit ────────────────────────────────────

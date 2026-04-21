@@ -29,6 +29,15 @@ lookupProperty = function(obj, key)
     local method = require("framework.lua.jsrt.builtins").arrayPrototype[key]
     if method then return method end
   end
+  if type(obj) == "string" then
+    if key == "length" then return #obj end
+    local method = require("framework.lua.jsrt.builtins").stringPrototype[key]
+    if method then return method end
+  end
+  if type(obj) == "table" and obj.__kind == "regexp" then
+    local method = require("framework.lua.jsrt.builtins").regexpPrototype[key]
+    if method then return method end
+  end
   if type(obj) ~= "table" then
     return Values.UNDEFINED
   end
@@ -166,6 +175,9 @@ evalExpression = function(node, scope)
 
   if t == "Literal" then
     if node.value == nil then return Values.NULL end
+    if type(node.value) == "table" and node.value.__regex then
+      return Values.newRegExp(node.value.source or "", node.value.flags or "")
+    end
     return node.value
   end
 
@@ -300,7 +312,7 @@ evalExpression = function(node, scope)
     local result = callFunction(ctor, args, newObj)
     -- If ctor explicitly returned an object, that's what `new` gives back.
     -- Otherwise, `new` yields the freshly-allocated `this`.
-    if type(result) == "table" and (result.__kind == "object" or result.__kind == "array") then
+    if type(result) == "table" and (result.__kind == "object" or result.__kind == "array" or result.__kind == "regexp") then
       return result
     end
     return newObj

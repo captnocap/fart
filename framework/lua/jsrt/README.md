@@ -25,7 +25,7 @@ esbuild lowers JSX to `React.createElement(...)` calls before anything hits JSRT
 
 Transpiler / compiler / codegen all do the same activity: read source, produce source or code. Label is not the thing. The real axis is **scope**: does the tool know about the framework?
 
-- A tool that reads JS and emits Lua can be written at the language level (translate ECMAScript syntax to Lua syntax, preserve semantics via runtime helpers). That's what the original EQJS was supposed to be.
+- A tool that reads JS and emits Lua can be written at the language level (translate ECMAScript syntax to Lua syntax, preserve semantics via runtime helpers). That's what the original EQJS was supposed to be — now deleted; the transpile direction is the trap.
 - But because the translated output has to encode JS semantics *through the emitted Lua*, every JS feature = emitter code. Every new pattern in an input bundle = emitter bug. The emitter is tempted to peek above JS into framework territory to make specific patterns emit better Lua — that's where it drifts and scope blows up.
 - An **evaluator** (this thing) puts all semantics in ONE place. The evaluator file *is* JS semantics. Adding a new JS feature means adding a handler in the evaluator, not emitting code everywhere. The evaluator can't drift into React-awareness because it never sees "React" — it sees identifier `React` referring to a bound value, same as any identifier.
 
@@ -87,8 +87,9 @@ Once the evaluator is stable, integration looks like:
 
 Existing pieces that already fit this shape:
 
-- `renderer/reconciler.lua` + `renderer/hostConfig.lua` — Lua-side reconciler + emitter, already works. Can serve as the host-config target or the baseline for correctness testing.
-- `tests/eqjs/*.lua` — smoke tests exercising the Lua reconciler. Become JSRT correctness tests: "can the evaluator execute JS that drives these output streams?"
+- `renderer/reconciler.lua` + `renderer/hostConfig.lua` — Lua-side reconciler + emitter, already works. Serves as the host-config target for JSRT and as correctness baseline.
+- `framework/lua/jsrt/test/reconciler_bridge.lua` — end-to-end proof that JSRT drives the Lua reconciler: boots a JS counter, mounts into a retained tree, dispatches a click, verifies the text update.
+- `framework/lua/jsrt/test/host_config_golden.lua` — unit test for the reconciler emitter protocol in isolation.
 - `framework/luajit_runtime.zig` — LuaJIT host with input dispatch parity already wired (commit 2909030c0).
 
 ## Progress

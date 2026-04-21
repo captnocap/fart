@@ -4,16 +4,16 @@ its react! (kinda) its fast! (really fast) hi. all the code in this project is a
 
 ---
 
-Write React. Get a single-file native binary. Copy-paste components from any React project. JSX, hooks, tailwind classes, HTML tags (`<div>`, `<button>`, `<h1>`), setState, useEffect — all work. Layout, paint, hit-test, events, input, text, GPU are native Zig. React runs inside the framework's in-process QuickJS VM, drives a Zig-owned `Node` pool via a react-reconciler host. No virtual DOM on the output side — React's mutations land directly as CREATE/UPDATE/APPEND commands against real Nodes.
+Write React. Get a single-file native binary. Copy-paste components from any React project. JSX, hooks, tailwind classes, HTML tags (`<div>`, `<button>`, `<h1>`), setState, useEffect — all work. Layout, paint, hit-test, events, input, text, GPU are native Zig. React drives a Zig-owned `Node` pool through a react-reconciler host — no virtual DOM on the output side, mutations land directly as CREATE/UPDATE/APPEND commands against real Nodes. JS runs in **[JSRT](#jsrt)** — a JS evaluator written in Lua, hosted by LuaJIT, so React's hot paths get trace-JIT'd.
 
 ```
 cart/my_app.tsx (standard React + JSX + hooks)
    │
    ▼
-esbuild → bundle.js
+esbuild → bundle.js  →  build-jsast.mjs → bundle.ast.lua
    │
    ▼
-@embedFile into qjs_app.zig
+@embedFile into the cart host (jsrt_app.zig)
    │
    ▼
 zig build → ELF + framework/ (layout, GPU, events, text, effects)
@@ -70,9 +70,10 @@ One file. `./scripts/ship counter`. Done — `zig-out/bin/counter` is shippable 
 
 The `ship` pipeline:
 1. **esbuild** bundles `cart/<name>.tsx` + `runtime/` + `renderer/` into `bundle.js`.
-2. **Zig build** compiles `qjs_app.zig` (the reconciler host) with `bundle.js` embedded via `@embedFile` — the binary carries its own JS.
-3. **Package** (Linux): `ldd` walks deps, bundles every non-system `.so` + `ld-linux` into a lib/ dir, prepends a self-extracting shell wrapper that extracts to `~/.cache/reactjit-<name>/<sig>/` on first run.
-4. **macOS**: `.app` bundle with `Frameworks/` dylib rewrites, ad-hoc codesigned.
+2. **build-jsast** runs acorn over `bundle.js` and emits `bundle.ast.lua` — the AST as a Lua table literal (data, not code).
+3. **Zig build** compiles the cart host with the AST embedded via `@embedFile` — the binary carries its own program.
+4. **Package** (Linux): `ldd` walks deps, bundles every non-system `.so` + `ld-linux` into a lib/ dir, prepends a self-extracting shell wrapper that extracts to `~/.cache/reactjit-<name>/<sig>/` on first run.
+5. **macOS**: `.app` bundle with `Frameworks/` dylib rewrites, ad-hoc codesigned.
 
 Result: **one file, no system dependencies, runs anywhere.**
 
@@ -92,10 +93,10 @@ One persistent ReleaseFast binary at `zig-out/bin/reactjit-dev` hosts every cart
 
 | What you changed | Action |
 |---|---|
-| `cart/**`, `runtime/**`, `renderer/**` (React / TSX / TS) | **Nothing.** Save the file — esbuild rebundles and pushes over `/tmp/reactjit.sock`, host tears down QJS + re-evals in ~300ms. |
-| `framework/**`, `qjs_app.zig`, `build.zig`, `scripts/**` | **Rebuild the dev binary.** Delete `zig-out/bin/reactjit-dev` then re-run `./scripts/dev <cart>`, or explicitly: `zig build app -Ddev-mode=true -Doptimize=ReleaseFast -Dapp-name=reactjit-dev`. |
+| `cart/**`, `runtime/**`, `renderer/**` (React / TSX / TS) | **Nothing.** Save the file — esbuild rebundles, the host re-evals in ~300ms. |
+| `framework/**`, `build.zig`, `scripts/**` | **Rebuild the dev binary.** Delete `zig-out/bin/reactjit-dev` then re-run `./scripts/dev <cart>`. |
 
-Tab switching tears down the QJS context fully and re-evals the target cart's bundle — React state (`useState` / `useRef`) resets on every reload. A `useHotState` hook + `framework/hotstate.zig` scaffold exists for state preservation but **isn't working yet** — don't rely on atoms surviving reloads.
+Tab switching re-evals the target cart's bundle from scratch — React state (`useState` / `useRef`) resets on every reload. A `useHotState` hook + `framework/hotstate.zig` scaffold exists for state preservation but **isn't working yet** — don't rely on atoms surviving reloads.
 
 Dev mode always compiles `-Doptimize=ReleaseFast`; the Debug build has a pre-existing framework bug that silently crashes on any click.
 
@@ -200,16 +201,16 @@ The Zig runtime at `framework/` — ~45k lines across categories:
 | UI | `theme`, `classifier`, `selection`, `tooltip`, `context_menu`, `router`, `query`, `windows`, `applescript` |
 | Cartridge | `cartridge`, `cartpack`, `dev_shell`, `devtools`, `devtools_state`, `api`, `core` |
 | Terminal | `pty`, `pty_client`, `pty_remote`, `vterm`, `semantic` |
-| Networking | `qjs_ipc`, `net/` |
+| Networking | `net/` |
 | Media | `audio`, `player`, `videos`, `recorder`, `capture` |
 | Data | `fs`, `fswatch`, `sqlite`, `localstore`, `archive`, `crypto`, `privacy` |
-| Scripting | `qjs_runtime`, `qjs_value`, `qjs_semantic`, `qjs_c`, `luajit_runtime`, `luajit_worker`, `lua_guard` |
+| Scripting | `luajit_runtime`, `luajit_worker`, `lua_guard` |
 | Agent | `agent_core`, `agent_session`, `agent_spawner` |
 | Tools | `tool_framework`, `tools_builtin` |
 | Dev | `telemetry`, `log`, `log_export`, `testharness`, `testdriver`, `testassert`, `debug_client`, `debug_server`, `watchdog`, `witness` |
 | System | `process`, `child_engine`, `physics2d`, `physics3d`, `filedrop`, `breakpoint`, `crashlog`, `c` |
 
-Most subsystems **exist in Zig but aren't yet exposed as JSX primitives**. Window chrome (drag/resize regions), terminal, video, audio, 3D rendering, physics, LLM/Claude/Codex/AppleScript — the framework implements them; wiring them into `qjs_app.zig`'s CREATE path + exposing as primitives is incremental work. `<Native type="X" />` is the universal bridge until they get first-class wrappers.
+Most subsystems **exist in Zig but aren't yet exposed as JSX primitives**. Window chrome (drag/resize regions), terminal, video, audio, 3D rendering, physics, LLM/Claude/Codex/AppleScript — the framework implements them; wiring them into the host's CREATE path + exposing as primitives is incremental work. `<Native type="X" />` is the universal bridge until they get first-class wrappers.
 
 ---
 
@@ -226,7 +227,6 @@ Vsync-locked to monitor refresh by default (`.fifo` present mode). Uncap with `Z
 - FPS: 240 (vsync-locked)
 - Layout: sub-ms
 - Paint: ~250µs
-- QJS→Zig bridge: 52M setState calls/sec (not a bottleneck; layout is)
 
 **Binary size**: ~24MB self-extracting (compressed tarball with ~57 bundled `.so` libs + ld-linux + ELF).
 
@@ -237,22 +237,25 @@ Vsync-locked to monitor refresh by default (`.fifo` present mode). Uncap with `Z
 Active stack at the root:
 
 ```
-framework/         Zig runtime (layout, engine, GPU, events, input, state,
-                   effects, text, windows, QuickJS bridge). ~45k lines.
-qjs_app.zig        React-reconciler host. Loads embedded bundle.js into
-                   framework's in-process QuickJS, owns Node pool, wires events.
-runtime/           JS entry (index.tsx), timer subsystem, primitives,
-                   classifier, theme, tw (tailwind parser), JSX shim,
-                   window/document shims.
-renderer/          react-reconciler host config. Emits CMD JSON via
-                   __hostFlush. HTML tag remap, className parsing, handler
-                   extraction, subscription manager.
-cart/              .tsx apps. Single-file (cart/foo.tsx) or directory-based
-                   (cart/foo/index.tsx) layouts both work.
-scripts/           ship (one-command build), build-bundle.mjs (esbuild wrapper).
-build.zig          Root build, linking parity with Smith-era app target.
-stb/               stb_image headers (needed by framework GPU).
+framework/           Zig runtime (layout, engine, GPU, events, input, state,
+                     effects, text, windows, LuaJIT runtime). ~45k lines.
+framework/lua/jsrt/  JSRT — JS evaluator in Lua, running inside LuaJIT. The
+                     cart runtime. Read its README.md + TARGET.md before
+                     touching. Progress: 12/13 targets, check via
+                     ./framework/lua/jsrt/test/run_targets.sh.
+runtime/             JS entry, primitives, classifier, theme, tw (tailwind
+                     parser), JSX shim, window/document shims.
+renderer/            Reconciler host config (hostConfig.lua + reconciler.lua).
+                     Receives the mutation command stream JSRT emits.
+cart/                .tsx apps. Single-file (cart/foo.tsx) or directory-based
+                     (cart/foo/index.tsx) layouts both work.
+scripts/             ship (one-command build), build-bundle.mjs (esbuild
+                     wrapper), build-jsast.mjs (acorn → Lua AST literal).
+build.zig            Root build.
+stb/                 stb_image headers (needed by framework GPU).
 ```
+
+`qjs_app.zig` at the repo root is legacy — a prior QuickJS-based cart host that hit a 2000ms-per-click perf ceiling on large React trees. Not extended. JSRT replaces it. Do not build new work there.
 
 Frozen reference directories — **read-only, do not modify**:
 
@@ -273,11 +276,20 @@ game/              Dead Internet Game. Separate project.
 
 ## Why This Shape
 
-For 50 days this project built `.tsz` — a custom DSL that compiled via Smith (a JS compiler running in QuickJS hosted by a Zig kernel called Forge) to generated Zig. The theory: AOT compilation would produce a faster-feeling UI than running React-reconciler in QuickJS at runtime.
+For 50 days this project built `.tsz` — a custom DSL that compiled ahead of time, on the theory that AOT compilation would beat running React-reconciler at runtime. The theory was wrong. A reconciler-over-VM spike matched the AOT version's feel exactly — because layout is the bottleneck, not JS execution, for the shapes of programs that fit in a single VM. AOT bought nothing user-facing, cost every language feature as emitter work, and drifted toward reimplementing React from scratch. Meanwhile, love2d had already shipped a full storybook in 30 days with the reconciler-over-VM shape.
 
-The theory was wrong. A reconciler-over-QuickJS spike (`qjs_app.zig`) was written to compare, and it matched Smith's runtime feel exactly — because QJS→Zig is 52M calls/sec and **layout is the bottleneck, not JS execution**. AOT compilation bought nothing user-facing. Meanwhile, love2d had already shipped a full storybook in 30 days with the same reconciler-over-VM shape.
+So the Smith-era stack is frozen at `tsz/` (treated like `love2d/` and `archive/` — reference only, do not modify). The active shape is: write `.tsx`, React's reconciler emits mutation commands, the Zig host applies them to the Node pool. Copy-pasting React code from anywhere just works.
 
-So the Smith-era stack is frozen at `tsz/` (treated like `love2d/` and `archive/` — reference only, do not modify). The active stack at the root is the reconciler path: write `.tsx`, ship a native binary. The ergonomics land in the same place — with the added bonus that copy-pasting React code from anywhere just works.
+---
+
+## JSRT
+
+JSRT is the cart runtime. A JavaScript evaluator written in Lua, running inside LuaJIT. JS source stays JS at every stage — nothing ever translates JS to Lua. LuaJIT's trace JIT specializes the evaluator's hot paths, which effectively JIT-compiles the JS running through it.
+
+- **Where it lives:** `framework/lua/jsrt/` — `evaluator.lua`, `values.lua`, `scope.lua`, `builtins.lua`, `host.lua`, `init.lua`, `README.md`, `TARGET.md`.
+- **Pipeline:** TSX → esbuild → `bundle.js` → acorn (`scripts/build-jsast.mjs`) → `bundle.ast.lua` (AST as Lua table literal — *data*, never code) → LuaJIT loads it → JSRT evaluator walks it and executes JS semantics → host FFI into Zig.
+- **Scope guardrail:** the evaluator stops at ECMAScript. It knows `var`/`let`/`const`, function calls, closures, prototype chain, `this`, try/catch, Map/Set/WeakMap, Symbol, iterators, destructuring. It does **not** know about React, JSX, hooks, or components — esbuild lowers JSX to `React.createElement(...)` before the evaluator ever sees a bundle. That's the line that prevents the drift that killed every prior compiler attempt in this repo.
+- **Progress:** 12/13 ordered targets in `TARGET.md` passing. Real TSX → esbuild → JSRT produces the expected host-op stream end-to-end (`framework/lua/jsrt/test/demo_esbuild_bridge.lua`). Check status anytime: `./framework/lua/jsrt/test/run_targets.sh`.
 
 ---
 
@@ -295,17 +307,3 @@ But the golden path is conservative. First-party code uses classifiers, theme to
 
 ---
 
-## EQJS migration scaffold
-
-A standalone LuaJIT prototype now exists in the repo:
-
-- `renderer/hostConfig.lua`
-- `renderer/reconciler.lua`
-- `runtime/react.lua`
-- `tests/eqjs/run.lua`
-
-Run the smoke harness with:
-
-```
-./scripts/eqjs-smoke.sh
-```

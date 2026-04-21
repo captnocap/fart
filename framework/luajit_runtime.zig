@@ -186,6 +186,391 @@ fn hostPollInputSubmit(L: ?*lua.lua_State) callconv(.c) c_int {
     return 1;
 }
 
+// ── JSRT host-op tree ---------------------------------------------------
+
+var jsrt_node_arena: std.heap.ArenaAllocator = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+var jsrt_nodes_by_id: std.ArrayList(?*Node) = undefined;
+var jsrt_ptr_to_id: std.AutoHashMap(usize, u32) = undefined;
+var jsrt_tree_inited: bool = false;
+var jsrt_next_id: u32 = 1;
+var jsrt_root: Node = .{};
+
+fn jsrtNodeAllocator() std.mem.Allocator {
+    return jsrt_node_arena.allocator();
+}
+
+fn jsrtInitTree() void {
+    if (jsrt_tree_inited) return;
+    jsrt_nodes_by_id = .{};
+    jsrt_ptr_to_id = std.AutoHashMap(usize, u32).init(std.heap.page_allocator);
+    jsrt_tree_inited = true;
+    jsrtResetTree();
+}
+
+fn jsrtResetTree() void {
+    if (!jsrt_tree_inited) return;
+    jsrt_root = .{};
+    jsrt_root.children = &.{};
+    jsrt_next_id = 1;
+    _ = jsrt_node_arena.reset(.retain_capacity);
+    jsrt_ptr_to_id.clearRetainingCapacity();
+    jsrt_nodes_by_id.clearRetainingCapacity();
+    jsrt_nodes_by_id.append(std.heap.page_allocator, null) catch @panic("[luajit-runtime] JSRT node registry allocation failed");
+}
+
+fn jsrtDeinitTree() void {
+    if (!jsrt_tree_inited) return;
+    jsrt_nodes_by_id.deinit(std.heap.page_allocator);
+    jsrt_ptr_to_id.deinit();
+    jsrt_node_arena.deinit();
+    jsrt_tree_inited = false;
+}
+
+fn jsrtEnsureSlot(id: u32) void {
+    while (jsrt_nodes_by_id.items.len <= id) {
+        jsrt_nodes_by_id.append(std.heap.page_allocator, null) catch @panic("[luajit-runtime] JSRT node registry allocation failed");
+    }
+}
+
+fn jsrtRegisterNode(id: u32, ptr: *Node) void {
+    jsrtEnsureSlot(id);
+    jsrt_nodes_by_id.items[id] = ptr;
+    jsrt_ptr_to_id.put(@intFromPtr(ptr), id) catch @panic("[luajit-runtime] JSRT node pointer registry allocation failed");
+}
+
+fn jsrtNodeForId(id: u32) ?*Node {
+    if (id == 0 or id >= jsrt_nodes_by_id.items.len) return null;
+    return jsrt_nodes_by_id.items[id];
+}
+
+fn jsrtIdForPtr(ptr: *const Node) ?u32 {
+    return jsrt_ptr_to_id.get(@intFromPtr(ptr));
+}
+
+fn jsrtCopyChildren(parent: *Node, old_children: []const Node, new_ptrs: []const *Node) bool {
+    const alloc = jsrtNodeAllocator();
+    if (new_ptrs.len > 0) {
+        const ids = alloc.alloc(u32, new_ptrs.len) catch return false;
+        for (new_ptrs, 0..) |src_ptr, i| {
+            ids[i] = jsrtIdForPtr(src_ptr) orelse return false;
+        }
+        for (old_children, 0..) |_, i| {
+            const old_ptr = &old_children[i];
+            if (jsrtIdForPtr(old_ptr)) |id| {
+                jsrtEnsureSlot(id);
+                jsrt_nodes_by_id.items[id] = null;
+                _ = jsrt_ptr_to_id.remove(@intFromPtr(old_ptr));
+            }
+        }
+
+        const new_children = alloc.alloc(Node, new_ptrs.len) catch return false;
+        for (new_ptrs, 0..) |src_ptr, i| {
+            new_children[i] = src_ptr.*;
+        }
+        for (new_ptrs, 0..) |_, i| {
+            const id = ids[i];
+            jsrtEnsureSlot(id);
+            jsrt_nodes_by_id.items[id] = &new_children[i];
+            jsrt_ptr_to_id.put(@intFromPtr(&new_children[i]), id) catch return false;
+        }
+        parent.children = new_children;
+        return true;
+    }
+
+    for (old_children, 0..) |_, i| {
+        const old_ptr = &old_children[i];
+        if (jsrtIdForPtr(old_ptr)) |id| {
+            jsrtEnsureSlot(id);
+            jsrt_nodes_by_id.items[id] = null;
+            _ = jsrt_ptr_to_id.remove(@intFromPtr(old_ptr));
+        }
+    }
+    parent.children = &.{};
+    return true;
+}
+
+fn jsrtAppendChild(parent: *Node, child: *Node) bool {
+    const old_children = parent.children;
+    var ptrs: std.ArrayList(*Node) = .{};
+    defer ptrs.deinit(std.heap.page_allocator);
+    for (old_children, 0..) |_, i| {
+        ptrs.append(std.heap.page_allocator, &old_children[i]) catch return false;
+    }
+    ptrs.append(std.heap.page_allocator, child) catch return false;
+    return jsrtCopyChildren(parent, old_children, ptrs.items);
+}
+
+fn jsrtInsertChildBefore(parent: *Node, child: *Node, before: *Node) bool {
+    const old_children = parent.children;
+    var ptrs: std.ArrayList(*Node) = .{};
+    defer ptrs.deinit(std.heap.page_allocator);
+    var inserted = false;
+    for (old_children, 0..) |_, i| {
+        const src = &old_children[i];
+        if (!inserted and jsrtIdForPtr(src) == jsrtIdForPtr(before)) {
+            ptrs.append(std.heap.page_allocator, child) catch return false;
+            inserted = true;
+        }
+        ptrs.append(std.heap.page_allocator, src) catch return false;
+    }
+    if (!inserted) ptrs.append(std.heap.page_allocator, child) catch return false;
+    return jsrtCopyChildren(parent, old_children, ptrs.items);
+}
+
+fn jsrtRemoveChild(parent: *Node, child: *Node) bool {
+    const old_children = parent.children;
+    var ptrs: std.ArrayList(*Node) = .{};
+    defer ptrs.deinit(std.heap.page_allocator);
+    const remove_id = jsrtIdForPtr(child) orelse return false;
+    var removed = false;
+    for (old_children, 0..) |_, i| {
+        const src = &old_children[i];
+        if (!removed) {
+            if (jsrtIdForPtr(src)) |id| {
+                if (id == remove_id) {
+                    removed = true;
+                    continue;
+                }
+            }
+        }
+        ptrs.append(std.heap.page_allocator, src) catch return false;
+    }
+    if (!removed) return false;
+    return jsrtCopyChildren(parent, old_children, ptrs.items);
+}
+
+fn jsrtDupLuaString(L: ?*lua.lua_State, idx: c_int, alloc: std.mem.Allocator) ?[]const u8 {
+    var len: usize = 0;
+    const ptr = lua.lua_tolstring(L, idx, &len);
+    if (ptr == null) return null;
+    const copy = alloc.alloc(u8, len) catch return null;
+    @memcpy(copy, @as([*]const u8, @ptrCast(ptr))[0..len]);
+    return copy;
+}
+
+fn jsrtSetNodeText(node: *Node, text: []const u8) void {
+    if (node.children.len > 0) {
+        node.children[0].text = text;
+    } else {
+        node.text = text;
+    }
+}
+
+fn jsrtApplyUpdatePatch(L: ?*lua.lua_State, idx: c_int, node: *Node) void {
+    if (!lua.lua_istable(L, idx)) return;
+
+    lua.lua_getfield(L, idx, "style");
+    if (lua.lua_istable(L, -1)) {
+        node.style = readLuaStyle(L, -1);
+    }
+    lua.lua_pop(L, 1);
+
+    lua.lua_getfield(L, idx, "text");
+    if (lua.lua_isstring(L, -1) != 0) {
+        var len: usize = 0;
+        const ptr = lua.lua_tolstring(L, -1, &len);
+        if (ptr != null) {
+            jsrtSetNodeText(node, @as([*]const u8, @ptrCast(ptr))[0..len]);
+        }
+    }
+    lua.lua_pop(L, 1);
+
+    if (readLuaOptFloat(L, idx, "font_size")) |v| node.font_size = @intFromFloat(v);
+    lua.lua_getfield(L, idx, "text_color");
+    if (readLuaColor(L, -1)) |c| node.text_color = c;
+    lua.lua_pop(L, 1);
+    if (readLuaOptFloat(L, idx, "letter_spacing")) |v| node.letter_spacing = v;
+    if (readLuaOptFloat(L, idx, "line_height")) |v| node.line_height = v;
+    if (readLuaOptFloat(L, idx, "number_of_lines")) |v| node.number_of_lines = @intFromFloat(v);
+    lua.lua_getfield(L, idx, "no_wrap");
+    if (lua.lua_isboolean(L, -1)) {
+        node.no_wrap = lua.lua_toboolean(L, -1) != 0;
+    }
+    lua.lua_pop(L, 1);
+
+    node.placeholder = readLuaOptString(L, idx, "placeholder", jsrtNodeAllocator()) orelse node.placeholder;
+    node.debug_name = readLuaOptString(L, idx, "debug_name", jsrtNodeAllocator()) orelse node.debug_name;
+    node.test_id = readLuaOptString(L, idx, "test_id", jsrtNodeAllocator()) orelse node.test_id;
+    node.tooltip = readLuaOptString(L, idx, "tooltip", jsrtNodeAllocator()) orelse node.tooltip;
+    node.href = readLuaOptString(L, idx, "href", jsrtNodeAllocator()) orelse node.href;
+    lua.lua_getfield(L, idx, "hoverable");
+    if (lua.lua_isboolean(L, -1)) {
+        node.hoverable = lua.lua_toboolean(L, -1) != 0;
+    }
+    lua.lua_pop(L, 1);
+    node.scroll_x = readLuaFloat(L, idx, "scroll_x", node.scroll_x);
+    node.scroll_y = readLuaFloat(L, idx, "scroll_y", node.scroll_y);
+    if (readLuaOptFloat(L, idx, "scroll_persist_slot")) |v| node.scroll_persist_slot = @intFromFloat(v);
+    node.content_height = readLuaFloat(L, idx, "content_height", node.content_height);
+    node.content_width = readLuaFloat(L, idx, "content_width", node.content_width);
+    lua.lua_getfield(L, idx, "window_drag");
+    if (lua.lua_isboolean(L, -1)) {
+        node.window_drag = lua.lua_toboolean(L, -1) != 0;
+    }
+    lua.lua_pop(L, 1);
+    lua.lua_getfield(L, idx, "window_resize");
+    if (lua.lua_isboolean(L, -1)) {
+        node.window_resize = lua.lua_toboolean(L, -1) != 0;
+    }
+    lua.lua_pop(L, 1);
+}
+
+fn hostCreate(L: ?*lua.lua_State) callconv(.c) c_int {
+    const alloc = jsrtNodeAllocator();
+    const argc = lua.lua_gettop(L);
+    var id: u32 = jsrt_next_id;
+    var type_idx: c_int = 1;
+    var props_idx: c_int = 2;
+
+    if (argc >= 3 and lua.lua_isnumber(L, 1) != 0) {
+        id = @intCast(@as(i64, @intFromFloat(lua.lua_tonumber(L, 1))));
+        type_idx = 2;
+        props_idx = 3;
+        if (id >= jsrt_next_id) {
+            jsrt_next_id = id + 1;
+        }
+    } else {
+        jsrt_next_id += 1;
+    }
+
+    var node = stampLuaNode(L, props_idx, alloc);
+    if (node.debug_name == null and lua.lua_isstring(L, type_idx) != 0) {
+        if (jsrtDupLuaString(L, type_idx, alloc)) |type_name| {
+            node.debug_name = type_name;
+        }
+    }
+    const stored = alloc.create(Node) catch return 0;
+    stored.* = node;
+    jsrtRegisterNode(id, stored);
+    lua.lua_pushinteger(L, @intCast(id));
+    return 1;
+}
+
+fn hostCreateText(L: ?*lua.lua_State) callconv(.c) c_int {
+    const alloc = jsrtNodeAllocator();
+    const argc = lua.lua_gettop(L);
+    var id: u32 = jsrt_next_id;
+    var text_idx: c_int = 1;
+    if (argc >= 2 and lua.lua_isnumber(L, 1) != 0) {
+        id = @intCast(@as(i64, @intFromFloat(lua.lua_tonumber(L, 1))));
+        text_idx = 2;
+        if (id >= jsrt_next_id) {
+            jsrt_next_id = id + 1;
+        }
+    } else {
+        jsrt_next_id += 1;
+    }
+
+    const stored = alloc.create(Node) catch return 0;
+    stored.* = .{};
+    if (jsrtDupLuaString(L, text_idx, alloc)) |text| {
+        stored.text = text;
+    }
+    jsrtRegisterNode(id, stored);
+    lua.lua_pushinteger(L, @intCast(id));
+    return 1;
+}
+
+fn hostAppend(L: ?*lua.lua_State) callconv(.c) c_int {
+    const parent_id = @as(u32, @intCast(lua.lua_tointeger(L, 1)));
+    const child_id = @as(u32, @intCast(lua.lua_tointeger(L, 2)));
+    const parent = jsrtNodeForId(parent_id) orelse return 0;
+    const child = jsrtNodeForId(child_id) orelse return 0;
+    return if (jsrtAppendChild(parent, child)) 0 else 0;
+}
+
+fn hostAppendToRoot(L: ?*lua.lua_State) callconv(.c) c_int {
+    const child_id = @as(u32, @intCast(lua.lua_tointeger(L, 1)));
+    const child = jsrtNodeForId(child_id) orelse return 0;
+    return if (jsrtAppendChild(&jsrt_root, child)) 0 else 0;
+}
+
+fn hostUpdateText(L: ?*lua.lua_State) callconv(.c) c_int {
+    const id = @as(u32, @intCast(lua.lua_tointeger(L, 1)));
+    const node = jsrtNodeForId(id) orelse return 0;
+    if (jsrtDupLuaString(L, 2, jsrtNodeAllocator())) |text| {
+        jsrtSetNodeText(node, text);
+    }
+    return 0;
+}
+
+fn hostUpdate(L: ?*lua.lua_State) callconv(.c) c_int {
+    const id = @as(u32, @intCast(lua.lua_tointeger(L, 1)));
+    const node = jsrtNodeForId(id) orelse return 0;
+    jsrtApplyUpdatePatch(L, 2, node);
+    return 0;
+}
+
+fn hostRemove(L: ?*lua.lua_State) callconv(.c) c_int {
+    const parent_id = @as(u32, @intCast(lua.lua_tointeger(L, 1)));
+    const child_id = @as(u32, @intCast(lua.lua_tointeger(L, 2)));
+    const parent = jsrtNodeForId(parent_id) orelse return 0;
+    const child = jsrtNodeForId(child_id) orelse return 0;
+    return if (jsrtRemoveChild(parent, child)) 0 else 0;
+}
+
+fn hostRemoveFromRoot(L: ?*lua.lua_State) callconv(.c) c_int {
+    const child_id = @as(u32, @intCast(lua.lua_tointeger(L, 1)));
+    const child = jsrtNodeForId(child_id) orelse return 0;
+    return if (jsrtRemoveChild(&jsrt_root, child)) 0 else 0;
+}
+
+fn hostInsertBefore(L: ?*lua.lua_State) callconv(.c) c_int {
+    const parent_id = @as(u32, @intCast(lua.lua_tointeger(L, 1)));
+    const child_id = @as(u32, @intCast(lua.lua_tointeger(L, 2)));
+    const before_id = @as(u32, @intCast(lua.lua_tointeger(L, 3)));
+    const parent = jsrtNodeForId(parent_id) orelse return 0;
+    const child = jsrtNodeForId(child_id) orelse return 0;
+    const before = jsrtNodeForId(before_id) orelse return 0;
+    const old_children = parent.children;
+    var ptrs: std.ArrayList(*Node) = .{};
+    defer ptrs.deinit(std.heap.page_allocator);
+    var inserted = false;
+    for (old_children, 0..) |_, i| {
+        const src = &old_children[i];
+        if (!inserted and jsrtIdForPtr(src) != null and jsrtIdForPtr(src).? == before_id) {
+            ptrs.append(std.heap.page_allocator, child) catch return 0;
+            inserted = true;
+        }
+        ptrs.append(std.heap.page_allocator, src) catch return 0;
+    }
+    if (!inserted) ptrs.append(std.heap.page_allocator, child) catch return 0;
+    _ = before;
+    return if (jsrtCopyChildren(parent, old_children, ptrs.items)) 0 else 0;
+}
+
+fn hostInsertBeforeRoot(L: ?*lua.lua_State) callconv(.c) c_int {
+    const child_id = @as(u32, @intCast(lua.lua_tointeger(L, 1)));
+    const before_id = @as(u32, @intCast(lua.lua_tointeger(L, 2)));
+    const child = jsrtNodeForId(child_id) orelse return 0;
+    const before = jsrtNodeForId(before_id) orelse return 0;
+    const old_children = jsrt_root.children;
+    var ptrs: std.ArrayList(*Node) = .{};
+    defer ptrs.deinit(std.heap.page_allocator);
+    var inserted = false;
+    for (old_children, 0..) |_, i| {
+        const src = &old_children[i];
+        if (!inserted and jsrtIdForPtr(src) != null and jsrtIdForPtr(src).? == before_id) {
+            ptrs.append(std.heap.page_allocator, child) catch return 0;
+            inserted = true;
+        }
+        ptrs.append(std.heap.page_allocator, src) catch return 0;
+    }
+    if (!inserted) ptrs.append(std.heap.page_allocator, child) catch return 0;
+    _ = before;
+    return if (jsrtCopyChildren(&jsrt_root, old_children, ptrs.items)) 0 else 0;
+}
+
+fn hostFlush(_: ?*lua.lua_State) callconv(.c) c_int {
+    layout.markLayoutDirty();
+    state.markDirty();
+    return 0;
+}
+
+pub fn jsrtRoot() *Node {
+    return &jsrt_root;
+}
+
 // ── Mouse/keyboard polling ──────────────────────────────────────────────
 
 var g_mouse_x: f32 = 0;
@@ -1129,6 +1514,7 @@ pub fn initVM() void {
     };
     lua.luaL_openlibs(L);
     g_lua = L;
+    jsrtInitTree();
 
     // Register host functions
     const funcs = [_]struct { name: [*:0]const u8, func: lua.lua_CFunction }{
@@ -1141,6 +1527,17 @@ pub fn initVM() void {
         .{ .name = "getInputText", .func = &hostGetInputText },
         .{ .name = "__setInputText", .func = &hostSetInputText },
         .{ .name = "__pollInputSubmit", .func = &hostPollInputSubmit },
+        .{ .name = "__hostCreate", .func = &hostCreate },
+        .{ .name = "__hostCreateText", .func = &hostCreateText },
+        .{ .name = "__hostAppend", .func = &hostAppend },
+        .{ .name = "__hostAppendToRoot", .func = &hostAppendToRoot },
+        .{ .name = "__hostUpdate", .func = &hostUpdate },
+        .{ .name = "__hostUpdateText", .func = &hostUpdateText },
+        .{ .name = "__hostRemove", .func = &hostRemove },
+        .{ .name = "__hostRemoveFromRoot", .func = &hostRemoveFromRoot },
+        .{ .name = "__hostInsertBefore", .func = &hostInsertBefore },
+        .{ .name = "__hostInsertBeforeRoot", .func = &hostInsertBeforeRoot },
+        .{ .name = "__hostFlush", .func = &hostFlush },
         .{ .name = "getMouseX", .func = &hostGetMouseX },
         .{ .name = "getMouseY", .func = &hostGetMouseY },
         .{ .name = "getMouseDown", .func = &hostGetMouseDown },
@@ -1198,6 +1595,7 @@ pub fn deinit() void {
         lua.lua_close(L);
         g_lua = null;
     }
+    jsrtDeinitTree();
 }
 
 // ── Script evaluation ───────────────────────────────────────────────────

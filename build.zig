@@ -161,4 +161,89 @@ pub fn build(b: *std.Build) void {
 
     const app_step = b.step("app", "Build the qjs_app binary");
     app_step.dependOn(&b.addInstallArtifact(exe, .{}).step);
+
+    // ── luajit_runtime integration test ────────────────────────
+    const test_mod = b.createModule(.{
+        .root_source_file = b.path("framework/luajit_runtime_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    test_mod.addOptions("build_options", options);
+    test_mod.addImport("wgpu", wgpu_mod);
+    test_mod.addImport("tls", tls_mod);
+    test_mod.addImport("zluajit", zluajit_dep.module("zluajit"));
+
+    test_mod.addIncludePath(b.path("."));
+    test_mod.addIncludePath(b.path("love2d/quickjs"));
+    test_mod.addIncludePath(b.path("framework/ffi"));
+
+    test_mod.addCSourceFiles(.{
+        .root = b.path("love2d/quickjs"),
+        .files = &.{ "cutils.c", "dtoa.c", "libregexp.c", "libunicode.c", "quickjs.c", "quickjs-libc.c" },
+        .flags = &.{ "-O2", "-D_GNU_SOURCE", "-DQUICKJS_NG_BUILD" },
+    });
+    test_mod.addCSourceFile(.{ .file = b.path("stb/stb_image_write_impl.c"), .flags = &.{"-O2"} });
+    test_mod.addCSourceFile(.{ .file = b.path("framework/ffi/compute_shim.c"), .flags = &.{"-O2"} });
+    test_mod.addCSourceFile(.{ .file = b.path("framework/ffi/physics_shim.cpp"), .flags = &.{"-O2"} });
+
+    const luajit_runtime_test = b.addTest(.{
+        .name = "luajit-runtime-test",
+        .root_module = test_mod,
+    });
+    luajit_runtime_test.stack_size = 64 * 1024 * 1024;
+
+    luajit_runtime_test.linkLibC();
+    luajit_runtime_test.linkSystemLibrary("SDL3");
+    luajit_runtime_test.linkSystemLibrary("freetype");
+    luajit_runtime_test.linkSystemLibrary("luajit-5.1");
+
+    if (os_tag == .linux) {
+        test_mod.addIncludePath(.{ .cwd_relative = "/usr/include/luajit-2.1" });
+        luajit_runtime_test.linkSystemLibrary("X11");
+        luajit_runtime_test.linkSystemLibrary("m");
+        luajit_runtime_test.linkSystemLibrary("pthread");
+        luajit_runtime_test.linkSystemLibrary("dl");
+        if (sysroot) |sr| {
+            test_mod.addIncludePath(.{ .cwd_relative = b.fmt("{s}/usr/include/freetype2", .{sr}) });
+            test_mod.addIncludePath(.{ .cwd_relative = b.fmt("{s}/usr/include", .{sr}) });
+            test_mod.addLibraryPath(.{ .cwd_relative = b.fmt("{s}/usr/lib", .{sr}) });
+        } else {
+            test_mod.addIncludePath(.{ .cwd_relative = "/usr/include/freetype2" });
+            test_mod.addIncludePath(.{ .cwd_relative = "/usr/include/x86_64-linux-gnu" });
+        }
+    } else if (os_tag == .macos) {
+        test_mod.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include/luajit-2.1" });
+        test_mod.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/lib" });
+        test_mod.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
+        test_mod.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include/freetype2" });
+        test_mod.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/opt/libarchive/lib" });
+        test_mod.addIncludePath(.{ .cwd_relative = "/opt/homebrew/opt/libarchive/include" });
+        luajit_runtime_test.linkFramework("Foundation");
+        luajit_runtime_test.linkFramework("QuartzCore");
+        luajit_runtime_test.linkFramework("Metal");
+        luajit_runtime_test.linkFramework("Cocoa");
+        luajit_runtime_test.linkFramework("IOKit");
+        luajit_runtime_test.linkFramework("CoreVideo");
+        test_mod.addCSourceFile(.{ .file = b.path("framework/ffi/applescript_shim.m"), .flags = &.{"-O2"} });
+    }
+
+    if (os_tag == .linux) {
+        if (sysroot) |sr| {
+            test_mod.addIncludePath(.{ .cwd_relative = b.fmt("{s}/usr/include", .{sr}) });
+        } else {
+            test_mod.addIncludePath(.{ .cwd_relative = "/usr/include/x86_64-linux-gnu" });
+        }
+    } else if (os_tag == .macos) {
+        test_mod.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
+    }
+
+    luajit_runtime_test.linkSystemLibrary("box2d");
+    luajit_runtime_test.linkSystemLibrary("sqlite3");
+    luajit_runtime_test.linkSystemLibrary("vterm");
+    luajit_runtime_test.linkSystemLibrary("curl");
+    luajit_runtime_test.linkLibCpp();
+
+    const run_luajit_runtime_test = b.addRunArtifact(luajit_runtime_test);
+    const luajit_runtime_test_step = b.step("test-luajit-runtime", "Run the LuaJIT runtime integration test");
+    luajit_runtime_test_step.dependOn(&run_luajit_runtime_test.step);
 }

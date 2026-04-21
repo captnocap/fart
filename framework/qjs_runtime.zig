@@ -86,6 +86,9 @@ var g_mouse_x: f32 = 0;
 var g_mouse_y: f32 = 0;
 var g_mouse_down: bool = false;
 var g_mouse_right_down: bool = false;
+var g_terminal_dock_resize_active: bool = false;
+var g_terminal_dock_resize_start_y: f32 = 0;
+var g_terminal_dock_resize_start_height: f32 = 0;
 
 pub fn updateMouse(x: f32, y: f32) void {
     g_mouse_x = x;
@@ -98,6 +101,28 @@ pub fn updateMouseButton(down: bool, right: bool) void {
     } else {
         g_mouse_down = down;
     }
+}
+
+pub fn beginTerminalDockResize(start_y: f32, start_height: f32) void {
+    g_terminal_dock_resize_active = true;
+    g_terminal_dock_resize_start_y = start_y;
+    g_terminal_dock_resize_start_height = start_height;
+}
+
+pub fn endTerminalDockResize() void {
+    g_terminal_dock_resize_active = false;
+}
+
+pub fn terminalDockResizeActive() bool {
+    return g_terminal_dock_resize_active;
+}
+
+pub fn terminalDockResizeStartY() f32 {
+    return g_terminal_dock_resize_start_y;
+}
+
+pub fn terminalDockResizeStartHeight() f32 {
+    return g_terminal_dock_resize_start_height;
 }
 
 fn kimiResetTurnBuffers() void {
@@ -557,6 +582,30 @@ fn hostGetMouseDown(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSV
 }
 fn hostGetMouseRightDown(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
     return qjs.JS_NewFloat64(null, if (g_mouse_right_down) 1.0 else 0.0);
+}
+
+fn hostBeginTerminalDockResize(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    if (argc < 2) return QJS_UNDEFINED;
+    var start_y: f64 = 0;
+    var start_height: f64 = 0;
+    _ = qjs.JS_ToFloat64(ctx, &start_y, argv[0]);
+    _ = qjs.JS_ToFloat64(ctx, &start_height, argv[1]);
+    beginTerminalDockResize(@floatCast(start_y), @floatCast(start_height));
+    return QJS_UNDEFINED;
+}
+
+fn hostEndTerminalDockResize(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    endTerminalDockResize();
+    return QJS_UNDEFINED;
+}
+
+fn hostGetTerminalDockResizeState(ctx: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
+    const c2 = ctx orelse return QJS_UNDEFINED;
+    const obj = qjs.JS_NewObject(c2);
+    setF(c2, obj, "active", if (g_terminal_dock_resize_active) 1 else 0);
+    setF(c2, obj, "startY", g_terminal_dock_resize_start_y);
+    setF(c2, obj, "startHeight", g_terminal_dock_resize_start_height);
+    return obj;
 }
 fn hostIsKeyDown(_: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
     if (argc < 1) return qjs.JS_NewFloat64(null, 0);
@@ -2938,6 +2987,9 @@ pub fn initVM() void {
     _ = qjs.JS_SetPropertyStr(ctx, global, "getMouseDown", qjs.JS_NewCFunction(ctx, hostGetMouseDown, "getMouseDown", 0));
     _ = qjs.JS_SetPropertyStr(ctx, global, "isKeyDown", qjs.JS_NewCFunction(ctx, hostIsKeyDown, "isKeyDown", 1));
     _ = qjs.JS_SetPropertyStr(ctx, global, "getMouseRightDown", qjs.JS_NewCFunction(ctx, hostGetMouseRightDown, "getMouseRightDown", 0));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__beginTerminalDockResize", qjs.JS_NewCFunction(ctx, hostBeginTerminalDockResize, "__beginTerminalDockResize", 2));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__endTerminalDockResize", qjs.JS_NewCFunction(ctx, hostEndTerminalDockResize, "__endTerminalDockResize", 0));
+    _ = qjs.JS_SetPropertyStr(ctx, global, "__getTerminalDockResizeState", qjs.JS_NewCFunction(ctx, hostGetTerminalDockResizeState, "__getTerminalDockResizeState", 0));
     _ = qjs.JS_SetPropertyStr(ctx, global, "__clipboard_set", qjs.JS_NewCFunction(ctx, hostClipboardSet, "__clipboard_set", 1));
     _ = qjs.JS_SetPropertyStr(ctx, global, "__clipboard_get", qjs.JS_NewCFunction(ctx, hostClipboardGet, "__clipboard_get", 0));
     _ = qjs.JS_SetPropertyStr(ctx, global, "heavy_compute", qjs.JS_NewCFunction(ctx, hostHeavyCompute, "heavy_compute", 1));
@@ -3187,6 +3239,44 @@ pub fn callGlobalInt(name: [*:0]const u8, arg: i64) void {
         if (!qjs.JS_IsUndefined(func)) {
             var argv = [1]qjs.JSValue{qjs.JS_NewInt64(ctx, arg)};
             const r = qjs.JS_Call(ctx, func, global, 1, &argv);
+            qjs.JS_FreeValue(ctx, r);
+        }
+    }
+}
+
+/// Call a global JS function with one float argument.
+pub fn callGlobalFloat(name: [*:0]const u8, arg: f32) void {
+    if (comptime !HAS_QUICKJS) return;
+    if (g_qjs_ctx) |ctx| {
+        const global = qjs.JS_GetGlobalObject(ctx);
+        defer qjs.JS_FreeValue(ctx, global);
+        const func = qjs.JS_GetPropertyStr(ctx, global, name);
+        defer qjs.JS_FreeValue(ctx, func);
+        if (!qjs.JS_IsUndefined(func)) {
+            var argv = [1]qjs.JSValue{qjs.JS_NewFloat64(ctx, @floatCast(arg))};
+            const r = qjs.JS_Call(ctx, func, global, 1, &argv);
+            qjs.JS_FreeValue(ctx, argv[0]);
+            qjs.JS_FreeValue(ctx, r);
+        }
+    }
+}
+
+/// Call a global JS function with two float arguments.
+pub fn callGlobal2Float(name: [*:0]const u8, arg0: f32, arg1: f32) void {
+    if (comptime !HAS_QUICKJS) return;
+    if (g_qjs_ctx) |ctx| {
+        const global = qjs.JS_GetGlobalObject(ctx);
+        defer qjs.JS_FreeValue(ctx, global);
+        const func = qjs.JS_GetPropertyStr(ctx, global, name);
+        defer qjs.JS_FreeValue(ctx, func);
+        if (!qjs.JS_IsUndefined(func)) {
+            var argv = [2]qjs.JSValue{
+                qjs.JS_NewFloat64(ctx, @floatCast(arg0)),
+                qjs.JS_NewFloat64(ctx, @floatCast(arg1)),
+            };
+            const r = qjs.JS_Call(ctx, func, global, 2, &argv);
+            qjs.JS_FreeValue(ctx, argv[0]);
+            qjs.JS_FreeValue(ctx, argv[1]);
             qjs.JS_FreeValue(ctx, r);
         }
     }

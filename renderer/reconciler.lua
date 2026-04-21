@@ -140,4 +140,8 @@ function M.render(prev_tree, next_tree, emitter)
   return update(prev_tree, next_tree, nil, emitter), emitter
 end
 
+function M.applyCommands(tree, commands)
+  return host.applyCommands(tree, commands)
+end
+
 return M

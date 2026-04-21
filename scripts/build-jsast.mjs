@@ -40,10 +40,10 @@ function emit(value, indent) {
   if (typeof value === 'bigint') {
     throw new Error('BigInt literal not supported in JSRT');
   }
-  if (typeof value === 'string') return luaString(value);
   if (value instanceof RegExp) {
-    throw new Error('Regex literal not supported yet');
+    return '{ __regex = true, source = ' + luaString(value.source) + ', flags = ' + luaString(value.flags) + ' }';
   }
+  if (typeof value === 'string') return luaString(value);
 
   if (Array.isArray(value)) {
     if (value.length === 0) return '{}';

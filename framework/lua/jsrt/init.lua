@@ -20,7 +20,7 @@ function M.run(ast, opts)
   opts = opts or {}
   local root = Scope.new(nil)
   Builtins.install(root)
-  Host.install(root)
+  Host.install(root, opts.host)
   if opts.globals then
     for name, value in pairs(opts.globals) do
       root:define(name, value)
