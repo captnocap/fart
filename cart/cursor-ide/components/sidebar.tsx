@@ -117,6 +117,7 @@ export function Sidebar(props: any) {
         <Col style={{ gap: 4 }}>
           {props.files.map((file: any) => {
             if (file.visible !== 1) return null;
+            const gitGutter = gitGutterColor(file.git);
             return (
               <Pressable
                 key={file.path + '_' + file.indent}
@@ -131,6 +132,8 @@ export function Sidebar(props: any) {
                   paddingBottom: 6,
                   borderRadius: 10,
                   backgroundColor: file.selected ? COLORS.panelHover : file.hot ? COLORS.panelRaised : 'transparent',
+                  borderLeftWidth: gitGutter ? 3 : 0,
+                  borderColor: gitGutter || 'transparent',
                 }}
               >
                 <Text fontSize={9} color={COLORS.textDim}>{file.type === 'dir' ? (file.expanded ? 'v' : '>') : ''}</Text>
@@ -143,7 +146,7 @@ export function Sidebar(props: any) {
                 <Text fontSize={11} color={file.selected ? COLORS.textBright : COLORS.text}>{file.name}</Text>
                 {file.hot ? <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: COLORS.blue }} /> : null}
                 <Box style={{ flexGrow: 1 }} />
-                {file.git ? <Pill label={file.git} color={COLORS.textMuted} tiny={true} /> : null}
+                {file.git ? <Pill label={file.git} color={gitGutter || COLORS.textMuted} tiny={true} /> : null}
               </Pressable>
             );
           })}
