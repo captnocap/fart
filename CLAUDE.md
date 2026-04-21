@@ -24,6 +24,26 @@ Why:
 - Explore summaries are less reliable than direct source inspection here.
 - Delegation is slower and increases hallucination risk.
 
+# HARD RULE: JSRT — JS INSIDE LUA, NOT JS TURNING INTO LUA
+
+The decided VM direction is **JSRT**: a JavaScript evaluator in Lua, running inside LuaJIT. JS source stays JS at every stage. There is no tool anywhere in the pipeline that translates JS to Lua. If you see one, or propose one, you are looking at the trap.
+
+**The distinction that matters is scope, not label.** Transpiler / compiler / codegen are the same activity with different marketing. The real question is: does the tool know about React, or does it stop at ECMAScript?
+
+- **JS inside Lua (JSRT — what we build):** JS is *data*. A Lua evaluator reads the JS (or its AST) and executes JS semantics. Semantics live in ONE place (the evaluator + runtime helpers). JS features = evaluator work, bounded by ECMAScript (finite, stable). LuaJIT trace-JITs the evaluator loop → effectively JITs the JS running through it. Nothing emits Lua code. Ever.
+
+- **JS turning into Lua (the trap — DO NOT BUILD):** An emitter reads JS and produces Lua source. Every JS feature becomes emitter code. Semantics scattered across every translated file. Drift vector: the emitter reaches above JS into framework territory (hooks / JSX / components) and grows unbounded. `deps/eqjs/eqjs_transpiler.zig` and `/home/siah/eqjs/compiler/` are both this shape. Quarantined. **Do not resurrect.**
+
+**Scope guardrail for JSRT:** the evaluator implements ECMAScript semantics (var/let/const, function calls, closures, prototype chain, this, try/catch, Map/Set/WeakMap, Symbol, iterators). It does NOT know about React, hooks, JSX, components, or reconcilers. esbuild lowers JSX to `React.createElement(...)` calls before JSRT sees anything. The React library code is indistinguishable from any other JS program at the evaluator's level. **If you catch yourself writing evaluator code that names `useState`, `hook`, `fiber`, `component`, or any React concept — STOP. That is the trap.**
+
+Live files: `framework/lua/jsrt/` — see `README.md` for the manifesto and `TARGET.md` for the 13 ordered milestones. Progress check:
+
+```
+./framework/lua/jsrt/test/run_targets.sh
+```
+
+When asked "where are we on JSRT," run that — don't guess. The old `deps/eqjs/` tree is reference only and should not be extended.
+
 ## Who Maintains This
 
 **You do.** Bugs are from other versions of yourself in parallel instances. If a bug from another Claude is blocking you, fix it — it is your code. All of it.
@@ -32,7 +52,13 @@ Why:
 
 ## What This Is (active shape)
 
-ReactJIT is a React-reconciler-driven UI framework. Apps are written in `.tsx` (standard React), bundled by esbuild, and run inside the framework's **QuickJS** VM via `qjs_app.zig`. The reconciler emits CREATE/APPEND/UPDATE mutation commands against a Zig-owned Node pool; the Zig framework handles layout, paint, hit-test, text, input, events, effects, and GPU.
+ReactJIT is a React-reconciler-driven UI framework. Apps are written in `.tsx` (standard React), bundled by esbuild.
+
+**Current runtime (being phased out):** JS runs in an embedded QuickJS VM via `qjs_app.zig`. Measured ceiling: QJS is an interpreter with no JIT, so a ~2000-fiber React reconcile walk takes 400ms+ and mounts scale linearly from there. This is why cursor-ide has 2-second file clicks.
+
+**Target runtime (active build — see `framework/lua/jsrt/`):** JSRT — a JS evaluator in Lua, running inside LuaJIT. JS source stays JS at every stage; the evaluator reads it as data and executes it. LuaJIT's trace JIT optimizes the evaluator's hot paths, effectively JITting the JS running through it. No tool ever translates JS to Lua. See the HARD RULE above.
+
+Both paths emit the same CREATE/APPEND/UPDATE mutation command stream that the Zig framework's layout, paint, hit-test, text, input, events, effects, and GPU machinery consumes.
 
 - **`framework/`** — Zig runtime. Layout, engine, GPU, events, input, state, effects, text, windows, QuickJS bridge.
 - **`qjs_app.zig`** — Host entry. Loads `bundle.js` into QuickJS, wires events, owns Node pool.
