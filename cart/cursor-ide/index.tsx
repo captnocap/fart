@@ -91,6 +91,7 @@ import { loadPlugins, type PluginRegistry } from './plugin';
 import { HotPanel } from './components/hotpanel';
 import { GitPanel } from './components/gitpanel';
 import { PlanPanelWrapper } from './components/planwrapper';
+import { saveCheckpoint } from './checkpoint';
 import { CommandPalette, type PaletteCommand } from './components/commandpalette';
 
 export default function CursorIdeApp() {
@@ -942,7 +943,13 @@ export default function CursorIdeApp() {
     setChatMessages((prev) => {
       const last = prev[prev.length - 1];
       if (last && last.role === 'assistant') {
-        return [...prev.slice(0, -1), { ...last, text: finalText, toolSnapshot }];
+        const updated = [...prev.slice(0, -1), { ...last, text: finalText, toolSnapshot }];
+        // Save checkpoint after assistant turn
+        try {
+          const turnIndex = updated.filter((m: Message) => m.role === 'assistant').length;
+          saveCheckpoint(turnIndex, last.id || 'msg_' + Date.now(), stateRef.current.workDir);
+        } catch {}
+        return updated;
       }
       return prev;
     });
