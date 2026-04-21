@@ -222,6 +222,13 @@ local function buildSet()
 end
 
 function M.install(scope)
+  -- Special values exposed as global bindings (they're identifiers in JS, not
+  -- keywords — `null` is a keyword and handled via Literal nodes, but
+  -- `undefined`, `NaN`, `Infinity` are regular globals).
+  scope:define("undefined", Values.UNDEFINED)
+  scope:define("NaN",       0/0)
+  scope:define("Infinity",  math.huge)
+
   scope:define("Error",       makeErrorCtor("Error"))
   scope:define("TypeError",   makeErrorCtor("TypeError"))
   scope:define("RangeError",  makeErrorCtor("RangeError"))

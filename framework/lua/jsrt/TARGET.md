@@ -139,7 +139,7 @@ Deferred to a later follow-up: using the actual npm `react` library (which requi
 
 Expected ops (verified): CREATE_TEXT("hello") → CREATE("Text", {}) → APPEND → APPEND_TO_ROOT.
 
-### 12 — useState counter  [pending]
+### 12 — useState counter  [PASS]
 
 Input: `cart/jsrt-counter/index.tsx` — `<Pressable onPress={...}><Text>{count}</Text></Pressable>` with a click handler incrementing state.
 

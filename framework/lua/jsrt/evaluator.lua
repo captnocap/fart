@@ -296,6 +296,16 @@ evalStatement = function(node, scope)
     return evalExpression(node.expression, scope)
   end
 
+  if t == "IfStatement" then
+    local condition = evalExpression(node.test, scope)
+    if Values.truthy(condition) then
+      return evalStatement(node.consequent, scope)
+    elseif node.alternate then
+      return evalStatement(node.alternate, scope)
+    end
+    return Values.UNDEFINED
+  end
+
   if t == "FunctionDeclaration" then
     local fn = Values.newFunction(node, scope)
     scope:define(node.id.name, fn)
