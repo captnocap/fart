@@ -19,6 +19,7 @@ local evalStatement
 local evalExpression
 local callFunction
 local lookupProperty
+local bindPattern
 
 -- Property read: object/array key lookup. Walks the __proto__ chain for objects,
 -- checks Array.prototype for arrays. Anything not found returns UNDEFINED.
@@ -41,6 +42,80 @@ lookupProperty = function(obj, key)
 end
 M.lookupProperty = lookupProperty
 
+-- Bind a destructuring pattern against a value, defining the resulting names
+-- in `scope`. Handles:
+--   Identifier            — direct name binding
+--   ArrayPattern          — positional destructuring from arrays
+--   ObjectPattern         — named destructuring from objects
+--   RestElement           — "collect the rest" at the end of an ArrayPattern
+--   AssignmentPattern     — default-value fallback when value is undefined
+-- Function params use this same machinery, so `function f({x, y}) {}` works.
+bindPattern = function(pattern, value, scope)
+  local pt = pattern.type
+  if pt == "Identifier" then
+    if value == nil then value = Values.UNDEFINED end
+    scope:define(pattern.name, value)
+    return
+  end
+  if pt == "AssignmentPattern" then
+    if value == nil or value == Values.UNDEFINED then
+      value = evalExpression(pattern.right, scope)
+    end
+    bindPattern(pattern.left, value, scope)
+    return
+  end
+  if pt == "ArrayPattern" then
+    local len = 0
+    if type(value) == "table" and value.__kind == "array" then
+      len = value.length or 0
+    end
+    for i, elem in ipairs(pattern.elements) do
+      if elem == nil then
+        -- hole in the pattern, skip
+      elseif elem.type == "RestElement" then
+        local rest = Values.newArray()
+        local restLen = 0
+        for j = i, len do
+          restLen = restLen + 1
+          rest[restLen] = value[j] or Values.UNDEFINED
+        end
+        rest.length = restLen
+        bindPattern(elem.argument, rest, scope)
+        return
+      else
+        local v = Values.UNDEFINED
+        if type(value) == "table" and value.__kind == "array" then
+          v = value[i]
+        end
+        bindPattern(elem, v, scope)
+      end
+    end
+    return
+  end
+  if pt == "ObjectPattern" then
+    for _, prop in ipairs(pattern.properties) do
+      if prop.type == "RestElement" then
+        -- Object rest is rarely needed and requires tracking consumed keys;
+        -- punt until a real program needs it.
+        error("ObjectPattern RestElement not yet supported", 0)
+      end
+      local key
+      if prop.computed then
+        key = evalExpression(prop.key, scope)
+      elseif prop.key.type == "Identifier" then
+        key = prop.key.name
+      else
+        key = tostring(prop.key.value)
+      end
+      local v = lookupProperty(value, key)
+      bindPattern(prop.value, v, scope)
+    end
+    return
+  end
+  error("bindPattern: unsupported pattern type " .. tostring(pt), 0)
+end
+M.bindPattern = bindPattern
+
 -- Call a function value with an array of already-evaluated arguments plus an
 -- optional `this` binding. Handles native (host-registered) functions and user
 -- JS functions. Uses a pcall + sentinel-table pattern to propagate `return`
@@ -57,10 +132,19 @@ callFunction = function(fn, args, thisVal)
   if not fn.is_arrow then
     callScope:define("this", thisVal)
   end
-  for i, name in ipairs(fn.params) do
-    local v = args[i]
-    if v == nil then v = Values.UNDEFINED end
-    callScope:define(name, v)
+  for i, paramNode in ipairs(fn.params) do
+    if paramNode.type == "RestElement" then
+      local rest = Values.newArray()
+      local n = 0
+      for j = i, #args do
+        n = n + 1
+        rest[n] = args[j]
+      end
+      rest.length = n
+      bindPattern(paramNode.argument, rest, callScope)
+      break
+    end
+    bindPattern(paramNode, args[i], callScope)
   end
   -- Expression-bodied arrow: body IS the return expression.
   if fn.is_arrow and fn.body.type ~= "BlockStatement" then
@@ -92,13 +176,22 @@ evalExpression = function(node, scope)
   if t == "ArrayExpression" then
     local arr = Values.newArray()
     local n = 0
-    for i, elem in ipairs(node.elements) do
-      if elem ~= nil then
-        arr[i] = evalExpression(elem, scope)
+    for _, elem in ipairs(node.elements) do
+      if elem == nil then
+        n = n + 1
+        arr[n] = Values.UNDEFINED
+      elseif elem.type == "SpreadElement" then
+        local src = evalExpression(elem.argument, scope)
+        if type(src) == "table" and src.__kind == "array" then
+          for j = 1, src.length or 0 do
+            n = n + 1
+            arr[n] = src[j]
+          end
+        end
       else
-        arr[i] = Values.UNDEFINED  -- hole in array literal
+        n = n + 1
+        arr[n] = evalExpression(elem, scope)
       end
-      n = i
     end
     arr.length = n
     return arr
@@ -192,8 +285,17 @@ evalExpression = function(node, scope)
     local newObj = Values.newObject()
     newObj.__proto__ = ctor.prototype
     local args = {}
-    for i, a in ipairs(node.arguments) do
-      args[i] = evalExpression(a, scope)
+    for _, a in ipairs(node.arguments) do
+      if a.type == "SpreadElement" then
+        local src = evalExpression(a.argument, scope)
+        if type(src) == "table" and src.__kind == "array" then
+          for j = 1, src.length or 0 do
+            args[#args + 1] = src[j]
+          end
+        end
+      else
+        args[#args + 1] = evalExpression(a, scope)
+      end
     end
     local result = callFunction(ctor, args, newObj)
     -- If ctor explicitly returned an object, that's what `new` gives back.
@@ -229,14 +331,104 @@ evalExpression = function(node, scope)
       fn = evalExpression(callee_node, scope)
     end
     local args = {}
-    for i, arg in ipairs(node.arguments) do
-      args[i] = evalExpression(arg, scope)
+    for _, arg in ipairs(node.arguments) do
+      if arg.type == "SpreadElement" then
+        local src = evalExpression(arg.argument, scope)
+        if type(src) == "table" and src.__kind == "array" then
+          for j = 1, src.length or 0 do
+            args[#args + 1] = src[j]
+          end
+        end
+      else
+        args[#args + 1] = evalExpression(arg, scope)
+      end
     end
     return callFunction(fn, args, thisVal)
   end
 
   if t == "FunctionExpression" or t == "ArrowFunctionExpression" then
     return Values.newFunction(node, scope)
+  end
+
+  if t == "UnaryExpression" then
+    local op = node.operator
+    if op == "typeof" then
+      -- Special case: typeof of an undeclared identifier is "undefined" (not an error).
+      if node.argument.type == "Identifier" and not scope:has(node.argument.name) then
+        return "undefined"
+      end
+      return Values.typeof(evalExpression(node.argument, scope))
+    end
+    if op == "delete" then
+      -- Simplified: return true. Real delete removes own properties.
+      return true
+    end
+    local val = evalExpression(node.argument, scope)
+    if op == "!"    then return not Values.truthy(val) end
+    if op == "-"    then return -val end
+    if op == "+"    then return tonumber(val) or (0/0) end
+    if op == "void" then return Values.UNDEFINED end
+    error("UnaryExpression: unsupported operator " .. tostring(op), 0)
+  end
+
+  if t == "UpdateExpression" then
+    local current = evalExpression(node.argument, scope)
+    if type(current) ~= "number" then current = tonumber(current) or (0/0) end
+    local newVal
+    if     node.operator == "++" then newVal = current + 1
+    elseif node.operator == "--" then newVal = current - 1
+    else error("UpdateExpression: unsupported operator " .. tostring(node.operator), 0) end
+    if node.argument.type == "Identifier" then
+      scope:set(node.argument.name, newVal)
+    elseif node.argument.type == "MemberExpression" then
+      local target = evalExpression(node.argument.object, scope)
+      local key
+      if node.argument.computed then
+        key = evalExpression(node.argument.property, scope)
+        if type(target) == "table" and target.__kind == "array" and type(key) == "number" then
+          key = key + 1
+        end
+      else
+        key = node.argument.property.name
+      end
+      target[key] = newVal
+    else
+      error("UpdateExpression: unsupported argument type " .. tostring(node.argument.type), 0)
+    end
+    if node.prefix then return newVal end
+    return current
+  end
+
+  if t == "ConditionalExpression" then
+    if Values.truthy(evalExpression(node.test, scope)) then
+      return evalExpression(node.consequent, scope)
+    end
+    return evalExpression(node.alternate, scope)
+  end
+
+  if t == "TemplateLiteral" then
+    -- Pattern: quasis[0] ++ exprs[0] ++ quasis[1] ++ exprs[1] ++ ... ++ quasis[n]
+    local parts = {}
+    for i, quasi in ipairs(node.quasis) do
+      parts[#parts + 1] = (quasi.value and (quasi.value.cooked or quasi.value.raw)) or ""
+      local exprNode = node.expressions[i]
+      if exprNode then
+        local v = evalExpression(exprNode, scope)
+        if v == Values.UNDEFINED then v = "undefined"
+        elseif v == Values.NULL then v = "null"
+        end
+        parts[#parts + 1] = tostring(v)
+      end
+    end
+    return table.concat(parts)
+  end
+
+  if t == "SequenceExpression" then
+    local last = Values.UNDEFINED
+    for _, e in ipairs(node.expressions) do
+      last = evalExpression(e, scope)
+    end
+    return last
   end
 
   if t == "LogicalExpression" then
@@ -392,7 +584,7 @@ evalStatement = function(node, scope)
       if decl.init then
         value = evalExpression(decl.init, scope)
       end
-      scope:define(decl.id.name, value)
+      bindPattern(decl.id, value, scope)
     end
     return Values.UNDEFINED
   end
@@ -404,6 +596,108 @@ evalStatement = function(node, scope)
       last = evalStatement(stmt, inner)
     end
     return last
+  end
+
+  if t == "EmptyStatement" then
+    return Values.UNDEFINED
+  end
+
+  if t == "BreakStatement" then
+    error({ __break = true, label = node.label and node.label.name }, 0)
+  end
+
+  if t == "ContinueStatement" then
+    error({ __continue = true, label = node.label and node.label.name }, 0)
+  end
+
+  -- runLoopBody: encapsulates the pcall + break/continue handling used by all
+  -- loop variants. Returns two values: continueLoop (bool), broke (bool).
+  local function runLoopBody(body, s)
+    local ok, err = pcall(evalStatement, body, s)
+    if ok then return true, false end
+    if type(err) == "table" then
+      if err.__break then return false, true end
+      if err.__continue then return true, false end
+    end
+    error(err, 0)
+  end
+
+  if t == "ForStatement" then
+    local loopScope = Scope.new(scope)
+    if node.init then
+      if node.init.type == "VariableDeclaration" then
+        evalStatement(node.init, loopScope)
+      else
+        evalExpression(node.init, loopScope)
+      end
+    end
+    while true do
+      if node.test then
+        if not Values.truthy(evalExpression(node.test, loopScope)) then break end
+      end
+      local _, broke = runLoopBody(node.body, loopScope)
+      if broke then return Values.UNDEFINED end
+      if node.update then evalExpression(node.update, loopScope) end
+    end
+    return Values.UNDEFINED
+  end
+
+  if t == "WhileStatement" then
+    while Values.truthy(evalExpression(node.test, scope)) do
+      local _, broke = runLoopBody(node.body, scope)
+      if broke then return Values.UNDEFINED end
+    end
+    return Values.UNDEFINED
+  end
+
+  if t == "DoWhileStatement" then
+    repeat
+      local _, broke = runLoopBody(node.body, scope)
+      if broke then return Values.UNDEFINED end
+    until not Values.truthy(evalExpression(node.test, scope))
+    return Values.UNDEFINED
+  end
+
+  if t == "ForOfStatement" then
+    local iterable = evalExpression(node.right, scope)
+    if type(iterable) == "table" and iterable.__kind == "array" then
+      for i = 1, iterable.length or 0 do
+        local loopScope = Scope.new(scope)
+        if node.left.type == "VariableDeclaration" then
+          bindPattern(node.left.declarations[1].id, iterable[i], loopScope)
+        elseif node.left.type == "Identifier" then
+          scope:set(node.left.name, iterable[i])
+        else
+          bindPattern(node.left, iterable[i], loopScope)
+        end
+        local _, broke = runLoopBody(node.body, loopScope)
+        if broke then return Values.UNDEFINED end
+      end
+      return Values.UNDEFINED
+    end
+    -- TODO: full iterator protocol (Symbol.iterator) for non-array iterables.
+    error("ForOfStatement: only arrays supported so far", 0)
+  end
+
+  if t == "ForInStatement" then
+    local obj = evalExpression(node.right, scope)
+    if type(obj) ~= "table" then return Values.UNDEFINED end
+    -- Iterate own enumerable string keys, skipping internal (__-prefixed) keys.
+    for k in pairs(obj) do
+      if type(k) == "string" and k:sub(1, 2) ~= "__" then
+        local loopScope = Scope.new(scope)
+        if node.left.type == "VariableDeclaration" then
+          bindPattern(node.left.declarations[1].id, k, loopScope)
+        elseif node.left.type == "Identifier" then
+          scope:set(node.left.name, k)
+        else
+          bindPattern(node.left, k, loopScope)
+        end
+        local _, broke = runLoopBody(node.body, loopScope)
+        if broke then return Values.UNDEFINED end
+      end
+    end
+    return Values.UNDEFINED
   end
 
   error("evalStatement: unsupported node type " .. tostring(t))

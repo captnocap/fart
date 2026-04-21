@@ -66,18 +66,15 @@ function M.newNativeFunction(fn)
 end
 
 -- User-authored JS function. Captures the defining scope as its closure.
+-- `params` stored as the raw AST nodes (Identifier / ArrayPattern / ObjectPattern /
+-- RestElement / AssignmentPattern) so callFunction can use bindPattern for
+-- destructuring + rest + defaults.
 -- Non-arrow functions get a fresh `prototype` object so they can be used as
 -- constructors via `new`. Arrows don't have `prototype` — they can't be `new`'d.
 function M.newFunction(node, closure)
-  local params = {}
-  if node.params then
-    for i, p in ipairs(node.params) do
-      params[i] = p.name
-    end
-  end
   local fn = {
     __kind = "function",
-    params = params,
+    params = node.params or {},
     body = node.body,
     closure = closure,
     is_arrow = (node.type == "ArrowFunctionExpression"),
