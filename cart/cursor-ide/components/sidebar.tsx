@@ -4,6 +4,20 @@ import { Box, Col, Pressable, Row, ScrollView, Text } from '../../../runtime/pri
 import { COLORS, fileGlyph, fileTone, samePath } from '../theme';
 import { Glyph, Pill } from './shared';
 
+function gitGutterColor(gitStatus: string): string | null {
+  if (!gitStatus) return null;
+  const code = gitStatus.trim();
+  // Staged (green)
+  if (code.startsWith('A') || code.startsWith('M') || code.startsWith('D') || code.startsWith('R')) return COLORS.green;
+  // Untracked (blue)
+  if (code === '??' || code.startsWith('?')) return COLORS.blue;
+  // Modified but not staged (yellow)
+  if (code.includes('M') || code.includes('D')) return COLORS.yellow;
+  // Renamed/copied (purple)
+  if (code.includes('R') || code.includes('C')) return COLORS.purple;
+  return COLORS.textMuted;
+}
+
 export function Sidebar(props: any) {
   const compactBand = props.widthBand === 'narrow' || props.widthBand === 'widget' || props.widthBand === 'minimum';
   const mediumBand = props.widthBand === 'medium';

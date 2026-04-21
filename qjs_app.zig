@@ -882,6 +882,8 @@ fn applyProps(node: *Node, props: std.json.Value, type_name: ?[]const u8) void {
             if (dupJsonText(v)) |s| syncInputValue(node, s);
         } else if (std.mem.eql(u8, k, "source")) {
             if (dupJsonText(v)) |s| node.image_src = s;
+        } else if (std.mem.eql(u8, k, "renderSrc")) {
+            if (dupJsonText(v)) |s| node.render_src = s;
         } else if (std.mem.eql(u8, k, "href")) {
             if (dupJsonText(v)) |s| node.href = s;
         } else if (std.mem.eql(u8, k, "tooltip")) {

@@ -105,6 +105,7 @@ export function TopBar(props: any) {
         <HeaderButton label="Search" meta="F3" icon="search" compact={compact} active={props.searchActive ? 1 : 0} onPress={props.onToggleSearch} />
         <HeaderButton label="Terminal" meta="~" icon="terminal" compact={compact} active={props.terminalActive ? 1 : 0} onPress={props.onToggleTerminal} />
         <HeaderButton label="Hot" meta="H" icon="flame" compact={compact} active={props.hotActive ? 1 : 0} onPress={props.onToggleHot} />
+        <HeaderButton label="Plan" meta="M" icon="map" compact={compact} active={props.planActive ? 1 : 0} onPress={props.onTogglePlan} />
         <HeaderButton label="Palette" meta="P" icon="command" compact={compact} active={props.paletteActive ? 1 : 0} onPress={props.onOpenPalette} />
         <HeaderButton label="Agent" icon="message" compact={compact} active={props.chatActive ? 1 : 0} onPress={props.onToggleChat} />
       </Row>

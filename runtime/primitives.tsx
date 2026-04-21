@@ -72,6 +72,14 @@ GraphBase.Path = (props: any) => React.createElement('Graph.Path', props, props.
 GraphBase.Node = (props: any) => React.createElement('Graph.Node', props, props.children);
 export const Graph: any = GraphBase;
 
+// ── Render — external display/app capture surface ─────────────
+//
+// Usage:
+//   <Render renderSrc="app:firefox" style={{ flexGrow: 1 }} />
+//   <Render renderSrc="display" style={{ width: 800, height: 600 }} />
+
+export const Render: any = (props: any) => React.createElement('Render', props, props.children);
+
 // ── Effect — per-pixel generative surface ─────────────────────
 //
 // The onRender callback fires each frame with an `e` context:
