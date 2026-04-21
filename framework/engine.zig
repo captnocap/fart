@@ -2058,6 +2058,8 @@ pub fn run(config_in: AppConfig) !void {
                             }
                         }
                     }
+                    qjs_runtime.updateMouse(event.button.x, event.button.y);
+                    qjs_runtime.updateMouseButton(true, event.button.button == c.SDL_BUTTON_RIGHT);
                     luajit_runtime.updateMouseButton(true, event.button.button == c.SDL_BUTTON_RIGHT);
                     // Render surface input forwarding (VNC mouse) — check first
                     {
@@ -2377,6 +2379,7 @@ pub fn run(config_in: AppConfig) !void {
                 c.SDL_EVENT_MOUSE_MOTION => {
                     const mx: f32 = event.motion.x;
                     const my: f32 = event.motion.y;
+                    qjs_runtime.updateMouse(mx, my);
                     luajit_runtime.updateMouse(mx, my);
                     // Render surface mouse motion forwarding
                     if (render_surfaces.handleMouseMotion(mx, my)) continue;
@@ -2475,6 +2478,8 @@ pub fn run(config_in: AppConfig) !void {
                     }
                 },
                 c.SDL_EVENT_MOUSE_BUTTON_UP => {
+                    qjs_runtime.updateMouse(event.button.x, event.button.y);
+                    qjs_runtime.updateMouseButton(false, event.button.button == c.SDL_BUTTON_RIGHT);
                     luajit_runtime.updateMouseButton(false, event.button.button == c.SDL_BUTTON_RIGHT);
                     // Render surface mouse up forwarding
                     {

@@ -82,6 +82,23 @@ var g_prepared_scroll_x: f32 = 0;
 var g_prepared_scroll_y: f32 = 0;
 var g_prepared_scroll_dx: f32 = 0;
 var g_prepared_scroll_dy: f32 = 0;
+var g_mouse_x: f32 = 0;
+var g_mouse_y: f32 = 0;
+var g_mouse_down: bool = false;
+var g_mouse_right_down: bool = false;
+
+pub fn updateMouse(x: f32, y: f32) void {
+    g_mouse_x = x;
+    g_mouse_y = y;
+}
+
+pub fn updateMouseButton(down: bool, right: bool) void {
+    if (right) {
+        g_mouse_right_down = down;
+    } else {
+        g_mouse_down = down;
+    }
+}
 
 fn kimiResetTurnBuffers() void {
     g_kimi_turn_text.clearRetainingCapacity();
@@ -514,16 +531,10 @@ fn hostGetTickUs(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValu
     return qjs.JS_NewFloat64(null, @floatFromInt(telemetry_tick_us));
 }
 fn hostGetMouseX(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
-    var mx: f32 = 0;
-    var my: f32 = 0;
-    _ = c.SDL_GetMouseState(&mx, &my);
-    return qjs.JS_NewFloat64(null, @floatCast(mx));
+    return qjs.JS_NewFloat64(null, @floatCast(g_mouse_x));
 }
 fn hostGetMouseY(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
-    var mx: f32 = 0;
-    var my: f32 = 0;
-    _ = c.SDL_GetMouseState(&mx, &my);
-    return qjs.JS_NewFloat64(null, @floatCast(my));
+    return qjs.JS_NewFloat64(null, @floatCast(g_mouse_y));
 }
 
 fn hostClipboardSet(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
@@ -542,16 +553,10 @@ fn hostClipboardGet(ctx: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.J
     return qjs.JS_NewString(ctx, clip);
 }
 fn hostGetMouseDown(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
-    var mx: f32 = 0;
-    var my: f32 = 0;
-    const buttons = c.SDL_GetMouseState(&mx, &my);
-    return qjs.JS_NewFloat64(null, if (buttons & c.SDL_BUTTON_LMASK != 0) 1.0 else 0.0);
+    return qjs.JS_NewFloat64(null, if (g_mouse_down) 1.0 else 0.0);
 }
 fn hostGetMouseRightDown(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
-    var mx: f32 = 0;
-    var my: f32 = 0;
-    const buttons = c.SDL_GetMouseState(&mx, &my);
-    return qjs.JS_NewFloat64(null, if (buttons & c.SDL_BUTTON_RMASK != 0) 1.0 else 0.0);
+    return qjs.JS_NewFloat64(null, if (g_mouse_right_down) 1.0 else 0.0);
 }
 fn hostIsKeyDown(_: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
     if (argc < 1) return qjs.JS_NewFloat64(null, 0);

@@ -12,6 +12,8 @@ import type { ProxyConfig } from '../proxy';
 import { createProxyConfig, deleteProxyConfig, getActiveProxyConfig, loadProxyConfig, saveProxyConfig, setProxyActive, validateProxyConfig } from '../proxy';
 import type { DefaultModelsSettings, ModelReference } from '../default-models';
 import { updateImageGenModel, updateResearchOrchestrator, updateResearchReader, updateRunnerConfig, updateShadowModel, updateTextModel, updateVisionProxy } from '../default-models';
+import { ApiKeyPanel } from './apikeypanel';
+import { IndexerPanel } from './indexerpanel';
 
 // ── Icon Badge (colored initials substitute for PNG icons) ───────────────────
 
@@ -718,6 +720,14 @@ export function SettingsSurface(props: any) {
 
             {props.activeSection === 'proxy' ? (
               <ProxyPanel configs={props.proxyConfigs} status={props.proxyStatus} onChange={props.onProxyChange} />
+            ) : null}
+
+            {props.activeSection === 'keys' ? (
+              <ApiKeyPanel onChange={props.onKeysChange} />
+            ) : null}
+
+            {props.activeSection === 'index' ? (
+              <IndexerPanel workDir={props.workDir} onIndex={props.onIndexChange} />
             ) : null}
 
             {props.activeSection === 'context' ? <Col style={{ gap: 10 }}>{props.contextRows.map((item: any) => <InfoCard key={item.name} item={item} />)}</Col> : null}

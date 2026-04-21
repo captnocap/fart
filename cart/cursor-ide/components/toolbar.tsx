@@ -80,8 +80,10 @@ export function TopBar(props: any) {
       </Row>
 
       <Row style={{ alignItems: 'center', gap: 8, marginLeft: 10 }}>
-        <Row
+        <Pressable
+          onPress={props.onToggleGit}
           style={{
+            flexDirection: 'row',
             alignItems: 'center',
             gap: 6,
             paddingLeft: 8,
@@ -90,14 +92,14 @@ export function TopBar(props: any) {
             paddingBottom: 6,
             borderRadius: 10,
             borderWidth: 1,
-            borderColor: COLORS.border,
-            backgroundColor: COLORS.panelAlt,
+            borderColor: props.gitActive ? COLORS.blue : COLORS.border,
+            backgroundColor: props.gitActive ? COLORS.blueDeep : COLORS.panelAlt,
           }}
         >
-          <Glyph icon="git" tone={COLORS.green} backgroundColor="transparent" tiny={true} />
+          <Glyph icon="git" tone={props.gitActive ? COLORS.blue : COLORS.green} backgroundColor="transparent" tiny={true} />
           <Text fontSize={10} color={COLORS.textBright}>{props.gitBranch}</Text>
           {!compact ? <Text fontSize={9} color={COLORS.textDim}>{props.changedCount + ' dirty / ' + props.stagedCount + ' staged'}</Text> : null}
-        </Row>
+        </Pressable>
         <HeaderButton label="Refresh" meta="R" icon="refresh" compact={compact} onPress={props.onRefreshWorkspace} />
         <HeaderButton label="Settings" meta="S" icon="palette" compact={compact} active={props.settingsActive ? 1 : 0} onPress={props.onOpenSettings} />
         <HeaderButton label="Search" meta="F3" icon="search" compact={compact} active={props.searchActive ? 1 : 0} onPress={props.onToggleSearch} />
