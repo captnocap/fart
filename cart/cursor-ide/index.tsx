@@ -74,8 +74,11 @@ import {
 import { trimLines, estimateTokens, lineMarker, tokenizeLine, editorTokenTone, primaryMainView } from './utils';
 import type { Tab, FileItem, Breadcrumb, SearchResult, ToolExecution, Message, TerminalHistoryEntry } from './types';
 
-import { BreadcrumbBar, CompactSurfaceButton } from './components/shared';
-import { TopBar, TabBar, StatusBar, TerminalPanel } from './components/chrome';
+import { CompactSurfaceButton, TopBar } from './components/toolbar';
+import { TabBar } from './components/tabbar';
+import { BreadcrumbBar } from './components/breadcrumbs';
+import { StatusBar } from './components/statusbar';
+import { TerminalPanel } from './components/terminal';
 import { Sidebar } from './components/sidebar';
 import { EditorSurface } from './components/editor';
 import { SearchSurface } from './components/search';
