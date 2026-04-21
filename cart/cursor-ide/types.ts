@@ -57,6 +57,15 @@ export type Message = {
   toolSnapshot?: ToolExecution[];
 };
 
+export type TerminalHistoryEntry = {
+  id: string;
+  kind: string;
+  title: string;
+  detail: string;
+  time: number;
+  path?: string;
+};
+
 export type Provider = {
   id: string;
   short: string;

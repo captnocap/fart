@@ -3,6 +3,8 @@ const React: any = require('react');
 import { Box, Col, Pressable, Row, ScrollView, Text, TextArea } from '../../../runtime/primitives';
 import { baseName, COLORS } from '../theme';
 import { Glyph, Pill } from './shared';
+import { getModelIconInfo } from '../model-icons';
+import { expandVariables, hasVariables, type ExpansionResult } from '../variables';
 
 export function ToolCallCard(props: any) {
   const execItem = props.exec;
@@ -19,6 +21,41 @@ export function ToolCallCard(props: any) {
   );
 }
 
+function ModelIconBadge(props: { modelId: string; size?: number }) {
+  const info = getModelIconInfo(props.modelId);
+  const size = props.size || 14;
+  return (
+    <Box style={{
+      width: size,
+      height: size,
+      borderRadius: size / 2,
+      backgroundColor: info.color,
+      justifyContent: 'center',
+      alignItems: 'center',
+    }}>
+      <Text fontSize={size * 0.4} color="#000" style={{ fontWeight: 'bold' }}>{info.initial}</Text>
+    </Box>
+  );
+}
+
+function VariablePreview(props: { results: ExpansionResult[] }) {
+  return (
+    <Col style={{ gap: 4, padding: 8, borderRadius: 8, backgroundColor: '#0f1520' }}>
+      <Text fontSize={9} color={COLORS.textDim} style={{ fontWeight: 'bold' }}>Variable Preview</Text>
+      {props.results.map(r => (
+        <Row key={r.variable} style={{ gap: 6, alignItems: 'center' }}>
+          <Text fontSize={9} color={COLORS.blue} style={{ fontFamily: 'monospace' }}>{'{{' + r.variable + '}'}</Text>
+          {r.data !== undefined ? (
+            <Text fontSize={9} color={COLORS.green}>{r.data}</Text>
+          ) : (
+            <Text fontSize={9} color={COLORS.red}>{r.error}</Text>
+          )}
+        </Row>
+      ))}
+    </Col>
+  );
+}
+
 export function ChatSurface(props: any) {
   const compactBand = props.widthBand === 'narrow' || props.widthBand === 'widget' || props.widthBand === 'minimum';
   const minimumBand = props.widthBand === 'minimum';
@@ -32,12 +69,19 @@ export function ChatSurface(props: any) {
     { cmd: '/commit', desc: 'Draft commit message' },
   ].filter((item) => props.currentInput === '/' || item.cmd.startsWith(props.currentInput));
 
+  // Variable expansion preview
+  const varResults: ExpansionResult[] = props.variablePreview || [];
+  const showVarPreview = hasVariables(props.currentInput) && varResults.length > 0;
+
   return (
     <Col style={{ width: props.style?.width || '100%', height: '100%', backgroundColor: COLORS.panelBg, borderLeftWidth: 1, borderColor: COLORS.border }}>
       <Row style={{ justifyContent: 'space-between', alignItems: 'center', padding: compactBand ? 10 : 12, borderBottomWidth: 1, borderColor: COLORS.borderSoft }}>
         <Row style={{ gap: 8, alignItems: 'center' }}>
           <Text fontSize={13} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>Agent Console</Text>
-          <Pill label={props.selectedModel} color={COLORS.blue} tiny={true} />
+          <Row style={{ alignItems: 'center', gap: 4 }}>
+            <ModelIconBadge modelId={props.selectedModel} />
+            <Pill label={props.selectedModel} color={COLORS.blue} tiny={true} />
+          </Row>
         </Row>
         <Row style={{ gap: 8 }}>
           <Pressable onPress={props.onNewConversation}><Text fontSize={10} color={COLORS.blue}>New</Text></Pressable>
@@ -84,7 +128,12 @@ export function ChatSurface(props: any) {
                   <Text fontSize={11} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>{isUser ? 'You' : 'Agent'}</Text>
                   <Text fontSize={10} color={COLORS.textDim}>{msg.time}</Text>
                   {msg.mode ? <Pill label={msg.mode} color={COLORS.blue} tiny={true} /> : null}
-                  {msg.model ? <Pill label={msg.model} color={COLORS.textMuted} tiny={true} /> : null}
+                  {msg.model ? (
+                    <Row style={{ alignItems: 'center', gap: 4 }}>
+                      <ModelIconBadge modelId={msg.model} />
+                      <Pill label={msg.model} color={COLORS.textMuted} tiny={true} />
+                    </Row>
+                  ) : null}
                 </Row>
                 <Box style={{ padding: 12, borderRadius: 12, borderWidth: 1, borderColor: isUser ? '#20324f' : '#1c2531', backgroundColor: isUser ? '#101827' : '#10141c', gap: 8 }}>
                   <Text fontSize={11} color={COLORS.text}>{msg.text}</Text>
@@ -189,6 +238,8 @@ export function ChatSurface(props: any) {
             style={{ height: 84, borderWidth: 0, backgroundColor: 'transparent' }}
           />
 
+          {showVarPreview ? <VariablePreview results={varResults} /> : null}
+
           <Col style={{ gap: 8 }}>
             <Row style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
               <Pressable onPress={props.onAttachCurrentFile}><Text fontSize={10} color={COLORS.blue}>File</Text></Pressable>
@@ -200,7 +251,12 @@ export function ChatSurface(props: any) {
             </Row>
             <Row style={{ gap: 8, alignItems: 'center', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
               {props.inputTokenEstimate > 0 ? <Text fontSize={10} color={props.inputTokenEstimate > 16000 ? COLORS.red : props.inputTokenEstimate > 8000 ? COLORS.yellow : COLORS.textDim}>{props.inputTokenEstimate + ' tkns'}</Text> : null}
-              <Pressable onPress={props.onCycleModel}><Text fontSize={10} color={COLORS.text}>{props.modelDisplayName}</Text></Pressable>
+              <Pressable onPress={props.onCycleModel}>
+                <Row style={{ alignItems: 'center', gap: 4 }}>
+                  <ModelIconBadge modelId={props.selectedModel} size={12} />
+                  <Text fontSize={10} color={COLORS.text}>{props.modelDisplayName}</Text>
+                </Row>
+              </Pressable>
               <Pressable onPress={props.onSend} style={{ paddingLeft: 14, paddingRight: 14, paddingTop: 8, paddingBottom: 8, borderRadius: 10, backgroundColor: COLORS.blueDeep, borderWidth: 1, borderColor: COLORS.blue }}>
                 <Text fontSize={11} color={COLORS.blue} style={{ fontWeight: 'bold' }}>{sendLabel}</Text>
               </Pressable>

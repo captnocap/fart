@@ -32,6 +32,8 @@ export const ScrollView: any = (props: any) => React.createElement('ScrollView',
 export const TextInput: any = (props: any) => React.createElement('TextInput', props, props.children);
 export const TextArea: any = (props: any) => React.createElement('TextArea', props, props.children);
 export const TextEditor: any = (props: any) => React.createElement('TextEditor', props, props.children);
+export const Terminal: any = (props: any) => React.createElement('Terminal', props, props.children);
+export const terminal: any = Terminal;
 
 // ── Generated bulk-rendering primitives ─────────────────────
 //

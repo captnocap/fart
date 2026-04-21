@@ -301,17 +301,17 @@ pub const Node = struct {
     input_paint_text: bool = true,
     input_color_rows: ?[]const ColorTextRow = null,
     // tslx:GEN:NODE_FIELDS START
-        gutter_rows: ?[]const GutterRow = null,
-        gutter_row_height: f32 = 17,
-        gutter_cursor_line: u32 = 0,
-        gutter_active_bg: ?Color = null,
-        gutter_active_text: ?Color = null,
-        gutter_text: ?Color = null,
-        minimap_rows: ?[]const MinimapRow = null,
-        minimap_row_height: f32 = 3,
-        minimap_row_gap: f32 = 1,
-        minimap_active_color: ?Color = null,
-        minimap_inactive_color: ?Color = null,
+    gutter_rows: ?[]const GutterRow = null,
+    gutter_row_height: f32 = 17,
+    gutter_cursor_line: u32 = 0,
+    gutter_active_bg: ?Color = null,
+    gutter_active_text: ?Color = null,
+    gutter_text: ?Color = null,
+    minimap_rows: ?[]const MinimapRow = null,
+    minimap_row_height: f32 = 3,
+    minimap_row_gap: f32 = 1,
+    minimap_active_color: ?Color = null,
+    minimap_inactive_color: ?Color = null,
     // tslx:GEN:NODE_FIELDS END
     placeholder: ?[]const u8 = null,
     debug_name: ?[]const u8 = null,
@@ -786,12 +786,12 @@ fn estimateIntrinsicHeightUncached(node: *Node, availableWidth: f32) f32 {
         return @as(f32, @floatFromInt(node.font_size)) * 1.4 + pt + pb;
     }
     // tslx:GEN:INTRINSIC_HEIGHT START
-        if (node.gutter_rows) |gr| {
-            return @as(f32, @floatFromInt(gr.len)) * node.gutter_row_height + pt + pb;
-        }
-        if (node.minimap_rows) |gr| {
-            return @as(f32, @floatFromInt(gr.len)) * (node.minimap_row_height + node.minimap_row_gap) + pt + pb;
-        }
+    if (node.gutter_rows) |gr| {
+        return @as(f32, @floatFromInt(gr.len)) * node.gutter_row_height + pt + pb;
+    }
+    if (node.minimap_rows) |gr| {
+        return @as(f32, @floatFromInt(gr.len)) * (node.minimap_row_height + node.minimap_row_gap) + pt + pb;
+    }
     // tslx:GEN:INTRINSIC_HEIGHT END
     if (node.children.len == 0) {
         return pt + pb;
@@ -1728,12 +1728,12 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
             h = @as(f32, @floatFromInt(node.font_size)) + pt + pb;
         } else
         // tslx:GEN:INTRINSIC_HEIGHT_FALLBACK START
-                if (node.gutter_rows) |gr| {
-                    h = @as(f32, @floatFromInt(gr.len)) * node.gutter_row_height + pt + pb;
-                } else
-                if (node.minimap_rows) |gr| {
-                    h = @as(f32, @floatFromInt(gr.len)) * (node.minimap_row_height + node.minimap_row_gap) + pt + pb;
-                } else
+        if (node.gutter_rows) |gr| {
+            h = @as(f32, @floatFromInt(gr.len)) * node.gutter_row_height + pt + pb;
+        } else
+        if (node.minimap_rows) |gr| {
+            h = @as(f32, @floatFromInt(gr.len)) * (node.minimap_row_height + node.minimap_row_gap) + pt + pb;
+        } else
         // tslx:GEN:INTRINSIC_HEIGHT_FALLBACK END
         if (node.text != null) {
             const m = measureNodeTextW(node, innerW);

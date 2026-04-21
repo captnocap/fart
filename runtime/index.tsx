@@ -243,6 +243,8 @@ function dispatchAliases(id: number, aliases: string[], ...args: any[]) {
 function eventAliases(type: string): string[] {
   if (type === 'onClick') return ['onClick', 'onPress'];
   if (type === 'onPress') return ['onPress', 'onClick'];
+  if (type === 'onMouseDown') return ['onMouseDown'];
+  if (type === 'onMouseUp') return ['onMouseUp'];
   if (type === 'onHoverEnter') return ['onHoverEnter', 'onMouseEnter'];
   if (type === 'onHoverExit') return ['onHoverExit', 'onMouseLeave'];
   return [type];

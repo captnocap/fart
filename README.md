@@ -292,3 +292,20 @@ But the golden path is conservative. First-party code uses classifiers, theme to
 ---
 
 *"Any sufficiently advanced technology is indistinguishable from magic." — Arthur C. Clarke*
+
+---
+
+## EQJS migration scaffold
+
+A standalone LuaJIT prototype now exists in the repo:
+
+- `renderer/hostConfig.lua`
+- `renderer/reconciler.lua`
+- `runtime/react.lua`
+- `tests/eqjs/run.lua`
+
+Run the smoke harness with:
+
+```
+./scripts/eqjs-smoke.sh
+```

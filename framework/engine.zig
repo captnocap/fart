@@ -2132,7 +2132,7 @@ pub fn run(config_in: AppConfig) !void {
                             }
                         }
                         const hit = layout.hitTest(config.root, mx, my);
-                        const hit_is_interactive = if (hit) |h| (h.input_id != null or h.handlers.on_press != null or h.handlers.js_on_press != null or h.handlers.lua_on_press != null or h.href != null) else false;
+                        const hit_is_interactive = if (hit) |h| (h.input_id != null or h.handlers.on_mouse_down != null or h.handlers.js_on_mouse_down != null or h.handlers.lua_on_mouse_down != null or h.handlers.on_press != null or h.handlers.js_on_press != null or h.handlers.lua_on_press != null or h.href != null) else false;
                         if (hit_is_interactive) {
                             const h = hit.?;
                             if (h.input_id) |id| {
@@ -2166,6 +2166,32 @@ pub fn run(config_in: AppConfig) !void {
                                     input_drag_font_size = h.font_size;
                                     input_drag_line_height = h.line_height;
                                 }
+                            } else if (h.handlers.on_mouse_down) |handler| {
+                                input.unfocus();
+                                stampInputLatency("click");
+                                handler();
+                                if (h.handlers.js_on_mouse_down) |js_expr| {
+                                    const expr = std.mem.span(js_expr);
+                                    qjs_runtime.callGlobal("__beginJsEvent");
+                                    qjs_runtime.evalExpr(expr);
+                                    qjs_runtime.callGlobal("__endJsEvent");
+                                    state_mod.markDirty();
+                                }
+                                if (h.handlers.lua_on_mouse_down) |lua_expr| {
+                                    luajit_runtime.evalExpr(std.mem.span(lua_expr));
+                                }
+                            } else if (h.handlers.js_on_mouse_down) |js_expr| {
+                                input.unfocus();
+                                stampInputLatency("click");
+                                const expr = std.mem.span(js_expr);
+                                qjs_runtime.callGlobal("__beginJsEvent");
+                                qjs_runtime.evalExpr(expr);
+                                qjs_runtime.callGlobal("__endJsEvent");
+                                state_mod.markDirty();
+                            } else if (h.handlers.lua_on_mouse_down) |lua_expr| {
+                                input.unfocus();
+                                stampInputLatency("click");
+                                luajit_runtime.evalExpr(std.mem.span(lua_expr));
                             } else if (h.handlers.on_press) |handler| {
                                 input.unfocus();
                                 stampInputLatency("click");
@@ -2251,6 +2277,30 @@ pub fn run(config_in: AppConfig) !void {
                                     input_drag_max_width = h.computed.w - pl - pr;
                                     input_drag_font_size = h.font_size;
                                     input_drag_line_height = h.line_height;
+                                    handled_interactive = true;
+                                } else if (h.handlers.on_mouse_down) |handler| {
+                                    stampInputLatency("click");
+                                    handler();
+                                    if (h.handlers.js_on_mouse_down) |js_expr| {
+                                        qjs_runtime.callGlobal("__beginJsEvent");
+                                        qjs_runtime.evalExpr(std.mem.span(js_expr));
+                                        qjs_runtime.callGlobal("__endJsEvent");
+                                        state_mod.markDirty();
+                                    }
+                                    if (h.handlers.lua_on_mouse_down) |lua_expr| {
+                                        luajit_runtime.evalExpr(std.mem.span(lua_expr));
+                                    }
+                                    handled_interactive = true;
+                                } else if (h.handlers.js_on_mouse_down) |js_expr| {
+                                    stampInputLatency("click");
+                                    qjs_runtime.callGlobal("__beginJsEvent");
+                                    qjs_runtime.evalExpr(std.mem.span(js_expr));
+                                    qjs_runtime.callGlobal("__endJsEvent");
+                                    state_mod.markDirty();
+                                    handled_interactive = true;
+                                } else if (h.handlers.lua_on_mouse_down) |lua_expr| {
+                                    stampInputLatency("click");
+                                    luajit_runtime.evalExpr(std.mem.span(lua_expr));
                                     handled_interactive = true;
                                 } else if (h.handlers.on_press) |handler| {
                                     stampInputLatency("click");

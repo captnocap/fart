@@ -76,6 +76,8 @@ pub const MAX_INLINE_SLOTS = 8;
 // ── Dependency types (inlined to avoid importing heavy modules) ────
 pub const EventHandler = struct {
     on_press: ?*const fn () void = null,
+    on_mouse_down: ?*const fn () void = null,
+    on_mouse_up: ?*const fn () void = null,
     on_hover_enter: ?*const fn () void = null,
     on_hover_exit: ?*const fn () void = null,
     js_on_hover_enter: ?[*:0]const u8 = null,
@@ -88,7 +90,11 @@ pub const EventHandler = struct {
     on_scroll: ?*const fn () void = null,
     on_right_click: ?*const fn (x: f32, y: f32) void = null,
     js_on_press: ?[*:0]const u8 = null,
+    js_on_mouse_down: ?[*:0]const u8 = null,
+    js_on_mouse_up: ?[*:0]const u8 = null,
     lua_on_press: ?[*:0]const u8 = null,
+    lua_on_mouse_down: ?[*:0]const u8 = null,
+    lua_on_mouse_up: ?[*:0]const u8 = null,
 };
 
 pub const GpuShaderDesc = struct { wgsl: []const u8 };

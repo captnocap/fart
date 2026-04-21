@@ -13,9 +13,7 @@ const kimi_send     = typeof host.__kimi_send     === 'function' ? host.__kimi_s
 const kimi_poll     = typeof host.__kimi_poll     === 'function' ? host.__kimi_poll     : () => null;
 
 function backendForModel(model: string): string {
-  if (model.startsWith('claude-')) return 'claude';
-  if (model.startsWith('kimi-')) return 'kimi';
-  return 'claude';
+  return _backendForModel(model);
 }
 
 import {
@@ -23,6 +21,7 @@ import {
   Col,
   Pressable,
   Row,
+  ScrollView,
   Text,
   TextInput,
 } from '../../runtime/primitives';
@@ -37,6 +36,14 @@ import {
   SETTINGS_PLUGIN_ROWS,
   SETTINGS_PROVIDERS,
 } from './data';
+import { PROVIDER_CONFIGS, backendForModel as _backendForModel } from './providers';
+import type { ProviderType, ProviderConfig } from './providers';
+import { loadDefaultModels, saveDefaultModels, updateTextModel } from './default-models';
+import type { DefaultModelsSettings, ModelReference } from './default-models';
+import { expandVariables, hasVariables, listCustomVariables } from './variables';
+import type { ExpansionResult } from './variables';
+import { listProxyConfigs, getProxyStatus } from './proxy';
+import type { ProxyConfig } from './proxy';
 import {
   closeWindow,
   exec,
@@ -65,7 +72,7 @@ import {
   widthBandForSize,
 } from './theme';
 import { trimLines, estimateTokens, lineMarker, tokenizeLine, editorTokenTone, primaryMainView } from './utils';
-import type { Tab, FileItem, Breadcrumb, SearchResult, ToolExecution, Message } from './types';
+import type { Tab, FileItem, Breadcrumb, SearchResult, ToolExecution, Message, TerminalHistoryEntry } from './types';
 
 import { BreadcrumbBar, CompactSurfaceButton } from './components/shared';
 import { TopBar, TabBar, StatusBar, TerminalPanel } from './components/chrome';
@@ -77,6 +84,9 @@ import { SettingsSurface } from './components/settings';
 import { LandingSurface } from './components/landing';
 
 import { usePersistentState } from './hooks/usePersistentState';
+import { loadPlugins, type PluginRegistry } from './plugin';
+import { HotPanel } from './components/hotpanel';
+import { CommandPalette, type PaletteCommand } from './components/commandpalette';
 
 export default function CursorIdeApp() {
   const [activeTabId, setActiveTabId] = useState('home');
@@ -117,6 +127,10 @@ export default function CursorIdeApp() {
   const [compactSurface, setCompactSurface] = useState('landing');
   const [showChat, setShowChat] = usePersistentState('cursor-ide.showChat', 1);
   const [showTerminal, setShowTerminal] = usePersistentState('cursor-ide.showTerminal', 0);
+  const [terminalPane, setTerminalPane] = usePersistentState('cursor-ide.terminalPane', 'live');
+  const [terminalHistory, setTerminalHistory] = usePersistentState<TerminalHistoryEntry[]>('cursor-ide.terminalHistory', []);
+  const [terminalDockExpanded, setTerminalDockExpanded] = usePersistentState('cursor-ide.terminalDockExpanded', 0);
+  const [terminalDockHeight, setTerminalDockHeight] = usePersistentState('cursor-ide.terminalDockHeight', 250);
   const [showSearch, setShowSearch] = useState(0);
   const [files, setFiles] = useState<FileItem[]>([
     { name: 'reactjit', type: 'workspace', indent: 0, expanded: 1, selected: 1, visible: 1, git: '', hot: 1, path: '.' },
@@ -157,6 +171,20 @@ export default function CursorIdeApp() {
   const [inputTokenEstimate, setInputTokenEstimateState] = useState(0);
   const [newFileName, setNewFileName] = useState('');
   const [showNewFileInput, setShowNewFileInput] = useState(0);
+  const [showHotPanel, setShowHotPanel] = usePersistentState('cursor-ide.showHotPanel', 0);
+  const [terminalRecording, setTerminalRecording] = useState(0);
+  const [terminalRecordFrames, setTerminalRecordFrames] = useState(0);
+  const [terminalPlaybackState, setTerminalPlaybackState] = useState<any>(null);
+  const [pluginRegistry, setPluginRegistry] = useState<PluginRegistry | null>(null);
+  const [pluginNotifications, setPluginNotifications] = useState<any[]>([]);
+  const [showPalette, setShowPalette] = useState(0);
+
+  // ── New ported state ─────────────────────────────────────────────────
+  const [providerConfigs, setProviderConfigs] = usePersistentState<ProviderConfig[]>('cursor-ide.providerConfigs', Object.values(PROVIDER_CONFIGS));
+  const [defaultModels, setDefaultModels] = useState<DefaultModelsSettings>(loadDefaultModels());
+  const [variablePreview, setVariablePreview] = useState<ExpansionResult[]>([]);
+  const [proxyConfigs, setProxyConfigs] = useState<ProxyConfig[]>(listProxyConfigs());
+  const [proxyStatus, setProxyStatus] = useState(getProxyStatus());
 
   const fileContentsRef = useRef<Record<string, string>>({});
   const gitStatusByPathRef = useRef<Record<string, string>>({});
@@ -166,6 +194,7 @@ export default function CursorIdeApp() {
   const stateRef = useRef<any>({});
 
   const execCacheRef = useRef<Record<string, string>>({});
+  const terminalDockResizeRef = useRef<any>(null);
   function execCached(cmd: string): string {
     const cache = execCacheRef.current;
     if (cache[cmd] !== undefined) return cache[cmd];
@@ -185,8 +214,15 @@ export default function CursorIdeApp() {
     changedCount, chatMessages, compactSurface, currentFilePath, currentInput,
     editorContent, files, gitBranch, gitRemote, modelDisplayName, openTabs,
     searchQuery, selectedModel, stagedCount, workDir, widthBand, windowHeight,
-    windowWidth, workspaceName, showSearch, showChat, showTerminal,
+    windowWidth, workspaceName, showSearch, showChat, showTerminal, showHotPanel,
+    defaultModels, providerConfigs, proxyConfigs, proxyStatus, terminalDockHeight,
   };
+
+  function clampTerminalDockHeight(value: number): number {
+    const minHeight = 140;
+    const maxHeight = Math.max(180, Math.floor((stateRef.current.windowHeight || 800) * 0.65));
+    return Math.max(minHeight, Math.min(maxHeight, Math.round(value)));
+  }
 
   function addToolExecution(id: string, name: string, input: string) {
     setToolExecutions((prev) => [...prev, { id, name, input, status: 'running', percent: 20, result: '' }]);
@@ -201,6 +237,17 @@ export default function CursorIdeApp() {
     const attachmentList = nextAttachments ?? stateRef.current.attachments;
     setCurrentInputState(nextText);
     setInputTokenEstimateState(estimateTokens(nextText, attachmentList));
+    // Update variable preview
+    if (hasVariables(nextText)) {
+      const results = expandVariables(nextText, {
+        workDir: stateRef.current.workDir || '.',
+        gitBranch: stateRef.current.gitBranch || 'main',
+        userName: 'user',
+      });
+      setVariablePreview(results);
+    } else {
+      setVariablePreview([]);
+    }
   }
   function replaceAttachments(nextAttachments: Array<{ id: string; type: string; name: string; path: string }>) {
     setAttachmentsState(nextAttachments);
@@ -743,17 +790,36 @@ export default function CursorIdeApp() {
   function toggleTermAccess() { setTermAccessState((prev: number) => prev ? 0 : 1); }
   function toggleAutoApply() { setAutoApplyState((prev: number) => prev ? 0 : 1); }
   function cycleModel() {
-    const models = [
-      { id: 'claude-opus-4', name: 'Opus 4' },
-      { id: 'claude-sonnet-4', name: 'Sonnet 4' },
-      { id: 'gpt-5.4', name: 'GPT-5.4' },
-      { id: 'o1-preview', name: 'o1' },
-    ];
+    const models = stateRef.current.providerConfigs
+      .filter((provider: ProviderConfig) => provider.enabled)
+      .flatMap((provider: ProviderConfig) => provider.models);
     let idx = models.findIndex((model) => model.id === stateRef.current.selectedModel);
     if (idx < 0) idx = 0;
-    const next = models[(idx + 1) % models.length];
-    setSelectedModel(next.id);
-    setModelDisplayName(next.name);
+    const next = models[(idx + 1) % models.length] || models[0];
+    if (next) {
+      setSelectedModel(next.id);
+      setModelDisplayName(next.displayName);
+      setSelectedProviderId(next.provider);
+    }
+  }
+  function selectModel(modelId: string, displayName: string, provider: ProviderType) {
+    setSelectedModel(modelId);
+    setModelDisplayName(displayName);
+    setSelectedProviderId(provider);
+  }
+  function updateProviderConfig(providerType: ProviderType, patch: Partial<ProviderConfig>) {
+    setProviderConfigs((prev) => prev.map((provider: ProviderConfig) => provider.type === providerType ? { ...provider, ...patch } : provider));
+  }
+  function toggleProviderEnabled(providerType: ProviderType) {
+    setProviderConfigs((prev) => {
+      const next = prev.map((provider: ProviderConfig) => provider.type === providerType ? { ...provider, enabled: !provider.enabled } : provider);
+      const selected = next.find((provider: ProviderConfig) => provider.type === stateRef.current.selectedProviderId);
+      if (selected && !selected.enabled) {
+        const fallback = next.find((provider: ProviderConfig) => provider.enabled);
+        if (fallback) setSelectedProviderId(fallback.type);
+      }
+      return next;
+    });
   }
   function startNewConversation() {
     setChatMessages(buildSeedMessages(stateRef.current.gitBranch, stateRef.current.changedCount, stateRef.current.workDir || '.', stateRef.current.modelDisplayName || 'Opus 4'));
@@ -789,9 +855,24 @@ export default function CursorIdeApp() {
   const assistantBufferRef = useRef('');
   const streamingMsgIdRef = useRef('');
 
-  function sendMessage() {
-    if (stateRef.current.currentInput.length === 0 && stateRef.current.attachments.length === 0) return;
-    const text = stateRef.current.currentInput.length > 0 ? stateRef.current.currentInput : '[attached ' + stateRef.current.attachments.length + ' context item(s)]';
+  function sendMessage(forceText?: string) {
+    let inputText = forceText ?? stateRef.current.currentInput;
+    if (inputText.length === 0 && stateRef.current.attachments.length === 0) return;
+    // Expand variables before sending
+    const expanded = expandVariables(inputText, {
+      workDir: stateRef.current.workDir || '.',
+      gitBranch: stateRef.current.gitBranch || 'main',
+      userName: 'user',
+    });
+    if (expanded.some(r => r.data !== undefined)) {
+      inputText = expanded.reduce((text, r) => {
+        if (r.data !== undefined) {
+          return text.replace(new RegExp('\\{\\{' + r.variable + '\\}\\}', 'g'), r.data);
+        }
+        return text;
+      }, inputText);
+    }
+    const text = inputText.length > 0 ? inputText : '[attached ' + stateRef.current.attachments.length + ' context item(s)]';
     const nextMessages: Message[] = [...stateRef.current.chatMessages, { role: 'user', time: 'now', text, mode: stateRef.current.agentMode, model: stateRef.current.selectedModel, attachments: stateRef.current.attachments }];
     setChatMessages(nextMessages);
     setCurrentInputState(''); setAttachmentsState([]); setInputTokenEstimateState(0); setIsGenerating(1); setAgentStatusText('streaming'); setToolExecutions([]);
@@ -874,11 +955,153 @@ export default function CursorIdeApp() {
     closeBackendSession();
     setActiveAgentId(''); setAgentStatusText('idle'); setIsGenerating(0);
   }
+
+  function pushTerminalHistory(kind: string, title: string, detail: string, path?: string) {
+    const entry: TerminalHistoryEntry = {
+      id: 'term_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+      kind,
+      title,
+      detail,
+      time: Date.now(),
+      path,
+    };
+    setTerminalHistory((prev) => [entry, ...prev].slice(0, 14));
+  }
+
+  function startTerminalRecording() {
+    if (typeof host.__rec_start !== 'function') return;
+    if (typeof host.__rec_is_recording === 'function' && host.__rec_is_recording()) return;
+    host.__rec_start();
+    setTerminalRecording(1);
+    pushTerminalHistory('record', 'Recording started', 'terminal output is now being captured');
+  }
+
+  function stopAndSaveTerminalRecording(reason: string) {
+    const isRecording = typeof host.__rec_is_recording === 'function' ? host.__rec_is_recording() : 0;
+    if (!isRecording || typeof host.__rec_save !== 'function' || typeof host.__rec_stop !== 'function') return;
+    const path = '/tmp/cursor-ide-terminal-' + Date.now() + '.trec';
+    const ok = host.__rec_save(path);
+    host.__rec_stop();
+    setTerminalRecording(0);
+    setTerminalRecordFrames(0);
+    if (ok) {
+      pushTerminalHistory('snapshot', reason, 'saved terminal recording', path);
+    } else {
+      pushTerminalHistory('snapshot', reason, 'failed to save terminal recording');
+    }
+  }
+
   function openTerminal() {
     if (!ptyStartedRef.current) { ptyOpen(110, 28); ptyStartedRef.current = true; }
     if (stateRef.current.widthBand === 'narrow' || stateRef.current.widthBand === 'widget' || stateRef.current.widthBand === 'minimum') setCompactSurface('terminal');
+    setTerminalPane('live');
+    startTerminalRecording();
+    pushTerminalHistory('session', 'Terminal opened', stateRef.current.workDir + ' • ' + stateRef.current.gitBranch);
+  }
+
+  function closeTerminalSurface(reason: string) {
+    stopTerminalDockResize();
+    setShowTerminal(0);
+    setTerminalDockExpanded(0);
+    if (stateRef.current.widthBand === 'narrow' || stateRef.current.widthBand === 'widget' || stateRef.current.widthBand === 'minimum') {
+      setCompactSurface(mainSurface);
+    }
+    stopAndSaveTerminalRecording(reason);
+    pushTerminalHistory('session', 'Terminal closed', reason);
+  }
+
+  function toggleTerminalDockExpanded() {
+    stopTerminalDockResize();
+    const next = terminalDockExpanded ? 0 : 1;
+    setTerminalDockExpanded(next);
+    pushTerminalHistory(next ? 'layout' : 'layout', next ? 'Terminal expanded' : 'Terminal collapsed', stateRef.current.workDir);
+  }
+
+  function stopTerminalDockResize() {
+    const current = terminalDockResizeRef.current;
+    if (!current) return;
+    if (current.interval != null) clearInterval(current.interval);
+    terminalDockResizeRef.current = null;
+  }
+
+  function beginTerminalDockResize() {
+    if (terminalDockResizeRef.current) return;
+    const getMouseY = typeof host.getMouseY === 'function' ? host.getMouseY : null;
+    const getMouseDown = typeof host.getMouseDown === 'function' ? host.getMouseDown : null;
+    if (!getMouseY || !getMouseDown) return;
+
+    const startY = Number(getMouseY());
+    const startHeight = clampTerminalDockHeight(stateRef.current.terminalDockHeight || 250);
+    const session = {
+      startY,
+      startHeight,
+      lastHeight: startHeight,
+      interval: null as any,
+    };
+    terminalDockResizeRef.current = session;
+
+    const tick = () => {
+      const current = terminalDockResizeRef.current;
+      if (!current) return;
+      if (!getMouseDown()) {
+        stopTerminalDockResize();
+        return;
+      }
+      const currentY = Number(getMouseY());
+      const nextHeight = clampTerminalDockHeight(current.startHeight + (current.startY - currentY));
+      if (nextHeight !== current.lastHeight) {
+        current.lastHeight = nextHeight;
+        setTerminalDockHeight(nextHeight);
+      }
+    };
+
+    session.interval = setInterval(tick, 16);
+    tick();
+  }
+
+  function toggleTerminalRecording() {
+    if (terminalRecording) {
+      stopAndSaveTerminalRecording('manual stop');
+      pushTerminalHistory('record', 'Recording stopped', 'manual stop');
+    } else {
+      startTerminalRecording();
+    }
+  }
+
+  function saveTerminalSnapshot() {
+    if (typeof host.__rec_save !== 'function') return;
+    if (!(typeof host.__rec_is_recording === 'function' ? host.__rec_is_recording() : 0)) startTerminalRecording();
+    const path = '/tmp/cursor-ide-terminal-' + Date.now() + '.trec';
+    const ok = host.__rec_save(path);
+    if (ok) pushTerminalHistory('snapshot', 'Snapshot saved', 'saved terminal recording', path);
+    else pushTerminalHistory('snapshot', 'Snapshot failed', 'unable to save terminal recording');
+  }
+
+  function loadTerminalPlayback() {
+    if (typeof host.__play_load !== 'function') return;
+    const ok = host.__play_load();
+    pushTerminalHistory('playback', ok ? 'Playback loaded' : 'Playback unavailable', ok ? 'loaded current recorder buffer' : 'no recorder buffer to load');
+  }
+
+  function toggleTerminalPlayback() {
+    if (typeof host.__play_toggle !== 'function') return;
+    host.__play_toggle();
+    pushTerminalHistory('playback', 'Playback toggled', 'current recorder playback state changed');
+  }
+
+  function stepTerminalPlayback() {
+    if (typeof host.__play_step !== 'function') return;
+    host.__play_step();
+    pushTerminalHistory('playback', 'Playback stepped', 'advanced current recorder by one step');
+  }
+
+  function clearTerminalHistory() {
+    setTerminalHistory([]);
   }
   function selectSlashCommand(cmd: string) { replaceComposer(cmd + ' '); }
+  function sendSteerMessage(message: string) {
+    sendMessage(message);
+  }
 
   // ── Lint / error count (basic) ──────────────────────────────────────
   function refreshDiagnostics() {
@@ -909,7 +1132,40 @@ export default function CursorIdeApp() {
     setSearchResults(recentSearchFallback());
     const timer = setInterval(syncWindowMetrics, 120);
     const diagTimer = setInterval(refreshDiagnostics, 8000);
-    return () => { clearInterval(timer); clearInterval(diagTimer); };
+    return () => { clearInterval(timer); clearInterval(diagTimer); stopTerminalDockResize(); };
+  }, []);
+
+  useEffect(() => {
+    const next = clampTerminalDockHeight(terminalDockHeight);
+    if (next !== terminalDockHeight) setTerminalDockHeight(next);
+  }, [windowHeight, terminalDockHeight]);
+
+  // ── Plugin system init ─────────────────────────────────────────────
+  useEffect(() => {
+    try {
+      const registry = loadPlugins(React, {
+        Box, Col, Pressable, Row, ScrollView, Text, TextInput,
+      });
+      setPluginRegistry(registry);
+      const unsub = registry.onNotification((n) => {
+        setPluginNotifications((prev) => [...prev.slice(-9), n]);
+      });
+      return unsub;
+    } catch (e: any) {
+      console.error('[plugin] init failed:', e?.message || String(e));
+    }
+  }, []);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      const recIsRecording = typeof host.__rec_is_recording === 'function' ? host.__rec_is_recording() : 0;
+      const frameCount = typeof host.__rec_frame_count === 'function' ? host.__rec_frame_count() : 0;
+      const playState = typeof host.__play_state === 'function' ? host.__play_state() : null;
+      setTerminalRecording(recIsRecording ? 1 : 0);
+      setTerminalRecordFrames(frameCount || 0);
+      setTerminalPlaybackState(playState || null);
+    }, 240);
+    return () => clearInterval(id);
   }, []);
 
   useEffect(() => {
@@ -946,6 +1202,29 @@ export default function CursorIdeApp() {
 
   const mainSurface = primaryMainView(activeView, currentFilePath);
   const compactMode = widthBand === 'narrow' || widthBand === 'widget' || widthBand === 'minimum';
+
+  // ── Command palette commands ───────────────────────────────────────
+  const paletteCommands: PaletteCommand[] = [
+    { id: 'nav.home', label: 'Open Projects', category: 'Navigation', action: openLandingPage },
+    { id: 'nav.settings', label: 'Open Settings', category: 'Navigation', action: openSettingsSurface },
+    { id: 'nav.search', label: 'Toggle Search', category: 'Navigation', action: () => { setShowSearch(showSearch ? 0 : 1); if (!showSearch) searchProject(searchQuery); } },
+    { id: 'nav.terminal', label: 'Toggle Terminal', category: 'Navigation', action: () => { if (showTerminal) closeTerminalSurface('palette toggle off'); else { openTerminal(); setShowTerminal(1); setTerminalDockExpanded(0); } } },
+    { id: 'nav.chat', label: 'Toggle Agent Chat', category: 'Navigation', action: () => { setShowChat(showChat ? 0 : 1); } },
+    { id: 'nav.hot', label: 'Toggle Hot Panel', category: 'Navigation', action: () => { setShowHotPanel(showHotPanel ? 0 : 1); } },
+    { id: 'file.new', label: 'New File', category: 'File', action: createNewFile },
+    { id: 'file.save', label: 'Save Current File', category: 'File', action: saveCurrentFile },
+    { id: 'workspace.refresh', label: 'Refresh Workspace', category: 'Workspace', action: refreshWorkspace },
+    { id: 'workspace.index', label: 'Index Project', category: 'Workspace', action: indexProject },
+    { id: 'chat.new', label: 'New Conversation', category: 'Agent', action: startNewConversation },
+    { id: 'chat.send', label: 'Send Message', category: 'Agent', action: sendMessage },
+    { id: 'model.cycle', label: 'Cycle Model', category: 'Agent', action: cycleModel },
+    { id: 'agent.stop', label: 'Stop Background Agent', category: 'Agent', action: stopBackgroundAgent },
+  ];
+  if (pluginRegistry) {
+    pluginRegistry.commands.forEach((cmd, id) => {
+      paletteCommands.push({ id, label: cmd.label, category: 'Plugins', action: cmd.callback });
+    });
+  }
   const widgetMode = widthBand === 'widget';
   const minimumMode = widthBand === 'minimum';
   const mediumMode = widthBand === 'medium';
@@ -968,8 +1247,11 @@ export default function CursorIdeApp() {
   const showStatusBar = !minimumMode && windowHeight >= 300;
   const showDockedSearch = !compactMode && rightRail === 'search';
   const showDockedChat = !compactMode && rightRail === 'agent';
-  const showDockedTerminal = showTerminal === 1 && !compactMode;
+  const showDockedTerminal = showTerminal === 1 && !compactMode && !terminalDockExpanded;
+  const showExpandedTerminal = showTerminal === 1 && !compactMode && terminalDockExpanded;
+  const showDockedHot = showHotPanel === 1 && !compactMode;
   const compactMainView = compactSurface === 'landing' ? 'landing' : compactSurface === 'settings' ? 'settings' : 'editor';
+  const dockedTerminalHeight = clampTerminalDockHeight(terminalDockHeight);
 
   return (
     <Box style={{ width: '100%', height: '100%', backgroundColor: COLORS.appBg }}>
@@ -995,11 +1277,13 @@ export default function CursorIdeApp() {
             } else { setShowChat(showChat ? 0 : 1); }
           }}
           onToggleTerminal={() => {
-            openTerminal();
             if (compactMode) {
-              if (compactSurface === 'terminal') { setShowTerminal(0); setCompactSurface(mainSurface); }
-              else { setShowTerminal(1); setCompactSurface('terminal'); }
-            } else { setShowTerminal(showTerminal ? 0 : 1); }
+              if (compactSurface === 'terminal') { closeTerminalSurface('compact close'); setCompactSurface(mainSurface); }
+              else { openTerminal(); setShowTerminal(1); setTerminalDockExpanded(0); setCompactSurface('terminal'); }
+            } else {
+              if (showTerminal) { closeTerminalSurface('toggle off'); }
+              else { openTerminal(); setShowTerminal(1); setTerminalDockExpanded(0); }
+            }
           }}
           onToggleSearch={() => {
             if (compactMode) {
@@ -1011,6 +1295,14 @@ export default function CursorIdeApp() {
               if (next) searchProject(searchQuery);
             }
           }}
+          onToggleHot={() => {
+            if (compactMode) {
+              if (compactSurface === 'hot') { setShowHotPanel(0); setCompactSurface(mainSurface); }
+              else { setShowHotPanel(1); setCompactSurface('hot'); }
+            } else { setShowHotPanel(showHotPanel ? 0 : 1); }
+          }}
+          onOpenPalette={() => setShowPalette(1)}
+          paletteActive={showPalette}
         />
 
         {compactMode ? (
@@ -1021,7 +1313,8 @@ export default function CursorIdeApp() {
               {mainSurface === 'editor' ? <CompactSurfaceButton label="Editor" showLabel={!minimumMode} active={compactSurface === 'editor'} onPress={() => setCompactSurface('editor')} icon="panel-left" /> : null}
               <CompactSurfaceButton label="Settings" showLabel={!minimumMode} active={compactSurface === 'settings'} onPress={openSettingsSurface} icon="palette" />
               <CompactSurfaceButton label="Search" showLabel={!minimumMode} active={compactSurface === 'search'} onPress={() => { setShowSearch(1); searchProject(searchQuery); setCompactSurface('search'); }} icon="search" />
-              <CompactSurfaceButton label="Term" showLabel={!minimumMode} active={compactSurface === 'terminal'} onPress={() => { openTerminal(); setShowTerminal(1); setCompactSurface('terminal'); }} icon="terminal" />
+              <CompactSurfaceButton label="Term" showLabel={!minimumMode} active={compactSurface === 'terminal'} onPress={() => { openTerminal(); setShowTerminal(1); setTerminalDockExpanded(0); setCompactSurface('terminal'); }} icon="terminal" />
+              <CompactSurfaceButton label="Hot" showLabel={!minimumMode} active={compactSurface === 'hot'} onPress={() => { setShowHotPanel(1); setCompactSurface('hot'); }} icon="flame" />
               <CompactSurfaceButton label="Agent" showLabel={!minimumMode} active={compactSurface === 'agent'} onPress={() => { setShowChat(1); setCompactSurface('agent'); }} icon="message" />
             </Row>
 
@@ -1068,14 +1361,17 @@ export default function CursorIdeApp() {
                   <LandingSurface workspaceName={workspaceName} workspaceTagline={workspaceTagline} workDir={workDir} gitBranch={gitBranch} gitRemote={gitRemote} branchAhead={branchAhead} branchBehind={branchBehind} changedCount={changedCount} stagedCount={stagedCount} widthBand={widthBand} stats={landingStats} projects={landingProjects} recentFiles={landingRecent} connections={landingConnections} onOpenPath={openFileByPath} onIndexWorkspace={indexProject} onOpenSettings={openSettingsSurface} />
                 ) : null}
                 {compactMainView === 'settings' ? (
-                  <SettingsSurface activeSection={settingsSection} selectedProviderId={selectedProviderId} selectedModelName={modelDisplayName} workspaceName={workspaceName} gitBranch={gitBranch} agentStatusText={agentStatusText} workDir={workDir} widthBand={widthBand} sections={[
-                    { id: 'providers', label: 'Providers', meta: 'model routing + auth + components', tone: '#79c0ff', icon: 'globe', count: String(SETTINGS_PROVIDERS.length) },
+                <SettingsSurface activeSection={settingsSection} selectedProviderId={selectedProviderId} selectedModelName={modelDisplayName} workspaceName={workspaceName} gitBranch={gitBranch} agentStatusText={agentStatusText} workDir={workDir} widthBand={widthBand} sections={[
+                    { id: 'providers', label: 'Providers', meta: 'model routing + auth + components', tone: '#79c0ff', icon: 'globe', count: String(providerConfigs.filter((provider: ProviderConfig) => provider.enabled).length) + '/' + String(providerConfigs.length) },
+                    { id: 'defaults', label: 'Defaults', meta: 'default models per task type', tone: '#ff7b72', icon: 'bot', count: '5' },
+                    { id: 'variables', label: 'Variables', meta: 'system + custom variable expansion', tone: '#d2a8ff', icon: 'braces', count: String(listCustomVariables().length) },
+                    { id: 'proxy', label: 'Proxy', meta: 'http/socks5 proxy routing', tone: '#7ee787', icon: 'network', count: String(proxyConfigs.length) },
                     { id: 'context', label: 'Context', meta: 'workspace + git + external sources', tone: '#7ee787', icon: 'folder', count: String(SETTINGS_CONTEXT_ROWS.length) },
                     { id: 'memory', label: 'Memory', meta: 'session + sqlite + transcript stores', tone: '#d2a8ff', icon: 'bot', count: String(SETTINGS_MEMORY_ROWS.length) },
                     { id: 'plugins', label: 'Plugins', meta: 'lua + qjs + marketplace parity', tone: '#ffa657', icon: 'palette', count: String(SETTINGS_PLUGIN_ROWS.length) },
                     { id: 'automations', label: 'Automations', meta: 'ifttt rules + build hooks', tone: '#ff7b72', icon: 'sparkles', count: String(SETTINGS_AUTOMATION_ROWS.length) },
                     { id: 'capabilities', label: 'Capabilities', meta: 'existing runtime references to bake in', tone: '#ffb86b', icon: 'braces', count: String(SETTINGS_CAPABILITY_ROWS.length) },
-                  ]} providers={SETTINGS_PROVIDERS} contextRows={SETTINGS_CONTEXT_ROWS} memoryRows={SETTINGS_MEMORY_ROWS} pluginRows={SETTINGS_PLUGIN_ROWS} automationRows={SETTINGS_AUTOMATION_ROWS} capabilityRows={SETTINGS_CAPABILITY_ROWS} onSelectSection={setSettingsSection} onSelectProvider={setSelectedProviderId} />
+                  ]} providers={SETTINGS_PROVIDERS} providerConfigs={providerConfigs} contextRows={SETTINGS_CONTEXT_ROWS} memoryRows={SETTINGS_MEMORY_ROWS} pluginRows={SETTINGS_PLUGIN_ROWS} automationRows={SETTINGS_AUTOMATION_ROWS} capabilityRows={SETTINGS_CAPABILITY_ROWS} defaultModels={defaultModels} proxyConfigs={proxyConfigs} proxyStatus={proxyStatus} onSelectSection={setSettingsSection} onSelectProvider={setSelectedProviderId} onToggleProvider={toggleProviderEnabled} onUpdateProvider={updateProviderConfig} onSelectModel={selectModel} onUpdateDefaultModels={(s: DefaultModelsSettings) => { setDefaultModels(s); saveDefaultModels(s); }} onVariablesChange={() => {}} onProxyChange={() => { setProxyConfigs(listProxyConfigs()); setProxyStatus(getProxyStatus()); }} />
                 ) : null}
                 {compactMainView === 'editor' ? (
                   <EditorSurface content={editorContent} editorRows={editorRows} editorColorRows={editorColorRows} largeFileMode={editorLargeFileMode} totalLines={totalLines} cursorLine={cursorPosition.line} cursorColumn={cursorPosition.column} modified={editorModified} currentFilePath={currentFilePath} widthBand={widthBand} windowHeight={windowHeight} onChange={updateEditorContent} onSave={saveCurrentFile} />
@@ -1086,11 +1382,35 @@ export default function CursorIdeApp() {
             {compactSurface === 'search' ? (
               <SearchSurface query={searchQuery} results={searchResults} workspaceName={workspaceName} gitBranch={gitBranch} widthBand={widthBand} style={{ width: '100%' }} onClose={() => { setShowSearch(0); setCompactSurface(mainSurface); }} onQuery={searchProject} onOpenResult={openSearchResult} />
             ) : null}
+            {compactSurface === 'hot' ? (
+              <HotPanel workDir={workDir} visible={true} onSteer={sendSteerMessage} />
+            ) : null}
             {compactSurface === 'agent' ? (
-              <ChatSurface messages={chatMessages} isGenerating={!!isGenerating} currentFilePath={currentFilePath} gitBranch={gitBranch} gitRemote={gitRemote} changedCount={changedCount} workspaceName={workspaceName} activeView={activeView} widthBand={widthBand} style={{ width: '100%' }} selectedModel={selectedModel} currentInput={currentInput} agentMode={agentMode} attachments={attachments} webSearch={!!webSearch} termAccess={!!termAccess} autoApply={!!autoApply} inputTokenEstimate={inputTokenEstimate} modelDisplayName={modelDisplayName} toolExecutions={toolExecutions} activeAgentId={activeAgentId} agentStatusText={agentStatusText} onNewConversation={startNewConversation} onIndex={indexProject} onSetMode={setAgentMode} onInputChange={(value: string) => replaceComposer(value)} onAttachCurrentFile={attachCurrentFile} onAttachSymbol={triggerSymbolMention} onAttachGit={attachGitContext} onToggleWebSearch={toggleWebSearch} onToggleTermAccess={toggleTermAccess} onToggleAutoApply={toggleAutoApply} onCycleModel={cycleModel} onSend={sendMessage} onRemoveAttachment={removeAttachment} onClearAttachments={clearAttachments} onSelectSlash={selectSlashCommand} onStopAgent={stopBackgroundAgent} />
+              <ChatSurface messages={chatMessages} isGenerating={!!isGenerating} currentFilePath={currentFilePath} gitBranch={gitBranch} gitRemote={gitRemote} changedCount={changedCount} workspaceName={workspaceName} activeView={activeView} widthBand={widthBand} style={{ width: '100%' }} selectedModel={selectedModel} currentInput={currentInput} agentMode={agentMode} attachments={attachments} webSearch={!!webSearch} termAccess={!!termAccess} autoApply={!!autoApply} inputTokenEstimate={inputTokenEstimate} modelDisplayName={modelDisplayName} toolExecutions={toolExecutions} activeAgentId={activeAgentId} agentStatusText={agentStatusText} variablePreview={variablePreview} onNewConversation={startNewConversation} onIndex={indexProject} onSetMode={setAgentMode} onInputChange={(value: string) => replaceComposer(value)} onAttachCurrentFile={attachCurrentFile} onAttachSymbol={triggerSymbolMention} onAttachGit={attachGitContext} onToggleWebSearch={toggleWebSearch} onToggleTermAccess={toggleTermAccess} onToggleAutoApply={toggleAutoApply} onCycleModel={cycleModel} onSend={sendMessage} onRemoveAttachment={removeAttachment} onClearAttachments={clearAttachments} onSelectSlash={selectSlashCommand} onStopAgent={stopBackgroundAgent} />
             ) : null}
             {compactSurface === 'terminal' ? (
-              <TerminalPanel workDir={workDir} gitBranch={gitBranch} widthBand={widthBand} onClose={() => { setShowTerminal(0); setCompactSurface(mainSurface); }} />
+              <TerminalPanel
+                workDir={workDir}
+                gitBranch={gitBranch}
+                widthBand={widthBand}
+                pane={terminalPane}
+                history={terminalHistory}
+                recording={terminalRecording}
+                recordFrames={terminalRecordFrames}
+                playState={terminalPlaybackState}
+                expanded={0}
+                onSetPane={(pane: string) => setTerminalPane(pane)}
+                onToggleExpanded={() => {}}
+                onBeginResize={beginTerminalDockResize}
+                onToggleRecording={toggleTerminalRecording}
+                onSaveSnapshot={saveTerminalSnapshot}
+                onLoadPlayback={loadTerminalPlayback}
+                onTogglePlayback={toggleTerminalPlayback}
+                onStepPlayback={stepTerminalPlayback}
+                onJumpLive={() => setTerminalPane('live')}
+                onClearHistory={clearTerminalHistory}
+                onClose={() => { closeTerminalSurface('compact close'); setCompactSurface(mainSurface); }}
+              />
             ) : null}
           </Col>
         ) : (
@@ -1115,39 +1435,109 @@ export default function CursorIdeApp() {
             <Col style={{ flexGrow: 1, flexBasis: 0, minHeight: 0 }}>
               <TabBar tabs={tabsForBar} activeId={activeTabId} compact={false} onActivate={activateTab} onClose={closeTab} />
               <BreadcrumbBar items={visibleBreadcrumbs(breadcrumbs, widthBand)} compact={false} onOpenHome={openLandingPage} />
-              {activeView === 'landing' ? (
-                <LandingSurface workspaceName={workspaceName} workspaceTagline={workspaceTagline} workDir={workDir} gitBranch={gitBranch} gitRemote={gitRemote} branchAhead={branchAhead} branchBehind={branchBehind} changedCount={changedCount} stagedCount={stagedCount} widthBand={widthBand} stats={landingStats} projects={landingProjects} recentFiles={landingRecent} connections={landingConnections} onOpenPath={openFileByPath} onIndexWorkspace={indexProject} onOpenSettings={openSettingsSurface} />
-              ) : null}
-              {activeView === 'settings' ? (
-                <SettingsSurface activeSection={settingsSection} selectedProviderId={selectedProviderId} selectedModelName={modelDisplayName} workspaceName={workspaceName} gitBranch={gitBranch} agentStatusText={agentStatusText} workDir={workDir} widthBand={widthBand} sections={[
-                  { id: 'providers', label: 'Providers', meta: 'model routing + auth + components', tone: '#79c0ff', icon: 'globe', count: String(SETTINGS_PROVIDERS.length) },
-                  { id: 'context', label: 'Context', meta: 'workspace + git + external sources', tone: '#7ee787', icon: 'folder', count: String(SETTINGS_CONTEXT_ROWS.length) },
-                  { id: 'memory', label: 'Memory', meta: 'session + sqlite + transcript stores', tone: '#d2a8ff', icon: 'bot', count: String(SETTINGS_MEMORY_ROWS.length) },
-                  { id: 'plugins', label: 'Plugins', meta: 'lua + qjs + marketplace parity', tone: '#ffa657', icon: 'palette', count: String(SETTINGS_PLUGIN_ROWS.length) },
-                  { id: 'automations', label: 'Automations', meta: 'ifttt rules + build hooks', tone: '#ff7b72', icon: 'sparkles', count: String(SETTINGS_AUTOMATION_ROWS.length) },
-                  { id: 'capabilities', label: 'Capabilities', meta: 'existing runtime references to bake in', tone: '#ffb86b', icon: 'braces', count: String(SETTINGS_CAPABILITY_ROWS.length) },
-                ]} providers={SETTINGS_PROVIDERS} contextRows={SETTINGS_CONTEXT_ROWS} memoryRows={SETTINGS_MEMORY_ROWS} pluginRows={SETTINGS_PLUGIN_ROWS} automationRows={SETTINGS_AUTOMATION_ROWS} capabilityRows={SETTINGS_CAPABILITY_ROWS} onSelectSection={setSettingsSection} onSelectProvider={setSelectedProviderId} />
-              ) : null}
-              {activeView === 'editor' ? (
-                <EditorSurface content={editorContent} editorRows={editorRows} editorColorRows={editorColorRows} largeFileMode={editorLargeFileMode} totalLines={totalLines} cursorLine={cursorPosition.line} cursorColumn={cursorPosition.column} modified={editorModified} currentFilePath={currentFilePath} widthBand={widthBand} windowHeight={windowHeight} onChange={updateEditorContent} onSave={saveCurrentFile} />
-              ) : null}
-              {showDockedTerminal ? (
-                <TerminalPanel workDir={workDir} gitBranch={gitBranch} widthBand={widthBand} height={mediumMode ? 210 : 250} onClose={() => setShowTerminal(0)} />
-              ) : null}
+              {showExpandedTerminal ? (
+                <TerminalPanel
+                  workDir={workDir}
+                  gitBranch={gitBranch}
+                  widthBand={widthBand}
+                  height={'100%'}
+                  pane={terminalPane}
+                  history={terminalHistory}
+                  recording={terminalRecording}
+                  recordFrames={terminalRecordFrames}
+                  playState={terminalPlaybackState}
+                  expanded={1}
+                  onSetPane={(pane: string) => setTerminalPane(pane)}
+                  onToggleExpanded={toggleTerminalDockExpanded}
+                  onBeginResize={undefined}
+                  onToggleRecording={toggleTerminalRecording}
+                  onSaveSnapshot={saveTerminalSnapshot}
+                  onLoadPlayback={loadTerminalPlayback}
+                  onTogglePlayback={toggleTerminalPlayback}
+                  onStepPlayback={stepTerminalPlayback}
+                  onJumpLive={() => setTerminalPane('live')}
+                  onClearHistory={clearTerminalHistory}
+                  onClose={() => closeTerminalSurface('close button')}
+                />
+              ) : (
+                <>
+                  {activeView === 'landing' ? (
+                    <LandingSurface workspaceName={workspaceName} workspaceTagline={workspaceTagline} workDir={workDir} gitBranch={gitBranch} gitRemote={gitRemote} branchAhead={branchAhead} branchBehind={branchBehind} changedCount={changedCount} stagedCount={stagedCount} widthBand={widthBand} stats={landingStats} projects={landingProjects} recentFiles={landingRecent} connections={landingConnections} onOpenPath={openFileByPath} onIndexWorkspace={indexProject} onOpenSettings={openSettingsSurface} />
+                  ) : null}
+                  {activeView === 'settings' ? (
+                    <SettingsSurface activeSection={settingsSection} selectedProviderId={selectedProviderId} selectedModelName={modelDisplayName} workspaceName={workspaceName} gitBranch={gitBranch} agentStatusText={agentStatusText} workDir={workDir} widthBand={widthBand} sections={[
+                      { id: 'providers', label: 'Providers', meta: 'model routing + auth + components', tone: '#79c0ff', icon: 'globe', count: String(providerConfigs.filter((provider: ProviderConfig) => provider.enabled).length) + '/' + String(providerConfigs.length) },
+                      { id: 'defaults', label: 'Defaults', meta: 'default models per task type', tone: '#ff7b72', icon: 'bot', count: '5' },
+                      { id: 'variables', label: 'Variables', meta: 'system + custom variable expansion', tone: '#d2a8ff', icon: 'braces', count: String(listCustomVariables().length) },
+                      { id: 'proxy', label: 'Proxy', meta: 'http/socks5 proxy routing', tone: '#7ee787', icon: 'network', count: String(proxyConfigs.length) },
+                      { id: 'context', label: 'Context', meta: 'workspace + git + external sources', tone: '#7ee787', icon: 'folder', count: String(SETTINGS_CONTEXT_ROWS.length) },
+                      { id: 'memory', label: 'Memory', meta: 'session + sqlite + transcript stores', tone: '#d2a8ff', icon: 'bot', count: String(SETTINGS_MEMORY_ROWS.length) },
+                      { id: 'plugins', label: 'Plugins', meta: 'lua + qjs + marketplace parity', tone: '#ffa657', icon: 'palette', count: String(SETTINGS_PLUGIN_ROWS.length) },
+                      { id: 'automations', label: 'Automations', meta: 'ifttt rules + build hooks', tone: '#ff7b72', icon: 'sparkles', count: String(SETTINGS_AUTOMATION_ROWS.length) },
+                      { id: 'capabilities', label: 'Capabilities', meta: 'existing runtime references to bake in', tone: '#ffb86b', icon: 'braces', count: String(SETTINGS_CAPABILITY_ROWS.length) },
+                    ]} providers={SETTINGS_PROVIDERS} providerConfigs={providerConfigs} contextRows={SETTINGS_CONTEXT_ROWS} memoryRows={SETTINGS_MEMORY_ROWS} pluginRows={SETTINGS_PLUGIN_ROWS} automationRows={SETTINGS_AUTOMATION_ROWS} capabilityRows={SETTINGS_CAPABILITY_ROWS} defaultModels={defaultModels} proxyConfigs={proxyConfigs} proxyStatus={proxyStatus} onSelectSection={setSettingsSection} onSelectProvider={setSelectedProviderId} onToggleProvider={toggleProviderEnabled} onUpdateProvider={updateProviderConfig} onSelectModel={selectModel} onUpdateDefaultModels={(s: DefaultModelsSettings) => { setDefaultModels(s); saveDefaultModels(s); }} onVariablesChange={() => {}} onProxyChange={() => { setProxyConfigs(listProxyConfigs()); setProxyStatus(getProxyStatus()); }} />
+                  ) : null}
+                  {activeView === 'editor' ? (
+                    <EditorSurface content={editorContent} editorRows={editorRows} editorColorRows={editorColorRows} largeFileMode={editorLargeFileMode} totalLines={totalLines} cursorLine={cursorPosition.line} cursorColumn={cursorPosition.column} modified={editorModified} currentFilePath={currentFilePath} widthBand={widthBand} windowHeight={windowHeight} onChange={updateEditorContent} onSave={saveCurrentFile} />
+                  ) : null}
+                  {showDockedTerminal ? (
+                    <TerminalPanel
+                      workDir={workDir}
+                      gitBranch={gitBranch}
+                      widthBand={widthBand}
+                      height={dockedTerminalHeight}
+                      pane={terminalPane}
+                      history={terminalHistory}
+                      recording={terminalRecording}
+                      recordFrames={terminalRecordFrames}
+                      playState={terminalPlaybackState}
+                      expanded={0}
+                      onSetPane={(pane: string) => setTerminalPane(pane)}
+                      onToggleExpanded={toggleTerminalDockExpanded}
+                      onBeginResize={beginTerminalDockResize}
+                      onToggleRecording={toggleTerminalRecording}
+                      onSaveSnapshot={saveTerminalSnapshot}
+                      onLoadPlayback={loadTerminalPlayback}
+                      onTogglePlayback={toggleTerminalPlayback}
+                      onStepPlayback={stepTerminalPlayback}
+                      onJumpLive={() => setTerminalPane('live')}
+                      onClearHistory={clearTerminalHistory}
+                      onClose={() => closeTerminalSurface('close button')}
+                    />
+                  ) : null}
+                </>
+              )}
             </Col>
 
             {showDockedSearch ? (
               <SearchSurface query={searchQuery} results={searchResults} workspaceName={workspaceName} gitBranch={gitBranch} widthBand={widthBand} style={{ width: mediumMode ? 320 : 390 }} onClose={() => setShowSearch(0)} onQuery={searchProject} onOpenResult={openSearchResult} />
             ) : null}
+            {showDockedHot ? (
+              <HotPanel workDir={workDir} visible={true} onSteer={sendSteerMessage} />
+            ) : null}
             {showDockedChat ? (
-              <ChatSurface messages={chatMessages} isGenerating={!!isGenerating} currentFilePath={currentFilePath} gitBranch={gitBranch} gitRemote={gitRemote} changedCount={changedCount} workspaceName={workspaceName} activeView={activeView} widthBand={widthBand} style={{ width: mediumMode ? 340 : 420 }} selectedModel={selectedModel} currentInput={currentInput} agentMode={agentMode} attachments={attachments} webSearch={!!webSearch} termAccess={!!termAccess} autoApply={!!autoApply} inputTokenEstimate={inputTokenEstimate} modelDisplayName={modelDisplayName} toolExecutions={toolExecutions} activeAgentId={activeAgentId} agentStatusText={agentStatusText} onNewConversation={startNewConversation} onIndex={indexProject} onSetMode={setAgentMode} onInputChange={(value: string) => replaceComposer(value)} onAttachCurrentFile={attachCurrentFile} onAttachSymbol={triggerSymbolMention} onAttachGit={attachGitContext} onToggleWebSearch={toggleWebSearch} onToggleTermAccess={toggleTermAccess} onToggleAutoApply={toggleAutoApply} onCycleModel={cycleModel} onSend={sendMessage} onRemoveAttachment={removeAttachment} onClearAttachments={clearAttachments} onSelectSlash={selectSlashCommand} onStopAgent={stopBackgroundAgent} />
+              <ChatSurface messages={chatMessages} isGenerating={!!isGenerating} currentFilePath={currentFilePath} gitBranch={gitBranch} gitRemote={gitRemote} changedCount={changedCount} workspaceName={workspaceName} activeView={activeView} widthBand={widthBand} style={{ width: mediumMode ? 340 : 420 }} selectedModel={selectedModel} currentInput={currentInput} agentMode={agentMode} attachments={attachments} webSearch={!!webSearch} termAccess={!!termAccess} autoApply={!!autoApply} inputTokenEstimate={inputTokenEstimate} modelDisplayName={modelDisplayName} toolExecutions={toolExecutions} activeAgentId={activeAgentId} agentStatusText={agentStatusText} variablePreview={variablePreview} onNewConversation={startNewConversation} onIndex={indexProject} onSetMode={setAgentMode} onInputChange={(value: string) => replaceComposer(value)} onAttachCurrentFile={attachCurrentFile} onAttachSymbol={triggerSymbolMention} onAttachGit={attachGitContext} onToggleWebSearch={toggleWebSearch} onToggleTermAccess={toggleTermAccess} onToggleAutoApply={toggleAutoApply} onCycleModel={cycleModel} onSend={sendMessage} onRemoveAttachment={removeAttachment} onClearAttachments={clearAttachments} onSelectSlash={selectSlashCommand} onStopAgent={stopBackgroundAgent} />
             ) : null}
           </Row>
         )}
 
+        {/* Plugin notifications */}
+        {pluginNotifications.length > 0 ? (
+          <Box style={{ backgroundColor: COLORS.panelBg, borderTopWidth: 1, borderColor: COLORS.border, paddingLeft: 10, paddingRight: 10, paddingTop: 4, paddingBottom: 4 }}>
+            {pluginNotifications.slice(-3).map((n: any) => (
+              <Row key={n.id} style={{ alignItems: 'center', gap: 6 }}>
+                <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: n.type === 'error' ? COLORS.red : n.type === 'success' ? COLORS.green : n.type === 'warning' ? COLORS.yellow : COLORS.blue }} />
+                <Text fontSize={9} color={COLORS.textDim}>{n.message}</Text>
+              </Row>
+            ))}
+          </Box>
+        ) : null}
+
         {showStatusBar ? (
           <StatusBar gitBranch={gitBranch} gitStatus={gitStatus} gitRemote={gitRemote} branchAhead={branchAhead} branchBehind={branchBehind} changedCount={changedCount} stagedCount={stagedCount} cursorLine={cursorPosition.line} cursorColumn={cursorPosition.column} languageMode={languageMode} errors={errors} warnings={warnings} modified={editorModified} fileName={currentFilePath} workDir={workDir} selectedModel={modelDisplayName} agentStatusText={agentStatusText} widthBand={widthBand} />
         ) : null}
+
+        <CommandPalette open={showPalette === 1} onClose={() => setShowPalette(0)} commands={paletteCommands} />
       </Col>
     </Box>
   );
