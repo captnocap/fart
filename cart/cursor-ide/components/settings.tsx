@@ -14,6 +14,8 @@ import type { DefaultModelsSettings, ModelReference } from '../default-models';
 import { updateImageGenModel, updateResearchOrchestrator, updateResearchReader, updateRunnerConfig, updateShadowModel, updateTextModel, updateVisionProxy } from '../default-models';
 import { ApiKeyPanel } from './apikeypanel';
 import { IndexerPanel } from './indexerpanel';
+import { DiffPanel } from './diffpanel';
+import { loadCheckpoints } from '../checkpoint';
 
 // ── Icon Badge (colored initials substitute for PNG icons) ───────────────────
 
@@ -728,6 +730,10 @@ export function SettingsSurface(props: any) {
 
             {props.activeSection === 'index' ? (
               <IndexerPanel workDir={props.workDir} onIndex={props.onIndexChange} />
+            ) : null}
+
+            {props.activeSection === 'checkpoints' ? (
+              <DiffPanel checkpoints={props.checkpoints || []} onSelectCheckpoint={props.onSelectCheckpoint} onClose={() => props.onSelectSection('providers')} />
             ) : null}
 
             {props.activeSection === 'context' ? <Col style={{ gap: 10 }}>{props.contextRows.map((item: any) => <InfoCard key={item.name} item={item} />)}</Col> : null}
