@@ -36,7 +36,7 @@ import {
   SETTINGS_PLUGIN_ROWS,
   SETTINGS_PROVIDERS,
 } from './data';
-import { PROVIDER_CONFIGS, backendForModel as _backendForModel } from './providers';
+import { PROVIDER_CONFIGS, backendForModel as _backendForModel, getEnabledModels } from './providers';
 import type { ProviderType, ProviderConfig } from './providers';
 import { loadDefaultModels, saveDefaultModels, updateTextModel } from './default-models';
 import type { DefaultModelsSettings, ModelReference } from './default-models';
@@ -152,8 +152,9 @@ export default function CursorIdeApp() {
   const [chatMessages, setChatMessages] = useState<Message[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
-  const [selectedModel, setSelectedModel] = usePersistentState('cursor-ide.selectedModel', 'claude-opus-4');
-  const [modelDisplayName, setModelDisplayName] = usePersistentState('cursor-ide.modelDisplayName', 'Opus 4');
+  const firstEnabledModel = getEnabledModels()[0];
+  const [selectedModel, setSelectedModel] = usePersistentState('cursor-ide.selectedModel', firstEnabledModel ? firstEnabledModel.id : '');
+  const [modelDisplayName, setModelDisplayName] = usePersistentState('cursor-ide.modelDisplayName', firstEnabledModel ? firstEnabledModel.displayName : 'No Model');
   const [gitBranch, setGitBranch] = useState('main');
   const [gitStatus, setGitStatus] = useState('');
   const [errors, setErrors] = useState(0);
@@ -550,7 +551,7 @@ export default function CursorIdeApp() {
     buildLandingRecentFiles(snapshot.paths, gitInfo);
     setOpenTabs((prev) => prev.map((tab) => ({ ...tab, git: tab.path !== '__landing__' ? (gitStatusByPathRef.current[tab.path] || '') : '' })));
     if (!workspaceBootstrappedRef.current || stateRef.current.chatMessages.length === 0) {
-      setChatMessages(buildSeedMessages(gitInfo.branch, gitInfo.dirty, pwd, stateRef.current.modelDisplayName || 'Opus 4'));
+      setChatMessages(buildSeedMessages(gitInfo.branch, gitInfo.dirty, pwd, stateRef.current.modelDisplayName || 'AI'));
     }
     if (stateRef.current.activeView === 'landing' || stateRef.current.currentFilePath === '__landing__' || !stateRef.current.currentFilePath) {
       buildBreadcrumbs('__landing__', nextWorkspaceName, gitInfo.branch); markSelectedPath('__landing__');
@@ -822,7 +823,7 @@ export default function CursorIdeApp() {
     });
   }
   function startNewConversation() {
-    setChatMessages(buildSeedMessages(stateRef.current.gitBranch, stateRef.current.changedCount, stateRef.current.workDir || '.', stateRef.current.modelDisplayName || 'Opus 4'));
+    setChatMessages(buildSeedMessages(stateRef.current.gitBranch, stateRef.current.changedCount, stateRef.current.workDir || '.', stateRef.current.modelDisplayName || 'AI'));
     replaceAttachments([]); replaceComposer(''); setIsGenerating(0);
     if (stateRef.current.widthBand === 'narrow' || stateRef.current.widthBand === 'widget' || stateRef.current.widthBand === 'minimum') setCompactSurface('agent');
   }
