@@ -76,6 +76,28 @@ export type ThemeTokens = {
   fontMd: number;
   fontLg: number;
   fontXl: number;
+  // typography scale (aliases — semantic names)
+  typeXs: number;
+  typeSm: number;
+  typeBase: number;
+  typeLg: number;
+  typeXl: number;
+  // shadow scale — resolved to CSS-ish strings (for boxShadow prop support)
+  shadow0: string;
+  shadow1: string;
+  shadow2: string;
+  shadow3: string;
+  shadow4: string;
+  // z-index scale
+  zBase: number;
+  zDock: number;
+  zOverlay: number;
+  zModal: number;
+  zToast: number;
+  // animation timing (ms)
+  timingFast: number;
+  timingBase: number;
+  timingSlow: number;
 };
 
 export type Theme = {
@@ -118,6 +140,24 @@ export const THEME_SOFT: Theme = {
     fontMd: 13,
     fontLg: 15,
     fontXl: 18,
+    typeXs: 10,
+    typeSm: 11,
+    typeBase: 13,
+    typeLg: 15,
+    typeXl: 18,
+    shadow0: 'none',
+    shadow1: '0 1px 2px rgba(0,0,0,0.25)',
+    shadow2: '0 2px 6px rgba(0,0,0,0.30)',
+    shadow3: '0 6px 14px rgba(0,0,0,0.35)',
+    shadow4: '0 14px 32px rgba(0,0,0,0.45)',
+    zBase: 0,
+    zDock: 50,
+    zOverlay: 500,
+    zModal: 1000,
+    zToast: 2000,
+    timingFast: 120,
+    timingBase: 220,
+    timingSlow: 420,
   },
   palette: {
     appBg: '#090d13',
@@ -183,6 +223,24 @@ export const THEME_SHARP: Theme = {
     fontMd: 12,
     fontLg: 14,
     fontXl: 17,
+    typeXs: 10,
+    typeSm: 11,
+    typeBase: 12,
+    typeLg: 14,
+    typeXl: 17,
+    shadow0: 'none',
+    shadow1: 'none',
+    shadow2: 'none',
+    shadow3: 'none',
+    shadow4: 'none',
+    zBase: 0,
+    zDock: 50,
+    zOverlay: 500,
+    zModal: 1000,
+    zToast: 2000,
+    timingFast: 80,
+    timingBase: 150,
+    timingSlow: 300,
   },
   palette: {
     appBg: '#000000',
@@ -248,6 +306,24 @@ export const THEME_STUDIO: Theme = {
     fontMd: 12,
     fontLg: 14,
     fontXl: 16,
+    typeXs: 10,
+    typeSm: 11,
+    typeBase: 12,
+    typeLg: 14,
+    typeXl: 16,
+    shadow0: 'none',
+    shadow1: '0 1px 2px rgba(0,0,0,0.4)',
+    shadow2: '0 2px 4px rgba(0,0,0,0.5)',
+    shadow3: '0 4px 10px rgba(0,0,0,0.55)',
+    shadow4: '0 10px 22px rgba(0,0,0,0.65)',
+    zBase: 0,
+    zDock: 50,
+    zOverlay: 500,
+    zModal: 1000,
+    zToast: 2000,
+    timingFast: 100,
+    timingBase: 180,
+    timingSlow: 340,
   },
   palette: {
     appBg: '#1a1c20',
