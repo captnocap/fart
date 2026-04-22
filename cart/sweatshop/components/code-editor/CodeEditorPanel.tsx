@@ -82,6 +82,10 @@ export function CodeEditorPanel(props: CodeEditorPanelProps) {
   const history = useCodeHistory(content);
   const folds = useCodeFolding(content);
 
+  useEffect(() => {
+    history.setValue(content);
+  }, [currentFilePath]);
+
   const handleChange = useCallback(
     (next: string) => {
       onChange(next);
