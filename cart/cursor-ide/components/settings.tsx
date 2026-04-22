@@ -883,13 +883,129 @@ function KeybindingsPanel(props: { query: string; resetToken: number }) {
   );
 }
 
-function MemoryPanel() {
+const MEMORY_DEFAULTS = {
+  provider: 'local',
+  contextTokens: 64000,
+  retentionDays: 30,
+  checkpointLimit: 50,
+  autoCheckpoint: true,
+  semanticSearch: true,
+};
+
+function MemoryPanel(props: { query: string; resetToken: number }) {
+  const [provider, setProviderS]           = useState<string>(sget('memory.provider', MEMORY_DEFAULTS.provider));
+  const [contextTokens, setCtxS]           = useState<number>(sget('memory.contextTokens', MEMORY_DEFAULTS.contextTokens));
+  const [retentionDays, setRetentionS]     = useState<number>(sget('memory.retentionDays', MEMORY_DEFAULTS.retentionDays));
+  const [checkpointLimit, setCkptS]        = useState<number>(sget('memory.checkpointLimit', MEMORY_DEFAULTS.checkpointLimit));
+  const [autoCheckpoint, setAutoCkptS]     = useState<boolean>(sget('memory.autoCheckpoint', MEMORY_DEFAULTS.autoCheckpoint));
+  const [semanticSearch, setSemanticS]     = useState<boolean>(sget('memory.semanticSearch', MEMORY_DEFAULTS.semanticSearch));
+  const [confirmClear, setConfirmClear]    = useState<boolean>(false);
+  const [cleared, setCleared]              = useState<string>('');
+
+  useEffect(() => {
+    setProviderS(sget('memory.provider', MEMORY_DEFAULTS.provider));
+    setCtxS(sget('memory.contextTokens', MEMORY_DEFAULTS.contextTokens));
+    setRetentionS(sget('memory.retentionDays', MEMORY_DEFAULTS.retentionDays));
+    setCkptS(sget('memory.checkpointLimit', MEMORY_DEFAULTS.checkpointLimit));
+    setAutoCkptS(sget('memory.autoCheckpoint', MEMORY_DEFAULTS.autoCheckpoint));
+    setSemanticS(sget('memory.semanticSearch', MEMORY_DEFAULTS.semanticSearch));
+    setCleared('');
+    setConfirmClear(false);
+  }, [props.resetToken]);
+
+  const setProvider = (v: string) => { setProviderS(v); sset('memory.provider', v); };
+  const setCtx = (v: number) => { setCtxS(v); sset('memory.contextTokens', v); };
+  const setRetention = (v: number) => { setRetentionS(v); sset('memory.retentionDays', v); };
+  const setCkpt = (v: number) => { setCkptS(v); sset('memory.checkpointLimit', v); };
+  const setAutoCkpt = (v: boolean) => { setAutoCkptS(v); sset('memory.autoCheckpoint', v); };
+  const setSemantic = (v: boolean) => { setSemanticS(v); sset('memory.semanticSearch', v); };
+
+  function doClear() {
+    sdel('memory.transcript');
+    sdel('memory.checkpoints');
+    sdel('memory.semantic-index');
+    setConfirmClear(false);
+    setCleared('Memory cleared.');
+  }
+
+  function doReset() {
+    setProvider(MEMORY_DEFAULTS.provider);
+    setCtx(MEMORY_DEFAULTS.contextTokens);
+    setRetention(MEMORY_DEFAULTS.retentionDays);
+    setCkpt(MEMORY_DEFAULTS.checkpointLimit);
+    setAutoCkpt(MEMORY_DEFAULTS.autoCheckpoint);
+    setSemantic(MEMORY_DEFAULTS.semanticSearch);
+  }
+
+  const q = (props.query || '').toLowerCase();
+  const match = (kw: string) => !q || kw.toLowerCase().indexOf(q) >= 0;
+
   return (
     <Col style={{ gap: 14 }}>
-      <SectionTitle title="Memory" description="Variables, checkpoints, context depth." />
-      <Box style={{ padding: 14, borderRadius: TOKENS.radiusMd, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelRaised, alignItems: 'center' }}>
-        <Text fontSize={11} color={COLORS.textDim}>Memory settings coming in a later commit.</Text>
-      </Box>
+      <SectionTitle title="Memory" description="Context depth, checkpoints, and stored transcripts." onReset={doReset} />
+
+      {match('memory provider backend local sqlite session') ? (
+        <SettingRow title="Memory provider" description="Where chat transcripts and embeddings are stored.">
+          <PillSelect value={provider} onChange={setProvider} options={[
+            { value: 'local',   label: 'Local file', color: COLORS.green },
+            { value: 'sqlite',  label: 'SQLite',     color: COLORS.blue  },
+            { value: 'session', label: 'Session',    color: COLORS.purple },
+          ]} />
+        </SettingRow>
+      ) : null}
+
+      {match('context size tokens window') ? (
+        <SettingRow title="Context tokens" description="Soft cap for conversation tokens sent to the model (1K–256K).">
+          <Stepper value={Math.round(contextTokens / 1000)} onChange={(v) => setCtx(v * 1000)} min={1} max={256} step={1} suffix="K" />
+        </SettingRow>
+      ) : null}
+
+      {match('retention days age history') ? (
+        <SettingRow title="Retention" description="How long transcripts are kept before they auto-prune.">
+          <Stepper value={retentionDays} onChange={setRetention} min={1} max={365} step={1} suffix="d" />
+        </SettingRow>
+      ) : null}
+
+      {match('checkpoint limit cap history turns') ? (
+        <SettingRow title="Checkpoint limit" description="Maximum number of per-turn checkpoints kept for diff review.">
+          <Stepper value={checkpointLimit} onChange={setCkpt} min={5} max={500} step={5} />
+        </SettingRow>
+      ) : null}
+
+      {match('auto checkpoint save on turn') ? (
+        <SettingRow title="Auto-checkpoint" description="Save a diff checkpoint after every AI turn.">
+          <Toggle value={autoCheckpoint} onChange={setAutoCkpt} />
+        </SettingRow>
+      ) : null}
+
+      {match('semantic search embeddings') ? (
+        <SettingRow title="Semantic search" description="Index project files for embedding-based search.">
+          <Toggle value={semanticSearch} onChange={setSemantic} />
+        </SettingRow>
+      ) : null}
+
+      {match('clear memory erase reset storage') ? (
+        <Box style={{ padding: 12, borderRadius: TOKENS.radiusMd, borderWidth: 1, borderColor: COLORS.red, backgroundColor: COLORS.panelRaised, gap: 10 }}>
+          <Text fontSize={12} color={COLORS.red} style={{ fontWeight: 'bold' }}>Clear all memory</Text>
+          <Text fontSize={10} color={COLORS.textDim}>Wipes stored transcripts, checkpoints, and the semantic index. Cannot be undone.</Text>
+          {confirmClear ? (
+            <Row style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+              <Text fontSize={10} color={COLORS.orange}>Are you sure?</Text>
+              <Pressable onPress={doClear} style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 6, paddingBottom: 6, borderRadius: TOKENS.radiusSm, backgroundColor: COLORS.redDeep, borderWidth: 1, borderColor: COLORS.red }}>
+                <Text fontSize={10} color={COLORS.red} style={{ fontWeight: 'bold' }}>Yes, clear everything</Text>
+              </Pressable>
+              <Pressable onPress={() => setConfirmClear(false)} style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 6, paddingBottom: 6, borderRadius: TOKENS.radiusSm, backgroundColor: COLORS.panelAlt, borderWidth: 1, borderColor: COLORS.border }}>
+                <Text fontSize={10} color={COLORS.textDim}>Cancel</Text>
+              </Pressable>
+            </Row>
+          ) : (
+            <Pressable onPress={() => setConfirmClear(true)} style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 6, paddingBottom: 6, borderRadius: TOKENS.radiusSm, backgroundColor: COLORS.redDeep, borderWidth: 1, borderColor: COLORS.red, alignSelf: 'flex-start' }}>
+              <Text fontSize={10} color={COLORS.red} style={{ fontWeight: 'bold' }}>Clear memory</Text>
+            </Pressable>
+          )}
+          {cleared ? <Text fontSize={10} color={COLORS.green}>{cleared}</Text> : null}
+        </Box>
+      ) : null}
     </Col>
   );
 }
@@ -1098,7 +1214,7 @@ export function SettingsSurface(props: any) {
       onUpdateProvider={props.onUpdateProvider || (() => {})}
       onSelectModel={props.onSelectModel || (() => {})}
     />;
-    if (active === 'memory')      return <MemoryPanel />;
+    if (active === 'memory')      return <MemoryPanel query={query} resetToken={resetToken} />;
     if (active === 'plugins')     return <PluginsPanel />;
     return <AboutPanel />;
   }
