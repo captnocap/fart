@@ -474,6 +474,9 @@ fn jsrtApplyUpdatePatch(L: ?*lua.lua_State, idx: c_int, node: *Node) void {
     node.scroll_x = readLuaFloat2(L, idx, "scroll_x", "scrollX", node.scroll_x);
     node.scroll_y = readLuaFloat2(L, idx, "scroll_y", "scrollY", node.scroll_y);
     if (readLuaOptFloat2(L, idx, "scroll_persist_slot", "scrollPersistSlot")) |v| node.scroll_persist_slot = @intFromFloat(v);
+    node.show_scrollbar = readLuaBool2(L, idx, "show_scrollbar", "showScrollbar");
+    node.scrollbar_side = readLuaScrollbarSide(L, idx, "scrollbar_side", "scrollbarSide", node.scrollbar_side);
+    node.scrollbar_auto_hide = readLuaBool2(L, idx, "scrollbar_auto_hide", "autoHide");
     node.content_height = readLuaFloat(L, idx, "content_height", node.content_height);
     node.content_width = readLuaFloat(L, idx, "content_width", node.content_width);
     luaGetFieldAlias2(L, idx, "window_drag", "windowDrag");
@@ -1052,6 +1055,31 @@ fn readLuaBool3(L: ?*lua.lua_State, idx: c_int, primary: [*:0]const u8, alias_a:
     return result;
 }
 
+fn readLuaScrollbarSide(L: ?*lua.lua_State, idx: c_int, primary: [*:0]const u8, alias: [*:0]const u8, default: layout.ScrollbarSide) layout.ScrollbarSide {
+    luaGetFieldAlias2(L, idx, primary, alias);
+    var side = default;
+    if (lua.lua_isstring(L, -1) != 0) {
+        var len: usize = 0;
+        const ptr = lua.lua_tolstring(L, -1, &len);
+        if (ptr != null) {
+            const s = @as([*]const u8, @ptrCast(ptr))[0..len];
+            if (std.mem.eql(u8, s, "left") or std.mem.eql(u8, s, "start")) {
+                side = .left;
+            } else if (std.mem.eql(u8, s, "right") or std.mem.eql(u8, s, "end")) {
+                side = .right;
+            } else if (std.mem.eql(u8, s, "top")) {
+                side = .top;
+            } else if (std.mem.eql(u8, s, "bottom")) {
+                side = .bottom;
+            } else if (std.mem.eql(u8, s, "auto")) {
+                side = .auto;
+            }
+        }
+    }
+    lua.lua_pop(L, 1);
+    return side;
+}
+
 fn readLuaU8(L: ?*lua.lua_State, idx: c_int, field: [*:0]const u8, default: u8) u8 {
     lua.lua_getfield(L, idx, field);
     const result: u8 = if (lua.lua_isnumber(L, -1) != 0) @intCast(@as(i64, @intFromFloat(lua.lua_tonumber(L, -1)))) else default;
@@ -1453,6 +1481,9 @@ fn stampLuaNode(L: ?*lua.lua_State, idx: c_int, alloc: std.mem.Allocator) Node {
         if (si > 0) node.scroll_persist_slot = @intCast(si);
     }
     lua.lua_pop(L, 1);
+    node.show_scrollbar = readLuaBool2(L, idx, "show_scrollbar", "showScrollbar");
+    node.scrollbar_side = readLuaScrollbarSide(L, idx, "scrollbar_side", "scrollbarSide", node.scrollbar_side);
+    node.scrollbar_auto_hide = readLuaBool2(L, idx, "scrollbar_auto_hide", "autoHide");
     // lua_on_press handler (string → null-terminated copy for Zig)
     lua.lua_getfield(L, idx, "lua_on_press");
     if (lua.lua_isstring(L, -1) != 0) {
