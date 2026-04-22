@@ -47,6 +47,11 @@ export interface IndexSymbol {
   lineNumber: number;
 }
 
+export interface IndexedSymbolSelection extends IndexSymbol {
+  path: string;
+  columnNumber: number;
+}
+
 export interface IndexSearchHit {
   path: string;
   lineNumber: number;
@@ -108,6 +113,24 @@ function clampSnippet(text: string, maxLen: number = 160): string {
   const trimmed = text.trim();
   if (trimmed.length <= maxLen) return trimmed;
   return trimmed.slice(0, maxLen - 1).trimEnd() + '…';
+}
+
+function wordAt(text: string, columnNumber: number): { word: string; startColumn: number; endColumn: number } | null {
+  if (!text) return null;
+  const idx = Math.max(0, Math.min(text.length - 1, columnNumber - 1));
+  const isWord = (ch: string) => /[A-Za-z0-9_$]/.test(ch);
+  let start = idx;
+  while (start >= 0 && isWord(text[start])) start--;
+  let end = idx;
+  while (end < text.length && isWord(text[end])) end++;
+  if (start === end) return null;
+  const word = text.slice(start + 1, end);
+  if (!word) return null;
+  return {
+    word,
+    startColumn: start + 2,
+    endColumn: end,
+  };
 }
 
 function extractSymbols(content: string): IndexSymbol[] {
@@ -556,6 +579,41 @@ export function searchIndexHits(query: string): IndexSearchHit[] {
       return a.hit.path.localeCompare(b.hit.path);
     })
     .map((entry) => entry.hit);
+}
+
+export function getIndexedSymbolAtLocation(path: string, lineNumber: number, columnNumber: number): IndexedSymbolSelection | null {
+  const index = loadIndex();
+  const file = index.find((entry) => entry.path === path || entry.path.endsWith('/' + path));
+  if (!file) return null;
+  const content = file.content || getFileContent(file.path);
+  const lines = content.split('\n');
+  const line = lines[lineNumber - 1];
+  if (!line) return null;
+
+  const extracted = wordAt(line, columnNumber);
+  const candidateName = extracted?.word || file.symbols?.find((sym) => sym.lineNumber === lineNumber)?.name || '';
+  if (!candidateName) return null;
+
+  const matches = (file.symbols || []).filter((sym) => sym.name === candidateName);
+  const preferred = matches.find((sym) => sym.lineNumber === lineNumber) || matches[0];
+  const column = extracted?.startColumn || (line.indexOf(candidateName) >= 0 ? line.indexOf(candidateName) + 1 : columnNumber);
+  if (!preferred) {
+    const kind = line.includes('class ' + candidateName) ? 'class' : 'function';
+    return {
+      path: file.path,
+      name: candidateName,
+      kind,
+      lineNumber,
+      columnNumber: column,
+    };
+  }
+  return {
+    path: file.path,
+    name: preferred.name,
+    kind: preferred.kind,
+    lineNumber: preferred.lineNumber,
+    columnNumber: lineNumber === preferred.lineNumber ? column : (line.indexOf(preferred.name) >= 0 ? line.indexOf(preferred.name) + 1 : column),
+  };
 }
 
 export function removeFromIndex(path: string): void {

@@ -7,6 +7,7 @@ const { useState, useEffect } = React;
 import { Box, Col, Pressable, Row, ScrollView, Text, TextInput } from '../../../runtime/primitives';
 import { COLORS } from '../theme';
 import { Pill } from './shared';
+import { RenamePanel } from './renamepanel';
 import {
   indexWorkspace,
   loadIndex,
@@ -262,6 +263,8 @@ export function IndexerPanel(props: { workDir: string; onIndex?: () => void }) {
           </Col>
         </ScrollView>
       </Box>
+
+      <RenamePanel workDir={props.workDir} onApplied={props.onIndex} />
 
       <Box style={{ padding: 14, borderRadius: 14, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelRaised, gap: 12 }}>
         <TextInput
