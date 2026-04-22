@@ -75,6 +75,12 @@ export function ptyAlive(handle: number): boolean {
   }
 }
 
+export function ptyClose(handle: number): void {
+  try {
+    if (typeof host.__pty_close === 'function') host.__pty_close(handle);
+  } catch {}
+}
+
 export function closeWindow(): void {
   try {
     if (typeof host.__windowClose === 'function') host.__windowClose();
