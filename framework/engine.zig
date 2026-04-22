@@ -2343,6 +2343,26 @@ pub fn run(config_in: AppConfig) !void {
                             }
                         }
                     }
+                    // Middle-click — dispatch onMiddleClick to JSRT
+                    if (event.button.button == c.SDL_BUTTON_MIDDLE) {
+                        const mx: f32 = event.button.x;
+                        const my: f32 = event.button.y;
+                        const events = @import("events.zig");
+                        if (events.hitTest(config.root, mx, my)) |h| {
+                            if (h.handlers.js_on_middle_click) |expr| {
+                                input.unfocus();
+                                const expr_str = std.mem.span(expr);
+                                if (luajit_runtime.hasGlobal("__dispatchEventFromZig")) {
+                                    luajit_runtime.callGlobalIntStr("__dispatchEventFromZig", h.scroll_persist_slot, "onMiddleClick");
+                                } else {
+                                    js_vm.callGlobal("__beginJsEvent");
+                                    js_vm.evalExpr(expr_str);
+                                    js_vm.callGlobal("__endJsEvent");
+                                    state_mod.markDirty();
+                                }
+                            }
+                        }
+                    }
                     if (event.button.button == c.SDL_BUTTON_LEFT) {
                         const mx: f32 = event.button.x;
                         const my: f32 = event.button.y;

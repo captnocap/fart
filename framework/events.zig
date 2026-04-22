@@ -34,6 +34,7 @@ pub const EventHandler = struct {
     lua_on_press: ?[*:0]const u8 = null,
     lua_on_mouse_down: ?[*:0]const u8 = null,
     lua_on_mouse_up: ?[*:0]const u8 = null,
+    js_on_middle_click: ?[*:0]const u8 = null,
 };
 
 // ── Hit Testing ──────────────────────────────────────────────────────────

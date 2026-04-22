@@ -1328,7 +1328,7 @@ fn installCString(alloc: std.mem.Allocator, s: []const u8) ?[*:0]const u8 {
     return @ptrCast(copy[0..s.len :0]);
 }
 
-fn jsrtHandlerNamesContainClick(L: ?*lua.lua_State, idx: c_int) bool {
+fn jsrtHandlerNamesContainPress(L: ?*lua.lua_State, idx: c_int) bool {
     if (!lua.lua_istable(L, idx)) return false;
     const count: usize = @intCast(lua.lua_objlen(L, idx));
     var i: usize = 0;
@@ -1339,7 +1339,7 @@ fn jsrtHandlerNamesContainClick(L: ?*lua.lua_State, idx: c_int) bool {
             const ptr = lua.lua_tolstring(L, -1, &len);
             if (ptr != null) {
                 const name = @as([*]const u8, @ptrCast(ptr))[0..len];
-                if (std.mem.eql(u8, name, "onClick") or std.mem.eql(u8, name, "onPress")) {
+                if (std.mem.eql(u8, name, "onClick") or std.mem.eql(u8, name, "onPress") or std.mem.eql(u8, name, "onMiddleClick")) {
                     lua.lua_pop(L, 1);
                     return true;
                 }
@@ -1352,9 +1352,34 @@ fn jsrtHandlerNamesContainClick(L: ?*lua.lua_State, idx: c_int) bool {
 
 fn jsrtApplyHandlerNames(node: *Node, alloc: std.mem.Allocator, id: u32, L: ?*lua.lua_State, idx: c_int) void {
     node.handlers.js_on_press = null;
-    if (!jsrtHandlerNamesContainClick(L, idx)) return;
-    const expr = std.fmt.allocPrint(alloc, "__dispatchEvent({d},'onClick')", .{id}) catch return;
-    node.handlers.js_on_press = installCString(alloc, expr);
+    node.handlers.js_on_middle_click = null;
+    if (!lua.lua_istable(L, idx)) return;
+    const count: usize = @intCast(lua.lua_objlen(L, idx));
+    var i: usize = 0;
+    while (i < count) : (i += 1) {
+        lua.lua_rawgeti(L, idx, @intCast(i + 1));
+        if (lua.lua_isstring(L, -1) != 0) {
+            var len: usize = 0;
+            const ptr = lua.lua_tolstring(L, -1, &len);
+            if (ptr != null) {
+                const name = @as([*]const u8, @ptrCast(ptr))[0..len];
+                if (std.mem.eql(u8, name, "onClick") or std.mem.eql(u8, name, "onPress")) {
+                    const expr = std.fmt.allocPrint(alloc, "__dispatchEvent({d},'onClick')", .{id}) catch {
+                        lua.lua_pop(L, 1);
+                        return;
+                    };
+                    node.handlers.js_on_press = installCString(alloc, expr);
+                } else if (std.mem.eql(u8, name, "onMiddleClick")) {
+                    const expr = std.fmt.allocPrint(alloc, "__dispatchEvent({d},'onMiddleClick')", .{id}) catch {
+                        lua.lua_pop(L, 1);
+                        return;
+                    };
+                    node.handlers.js_on_middle_click = installCString(alloc, expr);
+                }
+            }
+        }
+        lua.lua_pop(L, 1);
+    }
 }
 
 fn stampLuaNode(L: ?*lua.lua_State, idx: c_int, alloc: std.mem.Allocator) Node {
