@@ -72,3 +72,4 @@ require('./panels/mermaid.panel');
 require('./panels/hot.panel');
 require('./panels/graph.panel');
 require('./panels/media.panel');
+require('./panels/toast-history.panel');
