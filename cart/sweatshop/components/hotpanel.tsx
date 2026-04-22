@@ -3,7 +3,6 @@
 // Ported from love2d/examples/hot-code/src/App.tsx
 
 const React: any = require('react');
-import * as ts from 'typescript';
 const { useEffect, useRef, useState, useCallback } = React;
 
 import {
@@ -143,6 +142,28 @@ function resolveModuleRequest(fromFile: string, request: string): string | null 
   }
   return null;
 }
+
+function stripTypeScriptSyntax(source: string): string {
+  let out = source;
+  out = out.replace(/^\s*import\s+type\s+.*$/gm, '');
+  out = out.replace(/^\s*export\s+type\s+[\s\S]*?;\s*$/gm, '');
+  out = out.replace(/^\s*export\s+interface\s+[\s\S]*?}\s*$/gm, '');
+  out = out.replace(/^\s*interface\s+[\s\S]*?}\s*$/gm, '');
+  out = out.replace(/:\s*[A-Za-z_$][A-Za-z0-9_$<>,\[\]\|&\s?.]*/g, '');
+  out = out.replace(/\s+as\s+[A-Za-z_$][A-Za-z0-9_$<>,\[\]\|&\s?.]*/g, '');
+  out = out.replace(/<\s*[A-Za-z_$][A-Za-z0-9_$<>,\s?.]*\s*>(?=\s*\()/g, '');
+  return out;
+}
+
+const ts: any = {
+  transpileModule(source: string) {
+    return { outputText: stripTypeScriptSyntax(source) };
+  },
+  JsxEmit: { Preserve: 1 },
+  ModuleKind: { None: 0 },
+  ScriptTarget: { ES2018: 0 },
+  ImportsNotUsedAsValues: { Remove: 0 },
+};
 
 function transpileTsxToJs(source: string): string {
   const result = ts.transpileModule(source, {
