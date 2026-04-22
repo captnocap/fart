@@ -1,4 +1,5 @@
-import { useRef } from 'react';
+const React: any = require('react');
+const { useRef } = React;
 import { PaletteCommand } from './types';
 
 const host: any = globalThis;
