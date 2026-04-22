@@ -1201,6 +1201,298 @@ function AboutPanel(props: { query: string }) {
   );
 }
 
+// ── CLI / local-endpoint backends ────────────────────────────────────────────
+// Mirrors the backend routing used by cart/cockpit/index.tsx so settings can
+// configure and status-check the same host FFI surfaces used at runtime.
+
+type BackendKind = 'api' | 'cli' | 'local';
+
+interface BackendEntry {
+  id: string;
+  label: string;
+  kind: BackendKind;
+  tone: string;
+  description: string;
+  hostFns: string[];
+  defaults: Record<string, any>;
+}
+
+const BACKEND_ENTRIES: BackendEntry[] = [
+  {
+    id: 'claude-api',
+    label: 'Claude API',
+    kind: 'api',
+    tone: COLORS.orange,
+    description: 'Direct HTTP calls to the Anthropic messages API.',
+    hostFns: ['__fetch_async'],
+    defaults: { baseUrl: 'https://api.anthropic.com', defaultModel: 'claude-opus-4-7' },
+  },
+  {
+    id: 'claude-cli',
+    label: 'Claude Code CLI',
+    kind: 'cli',
+    tone: COLORS.orange,
+    description: 'Local Claude Code CLI bridged through __claude_init/send/poll.',
+    hostFns: ['__claude_init', '__claude_send', '__claude_poll', '__claude_close'],
+    defaults: { cliPath: 'claude', defaultModel: 'claude-opus-4-7', workingDir: '' },
+  },
+  {
+    id: 'codex-cli',
+    label: 'OpenAI Codex CLI',
+    kind: 'cli',
+    tone: COLORS.blue,
+    description: 'Codex CLI bridged through the local-ai channel (__localai_*).',
+    hostFns: ['__localai_init', '__localai_send', '__localai_poll', '__localai_close'],
+    defaults: { cliPath: 'codex', defaultModel: 'codex', workingDir: '' },
+  },
+  {
+    id: 'kimi-cli',
+    label: 'Kimi CLI',
+    kind: 'cli',
+    tone: COLORS.purple,
+    description: 'Kimi Code CLI bridged through __kimi_init/send/poll.',
+    hostFns: ['__kimi_init', '__kimi_send', '__kimi_poll', '__kimi_close'],
+    defaults: { cliPath: 'kimi-code', defaultModel: 'kimi-code/kimi-for-coding', workingDir: '' },
+  },
+];
+
+interface LocalEndpoint {
+  id: string;
+  label: string;
+  url: string;
+  kind: 'ollama' | 'lmstudio' | 'openai-compatible';
+}
+
+const LOCAL_ENDPOINTS_KNOWN: LocalEndpoint[] = [
+  { id: 'ollama',   label: 'Ollama',    url: 'http://127.0.0.1:11434', kind: 'ollama' },
+  { id: 'lmstudio', label: 'LM Studio', url: 'http://127.0.0.1:1234',  kind: 'lmstudio' },
+  { id: 'llamacpp', label: 'llama.cpp', url: 'http://127.0.0.1:8080',  kind: 'openai-compatible' },
+  { id: 'vllm',     label: 'vLLM',      url: 'http://127.0.0.1:8000',  kind: 'openai-compatible' },
+];
+
+function hostHasAll(fns: string[]): boolean {
+  const h: any = globalThis;
+  for (const name of fns) {
+    if (typeof h[name] !== 'function') return false;
+  }
+  return true;
+}
+
+function BackendCard(props: { entry: BackendEntry; enabled: boolean; onToggle: () => void; version: number }) {
+  const e = props.entry;
+  const reachable = hostHasAll(e.hostFns);
+  const [draftCli, setDraftCli]   = useState<string>(sget('providers.' + e.id + '.cliPath',     e.defaults.cliPath     || ''));
+  const [draftUrl, setDraftUrl]   = useState<string>(sget('providers.' + e.id + '.baseUrl',     e.defaults.baseUrl     || ''));
+  const [draftModel, setDraftMod] = useState<string>(sget('providers.' + e.id + '.defaultModel', e.defaults.defaultModel || ''));
+  const [draftDir, setDraftDir]   = useState<string>(sget('providers.' + e.id + '.workingDir',  e.defaults.workingDir  || ''));
+
+  useEffect(() => {
+    setDraftCli(sget('providers.' + e.id + '.cliPath', e.defaults.cliPath || ''));
+    setDraftUrl(sget('providers.' + e.id + '.baseUrl', e.defaults.baseUrl || ''));
+    setDraftMod(sget('providers.' + e.id + '.defaultModel', e.defaults.defaultModel || ''));
+    setDraftDir(sget('providers.' + e.id + '.workingDir', e.defaults.workingDir || ''));
+  }, [props.version]);
+
+  function save(field: string, value: string) { sset('providers.' + e.id + '.' + field, value); }
+
+  return (
+    <Box style={{
+      padding: 12, gap: 10,
+      borderRadius: TOKENS.radiusMd, borderWidth: 1,
+      borderColor: props.enabled ? e.tone : COLORS.border,
+      backgroundColor: props.enabled ? COLORS.panelHover : COLORS.panelRaised,
+    }}>
+      <Row style={{ alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <Text fontSize={12} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>{e.label}</Text>
+        <Pill label={e.kind.toUpperCase()} color={e.tone} tiny={true} />
+        <Pill label={reachable ? 'bound' : 'missing'} color={reachable ? COLORS.green : COLORS.red} tiny={true} />
+        <Box style={{ flexGrow: 1 }} />
+        <Toggle value={props.enabled} onChange={() => props.onToggle()} />
+      </Row>
+      <Text fontSize={10} color={COLORS.textDim}>{e.description}</Text>
+
+      {e.kind === 'api' ? (
+        <Col style={{ gap: 6 }}>
+          <Text fontSize={10} color={COLORS.textDim}>Base URL</Text>
+          <TextInput value={draftUrl} onChangeText={(v: string) => { setDraftUrl(v); save('baseUrl', v); }}
+            placeholder={e.defaults.baseUrl}
+            style={{ height: 30, borderWidth: 1, borderColor: COLORS.border, borderRadius: TOKENS.radiusSm, paddingLeft: 8, backgroundColor: COLORS.panelBg, fontFamily: 'monospace' }} />
+          <Text fontSize={10} color={COLORS.textDim}>Default model</Text>
+          <TextInput value={draftModel} onChangeText={(v: string) => { setDraftMod(v); save('defaultModel', v); }}
+            placeholder={e.defaults.defaultModel}
+            style={{ height: 30, borderWidth: 1, borderColor: COLORS.border, borderRadius: TOKENS.radiusSm, paddingLeft: 8, backgroundColor: COLORS.panelBg, fontFamily: 'monospace' }} />
+        </Col>
+      ) : null}
+
+      {e.kind === 'cli' ? (
+        <Col style={{ gap: 6 }}>
+          <Text fontSize={10} color={COLORS.textDim}>CLI path</Text>
+          <TextInput value={draftCli} onChangeText={(v: string) => { setDraftCli(v); save('cliPath', v); }}
+            placeholder={e.defaults.cliPath}
+            style={{ height: 30, borderWidth: 1, borderColor: COLORS.border, borderRadius: TOKENS.radiusSm, paddingLeft: 8, backgroundColor: COLORS.panelBg, fontFamily: 'monospace' }} />
+          <Text fontSize={10} color={COLORS.textDim}>Default model</Text>
+          <TextInput value={draftModel} onChangeText={(v: string) => { setDraftMod(v); save('defaultModel', v); }}
+            placeholder={e.defaults.defaultModel}
+            style={{ height: 30, borderWidth: 1, borderColor: COLORS.border, borderRadius: TOKENS.radiusSm, paddingLeft: 8, backgroundColor: COLORS.panelBg, fontFamily: 'monospace' }} />
+          <Text fontSize={10} color={COLORS.textDim}>Working directory (optional)</Text>
+          <TextInput value={draftDir} onChangeText={(v: string) => { setDraftDir(v); save('workingDir', v); }}
+            placeholder="cwd for CLI invocations"
+            style={{ height: 30, borderWidth: 1, borderColor: COLORS.border, borderRadius: TOKENS.radiusSm, paddingLeft: 8, backgroundColor: COLORS.panelBg, fontFamily: 'monospace' }} />
+        </Col>
+      ) : null}
+
+      <Row style={{ gap: 4, flexWrap: 'wrap' }}>
+        {e.hostFns.map(fn => (
+          <Text key={fn} fontSize={9} color={(globalThis as any)[fn] ? COLORS.green : COLORS.textMuted} style={{ fontFamily: 'monospace' }}>{fn}</Text>
+        ))}
+      </Row>
+    </Box>
+  );
+}
+
+function LocalEndpointsSection(props: { query: string; version: number; onBump: () => void }) {
+  const [scanning, setScanning]       = useState<boolean>(false);
+  const [statuses, setStatusesS]      = useState<Record<string, string>>(sget('providers.local.statuses', {} as Record<string, string>));
+  const [customUrl, setCustomUrl]     = useState<string>('');
+  const [customLabel, setCustomLabel] = useState<string>('');
+  const [customs, setCustomsS]        = useState<LocalEndpoint[]>(sget('providers.local.custom', [] as LocalEndpoint[]));
+
+  useEffect(() => {
+    setStatusesS(sget('providers.local.statuses', {} as Record<string, string>));
+    setCustomsS(sget('providers.local.custom', [] as LocalEndpoint[]));
+  }, [props.version]);
+
+  function setStatuses(next: Record<string, string>) {
+    setStatusesS(next);
+    sset('providers.local.statuses', next);
+  }
+  function setCustoms(next: LocalEndpoint[]) {
+    setCustomsS(next);
+    sset('providers.local.custom', next);
+  }
+
+  async function probe(endpoint: LocalEndpoint): Promise<string> {
+    const h: any = globalThis;
+    if (typeof h.__fetch_async !== 'function') return 'no __fetch_async';
+    try {
+      const probeUrl = endpoint.kind === 'ollama'
+        ? endpoint.url + '/api/tags'
+        : endpoint.url + '/v1/models';
+      const res = await h.__fetch_async(probeUrl, { method: 'GET', timeoutMs: 1500 });
+      if (!res) return 'no response';
+      if (res.status && res.status >= 200 && res.status < 500) return 'up (' + res.status + ')';
+      return 'status ' + (res.status || '?');
+    } catch (err: any) {
+      return 'down';
+    }
+  }
+
+  async function scanAll() {
+    setScanning(true);
+    const next: Record<string, string> = {};
+    const all = LOCAL_ENDPOINTS_KNOWN.concat(customs);
+    for (const ep of all) {
+      next[ep.id] = await probe(ep);
+    }
+    setStatuses(next);
+    setScanning(false);
+    props.onBump();
+  }
+
+  function addCustom() {
+    const url = customUrl.trim();
+    if (!url) return;
+    const id = 'custom-' + Date.now().toString(36);
+    const next = customs.concat([{ id, label: customLabel.trim() || url, url, kind: 'openai-compatible' }]);
+    setCustoms(next);
+    setCustomUrl('');
+    setCustomLabel('');
+  }
+  function removeCustom(id: string) {
+    setCustoms(customs.filter(c => c.id !== id));
+  }
+
+  const q = (props.query || '').toLowerCase();
+  const all = LOCAL_ENDPOINTS_KNOWN.concat(customs);
+  const filtered = q ? all.filter(ep => (ep.label + ' ' + ep.url + ' ' + ep.kind).toLowerCase().indexOf(q) >= 0) : all;
+
+  return (
+    <Box style={{ padding: 14, borderRadius: TOKENS.radiusMd, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelRaised, gap: 10 }}>
+      <Row style={{ alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <Text fontSize={13} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>Local endpoints</Text>
+        <Pill label={LOCAL_ENDPOINTS_KNOWN.length + customs.length + ' known'} tiny={true} />
+        <Pressable onPress={scanAll} style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 6, paddingBottom: 6, borderRadius: TOKENS.radiusSm, backgroundColor: scanning ? COLORS.panelAlt : COLORS.blueDeep, borderWidth: 1, borderColor: scanning ? COLORS.border : COLORS.blue }}>
+          <Text fontSize={10} color={scanning ? COLORS.textDim : COLORS.blue} style={{ fontWeight: 'bold' }}>{scanning ? 'scanning…' : 'Scan now'}</Text>
+        </Pressable>
+      </Row>
+      <Text fontSize={10} color={COLORS.textDim}>Probes known localhost ports for Ollama, LM Studio, and OpenAI-compatible servers. Uses __fetch_async with a short timeout.</Text>
+      <Col style={{ gap: 6 }}>
+        {filtered.map(ep => {
+          const status = statuses[ep.id] || 'unknown';
+          const up = status.indexOf('up') === 0;
+          const isCustom = customs.some(c => c.id === ep.id);
+          return (
+            <Row key={ep.id} style={{ alignItems: 'center', gap: 8, padding: 8, borderRadius: TOKENS.radiusSm, backgroundColor: COLORS.panelBg, flexWrap: 'wrap' }}>
+              <Pill label={up ? '●' : '○'} color={up ? COLORS.green : COLORS.textMuted} tiny={true} />
+              <Col style={{ flexGrow: 1, flexBasis: 0, minWidth: 180, gap: 1 }}>
+                <Text fontSize={11} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>{ep.label}</Text>
+                <Text fontSize={9} color={COLORS.textDim} style={{ fontFamily: 'monospace' }}>{ep.url} · {ep.kind}</Text>
+              </Col>
+              <Text fontSize={10} color={up ? COLORS.green : COLORS.textDim}>{status}</Text>
+              {isCustom ? (
+                <Pressable onPress={() => removeCustom(ep.id)}><Text fontSize={10} color={COLORS.red}>remove</Text></Pressable>
+              ) : null}
+            </Row>
+          );
+        })}
+      </Col>
+      <Col style={{ gap: 6 }}>
+        <Text fontSize={11} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>Add custom endpoint</Text>
+        <Row style={{ gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+          <TextInput value={customLabel} onChangeText={setCustomLabel} placeholder="Label (e.g. My server)"
+            style={{ flexGrow: 1, flexBasis: 0, minWidth: 180, height: 30, borderWidth: 1, borderColor: COLORS.border, borderRadius: TOKENS.radiusSm, paddingLeft: 8, backgroundColor: COLORS.panelBg }} />
+          <TextInput value={customUrl} onChangeText={setCustomUrl} placeholder="http://host:port"
+            style={{ flexGrow: 1, flexBasis: 0, minWidth: 220, height: 30, borderWidth: 1, borderColor: COLORS.border, borderRadius: TOKENS.radiusSm, paddingLeft: 8, backgroundColor: COLORS.panelBg, fontFamily: 'monospace' }} />
+          <Pressable onPress={addCustom} style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 6, paddingBottom: 6, borderRadius: TOKENS.radiusSm, backgroundColor: COLORS.blueDeep, borderWidth: 1, borderColor: COLORS.blue }}>
+            <Text fontSize={10} color={COLORS.blue} style={{ fontWeight: 'bold' }}>Add</Text>
+          </Pressable>
+        </Row>
+      </Col>
+    </Box>
+  );
+}
+
+function BackendsSection(props: { query: string; version: number; onBump: () => void }) {
+  const q = (props.query || '').toLowerCase();
+  const filtered = q
+    ? BACKEND_ENTRIES.filter(e => (e.label + ' ' + e.id + ' ' + e.kind + ' ' + e.description).toLowerCase().indexOf(q) >= 0)
+    : BACKEND_ENTRIES;
+
+  function enabledFor(id: string): boolean {
+    return sget('providers.' + id + '.enabled', true);
+  }
+  function toggle(id: string) {
+    sset('providers.' + id + '.enabled', !enabledFor(id));
+    props.onBump();
+  }
+
+  return (
+    <Box style={{ padding: 14, borderRadius: TOKENS.radiusMd, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelRaised, gap: 10 }}>
+      <Row style={{ alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <Text fontSize={13} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>Backends</Text>
+        <Pill label="API + CLI" tiny={true} />
+      </Row>
+      <Text fontSize={10} color={COLORS.textDim}>Each backend routes through a different host FFI surface. CLI backends map to the same __claude_*, __kimi_*, __localai_* bridges used by the cockpit cart, so disabling one here also disables it for any caller that defers to these settings.</Text>
+      {filtered.length === 0 ? (
+        <Text fontSize={10} color={COLORS.textDim}>No backends match "{props.query}".</Text>
+      ) : null}
+      {filtered.map(entry => (
+        <BackendCard key={entry.id + '_' + props.version} entry={entry} enabled={enabledFor(entry.id)} onToggle={() => toggle(entry.id)} version={props.version} />
+      ))}
+    </Box>
+  );
+}
+
 function ApiKeyField(props: { provider: string; onChange: () => void }) {
   const [draft, setDraft]   = useState<string>('');
   const [reveal, setReveal] = useState<boolean>(false);
@@ -1281,10 +1573,12 @@ function ProvidersPanel(props: {
 
   return (
     <Col style={{ gap: 14 }}>
-      <SectionTitle title="Providers" description="Model providers, API keys, and default routing." />
+      <SectionTitle title="Providers" description="Backends (API + CLI), local endpoints, and fallback HTTP providers." />
+      <BackendsSection query={props.query} version={keyVersion} onBump={() => setKeyVersion(v => v + 1)} />
+      <LocalEndpointsSection query={props.query} version={keyVersion} onBump={() => setKeyVersion(v => v + 1)} />
       <Box style={{ padding: 14, borderRadius: TOKENS.radiusMd, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelRaised, gap: 12 }}>
         <Row style={{ alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <Text fontSize={13} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>Model Providers</Text>
+          <Text fontSize={13} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>HTTP providers</Text>
           <Pill label={p.filter(x => x.enabled).length + '/' + p.length + ' enabled'} color={COLORS.blue} tiny={true} />
           <Pill label={storedKeyCount + ' key' + (storedKeyCount === 1 ? '' : 's')} color={storedKeyCount > 0 ? COLORS.green : COLORS.textMuted} tiny={true} />
         </Row>
