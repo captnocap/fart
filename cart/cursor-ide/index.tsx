@@ -50,7 +50,6 @@ import {
   exec,
   maximizeWindow,
   minimizeWindow,
-  ptyOpen,
   readFile,
   telSystem,
   writeFile,
@@ -86,6 +85,7 @@ import { SearchSurface } from './components/search';
 import { ChatSurface } from './components/chat';
 import { SettingsSurface } from './components/settings';
 import { LandingSurface } from './components/landing';
+import { PageModeTransition } from './anim';
 
 import { usePersistentState } from './hooks/usePersistentState';
 import { useFileContent } from '../../runtime/hooks/useFileContent';
@@ -95,6 +95,7 @@ import { GitPanel } from './components/gitpanel';
 import { PlanPanelWrapper } from './components/planwrapper';
 import { saveCheckpoint, loadCheckpoints } from './checkpoint';
 import { CommandPalette, type PaletteCommand } from './components/commandpalette';
+import type { MenuBarSection } from './components/menubar';
 
 export default function CursorIdeApp() {
   const [activeTabId, setActiveTabId] = useState('home');
@@ -208,7 +209,6 @@ export default function CursorIdeApp() {
   const gitStatusByPathRef = useRef<Record<string, string>>({});
   const cachedTreePathsRef = useRef<string[]>([]);
   const workspaceBootstrappedRef = useRef(false);
-  const ptyStartedRef = useRef(false);
   const stateRef = useRef<any>({});
 
   const execCacheRef = useRef<Record<string, string>>({});
@@ -709,6 +709,9 @@ export default function CursorIdeApp() {
     if (tabs.length === 0 || stateRef.current.activeTabId === id) { openLandingPage(); }
     else { activateTab(tabs[tabs.length - 1].id); }
   }, []);
+    const closeCurrentFile = useCallback(() => {
+    closeTab(stateRef.current.activeTabId);
+  }, [closeTab]);
     const toggleDir = useCallback((path: string) => {
     setFiles((prev) => {
       const next = prev.map((item) => samePath(item.path, path) ? { ...item, expanded: item.expanded ? 0 : 1 } : { ...item });
@@ -1047,7 +1050,6 @@ export default function CursorIdeApp() {
   }, []);
 
     const openTerminal = useCallback(() => {
-    if (!ptyStartedRef.current) { ptyOpen(110, 28); ptyStartedRef.current = true; }
     if (stateRef.current.widthBand === 'narrow' || stateRef.current.widthBand === 'widget' || stateRef.current.widthBand === 'minimum') setCompactSurface('terminal');
     setTerminalPane('live');
     startTerminalRecording();
@@ -1300,18 +1302,155 @@ export default function CursorIdeApp() {
   const showStatusBar = !minimumMode && windowHeight >= 300;
   const showDockedSearch = !compactMode && rightRail === 'search';
   const showDockedChat = !compactMode && rightRail === 'agent';
-  const showDockedTerminal = showTerminal === 1 && !compactMode && !terminalDockExpanded;
-  const showExpandedTerminal = showTerminal === 1 && !compactMode && terminalDockExpanded;
+  const showTerminalPanel = showTerminal === 1 && !compactMode;
   const showDockedHot = showHotPanel === 1 && !compactMode;
   const showDockedGit = showGitPanel === 1 && !compactMode;
   const showDockedPlan = showPlanPanel === 1 && !compactMode;
   const compactMainView = compactSurface === 'landing' ? 'landing' : compactSurface === 'settings' ? 'settings' : 'editor';
   const dockedTerminalHeight = clampTerminalDockHeight(terminalDockHeight);
+  const todoAction = useCallback((label: string) => () => {
+    console.log('[cursor-ide] TODO: ' + label);
+  }, []);
+  const toggleSearchSurface = useCallback(() => {
+    if (compactMode) {
+      if (compactSurface === 'search') { setShowSearch(0); setCompactSurface(mainSurface); }
+      else { setShowSearch(1); searchProject(searchQuery); setCompactSurface('search'); }
+    } else {
+      const next = showSearch ? 0 : 1;
+      setShowSearch(next);
+      if (next) searchProject(searchQuery);
+    }
+  }, [compactMode, compactSurface, mainSurface, searchProject, searchQuery, setShowSearch, showSearch]);
+  const toggleTerminalSurface = useCallback(() => {
+    if (compactMode) {
+      if (compactSurface === 'terminal') { closeTerminalSurface('compact close'); setCompactSurface(mainSurface); }
+      else { openTerminal(); setShowTerminal(1); setTerminalDockExpanded(0); setCompactSurface('terminal'); }
+    } else {
+      if (showTerminal) { closeTerminalSurface('toggle off'); }
+      else { openTerminal(); setShowTerminal(1); setTerminalDockExpanded(0); }
+    }
+  }, [closeTerminalSurface, compactMode, compactSurface, mainSurface, openTerminal, showTerminal]);
+  const toggleHotSurface = useCallback(() => {
+    if (compactMode) {
+      if (compactSurface === 'hot') { setShowHotPanel(0); setCompactSurface(mainSurface); }
+      else { setShowHotPanel(1); setCompactSurface('hot'); }
+    } else { setShowHotPanel(showHotPanel ? 0 : 1); }
+  }, [compactMode, compactSurface, mainSurface, showHotPanel]);
+  const toggleGitSurface = useCallback(() => {
+    if (compactMode) {
+      if (compactSurface === 'git') { setShowGitPanel(0); setCompactSurface(mainSurface); }
+      else { setShowGitPanel(1); setCompactSurface('git'); }
+    } else { setShowGitPanel(showGitPanel ? 0 : 1); }
+  }, [compactMode, compactSurface, mainSurface, showGitPanel]);
+  const togglePlanSurface = useCallback(() => {
+    if (compactMode) {
+      if (compactSurface === 'plan') { setShowPlanPanel(0); setCompactSurface(mainSurface); }
+      else { setShowPlanPanel(1); setCompactSurface('plan'); }
+    } else { setShowPlanPanel(showPlanPanel ? 0 : 1); }
+  }, [compactMode, compactSurface, mainSurface, showPlanPanel]);
+  const toggleChatSurface = useCallback(() => {
+    if (compactMode) {
+      if (compactSurface === 'agent') { setShowChat(0); setCompactSurface(mainSurface); }
+      else { setShowChat(1); setCompactSurface('agent'); }
+    } else { setShowChat(showChat ? 0 : 1); }
+  }, [compactMode, compactSurface, mainSurface, showChat]);
+  const toggleSidebarSurface = useCallback(() => {
+    console.log('[cursor-ide] TODO: View > Toggle Sidebar');
+  }, []);
+  const zoomIn = useCallback(() => {
+    console.log('[cursor-ide] TODO: View > Zoom In');
+  }, []);
+  const zoomOut = useCallback(() => {
+    console.log('[cursor-ide] TODO: View > Zoom Out');
+  }, []);
+  const resetZoom = useCallback(() => {
+    console.log('[cursor-ide] TODO: View > Reset Zoom');
+  }, []);
+  const openDocs = useCallback(() => {
+    console.log('[cursor-ide] TODO: Help > Docs');
+  }, []);
+  const showAbout = useCallback(() => {
+    console.log('[cursor-ide] TODO: Help > About');
+  }, []);
+  const menuSections: MenuBarSection[] = [
+    {
+      label: 'File',
+      items: [
+        { label: 'New', shortcut: 'Ctrl+N', action: createNewFile },
+        { label: 'Open', shortcut: 'Ctrl+O', action: openLandingPage },
+        { label: 'Save', shortcut: 'Ctrl+S', action: saveCurrentFile },
+        { label: 'Close', shortcut: 'Ctrl+W', action: closeCurrentFile },
+      ],
+    },
+    {
+      label: 'Edit',
+      items: [
+        { label: 'Undo', shortcut: 'Ctrl+Z', action: todoAction('Edit > Undo') },
+        { label: 'Redo', shortcut: 'Ctrl+Shift+Z', action: todoAction('Edit > Redo') },
+        { label: 'Cut', shortcut: 'Ctrl+X', action: todoAction('Edit > Cut') },
+        { label: 'Copy', shortcut: 'Ctrl+C', action: todoAction('Edit > Copy') },
+        { label: 'Paste', shortcut: 'Ctrl+V', action: todoAction('Edit > Paste') },
+        { kind: 'separator', label: '' },
+        { label: 'Find', shortcut: 'Ctrl+F', action: toggleSearchSurface },
+      ],
+    },
+    {
+      label: 'View',
+      items: [
+        { label: 'Toggle Sidebar', action: toggleSidebarSurface },
+        { label: 'Toggle Terminal', action: toggleTerminalSurface },
+        { label: 'Command Palette', shortcut: 'Ctrl+K', action: () => setShowPalette(1) },
+        { kind: 'separator', label: '' },
+        { label: 'Zoom In', shortcut: 'Ctrl++', action: zoomIn },
+        { label: 'Zoom Out', shortcut: 'Ctrl+-', action: zoomOut },
+        { label: 'Reset Zoom', shortcut: 'Ctrl+0', action: resetZoom },
+      ],
+    },
+    {
+      label: 'Help',
+      items: [
+        { label: 'Docs', action: openDocs },
+        { label: 'About', action: showAbout },
+      ],
+    },
+  ];
+  const settingsSections = [
+    { id: 'providers', label: 'Providers', meta: 'model routing + auth + components', tone: '#79c0ff', icon: 'globe', count: String(providerConfigs.filter((provider: ProviderConfig) => provider.enabled).length) + '/' + String(providerConfigs.length) },
+    { id: 'defaults', label: 'Defaults', meta: 'default models per task type', tone: '#ff7b72', icon: 'bot', count: '5' },
+    { id: 'variables', label: 'Variables', meta: 'system + custom variable expansion', tone: '#d2a8ff', icon: 'braces', count: String(listCustomVariables().length) },
+    { id: 'proxy', label: 'Proxy', meta: 'http/socks5 proxy routing', tone: '#7ee787', icon: 'network', count: String(proxyConfigs.length) },
+    { id: 'context', label: 'Context', meta: 'workspace + git + external sources', tone: '#7ee787', icon: 'folder', count: String(SETTINGS_CONTEXT_ROWS.length) },
+    { id: 'memory', label: 'Memory', meta: 'session + sqlite + transcript stores', tone: '#d2a8ff', icon: 'bot', count: String(SETTINGS_MEMORY_ROWS.length) },
+    { id: 'plugins', label: 'Plugins', meta: 'lua + qjs + marketplace parity', tone: '#ffa657', icon: 'palette', count: String(SETTINGS_PLUGIN_ROWS.length) },
+    { id: 'automations', label: 'Automations', meta: 'ifttt rules + build hooks', tone: '#ff7b72', icon: 'sparkles', count: String(SETTINGS_AUTOMATION_ROWS.length) },
+    { id: 'capabilities', label: 'Capabilities', meta: 'existing runtime references to bake in', tone: '#ffb86b', icon: 'braces', count: String(SETTINGS_CAPABILITY_ROWS.length) },
+    { id: 'checkpoints', label: 'Checkpoints', meta: 'diff per AI turn', tone: '#79c0ff', icon: 'git-commit', count: String(loadCheckpoints().length) },
+  ];
+  const renderMainSurface = (mode: 'landing' | 'settings' | 'editor') => {
+    if (mode === 'landing') {
+      return (
+        <LandingSurface workspaceName={workspaceName} workspaceTagline={workspaceTagline} workDir={workDir} gitBranch={gitBranch} gitRemote={gitRemote} branchAhead={branchAhead} branchBehind={branchBehind} changedCount={changedCount} stagedCount={stagedCount} widthBand={widthBand} stats={landingStats} projects={landingProjects} recentFiles={landingRecent} connections={landingConnections} onOpenPath={openFileByPath} onIndexWorkspace={indexProject} onOpenSettings={openSettingsSurface} />
+      );
+    }
+
+    if (mode === 'settings') {
+      return (
+        <SettingsSurface activeSection={settingsSection} selectedProviderId={selectedProviderId} selectedModelName={modelDisplayName} workspaceName={workspaceName} gitBranch={gitBranch} agentStatusText={agentStatusText} workDir={workDir} widthBand={widthBand} sections={settingsSections} providers={SETTINGS_PROVIDERS} providerConfigs={providerConfigs} contextRows={SETTINGS_CONTEXT_ROWS} memoryRows={SETTINGS_MEMORY_ROWS} pluginRows={SETTINGS_PLUGIN_ROWS} automationRows={SETTINGS_AUTOMATION_ROWS} capabilityRows={SETTINGS_CAPABILITY_ROWS} defaultModels={defaultModels} proxyConfigs={proxyConfigs} proxyStatus={proxyStatus} checkpoints={loadCheckpoints()} onSelectSection={setSettingsSection} onSelectProvider={setSelectedProviderId} onToggleProvider={toggleProviderEnabled} onUpdateProvider={updateProviderConfig} onSelectModel={selectModel} onUpdateDefaultModels={(s: DefaultModelsSettings) => { setDefaultModels(s); saveDefaultModels(s); }} onVariablesChange={() => {}} onProxyChange={() => { setProxyConfigs(listProxyConfigs()); setProxyStatus(getProxyStatus()); }} onKeysChange={() => {}} onIndexChange={() => {}} onSelectCheckpoint={(id: string) => setSettingsSection('checkpoints')} />
+      );
+    }
+
+    return (
+      <Box style={{ display: 'flex', flexGrow: 1, flexBasis: 0, minHeight: 0 }}>
+        <EditorSurface content={editorContent} contentHandle={fileContentHandle} editorRows={editorRows} editorColorRows={editorColorRows} largeFileMode={editorLargeFileMode} totalLines={totalLines} cursorLine={cursorPosition.line} cursorColumn={cursorPosition.column} modified={editorModified} currentFilePath={currentFilePath} widthBand={widthBand} windowHeight={windowHeight} onChange={updateEditorContent} onSave={saveCurrentFile} />
+      </Box>
+    );
+  };
 
   return (
     <Box style={{ width: '100%', height: '100%', backgroundColor: COLORS.appBg }}>
       <Col style={{ width: '100%', height: '100%' }}>
         <TopBar
+          menuSections={menuSections}
           displayTitle={currentFilePath === '__landing__' ? 'Project landing' : currentFilePath === '__settings__' ? 'Settings' : minimumMode ? baseName(currentFilePath) : currentFilePath}
           workspaceName={workspaceName}
           gitBranch={gitBranch}
@@ -1325,50 +1464,13 @@ export default function CursorIdeApp() {
           onOpenHome={openLandingPage}
           onOpenSettings={openSettingsSurface}
           onRefreshWorkspace={refreshWorkspace}
-          onToggleChat={() => {
-            if (compactMode) {
-              if (compactSurface === 'agent') { setShowChat(0); setCompactSurface(mainSurface); }
-              else { setShowChat(1); setCompactSurface('agent'); }
-            } else { setShowChat(showChat ? 0 : 1); }
-          }}
-          onToggleTerminal={() => {
-            if (compactMode) {
-              if (compactSurface === 'terminal') { closeTerminalSurface('compact close'); setCompactSurface(mainSurface); }
-              else { openTerminal(); setShowTerminal(1); setTerminalDockExpanded(0); setCompactSurface('terminal'); }
-            } else {
-              if (showTerminal) { closeTerminalSurface('toggle off'); }
-              else { openTerminal(); setShowTerminal(1); setTerminalDockExpanded(0); }
-            }
-          }}
-          onToggleSearch={() => {
-            if (compactMode) {
-              if (compactSurface === 'search') { setShowSearch(0); setCompactSurface(mainSurface); }
-              else { setShowSearch(1); searchProject(searchQuery); setCompactSurface('search'); }
-            } else {
-              const next = showSearch ? 0 : 1;
-              setShowSearch(next);
-              if (next) searchProject(searchQuery);
-            }
-          }}
-          onToggleHot={() => {
-            if (compactMode) {
-              if (compactSurface === 'hot') { setShowHotPanel(0); setCompactSurface(mainSurface); }
-              else { setShowHotPanel(1); setCompactSurface('hot'); }
-            } else { setShowHotPanel(showHotPanel ? 0 : 1); }
-          }}
-          onToggleGit={() => {
-            if (compactMode) {
-              if (compactSurface === 'git') { setShowGitPanel(0); setCompactSurface(mainSurface); }
-              else { setShowGitPanel(1); setCompactSurface('git'); }
-            } else { setShowGitPanel(showGitPanel ? 0 : 1); }
-          }}
+          onToggleChat={toggleChatSurface}
+          onToggleTerminal={toggleTerminalSurface}
+          onToggleSearch={toggleSearchSurface}
+          onToggleHot={toggleHotSurface}
+          onToggleGit={toggleGitSurface}
           gitActive={compactMode ? compactSurface === 'git' : showDockedGit}
-          onTogglePlan={() => {
-            if (compactMode) {
-              if (compactSurface === 'plan') { setShowPlanPanel(0); setCompactSurface(mainSurface); }
-              else { setShowPlanPanel(1); setCompactSurface('plan'); }
-            } else { setShowPlanPanel(showPlanPanel ? 0 : 1); }
-          }}
+          onTogglePlan={togglePlanSurface}
           planActive={compactMode ? compactSurface === 'plan' : showDockedPlan}
           onOpenPalette={() => setShowPalette(1)}
           paletteActive={showPalette}
@@ -1429,32 +1531,10 @@ export default function CursorIdeApp() {
             ) : null}
 
             {compactSurface === 'landing' || compactSurface === 'editor' || compactSurface === 'settings' ? (
-              <Col style={{ flexGrow: 1, flexBasis: 0 }}>
+              <Col style={{ flexGrow: 1, flexBasis: 0, minHeight: 0 }}>
                 <TabBar tabs={tabsForBar} activeId={activeTabId} compact={true} onActivate={activateTab} onClose={closeTab} />
                 <BreadcrumbBar items={visibleBreadcrumbs(breadcrumbs, widthBand)} compact={true} onOpenHome={openLandingPage} />
-                {compactMainView === 'landing' ? (
-                  <LandingSurface workspaceName={workspaceName} workspaceTagline={workspaceTagline} workDir={workDir} gitBranch={gitBranch} gitRemote={gitRemote} branchAhead={branchAhead} branchBehind={branchBehind} changedCount={changedCount} stagedCount={stagedCount} widthBand={widthBand} stats={landingStats} projects={landingProjects} recentFiles={landingRecent} connections={landingConnections} onOpenPath={openFileByPath} onIndexWorkspace={indexProject} onOpenSettings={openSettingsSurface} />
-                ) : null}
-                {compactMainView === 'settings' ? (
-                <SettingsSurface activeSection={settingsSection} selectedProviderId={selectedProviderId} selectedModelName={modelDisplayName} workspaceName={workspaceName} gitBranch={gitBranch} agentStatusText={agentStatusText} workDir={workDir} widthBand={widthBand} sections={[
-                    { id: 'providers', label: 'Providers', meta: 'model routing + auth + components', tone: '#79c0ff', icon: 'globe', count: String(providerConfigs.filter((provider: ProviderConfig) => provider.enabled).length) + '/' + String(providerConfigs.length) },
-                    { id: 'defaults', label: 'Defaults', meta: 'default models per task type', tone: '#ff7b72', icon: 'bot', count: '5' },
-                    { id: 'variables', label: 'Variables', meta: 'system + custom variable expansion', tone: '#d2a8ff', icon: 'braces', count: String(listCustomVariables().length) },
-                    { id: 'proxy', label: 'Proxy', meta: 'http/socks5 proxy routing', tone: '#7ee787', icon: 'network', count: String(proxyConfigs.length) },
-                    { id: 'context', label: 'Context', meta: 'workspace + git + external sources', tone: '#7ee787', icon: 'folder', count: String(SETTINGS_CONTEXT_ROWS.length) },
-                    { id: 'memory', label: 'Memory', meta: 'session + sqlite + transcript stores', tone: '#d2a8ff', icon: 'bot', count: String(SETTINGS_MEMORY_ROWS.length) },
-                    { id: 'plugins', label: 'Plugins', meta: 'lua + qjs + marketplace parity', tone: '#ffa657', icon: 'palette', count: String(SETTINGS_PLUGIN_ROWS.length) },
-                    { id: 'automations', label: 'Automations', meta: 'ifttt rules + build hooks', tone: '#ff7b72', icon: 'sparkles', count: String(SETTINGS_AUTOMATION_ROWS.length) },
-                    { id: 'capabilities', label: 'Capabilities', meta: 'existing runtime references to bake in', tone: '#ffb86b', icon: 'braces', count: String(SETTINGS_CAPABILITY_ROWS.length) },
-                    { id: 'checkpoints', label: 'Checkpoints', meta: 'diff per AI turn', tone: '#79c0ff', icon: 'git-commit', count: String(loadCheckpoints().length) },
-                  ]} providers={SETTINGS_PROVIDERS} providerConfigs={providerConfigs} contextRows={SETTINGS_CONTEXT_ROWS} memoryRows={SETTINGS_MEMORY_ROWS} pluginRows={SETTINGS_PLUGIN_ROWS} automationRows={SETTINGS_AUTOMATION_ROWS} capabilityRows={SETTINGS_CAPABILITY_ROWS} defaultModels={defaultModels} proxyConfigs={proxyConfigs} proxyStatus={proxyStatus} checkpoints={loadCheckpoints()} onSelectSection={setSettingsSection} onSelectProvider={setSelectedProviderId} onToggleProvider={toggleProviderEnabled} onUpdateProvider={updateProviderConfig} onSelectModel={selectModel} onUpdateDefaultModels={(s: DefaultModelsSettings) => { setDefaultModels(s); saveDefaultModels(s); }} onVariablesChange={() => {}} onProxyChange={() => { setProxyConfigs(listProxyConfigs()); setProxyStatus(getProxyStatus()); }} onKeysChange={() => {}} onIndexChange={() => {}} onSelectCheckpoint={(id: string) => setSettingsSection('checkpoints')} />
-                ) : null}
-                {/* Editor is always mounted; display toggles instead of conditional mount.
-                    Prevents the 191-op full-remount on every file click — subsequent
-                    clicks are prop updates on a stable subtree. */}
-                <Box style={{ display: compactMainView === 'editor' ? 'flex' : 'none', flexGrow: 1, flexBasis: 0, minHeight: 0 }}>
-                  <EditorSurface content={editorContent} contentHandle={fileContentHandle} editorRows={editorRows} editorColorRows={editorColorRows} largeFileMode={editorLargeFileMode} totalLines={totalLines} cursorLine={cursorPosition.line} cursorColumn={cursorPosition.column} modified={editorModified} currentFilePath={currentFilePath} widthBand={widthBand} windowHeight={windowHeight} onChange={updateEditorContent} onSave={saveCurrentFile} />
-                </Box>
+                <PageModeTransition mode={compactMainView as any} durationMs={220} style={{ flexGrow: 1, flexBasis: 0, minHeight: 0 }} renderPage={renderMainSurface} />
               </Col>
             ) : null}
 
@@ -1540,21 +1620,24 @@ export default function CursorIdeApp() {
             <Col style={{ flexGrow: 1, flexBasis: 0, minHeight: 0 }}>
               <TabBar tabs={tabsForBar} activeId={activeTabId} compact={false} onActivate={activateTab} onClose={closeTab} />
               <BreadcrumbBar items={visibleBreadcrumbs(breadcrumbs, widthBand)} compact={false} onOpenHome={openLandingPage} />
-              {showExpandedTerminal ? (
+              <Box style={{ display: showTerminalPanel && terminalDockExpanded ? 'none' : 'flex', flexGrow: 1, flexBasis: 0, minHeight: 0 }}>
+                <PageModeTransition mode={activeView as any} durationMs={220} style={{ flexGrow: 1, flexBasis: 0, minHeight: 0 }} renderPage={renderMainSurface} />
+              </Box>
+              {showTerminalPanel ? (
                 <TerminalPanel
                   workDir={workDir}
                   gitBranch={gitBranch}
                   widthBand={widthBand}
-                  height={'100%'}
+                  height={terminalDockExpanded ? '100%' : dockedTerminalHeight}
                   pane={terminalPane}
                   history={terminalHistory}
                   recording={terminalRecording}
                   recordFrames={terminalRecordFrames}
                   playState={terminalPlaybackState}
-                  expanded={1}
+                  expanded={terminalDockExpanded}
                   onSetPane={(pane: string) => setTerminalPane(pane)}
                   onToggleExpanded={toggleTerminalDockExpanded}
-                  onBeginResize={undefined}
+                  onBeginResize={terminalDockExpanded ? undefined : beginTerminalDockResize}
                   onToggleRecording={toggleTerminalRecording}
                   onSaveSnapshot={saveTerminalSnapshot}
                   onLoadPlayback={loadTerminalPlayback}
@@ -1564,55 +1647,7 @@ export default function CursorIdeApp() {
                   onClearHistory={clearTerminalHistory}
                   onClose={() => closeTerminalSurface('close button')}
                 />
-              ) : (
-                <>
-                  {activeView === 'landing' ? (
-                    <LandingSurface workspaceName={workspaceName} workspaceTagline={workspaceTagline} workDir={workDir} gitBranch={gitBranch} gitRemote={gitRemote} branchAhead={branchAhead} branchBehind={branchBehind} changedCount={changedCount} stagedCount={stagedCount} widthBand={widthBand} stats={landingStats} projects={landingProjects} recentFiles={landingRecent} connections={landingConnections} onOpenPath={openFileByPath} onIndexWorkspace={indexProject} onOpenSettings={openSettingsSurface} />
-                  ) : null}
-                  {activeView === 'settings' ? (
-                    <SettingsSurface activeSection={settingsSection} selectedProviderId={selectedProviderId} selectedModelName={modelDisplayName} workspaceName={workspaceName} gitBranch={gitBranch} agentStatusText={agentStatusText} workDir={workDir} widthBand={widthBand} sections={[
-                      { id: 'providers', label: 'Providers', meta: 'model routing + auth + components', tone: '#79c0ff', icon: 'globe', count: String(providerConfigs.filter((provider: ProviderConfig) => provider.enabled).length) + '/' + String(providerConfigs.length) },
-                      { id: 'defaults', label: 'Defaults', meta: 'default models per task type', tone: '#ff7b72', icon: 'bot', count: '5' },
-                      { id: 'variables', label: 'Variables', meta: 'system + custom variable expansion', tone: '#d2a8ff', icon: 'braces', count: String(listCustomVariables().length) },
-                      { id: 'proxy', label: 'Proxy', meta: 'http/socks5 proxy routing', tone: '#7ee787', icon: 'network', count: String(proxyConfigs.length) },
-                      { id: 'context', label: 'Context', meta: 'workspace + git + external sources', tone: '#7ee787', icon: 'folder', count: String(SETTINGS_CONTEXT_ROWS.length) },
-                      { id: 'memory', label: 'Memory', meta: 'session + sqlite + transcript stores', tone: '#d2a8ff', icon: 'bot', count: String(SETTINGS_MEMORY_ROWS.length) },
-                      { id: 'plugins', label: 'Plugins', meta: 'lua + qjs + marketplace parity', tone: '#ffa657', icon: 'palette', count: String(SETTINGS_PLUGIN_ROWS.length) },
-                      { id: 'automations', label: 'Automations', meta: 'ifttt rules + build hooks', tone: '#ff7b72', icon: 'sparkles', count: String(SETTINGS_AUTOMATION_ROWS.length) },
-                      { id: 'capabilities', label: 'Capabilities', meta: 'existing runtime references to bake in', tone: '#ffb86b', icon: 'braces', count: String(SETTINGS_CAPABILITY_ROWS.length) },
-                      { id: 'checkpoints', label: 'Checkpoints', meta: 'diff per AI turn', tone: '#79c0ff', icon: 'git-commit', count: String(loadCheckpoints().length) },
-                    ]} providers={SETTINGS_PROVIDERS} providerConfigs={providerConfigs} contextRows={SETTINGS_CONTEXT_ROWS} memoryRows={SETTINGS_MEMORY_ROWS} pluginRows={SETTINGS_PLUGIN_ROWS} automationRows={SETTINGS_AUTOMATION_ROWS} capabilityRows={SETTINGS_CAPABILITY_ROWS} defaultModels={defaultModels} proxyConfigs={proxyConfigs} proxyStatus={proxyStatus} checkpoints={loadCheckpoints()} onSelectSection={setSettingsSection} onSelectProvider={setSelectedProviderId} onToggleProvider={toggleProviderEnabled} onUpdateProvider={updateProviderConfig} onSelectModel={selectModel} onUpdateDefaultModels={(s: DefaultModelsSettings) => { setDefaultModels(s); saveDefaultModels(s); }} onVariablesChange={() => {}} onProxyChange={() => { setProxyConfigs(listProxyConfigs()); setProxyStatus(getProxyStatus()); }} onKeysChange={() => {}} onIndexChange={() => {}} onSelectCheckpoint={(id: string) => setSettingsSection('checkpoints')} />
-                  ) : null}
-                  <Box style={{ display: activeView === 'editor' ? 'flex' : 'none', flexGrow: 1, flexBasis: 0, minHeight: 0 }}>
-                    <EditorSurface content={editorContent} contentHandle={fileContentHandle} editorRows={editorRows} editorColorRows={editorColorRows} largeFileMode={editorLargeFileMode} totalLines={totalLines} cursorLine={cursorPosition.line} cursorColumn={cursorPosition.column} modified={editorModified} currentFilePath={currentFilePath} widthBand={widthBand} windowHeight={windowHeight} onChange={updateEditorContent} onSave={saveCurrentFile} />
-                  </Box>
-                  {showDockedTerminal ? (
-                    <TerminalPanel
-                      workDir={workDir}
-                      gitBranch={gitBranch}
-                      widthBand={widthBand}
-                      height={dockedTerminalHeight}
-                      pane={terminalPane}
-                      history={terminalHistory}
-                      recording={terminalRecording}
-                      recordFrames={terminalRecordFrames}
-                      playState={terminalPlaybackState}
-                      expanded={0}
-                      onSetPane={(pane: string) => setTerminalPane(pane)}
-                      onToggleExpanded={toggleTerminalDockExpanded}
-                      onBeginResize={beginTerminalDockResize}
-                      onToggleRecording={toggleTerminalRecording}
-                      onSaveSnapshot={saveTerminalSnapshot}
-                      onLoadPlayback={loadTerminalPlayback}
-                      onTogglePlayback={toggleTerminalPlayback}
-                      onStepPlayback={stepTerminalPlayback}
-                      onJumpLive={() => setTerminalPane('live')}
-                      onClearHistory={clearTerminalHistory}
-                      onClose={() => closeTerminalSurface('close button')}
-                    />
-                  ) : null}
-                </>
-              )}
+              ) : null}
             </Col>
 
             {showDockedSearch ? (
