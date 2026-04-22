@@ -3,6 +3,7 @@ const { useCallback, useEffect, useRef, useState } = React;
 
 import { Box, Pressable, Row, Text } from '../../../../runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
+import { Icon } from '../icons';
 import type { MediaBgToken, MediaRadiusKey } from './useMediaStore';
 
 const host: any = globalThis as any;
@@ -181,6 +182,7 @@ export function MediaControls(props: {
   bgToken: MediaBgToken;
   radiusKey: MediaRadiusKey;
   shadow: boolean;
+  onOpenImport?: () => void;
   onBgTokenChange: (next: MediaBgToken) => void;
   onRadiusKeyChange: (next: MediaRadiusKey) => void;
   onShadowChange: (next: boolean) => void;
@@ -190,21 +192,31 @@ export function MediaControls(props: {
     <Box style={{ padding: 10, gap: 10, borderBottomWidth: 1, borderColor: COLORS.borderSoft, backgroundColor: COLORS.panelRaised }}>
       <Row style={{ justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
         <SectionLabel icon="◎" label={props.title} value="theme-aware" />
-        <Pressable
-          onPress={() => props.onShadowChange(!props.shadow)}
-          style={{
-            paddingLeft: 8,
-            paddingRight: 8,
-            paddingTop: 6,
-            paddingBottom: 6,
-            borderRadius: TOKENS.radiusMd,
-            borderWidth: 1,
-            borderColor: props.shadow ? COLORS.blue : COLORS.border,
-            backgroundColor: props.shadow ? COLORS.blueDeep : COLORS.panelAlt,
-          }}
-        >
-          <Text fontSize={10} color={props.shadow ? COLORS.blue : COLORS.text}>{props.shadow ? 'shadow on' : 'shadow off'}</Text>
-        </Pressable>
+        <Row style={{ gap: 8, alignItems: 'center' }}>
+          {props.onOpenImport ? (
+            <Pressable onPress={props.onOpenImport} style={{ paddingLeft: 8, paddingRight: 8, paddingTop: 6, paddingBottom: 6, borderRadius: TOKENS.radiusMd, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelAlt }}>
+              <Row style={{ gap: 6, alignItems: 'center' }}>
+                <Icon name="upload" size={12} color={COLORS.textDim} />
+                <Text fontSize={10} color={COLORS.textDim}>Import</Text>
+              </Row>
+            </Pressable>
+          ) : null}
+          <Pressable
+            onPress={() => props.onShadowChange(!props.shadow)}
+            style={{
+              paddingLeft: 8,
+              paddingRight: 8,
+              paddingTop: 6,
+              paddingBottom: 6,
+              borderRadius: TOKENS.radiusMd,
+              borderWidth: 1,
+              borderColor: props.shadow ? COLORS.blue : COLORS.border,
+              backgroundColor: props.shadow ? COLORS.blueDeep : COLORS.panelAlt,
+            }}
+          >
+            <Text fontSize={10} color={props.shadow ? COLORS.blue : COLORS.text}>{props.shadow ? 'shadow on' : 'shadow off'}</Text>
+          </Pressable>
+        </Row>
       </Row>
 
       <Box style={{ gap: 8 }}>
