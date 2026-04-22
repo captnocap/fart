@@ -60,6 +60,11 @@ const cartEntryPlugin = {
 // direct-require workaround in runtime/jsx_shim.ts that avoids Hermes/JSRT's
 // __toESM mishandling of the react default export.
 const ambientInject = path.join(rootDir, 'framework', 'ambient.ts');
+// Split: primitive re-exports live in ambient_primitives.ts so ambient.ts
+// has zero dep on runtime/primitives. Merging them used to create a cycle
+// (react/index.js body → init_ambient → init_primitives → require('react')
+// → partial {} → React3.memo undefined at runtime).
+const ambientPrimitivesInject = path.join(rootDir, 'framework', 'ambient_primitives.ts');
 
 const esbuildOpts = {
   absWorkingDir: rootDir,
@@ -67,7 +72,7 @@ const esbuildOpts = {
   bundle: true,
   outfile: bundlePath,
   format: 'iife',
-  inject: [path.join(runtimeDir, 'jsx_shim.ts'), ambientInject],
+  inject: [path.join(runtimeDir, 'jsx_shim.ts'), ambientInject, ambientPrimitivesInject],
   jsxFactory: 'h',
   jsxFragment: 'Fragment',
   alias: { '@reactjit/core': './runtime/core_stub.ts' },

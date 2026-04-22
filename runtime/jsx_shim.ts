@@ -3,11 +3,11 @@
 // <Fragment> at bundle time. This file is inject'd into every build so
 // those identifiers are always in scope without an explicit import.
 //
-// The legacy version did `const React: any = require('react')` to
-// sidestep Hermes/JSRT mishandling of esbuild's __toESM wrapper on the
-// react default export. V8 (the default runtime) doesn't have that
-// problem, so we use plain ESM named imports — which also stops the
-// cross-file React1/React2/React3 aliasing that produced
-// `TypeError: React3.memo is not a function` when enough files mixed
-// `require` and `import { memo } from 'react'`.
-export { createElement as h, Fragment } from 'react';
+// MUST use require('react'), not ESM named imports. ESM re-exports from
+// 'react' create a circular dependency in the bundle (jsx_shim → ambient →
+// __toESM(require_react()) → init_jsx_shim() again) that causes
+// require_react() to return a partial module at runtime in V8, producing
+// 'TypeError: React3.memo is not a function'.
+const React: any = require('react');
+export const h = React.createElement;
+export const Fragment = React.Fragment;
