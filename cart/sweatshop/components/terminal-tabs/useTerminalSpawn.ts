@@ -1,7 +1,7 @@
 const React: any = require('react');
 const { useCallback, useEffect, useMemo, useRef, useState } = React;
 
-import { ptyAlive, ptyClose, ptyOpen, ptyRead, ptyWrite } from '../../host';
+import { ptyAlive, ptyClose, ptyFocus, ptyOpen, ptyRead, ptyWrite } from '../../host';
 
 const host: any = globalThis as any;
 const storeGet = typeof host.__store_get === 'function' ? host.__store_get : (_: string) => null;
@@ -23,6 +23,7 @@ export function useTerminalSpawn(props: {
   cols: number;
   rows: number;
   enabled?: boolean;
+  focused?: boolean;
   onOutput?: (chunk: string) => void;
   onExit?: (code?: number) => void;
   onUnread?: (dirty: boolean) => void;
@@ -54,6 +55,10 @@ export function useTerminalSpawn(props: {
       setAlive(false);
     };
   }, [enabled, props.cols, props.cwd, props.rows, props.tabId]);
+
+  useEffect(() => {
+    if (props.focused && handleRef.current >= 0) ptyFocus(handleRef.current);
+  }, [handle, props.focused]);
 
   useEffect(() => {
     if (handle < 0) return;
