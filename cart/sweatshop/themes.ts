@@ -517,6 +517,62 @@ export const THEME_DITHER_KIT: Theme = {
   },
 };
 
+// 'ngardenRetroClassic' — playful retro garden UI: black carrier,
+// bold white dividers, and saturated arcade accents.
+export const THEME_NGARDEN_RETRO_CLASSIC: Theme = {
+  tokens: {
+    ...THEME_STUDIO.tokens,
+    name: 'ngardenRetroClassic',
+    label: 'NGarden Retro',
+    corner: 'square',
+    density: 'comfortable',
+    radiusXs: 0,
+    radiusSm: 0,
+    radiusMd: 0,
+    radiusLg: 0,
+    radiusPill: 0,
+    borderW: 2,
+    shadowDepth: 0,
+    fontUI: 'system-ui, -apple-system, sans-serif',
+    fontMono: 'JetBrains Mono, Menlo, Consolas, monospace',
+    fontXs: 10,
+    fontSm: 11,
+    fontMd: 13,
+    fontLg: 14,
+    fontXl: 20,
+    typeBase: 13,
+    typeLg: 14,
+    typeXl: 20,
+  },
+  palette: {
+    appBg: '#000000',
+    panelBg: '#111111',
+    panelRaised: '#171717',
+    panelAlt: '#1c1c1c',
+    panelHover: '#242424',
+    border: '#ffffff',
+    borderSoft: '#737373',
+    text: '#ffffff',
+    textBright: '#ffffff',
+    textDim: '#b0b0b0',
+    textMuted: '#d8d8d8',
+    blue: '#2d9fff',
+    blueDeep: '#001e3d',
+    green: '#78d943',
+    greenDeep: '#12310a',
+    yellow: '#ffd54a',
+    yellowDeep: '#3a2f00',
+    orange: '#ff8b4f',
+    orangeDeep: '#3a1606',
+    red: '#ff4778',
+    redDeep: '#3a1020',
+    purple: '#ff4aa6',
+    purpleDeep: '#36113a',
+    grayChip: '#2a2a2a',
+    grayDeep: '#151515',
+  },
+};
+
 // 'custom' — user-configurable slot. Starts as a clone of 'soft'; user
 // overrides are merged on top via setCustomTheme().
 export const THEME_CUSTOM_BASE: Theme = {
@@ -531,10 +587,11 @@ export const THEMES: Record<string, Theme> = {
   'high-contrast': THEME_HIGH_CONTRAST,
   aptioSetup: THEME_APTIO_SETUP,
   ditherKit: THEME_DITHER_KIT,
+  ngardenRetroClassic: THEME_NGARDEN_RETRO_CLASSIC,
   custom: THEME_CUSTOM_BASE,
 };
 
-export const THEME_ORDER = ['soft', 'sharp', 'studio', 'high-contrast', 'aptioSetup', 'ditherKit', 'custom'];
+export const THEME_ORDER = ['soft', 'sharp', 'studio', 'high-contrast', 'aptioSetup', 'ditherKit', 'ngardenRetroClassic', 'custom'];
 
 // Custom theme overrides — partial token + palette patches applied on top
 // of a chosen base. Persisted separately in theme.ts.
