@@ -5,6 +5,7 @@
 const host: any = globalThis;
 
 const STORE_INDEX_KEY = 'cursor-ide.fileIndex';
+const STORE_AUTO_REINDEX_KEY = 'cursor-ide.indexer.autoReindex';
 const DEFAULT_EXCLUDES = ['.git', 'node_modules', '.zig-cache', 'zig-out', 'dist', '.cache'];
 
 function storeGet(key: string): string | null {
@@ -30,12 +31,28 @@ export interface IndexedFile {
   contentHash: string;
   indexedAt: number;
   tokenCount: number;
+  content?: string;
+  symbols?: IndexSymbol[];
   embeddings?: number[];
   metadata: {
     language: string;
     lineCount: number;
     lastModified: number;
   };
+}
+
+export interface IndexSymbol {
+  name: string;
+  kind: 'function' | 'class';
+  lineNumber: number;
+}
+
+export interface IndexSearchHit {
+  path: string;
+  lineNumber: number;
+  snippet: string;
+  matchKind: 'content' | 'path' | 'symbol';
+  symbols: IndexSymbol[];
 }
 
 export interface IndexStats {
@@ -61,6 +78,13 @@ export interface IndexDirectory {
   included: boolean;
 }
 
+export type IndexAutoReindexMode = 'off' | '15m' | '1h' | 'on-save';
+
+export interface IndexAutoReindexConfig {
+  mode: IndexAutoReindexMode;
+  lastAutoReindexAt: number;
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function hashContent(content: string): string {
@@ -73,6 +97,107 @@ function hashContent(content: string): string {
 
 function estimateTokens(content: string): number {
   return Math.ceil(content.length / 4);
+}
+
+function isSearchableText(path: string): boolean {
+  const ext = path.split('.').pop()?.toLowerCase() || '';
+  return ['ts', 'tsx', 'js', 'jsx', 'json', 'md', 'txt', 'css', 'html', 'xml', 'yml', 'yaml', 'sh', 'zig', 'lua', 'py', 'rs', 'go', 'c', 'cpp', 'h', 'hpp'].includes(ext);
+}
+
+function clampSnippet(text: string, maxLen: number = 160): string {
+  const trimmed = text.trim();
+  if (trimmed.length <= maxLen) return trimmed;
+  return trimmed.slice(0, maxLen - 1).trimEnd() + '…';
+}
+
+function extractSymbols(content: string): IndexSymbol[] {
+  const lines = content.split('\n');
+  const out: IndexSymbol[] = [];
+  const seen = new Set<string>();
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const patterns: Array<{ kind: IndexSymbol['kind']; regex: RegExp }> = [
+      { kind: 'class', regex: /^\s*(?:export\s+)?class\s+([A-Za-z_$][\w$]*)\b/ },
+      { kind: 'function', regex: /^\s*(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(/ },
+      { kind: 'function', regex: /^\s*(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?(?:function\b|\([^)]*\)\s*=>|[A-Za-z_$][\w$]*\s*=>)/ },
+    ];
+    for (const pattern of patterns) {
+      const match = line.match(pattern.regex);
+      if (!match) continue;
+      const name = match[1];
+      const key = `${pattern.kind}:${name}`;
+      if (seen.has(key)) break;
+      seen.add(key);
+      out.push({ name, kind: pattern.kind, lineNumber: i + 1 });
+      break;
+    }
+  }
+  return out;
+}
+
+function buildSearchHit(file: IndexedFile, query: string): IndexSearchHit {
+  const content = file.content || '';
+  const lines = content ? content.split('\n') : [];
+  const lowerQuery = query.toLowerCase().trim();
+  const terms = lowerQuery.split(/\s+/).filter(Boolean);
+  const symbols = file.symbols || [];
+  const pathLower = file.path.toLowerCase();
+
+  if (!terms.length) {
+    return {
+      path: file.path,
+      lineNumber: 1,
+      snippet: lines.length > 0 ? clampSnippet(lines[0]) : file.path,
+      matchKind: 'path',
+      symbols,
+    };
+  }
+
+  for (const symbol of symbols) {
+    const symbolLower = symbol.name.toLowerCase();
+    if (terms.some((term) => symbolLower.includes(term))) {
+      return {
+        path: file.path,
+        lineNumber: symbol.lineNumber,
+        snippet: `symbol ${symbol.kind} ${symbol.name}`,
+        matchKind: 'symbol',
+        symbols,
+      };
+    }
+  }
+
+  let bestLineNumber = 1;
+  let bestSnippet = file.path;
+  let bestKind: IndexSearchHit['matchKind'] = 'path';
+  let bestScore = pathLower.includes(lowerQuery) ? terms.length : 0;
+
+  if (bestScore > 0) {
+    bestSnippet = file.path;
+    bestKind = 'path';
+  }
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const lineLower = line.toLowerCase();
+    let score = 0;
+    for (const term of terms) {
+      if (lineLower.includes(term)) score++;
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      bestLineNumber = i + 1;
+      bestSnippet = clampSnippet(line);
+      bestKind = 'content';
+    }
+  }
+
+  return {
+    path: file.path,
+    lineNumber: bestLineNumber,
+    snippet: bestSnippet,
+    matchKind: bestKind,
+    symbols,
+  };
 }
 
 const LANG_MAP: Record<string, string> = {
@@ -119,6 +244,17 @@ function loadJson<T>(key: string, fallback: T): T {
 
 function saveJson(key: string, value: any): void {
   storeSet(key, JSON.stringify(value));
+}
+
+function loadAutoReindexConfig(): IndexAutoReindexConfig {
+  return loadJson<IndexAutoReindexConfig>(STORE_AUTO_REINDEX_KEY, {
+    mode: 'off',
+    lastAutoReindexAt: 0,
+  });
+}
+
+function saveAutoReindexConfig(config: IndexAutoReindexConfig): void {
+  saveJson(STORE_AUTO_REINDEX_KEY, config);
 }
 
 function listWorkspaceDirectories(workDir: string): string[] {
@@ -212,6 +348,26 @@ export function getStaleIndexCount(workDir: string): number {
   return stale;
 }
 
+export function getIndexAutoReindexConfig(): IndexAutoReindexConfig {
+  return loadAutoReindexConfig();
+}
+
+export function getIndexAutoReindexMode(): IndexAutoReindexMode {
+  return loadAutoReindexConfig().mode;
+}
+
+export function setIndexAutoReindexMode(mode: IndexAutoReindexMode): void {
+  const cfg = loadAutoReindexConfig();
+  cfg.mode = mode;
+  saveAutoReindexConfig(cfg);
+}
+
+export function markAutoReindexRun(): void {
+  const cfg = loadAutoReindexConfig();
+  cfg.lastAutoReindexAt = Date.now();
+  saveAutoReindexConfig(cfg);
+}
+
 function sleep0(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
@@ -252,11 +408,14 @@ export function indexFile(path: string): IndexedFile | null {
   const content = fsRead(path);
   if (!content) return null;
   const stat = fsStat(path);
+  const searchable = isSearchableText(path) && content.length <= 250000;
   return {
     path,
     contentHash: hashContent(content),
     indexedAt: Date.now(),
     tokenCount: estimateTokens(content),
+    content: searchable ? content : undefined,
+    symbols: searchable ? extractSymbols(content) : [],
     metadata: {
       language: langFromPath(path),
       lineCount: content.split('\n').length,
@@ -333,9 +492,70 @@ export async function indexWorkspace(workDir: string, options?: { exclude?: stri
 }
 
 export function searchIndex(query: string): IndexedFile[] {
+  const q = query.trim();
+  if (!q) return loadIndex();
+  const lower = q.toLowerCase();
+  const terms = lower.split(/\s+/).filter(Boolean);
   const index = loadIndex();
-  const q = query.toLowerCase();
-  return index.filter(f => f.path.toLowerCase().includes(q));
+  const scored = index
+    .map((file) => {
+      const pathLower = file.path.toLowerCase();
+      const content = file.content || '';
+      const contentLower = content.toLowerCase();
+      const symbolMatches = (file.symbols || []).filter((symbol) =>
+        symbol.name.toLowerCase().includes(lower) || terms.some((term) => symbol.name.toLowerCase().includes(term))
+      );
+      let score = 0;
+      if (pathLower.includes(lower)) score += 3;
+      for (const term of terms) {
+        if (pathLower.includes(term)) score += 2;
+        if (contentLower.includes(term)) score += 1;
+        if ((file.symbols || []).some((symbol) => symbol.name.toLowerCase().includes(term))) score += 2;
+      }
+      if (symbolMatches.length > 0) score += 5;
+      const hit = buildSearchHit(file, q);
+      return { file, score, hit };
+    })
+    .filter((entry) => entry.score > 0 || entry.hit.matchKind !== 'path' || entry.hit.snippet !== entry.file.path);
+
+  scored.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    return a.file.path.localeCompare(b.file.path);
+  });
+
+  return scored.map((entry) => entry.file);
+}
+
+export function searchIndexHits(query: string): IndexSearchHit[] {
+  const q = query.trim();
+  const index = loadIndex();
+  if (!q) return index.map((file) => buildSearchHit(file, q));
+  const lower = q.toLowerCase();
+  const terms = lower.split(/\s+/).filter(Boolean);
+  return index
+    .map((file) => {
+      const hit = buildSearchHit(file, q);
+      const pathLower = hit.path.toLowerCase();
+      const snippetLower = hit.snippet.toLowerCase();
+      const symbolScore = hit.symbols.some((symbol) => symbol.name.toLowerCase().includes(lower))
+        ? 3
+        : 0;
+      let score = symbolScore;
+      if (hit.matchKind === 'symbol') score += 6;
+      if (hit.matchKind === 'content') score += 4;
+      if (hit.matchKind === 'path') score += 2;
+      for (const term of terms) {
+        if (pathLower.includes(term)) score += 2;
+        if (snippetLower.includes(term)) score += 1;
+      }
+      return { hit, score };
+    })
+    .filter((entry) => entry.score > 0)
+    .sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      return a.hit.path.localeCompare(b.hit.path);
+    })
+    .map((entry) => entry.hit);
 }
 
 export function removeFromIndex(path: string): void {

@@ -13,14 +13,18 @@ import {
   getIndexStats,
   getIndexProgress,
   getStaleIndexCount,
+  getIndexAutoReindexConfig,
   listIndexDirectories,
+  markAutoReindexRun,
+  searchIndexHits,
+  setIndexAutoReindexMode,
   setDirectoryIncluded,
-  searchIndex,
   clearIndex,
   type IndexStats,
-  type IndexedFile,
+  type IndexSearchHit,
   type IndexProgress,
   type IndexDirectory,
+  type IndexAutoReindexMode,
 } from '../indexer';
 
 export function IndexerPanel(props: { workDir: string; onIndex?: () => void }) {
@@ -28,8 +32,9 @@ export function IndexerPanel(props: { workDir: string; onIndex?: () => void }) {
   const [progress, setProgress] = useState<IndexProgress>(getIndexProgress());
   const [staleCount, setStaleCount] = useState(0);
   const [directories, setDirectories] = useState<IndexDirectory[]>([]);
+  const [autoMode, setAutoModeState] = useState<IndexAutoReindexMode>(getIndexAutoReindexConfig().mode);
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<IndexedFile[]>([]);
+  const [results, setResults] = useState<IndexSearchHit[]>([]);
   const [indexing, setIndexing] = useState(false);
 
   useEffect(() => {
@@ -37,7 +42,8 @@ export function IndexerPanel(props: { workDir: string; onIndex?: () => void }) {
       setStats(getIndexStats());
       setProgress(getIndexProgress());
       setStaleCount(getStaleIndexCount(props.workDir));
-      setResults(query.trim() ? searchIndex(query) : loadIndex());
+      setAutoModeState(getIndexAutoReindexConfig().mode);
+      setResults(query.trim() ? searchIndexHits(query) : buildIdleHits());
     };
     refresh();
     const id = setInterval(refresh, 300);
@@ -48,12 +54,15 @@ export function IndexerPanel(props: { workDir: string; onIndex?: () => void }) {
     setDirectories(listIndexDirectories(props.workDir));
   }, [props.workDir]);
 
-  async function doIndex() {
+  async function doIndex(reason: 'manual' | 'auto' = 'manual') {
     setIndexing(true);
     try {
       const s = await indexWorkspace(props.workDir);
       setStats(s);
-      setResults(query.trim() ? searchIndex(query) : loadIndex());
+      if (reason === 'auto') {
+        markAutoReindexRun();
+      }
+      setResults(query.trim() ? searchIndexHits(query) : buildIdleHits());
       props.onIndex?.();
     } finally {
       setIndexing(false);
@@ -63,7 +72,7 @@ export function IndexerPanel(props: { workDir: string; onIndex?: () => void }) {
 
   function doSearch(q: string) {
     setQuery(q);
-    setResults(q.trim() ? searchIndex(q) : loadIndex());
+    setResults(q.trim() ? searchIndexHits(q) : buildIdleHits());
   }
 
   function doClear() {
@@ -78,6 +87,57 @@ export function IndexerPanel(props: { workDir: string; onIndex?: () => void }) {
     setDirectoryIncluded(dir.path, !dir.included);
     setDirectories(listIndexDirectories(props.workDir));
   }
+
+  function setAutoMode(mode: IndexAutoReindexMode) {
+    setIndexAutoReindexMode(mode);
+    setAutoModeState(mode);
+  }
+
+  function buildIdleHits() {
+    return loadIndex().map((file) => ({
+      path: file.path,
+      lineNumber: 1,
+      snippet: file.content ? file.content.split('\n')[0] || file.path : file.path,
+      matchKind: 'path' as const,
+      symbols: file.symbols || [],
+    }));
+  }
+
+  function formatDuration(ms: number): string {
+    if (!isFinite(ms) || ms <= 0) return 'due now';
+    const minutes = Math.ceil(ms / 60000);
+    if (minutes < 60) return `${minutes}m`;
+    const hours = Math.ceil(minutes / 60);
+    return `${hours}h`;
+  }
+
+  useEffect(() => {
+    if (autoMode === 'off' || indexing) return;
+    const tick = () => {
+      const cfg = getIndexAutoReindexConfig();
+      const currentMode = cfg.mode;
+      if (currentMode !== autoMode) {
+        setAutoModeState(currentMode);
+      }
+      if (currentMode === 'off' || indexing) return;
+      const now = Date.now();
+      const lastIndexedAt = stats?.lastIndexedAt || 0;
+      const stale = getStaleIndexCount(props.workDir);
+      if (currentMode === 'on-save') {
+        if (stale > 0 && now - cfg.lastAutoReindexAt > 30_000) {
+          doIndex('auto');
+        }
+        return;
+      }
+      const intervalMs = currentMode === '15m' ? 15 * 60 * 1000 : 60 * 60 * 1000;
+      if (lastIndexedAt > 0 && now - lastIndexedAt >= intervalMs && now - cfg.lastAutoReindexAt > 30_000) {
+        doIndex('auto');
+      }
+    };
+    tick();
+    const id = setInterval(tick, 15_000);
+    return () => clearInterval(id);
+  }, [autoMode, indexing, props.workDir, stats?.lastIndexedAt, staleCount]);
 
   const langEntries = stats ? Object.entries(stats.languages).sort((a, b) => b[1] - a[1]) : [];
   const progressLabel = progress.totalFiles > 0
@@ -94,6 +154,14 @@ export function IndexerPanel(props: { workDir: string; onIndex?: () => void }) {
   const currentFileLabel = progress.currentFile
     ? progress.currentFile.replace(props.workDir.endsWith('/') ? props.workDir : `${props.workDir}/`, '')
     : 'Waiting for scan';
+  const scheduleIntervalMs = autoMode === '15m' ? 15 * 60 * 1000 : autoMode === '1h' ? 60 * 60 * 1000 : 0;
+  const nextAutoLabel = autoMode === 'off'
+    ? 'off'
+    : autoMode === 'on-save'
+      ? (staleCount > 0 ? 'pending save' : 'watching saves')
+      : stats && stats.lastIndexedAt > 0
+        ? formatDuration(scheduleIntervalMs - (Date.now() - stats.lastIndexedAt))
+        : 'waiting';
 
   return (
     <Col style={{ gap: 14 }}>
@@ -108,6 +176,34 @@ export function IndexerPanel(props: { workDir: string; onIndex?: () => void }) {
           <Pressable onPress={doClear} style={{ padding: 8, borderRadius: 8, backgroundColor: COLORS.panelAlt, borderWidth: 1, borderColor: COLORS.border }}>
             <Text fontSize={11} color={COLORS.textDim}>Clear</Text>
           </Pressable>
+        </Row>
+
+        <Row style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <Text fontSize={10} color={COLORS.textDim} style={{ fontWeight: 'bold' }}>Auto reindex</Text>
+          {([
+            ['off', 'Off'],
+            ['15m', '15m'],
+            ['1h', '1h'],
+            ['on-save', 'On save'],
+          ] as Array<[IndexAutoReindexMode, string]>).map(([mode, label]) => (
+            <Pressable
+              key={mode}
+              onPress={() => setAutoMode(mode)}
+              style={{
+                paddingLeft: 8,
+                paddingRight: 8,
+                paddingTop: 4,
+                paddingBottom: 4,
+                borderRadius: 999,
+                borderWidth: 1,
+                borderColor: autoMode === mode ? COLORS.blue : COLORS.border,
+                backgroundColor: autoMode === mode ? COLORS.blueDeep : COLORS.panelAlt,
+              }}
+            >
+              <Text fontSize={9} color={autoMode === mode ? COLORS.blue : COLORS.textDim}>{label}</Text>
+            </Pressable>
+          ))}
+          <Pill label={`next ${nextAutoLabel}`} tiny={true} />
         </Row>
 
         {progress.active ? (
@@ -171,20 +267,41 @@ export function IndexerPanel(props: { workDir: string; onIndex?: () => void }) {
         <TextInput
           value={query}
           onChangeText={doSearch}
-          placeholder="Search indexed files..."
+          placeholder="Keyword search indexed content..."
           style={{ height: 32, borderWidth: 1, borderColor: COLORS.border, borderRadius: 8, paddingLeft: 8, fontSize: 11, color: COLORS.text }}
         />
-        <Text fontSize={10} color={COLORS.textDim}>{results.length} file{results.length !== 1 ? 's' : ''}</Text>
+        <Text fontSize={10} color={COLORS.textDim}>{results.length} hit{results.length !== 1 ? 's' : ''}</Text>
 
-        <Col style={{ gap: 4, maxHeight: 320 }}>
+        <Col style={{ gap: 8, maxHeight: 320 }}>
           <ScrollView style={{ flexGrow: 1 }}>
-            {results.map(f => (
-              <Row key={f.path} style={{ alignItems: 'center', gap: 8, padding: 6, borderRadius: 6 }}>
-                <Pill label={f.metadata.language} color={COLORS.blue} tiny={true} />
-                <Text fontSize={10} color={COLORS.textBright} style={{ flexGrow: 1, flexBasis: 0 }} numberOfLines={1}>{f.path.replace(props.workDir + '/', '')}</Text>
-                <Text fontSize={9} color={COLORS.textDim}>{f.tokenCount}t</Text>
-              </Row>
-            ))}
+            {results.map((hit) => {
+              const relativePath = hit.path.replace(props.workDir + '/', '');
+              const symbolNames = hit.symbols.slice(0, 4);
+              const moreSymbols = hit.symbols.length - symbolNames.length;
+              return (
+                <Box key={`${hit.path}:${hit.lineNumber}`} style={{ padding: 8, borderRadius: 8, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelAlt, gap: 6 }}>
+                  <Row style={{ alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <Text fontSize={10} color={COLORS.textBright} style={{ fontWeight: 'bold', flexGrow: 1, flexBasis: 0 }} numberOfLines={1}>
+                      {relativePath}:{hit.lineNumber}
+                    </Text>
+                    <Pill
+                      label={hit.matchKind}
+                      color={hit.matchKind === 'content' ? COLORS.green : hit.matchKind === 'symbol' ? COLORS.blue : COLORS.textDim}
+                      tiny={true}
+                    />
+                  </Row>
+                  <Text fontSize={10} color={COLORS.text}>{hit.snippet || 'TODO: no snippet available'}</Text>
+                  <Row style={{ gap: 6, flexWrap: 'wrap' }}>
+                    {symbolNames.length > 0 ? symbolNames.map((symbol) => (
+                      <Pill key={`${hit.path}:${symbol.name}:${symbol.lineNumber}`} label={`${symbol.kind} ${symbol.name}`} color={COLORS.yellow} tiny={true} />
+                    )) : (
+                      <Pill label="TODO: symbol index" color={COLORS.textDim} tiny={true} />
+                    )}
+                    {moreSymbols > 0 ? <Pill label={`+${moreSymbols}`} tiny={true} /> : null}
+                  </Row>
+                </Box>
+              );
+            })}
           </ScrollView>
         </Col>
       </Box>
