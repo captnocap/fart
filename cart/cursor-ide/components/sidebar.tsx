@@ -3,8 +3,9 @@ const { useMemo, useState } = React;
 const { memo } = React;
 
 import { Box, Col, Pressable, Row, ScrollView, Text } from '../../../runtime/primitives';
-import { COLORS, fileGlyph, fileTone, samePath } from '../theme';
-import { Glyph, Pill } from './shared';
+import { COLORS, fileTone, samePath } from '../theme';
+import { Icon } from './icons';
+import { Pill } from './shared';
 
 // File-tree virtualization constants. Each row is ~34px (padding 6+6 +
 // ~11px text + gap). Overscan keeps scrolling smooth by rendering a bit
@@ -49,7 +50,7 @@ function DockButton(props: {
         gap: 3,
       }}
     >
-      <Glyph icon={props.icon} tone={active ? props.tone : COLORS.textMuted} backgroundColor="transparent" tiny={true} />
+      <Icon name={props.icon} size={14} color={active ? props.tone : COLORS.textMuted} />
       <Text fontSize={8} color={active ? props.tone : COLORS.textMuted} style={{ fontWeight: 'bold' }}>
         {props.label.slice(0, 2).toUpperCase()}
       </Text>
@@ -92,7 +93,7 @@ function PanelShell(props: {
           borderColor: COLORS.borderSoft,
         }}
       >
-        <Glyph icon={props.icon} tone={props.tone} backgroundColor="transparent" tiny={true} />
+        <Icon name={props.icon} size={14} color={props.tone} />
         <Col style={{ gap: 1, flexGrow: 1, flexBasis: 0 }}>
           <Row style={{ alignItems: 'center', gap: 6 }}>
             <Text fontSize={11} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>{props.title}</Text>
@@ -102,7 +103,7 @@ function PanelShell(props: {
         </Col>
         {props.onClose ? (
           <Pressable onPress={props.onClose} style={{ padding: 4, borderRadius: 8, backgroundColor: COLORS.panelAlt, borderWidth: 1, borderColor: COLORS.border }}>
-            <Glyph icon="close" tone={COLORS.textMuted} backgroundColor="transparent" tiny={true} />
+            <Icon name="x" size={14} color={COLORS.textMuted} />
           </Pressable>
         ) : null}
       </Row>
@@ -139,9 +140,15 @@ function FilesPanel(props: any) {
           gap: 6,
         }}
       >
-        <Text fontSize={13} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>{props.workspaceName}</Text>
+        <Row style={{ gap: 6, alignItems: 'center' }}>
+          <Icon name="folder" size={14} color={COLORS.blue} />
+          <Text fontSize={13} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>{props.workspaceName}</Text>
+        </Row>
         <Row style={{ gap: 6, marginTop: 2, flexWrap: 'wrap' }}>
-          <Pill label={props.gitBranch} color={COLORS.green} tiny={true} />
+          <Row style={{ gap: 4, alignItems: 'center' }}>
+            <Icon name="git-branch" size={12} color={COLORS.green} />
+            <Pill label={props.gitBranch} color={COLORS.green} tiny={true} />
+          </Row>
           <Pill label={String(props.changedCount) + ' dirty'} color={COLORS.yellow} tiny={true} />
           <Pill label={String(props.stagedCount) + ' staged'} color={COLORS.blue} tiny={true} />
         </Row>
@@ -172,7 +179,7 @@ function FilesPanel(props: any) {
               backgroundColor: samePath(tab.path, props.currentFilePath) ? COLORS.panelHover : COLORS.panelRaised,
             }}
           >
-            <Glyph icon={fileGlyph(tab.type)} tone={fileTone(tab.type)} backgroundColor={COLORS.grayChip} tiny={true} />
+            <Icon name={tab.type === 'dir' ? 'folder' : 'file'} size={14} color={fileTone(tab.type)} />
             <Text fontSize={11} color={COLORS.text}>{tab.name}</Text>
             {tab.modified ? <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: COLORS.yellow }} /> : null}
             <Box style={{ flexGrow: 1 }} />
@@ -205,11 +212,10 @@ function FilesPanel(props: any) {
               }}
             >
               <Text fontSize={9} color={COLORS.textDim}>{file.type === 'dir' ? (file.expanded ? 'v' : '>') : ''}</Text>
-              <Glyph
-                icon={file.type === 'dir' ? (file.expanded ? 'folder-open' : 'folder') : fileGlyph(file.type)}
-                tone={file.type === 'dir' ? COLORS.textMuted : fileTone(file.type)}
-                backgroundColor={file.type === 'dir' ? COLORS.grayDeep : COLORS.grayChip}
-                tiny={true}
+              <Icon
+                name={file.type === 'dir' ? 'folder' : 'file'}
+                size={14}
+                color={file.type === 'dir' ? COLORS.textMuted : fileTone(file.type)}
               />
               <Text fontSize={11} color={file.selected ? COLORS.textBright : COLORS.text}>{file.name}</Text>
               {file.hot ? <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: COLORS.blue }} /> : null}
@@ -228,7 +234,7 @@ function SourceControlPanel(props: any) {
   return (
     <PanelShell
       title="Source Control"
-      icon="git"
+      icon="git-branch"
       tone={COLORS.green}
       subtitle={props.gitBranch}
       count={String(props.changedCount) + ' dirty'}
@@ -355,7 +361,7 @@ function SidebarImpl(props: any) {
                   backgroundColor: samePath(tab.path, props.currentFilePath) ? COLORS.panelHover : COLORS.panelRaised,
                 }}
               >
-                <Glyph icon={fileGlyph(tab.type)} tone={fileTone(tab.type)} backgroundColor={COLORS.grayChip} tiny={true} />
+                <Icon name={tab.type === 'dir' ? 'folder' : 'file'} size={14} color={fileTone(tab.type)} />
                 <Text fontSize={11} color={COLORS.text}>{tab.name}</Text>
                 {tab.modified ? <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: COLORS.yellow }} /> : null}
                 <Box style={{ flexGrow: 1 }} />
@@ -443,7 +449,7 @@ function SidebarImpl(props: any) {
         <DockButton
           active={panelOrder[0] === 'source-control'}
           count={String(changeCount)}
-          icon="git"
+          icon="git-branch"
           label="Git"
           tone={COLORS.green}
           onPress={() => props.onFocusDockPanel('source-control')}
@@ -567,11 +573,10 @@ function FileTreeList(props: { files: any[]; onSelectPath: (path: string) => voi
               }}
             >
               <Text fontSize={9} color={COLORS.textDim}>{file.type === 'dir' ? (file.expanded ? 'v' : '>') : ''}</Text>
-              <Glyph
-                icon={file.type === 'dir' ? (file.expanded ? 'folder-open' : 'folder') : fileGlyph(file.type)}
-                tone={file.type === 'dir' ? COLORS.textMuted : fileTone(file.type)}
-                backgroundColor={file.type === 'dir' ? COLORS.grayDeep : COLORS.grayChip}
-                tiny={true}
+              <Icon
+                name={file.type === 'dir' ? 'folder' : 'file'}
+                size={14}
+                color={file.type === 'dir' ? COLORS.textMuted : fileTone(file.type)}
               />
               <Text fontSize={11} color={file.selected ? COLORS.textBright : COLORS.text}>{file.name}</Text>
               {file.hot ? <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: COLORS.blue }} /> : null}
