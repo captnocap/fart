@@ -109,6 +109,7 @@ export function TerminalInstance(props: {
   onRequestNewTab?: () => void;
   onCycleTabs?: () => void;
   onMarkDirty?: (tabId: string, dirty: boolean) => void;
+  onCwdChange?: (tabId: string, cwd: string) => void;
   onExitTab?: (tabId: string) => void;
 }) {
   const compactBand = props.widthBand === 'narrow' || props.widthBand === 'widget' || props.widthBand === 'minimum';
@@ -176,6 +177,10 @@ export function TerminalInstance(props: {
     onOutput: (chunk: string) => {
       appendTranscript(chunk);
       props.onMarkDirty?.(props.tab.id, !props.tab.active);
+    },
+    onCwdChange: (cwd: string) => {
+      if (!cwd || cwd === props.tab.cwd) return;
+      props.onCwdChange?.(props.tab.id, cwd);
     },
     onExit: () => {
       props.onMarkDirty?.(props.tab.id, false);

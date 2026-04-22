@@ -1,5 +1,5 @@
 
-import { ptyAlive, ptyClose, ptyFocus, ptyOpen, ptyRead, ptyWrite } from '../../host';
+import { ptyAlive, ptyClose, ptyCwd, ptyFocus, ptyOpen, ptyRead, ptyWrite } from '../../host';
 
 const host: any = globalThis as any;
 const storeGet = typeof host.__store_get === 'function' ? host.__store_get : (_: string) => null;
@@ -25,11 +25,14 @@ export function useTerminalSpawn(props: {
   onOutput?: (chunk: string) => void;
   onExit?: (code?: number) => void;
   onUnread?: (dirty: boolean) => void;
+  onCwdChange?: (cwd: string) => void;
 }) {
   const enabled = props.enabled !== false;
   const onOutputRef = useRef(props.onOutput);
   const onExitRef = useRef(props.onExit);
   const onUnreadRef = useRef(props.onUnread);
+  const onCwdRef = useRef(props.onCwdChange);
+  const cwdRef = useRef(props.cwd);
   const [handle, setHandle] = useState(-1);
   const handleRef = useRef(-1);
   const [alive, setAlive] = useState(false);
@@ -37,10 +40,12 @@ export function useTerminalSpawn(props: {
   useEffect(() => { onOutputRef.current = props.onOutput; }, [props.onOutput]);
   useEffect(() => { onExitRef.current = props.onExit; }, [props.onExit]);
   useEffect(() => { onUnreadRef.current = props.onUnread; }, [props.onUnread]);
+  useEffect(() => { onCwdRef.current = props.onCwdChange; }, [props.onCwdChange]);
+  useEffect(() => { cwdRef.current = props.cwd; }, [props.cwd]);
 
   useEffect(() => {
     if (!enabled) return;
-    const nextHandle = ptyOpen(props.cols, props.rows, readShell(), props.cwd);
+    const nextHandle = ptyOpen(props.cols, props.rows, readShell(), cwdRef.current);
     handleRef.current = nextHandle;
     setHandle(nextHandle);
     setAlive(nextHandle >= 0);
@@ -52,7 +57,7 @@ export function useTerminalSpawn(props: {
       setHandle(-1);
       setAlive(false);
     };
-  }, [enabled, props.cols, props.cwd, props.rows, props.tabId]);
+  }, [enabled, props.cols, props.rows, props.tabId]);
 
   useEffect(() => {
     if (props.focused && handleRef.current >= 0) ptyFocus(handleRef.current);
@@ -67,6 +72,11 @@ export function useTerminalSpawn(props: {
       if (chunk) {
         onOutputRef.current?.(chunk);
         onUnreadRef.current?.(true);
+      }
+      const nextCwd = ptyCwd(current).trim();
+      if (nextCwd && nextCwd !== cwdRef.current) {
+        cwdRef.current = nextCwd;
+        onCwdRef.current?.(nextCwd);
       }
       const isAlive = ptyAlive(current);
       setAlive(isAlive);
@@ -93,11 +103,11 @@ export function useTerminalSpawn(props: {
 
   const restart = useCallback(() => {
     close();
-    const nextHandle = ptyOpen(props.cols, props.rows, readShell(), props.cwd);
+    const nextHandle = ptyOpen(props.cols, props.rows, readShell(), cwdRef.current);
     handleRef.current = nextHandle;
     setHandle(nextHandle);
     setAlive(nextHandle >= 0);
-  }, [close, props.cols, props.cwd, props.rows]);
+  }, [close, props.cols, props.rows]);
 
   return useMemo(() => ({
     handle,

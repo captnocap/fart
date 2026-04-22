@@ -128,6 +128,7 @@ export function TerminalTabs(props: any) {
             onRequestNewTab={() => tabs.createTab(tab.cwd)}
             onCycleTabs={tabs.cycleTab}
             onMarkDirty={tabs.setDirty}
+            onCwdChange={(tabId: string, cwd: string) => tabs.updateTab(tabId, { cwd })}
             onExitTab={tabs.settings.closeOnExit ? tabs.closeTab : undefined}
           />
         ))}
