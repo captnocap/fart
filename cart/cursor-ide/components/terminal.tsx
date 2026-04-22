@@ -542,6 +542,7 @@ export function TerminalPanel(props: any) {
         height: props.height || '100%',
         minHeight: 0,
         flexGrow: props.expanded ? 1 : 0,
+        marginTop: props.expanded ? 0 : 'auto',
       }}
     >
       {!compactBand && !props.expanded ? (
