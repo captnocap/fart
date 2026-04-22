@@ -1,4 +1,4 @@
-import { GitPanel } from '../components/gitpanel';
+import { GitPanel } from '../components/git/GitPanel';
 import { register } from '../panel-registry';
 
 register({
