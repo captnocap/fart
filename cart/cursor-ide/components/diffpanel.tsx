@@ -1,5 +1,5 @@
 const React: any = require('react');
-const { useState, useMemo, useCallback } = React;
+const { useState, useMemo, useCallback, useEffect } = React;
 
 import { Box, Col, Pressable, Row, ScrollView, Text } from '../../../runtime/primitives';
 import { COLORS, TOKENS } from '../theme';
@@ -86,6 +86,10 @@ export function DiffPanel(props: DiffPanelProps) {
 
   const totalAdditions = diffs.reduce((sum, d) => sum + d.additions, 0);
   const totalDeletions = diffs.reduce((sum, d) => sum + d.deletions, 0);
+
+  useEffect(() => {
+    setCollapsedHunks(new Set());
+  }, [selectedDiff?.path]);
 
   const toggleHunk = useCallback((hunkIndex: number) => {
     setCollapsedHunks((prev) => {
