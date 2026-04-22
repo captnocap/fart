@@ -1,52 +1,55 @@
 // =============================================================================
-// AMBIENT PRIMITIVES — Phase 1
+// AMBIENT PRIMITIVES
 // =============================================================================
-// Every named export in this file becomes a globally-available identifier in
-// every .tsx source under the build pipeline, via esbuild's `inject` option.
-// A source file can write `useState(0)` or `<Box><Text>…</Text></Box>` with no
-// imports at the top — esbuild sees the free identifier, matches it against an
-// export here, and inserts the equivalent of a named import at bundle time.
+// Every named export here becomes a globally-available identifier in every
+// .tsx source under the build pipeline, via esbuild's `inject` option. A
+// source file can write `useState(0)` or `<Box><Text>…</Text></Box>` with no
+// imports at the top — esbuild sees the free identifier, matches it against
+// an export here, and inserts the equivalent of a named import at bundle
+// time. Additive: existing files with explicit imports keep working.
 //
-// This file is additive. Existing .tsx files that explicitly
-// `import { Box } from '../../runtime/primitives'` continue to work unchanged;
-// esbuild only injects for identifiers that are *free* in the source.
+// Previously this file did `const React: any = require('react')` to work
+// around Hermes/JSRT's __toESM mishandling of the react default export.
+// V8 (now the default runtime) has no such issue, and the require path was
+// the root cause of cross-file alias collisions (`TypeError:
+// React3.memo is not a function`) once enough files mixed `require` and
+// `import { memo } from 'react'`. Normal ESM named re-exports fix both.
 // =============================================================================
 
-// Direct CJS require matches the pattern in runtime/jsx_shim.ts — bypasses
-// esbuild's __toESM wrapping which Hermes/JSRT mis-handles on the react
-// default export path.
-const React: any = require('react');
+// ── React core + hooks ──────────────────────────────────────────────────────
 
-// ── React core + hooks ───────────────────────────────────────────────────────
+export {
+  createElement,
+  cloneElement,
+  isValidElement,
+  Fragment,
+  Children,
+  memo,
+  forwardRef,
+  lazy,
+  Suspense,
+  createContext,
+  startTransition,
 
-export const createElement    = React.createElement;
-export const cloneElement     = React.cloneElement;
-export const isValidElement   = React.isValidElement;
-export const Fragment         = React.Fragment;
-
-export const useState         = React.useState;
-export const useEffect        = React.useEffect;
-export const useLayoutEffect  = React.useLayoutEffect;
-export const useCallback      = React.useCallback;
-export const useMemo          = React.useMemo;
-export const useRef           = React.useRef;
-export const useContext       = React.useContext;
-export const useReducer       = React.useReducer;
-export const useId            = React.useId;
-export const useImperativeHandle = React.useImperativeHandle;
-export const useSyncExternalStore = React.useSyncExternalStore;
-export const useTransition    = React.useTransition;
-export const useDeferredValue = React.useDeferredValue;
-
-export const createContext    = React.createContext;
-export const memo             = React.memo;
-export const forwardRef       = React.forwardRef;
+  useState,
+  useEffect,
+  useLayoutEffect,
+  useCallback,
+  useMemo,
+  useRef,
+  useContext,
+  useReducer,
+  useId,
+  useImperativeHandle,
+  useSyncExternalStore,
+  useTransition,
+  useDeferredValue,
+} from 'react';
 
 // ── Runtime primitives ──────────────────────────────────────────────────────
-// Re-exported from runtime/primitives.tsx. Keep this list in sync with the
-// export list there; esbuild's inject only matches identifiers it actually
-// finds here, so missing ones silently fall through and require a manual
-// import in the source file.
+// Re-exported from runtime/primitives.tsx. Keep in sync with the export list
+// there — esbuild's inject only matches identifiers it actually finds here,
+// so anything missing silently falls through and requires a manual import.
 
 export {
   Box,
