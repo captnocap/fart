@@ -91,5 +91,6 @@ require('./panels/docs.panel');
 require('./panels/finance.panel');
 require('./panels/weather.panel');
 require('./panels/crypto.panel');
+require('./panels/wallet.panel');
 require('./panels/gamepad.panel');
 require('./panels/a11y.panel');

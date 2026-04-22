@@ -58,6 +58,7 @@ export const ICON_NAMES = [
   'download',
   'upload',
   'home',
+  'wallet',
   'question-mark',
   'keyboard',
 ] as const;
@@ -195,6 +196,11 @@ const ICON_PATHS: Record<string, IconPath[]> = {
     line('M 12 21 V 9'),
     line('M 7 14 l 5 -5 l 5 5'),
     line('M 4 5 h 16'),
+  ],
+  wallet: [
+    line('M 5 6 h 14 a 3 3 0 0 1 3 3 v 8 a 3 3 0 0 1 -3 3 H 5 a 3 3 0 0 1 -3 -3 V 9 a 3 3 0 0 1 3 -3 Z'),
+    line('M 17 11 h 4 a 2 2 0 0 1 0 4 h -4 Z'),
+    line('M 6 9 h 10'),
   ],
   home: [
     line('M 3 11 l 9 -8 l 9 8'),
