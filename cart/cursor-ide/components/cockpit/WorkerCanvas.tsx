@@ -1,6 +1,6 @@
 const React: any = require('react');
 const { useState, useMemo, useCallback, useEffect } = React;
-import { Box, Col, Row, Text } from '../../../../runtime/primitives';
+import { Box, Col, Row, Text, Pressable, Canvas } from '../../../../runtime/primitives';
 import { WorkerTile, type Worker, type WorkerStatus } from './WorkerTile';
 import { WorkerStrip } from './WorkerStrip';
 import { WorkerCharts } from './WorkerCharts';
@@ -182,25 +182,46 @@ export function WorkerCanvas(_props: WorkerCanvasProps) {
         }} />
         <GridBackdrop offsetX={offsetX} offsetY={offsetY} />
         {mode === 'enforce' ? (
-          <Box style={{ position: 'absolute', left: offsetX, top: offsetY, width: 2400, height: 1600 }}>
-            <ConnectionLines workers={workers} />
-            {workers.map((w) => (
-              <WorkerTile key={w.id} worker={w} focused={w.id === focusedId} onFocus={focusWorker} />
-            ))}
-          </Box>
+          <Canvas style={{ flexGrow: 1, flexBasis: 0 }} viewX={offsetX} viewY={offsetY} viewZoom={zoom}>
+            {/* World-space connection lines: anchored at origin, spans tile grid */}
+            <Canvas.Node gx={0} gy={0} gw={2400} gh={1600}>
+              <ConnectionLines workers={workers} />
+            </Canvas.Node>
+            {workers.map((w) => {
+              const gw = w.id === focusedId ? 420 : 260;
+              const gh = w.id === focusedId ? 280 : 168;
+              return (
+                <Canvas.Node
+                  key={w.id}
+                  gx={w.x}
+                  gy={w.y}
+                  gw={gw}
+                  gh={gh}
+                  onMove={(e: any) => setWorkers((prev: Worker[]) => prev.map((pw) => pw.id === w.id ? { ...pw, x: e.gx, y: e.gy } : pw))}
+                >
+                  <WorkerTile worker={w} focused={w.id === focusedId} onFocus={focusWorker} inCanvas />
+                </Canvas.Node>
+              );
+            })}
+            {/* Clamp-overlay mini-legend lives above canvas, stays fixed across pan/zoom */}
+            <Canvas.Clamp>
+              <Box style={{ width: '100%', height: '100%', position: 'relative' }}>
+                <Box style={{
+                  position: 'absolute', right: 14, bottom: 14,
+                  backgroundColor: '#0b1018', borderWidth: 1, borderColor: '#1f2630', borderRadius: 8,
+                  padding: 10, gap: 4,
+                }}>
+                  <Text style={{ color: '#5c6a78', fontSize: 9, fontWeight: 700, letterSpacing: 1 }}>CANVAS</Text>
+                  <Text style={{ color: '#e6edf3', fontSize: 11 }}>pan {Math.round(offsetX)},{Math.round(offsetY)}</Text>
+                  <Text style={{ color: '#e6edf3', fontSize: 11 }}>zoom {zoom.toFixed(2)}x</Text>
+                  <Text style={{ color: '#5c6a78', fontSize: 9 }}>drag tile · scroll zoom</Text>
+                </Box>
+              </Box>
+            </Canvas.Clamp>
+          </Canvas>
         ) : (
           <BrainstormPanel workers={workers} />
         )}
-        {/* mini-legend overlay */}
-        <Box style={{
-          position: 'absolute', right: 14, bottom: 14,
-          backgroundColor: '#0b1018', borderWidth: 1, borderColor: '#1f2630', borderRadius: 8,
-          padding: 10, gap: 4,
-        }}>
-          <Text style={{ color: '#5c6a78', fontSize: 9, fontWeight: 700, letterSpacing: 1 }}>VIEW</Text>
-          <Text style={{ color: '#e6edf3', fontSize: 11 }}>pan {offsetX},{offsetY}</Text>
-          <Text style={{ color: '#e6edf3', fontSize: 11 }}>zoom {zoom.toFixed(2)}x</Text>
-        </Box>
       </Box>
       {showCharts ? <WorkerCharts workers={workers} /> : null}
       </Row>

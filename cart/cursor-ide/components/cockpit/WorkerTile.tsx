@@ -32,24 +32,23 @@ export interface WorkerTileProps {
   worker: Worker;
   focused?: boolean;
   onFocus?: (id: string) => void;
+  inCanvas?: boolean;
 }
 
-export function WorkerTile({ worker, focused, onFocus }: WorkerTileProps) {
+export function WorkerTile({ worker, focused, onFocus, inCanvas }: WorkerTileProps) {
   const tone = STATUS_TONE[worker.status] || STATUS_TONE.idle;
   const border = focused ? worker.accent : '#1f2630';
   const focusProgress = useAnimatedTransition(focused ? 1 : 0, 180);
   const width = 260 + (420 - 260) * focusProgress;
   const height = 168 + (280 - 168) * focusProgress;
   const scale = 1 + focusProgress * 0.06;
+  const positioning: any = inCanvas
+    ? { width: '100%', height: '100%' }
+    : { position: 'absolute', left: worker.x, top: worker.y, width, height, zIndex: focused ? 10 : 1, transform: { scaleX: scale, scaleY: scale } };
   return (
     <Pressable onPress={() => onFocus && onFocus(worker.id)}
       style={{
-        position: 'absolute',
-        left: worker.x,
-        top: worker.y,
-        width,
-        height,
-        zIndex: focused ? 10 : 1,
+        ...positioning,
         backgroundColor: '#0b1018',
         borderWidth: 2,
         borderColor: border,
@@ -57,7 +56,6 @@ export function WorkerTile({ worker, focused, onFocus }: WorkerTileProps) {
         padding: 12,
         flexDirection: 'column',
         gap: 6,
-        transform: { scaleX: scale, scaleY: scale },
       }}>
       <Row style={{ alignItems: 'center', gap: 8 }}>
         <Box style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: tone.color }} />
