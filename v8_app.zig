@@ -1433,6 +1433,10 @@ fn buildChromeNode(arena: std.mem.Allocator) ?Node {
     }
 
     var chrome: Node = .{};
+    chrome.style.position = .absolute;
+    chrome.style.top = 0;
+    chrome.style.left = 0;
+    chrome.style.right = 0;
     chrome.style.height = CHROME_HEIGHT;
     chrome.style.flex_direction = .row;
     chrome.style.align_items = .end;
@@ -1440,8 +1444,9 @@ fn buildChromeNode(arena: std.mem.Allocator) ?Node {
     chrome.style.padding_left = CHROME_PAD;
     chrome.style.padding_right = CHROME_PAD;
     chrome.style.background_color = layout.Color.rgb(8, 11, 15);
-    // Empty chrome space drags the (borderless) window. Tab + control buttons
-    // have on_press which overrides drag in framework/engine.zig's hitTestChrome.
+    // Empty chrome space in this top strip drags the (borderless) window.
+    // Tab + control buttons have on_press which overrides drag in
+    // framework/engine.zig's hitTestChrome.
     chrome.window_drag = true;
     chrome.children = children;
     return chrome;
