@@ -515,7 +515,7 @@ function SidebarImpl(props: any) {
         />
       </Col>
 
-      <ScrollView style={{ flexGrow: 1, height: '100%' }}>
+      <ScrollView showScrollbar={true} style={{ flexGrow: 1, height: '100%' }}>
         <Col style={{ padding: 10, gap: 10 }}>
           {panelOrder.map((panelId: string) => {
             if (panelId === 'files') {
@@ -588,6 +588,7 @@ function FileTreeList(props: { files: any[]; onSelectPath: (path: string) => voi
 
   return (
     <ScrollView
+      showScrollbar={true}
       style={{ flexGrow: 1, height: '100%', paddingLeft: 8, paddingRight: 8, paddingBottom: 12 }}
       onScroll={(payload: any) => {
         const next = typeof payload?.scrollY === 'number' ? payload.scrollY : 0;
