@@ -67,6 +67,33 @@ export function StatusBar(props: any) {
           {!mediumBand && props.stagedCount > 0 ? <Text fontSize={10} color={COLORS.green}>{'S' + props.stagedCount}</Text> : null}
         </StatusSegment>
 
+        {/* Indexing status */}
+        {!compactBand ? (
+          <StatusSegment onPress={props.onOpenSettings ? () => props.onOpenSettings('index') : undefined}>
+            <Text fontSize={10} color={COLORS.blue}>
+              {props.indexStats && props.indexStats.totalFiles > 0 ? `${props.indexStats.totalFiles} files` : 'idx 0'}
+            </Text>
+          </StatusSegment>
+        ) : null}
+
+        {/* Tokenization */}
+        {!compactBand ? (
+          <StatusSegment onPress={props.onOpenSettings ? () => props.onOpenSettings('memory') : undefined}>
+            <Text fontSize={10} color={COLORS.purple}>
+              {props.indexStats && props.indexStats.totalTokens > 0 ? `${Math.round(props.indexStats.totalTokens / 1000)}k tok` : '0 tok'}
+            </Text>
+          </StatusSegment>
+        ) : null}
+
+        {/* Memory / telemetry */}
+        {!compactBand && !mediumBand ? (
+          <StatusSegment onPress={props.onOpenSettings ? () => props.onOpenSettings('memory') : undefined}>
+            <Text fontSize={10} color={COLORS.textDim}>
+              {props.inputTokenEstimate > 0 ? `in ${props.inputTokenEstimate}` : '—'}
+            </Text>
+          </StatusSegment>
+        ) : null}
+
         {/* Cursor position */}
         <StatusSegment>
           <Text fontSize={10} color={COLORS.textDim}>Ln {props.cursorLine}</Text>
