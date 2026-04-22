@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# autotest — run .autotest files via the Node runner in framework/autotest.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+exec node framework/autotest/cli.cjs "$@"
