@@ -2,6 +2,7 @@ import type {
   AIConfig, Message, ToolDefinition, StreamDelta,
   ProviderRequest, ProviderModule, AIProviderType,
 } from './types';
+import { requestAsync } from '../../../../runtime/hooks/http';
 
 // Unified provider adapters. OpenAI (chat/completions) + Anthropic
 // (messages). Each exposes formatRequest / parseResponse /
@@ -158,10 +159,15 @@ export function getProvider(type: AIProviderType): ProviderModule {
   return openai; // 'openai' and 'custom' both use OpenAI-compatible shape
 }
 
+// HTTP goes through the __http_request_async host fn (libcurl), not a Node
+// fetch. `callProvider` is non-streaming — the host does not yet expose a
+// streaming variant (see stream.ts for the blocker).
 export async function callProvider(config: AIConfig, messages: Message[], tools?: ToolDefinition[]): Promise<Message> {
   const provider = getProvider(config.provider);
   const req = provider.formatRequest(messages, config, tools, false);
-  const res = await fetch(req.url, { method: req.method, headers: req.headers, body: req.body });
-  const json = await res.json();
+  const res = await requestAsync({ method: req.method as any, url: req.url, headers: req.headers, body: req.body });
+  if (res.error) return { role: 'assistant', content: 'http error: ' + res.error };
+  let json: any = {};
+  try { json = JSON.parse(res.body || '{}'); } catch { json = { error: { message: res.body } }; }
   return provider.parseResponse(json);
 }
