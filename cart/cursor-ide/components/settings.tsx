@@ -780,13 +780,104 @@ function TerminalSettingsPanel(props: { query: string; resetToken: number }) {
   );
 }
 
-function KeybindingsPanel() {
+interface KeybindingSpec {
+  id: string;
+  label: string;
+  category: string;
+  defaultChord: string;
+}
+
+const KEYBINDINGS: KeybindingSpec[] = [
+  { id: 'nav.settings',      label: 'Open Settings',        category: 'Navigation', defaultChord: 'Ctrl+,' },
+  { id: 'nav.commandPalette',label: 'Open Command Palette', category: 'Navigation', defaultChord: 'Ctrl+K' },
+  { id: 'nav.projects',      label: 'Open Projects',        category: 'Navigation', defaultChord: 'Ctrl+P' },
+  { id: 'surface.search',    label: 'Toggle Search',        category: 'Surface',    defaultChord: 'Ctrl+Shift+F' },
+  { id: 'surface.terminal',  label: 'Toggle Terminal',      category: 'Surface',    defaultChord: 'Ctrl+`' },
+  { id: 'surface.chat',      label: 'Toggle Chat',          category: 'Surface',    defaultChord: 'Ctrl+L' },
+  { id: 'surface.hot',       label: 'Toggle Hot Panel',     category: 'Surface',    defaultChord: 'Ctrl+H' },
+  { id: 'file.new',          label: 'New File',             category: 'File',       defaultChord: 'Ctrl+N' },
+  { id: 'file.save',         label: 'Save Current File',    category: 'File',       defaultChord: 'Ctrl+S' },
+  { id: 'workspace.refresh', label: 'Refresh Workspace',    category: 'Workspace',  defaultChord: 'Ctrl+Shift+R' },
+  { id: 'workspace.index',   label: 'Index Project',        category: 'Workspace',  defaultChord: 'Ctrl+Shift+I' },
+  { id: 'agent.new',         label: 'New Conversation',     category: 'Agent',      defaultChord: 'Ctrl+Shift+N' },
+  { id: 'agent.send',        label: 'Send Message',         category: 'Agent',      defaultChord: 'Ctrl+Enter' },
+  { id: 'agent.cycleModel',  label: 'Cycle Model',          category: 'Agent',      defaultChord: 'Ctrl+/' },
+  { id: 'agent.stop',        label: 'Stop Agent',           category: 'Agent',      defaultChord: 'Ctrl+.' },
+];
+
+function chordKey(id: string) { return 'keybindings.' + id; }
+
+function KeybindingsPanel(props: { query: string; resetToken: number }) {
+  const [version, setVersion] = useState(0);
+
+  useEffect(() => { setVersion(v => v + 1); }, [props.resetToken]);
+
+  function chordFor(spec: KeybindingSpec): string {
+    return sget(chordKey(spec.id), spec.defaultChord);
+  }
+  function setChord(spec: KeybindingSpec, chord: string) {
+    if (chord === spec.defaultChord) sdel(chordKey(spec.id));
+    else sset(chordKey(spec.id), chord);
+    setVersion(v => v + 1);
+  }
+
+  function doReset() {
+    for (const spec of KEYBINDINGS) sdel(chordKey(spec.id));
+    setVersion(v => v + 1);
+  }
+
+  const q = (props.query || '').toLowerCase();
+  const filtered = KEYBINDINGS.filter(spec => {
+    if (!q) return true;
+    const hay = (spec.label + ' ' + spec.category + ' ' + spec.id + ' ' + chordFor(spec)).toLowerCase();
+    return hay.indexOf(q) >= 0;
+  });
+
+  const groups: Record<string, KeybindingSpec[]> = {};
+  for (const spec of filtered) {
+    if (!groups[spec.category]) groups[spec.category] = [];
+    groups[spec.category].push(spec);
+  }
+
   return (
     <Col style={{ gap: 14 }}>
-      <SectionTitle title="Keybindings" description="Shortcuts and command palette." />
-      <Box style={{ padding: 14, borderRadius: TOKENS.radiusMd, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelRaised, alignItems: 'center' }}>
-        <Text fontSize={11} color={COLORS.textDim}>Keybindings coming in a later commit.</Text>
-      </Box>
+      <SectionTitle title="Keybindings" description="Search and rebind command shortcuts. Edit the chord field to remap." onReset={doReset} />
+      {filtered.length === 0 ? (
+        <Box style={{ padding: 14, borderRadius: TOKENS.radiusMd, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelRaised, alignItems: 'center' }}>
+          <Text fontSize={11} color={COLORS.textDim}>No keybindings match "{props.query}".</Text>
+        </Box>
+      ) : null}
+      {Object.keys(groups).map(category => (
+        <Box key={category} style={{ padding: 14, borderRadius: TOKENS.radiusMd, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelRaised, gap: 8 }}>
+          <Text fontSize={12} color={COLORS.blue} style={{ fontWeight: 'bold', letterSpacing: 0.6 }}>{category.toUpperCase()}</Text>
+          <Col style={{ gap: 6 }}>
+            {groups[category].map(spec => {
+              const current = chordFor(spec);
+              const customised = current !== spec.defaultChord;
+              return (
+                <Row key={spec.id + '_' + version} style={{
+                  padding: 10, gap: 10,
+                  borderRadius: TOKENS.radiusSm, borderWidth: 1,
+                  borderColor: customised ? COLORS.orange : COLORS.border,
+                  backgroundColor: COLORS.panelBg,
+                  alignItems: 'center', flexWrap: 'wrap',
+                }}>
+                  <Col style={{ flexGrow: 1, flexBasis: 0, minWidth: 200, gap: 2 }}>
+                    <Text fontSize={11} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>{spec.label}</Text>
+                    <Text fontSize={9} color={COLORS.textDim} style={{ fontFamily: 'monospace' }}>{spec.id}</Text>
+                  </Col>
+                  <TextField value={current} onChange={(v) => setChord(spec, v)} width={160} mono={true} />
+                  {customised ? (
+                    <Pressable onPress={() => setChord(spec, spec.defaultChord)} style={{ paddingLeft: 8, paddingRight: 8, paddingTop: 4, paddingBottom: 4, borderRadius: TOKENS.radiusSm, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelAlt }}>
+                      <Text fontSize={9} color={COLORS.textDim}>default</Text>
+                    </Pressable>
+                  ) : null}
+                </Row>
+              );
+            })}
+          </Col>
+        </Box>
+      ))}
     </Col>
   );
 }
@@ -914,7 +1005,7 @@ export function SettingsSurface(props: any) {
     if (active === 'appearance')  return <AppearancePanel query={query} resetToken={resetToken} />;
     if (active === 'editor')      return <EditorPanel query={query} resetToken={resetToken} />;
     if (active === 'terminal')    return <TerminalSettingsPanel query={query} resetToken={resetToken} />;
-    if (active === 'keybindings') return <KeybindingsPanel />;
+    if (active === 'keybindings') return <KeybindingsPanel query={query} resetToken={resetToken} />;
     if (active === 'providers')   return <ProvidersPanel
       providerConfigs={props.providerConfigs || []}
       selectedProviderId={props.selectedProviderId}
