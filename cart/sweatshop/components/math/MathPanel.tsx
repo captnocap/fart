@@ -15,11 +15,12 @@ function Toggle({ label, value, onToggle }: { label: string; value: boolean; onT
   );
 }
 
-function Field({ label, value, onChange, width = 120 }: { label: string; value: string; onChange: (value: string) => void; width?: number }) {
+function Field({ label, value, onChange, width = 120, id }: { label: string; value: string; onChange: (value: string) => void; width?: number; id?: string }) {
   return (
     <Col style={{ gap: 4 }}>
       <Text fontSize={9} color={COLORS.textDim} style={{ fontWeight: 'bold' }}>{label}</Text>
       <TextInput
+        data-id={id}
         value={value}
         onChangeText={onChange}
         style={{ width, height: 32, borderWidth: 1, borderColor: COLORS.border, borderRadius: TOKENS.radiusSm, paddingLeft: 10, paddingRight: 10, backgroundColor: COLORS.panelBg, color: COLORS.textBright }}
@@ -41,18 +42,22 @@ export function MathPanel(props: { title?: string; widthBand?: string; onClose?:
   const previewColor = color.trim() || COLORS.textBright;
 
   return (
-    <Col style={{ width: '100%', height: '100%', backgroundColor: COLORS.panelBg }}>
+    <Col data-id="math-panel-root" style={{ width: '100%', height: '100%', backgroundColor: COLORS.panelBg }}>
       <Row style={{ alignItems: 'center', justifyContent: 'space-between', paddingLeft: 14, paddingRight: 14, paddingTop: 12, paddingBottom: 12, borderBottomWidth: 1, borderColor: COLORS.borderSoft }}>
         <Col style={{ gap: 2 }}>
           <Text fontSize={13} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>{props.title || 'Math'}</Text>
           <Text fontSize={10} color={COLORS.textDim}>Live LaTeX editor and renderer</Text>
         </Col>
         <Row style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-          <Toggle label={inline ? 'Inline' : 'Block'} value={inline} onToggle={() => setInline((v) => !v)} />
-          <Toggle label={numbered ? 'Numbered' : 'Plain'} value={numbered} onToggle={() => setNumbered((v) => !v)} />
-          <Field label="Font" value={fontSize} onChange={setFontSize} width={72} />
-          <Field label="Color" value={color} onChange={setColor} width={108} />
-          <Field label="#" value={equationNumber} onChange={setEquationNumber} width={56} />
+          <Pressable data-id="math-toggle-inline" onPress={() => setInline((v) => !v)} style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 6, paddingBottom: 6, borderRadius: TOKENS.radiusMd, borderWidth: 1, borderColor: inline ? COLORS.blue : COLORS.border, backgroundColor: inline ? COLORS.blueDeep : COLORS.panelAlt }}>
+            <Text fontSize={10} color={inline ? COLORS.blue : COLORS.textDim} style={{ fontWeight: 'bold' }}>{inline ? 'Inline' : 'Block'}</Text>
+          </Pressable>
+          <Pressable data-id="math-toggle-numbered" onPress={() => setNumbered((v) => !v)} style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 6, paddingBottom: 6, borderRadius: TOKENS.radiusMd, borderWidth: 1, borderColor: numbered ? COLORS.blue : COLORS.border, backgroundColor: numbered ? COLORS.blueDeep : COLORS.panelAlt }}>
+            <Text fontSize={10} color={numbered ? COLORS.blue : COLORS.textDim} style={{ fontWeight: 'bold' }}>{numbered ? 'Numbered' : 'Plain'}</Text>
+          </Pressable>
+          <Field id="math-font-size" label="Font" value={fontSize} onChange={setFontSize} width={72} />
+          <Field id="math-color" label="Color" value={color} onChange={setColor} width={108} />
+          <Field id="math-equation-number" label="#" value={equationNumber} onChange={setEquationNumber} width={56} />
           {props.onClose ? (
             <Pressable onPress={props.onClose} style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 6, paddingBottom: 6, borderRadius: TOKENS.radiusMd, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelAlt }}>
               <Text fontSize={10} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>Close</Text>
@@ -68,6 +73,7 @@ export function MathPanel(props: { title?: string; widthBand?: string; onClose?:
           </Box>
           <Box style={{ flexGrow: 1, flexBasis: 0, minHeight: 0, padding: 10 }}>
             <TextArea
+              data-id="math-source"
               value={source}
               onChange={setSource}
               fontSize={11}
@@ -82,7 +88,7 @@ export function MathPanel(props: { title?: string; widthBand?: string; onClose?:
             <Text fontSize={10} color={COLORS.textDim} style={{ fontWeight: 'bold' }}>Preview</Text>
           </Box>
           <Box style={{ flexGrow: 1, flexBasis: 0, minHeight: 0, padding: 14 }}>
-            <Box style={{ padding: 16, borderRadius: TOKENS.radiusLg, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelRaised }}>
+            <Box data-id="math-preview" style={{ padding: 16, borderRadius: TOKENS.radiusLg, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelRaised }}>
               <LaTeX
                 source={source}
                 inline={inline}
@@ -92,7 +98,7 @@ export function MathPanel(props: { title?: string; widthBand?: string; onClose?:
                 color={previewColor}
               />
             </Box>
-            <Box style={{ marginTop: 12, padding: 12, borderRadius: TOKENS.radiusLg, borderWidth: 1, borderColor: COLORS.borderSoft, backgroundColor: COLORS.panelAlt }}>
+            <Box data-id="math-settings" style={{ marginTop: 12, padding: 12, borderRadius: TOKENS.radiusLg, borderWidth: 1, borderColor: COLORS.borderSoft, backgroundColor: COLORS.panelAlt }}>
               <Text fontSize={10} color={COLORS.textDim} style={{ fontWeight: 'bold' }}>Live settings</Text>
               <Text fontSize={10} color={COLORS.textMuted} style={{ marginTop: 4 }}>
                 {inline ? 'Inline mode keeps the expression within surrounding text.' : 'Block mode centers the expression in its own row.'}
