@@ -5,6 +5,35 @@ const { useCallback, useEffect, useMemo, useRef, useState } = React;
 
 import { Box, Col, Pressable, Row, ScrollView, Text, TextInput } from '../../runtime/primitives';
 import { COLORS } from '../theme';
+import { readFile as hostReadFile } from '../host';
+
+const host: any = globalThis;
+const storeGet = typeof host.__store_get === 'function' ? host.__store_get : (_: string) => null;
+const storeSet = typeof host.__store_set === 'function' ? host.__store_set : (_: string, __: string) => {};
+
+const RECENT_KEY = 'cursor-ide.palette.recent';
+const MAX_RECENT = 10;
+
+function loadRecent(): string[] {
+  try {
+    const raw = storeGet(RECENT_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return parsed.slice(0, MAX_RECENT);
+  } catch {}
+  return [];
+}
+
+function saveRecent(ids: string[]) {
+  try {
+    storeSet(RECENT_KEY, JSON.stringify(ids.slice(0, MAX_RECENT)));
+  } catch {}
+}
+
+function pushRecent(ids: string[], id: string): string[] {
+  const next = [id, ...ids.filter((x) => x !== id)];
+  return next.slice(0, MAX_RECENT);
+}
 
 export type PaletteCommand = {
   id: string;
@@ -90,6 +119,48 @@ function scoreCommand(query: string, cmd: PaletteCommand): number {
   return Math.max(labelScore, catScore * 0.6);
 }
 
+// ── Grouping ─────────────────────────────────────────────────────────
+
+type GroupedCategory = { category: string; items: PaletteCommand[] };
+
+function groupByCategory(cmds: PaletteCommand[]): GroupedCategory[] {
+  const map = new Map<string, PaletteCommand[]>();
+  for (const cmd of cmds) {
+    const cat = cmd.category || 'Other';
+    if (!map.has(cat)) map.set(cat, []);
+    map.get(cat)!.push(cmd);
+  }
+
+  const order = [
+    'Recent',
+    'Navigation',
+    'File',
+    'Edit',
+    'View',
+    'Help',
+    'Settings',
+    'Theme',
+    'Workspace',
+    'Agent',
+    'Plugins',
+    'Go to File',
+    'Files',
+    'Other',
+  ];
+
+  const result: GroupedCategory[] = [];
+  for (const cat of order) {
+    if (map.has(cat)) {
+      result.push({ category: cat, items: map.get(cat)! });
+      map.delete(cat);
+    }
+  }
+  for (const [cat, items] of map) {
+    result.push({ category: cat, items });
+  }
+  return result;
+}
+
 // ── Component ────────────────────────────────────────────────────────
 
 export function CommandPalette({
@@ -106,9 +177,14 @@ export function CommandPalette({
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<any>(null);
+  const recentIdsRef = useRef<string[]>(loadRecent());
 
-  // Build merged command list from static + dynamic sources
-  const allCommands = useMemo(() => {
+  const isGotoFileMode = query.startsWith('>');
+  const fileQuery = isGotoFileMode ? query.slice(1).trim() : '';
+  const activeQuery = isGotoFileMode ? fileQuery : query.trim();
+
+  // Base commands (everything except goto-file)
+  const baseCommands = useMemo(() => {
     const result: PaletteCommand[] = [...commands];
 
     // Settings section jumps
@@ -129,7 +205,7 @@ export function CommandPalette({
       }
     }
 
-    // Theme switches (stubbed — no multi-theme system yet)
+    // Theme switches (stubbed)
     result.push({
       id: 'theme.dark',
       label: 'Switch Theme: Dark',
@@ -165,39 +241,87 @@ export function CommandPalette({
       }
     }
 
-    // Goto file
+    return result;
+  }, [commands, settingsSections, menuSections, onJumpToSettingsSection]);
+
+  // File commands (for goto-file mode and normal mode)
+  const fileCommands = useMemo(() => {
+    const result: PaletteCommand[] = [];
     if (files && onOpenFile) {
       for (const file of files) {
         result.push({
           id: 'goto.file.' + file,
-          label: 'Open File: ' + file,
+          label: file,
           category: 'Go to File',
           action: () => onOpenFile(file),
         });
       }
     }
-
     return result;
-  }, [commands, files, settingsSections, onOpenFile, onJumpToSettingsSection]);
+  }, [files, onOpenFile]);
 
-  // Filter and sort by fuzzy score
+  // All commands (base + file) for normal mode
+  const allCommands = useMemo(() => {
+    return [...baseCommands, ...fileCommands];
+  }, [baseCommands, fileCommands]);
+
+  // Filtered selectable items
   const filtered = useMemo(() => {
-    const q = query.trim();
-    if (!q) return allCommands;
+    if (isGotoFileMode) {
+      if (!activeQuery) return fileCommands;
+      const scored = fileCommands
+        .map((cmd) => ({ cmd, score: fuzzyScore(activeQuery, cmd.label) }))
+        .filter((item) => item.score > 0);
+      scored.sort((a, b) => b.score - a.score);
+      return scored.map((item) => item.cmd);
+    }
+
+    if (!activeQuery) {
+      // Empty query: recent items first, grouped under "Recent" category
+      const recentSet = new Set(recentIdsRef.current);
+      const recent: PaletteCommand[] = [];
+      const rest: PaletteCommand[] = [];
+      for (const cmd of allCommands) {
+        if (recentSet.has(cmd.id)) recent.push(cmd);
+        else rest.push(cmd);
+      }
+      const orderMap = new Map(recentIdsRef.current.map((id, i) => [id, i]));
+      recent.sort((a, b) => (orderMap.get(a.id) ?? 0) - (orderMap.get(b.id) ?? 0));
+      return [
+        ...recent.map((cmd) => ({ ...cmd, category: 'Recent' })),
+        ...rest,
+      ];
+    }
+
     const scored = allCommands
-      .map((cmd) => ({ cmd, score: scoreCommand(q, cmd) }))
+      .map((cmd) => ({ cmd, score: scoreCommand(activeQuery, cmd) }))
       .filter((item) => item.score > 0);
     scored.sort((a, b) => b.score - a.score);
     return scored.map((item) => item.cmd);
-  }, [query, allCommands]);
+  }, [activeQuery, allCommands, fileCommands, isGotoFileMode]);
 
-  // Reset selection when opening
+  // Group for display
+  const grouped = useMemo(() => groupByCategory(filtered), [filtered]);
+
+  // Selected command
+  const selectedCmd = filtered[selectedIndex] || null;
+
+  // File preview for selected item
+  const previewLines = useMemo(() => {
+    if (!selectedCmd) return [];
+    if (!selectedCmd.id.startsWith('goto.file.')) return [];
+    const path = selectedCmd.label;
+    const content = hostReadFile(path);
+    if (!content) return [];
+    return content.split('\n').slice(0, 10);
+  }, [selectedCmd]);
+
+  // Reset selection when query or mode changes
   useEffect(() => {
     if (open) {
-      setQuery('');
       setSelectedIndex(0);
     }
-  }, [open]);
+  }, [open, activeQuery, isGotoFileMode]);
 
   // Keyboard navigation while open (wired via TextInput onKeyDown)
   const handleKeyDown = useCallback(
@@ -214,6 +338,9 @@ export function CommandPalette({
         // Enter
         const cmd = filtered[selectedIndex];
         if (cmd) {
+          // Persist to recent
+          recentIdsRef.current = pushRecent(recentIdsRef.current, cmd.id);
+          saveRecent(recentIdsRef.current);
           onClose();
           cmd.action();
         }
@@ -226,8 +353,6 @@ export function CommandPalette({
   );
 
   // Global shortcut: Ctrl+Shift+P to open
-  // Note: window.addEventListener is shimmed in the native host; will fire
-  // when the framework wires global keyboard events (already works in web).
   useEffect(() => {
     const handler = (e: any) => {
       const isP = e.keyCode === 112 || e.key === 'p' || e.key === 'P';
@@ -245,9 +370,19 @@ export function CommandPalette({
   if (!open) return null;
 
   const exec = (cmd: PaletteCommand) => {
+    recentIdsRef.current = pushRecent(recentIdsRef.current, cmd.id);
+    saveRecent(recentIdsRef.current);
     onClose();
     cmd.action();
   };
+
+  const footerLabel = isGotoFileMode
+    ? filtered.length + ' files'
+    : filtered.length + ' commands';
+
+  const placeholder = isGotoFileMode ? 'Type a file name...' : 'Type a command...';
+
+  let itemIdx = 0;
 
   return (
     <Box
@@ -281,7 +416,7 @@ export function CommandPalette({
             value={query}
             onChange={setQuery}
             onKeyDown={handleKeyDown}
-            placeholder="Type a command..."
+            placeholder={placeholder}
             style={{
               fontSize: 14,
               color: COLORS.textBright,
@@ -298,73 +433,122 @@ export function CommandPalette({
         </Box>
 
         {/* Results */}
-        <ScrollView style={{ flexGrow: 1, maxHeight: 380 }}>
+        <ScrollView style={{ flexGrow: 1, maxHeight: previewLines.length > 0 ? 260 : 380 }}>
           {filtered.length === 0 ? (
             <Box style={{ padding: 24, alignItems: 'center' }}>
               <Text style={{ fontSize: 12, color: COLORS.textMuted }}>
-                No matching commands
+                {isGotoFileMode ? 'No matching files' : 'No matching commands'}
               </Text>
             </Box>
           ) : (
-            filtered.map((cmd, idx) => (
-              <Pressable
-                key={cmd.id}
-                onPress={() => exec(cmd)}
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  paddingLeft: 14,
-                  paddingRight: 14,
-                  paddingTop: 10,
-                  paddingBottom: 10,
-                  backgroundColor:
-                    idx === selectedIndex
-                      ? 'rgba(45,98,255,0.15)'
-                      : 'transparent',
-                  borderLeftWidth: 3,
-                  borderLeftColor:
-                    idx === selectedIndex ? COLORS.blue : 'transparent',
-                }}
-              >
-                <Col style={{ gap: 2, flexGrow: 1, flexBasis: 0 }}>
-                  <Text
-                    style={{
-                      fontSize: 12,
-                      color:
-                        idx === selectedIndex ? COLORS.blue : COLORS.textBright,
-                      fontWeight: idx === selectedIndex ? 'bold' : 'normal',
-                    }}
-                  >
-                    {cmd.label}
+            grouped.map((group, groupIdx) => {
+              const rows: any[] = [];
+              rows.push(
+                <Box
+                  key={'hdr:' + group.category + ':' + groupIdx}
+                  style={{
+                    paddingLeft: 14,
+                    paddingRight: 14,
+                    paddingTop: 8,
+                    paddingBottom: 4,
+                    backgroundColor: 'transparent',
+                  }}
+                >
+                  <Text style={{ fontSize: 9, color: COLORS.textDim, fontWeight: 'bold', textTransform: 'uppercase' }}>
+                    {group.category}
                   </Text>
-                  {cmd.category ? (
-                    <Text style={{ fontSize: 10, color: COLORS.textMuted }}>
-                      {cmd.category}
-                    </Text>
-                  ) : null}
-                </Col>
-                {cmd.shortcut ? (
-                  <Box
+                </Box>
+              );
+              for (const cmd of group.items) {
+                const idx = itemIdx;
+                const isSel = idx === selectedIndex;
+                itemIdx++;
+                rows.push(
+                  <Pressable
+                    key={cmd.id}
+                    onPress={() => exec(cmd)}
                     style={{
-                      backgroundColor: COLORS.panelAlt,
-                      borderRadius: 4,
-                      paddingLeft: 6,
-                      paddingRight: 6,
-                      paddingTop: 2,
-                      paddingBottom: 2,
-                      marginLeft: 8,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      paddingLeft: 14,
+                      paddingRight: 14,
+                      paddingTop: 10,
+                      paddingBottom: 10,
+                      backgroundColor: isSel ? 'rgba(45,98,255,0.15)' : 'transparent',
+                      borderLeftWidth: 3,
+                      borderLeftColor: isSel ? COLORS.blue : 'transparent',
                     }}
                   >
-                    <Text style={{ fontSize: 9, color: COLORS.textDim }}>
-                      {cmd.shortcut}
-                    </Text>
-                  </Box>
-                ) : null}
-              </Pressable>
-            ))
+                    <Col style={{ gap: 2, flexGrow: 1, flexBasis: 0 }}>
+                      <Text
+                        style={{
+                          fontSize: 12,
+                          color: isSel ? COLORS.blue : COLORS.textBright,
+                          fontWeight: isSel ? 'bold' : 'normal',
+                        }}
+                      >
+                        {cmd.label}
+                      </Text>
+                      {cmd.category && !isGotoFileMode ? (
+                        <Text style={{ fontSize: 10, color: COLORS.textMuted }}>
+                          {cmd.category}
+                        </Text>
+                      ) : null}
+                    </Col>
+                    {cmd.shortcut ? (
+                      <Box
+                        style={{
+                          backgroundColor: COLORS.panelAlt,
+                          borderRadius: 4,
+                          paddingLeft: 6,
+                          paddingRight: 6,
+                          paddingTop: 2,
+                          paddingBottom: 2,
+                          marginLeft: 8,
+                        }}
+                      >
+                        <Text style={{ fontSize: 9, color: COLORS.textDim }}>
+                          {cmd.shortcut}
+                        </Text>
+                      </Box>
+                    ) : null}
+                  </Pressable>
+                );
+              }
+              return rows;
+            })
           )}
         </ScrollView>
+
+        {/* File preview */}
+        {previewLines.length > 0 ? (
+          <Box
+            style={{
+              borderTopWidth: 1,
+              borderColor: COLORS.border,
+              backgroundColor: COLORS.panelBg,
+              padding: 10,
+              maxHeight: 120,
+            }}
+          >
+            <Text style={{ fontSize: 9, color: COLORS.textDim, marginBottom: 4 }}>
+              Preview: {selectedCmd?.label}
+            </Text>
+            {previewLines.map((line, i) => (
+              <Text
+                key={i}
+                style={{
+                  fontSize: 10,
+                  color: COLORS.textMuted,
+                  fontFamily: 'monospace',
+                }}
+              >
+                {String(i + 1).padStart(3, ' ')}  {line.slice(0, 80)}
+              </Text>
+            ))}
+          </Box>
+        ) : null}
 
         {/* Footer */}
         <Row
@@ -381,9 +565,12 @@ export function CommandPalette({
           }}
         >
           <Text style={{ fontSize: 9, color: COLORS.textMuted }}>
-            {filtered.length} commands
+            {footerLabel}
           </Text>
           <Row style={{ gap: 12, alignItems: 'center' }}>
+            <Text style={{ fontSize: 9, color: COLORS.textDim }}>
+              {isGotoFileMode ? '>file' : 'ctrl+shift+p'}
+            </Text>
             <Text style={{ fontSize: 9, color: COLORS.textDim }}>
               &uarr;&darr; to navigate
             </Text>
