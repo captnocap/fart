@@ -79,3 +79,4 @@ require('./panels/logviewer.panel');
 require('./panels/rssreader.panel');
 require('./panels/apis.panel');
 require('./panels/scene3d.panel');
+require('./panels/ai.panel');
