@@ -86,7 +86,7 @@ import { ChatSurface } from './components/chat';
 import { SettingsSurface } from './components/settings';
 import { LandingSurface } from './components/landing';
 import { WorkerCanvas } from './components/cockpit/WorkerCanvas';
-import { PageModeTransition } from './anim';
+import { FadeIn, PageModeTransition, SlideIn } from './anim';
 
 import { usePersistentState } from './hooks/usePersistentState';
 import { useFileContent } from '../../runtime/hooks/useFileContent';
@@ -1447,23 +1447,29 @@ export default function CursorIdeApp() {
   ];
   const renderMainSurface = (mode: 'landing' | 'settings' | 'editor' | 'cockpit') => {
     if (mode === 'cockpit') {
-      return <WorkerCanvas widthBand={widthBand} windowHeight={windowHeight} />;
+      return <FadeIn delay={0} style={{ width: '100%', height: '100%', flexGrow: 1, flexBasis: 0, minHeight: 0 }}><WorkerCanvas widthBand={widthBand} windowHeight={windowHeight} /></FadeIn>;
     }
     if (mode === 'landing') {
       return (
-        <LandingSurface workspaceName={workspaceName} workspaceTagline={workspaceTagline} workDir={workDir} gitBranch={gitBranch} gitRemote={gitRemote} branchAhead={branchAhead} branchBehind={branchBehind} changedCount={changedCount} stagedCount={stagedCount} widthBand={widthBand} stats={landingStats} projects={landingProjects} recentFiles={landingRecent} connections={landingConnections} onOpenPath={openFileByPath} onIndexWorkspace={indexProject} onOpenSettings={openSettingsSurface} />
+        <FadeIn delay={0} style={{ width: '100%', height: '100%', flexGrow: 1, flexBasis: 0, minHeight: 0 }}>
+          <LandingSurface workspaceName={workspaceName} workspaceTagline={workspaceTagline} workDir={workDir} gitBranch={gitBranch} gitRemote={gitRemote} branchAhead={branchAhead} branchBehind={branchBehind} changedCount={changedCount} stagedCount={stagedCount} widthBand={widthBand} stats={landingStats} projects={landingProjects} recentFiles={landingRecent} connections={landingConnections} onOpenPath={openFileByPath} onIndexWorkspace={indexProject} onOpenSettings={openSettingsSurface} />
+        </FadeIn>
       );
     }
 
     if (mode === 'settings') {
       return (
-        <SettingsSurface activeSection={settingsSection} selectedProviderId={selectedProviderId} selectedModelName={modelDisplayName} workspaceName={workspaceName} gitBranch={gitBranch} agentStatusText={agentStatusText} workDir={workDir} widthBand={widthBand} sections={settingsSections} providers={SETTINGS_PROVIDERS} providerConfigs={providerConfigs} contextRows={SETTINGS_CONTEXT_ROWS} memoryRows={SETTINGS_MEMORY_ROWS} pluginRows={SETTINGS_PLUGIN_ROWS} automationRows={SETTINGS_AUTOMATION_ROWS} capabilityRows={SETTINGS_CAPABILITY_ROWS} defaultModels={defaultModels} proxyConfigs={proxyConfigs} proxyStatus={proxyStatus} checkpoints={loadCheckpoints()} onSelectSection={setSettingsSection} onSelectProvider={setSelectedProviderId} onToggleProvider={toggleProviderEnabled} onUpdateProvider={updateProviderConfig} onSelectModel={selectModel} onUpdateDefaultModels={(s: DefaultModelsSettings) => { setDefaultModels(s); saveDefaultModels(s); }} onVariablesChange={() => {}} onProxyChange={() => { setProxyConfigs(listProxyConfigs()); setProxyStatus(getProxyStatus()); }} onKeysChange={() => {}} onIndexChange={() => {}} onSelectCheckpoint={(id: string) => setSettingsSection('checkpoints')} />
+        <FadeIn delay={0} style={{ width: '100%', height: '100%', flexGrow: 1, flexBasis: 0, minHeight: 0 }}>
+          <SettingsSurface activeSection={settingsSection} selectedProviderId={selectedProviderId} selectedModelName={modelDisplayName} workspaceName={workspaceName} gitBranch={gitBranch} agentStatusText={agentStatusText} workDir={workDir} widthBand={widthBand} sections={settingsSections} providers={SETTINGS_PROVIDERS} providerConfigs={providerConfigs} contextRows={SETTINGS_CONTEXT_ROWS} memoryRows={SETTINGS_MEMORY_ROWS} pluginRows={SETTINGS_PLUGIN_ROWS} automationRows={SETTINGS_AUTOMATION_ROWS} capabilityRows={SETTINGS_CAPABILITY_ROWS} defaultModels={defaultModels} proxyConfigs={proxyConfigs} proxyStatus={proxyStatus} checkpoints={loadCheckpoints()} onSelectSection={setSettingsSection} onSelectProvider={setSelectedProviderId} onToggleProvider={toggleProviderEnabled} onUpdateProvider={updateProviderConfig} onSelectModel={selectModel} onUpdateDefaultModels={(s: DefaultModelsSettings) => { setDefaultModels(s); saveDefaultModels(s); }} onVariablesChange={() => {}} onProxyChange={() => { setProxyConfigs(listProxyConfigs()); setProxyStatus(getProxyStatus()); }} onKeysChange={() => {}} onIndexChange={() => {}} onSelectCheckpoint={(id: string) => setSettingsSection('checkpoints')} />
+        </FadeIn>
       );
     }
 
     return (
       <Box style={{ display: 'flex', flexGrow: 1, flexBasis: 0, minHeight: 0 }}>
-        <EditorSurface content={editorContent} contentHandle={fileContentHandle} editorRows={editorRows} editorColorRows={editorColorRows} largeFileMode={editorLargeFileMode} totalLines={totalLines} cursorLine={cursorPosition.line} cursorColumn={cursorPosition.column} modified={editorModified} currentFilePath={currentFilePath} widthBand={widthBand} windowHeight={windowHeight} onChange={updateEditorContent} onSave={saveCurrentFile} />
+        <FadeIn delay={0} style={{ width: '100%', height: '100%', flexGrow: 1, flexBasis: 0, minHeight: 0, display: 'flex' }}>
+          <EditorSurface content={editorContent} contentHandle={fileContentHandle} editorRows={editorRows} editorColorRows={editorColorRows} largeFileMode={editorLargeFileMode} totalLines={totalLines} cursorLine={cursorPosition.line} cursorColumn={cursorPosition.column} modified={editorModified} currentFilePath={currentFilePath} widthBand={widthBand} windowHeight={windowHeight} onChange={updateEditorContent} onSave={saveCurrentFile} />
+        </FadeIn>
       </Box>
     );
   };
@@ -1647,29 +1653,57 @@ export default function CursorIdeApp() {
                 <PageModeTransition mode={activeView as any} durationMs={220} style={{ flexGrow: 1, flexBasis: 0, minHeight: 0 }} renderPage={renderMainSurface} />
               </Box>
               {showTerminalPanel ? (
-                <TerminalPanel
-                  workDir={workDir}
-                  gitBranch={gitBranch}
-                  widthBand={widthBand}
-                  height={terminalDockExpanded ? '100%' : dockedTerminalHeight}
-                  pane={terminalPane}
-                  history={terminalHistory}
-                  recording={terminalRecording}
-                  recordFrames={terminalRecordFrames}
-                  playState={terminalPlaybackState}
-                  expanded={terminalDockExpanded}
-                  onSetPane={(pane: string) => setTerminalPane(pane)}
-                  onToggleExpanded={toggleTerminalDockExpanded}
-                  onBeginResize={terminalDockExpanded ? undefined : beginTerminalDockResize}
-                  onToggleRecording={toggleTerminalRecording}
-                  onSaveSnapshot={saveTerminalSnapshot}
-                  onLoadPlayback={loadTerminalPlayback}
-                  onTogglePlayback={toggleTerminalPlayback}
-                  onStepPlayback={stepTerminalPlayback}
-                  onJumpLive={() => setTerminalPane('live')}
-                  onClearHistory={clearTerminalHistory}
-                  onClose={() => closeTerminalSurface('close button')}
-                />
+                terminalDockExpanded ? (
+                  <TerminalPanel
+                    workDir={workDir}
+                    gitBranch={gitBranch}
+                    widthBand={widthBand}
+                    height={'100%'}
+                    pane={terminalPane}
+                    history={terminalHistory}
+                    recording={terminalRecording}
+                    recordFrames={terminalRecordFrames}
+                    playState={terminalPlaybackState}
+                    expanded={terminalDockExpanded}
+                    onSetPane={(pane: string) => setTerminalPane(pane)}
+                    onToggleExpanded={toggleTerminalDockExpanded}
+                    onBeginResize={undefined}
+                    onToggleRecording={toggleTerminalRecording}
+                    onSaveSnapshot={saveTerminalSnapshot}
+                    onLoadPlayback={loadTerminalPlayback}
+                    onTogglePlayback={toggleTerminalPlayback}
+                    onStepPlayback={stepTerminalPlayback}
+                    onJumpLive={() => setTerminalPane('live')}
+                    onClearHistory={clearTerminalHistory}
+                    onClose={() => closeTerminalSurface('close button')}
+                  />
+                ) : (
+                  <SlideIn from="bottom" delay={0} durationMs={180} style={{ width: '100%', flexGrow: 1, flexBasis: 0, minHeight: 0 }}>
+                    <TerminalPanel
+                      workDir={workDir}
+                      gitBranch={gitBranch}
+                      widthBand={widthBand}
+                      height={dockedTerminalHeight}
+                      pane={terminalPane}
+                      history={terminalHistory}
+                      recording={terminalRecording}
+                      recordFrames={terminalRecordFrames}
+                      playState={terminalPlaybackState}
+                      expanded={terminalDockExpanded}
+                      onSetPane={(pane: string) => setTerminalPane(pane)}
+                      onToggleExpanded={toggleTerminalDockExpanded}
+                      onBeginResize={beginTerminalDockResize}
+                      onToggleRecording={toggleTerminalRecording}
+                      onSaveSnapshot={saveTerminalSnapshot}
+                      onLoadPlayback={loadTerminalPlayback}
+                      onTogglePlayback={toggleTerminalPlayback}
+                      onStepPlayback={stepTerminalPlayback}
+                      onJumpLive={() => setTerminalPane('live')}
+                      onClearHistory={clearTerminalHistory}
+                      onClose={() => closeTerminalSurface('close button')}
+                    />
+                  </SlideIn>
+                )
               ) : null}
             </Col>
 

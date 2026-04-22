@@ -5,11 +5,12 @@ const { memo } = React;
 import { Box, Col, Pressable, Row, ScrollView, Text, TextArea, TextInput } from '../../../runtime/primitives';
 import { ChatMessage } from './chatmessage';
 import { baseName, COLORS } from '../theme';
-import { Glyph, Pill } from './shared';
+import { Glyph, HoverPressable, Pill } from './shared';
 import { getModelIconInfo } from '../model-icons';
 import { findModelById } from '../providers';
 import { expandVariables, hasVariables, type ExpansionResult } from '../variables';
 import { usePulse } from '../anim';
+import { FadeIn } from '../anim';
 import { useComposerHistory, useMessageSearch, useTypingDots } from '../chat-hooks';
 import { exportConversation, copyToClipboard, saveConversationToFile } from '../chat-export';
 
@@ -253,9 +254,9 @@ function ChatSurfaceImpl(props: any) {
           <ContextMeter messages={messages} modelId={selectedModel} />
         </Row>
         <Row style={{ gap: 8 }}>
-          <Pressable onPress={() => setShowSearch(!showSearch)}><Text fontSize={10} color={showSearch ? COLORS.blue : COLORS.textDim}>Search</Text></Pressable>
-          <Pressable onPress={() => setShowExportMenu(!showExportMenu)}><Text fontSize={10} color={showExportMenu ? COLORS.blue : COLORS.textDim}>Export</Text></Pressable>
-          <Pressable onPress={props.onNewConversation}><Text fontSize={10} color={COLORS.blue}>New</Text></Pressable>
+          <HoverPressable onPress={() => setShowSearch(!showSearch)} style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 8, backgroundColor: 'transparent' }}><Text fontSize={10} color={showSearch ? COLORS.blue : COLORS.textDim}>Search</Text></HoverPressable>
+          <HoverPressable onPress={() => setShowExportMenu(!showExportMenu)} style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 8, backgroundColor: 'transparent' }}><Text fontSize={10} color={showExportMenu ? COLORS.blue : COLORS.textDim}>Export</Text></HoverPressable>
+          <HoverPressable onPress={props.onNewConversation} style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 8, backgroundColor: 'transparent' }}><Text fontSize={10} color={COLORS.blue}>New</Text></HoverPressable>
         </Row>
       </Row>
 
@@ -271,7 +272,7 @@ function ChatSurfaceImpl(props: any) {
             style={{ flexGrow: 1, height: 28, borderWidth: 1, borderColor: COLORS.border, borderRadius: 6, paddingLeft: 8 }}
           />
           <Text fontSize={10} color={COLORS.textDim}>{searchResults.length} matches</Text>
-          <Pressable onPress={() => { setShowSearch(false); setSearchQuery(''); }}><Text fontSize={10} color={COLORS.textDim}>✕</Text></Pressable>
+          <HoverPressable onPress={() => { setShowSearch(false); setSearchQuery(''); }} style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 8, backgroundColor: 'transparent' }}><Text fontSize={10} color={COLORS.textDim}>✕</Text></HoverPressable>
         </Row>
       ) : null}
 
@@ -279,18 +280,18 @@ function ChatSurfaceImpl(props: any) {
         <Col style={{ gap: 4, padding: 10, borderBottomWidth: 1, borderColor: COLORS.borderSoft, backgroundColor: COLORS.panelRaised }}>
           <Text fontSize={10} color={COLORS.textDim} style={{ fontWeight: 'bold' }}>Export Conversation</Text>
           <Row style={{ gap: 8, flexWrap: 'wrap' }}>
-            <Pressable onPress={() => { copyToClipboard(exportConversation(messages, { format: 'markdown' })); setShowExportMenu(false); }}>
+            <HoverPressable onPress={() => { copyToClipboard(exportConversation(messages, { format: 'markdown' })); setShowExportMenu(false); }}>
               <Pill label="Copy Markdown" color={COLORS.blue} tiny={true} />
-            </Pressable>
-            <Pressable onPress={() => { copyToClipboard(exportConversation(messages, { format: 'text' })); setShowExportMenu(false); }}>
+            </HoverPressable>
+            <HoverPressable onPress={() => { copyToClipboard(exportConversation(messages, { format: 'text' })); setShowExportMenu(false); }}>
               <Pill label="Copy Text" color={COLORS.blue} tiny={true} />
-            </Pressable>
-            <Pressable onPress={() => { const r = saveConversationToFile(messages, props.workDir || '.', { format: 'markdown' }); setShowExportMenu(false); }}>
+            </HoverPressable>
+            <HoverPressable onPress={() => { const r = saveConversationToFile(messages, props.workDir || '.', { format: 'markdown' }); setShowExportMenu(false); }}>
               <Pill label="Save .md" color={COLORS.green} tiny={true} />
-            </Pressable>
-            <Pressable onPress={() => { const r = saveConversationToFile(messages, props.workDir || '.', { format: 'json' }); setShowExportMenu(false); }}>
+            </HoverPressable>
+            <HoverPressable onPress={() => { const r = saveConversationToFile(messages, props.workDir || '.', { format: 'json' }); setShowExportMenu(false); }}>
               <Pill label="Save .json" color={COLORS.green} tiny={true} />
-            </Pressable>
+            </HoverPressable>
           </Row>
         </Col>
       ) : null}
@@ -326,14 +327,15 @@ function ChatSurfaceImpl(props: any) {
           ) : null}
 
           {messages.map((msg: any, idx: number) => (
-            <ChatMessage
-              key={msg.role + '_' + idx + '_' + (msg.text || '').slice(0, 16)}
-              message={msg}
-              index={idx}
-              isLast={idx === messages.length - 1}
-              compact={compactBand}
-              isStreaming={idx === messages.length - 1 && props.isGenerating && msg.role === 'assistant'}
-            />
+            <FadeIn key={msg.role + '_' + idx + '_' + (msg.text || '').slice(0, 16)} delay={Math.min(idx * 18, 140)}>
+              <ChatMessage
+                message={msg}
+                index={idx}
+                isLast={idx === messages.length - 1}
+                compact={compactBand}
+                isStreaming={idx === messages.length - 1 && props.isGenerating && msg.role === 'assistant'}
+              />
+            </FadeIn>
           ))}
 
           {props.isGenerating ? (
@@ -345,7 +347,7 @@ function ChatSurfaceImpl(props: any) {
       <Col style={{ padding: compactBand ? 10 : 12, gap: 8, borderTopWidth: 1, borderColor: COLORS.borderSoft }}>
         <Row style={{ gap: 6, flexWrap: 'wrap' }}>
           {['ask', 'plan', 'task', 'agent'].map((mode) => (
-            <Pressable
+            <HoverPressable
               key={mode}
               onPress={() => props.onSetMode(mode)}
               style={{
@@ -362,7 +364,7 @@ function ChatSurfaceImpl(props: any) {
               <Text fontSize={10} color={agentMode === mode ? (mode === 'task' ? COLORS.green : mode === 'agent' ? COLORS.orange : COLORS.blue) : COLORS.text}>
                 {mode.charAt(0).toUpperCase() + mode.slice(1)}
               </Text>
-            </Pressable>
+            </HoverPressable>
           ))}
         </Row>
 
@@ -377,10 +379,10 @@ function ChatSurfaceImpl(props: any) {
               {attachments.map((attachment: any) => (
                 <Row key={attachment.id} style={{ alignItems: 'center', gap: 6, paddingLeft: 8, paddingRight: 8, paddingTop: 5, paddingBottom: 5, borderRadius: 999, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelAlt }}>
                   <Text fontSize={10} color={COLORS.blue}>{attachment.name}</Text>
-                  <Pressable onPress={() => props.onRemoveAttachment(attachment.id)}><Text fontSize={10} color={COLORS.textDim}>X</Text></Pressable>
+                  <HoverPressable onPress={() => props.onRemoveAttachment(attachment.id)} style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 8, backgroundColor: 'transparent' }}><Text fontSize={10} color={COLORS.textDim}>X</Text></HoverPressable>
                 </Row>
               ))}
-              <Pressable onPress={props.onClearAttachments}><Text fontSize={10} color={COLORS.red}>Clear</Text></Pressable>
+              <HoverPressable onPress={props.onClearAttachments} style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 8, backgroundColor: 'transparent' }}><Text fontSize={10} color={COLORS.red}>Clear</Text></HoverPressable>
             </Row>
           ) : null}
 
@@ -398,7 +400,7 @@ function ChatSurfaceImpl(props: any) {
                 {menuType === 'slash' ? 'Commands' : 'Files'}
               </Text>
               {menuItems.map((item, idx) => (
-                <Pressable
+                <HoverPressable
                   key={item.label}
                   onPress={() => insertMenuItem(item.value)}
                   style={{
@@ -411,7 +413,7 @@ function ChatSurfaceImpl(props: any) {
                     <Text fontSize={10} color={idx === safeHighlight ? COLORS.blue : COLORS.textBright} style={{ fontWeight: 'bold' }}>{item.label}</Text>
                     <Text fontSize={10} color={COLORS.textDim}>{item.desc}</Text>
                   </Row>
-                </Pressable>
+                </HoverPressable>
               ))}
             </Col>
           ) : null}
@@ -429,24 +431,24 @@ function ChatSurfaceImpl(props: any) {
 
           <Col style={{ gap: 8 }}>
             <Row style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-              <Pressable onPress={props.onAttachCurrentFile}><Text fontSize={10} color={COLORS.blue}>File</Text></Pressable>
-              <Pressable onPress={props.onAttachSymbol}><Text fontSize={10} color={COLORS.blue}>Symbol</Text></Pressable>
-              <Pressable onPress={props.onAttachGit}><Text fontSize={10} color={COLORS.blue}>Git</Text></Pressable>
-              <Pressable onPress={props.onToggleWebSearch}><Text fontSize={10} color={props.webSearch ? COLORS.blue : COLORS.textDim}>Web</Text></Pressable>
-              <Pressable onPress={props.onToggleTermAccess}><Text fontSize={10} color={props.termAccess ? COLORS.blue : COLORS.textDim}>Term</Text></Pressable>
-              <Pressable onPress={props.onToggleAutoApply}><Text fontSize={10} color={props.autoApply ? COLORS.blue : COLORS.textDim}>Auto</Text></Pressable>
+              <HoverPressable onPress={props.onAttachCurrentFile} style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 8, backgroundColor: 'transparent' }}><Text fontSize={10} color={COLORS.blue}>File</Text></HoverPressable>
+              <HoverPressable onPress={props.onAttachSymbol} style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 8, backgroundColor: 'transparent' }}><Text fontSize={10} color={COLORS.blue}>Symbol</Text></HoverPressable>
+              <HoverPressable onPress={props.onAttachGit} style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 8, backgroundColor: 'transparent' }}><Text fontSize={10} color={COLORS.blue}>Git</Text></HoverPressable>
+              <HoverPressable onPress={props.onToggleWebSearch} style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 8, backgroundColor: 'transparent' }}><Text fontSize={10} color={props.webSearch ? COLORS.blue : COLORS.textDim}>Web</Text></HoverPressable>
+              <HoverPressable onPress={props.onToggleTermAccess} style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 8, backgroundColor: 'transparent' }}><Text fontSize={10} color={props.termAccess ? COLORS.blue : COLORS.textDim}>Term</Text></HoverPressable>
+              <HoverPressable onPress={props.onToggleAutoApply} style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 8, backgroundColor: 'transparent' }}><Text fontSize={10} color={props.autoApply ? COLORS.blue : COLORS.textDim}>Auto</Text></HoverPressable>
             </Row>
             <Row style={{ gap: 8, alignItems: 'center', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
               {inputTokenEstimate > 0 ? <Text fontSize={10} color={inputTokenEstimate > 16000 ? COLORS.red : inputTokenEstimate > 8000 ? COLORS.yellow : COLORS.textDim}>{inputTokenEstimate + ' tkns'}</Text> : null}
-              <Pressable onPress={props.onCycleModel}>
+              <HoverPressable onPress={props.onCycleModel} style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 8, backgroundColor: 'transparent' }}>
                 <Row style={{ alignItems: 'center', gap: 4 }}>
                   <ModelIconBadge modelId={selectedModel} size={12} />
                   <Text fontSize={10} color={COLORS.text}>{modelDisplayName}</Text>
                 </Row>
-              </Pressable>
-              <Pressable onPress={props.onSend} style={{ paddingLeft: 14, paddingRight: 14, paddingTop: 8, paddingBottom: 8, borderRadius: 10, backgroundColor: COLORS.blueDeep, borderWidth: 1, borderColor: COLORS.blue }}>
+              </HoverPressable>
+              <HoverPressable onPress={props.onSend} style={{ paddingLeft: 14, paddingRight: 14, paddingTop: 8, paddingBottom: 8, borderRadius: 10, backgroundColor: COLORS.blueDeep, borderWidth: 1, borderColor: COLORS.blue }}>
                 <Text fontSize={11} color={COLORS.blue} style={{ fontWeight: 'bold' }}>{sendLabel}</Text>
-              </Pressable>
+              </HoverPressable>
             </Row>
           </Col>
         </Box>

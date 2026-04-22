@@ -3,7 +3,7 @@ const { useState, useEffect, useMemo } = React;
 
 import { Box, Col, Pressable, Row, Text } from '../../../runtime/primitives';
 import { COLORS } from '../theme';
-import { Glyph, Pill } from './shared';
+import { Glyph, HoverPressable, Pill } from './shared';
 import { getModelIconInfo } from '../model-icons';
 import type { Message, ToolExecution } from '../types';
 
@@ -314,23 +314,18 @@ export function ToolCallCard(props: { exec: ToolExecution }) {
   );
 }
 
-// ── Streaming cursor ──────────────────────────────────────────
+// ── Streaming pulsing dot ─────────────────────────────────────
 
-function StreamingCursor() {
-  const [visible, setVisible] = useState(true);
-
-  useEffect(() => {
-    const id = setInterval(() => setVisible((v) => !v), 530);
-    return () => clearInterval(id);
-  }, []);
-
+function PulsingDot() {
+  const pulse = usePulse(0.3, 1, 1200);
   return (
     <Box
       style={{
         width: 8,
-        height: 16,
+        height: 8,
+        borderRadius: 4,
         backgroundColor: COLORS.blue,
-        opacity: visible ? 1 : 0,
+        opacity: pulse,
       }}
     />
   );
@@ -396,14 +391,14 @@ function renderMarkdownNodes(nodes: InternalNode[], onCopyCode: (code: string) =
               <Text fontSize={9} color={COLORS.textMuted} style={{ fontWeight: 'bold' }}>
                 {node.language || 'text'}
               </Text>
-              <Pressable onPress={() => onCopyCode(node.content)}>
+              <HoverPressable onPress={() => onCopyCode(node.content)} style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 8, backgroundColor: 'transparent' }}>
                 <Row style={{ gap: 4, alignItems: 'center' }}>
                   <Glyph icon="copy" tone={COLORS.textDim} backgroundColor="transparent" tiny={true} />
                   <Text fontSize={9} color={COLORS.textMuted}>
                     Copy
                   </Text>
                 </Row>
-              </Pressable>
+              </HoverPressable>
             </Row>
             <Box style={{ padding: 10 }}>
               <Text fontSize={10} color={COLORS.textBright} style={{ fontFamily: 'monospace' }}>
@@ -516,7 +511,7 @@ export function ChatMessage(props: {
         <Text fontSize={11} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>
           {isUser ? 'You' : isAssistant ? 'Agent' : 'System'}
         </Text>
-        {hovered || compact ? (
+        {isLast || hovered || compact ? (
           <Text fontSize={9} color={COLORS.textDim}>
             {message.time}
           </Text>
@@ -528,13 +523,13 @@ export function ChatMessage(props: {
             <Pill label={message.model} color={COLORS.textMuted} tiny={true} />
           </Row>
         ) : null}
-        {hovered ? (
-          <Pressable onPress={handleCopyMessage}>
+        {hovered && !isLast ? (
+          <HoverPressable onPress={handleCopyMessage} style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 8, backgroundColor: 'transparent' }}>
             <Row style={{ gap: 4, alignItems: 'center' }}>
               <Glyph icon="copy" tone={COLORS.textDim} backgroundColor="transparent" tiny={true} />
               <Text fontSize={9} color={COLORS.textDim}>Copy</Text>
             </Row>
-          </Pressable>
+          </HoverPressable>
         ) : null}
       </Row>
 
@@ -552,8 +547,9 @@ export function ChatMessage(props: {
         <Col style={{ gap: 6 }}>
           {renderMarkdownNodes(mdNodes, handleCopyCode)}
           {isStreaming ? (
-            <Row style={{ alignItems: 'center' }}>
-              <StreamingCursor />
+            <Row style={{ alignItems: 'center', gap: 6 }}>
+              <PulsingDot />
+              <Text fontSize={10} color={COLORS.textDim}>responding...</Text>
             </Row>
           ) : null}
         </Col>
@@ -580,43 +576,43 @@ export function ChatMessage(props: {
       {/* Actions */}
       {isLast && (
         <Row style={{ gap: 10, alignItems: 'center', paddingLeft: 4 }}>
-          <Pressable onPress={handleCopyMessage}>
+          <HoverPressable onPress={handleCopyMessage} style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 8, backgroundColor: 'transparent' }}>
             <Row style={{ gap: 4, alignItems: 'center' }}>
               <Glyph icon="copy" tone={COLORS.textDim} backgroundColor="transparent" tiny={true} />
               <Text fontSize={9} color={COLORS.textDim}>
                 Copy
               </Text>
             </Row>
-          </Pressable>
+          </HoverPressable>
           {isAssistant && onRetry ? (
-            <Pressable onPress={onRetry}>
+            <HoverPressable onPress={onRetry} style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 8, backgroundColor: 'transparent' }}>
               <Row style={{ gap: 4, alignItems: 'center' }}>
                 <Glyph icon="refresh" tone={COLORS.textDim} backgroundColor="transparent" tiny={true} />
                 <Text fontSize={9} color={COLORS.textDim}>
                   Retry
                 </Text>
               </Row>
-            </Pressable>
+            </HoverPressable>
           ) : null}
           {isUser && onEdit ? (
-            <Pressable onPress={onEdit}>
+            <HoverPressable onPress={onEdit} style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 8, backgroundColor: 'transparent' }}>
               <Row style={{ gap: 4, alignItems: 'center' }}>
                 <Glyph icon="edit" tone={COLORS.textDim} backgroundColor="transparent" tiny={true} />
                 <Text fontSize={9} color={COLORS.textDim}>
                   Edit
                 </Text>
               </Row>
-            </Pressable>
+            </HoverPressable>
           ) : null}
           {onDelete ? (
-            <Pressable onPress={onDelete}>
+            <HoverPressable onPress={onDelete} style={{ paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 8, backgroundColor: 'transparent' }}>
               <Row style={{ gap: 4, alignItems: 'center' }}>
                 <Glyph icon="trash" tone={COLORS.textDim} backgroundColor="transparent" tiny={true} />
                 <Text fontSize={9} color={COLORS.textDim}>
                   Delete
                 </Text>
               </Row>
-            </Pressable>
+            </HoverPressable>
           ) : null}
         </Row>
       )}
