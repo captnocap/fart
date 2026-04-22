@@ -97,7 +97,7 @@ export function useNodeGraph(intervalMs: number = 500): {
   snapshot: GraphSnapshot;
   refresh: () => void;
 } {
-  const [snap, setSnap] = useState<GraphSnapshot>(() => snapshot());
+  const [snap, setSnap] = useState(() => snapshot());
   const mounted = useRef(true);
 
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
