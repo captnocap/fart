@@ -22,6 +22,17 @@ const TILE_TITLES: Record<TileType, string> = {
   stats: 'Ambient',
 };
 
+const TILE_ACCENT: Record<TileType, string> = {
+  clock: COLORS.blue,
+  recent: COLORS.green,
+  launch: COLORS.orange,
+  theme: COLORS.purple,
+  shader: COLORS.yellow,
+  stats: COLORS.blue,
+  weatherless: COLORS.textMuted,
+  scratch: COLORS.red,
+};
+
 export function HomeTile(props: {
   tile: HomeTileDef;
   onMove: (x: number, y: number) => void;
@@ -53,7 +64,11 @@ export function HomeTile(props: {
       case 'stats':
         return <StatsTile openFiles={props.openFiles} sessionMinutes={props.sessionMinutes} />;
       default:
-        return null;
+        return (
+          <Box style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
+            <Text fontSize={10} color={COLORS.textDim}>Unknown tile: {tile.type}</Text>
+          </Box>
+        );
     }
   })();
 
@@ -64,8 +79,10 @@ export function HomeTile(props: {
         height: '100%',
         borderRadius: TOKENS.radiusMd,
         backgroundColor: COLORS.panelRaised,
-        borderWidth: 1,
+        borderWidth: 2,
         borderColor: COLORS.border,
+        borderTopWidth: 3,
+        borderTopColor: TILE_ACCENT[tile.type] ?? COLORS.border,
         overflow: 'hidden',
       }}
     >
