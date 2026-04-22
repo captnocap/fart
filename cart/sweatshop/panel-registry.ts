@@ -78,6 +78,7 @@ require('./panels/chemistry.panel');
 require('./panels/molecule.panel');
 require('./panels/vesper.panel');
 require('./panels/mcp-server.panel');
+require('./panels/browser.panel');
 require('./panels/presentation.panel');
 require('./panels/toast-history.panel');
 require('./panels/logviewer.panel');
