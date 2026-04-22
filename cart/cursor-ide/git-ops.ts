@@ -225,6 +225,83 @@ export function gitReset(workDir: string, path: string): { ok: boolean; error?: 
   }
 }
 
+export interface GitStashEntry {
+  index: number;
+  ref: string;
+  message: string;
+}
+
+export function gitStashList(workDir: string): GitStashEntry[] {
+  try {
+    const raw = execRaw(`cd "${workDir}" && git stash list 2>/dev/null`);
+    const lines = trimLines(raw);
+    return lines.map((line, i) => {
+      const colon = line.indexOf(':');
+      const ref = colon > 0 ? line.slice(0, colon).trim() : `stash@{${i}}`;
+      const message = colon > 0 ? line.slice(colon + 1).trim() : line.trim();
+      return { index: i, ref, message };
+    });
+  } catch {
+    return [];
+  }
+}
+
+export function gitStashApply(workDir: string, ref: string): { ok: boolean; error?: string } {
+  try {
+    execRaw(`cd "${workDir}" && git stash apply "${ref}" 2>&1`);
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, error: e?.message || String(e) };
+  }
+}
+
+export function gitStashDrop(workDir: string, ref: string): { ok: boolean; error?: string } {
+  try {
+    execRaw(`cd "${workDir}" && git stash drop "${ref}" 2>&1`);
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, error: e?.message || String(e) };
+  }
+}
+
+export function gitAmend(workDir: string, message?: string): { ok: boolean; error?: string } {
+  try {
+    if (message && message.trim()) {
+      const escaped = message.replace(/'/g, "'\\''");
+      execRaw(`cd "${workDir}" && git commit --amend -m '${escaped}' 2>&1`);
+    } else {
+      execRaw(`cd "${workDir}" && git commit --amend --no-edit 2>&1`);
+    }
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, error: e?.message || String(e) };
+  }
+}
+
+export function gitBranchDelete(workDir: string, branch: string, force?: boolean): { ok: boolean; error?: string } {
+  try {
+    const flag = force ? '-D' : '-d';
+    execRaw(`cd "${workDir}" && git branch ${flag} "${branch}" 2>&1`);
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, error: e?.message || String(e) };
+  }
+}
+
+export function gitAheadBehind(workDir: string, branch: string): { ahead: number; behind: number } {
+  try {
+    const raw = execRaw(
+      `cd "${workDir}" && git rev-list --left-right --count "${branch}@{upstream}...${branch}" 2>/dev/null`,
+    ).trim();
+    if (!raw) return { ahead: 0, behind: 0 };
+    const parts = raw.includes('\t') ? raw.split('\t') : raw.split(/\s+/);
+    if (parts.length < 2) return { ahead: 0, behind: 0 };
+    return { behind: parseInt(parts[0], 10) || 0, ahead: parseInt(parts[1], 10) || 0 };
+  } catch {
+    return { ahead: 0, behind: 0 };
+  }
+}
+
 export function gitStatusList(workDir: string): { path: string; code: string; staged: boolean }[] {
   try {
     const raw = execRaw(`cd "${workDir}" && git status --porcelain 2>/dev/null`);

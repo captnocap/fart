@@ -6,6 +6,9 @@ import { COLORS } from '../theme';
 import { Glyph, Pill } from './shared';
 import {
   gitAdd,
+  gitAheadBehind,
+  gitAmend,
+  gitBranchDelete,
   gitBranchList,
   gitCheckout,
   gitCommit,
@@ -17,10 +20,14 @@ import {
   gitPush,
   gitReset,
   gitStash,
+  gitStashApply,
+  gitStashDrop,
+  gitStashList,
   gitStashPop,
   gitStatusList,
   type GitCommitInfo,
   type GitDiff,
+  type GitStashEntry,
 } from '../git-ops';
 
 function execRaw(cmd: string): string {
@@ -58,6 +65,8 @@ export function GitPanel(props: {
   const [behind, setBehind] = useState(0);
 
   const [logs, setLogs] = useState<GitCommitInfo[]>([]);
+  const [stashes, setStashes] = useState<GitStashEntry[]>([]);
+  const [branchAheadBehind, setBranchAheadBehind] = useState<Record<string, { ahead: number; behind: number }>>({});
   const [errorBanner, setErrorBanner] = useState('');
 
   function loadAheadBehind() {
@@ -93,7 +102,14 @@ export function GitPanel(props: {
     setDiffs(allDiffs);
 
     setDiffStats(gitDiffStats(workDir));
-    setLogs(gitLog(workDir, 12));
+    setLogs(gitLog(workDir, 50));
+    setStashes(gitStashList(workDir));
+    const ab: Record<string, { ahead: number; behind: number }> = {};
+    for (const b of branchInfo.branches) {
+      if (b.startsWith('remotes/')) continue;
+      ab[b] = gitAheadBehind(workDir, b);
+    }
+    setBranchAheadBehind(ab);
     loadAheadBehind();
     setErrorBanner('');
     props.onRefresh?.();
@@ -106,6 +122,10 @@ export function GitPanel(props: {
   function handleCommit() {
     if (!commitMessage.trim()) {
       setErrorBanner('Enter a commit message');
+      return;
+    }
+    if (stagedFiles.length === 0) {
+      setErrorBanner('Nothing staged — stage files before committing');
       return;
     }
     const res = gitCommit(workDir, commitMessage.trim());
@@ -146,6 +166,37 @@ export function GitPanel(props: {
       setShowBranchDropdown(false);
       refresh();
     }
+  }
+
+  function handleAmend() {
+    const res = gitAmend(workDir, commitMessage.trim() || undefined);
+    if (!res.ok) setErrorBanner(res.error || 'Amend failed');
+    else {
+      setCommitMessage('');
+      refresh();
+    }
+  }
+
+  function handleDeleteBranch(branch: string) {
+    if (branch === currentBranch) {
+      setErrorBanner('Cannot delete the current branch');
+      return;
+    }
+    const res = gitBranchDelete(workDir, branch);
+    if (!res.ok) setErrorBanner(res.error || 'Delete branch failed');
+    else refresh();
+  }
+
+  function handleStashApply(ref: string) {
+    const res = gitStashApply(workDir, ref);
+    if (!res.ok) setErrorBanner(res.error || 'Stash apply failed');
+    else refresh();
+  }
+
+  function handleStashDrop(ref: string) {
+    const res = gitStashDrop(workDir, ref);
+    if (!res.ok) setErrorBanner(res.error || 'Stash drop failed');
+    else refresh();
   }
 
   function handleDiscard(path: string, code: string) {
@@ -250,21 +301,49 @@ export function GitPanel(props: {
           >
             <ScrollView style={{ flexGrow: 1 }}>
               <Col style={{ gap: 4 }}>
-                {branches.map((b) => (
-                  <Pressable
-                    key={b}
-                    onPress={() => handleCheckout(b)}
-                    style={{
-                      padding: 8,
-                      borderRadius: 8,
-                      backgroundColor: b === currentBranch ? COLORS.panelHover : 'transparent',
-                    }}
-                  >
-                    <Text fontSize={11} color={b === currentBranch ? COLORS.green : COLORS.text}>
-                      {b === currentBranch ? '* ' + b : b}
-                    </Text>
-                  </Pressable>
-                ))}
+                {branches.filter((b) => !b.startsWith('remotes/')).map((b) => {
+                  const ab = branchAheadBehind[b] || { ahead: 0, behind: 0 };
+                  const isCurrent = b === currentBranch;
+                  return (
+                    <Row
+                      key={b}
+                      style={{
+                        alignItems: 'center',
+                        gap: 6,
+                        padding: 6,
+                        borderRadius: 8,
+                        backgroundColor: isCurrent ? COLORS.panelHover : 'transparent',
+                      }}
+                    >
+                      <Pressable onPress={() => handleCheckout(b)} style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0 }}>
+                        <Text fontSize={11} color={isCurrent ? COLORS.green : COLORS.text}>
+                          {isCurrent ? '* ' + b : b}
+                        </Text>
+                      </Pressable>
+                      {ab.ahead > 0 ? <Pill label={'↑' + ab.ahead} color={COLORS.blue} tiny={true} /> : null}
+                      {ab.behind > 0 ? <Pill label={'↓' + ab.behind} color={COLORS.orange} tiny={true} /> : null}
+                      {!isCurrent ? (
+                        <Pressable onPress={() => handleDeleteBranch(b)}>
+                          <Box
+                            style={{
+                              paddingLeft: 6,
+                              paddingRight: 6,
+                              paddingTop: 2,
+                              paddingBottom: 2,
+                              borderRadius: 4,
+                              borderWidth: 1,
+                              borderColor: COLORS.red,
+                            }}
+                          >
+                            <Text fontSize={8} color={COLORS.red} style={{ fontWeight: 'bold' }}>
+                              ✕
+                            </Text>
+                          </Box>
+                        </Pressable>
+                      ) : null}
+                    </Row>
+                  );
+                })}
                 <Box style={{ height: 1, backgroundColor: COLORS.border, marginVertical: 4 }} />
                 <NewBranchInput onCreate={handleCreateBranch} />
               </Col>
@@ -317,44 +396,78 @@ export function GitPanel(props: {
         </Row>
       </Row>
 
-      {/* Commit input */}
-      <Row style={{ paddingLeft: 12, paddingRight: 12, paddingBottom: 10, gap: 8, alignItems: 'center' }}>
-        <Box style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0 }}>
-          <TextInput
-            value={commitMessage}
-            onChangeText={setCommitMessage}
-            placeholder="Commit message"
-            fontSize={11}
-            color={COLORS.text}
-            style={{
-              height: 34,
-              borderWidth: 1,
-              borderColor: COLORS.border,
-              borderRadius: 8,
-              paddingLeft: 10,
-              backgroundColor: COLORS.panelBg,
-            }}
-          />
-        </Box>
-        <Pressable onPress={handleCommit}>
-          <Box
-            style={{
-              paddingLeft: 12,
-              paddingRight: 12,
-              paddingTop: 8,
-              paddingBottom: 8,
-              borderRadius: 8,
-              backgroundColor: COLORS.blueDeep,
-              borderWidth: 1,
-              borderColor: COLORS.blue,
-            }}
-          >
-            <Text fontSize={10} color={COLORS.blue} style={{ fontWeight: 'bold' }}>
-              Commit
-            </Text>
+      {/* Commit composer */}
+      <Col style={{ paddingLeft: 12, paddingRight: 12, paddingBottom: 10, gap: 6 }}>
+        <Row style={{ alignItems: 'center', justifyContent: 'space-between' }}>
+          <Text fontSize={9} color={COLORS.textMuted} style={{ fontWeight: 'bold' }}>
+            MESSAGE
+          </Text>
+          <Text fontSize={9} color={COLORS.textDim}>
+            {stagedFiles.length} staged
+          </Text>
+        </Row>
+        <Row style={{ gap: 8, alignItems: 'center' }}>
+          <Box style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0 }}>
+            <TextInput
+              value={commitMessage}
+              onChangeText={setCommitMessage}
+              placeholder="Commit message (summary of staged changes)"
+              fontSize={11}
+              color={COLORS.text}
+              style={{
+                height: 34,
+                borderWidth: 1,
+                borderColor: COLORS.border,
+                borderRadius: 8,
+                paddingLeft: 10,
+                backgroundColor: COLORS.panelBg,
+              }}
+            />
           </Box>
-        </Pressable>
-      </Row>
+          <Pressable onPress={handleCommit}>
+            <Box
+              style={{
+                paddingLeft: 12,
+                paddingRight: 12,
+                paddingTop: 8,
+                paddingBottom: 8,
+                borderRadius: 8,
+                backgroundColor:
+                  commitMessage.trim() && stagedFiles.length > 0 ? COLORS.blueDeep : COLORS.panelRaised,
+                borderWidth: 1,
+                borderColor:
+                  commitMessage.trim() && stagedFiles.length > 0 ? COLORS.blue : COLORS.border,
+              }}
+            >
+              <Text
+                fontSize={10}
+                color={commitMessage.trim() && stagedFiles.length > 0 ? COLORS.blue : COLORS.textDim}
+                style={{ fontWeight: 'bold' }}
+              >
+                Commit
+              </Text>
+            </Box>
+          </Pressable>
+          <Pressable onPress={handleAmend}>
+            <Box
+              style={{
+                paddingLeft: 10,
+                paddingRight: 10,
+                paddingTop: 8,
+                paddingBottom: 8,
+                borderRadius: 8,
+                backgroundColor: COLORS.panelRaised,
+                borderWidth: 1,
+                borderColor: COLORS.yellow,
+              }}
+            >
+              <Text fontSize={10} color={COLORS.yellow} style={{ fontWeight: 'bold' }}>
+                Amend
+              </Text>
+            </Box>
+          </Pressable>
+        </Row>
+      </Col>
 
       {/* File lists */}
       <Row style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0, borderTopWidth: 1, borderColor: COLORS.borderSoft }}>
@@ -444,10 +557,10 @@ export function GitPanel(props: {
       </Row>
 
       {/* Recent commits */}
-      <Col style={{ borderTopWidth: 1, borderColor: COLORS.borderSoft, maxHeight: 180 }}>
+      <Col style={{ borderTopWidth: 1, borderColor: COLORS.borderSoft, maxHeight: 280 }}>
         <Box style={{ padding: 10, borderBottomWidth: 1, borderColor: COLORS.borderSoft }}>
           <Text fontSize={10} color={COLORS.textMuted} style={{ fontWeight: 'bold' }}>
-            RECENT COMMITS
+            RECENT COMMITS ({logs.length})
           </Text>
         </Box>
         <ScrollView style={{ flexGrow: 1, padding: 8 }}>
@@ -481,6 +594,47 @@ export function GitPanel(props: {
           </Col>
         </ScrollView>
       </Col>
+
+      {/* Stash list */}
+      {stashes.length > 0 ? (
+        <Col style={{ borderTopWidth: 1, borderColor: COLORS.borderSoft, maxHeight: 140 }}>
+          <Box style={{ padding: 10, borderBottomWidth: 1, borderColor: COLORS.borderSoft }}>
+            <Text fontSize={10} color={COLORS.textMuted} style={{ fontWeight: 'bold' }}>
+              STASHES ({stashes.length})
+            </Text>
+          </Box>
+          <ScrollView style={{ flexGrow: 1, padding: 8 }}>
+            <Col style={{ gap: 4 }}>
+              {stashes.map((s) => (
+                <Row
+                  key={s.ref}
+                  style={{
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: 8,
+                    borderRadius: 8,
+                    backgroundColor: COLORS.panelRaised,
+                  }}
+                >
+                  <Text fontSize={9} color={COLORS.yellow} style={{ fontWeight: 'bold' }}>
+                    {s.ref}
+                  </Text>
+                  <Text fontSize={10} color={COLORS.text} style={{ flexShrink: 1, flexBasis: 0 }}>
+                    {s.message}
+                  </Text>
+                  <Box style={{ flexGrow: 1 }} />
+                  <Pressable onPress={() => handleStashApply(s.ref)}>
+                    <Pill label="apply" color={COLORS.green} tiny={true} />
+                  </Pressable>
+                  <Pressable onPress={() => handleStashDrop(s.ref)}>
+                    <Pill label="drop" color={COLORS.red} tiny={true} />
+                  </Pressable>
+                </Row>
+              ))}
+            </Col>
+          </ScrollView>
+        </Col>
+      ) : null}
 
       {/* Stash actions */}
       <Row
