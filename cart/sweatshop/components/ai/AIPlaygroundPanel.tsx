@@ -9,6 +9,7 @@ import { useRegisteredTools } from '../../hooks/ai/useToolUse';
 import { useTokenCount } from '../../hooks/ai/useTokenCount';
 import { useAPIKeys } from '../../lib/ai/keys';
 import { browseTools } from '../../lib/ai/browse';
+import { streamingSupported } from '../../lib/ai/stream';
 import { ChatUI } from './ChatUI';
 import { ProviderPicker } from './ProviderPicker';
 import { MCPServerList } from './MCPServerList';
@@ -133,6 +134,14 @@ export function AIPlaygroundPanel() {
         <Box style={{ padding: TOKENS.padNormal, borderRadius: TOKENS.radiusSm, borderWidth: 1, borderColor: COLORS.yellow, backgroundColor: COLORS.yellowDeep }}>
           <Text fontSize={TOKENS.fontSm} color={COLORS.yellow}>
             No API key stored for {cfg.provider}. Add one in Settings → API keys before sending.
+          </Text>
+        </Box>
+      ) : null}
+
+      {!streamingSupported() ? (
+        <Box style={{ padding: TOKENS.padNormal, borderRadius: TOKENS.radiusSm, borderWidth: 1, borderColor: COLORS.yellow, backgroundColor: COLORS.yellowDeep }}>
+          <Text fontSize={TOKENS.fontXs} color={COLORS.yellow}>
+            True token streaming requires a host __http_stream_* binding — not shipped yet. Responses currently arrive as one final message.
           </Text>
         </Box>
       ) : null}
