@@ -3,6 +3,7 @@
 // 'soft' (the previous default, lightly tuned, crisp corners),
 // 'studio' (pro-tool muted, tight density, square).
 // Plus themed ports from tsz references.
+import { VESPER_PALETTE, VESPER_TOKENS } from './lib/vesper/tokens';
 //
 // A theme is a flat token map. Components read tokens from the live `TOKENS`
 // object and palette via the live `COLORS` object (both re-exported from
@@ -685,6 +686,22 @@ export const THEME_PSYCHEDELIC_DITHER: Theme = {
   },
 };
 
+export const THEME_VESPER: Theme = {
+  tokens: {
+    ...THEME_SOFT.tokens,
+    ...VESPER_TOKENS,
+    name: 'vesper',
+    label: 'Vesper',
+    corner: 'soft',
+    density: 'comfortable',
+    radiusMd: 4,
+    radiusLg: 6,
+  },
+  palette: {
+    ...VESPER_PALETTE,
+  },
+};
+
 // 'custom' — user-configurable slot. Starts as a clone of 'soft'; user
 // overrides are merged on top via setCustomTheme().
 export const THEME_CUSTOM_BASE: Theme = {
@@ -699,13 +716,14 @@ export const THEMES: Record<string, Theme> = {
   'high-contrast': THEME_HIGH_CONTRAST,
   aptioSetup: THEME_APTIO_SETUP,
   ditherKit: THEME_DITHER_KIT,
+  vesper: THEME_VESPER,
   ngardenRetroClassic: THEME_NGARDEN_RETRO_CLASSIC,
   orionMonitor: THEME_ORION_MONITOR,
   psychedelicDither: THEME_PSYCHEDELIC_DITHER,
   custom: THEME_CUSTOM_BASE,
 };
 
-export const THEME_ORDER = ['soft', 'sharp', 'studio', 'high-contrast', 'aptioSetup', 'ditherKit', 'ngardenRetroClassic', 'orionMonitor', 'psychedelicDither', 'custom'];
+export const THEME_ORDER = ['soft', 'sharp', 'studio', 'high-contrast', 'aptioSetup', 'ditherKit', 'vesper', 'ngardenRetroClassic', 'orionMonitor', 'psychedelicDither', 'custom'];
 
 // Custom theme overrides — partial token + palette patches applied on top
 // of a chosen base. Persisted separately in theme.ts.
