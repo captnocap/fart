@@ -67,6 +67,7 @@ import {
   statusTone,
   stripDotSlash,
   takeList,
+  useTheme,
   visibleBreadcrumbs,
   visibleTabs,
   widthBandForSize,
@@ -101,6 +102,11 @@ import type { MenuBarSection } from './components/menubar';
 import { getIndexStats } from './indexer';
 
 export default function CursorIdeApp() {
+  // Subscribe the root shell to theme changes so applyTheme() re-renders
+  // the entire tree. Without this, components importing COLORS/TOKENS
+  // directly (rather than via useTheme) don't re-render on theme switch
+  // and appear stuck on the previous palette until some other state change.
+  useTheme();
   const [activeTabId, setActiveTabId] = useState('home');
   const [currentInput, setCurrentInputState] = useState('');
   const [isGenerating, setIsGenerating] = useState(0);

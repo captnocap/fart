@@ -1,3 +1,37 @@
+// ────────────────────────────────────────────────────────────────────
+// THEME CASCADE MODEL
+//   COLORS / TOKENS are live objects mutated in place by applyTheme().
+//   Components that import them by reference see new values, but React
+//   only re-renders components that subscribe via useTheme(). The root
+//   shell (CursorIdeApp in index.tsx) calls useTheme() so applyTheme()
+//   causes a tree-wide re-render — children that import COLORS/TOKENS
+//   directly then read the updated palette on their next render.
+//
+// HARDCODED-COLOR AUDIT (as of 2026-04-22 — worker-4f14/theme-global-wrap)
+//   Files below contain literal hex colors (#RRGGBB / #RGB) that bypass
+//   the theme system. They will NOT update on theme switch even after
+//   the root-subscribe fix. Worker 9 owns the migration to TOKENS/COLORS.
+//   DO NOT migrate here — this list is a handoff, not a todo for me.
+//     • cart/cursor-ide/components/toolbar.tsx
+//     • cart/cursor-ide/components/hotpanel.tsx
+//     • cart/cursor-ide/components/settings.tsx
+//     • cart/cursor-ide/components/tooltip.tsx
+//     • cart/cursor-ide/components/icons.tsx
+//     • cart/cursor-ide/components/plancanvas.tsx
+//     • cart/cursor-ide/components/editor.tsx
+//     • cart/cursor-ide/components/sparkline.tsx
+//     • cart/cursor-ide/components/agent/*.tsx (all files in agent/)
+//     • cart/cursor-ide/components/cockpit/WorkerCanvas.tsx
+//     • cart/cursor-ide/components/cockpit/WorkerTile.tsx
+//     • cart/cursor-ide/components/cockpit/WorkerCharts.tsx
+//     • cart/cursor-ide/components/cockpit/WorkerStrip.tsx
+//     • cart/cursor-ide/mermaid/renderer.tsx
+//     • cart/cursor-ide/index.tsx (a few literals in workspaceStats / landingProjects)
+//   Also note: this file itself inlines a handful of literals in
+//   fileTone/statusTone (e.g. '#2d62ff', '#56d364', '#4a5568', '#6e6e6e')
+//   that should ideally come from COLORS too.
+// ────────────────────────────────────────────────────────────────────
+
 import { useEffect, useState } from 'react';
 import { THEMES, THEME_ORDER, buildCustomTheme, type CustomThemeOverrides, type Theme, type ThemePalette, type ThemeTokens } from './themes';
 
