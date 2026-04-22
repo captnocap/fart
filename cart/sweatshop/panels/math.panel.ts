@@ -1,4 +1,4 @@
-import { MathDemoPanel } from '../components/math/MathDemoPanel';
+import { MathPanel } from '../components/math/MathPanel';
 import { register } from '../panel-registry';
 
 register({
@@ -6,7 +6,7 @@ register({
   title: 'Math',
   defaultSlot: 'right',
   icon: 'keyboard',
-  component: MathDemoPanel,
+  component: MathPanel,
   userVisible: true,
   defaultOpen: false,
 });
