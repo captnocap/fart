@@ -103,3 +103,4 @@ require('./panels/a11y.panel');
 require('./panels/automation.panel');
 require('./panels/llm-studio.panel');
 require('./panels/tor.panel');
+require('./panels/osm.panel');
