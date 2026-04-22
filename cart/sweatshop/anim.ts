@@ -264,7 +264,24 @@ export function PageModeTransition(props: {
       : null,
     React.createElement(
       Box,
-      { key: 'page-cur-' + currentMode, style: { opacity: progress } },
+      {
+        key: 'page-cur-' + currentMode,
+        style: {
+          // Mirror the parent's flex sizing (index.tsx:1817-1819 passes
+          // flexGrow:1 + flexBasis:0 + minHeight:0). Without these, the
+          // current-mode wrapper Box was a flex child with no grow rule
+          // and collapsed to zero height — every surface rendered inside
+          // disappeared even though its children carried their own
+          // flexGrow. Preserve opacity animation exactly as before.
+          opacity: progress,
+          display: 'flex',
+          flexDirection: 'column',
+          flexGrow: 1,
+          flexBasis: 0,
+          minHeight: 0,
+          minWidth: 0,
+        },
+      },
       props.renderPage(currentMode),
     ),
   );
