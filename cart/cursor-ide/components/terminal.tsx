@@ -2,7 +2,7 @@ const React: any = require('react');
 const { useCallback, useEffect, useRef, useState } = React;
 
 import { Box, Col, Pressable, Row, ScrollView, Terminal, Text, TextInput } from '../../../runtime/primitives';
-import { COLORS } from '../theme';
+import { COLORS, TOKENS } from '../theme';
 import { Pill } from './shared';
 
 const host: any = globalThis as any;
@@ -367,7 +367,7 @@ export function TerminalPanel(props: any) {
           paddingRight: 10,
           paddingTop: 7,
           paddingBottom: 7,
-          borderRadius: 10,
+          borderRadius: TOKENS.radiusLg,
           borderWidth: 1,
           borderColor: active ? COLORS.blue : COLORS.border,
           backgroundColor: active ? COLORS.blueDeep : COLORS.panelAlt,
@@ -391,7 +391,7 @@ export function TerminalPanel(props: any) {
           paddingRight: 8,
           paddingTop: 7,
           paddingBottom: 7,
-          borderRadius: 10,
+          borderRadius: TOKENS.radiusLg,
           borderWidth: 1,
           borderColor: active ? COLORS.blue : COLORS.border,
           backgroundColor: active ? COLORS.blueDeep : COLORS.panelAlt,
@@ -414,7 +414,7 @@ export function TerminalPanel(props: any) {
         key={entry.id}
         style={{
           padding: 10,
-          borderRadius: 10,
+          borderRadius: TOKENS.radiusLg,
           backgroundColor: COLORS.panelAlt,
           borderWidth: 1,
           borderColor: COLORS.borderSoft,
@@ -462,7 +462,7 @@ export function TerminalPanel(props: any) {
         }}
         style={{
           padding: 8,
-          borderRadius: 8,
+          borderRadius: TOKENS.radiusMd,
           borderWidth: 1,
           borderColor: selected ? COLORS.blue : matchesQuery ? COLORS.border : COLORS.borderSoft,
           backgroundColor: selected ? COLORS.blueDeep : matchesQuery ? COLORS.panelAlt : COLORS.panelRaised,
@@ -525,7 +525,7 @@ export function TerminalPanel(props: any) {
           }}
         >
           <Col style={{ gap: 4 }}>
-            <Box style={{ width: '100%', height: 4, borderRadius: 2, backgroundColor: COLORS.border }} />
+            <Box style={{ width: '100%', height: 4, borderRadius: TOKENS.radiusXs, backgroundColor: COLORS.border }} />
             <Text fontSize={9} color={COLORS.textDim}>drag to resize</Text>
           </Col>
         </Pressable>
@@ -565,7 +565,7 @@ export function TerminalPanel(props: any) {
             paddingRight: 10,
             paddingTop: 7,
             paddingBottom: 7,
-            borderRadius: 10,
+            borderRadius: TOKENS.radiusLg,
             borderWidth: 1,
             borderColor: COLORS.border,
             backgroundColor: COLORS.panelAlt,
@@ -610,7 +610,7 @@ export function TerminalPanel(props: any) {
                   paddingRight: 10,
                   paddingTop: 7,
                   paddingBottom: 7,
-                  borderRadius: 10,
+                  borderRadius: TOKENS.radiusLg,
                   backgroundColor: COLORS.panelAlt,
                   borderWidth: 1,
                   borderColor: COLORS.border,
@@ -635,7 +635,7 @@ export function TerminalPanel(props: any) {
                   }}
                   fontSize={11}
                   color={COLORS.text}
-                  style={{ minWidth: 220, flexGrow: 1, flexBasis: 220, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelAlt, padding: 8, borderRadius: 8 }}
+                  style={{ minWidth: 220, flexGrow: 1, flexBasis: 220, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelAlt, padding: 8, borderRadius: TOKENS.radiusMd}}
                 />
                 <Pill label={String(searchMatches) + ' matches'} color={COLORS.blue} tiny={true} />
               </Row>
@@ -692,23 +692,23 @@ export function TerminalPanel(props: any) {
               <PlaybackSummary />
             </Row>
             <Row style={{ gap: 8, flexWrap: 'wrap' }}>
-              <Pressable onPress={props.onToggleRecording} style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 7, paddingBottom: 7, borderRadius: 10, backgroundColor: isRecording ? COLORS.redDeep : COLORS.panelAlt, borderWidth: 1, borderColor: isRecording ? COLORS.red : COLORS.border }}>
+              <Pressable onPress={props.onToggleRecording} style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 7, paddingBottom: 7, borderRadius: TOKENS.radiusLg, backgroundColor: isRecording ? COLORS.redDeep : COLORS.panelAlt, borderWidth: 1, borderColor: isRecording ? COLORS.red : COLORS.border }}>
                 <Text fontSize={10} color={isRecording ? COLORS.red : COLORS.textBright}>{isRecording ? 'Stop recording' : 'Start recording'}</Text>
               </Pressable>
-              <Pressable onPress={props.onSaveSnapshot} style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 7, paddingBottom: 7, borderRadius: 10, backgroundColor: COLORS.panelAlt, borderWidth: 1, borderColor: COLORS.border }}>
+              <Pressable onPress={props.onSaveSnapshot} style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 7, paddingBottom: 7, borderRadius: TOKENS.radiusLg, backgroundColor: COLORS.panelAlt, borderWidth: 1, borderColor: COLORS.border }}>
                 <Text fontSize={10} color={COLORS.textBright}>Save snapshot</Text>
               </Pressable>
-              <Pressable onPress={props.onLoadPlayback} style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 7, paddingBottom: 7, borderRadius: 10, backgroundColor: COLORS.panelAlt, borderWidth: 1, borderColor: COLORS.border }}>
+              <Pressable onPress={props.onLoadPlayback} style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 7, paddingBottom: 7, borderRadius: TOKENS.radiusLg, backgroundColor: COLORS.panelAlt, borderWidth: 1, borderColor: COLORS.border }}>
                 <Text fontSize={10} color={COLORS.textBright}>Load playback</Text>
               </Pressable>
-              <Pressable onPress={props.onTogglePlayback} style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 7, paddingBottom: 7, borderRadius: 10, backgroundColor: COLORS.panelAlt, borderWidth: 1, borderColor: COLORS.border }}>
+              <Pressable onPress={props.onTogglePlayback} style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 7, paddingBottom: 7, borderRadius: TOKENS.radiusLg, backgroundColor: COLORS.panelAlt, borderWidth: 1, borderColor: COLORS.border }}>
                 <Text fontSize={10} color={COLORS.textBright}>Play / pause</Text>
               </Pressable>
-              <Pressable onPress={props.onStepPlayback} style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 7, paddingBottom: 7, borderRadius: 10, backgroundColor: COLORS.panelAlt, borderWidth: 1, borderColor: COLORS.border }}>
+              <Pressable onPress={props.onStepPlayback} style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 7, paddingBottom: 7, borderRadius: TOKENS.radiusLg, backgroundColor: COLORS.panelAlt, borderWidth: 1, borderColor: COLORS.border }}>
                 <Text fontSize={10} color={COLORS.textBright}>Step</Text>
               </Pressable>
             </Row>
-            <Box style={{ padding: 10, borderRadius: 10, borderWidth: 1, borderColor: COLORS.borderSoft, backgroundColor: COLORS.panelAlt, gap: 4 }}>
+            <Box style={{ padding: 10, borderRadius: TOKENS.radiusLg, borderWidth: 1, borderColor: COLORS.borderSoft, backgroundColor: COLORS.panelAlt, gap: 4 }}>
               <Text fontSize={10} color={COLORS.textDim}>Recording stays local to the current terminal session. Saving snapshots adds an entry to the history tab.</Text>
               {playState ? <Text fontSize={10} color={COLORS.textDim}>{'Playback ' + Math.round((playState.progress || 0) * 100) + '%'}</Text> : null}
             </Box>

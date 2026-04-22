@@ -2,7 +2,7 @@ const React: any = require('react');
 const { memo } = React;
 
 import { Box, Col, Pressable, Row, ScrollView, Text, TextInput } from '../../../runtime/primitives';
-import { COLORS } from '../theme';
+import { COLORS, TOKENS } from '../theme';
 import { Pill } from './shared';
 
 function SearchSurfaceImpl(props: any) {
@@ -17,7 +17,7 @@ function SearchSurfaceImpl(props: any) {
           {!minimumBand ? <Text fontSize={10} color={COLORS.textDim}>{props.workspaceName + ' / ' + props.gitBranch}</Text> : null}
           <Pressable onPress={props.onClose}><Text fontSize={11} color={COLORS.textDim}>X</Text></Pressable>
         </Row>
-        <Box style={{ padding: 10, borderRadius: 12, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelAlt }}>
+        <Box style={{ padding: 10, borderRadius: TOKENS.radiusLg, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelAlt }}>
           <TextInput value={props.query} onChange={props.onQuery} placeholder="rg query" fontSize={11} color={COLORS.text} style={{ borderWidth: 0, backgroundColor: 'transparent' }} />
         </Box>
         {!minimumBand ? (
@@ -31,7 +31,7 @@ function SearchSurfaceImpl(props: any) {
       <ScrollView style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0, padding: 12 }}>
         <Col style={{ gap: 8 }}>
           {props.results.map((result: any) => (
-            <Pressable key={result.file + ':' + result.line + ':' + result.text} onPress={() => props.onOpenResult(result.file, result.line)} style={{ padding: 12, borderRadius: 12, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelRaised, gap: 6 }}>
+            <Pressable key={result.file + ':' + result.line + ':' + result.text} onPress={() => props.onOpenResult(result.file, result.line)} style={{ padding: 12, borderRadius: TOKENS.radiusLg, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelRaised, gap: 6 }}>
               <Row style={{ alignItems: 'center', gap: 6 }}>
                 <Text fontSize={11} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>{result.file}</Text>
                 <Text fontSize={10} color={COLORS.textDim}>:{result.line}</Text>

@@ -2,7 +2,7 @@ const React: any = require('react');
 const { memo } = React;
 
 import { Box, Col, Pressable, Row, ScrollView, Text } from '../../../runtime/primitives';
-import { COLORS } from '../theme';
+import { COLORS, TOKENS } from '../theme';
 import { Glyph, Pill } from './shared';
 
 function LandingSurfaceImpl(props: any) {
@@ -16,7 +16,7 @@ function LandingSurfaceImpl(props: any) {
         <Box
           style={{
             padding: minimumBand ? 14 : 18,
-            borderRadius: 16,
+            borderRadius: TOKENS.radiusLg,
             borderWidth: 1,
             borderColor: COLORS.border,
             backgroundColor: COLORS.panelRaised,
@@ -38,13 +38,13 @@ function LandingSurfaceImpl(props: any) {
             {!minimumBand ? <Pill label={props.changedCount + ' dirty / ' + props.stagedCount + ' staged'} color={COLORS.yellow} /> : null}
           </Row>
           <Row style={{ gap: 8, flexWrap: 'wrap' }}>
-            <Pressable onPress={props.onIndexWorkspace} style={{ padding: 10, borderRadius: 10, backgroundColor: COLORS.blueDeep, borderWidth: 1, borderColor: COLORS.blue }}>
+            <Pressable onPress={props.onIndexWorkspace} style={{ padding: 10, borderRadius: TOKENS.radiusLg, backgroundColor: COLORS.blueDeep, borderWidth: 1, borderColor: COLORS.blue }}>
               <Text fontSize={11} color={COLORS.blue}>Index Workspace</Text>
             </Pressable>
-            <Pressable onPress={() => props.onOpenPath('cart/cursor-ide/index.tsx')} style={{ padding: 10, borderRadius: 10, backgroundColor: COLORS.panelAlt, borderWidth: 1, borderColor: COLORS.border }}>
+            <Pressable onPress={() => props.onOpenPath('cart/cursor-ide/index.tsx')} style={{ padding: 10, borderRadius: TOKENS.radiusLg, backgroundColor: COLORS.panelAlt, borderWidth: 1, borderColor: COLORS.border }}>
               <Text fontSize={11} color={COLORS.text}>Open TSX cart</Text>
             </Pressable>
-            <Pressable onPress={props.onOpenSettings} style={{ padding: 10, borderRadius: 10, backgroundColor: COLORS.panelAlt, borderWidth: 1, borderColor: COLORS.border }}>
+            <Pressable onPress={props.onOpenSettings} style={{ padding: 10, borderRadius: TOKENS.radiusLg, backgroundColor: COLORS.panelAlt, borderWidth: 1, borderColor: COLORS.border }}>
               <Text fontSize={11} color={COLORS.text}>Open Settings Surface</Text>
             </Pressable>
           </Row>
@@ -52,7 +52,7 @@ function LandingSurfaceImpl(props: any) {
 
         <Row style={{ gap: 10, flexWrap: 'wrap' }}>
           {props.stats.map((stat: any) => (
-            <Box key={stat.label} style={{ padding: 12, borderRadius: 12, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelRaised, minWidth: 110 }}>
+            <Box key={stat.label} style={{ padding: 12, borderRadius: TOKENS.radiusLg, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelRaised, minWidth: 110 }}>
               <Text fontSize={18} color={stat.tone} style={{ fontWeight: 'bold' }}>{stat.value}</Text>
               <Text fontSize={10} color={COLORS.textDim}>{stat.label}</Text>
             </Box>
@@ -61,7 +61,7 @@ function LandingSurfaceImpl(props: any) {
 
         <Row style={{ gap: 14, alignItems: 'flex-start', flexWrap: compactBand ? 'wrap' : 'nowrap' }}>
           <Col style={{ flexGrow: 1, flexBasis: 0, gap: 12 }}>
-            <Box style={{ padding: 14, borderRadius: 14, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelRaised, gap: 10 }}>
+            <Box style={{ padding: 14, borderRadius: TOKENS.radiusLg, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelRaised, gap: 10 }}>
               <Text fontSize={13} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>Projects</Text>
               <Text fontSize={10} color={COLORS.textDim}>Curated entry points into the repo</Text>
               <Col style={{ gap: 8 }}>
@@ -69,10 +69,10 @@ function LandingSurfaceImpl(props: any) {
                   <Pressable
                     key={item.name + '_' + item.path}
                     onPress={() => props.onOpenPath(item.path)}
-                    style={{ padding: 12, borderRadius: 12, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelAlt, gap: 6 }}
+                    style={{ padding: 12, borderRadius: TOKENS.radiusLg, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelAlt, gap: 6 }}
                   >
                     <Row style={{ alignItems: 'center', gap: 8 }}>
-                      <Box style={{ width: 8, height: 28, borderRadius: 4, backgroundColor: item.accent }} />
+                      <Box style={{ width: 8, height: 28, borderRadius: TOKENS.radiusSm, backgroundColor: item.accent }} />
                       <Text fontSize={12} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>{item.name}</Text>
                       <Box style={{ flexGrow: 1 }} />
                       <Pill label={item.badge} color={item.accent} tiny={true} />
@@ -86,13 +86,13 @@ function LandingSurfaceImpl(props: any) {
           </Col>
 
           <Col style={{ flexGrow: 1, flexBasis: 0, gap: 12 }}>
-            <Box style={{ padding: 14, borderRadius: 14, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelRaised, gap: 10 }}>
+            <Box style={{ padding: 14, borderRadius: TOKENS.radiusLg, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelRaised, gap: 10 }}>
               <Text fontSize={13} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>Git Connections</Text>
               <Text fontSize={10} color={COLORS.textDim}>Branch, remote, and worktree wiring</Text>
               <Col style={{ gap: 8 }}>
                 {props.connections.map((item: any) => (
-                  <Row key={item.name + '_' + item.detail} style={{ gap: 10, alignItems: 'flex-start', padding: 10, borderRadius: 12, backgroundColor: COLORS.panelAlt }}>
-                    <Box style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: item.tone, marginTop: 5 }} />
+                  <Row key={item.name + '_' + item.detail} style={{ gap: 10, alignItems: 'flex-start', padding: 10, borderRadius: TOKENS.radiusLg, backgroundColor: COLORS.panelAlt }}>
+                    <Box style={{ width: 8, height: 8, borderRadius: TOKENS.radiusSm, backgroundColor: item.tone, marginTop: 5 }} />
                     <Col style={{ gap: 3, flexGrow: 1, flexBasis: 0 }}>
                       <Text fontSize={11} color={COLORS.textBright}>{item.name}</Text>
                       <Text fontSize={10} color={COLORS.textDim}>{item.detail}</Text>
@@ -102,7 +102,7 @@ function LandingSurfaceImpl(props: any) {
               </Col>
             </Box>
 
-            <Box style={{ padding: 14, borderRadius: 14, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelRaised, gap: 10 }}>
+            <Box style={{ padding: 14, borderRadius: TOKENS.radiusLg, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelRaised, gap: 10 }}>
               <Text fontSize={13} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>Recent Focus</Text>
               <Text fontSize={10} color={COLORS.textDim}>Dirty files, open tabs, and cart hotspots</Text>
               <Col style={{ gap: 8 }}>
@@ -110,7 +110,7 @@ function LandingSurfaceImpl(props: any) {
                   <Pressable
                     key={item.path + '_' + item.reason}
                     onPress={() => props.onOpenPath(item.path)}
-                    style={{ padding: 10, borderRadius: 12, backgroundColor: COLORS.panelAlt, gap: 6 }}
+                    style={{ padding: 10, borderRadius: TOKENS.radiusLg, backgroundColor: COLORS.panelAlt, gap: 6 }}
                   >
                     <Row style={{ alignItems: 'center', gap: 8 }}>
                       <Glyph icon={item.icon} tone={item.tone} backgroundColor={COLORS.grayChip} tiny={true} />
