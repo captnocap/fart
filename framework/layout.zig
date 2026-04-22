@@ -1090,7 +1090,20 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
     // - innerH: the REAL container height (for flex distribution — children share this space)
     // - childLayoutH: unlimited (so children can overflow and be scrolled to)
     const innerH = if (h != null) h.? - pt - pb else @as(f32, 9999);
-    const isRow = s.flex_direction == .row or s.flex_direction == .row_reverse;
+    const hasExplicitFlexSpacing = s.gap != 0 or s.row_gap != null or s.column_gap != null or s.padding != 0 or s.padding_left != null or s.padding_right != null or s.padding_top != null or s.padding_bottom != null or s.flex_wrap != .no_wrap or s.flex_direction == .row or s.flex_direction == .row_reverse;
+    var onlyTextChildren = node.text == null and node.children.len > 0 and !hasExplicitFlexSpacing;
+    if (onlyTextChildren) {
+        var ti: usize = 0;
+        while (ti < node.children.len) : (ti += 1) {
+            const child = &node.children[ti];
+            if (child.style.display == .none) continue;
+            if (child.text == null or child.children.len != 0) {
+                onlyTextChildren = false;
+                break;
+            }
+        }
+    }
+    const isRow = s.flex_direction == .row or s.flex_direction == .row_reverse or onlyTextChildren;
     const isReverse = s.flex_direction == .row_reverse or s.flex_direction == .column_reverse;
     // Vertical scroll containers should preserve child heights and overflow.
     // If we shrink them to fit the viewport, content_height collapses to the

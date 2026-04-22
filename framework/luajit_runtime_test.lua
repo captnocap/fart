@@ -3,12 +3,13 @@ package.path = package.path .. ";./?.lua;./?/init.lua"
 local JSRT = require("framework.lua.jsrt.init")
 local Values = require("framework.lua.jsrt.values")
 local Evaluator = require("framework.lua.jsrt.evaluator")
+local AST = require("framework.lua.jsrt.test.load_generated_ast")
 
 local src = "./framework/lua/jsrt/test/target_12_source.js"
 local out = "/tmp/reactjit_luajit_runtime_target12.ast.lua"
 local ok = os.execute(string.format("node scripts/build-jsast.mjs %q %q", src, out))
 assert(ok == 0 or ok == true, "build-jsast.mjs failed")
-local ast = assert(loadfile(out))()
+local ast = AST.load(out)
 
 local dispatchFn = nil
 local globals = {
@@ -42,4 +43,3 @@ assert(dispatchFn ~= nil, "dispatch not registered")
 function __zig_dispatch()
   Evaluator.callFunction(dispatchFn, {}, Values.UNDEFINED)
 end
-

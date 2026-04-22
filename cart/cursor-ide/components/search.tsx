@@ -1,10 +1,12 @@
 const React: any = require('react');
+const { memo } = React;
 
 import { Box, Col, Pressable, Row, ScrollView, Text, TextInput } from '../../../runtime/primitives';
 import { COLORS } from '../theme';
 import { Pill } from './shared';
 
-export function SearchSurface(props: any) {
+function SearchSurfaceImpl(props: any) {
+  (globalThis as any).__hostLog?.(0, "[render] SearchSurface");
   const compactBand = props.widthBand === 'narrow' || props.widthBand === 'widget' || props.widthBand === 'minimum';
   const minimumBand = props.widthBand === 'minimum';
   return (
@@ -50,3 +52,5 @@ export function SearchSurface(props: any) {
     </Col>
   );
 }
+
+export const SearchSurface = memo(SearchSurfaceImpl);

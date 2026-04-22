@@ -226,38 +226,40 @@ function ModelSelector(props: {
     <Col style={{ gap: 6 }}>
       {props.label ? <Text fontSize={11} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>{props.label}</Text> : null}
       {props.description ? <Text fontSize={10} color={COLORS.textDim}>{props.description}</Text> : null}
-      <Pressable onPress={() => setOpen(!open)} style={{ padding: 10, borderRadius: 10, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelBg, gap: 8 }}>
-        <Row style={{ alignItems: 'center', gap: 8 }}>
-          <Box style={{ width: 18, height: 18, borderRadius: 9, backgroundColor: icon.color, justifyContent: 'center', alignItems: 'center' }}>
-            <Text fontSize={7} color="#000" style={{ fontWeight: 'bold' }}>{icon.initial}</Text>
-          </Box>
-          <Text fontSize={11} color={COLORS.text}>{selectedModel?.displayName || props.value.modelId}</Text>
-          <Box style={{ flexGrow: 1 }} />
-          <Text fontSize={10} color={COLORS.textDim}>{open ? '▲' : '▼'}</Text>
-        </Row>
-      </Pressable>
-      {open ? (
-        <Col style={{ gap: 6, maxHeight: 280, overflow: 'scroll' }}>
-          {props.providers.filter(p => (p.enabled || props.allowDisabledProviders) && p.models.length > 0).map(provider => (
-            <Col key={provider.type} style={{ gap: 4 }}>
-              <Row style={{ alignItems: 'center', gap: 6, paddingLeft: 4 }}>
-                <IconBadge providerId={provider.type} size={14} />
-                <Text fontSize={10} color={COLORS.textDim} style={{ fontWeight: 'bold' }}>{getProviderIconInfo(provider.type).name}</Text>
-              </Row>
-              {provider.models
-                .filter(m => !props.filterVision || m.supportsVision)
-                .map(model => (
-                  <ModelRow
-                    key={model.id}
-                    model={model}
-                    selected={props.value.provider === provider.type && props.value.modelId === model.id}
-                    onSelect={() => { props.onChange({ provider: provider.type, modelId: model.id }); setOpen(false); }}
-                  />
-                ))}
-            </Col>
-          ))}
-        </Col>
-      ) : null}
+      <Box style={{ position: 'relative' }}>
+        <Pressable onPress={() => setOpen(!open)} style={{ padding: 10, borderRadius: 10, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelBg, gap: 8 }}>
+          <Row style={{ alignItems: 'center', gap: 8 }}>
+            <Box style={{ width: 18, height: 18, borderRadius: 9, backgroundColor: icon.color, justifyContent: 'center', alignItems: 'center' }}>
+              <Text fontSize={7} color="#000" style={{ fontWeight: 'bold' }}>{icon.initial}</Text>
+            </Box>
+            <Text fontSize={11} color={COLORS.text}>{selectedModel?.displayName || props.value.modelId}</Text>
+            <Box style={{ flexGrow: 1 }} />
+            <Text fontSize={10} color={COLORS.textDim}>{open ? '▲' : '▼'}</Text>
+          </Row>
+        </Pressable>
+        {open ? (
+          <Col style={{ position: 'absolute', left: 0, right: 0, top: 46, gap: 6, maxHeight: 280, overflow: 'scroll', zIndex: 20 }}>
+            {props.providers.filter(p => (p.enabled || props.allowDisabledProviders) && p.models.length > 0).map(provider => (
+              <Col key={provider.type} style={{ gap: 4 }}>
+                <Row style={{ alignItems: 'center', gap: 6, paddingLeft: 4 }}>
+                  <IconBadge providerId={provider.type} size={14} />
+                  <Text fontSize={10} color={COLORS.textDim} style={{ fontWeight: 'bold' }}>{getProviderIconInfo(provider.type).name}</Text>
+                </Row>
+                {provider.models
+                  .filter(m => !props.filterVision || m.supportsVision)
+                  .map(model => (
+                    <ModelRow
+                      key={model.id}
+                      model={model}
+                      selected={props.value.provider === provider.type && props.value.modelId === model.id}
+                      onSelect={() => { props.onChange({ provider: provider.type, modelId: model.id }); setOpen(false); }}
+                    />
+                  ))}
+              </Col>
+            ))}
+          </Col>
+        ) : null}
+      </Box>
     </Col>
   );
 }

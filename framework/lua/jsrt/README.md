@@ -40,7 +40,7 @@ Cart .tsx
 JS bundle (.js)
     │
     ▼ optional: acorn parse at build time
-AST (Lua table literal)              ← DATA, never code
+AST (JSON blob in a Lua string)       ← DATA, never code
     │
     ▼ LuaJIT loads
 JSRT evaluator (this directory)      ← Lua code that executes JS semantics
@@ -74,13 +74,13 @@ Event dispatch runs the reverse direction: Zig receives input → calls into the
 
 - No `emit.lua`, no `compile.lua`, no `transpile.lua`, no `codegen.lua`. If a file with one of these names shows up in this directory, someone is building the trap. Delete it.
 - No `react_*.lua`, no `hooks.lua`, no `component_runtime.lua`. If the evaluator needs to know about React, the evaluator has drifted above its scope. Back it out.
-- No `bundle.lua.generated` file. The output of the build pipeline is JS (or JS AST as a table literal of data). Not Lua source. Ever.
+- No `bundle.lua.generated` file. The output of the build pipeline is JS (or JS AST as a JSON blob wrapped in a Lua string). Not Lua source. Ever.
 
 ## Working integration
 
 Once the evaluator is stable, integration looks like:
 
-1. `framework/luajit_runtime.zig` loads the AST data (Lua table literal produced by build step) and calls `init.lua:run(ast)`.
+1. `framework/luajit_runtime.zig` loads the AST data (Lua chunk returning a JSON string), decodes it once, and calls `init.lua:run(ast)`.
 2. The evaluator executes the program. React mounts. React's hostConfig (running through the evaluator) calls the `__host*` globals.
 3. Mutation command stream crosses into Zig via the registered host-fns — the *same* stream shape the current QJS bridge produces and `renderer/reconciler.lua` / `renderer/hostConfig.lua` already consume.
 4. Zig's node tree / layout / paint pipeline consumes the stream unchanged.

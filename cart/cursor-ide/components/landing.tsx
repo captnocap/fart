@@ -1,10 +1,12 @@
 const React: any = require('react');
+const { memo } = React;
 
 import { Box, Col, Pressable, Row, ScrollView, Text } from '../../../runtime/primitives';
 import { COLORS } from '../theme';
 import { Glyph, Pill } from './shared';
 
-export function LandingSurface(props: any) {
+function LandingSurfaceImpl(props: any) {
+  (globalThis as any).__hostLog?.(0, "[render] LandingSurface");
   const compactBand = props.widthBand === 'narrow' || props.widthBand === 'widget' || props.widthBand === 'minimum';
   const minimumBand = props.widthBand === 'minimum';
 
@@ -127,3 +129,5 @@ export function LandingSurface(props: any) {
     </ScrollView>
   );
 }
+
+export const LandingSurface = memo(LandingSurfaceImpl);

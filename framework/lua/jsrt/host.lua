@@ -6,6 +6,13 @@
 local Values = require("framework.lua.jsrt.values")
 local renderer_host = require("renderer.hostConfig")
 local has_cjson, cjson = pcall(require, "cjson")
+local click_latency_begin = rawget(_G, "__clickLatencyBegin")
+local click_latency_stamp_dispatch = rawget(_G, "__clickLatencyStampDispatch")
+local click_latency_stamp_handler = rawget(_G, "__clickLatencyStampHandler")
+local click_latency_stamp_state_update = rawget(_G, "__clickLatencyStampStateUpdate")
+local click_latency_stamp_flush = rawget(_G, "__clickLatencyStampFlush")
+local click_latency_stamp_apply_done = rawget(_G, "__clickLatencyStampApplyDone")
+local host_log = rawget(_G, "__hostLog")
 
 local M = {}
 
@@ -29,11 +36,8 @@ local function decode_commands(payload)
   if type(payload) ~= "string" or not has_cjson or not cjson then
     return nil
   end
-
   local ok, parsed = pcall(cjson.decode, payload)
-  if ok then
-    return parsed
-  end
+  if ok then return parsed end
   return nil
 end
 
@@ -111,9 +115,40 @@ function M.install(scope, opts)
     return Values.UNDEFINED
   end)
 
+  define_native(scope, "__clickLatencyBegin", function(_args)
+    if type(click_latency_begin) == "function" then
+      return click_latency_begin()
+    end
+    return 0
+  end)
+
+  define_native(scope, "__clickLatencyStampDispatch", function(_args)
+    if type(click_latency_stamp_dispatch) == "function" then
+      return click_latency_stamp_dispatch()
+    end
+    return Values.UNDEFINED
+  end)
+
+  define_native(scope, "__clickLatencyStampHandler", function(_args)
+    if type(click_latency_stamp_handler) == "function" then
+      return click_latency_stamp_handler()
+    end
+    return Values.UNDEFINED
+  end)
+
+  define_native(scope, "__clickLatencyStampStateUpdate", function(_args)
+    if type(click_latency_stamp_state_update) == "function" then
+      return click_latency_stamp_state_update()
+    end
+    return Values.UNDEFINED
+  end)
+
   define_native(scope, "__hostFlush", function(args)
     local payload = args[1]
     local commands = decode_commands(payload)
+    if type(click_latency_stamp_flush) == "function" then
+      click_latency_stamp_flush()
+    end
     if commands and tree then
       renderer_host.applyCommands(tree, commands)
     elseif commands and type(opts.onFlush) == "function" then
@@ -122,6 +157,9 @@ function M.install(scope, opts)
       renderer_host.applyCommands(tree, payload)
     elseif type(payload) == "table" and type(opts.onFlush) == "function" then
       opts.onFlush(payload)
+    end
+    if type(click_latency_stamp_apply_done) == "function" then
+      click_latency_stamp_apply_done()
     end
     return Values.UNDEFINED
   end)

@@ -11,6 +11,7 @@ package.path = package.path .. ";./?.lua;./?/init.lua"
 local JSRT      = require("framework.lua.jsrt.init")
 local Values    = require("framework.lua.jsrt.values")
 local Evaluator = require("framework.lua.jsrt.evaluator")
+local AST       = require("framework.lua.jsrt.test.load_generated_ast")
 
 local here = debug.getinfo(1, "S").source:sub(2):match("(.+)/[^/]+$") or "."
 local tsx  = here .. "/demo_esbuild_bridge.tsx"
@@ -25,7 +26,7 @@ ok = os.execute(string.format(
 assert(ok == 0 or ok == true, "esbuild failed")
 ok = os.execute(string.format('node scripts/build-jsast.mjs %q %q', js, ast))
 assert(ok == 0 or ok == true, "build-jsast.mjs failed")
-local program = assert(loadfile(ast))()
+local program = AST.load(ast)
 
 local ops = {}
 local nextId = 0
@@ -54,7 +55,7 @@ local globals = {
         arr.length = #children
         finalProps.children = arr
       end
-      return Evaluator.callFunction(Type, { finalProps })
+      return Evaluator.callFunction(Type, { finalProps }, Values.UNDEFINED, nil, "demo_esbuild_bridge component")
     end
     -- Fallback for host-string types (not exercised here)
     return { kind = Type, props = props, children = children }

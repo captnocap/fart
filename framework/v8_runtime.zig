@@ -1,0 +1,259 @@
+//! V8 Runtime — thin VM-facing wrapper mirroring qjs_runtime's surface.
+//!
+//! Only the JS VM lifecycle + calls. SDL/paint/telemetry stays in qjs_runtime.zig;
+//! the app layer can import both and route JS work through here when -Dvm=v8.
+//!
+//! Host functions: register a `v8.c.FunctionCallback` (signature
+//! `fn(?*const v8.c.FunctionCallbackInfo) callconv(.c) void`). Each callback
+//! reads its own args via FunctionCallbackInfo and writes its return via the
+//! `getReturnValue()` setter. Very different from qjs's (ctx, this, argc, argv)
+//! → JSValue pattern — callers must provide v8-shaped versions.
+
+const std = @import("std");
+const v8 = @import("v8");
+
+var g_platform: ?v8.Platform = null;
+var g_isolate_params: v8.CreateParams = undefined;
+var g_isolate: ?v8.Isolate = null;
+// Top-level HandleScope lives for the whole session — keeps g_context valid.
+var g_hscope_storage: v8.HandleScope = undefined;
+var g_hscope_alive: bool = false;
+var g_context: ?v8.Context = null;
+
+pub fn initVM() void {
+    if (g_isolate != null) return;
+
+    const platform = v8.Platform.initDefault(0, true);
+    g_platform = platform;
+    v8.initV8Platform(platform);
+    v8.initV8();
+
+    g_isolate_params = v8.initCreateParams();
+    g_isolate_params.array_buffer_allocator = v8.createDefaultArrayBufferAllocator();
+
+    var isolate = v8.Isolate.init(&g_isolate_params);
+    isolate.enter();
+
+    g_hscope_storage.init(isolate);
+    g_hscope_alive = true;
+
+    const context = v8.Context.init(isolate, null, null);
+    context.enter();
+
+    g_isolate = isolate;
+    g_context = context;
+}
+
+pub const deinit = teardownVM;
+pub fn tick() void {}
+
+pub fn teardownVM() void {
+    if (g_context) |ctx| {
+        ctx.exit();
+        g_context = null;
+    }
+    if (g_hscope_alive) {
+        g_hscope_storage.deinit();
+        g_hscope_alive = false;
+    }
+    if (g_isolate) |*iso| {
+        iso.exit();
+        iso.deinit();
+        g_isolate = null;
+    }
+    if (g_isolate_params.array_buffer_allocator) |abi| {
+        v8.destroyArrayBufferAllocator(abi);
+    }
+    _ = v8.deinitV8();
+    if (g_platform) |plat| {
+        v8.deinitV8Platform();
+        plat.deinit();
+        g_platform = null;
+    }
+}
+
+pub fn registerHostFn(name: [*:0]const u8, callback: v8.c.FunctionCallback) void {
+    const iso = g_isolate orelse return;
+    const ctx = g_context orelse return;
+
+    var hscope: v8.HandleScope = undefined;
+    hscope.init(iso);
+    defer hscope.deinit();
+
+    const tmpl = v8.FunctionTemplate.initCallback(iso, callback);
+    const func = tmpl.getFunction(ctx);
+    const global = ctx.getGlobal();
+    const key = v8.String.initUtf8(iso, std.mem.span(name));
+    _ = global.setValue(ctx, key, func);
+}
+
+pub fn evalScript(js_logic: []const u8) void {
+    const iso = g_isolate orelse return;
+    const ctx = g_context orelse return;
+
+    var hscope: v8.HandleScope = undefined;
+    hscope.init(iso);
+    defer hscope.deinit();
+
+    var try_catch: v8.TryCatch = undefined;
+    try_catch.init(iso);
+    defer try_catch.deinit();
+
+    const src = v8.String.initUtf8(iso, js_logic);
+    const script = v8.Script.compile(ctx, src, null) catch {
+        logException(iso, ctx, try_catch, "compile");
+        return;
+    };
+    _ = script.run(ctx) catch {
+        logException(iso, ctx, try_catch, "run");
+        return;
+    };
+}
+
+pub fn evalExpr(code: []const u8) void {
+    if (code.len == 0) return;
+    evalScript(code);
+}
+
+pub fn evalToString(code: []const u8, buf: []u8) []const u8 {
+    const iso = g_isolate orelse return buf[0..0];
+    const ctx = g_context orelse return buf[0..0];
+
+    var hscope: v8.HandleScope = undefined;
+    hscope.init(iso);
+    defer hscope.deinit();
+
+    const src = v8.String.initUtf8(iso, code);
+    const script = v8.Script.compile(ctx, src, null) catch return buf[0..0];
+    const result = script.run(ctx) catch return buf[0..0];
+    const str = result.toString(ctx) catch return buf[0..0];
+    const need = str.lenUtf8(iso);
+    const n = @min(need, buf.len);
+    _ = str.writeUtf8(iso, buf[0..n]);
+    return buf[0..n];
+}
+
+pub fn hasGlobal(name: [*:0]const u8) bool {
+    const iso = g_isolate orelse return false;
+    const ctx = g_context orelse return false;
+
+    var hscope: v8.HandleScope = undefined;
+    hscope.init(iso);
+    defer hscope.deinit();
+
+    const global = ctx.getGlobal();
+    const key = v8.String.initUtf8(iso, std.mem.span(name));
+    const val = global.getValue(ctx, key) catch return false;
+    return !val.isUndefined();
+}
+
+fn callGlobalWithArgs(name: [*:0]const u8, argv: []const v8.Value) void {
+    const iso = g_isolate orelse return;
+    const ctx = g_context orelse return;
+
+    var try_catch: v8.TryCatch = undefined;
+    try_catch.init(iso);
+    defer try_catch.deinit();
+
+    const global = ctx.getGlobal();
+    const key = v8.String.initUtf8(iso, std.mem.span(name));
+    const val = global.getValue(ctx, key) catch return;
+    if (val.isUndefined() or !val.isFunction()) return;
+    const func = val.castTo(v8.Function);
+    _ = func.call(ctx, global.toValue(), argv) orelse {
+        logException(iso, ctx, try_catch, std.mem.span(name));
+        return;
+    };
+}
+
+pub fn callGlobal(name: [*:0]const u8) void {
+    const iso = g_isolate orelse return;
+    var hscope: v8.HandleScope = undefined;
+    hscope.init(iso);
+    defer hscope.deinit();
+    callGlobalWithArgs(name, &.{});
+}
+
+pub fn callGlobalStr(name: [*:0]const u8, arg: [*:0]const u8) void {
+    const iso = g_isolate orelse return;
+    var hscope: v8.HandleScope = undefined;
+    hscope.init(iso);
+    defer hscope.deinit();
+    const s = v8.String.initUtf8(iso, std.mem.span(arg));
+    callGlobalWithArgs(name, &.{s.toValue()});
+}
+
+pub fn callGlobal2Str(name: [*:0]const u8, a: [*:0]const u8, b: [*:0]const u8) void {
+    const iso = g_isolate orelse return;
+    var hscope: v8.HandleScope = undefined;
+    hscope.init(iso);
+    defer hscope.deinit();
+    callGlobalWithArgs(name, &.{
+        v8.String.initUtf8(iso, std.mem.span(a)).toValue(),
+        v8.String.initUtf8(iso, std.mem.span(b)).toValue(),
+    });
+}
+
+pub fn callGlobalInt(name: [*:0]const u8, arg: i64) void {
+    const iso = g_isolate orelse return;
+    var hscope: v8.HandleScope = undefined;
+    hscope.init(iso);
+    defer hscope.deinit();
+    const n = v8.Number.init(iso, @floatFromInt(arg));
+    callGlobalWithArgs(name, &.{n.toValue()});
+}
+
+pub fn callGlobalFloat(name: [*:0]const u8, arg: f32) void {
+    const iso = g_isolate orelse return;
+    var hscope: v8.HandleScope = undefined;
+    hscope.init(iso);
+    defer hscope.deinit();
+    const n = v8.Number.init(iso, @floatCast(arg));
+    callGlobalWithArgs(name, &.{n.toValue()});
+}
+
+pub fn callGlobal2Float(name: [*:0]const u8, a: f32, b: f32) void {
+    const iso = g_isolate orelse return;
+    var hscope: v8.HandleScope = undefined;
+    hscope.init(iso);
+    defer hscope.deinit();
+    callGlobalWithArgs(name, &.{
+        v8.Number.init(iso, @floatCast(a)).toValue(),
+        v8.Number.init(iso, @floatCast(b)).toValue(),
+    });
+}
+
+pub fn callGlobal3Int(name: [*:0]const u8, a: i64, b: i64, c: i64) void {
+    const iso = g_isolate orelse return;
+    var hscope: v8.HandleScope = undefined;
+    hscope.init(iso);
+    defer hscope.deinit();
+    callGlobalWithArgs(name, &.{
+        v8.Number.init(iso, @floatFromInt(a)).toValue(),
+        v8.Number.init(iso, @floatFromInt(b)).toValue(),
+        v8.Number.init(iso, @floatFromInt(c)).toValue(),
+    });
+}
+
+pub fn callGlobal5Int(name: [*:0]const u8, a: i64, b: i64, c: i64, d: i64, e: i64) void {
+    const iso = g_isolate orelse return;
+    var hscope: v8.HandleScope = undefined;
+    hscope.init(iso);
+    defer hscope.deinit();
+    callGlobalWithArgs(name, &.{
+        v8.Number.init(iso, @floatFromInt(a)).toValue(),
+        v8.Number.init(iso, @floatFromInt(b)).toValue(),
+        v8.Number.init(iso, @floatFromInt(c)).toValue(),
+        v8.Number.init(iso, @floatFromInt(d)).toValue(),
+        v8.Number.init(iso, @floatFromInt(e)).toValue(),
+    });
+}
+
+fn logException(iso: v8.Isolate, ctx: v8.Context, try_catch: v8.TryCatch, tag: []const u8) void {
+    const ex = try_catch.getException() orelse return;
+    const str = ex.toString(ctx) catch return;
+    var buf: [512]u8 = undefined;
+    const n = @min(str.lenUtf8(iso), buf.len);
+    _ = str.writeUtf8(iso, buf[0..n]);
+    std.log.err("[v8 {s}] {s}", .{ tag, buf[0..n] });
+}

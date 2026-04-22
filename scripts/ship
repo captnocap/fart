@@ -29,11 +29,13 @@ NAME="${1:-}"
 DEBUG=0
 RAW=0
 JSRT=0
+V8=0
 for arg in "${@:2}"; do
     case "$arg" in
         -d|--debug) DEBUG=1 ;;
         --raw)      RAW=1 ;;
         --jsrt)     JSRT=1 ;;
+        --v8)       V8=1 ;;
     esac
 done
 
@@ -67,14 +69,23 @@ fi
 # Per-cart bundle path means two parallel ships can't overwrite each other's
 # output. qjs_app.zig embeds `bundle-<app-name>.js` at compile time.
 BUNDLE_OUT="bundle-${NAME}.js"
-echo "[ship] bundling $CART_FILE → $BUNDLE_OUT..."
-node scripts/build-bundle.mjs "$CART_FILE" --out "$BUNDLE_OUT"
 
 AST_OUT=""
 if [[ "$JSRT" -eq 1 ]]; then
     AST_OUT="bundle-${NAME}.ast.lua"
-    echo "[ship] parsing $BUNDLE_OUT → $AST_OUT..."
-    node scripts/build-jsast.mjs "$BUNDLE_OUT" "$AST_OUT"
+    JSRT_SOURCE="${JSRT_AST_SOURCE:-$CART_FILE}"
+    if [[ -z "${JSRT_AST_SOURCE:-}" ]]; then
+        echo "[ship] bundling $CART_FILE → $BUNDLE_OUT..."
+        node scripts/build-bundle.mjs "$CART_FILE" --out "$BUNDLE_OUT"
+        JSRT_SOURCE="$BUNDLE_OUT"
+    else
+        echo "[ship] JSRT AST source override: $JSRT_SOURCE"
+    fi
+    echo "[ship] parsing $JSRT_SOURCE → $AST_OUT..."
+    node scripts/build-jsast.mjs "$JSRT_SOURCE" "$AST_OUT"
+else
+    echo "[ship] bundling $CART_FILE → $BUNDLE_OUT..."
+    node scripts/build-bundle.mjs "$CART_FILE" --out "$BUNDLE_OUT"
 fi
 
 # ── 2. Compile qjs_app.zig (bundle-<name>.js embedded via @embedFile) ─
@@ -85,10 +96,14 @@ fi
 
 echo "[ship] compiling native binary..."
 APP_SOURCE="qjs_app.zig"
+V8_FLAG=""
 if [[ "$JSRT" -eq 1 ]]; then
     APP_SOURCE="jsrt_app.zig"
+elif [[ "$V8" -eq 1 ]]; then
+    APP_SOURCE="v8_app.zig"
+    V8_FLAG="-Duse-v8=true"
 fi
-zig build app -Dapp-name="$NAME" -Dapp-source="$APP_SOURCE" $OPT_FLAG
+zig build app -Dapp-name="$NAME" -Dapp-source="$APP_SOURCE" $V8_FLAG $OPT_FLAG
 
 RAW_BIN="zig-out/bin/$NAME"
 if [[ ! -f "$RAW_BIN" ]]; then

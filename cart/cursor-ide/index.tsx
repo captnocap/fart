@@ -1,5 +1,5 @@
 const React: any = require('react');
-const { useEffect, useRef, useState } = React;
+const { useEffect, useRef, useState, useCallback, useMemo } = React;
 
 // ── FFI stubs (aligned with cart/cockpit) ──────────────────────────
 const host: any = globalThis;
@@ -44,6 +44,7 @@ import { expandVariables, hasVariables, listCustomVariables } from './variables'
 import type { ExpansionResult } from './variables';
 import { listProxyConfigs, getProxyStatus } from './proxy';
 import type { ProxyConfig } from './proxy';
+import { execAsync } from '../../runtime/hooks/process';
 import {
   closeWindow,
   exec,
@@ -87,6 +88,7 @@ import { SettingsSurface } from './components/settings';
 import { LandingSurface } from './components/landing';
 
 import { usePersistentState } from './hooks/usePersistentState';
+import { useFileContent } from '../../runtime/hooks/useFileContent';
 import { loadPlugins, type PluginRegistry } from './plugin';
 import { HotPanel } from './components/hotpanel';
 import { GitPanel } from './components/gitpanel';
@@ -146,6 +148,11 @@ export default function CursorIdeApp() {
   const rebuildTimerRef = useRef<any>(null);
   const [editorModified, setEditorModified] = useState(0);
   const [currentFilePath, setCurrentFilePath] = useState('__landing__');
+  // Handle-based file content. The TextEditor primitive reads the file bytes
+  // directly from a Zig-owned buffer keyed by this handle, so the content
+  // never crosses the JS bridge as a prop. Replaces the 1MB `value=` prop
+  // diff that used to dominate click latency on large files.
+  const fileContentHandle = useFileContent(currentFilePath);
   const [editorRows, setEditorRows] = useState<any[]>([]);
   const [editorColorRows, setEditorColorRows] = useState<any[] | null>(null);
   const [totalLines, setTotalLines] = useState(0);
@@ -205,18 +212,18 @@ export default function CursorIdeApp() {
   const stateRef = useRef<any>({});
 
   const execCacheRef = useRef<Record<string, string>>({});
-  function execCached(cmd: string): string {
+    const execCached = useCallback((cmd: string): string => {
     const cache = execCacheRef.current;
     if (cache[cmd] !== undefined) return cache[cmd];
     const result = exec(cmd);
     cache[cmd] = result;
     return result;
-  }
-  function clearExecCache(): void {
+  }, []);
+    const clearExecCache = useCallback((): void => {
     execCacheRef.current = {};
-  }
+  }, []);
 
-  function normalizeDockPanels(list: string[]): string[] {
+    const normalizeDockPanels = useCallback((list: string[]): string[] => {
     const next: string[] = [];
     const seen: Record<string, number> = {};
     for (const panelId of list) {
@@ -225,21 +232,21 @@ export default function CursorIdeApp() {
       seen[panelId] = 1;
     }
     return next.length > 0 ? next : ['files'];
-  }
+  }, []);
 
-  function focusDockPanel(panelId: string) {
+    const focusDockPanel = useCallback((panelId: string) => {
     setDockPanels((prev) => {
       const base = normalizeDockPanels(prev);
       return [panelId, ...base.filter((id) => id !== panelId)].slice(0, 4);
     });
-  }
+  }, []);
 
-  function closeDockPanel(panelId: string) {
+    const closeDockPanel = useCallback((panelId: string) => {
     setDockPanels((prev) => {
       const next = normalizeDockPanels(prev).filter((id) => id !== panelId);
       return next.length > 0 ? next : ['files'];
     });
-  }
+  }, []);
 
   const cursorPosition = { line: 1, column: 1 };
 
@@ -257,22 +264,22 @@ export default function CursorIdeApp() {
     setTerminalDockHeight(clampTerminalDockHeight(Number(value)));
   };
 
-  function clampTerminalDockHeight(value: number): number {
+    const clampTerminalDockHeight = useCallback((value: number): number => {
     const minHeight = 140;
     const maxHeight = Math.max(180, Math.floor((stateRef.current.windowHeight || 800) * 0.65));
     return Math.max(minHeight, Math.min(maxHeight, Math.round(value)));
-  }
+  }, []);
 
-  function addToolExecution(id: string, name: string, input: string) {
+    const addToolExecution = useCallback((id: string, name: string, input: string) => {
     setToolExecutions((prev) => [...prev, { id, name, input, status: 'running', percent: 20, result: '' }]);
-  }
-  function completeToolExecution(id: string, result: string) {
+  }, []);
+    const completeToolExecution = useCallback((id: string, result: string) => {
     setToolExecutions((prev) => prev.map((item) => item.id === id ? { ...item, status: 'completed', percent: 100, result } : item));
-  }
-  function failToolExecution(id: string, result: string) {
+  }, []);
+    const failToolExecution = useCallback((id: string, result: string) => {
     setToolExecutions((prev) => prev.map((item) => item.id === id ? { ...item, status: 'error', percent: 0, result } : item));
-  }
-  function replaceComposer(nextText: string, nextAttachments?: Array<{ id: string; type: string; name: string; path: string }>) {
+  }, []);
+    const replaceComposer = useCallback((nextText: string, nextAttachments?: Array<{ id: string; type: string; name: string; path: string }>) => {
     const attachmentList = nextAttachments ?? stateRef.current.attachments;
     setCurrentInputState(nextText);
     setInputTokenEstimateState(estimateTokens(nextText, attachmentList));
@@ -287,13 +294,13 @@ export default function CursorIdeApp() {
     } else {
       setVariablePreview([]);
     }
-  }
-  function replaceAttachments(nextAttachments: Array<{ id: string; type: string; name: string; path: string }>) {
+  }, []);
+    const replaceAttachments = useCallback((nextAttachments: Array<{ id: string; type: string; name: string; path: string }>) => {
     setAttachmentsState(nextAttachments);
     setInputTokenEstimateState(estimateTokens(stateRef.current.currentInput, nextAttachments));
-  }
+  }, []);
 
-  function syncWindowMetrics() {
+    const syncWindowMetrics = useCallback(() => {
     const sys = telSystem();
     if (!sys) return;
     const w = sys.window_w || stateRef.current.windowWidth || 1280;
@@ -316,17 +323,17 @@ export default function CursorIdeApp() {
     ) {
       setCompactSurface(mainSurface);
     }
-  }
+  }, []);
 
-  function pathPriority(path: string): number {
+    const pathPriority = useCallback((path: string): number => {
     if (path.indexOf('cart/cursor-ide') === 0) return 0;
     if (path.indexOf('tsz/carts/conformance/mixed/cursor-ide') === 0) return 1;
     if (path.indexOf('runtime/') === 0) return 2;
     if (path.indexOf('renderer/') === 0) return 3;
     if (path === 'qjs_app.zig') return 4;
     return 5;
-  }
-  function shouldKeepPath(path: string): boolean {
+  }, []);
+    const shouldKeepPath = useCallback((path: string): boolean => {
     if (!path) return false;
     if (path.indexOf('.git/') === 0) return false;
     if (path.indexOf('zig-cache/') === 0) return false;
@@ -336,20 +343,20 @@ export default function CursorIdeApp() {
     if (path.indexOf('love2d/') === 0) return false;
     if (path.endsWith('.png') || path.endsWith('.jpg') || path.endsWith('.jpeg')) return false;
     return true;
-  }
-  function hasPath(list: string[], path: string): boolean {
+  }, []);
+    const hasPath = useCallback((list: string[], path: string): boolean => {
     return list.some((item) => samePath(item, path));
-  }
-  function dirGitStatus(path: string): string {
+  }, []);
+    const dirGitStatus = useCallback((path: string): string => {
     for (const key of Object.keys(gitStatusByPathRef.current)) {
       if (key.indexOf(path + '/') === 0) return 'dirty';
     }
     return '';
-  }
-  function isHotPath(path: string): boolean {
+  }, []);
+    const isHotPath = useCallback((path: string): boolean => {
     return path.indexOf('cursor-ide') >= 0 || path.indexOf('runtime/') === 0 || path === 'qjs_app.zig';
-  }
-  function shouldExpand(path: string): number {
+  }, []);
+    const shouldExpand = useCallback((path: string): number => {
     return (
       path === 'cart' ||
       path === 'cart/cursor-ide' ||
@@ -361,11 +368,11 @@ export default function CursorIdeApp() {
       path === 'tsz/carts/conformance/mixed' ||
       path === 'tsz/carts/conformance/mixed/cursor-ide'
     ) ? 1 : 0;
-  }
-  function findTreeItem(list: FileItem[], path: string): FileItem | null {
+  }, []);
+    const findTreeItem = useCallback((list: FileItem[], path: string): FileItem | null => {
     return list.find((item) => samePath(item.path, path)) || null;
-  }
-  function applyTreeVisibility(list: FileItem[]): FileItem[] {
+  }, []);
+    const applyTreeVisibility = useCallback((list: FileItem[]): FileItem[] => {
     return list.map((item) => {
       if (item.type === 'workspace') return { ...item, visible: 1 };
       let visible = 1;
@@ -377,8 +384,8 @@ export default function CursorIdeApp() {
       }
       return { ...item, visible };
     });
-  }
-  function flattenTreeNode(node: any, depth: number, items: FileItem[]) {
+  }, []);
+    const flattenTreeNode = useCallback((node: any, depth: number, items: FileItem[]) => {
     const dirNames = Object.keys(node.dirs).sort();
     for (const dirName of dirNames) {
       const dir = node.dirs[dirName];
@@ -400,9 +407,9 @@ export default function CursorIdeApp() {
         visible: 1, git: gitStatusByPathRef.current[file.path] || '', hot: isHotPath(file.path) ? 1 : 0, path: file.path,
       });
     }
-  }
+  }, []);
 
-  function buildWorkspaceSnapshot(rootName: string) {
+    const buildWorkspaceSnapshot = useCallback((rootName: string) => {
     const raw = execCached('find . -maxdepth 5 \\( -path "./.git" -o -path "./zig-cache" -o -path "./zig-out" -o -path "./node_modules" -o -path "./archive" -o -path "./love2d" \\) -prune -o -type f -print 2>/dev/null | sed -n "1,180{s#^\\./##;p;}"');
     const discovered = trimLines(raw);
     const merged: string[] = [];
@@ -441,16 +448,16 @@ export default function CursorIdeApp() {
     ];
     flattenTreeNode(tree, 0, items);
     return { items: applyTreeVisibility(items), paths: merged };
-  }
+  }, []);
 
-  function markSelectedPath(path: string) {
+    const markSelectedPath = useCallback((path: string) => {
     setFiles((prev) => prev.map((item) => ({
       ...item,
       selected: path === '__landing__' ? (item.type === 'workspace' ? 1 : 0) : (samePath(item.path, path) ? 1 : 0),
     })));
-  }
+  }, []);
 
-  function buildLandingProjects(paths: string[], info: any, nextWorkspaceName: string) {
+    const buildLandingProjects = useCallback((paths: string[], info: any, nextWorkspaceName: string) => {
     const projects: any[] = [
       { name: nextWorkspaceName, path: '__landing__', displayPath: 'Project landing', summary: 'Branch ' + info.branch + ' with ' + info.dirty + ' dirty paths and ' + paths.length + ' indexed files.', badge: 'workspace', accent: '#2d62ff' },
       { name: 'cursor-ide TSX cart', path: 'cart/cursor-ide/index.tsx', displayPath: 'cart/cursor-ide/index.tsx', summary: 'Runtime-native port of the mixed-lane Cursor IDE shell for the active ReactJIT stack.', badge: 'active', accent: COLORS.green },
@@ -461,9 +468,9 @@ export default function CursorIdeApp() {
       projects.push({ name: 'runtime primitives', path: 'runtime/primitives.tsx', displayPath: 'runtime/primitives.tsx', summary: 'Current primitive surface map for Box/Text/Terminal/Native nodes.', badge: 'runtime', accent: COLORS.blue });
     }
     setLandingProjects(projects);
-  }
+  }, []);
 
-  function buildLandingRecentFiles(paths: string[], info: any) {
+    const buildLandingRecentFiles = useCallback((paths: string[], info: any) => {
     const recent: any[] = [];
     const seen: Record<string, number> = {};
     function pushRecent(path: string, label: string, reason: string) {
@@ -482,9 +489,9 @@ export default function CursorIdeApp() {
       if (paths[i].indexOf('cursor-ide') >= 0) pushRecent(paths[i], baseName(paths[i]), 'focus surface');
     }
     setLandingRecentFiles(recent);
-  }
+  }, []);
 
-  function buildBreadcrumbs(path: string, workspaceNameOverride?: string, gitBranchOverride?: string) {
+    const buildBreadcrumbs = useCallback((path: string, workspaceNameOverride?: string, gitBranchOverride?: string) => {
     const nextWorkspaceName = workspaceNameOverride || stateRef.current.workspaceName;
     const nextGitBranch = gitBranchOverride || stateRef.current.gitBranch;
     if (path === '__landing__') {
@@ -512,9 +519,9 @@ export default function CursorIdeApp() {
       crumbs.push({ label: part, icon: fileGlyph(type), tone: fileTone(type), active: isLast ? 1 : 0, kind: type, meta: isLast && gitStatusByPathRef.current[path] ? gitStatusByPathRef.current[path] : '' });
     }
     setBreadcrumbs(crumbs);
-  }
+  }, []);
 
-  function loadGitSummary() {
+    const loadGitSummary = useCallback(() => {
     let branch = execCached('git branch --show-current 2>/dev/null').replace(/\s+/g, '');
     if (!branch) branch = 'detached';
     setGitBranch(branch);
@@ -567,9 +574,9 @@ export default function CursorIdeApp() {
     setChangedCount(dirty); setStagedCount(staged);
     setGitStatus(dirty > 0 ? '*' + dirty : '');
     return { branch, dirty, staged, remote: remoteName, ahead, behind, changes, connections };
-  }
+  }, []);
 
-  function refreshWorkspace() {
+    const refreshWorkspace = useCallback(() => {
     syncWindowMetrics();
     let pwd = execCached('pwd 2>/dev/null').trim();
     if (!pwd) pwd = '.';
@@ -599,9 +606,9 @@ export default function CursorIdeApp() {
       buildBreadcrumbs(stateRef.current.currentFilePath, nextWorkspaceName, gitInfo.branch); markSelectedPath(stateRef.current.currentFilePath);
     }
     workspaceBootstrappedRef.current = true;
-  }
+  }, []);
 
-  function rebuildPlain(content: string, path: string) {
+    const rebuildPlain = useCallback((content: string, path: string) => {
     const lines = content.length > 0 ? content.split('\n') : [''];
     const rows = new Array(lines.length);
     for (let idx = 0; idx < lines.length; idx += 1) {
@@ -611,9 +618,9 @@ export default function CursorIdeApp() {
     }
     setTotalLines(lines.length); setEditorRows(rows); setEditorColorRows(null); setEditorLargeFileMode(1);
     setLanguageMode(languageForType(inferFileType(path)));
-  }
+  }, []);
 
-  function rebuildColor(content: string, path: string) {
+    const rebuildColor = useCallback((content: string, path: string) => {
     try {
       const lines = content.length > 0 ? content.split('\n') : [''];
       const largeFileMode = lines.length > 1800 || content.length > 90000;
@@ -636,13 +643,13 @@ export default function CursorIdeApp() {
       console.error('[cursor-ide] rebuildColor failed', path, content.length, error);
       rebuildPlain(content, path);
     }
-  }
+  }, []);
 
-  function ensureHomeTab(list: Tab[]): Tab[] {
+    const ensureHomeTab = useCallback((list: Tab[]): Tab[] => {
     if (list.some((tab) => tab.path === '__landing__')) return list;
     return [{ id: 'home', name: 'Projects', path: '__landing__', type: 'home', modified: 0, pinned: 1, git: '' }, ...list];
-  }
-  function ensureTabForPath(path: string) {
+  }, []);
+    const ensureTabForPath = useCallback((path: string) => {
     let nextTabs = ensureHomeTab([...stateRef.current.openTabs]);
     let tabId = '';
     nextTabs = nextTabs.map((tab) => { if (tab.path === path) { tabId = tab.id; return { ...tab, git: gitStatusByPathRef.current[path] || '' }; } return tab; });
@@ -651,17 +658,17 @@ export default function CursorIdeApp() {
       nextTabs.push({ id: tabId, name: baseName(path), path, type: inferFileType(path), modified: 0, pinned: 0, git: gitStatusByPathRef.current[path] || '' });
     }
     setOpenTabs(nextTabs); setActiveTabId(tabId);
-  }
+  }, []);
 
-  function openLandingPage() {
+    const openLandingPage = useCallback(() => {
     setOpenTabs((prev) => ensureHomeTab([...prev]));
     setActiveView('landing');
     if (stateRef.current.widthBand === 'narrow' || stateRef.current.widthBand === 'widget' || stateRef.current.widthBand === 'minimum') setCompactSurface('landing');
     setCurrentFilePath('__landing__'); editorContentRef.current = ''; setEditorContent('');
     setEditorRows([]); setEditorColorRows(null); setEditorLargeFileMode(0); setEditorModified(0); setTotalLines(0); setLanguageMode('Workspace');
     setActiveTabId('home'); buildBreadcrumbs('__landing__'); markSelectedPath('__landing__');
-  }
-  function openSettingsSurface() {
+  }, []);
+    const openSettingsSurface = useCallback(() => {
     let nextTabs = ensureHomeTab([...stateRef.current.openTabs]);
     let tabId = 'settings';
     if (!nextTabs.some((tab) => tab.path === '__settings__')) {
@@ -672,9 +679,9 @@ export default function CursorIdeApp() {
     setCurrentFilePath('__settings__'); editorContentRef.current = ''; setEditorContent('');
     setEditorRows([]); setEditorColorRows(null); setEditorLargeFileMode(0); setEditorModified(0); setTotalLines(0); setLanguageMode('Settings');
     setActiveTabId(tabId); buildBreadcrumbs('__settings__'); markSelectedPath('__landing__');
-  }
+  }, []);
 
-  function loadFileByPath(path: string) {
+    const loadFileByPath = useCallback((path: string) => {
     if (path === '__settings__') { openSettingsSurface(); return; }
     if (path === '__landing__' || path === '.' || inferFileType(path) === 'workspace') { openLandingPage(); return; }
     let content = fileContentsRef.current[path];
@@ -687,39 +694,42 @@ export default function CursorIdeApp() {
     if (stateRef.current.widthBand === 'narrow' || stateRef.current.widthBand === 'widget' || stateRef.current.widthBand === 'minimum') setCompactSurface('editor');
     editorContentRef.current = content; setEditorContent(content); setCurrentFilePath(path); setEditorModified(0);
     rebuildColor(content, path); buildBreadcrumbs(path); ensureTabForPath(path); markSelectedPath(path);
-  }
+  }, []);
 
-  function activateTab(id: string) {
+    const activateTab = useCallback((id: string) => {
     if (id === 'home') { openLandingPage(); return; }
     if (id === 'settings') { openSettingsSurface(); return; }
     const tab = stateRef.current.openTabs.find((item: Tab) => item.id === id);
     if (tab) loadFileByPath(tab.path);
-  }
-  function closeTab(id: string) {
+  }, []);
+    const closeTab = useCallback((id: string) => {
     if (id === 'home') return;
     const tabs = stateRef.current.openTabs.filter((tab: Tab) => tab.id !== id);
     setOpenTabs(tabs);
     if (tabs.length === 0 || stateRef.current.activeTabId === id) { openLandingPage(); }
     else { activateTab(tabs[tabs.length - 1].id); }
-  }
-  function toggleDir(path: string) {
+  }, []);
+    const toggleDir = useCallback((path: string) => {
     setFiles((prev) => {
       const next = prev.map((item) => samePath(item.path, path) ? { ...item, expanded: item.expanded ? 0 : 1 } : { ...item });
       return applyTreeVisibility(next);
     });
-  }
-  function openFileByPath(path: string) {
+  }, []);
+    const openFileByPath = useCallback((path: string) => {
     const item = stateRef.current.files?.find((entry: FileItem) => samePath(entry.path, path));
     if (item && item.type === 'dir') { toggleDir(path); return; }
     loadFileByPath(path);
-  }
-  function openSearchResult(path: string, line: number) {
+  }, []);
+    const openSearchResult = useCallback((path: string, line: number) => {
     if (path === '(no results)') return;
     loadFileByPath(path); setShowSearch(0);
     if (stateRef.current.widthBand === 'narrow' || stateRef.current.widthBand === 'widget' || stateRef.current.widthBand === 'minimum') setCompactSurface('editor');
-  }
+  }, []);
 
-  function updateEditorContent(text: string) {
+  // useCallback with [] — all mutable reads go through refs, setState setters
+  // are stable by React contract, so these closures are self-sufficient. Stable
+  // identity lets React.memo(EditorSurface) actually bail out.
+  const updateEditorContent = useCallback((text: string) => {
     const path = stateRef.current.currentFilePath;
     if (path === '__landing__' || path === '__settings__') return;
     editorContentRef.current = text;
@@ -728,7 +738,7 @@ export default function CursorIdeApp() {
     if (!curTab || curTab.modified !== 1) {
       setEditorModified(1);
       setGitStatus('*' + (stateRef.current.changedCount > 0 ? stateRef.current.changedCount : 1));
-      setOpenTabs((prev) => prev.map((tab) => tab.path === path ? { ...tab, modified: 1 } : tab));
+      setOpenTabs((prev: Tab[]) => prev.map((tab) => tab.path === path ? { ...tab, modified: 1 } : tab));
     }
     setEditorColorRows(null);
     if (rebuildTimerRef.current) clearTimeout(rebuildTimerRef.current);
@@ -736,9 +746,9 @@ export default function CursorIdeApp() {
       rebuildTimerRef.current = null;
       rebuildColor(editorContentRef.current, stateRef.current.currentFilePath);
     }, 300);
-  }
+  }, []);
 
-  function saveCurrentFile() {
+  const saveCurrentFile = useCallback(() => {
     const path = stateRef.current.currentFilePath;
     if (path === '__landing__' || path === '__settings__') return;
     const execId = 'write_' + Date.now();
@@ -746,18 +756,18 @@ export default function CursorIdeApp() {
     const text = editorContentRef.current;
     const wrote = writeFile(path, text);
     fileContentsRef.current[path] = text;
-    setOpenTabs((prev) => prev.map((tab) => tab.path === path ? { ...tab, modified: 0 } : tab));
+    setOpenTabs((prev: Tab[]) => prev.map((tab) => tab.path === path ? { ...tab, modified: 0 } : tab));
     setEditorModified(0);
     if (wrote) completeToolExecution(execId, 'saved ' + path);
     else failToolExecution(execId, 'write failed');
     refreshWorkspace();
-  }
+  }, []);
 
-  function createNewFile() {
+    const createNewFile = useCallback(() => {
     setShowNewFileInput(1);
     setNewFileName('');
-  }
-  function confirmCreateFile() {
+  }, []);
+    const confirmCreateFile = useCallback(() => {
     const name = newFileName.trim();
     if (!name) { setShowNewFileInput(0); return; }
     const path = name.startsWith('/') ? name.slice(1) : name;
@@ -769,12 +779,12 @@ export default function CursorIdeApp() {
     refreshWorkspace();
     loadFileByPath(path);
     setShowNewFileInput(0);
-  }
+  }, []);
 
-  function recentSearchFallback(): SearchResult[] {
+    const recentSearchFallback = useCallback((): SearchResult[] => {
     return cachedTreePathsRef.current.slice(0, 8).map((path) => ({ file: path, line: 1, text: 'Recent workspace path', matches: 1 }));
-  }
-  function searchProject(query: string) {
+  }, []);
+    const searchProject = useCallback((query: string) => {
     if (stateRef.current.widthBand === 'narrow' || stateRef.current.widthBand === 'widget' || stateRef.current.widthBand === 'minimum') setCompactSurface('search');
     setSearchQuery(query);
     if (!query) { setSearchResults(recentSearchFallback()); return; }
@@ -798,37 +808,37 @@ export default function CursorIdeApp() {
     if (results.length === 0) results.push({ file: '(no results)', line: 0, text: 'No matches for: ' + query, matches: 0 });
     setSearchResults(results);
     completeToolExecution(execId, results.length + ' result(s)');
-  }
+  }, []);
 
-  function indexProject() {
+    const indexProject = useCallback(() => {
     const execId = 'index_' + Date.now();
     addToolExecution(execId, 'index', '.');
     clearExecCache();
     refreshWorkspace();
     completeToolExecution(execId, cachedTreePathsRef.current.length + ' paths indexed');
-  }
-  function setAgentMode(mode: string) { setAgentModeState(mode); }
-  function addAttachment(type: string, name: string, path: string) {
+  }, []);
+    const setAgentMode = useCallback((mode: string) => { setAgentModeState(mode); }, []);
+    const addAttachment = useCallback((type: string, name: string, path: string) => {
     const id = 'a' + String(Date.now()) + '_' + String(Math.floor(Math.random() * 1000));
     replaceAttachments([...stateRef.current.attachments, { id, type, name, path }]);
-  }
-  function removeAttachment(id: string) { replaceAttachments(stateRef.current.attachments.filter((a: any) => a.id !== id)); }
-  function clearAttachments() { replaceAttachments([]); }
-  function attachCurrentFile() {
+  }, []);
+    const removeAttachment = useCallback((id: string) => { replaceAttachments(stateRef.current.attachments.filter((a: any) => a.id !== id)); }, []);
+    const clearAttachments = useCallback(() => { replaceAttachments([]); }, []);
+    const attachCurrentFile = useCallback(() => {
     if (stateRef.current.currentFilePath === '__landing__') { addAttachment('workspace', stateRef.current.workspaceName, stateRef.current.workDir || '.'); return; }
     if (stateRef.current.currentFilePath === '__settings__') { addAttachment('surface', 'Settings', '__settings__'); return; }
     addAttachment('file', baseName(stateRef.current.currentFilePath), stateRef.current.currentFilePath);
-  }
-  function attachGitContext() { addAttachment('git', stateRef.current.gitBranch + ' diff', 'git-status'); }
-  function triggerSymbolMention() {
+  }, []);
+    const attachGitContext = useCallback(() => { addAttachment('git', stateRef.current.gitBranch + ' diff', 'git-status'); }, []);
+    const triggerSymbolMention = useCallback(() => {
     if (stateRef.current.currentFilePath !== '__landing__' && stateRef.current.currentFilePath !== '__settings__') {
       addAttachment('symbol', baseName(stateRef.current.currentFilePath) + ':focus', stateRef.current.currentFilePath);
     }
-  }
-  function toggleWebSearch() { setWebSearchState((prev: number) => prev ? 0 : 1); }
-  function toggleTermAccess() { setTermAccessState((prev: number) => prev ? 0 : 1); }
-  function toggleAutoApply() { setAutoApplyState((prev: number) => prev ? 0 : 1); }
-  function cycleModel() {
+  }, []);
+    const toggleWebSearch = useCallback(() => { setWebSearchState((prev: number) => prev ? 0 : 1); }, []);
+    const toggleTermAccess = useCallback(() => { setTermAccessState((prev: number) => prev ? 0 : 1); }, []);
+    const toggleAutoApply = useCallback(() => { setAutoApplyState((prev: number) => prev ? 0 : 1); }, []);
+    const cycleModel = useCallback(() => {
     const models = stateRef.current.providerConfigs
       .filter((provider: ProviderConfig) => provider.enabled)
       .flatMap((provider: ProviderConfig) => provider.models);
@@ -840,16 +850,16 @@ export default function CursorIdeApp() {
       setModelDisplayName(next.displayName);
       setSelectedProviderId(next.provider);
     }
-  }
-  function selectModel(modelId: string, displayName: string, provider: ProviderType) {
+  }, []);
+    const selectModel = useCallback((modelId: string, displayName: string, provider: ProviderType) => {
     setSelectedModel(modelId);
     setModelDisplayName(displayName);
     setSelectedProviderId(provider);
-  }
-  function updateProviderConfig(providerType: ProviderType, patch: Partial<ProviderConfig>) {
+  }, []);
+    const updateProviderConfig = useCallback((providerType: ProviderType, patch: Partial<ProviderConfig>) => {
     setProviderConfigs((prev) => prev.map((provider: ProviderConfig) => provider.type === providerType ? { ...provider, ...patch } : provider));
-  }
-  function toggleProviderEnabled(providerType: ProviderType) {
+  }, []);
+    const toggleProviderEnabled = useCallback((providerType: ProviderType) => {
     setProviderConfigs((prev) => {
       const next = prev.map((provider: ProviderConfig) => provider.type === providerType ? { ...provider, enabled: !provider.enabled } : provider);
       const selected = next.find((provider: ProviderConfig) => provider.type === stateRef.current.selectedProviderId);
@@ -859,20 +869,20 @@ export default function CursorIdeApp() {
       }
       return next;
     });
-  }
-  function startNewConversation() {
+  }, []);
+    const startNewConversation = useCallback(() => {
     setChatMessages(buildSeedMessages(stateRef.current.gitBranch, stateRef.current.changedCount, stateRef.current.workDir || '.', stateRef.current.modelDisplayName || 'AI'));
     replaceAttachments([]); replaceComposer(''); setIsGenerating(0);
     if (stateRef.current.widthBand === 'narrow' || stateRef.current.widthBand === 'widget' || stateRef.current.widthBand === 'minimum') setCompactSurface('agent');
-  }
+  }, []);
 
-  function closeBackendSession() {
+    const closeBackendSession = useCallback(() => {
     if (stateRef.current.activeBackend === 'claude') claude_close();
     else if (stateRef.current.activeBackend === 'kimi') kimi_close();
     setActiveBackend(''); setActiveSessionModel(''); setSessionInitState(0);
-  }
+  }, []);
 
-  function ensureBackendConnected(backend: string, model: string): boolean {
+    const ensureBackendConnected = useCallback((backend: string, model: string): boolean => {
     if (stateRef.current.sessionInitState === 1 && stateRef.current.activeBackend === backend && stateRef.current.activeSessionModel === model) {
       return true;
     }
@@ -889,12 +899,12 @@ export default function CursorIdeApp() {
     }
     setActiveBackend(backend); setActiveSessionModel(model); setSessionInitState(2);
     return false;
-  }
+  }, []);
 
   const assistantBufferRef = useRef('');
   const streamingMsgIdRef = useRef('');
 
-  function sendMessage(forceText?: string) {
+    const sendMessage = useCallback((forceText?: string) => {
     let inputText = forceText ?? stateRef.current.currentInput;
     if (inputText.length === 0 && stateRef.current.attachments.length === 0) return;
     // Expand variables before sending
@@ -966,9 +976,9 @@ export default function CursorIdeApp() {
     assistantBufferRef.current = '';
     streamingMsgIdRef.current = llmId;
     setChatMessages([...nextMessages, { role: 'assistant', time: 'now', text: '', model: stateRef.current.selectedModel, toolSnapshot: toolSnapshot }]);
-  }
+  }, []);
 
-  function finalizeStream(finalText: string, toolSnapshot: ToolExecution[]) {
+    const finalizeStream = useCallback((finalText: string, toolSnapshot: ToolExecution[]) => {
     setChatMessages((prev) => {
       const last = prev[prev.length - 1];
       if (last && last.role === 'assistant') {
@@ -982,9 +992,9 @@ export default function CursorIdeApp() {
       }
       return prev;
     });
-  }
+  }, []);
 
-  function appendStreamChunk(chunk: string) {
+    const appendStreamChunk = useCallback((chunk: string) => {
     assistantBufferRef.current += chunk;
     const buf = assistantBufferRef.current;
     setChatMessages((prev) => {
@@ -994,14 +1004,14 @@ export default function CursorIdeApp() {
       }
       return prev;
     });
-  }
+  }, []);
 
-  function stopBackgroundAgent() {
+    const stopBackgroundAgent = useCallback(() => {
     closeBackendSession();
     setActiveAgentId(''); setAgentStatusText('idle'); setIsGenerating(0);
-  }
+  }, []);
 
-  function pushTerminalHistory(kind: string, title: string, detail: string, path?: string) {
+    const pushTerminalHistory = useCallback((kind: string, title: string, detail: string, path?: string) => {
     const entry: TerminalHistoryEntry = {
       id: 'term_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
       kind,
@@ -1011,17 +1021,17 @@ export default function CursorIdeApp() {
       path,
     };
     setTerminalHistory((prev) => [entry, ...prev].slice(0, 14));
-  }
+  }, []);
 
-  function startTerminalRecording() {
+    const startTerminalRecording = useCallback(() => {
     if (typeof host.__rec_start !== 'function') return;
     if (typeof host.__rec_is_recording === 'function' && host.__rec_is_recording()) return;
     host.__rec_start();
     setTerminalRecording(1);
     pushTerminalHistory('record', 'Recording started', 'terminal output is now being captured');
-  }
+  }, []);
 
-  function stopAndSaveTerminalRecording(reason: string) {
+    const stopAndSaveTerminalRecording = useCallback((reason: string) => {
     const isRecording = typeof host.__rec_is_recording === 'function' ? host.__rec_is_recording() : 0;
     if (!isRecording || typeof host.__rec_save !== 'function' || typeof host.__rec_stop !== 'function') return;
     const path = '/tmp/cursor-ide-terminal-' + Date.now() + '.trec';
@@ -1034,17 +1044,17 @@ export default function CursorIdeApp() {
     } else {
       pushTerminalHistory('snapshot', reason, 'failed to save terminal recording');
     }
-  }
+  }, []);
 
-  function openTerminal() {
+    const openTerminal = useCallback(() => {
     if (!ptyStartedRef.current) { ptyOpen(110, 28); ptyStartedRef.current = true; }
     if (stateRef.current.widthBand === 'narrow' || stateRef.current.widthBand === 'widget' || stateRef.current.widthBand === 'minimum') setCompactSurface('terminal');
     setTerminalPane('live');
     startTerminalRecording();
     pushTerminalHistory('session', 'Terminal opened', stateRef.current.workDir + ' • ' + stateRef.current.gitBranch);
-  }
+  }, []);
 
-  function closeTerminalSurface(reason: string) {
+    const closeTerminalSurface = useCallback((reason: string) => {
     stopTerminalDockResize();
     setShowTerminal(0);
     setTerminalDockExpanded(0);
@@ -1053,94 +1063,102 @@ export default function CursorIdeApp() {
     }
     stopAndSaveTerminalRecording(reason);
     pushTerminalHistory('session', 'Terminal closed', reason);
-  }
+  }, []);
 
-  function toggleTerminalDockExpanded() {
+    const toggleTerminalDockExpanded = useCallback(() => {
     stopTerminalDockResize();
     const next = terminalDockExpanded ? 0 : 1;
     setTerminalDockExpanded(next);
     pushTerminalHistory(next ? 'layout' : 'layout', next ? 'Terminal expanded' : 'Terminal collapsed', stateRef.current.workDir);
-  }
+  }, []);
 
-  function stopTerminalDockResize() {
+    const stopTerminalDockResize = useCallback(() => {
     if (typeof host.__endTerminalDockResize === 'function') {
       host.__endTerminalDockResize();
     }
-  }
+  }, []);
 
-  function beginTerminalDockResize() {
+    const beginTerminalDockResize = useCallback(() => {
     const begin = typeof host.__beginTerminalDockResize === 'function' ? host.__beginTerminalDockResize : null;
     const getMouseY = typeof host.getMouseY === 'function' ? host.getMouseY : null;
     if (!begin || !getMouseY) return;
     begin(Number(getMouseY()), clampTerminalDockHeight(stateRef.current.terminalDockHeight || 250));
-  }
+  }, []);
 
-  function toggleTerminalRecording() {
+    const toggleTerminalRecording = useCallback(() => {
     if (terminalRecording) {
       stopAndSaveTerminalRecording('manual stop');
       pushTerminalHistory('record', 'Recording stopped', 'manual stop');
     } else {
       startTerminalRecording();
     }
-  }
+  }, []);
 
-  function saveTerminalSnapshot() {
+    const saveTerminalSnapshot = useCallback(() => {
     if (typeof host.__rec_save !== 'function') return;
     if (!(typeof host.__rec_is_recording === 'function' ? host.__rec_is_recording() : 0)) startTerminalRecording();
     const path = '/tmp/cursor-ide-terminal-' + Date.now() + '.trec';
     const ok = host.__rec_save(path);
     if (ok) pushTerminalHistory('snapshot', 'Snapshot saved', 'saved terminal recording', path);
     else pushTerminalHistory('snapshot', 'Snapshot failed', 'unable to save terminal recording');
-  }
+  }, []);
 
-  function loadTerminalPlayback() {
+    const loadTerminalPlayback = useCallback(() => {
     if (typeof host.__play_load !== 'function') return;
     const ok = host.__play_load();
     pushTerminalHistory('playback', ok ? 'Playback loaded' : 'Playback unavailable', ok ? 'loaded current recorder buffer' : 'no recorder buffer to load');
-  }
+  }, []);
 
-  function toggleTerminalPlayback() {
+    const toggleTerminalPlayback = useCallback(() => {
     if (typeof host.__play_toggle !== 'function') return;
     host.__play_toggle();
     pushTerminalHistory('playback', 'Playback toggled', 'current recorder playback state changed');
-  }
+  }, []);
 
-  function stepTerminalPlayback() {
+    const stepTerminalPlayback = useCallback(() => {
     if (typeof host.__play_step !== 'function') return;
     host.__play_step();
     pushTerminalHistory('playback', 'Playback stepped', 'advanced current recorder by one step');
-  }
+  }, []);
 
-  function clearTerminalHistory() {
+    const clearTerminalHistory = useCallback(() => {
     setTerminalHistory([]);
-  }
-  function selectSlashCommand(cmd: string) { replaceComposer(cmd + ' '); }
-  function sendSteerMessage(message: string) {
+  }, []);
+    const selectSlashCommand = useCallback((cmd: string) => { replaceComposer(cmd + ' '); }, []);
+    const sendSteerMessage = useCallback((message: string) => {
     sendMessage(message);
-  }
+  }, []);
 
   // ── Lint / error count (basic) ──────────────────────────────────────
-  function refreshDiagnostics() {
+  const refreshDiagnostics = useCallback(() => {
     const path = stateRef.current.currentFilePath;
     if (!path || path === '__landing__' || path === '__settings__') { setErrors(0); setWarnings(0); return; }
     const type = inferFileType(path);
     if (type === 'tsx' || type === 'ts') {
-      const raw = exec('npx tsc --noEmit --pretty false ' + path + ' 2>/dev/null || true').trim();
-      let e = 0, w = 0;
-      for (const line of raw.split('\n')) {
-        if (line.includes('error TS')) e++;
-        else if (line.includes('warning TS')) w++;
-      }
-      setErrors(e); setWarnings(w);
+      execAsync('npx tsc --noEmit --pretty false ' + path + ' 2>/dev/null || true').then((res) => {
+        // Stale-result guard: if the user switched files before tsc finished,
+        // drop this result.
+        if (stateRef.current.currentFilePath !== path) return;
+        const raw = res.stdout.trim();
+        let e = 0, w = 0;
+        for (const line of raw.split('\n')) {
+          if (line.includes('error TS')) e++;
+          else if (line.includes('warning TS')) w++;
+        }
+        setErrors(e); setWarnings(w);
+      });
     } else if (type === 'zig') {
-      const raw = exec('zig ast-check ' + path + ' 2>/dev/null || true').trim();
-      let e = 0;
-      for (const line of raw.split('\n')) { if (line.includes('error:')) e++; }
-      setErrors(e); setWarnings(0);
+      execAsync('zig ast-check ' + path + ' 2>/dev/null || true').then((res) => {
+        if (stateRef.current.currentFilePath !== path) return;
+        const raw = res.stdout.trim();
+        let e = 0;
+        for (const line of raw.split('\n')) { if (line.includes('error:')) e++; }
+        setErrors(e); setWarnings(0);
+      });
     } else {
       setErrors(0); setWarnings(0);
     }
-  }
+  }, []);
 
   useEffect(() => {
     syncWindowMetrics();
@@ -1184,9 +1202,10 @@ export default function CursorIdeApp() {
     return () => clearInterval(id);
   }, []);
 
-  useEffect(() => {
-    refreshDiagnostics();
-  }, [currentFilePath]);
+  // Diagnostics run via execAsync (detached thread on the host, __ffiEmit on
+  // completion). Click handler returns immediately; the error/warning badges
+  // update a few seconds later when tsc finishes.
+  useEffect(() => { refreshDiagnostics(); }, [currentFilePath]);
 
   // ── Backend poll loop (aligned with cart/cockpit) ──────────────────
   useEffect(() => {
@@ -1248,6 +1267,21 @@ export default function CursorIdeApp() {
   const minimumMode = widthBand === 'minimum';
   const mediumMode = widthBand === 'medium';
   const rightRail = showSearch ? 'search' : showChat ? 'agent' : '';
+
+  // Stable style/handler refs so memo'd surfaces can bail out on unchanged input.
+  // Without these, every App render creates fresh `style={{...}}` + `onX={() => ...}`
+  // identities and every memo'd child re-renders. This was the actual 1800ms fix.
+  const sidebarStyle = useMemo(() => ({ width: '100%', borderRightWidth: 0 }), []);
+  const fullWidthStyle = useMemo(() => ({ width: '100%' }), []);
+  const searchWideStyle = useMemo(() => ({ width: mediumMode ? 320 : 390 }), [mediumMode]);
+  const chatWideStyle = useMemo(() => ({ width: mediumMode ? 340 : 420 }), [mediumMode]);
+  const closeSearchToMainSurface = useCallback(() => {
+    setShowSearch(0);
+    const ms = primaryMainView(stateRef.current.activeView, stateRef.current.currentFilePath);
+    setCompactSurface(ms);
+  }, []);
+  const closeSearchOnly = useCallback(() => setShowSearch(0), []);
+  const onChatInputChange = useCallback((value: string) => replaceComposer(value), []);
   let tabsForBar = openTabs;
   let landingStats = workspaceStats;
   let landingRecent = landingRecentFiles;
@@ -1367,7 +1401,7 @@ export default function CursorIdeApp() {
                 stagedCount={stagedCount}
                 currentFilePath={currentFilePath}
                 widthBand={widthBand}
-                style={{ width: '100%', borderRightWidth: 0 }}
+                style={sidebarStyle}
                 multiPanel={false}
                 dockPanels={dockPanels}
                 onOpenHome={openLandingPage}
@@ -1415,14 +1449,17 @@ export default function CursorIdeApp() {
                     { id: 'checkpoints', label: 'Checkpoints', meta: 'diff per AI turn', tone: '#79c0ff', icon: 'git-commit', count: String(loadCheckpoints().length) },
                   ]} providers={SETTINGS_PROVIDERS} providerConfigs={providerConfigs} contextRows={SETTINGS_CONTEXT_ROWS} memoryRows={SETTINGS_MEMORY_ROWS} pluginRows={SETTINGS_PLUGIN_ROWS} automationRows={SETTINGS_AUTOMATION_ROWS} capabilityRows={SETTINGS_CAPABILITY_ROWS} defaultModels={defaultModels} proxyConfigs={proxyConfigs} proxyStatus={proxyStatus} checkpoints={loadCheckpoints()} onSelectSection={setSettingsSection} onSelectProvider={setSelectedProviderId} onToggleProvider={toggleProviderEnabled} onUpdateProvider={updateProviderConfig} onSelectModel={selectModel} onUpdateDefaultModels={(s: DefaultModelsSettings) => { setDefaultModels(s); saveDefaultModels(s); }} onVariablesChange={() => {}} onProxyChange={() => { setProxyConfigs(listProxyConfigs()); setProxyStatus(getProxyStatus()); }} onKeysChange={() => {}} onIndexChange={() => {}} onSelectCheckpoint={(id: string) => setSettingsSection('checkpoints')} />
                 ) : null}
-                {compactMainView === 'editor' ? (
-                  <EditorSurface content={editorContent} editorRows={editorRows} editorColorRows={editorColorRows} largeFileMode={editorLargeFileMode} totalLines={totalLines} cursorLine={cursorPosition.line} cursorColumn={cursorPosition.column} modified={editorModified} currentFilePath={currentFilePath} widthBand={widthBand} windowHeight={windowHeight} onChange={updateEditorContent} onSave={saveCurrentFile} />
-                ) : null}
+                {/* Editor is always mounted; display toggles instead of conditional mount.
+                    Prevents the 191-op full-remount on every file click — subsequent
+                    clicks are prop updates on a stable subtree. */}
+                <Box style={{ display: compactMainView === 'editor' ? 'flex' : 'none', flexGrow: 1, flexBasis: 0, minHeight: 0 }}>
+                  <EditorSurface content={editorContent} contentHandle={fileContentHandle} editorRows={editorRows} editorColorRows={editorColorRows} largeFileMode={editorLargeFileMode} totalLines={totalLines} cursorLine={cursorPosition.line} cursorColumn={cursorPosition.column} modified={editorModified} currentFilePath={currentFilePath} widthBand={widthBand} windowHeight={windowHeight} onChange={updateEditorContent} onSave={saveCurrentFile} />
+                </Box>
               </Col>
             ) : null}
 
             {compactSurface === 'search' ? (
-              <SearchSurface query={searchQuery} results={searchResults} workspaceName={workspaceName} gitBranch={gitBranch} widthBand={widthBand} style={{ width: '100%' }} onClose={() => { setShowSearch(0); setCompactSurface(mainSurface); }} onQuery={searchProject} onOpenResult={openSearchResult} />
+              <SearchSurface query={searchQuery} results={searchResults} workspaceName={workspaceName} gitBranch={gitBranch} widthBand={widthBand} style={fullWidthStyle} onClose={closeSearchToMainSurface} onQuery={searchProject} onOpenResult={openSearchResult} />
             ) : null}
             {compactSurface === 'hot' ? (
               <HotPanel workDir={workDir} visible={true} onSteer={sendSteerMessage} />
@@ -1434,7 +1471,7 @@ export default function CursorIdeApp() {
               <PlanPanelWrapper workDir={workDir} activePlanId={activePlanId} onChange={(id) => setActivePlanId(id)} onSendToAI={sendMessage} />
             ) : null}
             {compactSurface === 'agent' ? (
-              <ChatSurface messages={chatMessages} isGenerating={!!isGenerating} currentFilePath={currentFilePath} gitBranch={gitBranch} gitRemote={gitRemote} changedCount={changedCount} workspaceName={workspaceName} activeView={activeView} widthBand={widthBand} style={{ width: '100%' }} selectedModel={selectedModel} currentInput={currentInput} agentMode={agentMode} attachments={attachments} webSearch={!!webSearch} termAccess={!!termAccess} autoApply={!!autoApply} inputTokenEstimate={inputTokenEstimate} modelDisplayName={modelDisplayName} toolExecutions={toolExecutions} activeAgentId={activeAgentId} agentStatusText={agentStatusText} variablePreview={variablePreview} workspaceFiles={cachedTreePathsRef.current} onNewConversation={startNewConversation} onIndex={indexProject} onSetMode={setAgentMode} onInputChange={(value: string) => replaceComposer(value)} onAttachCurrentFile={attachCurrentFile} onAttachSymbol={triggerSymbolMention} onAttachGit={attachGitContext} onToggleWebSearch={toggleWebSearch} onToggleTermAccess={toggleTermAccess} onToggleAutoApply={toggleAutoApply} onCycleModel={cycleModel} onSend={sendMessage} onRemoveAttachment={removeAttachment} onClearAttachments={clearAttachments} onSelectSlash={selectSlashCommand} onStopAgent={stopBackgroundAgent} />
+              <ChatSurface messages={chatMessages} isGenerating={!!isGenerating} currentFilePath={currentFilePath} gitBranch={gitBranch} gitRemote={gitRemote} changedCount={changedCount} workspaceName={workspaceName} activeView={activeView} widthBand={widthBand} style={fullWidthStyle} selectedModel={selectedModel} currentInput={currentInput} agentMode={agentMode} attachments={attachments} webSearch={!!webSearch} termAccess={!!termAccess} autoApply={!!autoApply} inputTokenEstimate={inputTokenEstimate} modelDisplayName={modelDisplayName} toolExecutions={toolExecutions} activeAgentId={activeAgentId} agentStatusText={agentStatusText} variablePreview={variablePreview} workspaceFiles={cachedTreePathsRef.current} onNewConversation={startNewConversation} onIndex={indexProject} onSetMode={setAgentMode} onInputChange={onChatInputChange} onAttachCurrentFile={attachCurrentFile} onAttachSymbol={triggerSymbolMention} onAttachGit={attachGitContext} onToggleWebSearch={toggleWebSearch} onToggleTermAccess={toggleTermAccess} onToggleAutoApply={toggleAutoApply} onCycleModel={cycleModel} onSend={sendMessage} onRemoveAttachment={removeAttachment} onClearAttachments={clearAttachments} onSelectSlash={selectSlashCommand} onStopAgent={stopBackgroundAgent} />
             ) : null}
             {compactSurface === 'terminal' ? (
               <TerminalPanel
@@ -1546,9 +1583,9 @@ export default function CursorIdeApp() {
                       { id: 'checkpoints', label: 'Checkpoints', meta: 'diff per AI turn', tone: '#79c0ff', icon: 'git-commit', count: String(loadCheckpoints().length) },
                     ]} providers={SETTINGS_PROVIDERS} providerConfigs={providerConfigs} contextRows={SETTINGS_CONTEXT_ROWS} memoryRows={SETTINGS_MEMORY_ROWS} pluginRows={SETTINGS_PLUGIN_ROWS} automationRows={SETTINGS_AUTOMATION_ROWS} capabilityRows={SETTINGS_CAPABILITY_ROWS} defaultModels={defaultModels} proxyConfigs={proxyConfigs} proxyStatus={proxyStatus} checkpoints={loadCheckpoints()} onSelectSection={setSettingsSection} onSelectProvider={setSelectedProviderId} onToggleProvider={toggleProviderEnabled} onUpdateProvider={updateProviderConfig} onSelectModel={selectModel} onUpdateDefaultModels={(s: DefaultModelsSettings) => { setDefaultModels(s); saveDefaultModels(s); }} onVariablesChange={() => {}} onProxyChange={() => { setProxyConfigs(listProxyConfigs()); setProxyStatus(getProxyStatus()); }} onKeysChange={() => {}} onIndexChange={() => {}} onSelectCheckpoint={(id: string) => setSettingsSection('checkpoints')} />
                   ) : null}
-                  {activeView === 'editor' ? (
-                    <EditorSurface content={editorContent} editorRows={editorRows} editorColorRows={editorColorRows} largeFileMode={editorLargeFileMode} totalLines={totalLines} cursorLine={cursorPosition.line} cursorColumn={cursorPosition.column} modified={editorModified} currentFilePath={currentFilePath} widthBand={widthBand} windowHeight={windowHeight} onChange={updateEditorContent} onSave={saveCurrentFile} />
-                  ) : null}
+                  <Box style={{ display: activeView === 'editor' ? 'flex' : 'none', flexGrow: 1, flexBasis: 0, minHeight: 0 }}>
+                    <EditorSurface content={editorContent} contentHandle={fileContentHandle} editorRows={editorRows} editorColorRows={editorColorRows} largeFileMode={editorLargeFileMode} totalLines={totalLines} cursorLine={cursorPosition.line} cursorColumn={cursorPosition.column} modified={editorModified} currentFilePath={currentFilePath} widthBand={widthBand} windowHeight={windowHeight} onChange={updateEditorContent} onSave={saveCurrentFile} />
+                  </Box>
                   {showDockedTerminal ? (
                     <TerminalPanel
                       workDir={workDir}
@@ -1579,7 +1616,7 @@ export default function CursorIdeApp() {
             </Col>
 
             {showDockedSearch ? (
-              <SearchSurface query={searchQuery} results={searchResults} workspaceName={workspaceName} gitBranch={gitBranch} widthBand={widthBand} style={{ width: mediumMode ? 320 : 390 }} onClose={() => setShowSearch(0)} onQuery={searchProject} onOpenResult={openSearchResult} />
+              <SearchSurface query={searchQuery} results={searchResults} workspaceName={workspaceName} gitBranch={gitBranch} widthBand={widthBand} style={searchWideStyle} onClose={closeSearchOnly} onQuery={searchProject} onOpenResult={openSearchResult} />
             ) : null}
             {showDockedHot ? (
               <HotPanel workDir={workDir} visible={true} onSteer={sendSteerMessage} />
@@ -1591,7 +1628,7 @@ export default function CursorIdeApp() {
               <PlanPanelWrapper workDir={workDir} activePlanId={activePlanId} onChange={(id) => setActivePlanId(id)} onSendToAI={sendMessage} />
             ) : null}
             {showDockedChat ? (
-              <ChatSurface messages={chatMessages} isGenerating={!!isGenerating} currentFilePath={currentFilePath} gitBranch={gitBranch} gitRemote={gitRemote} changedCount={changedCount} workspaceName={workspaceName} activeView={activeView} widthBand={widthBand} style={{ width: mediumMode ? 340 : 420 }} selectedModel={selectedModel} currentInput={currentInput} agentMode={agentMode} attachments={attachments} webSearch={!!webSearch} termAccess={!!termAccess} autoApply={!!autoApply} inputTokenEstimate={inputTokenEstimate} modelDisplayName={modelDisplayName} toolExecutions={toolExecutions} activeAgentId={activeAgentId} agentStatusText={agentStatusText} variablePreview={variablePreview} workspaceFiles={cachedTreePathsRef.current} onNewConversation={startNewConversation} onIndex={indexProject} onSetMode={setAgentMode} onInputChange={(value: string) => replaceComposer(value)} onAttachCurrentFile={attachCurrentFile} onAttachSymbol={triggerSymbolMention} onAttachGit={attachGitContext} onToggleWebSearch={toggleWebSearch} onToggleTermAccess={toggleTermAccess} onToggleAutoApply={toggleAutoApply} onCycleModel={cycleModel} onSend={sendMessage} onRemoveAttachment={removeAttachment} onClearAttachments={clearAttachments} onSelectSlash={selectSlashCommand} onStopAgent={stopBackgroundAgent} />
+              <ChatSurface messages={chatMessages} isGenerating={!!isGenerating} currentFilePath={currentFilePath} gitBranch={gitBranch} gitRemote={gitRemote} changedCount={changedCount} workspaceName={workspaceName} activeView={activeView} widthBand={widthBand} style={chatWideStyle} selectedModel={selectedModel} currentInput={currentInput} agentMode={agentMode} attachments={attachments} webSearch={!!webSearch} termAccess={!!termAccess} autoApply={!!autoApply} inputTokenEstimate={inputTokenEstimate} modelDisplayName={modelDisplayName} toolExecutions={toolExecutions} activeAgentId={activeAgentId} agentStatusText={agentStatusText} variablePreview={variablePreview} workspaceFiles={cachedTreePathsRef.current} onNewConversation={startNewConversation} onIndex={indexProject} onSetMode={setAgentMode} onInputChange={onChatInputChange} onAttachCurrentFile={attachCurrentFile} onAttachSymbol={triggerSymbolMention} onAttachGit={attachGitContext} onToggleWebSearch={toggleWebSearch} onToggleTermAccess={toggleTermAccess} onToggleAutoApply={toggleAutoApply} onCycleModel={cycleModel} onSend={sendMessage} onRemoveAttachment={removeAttachment} onClearAttachments={clearAttachments} onSelectSlash={selectSlashCommand} onStopAgent={stopBackgroundAgent} />
             ) : null}
           </Row>
         )}

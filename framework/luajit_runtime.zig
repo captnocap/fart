@@ -19,6 +19,7 @@ const qjs_runtime = @import("qjs_runtime.zig");
 const layout = @import("layout.zig");
 const effect_ctx = @import("effect_ctx.zig");
 const effect_shader_mod = @import("effect_shader.zig");
+const click_latency = @import("lua/jsrt/click_latency.zig");
 const Node = layout.Node;
 const Style = layout.Style;
 const Color = layout.Color;
@@ -59,6 +60,13 @@ pub var telemetry_paint_us: u64 = 0;
 pub var telemetry_tick_us: u64 = 0;
 pub var bridge_calls_this_second: u64 = 0;
 var bridge_last_reset: i64 = 0;
+var g_click_latency: click_latency.ClickLatencyRing = .{};
+var g_click_latency_seq: u64 = 0;
+var g_click_latency_dump_on_apply = false;
+
+pub fn setClickLatencyDumpOnApply(enabled: bool) void {
+    g_click_latency_dump_on_apply = enabled;
+}
 
 // ── Host functions ──────────────────────────────────────────────────────
 
@@ -134,13 +142,26 @@ fn hostMarkDirty(_: ?*lua.lua_State) callconv(.c) c_int {
 }
 
 fn hostLog(L: ?*lua.lua_State) callconv(.c) c_int {
-    var len: usize = 0;
-    const ptr = lua.lua_tolstring(L, 1, &len);
-    if (ptr != null) {
-        const msg: []const u8 = @as([*]const u8, @ptrCast(ptr))[0..len];
-        std.log.info("[Lua] {s}", .{msg});
+    const argc = lua.lua_gettop(L);
+    const msg_idx: c_int = if (argc >= 2) 2 else 1;
+    var level_len: usize = 0;
+    var msg_len: usize = 0;
+    const level_ptr = if (argc >= 2) lua.lua_tolstring(L, 1, &level_len) else null;
+    const msg_ptr = lua.lua_tolstring(L, msg_idx, &msg_len);
+    if (msg_ptr != null) {
+        const msg: []const u8 = @as([*]const u8, @ptrCast(msg_ptr))[0..msg_len];
+        if (level_ptr != null and level_len > 0) {
+            const level: []const u8 = @as([*]const u8, @ptrCast(level_ptr))[0..level_len];
+            std.log.info("[Lua:{s}] {s}", .{ level, msg });
+        } else {
+            std.log.info("[Lua] {s}", .{msg});
+        }
     }
     return 0;
+}
+
+fn hostTrace(name: []const u8) void {
+    _ = name;
 }
 
 fn hostGetInputText(L: ?*lua.lua_State) callconv(.c) c_int {
@@ -184,6 +205,66 @@ fn hostPollInputSubmit(L: ?*lua.lua_State) callconv(.c) c_int {
     lua.lua_pushlstring(L, evt.text.ptr, @intCast(evt.text.len));
     lua.lua_setfield(L, -2, "text");
     return 1;
+}
+
+fn hostClickLatencyBegin(L: ?*lua.lua_State) callconv(.c) c_int {
+    g_click_latency_seq = g_click_latency.beginClick();
+    lua.lua_pushinteger(L, @intCast(g_click_latency_seq));
+    return 1;
+}
+
+fn hostClickLatencyCurrentSeq(L: ?*lua.lua_State) callconv(.c) c_int {
+    lua.lua_pushinteger(L, @intCast(g_click_latency_seq));
+    return 1;
+}
+
+fn hostClickLatencyStampDispatch(_: ?*lua.lua_State) callconv(.c) c_int {
+    _ = g_click_latency.stampDispatch(g_click_latency_seq);
+    return 0;
+}
+
+fn hostClickLatencyStampHandler(_: ?*lua.lua_State) callconv(.c) c_int {
+    _ = g_click_latency.stampHandler(g_click_latency_seq);
+    return 0;
+}
+
+fn hostClickLatencyStampStateUpdate(_: ?*lua.lua_State) callconv(.c) c_int {
+    _ = g_click_latency.stampStateUpdate(g_click_latency_seq);
+    return 0;
+}
+
+fn hostClickLatencyStampFlush(_: ?*lua.lua_State) callconv(.c) c_int {
+    _ = g_click_latency.stampFlush(g_click_latency_seq);
+    return 0;
+}
+
+fn hostClickLatencyStampApplyDone(_: ?*lua.lua_State) callconv(.c) c_int {
+    _ = g_click_latency.stampApplyDone(g_click_latency_seq);
+    if (g_click_latency_dump_on_apply) {
+        var stderr_buf: [4096]u8 = undefined;
+        var stderr_file = std.fs.File.stderr();
+        var stderr_writer = stderr_file.writer(&stderr_buf);
+        g_click_latency.dumpRecent(&stderr_writer.interface, click_latency.default_capacity) catch |err| {
+            std.log.warn("[click-latency] dump failed: {}", .{err});
+        };
+        g_click_latency_dump_on_apply = false;
+    }
+    g_click_latency_seq = 0;
+    return 0;
+}
+
+fn hostClickLatencyDump(L: ?*lua.lua_State) callconv(.c) c_int {
+    const last_n = if (lua.lua_gettop(L) >= 1 and lua.lua_isnumber(L, 1) != 0)
+        @as(usize, @intCast(@max(0, lua.lua_tointeger(L, 1))))
+    else
+        click_latency.default_capacity;
+    var stderr_buf: [4096]u8 = undefined;
+    var stderr_file = std.fs.File.stderr();
+    var stderr_writer = stderr_file.writer(&stderr_buf);
+    g_click_latency.dumpRecent(&stderr_writer.interface, last_n) catch |err| {
+        std.log.warn("[click-latency] dump failed: {}", .{err});
+    };
+    return 0;
 }
 
 // ── JSRT host-op tree ---------------------------------------------------
@@ -300,6 +381,14 @@ fn jsrtAppendChild(parent: *Node, child: *Node) bool {
     return jsrtCopyChildren(parent, old_children, ptrs.items);
 }
 
+fn jsrtInheritTypography(parent: *Node, child: *Node) void {
+    if (child.text == null) return;
+    child.font_size = parent.font_size;
+    if (parent.text_color) |c| child.text_color = c;
+    child.letter_spacing = parent.letter_spacing;
+    if (parent.line_height > 0) child.line_height = parent.line_height;
+}
+
 fn jsrtInsertChildBefore(parent: *Node, child: *Node, before: *Node) bool {
     const old_children = parent.children;
     var ptrs: std.ArrayList(*Node) = .{};
@@ -362,6 +451,7 @@ fn jsrtApplyUpdatePatch(L: ?*lua.lua_State, idx: c_int, node: *Node) void {
     lua.lua_getfield(L, idx, "style");
     if (lua.lua_istable(L, -1)) {
         node.style = readLuaStyle(L, -1);
+        applyLuaTextProps(node, L, -1, jsrtNodeAllocator());
     }
     lua.lua_pop(L, 1);
 
@@ -375,40 +465,23 @@ fn jsrtApplyUpdatePatch(L: ?*lua.lua_State, idx: c_int, node: *Node) void {
     }
     lua.lua_pop(L, 1);
 
-    if (readLuaOptFloat(L, idx, "font_size")) |v| node.font_size = @intFromFloat(v);
-    lua.lua_getfield(L, idx, "text_color");
-    if (readLuaColor(L, -1)) |c| node.text_color = c;
-    lua.lua_pop(L, 1);
-    if (readLuaOptFloat(L, idx, "letter_spacing")) |v| node.letter_spacing = v;
-    if (readLuaOptFloat(L, idx, "line_height")) |v| node.line_height = v;
-    if (readLuaOptFloat(L, idx, "number_of_lines")) |v| node.number_of_lines = @intFromFloat(v);
-    lua.lua_getfield(L, idx, "no_wrap");
-    if (lua.lua_isboolean(L, -1)) {
-        node.no_wrap = lua.lua_toboolean(L, -1) != 0;
-    }
-    lua.lua_pop(L, 1);
-
-    node.placeholder = readLuaOptString(L, idx, "placeholder", jsrtNodeAllocator()) orelse node.placeholder;
-    node.debug_name = readLuaOptString(L, idx, "debug_name", jsrtNodeAllocator()) orelse node.debug_name;
-    node.test_id = readLuaOptString(L, idx, "test_id", jsrtNodeAllocator()) orelse node.test_id;
-    node.tooltip = readLuaOptString(L, idx, "tooltip", jsrtNodeAllocator()) orelse node.tooltip;
-    node.href = readLuaOptString(L, idx, "href", jsrtNodeAllocator()) orelse node.href;
+    applyLuaTextProps(node, L, idx, jsrtNodeAllocator());
     lua.lua_getfield(L, idx, "hoverable");
     if (lua.lua_isboolean(L, -1)) {
         node.hoverable = lua.lua_toboolean(L, -1) != 0;
     }
     lua.lua_pop(L, 1);
-    node.scroll_x = readLuaFloat(L, idx, "scroll_x", node.scroll_x);
-    node.scroll_y = readLuaFloat(L, idx, "scroll_y", node.scroll_y);
-    if (readLuaOptFloat(L, idx, "scroll_persist_slot")) |v| node.scroll_persist_slot = @intFromFloat(v);
+    node.scroll_x = readLuaFloat2(L, idx, "scroll_x", "scrollX", node.scroll_x);
+    node.scroll_y = readLuaFloat2(L, idx, "scroll_y", "scrollY", node.scroll_y);
+    if (readLuaOptFloat2(L, idx, "scroll_persist_slot", "scrollPersistSlot")) |v| node.scroll_persist_slot = @intFromFloat(v);
     node.content_height = readLuaFloat(L, idx, "content_height", node.content_height);
     node.content_width = readLuaFloat(L, idx, "content_width", node.content_width);
-    lua.lua_getfield(L, idx, "window_drag");
+    luaGetFieldAlias2(L, idx, "window_drag", "windowDrag");
     if (lua.lua_isboolean(L, -1)) {
         node.window_drag = lua.lua_toboolean(L, -1) != 0;
     }
     lua.lua_pop(L, 1);
-    lua.lua_getfield(L, idx, "window_resize");
+    luaGetFieldAlias2(L, idx, "window_resize", "windowResize");
     if (lua.lua_isboolean(L, -1)) {
         node.window_resize = lua.lua_toboolean(L, -1) != 0;
     }
@@ -416,6 +489,7 @@ fn jsrtApplyUpdatePatch(L: ?*lua.lua_State, idx: c_int, node: *Node) void {
 }
 
 fn hostCreate(L: ?*lua.lua_State) callconv(.c) c_int {
+    hostTrace("__hostCreate");
     const alloc = jsrtNodeAllocator();
     const argc = lua.lua_gettop(L);
     var id: u32 = jsrt_next_id;
@@ -434,6 +508,9 @@ fn hostCreate(L: ?*lua.lua_State) callconv(.c) c_int {
     }
 
     var node = stampLuaNode(L, props_idx, alloc);
+    if (argc >= props_idx + 1 and lua.lua_istable(L, props_idx + 1)) {
+        jsrtApplyHandlerNames(&node, alloc, id, L, props_idx + 1);
+    }
     if (node.debug_name == null and lua.lua_isstring(L, type_idx) != 0) {
         if (jsrtDupLuaString(L, type_idx, alloc)) |type_name| {
             node.debug_name = type_name;
@@ -447,6 +524,7 @@ fn hostCreate(L: ?*lua.lua_State) callconv(.c) c_int {
 }
 
 fn hostCreateText(L: ?*lua.lua_State) callconv(.c) c_int {
+    hostTrace("__hostCreateText");
     const alloc = jsrtNodeAllocator();
     const argc = lua.lua_gettop(L);
     var id: u32 = jsrt_next_id;
@@ -472,20 +550,24 @@ fn hostCreateText(L: ?*lua.lua_State) callconv(.c) c_int {
 }
 
 fn hostAppend(L: ?*lua.lua_State) callconv(.c) c_int {
+    hostTrace("__hostAppend");
     const parent_id = @as(u32, @intCast(lua.lua_tointeger(L, 1)));
     const child_id = @as(u32, @intCast(lua.lua_tointeger(L, 2)));
     const parent = jsrtNodeForId(parent_id) orelse return 0;
     const child = jsrtNodeForId(child_id) orelse return 0;
+    jsrtInheritTypography(parent, child);
     return if (jsrtAppendChild(parent, child)) 0 else 0;
 }
 
 fn hostAppendToRoot(L: ?*lua.lua_State) callconv(.c) c_int {
+    hostTrace("__hostAppendToRoot");
     const child_id = @as(u32, @intCast(lua.lua_tointeger(L, 1)));
     const child = jsrtNodeForId(child_id) orelse return 0;
     return if (jsrtAppendChild(&jsrt_root, child)) 0 else 0;
 }
 
 fn hostUpdateText(L: ?*lua.lua_State) callconv(.c) c_int {
+    hostTrace("__hostUpdateText");
     const id = @as(u32, @intCast(lua.lua_tointeger(L, 1)));
     const node = jsrtNodeForId(id) orelse return 0;
     if (jsrtDupLuaString(L, 2, jsrtNodeAllocator())) |text| {
@@ -495,13 +577,18 @@ fn hostUpdateText(L: ?*lua.lua_State) callconv(.c) c_int {
 }
 
 fn hostUpdate(L: ?*lua.lua_State) callconv(.c) c_int {
+    hostTrace("__hostUpdate");
     const id = @as(u32, @intCast(lua.lua_tointeger(L, 1)));
     const node = jsrtNodeForId(id) orelse return 0;
     jsrtApplyUpdatePatch(L, 2, node);
+    if (lua.lua_gettop(L) >= 3 and lua.lua_istable(L, 3)) {
+        jsrtApplyHandlerNames(node, jsrtNodeAllocator(), id, L, 3);
+    }
     return 0;
 }
 
 fn hostRemove(L: ?*lua.lua_State) callconv(.c) c_int {
+    hostTrace("__hostRemove");
     const parent_id = @as(u32, @intCast(lua.lua_tointeger(L, 1)));
     const child_id = @as(u32, @intCast(lua.lua_tointeger(L, 2)));
     const parent = jsrtNodeForId(parent_id) orelse return 0;
@@ -510,18 +597,21 @@ fn hostRemove(L: ?*lua.lua_State) callconv(.c) c_int {
 }
 
 fn hostRemoveFromRoot(L: ?*lua.lua_State) callconv(.c) c_int {
+    hostTrace("__hostRemoveFromRoot");
     const child_id = @as(u32, @intCast(lua.lua_tointeger(L, 1)));
     const child = jsrtNodeForId(child_id) orelse return 0;
     return if (jsrtRemoveChild(&jsrt_root, child)) 0 else 0;
 }
 
 fn hostInsertBefore(L: ?*lua.lua_State) callconv(.c) c_int {
+    hostTrace("__hostInsertBefore");
     const parent_id = @as(u32, @intCast(lua.lua_tointeger(L, 1)));
     const child_id = @as(u32, @intCast(lua.lua_tointeger(L, 2)));
     const before_id = @as(u32, @intCast(lua.lua_tointeger(L, 3)));
     const parent = jsrtNodeForId(parent_id) orelse return 0;
     const child = jsrtNodeForId(child_id) orelse return 0;
     const before = jsrtNodeForId(before_id) orelse return 0;
+    jsrtInheritTypography(parent, child);
     const old_children = parent.children;
     var ptrs: std.ArrayList(*Node) = .{};
     defer ptrs.deinit(std.heap.page_allocator);
@@ -540,6 +630,7 @@ fn hostInsertBefore(L: ?*lua.lua_State) callconv(.c) c_int {
 }
 
 fn hostInsertBeforeRoot(L: ?*lua.lua_State) callconv(.c) c_int {
+    hostTrace("__hostInsertBeforeRoot");
     const child_id = @as(u32, @intCast(lua.lua_tointeger(L, 1)));
     const before_id = @as(u32, @intCast(lua.lua_tointeger(L, 2)));
     const child = jsrtNodeForId(child_id) orelse return 0;
@@ -562,6 +653,7 @@ fn hostInsertBeforeRoot(L: ?*lua.lua_State) callconv(.c) c_int {
 }
 
 fn hostFlush(_: ?*lua.lua_State) callconv(.c) c_int {
+    hostTrace("__hostFlush");
     layout.markLayoutDirty();
     state.markDirty();
     return 0;
@@ -632,6 +724,11 @@ fn hostGetPaintUs(L: ?*lua.lua_State) callconv(.c) c_int {
 
 fn hostGetTickUs(L: ?*lua.lua_State) callconv(.c) c_int {
     lua.lua_pushnumber(L, @floatFromInt(telemetry_tick_us));
+    return 1;
+}
+
+fn hostGetNowMs(L: ?*lua.lua_State) callconv(.c) c_int {
+    lua.lua_pushnumber(L, @as(f64, @floatFromInt(std.time.microTimestamp())) / 1000.0);
     return 1;
 }
 
@@ -805,9 +902,74 @@ fn readLuaGlyphColor(L: ?*lua.lua_State, idx: c_int) ?Color {
     return null;
 }
 
+fn luaGetFieldAlias2(L: ?*lua.lua_State, idx: c_int, primary: [*:0]const u8, alias: [*:0]const u8) void {
+    lua.lua_getfield(L, idx, primary);
+    if (lua.lua_isnil(L, -1)) {
+        lua.lua_pop(L, 1);
+        lua.lua_getfield(L, idx, alias);
+    }
+}
+
+fn luaGetFieldAlias3(L: ?*lua.lua_State, idx: c_int, primary: [*:0]const u8, alias_a: [*:0]const u8, alias_b: [*:0]const u8) void {
+    lua.lua_getfield(L, idx, primary);
+    if (lua.lua_isnil(L, -1)) {
+        lua.lua_pop(L, 1);
+        lua.lua_getfield(L, idx, alias_a);
+        if (lua.lua_isnil(L, -1)) {
+            lua.lua_pop(L, 1);
+            lua.lua_getfield(L, idx, alias_b);
+        }
+    }
+}
+
 fn readLuaOptFloat(L: ?*lua.lua_State, idx: c_int, field: [*:0]const u8) ?f32 {
     lua.lua_getfield(L, idx, field);
     const result: ?f32 = if (lua.lua_isnumber(L, -1) != 0) @floatCast(lua.lua_tonumber(L, -1)) else null;
+    lua.lua_pop(L, 1);
+    return result;
+}
+
+fn readLuaOptFloat2(L: ?*lua.lua_State, idx: c_int, primary: [*:0]const u8, alias: [*:0]const u8) ?f32 {
+    luaGetFieldAlias2(L, idx, primary, alias);
+    const result: ?f32 = if (lua.lua_isnumber(L, -1) != 0) @floatCast(lua.lua_tonumber(L, -1)) else null;
+    lua.lua_pop(L, 1);
+    return result;
+}
+
+fn readLuaOptFloat3(L: ?*lua.lua_State, idx: c_int, primary: [*:0]const u8, alias_a: [*:0]const u8, alias_b: [*:0]const u8) ?f32 {
+    luaGetFieldAlias3(L, idx, primary, alias_a, alias_b);
+    const result: ?f32 = if (lua.lua_isnumber(L, -1) != 0) @floatCast(lua.lua_tonumber(L, -1)) else null;
+    lua.lua_pop(L, 1);
+    return result;
+}
+
+fn parsePctString(s: []const u8) ?f32 {
+    const trimmed = std.mem.trim(u8, s, " \t\r\n");
+    if (trimmed.len == 0) return null;
+    if (std.mem.endsWith(u8, trimmed, "%")) {
+        const pct = std.fmt.parseFloat(f32, trimmed[0 .. trimmed.len - 1]) catch return null;
+        return -(pct / 100.0);
+    }
+    return std.fmt.parseFloat(f32, trimmed) catch null;
+}
+
+fn readLuaMaybePct(L: ?*lua.lua_State, idx: c_int) ?f32 {
+    if (lua.lua_isnumber(L, idx) != 0) {
+        return @floatCast(lua.lua_tonumber(L, idx));
+    }
+    if (lua.lua_isstring(L, idx) != 0) {
+        var len: usize = 0;
+        const ptr = lua.lua_tolstring(L, idx, &len);
+        if (ptr != null) {
+            return parsePctString(@as([*]const u8, @ptrCast(ptr))[0..len]);
+        }
+    }
+    return null;
+}
+
+fn readLuaOptMaybePct2(L: ?*lua.lua_State, idx: c_int, primary: [*:0]const u8, alias: [*:0]const u8) ?f32 {
+    luaGetFieldAlias2(L, idx, primary, alias);
+    const result = readLuaMaybePct(L, -1);
     lua.lua_pop(L, 1);
     return result;
 }
@@ -816,9 +978,39 @@ fn readLuaFloat(L: ?*lua.lua_State, idx: c_int, field: [*:0]const u8, default: f
     return readLuaOptFloat(L, idx, field) orelse default;
 }
 
+fn readLuaFloat2(L: ?*lua.lua_State, idx: c_int, primary: [*:0]const u8, alias: [*:0]const u8, default: f32) f32 {
+    return readLuaOptFloat2(L, idx, primary, alias) orelse default;
+}
+
+fn readLuaFloat3(L: ?*lua.lua_State, idx: c_int, primary: [*:0]const u8, alias_a: [*:0]const u8, alias_b: [*:0]const u8, default: f32) f32 {
+    return readLuaOptFloat3(L, idx, primary, alias_a, alias_b) orelse default;
+}
+
 /// Read a margin field: number → pixel value, "auto" → inf (triggers auto-margin in layout)
 fn readLuaMargin(L: ?*lua.lua_State, idx: c_int, field: [*:0]const u8) ?f32 {
     lua.lua_getfield(L, idx, field);
+    if (lua.lua_isnumber(L, -1) != 0) {
+        const v: f32 = @floatCast(lua.lua_tonumber(L, -1));
+        lua.lua_pop(L, 1);
+        return v;
+    }
+    if (lua.lua_isstring(L, -1) != 0) {
+        var len: usize = 0;
+        const ptr = lua.lua_tolstring(L, -1, &len);
+        if (ptr != null) {
+            const s = @as([*]const u8, @ptrCast(ptr))[0..len];
+            if (std.mem.eql(u8, s, "auto")) {
+                lua.lua_pop(L, 1);
+                return std.math.inf(f32);
+            }
+        }
+    }
+    lua.lua_pop(L, 1);
+    return null;
+}
+
+fn readLuaMargin2(L: ?*lua.lua_State, idx: c_int, primary: [*:0]const u8, alias: [*:0]const u8) ?f32 {
+    luaGetFieldAlias2(L, idx, primary, alias);
     if (lua.lua_isnumber(L, -1) != 0) {
         const v: f32 = @floatCast(lua.lua_tonumber(L, -1));
         lua.lua_pop(L, 1);
@@ -846,8 +1038,29 @@ fn readLuaBool(L: ?*lua.lua_State, idx: c_int, field: [*:0]const u8) bool {
     return result;
 }
 
+fn readLuaBool2(L: ?*lua.lua_State, idx: c_int, primary: [*:0]const u8, alias: [*:0]const u8) bool {
+    luaGetFieldAlias2(L, idx, primary, alias);
+    const result = lua.lua_toboolean(L, -1) != 0;
+    lua.lua_pop(L, 1);
+    return result;
+}
+
+fn readLuaBool3(L: ?*lua.lua_State, idx: c_int, primary: [*:0]const u8, alias_a: [*:0]const u8, alias_b: [*:0]const u8) bool {
+    luaGetFieldAlias3(L, idx, primary, alias_a, alias_b);
+    const result = lua.lua_toboolean(L, -1) != 0;
+    lua.lua_pop(L, 1);
+    return result;
+}
+
 fn readLuaU8(L: ?*lua.lua_State, idx: c_int, field: [*:0]const u8, default: u8) u8 {
     lua.lua_getfield(L, idx, field);
+    const result: u8 = if (lua.lua_isnumber(L, -1) != 0) @intCast(@as(i64, @intFromFloat(lua.lua_tonumber(L, -1)))) else default;
+    lua.lua_pop(L, 1);
+    return result;
+}
+
+fn readLuaU82(L: ?*lua.lua_State, idx: c_int, primary: [*:0]const u8, alias: [*:0]const u8, default: u8) u8 {
+    luaGetFieldAlias2(L, idx, primary, alias);
     const result: u8 = if (lua.lua_isnumber(L, -1) != 0) @intCast(@as(i64, @intFromFloat(lua.lua_tonumber(L, -1)))) else default;
     lua.lua_pop(L, 1);
     return result;
@@ -870,6 +1083,77 @@ fn readLuaOptString(L: ?*lua.lua_State, idx: c_int, field: [*:0]const u8, alloc:
     }
     lua.lua_pop(L, 1);
     return null;
+}
+
+fn readLuaOptString2(L: ?*lua.lua_State, idx: c_int, primary: [*:0]const u8, alias: [*:0]const u8, alloc: std.mem.Allocator) ?[]const u8 {
+    luaGetFieldAlias2(L, idx, primary, alias);
+    if (lua.lua_isstring(L, -1) != 0) {
+        var len: usize = 0;
+        const ptr = lua.lua_tolstring(L, -1, &len);
+        if (ptr != null and len > 0) {
+            const copy = alloc.alloc(u8, len) catch {
+                lua.lua_pop(L, 1);
+                return null;
+            };
+            @memcpy(copy, @as([*]const u8, @ptrCast(ptr))[0..len]);
+            lua.lua_pop(L, 1);
+            return copy;
+        }
+    }
+    lua.lua_pop(L, 1);
+    return null;
+}
+
+fn readLuaOptString3(L: ?*lua.lua_State, idx: c_int, primary: [*:0]const u8, alias_a: [*:0]const u8, alias_b: [*:0]const u8, alloc: std.mem.Allocator) ?[]const u8 {
+    luaGetFieldAlias3(L, idx, primary, alias_a, alias_b);
+    if (lua.lua_isstring(L, -1) != 0) {
+        var len: usize = 0;
+        const ptr = lua.lua_tolstring(L, -1, &len);
+        if (ptr != null and len > 0) {
+            const copy = alloc.alloc(u8, len) catch {
+                lua.lua_pop(L, 1);
+                return null;
+            };
+            @memcpy(copy, @as([*]const u8, @ptrCast(ptr))[0..len]);
+            lua.lua_pop(L, 1);
+            return copy;
+        }
+    }
+    lua.lua_pop(L, 1);
+    return null;
+}
+
+fn readLuaColorField2(L: ?*lua.lua_State, idx: c_int, primary: [*:0]const u8, alias: [*:0]const u8) ?Color {
+    luaGetFieldAlias2(L, idx, primary, alias);
+    const color = readLuaColor(L, -1);
+    lua.lua_pop(L, 1);
+    return color;
+}
+
+fn readLuaColorField3(L: ?*lua.lua_State, idx: c_int, primary: [*:0]const u8, alias_a: [*:0]const u8, alias_b: [*:0]const u8) ?Color {
+    luaGetFieldAlias3(L, idx, primary, alias_a, alias_b);
+    const color = readLuaColor(L, -1);
+    lua.lua_pop(L, 1);
+    return color;
+}
+
+fn applyLuaTextProps(node: *Node, L: ?*lua.lua_State, idx: c_int, alloc: std.mem.Allocator) void {
+    if (readLuaOptFloat2(L, idx, "font_size", "fontSize")) |v| node.font_size = @intFromFloat(v);
+    if (readLuaColorField3(L, idx, "text_color", "textColor", "color")) |c| node.text_color = c;
+    if (readLuaOptFloat2(L, idx, "letter_spacing", "letterSpacing")) |v| node.letter_spacing = v;
+    if (readLuaOptFloat2(L, idx, "line_height", "lineHeight")) |v| node.line_height = v;
+    if (readLuaOptFloat2(L, idx, "number_of_lines", "numberOfLines")) |v| node.number_of_lines = @intFromFloat(v);
+    luaGetFieldAlias2(L, idx, "no_wrap", "noWrap");
+    if (lua.lua_isboolean(L, -1)) {
+        node.no_wrap = lua.lua_toboolean(L, -1) != 0;
+    }
+    lua.lua_pop(L, 1);
+
+    node.placeholder = readLuaOptString2(L, idx, "placeholder", "placeholder", alloc) orelse node.placeholder;
+    node.debug_name = readLuaOptString2(L, idx, "debug_name", "debugName", alloc) orelse node.debug_name;
+    node.test_id = readLuaOptString3(L, idx, "test_id", "testId", "testID", alloc) orelse node.test_id;
+    node.tooltip = readLuaOptString2(L, idx, "tooltip", "tooltip", alloc) orelse node.tooltip;
+    node.href = readLuaOptString2(L, idx, "href", "href", alloc) orelse node.href;
 }
 
 fn readLuaInlineGlyphs(L: ?*lua.lua_State, idx: c_int, alloc: std.mem.Allocator) ?[]layout.InlineGlyph {
@@ -915,98 +1199,103 @@ fn readLuaInlineGlyphs(L: ?*lua.lua_State, idx: c_int, alloc: std.mem.Allocator)
 fn readLuaStyle(L: ?*lua.lua_State, idx: c_int) Style {
     var s = Style{};
     if (!lua.lua_istable(L, idx)) return s;
-    if (readLuaOptFloat(L, idx, "flex_grow")) |v| s.flex_grow = v;
+    if (readLuaOptFloat2(L, idx, "flex_grow", "flexGrow")) |v| s.flex_grow = v;
+    if (readLuaOptFloat2(L, idx, "flex_shrink", "flexShrink")) |v| s.flex_shrink = v;
     if (readLuaOptFloat(L, idx, "gap")) |v| s.gap = v;
-    if (readLuaOptFloat(L, idx, "width")) |v| s.width = v;
-    if (readLuaOptFloat(L, idx, "height")) |v| s.height = v;
-    if (readLuaOptFloat(L, idx, "padding")) |v| { s.padding_top = v; s.padding_bottom = v; s.padding_left = v; s.padding_right = v; }
-    if (readLuaOptFloat(L, idx, "padding_top")) |v| s.padding_top = v;
-    if (readLuaOptFloat(L, idx, "padding_bottom")) |v| s.padding_bottom = v;
-    if (readLuaOptFloat(L, idx, "padding_left")) |v| s.padding_left = v;
-    if (readLuaOptFloat(L, idx, "padding_right")) |v| s.padding_right = v;
-    if (readLuaMargin(L, idx, "margin_top")) |v| s.margin_top = v;
-    if (readLuaMargin(L, idx, "margin_bottom")) |v| s.margin_bottom = v;
-    if (readLuaMargin(L, idx, "margin_left")) |v| s.margin_left = v;
-    if (readLuaMargin(L, idx, "margin_right")) |v| s.margin_right = v;
-    if (readLuaOptFloat(L, idx, "border_radius")) |v| s.border_radius = v;
+    if (readLuaOptFloat2(L, idx, "row_gap", "rowGap")) |v| s.row_gap = v;
+    if (readLuaOptFloat2(L, idx, "column_gap", "columnGap")) |v| s.column_gap = v;
+    if (readLuaOptMaybePct2(L, idx, "width", "width")) |v| s.width = v;
+    if (readLuaOptMaybePct2(L, idx, "height", "height")) |v| s.height = v;
+    if (readLuaOptFloat(L, idx, "padding")) |v| {
+        s.padding_top = v;
+        s.padding_bottom = v;
+        s.padding_left = v;
+        s.padding_right = v;
+    }
+    if (readLuaOptFloat2(L, idx, "padding_top", "paddingTop")) |v| s.padding_top = v;
+    if (readLuaOptFloat2(L, idx, "padding_bottom", "paddingBottom")) |v| s.padding_bottom = v;
+    if (readLuaOptFloat2(L, idx, "padding_left", "paddingLeft")) |v| s.padding_left = v;
+    if (readLuaOptFloat2(L, idx, "padding_right", "paddingRight")) |v| s.padding_right = v;
+    if (readLuaMargin2(L, idx, "margin", "margin")) |v| s.margin = v;
+    if (readLuaMargin2(L, idx, "margin_top", "marginTop")) |v| s.margin_top = v;
+    if (readLuaMargin2(L, idx, "margin_bottom", "marginBottom")) |v| s.margin_bottom = v;
+    if (readLuaMargin2(L, idx, "margin_left", "marginLeft")) |v| s.margin_left = v;
+    if (readLuaMargin2(L, idx, "margin_right", "marginRight")) |v| s.margin_right = v;
+    if (readLuaOptFloat2(L, idx, "border_radius", "borderRadius")) |v| s.border_radius = v;
     if (readLuaOptFloat(L, idx, "border_width")) |v| s.border_width = v;
     // justify_content: check string
-    lua.lua_getfield(L, idx, "justify_content");
+    luaGetFieldAlias2(L, idx, "justify_content", "justifyContent");
     if (lua.lua_isstring(L, -1) != 0) {
         var jlen: usize = 0;
         const jptr = lua.lua_tolstring(L, -1, &jlen);
         if (jptr != null) {
             const jc: []const u8 = @as([*]const u8, @ptrCast(jptr))[0..jlen];
-            if (std.mem.eql(u8, jc, "center")) s.justify_content = .center
-            else if (std.mem.eql(u8, jc, "spaceBetween") or std.mem.eql(u8, jc, "space_between")) s.justify_content = .space_between
-            else if (std.mem.eql(u8, jc, "spaceAround") or std.mem.eql(u8, jc, "space_around")) s.justify_content = .space_around
-            else if (std.mem.eql(u8, jc, "spaceEvenly") or std.mem.eql(u8, jc, "space_evenly")) s.justify_content = .space_evenly
-            else if (std.mem.eql(u8, jc, "end") or std.mem.eql(u8, jc, "flex_end")) s.justify_content = .end;
+            if (std.mem.eql(u8, jc, "center")) {
+                s.justify_content = .center;
+            } else if (std.mem.eql(u8, jc, "spaceBetween") or std.mem.eql(u8, jc, "space_between") or std.mem.eql(u8, jc, "space-between")) {
+                s.justify_content = .space_between;
+            } else if (std.mem.eql(u8, jc, "spaceAround") or std.mem.eql(u8, jc, "space_around") or std.mem.eql(u8, jc, "space-around")) {
+                s.justify_content = .space_around;
+            } else if (std.mem.eql(u8, jc, "spaceEvenly") or std.mem.eql(u8, jc, "space_evenly") or std.mem.eql(u8, jc, "space-evenly")) {
+                s.justify_content = .space_evenly;
+            } else if (std.mem.eql(u8, jc, "end") or std.mem.eql(u8, jc, "flex_end") or std.mem.eql(u8, jc, "flex-end")) {
+                s.justify_content = .end;
+            } else if (std.mem.eql(u8, jc, "start") or std.mem.eql(u8, jc, "flex_start") or std.mem.eql(u8, jc, "flex-start")) {
+                s.justify_content = .start;
+            }
         }
     }
     lua.lua_pop(L, 1);
     // flex_direction: check string
-    lua.lua_getfield(L, idx, "flex_direction");
+    luaGetFieldAlias2(L, idx, "flex_direction", "flexDirection");
     if (lua.lua_isstring(L, -1) != 0) {
         var len: usize = 0;
         const ptr = lua.lua_tolstring(L, -1, &len);
         if (ptr != null) {
             const dir: []const u8 = @as([*]const u8, @ptrCast(ptr))[0..len];
-            if (std.mem.eql(u8, dir, "row")) s.flex_direction = .row;
+            if (std.mem.eql(u8, dir, "row")) s.flex_direction = .row else if (std.mem.eql(u8, dir, "row_reverse") or std.mem.eql(u8, dir, "row-reverse")) s.flex_direction = .row_reverse else if (std.mem.eql(u8, dir, "column_reverse") or std.mem.eql(u8, dir, "column-reverse")) s.flex_direction = .column_reverse;
         }
     }
     lua.lua_pop(L, 1);
-    // background_color
-    lua.lua_getfield(L, idx, "background_color");
-    s.background_color = readLuaColor(L, -1);
-    lua.lua_pop(L, 1);
-    // border_color
-    lua.lua_getfield(L, idx, "border_color");
-    if (readLuaColor(L, -1)) |c| s.border_color = c;
-    lua.lua_pop(L, 1);
+    s.background_color = readLuaColorField2(L, idx, "background_color", "backgroundColor");
+    if (readLuaColorField2(L, idx, "border_color", "borderColor")) |c| s.border_color = c;
     // align_items
-    lua.lua_getfield(L, idx, "align_items");
+    luaGetFieldAlias2(L, idx, "align_items", "alignItems");
     if (lua.lua_isstring(L, -1) != 0) {
         var len: usize = 0;
         const ptr = lua.lua_tolstring(L, -1, &len);
         if (ptr != null) {
             const v: []const u8 = @as([*]const u8, @ptrCast(ptr))[0..len];
-            if (std.mem.eql(u8, v, "center")) s.align_items = .center
-            else if (std.mem.eql(u8, v, "flexStart") or std.mem.eql(u8, v, "start") or std.mem.eql(u8, v, "flex_start")) s.align_items = .start
-            else if (std.mem.eql(u8, v, "flexEnd") or std.mem.eql(u8, v, "end") or std.mem.eql(u8, v, "flex_end")) s.align_items = .end
-            else if (std.mem.eql(u8, v, "stretch")) s.align_items = .stretch;
+            if (std.mem.eql(u8, v, "center")) s.align_items = .center else if (std.mem.eql(u8, v, "flexStart") or std.mem.eql(u8, v, "start") or std.mem.eql(u8, v, "flex_start") or std.mem.eql(u8, v, "flex-start")) s.align_items = .start else if (std.mem.eql(u8, v, "flexEnd") or std.mem.eql(u8, v, "end") or std.mem.eql(u8, v, "flex_end") or std.mem.eql(u8, v, "flex-end")) s.align_items = .end else if (std.mem.eql(u8, v, "stretch")) s.align_items = .stretch;
         }
     }
     lua.lua_pop(L, 1);
     // align_self
-    lua.lua_getfield(L, idx, "align_self");
+    luaGetFieldAlias2(L, idx, "align_self", "alignSelf");
     if (lua.lua_isstring(L, -1) != 0) {
         var len: usize = 0;
         const ptr = lua.lua_tolstring(L, -1, &len);
         if (ptr != null) {
             const v: []const u8 = @as([*]const u8, @ptrCast(ptr))[0..len];
-            if (std.mem.eql(u8, v, "center")) s.align_self = .center
-            else if (std.mem.eql(u8, v, "flexStart") or std.mem.eql(u8, v, "start") or std.mem.eql(u8, v, "flex_start")) s.align_self = .start
-            else if (std.mem.eql(u8, v, "flexEnd") or std.mem.eql(u8, v, "end") or std.mem.eql(u8, v, "flex_end")) s.align_self = .end
-            else if (std.mem.eql(u8, v, "stretch")) s.align_self = .stretch;
+            if (std.mem.eql(u8, v, "center")) s.align_self = .center else if (std.mem.eql(u8, v, "flexStart") or std.mem.eql(u8, v, "start") or std.mem.eql(u8, v, "flex_start") or std.mem.eql(u8, v, "flex-start")) s.align_self = .start else if (std.mem.eql(u8, v, "flexEnd") or std.mem.eql(u8, v, "end") or std.mem.eql(u8, v, "flex_end") or std.mem.eql(u8, v, "flex-end")) s.align_self = .end else if (std.mem.eql(u8, v, "stretch")) s.align_self = .stretch;
         }
     }
     lua.lua_pop(L, 1);
     // flex_wrap
-    lua.lua_getfield(L, idx, "flex_wrap");
+    luaGetFieldAlias2(L, idx, "flex_wrap", "flexWrap");
     if (lua.lua_isstring(L, -1) != 0) {
         var len: usize = 0;
         const ptr = lua.lua_tolstring(L, -1, &len);
-        if (ptr != null and std.mem.eql(u8, @as([*]const u8, @ptrCast(ptr))[0..len], "wrap")) {
-            s.flex_wrap = .wrap;
+        if (ptr != null) {
+            const wrap = @as([*]const u8, @ptrCast(ptr))[0..len];
+            if (std.mem.eql(u8, wrap, "wrap")) s.flex_wrap = .wrap else if (std.mem.eql(u8, wrap, "wrap_reverse") or std.mem.eql(u8, wrap, "wrap-reverse")) s.flex_wrap = .wrap_reverse;
         }
     }
     lua.lua_pop(L, 1);
-    // flex_shrink
-    if (readLuaOptFloat(L, idx, "flex_shrink")) |v| s.flex_shrink = v;
-    // max_width / max_height
-    if (readLuaOptFloat(L, idx, "max_width")) |v| s.max_width = v;
-    if (readLuaOptFloat(L, idx, "max_height")) |v| s.max_height = v;
+    if (readLuaOptMaybePct2(L, idx, "min_width", "minWidth")) |v| s.min_width = v;
+    if (readLuaOptMaybePct2(L, idx, "min_height", "minHeight")) |v| s.min_height = v;
+    if (readLuaOptMaybePct2(L, idx, "max_width", "maxWidth")) |v| s.max_width = v;
+    if (readLuaOptMaybePct2(L, idx, "max_height", "maxHeight")) |v| s.max_height = v;
     // overflow
     lua.lua_getfield(L, idx, "overflow");
     if (lua.lua_isstring(L, -1) != 0) {
@@ -1014,9 +1303,7 @@ fn readLuaStyle(L: ?*lua.lua_State, idx: c_int) Style {
         const ptr = lua.lua_tolstring(L, -1, &len);
         if (ptr != null) {
             const v: []const u8 = @as([*]const u8, @ptrCast(ptr))[0..len];
-            if (std.mem.eql(u8, v, "scroll")) s.overflow = .scroll
-            else if (std.mem.eql(u8, v, "hidden")) s.overflow = .hidden
-            else if (std.mem.eql(u8, v, "auto")) s.overflow = .auto;
+            if (std.mem.eql(u8, v, "scroll")) s.overflow = .scroll else if (std.mem.eql(u8, v, "hidden")) s.overflow = .hidden else if (std.mem.eql(u8, v, "auto")) s.overflow = .auto;
         }
     }
     lua.lua_pop(L, 1);
@@ -1031,6 +1318,43 @@ fn readLuaStyle(L: ?*lua.lua_State, idx: c_int) Style {
     }
     lua.lua_pop(L, 1);
     return s;
+}
+
+fn installCString(alloc: std.mem.Allocator, s: []const u8) ?[*:0]const u8 {
+    if (s.len == 0) return null;
+    const copy = alloc.alloc(u8, s.len + 1) catch return null;
+    @memcpy(copy[0..s.len], s);
+    copy[s.len] = 0;
+    return @ptrCast(copy[0..s.len :0]);
+}
+
+fn jsrtHandlerNamesContainClick(L: ?*lua.lua_State, idx: c_int) bool {
+    if (!lua.lua_istable(L, idx)) return false;
+    const count: usize = @intCast(lua.lua_objlen(L, idx));
+    var i: usize = 0;
+    while (i < count) : (i += 1) {
+        lua.lua_rawgeti(L, idx, @intCast(i + 1));
+        if (lua.lua_isstring(L, -1) != 0) {
+            var len: usize = 0;
+            const ptr = lua.lua_tolstring(L, -1, &len);
+            if (ptr != null) {
+                const name = @as([*]const u8, @ptrCast(ptr))[0..len];
+                if (std.mem.eql(u8, name, "onClick") or std.mem.eql(u8, name, "onPress")) {
+                    lua.lua_pop(L, 1);
+                    return true;
+                }
+            }
+        }
+        lua.lua_pop(L, 1);
+    }
+    return false;
+}
+
+fn jsrtApplyHandlerNames(node: *Node, alloc: std.mem.Allocator, id: u32, L: ?*lua.lua_State, idx: c_int) void {
+    node.handlers.js_on_press = null;
+    if (!jsrtHandlerNamesContainClick(L, idx)) return;
+    const expr = std.fmt.allocPrint(alloc, "__dispatchEvent({d},'onClick')", .{id}) catch return;
+    node.handlers.js_on_press = installCString(alloc, expr);
 }
 
 fn stampLuaNode(L: ?*lua.lua_State, idx: c_int, alloc: std.mem.Allocator) Node {
@@ -1051,14 +1375,7 @@ fn stampLuaNode(L: ?*lua.lua_State, idx: c_int, alloc: std.mem.Allocator) Node {
         }
     }
     lua.lua_pop(L, 1);
-    // font_size
-    lua.lua_getfield(L, idx, "font_size");
-    if (lua.lua_isnumber(L, -1) != 0) node.font_size = @intCast(@as(i64, @intFromFloat(lua.lua_tonumber(L, -1))));
-    lua.lua_pop(L, 1);
-    // text_color
-    lua.lua_getfield(L, idx, "text_color");
-    node.text_color = readLuaColor(L, -1);
-    lua.lua_pop(L, 1);
+    applyLuaTextProps(&node, L, idx, alloc);
     // inline_glyphs
     node.inline_glyphs = readLuaInlineGlyphs(L, idx, alloc);
     // TextInput support: input_id + multiline from Lua tree
@@ -1086,7 +1403,7 @@ fn stampLuaNode(L: ?*lua.lua_State, idx: c_int, alloc: std.mem.Allocator) Node {
             node.terminal_id = @intCast(@as(i64, @intFromFloat(lua.lua_tonumber(L, -1))));
         }
         lua.lua_pop(L, 1);
-        lua.lua_getfield(L, idx, "terminal_font_size");
+        luaGetFieldAlias2(L, idx, "terminal_font_size", "terminalFontSize");
         if (lua.lua_isnumber(L, -1) != 0) {
             node.terminal_font_size = @intCast(@as(i64, @intFromFloat(lua.lua_tonumber(L, -1))));
         }
@@ -1094,15 +1411,18 @@ fn stampLuaNode(L: ?*lua.lua_State, idx: c_int, alloc: std.mem.Allocator) Node {
     lua.lua_pop(L, 1);
     // style
     lua.lua_getfield(L, idx, "style");
-    if (lua.lua_istable(L, -1)) node.style = readLuaStyle(L, -1);
+    if (lua.lua_istable(L, -1)) {
+        node.style = readLuaStyle(L, -1);
+        applyLuaTextProps(&node, L, -1, alloc);
+    }
     lua.lua_pop(L, 1);
     // scroll_y / scroll_persist_slot — restored from global `_scrollY` in emitted Lua
-    lua.lua_getfield(L, idx, "scroll_y");
+    luaGetFieldAlias2(L, idx, "scroll_y", "scrollY");
     if (lua.lua_isnumber(L, -1) != 0) {
         node.scroll_y = @floatCast(lua.lua_tonumber(L, -1));
     }
     lua.lua_pop(L, 1);
-    lua.lua_getfield(L, idx, "scroll_persist_slot");
+    luaGetFieldAlias2(L, idx, "scroll_persist_slot", "scrollPersistSlot");
     if (lua.lua_isnumber(L, -1) != 0) {
         const si = lua.lua_tointeger(L, -1);
         if (si > 0) node.scroll_persist_slot = @intCast(si);
@@ -1205,18 +1525,18 @@ fn stampLuaNode(L: ?*lua.lua_State, idx: c_int, alloc: std.mem.Allocator) Node {
     }
     lua.lua_pop(L, 1);
     // test_id (for snapshot click discovery)
-    node.test_id = readLuaOptString(L, idx, "test_id", alloc);
+    node.test_id = readLuaOptString3(L, idx, "test_id", "testId", "testID", alloc);
     // ── Window chrome fields ──
-    node.window_drag = readLuaBool(L, idx, "window_drag");
-    node.window_resize = readLuaBool(L, idx, "window_resize");
+    node.window_drag = readLuaBool2(L, idx, "window_drag", "windowDrag");
+    node.window_resize = readLuaBool2(L, idx, "window_resize", "windowResize");
     // ── Canvas/Graph fields ──
     node.graph_container = readLuaBool(L, idx, "graph_container");
-    node.canvas_type = readLuaOptString(L, idx, "canvas_type", alloc);
+    node.canvas_type = readLuaOptString2(L, idx, "canvas_type", "canvasType", alloc);
     node.canvas_id = @intFromFloat(readLuaFloat(L, idx, "canvas_id", 0));
     node.canvas_clamp = readLuaBool(L, idx, "canvas_clamp");
     node.canvas_path = readLuaBool(L, idx, "canvas_path");
     node.canvas_node = readLuaBool(L, idx, "canvas_node");
-    node.canvas_path_d = readLuaOptString(L, idx, "canvas_path_d", alloc);
+    node.canvas_path_d = readLuaOptString2(L, idx, "canvas_path_d", "canvasPathD", alloc);
     node.canvas_fill_effect = readLuaOptString(L, idx, "canvas_fill_effect", alloc);
     node.canvas_stroke_width = readLuaFloat(L, idx, "canvas_stroke_width", 2);
     node.canvas_flow_speed = readLuaFloat(L, idx, "canvas_flow_speed", 0);
@@ -1546,6 +1866,7 @@ pub fn initVM() void {
         .{ .name = "getLayoutUs", .func = &hostGetLayoutUs },
         .{ .name = "getPaintUs", .func = &hostGetPaintUs },
         .{ .name = "getTickUs", .func = &hostGetTickUs },
+        .{ .name = "getNowMs", .func = &hostGetNowMs },
         .{ .name = "__applescript", .func = &hostApplescript },
         .{ .name = "__applescript_file", .func = &hostApplescriptFile },
         .{ .name = "__declareChildren", .func = &hostDeclareChildren },
@@ -1554,6 +1875,14 @@ pub fn initVM() void {
         .{ .name = "__callJS", .func = &hostCallJS },
         .{ .name = "__callJSReturn", .func = &hostCallJSReturn },
         .{ .name = "__syncToJS", .func = &hostSyncToJS },
+        .{ .name = "__clickLatencyBegin", .func = &hostClickLatencyBegin },
+        .{ .name = "__clickLatencyCurrentSeq", .func = &hostClickLatencyCurrentSeq },
+        .{ .name = "__clickLatencyStampDispatch", .func = &hostClickLatencyStampDispatch },
+        .{ .name = "__clickLatencyStampHandler", .func = &hostClickLatencyStampHandler },
+        .{ .name = "__clickLatencyStampStateUpdate", .func = &hostClickLatencyStampStateUpdate },
+        .{ .name = "__clickLatencyStampFlush", .func = &hostClickLatencyStampFlush },
+        .{ .name = "__clickLatencyStampApplyDone", .func = &hostClickLatencyStampApplyDone },
+        .{ .name = "__clickLatencyDump", .func = &hostClickLatencyDump },
     };
 
     for (funcs) |f| {
@@ -1613,7 +1942,9 @@ pub fn evalScript(lua_logic: []const u8) void {
     if (lua.lua_pcall(L, 0, 0, 0) != 0) {
         logLuaError(L, "evalScript run");
         lua.lua_pop(L, 1);
+        return;
     }
+
 }
 
 /// Eval a Lua expression (equivalent to qjs_runtime.evalExpr — called on events)
@@ -1676,6 +2007,22 @@ pub fn callGlobalInt(name: [*:0]const u8, arg: i64) void {
     }
 }
 
+/// Call a global Lua function with one integer and one string argument.
+pub fn callGlobalIntStr(name: [*:0]const u8, arg0: i64, arg1: [*:0]const u8) void {
+    const L = g_lua orelse return;
+    _ = lua.lua_getglobal(L, name);
+    if (lua.lua_isfunction(L, -1)) {
+        lua.lua_pushinteger(L, @intCast(arg0));
+        lua.lua_pushstring(L, arg1);
+        if (lua.lua_pcall(L, 2, 0, 0) != 0) {
+            logLuaError(L, std.mem.span(name));
+            lua.lua_pop(L, 1);
+        }
+    } else {
+        lua.lua_pop(L, 1);
+    }
+}
+
 /// Call a global Lua function with three integer arguments (used for keyboard events)
 pub fn callGlobal3Int(name: [*:0]const u8, arg0: i64, arg1: i64, arg2: i64) void {
     const L = g_lua orelse return;
@@ -1724,6 +2071,16 @@ pub fn tick() void {
         lua.lua_pop(L, 1);
     }
 
+    _ = lua.lua_getglobal(L, "__jsrtDrainMicrotasks");
+    if (lua.lua_isfunction(L, -1)) {
+        if (lua.lua_pcall(L, 0, 0, 0) != 0) {
+            logLuaError(L, "jsrt-microtasks");
+            lua.lua_pop(L, 1);
+        }
+    } else {
+        lua.lua_pop(L, 1);
+    }
+
     telemetry_tick_us = @intCast(std.time.microTimestamp() - t0);
 
     // Reset bridge call counter every second
@@ -1741,6 +2098,7 @@ fn logLuaError(L: *lua.lua_State, context: []const u8) void {
     const err = lua.lua_tolstring(L, -1, &len);
     if (err != null) {
         const msg: []const u8 = @as([*]const u8, @ptrCast(err))[0..len];
+        std.debug.print("[raw-lua-err] {s}: {s}\n", .{ context, msg });
         std.log.err("[luajit-runtime] {s}: {s}", .{ context, msg });
     }
 }

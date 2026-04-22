@@ -1,8 +1,18 @@
 const React: any = require('react');
+const { useMemo, useState } = React;
+const { memo } = React;
 
 import { Box, Col, Pressable, Row, ScrollView, Text } from '../../../runtime/primitives';
 import { COLORS, fileGlyph, fileTone, samePath } from '../theme';
 import { Glyph, Pill } from './shared';
+
+// File-tree virtualization constants. Each row is ~34px (padding 6+6 +
+// ~11px text + gap). Overscan keeps scrolling smooth by rendering a bit
+// above + below the visible window. Viewport is a rough estimate; worst
+// case a too-small viewport just means slightly more clipping on the edge.
+const FILE_ROW_HEIGHT = 34;
+const FILE_OVERSCAN = 12;
+const FILE_VIEWPORT_ESTIMATE = 720;
 
 function gitGutterColor(gitStatus: string): string | null {
   if (!gitStatus) return null;
@@ -274,7 +284,9 @@ function SourceControlPanel(props: any) {
   );
 }
 
-export function Sidebar(props: any) {
+function SidebarImpl(props: any) {
+  const _rT0 = Date.now();
+  (globalThis as any).__hostLog?.(0, "[render] Sidebar start t=" + _rT0);
   const compactBand = props.widthBand === 'narrow' || props.widthBand === 'widget' || props.widthBand === 'minimum';
   const mediumBand = props.widthBand === 'medium';
   const openEditorLimit = compactBand ? 8 : mediumBand ? 4 : 6;
@@ -384,45 +396,10 @@ export function Sidebar(props: any) {
             EXPLORER
           </Text>
         </Box>
-        <ScrollView style={{ flexGrow: 1, height: '100%', paddingLeft: 8, paddingRight: 8, paddingBottom: 12 }}>
-          <Col style={{ gap: 4 }}>
-            {props.files.map((file: any) => {
-              if (file.visible !== 1) return null;
-              const gitGutter = gitGutterColor(file.git);
-              return (
-                <Pressable
-                  key={file.path + '_' + file.indent}
-                  onPress={() => props.onSelectPath(file.path)}
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    gap: 8,
-                    paddingLeft: 10 + file.indent * 12,
-                    paddingRight: 10,
-                    paddingTop: 6,
-                    paddingBottom: 6,
-                    borderRadius: 10,
-                    backgroundColor: file.selected ? COLORS.panelHover : file.hot ? COLORS.panelRaised : 'transparent',
-                    borderLeftWidth: gitGutter ? 3 : 0,
-                    borderColor: gitGutter || 'transparent',
-                  }}
-                >
-                  <Text fontSize={9} color={COLORS.textDim}>{file.type === 'dir' ? (file.expanded ? 'v' : '>') : ''}</Text>
-                  <Glyph
-                    icon={file.type === 'dir' ? (file.expanded ? 'folder-open' : 'folder') : fileGlyph(file.type)}
-                    tone={file.type === 'dir' ? COLORS.textMuted : fileTone(file.type)}
-                    backgroundColor={file.type === 'dir' ? COLORS.grayDeep : COLORS.grayChip}
-                    tiny={true}
-                  />
-                  <Text fontSize={11} color={file.selected ? COLORS.textBright : COLORS.text}>{file.name}</Text>
-                  {file.hot ? <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: COLORS.blue }} /> : null}
-                  <Box style={{ flexGrow: 1 }} />
-                  {file.git ? <Pill label={file.git} color={gitGutter || COLORS.textMuted} tiny={true} /> : null}
-                </Pressable>
-              );
-            })}
-          </Col>
-        </ScrollView>
+        <FileTreeList
+          files={props.files}
+          onSelectPath={props.onSelectPath}
+        />
       </Col>
     );
   }
@@ -539,3 +516,75 @@ export function Sidebar(props: any) {
     </Row>
   );
 }
+
+// Windowed file list. Only renders rows in the visible viewport + a small
+// overscan band. Non-visible files (file.visible !== 1) are filtered out
+// up-front so the virtualization math lines up with what actually paints.
+function FileTreeList(props: { files: any[]; onSelectPath: (path: string) => void }) {
+  const [scrollY, setScrollY] = useState(0);
+  const visibleFiles = useMemo(
+    () => props.files.filter((f: any) => f.visible === 1),
+    [props.files]
+  );
+  const total = visibleFiles.length;
+  const startIndex = Math.max(0, Math.floor(scrollY / FILE_ROW_HEIGHT) - FILE_OVERSCAN);
+  const endIndex = Math.min(
+    total,
+    Math.ceil((scrollY + FILE_VIEWPORT_ESTIMATE) / FILE_ROW_HEIGHT) + FILE_OVERSCAN
+  );
+  const window = visibleFiles.slice(startIndex, endIndex);
+  const topSpacer = startIndex * FILE_ROW_HEIGHT;
+  const bottomSpacer = Math.max(0, (total - endIndex) * FILE_ROW_HEIGHT);
+
+  return (
+    <ScrollView
+      style={{ flexGrow: 1, height: '100%', paddingLeft: 8, paddingRight: 8, paddingBottom: 12 }}
+      onScroll={(payload: any) => {
+        const next = typeof payload?.scrollY === 'number' ? payload.scrollY : 0;
+        if (Math.abs(next - scrollY) >= FILE_ROW_HEIGHT / 2) setScrollY(next);
+      }}
+    >
+      <Col style={{ gap: 4 }}>
+        {topSpacer > 0 ? <Box style={{ height: topSpacer }} /> : null}
+        {window.map((file: any) => {
+          const gitGutter = gitGutterColor(file.git);
+          return (
+            <Pressable
+              key={file.path + '_' + file.indent}
+              onPress={() => props.onSelectPath(file.path)}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 8,
+                paddingLeft: 10 + file.indent * 12,
+                paddingRight: 10,
+                paddingTop: 6,
+                paddingBottom: 6,
+                borderRadius: 10,
+                backgroundColor: file.selected ? COLORS.panelHover : file.hot ? COLORS.panelRaised : 'transparent',
+                borderLeftWidth: gitGutter ? 3 : 0,
+                borderColor: gitGutter || 'transparent',
+              }}
+            >
+              <Text fontSize={9} color={COLORS.textDim}>{file.type === 'dir' ? (file.expanded ? 'v' : '>') : ''}</Text>
+              <Glyph
+                icon={file.type === 'dir' ? (file.expanded ? 'folder-open' : 'folder') : fileGlyph(file.type)}
+                tone={file.type === 'dir' ? COLORS.textMuted : fileTone(file.type)}
+                backgroundColor={file.type === 'dir' ? COLORS.grayDeep : COLORS.grayChip}
+                tiny={true}
+              />
+              <Text fontSize={11} color={file.selected ? COLORS.textBright : COLORS.text}>{file.name}</Text>
+              {file.hot ? <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: COLORS.blue }} /> : null}
+              <Box style={{ flexGrow: 1 }} />
+              {file.git ? <Pill label={file.git} color={gitGutter || COLORS.textMuted} tiny={true} /> : null}
+            </Pressable>
+          );
+        })}
+        {bottomSpacer > 0 ? <Box style={{ height: bottomSpacer }} /> : null}
+      </Col>
+    </ScrollView>
+  );
+}
+
+
+export const Sidebar = memo(SidebarImpl);

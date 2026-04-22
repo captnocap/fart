@@ -64,8 +64,12 @@ const debug_server = if (HAS_DEBUG_SERVER) @import("debug_server.zig") else stru
     pub fn init(_: [*:0]const u8) void {}
     pub fn poll() void {}
     pub fn deinit() void {}
-    pub fn getSelectedNode() i32 { return -1; }
-    pub fn getPairingCode() ?[]const u8 { return null; }
+    pub fn getSelectedNode() i32 {
+        return -1;
+    }
+    pub fn getPairingCode() ?[]const u8 {
+        return null;
+    }
 };
 
 // Force-reference crypto.zig so its export fn symbols (e.g. crypto_run_all_tests) are available to the linker.
@@ -93,12 +97,15 @@ comptime {
     _ = @import("pty_client.zig");
 }
 
+const USE_V8 = if (@hasDecl(build_options, "use_v8")) build_options.use_v8 else false;
 const qjs_runtime = if (HAS_QUICKJS) @import("qjs_runtime.zig") else struct {
     pub fn initVM() void {}
     pub fn deinit() void {}
     pub fn tick() void {}
     pub fn evalScript(_: []const u8) void {}
-    pub fn ptyActive() bool { return false; }
+    pub fn ptyActive() bool {
+        return false;
+    }
     pub fn ptyHandleTextInput(_: [*:0]const u8) void {}
     pub fn ptyHandleKeyDown(_: i32, _: u16) void {}
     pub var telemetry_tick_us: i64 = 0;
@@ -108,66 +115,117 @@ const qjs_runtime = if (HAS_QUICKJS) @import("qjs_runtime.zig") else struct {
     pub var telemetry_bridge_calls: u32 = 0;
     pub var bridge_calls_this_second: u32 = 0;
 };
+const js_vm = if (USE_V8) @import("v8_runtime.zig") else qjs_runtime;
 const canvas = if (HAS_CANVAS) @import("canvas.zig") else struct {
     pub const CameraTransform = struct { cx: f32 = 0, cy: f32 = 0, scale: f32 = 1 };
     pub fn init() void {}
     pub fn setCamera(_: f32, _: f32, _: f32) void {}
-    pub fn getHoveredNode() ?u16 { return null; }
+    pub fn getHoveredNode() ?u16 {
+        return null;
+    }
     pub fn setHoveredNode(_: ?u16) void {}
-    pub fn getSelectedNode() ?u16 { return null; }
+    pub fn getSelectedNode() ?u16 {
+        return null;
+    }
     pub fn clickNode() void {}
-    pub fn screenToGraph(_: f32, _: f32, _: f32, _: f32) [2]f32 { return .{ 0, 0 }; }
+    pub fn screenToGraph(_: f32, _: f32, _: f32, _: f32) [2]f32 {
+        return .{ 0, 0 };
+    }
     pub fn handleDrag(_: f32, _: f32) void {}
     pub fn handleScroll(_: f32, _: f32, _: f32, _: f32, _: f32) void {}
     pub fn renderCanvas(_: ?[]const u8, _: f32, _: f32, _: f32, _: f32) void {}
-    pub fn getCameraTransform(_: f32, _: f32, _: f32, _: f32) CameraTransform { return .{}; }
-    pub fn getNodeDim(_: u16) f32 { return 1.0; }
-    pub fn getFlowOverride(_: u16) bool { return true; }
+    pub fn getCameraTransform(_: f32, _: f32, _: f32, _: f32) CameraTransform {
+        return .{};
+    }
+    pub fn getNodeDim(_: u16) f32 {
+        return 1.0;
+    }
+    pub fn getFlowOverride(_: u16) bool {
+        return true;
+    }
 };
 // devtools removed — inspector lives in tsz-tools (standalone IPC app)
 const testharness = if (HAS_QUICKJS) @import("testharness.zig") else struct {
-    pub fn envEnabled() bool { return false; }
+    pub fn envEnabled() bool {
+        return false;
+    }
     pub fn enable() void {}
-    pub fn tick() bool { return false; }
-    pub fn runAll(_: *Node) u8 { return 0; }
+    pub fn tick() bool {
+        return false;
+    }
+    pub fn runAll(_: *Node) u8 {
+        return 0;
+    }
 };
 const videos = if (HAS_VIDEO) @import("videos.zig") else struct {
     pub fn init() void {}
     pub fn deinit() void {}
     pub fn update() void {}
-    pub fn handleKey(_: i32) bool { return false; }
-    pub fn paintVideo(_: ?[]const u8, _: f32, _: f32, _: f32, _: f32, _: f32) bool { return false; }
+    pub fn handleKey(_: i32) bool {
+        return false;
+    }
+    pub fn paintVideo(_: ?[]const u8, _: f32, _: f32, _: f32, _: f32, _: f32) bool {
+        return false;
+    }
 };
 const render_surfaces = if (HAS_RENDER_SURFACES) @import("render_surfaces.zig") else struct {
     pub fn init() void {}
     pub fn deinit() void {}
     pub fn update() void {}
-    pub fn handleMouseDown(_: f32, _: f32, _: u8) bool { return false; }
-    pub fn handleMouseUp(_: f32, _: f32, _: u8) bool { return false; }
-    pub fn handleMouseMotion(_: f32, _: f32) bool { return false; }
-    pub fn handleTextInput(_: [*:0]const u8) bool { return false; }
-    pub fn handleKeyDown(_: i32) bool { return false; }
-    pub fn handleKeyUp(_: i32) bool { return false; }
-    pub fn paintSurface(_: ?[]const u8, _: f32, _: f32, _: f32, _: f32, _: f32) bool { return false; }
+    pub fn handleMouseDown(_: f32, _: f32, _: u8) bool {
+        return false;
+    }
+    pub fn handleMouseUp(_: f32, _: f32, _: u8) bool {
+        return false;
+    }
+    pub fn handleMouseMotion(_: f32, _: f32) bool {
+        return false;
+    }
+    pub fn handleTextInput(_: [*:0]const u8) bool {
+        return false;
+    }
+    pub fn handleKeyDown(_: i32) bool {
+        return false;
+    }
+    pub fn handleKeyUp(_: i32) bool {
+        return false;
+    }
+    pub fn paintSurface(_: ?[]const u8, _: f32, _: f32, _: f32, _: f32, _: f32) bool {
+        return false;
+    }
 };
 const capture = if (HAS_EFFECTS) @import("capture.zig") else struct {
     pub fn init() void {}
     pub fn deinit() void {}
-    pub fn handleKey(_: i32) bool { return false; }
-    pub fn tick(_: *Node) bool { return false; }
+    pub fn handleKey(_: i32) bool {
+        return false;
+    }
+    pub fn tick(_: *Node) bool {
+        return false;
+    }
 };
 const effects = if (HAS_EFFECTS) @import("effects.zig") else struct {
     pub fn init() void {}
     pub fn deinit() void {}
     pub fn update(_: f32) void {}
-    pub fn paintEffect(_: ?[]const u8, _: f32, _: f32, _: f32, _: f32, _: f32) bool { return false; }
-    pub fn paintCustomEffect(_: *const Node, _: f32, _: f32, _: f32, _: f32, _: f32) bool { return false; }
-    pub fn paintNamedEffect(_: *const Node, _: []const u8, _: f32, _: f32, _: f32, _: f32) bool { return false; }
+    pub fn paintEffect(_: ?[]const u8, _: f32, _: f32, _: f32, _: f32, _: f32) bool {
+        return false;
+    }
+    pub fn paintCustomEffect(_: *const Node, _: f32, _: f32, _: f32, _: f32, _: f32) bool {
+        return false;
+    }
+    pub fn paintNamedEffect(_: *const Node, _: []const u8, _: f32, _: f32, _: f32, _: f32) bool {
+        return false;
+    }
     pub const EffectFillInfo = struct { pixel_buf: [*]const u8, width: u32, height: u32, screen_x: f32, screen_y: f32 };
-    pub fn getEffectFill(_: []const u8) ?EffectFillInfo { return null; }
+    pub fn getEffectFill(_: []const u8) ?EffectFillInfo {
+        return null;
+    }
 };
 const r3d = if (HAS_3D) @import("gpu/3d.zig") else struct {
-    pub fn render(_: *Node, _: f32, _: f32, _: f32, _: f32, _: f32) bool { return false; }
+    pub fn render(_: *Node, _: f32, _: f32, _: f32, _: f32, _: f32) bool {
+        return false;
+    }
     pub fn update(_: f32) void {}
 };
 const transition = if (HAS_TRANSITIONS) @import("transition.zig") else struct {
@@ -183,61 +241,124 @@ const VtermStub = struct {
     pub const MAX_TERMINALS: u8 = 4;
     pub const VtColor = struct { r: u8 = 0, g: u8 = 0, b: u8 = 0 };
     pub const Cell = struct {
-        char_buf: [4]u8 = .{ 0, 0, 0, 0 }, char_len: u8 = 0, width: u8 = 1,
-        fg: ?VtColor = null, bg: ?VtColor = null, bold: bool = false,
-        italic: bool = false, underline: bool = false, strike: bool = false, reverse: bool = false,
+        char_buf: [4]u8 = .{ 0, 0, 0, 0 },
+        char_len: u8 = 0,
+        width: u8 = 1,
+        fg: ?VtColor = null,
+        bg: ?VtColor = null,
+        bold: bool = false,
+        italic: bool = false,
+        underline: bool = false,
+        strike: bool = false,
+        reverse: bool = false,
     };
     pub fn initVterm(_: u16, _: u16) void {}
     pub fn feed(_: []const u8) void {}
-    pub fn readOutput(_: []u8) ?[]const u8 { return null; }
-    pub fn getRowText(_: u16) []const u8 { return ""; }
-    pub fn getCell(_: u16, _: u16) Cell { return .{}; }
-    pub fn getCursorRow() u16 { return 0; }
-    pub fn getCursorCol() u16 { return 0; }
-    pub fn getCursorVisible() bool { return false; }
-    pub fn hasDamage() bool { return false; }
+    pub fn readOutput(_: []u8) ?[]const u8 {
+        return null;
+    }
+    pub fn getRowText(_: u16) []const u8 {
+        return "";
+    }
+    pub fn getCell(_: u16, _: u16) Cell {
+        return .{};
+    }
+    pub fn getCursorRow() u16 {
+        return 0;
+    }
+    pub fn getCursorCol() u16 {
+        return 0;
+    }
+    pub fn getCursorVisible() bool {
+        return false;
+    }
+    pub fn hasDamage() bool {
+        return false;
+    }
     pub fn clearDamageState() void {}
-    pub fn getRows() u16 { return 0; }
-    pub fn getCols() u16 { return 0; }
+    pub fn getRows() u16 {
+        return 0;
+    }
+    pub fn getCols() u16 {
+        return 0;
+    }
     pub fn resizeVterm(_: u16, _: u16) void {}
     pub fn deinit() void {}
     pub fn spawnShell(_: anytype, _: u16, _: u16) void {}
-    pub fn pollPty() bool { return false; }
+    pub fn pollPty() bool {
+        return false;
+    }
     pub fn writePty(_: []const u8) void {}
-    pub fn ptyAlive() bool { return false; }
+    pub fn ptyAlive() bool {
+        return false;
+    }
     pub fn closePty() void {}
-    pub fn getScrollbackCell(_: u16, _: u16) Cell { return .{}; }
-    pub fn scrollbackCount() u16 { return 0; }
-    pub fn scrollOffset() u16 { return 0; }
+    pub fn getScrollbackCell(_: u16, _: u16) Cell {
+        return .{};
+    }
+    pub fn scrollbackCount() u16 {
+        return 0;
+    }
+    pub fn scrollOffset() u16 {
+        return 0;
+    }
     pub fn scrollUp(_: u16) void {}
     pub fn scrollDown(_: u16) void {}
     pub fn scrollToBottom() void {}
-    pub fn copySelectedText(_: u16, _: u16, _: u16, _: u16, _: []u8) usize { return 0; }
+    pub fn copySelectedText(_: u16, _: u16, _: u16, _: u16, _: []u8) usize {
+        return 0;
+    }
     // Idx variants for multi-terminal support
     pub fn spawnShellIdx(_: u8, _: anytype, _: u16, _: u16) void {}
-    pub fn pollPtyIdx(_: u8) bool { return false; }
+    pub fn pollPtyIdx(_: u8) bool {
+        return false;
+    }
     pub fn writePtyIdx(_: u8, _: []const u8) void {}
-    pub fn getRowTextIdx(_: u8, _: u16) []const u8 { return ""; }
-    pub fn getCellIdx(_: u8, _: u16, _: u16) Cell { return .{}; }
-    pub fn getRowsIdx(_: u8) u16 { return 0; }
-    pub fn getColsIdx(_: u8) u16 { return 0; }
+    pub fn getRowTextIdx(_: u8, _: u16) []const u8 {
+        return "";
+    }
+    pub fn getCellIdx(_: u8, _: u16, _: u16) Cell {
+        return .{};
+    }
+    pub fn getRowsIdx(_: u8) u16 {
+        return 0;
+    }
+    pub fn getColsIdx(_: u8) u16 {
+        return 0;
+    }
     pub fn resizeVtermIdx(_: u8, _: u16, _: u16) void {}
-    pub fn getScrollbackCellIdx(_: u8, _: u16, _: u16) Cell { return .{}; }
-    pub fn scrollOffsetIdx(_: u8) u16 { return 0; }
+    pub fn getScrollbackCellIdx(_: u8, _: u16, _: u16) Cell {
+        return .{};
+    }
+    pub fn scrollOffsetIdx(_: u8) u16 {
+        return 0;
+    }
     pub fn scrollUpIdx(_: u8, _: u16) void {}
     pub fn scrollDownIdx(_: u8, _: u16) void {}
     pub fn scrollToBottomIdx(_: u8) void {}
-    pub fn getCursorRowIdx(_: u8) u16 { return 0; }
-    pub fn getCursorColIdx(_: u8) u16 { return 0; }
-    pub fn getCursorVisibleIdx(_: u8) bool { return false; }
-    pub fn copySelectedTextIdx(_: u8, _: u16, _: u16, _: u16, _: u16, _: []u8) usize { return 0; }
+    pub fn getCursorRowIdx(_: u8) u16 {
+        return 0;
+    }
+    pub fn getCursorColIdx(_: u8) u16 {
+        return 0;
+    }
+    pub fn getCursorVisibleIdx(_: u8) bool {
+        return false;
+    }
+    pub fn copySelectedTextIdx(_: u8, _: u16, _: u16, _: u16, _: u16, _: []u8) usize {
+        return 0;
+    }
 };
 const physics2d = if (HAS_PHYSICS) @import("physics2d.zig") else struct {
     pub const BodyType = enum(c_int) { static_body = 0, kinematic = 1, dynamic = 2 };
     pub fn init(_: f32, _: f32) void {}
-    pub fn isInitialized() bool { return false; }
+    pub fn isInitialized() bool {
+        return false;
+    }
     pub fn tick(_: f32) void {}
-    pub fn createBody(_: BodyType, _: f32, _: f32, _: f32, _: ?*Node) ?u32 { return null; }
+    pub fn createBody(_: BodyType, _: f32, _: f32, _: f32, _: ?*Node) ?u32 {
+        return null;
+    }
     pub fn addBoxCollider(_: u32, _: f32, _: f32, _: f32, _: f32, _: f32) void {}
     pub fn addCircleCollider(_: u32, _: f32, _: f32, _: f32, _: f32) void {}
     pub fn setFixedRotation(_: u32, _: bool) void {}
@@ -246,7 +367,9 @@ const physics2d = if (HAS_PHYSICS) @import("physics2d.zig") else struct {
     pub fn startDrag(_: f32, _: f32) void {}
     pub fn updateDrag(_: f32, _: f32) void {}
     pub fn endDrag() void {}
-    pub fn isDragging() bool { return false; }
+    pub fn isDragging() bool {
+        return false;
+    }
 };
 const Node = layout.Node;
 const Color = layout.Color;
@@ -292,11 +415,15 @@ fn termPixelToCell(tn: *Node, mx: f32, my: f32) struct { row: u16, col: u16 } {
 
 fn termCellSelected(row: u16, col: u16) bool {
     if (!term_sel_active) return false;
-    var r0 = term_sel_start_row; var c0 = term_sel_start_col;
-    var r1 = term_sel_end_row; var c1 = term_sel_end_col;
+    var r0 = term_sel_start_row;
+    var c0 = term_sel_start_col;
+    var r1 = term_sel_end_row;
+    var c1 = term_sel_end_col;
     if (r0 > r1 or (r0 == r1 and c0 > c1)) {
-        r0 = term_sel_end_row; c0 = term_sel_end_col;
-        r1 = term_sel_start_row; c1 = term_sel_start_col;
+        r0 = term_sel_end_row;
+        c0 = term_sel_end_col;
+        r1 = term_sel_start_row;
+        c1 = term_sel_start_col;
     }
     if (row < r0 or row > r1) return false;
     if (r0 == r1) return col >= c0 and col <= c1;
@@ -340,7 +467,9 @@ fn findTerminalNodeById(node: *Node, id: u8) ?*Node {
 }
 
 fn anyTerminalInitialized() bool {
-    for (terminals_initialized) |t| { if (t) return true; }
+    for (terminals_initialized) |t| {
+        if (t) return true;
+    }
     return false;
 }
 
@@ -442,14 +571,12 @@ fn initPhysicsNode(node: *Node) void {
             if (collider_child) |col| {
                 if (col.physics_shape == 1) {
                     // Circle
-                    physics2d.addCircleCollider(idx, col.physics_radius,
-                        col.physics_density, col.physics_friction, col.physics_restitution);
+                    physics2d.addCircleCollider(idx, col.physics_radius, col.physics_density, col.physics_friction, col.physics_restitution);
                 } else {
                     // Rectangle — use the visual child's dimensions or collider's own
                     const w = if (visual_child) |v| (v.style.width orelse 40) else 40;
                     const h = if (visual_child) |v| (v.style.height orelse 40) else 40;
-                    physics2d.addBoxCollider(idx, w, h,
-                        col.physics_density, col.physics_friction, col.physics_restitution);
+                    physics2d.addBoxCollider(idx, w, h, col.physics_density, col.physics_friction, col.physics_restitution);
                 }
             }
         }
@@ -528,9 +655,9 @@ fn updateHover(root: *Node, mx: f32, my: f32) void {
             luajit_runtime.evalExpr(std.mem.span(lua_expr));
         }
         if (prev.handlers.js_on_hover_exit) |js_expr| {
-            qjs_runtime.callGlobal("__beginJsEvent");
-            qjs_runtime.evalExpr(std.mem.span(js_expr));
-            qjs_runtime.callGlobal("__endJsEvent");
+            js_vm.callGlobal("__beginJsEvent");
+            js_vm.evalExpr(std.mem.span(js_expr));
+            js_vm.callGlobal("__endJsEvent");
             state_mod.markDirty();
         }
     }
@@ -542,9 +669,9 @@ fn updateHover(root: *Node, mx: f32, my: f32) void {
             luajit_runtime.evalExpr(std.mem.span(lua_expr));
         }
         if (node.handlers.js_on_hover_enter) |js_expr| {
-            qjs_runtime.callGlobal("__beginJsEvent");
-            qjs_runtime.evalExpr(std.mem.span(js_expr));
-            qjs_runtime.callGlobal("__endJsEvent");
+            js_vm.callGlobal("__beginJsEvent");
+            js_vm.evalExpr(std.mem.span(js_expr));
+            js_vm.callGlobal("__endJsEvent");
             state_mod.markDirty();
         }
         // Tooltip: show if node carries tooltip text
@@ -605,6 +732,8 @@ pub const AppConfig = struct {
     check_reload: ?*const fn (*AppConfig) bool = null,
     /// Called after init during a hot-reload, before tick. Used for state restoration.
     post_reload: ?*const fn () void = null,
+    /// Called once during shutdown while host runtimes are still alive.
+    shutdown: ?*const fn () void = null,
     /// Borderless window — removes OS window decorations (title bar, borders).
     /// The app must provide its own chrome using window_drag / window_resize nodes.
     borderless: bool = false,
@@ -760,6 +889,28 @@ fn openUrl(url: []const u8) void {
     _ = child.spawnAndWait() catch {};
 }
 
+fn tryDispatchJsrtEventExpr(expr: []const u8) bool {
+    if (!luajit_runtime.hasGlobal("__dispatchEventFromZig")) return false;
+    const prefix = "__dispatchEvent(";
+    const suffix = ",'onClick')";
+    if (!std.mem.startsWith(u8, expr, prefix) or !std.mem.endsWith(u8, expr, suffix)) return false;
+    const id_slice = expr[prefix.len .. expr.len - suffix.len];
+    const id = std.fmt.parseInt(i64, id_slice, 10) catch return false;
+    luajit_runtime.callGlobalIntStr("__dispatchEventFromZig", id, "onClick");
+    return true;
+}
+
+fn runJsHandlerExpr(expr: []const u8) void {
+    if (tryDispatchJsrtEventExpr(expr)) {
+        state_mod.markDirty();
+        return;
+    }
+    js_vm.callGlobal("__beginJsEvent");
+    js_vm.evalExpr(expr);
+    js_vm.callGlobal("__endJsEvent");
+    state_mod.markDirty();
+}
+
 fn measureCallback(t: []const u8, font_size: u16, max_width: f32, letter_spacing: f32, line_height: f32, max_lines: u16, no_wrap: bool) layout.TextMetrics {
     if (g_text_engine) |te| {
         return te.measureTextWrappedEx(t, font_size, max_width, letter_spacing, line_height, max_lines, no_wrap);
@@ -784,7 +935,11 @@ fn drawNodeTextCommon(node: *Node, text: []const u8, x: f32, y: f32, max_width: 
     }
     if (node.line_height > 0) gpu.setLineHeightOverride(node.line_height);
     const text_h = gpu.drawTextWrapped(
-        text, x, y, node.font_size, max_width,
+        text,
+        x,
+        y,
+        node.font_size,
+        max_width,
         @as(f32, @floatFromInt(color.r)) / 255.0,
         @as(f32, @floatFromInt(color.g)) / 255.0,
         @as(f32, @floatFromInt(color.b)) / 255.0,
@@ -808,7 +963,12 @@ fn drawNodeTextCommon(node: *Node, text: []const u8, x: f32, y: f32, max_width: 
             @as(f32, @floatFromInt(color.g)) / 255.0,
             @as(f32, @floatFromInt(color.b)) / 255.0,
             final_a * 0.6,
-            0, 0, 0, 0, 0, 0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
         );
     }
     return text_h;
@@ -923,6 +1083,10 @@ var g_input_latency_ts_us: i64 = 0;
 var g_input_latency_kind: []const u8 = "";
 var g_input_latency_event_count: u32 = 0; // events batched into this frame
 
+fn stampClickLatency() void {
+    luajit_runtime.callGlobal("__clickLatencyBegin");
+}
+
 fn stampInputLatency(kind: []const u8) void {
     if (g_input_latency_ts_us == 0) {
         g_input_latency_ts_us = std.time.microTimestamp();
@@ -972,7 +1136,10 @@ fn hitTestInputByte(id: u8, local_x: f32, local_y: f32, font_size: u16, max_widt
 }
 
 fn paintNode(node: *Node) void {
-    if (node.style.display == .none) { g_hidden_count += 1; return; }
+    if (node.style.display == .none) {
+        g_hidden_count += 1;
+        return;
+    }
     g_paint_count += 1;
     if (g_paint_count > PAINT_BUDGET) {
         if (!g_budget_exceeded) {
@@ -983,17 +1150,26 @@ fn paintNode(node: *Node) void {
     }
 
     // Canvas.Path: draw before size check
-    if (node.canvas_path or node.canvas_path_d != null) { paintCanvasPath(node); return; }
+    if (node.canvas_path or node.canvas_path_d != null) {
+        paintCanvasPath(node);
+        return;
+    }
 
     const r = node.computed;
-    if (r.w <= 0 or r.h <= 0) { g_zero_count += 1; return; }
+    if (r.w <= 0 or r.h <= 0) {
+        g_zero_count += 1;
+        return;
+    }
 
     // Apply node opacity (cascades to children via g_paint_opacity)
     const saved_opacity = g_paint_opacity;
     if (node.style.opacity < 1.0) {
         g_paint_opacity *= node.style.opacity;
     }
-    if (g_paint_opacity <= 0) { g_paint_opacity = saved_opacity; return; }
+    if (g_paint_opacity <= 0) {
+        g_paint_opacity = saved_opacity;
+        return;
+    }
 
     // Paint this node's visuals (background, text, input, selection)
     paintNodeVisuals(node);
@@ -1014,7 +1190,10 @@ fn paintNode(node: *Node) void {
     }
 
     // Canvas rendering — separate heavy path
-    if (node.canvas_type != null) { paintCanvasContainer(node); return; }
+    if (node.canvas_type != null) {
+        paintCanvasContainer(node);
+        return;
+    }
 
     // Graph container — lightweight canvas with transform for SVG path children
     if (node.graph_container) {
@@ -1142,7 +1321,10 @@ fn paintCanvasPath(node: *Node) callconv(.auto) void {
                         info.pixel_buf,
                         info.width,
                         info.height,
-                        min_x, min_y, max_x - min_x, max_y - min_y,
+                        min_x,
+                        min_y,
+                        max_x - min_x,
+                        max_y - min_y,
                     );
                 }
             } else if (paisleyDebugEnabled() and isPaisleyName(ename)) {
@@ -1181,9 +1363,7 @@ noinline fn paintNodeVisuals(node: *Node) void {
     const is_hovered = (hovered_node == node) and (node.handlers.on_hover_enter != null or node.handlers.on_hover_exit != null or node.handlers.js_on_hover_enter != null or node.handlers.lua_on_hover_enter != null or node.handlers.js_on_hover_exit != null or node.handlers.lua_on_hover_exit != null or node.hoverable);
 
     if (is_hovered and node.style.background_color == null) {
-        gpu.drawRectCorners(r.x, r.y, r.w, r.h, 0.15, 0.15, 0.22, 0.6,
-            node.style.radiusTL(), node.style.radiusTR(), node.style.radiusBR(), node.style.radiusBL(),
-            0, 0, 0, 0, 0);
+        gpu.drawRectCorners(r.x, r.y, r.w, r.h, 0.15, 0.15, 0.22, 0.6, node.style.radiusTL(), node.style.radiusTR(), node.style.radiusBR(), node.style.radiusBL(), 0, 0, 0, 0, 0);
     }
 
     // Box shadow — draw BEFORE background so it appears behind
@@ -1208,18 +1388,37 @@ noinline fn paintNodeVisuals(node: *Node) void {
                     const alpha = (sa / fsteps) * (fsteps - expand + 1);
                     const rad = node.style.radiusTL() + expand;
                     gpu.drawRect(
-                        r.x + ox - expand, r.y + oy - expand,
-                        r.w + expand * 2, r.h + expand * 2,
-                        sr, sg, sb, alpha,
-                        rad, 0, 0, 0, 0, 0,
+                        r.x + ox - expand,
+                        r.y + oy - expand,
+                        r.w + expand * 2,
+                        r.h + expand * 2,
+                        sr,
+                        sg,
+                        sb,
+                        alpha,
+                        rad,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
                     );
                 }
             } else {
                 // SDF shader: single rect with GPU blur (default, shadowMethod: 'sdf')
                 gpu.drawRectShadow(
-                    r.x + ox, r.y + oy, r.w, r.h,
-                    sr, sg, sb, sa,
-                    node.style.radiusTL(), node.style.radiusTR(), node.style.radiusBR(), node.style.radiusBL(),
+                    r.x + ox,
+                    r.y + oy,
+                    r.w,
+                    r.h,
+                    sr,
+                    sg,
+                    sb,
+                    sa,
+                    node.style.radiusTL(),
+                    node.style.radiusTR(),
+                    node.style.radiusBR(),
+                    node.style.radiusBL(),
                     blur,
                 );
             }
@@ -1233,14 +1432,26 @@ noinline fn paintNodeVisuals(node: *Node) void {
             const has_transform = node.style.rotation != 0 or node.style.scale_x != 1.0 or node.style.scale_y != 1.0;
             if (has_transform) {
                 gpu.drawRectCornersTransformed(
-                    r.x, r.y, r.w, r.h,
-                    @as(f32, @floatFromInt(bg.r)) / 255.0, @as(f32, @floatFromInt(bg.g)) / 255.0,
-                    @as(f32, @floatFromInt(bg.b)) / 255.0, @as(f32, @floatFromInt(bg.a)) / 255.0 * g_paint_opacity,
-                    node.style.radiusTL(), node.style.radiusTR(), node.style.radiusBR(), node.style.radiusBL(),
+                    r.x,
+                    r.y,
+                    r.w,
+                    r.h,
+                    @as(f32, @floatFromInt(bg.r)) / 255.0,
+                    @as(f32, @floatFromInt(bg.g)) / 255.0,
+                    @as(f32, @floatFromInt(bg.b)) / 255.0,
+                    @as(f32, @floatFromInt(bg.a)) / 255.0 * g_paint_opacity,
+                    node.style.radiusTL(),
+                    node.style.radiusTR(),
+                    node.style.radiusBR(),
+                    node.style.radiusBL(),
                     node.style.brdTop(),
-                    @as(f32, @floatFromInt(bc.r)) / 255.0, @as(f32, @floatFromInt(bc.g)) / 255.0,
-                    @as(f32, @floatFromInt(bc.b)) / 255.0, @as(f32, @floatFromInt(bc.a)) / 255.0 * g_paint_opacity,
-                    node.style.rotation, node.style.scale_x, node.style.scale_y,
+                    @as(f32, @floatFromInt(bc.r)) / 255.0,
+                    @as(f32, @floatFromInt(bc.g)) / 255.0,
+                    @as(f32, @floatFromInt(bc.b)) / 255.0,
+                    @as(f32, @floatFromInt(bc.a)) / 255.0 * g_paint_opacity,
+                    node.style.rotation,
+                    node.style.scale_x,
+                    node.style.scale_y,
                 );
             } else if (node.style.gradient_color_end) |ge| {
                 if (node.style.gradient_direction != .none) {
@@ -1250,37 +1461,69 @@ noinline fn paintNodeVisuals(node: *Node) void {
                         else => 0.0,
                     };
                     gpu.drawRectGradient(
-                        r.x, r.y, r.w, r.h,
-                        @as(f32, @floatFromInt(bg.r)) / 255.0, @as(f32, @floatFromInt(bg.g)) / 255.0,
-                        @as(f32, @floatFromInt(bg.b)) / 255.0, @as(f32, @floatFromInt(bg.a)) / 255.0 * g_paint_opacity,
-                        node.style.radiusTL(), node.style.radiusTR(), node.style.radiusBR(), node.style.radiusBL(),
+                        r.x,
+                        r.y,
+                        r.w,
+                        r.h,
+                        @as(f32, @floatFromInt(bg.r)) / 255.0,
+                        @as(f32, @floatFromInt(bg.g)) / 255.0,
+                        @as(f32, @floatFromInt(bg.b)) / 255.0,
+                        @as(f32, @floatFromInt(bg.a)) / 255.0 * g_paint_opacity,
+                        node.style.radiusTL(),
+                        node.style.radiusTR(),
+                        node.style.radiusBR(),
+                        node.style.radiusBL(),
                         node.style.brdTop(),
-                        @as(f32, @floatFromInt(bc.r)) / 255.0, @as(f32, @floatFromInt(bc.g)) / 255.0,
-                        @as(f32, @floatFromInt(bc.b)) / 255.0, @as(f32, @floatFromInt(bc.a)) / 255.0 * g_paint_opacity,
-                        @as(f32, @floatFromInt(ge.r)) / 255.0, @as(f32, @floatFromInt(ge.g)) / 255.0,
-                        @as(f32, @floatFromInt(ge.b)) / 255.0, @as(f32, @floatFromInt(ge.a)) / 255.0 * g_paint_opacity,
+                        @as(f32, @floatFromInt(bc.r)) / 255.0,
+                        @as(f32, @floatFromInt(bc.g)) / 255.0,
+                        @as(f32, @floatFromInt(bc.b)) / 255.0,
+                        @as(f32, @floatFromInt(bc.a)) / 255.0 * g_paint_opacity,
+                        @as(f32, @floatFromInt(ge.r)) / 255.0,
+                        @as(f32, @floatFromInt(ge.g)) / 255.0,
+                        @as(f32, @floatFromInt(ge.b)) / 255.0,
+                        @as(f32, @floatFromInt(ge.a)) / 255.0 * g_paint_opacity,
                         dir,
                     );
                 } else {
                     gpu.drawRectCorners(
-                        r.x, r.y, r.w, r.h,
-                        @as(f32, @floatFromInt(bg.r)) / 255.0, @as(f32, @floatFromInt(bg.g)) / 255.0,
-                        @as(f32, @floatFromInt(bg.b)) / 255.0, @as(f32, @floatFromInt(bg.a)) / 255.0 * g_paint_opacity,
-                        node.style.radiusTL(), node.style.radiusTR(), node.style.radiusBR(), node.style.radiusBL(),
+                        r.x,
+                        r.y,
+                        r.w,
+                        r.h,
+                        @as(f32, @floatFromInt(bg.r)) / 255.0,
+                        @as(f32, @floatFromInt(bg.g)) / 255.0,
+                        @as(f32, @floatFromInt(bg.b)) / 255.0,
+                        @as(f32, @floatFromInt(bg.a)) / 255.0 * g_paint_opacity,
+                        node.style.radiusTL(),
+                        node.style.radiusTR(),
+                        node.style.radiusBR(),
+                        node.style.radiusBL(),
                         node.style.brdTop(),
-                        @as(f32, @floatFromInt(bc.r)) / 255.0, @as(f32, @floatFromInt(bc.g)) / 255.0,
-                        @as(f32, @floatFromInt(bc.b)) / 255.0, @as(f32, @floatFromInt(bc.a)) / 255.0 * g_paint_opacity,
+                        @as(f32, @floatFromInt(bc.r)) / 255.0,
+                        @as(f32, @floatFromInt(bc.g)) / 255.0,
+                        @as(f32, @floatFromInt(bc.b)) / 255.0,
+                        @as(f32, @floatFromInt(bc.a)) / 255.0 * g_paint_opacity,
                     );
                 }
             } else {
                 gpu.drawRectCorners(
-                    r.x, r.y, r.w, r.h,
-                    @as(f32, @floatFromInt(bg.r)) / 255.0, @as(f32, @floatFromInt(bg.g)) / 255.0,
-                    @as(f32, @floatFromInt(bg.b)) / 255.0, @as(f32, @floatFromInt(bg.a)) / 255.0 * g_paint_opacity,
-                    node.style.radiusTL(), node.style.radiusTR(), node.style.radiusBR(), node.style.radiusBL(),
+                    r.x,
+                    r.y,
+                    r.w,
+                    r.h,
+                    @as(f32, @floatFromInt(bg.r)) / 255.0,
+                    @as(f32, @floatFromInt(bg.g)) / 255.0,
+                    @as(f32, @floatFromInt(bg.b)) / 255.0,
+                    @as(f32, @floatFromInt(bg.a)) / 255.0 * g_paint_opacity,
+                    node.style.radiusTL(),
+                    node.style.radiusTR(),
+                    node.style.radiusBR(),
+                    node.style.radiusBL(),
                     node.style.brdTop(),
-                    @as(f32, @floatFromInt(bc.r)) / 255.0, @as(f32, @floatFromInt(bc.g)) / 255.0,
-                    @as(f32, @floatFromInt(bc.b)) / 255.0, @as(f32, @floatFromInt(bc.a)) / 255.0 * g_paint_opacity,
+                    @as(f32, @floatFromInt(bc.r)) / 255.0,
+                    @as(f32, @floatFromInt(bc.g)) / 255.0,
+                    @as(f32, @floatFromInt(bc.b)) / 255.0,
+                    @as(f32, @floatFromInt(bc.a)) / 255.0 * g_paint_opacity,
                 );
             }
         }
@@ -1290,12 +1533,23 @@ noinline fn paintNodeVisuals(node: *Node) void {
     if (node.style.background_color == null and (node.style.brdTop() > 0 or node.style.border_width > 0)) {
         if (node.style.border_color) |bc| {
             gpu.drawRectCorners(
-                r.x, r.y, r.w, r.h,
-                0, 0, 0, 0,
-                node.style.radiusTL(), node.style.radiusTR(), node.style.radiusBR(), node.style.radiusBL(),
+                r.x,
+                r.y,
+                r.w,
+                r.h,
+                0,
+                0,
+                0,
+                0,
+                node.style.radiusTL(),
+                node.style.radiusTR(),
+                node.style.radiusBR(),
+                node.style.radiusBL(),
                 node.style.brdTop(),
-                @as(f32, @floatFromInt(bc.r)) / 255.0, @as(f32, @floatFromInt(bc.g)) / 255.0,
-                @as(f32, @floatFromInt(bc.b)) / 255.0, @as(f32, @floatFromInt(bc.a)) / 255.0 * g_paint_opacity,
+                @as(f32, @floatFromInt(bc.r)) / 255.0,
+                @as(f32, @floatFromInt(bc.g)) / 255.0,
+                @as(f32, @floatFromInt(bc.b)) / 255.0,
+                @as(f32, @floatFromInt(bc.a)) / 255.0 * g_paint_opacity,
             );
         }
     }
@@ -1424,17 +1678,12 @@ fn paintInlineGlyphs(glyphs: []const layout.InlineGlyph, font_size: u16) void {
         }
         if (!used_effect) {
             const fc = glyph.fill;
-            svg_path.drawFill(&path,
-                @as(f32, @floatFromInt(fc.r)) / 255.0, @as(f32, @floatFromInt(fc.g)) / 255.0,
-                @as(f32, @floatFromInt(fc.b)) / 255.0, @as(f32, @floatFromInt(fc.a)) / 255.0 * g_paint_opacity);
+            svg_path.drawFill(&path, @as(f32, @floatFromInt(fc.r)) / 255.0, @as(f32, @floatFromInt(fc.g)) / 255.0, @as(f32, @floatFromInt(fc.b)) / 255.0, @as(f32, @floatFromInt(fc.a)) / 255.0 * g_paint_opacity);
         }
         // Stroke
         if (glyph.stroke_width > 0 and glyph.stroke.a > 0) {
             const sc = glyph.stroke;
-            svg_path.drawStrokeCurves(&path,
-                @as(f32, @floatFromInt(sc.r)) / 255.0, @as(f32, @floatFromInt(sc.g)) / 255.0,
-                @as(f32, @floatFromInt(sc.b)) / 255.0, @as(f32, @floatFromInt(sc.a)) / 255.0 * g_paint_opacity,
-                glyph.stroke_width, 0, 0);
+            svg_path.drawStrokeCurves(&path, @as(f32, @floatFromInt(sc.r)) / 255.0, @as(f32, @floatFromInt(sc.g)) / 255.0, @as(f32, @floatFromInt(sc.b)) / 255.0, @as(f32, @floatFromInt(sc.a)) / 255.0 * g_paint_opacity, glyph.stroke_width, 0, 0);
         }
         gpu.resetTransform();
     }
@@ -1598,11 +1847,7 @@ noinline fn paintTerminal(node: *Node) void {
             const tok = classifier.getRowTokenIdx(ti, live_r);
             if (tok != .output and tok != .text) {
                 const ac = classifier.tokenColor(tok);
-                gpu.drawRect(r.x, cy, 2, cell_h,
-                    @as(f32, @floatFromInt(ac.r)) / 255.0,
-                    @as(f32, @floatFromInt(ac.g)) / 255.0,
-                    @as(f32, @floatFromInt(ac.b)) / 255.0,
-                    0.9 * g_paint_opacity, 0, 0, 0, 0, 0, 0);
+                gpu.drawRect(r.x, cy, 2, cell_h, @as(f32, @floatFromInt(ac.r)) / 255.0, @as(f32, @floatFromInt(ac.g)) / 255.0, @as(f32, @floatFromInt(ac.b)) / 255.0, 0.9 * g_paint_opacity, 0, 0, 0, 0, 0, 0);
             } else {
                 gpu.drawRect(r.x, cy + cell_h * 0.35, 2, cell_h * 0.3, 0.3, 0.33, 0.4, 0.25 * g_paint_opacity, 0, 0, 0, 0, 0, 0);
             }
@@ -1624,11 +1869,7 @@ noinline fn paintTerminal(node: *Node) void {
             // Background rect (non-default bg only)
             if (cell.bg) |bg| {
                 const actual_bg = if (cell.reverse) (cell.fg orelse @TypeOf(cell.fg.?){ .r = 204, .g = 204, .b = 204 }) else bg;
-                gpu.drawRect(cx, cy, cell_w * @as(f32, @floatFromInt(cell.width)), cell_h,
-                    @as(f32, @floatFromInt(actual_bg.r)) / 255.0,
-                    @as(f32, @floatFromInt(actual_bg.g)) / 255.0,
-                    @as(f32, @floatFromInt(actual_bg.b)) / 255.0,
-                    g_paint_opacity, 0, 0, 0, 0, 0, 0);
+                gpu.drawRect(cx, cy, cell_w * @as(f32, @floatFromInt(cell.width)), cell_h, @as(f32, @floatFromInt(actual_bg.r)) / 255.0, @as(f32, @floatFromInt(actual_bg.g)) / 255.0, @as(f32, @floatFromInt(actual_bg.b)) / 255.0, g_paint_opacity, 0, 0, 0, 0, 0, 0);
             }
 
             // Foreground glyph — semantic color for live rows, cell color for scrollback
@@ -1647,7 +1888,9 @@ noinline fn paintTerminal(node: *Node) void {
                 } else raw_fg;
                 gpu.drawGlyphAt(
                     cell.char_buf[0..cell.char_len],
-                    cx, cy, font_size,
+                    cx,
+                    cy,
+                    font_size,
                     @as(f32, @floatFromInt(fg.r)) / 255.0,
                     @as(f32, @floatFromInt(fg.g)) / 255.0,
                     @as(f32, @floatFromInt(fg.b)) / 255.0,
@@ -1798,7 +2041,7 @@ pub fn run(config_in: AppConfig) !void {
 
     // Ignore signals that kill the process when launched without a controlling terminal
     crashlog.ignoreSignal(13); // SIGPIPE
-    crashlog.ignoreSignal(1);  // SIGHUP
+    crashlog.ignoreSignal(1); // SIGHUP
     crashlog.ignoreSignal(15); // SIGTERM (catch and log instead of die)
     crashlog.ignoreSignal(20); // SIGTSTP
 
@@ -1860,7 +2103,8 @@ pub fn run(config_in: AppConfig) !void {
         (if (config.borderless) c.SDL_WINDOW_BORDERLESS else @as(u64, 0));
     const window = c.SDL_CreateWindow(
         config.title,
-        init_w, init_h,
+        init_w,
+        init_h,
         window_flags,
     ) orelse return error.WindowCreateFailed;
     defer c.SDL_DestroyWindow(window);
@@ -1926,12 +2170,15 @@ pub fn run(config_in: AppConfig) !void {
     breakpoint.update(win_w);
 
     // QuickJS VM
-    qjs_runtime.initVM();
-    defer qjs_runtime.deinit();
+    js_vm.initVM();
+    defer js_vm.deinit();
 
     // LuaJIT logic VM (main-thread — events, state, conditionals)
     luajit_runtime.initVM();
     defer luajit_runtime.deinit();
+    defer {
+        if (config.shutdown) |shutdown| shutdown();
+    }
     @import("audio.zig").registerQjsHostFunctions();
     @import("pty_client.zig").registerQjsHostFunctions();
     @import("applescript.zig").registerQjsHostFunctions();
@@ -1956,9 +2203,9 @@ pub fn run(config_in: AppConfig) !void {
 
     // Load embedded scripts — after init so host functions are registered,
     // then mark dirty so first tick re-evaluates conditionals with scripts available.
-    if (config.js_logic.len > 0) qjs_runtime.evalScript(config.js_logic);
+    if (config.js_logic.len > 0) js_vm.evalScript(config.js_logic);
     if (config.lua_logic.len > 0) luajit_runtime.evalScript(config.lua_logic);
-    if (config.js_logic.len > 0) qjs_runtime.evalExpr("__luaReady = true;");
+    if (config.js_logic.len > 0) js_vm.evalExpr("__luaReady = true;");
     if (config.js_logic.len > 0 or config.lua_logic.len > 0) state_mod.markDirty();
     {
         const dt = @divTrunc(std.time.microTimestamp() - startup_t0, 1000);
@@ -2001,9 +2248,9 @@ pub fn run(config_in: AppConfig) !void {
                 // Re-init first (registers host functions), then load scripts
                 // (matches startup order: _appInit → evalScript)
                 if (config.init) |initFn| initFn();
-                if (config.js_logic.len > 0) qjs_runtime.evalScript(config.js_logic);
+                if (config.js_logic.len > 0) js_vm.evalScript(config.js_logic);
                 if (config.lua_logic.len > 0) luajit_runtime.evalScript(config.lua_logic);
-                if (config.js_logic.len > 0) qjs_runtime.evalExpr("__luaReady = true;");
+                if (config.js_logic.len > 0) js_vm.evalExpr("__luaReady = true;");
                 // Restore preserved state (after init resets to defaults, before tick uses it)
                 if (config.post_reload) |postFn| postFn();
                 if (config.tick) |tickFn| tickFn(@truncate(c.SDL_GetTicks()));
@@ -2138,6 +2385,7 @@ pub fn run(config_in: AppConfig) !void {
                         if (hit_is_interactive) {
                             const h = hit.?;
                             if (h.input_id) |id| {
+                                stampClickLatency();
                                 const now_ms: u32 = @intCast(c.SDL_GetTicks() & 0xFFFFFFFF);
                                 const clicks = input.trackClick(now_ms);
                                 input.focus(id);
@@ -2170,13 +2418,14 @@ pub fn run(config_in: AppConfig) !void {
                                 }
                             } else if (h.handlers.on_mouse_down) |handler| {
                                 input.unfocus();
+                                stampClickLatency();
                                 stampInputLatency("click");
                                 handler();
                                 if (h.handlers.js_on_mouse_down) |js_expr| {
                                     const expr = std.mem.span(js_expr);
-                                    qjs_runtime.callGlobal("__beginJsEvent");
-                                    qjs_runtime.evalExpr(expr);
-                                    qjs_runtime.callGlobal("__endJsEvent");
+                                    js_vm.callGlobal("__beginJsEvent");
+                                    js_vm.evalExpr(expr);
+                                    js_vm.callGlobal("__endJsEvent");
                                     state_mod.markDirty();
                                 }
                                 if (h.handlers.lua_on_mouse_down) |lua_expr| {
@@ -2184,18 +2433,21 @@ pub fn run(config_in: AppConfig) !void {
                                 }
                             } else if (h.handlers.js_on_mouse_down) |js_expr| {
                                 input.unfocus();
+                                stampClickLatency();
                                 stampInputLatency("click");
                                 const expr = std.mem.span(js_expr);
-                                qjs_runtime.callGlobal("__beginJsEvent");
-                                qjs_runtime.evalExpr(expr);
-                                qjs_runtime.callGlobal("__endJsEvent");
+                                js_vm.callGlobal("__beginJsEvent");
+                                js_vm.evalExpr(expr);
+                                js_vm.callGlobal("__endJsEvent");
                                 state_mod.markDirty();
                             } else if (h.handlers.lua_on_mouse_down) |lua_expr| {
                                 input.unfocus();
+                                stampClickLatency();
                                 stampInputLatency("click");
                                 luajit_runtime.evalExpr(std.mem.span(lua_expr));
                             } else if (h.handlers.on_press) |handler| {
                                 input.unfocus();
+                                stampClickLatency();
                                 stampInputLatency("click");
                                 std.debug.print("[press] zig handler at ({d:.0},{d:.0})\n", .{ mx, my });
                                 handler();
@@ -2203,10 +2455,7 @@ pub fn run(config_in: AppConfig) !void {
                                 if (h.handlers.js_on_press) |js_expr| {
                                     const expr = std.mem.span(js_expr);
                                     std.debug.print("[press] +js: '{s}'\n", .{expr});
-                                    qjs_runtime.callGlobal("__beginJsEvent");
-                                    qjs_runtime.evalExpr(expr);
-                                    qjs_runtime.callGlobal("__endJsEvent");
-                                    state_mod.markDirty();
+                                    runJsHandlerExpr(expr);
                                     std.debug.print("[press] +js done\n", .{});
                                 }
                                 // Also run Lua handler if present
@@ -2215,21 +2464,23 @@ pub fn run(config_in: AppConfig) !void {
                                 }
                             } else if (h.handlers.lua_on_press) |lua_expr| {
                                 input.unfocus();
+                                stampClickLatency();
                                 stampInputLatency("click");
                                 std.debug.print("[lua_on_press] eval: '{s}'\n", .{std.mem.span(lua_expr)});
                                 luajit_runtime.evalExpr(std.mem.span(lua_expr));
                                 std.debug.print("[lua_on_press] done\n", .{});
                             } else if (h.handlers.js_on_press) |js_expr| {
                                 input.unfocus();
+                                stampClickLatency();
                                 stampInputLatency("click");
                                 const expr = std.mem.span(js_expr);
                                 std.debug.print("[js_on_press] eval: '{s}'\n", .{expr});
-                                qjs_runtime.callGlobal("__beginJsEvent");
-                                qjs_runtime.evalExpr(expr);
-                                qjs_runtime.callGlobal("__endJsEvent");
-                                state_mod.markDirty();
-                                std.debug.print("[js_on_press] done\n", .{});
+                                const jt0 = std.time.microTimestamp();
+                                runJsHandlerExpr(expr);
+                                const jt1 = std.time.microTimestamp();
+                                std.debug.print("[js_on_press] done ({d}us)\n", .{jt1 - jt0});
                             } else if (h.href) |url| {
+                                stampClickLatency();
                                 stampInputLatency("click");
                                 openUrl(url);
                             }
@@ -2261,6 +2512,7 @@ pub fn run(config_in: AppConfig) !void {
                             var handled_interactive = false;
                             if (canvas_child_hit) |h| {
                                 if (h.input_id) |id| {
+                                    stampClickLatency();
                                     input.focus(id);
                                     const pl = h.style.padLeft();
                                     const pt = h.style.padTop();
@@ -2281,12 +2533,13 @@ pub fn run(config_in: AppConfig) !void {
                                     input_drag_line_height = h.line_height;
                                     handled_interactive = true;
                                 } else if (h.handlers.on_mouse_down) |handler| {
+                                    stampClickLatency();
                                     stampInputLatency("click");
                                     handler();
                                     if (h.handlers.js_on_mouse_down) |js_expr| {
-                                        qjs_runtime.callGlobal("__beginJsEvent");
-                                        qjs_runtime.evalExpr(std.mem.span(js_expr));
-                                        qjs_runtime.callGlobal("__endJsEvent");
+                                        js_vm.callGlobal("__beginJsEvent");
+                                        js_vm.evalExpr(std.mem.span(js_expr));
+                                        js_vm.callGlobal("__endJsEvent");
                                         state_mod.markDirty();
                                     }
                                     if (h.handlers.lua_on_mouse_down) |lua_expr| {
@@ -2294,41 +2547,41 @@ pub fn run(config_in: AppConfig) !void {
                                     }
                                     handled_interactive = true;
                                 } else if (h.handlers.js_on_mouse_down) |js_expr| {
+                                    stampClickLatency();
                                     stampInputLatency("click");
-                                    qjs_runtime.callGlobal("__beginJsEvent");
-                                    qjs_runtime.evalExpr(std.mem.span(js_expr));
-                                    qjs_runtime.callGlobal("__endJsEvent");
+                                    js_vm.callGlobal("__beginJsEvent");
+                                    js_vm.evalExpr(std.mem.span(js_expr));
+                                    js_vm.callGlobal("__endJsEvent");
                                     state_mod.markDirty();
                                     handled_interactive = true;
                                 } else if (h.handlers.lua_on_mouse_down) |lua_expr| {
+                                    stampClickLatency();
                                     stampInputLatency("click");
                                     luajit_runtime.evalExpr(std.mem.span(lua_expr));
                                     handled_interactive = true;
                                 } else if (h.handlers.on_press) |handler| {
+                                    stampClickLatency();
                                     stampInputLatency("click");
                                     handler();
                                     if (h.handlers.js_on_press) |js_expr| {
-                                        qjs_runtime.callGlobal("__beginJsEvent");
-                                        qjs_runtime.evalExpr(std.mem.span(js_expr));
-                                        qjs_runtime.callGlobal("__endJsEvent");
-                                        state_mod.markDirty();
+                                        runJsHandlerExpr(std.mem.span(js_expr));
                                     }
                                     if (h.handlers.lua_on_press) |lua_expr| {
                                         luajit_runtime.evalExpr(std.mem.span(lua_expr));
                                     }
                                     handled_interactive = true;
                                 } else if (h.handlers.lua_on_press) |lua_expr| {
+                                    stampClickLatency();
                                     stampInputLatency("click");
                                     luajit_runtime.evalExpr(std.mem.span(lua_expr));
                                     handled_interactive = true;
                                 } else if (h.handlers.js_on_press) |js_expr| {
+                                    stampClickLatency();
                                     stampInputLatency("click");
-                                    qjs_runtime.callGlobal("__beginJsEvent");
-                                    qjs_runtime.evalExpr(std.mem.span(js_expr));
-                                    qjs_runtime.callGlobal("__endJsEvent");
-                                    state_mod.markDirty();
+                                    runJsHandlerExpr(std.mem.span(js_expr));
                                     handled_interactive = true;
                                 } else if (h.href) |url| {
+                                    stampClickLatency();
                                     stampInputLatency("click");
                                     openUrl(url);
                                     handled_interactive = true;
@@ -2384,7 +2637,7 @@ pub fn run(config_in: AppConfig) !void {
                     if (qjs_runtime.terminalDockResizeActive()) {
                         if ((event.motion.state & c.SDL_BUTTON_LMASK) != 0) {
                             const next_height = qjs_runtime.terminalDockResizeStartHeight() + (qjs_runtime.terminalDockResizeStartY() - my);
-                            qjs_runtime.callGlobalFloat("__setTerminalDockHeight", next_height);
+                            js_vm.callGlobalFloat("__setTerminalDockHeight", next_height);
                         } else {
                             qjs_runtime.endTerminalDockResize();
                         }
@@ -2508,9 +2761,9 @@ pub fn run(config_in: AppConfig) !void {
                                 canvas_move_last_gx,
                                 canvas_move_last_gy,
                             })) |sentinel| {
-                                qjs_runtime.callGlobal("__beginJsEvent");
-                                qjs_runtime.evalExpr(sentinel);
-                                qjs_runtime.callGlobal("__endJsEvent");
+                                js_vm.callGlobal("__beginJsEvent");
+                                js_vm.evalExpr(sentinel);
+                                js_vm.callGlobal("__endJsEvent");
                                 state_mod.markDirty();
                             } else |_| {}
                             canvas_move_drag_id = 0;
@@ -2557,8 +2810,10 @@ pub fn run(config_in: AppConfig) !void {
                                 var copy_buf: [8192]u8 = undefined;
                                 const len = vterm_mod.copySelectedTextIdx(
                                     g_focused_terminal,
-                                    term_sel_start_row, term_sel_start_col,
-                                    term_sel_end_row, term_sel_end_col,
+                                    term_sel_start_row,
+                                    term_sel_start_col,
+                                    term_sel_end_row,
+                                    term_sel_end_col,
                                     &copy_buf,
                                 );
                                 if (len > 0 and len < copy_buf.len) {
@@ -2610,9 +2865,9 @@ pub fn run(config_in: AppConfig) !void {
                         if (input_consumed) stampInputLatency("key");
                         if (!input_consumed and !videos.handleKey(sym)) {
                             selection.onKeyDown(config.root, sym, mod);
-                            qjs_runtime.callGlobalInt("__ifttt_onKeyDown", packed_key);
+                            js_vm.callGlobalInt("__ifttt_onKeyDown", packed_key);
                             // Forward key events to QuickJS script layer
-                            qjs_runtime.callGlobalInt("__onKeyDown", @intCast(sym));
+                            js_vm.callGlobalInt("__onKeyDown", @intCast(sym));
                         }
                     }
                 },
@@ -2621,7 +2876,7 @@ pub fn run(config_in: AppConfig) !void {
                     const mod = event.key.mod;
                     const packed_key: i64 = (@as(i64, @intCast(mod)) << 16) | (@as(i64, @intCast(sym)) & 0xFFFF);
                     _ = render_surfaces.handleKeyUp(@intCast(event.key.key));
-                    qjs_runtime.callGlobalInt("__ifttt_onKeyUp", packed_key);
+                    js_vm.callGlobalInt("__ifttt_onKeyUp", packed_key);
                 },
                 c.SDL_EVENT_MOUSE_WHEEL => {
                     // SDL3: mouse_x/mouse_y are in the wheel event itself
@@ -2746,7 +3001,7 @@ pub fn run(config_in: AppConfig) !void {
 
         // QuickJS tick
         const t0 = std.time.microTimestamp();
-        qjs_runtime.tick();
+        js_vm.tick();
         const t1 = std.time.microTimestamp();
         qjs_runtime.telemetry_tick_us = @intCast(@max(0, t1 - t0));
 
@@ -2754,6 +3009,7 @@ pub fn run(config_in: AppConfig) !void {
         luajit_runtime.tick();
 
         // App tick (FFI polling, state updates, dynamic texts)
+        const phase_t0 = std.time.microTimestamp();
         if (config.tick) |tickFn| {
             // Cache the stable slot id BEFORE tick runs — tick may rebuild the
             // arena that hovered_node points into, leaving it dangling. Reading
@@ -2765,6 +3021,7 @@ pub fn run(config_in: AppConfig) !void {
             else
                 null;
         }
+        const phase_t1 = std.time.microTimestamp();
 
         // Tick all loaded cartridges + scan for new <Cartridge> nodes (first frame only)
         if (cart.count() > 0) cart.tickAll(@truncate(c.SDL_GetTicks()));
@@ -2930,7 +3187,21 @@ pub fn run(config_in: AppConfig) !void {
         const t5 = std.time.microTimestamp();
         qjs_runtime.telemetry_paint_us = @intCast(@max(0, t5 - t4));
 
+        const phase_t_preframe = std.time.microTimestamp();
         gpu.frame(0.051, 0.067, 0.090);
+        const phase_t_postframe = std.time.microTimestamp();
+        if (g_input_latency_ts_us != 0) {
+            const since_click = phase_t_postframe - g_input_latency_ts_us;
+            if (since_click > 50000) {
+                std.debug.print("[frame-timing] since_click={d}ms  tick={d}us  layout={d}us  paint={d}us  gpu.frame={d}us\n", .{
+                    @divTrunc(since_click, 1000),
+                    phase_t1 - phase_t0,
+                    qjs_runtime.telemetry_layout_us,
+                    t5 - t4,
+                    phase_t_postframe - phase_t_preframe,
+                });
+            }
+        }
 
         // Input-to-present latency: time from first SDL input event in this
         // frame's cycle to post-present. Prints every time so a live typing

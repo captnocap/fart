@@ -15,6 +15,7 @@ package.path = package.path .. ";./?.lua;./?/init.lua"
 
 local JSRT   = require("framework.lua.jsrt.init")
 local Values = require("framework.lua.jsrt.values")
+local AST    = require("framework.lua.jsrt.test.load_generated_ast")
 
 -- Build AST from JS source.
 local here = debug.getinfo(1, "S").source:sub(2):match("(.+)/[^/]+$") or "."
@@ -23,7 +24,7 @@ local out  = here .. "/target_11_source.ast.lua"
 local build_cmd = string.format('node scripts/build-jsast.mjs %q %q', src, out)
 local ok = os.execute(build_cmd)
 assert(ok == 0 or ok == true, "build-jsast.mjs failed (status " .. tostring(ok) .. ")")
-local ast = assert(loadfile(out))()
+local ast = AST.load(out)
 
 -- Recording host-fns. Each appends to `ops` and returns a fresh id.
 local ops = {}

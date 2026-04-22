@@ -1,5 +1,6 @@
 const React: any = require('react');
 const { useState, useEffect } = React;
+const { memo } = React;
 
 import { Box, Col, Pressable, Row, ScrollView, Text, TextArea } from '../../../runtime/primitives';
 import { baseName, COLORS } from '../theme';
@@ -94,10 +95,11 @@ function fuzzyMatch(query: string, path: string): boolean {
 }
 
 function ContextMeter(props: { messages: any[]; modelId: string }) {
+  const messages = Array.isArray(props.messages) ? props.messages : [];
   const model = findModelById(props.modelId);
   const limit = model?.contextWindow || 200000;
   // Rough token estimate: 1 token ≈ 4 chars
-  const textLength = props.messages.reduce((sum: number, m: any) => sum + (m.text?.length || 0), 0);
+  const textLength = messages.reduce((sum: number, m: any) => sum + (typeof m.text === 'string' ? m.text.length : 0), 0);
   const tokens = Math.ceil(textLength / 4);
   const pct = Math.min(100, Math.round((tokens / limit) * 100));
   const color = pct > 80 ? COLORS.red : pct > 50 ? COLORS.yellow : COLORS.green;
@@ -106,7 +108,7 @@ function ContextMeter(props: { messages: any[]; modelId: string }) {
       <Box style={{ width: 18, height: 18, borderRadius: 9, borderWidth: 2, borderColor: color, justifyContent: 'center', alignItems: 'center' }}>
         <Text fontSize={7} color={color} style={{ fontWeight: 'bold' }}>{pct}%</Text>
       </Box>
-      {!props.messages.length || props.messages.length < 2 ? null : (
+      {!messages.length || messages.length < 2 ? null : (
         <Text fontSize={9} color={COLORS.textDim}>{tokens.toLocaleString()} / {limit.toLocaleString()}</Text>
       )}
     </Row>
@@ -114,13 +116,14 @@ function ContextMeter(props: { messages: any[]; modelId: string }) {
 }
 
 function GeneratingIndicator(props: { toolExecutions: any[] }) {
+  const toolExecutions = Array.isArray(props.toolExecutions) ? props.toolExecutions : [];
   const pulse = usePulse(0.5, 1, 1200);
   return (
     <Col style={{ gap: 8 }}>
-      {props.toolExecutions.length > 0 ? (
+      {toolExecutions.length > 0 ? (
         <Box style={{ gap: 8 }}>
           <Text fontSize={10} color={COLORS.textDim}>Live tool calls</Text>
-          {props.toolExecutions.map((execItem: any) => <ToolCallCard key={execItem.id} exec={execItem} />)}
+          {toolExecutions.map((execItem: any) => <ToolCallCard key={execItem.id} exec={execItem} />)}
         </Box>
       ) : null}
       <Row style={{ gap: 8, alignItems: 'center' }}>
@@ -129,7 +132,7 @@ function GeneratingIndicator(props: { toolExecutions: any[] }) {
         </Box>
         <Box style={{ padding: 10, borderRadius: 12, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelAlt }}>
           <Text fontSize={10} color={COLORS.textDim}>
-            {props.toolExecutions.some((item: any) => item.status === 'running') ? 'running tool chain' : 'thinking'}
+            {toolExecutions.some((item: any) => item.status === 'running') ? 'running tool chain' : 'thinking'}
           </Text>
         </Box>
         <Row style={{ gap: 2 }}>
@@ -142,23 +145,41 @@ function GeneratingIndicator(props: { toolExecutions: any[] }) {
   );
 }
 
-export function ChatSurface(props: any) {
+function ChatSurfaceImpl(props: any) {
+  const _rT0 = Date.now();
+  (globalThis as any).__hostLog?.(0, "[render] ChatSurface start t=" + _rT0);
   const compactBand = props.widthBand === 'narrow' || props.widthBand === 'widget' || props.widthBand === 'minimum';
   const minimumBand = props.widthBand === 'minimum';
-  const focusLabel = props.currentFilePath === '__landing__' ? props.workspaceName : props.currentFilePath === '__settings__' ? 'Settings' : props.currentFilePath;
-  const sendLabel = props.agentMode === 'agent' ? 'Launch' : props.agentMode === 'task' ? 'Run Task' : props.agentMode === 'plan' ? 'Plan' : 'Send';
+  const messages = Array.isArray(props.messages) ? props.messages : [];
+  const attachments = Array.isArray(props.attachments) ? props.attachments : [];
+  const toolExecutions = Array.isArray(props.toolExecutions) ? props.toolExecutions : [];
+  const workspaceFiles = Array.isArray(props.workspaceFiles) ? props.workspaceFiles : [];
+  const variablePreview = Array.isArray(props.variablePreview) ? props.variablePreview : [];
+  const currentInput = typeof props.currentInput === 'string' ? props.currentInput : '';
+  const currentFilePath = typeof props.currentFilePath === 'string' ? props.currentFilePath : '';
+  const workspaceName = typeof props.workspaceName === 'string' ? props.workspaceName : 'workspace';
+  const gitBranch = typeof props.gitBranch === 'string' ? props.gitBranch : 'main';
+  const gitRemote = typeof props.gitRemote === 'string' ? props.gitRemote : 'origin';
+  const selectedModel = typeof props.selectedModel === 'string' && props.selectedModel ? props.selectedModel : 'unknown';
+  const modelDisplayName = typeof props.modelDisplayName === 'string' && props.modelDisplayName ? props.modelDisplayName : selectedModel;
+  const agentMode = typeof props.agentMode === 'string' ? props.agentMode : 'ask';
+  const activeView = typeof props.activeView === 'string' ? props.activeView : 'landing';
+  const changedCount = typeof props.changedCount === 'number' ? props.changedCount : 0;
+  const inputTokenEstimate = typeof props.inputTokenEstimate === 'number' ? props.inputTokenEstimate : 0;
+  const focusLabel = currentFilePath === '__landing__' ? workspaceName : currentFilePath === '__settings__' ? 'Settings' : currentFilePath;
+  const sendLabel = agentMode === 'agent' ? 'Launch' : agentMode === 'task' ? 'Run Task' : agentMode === 'plan' ? 'Plan' : 'Send';
   const [highlightedIndex, setHighlightedIndex] = useState(0);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const { push: pushHistory, navigate: navigateHistory, reset: resetHistory } = useComposerHistory();
-  const { query: searchQuery, setQuery: setSearchQuery, results: searchResults, active: searchActive } = useMessageSearch(props.messages || []);
+  const { query: searchQuery, setQuery: setSearchQuery, results: searchResults } = useMessageSearch(messages);
 
   // Variable expansion preview
-  const varResults: ExpansionResult[] = props.variablePreview || [];
-  const showVarPreview = hasVariables(props.currentInput) && varResults.length > 0;
+  const varResults: ExpansionResult[] = variablePreview;
+  const showVarPreview = hasVariables(currentInput) && varResults.length > 0;
 
   // ── Composer menu state ──
-  const { token, startIndex } = getActiveToken(props.currentInput);
+  const { token, startIndex } = getActiveToken(currentInput);
   const menuType = token.startsWith('/') ? 'slash' : token.startsWith('@') ? 'at' : null;
   const query = token.slice(1);
 
@@ -168,8 +189,7 @@ export function ChatSurface(props: any) {
       .filter((item) => query.length === 0 || item.cmd.slice(1).toLowerCase().includes(query.toLowerCase()))
       .map((item) => ({ label: item.cmd, desc: item.desc, value: item.cmd + ' ' }));
   } else if (menuType === 'at') {
-    const files = props.workspaceFiles || [];
-    menuItems = files
+    menuItems = workspaceFiles
       .filter((path: string) => query.length === 0 || fuzzyMatch(query, path))
       .slice(0, 8)
       .map((path: string) => ({ label: path, desc: baseName(path), value: '@' + path + ' ' }));
@@ -180,10 +200,10 @@ export function ChatSurface(props: any) {
 
   useEffect(() => {
     setHighlightedIndex(0);
-  }, [props.currentInput]);
+  }, [currentInput]);
 
   function insertMenuItem(value: string) {
-    const before = props.currentInput.slice(0, startIndex);
+    const before = currentInput.slice(0, startIndex);
     props.onInputChange(before + value);
   }
 
@@ -195,7 +215,7 @@ export function ChatSurface(props: any) {
         const item = menuItems[safeHighlight];
         if (item) insertMenuItem(item.value);
       } else if (key === 27) {
-        const before = props.currentInput.slice(0, startIndex);
+        const before = currentInput.slice(0, startIndex);
         props.onInputChange(before);
       } else if (key === 81) {
         setHighlightedIndex((prev) => Math.min(prev + 1, menuItems.length - 1));
@@ -206,16 +226,16 @@ export function ChatSurface(props: any) {
     }
     // History navigation when not in menu
     if (key === 82) { // Up
-      const { text, moved } = navigateHistory('up', props.currentInput);
+      const { text, moved } = navigateHistory('up', currentInput);
       if (moved) props.onInputChange(text);
     } else if (key === 81) { // Down
-      const { text, moved } = navigateHistory('down', props.currentInput);
+      const { text, moved } = navigateHistory('down', currentInput);
       if (moved) props.onInputChange(text);
     }
   }
 
   function doSend() {
-    pushHistory(props.currentInput);
+    pushHistory(currentInput);
     resetHistory();
     props.onSend();
   }
@@ -226,10 +246,10 @@ export function ChatSurface(props: any) {
         <Row style={{ gap: 8, alignItems: 'center' }}>
           <Text fontSize={13} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>Agent Console</Text>
           <Row style={{ alignItems: 'center', gap: 4 }}>
-            <ModelIconBadge modelId={props.selectedModel} />
-            <Pill label={props.selectedModel} color={COLORS.blue} tiny={true} />
+            <ModelIconBadge modelId={selectedModel} />
+            <Pill label={selectedModel} color={COLORS.blue} tiny={true} />
           </Row>
-          <ContextMeter messages={props.messages} modelId={props.selectedModel} />
+          <ContextMeter messages={messages} modelId={selectedModel} />
         </Row>
         <Row style={{ gap: 8 }}>
           <Pressable onPress={() => setShowSearch(!showSearch)}><Text fontSize={10} color={showSearch ? COLORS.blue : COLORS.textDim}>Search</Text></Pressable>
@@ -258,16 +278,16 @@ export function ChatSurface(props: any) {
         <Col style={{ gap: 4, padding: 10, borderBottomWidth: 1, borderColor: COLORS.borderSoft, backgroundColor: COLORS.panelRaised }}>
           <Text fontSize={10} color={COLORS.textDim} style={{ fontWeight: 'bold' }}>Export Conversation</Text>
           <Row style={{ gap: 8, flexWrap: 'wrap' }}>
-            <Pressable onPress={() => { copyToClipboard(exportConversation(props.messages, { format: 'markdown' })); setShowExportMenu(false); }}>
+            <Pressable onPress={() => { copyToClipboard(exportConversation(messages, { format: 'markdown' })); setShowExportMenu(false); }}>
               <Pill label="Copy Markdown" color={COLORS.blue} tiny={true} />
             </Pressable>
-            <Pressable onPress={() => { copyToClipboard(exportConversation(props.messages, { format: 'text' })); setShowExportMenu(false); }}>
+            <Pressable onPress={() => { copyToClipboard(exportConversation(messages, { format: 'text' })); setShowExportMenu(false); }}>
               <Pill label="Copy Text" color={COLORS.blue} tiny={true} />
             </Pressable>
-            <Pressable onPress={() => { const r = saveConversationToFile(props.messages, props.workDir || '.', { format: 'markdown' }); setShowExportMenu(false); }}>
+            <Pressable onPress={() => { const r = saveConversationToFile(messages, props.workDir || '.', { format: 'markdown' }); setShowExportMenu(false); }}>
               <Pill label="Save .md" color={COLORS.green} tiny={true} />
             </Pressable>
-            <Pressable onPress={() => { const r = saveConversationToFile(props.messages, props.workDir || '.', { format: 'json' }); setShowExportMenu(false); }}>
+            <Pressable onPress={() => { const r = saveConversationToFile(messages, props.workDir || '.', { format: 'json' }); setShowExportMenu(false); }}>
               <Pill label="Save .json" color={COLORS.green} tiny={true} />
             </Pressable>
           </Row>
@@ -275,10 +295,10 @@ export function ChatSurface(props: any) {
       ) : null}
 
       <Row style={{ padding: compactBand ? 10 : 12, gap: 8, borderBottomWidth: 1, borderColor: COLORS.borderSoft, flexWrap: 'wrap' }}>
-        {props.widthBand !== 'narrow' && props.widthBand !== 'widget' && props.widthBand !== 'minimum' ? <Pill label={'view ' + props.activeView} color={COLORS.textMuted} tiny={true} /> : null}
-        <Pill label={'branch ' + props.gitBranch} color={COLORS.green} tiny={true} />
+        {props.widthBand !== 'narrow' && props.widthBand !== 'widget' && props.widthBand !== 'minimum' ? <Pill label={'view ' + activeView} color={COLORS.textMuted} tiny={true} /> : null}
+        <Pill label={'branch ' + gitBranch} color={COLORS.green} tiny={true} />
         {props.widthBand !== 'minimum' ? <Pill label={'focus ' + (compactBand && focusLabel.includes('/') ? baseName(focusLabel) : focusLabel)} color={COLORS.blue} tiny={true} /> : null}
-        <Pill label={'dirty ' + props.changedCount} color={COLORS.yellow} tiny={true} />
+        <Pill label={'dirty ' + changedCount} color={COLORS.yellow} tiny={true} />
       </Row>
 
       {props.agentStatusText === 'streaming' || props.agentStatusText === 'executing' || props.activeAgentId ? (
@@ -296,18 +316,19 @@ export function ChatSurface(props: any) {
           {!minimumBand ? (
             <Box style={{ padding: 12, borderRadius: 12, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelRaised }}>
               <Text fontSize={12} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>
-                {props.workspaceName + ' agent session'}
+                {workspaceName + ' agent session'}
               </Text>
               <Text fontSize={10} color={COLORS.textDim}>
-                {props.gitBranch + ' / ' + props.gitRemote + ' / ' + props.changedCount + ' dirty paths'}
+                {gitBranch + ' / ' + gitRemote + ' / ' + changedCount + ' dirty paths'}
               </Text>
             </Box>
           ) : null}
 
-          {props.messages.map((msg: any, idx: number) => {
+          {messages.map((msg: any, idx: number) => {
             const isUser = msg.role === 'user';
+            const msgText = typeof msg.text === 'string' ? msg.text : '';
             return (
-              <Col key={msg.role + '_' + idx + '_' + msg.text.slice(0, 16)} style={{ gap: 6 }}>
+              <Col key={msg.role + '_' + idx + '_' + msgText.slice(0, 16)} style={{ gap: 6 }}>
                 <Row style={{ alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   <Glyph icon={isUser ? 'message' : 'bot'} tone={isUser ? COLORS.blue : COLORS.green} backgroundColor={isUser ? '#17345d' : '#143120'} tiny={true} />
                   <Text fontSize={11} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>{isUser ? 'You' : 'Agent'}</Text>
@@ -321,15 +342,15 @@ export function ChatSurface(props: any) {
                   ) : null}
                 </Row>
                 <Box style={{ padding: 12, borderRadius: 12, borderWidth: 1, borderColor: isUser ? '#20324f' : '#1c2531', backgroundColor: isUser ? '#101827' : '#10141c', gap: 8 }}>
-                  <Text fontSize={11} color={COLORS.text}>{msg.text}</Text>
-                  {msg.attachments && msg.attachments.length > 0 ? (
+                  <Text fontSize={11} color={COLORS.text}>{msgText}</Text>
+                  {Array.isArray(msg.attachments) && msg.attachments.length > 0 ? (
                     <Row style={{ gap: 6, flexWrap: 'wrap' }}>
                       {msg.attachments.map((attachment: any) => (
                         <Pill key={attachment.id} label={attachment.name} color={COLORS.blue} tiny={true} />
                       ))}
                     </Row>
                   ) : null}
-                  {msg.toolSnapshot && msg.toolSnapshot.length > 0 ? (
+                  {Array.isArray(msg.toolSnapshot) && msg.toolSnapshot.length > 0 ? (
                     <Col style={{ gap: 8 }}>
                       {msg.toolSnapshot.map((execItem: any) => <ToolCallCard key={execItem.id} exec={execItem} />)}
                     </Col>
@@ -340,7 +361,7 @@ export function ChatSurface(props: any) {
           })}
 
           {props.isGenerating ? (
-            <GeneratingIndicator toolExecutions={props.toolExecutions} />
+            <GeneratingIndicator toolExecutions={toolExecutions} />
           ) : null}
         </Col>
       </ScrollView>
@@ -358,11 +379,11 @@ export function ChatSurface(props: any) {
                 paddingBottom: 6,
                 borderRadius: 999,
                 borderWidth: 1,
-                borderColor: props.agentMode === mode ? (mode === 'task' ? COLORS.green : mode === 'agent' ? COLORS.orange : COLORS.blue) : COLORS.border,
-                backgroundColor: props.agentMode === mode ? (mode === 'task' ? '#182510' : mode === 'agent' ? '#26180f' : COLORS.blueDeep) : COLORS.panelAlt,
+                borderColor: agentMode === mode ? (mode === 'task' ? COLORS.green : mode === 'agent' ? COLORS.orange : COLORS.blue) : COLORS.border,
+                backgroundColor: agentMode === mode ? (mode === 'task' ? '#182510' : mode === 'agent' ? '#26180f' : COLORS.blueDeep) : COLORS.panelAlt,
               }}
             >
-              <Text fontSize={10} color={props.agentMode === mode ? (mode === 'task' ? COLORS.green : mode === 'agent' ? COLORS.orange : COLORS.blue) : COLORS.text}>
+              <Text fontSize={10} color={agentMode === mode ? (mode === 'task' ? COLORS.green : mode === 'agent' ? COLORS.orange : COLORS.blue) : COLORS.text}>
                 {mode.charAt(0).toUpperCase() + mode.slice(1)}
               </Text>
             </Pressable>
@@ -372,12 +393,12 @@ export function ChatSurface(props: any) {
         <Box style={{ padding: 10, borderRadius: 12, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelRaised, gap: 8 }}>
           <Row style={{ justifyContent: 'space-between', alignItems: 'center' }}>
             <Text fontSize={10} color={COLORS.textBright}>{focusLabel}</Text>
-            {props.widthBand !== 'minimum' ? <Text fontSize={10} color={COLORS.textDim}>{props.gitBranch + ' / ' + props.gitRemote}</Text> : null}
+            {props.widthBand !== 'minimum' ? <Text fontSize={10} color={COLORS.textDim}>{gitBranch + ' / ' + gitRemote}</Text> : null}
           </Row>
 
-          {props.attachments.length > 0 ? (
+          {attachments.length > 0 ? (
             <Row style={{ gap: 6, flexWrap: 'wrap' }}>
-              {props.attachments.map((attachment: any) => (
+              {attachments.map((attachment: any) => (
                 <Row key={attachment.id} style={{ alignItems: 'center', gap: 6, paddingLeft: 8, paddingRight: 8, paddingTop: 5, paddingBottom: 5, borderRadius: 999, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelAlt }}>
                   <Text fontSize={10} color={COLORS.blue}>{attachment.name}</Text>
                   <Pressable onPress={() => props.onRemoveAttachment(attachment.id)}><Text fontSize={10} color={COLORS.textDim}>X</Text></Pressable>
@@ -420,7 +441,7 @@ export function ChatSurface(props: any) {
           ) : null}
 
           <TextArea
-            value={props.currentInput}
+            value={currentInput}
             onChange={props.onInputChange}
             onKeyDown={handleComposerKey}
             fontSize={11}
@@ -440,11 +461,11 @@ export function ChatSurface(props: any) {
               <Pressable onPress={props.onToggleAutoApply}><Text fontSize={10} color={props.autoApply ? COLORS.blue : COLORS.textDim}>Auto</Text></Pressable>
             </Row>
             <Row style={{ gap: 8, alignItems: 'center', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-              {props.inputTokenEstimate > 0 ? <Text fontSize={10} color={props.inputTokenEstimate > 16000 ? COLORS.red : props.inputTokenEstimate > 8000 ? COLORS.yellow : COLORS.textDim}>{props.inputTokenEstimate + ' tkns'}</Text> : null}
+              {inputTokenEstimate > 0 ? <Text fontSize={10} color={inputTokenEstimate > 16000 ? COLORS.red : inputTokenEstimate > 8000 ? COLORS.yellow : COLORS.textDim}>{inputTokenEstimate + ' tkns'}</Text> : null}
               <Pressable onPress={props.onCycleModel}>
                 <Row style={{ alignItems: 'center', gap: 4 }}>
-                  <ModelIconBadge modelId={props.selectedModel} size={12} />
-                  <Text fontSize={10} color={COLORS.text}>{props.modelDisplayName}</Text>
+                  <ModelIconBadge modelId={selectedModel} size={12} />
+                  <Text fontSize={10} color={COLORS.text}>{modelDisplayName}</Text>
                 </Row>
               </Pressable>
               <Pressable onPress={props.onSend} style={{ paddingLeft: 14, paddingRight: 14, paddingTop: 8, paddingBottom: 8, borderRadius: 10, backgroundColor: COLORS.blueDeep, borderWidth: 1, borderColor: COLORS.blue }}>
@@ -454,9 +475,11 @@ export function ChatSurface(props: any) {
           </Col>
         </Box>
 
-        {props.agentMode === 'task' ? <Text fontSize={10} color={COLORS.yellow}>Task mode can read the workspace, inspect git, and use the terminal.</Text> : null}
-        {props.agentMode === 'plan' ? <Text fontSize={10} color={COLORS.blue}>Plan mode stays descriptive first, edit second.</Text> : null}
+        {agentMode === 'task' ? <Text fontSize={10} color={COLORS.yellow}>Task mode can read the workspace, inspect git, and use the terminal.</Text> : null}
+        {agentMode === 'plan' ? <Text fontSize={10} color={COLORS.blue}>Plan mode stays descriptive first, edit second.</Text> : null}
       </Col>
     </Col>
   );
 }
+
+export const ChatSurface = memo(ChatSurfaceImpl);

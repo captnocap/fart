@@ -13,11 +13,15 @@ function M.new(parent)
   return setmetatable({
     bindings = {},
     parent = parent,
+    globalObject = nil,
   }, Scope)
 end
 
 function Scope:define(name, value)
   self.bindings[name] = value
+  if self.parent == nil and self.globalObject then
+    self.globalObject[name] = value
+  end
 end
 
 function Scope:set(name, value)
@@ -25,6 +29,9 @@ function Scope:set(name, value)
   while s do
     if s.bindings[name] ~= nil then
       s.bindings[name] = value
+      if s.parent == nil and s.globalObject then
+        s.globalObject[name] = value
+      end
       return
     end
     s = s.parent

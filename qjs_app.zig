@@ -61,6 +61,14 @@ var g_press_expr_pool: std.ArrayList([:0]u8) = .{};
 var g_input_slot_by_node_id: std.AutoHashMap(u32, u8) = undefined;
 var g_node_id_by_input_slot: [input.MAX_INPUTS]u32 = [_]u32{0} ** input.MAX_INPUTS;
 
+// Content store — Zig-owned buffers referenced by handle. Carts use the
+// `useFileContent(path)` React hook to load a file's bytes once into this
+// store and pass the returned handle as a prop on TextEditor. The actual
+// text never crosses the JS bridge — only the u32 handle does. This fixes
+// the "1MB prop diff on every file click" bottleneck.
+var g_content_store: std.AutoHashMap(u32, []u8) = undefined;
+var g_content_store_next_id: u32 = 1;
+
 // Pending flush queue. host_flush is called mid-frame (from inside js_on_press
 // evals, or inside __dispatchEvent's React commit). Applying CMDs mid-frame
 // would destroy nodes whose heap memory is still referenced by the engine's
@@ -880,6 +888,19 @@ fn applyProps(node: *Node, props: std.json.Value, type_name: ?[]const u8) void {
             if (dupJsonText(v)) |s| node.placeholder = s;
         } else if (is_input and std.mem.eql(u8, k, "value")) {
             if (dupJsonText(v)) |s| syncInputValue(node, s);
+        } else if (is_input and std.mem.eql(u8, k, "contentHandle")) {
+            // Handle-based content: skip the 1MB string-prop round-trip. The
+            // buffer already lives in g_content_store; point node.text directly
+            // at it so the paint path reads the Zig-owned bytes. Stays valid
+            // until the hook cleanup releases the handle.
+            const handle: u32 = switch (v) {
+                .integer => @intCast(@max(0, v.integer)),
+                .float => @intFromFloat(@max(0.0, v.float)),
+                else => 0,
+            };
+            if (handle != 0) {
+                if (contentStoreGet(handle)) |buf| syncInputValue(node, buf);
+            }
         } else if (std.mem.eql(u8, k, "source")) {
             if (dupJsonText(v)) |s| node.image_src = s;
         } else if (std.mem.eql(u8, k, "renderSrc")) {
@@ -1312,6 +1333,47 @@ export fn host_get_input_text_for_node(ctx: ?*qjs.JSContext, _: qjs.JSValue, arg
     const text = input.getText(slot);
     if (text.len == 0) return qjs.JS_NewString(ctx, "");
     return qjs.JS_NewStringLen(ctx, text.ptr, @intCast(text.len));
+}
+
+// Read `path` into a Zig-owned buffer, store under a fresh u32 handle, and
+// return that handle to JS. Returns 0 on failure (empty path, missing file,
+// read error). 64MB cap matches __fs_readfile's sanity limit.
+export fn host_load_file_to_buffer(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) qjs.JSValue {
+    if (ctx == null or argc < 1) return qjs.JS_NewInt32(ctx, 0);
+    const c_str = qjs.JS_ToCString(ctx, argv[0]);
+    if (c_str == null) return qjs.JS_NewInt32(ctx, 0);
+    defer qjs.JS_FreeCString(ctx, c_str);
+    const path = std.mem.span(c_str);
+    if (path.len == 0) return qjs.JS_NewInt32(ctx, 0);
+
+    const data = std.fs.cwd().readFileAlloc(g_alloc, path, 64 * 1024 * 1024) catch |e| {
+        std.log.warn("[content-store] read failed path={s}: {}", .{ path, e });
+        return qjs.JS_NewInt32(ctx, 0);
+    };
+
+    const id = g_content_store_next_id;
+    g_content_store_next_id += 1;
+    g_content_store.put(id, data) catch {
+        g_alloc.free(data);
+        return qjs.JS_NewInt32(ctx, 0);
+    };
+    return qjs.JS_NewInt32(ctx, @intCast(id));
+}
+
+// Release a buffer by handle. Safe to call with 0 or an unknown id.
+export fn host_release_file_buffer(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) qjs.JSValue {
+    if (ctx == null or argc < 1) return QJS_UNDEFINED;
+    var id_i32: i32 = 0;
+    _ = qjs.JS_ToInt32(ctx, &id_i32, argv[0]);
+    if (id_i32 <= 0) return QJS_UNDEFINED;
+    if (g_content_store.fetchRemove(@intCast(id_i32))) |entry| {
+        g_alloc.free(entry.value);
+    }
+    return QJS_UNDEFINED;
+}
+
+fn contentStoreGet(id: u32) ?[]const u8 {
+    return g_content_store.get(id);
 }
 
 // ── Tree materialization ────────────────────────────────────────
@@ -1759,6 +1821,8 @@ fn appInit() void {
     // evalScript in engine.run order (tsz convention: init → evalScript), register here.
     qjs_runtime.registerHostFn("__hostFlush", @ptrCast(&host_flush), 1);
     qjs_runtime.registerHostFn("__getInputTextForNode", @ptrCast(&host_get_input_text_for_node), 1);
+    qjs_runtime.registerHostFn("__hostLoadFileToBuffer", @ptrCast(&host_load_file_to_buffer), 1);
+    qjs_runtime.registerHostFn("__hostReleaseFileBuffer", @ptrCast(&host_release_file_buffer), 1);
 
     // Persistent-store substrate for runtime/hooks/localstore. Best-effort —
     // if init fails the hooks gracefully no-op (see qjs_bindings.storeGet etc.).
@@ -1814,6 +1878,7 @@ pub fn main() !void {
     g_node_by_id = std.AutoHashMap(u32, *Node).init(g_alloc);
     g_children_ids = std.AutoHashMap(u32, std.ArrayList(u32)).init(g_alloc);
     g_input_slot_by_node_id = std.AutoHashMap(u32, u8).init(g_alloc);
+    g_content_store = std.AutoHashMap(u32, []u8).init(g_alloc);
 
     g_root = .{};
 

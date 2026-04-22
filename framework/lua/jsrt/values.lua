@@ -18,6 +18,8 @@
 --                          { params, body, closure, is_arrow } for user fns
 
 local M = {}
+M.OBJECT_PROTOTYPE = nil
+M.FUNCTION_PROTOTYPE = { __kind = "object" }
 
 M.NULL      = setmetatable({}, { __tostring = function() return "null" end })
 M.UNDEFINED = setmetatable({}, { __tostring = function() return "undefined" end })
@@ -93,8 +95,68 @@ function M.truthy(v)
   return true
 end
 
+-- Shared metatable for JS-like objects. Intercepts first-write to each
+-- user-visible key and appends it to __keys, giving Object.keys / .values /
+-- .entries / Object.assign / for-in insertion-order iteration — a real JS
+-- spec requirement that React (and most JS libs) silently depend on.
+-- Re-assigning an existing key does NOT fire __newindex, so ordering stays
+-- stable across updates. Internal fields (anything prefixed with __) are
+-- excluded from the keys list.
+local ObjectMeta = {
+  __newindex = function(t, k, v)
+    if type(k) == "string" and k:sub(1, 2) ~= "__" then
+      local keys = rawget(t, "__keys")
+      if keys and v ~= nil then
+        keys[#keys + 1] = k
+      end
+    end
+    rawset(t, k, v)
+  end,
+}
+M.ObjectMeta = ObjectMeta
+
+-- Delete a user property, keeping __keys in sync. Callers use this when they
+-- want JS-style delete semantics.
+function M.deleteProp(obj, key)
+  if type(obj) ~= "table" then return end
+  rawset(obj, key, nil)
+  local keys = rawget(obj, "__keys")
+  if keys and type(key) == "string" then
+    for i = 1, #keys do
+      if keys[i] == key then
+        table.remove(keys, i)
+        return
+      end
+    end
+  end
+end
+
+-- Ordered list of user keys for iteration. Falls back to `pairs` filtering
+-- for objects that never went through the metatable (shouldn't happen in
+-- practice, but keeps backwards compatibility).
+function M.orderedKeys(obj)
+  if type(obj) ~= "table" then return {} end
+  local keys = rawget(obj, "__keys")
+  if type(keys) == "table" then
+    local out = {}
+    for i = 1, #keys do out[i] = keys[i] end
+    return out
+  end
+  local out = {}
+  for k in pairs(obj) do
+    if type(k) == "string" and k:sub(1, 2) ~= "__" then
+      out[#out + 1] = k
+    end
+  end
+  return out
+end
+
 function M.newObject(props)
-  local o = { __kind = "object" }
+  local o = { __kind = "object", __keys = {} }
+  setmetatable(o, ObjectMeta)
+  if M.OBJECT_PROTOTYPE then
+    rawset(o, "__proto__", M.OBJECT_PROTOTYPE)
+  end
   if props then
     for k, v in pairs(props) do o[k] = v end
   end
@@ -103,6 +165,9 @@ end
 
 function M.newArray(items)
   local a = { __kind = "array", length = items and #items or 0 }
+  if M.ARRAY_PROTOTYPE then
+    a.__proto__ = M.ARRAY_PROTOTYPE
+  end
   if items then
     for i = 1, #items do a[i] = items[i] end
   end
@@ -110,7 +175,11 @@ function M.newArray(items)
 end
 
 function M.newNativeFunction(fn)
-  return { __kind = "function", __native = fn }
+  local out = { __kind = "function", __native = fn }
+  if M.FUNCTION_PROTOTYPE then
+    out.__proto__ = M.FUNCTION_PROTOTYPE
+  end
+  return out
 end
 
 -- User-authored JS function. Captures the defining scope as its closure.
@@ -127,6 +196,9 @@ function M.newFunction(node, closure)
     closure = closure,
     is_arrow = (node.type == "ArrowFunctionExpression"),
   }
+  if M.FUNCTION_PROTOTYPE then
+    fn.__proto__ = M.FUNCTION_PROTOTYPE
+  end
   if not fn.is_arrow then
     fn.prototype = M.newObject()
     fn.prototype.constructor = fn

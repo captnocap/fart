@@ -1,5 +1,5 @@
 const React: any = require('react');
-const { useRef, useState } = React;
+const { useRef, useState, useMemo, memo } = React;
 
 import { Box, Col, CodeGutter, Minimap, Pressable, Row, ScrollView, Text, TextEditor } from '../../../runtime/primitives';
 import { COLORS, fileGlyph, fileTone, inferFileType, languageForType, baseName, parentPath } from '../theme';
@@ -7,7 +7,9 @@ import { Glyph } from './shared';
 import { editorAccentTone, editorTokenTone } from '../utils';
 import { Pill } from './shared';
 
-export function EditorSurface(props: any) {
+function EditorSurfaceImpl(props: any) {
+  const _rT0 = Date.now();
+  (globalThis as any).__hostLog?.(0, "[render] EditorSurface start t=" + _rT0);
   const compactBand = props.widthBand === 'narrow' || props.widthBand === 'widget' || props.widthBand === 'minimum';
   const minimumBand = props.widthBand === 'minimum';
   const showMinimap = !compactBand && props.windowHeight >= 440;
@@ -39,7 +41,20 @@ export function EditorSurface(props: any) {
   const shouldVirtualizeChrome = props.totalLines > visibleRowCount;
   const visibleStart = shouldVirtualizeChrome ? Math.max(0, Math.floor(Math.max(0, editorScrollY - topPad) / lineStride) - overscanRows) : 0;
   const visibleEnd = shouldVirtualizeChrome ? Math.min(props.editorRows.length, visibleStart + visibleRowCount) : props.editorRows.length;
-  const gutterRows = shouldVirtualizeChrome ? props.editorRows.slice(visibleStart, visibleEnd) : props.editorRows;
+  // Virtualized slice of rows for the gutter, then memoized transform to the
+  // {line, marker} shape CodeGutter wants. Two wins combined: (a) virtualization
+  // shrinks the 1000-line array to ~80 visible rows, (b) memo keeps the array
+  // reference stable across re-renders when the slice window + editorRows
+  // don't change — so React skips the 1MB prop-diff bridge cross that was
+  // dominating click latency on large files.
+  const gutterRowsSlice = shouldVirtualizeChrome ? props.editorRows.slice(visibleStart, visibleEnd) : props.editorRows;
+  const gutterRows = useMemo(
+    () => gutterRowsSlice.map((row: any) => ({
+      line: row.line,
+      marker: row.marker ? editorAccentTone(row.marker, false) : null,
+    })),
+    [gutterRowsSlice]
+  );
   const gutterTopSpacer = shouldVirtualizeChrome ? topPad + visibleStart * lineStride : topPad;
   const gutterBottomSpacer = shouldVirtualizeChrome ? bottomPad + Math.max(0, props.totalLines - visibleEnd) * lineStride : bottomPad;
   // Cap the minimap sample count regardless of large-file mode; otherwise a
@@ -119,10 +134,7 @@ export function EditorSurface(props: any) {
             <Row style={{ minHeight: editorHeight, width: canvasWidth, alignItems: 'flex-start' }}>
               {showGutter ? (
                 <CodeGutter
-                  rows={props.editorRows.map((row: any) => ({
-                    line: row.line,
-                    marker: row.marker ? editorAccentTone(row.marker, false) : null,
-                  }))}
+                  rows={gutterRows}
                   rowHeight={lineStride}
                   cursorLine={props.cursorLine}
                   fontSize={11}
@@ -135,7 +147,8 @@ export function EditorSurface(props: any) {
 
               <Box style={{ width: editorWidth, height: editorHeight, position: 'relative', backgroundColor: '#0b1017' }}>
                 <TextEditor
-                  value={props.content}
+                  contentHandle={props.contentHandle || 0}
+                  value={props.contentHandle ? '' : props.content}
                   onChange={props.onChange}
                   paintText={true}
                   colorRows={props.editorColorRows}
@@ -180,3 +193,5 @@ export function EditorSurface(props: any) {
     </Col>
   );
 }
+
+export const EditorSurface = memo(EditorSurfaceImpl);

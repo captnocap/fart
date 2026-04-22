@@ -163,7 +163,7 @@ From `runtime/primitives.tsx`:
 - **Layout / text**: `Box`, `Row`, `Col`, `Text`, `Image`, `Pressable`, `ScrollView`, `TextInput`, `TextArea`, `TextEditor`
 - **Canvas** (pan/zoomable surface): `Canvas`, `Canvas.Node`, `Canvas.Path`, `Canvas.Clamp` — with `gx/gy/gw/gh` coordinate-space positioning and SVG `d`/`stroke`/`strokeWidth`/`fill` props on paths
 - **Graph** (static-viewport chart surface): `Graph`, `Graph.Path`, `Graph.Node`
-- **Native** — universal escape hatch: `<Native type="Audio" src="song.mp3" />`, `<Native type="Video" src="clip.mp4" />`, `<Native type="Cartridge" src="sidebar.so" />`
+
 
 Custom host-handled types (Audio, Video, Cartridge, LLMAgent, RigidBody, etc.) use `Native` — the reconciler emits CREATE with that type string, the Zig host handles it. Exposing these each as first-class JSX primitives is incremental work.
 
@@ -289,7 +289,7 @@ JSRT is the cart runtime. A JavaScript evaluator written in Lua, running inside 
 - **Where it lives:** `framework/lua/jsrt/` — `evaluator.lua`, `values.lua`, `scope.lua`, `builtins.lua`, `host.lua`, `init.lua`, `README.md`, `TARGET.md`.
 - **Pipeline:** TSX → esbuild → `bundle.js` → acorn (`scripts/build-jsast.mjs`) → `bundle.ast.lua` (AST as Lua table literal — *data*, never code) → LuaJIT loads it → JSRT evaluator walks it and executes JS semantics → host FFI into Zig.
 - **Scope guardrail:** the evaluator stops at ECMAScript. It knows `var`/`let`/`const`, function calls, closures, prototype chain, `this`, try/catch, Map/Set/WeakMap, Symbol, iterators, destructuring. It does **not** know about React, JSX, hooks, or components — esbuild lowers JSX to `React.createElement(...)` before the evaluator ever sees a bundle. That's the line that prevents the drift that killed every prior compiler attempt in this repo.
-- **Progress:** 12/13 ordered targets in `TARGET.md` passing. Real TSX → esbuild → JSRT produces the expected host-op stream end-to-end (`framework/lua/jsrt/test/demo_esbuild_bridge.lua`). Check status anytime: `./framework/lua/jsrt/test/run_targets.sh`.
+
 
 ---
 

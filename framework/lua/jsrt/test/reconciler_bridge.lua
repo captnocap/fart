@@ -16,6 +16,7 @@ local Values     = require("framework.lua.jsrt.values")
 local Evaluator  = require("framework.lua.jsrt.evaluator")
 local host       = require("renderer.hostConfig")
 local reconciler = require("renderer.reconciler")
+local AST        = require("framework.lua.jsrt.test.load_generated_ast")
 
 local function assert_eq(got, expected, label)
   if got ~= expected then
@@ -29,7 +30,7 @@ local out  = here .. "/target_12_source.ast.lua"
 
 local ok = os.execute(string.format('node scripts/build-jsast.mjs %q %q', src, out))
 assert(ok == 0 or ok == true, "build-jsast.mjs failed")
-local ast = assert(loadfile(out))()
+local ast = AST.load(out)
 
 local emitter = host.newEmitter()
 local dispatch_slot = {}
@@ -58,7 +59,7 @@ assert_eq(text.children[1]._text, "0", "initial text value")
 
 assert(dispatch_slot.fn ~= nil, "dispatch function not registered")
 
-Evaluator.callFunction(dispatch_slot.fn, {}, Values.UNDEFINED)
+Evaluator.callFunction(dispatch_slot.fn, {}, Values.UNDEFINED, nil, "reconciler_bridge dispatch")
 local update_ops = emitter:flush()
 assert_eq(#update_ops, 1, "update op count")
 assert_eq(update_ops[1].op, "UPDATE_TEXT", "update op type")

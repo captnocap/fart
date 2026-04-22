@@ -127,7 +127,7 @@ Expected ops: `[{op: "CREATE_TEXT", text: "hello"}, {op: "APPEND_TO_ROOT", id: 1
 
 ### 10 — AST pre-parser bridge  [PASS]
 
-Adds `scripts/build-jsast.mjs` (acorn in Node) and an on-disk AST cache. JSRT loads the Lua table literal instead of a hand-written AST. Re-runs targets 01-09 from real JS sources.
+Adds `scripts/build-jsast.mjs` (acorn in Node) and an on-disk AST cache. JSRT loads the JSON blob, decodes it once at boot, and then walks the resulting table instead of a hand-written AST. Re-runs targets 01-09 from real JS sources.
 
 Proves: the full JS → AST → JSRT chain works. After this target, all prior targets can be expressed as `.js` files instead of hand-written AST tables.
 

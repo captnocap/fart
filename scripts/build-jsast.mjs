@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 /*
- * build-jsast — parse a JS file with acorn and emit its AST as a Lua table
- * literal. Output is data, not code. JSRT's evaluator loads this table and
- * walks it directly — no JS-to-Lua translation ever happens.
+ * build-jsast — parse a JS file with acorn and emit its AST as a Lua chunk
+ * that returns one JSON string constant. JSRT loads the blob, decodes it once
+ * at boot, and then walks the resulting table directly — no JS-to-Lua
+ * translation ever happens.
  *
  * Usage:
  *   node scripts/build-jsast.mjs <input.js> <output.lua>
@@ -25,45 +26,27 @@ function luaString(s) {
   return '"' + s.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/\t/g, '\\t') + '"';
 }
 
-function emit(value, indent) {
-  const pad = '  '.repeat(indent);
-  const inner = '  '.repeat(indent + 1);
-
-  if (value === null || value === undefined) return 'nil';
-  if (typeof value === 'boolean') return value ? 'true' : 'false';
-  if (typeof value === 'number') {
-    if (!Number.isFinite(value)) {
-      throw new Error('Cannot emit non-finite number: ' + value);
-    }
-    return String(value);
-  }
+function normalizeAst(value) {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'boolean' || typeof value === 'number' || typeof value === 'string') return value;
   if (typeof value === 'bigint') {
     throw new Error('BigInt literal not supported in JSRT');
   }
   if (value instanceof RegExp) {
-    return '{ __regex = true, source = ' + luaString(value.source) + ', flags = ' + luaString(value.flags) + ' }';
+    return { __regex: true, source: value.source, flags: value.flags };
   }
-  if (typeof value === 'string') return luaString(value);
-
   if (Array.isArray(value)) {
-    if (value.length === 0) return '{}';
-    const items = value.map((v) => inner + emit(v, indent + 1));
-    return '{\n' + items.join(',\n') + '\n' + pad + '}';
+    return value.map((item) => normalizeAst(item));
   }
-
   if (typeof value === 'object') {
-    const keys = Object.keys(value).filter((k) => !SKIP_KEYS.has(k));
-    if (keys.length === 0) return '{}';
-    const pairs = keys.map((k) => {
-      const valueEmit = emit(value[k], indent + 1);
-      const keyEmit = /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(k) && !LUA_KEYWORDS.has(k)
-        ? k
-        : '[' + luaString(k) + ']';
-      return inner + keyEmit + ' = ' + valueEmit;
-    });
-    return '{\n' + pairs.join(',\n') + '\n' + pad + '}';
+    const out = {};
+    for (const key of Object.keys(value)) {
+      if (!SKIP_KEYS.has(key)) {
+        out[key] = normalizeAst(value[key]);
+      }
+    }
+    return out;
   }
-
   throw new Error('Unhandled value type: ' + typeof value);
 }
 
@@ -75,7 +58,8 @@ if (!inputPath || !outputPath) {
 
 const source = fs.readFileSync(inputPath, 'utf8');
 const ast = parse(source, { ecmaVersion: 'latest', sourceType: 'module' });
+const json = JSON.stringify(normalizeAst(ast));
 const lua = '-- AUTO-GENERATED from ' + inputPath + '. Do not edit.\n' +
             '-- Regenerate: node scripts/build-jsast.mjs ' + inputPath + ' ' + outputPath + '\n' +
-            'return ' + emit(ast, 0) + '\n';
+            'return ' + luaString(json) + '\n';
 fs.writeFileSync(outputPath, lua);
