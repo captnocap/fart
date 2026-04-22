@@ -1,5 +1,5 @@
 const React: any = require('react');
-const { useMemo, useState } = React;
+const { useEffect, useState } = React;
 
 import { Box, Col, Pressable, Row, Text, TextInput } from '../../../../runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
@@ -17,6 +17,37 @@ export function TerminalTabs(props: any) {
   const [renameValue, setRenameValue] = useState('');
 
   const activeTab = tabs.activeTab;
+
+  useEffect(() => {
+    const target: any = typeof window !== 'undefined' ? window : globalThis;
+    if (!target || typeof target.addEventListener !== 'function') return;
+    const onKeyDown = (event: any) => {
+      if (!activeTab) return;
+      if (!event.ctrlKey || event.metaKey) return;
+      const key = typeof event.key === 'string' ? event.key.toLowerCase() : '';
+      if (key === 't') {
+        event.preventDefault?.();
+        event.stopPropagation?.();
+        tabs.createTab(activeTab.cwd || initialCwd);
+        return;
+      }
+      if (key === 'w') {
+        event.preventDefault?.();
+        event.stopPropagation?.();
+        tabs.closeTab(activeTab.id);
+        return;
+      }
+      if (key === 'tab') {
+        event.preventDefault?.();
+        event.stopPropagation?.();
+        tabs.cycleTab();
+      }
+    };
+    target.addEventListener('keydown', onKeyDown, true);
+    return () => {
+      try { target.removeEventListener('keydown', onKeyDown, true); } catch {}
+    };
+  }, [activeTab, initialCwd, tabs]);
 
   const startRename = (tabId: string) => {
     const tab = tabs.tabs.find((item) => item.id === tabId);
