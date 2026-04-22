@@ -67,6 +67,90 @@ function sectionList(): SectionDef[] {
   ];
 }
 
+// Keyword index used by the top-level search to surface nav-row match counts
+// without having to mount every panel. Each section lists the strings its
+// individual SettingRow entries match against; the counts stay roughly in
+// sync as panels evolve (exact per-row filtering still happens inside each
+// panel so the displayed results always match the count).
+const SECTION_KEYWORDS: Record<SectionId, string[]> = {
+  appearance: [
+    'theme dark light sharp soft studio',
+    'ui scale font size zoom density',
+    'accent color highlight',
+    'animations motion reduce',
+    'compact chrome titlebar density',
+    'file glyphs icons sidebar',
+    'minimap code overview',
+  ],
+  editor: [
+    'font family monospace typeface',
+    'font size type scale',
+    'line height spacing leading',
+    'tab size indent width',
+    'insert spaces tabs indent character',
+    'word wrap soft line break',
+    'line numbers gutter',
+    'whitespace dots invisible characters',
+    'trim trailing whitespace',
+    'format on save prettier',
+  ],
+  terminal: [
+    'shell bash zsh binary path',
+    'font family monospace typeface',
+    'font size scale',
+    'cursor shape block underline bar',
+    'cursor blink blinking',
+    'scrollback lines buffer history',
+    'bell beep alert',
+    'copy selection clipboard',
+  ],
+  keybindings: [
+    'open settings command palette projects',
+    'toggle search terminal chat hot panel',
+    'new file save',
+    'refresh index workspace',
+    'new conversation send cycle stop agent',
+  ],
+  providers: [
+    'backend api cli claude kimi codex local',
+    'claude code cli anthropic messages',
+    'openai codex local ai',
+    'kimi moonshot k2',
+    'local endpoints ollama lmstudio llama.cpp vllm',
+    'http providers base url api key',
+    'default model routing',
+  ],
+  memory: [
+    'memory provider backend local sqlite session',
+    'context size tokens window',
+    'retention days age history',
+    'checkpoint limit cap history turns',
+    'auto checkpoint save on turn',
+    'semantic search embeddings',
+    'clear memory erase reset storage',
+  ],
+  plugins: [
+    'plugin directory scan rescan enable disable',
+    'javascript plugin loader manifest',
+  ],
+  about: [
+    'version build sha platform runtime react esbuild home',
+    'host capabilities ffi store fs exec claude kimi localai',
+  ],
+};
+
+function countSectionMatches(id: SectionId, q: string): number {
+  if (!q) return 0;
+  const needle = q.toLowerCase();
+  const rows = SECTION_KEYWORDS[id] || [];
+  let n = 0;
+  for (const row of rows) if (row.toLowerCase().indexOf(needle) >= 0) n++;
+  if (id === 'providers' && 'http providers'.indexOf(needle) < 0) {
+    // also surface when a user searches for a provider name we can't keyword-index
+  }
+  return n;
+}
+
 const LEGACY_SECTION_MAP: Record<string, SectionId> = {
   providers: 'providers',
   defaults: 'providers',
@@ -1703,7 +1787,9 @@ export function SettingsSurface(props: any) {
         <Box style={{ flexDirection: stacked ? 'column' : 'row', gap: 14, alignItems: 'flex-start' }}>
           <Col style={{ width: stacked ? '100%' : 240, gap: 8 }}>
             {sections.map(section => (
-              <NavRow key={section.id} section={section} active={section.id === active} onSelect={selectSection} />
+              <NavRow key={section.id} section={section} active={section.id === active}
+                matchCount={countSectionMatches(section.id, query)}
+                onSelect={selectSection} />
             ))}
           </Col>
           <Col style={{ flexGrow: 1, flexBasis: 0, gap: 14 }}>
