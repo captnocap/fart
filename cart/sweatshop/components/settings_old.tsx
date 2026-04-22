@@ -627,7 +627,7 @@ export function SettingsSurface(props: any) {
   const selectedProvider = (props.providerConfigs || []).find((provider: any) => provider.type === props.selectedProviderId) || (props.providerConfigs || [])[0];
 
   return (
-    <ScrollView style={{ flexGrow: 1, height: '100%', backgroundColor: COLORS.panelBg }}>
+    <ScrollView showScrollbar={true} style={{ flexGrow: 1, height: '100%', backgroundColor: COLORS.panelBg }}>
       <Col style={{ padding: stacked ? 12 : 18, gap: 16 }}>
         <Box style={{ padding: stacked ? 14 : 18, borderRadius: 16, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelRaised, gap: 10 }}>
           <Text fontSize={10} color={COLORS.blue} style={{ letterSpacing: 0.8, fontWeight: 'bold' }}>SETTINGS SURFACE</Text>

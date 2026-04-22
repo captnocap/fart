@@ -547,7 +547,7 @@ export function HotPanel({ workDir, visible, onSteer }: HotPanelProps) {
           </Box>
         ) : isTsx ? (
           <Box style={{ flexGrow: 1 }}>
-            <ScrollView style={{ flexGrow: 1 }}>
+            <ScrollView showScrollbar={true} style={{ flexGrow: 1 }}>
               {evalError ? (
                 <Box style={{ padding: 16 }}>
                   <Text style={{ fontSize: 11, color: C.red }}>{evalError}</Text>
@@ -588,7 +588,7 @@ export function HotPanel({ workDir, visible, onSteer }: HotPanelProps) {
             )}
           </Box>
         ) : (
-          <ScrollView style={{ flexGrow: 1 }}>
+          <ScrollView showScrollbar={true} style={{ flexGrow: 1 }}>
             <Box style={{ padding: 12 }}>
               {content.split('\n').map((line: string, i: number) => (
                 <Row key={i} style={{ gap: 8 }}>

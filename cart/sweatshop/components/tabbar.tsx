@@ -159,7 +159,7 @@ export function TabBar(props: TabBarProps) {
               minWidth: 160,
               maxHeight: 320,
             }}>
-              <ScrollView>
+              <ScrollView showScrollbar={true}>
                 {overflow.map((tab: any) => (
                   <Tooltip key={tab.id} label={'Activate ' + tab.name} side="left">
                     <Pressable

@@ -2449,7 +2449,7 @@ export function SettingsSurface(props: any) {
   }
 
   return (
-    <ScrollView style={{ flexGrow: 1, height: '100%', backgroundColor: COLORS.panelBg }}>
+    <ScrollView showScrollbar={true} style={{ flexGrow: 1, height: '100%', backgroundColor: COLORS.panelBg }}>
       <Col style={{ padding: stacked ? 12 : 18, gap: 16 }}>
         <Box style={{ padding: stacked ? 14 : 18, borderRadius: TOKENS.radiusMd, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelRaised, gap: 10 }}>
           <Text fontSize={10} color={COLORS.blue} style={{ letterSpacing: 0.8, fontWeight: 'bold' }}>SETTINGS</Text>

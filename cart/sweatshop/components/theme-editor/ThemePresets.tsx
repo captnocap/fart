@@ -81,7 +81,7 @@ export function ThemePresets(props: { currentDraft: CustomThemeOverrides }) {
         />
         <RowButton label="Save draft" onPress={onSave} tone={COLORS.blue} />
       </Row>
-      <ScrollView style={{ maxHeight: 180, borderWidth: 1, borderColor: COLORS.borderSoft, borderRadius: TOKENS.radiusSm, backgroundColor: COLORS.panelBg }}>
+      <ScrollView showScrollbar={true} style={{ maxHeight: 180, borderWidth: 1, borderColor: COLORS.borderSoft, borderRadius: TOKENS.radiusSm, backgroundColor: COLORS.panelBg }}>
         <Col style={{ padding: 4, gap: 3 }}>
           {names.length === 0 ? (
             <Text fontSize={10} color={COLORS.textDim} style={{ paddingLeft: 4 }}>No saved themes yet.</Text>

@@ -68,7 +68,7 @@ export function WorkerStats({ rows, max }: WorkerStatsProps) {
         </Text>
       </Row>
 
-      <ScrollView style={{ maxHeight: 220 }}>
+      <ScrollView showScrollbar={true} style={{ maxHeight: 220 }}>
         <Col style={{ gap: 4 }}>
           {capped.map((r) => (
             <Row key={r.id} style={{

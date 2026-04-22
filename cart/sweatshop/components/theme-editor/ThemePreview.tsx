@@ -62,7 +62,7 @@ export function ThemePreview() {
         </Box>
       </Pressable>
 
-      <ScrollView style={{ maxHeight: 80, borderWidth: TOKENS.borderW, borderColor: COLORS.borderSoft, borderRadius: TOKENS.radiusSm, backgroundColor: COLORS.panelBg }}>
+      <ScrollView showScrollbar={true} style={{ maxHeight: 80, borderWidth: TOKENS.borderW, borderColor: COLORS.borderSoft, borderRadius: TOKENS.radiusSm, backgroundColor: COLORS.panelBg }}>
         <Col style={{ padding: TOKENS.padTight, gap: 2 }}>
           {['alpha', 'bravo', 'charlie', 'delta', 'echo', 'foxtrot'].map((row) => (
             <Text key={row} fontSize={TOKENS.fontXs} color={COLORS.textMuted} style={{ fontFamily: TOKENS.fontMono }}>{row}</Text>

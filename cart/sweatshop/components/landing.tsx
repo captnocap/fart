@@ -11,7 +11,7 @@ function LandingSurfaceImpl(props: any) {
   const minimumBand = props.widthBand === 'minimum';
 
   return (
-    <ScrollView style={{ flexGrow: 1, height: '100%', backgroundColor: COLORS.panelBg }}>
+    <ScrollView showScrollbar={true} style={{ flexGrow: 1, height: '100%', backgroundColor: COLORS.panelBg }}>
       <Col style={{ padding: compactBand ? 12 : 18, gap: 16 }}>
         <Box
           style={{

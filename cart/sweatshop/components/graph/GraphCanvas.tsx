@@ -335,7 +335,7 @@ export function GraphCanvas(props: {
   const contentHeight = Math.max(420, Math.ceil(layout.height * zoom));
 
   return (
-    <ScrollView style={{ flexGrow: 1, flexBasis: 0, minHeight: 0, backgroundColor: COLORS.panelBg }}>
+    <ScrollView showScrollbar={true} style={{ flexGrow: 1, flexBasis: 0, minHeight: 0, backgroundColor: COLORS.panelBg }}>
       <Canvas style={{ width: contentWidth, height: contentHeight, backgroundColor: COLORS.panelBg }}>
         <Graph style={{ position: 'absolute', left: 0, top: 0, width: '100%', height: '100%' }}>
           {layout.edges.map((edge) => (

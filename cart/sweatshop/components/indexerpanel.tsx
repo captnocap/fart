@@ -238,7 +238,7 @@ export function IndexerPanel(props: { workDir: string; onIndex?: () => void }) {
           <Pill label={`${directories.length} dirs`} tiny={true} />
         </Row>
         <Text fontSize={10} color={COLORS.textDim}>Toggle directories to include or exclude them from the next index run.</Text>
-        <ScrollView style={{ maxHeight: 180 }}>
+        <ScrollView showScrollbar={true} style={{ maxHeight: 180 }}>
           <Col style={{ gap: 6 }}>
             {directories.map((dir) => (
               <Pressable
@@ -276,7 +276,7 @@ export function IndexerPanel(props: { workDir: string; onIndex?: () => void }) {
         <Text fontSize={10} color={COLORS.textDim}>{results.length} hit{results.length !== 1 ? 's' : ''}</Text>
 
         <Col style={{ gap: 8, maxHeight: 320 }}>
-          <ScrollView style={{ flexGrow: 1 }}>
+          <ScrollView showScrollbar={true} style={{ flexGrow: 1 }}>
             {results.map((hit) => {
               const relativePath = hit.path.replace(props.workDir + '/', '');
               const symbolNames = hit.symbols.slice(0, 4);

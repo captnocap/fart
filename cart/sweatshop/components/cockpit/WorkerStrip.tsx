@@ -31,7 +31,7 @@ export function WorkerStrip({ workers, focusedId, onFocus }: WorkerStripProps) {
     }}>
       <Text style={{ color: '#5c6a78', fontSize: 10, fontWeight: 700, letterSpacing: 1 }}>FLEET</Text>
       <Box style={{ width: 1, height: 20, backgroundColor: '#1a222c', marginHorizontal: 6 }} />
-      <ScrollView horizontal style={{ flexGrow: 1 }}>
+      <ScrollView horizontal showScrollbar={true} scrollbarSide="bottom" style={{ flexGrow: 1 }}>
         <Row style={{ gap: 6 }}>
           {workers.map((w) => {
             const active = w.id === focusedId;

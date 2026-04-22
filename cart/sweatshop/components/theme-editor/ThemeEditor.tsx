@@ -77,7 +77,7 @@ export function ThemeEditor() {
       <Row style={{ gap: 14, alignItems: 'flex-start', flexWrap: 'wrap' }}>
         <Col style={{ flexGrow: 1, flexBasis: 280, minWidth: 280, gap: 8 }}>
           {tab === 'colors' ? (
-            <ScrollView style={{ maxHeight: 420, borderWidth: 1, borderColor: COLORS.borderSoft, borderRadius: TOKENS.radiusSm, backgroundColor: COLORS.panelBg }}>
+            <ScrollView showScrollbar={true} style={{ maxHeight: 420, borderWidth: 1, borderColor: COLORS.borderSoft, borderRadius: TOKENS.radiusSm, backgroundColor: COLORS.panelBg }}>
               <Col style={{ padding: 8, gap: 6 }}>
                 {COLOR_KEYS.map((k) => (
                   <ColorField

@@ -98,7 +98,7 @@ export function BreadcrumbBar(props: any) {
             minWidth: 180,
             maxHeight: 260,
           }}>
-            <ScrollView>
+            <ScrollView showScrollbar={true}>
               {siblings.length > 0 ? (
                 siblings.map((sib: any) => (
                   <Pressable
@@ -142,7 +142,7 @@ export function BreadcrumbBar(props: any) {
             minWidth: 200,
             maxHeight: 260,
           }}>
-            <ScrollView>
+            <ScrollView showScrollbar={true}>
               <Box style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 6, paddingBottom: 6, borderBottomWidth: 1, borderColor: COLORS.borderSoft }}>
                 <Text fontSize={10} color={COLORS.textMuted} style={{ fontWeight: 'bold' }}>SYMBOLS</Text>
               </Box>
@@ -205,7 +205,7 @@ export function BreadcrumbBar(props: any) {
                 minWidth: 220,
                 maxHeight: 300,
               }}>
-                <ScrollView>
+                <ScrollView showScrollbar={true}>
                   {items.map((crumb: any, idx: number) => (
                     <Pressable
                       key={crumb.label + '_' + idx}

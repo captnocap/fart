@@ -49,7 +49,7 @@ export function AchievementFeed({ unlocks, max }: AchievementFeedProps) {
   return (
     <Col style={tileStyle()}>
       <Header count={unlocks.length} />
-      <ScrollView style={{ maxHeight: 180 }}>
+      <ScrollView showScrollbar={true} style={{ maxHeight: 180 }}>
         <Col style={{ gap: 4, padding: 8 }}>
           {items.map((a, i) => {
             const fresh = i === 0 && (Date.now() - a.t) < 4000;

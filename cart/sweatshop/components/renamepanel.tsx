@@ -166,7 +166,7 @@ export function RenamePanel(props: { workDir: string; onApplied?: () => void }) 
             <Text fontSize={11} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>{preview.selection.sourceLineText || preview.selection.name}</Text>
           </Box>
 
-          <ScrollView style={{ maxHeight: 260 }}>
+          <ScrollView showScrollbar={true} style={{ maxHeight: 260 }}>
             <Col style={{ gap: 8 }}>
               {preview.groups.map((group) => {
                 const selectedCount = group.hits.filter((hit) => selectedHits[hit.id] !== false).length;

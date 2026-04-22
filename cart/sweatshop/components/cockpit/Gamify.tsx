@@ -65,7 +65,7 @@ export function Gamify({ panels, workers, width }: GamifyProps) {
   return (
     <Col style={wrap(width)}>
       <Header enabled={gamify.enabled} onToggle={() => gamify.setEnabled(false)} onReset={gamify.reset} />
-      <ScrollView style={{ flexGrow: 1 }}>
+      <ScrollView showScrollbar={true} style={{ flexGrow: 1 }}>
         <Col style={{ padding: 10, gap: 10 }}>
           <XPBar level={gamify.level} />
           <AchievementFeed unlocks={gamify.unlocks} />
