@@ -199,7 +199,11 @@ const Reconciler: any = require('react-reconciler');
 
 import { hostConfig, setTransportFlush, handlerRegistry } from '../renderer/hostConfig';
 import { prepareContext, releaseContext } from './effectContext';
+import { installWebSocketShim } from './hooks/websocket';
 import App from './current_app';
+
+// Install WebSocket shim so copy-pasted browser code works.
+installWebSocketShim();
 
 // Flush path: host's __hostFlush receives the JSON string.
 setTransportFlush((cmds: any) => {
