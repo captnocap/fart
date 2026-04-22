@@ -38,10 +38,10 @@ export function telSystem(): { window_w?: number; window_h?: number } | null {
   }
 }
 
-export function ptyOpen(cols: number, rows: number, cwd?: string): number {
+export function ptyOpen(cols: number, rows: number, shell?: string, cwd?: string): number {
   try {
     if (typeof host.__pty_open !== 'function') return -1;
-    const out = host.__pty_open(cols, rows, cwd || '');
+    const out = host.__pty_open(cols, rows, shell || '', cwd || '');
     if (typeof out === 'number' && Number.isFinite(out)) return out;
     const value = Number(out);
     return Number.isFinite(value) ? value : -1;
