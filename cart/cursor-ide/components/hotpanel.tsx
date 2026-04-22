@@ -3,6 +3,7 @@
 // Ported from love2d/examples/hot-code/src/App.tsx
 
 const React: any = require('react');
+const ts: any = require('typescript');
 const { useEffect, useRef, useState, useCallback } = React;
 
 import {
@@ -88,29 +89,262 @@ function wrappedCreateElement(type: any, props: any, ...children: any[]) {
 
 const WrappedReact = { ...React, createElement: wrappedCreateElement };
 
-const SCOPE_NAMES = [
-  'React', 'useState', 'useEffect', 'useRef', 'useCallback', 'useMemo',
-  'Box', 'Text', 'Image', 'Pressable', 'ScrollView', 'TextInput', 'Col', 'Row',
-];
+const MODULE_CACHE = new Map<string, any>();
 
-const SCOPE_VALUES = [
-  WrappedReact,
-  React.useState, React.useEffect, React.useRef, React.useCallback, React.useMemo,
-  Box, Text, null, Pressable, ScrollView, TextInput, Col, Row,
-];
+function splitPath(path: string): string[] {
+  return path.split('/').filter((part) => part.length > 0);
+}
 
-export function evalComponent(transformedCode: string): EvalResult {
+function normalizePath(path: string): string {
+  const isAbs = path.startsWith('/');
+  const parts = splitPath(path);
+  const stack: string[] = [];
+  for (const part of parts) {
+    if (part === '.') continue;
+    if (part === '..') {
+      if (stack.length > 0) stack.pop();
+      continue;
+    }
+    stack.push(part);
+  }
+  return (isAbs ? '/' : '') + stack.join('/');
+}
+
+function dirname(path: string): string {
+  const cleaned = normalizePath(path);
+  const idx = cleaned.lastIndexOf('/');
+  if (idx < 0) return '.';
+  if (idx === 0) return '/';
+  return cleaned.slice(0, idx);
+}
+
+function joinPath(...parts: string[]): string {
+  return normalizePath(parts.filter((part) => part && part.length > 0).join('/'));
+}
+
+function resolveModuleRequest(fromFile: string, request: string): string | null {
+  if (!request.startsWith('.')) return null;
+  const dir = dirname(fromFile);
+  const base = normalizePath(joinPath(dir, request));
+  const candidates = [
+    base,
+    `${base}.tsx`,
+    `${base}.ts`,
+    `${base}.jsx`,
+    `${base}.js`,
+    joinPath(base, 'index.tsx'),
+    joinPath(base, 'index.ts'),
+    joinPath(base, 'index.jsx'),
+    joinPath(base, 'index.js'),
+  ];
+  for (const candidate of candidates) {
+    const stat = fsStat(candidate);
+    if (stat && !stat.isDir) return candidate;
+  }
+  return null;
+}
+
+function transpileTsxToJs(source: string): string {
+  const result = ts.transpileModule(source, {
+    compilerOptions: {
+      jsx: ts.JsxEmit.Preserve,
+      module: ts.ModuleKind.None,
+      target: ts.ScriptTarget.ES2018,
+      esModuleInterop: true,
+      importsNotUsedAsValues: ts.ImportsNotUsedAsValues.Remove,
+      isolatedModules: true,
+      verbatimModuleSyntax: false,
+      skipLibCheck: true,
+      noEmitHelpers: true,
+      importHelpers: false,
+    },
+    fileName: 'hotpanel.tsx',
+    reportDiagnostics: false,
+  });
+  return result.outputText || '';
+}
+
+function rewriteModuleSyntax(source: string): string {
+  const lines = source.split('\n');
+  const out: string[] = [];
+  const exportLines: string[] = [];
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    if (!trimmed) {
+      out.push(line);
+      continue;
+    }
+
+    const typeImport = trimmed.match(/^import\s+type\s+/);
+    if (typeImport) continue;
+
+    const importStar = line.match(/^(\s*)import\s+\*\s+as\s+([A-Za-z_$][A-Za-z0-9_$]*)\s+from\s+(['"][^'"]+['"]);?\s*$/);
+    if (importStar) {
+      out.push(`${importStar[1]}const ${importStar[2]} = require(${importStar[3]});`);
+      continue;
+    }
+
+    const importDefault = line.match(/^(\s*)import\s+([A-Za-z_$][A-Za-z0-9_$]*)\s+from\s+(['"][^'"]+['"]);?\s*$/);
+    if (importDefault) {
+      out.push(`${importDefault[1]}const ${importDefault[2]} = require(${importDefault[3]}).default || require(${importDefault[3]});`);
+      continue;
+    }
+
+    const importNamed = line.match(/^(\s*)import\s+\{\s*([^}]+)\s*\}\s+from\s+(['"][^'"]+['"]);?\s*$/);
+    if (importNamed) {
+      const spec = importNamed[2]
+        .split(',')
+        .map((part) => part.trim())
+        .filter(Boolean)
+        .map((part) => {
+          const alias = part.match(/^([A-Za-z_$][A-Za-z0-9_$]*)\s+as\s+([A-Za-z_$][A-Za-z0-9_$]*)$/);
+          if (alias) return `${alias[1]}: ${alias[2]}`;
+          return part;
+        })
+        .join(', ');
+      out.push(`${importNamed[1]}const { ${spec} } = require(${importNamed[3]});`);
+      continue;
+    }
+
+    if (/^import\s+['"][^'"]+['"];\s*$/.test(trimmed)) continue;
+
+    const exportDefaultNamedFn = line.match(/^(\s*)export\s+default\s+function\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*\(/);
+    if (exportDefaultNamedFn) {
+      out.push(line.replace('export default ', ''));
+      exportLines.push(`module.exports.default = ${exportDefaultNamedFn[2]};`);
+      continue;
+    }
+
+    const exportDefaultAnonFn = line.match(/^(\s*)export\s+default\s+function\s*\(/);
+    if (exportDefaultAnonFn) {
+      const indent = exportDefaultAnonFn[1];
+      const rewritten = line.replace(/^\s*export\s+default\s+/, indent);
+      out.push(rewritten);
+      // Anonymous defaults are uncommon here; fall back to returning the module object.
+      exportLines.push(`module.exports.default = module.exports.default || module.exports;`);
+      continue;
+    }
+
+    const exportDefaultExpr = line.match(/^(\s*)export\s+default\s+(.+);\s*$/);
+    if (exportDefaultExpr && !exportDefaultExpr[2].startsWith('function')) {
+      out.push(`${exportDefaultExpr[1]}module.exports.default = ${exportDefaultExpr[2]};`);
+      continue;
+    }
+
+    const exportNamedFn = line.match(/^(\s*)export\s+function\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*\(/);
+    if (exportNamedFn) {
+      out.push(line.replace(/^(\s*)export\s+/, '$1'));
+      exportLines.push(`module.exports.${exportNamedFn[2]} = ${exportNamedFn[2]};`);
+      continue;
+    }
+
+    const exportNamedConst = line.match(/^(\s*)export\s+(const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=/);
+    if (exportNamedConst) {
+      out.push(line.replace(/^(\s*)export\s+/, '$1'));
+      exportLines.push(`module.exports.${exportNamedConst[3]} = ${exportNamedConst[3]};`);
+      continue;
+    }
+
+    const exportList = line.match(/^(\s*)export\s+\{\s*([^}]+)\s*\};?\s*$/);
+    if (exportList) {
+      const assigns = exportList[2]
+        .split(',')
+        .map((part) => part.trim())
+        .filter(Boolean)
+        .map((part) => {
+          const alias = part.match(/^([A-Za-z_$][A-Za-z0-9_$]*)\s+as\s+([A-Za-z_$][A-Za-z0-9_$]*)$/);
+          if (alias) return `module.exports.${alias[2]} = ${alias[1]};`;
+          return `module.exports.${part} = ${part};`;
+        });
+      exportLines.push(...assigns);
+      continue;
+    }
+
+    if (/^\s*export\s+type\s+/.test(line) || /^\s*export\s+interface\s+/.test(line)) continue;
+
+    out.push(line);
+  }
+
+  if (exportLines.length > 0) out.push(...exportLines);
+  return out.join('\n');
+}
+
+function compileHotSource(source: string, fileName: string): string {
+  const transpiled = transpileTsxToJs(source);
+  const { code, errors } = transformJSX(transpiled);
+  if (errors.length > 0) {
+    const first = errors[0];
+    throw new Error(`Line ${first.line}:${first.col} ${first.message}`);
+  }
+  return rewriteModuleSyntax(code);
+}
+
+function runHotModule(filePath: string): any {
+  const cached = MODULE_CACHE.get(filePath);
+  if (cached) return cached.exports;
+
+  const raw = fsRead(filePath);
+  if (!raw) throw new Error(`Unable to read ${filePath}`);
+
+  const record = { exports: {} as any };
+  MODULE_CACHE.set(filePath, record);
+
+  const compiled = compileHotSource(raw, filePath);
+
+  const localRequire = (request: string) => {
+    if (request === 'react') return WrappedReact;
+    if (request === '../../../runtime/primitives' || request === '../../runtime/primitives' || request === '../runtime/primitives' || request === './runtime/primitives' || request === 'runtime/primitives') {
+      return { Box, Col, Pressable, Row, ScrollView, Text, TextInput };
+    }
+    const resolved = resolveModuleRequest(filePath, request);
+    if (resolved) return runHotModule(resolved);
+    try {
+      return require(request);
+    } catch {
+      return {};
+    }
+  };
+
   try {
-    const funcMatch = transformedCode.match(/function\s+([A-Z][a-zA-Z0-9_]*)\s*\(/);
-    const constMatch = transformedCode.match(/(?:const|let|var)\s+([A-Z][a-zA-Z0-9_]*)\s*=/);
-    const name = funcMatch?.[1] || constMatch?.[1];
-    const wrapped = name
-      ? `${transformedCode}\nreturn ${name};`
-      : `return function __Component__() { return ${transformedCode.trim().replace(/;$/, '')}; };`;
-    const fn = new Function(...SCOPE_NAMES, wrapped);
-    const result = fn(...SCOPE_VALUES);
-    if (typeof result === 'function') return { component: result, error: null };
-    return { component: null, error: 'No component found in evaluated code.' };
+    const fn = new Function('React', 'require', 'module', 'exports', compiled);
+    fn(WrappedReact, localRequire, record, record.exports);
+  } catch (e: any) {
+    MODULE_CACHE.delete(filePath);
+    throw e;
+  }
+
+  return record.exports;
+}
+
+function pickExportedComponent(exportsObj: any): any | null {
+  if (!exportsObj) return null;
+  if (typeof exportsObj === 'function') return exportsObj;
+  if (typeof exportsObj.default === 'function') return exportsObj.default;
+  const keys = Object.keys(exportsObj).filter((key) => typeof exportsObj[key] === 'function');
+  if (keys.length === 1) return exportsObj[keys[0]];
+  const named = keys.find((key) => /^[A-Z]/.test(key));
+  return named ? exportsObj[named] : null;
+}
+
+export function evalComponent(transformedCode: string, sourcePath: string = 'hotpanel.tsx'): EvalResult {
+  try {
+    const module = { exports: {} as any };
+    const fn = new Function('React', 'require', 'module', 'exports', transformedCode);
+    fn(WrappedReact, (request: string) => {
+      if (request === 'react') return WrappedReact;
+      const resolved = resolveModuleRequest(sourcePath, request);
+      if (resolved) return runHotModule(resolved);
+      try {
+        return require(request);
+      } catch {
+        return {};
+      }
+    }, module, module.exports);
+    const component = pickExportedComponent(module.exports);
+    if (component) return { component, error: null };
+    return { component: null, error: 'No exported component found.' };
   } catch (e: any) {
     return { component: null, error: e?.message || String(e) };
   }
@@ -237,6 +471,7 @@ export function HotPanel({ workDir, visible, onSteer }: HotPanelProps) {
   useEffect(() => {
     if (!changedFile) return;
     const path = changedFile.path;
+    MODULE_CACHE.clear();
     // Skip binary files
     if (/\.(png|jpg|jpeg|gif|svg|ico|woff|ttf|so|o|a|lock|tar\.gz|zip)$/i.test(path)) return;
 
@@ -252,7 +487,7 @@ export function HotPanel({ workDir, visible, onSteer }: HotPanelProps) {
         setEvalError(`Line ${errors[0].line}: ${errors[0].message}`);
         setUserComponent(null);
       } else {
-        const result = evalComponent(code);
+        const result = evalComponent(code, path);
         if (result.error) {
           setEvalError(result.error);
           setUserComponent(null);
