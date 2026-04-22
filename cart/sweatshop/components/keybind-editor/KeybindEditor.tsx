@@ -8,15 +8,25 @@ import { KeybindConflict } from './KeybindConflict';
 import { KeybindPresets } from './KeybindPresets';
 import { findConflicts, useKeybindStore } from './useKeybindStore';
 
-export function KeybindEditor() {
+export function KeybindEditor(props: { query?: string; resetToken?: number } = {}) {
   const store = useKeybindStore();
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState(props.query || '');
   const [selectedId, setSelectedId] = useState(store.commands[0]?.id || '');
   const [recordingId, setRecordingId] = useState<string | null>(null);
 
   useEffect(() => {
+    if (typeof props.query === 'string') setQuery(props.query);
+  }, [props.query]);
+
+  useEffect(() => {
     if (!selectedId && store.commands[0]) setSelectedId(store.commands[0].id);
   }, [selectedId, store.commands]);
+
+  useEffect(() => {
+    if (props.resetToken === undefined) return;
+    setSelectedId(store.commands[0]?.id || '');
+    setRecordingId(null);
+  }, [props.resetToken, store.commands]);
 
   const selected = store.commands.find((command) => command.id === selectedId) || null;
   const selectedChord = selected ? store.bindings[selected.id] || '' : '';
