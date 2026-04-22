@@ -266,63 +266,61 @@ export function CommandPalette({
     return [...baseCommands, ...fileCommands];
   }, [baseCommands, fileCommands]);
 
-  // Filtered selectable items
-  const filtered = useMemo(() => {
-    if (isGotoFileMode) {
-      if (!activeQuery) return fileCommands;
+  // Filtered selectable items — computed inline so query changes always flow through
+  let filtered: PaletteCommand[];
+  if (isGotoFileMode) {
+    if (!activeQuery) {
+      filtered = fileCommands;
+    } else {
       const scored = fileCommands
         .map((cmd) => ({ cmd, score: fuzzyScore(activeQuery, cmd.label) }))
         .filter((item) => item.score > 0);
       scored.sort((a, b) => b.score - a.score);
-      return scored.map((item) => item.cmd);
+      filtered = scored.map((item) => item.cmd);
     }
-
-    if (!activeQuery) {
-      // Empty query: recent items first, grouped under "Recent" category
-      const recentSet = new Set(recentIdsRef.current);
-      const recent: PaletteCommand[] = [];
-      const rest: PaletteCommand[] = [];
-      for (const cmd of allCommands) {
-        if (recentSet.has(cmd.id)) recent.push(cmd);
-        else rest.push(cmd);
-      }
-      const orderMap = new Map(recentIdsRef.current.map((id, i) => [id, i]));
-      recent.sort((a, b) => (orderMap.get(a.id) ?? 0) - (orderMap.get(b.id) ?? 0));
-      return [
-        ...recent.map((cmd) => ({ ...cmd, category: 'Recent' })),
-        ...rest,
-      ];
+  } else if (!activeQuery) {
+    // Empty query: recent items first, grouped under "Recent" category
+    const recentSet = new Set(recentIdsRef.current);
+    const recent: PaletteCommand[] = [];
+    const rest: PaletteCommand[] = [];
+    for (const cmd of allCommands) {
+      if (recentSet.has(cmd.id)) recent.push(cmd);
+      else rest.push(cmd);
     }
-
+    const orderMap = new Map(recentIdsRef.current.map((id, i) => [id, i]));
+    recent.sort((a, b) => (orderMap.get(a.id) ?? 0) - (orderMap.get(b.id) ?? 0));
+    filtered = [
+      ...recent.map((cmd) => ({ ...cmd, category: 'Recent' })),
+      ...rest,
+    ];
+  } else {
     const scored = allCommands
       .map((cmd) => ({ cmd, score: scoreCommand(activeQuery, cmd) }))
       .filter((item) => item.score > 0);
     scored.sort((a, b) => b.score - a.score);
-    return scored.map((item) => item.cmd);
-  }, [activeQuery, allCommands, fileCommands, isGotoFileMode]);
+    filtered = scored.map((item) => item.cmd);
+  }
 
   // Group for display
-  const grouped = useMemo(() => groupByCategory(filtered), [filtered]);
+  const grouped = groupByCategory(filtered);
 
   // Selected command
   const selectedCmd = filtered[selectedIndex] || null;
 
   // File preview for selected item
-  const previewLines = useMemo(() => {
-    if (!selectedCmd) return [];
-    if (!selectedCmd.id.startsWith('goto.file.')) return [];
-    const path = selectedCmd.label;
-    const content = hostReadFile(path);
-    if (!content) return [];
-    return content.split('\n').slice(0, 10);
-  }, [selectedCmd]);
+  let previewLines: string[] = [];
+  if (selectedCmd && selectedCmd.id.startsWith('goto.file.')) {
+    const content = hostReadFile(selectedCmd.label);
+    if (content) previewLines = content.split('\n').slice(0, 10);
+  }
 
-  // Reset selection when query or mode changes
+  // Reset query + selection when opening or when mode changes
   useEffect(() => {
     if (open) {
+      setQuery('');
       setSelectedIndex(0);
     }
-  }, [open, activeQuery, isGotoFileMode]);
+  }, [open]);
 
   // Keyboard navigation while open (wired via TextInput onKeyDown)
   const handleKeyDown = useCallback(
