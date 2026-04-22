@@ -1,10 +1,11 @@
 const React: any = require('react');
-const { useState, useMemo } = React;
+const { useState, useMemo, useCallback } = React;
 
 import { Box, Col, Pressable, Row, ScrollView, Text } from '../../../runtime/primitives';
 import { COLORS, TOKENS } from '../theme';
 import { Glyph, Pill } from './shared';
 import type { Checkpoint, CheckpointDiff } from '../checkpoint';
+import { parseSideBySide, hunkToText, copyToClipboard, type DiffHunk, type SideBySideRow } from '../app/diff-helpers';
 
 interface DiffPanelProps {
   checkpoints: Checkpoint[];
@@ -14,6 +15,10 @@ interface DiffPanelProps {
 }
 
 const ALL_TURNS_ID = '__all__';
+const ROW_HEIGHT = 18;
+const VIEWPORT_ESTIMATE = 600;
+const OVERSCAN = 8;
+const VIRTUALIZE_THRESHOLD = 500;
 
 function statusColor(status: string): string {
   if (status === 'added') return COLORS.green;
@@ -35,7 +40,6 @@ function mergeCumulativeDiffs(checkpoints: Checkpoint[]): CheckpointDiff[] {
       if (existing) {
         existing.additions += d.additions;
         existing.deletions += d.deletions;
-        // Keep latest patch and most severe status
         existing.patch = d.patch;
         if (d.status === 'deleted' || existing.status === 'deleted') existing.status = 'deleted';
         else if (d.status === 'added' || existing.status === 'added') existing.status = 'added';
@@ -53,7 +57,9 @@ export function DiffPanel(props: DiffPanelProps) {
 
   const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
   const [wordWrap, setWordWrap] = useState(true);
-  const [stackedView, setStackedView] = useState(true);
+  const [stackedView, setStackedView] = useState(false);
+  const [scrollY, setScrollY] = useState(0);
+  const [collapsedHunks, setCollapsedHunks] = useState<Set<number>>(new Set());
 
   const viewMode = activeCheckpointId || ALL_TURNS_ID;
   const isAllTurns = viewMode === ALL_TURNS_ID;
@@ -80,6 +86,53 @@ export function DiffPanel(props: DiffPanelProps) {
 
   const totalAdditions = diffs.reduce((sum, d) => sum + d.additions, 0);
   const totalDeletions = diffs.reduce((sum, d) => sum + d.deletions, 0);
+
+  const toggleHunk = useCallback((hunkIndex: number) => {
+    setCollapsedHunks((prev) => {
+      const next = new Set(prev);
+      if (next.has(hunkIndex)) next.delete(hunkIndex);
+      else next.add(hunkIndex);
+      return next;
+    });
+  }, []);
+
+  const parsed = useMemo(() => {
+    if (!selectedDiff || stackedView) return null;
+    return parseSideBySide(selectedDiff.patch);
+  }, [selectedDiff, stackedView]);
+
+  const virtualRows = useMemo(() => {
+    if (!parsed) return [];
+    const rows: Array<
+      | { type: 'hunk-header'; hunkIndex: number; hunk: DiffHunk; key: string }
+      | { type: 'diff-row'; hunkIndex: number; row: SideBySideRow; key: string }
+      | { type: 'hunk-summary'; hunkIndex: number; hiddenCount: number; key: string }
+    > = [];
+    parsed.hunks.forEach((hunk, hunkIndex) => {
+      rows.push({ type: 'hunk-header', hunkIndex, hunk, key: `h-${hunkIndex}` });
+      if (collapsedHunks.has(hunkIndex)) {
+        rows.push({ type: 'hunk-summary', hunkIndex, hiddenCount: hunk.rows.length, key: `s-${hunkIndex}` });
+      } else {
+        hunk.rows.forEach((row, rowIndex) => {
+          rows.push({ type: 'diff-row', hunkIndex, row, key: `r-${hunkIndex}-${rowIndex}` });
+        });
+      }
+    });
+    return rows;
+  }, [parsed, collapsedHunks]);
+
+  const totalRows = virtualRows.length;
+  const shouldVirtualize = totalRows > VIRTUALIZE_THRESHOLD;
+
+  const startIndex = shouldVirtualize
+    ? Math.max(0, Math.floor(scrollY / ROW_HEIGHT) - OVERSCAN)
+    : 0;
+  const endIndex = shouldVirtualize
+    ? Math.min(totalRows, Math.ceil((scrollY + VIEWPORT_ESTIMATE) / ROW_HEIGHT) + OVERSCAN)
+    : totalRows;
+  const visibleWindow = virtualRows.slice(startIndex, endIndex);
+  const topSpacer = startIndex * ROW_HEIGHT;
+  const bottomSpacer = Math.max(0, (totalRows - endIndex) * ROW_HEIGHT);
 
   return (
     <Col style={{ width: '100%', height: '100%', backgroundColor: COLORS.panelBg }}>
@@ -110,7 +163,7 @@ export function DiffPanel(props: DiffPanelProps) {
           ) : null}
         </Row>
         <Row style={{ alignItems: 'center', gap: 8 }}>
-          {/* View toggle — stacked only for now */}
+          {/* View toggle */}
           <Pressable onPress={() => setStackedView(!stackedView)}>
             <Box
               style={{
@@ -261,44 +314,73 @@ export function DiffPanel(props: DiffPanelProps) {
               {selectedDiff ? selectedDiff.path : 'DIFF'}
             </Text>
           </Box>
-          <ScrollView style={{ flexGrow: 1, padding: 10 }}>
-            {selectedDiff ? (
-              <Col style={{ gap: 4 }}>
-                <Row style={{ gap: 6, marginBottom: 6 }}>
-                  <Pill
-                    label={selectedDiff.status}
-                    color={statusColor(selectedDiff.status)}
-                    tiny={true}
-                  />
-                  <Pill
-                    label={'+' + selectedDiff.additions}
-                    color={COLORS.green}
-                    tiny={true}
-                  />
-                  <Pill
-                    label={'-' + selectedDiff.deletions}
-                    color={COLORS.red}
-                    tiny={true}
-                  />
-                </Row>
-                <Text
-                  fontSize={9}
-                  color={COLORS.textDim}
-                  style={{
-                    whiteSpace: wordWrap ? 'pre-wrap' : 'pre',
-                  }}
-                >
-                  {selectedDiff.patch}
-                </Text>
-              </Col>
+          {selectedDiff ? (
+            stackedView ? (
+              <ScrollView style={{ flexGrow: 1, padding: 10 }}>
+                <Col style={{ gap: 4 }}>
+                  <Row style={{ gap: 6, marginBottom: 6 }}>
+                    <Pill label={selectedDiff.status} color={statusColor(selectedDiff.status)} tiny={true} />
+                    <Pill label={'+' + selectedDiff.additions} color={COLORS.green} tiny={true} />
+                    <Pill label={'-' + selectedDiff.deletions} color={COLORS.red} tiny={true} />
+                  </Row>
+                  <Text
+                    fontSize={9}
+                    color={COLORS.textDim}
+                    style={{ whiteSpace: wordWrap ? 'pre-wrap' : 'pre' }}
+                  >
+                    {selectedDiff.patch}
+                  </Text>
+                </Col>
+              </ScrollView>
             ) : (
+              <ScrollView
+                style={{ flexGrow: 1 }}
+                onScroll={(payload: any) => {
+                  const next = typeof payload?.scrollY === 'number' ? payload.scrollY : 0;
+                  if (Math.abs(next - scrollY) >= ROW_HEIGHT / 2) setScrollY(next);
+                }}
+              >
+                <Col>
+                  {topSpacer > 0 ? <Box style={{ height: topSpacer }} /> : null}
+                  {visibleWindow.map((vr) => {
+                    if (vr.type === 'hunk-header') {
+                      return (
+                        <HunkHeader
+                          key={vr.key}
+                          hunk={vr.hunk}
+                          collapsed={collapsedHunks.has(vr.hunkIndex)}
+                          onToggle={() => toggleHunk(vr.hunkIndex)}
+                          onCopy={() => copyToClipboard(hunkToText(vr.hunk))}
+                        />
+                      );
+                    }
+                    if (vr.type === 'hunk-summary') {
+                      return (
+                        <HunkSummary
+                          key={vr.key}
+                          hiddenCount={vr.hiddenCount}
+                          onToggle={() => toggleHunk(vr.hunkIndex)}
+                        />
+                      );
+                    }
+                    return (
+                      <SideBySideDiffRow
+                        key={vr.key}
+                        row={vr.row}
+                      />
+                    );
+                  })}
+                  {bottomSpacer > 0 ? <Box style={{ height: bottomSpacer }} /> : null}
+                </Col>
+              </ScrollView>
+            )
+          ) : (
+            <Box style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center' }}>
               <Text fontSize={10} color={COLORS.textDim}>
-                {diffs.length === 0
-                  ? 'No changes to display'
-                  : 'Select a file to view diff'}
+                {diffs.length === 0 ? 'No changes to display' : 'Select a file to view diff'}
               </Text>
-            )}
-          </ScrollView>
+            </Box>
+          )}
         </Col>
       </Row>
     </Col>
@@ -333,5 +415,149 @@ function TurnChip(props: {
         </Text>
       </Box>
     </Pressable>
+  );
+}
+
+function HunkHeader(props: {
+  hunk: DiffHunk;
+  collapsed: boolean;
+  onToggle: () => void;
+  onCopy: () => void;
+}) {
+  return (
+    <Row
+      style={{
+        height: ROW_HEIGHT,
+        alignItems: 'center',
+        paddingLeft: 8,
+        paddingRight: 8,
+        backgroundColor: COLORS.panelRaised,
+        borderBottomWidth: 1,
+        borderColor: COLORS.borderSoft,
+      }}
+    >
+      <Pressable onPress={props.onToggle}>
+        <Text fontSize={9} color={COLORS.blue} style={{ fontWeight: 'bold' }}>
+          {props.collapsed ? '▶' : '▼'}
+        </Text>
+      </Pressable>
+      <Text fontSize={9} color={COLORS.textMuted} style={{ marginLeft: 8 }}>
+        {props.hunk.header}
+      </Text>
+      <Box style={{ flexGrow: 1 }} />
+      <Pressable onPress={props.onCopy}>
+        <Row style={{ alignItems: 'center', gap: 4 }}>
+          <Glyph icon="copy" tone={COLORS.textDim} backgroundColor="transparent" tiny={true} />
+          <Text fontSize={9} color={COLORS.textDim}>
+            Copy
+          </Text>
+        </Row>
+      </Pressable>
+    </Row>
+  );
+}
+
+function HunkSummary(props: {
+  hiddenCount: number;
+  onToggle: () => void;
+}) {
+  return (
+    <Pressable onPress={props.onToggle}>
+      <Row
+        style={{
+          height: ROW_HEIGHT,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: COLORS.panelAlt,
+          borderBottomWidth: 1,
+          borderColor: COLORS.borderSoft,
+        }}
+      >
+        <Text fontSize={9} color={COLORS.textDim}>
+          {props.hiddenCount} line{props.hiddenCount === 1 ? '' : 's'} hidden — click to expand
+        </Text>
+      </Row>
+    </Pressable>
+  );
+}
+
+function SideBySideDiffRow(props: { row: SideBySideRow }) {
+  const { row } = props;
+  const oldBg = row.kind === 'old' || row.kind === 'both' ? COLORS.redDeep : 'transparent';
+  const newBg = row.kind === 'new' || row.kind === 'both' ? COLORS.greenDeep : 'transparent';
+  const oldFg = row.kind === 'old' || row.kind === 'both' ? COLORS.red : COLORS.text;
+  const newFg = row.kind === 'new' || row.kind === 'both' ? COLORS.green : COLORS.text;
+
+  return (
+    <Row style={{ height: ROW_HEIGHT, alignItems: 'center' }}>
+      {/* Old gutter */}
+      <Box
+        style={{
+          width: 44,
+          height: '100%',
+          justifyContent: 'center',
+          alignItems: 'flex-end',
+          paddingRight: 6,
+          backgroundColor: oldBg,
+        }}
+      >
+        <Text fontSize={9} color={COLORS.textDim}>
+          {row.oldLine ?? ''}
+        </Text>
+      </Box>
+      {/* Old content */}
+      <Box
+        style={{
+          flexGrow: 1,
+          flexShrink: 1,
+          flexBasis: 0,
+          minWidth: 0,
+          height: '100%',
+          justifyContent: 'center',
+          backgroundColor: oldBg,
+          paddingLeft: 4,
+          overflow: 'hidden',
+        }}
+      >
+        <Text fontSize={9} color={oldFg} style={{ whiteSpace: 'pre' }}>
+          {row.oldText}
+        </Text>
+      </Box>
+      {/* Divider */}
+      <Box style={{ width: 1, height: '100%', backgroundColor: COLORS.borderSoft }} />
+      {/* New gutter */}
+      <Box
+        style={{
+          width: 44,
+          height: '100%',
+          justifyContent: 'center',
+          alignItems: 'flex-end',
+          paddingRight: 6,
+          backgroundColor: newBg,
+        }}
+      >
+        <Text fontSize={9} color={COLORS.textDim}>
+          {row.newLine ?? ''}
+        </Text>
+      </Box>
+      {/* New content */}
+      <Box
+        style={{
+          flexGrow: 1,
+          flexShrink: 1,
+          flexBasis: 0,
+          minWidth: 0,
+          height: '100%',
+          justifyContent: 'center',
+          backgroundColor: newBg,
+          paddingLeft: 4,
+          overflow: 'hidden',
+        }}
+      >
+        <Text fontSize={9} color={newFg} style={{ whiteSpace: 'pre' }}>
+          {row.newText}
+        </Text>
+      </Box>
+    </Row>
   );
 }
