@@ -34,14 +34,17 @@ export interface WorkerTileProps {
 export function WorkerTile({ worker, focused, onFocus }: WorkerTileProps) {
   const tone = STATUS_TONE[worker.status] || STATUS_TONE.idle;
   const border = focused ? worker.accent : '#1f2630';
+  const width = focused ? 420 : 260;
+  const height = focused ? 280 : 168;
   return (
     <Pressable onPress={() => onFocus && onFocus(worker.id)}
       style={{
         position: 'absolute',
         left: worker.x,
         top: worker.y,
-        width: 260,
-        height: 168,
+        width,
+        height,
+        zIndex: focused ? 10 : 1,
         backgroundColor: '#0b1018',
         borderWidth: 2,
         borderColor: border,

@@ -1,5 +1,5 @@
 const React: any = require('react');
-const { useState, useMemo, useCallback } = React;
+const { useState, useMemo, useCallback, useEffect } = React;
 import { Box, Col, Row, Text, Pressable } from '../../../../runtime/primitives';
 import { WorkerTile, type Worker, type WorkerStatus } from './WorkerTile';
 import { WorkerStrip } from './WorkerStrip';
@@ -52,6 +52,8 @@ export interface WorkerCanvasProps {
   windowHeight?: number;
 }
 
+export type CockpitMode = 'brainstorm' | 'enforce';
+
 export function WorkerCanvas(_props: WorkerCanvasProps) {
   const initial = useMemo(() => seedFakeWorkers(8), []);
   const [workers] = useState<Worker[]>(initial);
@@ -59,6 +61,7 @@ export function WorkerCanvas(_props: WorkerCanvasProps) {
   const [offsetX, setOffsetX] = useState(0);
   const [offsetY, setOffsetY] = useState(0);
   const [zoom, setZoom] = useState(1);
+  const [mode, setMode] = useState<CockpitMode>('enforce');
 
   const pan = useCallback((dx: number, dy: number) => {
     setOffsetX((v: number) => v + dx);
@@ -68,8 +71,32 @@ export function WorkerCanvas(_props: WorkerCanvasProps) {
   const focusWorker = useCallback((id: string) => {
     setFocusedId(id);
     const w = initial.find((x) => x.id === id);
-    if (w) { setOffsetX(-w.x + 80); setOffsetY(-w.y + 80); }
+    if (w) { setOffsetX(-w.x + 240); setOffsetY(-w.y + 180); }
   }, [initial]);
+
+  // Keyboard shortcuts: 1-9 jump to worker N, B/E toggle mode
+  useEffect(() => {
+    const handler = (e: any) => {
+      const k = e && (e.key || '');
+      if (k >= '1' && k <= '9') {
+        const idx = parseInt(k, 10) - 1;
+        if (idx < initial.length) focusWorker(initial[idx].id);
+      } else if (k === 'b' || k === 'B') {
+        setMode('brainstorm');
+      } else if (k === 'e' || k === 'E') {
+        setMode('enforce');
+      }
+    };
+    try {
+      const g: any = globalThis as any;
+      const target = (typeof g.window !== 'undefined' ? g.window : g.document) || null;
+      if (target && target.addEventListener) {
+        target.addEventListener('keydown', handler);
+        return () => { try { target.removeEventListener('keydown', handler); } catch (_) {} };
+      }
+    } catch (_) {}
+    return undefined;
+  }, [initial, focusWorker]);
 
   const reset = useCallback(() => { setOffsetX(0); setOffsetY(0); setZoom(1); }, []);
 
@@ -88,6 +115,7 @@ export function WorkerCanvas(_props: WorkerCanvasProps) {
       }}>
         <Text style={{ color: '#2d62ff', fontSize: 12, fontWeight: 700, letterSpacing: 2 }}>◆ COCKPIT</Text>
         <Text style={{ color: '#5c6a78', fontSize: 11 }}>worker supervisor · {workers.length} tiles</Text>
+        <ModeToggle mode={mode} onChange={setMode} />
         <Box style={{ flexGrow: 1 }} />
         <HudCount label="THINK"   n={counts.thinking      || 0} color="#79c0ff" />
         <HudCount label="TOOL"    n={counts.tool          || 0} color="#7ee787" />
@@ -112,12 +140,15 @@ export function WorkerCanvas(_props: WorkerCanvasProps) {
           backgroundColor: '#02050a',
         }} />
         <GridBackdrop offsetX={offsetX} offsetY={offsetY} />
-        {/* tiles layer — translated by offset */}
-        <Box style={{ position: 'absolute', left: offsetX, top: offsetY, width: 2400, height: 1600 }}>
-          {workers.map((w) => (
-            <WorkerTile key={w.id} worker={w} focused={w.id === focusedId} onFocus={focusWorker} />
-          ))}
-        </Box>
+        {mode === 'enforce' ? (
+          <Box style={{ position: 'absolute', left: offsetX, top: offsetY, width: 2400, height: 1600 }}>
+            {workers.map((w) => (
+              <WorkerTile key={w.id} worker={w} focused={w.id === focusedId} onFocus={focusWorker} />
+            ))}
+          </Box>
+        ) : (
+          <BrainstormPanel />
+        )}
         {/* mini-legend overlay */}
         <Box style={{
           position: 'absolute', right: 14, bottom: 14,
@@ -155,6 +186,72 @@ function PanBtn({ label, onPress }: { label: string; onPress: () => void }) {
     }}>
       <Text style={{ color: '#8b98a6', fontSize: 12, fontWeight: 700 }}>{label}</Text>
     </Pressable>
+  );
+}
+
+function ModeToggle({ mode, onChange }: { mode: CockpitMode; onChange: (m: CockpitMode) => void }) {
+  const btn = (m: CockpitMode, label: string, color: string) => {
+    const active = mode === m;
+    return (
+      <Pressable onPress={() => onChange(m)} style={{
+        paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6,
+        backgroundColor: active ? color : '#0b1018',
+        borderWidth: 1, borderColor: active ? color : '#1f2630',
+      }}>
+        <Text style={{ color: active ? '#05090f' : color, fontSize: 10, fontWeight: 700, letterSpacing: 1 }}>{label}</Text>
+      </Pressable>
+    );
+  };
+  return (
+    <Row style={{ gap: 4, marginLeft: 8 }}>
+      {btn('brainstorm', 'BRAINSTORM', '#d2a8ff')}
+      {btn('enforce', 'ENFORCE', '#7ee787')}
+    </Row>
+  );
+}
+
+function BrainstormPanel() {
+  return (
+    <Box style={{
+      position: 'absolute', left: 0, top: 0, right: 0, bottom: 0,
+      alignItems: 'center', justifyContent: 'center',
+    }}>
+      <Box style={{
+        width: 520, maxWidth: '80%',
+        backgroundColor: '#0b1018',
+        borderWidth: 1, borderColor: '#2a1840',
+        borderRadius: 12, padding: 20, gap: 12,
+      }}>
+        <Row style={{ alignItems: 'center', gap: 8 }}>
+          <Box style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#d2a8ff' }} />
+          <Text style={{ color: '#d2a8ff', fontSize: 11, fontWeight: 700, letterSpacing: 2 }}>BRAINSTORM MODE</Text>
+        </Row>
+        <Text style={{ color: '#e6edf3', fontSize: 16, fontWeight: 700 }}>What are we exploring?</Text>
+        <Text style={{ color: '#8b98a6', fontSize: 12 }}>Worker tiles hidden. Talk through the feature with the supervisor. Past bundles touching the same area will auto-surface as chips. When ready, crystallize → switch to ENFORCE to spawn workers against the spec.</Text>
+        <Box style={{
+          backgroundColor: '#05090f', borderRadius: 8, borderWidth: 1, borderColor: '#1f2630',
+          padding: 12, minHeight: 120,
+        }}>
+          <Text style={{ color: '#5c6a78', fontSize: 11 }}>[ conversation surface placeholder ]</Text>
+        </Box>
+        <Row style={{ gap: 8, flexWrap: 'wrap' }}>
+          <Chip label="prior: cursor-ide plan surface" />
+          <Chip label="prior: worker lifecycle policy" />
+          <Chip label="prior: fake-green pathology" />
+        </Row>
+      </Box>
+    </Box>
+  );
+}
+
+function Chip({ label }: { label: string }) {
+  return (
+    <Box style={{
+      paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999,
+      backgroundColor: '#173048', borderWidth: 1, borderColor: '#2a4d6e',
+    }}>
+      <Text style={{ color: '#79c0ff', fontSize: 10 }}>{label}</Text>
+    </Box>
   );
 }
 
