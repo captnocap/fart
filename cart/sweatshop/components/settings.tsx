@@ -44,7 +44,7 @@ function sdel(path: string) { try { storeDel(KEY + '.' + path); } catch {} }
 
 // ── Section Definitions ──────────────────────────────────────────────────────
 
-type SectionId = 'appearance' | 'editor' | 'terminal' | 'keybindings' | 'providers' | 'memory' | 'plugins' | 'about';
+type SectionId = 'appearance' | 'editor' | 'scrolling' | 'terminal' | 'keybindings' | 'providers' | 'memory' | 'plugins' | 'about';
 
 interface SectionDef {
   id: SectionId;
@@ -58,6 +58,7 @@ function sectionList(): SectionDef[] {
   return [
     { id: 'appearance',  label: 'Appearance',  description: 'Theme, density, font scale',           icon: 'palette',  tone: COLORS.purple },
     { id: 'editor',      label: 'Editor',      description: 'Font size, tabs, wrap, line numbers',  icon: 'braces',   tone: COLORS.blue   },
+    { id: 'scrolling',   label: 'Scrolling',   description: 'Scrollbars, drag panning, sync',      icon: 'mouse',    tone: COLORS.green  },
     { id: 'terminal',    label: 'Terminal',    description: 'Shell, font, cursor, scrollback',      icon: 'command',  tone: COLORS.green  },
     { id: 'keybindings', label: 'Keybindings', description: 'Shortcuts and command palette',        icon: 'command',  tone: COLORS.orange },
     { id: 'providers',   label: 'Providers',   description: 'Models, API keys, default routing',    icon: 'globe',    tone: COLORS.blue   },
@@ -93,6 +94,15 @@ const SECTION_KEYWORDS: Record<SectionId, string[]> = {
     'whitespace dots invisible characters',
     'trim trailing whitespace',
     'format on save prettier',
+    'scrollbars drag scroll panning sync',
+  ],
+  scrolling: [
+    'scrollbars overlay drag panning sync',
+    'terminal scrollback drag scroll history',
+    'chat message list drag scroll',
+    'search results drag scroll',
+    'diff side by side gutters sync',
+    'git commit list history drag scroll',
   ],
   terminal: [
     'shell bash zsh binary path',
@@ -162,6 +172,7 @@ const LEGACY_SECTION_MAP: Record<string, SectionId> = {
   automations: 'plugins',
   capabilities: 'about',
   checkpoints: 'memory',
+  scrolling: 'scrolling',
 };
 
 // ── Shared UI primitives ─────────────────────────────────────────────────────
@@ -972,6 +983,94 @@ function EditorPanel(props: { query: string; resetToken: number }) {
       {match('format on save prettier') ? (
         <SettingRow title="Format on save" description="Run the formatter when a file is saved.">
           <Toggle value={formatOnSave} onChange={setFmt} />
+        </SettingRow>
+      ) : null}
+    </Col>
+  );
+}
+
+const SCROLLING_DEFAULTS = {
+  editorDragToScroll: true,
+  terminalDragToScroll: true,
+  chatDragToScroll: true,
+  searchDragToScroll: true,
+  diffDragToScroll: true,
+  gitDragToScroll: true,
+};
+
+function ScrollingPanel(props: { query: string; resetToken: number }) {
+  const [editorDragToScroll, setEditorDragToScrollS] = useState<boolean>(sget('scrolling.editorDragToScroll', SCROLLING_DEFAULTS.editorDragToScroll));
+  const [terminalDragToScroll, setTerminalDragToScrollS] = useState<boolean>(sget('scrolling.terminalDragToScroll', SCROLLING_DEFAULTS.terminalDragToScroll));
+  const [chatDragToScroll, setChatDragToScrollS] = useState<boolean>(sget('scrolling.chatDragToScroll', SCROLLING_DEFAULTS.chatDragToScroll));
+  const [searchDragToScroll, setSearchDragToScrollS] = useState<boolean>(sget('scrolling.searchDragToScroll', SCROLLING_DEFAULTS.searchDragToScroll));
+  const [diffDragToScroll, setDiffDragToScrollS] = useState<boolean>(sget('scrolling.diffDragToScroll', SCROLLING_DEFAULTS.diffDragToScroll));
+  const [gitDragToScroll, setGitDragToScrollS] = useState<boolean>(sget('scrolling.gitDragToScroll', SCROLLING_DEFAULTS.gitDragToScroll));
+
+  useEffect(() => {
+    setEditorDragToScrollS(sget('scrolling.editorDragToScroll', SCROLLING_DEFAULTS.editorDragToScroll));
+    setTerminalDragToScrollS(sget('scrolling.terminalDragToScroll', SCROLLING_DEFAULTS.terminalDragToScroll));
+    setChatDragToScrollS(sget('scrolling.chatDragToScroll', SCROLLING_DEFAULTS.chatDragToScroll));
+    setSearchDragToScrollS(sget('scrolling.searchDragToScroll', SCROLLING_DEFAULTS.searchDragToScroll));
+    setDiffDragToScrollS(sget('scrolling.diffDragToScroll', SCROLLING_DEFAULTS.diffDragToScroll));
+    setGitDragToScrollS(sget('scrolling.gitDragToScroll', SCROLLING_DEFAULTS.gitDragToScroll));
+  }, [props.resetToken]);
+
+  const setEditorDragToScroll = (v: boolean) => { setEditorDragToScrollS(v); sset('scrolling.editorDragToScroll', v); };
+  const setTerminalDragToScroll = (v: boolean) => { setTerminalDragToScrollS(v); sset('scrolling.terminalDragToScroll', v); };
+  const setChatDragToScroll = (v: boolean) => { setChatDragToScrollS(v); sset('scrolling.chatDragToScroll', v); };
+  const setSearchDragToScroll = (v: boolean) => { setSearchDragToScrollS(v); sset('scrolling.searchDragToScroll', v); };
+  const setDiffDragToScroll = (v: boolean) => { setDiffDragToScrollS(v); sset('scrolling.diffDragToScroll', v); };
+  const setGitDragToScroll = (v: boolean) => { setGitDragToScrollS(v); sset('scrolling.gitDragToScroll', v); };
+
+  function doReset() {
+    setEditorDragToScroll(SCROLLING_DEFAULTS.editorDragToScroll);
+    setTerminalDragToScroll(SCROLLING_DEFAULTS.terminalDragToScroll);
+    setChatDragToScroll(SCROLLING_DEFAULTS.chatDragToScroll);
+    setSearchDragToScroll(SCROLLING_DEFAULTS.searchDragToScroll);
+    setDiffDragToScroll(SCROLLING_DEFAULTS.diffDragToScroll);
+    setGitDragToScroll(SCROLLING_DEFAULTS.gitDragToScroll);
+  }
+
+  const q = (props.query || '').toLowerCase();
+  const match = (kw: string) => !q || kw.toLowerCase().indexOf(q) >= 0;
+
+  return (
+    <Col style={{ gap: 14 }}>
+      <SectionTitle title="Scrolling" description="Overlay scrollbars, drag panning, and synchronized diff panes." onReset={doReset} />
+
+      {match('scrollbars overlay drag panning sync') ? (
+        <SettingRow title="Editor drag-to-scroll" description="Hold and drag inside long editor buffers to pan the viewport.">
+          <Toggle value={editorDragToScroll} onChange={setEditorDragToScroll} />
+        </SettingRow>
+      ) : null}
+
+      {match('terminal scrollback drag scroll history') ? (
+        <SettingRow title="Terminal drag-to-scroll" description="Drag inside terminal history / scrollback panes.">
+          <Toggle value={terminalDragToScroll} onChange={setTerminalDragToScroll} />
+        </SettingRow>
+      ) : null}
+
+      {match('chat message list drag scroll') ? (
+        <SettingRow title="Chat drag-to-scroll" description="Drag inside the conversation transcript to pan the message list.">
+          <Toggle value={chatDragToScroll} onChange={setChatDragToScroll} />
+        </SettingRow>
+      ) : null}
+
+      {match('search results drag scroll') ? (
+        <SettingRow title="Search drag-to-scroll" description="Drag inside the search results surface.">
+          <Toggle value={searchDragToScroll} onChange={setSearchDragToScroll} />
+        </SettingRow>
+      ) : null}
+
+      {match('diff side by side gutters sync') ? (
+        <SettingRow title="Diff drag-to-scroll" description="Drag inside side-by-side diff panes and keep gutters aligned.">
+          <Toggle value={diffDragToScroll} onChange={setDiffDragToScroll} />
+        </SettingRow>
+      ) : null}
+
+      {match('git commit list history drag scroll') ? (
+        <SettingRow title="Git history drag-to-scroll" description="Drag inside the commit history / log list.">
+          <Toggle value={gitDragToScroll} onChange={setGitDragToScroll} />
         </SettingRow>
       ) : null}
     </Col>
@@ -2331,6 +2430,7 @@ export function SettingsSurface(props: any) {
   function renderPanel(section: SectionId) {
     if (section === 'appearance')  return <AppearancePanel query={query} resetToken={resetToken} />;
     if (section === 'editor')      return <EditorPanel query={query} resetToken={resetToken} />;
+    if (section === 'scrolling')   return <ScrollingPanel query={query} resetToken={resetToken} />;
     if (section === 'terminal')    return <TerminalSettingsPanel query={query} resetToken={resetToken} />;
     if (section === 'keybindings') return <KeybindingsPanel query={query} resetToken={resetToken} />;
     if (section === 'providers')   return <ProvidersPanel
