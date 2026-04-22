@@ -1042,6 +1042,75 @@ var g_flow_enabled: bool = true; // per-child flow override for hover mode
 var g_hover_changed: bool = false; // debug flag
 var g_semantic_overlay: bool = false; // Ctrl+Shift+D toggles semantic color overlay
 
+// One-shot visible-node coord dump (gated by REACTJIT_NODEDUMP env var).
+// Fires once at tick 60, after layout has settled, so a supervisor can read
+// post-layout pixel rects for the first ~50 visible nodes.
+var g_nodedump_tick: u32 = 0;
+var g_nodedump_done: bool = false;
+
+fn nodedumpTag(node: *Node) []const u8 {
+    if (node.text != null) return "Text";
+    if (node.canvas_path) return "Canvas.Path";
+    if (node.canvas_clamp) return "Canvas.Clamp";
+    if (node.canvas_node) return "Canvas.Node";
+    if (node.canvas_type != null) return "Canvas";
+    if (node.image_src != null) return "Image";
+    if (node.video_src != null) return "Video";
+    if (node.render_src != null) return "Render";
+    if (node.input_id != null) return "TextInput";
+    if (node.cartridge_src != null) return "Cartridge";
+    if (node.effect_type != null) return "Effect";
+    if (node.scene3d) return "Scene3D";
+    if (node.handlers.on_press != null or node.handlers.js_on_press != null or node.handlers.lua_on_press != null) return "Pressable";
+    return "Box";
+}
+
+fn nodedumpWalk(node: *Node, count: *u32, limit: u32) void {
+    if (count.* >= limit) return;
+    const r = node.computed;
+    if (r.w > 0 and r.h > 0) {
+        var tbuf: [20]u8 = undefined;
+        var text_len: usize = 0;
+        if (node.text) |t| {
+            const take = @min(t.len, tbuf.len);
+            var i: usize = 0;
+            while (i < take) : (i += 1) {
+                const ch = t[i];
+                tbuf[i] = if (ch >= 0x20 and ch < 0x7F) ch else '?';
+            }
+            text_len = take;
+        }
+        std.debug.print("[nodedump] t=60 i={d} tag={s} x={d} y={d} w={d} h={d} text={s}\n", .{
+            count.*,
+            nodedumpTag(node),
+            @as(i32, @intFromFloat(r.x)),
+            @as(i32, @intFromFloat(r.y)),
+            @as(i32, @intFromFloat(r.w)),
+            @as(i32, @intFromFloat(r.h)),
+            tbuf[0..text_len],
+        });
+        count.* += 1;
+    }
+    for (node.children) |*child| {
+        if (count.* >= limit) return;
+        nodedumpWalk(child, count, limit);
+    }
+}
+
+fn nodedumpMaybeEmit(root: *Node, win_w: f32, win_h: f32) void {
+    if (g_nodedump_done) return;
+    g_nodedump_tick +%= 1;
+    if (g_nodedump_tick != 60) return;
+    g_nodedump_done = true;
+    if (std.posix.getenv("REACTJIT_NODEDUMP") == null) return;
+    std.debug.print("[nodedump] window={d}x{d}\n", .{
+        @as(i32, @intFromFloat(win_w)),
+        @as(i32, @intFromFloat(win_h)),
+    });
+    var count: u32 = 0;
+    nodedumpWalk(root, &count, 50);
+}
+
 // Canvas drag state — tracks which canvas is being dragged for pan
 var canvas_drag_node: ?*Node = null;
 var canvas_drag_last_x: f32 = 0;
@@ -3213,6 +3282,9 @@ pub fn run(config_in: AppConfig) !void {
         layout.layout(config.root, 0, 0, win_w, app_h);
         const t3 = std.time.microTimestamp();
         qjs_runtime.telemetry_layout_us = @intCast(@max(0, t3 - t2));
+
+        // One-shot visible-node coord dump at tick 60 (REACTJIT_NODEDUMP gate).
+        nodedumpMaybeEmit(config.root, win_w, app_h);
 
         // Physics 2D tick — step world, sync body positions to nodes AFTER layout
         // (physics overwrites computed.x/y — must happen after layout sets them)
