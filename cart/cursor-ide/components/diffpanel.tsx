@@ -2,7 +2,7 @@ const React: any = require('react');
 const { useState, useMemo } = React;
 
 import { Box, Col, Pressable, Row, ScrollView, Text } from '../../../runtime/primitives';
-import { COLORS } from '../theme';
+import { COLORS, TOKENS } from '../theme';
 import { Glyph, Pill } from './shared';
 import type { Checkpoint, CheckpointDiff } from '../checkpoint';
 
@@ -118,7 +118,7 @@ export function DiffPanel(props: DiffPanelProps) {
                 paddingRight: 8,
                 paddingTop: 4,
                 paddingBottom: 4,
-                borderRadius: 6,
+                borderRadius: TOKENS.radiusSm,
                 borderWidth: 1,
                 borderColor: COLORS.border,
                 backgroundColor: stackedView ? COLORS.panelHover : 'transparent',
@@ -137,7 +137,7 @@ export function DiffPanel(props: DiffPanelProps) {
                 paddingRight: 8,
                 paddingTop: 4,
                 paddingBottom: 4,
-                borderRadius: 6,
+                borderRadius: TOKENS.radiusSm,
                 borderWidth: 1,
                 borderColor: COLORS.border,
                 backgroundColor: wordWrap ? COLORS.panelHover : 'transparent',
@@ -212,7 +212,7 @@ export function DiffPanel(props: DiffPanelProps) {
                     alignItems: 'center',
                     gap: 8,
                     padding: 8,
-                    borderRadius: 8,
+                    borderRadius: TOKENS.radiusMd,
                     backgroundColor: selectedFilePath === d.path ? COLORS.panelHover : COLORS.panelRaised,
                   }}
                 >
@@ -318,7 +318,7 @@ function TurnChip(props: {
           paddingRight: 10,
           paddingTop: 5,
           paddingBottom: 5,
-          borderRadius: 999,
+          borderRadius: TOKENS.radiusPill,
           borderWidth: 1,
           borderColor: props.active ? COLORS.blue : COLORS.border,
           backgroundColor: props.active ? COLORS.blueDeep : COLORS.panelAlt,
