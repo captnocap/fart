@@ -3,6 +3,7 @@ const { useState, useMemo, useCallback, useEffect } = React;
 import { Box, Col, Row, Text } from '../../../../runtime/primitives';
 import { WorkerTile, type Worker, type WorkerStatus } from './WorkerTile';
 import { WorkerStrip } from './WorkerStrip';
+import { WorkerCharts } from './WorkerCharts';
 import { HoverPressable } from '../shared';
 
 const ACCENTS = ['#2d62ff', '#ff7b72', '#7ee787', '#d2a8ff', '#ffb86b', '#79c0ff', '#ff6bcb', '#f2e05a'];
@@ -92,6 +93,7 @@ export function WorkerCanvas(_props: WorkerCanvasProps) {
   const [offsetY, setOffsetY] = useState(0);
   const [zoom, setZoom] = useState(1);
   const [mode, setMode] = useState<CockpitMode>('enforce');
+  const [showCharts, setShowCharts] = useState(true);
 
   const pan = useCallback((dx: number, dy: number) => {
     setOffsetX((v: number) => v + dx);
@@ -160,9 +162,18 @@ export function WorkerCanvas(_props: WorkerCanvasProps) {
         <PanBtn label="−" onPress={() => setZoom((z: number) => Math.max(0.5, z - 0.1))} />
         <PanBtn label="+" onPress={() => setZoom((z: number) => Math.min(1.6, z + 0.1))} />
         <PanBtn label="⟳" onPress={reset} />
+        <Box style={{ width: 1, height: 22, backgroundColor: '#1a222c', marginHorizontal: 6 }} />
+        <Pressable onPress={() => setShowCharts((v: boolean) => !v)} style={{
+          paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6,
+          backgroundColor: showCharts ? '#79c0ff' : '#0b1018',
+          borderWidth: 1, borderColor: showCharts ? '#79c0ff' : '#1f2630',
+        }}>
+          <Text style={{ color: showCharts ? '#05090f' : '#79c0ff', fontSize: 10, fontWeight: 700, letterSpacing: 1 }}>HUD +</Text>
+        </Pressable>
       </Row>
 
-      {/* Pannable canvas surface */}
+      {/* Pannable canvas surface + optional right-side HUD charts dock */}
+      <Row style={{ flexGrow: 1, flexBasis: 0, minHeight: 0 }}>
       <Box style={{ flexGrow: 1, flexBasis: 0, overflow: 'hidden', position: 'relative', minHeight: 0 }}>
         {/* grid backdrop */}
         <Box style={{
@@ -191,6 +202,8 @@ export function WorkerCanvas(_props: WorkerCanvasProps) {
           <Text style={{ color: '#e6edf3', fontSize: 11 }}>zoom {zoom.toFixed(2)}x</Text>
         </Box>
       </Box>
+      {showCharts ? <WorkerCharts workers={workers} /> : null}
+      </Row>
 
       {/* persistent bottom strip */}
       <WorkerStrip workers={workers} focusedId={focusedId} onFocus={focusWorker} />
