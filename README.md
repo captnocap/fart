@@ -1,29 +1,10 @@
 # ReactJIT
 
-its react! (kinda) its fast! (really fast) hi. all the code in this project is an accident from a bad joke. the code is not a joke, how it came to be was though. also, i didnt write a single line of code in here, and this readme is also ai generated after i finish my brief intro. this is really now just one big experiment that started from asking how i could put the react based game i was making, inside of a monitor in cs_office, things really got out of hand after that. this is a series of fortunate (or unfortunate) events that all came from asking 'how' and then following with 'if that worked, what about this'. we will see where this all lands at the 60 day mark and again at the 90 day mark. thanks for stopping by
+This is an experiment. We don't claim to know where it's going. It started as a joke about putting a React game inside a monitor in cs_office, and things got out of hand. Now it's a general-purpose stack that does whatever you point it at — coding tools, 3D scenes, physics sims, audio visualizers, agent UIs, chemistry plots, finance dashboards, emulators, whatever. Put the fries in the bag.
 
----
+Write React. Get a single-file native binary. Copy-paste components from any React project. JSX, hooks, tailwind classes, HTML tags, setState, useEffect — all work. But there's no DOM, no CSS engine, no browser. React's reconciler emits CREATE/APPEND/UPDATE mutation commands against a Zig-owned `Node` pool. Layout, paint, hit-test, events, input, text, and GPU are native Zig/wgpu. React is the algorithm, not the environment.
 
-Write React. Get a single-file native binary. Copy-paste components from any React project. JSX, hooks, tailwind classes, HTML tags (`<div>`, `<button>`, `<h1>`), setState, useEffect — all work. Layout, paint, hit-test, events, input, text, GPU are native Zig. React drives a Zig-owned `Node` pool through a react-reconciler host — no virtual DOM on the output side, mutations land directly as CREATE/UPDATE/APPEND commands against real Nodes. JS runs in **[JSRT](#jsrt)** — a JS evaluator written in Lua, hosted by LuaJIT, so React's hot paths get trace-JIT'd.
-
-```
-cart/my_app.tsx (standard React + JSX + hooks)
-   │
-   ▼
-esbuild → bundle.js  →  build-jsast.mjs → bundle.ast.lua
-   │
-   ▼
-@embedFile into the cart host (jsrt_app.zig)
-   │
-   ▼
-zig build → ELF + framework/ (layout, GPU, events, text, effects)
-   │
-   ▼
-scripts/ship packages with ld-linux + all .so deps
-   │
-   ▼
-self-extracting single-file binary (runs anywhere, no system deps)
-```
+The JS runtime is **V8** (embedded via zig-v8) — the default since April 2026, when it delivered an 1800ms → 40ms click-latency improvement. QJS is maintenance-only legacy; `--qjs` is opt-in. The "V8 has baggage" myth is fake — Chromium has the baggage (networking, rendering engine, browser integration). V8 on its own, embedded in a native app, is tight. We proved it.
 
 ```tsx
 // cart/counter.tsx
@@ -32,15 +13,11 @@ import { Box, Text, Pressable } from '../runtime/primitives';
 
 export default function Counter() {
   const [count, setCount] = useState(0);
-
   return (
     <Box className="p-8 gap-4 bg-slate-900">
       <Text fontSize={28} color="#ffffff">Counter</Text>
       <Text fontSize={48} color="#ff79c6">{String(count)}</Text>
-      <Pressable
-        onPress={() => setCount(count + 1)}
-        className="p-4 bg-teal-500 rounded-lg"
-      >
+      <Pressable onPress={() => setCount(count + 1)} className="p-4 bg-teal-500 rounded-lg">
         <Text fontSize={16} color="#ffffff">+ Increment</Text>
       </Pressable>
     </Box>
@@ -48,262 +25,145 @@ export default function Counter() {
 }
 ```
 
-One file. `./scripts/ship counter`. Done — `zig-out/bin/counter` is shippable anywhere.
+One file. `./scripts/ship counter`. Done.
 
 ---
 
 ## Quick Start
 
 ```bash
-# Build a cart into a self-extracting native binary:
-./scripts/ship counter          # cart/counter.tsx → zig-out/bin/counter
-
-# Debug build (raw ELF for gdb/ldd inspection, at zig-out/bin/<name>-raw):
-./scripts/ship counter -d
-
-# Release, raw ELF (no self-extracting wrapper), for ldd inspection:
-./scripts/ship counter --raw
-
-# Directory-based cart layout also works (cart/counter/index.tsx):
-./scripts/ship counter
+./scripts/ship counter          # cart/counter.tsx → self-extracting binary
+./scripts/ship counter -d       # debug build (raw ELF)
+./scripts/ship counter --raw    # release, raw ELF (for ldd inspection)
 ```
 
-The `ship` pipeline:
-1. **esbuild** bundles `cart/<name>.tsx` + `runtime/` + `renderer/` into `bundle.js`.
-2. **build-jsast** runs acorn over `bundle.js` and emits `bundle.ast.lua` — the AST as a Lua table literal (data, not code).
-3. **Zig build** compiles the cart host with the AST embedded via `@embedFile` — the binary carries its own program.
-4. **Package** (Linux): `ldd` walks deps, bundles every non-system `.so` + `ld-linux` into a lib/ dir, prepends a self-extracting shell wrapper that extracts to `~/.cache/reactjit-<name>/<sig>/` on first run.
-5. **macOS**: `.app` bundle with `Frameworks/` dylib rewrites, ad-hoc codesigned.
-
-Result: **one file, no system dependencies, runs anywhere.**
+Pipeline: esbuild bundles TSX → `bundle.js` → Zig compiles with the bundle embedded via `@embedFile` → Linux packaging bundles all `.so` deps + `ld-linux` into a self-extracting shell wrapper → macOS produces a `.app` bundle. One file, zero system dependencies.
 
 ---
 
 ## Dev Loop (hot reload)
 
 ```bash
-./scripts/dev cockpit           # launches persistent dev host, watches cart/cockpit
-./scripts/dev inspector         # in a second terminal: pushes to running host, adds a tab
-./scripts/dev cockpit           # re-push cockpit → switches back to that tab
+./scripts/dev sweatshop         # persistent dev host + watch
+./scripts/dev inspector         # second terminal: pushes to host, adds tab
 ```
 
-One persistent ReleaseFast binary at `zig-out/bin/reactjit-dev` hosts every cart you push. The dev host is borderless — the top strip IS the window chrome, with tabs for each pushed cart, window controls on the right, double-click to maximize, drag empty chrome to move, edge-drag to resize.
+The dev host is a single persistent `ReleaseFast` binary. Edit any file under `cart/` or `runtime/` — esbuild rebundles, host re-evals in ~300ms. No rebuild needed for TSX/TS changes. Rebuild only when you touch `framework/`, `build.zig`, or `scripts/`.
 
-**When to rebuild:**
+The host is borderless; the top strip IS the window chrome. Tabs for each pushed cart. Double-click to maximize. Drag to move. Window controls on the right.
 
-| What you changed | Action |
-|---|---|
-| `cart/**`, `runtime/**`, `renderer/**` (React / TSX / TS) | **Nothing.** Save the file — esbuild rebundles, the host re-evals in ~300ms. |
-| `framework/**`, `build.zig`, `scripts/**` | **Rebuild the dev binary.** Delete `zig-out/bin/reactjit-dev` then re-run `./scripts/dev <cart>`. |
+Dev mode is always `ReleaseFast`. Debug builds have a pre-existing click-path bug — don't use them for dev work.
 
-Tab switching re-evals the target cart's bundle from scratch — React state (`useState` / `useRef`) resets on every reload. A `useHotState` hook + `framework/hotstate.zig` scaffold exists for state preservation but **isn't working yet** — don't rely on atoms surviving reloads.
-
-Dev mode always compiles `-Doptimize=ReleaseFast`; the Debug build has a pre-existing framework bug that silently crashes on any click.
+`useHotState` scaffolding exists but **doesn't preserve state across reloads yet**. Treat HMR as "save → see your change, lose local useState."
 
 ---
 
 ## What's Real on the .tsx Side
 
-### Works out of the box (copy-paste from any React project)
+### Works out of the box
 
-- **All standard hooks** — `useState`, `useEffect`, `useRef`, `useMemo`, `useCallback`, `useContext`, custom hooks
-- **HTML tags** — `<div>`, `<span>`, `<p>`, `<button>`, `<a>`, `<img>`, `<input>`, `<h1>`–`<h6>`, `<section>`, `<nav>`, `<header>`, `<footer>`, `<ul>`, `<li>`, `<table>`, and friends. Remapped to native primitives in `renderer/hostConfig.ts`. HTML-only attrs (`alt`, `htmlFor`, `aria-*`, `data-*`, `tabIndex`) stripped before the bridge. Headings auto-size (h1=32, h2=28, …, h6=16).
-- **Tailwind via `className`** — full utility coverage via `runtime/tw.ts` (ported from love2d): spacing (`p-4`, `mx-8`), sizing (`w-full`, `h-[300]`), flex (`flex-row`, `gap-2`, `justify-center`, `items-start`), colors (`bg-blue-500`, `text-slate-200`), radius (`rounded-lg`), borders (`border-2`), typography (`text-xl`, `font-bold`), arbitrary bracket values (`p-[20]`, `bg-[#ff6600]`).
-- **Style props + `className` together** — mix freely, `style` wins on conflicts.
-- **Timers** — `setTimeout`, `setInterval`, `clearTimeout`, `clearInterval`, `performance.now()` all real, backed by the engine's frame clock.
-- **Events** — `onClick`, `onPress`, `onChangeText`, `onSubmit`, `onHoverEnter`/`onHoverExit`, `onKeyDown`, `onScroll`, `onRightClick`/`onContextMenu`. Bidirectional: press → Zig hit-test → `js_on_press` eval → React handler → state change → commit → new mutations → same Node pool.
+- **Standard hooks** — `useState`, `useEffect`, `useRef`, `useMemo`, `useCallback`, `useContext`, custom hooks
+- **HTML tags** — `<div>`, `<span>`, `<button>`, `<img>`, `<input>`, `<h1>`–`<h6>`, and friends remapped to native primitives in `renderer/hostConfig.ts`. HTML-only attrs stripped before the bridge.
+- **Tailwind via `className`** — full utility coverage: spacing, sizing, flex, colors, radius, borders, typography, arbitrary bracket values (`p-[20]`, `bg-[#ff6600]`).
+- **Timers** — `setTimeout`, `setInterval`, `performance.now()` backed by the engine frame clock.
+- **Events** — `onClick`, `onPress`, `onChangeText`, `onKeyDown`, `onScroll`, `onRightClick`. Bidirectional through the Zig runtime.
 
 ### Works via hooks (`runtime/hooks/`)
 
-Shipped surfaces you can import directly — see `runtime/hooks/README.md` for the full matrix.
+- **fs** — read/write/list/stat/mkdir/remove
+- **localstore** — persistent key/value via SQLite
+- **sqlite** — JSON param binding, typed row objects
+- **http** — sync (`curl` subprocess) and async (libcurl worker pool)
+- **crypto** — randomBytes, HMAC-SHA256, HKDF-SHA256, XChaCha20-Poly1305
+- **clipboard** — system get/set
 
-- **`fs`** — `readFile`, `writeFile`, `exists`, `listDir`, `mkdir`, `remove`, `stat` (absolute or CWD-relative paths)
-- **`localstore`** — persistent key/value via SQLite under the app data dir. `installLocalStorageShim()` aliases it to `globalThis.localStorage`.
-- **`sqlite`** — handle registry, JSON param binding, `query_json` → typed row objects
-- **`http`** — `get/post` sync (via `curl` subprocess) and `getAsync/postAsync` (libcurl worker pool, drained each tick). `installFetchShim()` aliases it to `globalThis.fetch`.
-- **`crypto`** — `randomBytes`, HMAC-SHA256, HKDF-SHA256, XChaCha20-Poly1305 encrypt/decrypt (base64-encoded across the bridge)
-- **`clipboard`** — system clipboard get/set
-- **`process.envGet`/`envSet`/`exit`** — `std.posix` / libc wrappers
-
-`runtime/hooks/index.ts` has a `installBrowserShims()` one-liner that installs `fetch` + `localStorage` globals for copy-pasted code.
-
-### Still missing (framework exists, Zig binding pending)
-
-- **`WebSocket`** — `framework/net/websocket.zig` needs a small Zig 0.15 writer-API migration before its hooks can land. `installWebSocketShim()` is a no-op stub today.
-- **Long-running subprocess with stdout/stderr streaming** — `framework/process.zig` has spawn/kill but no pipes; per-child read-thread infra pending.
-- **Shamir secret split/combine** — framework has it (hex I/O); hook wrapper not yet written.
+`installBrowserShims()` one-liner adds `fetch` + `localStorage` globals for copy-pasted code.
 
 ### Doesn't work (no browser context)
 
-- **No `window`/`document`/`navigator`/`location`** — minimal shims exist so copy-pasted code doesn't crash, but DOM manipulation is a no-op.
-- **No `sessionStorage`, `IndexedDB`, cookies** — out of scope; use `localstore` for persistent state.
-- **No `XMLHttpRequest`, `URL`, `Blob`, `FormData`, `FileReader`** — undefined.
-- **Inline `<svg>` with `<path>`/`<circle>`/`<rect>`** — not remapped. Use `<Canvas.Path d="..." />` or `<Graph.Path>` instead.
-- **CSS `@media`, CSS Grid, CSS `:hover`/`:focus` pseudo-classes, CSS transitions/animations** — not parsed. Use `useEffect` + interval for animations, `onHoverEnter`/`onHoverExit` for hover state.
-- **Images** — png/jpg/bmp/tga/gif via stb_image only. No blob URLs.
+- No `window`/`document`/`navigator` — minimal shims so code doesn't crash, but DOM manipulation is a no-op.
+- No `sessionStorage`, `IndexedDB`, cookies.
+- No `Blob`, `FormData`, `FileReader`, `XMLHttpRequest`.
+- No inline `<svg>` — use `<Canvas.Path>` or `<Graph.Path>`.
+- No CSS `@media`, Grid, pseudo-classes, transitions — use `useEffect` + interval.
 
-### Library compatibility
-
-- **Pure-JS state libs** (zustand, jotai, xstate, redux, immer) — work.
-- **react-query / swr** — work, once you `installFetchShim()` (or swap their fetcher for the `http` hook).
-- **Headless component libs** (Radix, Headless UI, React Aria) — don't work (DOM refs).
-- **Styled component libs** (MUI, Chakra, Ant Design, Tailwind UI) — don't work (DOM CSS cascade).
-- **Animation libs** (framer-motion, react-spring) — partial; hook state works, imperative DOM manipulation doesn't.
-- **react-router** — memory mode works.
-- **React Native libs** — port naturally (same flex layout + primitive model).
-
-This is closer to React Native than browser React. Great for dashboards, forms, internal tools, games, visualizers, music apps, chat UIs, creative coding. Not for e-commerce checkout flows.
+This is closer to React Native than browser React. Great for dashboards, tools, games, visualizers, chat UIs, creative coding.
 
 ---
 
 ## Primitives
 
-From `runtime/primitives.tsx`:
+`Box`, `Row`, `Col`, `Text`, `Image`, `Pressable`, `ScrollView`, `TextInput`, `TextArea`, `TextEditor`, `Canvas`/`Canvas.Node`/`Canvas.Path`/`Canvas.Clamp`, `Graph`/`Graph.Path`/`Graph.Node`, `Native`.
 
-- **Layout / text**: `Box`, `Row`, `Col`, `Text`, `Image`, `Pressable`, `ScrollView`, `TextInput`, `TextArea`, `TextEditor`
-- **Canvas** (pan/zoomable surface): `Canvas`, `Canvas.Node`, `Canvas.Path`, `Canvas.Clamp` — with `gx/gy/gw/gh` coordinate-space positioning and SVG `d`/`stroke`/`strokeWidth`/`fill` props on paths
-- **Graph** (static-viewport chart surface): `Graph`, `Graph.Path`, `Graph.Node`
-
-
-Custom host-handled types (Audio, Video, Cartridge, LLMAgent, RigidBody, etc.) use `Native` — the reconciler emits CREATE with that type string, the Zig host handles it. Exposing these each as first-class JSX primitives is incremental work.
+`<Native type="X" />` is the universal escape hatch — the reconciler emits CREATE with that type string, the Zig host handles it. Audio, Video, Cartridge, LLMAgent, RigidBody, etc. all bridge through this.
 
 ---
 
-## Runtime Shims
+## How We Got Here
 
-Ported from love2d's runtime (`love2d/packages/core/src/`):
+**love2d** — built a proven reconciler-on-Lua stack with 30+ packages, storybook, classifier, theme, tw, hooks. Frozen at `love2d/` — read-only reference for porting patterns.
 
-- **`runtime/classifier.tsx`** — global classifier registry. Define once at app init, use everywhere:
-  ```ts
-  classifier({
-    Card: { type: 'Box', style: { padding: 16, borderRadius: 8, backgroundColor: 'theme:surface' } },
-    Title: { type: 'Text', size: 24, bold: true, color: 'theme:text' },
-  });
-  // Then: import { classifiers as C } from '../../runtime/classifier';
-  //       <C.Card><C.Title>Hi</C.Title></C.Card>
-  ```
-  Supports static defaults, `'theme:*'` token resolution, and hook-powered defaults via a `use` field.
+**tsz** — 50-day experiment compiling a `.tsz` DSL to Zig ahead of time. Theory: AOT beats VM. Reality: layout is the bottleneck, not JS execution. AOT bought nothing user-facing, cost every language feature as emitter work, and drifted toward reimplementing React. Frozen at `tsz/`.
 
-- **`runtime/theme.tsx`** — `<ThemeProvider colors={...}>` + `useThemeColors()` / `useThemeColorsOptional()`. Minimal (single colors map, no multi-theme switching); extend when needed.
+**QJS** — QuickJS-based host. Hit a 2000ms-per-click ceiling on large React trees. Legacy, maintenance-only.
 
-- **`runtime/tw.ts`** — tailwind class-to-style parser, 819 lines.
+**V8** — default since April 2026. The move coincided with discovering a synchronous path in the React reconciler that was the actual bottleneck. Fixing that plus V8's headroom dropped clicks from 1800ms to 40ms. V8 on its own (not Chromium) is lean and fast. We ship with it.
 
----
-
-## Framework Modules
-
-The Zig runtime at `framework/` — ~45k lines across categories:
-
-| Category | Modules |
-|----------|---------|
-| Core | `engine`, `engine_paint`, `state`, `events`, `input`, `layout`, `text`, `geometry`, `math`, `random`, `lib` |
-| Rendering | `gpu/`, `render_surfaces`, `render_surfaces_vm`, `effects`, `effect_ctx`, `effect_shader`, `easing`, `transition`, `canvas`, `svg_path`, `blend2d`, `vello`, `engine_web` |
-| UI | `theme`, `classifier`, `selection`, `tooltip`, `context_menu`, `router`, `query`, `windows`, `applescript` |
-| Cartridge | `cartridge`, `cartpack`, `dev_shell`, `devtools`, `devtools_state`, `api`, `core` |
-| Terminal | `pty`, `pty_client`, `pty_remote`, `vterm`, `semantic` |
-| Networking | `net/` |
-| Media | `audio`, `player`, `videos`, `recorder`, `capture` |
-| Data | `fs`, `fswatch`, `sqlite`, `localstore`, `archive`, `crypto`, `privacy` |
-| Scripting | `luajit_runtime`, `luajit_worker`, `lua_guard` |
-| Agent | `agent_core`, `agent_session`, `agent_spawner` |
-| Tools | `tool_framework`, `tools_builtin` |
-| Dev | `telemetry`, `log`, `log_export`, `testharness`, `testdriver`, `testassert`, `debug_client`, `debug_server`, `watchdog`, `witness` |
-| System | `process`, `child_engine`, `physics2d`, `physics3d`, `filedrop`, `breakpoint`, `crashlog`, `c` |
-
-Most subsystems **exist in Zig but aren't yet exposed as JSX primitives**. Window chrome (drag/resize regions), terminal, video, audio, 3D rendering, physics, LLM/Claude/Codex/AppleScript — the framework implements them; wiring them into the host's CREATE path + exposing as primitives is incremental work. `<Native type="X" />` is the universal bridge until they get first-class wrappers.
-
----
-
-## Performance
-
-Vsync-locked to monitor refresh by default (`.fifo` present mode). Uncap with `ZIGOS_VSYNC=0 ./zig-out/bin/<app>` for profiling.
-
-**Build**:
-- esbuild bundle: ~30–100ms
-- zig build (cached engine): ~1–3s
-- packaging (ldd walk + tarball): ~500ms
-
-**Runtime** (representative: spinner cart, 240Hz monitor, vsync on):
-- FPS: 240 (vsync-locked)
-- Layout: sub-ms
-- Paint: ~250µs
-
-**Binary size**: ~24MB self-extracting (compressed tarball with ~57 bundled `.so` libs + ld-linux + ELF).
+**JSRT** — a JS evaluator in Lua, running inside LuaJIT. JS stays JS as data; the evaluator walks an AST and executes JS semantics. LuaJIT's trace JIT optimizes the evaluator's hot paths. 12/13 targets passing at `framework/lua/jsrt/`. Not the default runtime, but the alternate path.
 
 ---
 
 ## Repository Layout
 
-Active stack at the root:
-
 ```
-framework/           Zig runtime (layout, engine, GPU, events, input, state,
-                     effects, text, windows, LuaJIT runtime). ~45k lines.
-framework/lua/jsrt/  JSRT — JS evaluator in Lua, running inside LuaJIT. The
-                     cart runtime. Read its README.md + TARGET.md before
-                     touching. Progress: 12/13 targets, check via
-                     ./framework/lua/jsrt/test/run_targets.sh.
-runtime/             JS entry, primitives, classifier, theme, tw (tailwind
-                     parser), JSX shim, window/document shims.
-renderer/            Reconciler host config (hostConfig.lua + reconciler.lua).
-                     Receives the mutation command stream JSRT emits.
-cart/                .tsx apps. Single-file (cart/foo.tsx) or directory-based
-                     (cart/foo/index.tsx) layouts both work.
-scripts/             ship (one-command build), build-bundle.mjs (esbuild
-                     wrapper), build-jsast.mjs (acorn → Lua AST literal).
-build.zig            Root build.
-stb/                 stb_image headers (needed by framework GPU).
-```
+framework/            Zig runtime (layout, engine, GPU, events, input,
+                      state, effects, text, windows, LuaJIT runtime).
+framework/lua/jsrt/   JSRT evaluator in Lua. Alternate runtime path.
+runtime/              JS entry, primitives, classifier, theme, tw,
+                      JSX shim, window/document shims.
+renderer/             Reconciler host config. Mutation command stream.
+cart/                 .tsx apps. One file = one app.
+cart/sweatshop/       Active IDE cart (evolved from cursor-ide).
+scripts/              ship (one-command build), esbuild wrapper.
+build.zig             Root build.
 
-`qjs_app.zig` at the repo root is legacy — a prior QuickJS-based cart host that hit a 2000ms-per-click perf ceiling on large React trees. Not extended. JSRT replaces it. Do not build new work there.
+v8_app.zig            ACTIVE. V8-based cart host (default).
+qjs_app.zig           LEGACY. QJS host. Maintenance-only.
+jsrt_app.zig          JSRT host binary. Alternate path.
 
-Frozen reference directories — **read-only, do not modify**:
-
-```
-tsz/               Smith-era stack (50-day experiment). .tsz compiler,
-                   d-suite conformance, cockpit/Sweatshop .tsz carts,
-                   InspectorTsz tools. Useful for screenshots + porting
-                   reference.
-love2d/            The proven reconciler-on-Lua stack. 30+ packages, a full
-                   storybook, classifier + theme + tw + hooks all battle-
-                   tested. Primary reference for any runtime pattern.
-archive/           Old compiler iterations (v1/v2 tsz).
-os/                Future (CartridgeOS). Mostly stubs.
-game/              Dead Internet Game. Separate project.
+tsz/                  FROZEN. Smith-era compiler stack.
+love2d/               FROZEN. Proven reconciler-on-Lua stack. Reference.
+archive/              FROZEN. Old compiler iterations.
+os/                   Future (CartridgeOS). Mostly stubs.
 ```
 
 ---
 
-## Why This Shape
+## Performance
 
-For 50 days this project built `.tsz` — a custom DSL that compiled ahead of time, on the theory that AOT compilation would beat running React-reconciler at runtime. The theory was wrong. A reconciler-over-VM spike matched the AOT version's feel exactly — because layout is the bottleneck, not JS execution, for the shapes of programs that fit in a single VM. AOT bought nothing user-facing, cost every language feature as emitter work, and drifted toward reimplementing React from scratch. Meanwhile, love2d had already shipped a full storybook in 30 days with the reconciler-over-VM shape.
+Vsync-locked by default. Uncap with `ZIGOS_VSYNC=0 ./zig-out/bin/<app>`.
 
-So the Smith-era stack is frozen at `tsz/` (treated like `love2d/` and `archive/` — reference only, do not modify). The active shape is: write `.tsx`, React's reconciler emits mutation commands, the Zig host applies them to the Node pool. Copy-pasting React code from anywhere just works.
-
----
-
-## JSRT
-
-JSRT is the cart runtime. A JavaScript evaluator written in Lua, running inside LuaJIT. JS source stays JS at every stage — nothing ever translates JS to Lua. LuaJIT's trace JIT specializes the evaluator's hot paths, which effectively JIT-compiles the JS running through it.
-
-- **Where it lives:** `framework/lua/jsrt/` — `evaluator.lua`, `values.lua`, `scope.lua`, `builtins.lua`, `host.lua`, `init.lua`, `README.md`, `TARGET.md`.
-- **Pipeline:** TSX → esbuild → `bundle.js` → acorn (`scripts/build-jsast.mjs`) → `bundle.ast.lua` (AST as Lua table literal — *data*, never code) → LuaJIT loads it → JSRT evaluator walks it and executes JS semantics → host FFI into Zig.
-- **Scope guardrail:** the evaluator stops at ECMAScript. It knows `var`/`let`/`const`, function calls, closures, prototype chain, `this`, try/catch, Map/Set/WeakMap, Symbol, iterators, destructuring. It does **not** know about React, JSX, hooks, or components — esbuild lowers JSX to `React.createElement(...)` before the evaluator ever sees a bundle. That's the line that prevents the drift that killed every prior compiler attempt in this repo.
-
+- esbuild bundle: ~30–100ms
+- zig build (cached): ~1–3s
+- packaging: ~500ms
+- Layout: sub-ms
+- Paint: ~250µs
+- Binary: ~24MB self-extracting
 
 ---
 
-## Design Philosophy: Postel's Law
+## Design Philosophy
 
 **Be conservative in what you send, be liberal in what you accept.**
 
-The runtime accepts anything React emits. HTML tags. `className` with tailwind. Inline styles with arbitrary CSS-shaped objects. Handler props named any way you like (`onPress`, `onClick`, `onMouseEnter` — aliases normalize). `style.flex: 1` shorthand works. If something a model hallucinates parses as valid JSX, it should still render.
+The runtime accepts anything React emits. HTML tags, tailwind, inline styles, handler aliases. If a model hallucinates valid JSX, it should render. But first-party code uses classifiers, theme tokens, and semantic primitives. The freedom is at the boundary where external code enters.
 
-But the golden path is conservative. First-party code uses classifiers, theme tokens, semantic primitives, and the framework's style guide. The framework's own Zig code is strict and explicit. The freedom is at the boundary where external code enters the system.
+---
+
+## Contributing
+
+See [`AGENTS.md`](AGENTS.md) for agent/AI contributor guidance. See [`CLAUDE.md`](CLAUDE.md) for Claude Code specific conventions.
 
 ---
 
 *"Any sufficiently advanced technology is indistinguishable from magic." — Arthur C. Clarke*
-
----
-
