@@ -3,9 +3,12 @@ import { Box, Graph, Pressable, Row } from '../../../../runtime/primitives';
 import { COLORS } from '../../theme';
 import { ChartAxis } from './ChartAxis';
 import { ChartLegend, type ChartLegendPosition } from './ChartLegend';
-import { ChartTooltip } from './ChartTooltip';
+import { ChartTooltip, ChartTooltipFromCrosshair } from './ChartTooltip';
 import { normalizeChartData, type ChartInput } from './useChartData';
 import { formatTick, useChartScale, type ChartScaleMode } from './useChartScale';
+import { ChartInteractions, type ChartInteractionsConfig } from './ChartInteractions';
+import type { CrosshairInputPoint, CrosshairState } from './useChartCrosshair';
+import type { DataViewport } from './useChartZoom';
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
@@ -25,6 +28,7 @@ export function BarChart(props: {
   valueFormat?: (value: number) => string;
   scaleMode?: ChartScaleMode;
   color?: string;
+  interactions?: ChartInteractionsConfig;
 }) {
   const width = props.width ?? 560;
   const height = props.height ?? 240;
@@ -35,6 +39,10 @@ export function BarChart(props: {
   const scale = useChartScale(props.scaleMode ?? 'linear', [domainMin, domainMax], [plot.y + plot.h, plot.y]);
   const formatValue = props.valueFormat || formatTick;
   const [hovered, setHovered] = useState<{ index: number; x: number; y: number } | null>(null);
+  const [viewport, setViewport] = useState<DataViewport>({ x0: 0, x1: Math.max(1, normalized.pointCount - 1), y0: domainMin, y1: domainMax });
+  const [crosshair, setCrosshair] = useState<CrosshairState | null>(null);
+  const interactionsOn = !!props.interactions;
+  const crosshairPoints: CrosshairInputPoint[] = [];
   const seriesCount = Math.max(1, normalized.seriesCount);
   const groupCount = Math.max(1, normalized.pointCount);
   const groupW = plot.w / groupCount;
@@ -58,6 +66,17 @@ export function BarChart(props: {
       const groupLeft = plot.x + point.index * groupW;
       const total = seriesCount * barW + (seriesCount - 1) * gap;
       const left = groupLeft + (groupW - total) / 2 + seriesIndex * (barW + gap);
+      if (interactionsOn) {
+        crosshairPoints.push({
+          seriesId:   series.id,
+          seriesName: series.label,
+          color:      series.color || props.color || COLORS.blue,
+          x:  point.index,
+          y:  point.y,
+          px: left + barW / 2,
+          py: top,
+        });
+      }
       return (
         <Graph.Node key={series.id + '-' + point.index} gx={left} gy={top} gw={barW} gh={heightPx}>
           <Pressable
@@ -98,6 +117,26 @@ export function BarChart(props: {
       </Graph>
       <ChartAxis plot={plot} xLabels={xLabels} yTicks={yTicks} showLabels={props.showAxisLabels !== false} />
       {tooltip}
+      {interactionsOn ? (
+        <ChartInteractions
+          plot={plot}
+          natural={{ xMin: 0, xMax: Math.max(1, normalized.pointCount - 1), yMin: domainMin, yMax: domainMax }}
+          viewport={viewport}
+          setViewport={setViewport}
+          config={props.interactions as ChartInteractionsConfig}
+          points={crosshairPoints}
+          onCrosshair={setCrosshair}
+        />
+      ) : null}
+      {interactionsOn && crosshair ? (
+        <ChartTooltipFromCrosshair
+          crosshair={crosshair}
+          plotW={plot.w}
+          plotH={plot.h}
+          xLabel={(x) => xLabels[Math.round(x)] || String(Math.round(x))}
+          yLabel={formatValue}
+        />
+      ) : null}
     </Box>
   );
 
