@@ -4,6 +4,7 @@ const { useCallback, useEffect, useMemo, useState } = React;
 import { Box, Col, Pressable, Row, Text } from '../../../runtime/primitives';
 import { COLORS } from '../theme';
 import { Icon } from './icons';
+import { Tooltip } from './tooltip';
 
 export type MenuBarAction = {
   kind?: 'item' | 'separator';
@@ -232,29 +233,31 @@ export function MenuBar(props: MenuBarProps) {
         {props.sections.map((section, index) => {
           const open = openSection === section.label;
           return (
-            <Pressable
-              key={section.label}
-              onPress={() => {
-                if (open) closeMenu();
-                else openMenu(section.label);
-              }}
-              style={{
-                minWidth: 76,
-                paddingLeft: 10,
-                paddingRight: 10,
-                paddingTop: 4,
-                paddingBottom: 4,
-                borderRadius: 8,
-                backgroundColor: open ? COLORS.blueDeep : 'transparent',
-                borderWidth: 1,
-                borderColor: open ? COLORS.blue : 'transparent',
-              }}
-              >
-              <Row style={{ alignItems: 'center', gap: 4 }}>
-                {renderMenuLabel(section.label)}
-                {open ? <Icon name="chevron-down" size={10} color={COLORS.blue} /> : null}
-              </Row>
-            </Pressable>
+            <Tooltip label={'Open ' + section.label + ' menu'} side="bottom">
+              <Pressable
+                key={section.label}
+                onPress={() => {
+                  if (open) closeMenu();
+                  else openMenu(section.label);
+                }}
+                style={{
+                  minWidth: 76,
+                  paddingLeft: 10,
+                  paddingRight: 10,
+                  paddingTop: 4,
+                  paddingBottom: 4,
+                  borderRadius: 8,
+                  backgroundColor: open ? COLORS.blueDeep : 'transparent',
+                  borderWidth: 1,
+                  borderColor: open ? COLORS.blue : 'transparent',
+                }}
+                >
+                <Row style={{ alignItems: 'center', gap: 4 }}>
+                  {renderMenuLabel(section.label)}
+                  {open ? <Icon name="chevron-down" size={10} color={COLORS.blue} /> : null}
+                </Row>
+              </Pressable>
+            </Tooltip>
           );
         })}
       </Row>
@@ -283,23 +286,25 @@ export function MenuBar(props: MenuBarProps) {
                 {item.kind === 'separator' ? (
                   menuSeparator()
                 ) : (
-                  <Pressable
-                    onPress={() => {
-                      if (item.disabled) return;
-                      if (!item.action) return;
-                      hideMenuBar();
-                      item.action();
-                    }}
-                    style={{
-                      ...menuActionStyle(!!item.disabled),
-                      backgroundColor: index === selectedItemIndex ? COLORS.blueDeep : 'transparent',
-                    }}
-                  >
-                    <Text fontSize={11} color={item.disabled ? COLORS.textDim : COLORS.textBright} style={{ fontWeight: 'bold' }}>
-                      {item.label}
-                    </Text>
-                    {item.shortcut ? <Text fontSize={9} color={COLORS.textDim}>{item.shortcut}</Text> : <Box style={{ width: 1, height: 1 }} />}
-                  </Pressable>
+                  <Tooltip label={item.disabled ? item.label + ' (disabled)' : 'Run ' + item.label} side="right">
+                    <Pressable
+                      onPress={() => {
+                        if (item.disabled) return;
+                        if (!item.action) return;
+                        hideMenuBar();
+                        item.action();
+                      }}
+                      style={{
+                        ...menuActionStyle(!!item.disabled),
+                        backgroundColor: index === selectedItemIndex ? COLORS.blueDeep : 'transparent',
+                      }}
+                    >
+                      <Text fontSize={11} color={item.disabled ? COLORS.textDim : COLORS.textBright} style={{ fontWeight: 'bold' }}>
+                        {item.label}
+                      </Text>
+                      {item.shortcut ? <Text fontSize={9} color={COLORS.textDim}>{item.shortcut}</Text> : <Box style={{ width: 1, height: 1 }} />}
+                    </Pressable>
+                  </Tooltip>
                 )}
               </React.Fragment>
             ))}

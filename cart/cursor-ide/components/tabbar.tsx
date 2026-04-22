@@ -4,6 +4,7 @@ const { useState } = React;
 import { Box, Pressable, Row, ScrollView, Text } from '../../../runtime/primitives';
 import { COLORS, fileGlyph, fileTone } from '../theme';
 import { Glyph, Pill } from './shared';
+import { Tooltip } from './tooltip';
 
 interface TabBarProps {
   tabs: any[];
@@ -64,60 +65,66 @@ export function TabBar(props: TabBarProps) {
         const draggingThis = dragTabId === tab.id;
         return (
           <Row key={tab.id} style={{ alignItems: 'center' }}>
-            <Pressable
-              onPress={() => {
-                if (dragTabId) {
-                  if (dragTabId === tab.id) { setDragTabId(null); return; }
-                  moveTabToIndex(dragTabId, idx + 1);
-                  setDragTabId(null);
-                } else {
-                  onActivate(tab.id);
-                }
-              }}
-              onMiddleClick={() => onClose(tab.id)}
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: compact ? 5 : 7,
-                paddingLeft: compact ? 10 : 12,
-                paddingRight: compact ? 6 : 8,
-                paddingTop: compact ? 7 : 8,
-                paddingBottom: compact ? 7 : 8,
-                borderRightWidth: isDragging ? 0 : 1,
-                borderColor: COLORS.borderSoft,
-                borderTopWidth: 2,
-                borderTopColor: active ? COLORS.blue : 'transparent',
-                backgroundColor: draggingThis ? COLORS.blueDeep : active ? COLORS.panelAlt : COLORS.panelBg,
-                opacity: draggingThis ? 0.6 : 1,
-              }}
-            >
-              {onReorder && !compact ? (
-                <Pressable
-                  onPress={() => setDragTabId(draggingThis ? null : tab.id)}
-                  style={{
-                    paddingLeft: 2,
-                    paddingRight: 2,
-                    paddingTop: 1,
-                    paddingBottom: 1,
-                    borderRadius: 3,
-                    backgroundColor: draggingThis ? COLORS.blue : 'transparent',
-                  }}
-                >
-                  <Text fontSize={9} color={draggingThis ? COLORS.textBright : COLORS.textDim}>≡</Text>
-                </Pressable>
-              ) : null}
-              <Glyph icon={fileGlyph(tab.type)} tone={fileTone(tab.type)} backgroundColor={COLORS.grayChip} tiny={true} />
-              <Text fontSize={11} color={active ? COLORS.textBright : COLORS.text}>{tab.name}</Text>
-              {tab.modified ? (
-                <Text fontSize={9} color={COLORS.yellow} style={{ marginLeft: 1 }}>●</Text>
-              ) : null}
-              {!compact && tab.git ? <Pill label={tab.git} color={COLORS.blue} tiny={true} /> : null}
-              {!compact && !tab.pinned ? (
-                <Pressable onPress={() => onClose(tab.id)} style={{ paddingLeft: 3, paddingRight: 3, paddingTop: 2, paddingBottom: 2, borderRadius: 4 }}>
-                  <Text fontSize={10} color={COLORS.textDim}>×</Text>
-                </Pressable>
-              ) : null}
-            </Pressable>
+            <Tooltip label={'Activate ' + tab.name} side="bottom">
+              <Pressable
+                onPress={() => {
+                  if (dragTabId) {
+                    if (dragTabId === tab.id) { setDragTabId(null); return; }
+                    moveTabToIndex(dragTabId, idx + 1);
+                    setDragTabId(null);
+                  } else {
+                    onActivate(tab.id);
+                  }
+                }}
+                onMiddleClick={() => onClose(tab.id)}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: compact ? 5 : 7,
+                  paddingLeft: compact ? 10 : 12,
+                  paddingRight: compact ? 6 : 8,
+                  paddingTop: compact ? 7 : 8,
+                  paddingBottom: compact ? 7 : 8,
+                  borderRightWidth: isDragging ? 0 : 1,
+                  borderColor: COLORS.borderSoft,
+                  borderTopWidth: 2,
+                  borderTopColor: active ? COLORS.blue : 'transparent',
+                  backgroundColor: draggingThis ? COLORS.blueDeep : active ? COLORS.panelAlt : COLORS.panelBg,
+                  opacity: draggingThis ? 0.6 : 1,
+                }}
+              >
+                {onReorder && !compact ? (
+                  <Tooltip label={'Drag ' + tab.name} side="bottom">
+                    <Pressable
+                      onPress={() => setDragTabId(draggingThis ? null : tab.id)}
+                      style={{
+                        paddingLeft: 2,
+                        paddingRight: 2,
+                        paddingTop: 1,
+                        paddingBottom: 1,
+                        borderRadius: 3,
+                        backgroundColor: draggingThis ? COLORS.blue : 'transparent',
+                      }}
+                    >
+                      <Text fontSize={9} color={draggingThis ? COLORS.textBright : COLORS.textDim}>≡</Text>
+                    </Pressable>
+                  </Tooltip>
+                ) : null}
+                <Glyph icon={fileGlyph(tab.type)} tone={fileTone(tab.type)} backgroundColor={COLORS.grayChip} tiny={true} />
+                <Text fontSize={11} color={active ? COLORS.textBright : COLORS.text}>{tab.name}</Text>
+                {tab.modified ? (
+                  <Text fontSize={9} color={COLORS.yellow} style={{ marginLeft: 1 }}>●</Text>
+                ) : null}
+                {!compact && tab.git ? <Pill label={tab.git} color={COLORS.blue} tiny={true} /> : null}
+                {!compact && !tab.pinned ? (
+                  <Tooltip label={'Close ' + tab.name} side="bottom">
+                    <Pressable onPress={() => onClose(tab.id)} style={{ paddingLeft: 3, paddingRight: 3, paddingTop: 2, paddingBottom: 2, borderRadius: 4 }}>
+                      <Text fontSize={10} color={COLORS.textDim}>×</Text>
+                    </Pressable>
+                  </Tooltip>
+                ) : null}
+              </Pressable>
+            </Tooltip>
             {isDragging && onReorder ? renderDropZone(idx + 1, 'drop-' + tab.id) : null}
           </Row>
         );
@@ -125,19 +132,21 @@ export function TabBar(props: TabBarProps) {
 
       {overflow.length > 0 ? (
         <Box style={{ position: 'relative' }}>
-          <Pressable
-            onPress={() => setOverflowOpen(!overflowOpen)}
-            style={{
-              paddingLeft: 10,
-              paddingRight: 10,
-              paddingTop: 8,
-              paddingBottom: 8,
-              borderLeftWidth: 1,
-              borderColor: COLORS.borderSoft,
-            }}
-          >
-            <Text fontSize={11} color={COLORS.textDim}>{'>>'}{overflow.length > 9 ? '9+' : overflow.length}</Text>
-          </Pressable>
+          <Tooltip label="Show hidden tabs" side="bottom">
+            <Pressable
+              onPress={() => setOverflowOpen(!overflowOpen)}
+              style={{
+                paddingLeft: 10,
+                paddingRight: 10,
+                paddingTop: 8,
+                paddingBottom: 8,
+                borderLeftWidth: 1,
+                borderColor: COLORS.borderSoft,
+              }}
+            >
+              <Text fontSize={11} color={COLORS.textDim}>{'>>'}{overflow.length > 9 ? '9+' : overflow.length}</Text>
+            </Pressable>
+          </Tooltip>
           {overflowOpen ? (
             <Box style={{
               position: 'absolute',
@@ -152,23 +161,24 @@ export function TabBar(props: TabBarProps) {
             }}>
               <ScrollView>
                 {overflow.map((tab: any) => (
-                  <Pressable
-                    key={tab.id}
-                    onPress={() => { onActivate(tab.id); setOverflowOpen(false); }}
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      gap: 8,
-                      paddingLeft: 12,
-                      paddingRight: 12,
-                      paddingTop: 8,
-                      paddingBottom: 8,
-                    }}
-                  >
-                    <Glyph icon={fileGlyph(tab.type)} tone={fileTone(tab.type)} backgroundColor={COLORS.grayChip} tiny={true} />
-                    <Text fontSize={11} color={tab.id === activeId ? COLORS.textBright : COLORS.text}>{tab.name}</Text>
-                    {tab.modified ? <Text fontSize={9} color={COLORS.yellow}>●</Text> : null}
-                  </Pressable>
+                  <Tooltip key={tab.id} label={'Activate ' + tab.name} side="left">
+                    <Pressable
+                      onPress={() => { onActivate(tab.id); setOverflowOpen(false); }}
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 8,
+                        paddingLeft: 12,
+                        paddingRight: 12,
+                        paddingTop: 8,
+                        paddingBottom: 8,
+                      }}
+                    >
+                      <Glyph icon={fileGlyph(tab.type)} tone={fileTone(tab.type)} backgroundColor={COLORS.grayChip} tiny={true} />
+                      <Text fontSize={11} color={tab.id === activeId ? COLORS.textBright : COLORS.text}>{tab.name}</Text>
+                      {tab.modified ? <Text fontSize={9} color={COLORS.yellow}>●</Text> : null}
+                    </Pressable>
+                  </Tooltip>
                 ))}
               </ScrollView>
             </Box>
@@ -177,9 +187,11 @@ export function TabBar(props: TabBarProps) {
       ) : null}
 
       {isDragging && onReorder ? (
-        <Pressable onPress={() => setDragTabId(null)} style={{ paddingLeft: 10, paddingRight: 10 }}>
-          <Text fontSize={10} color={COLORS.textDim}>Cancel</Text>
-        </Pressable>
+        <Tooltip label="Cancel tab drag" side="bottom">
+          <Pressable onPress={() => setDragTabId(null)} style={{ paddingLeft: 10, paddingRight: 10 }}>
+            <Text fontSize={10} color={COLORS.textDim}>Cancel</Text>
+          </Pressable>
+        </Tooltip>
       ) : null}
     </Row>
   );

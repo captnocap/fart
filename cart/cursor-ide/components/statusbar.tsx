@@ -3,7 +3,7 @@ const React: any = require('react');
 import { Box, Pressable, Row, Text } from '../../../runtime/primitives';
 import { COLORS } from '../theme';
 import { Icon } from './icons';
-import { useHover } from '../anim';
+import { Tooltip } from './tooltip';
 import {
   Sparkline,
   XPBar,
@@ -24,11 +24,9 @@ function copyToClipboard(text: string): void {
 }
 
 function StatusSegment(props: any) {
-  const [hoverHandlers, hovered] = useHover();
-  return (
+  const content = (
     <Pressable
       onPress={props.onPress}
-      {...hoverHandlers}
       style={{
         flexDirection: 'row',
         alignItems: 'center',
@@ -39,30 +37,14 @@ function StatusSegment(props: any) {
         paddingBottom: 2,
         borderRadius: 4,
         position: 'relative',
-        backgroundColor: hovered ? COLORS.panelHover : 'transparent',
+        backgroundColor: 'transparent',
       }}
     >
       {props.children}
-      {hovered && props.tooltip ? (
-        <Box style={{
-          position: 'absolute',
-          left: 0,
-          bottom: 20,
-          paddingLeft: 6,
-          paddingRight: 6,
-          paddingTop: 3,
-          paddingBottom: 3,
-          backgroundColor: COLORS.panelRaised,
-          borderRadius: 4,
-          borderWidth: 1,
-          borderColor: COLORS.border,
-          zIndex: 100,
-        }}>
-          <Text fontSize={9} color={COLORS.textBright}>{props.tooltip}</Text>
-        </Box>
-      ) : null}
     </Pressable>
   );
+  if (!props.tooltip) return content;
+  return <Tooltip label={props.tooltip} side={props.side || 'top'}>{content}</Tooltip>;
 }
 
 function Dot(props: { color: string }) {
@@ -98,7 +80,7 @@ export function StatusBar(props: any) {
         paddingLeft: 10,
         paddingRight: 10,
         paddingTop: 5,
-        paddingBottom: 5,
+        paddingBottom: 0,
         backgroundColor: COLORS.panelAlt,
         borderTopWidth: 1,
         borderColor: COLORS.border,

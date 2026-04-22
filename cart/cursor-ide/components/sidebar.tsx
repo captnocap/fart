@@ -2,10 +2,12 @@ const React: any = require('react');
 const { useMemo, useState } = React;
 const { memo } = React;
 
-import { Box, Col, Pressable, Row, ScrollView, Text } from '../../../runtime/primitives';
+import { Box, Col, Pressable, Row, Text } from '../../../runtime/primitives';
 import { COLORS, fileTone, samePath } from '../theme';
 import { Icon } from './icons';
 import { HoverPressable, Pill } from './shared';
+import { Tooltip } from './tooltip';
+import { ScrollFrame } from './scrollbar';
 
 // File-tree virtualization constants. Each row is ~34px (padding 6+6 +
 // ~11px text + gap). Overscan keeps scrolling smooth by rendering a bit
@@ -32,30 +34,33 @@ function DockButton(props: {
   label: string;
   tone: string;
   onPress: () => void;
+  tooltip?: string;
 }) {
   const active = props.active === true;
   return (
-    <HoverPressable
-      onPress={props.onPress}
-      style={{
-        paddingTop: 7,
-        paddingBottom: 7,
-        paddingLeft: 7,
-        paddingRight: 7,
-        borderRadius: 10,
-        borderWidth: 1,
-        borderColor: active ? props.tone : COLORS.border,
-        backgroundColor: active ? COLORS.panelHover : COLORS.panelAlt,
-        alignItems: 'center',
-        gap: 3,
-      }}
-    >
-      <Icon name={props.icon} size={14} color={active ? props.tone : COLORS.textMuted} />
-      <Text fontSize={8} color={active ? props.tone : COLORS.textMuted} style={{ fontWeight: 'bold' }}>
-        {props.label.slice(0, 2).toUpperCase()}
-      </Text>
-      {props.count ? <Text fontSize={8} color={props.tone}>{props.count}</Text> : null}
-    </HoverPressable>
+    <Tooltip label={props.tooltip || props.label} side="right">
+      <HoverPressable
+        onPress={props.onPress}
+        style={{
+          paddingTop: 7,
+          paddingBottom: 7,
+          paddingLeft: 7,
+          paddingRight: 7,
+          borderRadius: 10,
+          borderWidth: 1,
+          borderColor: active ? props.tone : COLORS.border,
+          backgroundColor: active ? COLORS.panelHover : COLORS.panelAlt,
+          alignItems: 'center',
+          gap: 3,
+        }}
+      >
+        <Icon name={props.icon} size={14} color={active ? props.tone : COLORS.textMuted} />
+        <Text fontSize={8} color={active ? props.tone : COLORS.textMuted} style={{ fontWeight: 'bold' }}>
+          {props.label.slice(0, 2).toUpperCase()}
+        </Text>
+        {props.count ? <Text fontSize={8} color={props.tone}>{props.count}</Text> : null}
+      </HoverPressable>
+    </Tooltip>
   );
 }
 
@@ -106,11 +111,13 @@ function PanelShell(props: {
           </Row>
           {props.subtitle ? <Text fontSize={9} color={COLORS.textDim}>{props.subtitle}</Text> : null}
         </Col>
-          {props.onClose ? (
+        {props.onClose ? (
+          <Tooltip label={`Close ${props.title.toLowerCase()} panel`} side="left">
             <Pressable onPress={props.onClose} style={{ padding: 4, borderRadius: 8, backgroundColor: COLORS.panelAlt, borderWidth: 1, borderColor: COLORS.border }}>
               <Icon name="x" size={14} color={COLORS.textMuted} />
             </Pressable>
-          ) : null}
+          </Tooltip>
+        ) : null}
       </Row>
       <Col
         style={{
@@ -148,39 +155,45 @@ function FilesPanel(props: any) {
       active={props.active === 'files'}
       onClose={props.onClose}
     >
-      <Pressable
-        onPress={props.onOpenHome}
-        style={{
-          padding: 12,
-          borderRadius: 12,
-          borderWidth: 1,
-          borderColor: COLORS.border,
-          backgroundColor: COLORS.panelRaised,
-          gap: 6,
-        }}
-      >
-        <Row style={{ gap: 6, alignItems: 'center' }}>
-          <Icon name="folder" size={14} color={COLORS.blue} />
-          <Text fontSize={13} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>{props.workspaceName}</Text>
-        </Row>
-        <Row style={{ gap: 6, marginTop: 2, flexWrap: 'wrap' }}>
-          <Row style={{ gap: 4, alignItems: 'center' }}>
-            <Icon name="git-branch" size={12} color={COLORS.green} />
-            <Pill label={props.gitBranch} color={COLORS.green} tiny={true} />
+      <Tooltip label="Open landing view" side="right">
+        <Pressable
+          onPress={props.onOpenHome}
+          style={{
+            padding: 12,
+            borderRadius: 12,
+            borderWidth: 1,
+            borderColor: COLORS.border,
+            backgroundColor: COLORS.panelRaised,
+            gap: 6,
+          }}
+        >
+          <Row style={{ gap: 6, alignItems: 'center' }}>
+            <Icon name="folder" size={14} color={COLORS.blue} />
+            <Text fontSize={13} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>{props.workspaceName}</Text>
           </Row>
-          <Pill label={String(props.changedCount) + ' dirty'} color={COLORS.yellow} tiny={true} />
-          <Pill label={String(props.stagedCount) + ' staged'} color={COLORS.blue} tiny={true} />
-        </Row>
-        {props.widthBand === 'desktop' ? <Text fontSize={10} color={COLORS.textDim}>{props.workDir}</Text> : null}
-      </Pressable>
+          <Row style={{ gap: 6, marginTop: 2, flexWrap: 'wrap' }}>
+            <Row style={{ gap: 4, alignItems: 'center' }}>
+              <Icon name="git-branch" size={12} color={COLORS.green} />
+              <Pill label={props.gitBranch} color={COLORS.green} tiny={true} />
+            </Row>
+            <Pill label={String(props.changedCount) + ' dirty'} color={COLORS.yellow} tiny={true} />
+            <Pill label={String(props.stagedCount) + ' staged'} color={COLORS.blue} tiny={true} />
+          </Row>
+          {props.widthBand === 'desktop' ? <Text fontSize={10} color={COLORS.textDim}>{props.workDir}</Text> : null}
+        </Pressable>
+      </Tooltip>
 
       <Row style={{ gap: 8, flexWrap: 'wrap' }}>
-        <HoverPressable onPress={props.onRefreshWorkspace} style={{ padding: 8, borderRadius: 8, backgroundColor: COLORS.panelAlt, borderWidth: 1, borderColor: COLORS.border }}>
-          <Text fontSize={10} color={COLORS.blue}>Refresh</Text>
-        </HoverPressable>
-        <HoverPressable onPress={props.onCreateFile} style={{ padding: 8, borderRadius: 8, backgroundColor: COLORS.panelAlt, borderWidth: 1, borderColor: COLORS.border }}>
-          <Text fontSize={10} color={COLORS.green}>New File</Text>
-        </HoverPressable>
+        <Tooltip label="Refresh workspace tree" side="bottom">
+          <HoverPressable onPress={props.onRefreshWorkspace} style={{ padding: 8, borderRadius: 8, backgroundColor: COLORS.panelAlt, borderWidth: 1, borderColor: COLORS.border }}>
+            <Text fontSize={10} color={COLORS.blue}>Refresh</Text>
+          </HoverPressable>
+        </Tooltip>
+        <Tooltip label="Create a new file" side="bottom">
+          <HoverPressable onPress={props.onCreateFile} style={{ padding: 8, borderRadius: 8, backgroundColor: COLORS.panelAlt, borderWidth: 1, borderColor: COLORS.border }}>
+            <Text fontSize={10} color={COLORS.green}>New File</Text>
+          </HoverPressable>
+        </Tooltip>
       </Row>
 
       <Box style={{ gap: 8 }}>
@@ -279,9 +292,11 @@ function SourceControlPanel(props: any) {
       </Box>
 
       <Row style={{ gap: 8, flexWrap: 'wrap' }}>
-        <Pressable onPress={props.onRefreshWorkspace} style={{ padding: 8, borderRadius: 8, backgroundColor: COLORS.panelAlt, borderWidth: 1, borderColor: COLORS.border }}>
-          <Text fontSize={10} color={COLORS.blue}>Refresh</Text>
-        </Pressable>
+        <Tooltip label="Refresh workspace tree" side="bottom">
+          <Pressable onPress={props.onRefreshWorkspace} style={{ padding: 8, borderRadius: 8, backgroundColor: COLORS.panelAlt, borderWidth: 1, borderColor: COLORS.border }}>
+            <Text fontSize={10} color={COLORS.blue}>Refresh</Text>
+          </Pressable>
+        </Tooltip>
       </Row>
 
       <Box style={{ gap: 6 }}>
@@ -334,8 +349,8 @@ function SidebarImpl(props: any) {
             {compactBand ? 'FILES' : 'WORKSPACE'}
           </Text>
           <Row style={{ gap: 8 }}>
-            <Pressable onPress={props.onRefreshWorkspace}><Text fontSize={10} color={COLORS.blue}>RF</Text></Pressable>
-            <Pressable onPress={props.onCreateFile}><Text fontSize={10} color={COLORS.blue}>+</Text></Pressable>
+            <Tooltip label="Refresh workspace tree" side="bottom"><Pressable onPress={props.onRefreshWorkspace}><Text fontSize={10} color={COLORS.blue}>RF</Text></Pressable></Tooltip>
+            <Tooltip label="Create a new file" side="bottom"><Pressable onPress={props.onCreateFile}><Text fontSize={10} color={COLORS.blue}>+</Text></Pressable></Tooltip>
           </Row>
         </Row>
 
@@ -463,6 +478,7 @@ function SidebarImpl(props: any) {
           icon="folder"
           label="Files"
           tone={COLORS.blue}
+          tooltip="Show file browser"
           onPress={() => props.onFocusDockPanel('files')}
         />
         <DockButton
@@ -471,6 +487,7 @@ function SidebarImpl(props: any) {
           icon="git-branch"
           label="Git"
           tone={COLORS.green}
+          tooltip="Show source control"
           onPress={() => props.onFocusDockPanel('source-control')}
         />
         <Box style={{ flexGrow: 1 }} />
@@ -479,6 +496,7 @@ function SidebarImpl(props: any) {
           icon="refresh"
           label="Refresh"
           tone={COLORS.blue}
+          tooltip="Refresh workspace tree"
           onPress={props.onRefreshWorkspace}
         />
         <DockButton
@@ -486,12 +504,18 @@ function SidebarImpl(props: any) {
           icon="plus"
           label="New"
           tone={COLORS.green}
+          tooltip="Create a new file"
           onPress={props.onCreateFile}
         />
       </Col>
 
-      <ScrollView style={{ flexGrow: 1, height: '100%' }}>
-        <Col style={{ padding: 10, gap: 10 }}>
+      <ScrollFrame
+        style={{ flexGrow: 1, height: '100%' }}
+        scrollStyle={{ padding: 10, gap: 10 }}
+        contentHeight={Math.max(900, panelOrder.length * 460)}
+        viewportHeight={Math.max(540, FILE_VIEWPORT_ESTIMATE + 80)}
+      >
+        <Col style={{ gap: 10 }}>
           {panelOrder.map((panelId: string) => {
             if (panelId === 'files') {
               return (
@@ -537,7 +561,7 @@ function SidebarImpl(props: any) {
             return null;
           })}
         </Col>
-      </ScrollView>
+      </ScrollFrame>
     </Row>
   );
 }
@@ -562,8 +586,11 @@ function FileTreeList(props: { files: any[]; onSelectPath: (path: string) => voi
   const bottomSpacer = Math.max(0, (total - endIndex) * FILE_ROW_HEIGHT);
 
   return (
-    <ScrollView
-      style={{ flexGrow: 1, height: '100%', paddingLeft: 8, paddingRight: 8, paddingBottom: 12 }}
+    <ScrollFrame
+      style={{ flexGrow: 1, height: '100%' }}
+      scrollStyle={{ paddingLeft: 8, paddingRight: 8, paddingBottom: 12 }}
+      contentHeight={Math.max(FILE_VIEWPORT_ESTIMATE, total * FILE_ROW_HEIGHT + 24)}
+      viewportHeight={FILE_VIEWPORT_ESTIMATE}
       onScroll={(payload: any) => {
         const next = typeof payload?.scrollY === 'number' ? payload.scrollY : 0;
         if (Math.abs(next - scrollY) >= FILE_ROW_HEIGHT / 2) setScrollY(next);
@@ -606,7 +633,7 @@ function FileTreeList(props: { files: any[]; onSelectPath: (path: string) => voi
         })}
         {bottomSpacer > 0 ? <Box style={{ height: bottomSpacer }} /> : null}
       </Col>
-    </ScrollView>
+    </ScrollFrame>
   );
 }
 
