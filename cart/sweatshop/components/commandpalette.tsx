@@ -11,7 +11,7 @@ const host: any = globalThis;
 const storeGet = typeof host.__store_get === 'function' ? host.__store_get : (_: string) => null;
 const storeSet = typeof host.__store_set === 'function' ? host.__store_set : (_: string, __: string) => {};
 
-const RECENT_KEY = 'cursor-ide.palette.recent';
+const RECENT_KEY = 'sweatshop.palette.recent';
 const MAX_RECENT = 10;
 
 function loadRecent(): string[] {
@@ -35,7 +35,7 @@ function pushRecent(ids: string[], id: string): string[] {
   return next.slice(0, MAX_RECENT);
 }
 
-const HISTORY_KEY = 'cursor-ide.palette.history';
+const HISTORY_KEY = 'sweatshop.palette.history';
 const MAX_HISTORY = 20;
 
 type HistoryEntry = { id: string; label: string; category?: string };
@@ -61,7 +61,7 @@ function pushHistory(history: HistoryEntry[], cmd: PaletteCommand): HistoryEntry
   return [entry, ...history.filter((h) => h.id !== cmd.id)].slice(0, MAX_HISTORY);
 }
 
-const KEYBINDINGS_KEY = 'cursor-ide.palette.keybindings';
+const KEYBINDINGS_KEY = 'sweatshop.palette.keybindings';
 
 function loadKeybindings(): Array<{ name: string; command: string }> {
   try {

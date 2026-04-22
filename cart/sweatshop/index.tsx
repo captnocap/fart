@@ -143,12 +143,12 @@ export default function CursorIdeApp() {
   const [windowHeight, setWindowHeight] = useState(800);
   const [widthBand, setWidthBand] = useState('desktop');
   const [compactSurface, setCompactSurface] = useState('landing');
-  const [showChat, setShowChat] = usePersistentState('cursor-ide.showChat', 1);
-  const [showTerminal, setShowTerminal] = usePersistentState('cursor-ide.showTerminal', 0);
-  const [terminalPane, setTerminalPane] = usePersistentState('cursor-ide.terminalPane', 'live');
-  const [terminalHistory, setTerminalHistory] = usePersistentState<TerminalHistoryEntry[]>('cursor-ide.terminalHistory', []);
-  const [terminalDockExpanded, setTerminalDockExpanded] = usePersistentState('cursor-ide.terminalDockExpanded', 0);
-  const [terminalDockHeight, setTerminalDockHeight] = usePersistentState('cursor-ide.terminalDockHeight', 250);
+  const [showChat, setShowChat] = usePersistentState('sweatshop.showChat', 1);
+  const [showTerminal, setShowTerminal] = usePersistentState('sweatshop.showTerminal', 0);
+  const [terminalPane, setTerminalPane] = usePersistentState('sweatshop.terminalPane', 'live');
+  const [terminalHistory, setTerminalHistory] = usePersistentState<TerminalHistoryEntry[]>('sweatshop.terminalHistory', []);
+  const [terminalDockExpanded, setTerminalDockExpanded] = usePersistentState('sweatshop.terminalDockExpanded', 0);
+  const [terminalDockHeight, setTerminalDockHeight] = usePersistentState('sweatshop.terminalDockHeight', 250);
   const [showSearch, setShowSearch] = useState(0);
   const [files, setFiles] = useState<FileItem[]>([
     { name: 'reactjit', type: 'workspace', indent: 0, expanded: 1, selected: 1, visible: 1, git: '', hot: 1, path: '.' },
@@ -167,8 +167,8 @@ export default function CursorIdeApp() {
   const [editorColorRows, setEditorColorRows] = useState<any[] | null>(null);
   const [totalLines, setTotalLines] = useState(0);
   const [editorLargeFileMode, setEditorLargeFileMode] = useState(0);
-  const [settingsSection, setSettingsSection] = usePersistentState('cursor-ide.settingsSection', 'providers');
-  const [selectedProviderId, setSelectedProviderId] = usePersistentState('cursor-ide.selectedProvider', 'anthropic');
+  const [settingsSection, setSettingsSection] = usePersistentState('sweatshop.settingsSection', 'providers');
+  const [selectedProviderId, setSelectedProviderId] = usePersistentState('sweatshop.selectedProvider', 'anthropic');
   const [openTabs, setOpenTabs] = useState<Tab[]>([
     { id: 'home', name: 'Projects', path: '__landing__', type: 'home', modified: 0, pinned: 1, git: '' },
   ]);
@@ -176,8 +176,8 @@ export default function CursorIdeApp() {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const firstEnabledModel = getEnabledModels()[0];
-  const [selectedModel, setSelectedModel] = usePersistentState('cursor-ide.selectedModel', firstEnabledModel ? firstEnabledModel.id : '');
-  const [modelDisplayName, setModelDisplayName] = usePersistentState('cursor-ide.modelDisplayName', firstEnabledModel ? firstEnabledModel.displayName : 'No Model');
+  const [selectedModel, setSelectedModel] = usePersistentState('sweatshop.selectedModel', firstEnabledModel ? firstEnabledModel.id : '');
+  const [modelDisplayName, setModelDisplayName] = usePersistentState('sweatshop.modelDisplayName', firstEnabledModel ? firstEnabledModel.displayName : 'No Model');
   const [gitBranch, setGitBranch] = useState('main');
   const [gitStatus, setGitStatus] = useState('');
   const [errors, setErrors] = useState(0);
@@ -195,10 +195,10 @@ export default function CursorIdeApp() {
   const [inputTokenEstimate, setInputTokenEstimateState] = useState(0);
   const [newFileName, setNewFileName] = useState('');
   const [showNewFileInput, setShowNewFileInput] = useState(0);
-  const [showHotPanel, setShowHotPanel] = usePersistentState('cursor-ide.showHotPanel', 0);
-  const [showGitPanel, setShowGitPanel] = usePersistentState('cursor-ide.showGitPanel', 0);
-  const [showPlanPanel, setShowPlanPanel] = usePersistentState('cursor-ide.showPlanPanel', 0);
-  const [activePlanId, setActivePlanId] = usePersistentState('cursor-ide.activePlan', '');
+  const [showHotPanel, setShowHotPanel] = usePersistentState('sweatshop.showHotPanel', 0);
+  const [showGitPanel, setShowGitPanel] = usePersistentState('sweatshop.showGitPanel', 0);
+  const [showPlanPanel, setShowPlanPanel] = usePersistentState('sweatshop.showPlanPanel', 0);
+  const [activePlanId, setActivePlanId] = usePersistentState('sweatshop.activePlan', '');
   const [terminalRecording, setTerminalRecording] = useState(0);
   const [terminalRecordFrames, setTerminalRecordFrames] = useState(0);
   const [terminalPlaybackState, setTerminalPlaybackState] = useState<any>(null);
@@ -206,10 +206,10 @@ export default function CursorIdeApp() {
   const [pluginNotifications, setPluginNotifications] = useState<any[]>([]);
   const [showPalette, setShowPalette] = useState(0);
   const openPalette = useCallback(() => setShowPalette(1), []);
-  const [dockPanels, setDockPanels] = usePersistentState<string[]>('cursor-ide.dockPanels', ['files', 'source-control']);
+  const [dockPanels, setDockPanels] = usePersistentState<string[]>('sweatshop.dockPanels', ['files', 'source-control']);
 
   // ── New ported state ─────────────────────────────────────────────────
-  const [providerConfigs, setProviderConfigs] = usePersistentState<ProviderConfig[]>('cursor-ide.providerConfigs', Object.values(PROVIDER_CONFIGS));
+  const [providerConfigs, setProviderConfigs] = usePersistentState<ProviderConfig[]>('sweatshop.providerConfigs', Object.values(PROVIDER_CONFIGS));
   const [defaultModels, setDefaultModels] = useState<DefaultModelsSettings>(loadDefaultModels());
   const [variablePreview, setVariablePreview] = useState<ExpansionResult[]>([]);
   const [proxyConfigs, setProxyConfigs] = useState<ProxyConfig[]>(listProxyConfigs());
@@ -336,8 +336,8 @@ export default function CursorIdeApp() {
   }, []);
 
     const pathPriority = useCallback((path: string): number => {
-    if (path.indexOf('cart/cursor-ide') === 0) return 0;
-    if (path.indexOf('tsz/carts/conformance/mixed/cursor-ide') === 0) return 1;
+    if (path.indexOf('cart/sweatshop') === 0) return 0;
+    if (path.indexOf('tsz/carts/conformance/mixed/sweatshop') === 0) return 1;
     if (path.indexOf('runtime/') === 0) return 2;
     if (path.indexOf('renderer/') === 0) return 3;
     if (path === 'qjs_app.zig') return 4;
@@ -364,19 +364,19 @@ export default function CursorIdeApp() {
     return '';
   }, []);
     const isHotPath = useCallback((path: string): boolean => {
-    return path.indexOf('cursor-ide') >= 0 || path.indexOf('runtime/') === 0 || path === 'qjs_app.zig';
+    return path.indexOf('sweatshop') >= 0 || path.indexOf('runtime/') === 0 || path === 'qjs_app.zig';
   }, []);
     const shouldExpand = useCallback((path: string): number => {
     return (
       path === 'cart' ||
-      path === 'cart/cursor-ide' ||
+      path === 'cart/sweatshop' ||
       path === 'runtime' ||
       path === 'renderer' ||
       path === 'tsz' ||
       path === 'tsz/carts' ||
       path === 'tsz/carts/conformance' ||
       path === 'tsz/carts/conformance/mixed' ||
-      path === 'tsz/carts/conformance/mixed/cursor-ide'
+      path === 'tsz/carts/conformance/mixed/sweatshop'
     ) ? 1 : 0;
   }, []);
     const findTreeItem = useCallback((list: FileItem[], path: string): FileItem | null => {
@@ -470,8 +470,8 @@ export default function CursorIdeApp() {
     const buildLandingProjects = useCallback((paths: string[], info: any, nextWorkspaceName: string) => {
     const projects: any[] = [
       { name: nextWorkspaceName, path: '__landing__', displayPath: 'Project landing', summary: 'Branch ' + info.branch + ' with ' + info.dirty + ' dirty paths and ' + paths.length + ' indexed files.', badge: 'workspace', accent: '#2d62ff' },
-      { name: 'cursor-ide TSX cart', path: 'cart/cursor-ide/index.tsx', displayPath: 'cart/cursor-ide/index.tsx', summary: 'Runtime-native port of the mixed-lane Cursor IDE shell for the active ReactJIT stack.', badge: 'active', accent: COLORS.green },
-      { name: 'legacy TSZ reference', path: 'tsz/carts/conformance/mixed/cursor-ide/cursor-ide.tsz', displayPath: 'tsz/carts/conformance/mixed/cursor-ide/cursor-ide.tsz', summary: 'Frozen Smith-era source that the current cart mirrors surface-for-surface.', badge: 'reference', accent: COLORS.purple },
+      { name: 'sweatshop TSX cart', path: 'cart/sweatshop/index.tsx', displayPath: 'cart/sweatshop/index.tsx', summary: 'Runtime-native port of the mixed-lane Sweatshop shell for the active ReactJIT stack.', badge: 'active', accent: COLORS.green },
+      { name: 'legacy TSZ reference', path: 'tsz/carts/conformance/mixed/sweatshop/sweatshop.tsz', displayPath: 'tsz/carts/conformance/mixed/sweatshop/sweatshop.tsz', summary: 'Frozen Smith-era source that the current cart mirrors surface-for-surface.', badge: 'reference', accent: COLORS.purple },
       { name: 'settings surface', path: '__settings__', displayPath: 'Settings', summary: 'Provider routing, context layering, memory orchestration, plugin runtimes, and capability references in one dense shell.', badge: 'surface', accent: COLORS.orange },
     ];
     if (hasPath(paths, 'runtime/primitives.tsx')) {
@@ -496,7 +496,7 @@ export default function CursorIdeApp() {
       if (tab.path !== '__landing__') pushRecent(tab.path, tab.name, 'open tab');
     }
     for (let i = 0; i < paths.length && recent.length < 8; i += 1) {
-      if (paths[i].indexOf('cursor-ide') >= 0) pushRecent(paths[i], baseName(paths[i]), 'focus surface');
+      if (paths[i].indexOf('sweatshop') >= 0) pushRecent(paths[i], baseName(paths[i]), 'focus surface');
     }
     setLandingRecentFiles(recent);
   }, []);
@@ -650,7 +650,7 @@ export default function CursorIdeApp() {
       setTotalLines(lines.length); setEditorRows(rows); setEditorColorRows(colorRows); setEditorLargeFileMode(largeFileMode ? 1 : 0);
       setLanguageMode(languageForType(inferFileType(path)));
     } catch (error) {
-      console.error('[cursor-ide] rebuildColor failed', path, content.length, error);
+      console.error('[sweatshop] rebuildColor failed', path, content.length, error);
       rebuildPlain(content, path);
     }
   }, []);
@@ -1073,7 +1073,7 @@ export default function CursorIdeApp() {
     const stopAndSaveTerminalRecording = useCallback((reason: string) => {
     const isRecording = typeof host.__rec_is_recording === 'function' ? host.__rec_is_recording() : 0;
     if (!isRecording || typeof host.__rec_save !== 'function' || typeof host.__rec_stop !== 'function') return;
-    const path = '/tmp/cursor-ide-terminal-' + Date.now() + '.trec';
+    const path = '/tmp/sweatshop-terminal-' + Date.now() + '.trec';
     const ok = host.__rec_save(path);
     host.__rec_stop();
     setTerminalRecording(0);
@@ -1135,7 +1135,7 @@ export default function CursorIdeApp() {
     const saveTerminalSnapshot = useCallback(() => {
     if (typeof host.__rec_save !== 'function') return;
     if (!(typeof host.__rec_is_recording === 'function' ? host.__rec_is_recording() : 0)) startTerminalRecording();
-    const path = '/tmp/cursor-ide-terminal-' + Date.now() + '.trec';
+    const path = '/tmp/sweatshop-terminal-' + Date.now() + '.trec';
     const ok = host.__rec_save(path);
     if (ok) pushTerminalHistory('snapshot', 'Snapshot saved', 'saved terminal recording', path);
     else pushTerminalHistory('snapshot', 'Snapshot failed', 'unable to save terminal recording');
@@ -1347,7 +1347,7 @@ export default function CursorIdeApp() {
   const compactMainView = compactSurface === 'landing' ? 'landing' : compactSurface === 'settings' ? 'settings' : compactSurface === 'cockpit' ? 'cockpit' : 'editor';
   const dockedTerminalHeight = clampTerminalDockHeight(terminalDockHeight);
   const todoAction = useCallback((label: string) => () => {
-    console.log('[cursor-ide] TODO: ' + label);
+    console.log('[sweatshop] TODO: ' + label);
   }, []);
   const toggleSearchSurface = useCallback(() => {
     if (compactMode) {
@@ -1393,22 +1393,22 @@ export default function CursorIdeApp() {
     } else { setShowChat(showChat ? 0 : 1); }
   }, [compactMode, compactSurface, mainSurface, showChat]);
   const toggleSidebarSurface = useCallback(() => {
-    console.log('[cursor-ide] TODO: View > Toggle Sidebar');
+    console.log('[sweatshop] TODO: View > Toggle Sidebar');
   }, []);
   const zoomIn = useCallback(() => {
-    console.log('[cursor-ide] TODO: View > Zoom In');
+    console.log('[sweatshop] TODO: View > Zoom In');
   }, []);
   const zoomOut = useCallback(() => {
-    console.log('[cursor-ide] TODO: View > Zoom Out');
+    console.log('[sweatshop] TODO: View > Zoom Out');
   }, []);
   const resetZoom = useCallback(() => {
-    console.log('[cursor-ide] TODO: View > Reset Zoom');
+    console.log('[sweatshop] TODO: View > Reset Zoom');
   }, []);
   const openDocs = useCallback(() => {
-    console.log('[cursor-ide] TODO: Help > Docs');
+    console.log('[sweatshop] TODO: Help > Docs');
   }, []);
   const showAbout = useCallback(() => {
-    console.log('[cursor-ide] TODO: Help > About');
+    console.log('[sweatshop] TODO: Help > About');
   }, []);
   const menuSections: MenuBarSection[] = [
     {

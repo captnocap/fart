@@ -1,4 +1,4 @@
-# cursor-ide — New Features
+# sweatshop — New Features
 
 ## What was built
 
@@ -16,7 +16,7 @@ Scanned ~57k lines of t3code and identified everything we lack vs what they have
 ### 2. QJS Plugin Interface
 **Files:** `plugin/{types.ts, context.ts, loader.ts, index.ts}`
 
-A runtime plugin system that loads JS plugins from `~/.cursor-ide/plugins/`.
+A runtime plugin system that loads JS plugins from `~/.sweatshop/plugins/`.
 
 **Plugin API (`ctx`):**
 ```js
@@ -33,7 +33,7 @@ ctx.pathExists(path) / ctx.listDir(path)
 ctx.React / ctx.primitives                 // UI building blocks
 ```
 
-**Example plugin** (`~/.cursor-ide/plugins/hello.js`):
+**Example plugin** (`~/.sweatshop/plugins/hello.js`):
 ```js
 // @plugin name Hello World
 // @plugin version 1.0.0
@@ -92,8 +92,8 @@ A searchable command overlay. Currently opened via the **Palette** button in the
 ## Build & Run
 
 ```bash
-./scripts/ship cursor-ide -d    # debug build
-./zig-out/bin/cursor-ide-raw    # run
+./scripts/ship sweatshop -d    # debug build
+./zig-out/bin/sweatshop-raw    # run
 ```
 
 ## Next Up (from audit)
@@ -101,4 +101,4 @@ A searchable command overlay. Currently opened via the **Palette** button in the
 1. **Checkpoint / Diff Panel** — git diff per turn, conversation-level diff viewing
 2. **Chat Composer enhancements** — slash commands, `@` file mentions, attachments
 3. **Plan Sidebar** — structured agent plan steps with status tracking
-4. **Keybindings system** — `~/.cursor-ide/keybindings.json`
+4. **Keybindings system** — `~/.sweatshop/keybindings.json`

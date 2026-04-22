@@ -4,8 +4,8 @@
 
 const host: any = globalThis;
 
-const STORE_INDEX_KEY = 'cursor-ide.fileIndex';
-const STORE_AUTO_REINDEX_KEY = 'cursor-ide.indexer.autoReindex';
+const STORE_INDEX_KEY = 'sweatshop.fileIndex';
+const STORE_AUTO_REINDEX_KEY = 'sweatshop.indexer.autoReindex';
 const DEFAULT_EXCLUDES = ['.git', 'node_modules', '.zig-cache', 'zig-out', 'dist', '.cache'];
 
 function storeGet(key: string): string | null {
@@ -307,7 +307,7 @@ function listWorkspaceDirectories(workDir: string): string[] {
   return Array.from(dirs).sort((a, b) => a.localeCompare(b));
 }
 
-const STORE_DIR_RULES_KEY = 'cursor-ide.indexer.dirRules';
+const STORE_DIR_RULES_KEY = 'sweatshop.indexer.dirRules';
 
 function loadDirRules(): Record<string, boolean> {
   return loadJson<Record<string, boolean>>(STORE_DIR_RULES_KEY, {});

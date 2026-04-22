@@ -286,7 +286,7 @@ export function IconGallery() {
           Icon Gallery
         </Text>
         <Text fontSize={10} color="#8b949e">
-          Smoke test for the cursor-ide vector icon catalog.
+          Smoke test for the sweatshop vector icon catalog.
         </Text>
       </Col>
       <Row

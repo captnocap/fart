@@ -63,7 +63,7 @@ export const DEFAULT_MODELS: DefaultModelsSettings = {
 
 // ── Persistence ──────────────────────────────────────────────────────────────
 
-const STORE_KEY = 'cursor-ide:defaultModels';
+const STORE_KEY = 'sweatshop:defaultModels';
 const host: any = globalThis;
 const storeGet = typeof host.__store_get === 'function' ? host.__store_get : () => null;
 const storeSet = typeof host.__store_set === 'function' ? host.__store_set : () => {};

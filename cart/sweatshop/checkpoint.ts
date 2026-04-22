@@ -16,7 +16,7 @@ export interface CheckpointDiff {
   deletions: number;
 }
 
-const STORE_KEY = 'cursor-ide.checkpoints';
+const STORE_KEY = 'sweatshop.checkpoints';
 
 function execRaw(cmd: string): string {
   if (typeof host.__exec !== 'function') return '';

@@ -1,4 +1,4 @@
-// Theme token system for cursor-ide.
+// Theme token system for sweatshop.
 // Three built-in themes: 'sharp' (terminal-feel, square, high contrast),
 // 'soft' (the previous default, lightly tuned, crisp corners),
 // 'studio' (pro-tool muted, tight density, square).

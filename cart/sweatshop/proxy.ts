@@ -27,9 +27,9 @@ export interface ProxyStatus {
 
 // ── Persistence ──────────────────────────────────────────────────────────────
 
-const STORE_PREFIX = 'cursor-ide:proxy:';
-const STORE_LIST_KEY = 'cursor-ide:proxy:list';
-const STORE_ACTIVE_KEY = 'cursor-ide:proxy:active';
+const STORE_PREFIX = 'sweatshop:proxy:';
+const STORE_LIST_KEY = 'sweatshop:proxy:list';
+const STORE_ACTIVE_KEY = 'sweatshop:proxy:active';
 
 const host: any = globalThis;
 const storeGet = typeof host.__store_get === 'function' ? host.__store_get : () => null;

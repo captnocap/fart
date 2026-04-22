@@ -89,8 +89,8 @@ export const SYSTEM_VARIABLES: SystemVariable[] = [
 
 // ── Persistence ──────────────────────────────────────────────────────────────
 
-const STORE_PREFIX = 'cursor-ide:vars:';
-const STORE_LIST_KEY = 'cursor-ide:vars:list';
+const STORE_PREFIX = 'sweatshop:vars:';
+const STORE_LIST_KEY = 'sweatshop:vars:list';
 
 function varStoreKey(name: string): string {
   return STORE_PREFIX + name;

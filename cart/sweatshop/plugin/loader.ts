@@ -3,7 +3,7 @@
 import type { LoadedPlugin, PluginContext } from './types';
 import { createPluginContext, setGlobalNotificationHandler } from './context';
 
-const PLUGIN_DIR = `${(globalThis as any).__env_home || '/home/siah'}/.cursor-ide/plugins`;
+const PLUGIN_DIR = `${(globalThis as any).__env_home || '/home/siah'}/.sweatshop/plugins`;
 
 const host: any = globalThis;
 

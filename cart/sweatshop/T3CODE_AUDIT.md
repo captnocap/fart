@@ -1,4 +1,4 @@
-# T3 Code Feature Audit vs cursor-ide
+# T3 Code Feature Audit vs sweatshop
 
 > Scanned ~57k lines of t3code web+server source. Below is what they have that we lack.
 
@@ -21,7 +21,7 @@
 **What it is:** User-authored JS plugins that run inside QJS and can alter the IDE.
 **t3code details:** They don't have this — it's our differentiator.
 **What we should build:**
-- `~/.cursor-ide/plugins/` directory
+- `~/.sweatshop/plugins/` directory
 - Each plugin: `{ name, version, activate(ctx) }`
 - `ctx` API: register commands, add panels, subscribe to events, read/write settings
 - Hot-reload on plugin file changes

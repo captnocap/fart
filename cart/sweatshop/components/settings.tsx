@@ -22,7 +22,7 @@ const storeGet = typeof host.__store_get === 'function' ? host.__store_get : (_:
 const storeSet = typeof host.__store_set === 'function' ? host.__store_set : (_: string, __: string) => {};
 const storeDel = typeof host.__store_del === 'function' ? host.__store_del : (_: string) => {};
 
-const KEY = 'cursor-ide.settings';
+const KEY = 'sweatshop.settings';
 
 function sget<T>(path: string, fallback: T): T {
   try {
@@ -546,7 +546,7 @@ function exportSettings(): SettingsDump {
   // Plugins: the set of plugin ids isn't static — serialise every id we find.
   try {
     const h: any = globalThis;
-    const pd: string = (typeof h.__env_home === 'string' ? h.__env_home : '/home/siah') + '/.cursor-ide/plugins';
+    const pd: string = (typeof h.__env_home === 'string' ? h.__env_home : '/home/siah') + '/.sweatshop/plugins';
     if (typeof h.__fs_list_json === 'function') {
       const raw = h.__fs_list_json(pd);
       const list: string[] = JSON.parse(typeof raw === 'string' ? raw : '[]');
@@ -1463,7 +1463,7 @@ interface PluginDescriptor {
 function pluginDir(): string {
   const h: any = globalThis;
   const home = h.__env_home || '/home/siah';
-  return home + '/.cursor-ide/plugins';
+  return home + '/.sweatshop/plugins';
 }
 
 function scanPlugins(): PluginDescriptor[] {
@@ -1516,7 +1516,7 @@ function PluginsPanel(props: { query: string; resetToken: number }) {
 
   return (
     <Col style={{ gap: 14 }}>
-      <SectionTitle title="Plugins" description="JS plugins loaded from ~/.cursor-ide/plugins." onReset={doReset} />
+      <SectionTitle title="Plugins" description="JS plugins loaded from ~/.sweatshop/plugins." onReset={doReset} />
 
       <Box style={{ padding: 12, borderRadius: TOKENS.radiusMd, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelRaised, gap: 6 }}>
         <Row style={{ alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -1612,7 +1612,7 @@ function AboutPanel(props: { query: string }) {
       <SectionTitle title="About" description="Version, build info, and detected host capabilities." />
 
       <Box style={{ padding: 14, borderRadius: TOKENS.radiusMd, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelRaised, gap: 10 }}>
-        <Text fontSize={13} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>cursor-ide</Text>
+        <Text fontSize={13} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>sweatshop</Text>
         <Text fontSize={10} color={COLORS.textDim}>A React-native-feel IDE surface running on the JSRT runtime.</Text>
         <Col style={{ gap: 4 }}>
           {rowsFiltered.map(r => (
@@ -1721,7 +1721,7 @@ function hostHasAll(fns: string[]): boolean {
   return true;
 }
 
-// Known model catalogs per backend. Sourced from cart/cursor-ide/providers.ts
+// Known model catalogs per backend. Sourced from cart/sweatshop/providers.ts
 // (Claude API + Claude CLI share the Anthropic set) and cart/cockpit/index.tsx
 // (Kimi, Codex/local backends). Codex entries are augmented at runtime via
 // the local endpoint scanner below, so the dropdown shows both hardcoded

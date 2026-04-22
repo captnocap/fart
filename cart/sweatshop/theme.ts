@@ -12,21 +12,21 @@
 //   the theme system. They will NOT update on theme switch even after
 //   the root-subscribe fix. Worker 9 owns the migration to TOKENS/COLORS.
 //   DO NOT migrate here — this list is a handoff, not a todo for me.
-//     • cart/cursor-ide/components/toolbar.tsx
-//     • cart/cursor-ide/components/hotpanel.tsx
-//     • cart/cursor-ide/components/settings.tsx
-//     • cart/cursor-ide/components/tooltip.tsx
-//     • cart/cursor-ide/components/icons.tsx
-//     • cart/cursor-ide/components/plancanvas.tsx
-//     • cart/cursor-ide/components/editor.tsx
-//     • cart/cursor-ide/components/sparkline.tsx
-//     • cart/cursor-ide/components/agent/*.tsx (all files in agent/)
-//     • cart/cursor-ide/components/cockpit/WorkerCanvas.tsx
-//     • cart/cursor-ide/components/cockpit/WorkerTile.tsx
-//     • cart/cursor-ide/components/cockpit/WorkerCharts.tsx
-//     • cart/cursor-ide/components/cockpit/WorkerStrip.tsx
-//     • cart/cursor-ide/mermaid/renderer.tsx
-//     • cart/cursor-ide/index.tsx (a few literals in workspaceStats / landingProjects)
+//     • cart/sweatshop/components/toolbar.tsx
+//     • cart/sweatshop/components/hotpanel.tsx
+//     • cart/sweatshop/components/settings.tsx
+//     • cart/sweatshop/components/tooltip.tsx
+//     • cart/sweatshop/components/icons.tsx
+//     • cart/sweatshop/components/plancanvas.tsx
+//     • cart/sweatshop/components/editor.tsx
+//     • cart/sweatshop/components/sparkline.tsx
+//     • cart/sweatshop/components/agent/*.tsx (all files in agent/)
+//     • cart/sweatshop/components/cockpit/WorkerCanvas.tsx
+//     • cart/sweatshop/components/cockpit/WorkerTile.tsx
+//     • cart/sweatshop/components/cockpit/WorkerCharts.tsx
+//     • cart/sweatshop/components/cockpit/WorkerStrip.tsx
+//     • cart/sweatshop/mermaid/renderer.tsx
+//     • cart/sweatshop/index.tsx (a few literals in workspaceStats / landingProjects)
 //   Also note: this file itself inlines a handful of literals in
 //   fileTone/statusTone (e.g. '#2d62ff', '#56d364', '#4a5568', '#6e6e6e')
 //   that should ideally come from COLORS too.
@@ -49,14 +49,14 @@ let activeThemeName = 'soft';
 
 function persist(name: string) {
   try {
-    if (typeof localStorage !== 'undefined') localStorage.setItem('cursor-ide-theme', name);
+    if (typeof localStorage !== 'undefined') localStorage.setItem('sweatshop-theme', name);
   } catch (_e) {}
 }
 
 function restore(): string {
   try {
     if (typeof localStorage !== 'undefined') {
-      const v = localStorage.getItem('cursor-ide-theme');
+      const v = localStorage.getItem('sweatshop-theme');
       if (v && THEMES[v]) return v;
     }
   } catch (_e) {}
@@ -73,14 +73,14 @@ export function getThemeNames(): string[] {
 
 function persistCustom(overrides: CustomThemeOverrides): void {
   try {
-    if (typeof localStorage !== 'undefined') localStorage.setItem('cursor-ide-theme-custom', JSON.stringify(overrides));
+    if (typeof localStorage !== 'undefined') localStorage.setItem('sweatshop-theme-custom', JSON.stringify(overrides));
   } catch (_e) {}
 }
 
 function restoreCustom(): CustomThemeOverrides {
   try {
     if (typeof localStorage !== 'undefined') {
-      const v = localStorage.getItem('cursor-ide-theme-custom');
+      const v = localStorage.getItem('sweatshop-theme-custom');
       if (v) return JSON.parse(v);
     }
   } catch (_e) {}

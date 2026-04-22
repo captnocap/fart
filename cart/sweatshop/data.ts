@@ -118,15 +118,15 @@ export function buildSeedMessages(branch: string, dirty: number, root: string, m
 
 export function focusPaths(): string[] {
   return [
-    'cart/cursor-ide/index.tsx',
-    'cart/cursor-ide/data.ts',
-    'cart/cursor-ide/theme.ts',
-    'cart/cursor-ide/host.ts',
+    'cart/sweatshop/index.tsx',
+    'cart/sweatshop/data.ts',
+    'cart/sweatshop/theme.ts',
+    'cart/sweatshop/host.ts',
     'runtime/index.tsx',
     'runtime/primitives.tsx',
     'renderer/hostConfig.ts',
     'qjs_app.zig',
-    'tsz/carts/conformance/mixed/cursor-ide/cursor-ide.tsz',
-    'tsz/carts/conformance/mixed/cursor-ide/cursor.script.tsz',
+    'tsz/carts/conformance/mixed/sweatshop/sweatshop.tsz',
+    'tsz/carts/conformance/mixed/sweatshop/cursor.script.tsz',
   ];
 }

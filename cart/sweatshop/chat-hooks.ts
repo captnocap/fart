@@ -109,7 +109,7 @@ export interface ConversationMeta {
   preview: string;
 }
 
-const CONV_STORAGE_KEY = 'cursor-ide:conversations';
+const CONV_STORAGE_KEY = 'sweatshop:conversations';
 
 function loadConversations(): ConversationMeta[] {
   try {

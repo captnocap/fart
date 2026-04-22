@@ -22,7 +22,7 @@ export interface LocalEndpointConfig {
   embeddingModel: string;    // embedding model id on the same endpoint
 }
 
-const STORE_KEY = 'cursor-ide:localEndpoint';
+const STORE_KEY = 'sweatshop:localEndpoint';
 
 export const DEFAULT_LOCAL_ENDPOINT: LocalEndpointConfig = {
   baseUrl: 'http://localhost:1234/v1',

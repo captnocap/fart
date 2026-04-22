@@ -7,7 +7,7 @@
 
 const host: any = globalThis;
 
-const STORE_PREFIX = 'cursor-ide.apikey.';
+const STORE_PREFIX = 'sweatshop.apikey.';
 
 function storeGet(key: string): string | null {
   try { return host.__store_get(key); } catch { return null; }
@@ -62,7 +62,7 @@ export interface ApiKeyStore {
   keys: ApiKeyEntry[];
 }
 
-const STORE_META_KEY = 'cursor-ide.apikey.meta';
+const STORE_META_KEY = 'sweatshop.apikey.meta';
 
 function loadMeta(): ApiKeyEntry[] {
   const raw = storeGet(STORE_META_KEY);

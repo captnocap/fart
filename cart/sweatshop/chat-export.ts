@@ -67,7 +67,7 @@ export function copyToClipboard(text: string): boolean {
   try {
     if (typeof host.__store_set === 'function') {
       // Use store as a clipboard proxy
-      host.__store_set('cursor-ide.clipboard', text);
+      host.__store_set('sweatshop.clipboard', text);
     }
     // Try exec-based clipboard
     const escaped = text.replace(/'/g, "'\"'\"'").replace(/\\/g, '\\\\');
@@ -79,10 +79,10 @@ export function copyToClipboard(text: string): boolean {
 export function saveConversationToFile(messages: ChatMessage[], workDir: string, opts: ExportOptions): { ok: boolean; path?: string; error?: string } {
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
   const ext = opts.format === 'json' ? 'json' : opts.format === 'text' ? 'txt' : 'md';
-  const path = `${workDir}/.cursor-ide/conversations/${timestamp}.${ext}`;
+  const path = `${workDir}/.sweatshop/conversations/${timestamp}.${ext}`;
 
   // Ensure directory exists
-  execCmd(`mkdir -p "${workDir}/.cursor-ide/conversations"`);
+  execCmd(`mkdir -p "${workDir}/.sweatshop/conversations"`);
 
   const content = exportConversation(messages, opts);
   if (writeFile(path, content)) {

@@ -13,9 +13,9 @@ const TASKS = [
   'worker-apikey-rewire', 'worker-terminal-playback', 'worker-diff-viewer', 'worker-indexer-tune',
 ];
 const TOOLS = [
-  'Read(cart/cursor-ide/index.tsx)',
+  'Read(cart/sweatshop/index.tsx)',
   'Edit(components/gitpanel.tsx) — +142 −38',
-  'Bash(./scripts/ship cursor-ide)',
+  'Bash(./scripts/ship sweatshop)',
   'Grep("activeView") → 14 matches',
   'Write(components/cockpit/WorkerTile.tsx)',
   'Read(FEATURES.md, offset=200)',
@@ -301,7 +301,7 @@ function BrainstormPanel({ workers }: { workers: Worker[] }) {
           <Text style={{ color: '#5c6a78', fontSize: 11 }}>[ conversation surface placeholder ]</Text>
         </Box>
         <Row style={{ gap: 8, flexWrap: 'wrap' }}>
-          <Chip label="prior: cursor-ide plan surface" />
+          <Chip label="prior: sweatshop plan surface" />
           <Chip label="prior: worker lifecycle policy" />
           <Chip label="prior: fake-green pathology" />
         </Row>

@@ -15,7 +15,7 @@ const { useState } = React;
 import { Box, Pressable, Text, TextEditor } from '../runtime/primitives';
 import * as fs from '../runtime/hooks/fs';
 
-const TEST_FILE = '/home/siah/creative/reactjit/cart/cursor-ide/index.tsx';
+const TEST_FILE = '/home/siah/creative/reactjit/cart/sweatshop/index.tsx';
 
 export default function App() {
   const [content, setContent] = useState('');

@@ -7,8 +7,8 @@ const storeGet = typeof host.__store_get === 'function' ? host.__store_get : () 
 const storeSet = typeof host.__store_set === 'function' ? host.__store_set : () => {};
 const storeDel = typeof host.__store_del === 'function' ? host.__store_del : () => {};
 
-const STORE_LIST_KEY = 'cursor-ide:plans:list';
-const STORE_PREFIX = 'cursor-ide:plan:';
+const STORE_LIST_KEY = 'sweatshop:plans:list';
+const STORE_PREFIX = 'sweatshop:plan:';
 
 export interface PlanItem {
   id: string;

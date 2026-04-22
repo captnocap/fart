@@ -41,7 +41,7 @@ function LandingSurfaceImpl(props: any) {
             <Pressable onPress={props.onIndexWorkspace} style={{ padding: 10, borderRadius: TOKENS.radiusLg, backgroundColor: COLORS.blueDeep, borderWidth: 1, borderColor: COLORS.blue }}>
               <Text fontSize={11} color={COLORS.blue}>Index Workspace</Text>
             </Pressable>
-            <Pressable onPress={() => props.onOpenPath('cart/cursor-ide/index.tsx')} style={{ padding: 10, borderRadius: TOKENS.radiusLg, backgroundColor: COLORS.panelAlt, borderWidth: 1, borderColor: COLORS.border }}>
+            <Pressable onPress={() => props.onOpenPath('cart/sweatshop/index.tsx')} style={{ padding: 10, borderRadius: TOKENS.radiusLg, backgroundColor: COLORS.panelAlt, borderWidth: 1, borderColor: COLORS.border }}>
               <Text fontSize={11} color={COLORS.text}>Open TSX cart</Text>
             </Pressable>
             <Pressable onPress={props.onOpenSettings} style={{ padding: 10, borderRadius: TOKENS.radiusLg, backgroundColor: COLORS.panelAlt, borderWidth: 1, borderColor: COLORS.border }}>

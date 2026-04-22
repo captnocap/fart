@@ -16,7 +16,7 @@ const KEY_L = 76;
 const KEY_F = 70;
 const KEY_C = 67;
 const DEFAULT_SCROLLBACK_LIMIT = 2000;
-const SCROLLBACK_LIMIT_KEY = 'cursor-ide.terminalScrollbackLimit';
+const SCROLLBACK_LIMIT_KEY = 'sweatshop.terminalScrollbackLimit';
 
 type TerminalSession = {
   id: string;
