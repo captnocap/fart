@@ -493,6 +493,231 @@ function SearchBar(props: { query: string; onQuery: (q: string) => void }) {
   );
 }
 
+// ── Export / Import ──────────────────────────────────────────────────────────
+// Dumps and restores every panel's settings. Reads through sget/sdel so we
+// don't need a host "list keys" API — the full set of tracked paths is
+// enumerated here and kept in sync with the panels above.
+
+const EXPORT_VERSION = 1;
+
+const APPEARANCE_KEYS: string[] = ['uiScale', 'accent', 'animations', 'compactChrome', 'showFileGlyphs', 'showMinimap'];
+const EDITOR_KEYS:     string[] = ['fontFamily', 'fontSize', 'lineHeight', 'tabSize', 'insertSpaces', 'wordWrap', 'showLineNumbers', 'showWhitespace', 'trimTrailingWhitespace', 'formatOnSave'];
+const TERMINAL_KEYS:   string[] = ['shell', 'fontFamily', 'fontSize', 'cursorStyle', 'cursorBlink', 'scrollback', 'bellSound', 'copyOnSelect'];
+const MEMORY_KEYS:     string[] = ['provider', 'contextTokens', 'retentionDays', 'checkpointLimit', 'autoCheckpoint', 'semanticSearch'];
+const BACKEND_KEYS:    string[] = ['enabled', 'cliPath', 'baseUrl', 'defaultModel', 'workingDir'];
+
+interface SettingsDump {
+  version: number;
+  exportedAt: string;
+  appearance: Record<string, any>;
+  editor: Record<string, any>;
+  terminal: Record<string, any>;
+  memory: Record<string, any>;
+  keybindings: Record<string, string>;
+  plugins: Record<string, boolean>;
+  providers: Record<string, any>;
+  providersLocalCustom: any;
+}
+
+function exportSettings(): SettingsDump {
+  const dump: SettingsDump = {
+    version: EXPORT_VERSION,
+    exportedAt: new Date().toISOString(),
+    appearance: {},
+    editor: {},
+    terminal: {},
+    memory: {},
+    keybindings: {},
+    plugins: {},
+    providers: {},
+    providersLocalCustom: sget('providers.local.custom', null),
+  };
+  for (const k of APPEARANCE_KEYS) dump.appearance[k] = sget('appearance.' + k, null);
+  for (const k of EDITOR_KEYS)     dump.editor[k]     = sget('editor.' + k, null);
+  for (const k of TERMINAL_KEYS)   dump.terminal[k]   = sget('terminal.' + k, null);
+  for (const k of MEMORY_KEYS)     dump.memory[k]     = sget('memory.' + k, null);
+  // Keybindings: only record explicit overrides so defaults stay live.
+  for (const spec of KEYBINDINGS) {
+    const raw = sget('keybindings.' + spec.id, null as any);
+    if (raw !== null && raw !== undefined && raw !== '' && raw !== spec.defaultChord) {
+      dump.keybindings[spec.id] = String(raw);
+    }
+  }
+  // Plugins: the set of plugin ids isn't static — serialise every id we find.
+  try {
+    const h: any = globalThis;
+    const pd: string = (typeof h.__env_home === 'string' ? h.__env_home : '/home/siah') + '/.cursor-ide/plugins';
+    if (typeof h.__fs_list_json === 'function') {
+      const raw = h.__fs_list_json(pd);
+      const list: string[] = JSON.parse(typeof raw === 'string' ? raw : '[]');
+      for (const filename of list) {
+        if (!filename.endsWith('.js')) continue;
+        const id = filename.replace(/\.js$/, '');
+        dump.plugins[id] = sget('plugins.enabled.' + id, true);
+      }
+    }
+  } catch {}
+  // Providers: per-backend config + enable.
+  for (const entry of BACKEND_ENTRIES) {
+    const per: Record<string, any> = {};
+    for (const k of BACKEND_KEYS) {
+      const v = sget('providers.' + entry.id + '.' + k, null as any);
+      if (v !== null && v !== undefined && v !== '') per[k] = v;
+    }
+    if (Object.keys(per).length > 0) dump.providers[entry.id] = per;
+  }
+  return dump;
+}
+
+interface ImportReport { applied: number; skipped: number; error?: string }
+
+function importSettings(json: string): ImportReport {
+  let parsed: any;
+  try { parsed = JSON.parse(json); } catch (err: any) { return { applied: 0, skipped: 0, error: 'Invalid JSON: ' + (err && err.message ? err.message : 'parse failed') }; }
+  if (!parsed || typeof parsed !== 'object') return { applied: 0, skipped: 0, error: 'Top-level must be an object' };
+  if (typeof parsed.version !== 'number') return { applied: 0, skipped: 0, error: "Missing numeric 'version' field" };
+  if (parsed.version > EXPORT_VERSION) return { applied: 0, skipped: 0, error: 'Settings file version ' + parsed.version + ' is newer than supported ' + EXPORT_VERSION };
+
+  let applied = 0;
+  let skipped = 0;
+  function writeMap(prefix: string, map: any, allow: string[] | null) {
+    if (!map || typeof map !== 'object') return;
+    for (const k of Object.keys(map)) {
+      if (allow && allow.indexOf(k) < 0) { skipped++; continue; }
+      const v = map[k];
+      if (v === null || v === undefined) { sdel(prefix + k); applied++; continue; }
+      sset(prefix + k, v);
+      applied++;
+    }
+  }
+  writeMap('appearance.', parsed.appearance, APPEARANCE_KEYS);
+  writeMap('editor.',     parsed.editor,     EDITOR_KEYS);
+  writeMap('terminal.',   parsed.terminal,   TERMINAL_KEYS);
+  writeMap('memory.',     parsed.memory,     MEMORY_KEYS);
+
+  if (parsed.keybindings && typeof parsed.keybindings === 'object') {
+    const known = new Set(KEYBINDINGS.map(k => k.id));
+    for (const id of Object.keys(parsed.keybindings)) {
+      if (!known.has(id)) { skipped++; continue; }
+      const v = parsed.keybindings[id];
+      if (typeof v !== 'string' || !v) { sdel('keybindings.' + id); applied++; continue; }
+      sset('keybindings.' + id, v);
+      applied++;
+    }
+  }
+
+  if (parsed.plugins && typeof parsed.plugins === 'object') {
+    for (const id of Object.keys(parsed.plugins)) {
+      const v = parsed.plugins[id];
+      if (typeof v !== 'boolean') { skipped++; continue; }
+      sset('plugins.enabled.' + id, v);
+      applied++;
+    }
+  }
+
+  if (parsed.providers && typeof parsed.providers === 'object') {
+    const known = new Set(BACKEND_ENTRIES.map(e => e.id));
+    for (const id of Object.keys(parsed.providers)) {
+      if (!known.has(id)) { skipped++; continue; }
+      const cfg = parsed.providers[id];
+      if (!cfg || typeof cfg !== 'object') { skipped++; continue; }
+      for (const k of BACKEND_KEYS) {
+        if (k in cfg) { sset('providers.' + id + '.' + k, cfg[k]); applied++; }
+      }
+    }
+  }
+
+  if (parsed.providersLocalCustom !== undefined) {
+    if (Array.isArray(parsed.providersLocalCustom)) {
+      sset('providers.local.custom', parsed.providersLocalCustom);
+      applied++;
+    } else {
+      sdel('providers.local.custom');
+    }
+  }
+
+  return { applied, skipped };
+}
+
+function ImportExportCard(props: { query: string }) {
+  const [open, setOpen]           = useState<'none' | 'export' | 'import'>('none');
+  const [exportText, setExportText] = useState<string>('');
+  const [importText, setImportText] = useState<string>('');
+  const [status, setStatus]         = useState<{ tone: string; message: string } | null>(null);
+
+  function doExport() {
+    try {
+      const dump = exportSettings();
+      setExportText(JSON.stringify(dump, null, 2));
+      setOpen('export');
+      setStatus({ tone: COLORS.green, message: 'Settings exported — copy the JSON below.' });
+    } catch (err: any) {
+      setStatus({ tone: COLORS.red, message: 'Export failed: ' + (err && err.message ? err.message : 'unknown error') });
+    }
+  }
+
+  function doImport() {
+    const report = importSettings(importText);
+    if (report.error) {
+      setStatus({ tone: COLORS.red, message: report.error });
+      return;
+    }
+    setStatus({ tone: COLORS.green, message: 'Imported ' + report.applied + ' setting' + (report.applied === 1 ? '' : 's') + (report.skipped ? ', skipped ' + report.skipped : '') + '.' });
+    setImportText('');
+    setOpen('none');
+  }
+
+  const q = (props.query || '').toLowerCase();
+  if (q && 'export import settings json backup restore'.indexOf(q) < 0) return null;
+
+  return (
+    <Box style={{ padding: 14, borderRadius: TOKENS.radiusMd, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelRaised, gap: 10 }}>
+      <Row style={{ alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <Text fontSize={13} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>Export / Import</Text>
+        <Text fontSize={10} color={COLORS.textDim}>Round-trip every setting as a single JSON blob. Useful for sharing config or migrating across machines.</Text>
+      </Row>
+      <Row style={{ gap: 8, flexWrap: 'wrap' }}>
+        <Pressable onPress={doExport} style={{ paddingLeft: 12, paddingRight: 12, paddingTop: 8, paddingBottom: 8, borderRadius: TOKENS.radiusSm, backgroundColor: COLORS.blueDeep, borderWidth: 1, borderColor: COLORS.blue }}>
+          <Text fontSize={11} color={COLORS.blue} style={{ fontWeight: 'bold' }}>Export settings</Text>
+        </Pressable>
+        <Pressable onPress={() => { setOpen(open === 'import' ? 'none' : 'import'); setStatus(null); }} style={{ paddingLeft: 12, paddingRight: 12, paddingTop: 8, paddingBottom: 8, borderRadius: TOKENS.radiusSm, backgroundColor: COLORS.panelAlt, borderWidth: 1, borderColor: open === 'import' ? COLORS.blue : COLORS.border }}>
+          <Text fontSize={11} color={open === 'import' ? COLORS.blue : COLORS.text} style={{ fontWeight: 'bold' }}>Import settings</Text>
+        </Pressable>
+        {open !== 'none' ? (
+          <Pressable onPress={() => { setOpen('none'); setStatus(null); }} style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 8, paddingBottom: 8, borderRadius: TOKENS.radiusSm, backgroundColor: COLORS.panelAlt, borderWidth: 1, borderColor: COLORS.border }}>
+            <Text fontSize={11} color={COLORS.textDim} style={{ fontWeight: 'bold' }}>Close</Text>
+          </Pressable>
+        ) : null}
+      </Row>
+
+      {status ? (
+        <Text fontSize={10} color={status.tone}>{status.message}</Text>
+      ) : null}
+
+      {open === 'export' ? (
+        <Col style={{ gap: 6 }}>
+          <Text fontSize={10} color={COLORS.textDim}>Select all and copy. Paste into the Import pane on another machine to apply.</Text>
+          <TextInput value={exportText} onChangeText={(v: string) => setExportText(v)} multiline={true}
+            style={{ height: 220, borderWidth: 1, borderColor: COLORS.border, borderRadius: TOKENS.radiusSm, padding: 8, backgroundColor: COLORS.panelBg, fontFamily: 'monospace' }} />
+        </Col>
+      ) : null}
+
+      {open === 'import' ? (
+        <Col style={{ gap: 6 }}>
+          <Text fontSize={10} color={COLORS.textDim}>Paste a previously exported JSON blob. Unknown keys are skipped, known ones are applied to the store.</Text>
+          <TextInput value={importText} onChangeText={setImportText} placeholder='{"version":1,"appearance":{...}}' multiline={true}
+            style={{ height: 160, borderWidth: 1, borderColor: COLORS.border, borderRadius: TOKENS.radiusSm, padding: 8, backgroundColor: COLORS.panelBg, fontFamily: 'monospace' }} />
+          <Row style={{ gap: 8 }}>
+            <Pressable onPress={doImport} style={{ paddingLeft: 12, paddingRight: 12, paddingTop: 6, paddingBottom: 6, borderRadius: TOKENS.radiusSm, backgroundColor: COLORS.greenDeep, borderWidth: 1, borderColor: COLORS.green }}>
+              <Text fontSize={11} color={COLORS.green} style={{ fontWeight: 'bold' }}>Apply</Text>
+            </Pressable>
+          </Row>
+        </Col>
+      ) : null}
+    </Box>
+  );
+}
+
 // ── Panels ───────────────────────────────────────────────────────────────────
 
 const APPEARANCE_DEFAULTS = {
@@ -615,6 +840,8 @@ function AppearancePanel(props: { query: string; resetToken: number }) {
           <Toggle value={showMinimap} onChange={setMinimap} />
         </SettingRow>
       ) : null}
+
+      <ImportExportCard query={props.query} />
     </Col>
   );
 }
