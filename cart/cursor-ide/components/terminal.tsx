@@ -1,19 +1,35 @@
 const React: any = require('react');
 const { useCallback, useEffect, useRef, useState } = React;
 
-import { Box, Col, Pressable, Row, ScrollView, Terminal, Text } from '../../../runtime/primitives';
+import { Box, Col, Pressable, Row, ScrollView, Terminal, Text, TextInput } from '../../../runtime/primitives';
 import { COLORS } from '../theme';
 import { Pill } from './shared';
 
 const host: any = globalThis as any;
 const CTRL_MOD = 192;
+const SHIFT_MOD = 1;
 const TAB_KEY = 9;
+const KEY_L = 76;
+const KEY_F = 70;
+const KEY_C = 67;
+const DEFAULT_SCROLLBACK_LIMIT = 2000;
+const SCROLLBACK_LIMIT_KEY = 'cursor-ide.terminalScrollbackLimit';
 
 type TerminalSession = {
   id: string;
   name: string;
   ptyHandle: number;
 };
+
+type TerminalTranscript = {
+  pending: string;
+  lines: string[];
+};
+
+type SearchSelection = {
+  sessionId: string;
+  lineIndex: number;
+} | null;
 
 function toHandle(value: any, fallback: number): number {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
@@ -33,10 +49,93 @@ function spawnPty(cols: number, rows: number, fallback: number): number {
   }
 }
 
-function closePty(handle: number): void {
+function ptyAlive(handle: number): boolean {
   try {
-    if (typeof host.__pty_close === 'function') host.__pty_close(handle);
+    return typeof host.__pty_alive === 'function' ? !!host.__pty_alive(handle) : true;
+  } catch {
+    return false;
+  }
+}
+
+function ptyRead(handle: number): string {
+  try {
+    if (typeof host.__pty_read !== 'function') return '';
+    const out = host.__pty_read(handle);
+    return typeof out === 'string' ? out : String(out ?? '');
+  } catch {
+    return '';
+  }
+}
+
+function ptyWrite(handle: number, data: string): void {
+  try {
+    if (typeof host.__pty_write === 'function') host.__pty_write(handle, data);
   } catch {}
+}
+
+function clipboardSet(text: string): void {
+  try {
+    if (typeof host.__clipboard_set === 'function') host.__clipboard_set(text);
+  } catch {}
+}
+
+function storeGet(key: string): string | null {
+  try {
+    if (typeof host.__store_get !== 'function') return null;
+    const out = host.__store_get(key);
+    return out == null ? null : String(out);
+  } catch {
+    return null;
+  }
+}
+
+function storeSet(key: string, value: string): void {
+  try {
+    if (typeof host.__store_set === 'function') host.__store_set(key, value);
+  } catch {}
+}
+
+function clampScrollback(value: number): number {
+  if (!Number.isFinite(value)) return DEFAULT_SCROLLBACK_LIMIT;
+  return Math.max(100, Math.min(20000, Math.floor(value)));
+}
+
+function loadScrollbackLimit(): number {
+  return clampScrollback(Number(storeGet(SCROLLBACK_LIMIT_KEY) ?? DEFAULT_SCROLLBACK_LIMIT));
+}
+
+function stripAnsi(input: string): string {
+  return input
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .replace(/\u001b\[[0-9;?]*[A-Za-z]/g, '')
+    .replace(/\u001b\][^\u001b]*\u0007/g, '')
+    .replace(/\u001b[PX^_][^\u001b]*\u001b\\/g, '')
+    .replace(/\u001b./g, '');
+}
+
+function splitTranscriptChunk(chunk: string): string[] {
+  const normalized = stripAnsi(chunk);
+  return normalized.split('\n').map((line) => line.replace(/\t/g, '    '));
+}
+
+function highlightLineParts(line: string, query: string): Array<{ text: string; highlight: boolean }> {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return [{ text: line, highlight: false }];
+  const lowered = line.toLowerCase();
+  const parts: Array<{ text: string; highlight: boolean }> = [];
+  let cursor = 0;
+  while (cursor < line.length) {
+    const index = lowered.indexOf(needle, cursor);
+    if (index < 0) {
+      parts.push({ text: line.slice(cursor), highlight: false });
+      break;
+    }
+    if (index > cursor) parts.push({ text: line.slice(cursor, index), highlight: false });
+    parts.push({ text: line.slice(index, index + needle.length), highlight: true });
+    cursor = index + needle.length;
+  }
+  return parts.length > 0 ? parts : [{ text: line, highlight: false }];
 }
 
 export function TerminalPanel(props: any) {
@@ -47,7 +146,13 @@ export function TerminalPanel(props: any) {
   const recordFrames = props.recordFrames || 0;
   const activePane = props.pane || 'live';
 
+  const [findOpen, setFindOpen] = useState(false);
+  const [findQuery, setFindQuery] = useState('');
+  const [scrollbackLimit, setScrollbackLimit] = useState(() => loadScrollbackLimit());
+  const [selectedSearchLine, setSelectedSearchLine] = useState<SearchSelection>(null);
+
   const sessionsRef = useRef<TerminalSession[]>([]);
+  const transcriptRef = useRef<Record<string, TerminalTranscript>>({});
   const activeSessionIdRef = useRef('');
   const nextSessionOrdinalRef = useRef(1);
   const bootstrappedRef = useRef(false);
@@ -56,6 +161,11 @@ export function TerminalPanel(props: any) {
 
   const sessions = sessionsRef.current;
   const activeSession = sessions.find((session) => session.id === activeSessionId) || sessions[0] || null;
+  const activeTranscript = activeSession ? transcriptRef.current[activeSession.id] || { pending: '', lines: [] } : { pending: '', lines: [] };
+
+  useEffect(() => {
+    storeSet(SCROLLBACK_LIMIT_KEY, String(scrollbackLimit));
+  }, [scrollbackLimit]);
 
   const bumpSessions = useCallback(() => {
     setSessionRevision((value) => value + 1);
@@ -64,7 +174,15 @@ export function TerminalPanel(props: any) {
   const setActiveSession = useCallback((id: string) => {
     activeSessionIdRef.current = id;
     setActiveSessionId(id);
+    setSelectedSearchLine(null);
   }, []);
+
+  const clampTranscript = useCallback((entry: TerminalTranscript) => {
+    const limit = scrollbackLimit;
+    if (entry.lines.length > limit) {
+      entry.lines.splice(0, entry.lines.length - limit);
+    }
+  }, [scrollbackLimit]);
 
   const ensureSession = useCallback((focus: boolean = false) => {
     const ordinal = nextSessionOrdinalRef.current++;
@@ -75,6 +193,7 @@ export function TerminalPanel(props: any) {
       ptyHandle,
     };
     sessionsRef.current = [...sessionsRef.current, session];
+    transcriptRef.current[session.id] = transcriptRef.current[session.id] || { pending: '', lines: [] };
     if (focus || !activeSessionIdRef.current) {
       setActiveSession(session.id);
     }
@@ -82,23 +201,18 @@ export function TerminalPanel(props: any) {
     return session;
   }, [bumpSessions, compactBand, setActiveSession]);
 
-  const replaceWithFallbackSession = useCallback((focus: boolean = true) => {
-    sessionsRef.current = [];
-    activeSessionIdRef.current = '';
-    setActiveSessionId('');
-    return ensureSession(focus);
-  }, [ensureSession]);
-
   const closeSession = useCallback((sessionId: string) => {
     const current = sessionsRef.current;
-    const closing = current.find((session) => session.id === sessionId) || null;
     const remaining = current.filter((session) => session.id !== sessionId);
-    if (closing) closePty(closing.ptyHandle);
-
+    delete transcriptRef.current[sessionId];
     sessionsRef.current = remaining;
 
     if (remaining.length === 0) {
-      replaceWithFallbackSession(true);
+      sessionsRef.current = [];
+      activeSessionIdRef.current = '';
+      setActiveSessionId('');
+      setSelectedSearchLine(null);
+      ensureSession(true);
       return;
     }
 
@@ -109,7 +223,7 @@ export function TerminalPanel(props: any) {
 
     setActiveSession(nextActive.id);
     bumpSessions();
-  }, [bumpSessions, replaceWithFallbackSession, setActiveSession]);
+  }, [bumpSessions, ensureSession, setActiveSession]);
 
   const focusSession = useCallback((sessionId: string) => {
     if (activeSessionIdRef.current === sessionId) return;
@@ -127,13 +241,90 @@ export function TerminalPanel(props: any) {
     if (props.onSetPane) props.onSetPane('live');
   }, [setActiveSession, props]);
 
+  const clearCurrentTerminal = useCallback(() => {
+    if (!activeSession) return;
+    ptyWrite(activeSession.ptyHandle, '\x1b[H\x1b[2J\x1b[3J');
+  }, [activeSession]);
+
+  const copySelectedLine = useCallback(() => {
+    if (!selectedSearchLine) return;
+    const session = sessionsRef.current.find((item) => item.id === selectedSearchLine.sessionId);
+    if (!session) return;
+    const line = (transcriptRef.current[session.id]?.lines[selectedSearchLine.lineIndex]) || '';
+    if (line) clipboardSet(line);
+  }, [selectedSearchLine]);
+
+  const openSearch = useCallback(() => {
+    setFindOpen(true);
+    if (props.onSetPane) props.onSetPane('live');
+  }, [props]);
+
   const handleTerminalKeyDown = useCallback((payload: any) => {
     const keyCode = Number(payload?.keyCode ?? payload?.key ?? 0);
     const mods = Number(payload?.mods ?? 0);
-    if ((mods & CTRL_MOD) && keyCode === TAB_KEY) {
+    const ctrl = (mods & CTRL_MOD) !== 0;
+    const shift = (mods & SHIFT_MOD) !== 0;
+
+    if (ctrl && keyCode === TAB_KEY) {
       cycleSession();
+      return;
     }
-  }, [cycleSession]);
+    if (ctrl && keyCode === KEY_L) {
+      clearCurrentTerminal();
+      return;
+    }
+    if (ctrl && shift && keyCode === KEY_F) {
+      openSearch();
+      return;
+    }
+    if (ctrl && keyCode === KEY_C && selectedSearchLine) {
+      copySelectedLine();
+    }
+  }, [clearCurrentTerminal, copySelectedLine, cycleSession, openSearch, selectedSearchLine]);
+
+  const appendTranscript = useCallback((sessionId: string, chunk: string) => {
+    if (!chunk) return;
+    const entry = transcriptRef.current[sessionId] || (transcriptRef.current[sessionId] = { pending: '', lines: [] });
+    const pieces = splitTranscriptChunk(chunk);
+    if (pieces.length === 0) return;
+
+    let pending = entry.pending + pieces[0];
+    const complete: string[] = [];
+    const normalizedChunk = stripAnsi(chunk).replace(/\r/g, '\n');
+
+    if (normalizedChunk.includes('\n')) {
+      const split = normalizedChunk.split('\n');
+      split[0] = pending;
+      pending = split.pop() || '';
+      for (const line of split) {
+        complete.push(line.replace(/\t/g, '    '));
+      }
+      if (complete.length === 0 && pending.length > 0) {
+        entry.pending = pending;
+        return;
+      }
+    } else if (pieces.length === 1) {
+      entry.pending = pending;
+      return;
+    }
+
+    if (!normalizedChunk.includes('\n') && pieces.length > 1) {
+      for (let i = 1; i < pieces.length - 1; i += 1) complete.push(pieces[i]);
+      pending = pieces[pieces.length - 1];
+    }
+
+    if (complete.length > 0) {
+      entry.lines.push(...complete);
+      clampTranscript(entry);
+    }
+    entry.pending = pending;
+    if (pending.length > 0 && entry.lines.length > 0) {
+      const last = entry.lines[entry.lines.length - 1];
+      if (last !== pending && !pending.endsWith('\n')) {
+        // keep partial line in pending only
+      }
+    }
+  }, [clampTranscript]);
 
   useEffect(() => {
     if (!bootstrappedRef.current) {
@@ -144,13 +335,23 @@ export function TerminalPanel(props: any) {
         setActiveSession(sessionsRef.current[0].id);
       }
     }
-  }, [ensureSession, setActiveSession, sessionRevision]);
+  }, [ensureSession, sessionRevision, setActiveSession]);
 
   useEffect(() => {
-    return () => {
-      for (const session of sessionsRef.current) closePty(session.ptyHandle);
-    };
-  }, []);
+    const id = setInterval(() => {
+      for (const session of sessionsRef.current) {
+        if (!ptyAlive(session.ptyHandle)) continue;
+        const chunk = ptyRead(session.ptyHandle);
+        if (chunk) appendTranscript(session.id, chunk);
+      }
+    }, 80);
+    return () => clearInterval(id);
+  }, [appendTranscript]);
+
+  useEffect(() => {
+    if (!activeSession) return;
+    setSelectedSearchLine(null);
+  }, [activeSessionId]);
 
   function TabButton(tab: string, label: string, meta?: string) {
     const active = activePane === tab;
@@ -249,6 +450,56 @@ export function TerminalPanel(props: any) {
     );
   }
 
+  function SearchResultRow(session: TerminalSession, line: string, lineIndex: number, matchesQuery: boolean) {
+    const selected = selectedSearchLine?.sessionId === session.id && selectedSearchLine.lineIndex === lineIndex;
+    return (
+      <Pressable
+        key={session.id + '_' + lineIndex}
+        onPress={() => {
+          const nextSelection = { sessionId: session.id, lineIndex };
+          setSelectedSearchLine(nextSelection);
+          if (line) clipboardSet(line);
+        }}
+        style={{
+          padding: 8,
+          borderRadius: 8,
+          borderWidth: 1,
+          borderColor: selected ? COLORS.blue : matchesQuery ? COLORS.border : COLORS.borderSoft,
+          backgroundColor: selected ? COLORS.blueDeep : matchesQuery ? COLORS.panelAlt : COLORS.panelRaised,
+          gap: 4,
+        }}
+      >
+        <Row style={{ gap: 8, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+          <Row style={{ gap: 6, alignItems: 'center', flexWrap: 'wrap', flexGrow: 1, flexBasis: 0 }}>
+            <Pill label={session.name} color={selected ? COLORS.blue : COLORS.textBright} tiny={true} />
+            <Text fontSize={9} color={COLORS.textDim}>{'line ' + String(lineIndex + 1)}</Text>
+          </Row>
+          <Text fontSize={9} color={COLORS.textDim}>{matchesQuery ? 'match' : 'buffer'}</Text>
+        </Row>
+        <Text fontSize={10} color={selected ? COLORS.textBright : COLORS.text}>
+          {highlightLineParts(line, findQuery).map((part, idx) => (
+            <Text
+              key={idx}
+              fontSize={10}
+              color={part.highlight ? COLORS.blue : selected ? COLORS.textBright : COLORS.text}
+              style={part.highlight ? { backgroundColor: COLORS.blueDeep } : undefined}
+            >
+              {part.text}
+            </Text>
+          ))}
+        </Text>
+      </Pressable>
+    );
+  }
+
+  const activeLines = activeTranscript.lines;
+  const searchLines = findQuery.trim()
+    ? activeLines
+        .map((line, index) => ({ line, index }))
+        .filter((item) => item.line.toLowerCase().includes(findQuery.trim().toLowerCase()))
+    : activeLines.map((line, index) => ({ line, index }));
+
+  const searchMatches = searchLines.length;
   return (
     <Col
       style={{
@@ -290,6 +541,9 @@ export function TerminalPanel(props: any) {
           <Pill label={String(sessions.length) + ' tabs'} color={COLORS.blue} tiny={true} />
         </Row>
         <Row style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          <Pressable onPress={() => setFindOpen((value) => !value)}>
+            <Text fontSize={10} color={findOpen ? COLORS.blue : COLORS.textDim}>Find</Text>
+          </Pressable>
           {!compactBand && props.onToggleExpanded ? (
             <Pressable onPress={props.onToggleExpanded}>
               <Text fontSize={10} color={COLORS.textDim}>{props.expanded ? 'Restore dock' : 'Take over'}</Text>
@@ -368,6 +622,49 @@ export function TerminalPanel(props: any) {
           )}
         </Box>
 
+        {activePane === 'live' && findOpen ? (
+          <Col style={{ height: '38%', minHeight: 160, borderTopWidth: 1, borderColor: COLORS.borderSoft, backgroundColor: COLORS.panelRaised }}>
+            <Row style={{ padding: 10, alignItems: 'center', gap: 8, justifyContent: 'space-between', borderBottomWidth: 1, borderColor: COLORS.borderSoft, flexWrap: 'wrap' }}>
+              <Row style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap', flexGrow: 1, flexBasis: 0 }}>
+                <Text fontSize={11} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>Find in buffer</Text>
+                <TextInput
+                  value={findQuery}
+                  onChange={(value: string) => {
+                    setFindQuery(value);
+                    setSelectedSearchLine(null);
+                  }}
+                  fontSize={11}
+                  color={COLORS.text}
+                  style={{ minWidth: 220, flexGrow: 1, flexBasis: 220, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelAlt, padding: 8, borderRadius: 8 }}
+                />
+                <Pill label={String(searchMatches) + ' matches'} color={COLORS.blue} tiny={true} />
+              </Row>
+              <Row style={{ gap: 8, alignItems: 'center' }}>
+                <Text fontSize={10} color={COLORS.textDim}>Scrollback</Text>
+                <Pressable onPress={() => setScrollbackLimit((value) => clampScrollback(value - 250))}>
+                  <Text fontSize={11} color={COLORS.textBright}>-</Text>
+                </Pressable>
+                <Text fontSize={10} color={COLORS.textBright}>{String(scrollbackLimit)}</Text>
+                <Pressable onPress={() => setScrollbackLimit((value) => clampScrollback(value + 250))}>
+                  <Text fontSize={11} color={COLORS.textBright}>+</Text>
+                </Pressable>
+                <Pressable onPress={() => setFindOpen(false)}>
+                  <Text fontSize={10} color={COLORS.textDim}>Close</Text>
+                </Pressable>
+              </Row>
+            </Row>
+            <ScrollView style={{ flexGrow: 1, minHeight: 0 }}>
+              <Col style={{ gap: 8, padding: 10 }}>
+                {searchLines.length > 0 ? searchLines.map((item) => {
+                  return SearchResultRow(activeSession || sessions[0], item.line, item.index, true);
+                }) : (
+                  <Text fontSize={10} color={COLORS.textDim}>No matches yet. Open a session and keep typing.</Text>
+                )}
+              </Col>
+            </ScrollView>
+          </Col>
+        ) : null}
+
         {activePane === 'history' ? (
           <Col style={{ width: '100%', height: '100%', padding: 10, gap: 10, minHeight: 0 }}>
             <Row style={{ justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -421,7 +718,7 @@ export function TerminalPanel(props: any) {
 
       {!compactBand ? (
         <Box style={{ padding: 10, borderTopWidth: 1, borderColor: COLORS.borderSoft }}>
-          <Text fontSize={10} color={COLORS.textDim}>Terminal history is stored in localstore and snapshots are saved to /tmp when recording is active. Drag the top bar to resize. Ctrl+Tab cycles terminal tabs.</Text>
+          <Text fontSize={10} color={COLORS.textDim}>Terminal history is stored in localstore and snapshots are saved to /tmp when recording is active. Drag the top bar to resize. Ctrl+Tab cycles terminal tabs. Ctrl+Shift+F opens buffer search. Ctrl+L clears the current screen.</Text>
         </Box>
       ) : null}
     </Col>
