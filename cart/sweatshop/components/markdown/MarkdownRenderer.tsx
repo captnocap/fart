@@ -123,6 +123,7 @@ export function MarkdownRenderer(props: {
   return (
     <ScrollView
       showScrollbar={true}
+      scrollY={props.scrollY}
       onScroll={(payload: any) => {
         const next = typeof payload?.scrollY === 'number' ? payload.scrollY : 0;
         props.onScroll(next);
