@@ -1,0 +1,86 @@
+@entry ../fixtures/MockStatusBar
+@title "statusbar scale reference — ~940 ops, end-state stable"
+
+# Initial sanity on every visible affordance
+expect "mode: idle"
+expect "count: 0"
+expect "conn: online"
+expect "audio: live"
+expect "rec: off"
+expect "prev-mode"
+expect "next-mode"
+expect "inc"
+expect "dec"
+expect "reset-counter"
+expect "open-menu"
+expect "shift-left"
+expect "shift-right"
+expect "pill:alpha"
+expect "pill:echo"
+expect_not "menu-item-a"
+
+# Lock in a pre-keybinding snapshot so lastKey is consistent with the end state
+press Escape
+snapshot_hash baseline
+
+# Counter scale: +200 / -200 → 0.  (400 click ops)
+repeat 200 {
+  click "inc"
+}
+expect "count: 200"
+repeat 200 {
+  click "dec"
+}
+expect "count: 0"
+
+# Mode cycle: 25 full rotations × 5 modes = 125 clicks → back to idle
+repeat 25 {
+  click "next-mode"
+  click "next-mode"
+  click "next-mode"
+  click "next-mode"
+  click "next-mode"
+}
+expect "mode: idle"
+
+# Bool toggles: 100 clicks each → each toggle returns to initial state
+repeat 100 {
+  click "conn:"
+}
+expect "conn: online"
+repeat 100 {
+  click "audio:"
+}
+expect "audio: live"
+repeat 100 {
+  click "rec:"
+}
+expect "rec: off"
+
+# Menu open/close cycle (20 × (open,assert,close,assert) = 80 ops, menu closed at end)
+repeat 20 {
+  click "open-menu"
+  expect "menu-item-a"
+  click "close-menu"
+  expect_not "menu-item-a"
+}
+
+# Pill rotation identity: shift-right × 5 = identity, shift-left × 5 = identity
+repeat 5 {
+  click "shift-right"
+}
+expect "pill:alpha"
+repeat 5 {
+  click "shift-left"
+}
+expect "pill:alpha"
+
+# Keybindings: two Ctrl+R flips rec off→on→off; Escape closes the already-closed menu
+press Ctrl+R
+expect "rec: on"
+press Ctrl+R
+expect "rec: off"
+press Escape
+
+# Final stability: scene-graph hash must equal the pre-scale baseline
+diff_hash baseline

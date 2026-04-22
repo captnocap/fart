@@ -31,12 +31,14 @@ DEBUG=0
 RAW=0
 JSRT=0
 QJS=0
+TEST=0
 for arg in "${@:2}"; do
     case "$arg" in
         -d|--debug) DEBUG=1 ;;
         --raw)      RAW=1 ;;
         --jsrt)     JSRT=1 ;;
         --qjs)      QJS=1 ;;
+        --test)     TEST=1 ;;
     esac
 done
 
@@ -55,6 +57,22 @@ elif [[ -f "cart/${NAME}.tsx" ]]; then
 else
     echo "[ship] not found: cart/${NAME}/index.tsx or cart/${NAME}.tsx" >&2
     exit 1
+fi
+
+# ── 0. Optional autotest gate ────────────────────────────────────────
+# Run all .autotest files for the cart first when --test is passed.
+# Failing tests abort the build before any expensive work.
+if [[ "$TEST" == "1" ]]; then
+    TESTS_DIR="cart/${NAME}/tests"
+    if [[ -d "$TESTS_DIR" ]] && compgen -G "$TESTS_DIR/*.autotest" > /dev/null; then
+        echo "[ship] running autotests in $TESTS_DIR..."
+        if ! "$REPO_ROOT/scripts/autotest" run "$TESTS_DIR"; then
+            echo "[ship] FAILED: autotests for cart/${NAME}" >&2
+            exit 1
+        fi
+    else
+        echo "[ship] --test: no .autotest files under $TESTS_DIR (skipping)"
+    fi
 fi
 
 # ── 1a. Recompile all primitive .tslx sources ────────────────────────
