@@ -85,6 +85,7 @@ import { SearchSurface } from './components/search';
 import { ChatSurface } from './components/chat';
 import { SettingsSurface } from './components/settings';
 import { LandingSurface } from './components/landing';
+import { MermaidPanel } from './components/mermaidpanel';
 import { WorkerCanvas } from './components/cockpit/WorkerCanvas';
 import { FadeIn, PageModeTransition, SlideIn } from './anim';
 
@@ -697,8 +698,18 @@ export default function CursorIdeApp() {
     setActiveTabId(tabId); buildBreadcrumbs('__cockpit__'); markSelectedPath('__landing__');
   }, []);
 
+    const openMermaidSurface = useCallback(() => {
+    setOpenTabs((prev) => ensureHomeTab([...prev]));
+    setActiveView('editor');
+    if (stateRef.current.widthBand === 'narrow' || stateRef.current.widthBand === 'widget' || stateRef.current.widthBand === 'minimum') setCompactSurface('editor');
+    setCurrentFilePath('__mermaid__'); editorContentRef.current = ''; setEditorContent('');
+    setEditorRows([]); setEditorColorRows(null); setEditorLargeFileMode(0); setEditorModified(0); setTotalLines(0); setLanguageMode('Mermaid');
+    setActiveTabId('mermaid'); buildBreadcrumbs('__mermaid__'); markSelectedPath('__landing__');
+  }, [ensureHomeTab, buildBreadcrumbs, markSelectedPath]);
+
     const loadFileByPath = useCallback((path: string) => {
     if (path === '__cockpit__') { openCockpitSurface(); return; }
+    if (path === '__mermaid__') { openMermaidSurface(); return; }
     if (path === '__settings__') { openSettingsSurface(); return; }
     if (path === '__landing__' || path === '.' || inferFileType(path) === 'workspace') { openLandingPage(); return; }
     let content = fileContentsRef.current[path];
@@ -713,10 +724,11 @@ export default function CursorIdeApp() {
     rebuildColor(content, path); buildBreadcrumbs(path); ensureTabForPath(path); markSelectedPath(path);
   }, []);
 
-    const activateTab = useCallback((id: string) => {
+  const activateTab = useCallback((id: string) => {
     if (id === 'home') { openLandingPage(); return; }
     if (id === 'settings') { openSettingsSurface(); return; }
     if (id === 'cockpit') { openCockpitSurface(); return; }
+    if (id === 'mermaid') { openMermaidSurface(); return; }
     const tab = stateRef.current.openTabs.find((item: Tab) => item.id === id);
     if (tab) loadFileByPath(tab.path);
   }, []);
@@ -1263,6 +1275,7 @@ export default function CursorIdeApp() {
     { id: 'nav.home', label: 'Open Projects', category: 'Navigation', action: openLandingPage },
     { id: 'nav.settings', label: 'Open Settings', category: 'Navigation', action: openSettingsSurface },
     { id: 'nav.cockpit', label: 'Open Cockpit (Worker Supervisor)', category: 'Navigation', action: openCockpitSurface },
+    { id: 'nav.mermaid', label: 'Open Mermaid Canvas', category: 'Navigation', action: openMermaidSurface },
     { id: 'nav.search', label: 'Toggle Search', category: 'Navigation', action: () => { setShowSearch(showSearch ? 0 : 1); if (!showSearch) searchProject(searchQuery); } },
     { id: 'nav.terminal', label: 'Toggle Terminal', category: 'Navigation', action: () => { if (showTerminal) closeTerminalSurface('palette toggle off'); else { openTerminal(); setShowTerminal(1); setTerminalDockExpanded(0); } } },
     { id: 'nav.chat', label: 'Toggle Agent Chat', category: 'Navigation', action: () => { setShowChat(showChat ? 0 : 1); } },
@@ -1418,6 +1431,7 @@ export default function CursorIdeApp() {
       items: [
         { label: 'Toggle Sidebar', action: toggleSidebarSurface },
         { label: 'Toggle Terminal', action: toggleTerminalSurface },
+        { label: 'Mermaid Canvas', action: openMermaidSurface },
         { label: 'Command Palette', shortcut: 'Ctrl+K', action: () => setShowPalette(1) },
         { kind: 'separator', label: '' },
         { label: 'Zoom In', shortcut: 'Ctrl++', action: zoomIn },
@@ -1465,6 +1479,14 @@ export default function CursorIdeApp() {
       );
     }
 
+    if (currentFilePath === '__mermaid__') {
+      return (
+        <FadeIn delay={0} style={{ width: '100%', height: '100%', flexGrow: 1, flexBasis: 0, minHeight: 0 }}>
+          <MermaidPanel widthBand={widthBand} title="Mermaid Canvas" onClose={openLandingPage} />
+        </FadeIn>
+      );
+    }
+
     return (
       <Box style={{ display: 'flex', flexGrow: 1, flexBasis: 0, minHeight: 0 }}>
         <FadeIn delay={0} style={{ width: '100%', height: '100%', flexGrow: 1, flexBasis: 0, minHeight: 0, display: 'flex' }}>
@@ -1479,7 +1501,7 @@ export default function CursorIdeApp() {
       <Col style={{ width: '100%', height: '100%' }}>
         <TopBar
           menuSections={menuSections}
-          displayTitle={currentFilePath === '__landing__' ? 'Project landing' : currentFilePath === '__settings__' ? 'Settings' : minimumMode ? baseName(currentFilePath) : currentFilePath}
+          displayTitle={currentFilePath === '__landing__' ? 'Project landing' : currentFilePath === '__settings__' ? 'Settings' : currentFilePath === '__mermaid__' ? 'Mermaid' : minimumMode ? baseName(currentFilePath) : currentFilePath}
           workspaceName={workspaceName}
           gitBranch={gitBranch}
           changedCount={changedCount}
