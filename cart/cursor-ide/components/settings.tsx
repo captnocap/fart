@@ -1655,9 +1655,22 @@ function ProvidersPanel(props: {
   const selectedProvider = filtered.find(x => x.type === props.selectedProviderId) || filtered[0] || p[0];
   const storedKeyCount = listApiKeys().length;
 
+  function doReset() {
+    for (const entry of BACKEND_ENTRIES) {
+      sdel('providers.' + entry.id + '.enabled');
+      sdel('providers.' + entry.id + '.cliPath');
+      sdel('providers.' + entry.id + '.baseUrl');
+      sdel('providers.' + entry.id + '.defaultModel');
+      sdel('providers.' + entry.id + '.workingDir');
+    }
+    sdel('providers.local.statuses');
+    sdel('providers.local.custom');
+    setKeyVersion(v => v + 1);
+  }
+
   return (
     <Col style={{ gap: 14 }}>
-      <SectionTitle title="Providers" description="Backends (API + CLI), local endpoints, and fallback HTTP providers." />
+      <SectionTitle title="Providers" description="Backends (API + CLI), local endpoints, and fallback HTTP providers." onReset={doReset} />
       <BackendsSection query={props.query} version={keyVersion} onBump={() => setKeyVersion(v => v + 1)} />
       <LocalEndpointsSection query={props.query} version={keyVersion} onBump={() => setKeyVersion(v => v + 1)} />
       <Box style={{ padding: 14, borderRadius: TOKENS.radiusMd, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelRaised, gap: 12 }}>
