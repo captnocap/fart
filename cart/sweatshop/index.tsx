@@ -101,6 +101,8 @@ import { GitPanel } from './components/git/GitPanel';
 import { PlanPanelWrapper } from './components/planwrapper';
 import { saveCheckpoint, loadCheckpoints } from './checkpoint';
 import { CommandPalette, type PaletteCommand } from './components/palette';
+import { ToastProvider } from './components/toast/ToastProvider';
+import { toast as pushToast } from './components/toast/useToast';
 import type { MenuBarSection } from './components/menubar';
 import { buildWindowMenuSection, getDefaultOpenPanelIds, useRegisteredPanels } from './panel-registry';
 import { getIndexStats } from './indexer';
@@ -209,7 +211,6 @@ export default function CursorIdeApp() {
   const [terminalRecordFrames, setTerminalRecordFrames] = useState(0);
   const [terminalPlaybackState, setTerminalPlaybackState] = useState<any>(null);
   const [pluginRegistry, setPluginRegistry] = useState<PluginRegistry | null>(null);
-  const [pluginNotifications, setPluginNotifications] = useState<any[]>([]);
   const [showPalette, setShowPalette] = useState(0);
   const openPalette = useCallback(() => setShowPalette(1), []);
   const [dockPanels, setDockPanels] = usePersistentState<string[]>('sweatshop.dockPanels', getDefaultOpenPanelIds());
@@ -1228,7 +1229,11 @@ export default function CursorIdeApp() {
       });
       setPluginRegistry(registry);
       const unsub = registry.onNotification((n) => {
-        setPluginNotifications((prev) => [...prev.slice(-9), n]);
+        const level = n.type === 'error' ? 'error' : n.type === 'success' ? 'success' : n.type === 'warning' ? 'warn' : 'info';
+        pushToast(n.message, {
+          title: 'Plugin ' + (level === 'warn' ? 'warning' : level),
+          level,
+        });
       });
       return unsub;
     } catch (e: any) {
@@ -1596,8 +1601,9 @@ export default function CursorIdeApp() {
 
   return (
     <TooltipLayer>
-      <Box style={{ width: '100%', height: '100%', backgroundColor: COLORS.appBg }}>
-        <Col style={{ width: '100%', height: '100%' }}>
+      <ToastProvider>
+        <Box style={{ width: '100%', height: '100%', backgroundColor: COLORS.appBg }}>
+          <Col style={{ width: '100%', height: '100%' }}>
         <TopBar
           menuSections={menuSections}
           displayTitle={currentFilePath === '__landing__' ? 'Project landing' : currentFilePath === '__settings__' ? 'Settings' : currentFilePath === '__mermaid__' ? 'Mermaid' : minimumMode ? baseName(currentFilePath) : currentFilePath}
@@ -1869,22 +1875,10 @@ export default function CursorIdeApp() {
           </Row>
         )}
 
-        {/* Plugin notifications */}
-        {pluginNotifications.length > 0 ? (
-          <Box style={{ backgroundColor: COLORS.panelBg, borderTopWidth: 1, borderColor: COLORS.border, paddingLeft: 10, paddingRight: 10, paddingTop: 4, paddingBottom: 4 }}>
-            {pluginNotifications.slice(-3).map((n: any) => (
-              <Row key={n.id} style={{ alignItems: 'center', gap: 6 }}>
-                <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: n.type === 'error' ? COLORS.red : n.type === 'success' ? COLORS.green : n.type === 'warning' ? COLORS.yellow : COLORS.blue }} />
-                <Text fontSize={9} color={COLORS.textDim}>{n.message}</Text>
-              </Row>
-            ))}
-          </Box>
-        ) : null}
-
-        {showStatusBar ? (
-          <StatusBar
-            gitBranch={gitBranch}
-            gitStatus={gitStatus}
+          {showStatusBar ? (
+            <StatusBar
+              gitBranch={gitBranch}
+              gitStatus={gitStatus}
             gitRemote={gitRemote}
             branchAhead={branchAhead}
             branchBehind={branchBehind}
@@ -1911,22 +1905,23 @@ export default function CursorIdeApp() {
           />
         ) : null}
 
-        <CommandPalette
-          open={showPalette === 1}
-          onClose={() => setShowPalette(0)}
-          onOpen={openPalette}
-          commands={paletteCommands}
-          files={cachedTreePathsRef.current}
-          settingsSections={settingsSections.map((s: any) => ({ id: s.id, label: s.label }))}
-          menuSections={menuSections}
-          onOpenFile={loadFileByPath}
-          onJumpToSettingsSection={(sectionId: string) => {
-            openSettingsSurface();
-            setSettingsSection(sectionId);
-          }}
-        />
-        </Col>
-      </Box>
+          <CommandPalette
+            open={showPalette === 1}
+            onClose={() => setShowPalette(0)}
+            onOpen={openPalette}
+            commands={paletteCommands}
+            files={cachedTreePathsRef.current}
+            settingsSections={settingsSections.map((s: any) => ({ id: s.id, label: s.label }))}
+            menuSections={menuSections}
+            onOpenFile={loadFileByPath}
+            onJumpToSettingsSection={(sectionId: string) => {
+              openSettingsSurface();
+              setSettingsSection(sectionId);
+            }}
+          />
+          </Col>
+        </Box>
+      </ToastProvider>
     </TooltipLayer>
   );
 }
