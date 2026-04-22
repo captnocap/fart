@@ -123,6 +123,7 @@ export function TerminalInstance(props: {
   const [findQuery, setFindQuery] = useState('');
   const [scrollbackLimit, setScrollbackLimit] = useState(DEFAULT_SCROLLBACK_LIMIT);
   const [selectedSearchLine, setSelectedSearchLine] = useState<SearchSelection>(null);
+  const [revision, setRevision] = useState(0);
   const historyScrollRef = useRef(null);
   const historyScroll = useDragToScroll(historyScrollRef, { axis: 'y', inertia: false, grabCursor: true, surfaceKey: 'scrolling.terminalDragToScroll' });
   const findScrollRef = useRef(null);
@@ -165,6 +166,7 @@ export function TerminalInstance(props: {
       }
     }
     entry.pending = pending;
+    setRevision((value) => value + 1);
   }, [scrollbackLimit]);
 
   const terminal = useTerminalSpawn({
