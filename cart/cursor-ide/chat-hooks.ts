@@ -1,5 +1,5 @@
 // =============================================================================
-// CHAT HOOKS — composer history, message search, export state
+// CHAT HOOKS — composer history, message search, export state, conversations
 // =============================================================================
 
 const React: any = require('react');
@@ -97,4 +97,93 @@ export function useTypingDots(speedMs: number = 400): number {
   }, [speedMs]);
 
   return dot;
+}
+
+// ── Conversation List ────────────────────────────────────────────────────────
+
+export interface ConversationMeta {
+  id: string;
+  title: string;
+  timestamp: number;
+  messageCount: number;
+  preview: string;
+}
+
+const CONV_STORAGE_KEY = 'cursor-ide:conversations';
+
+function loadConversations(): ConversationMeta[] {
+  try {
+    const raw = (globalThis as any).__localstore_get?.(CONV_STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  try {
+    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(CONV_STORAGE_KEY) : null;
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return [];
+}
+
+function saveConversations(list: ConversationMeta[]) {
+  const json = JSON.stringify(list);
+  try {
+    (globalThis as any).__localstore_set?.(CONV_STORAGE_KEY, json);
+  } catch {}
+  try {
+    if (typeof localStorage !== 'undefined') localStorage.setItem(CONV_STORAGE_KEY, json);
+  } catch {}
+}
+
+export function useConversationList() {
+  const [conversations, setConversations] = useState<ConversationMeta[]>(loadConversations);
+
+  const addConversation = useCallback((messages: any[]) => {
+    if (!messages || messages.length === 0) return;
+    const firstUser = messages.find((m: any) => m.role === 'user');
+    const title = firstUser?.text?.slice(0, 40) || 'New conversation';
+    const preview = messages[messages.length - 1]?.text?.slice(0, 60) || '';
+    const meta: ConversationMeta = {
+      id: String(Date.now()),
+      title,
+      timestamp: Date.now(),
+      messageCount: messages.length,
+      preview,
+    };
+    setConversations(prev => {
+      const next = [meta, ...prev].slice(0, 30);
+      saveConversations(next);
+      return next;
+    });
+  }, []);
+
+  const deleteConversation = useCallback((id: string) => {
+    setConversations(prev => {
+      const next = prev.filter(c => c.id !== id);
+      saveConversations(next);
+      return next;
+    });
+  }, []);
+
+  return { conversations, addConversation, deleteConversation };
+}
+
+// ── Scroll-to-bottom stub ────────────────────────────────────────────────────
+// Host does not expose scroll position / scrollTo API yet, so this is UI-only.
+
+export function useScrollBottomStub(messages: any[], isGenerating: boolean) {
+  const [dismissed, setDismissed] = useState(false);
+
+  React.useEffect(() => {
+    setDismissed(false);
+  }, [messages.length]);
+
+  const show = messages.length > 5 && isGenerating && !dismissed;
+
+  return {
+    showScrollButton: show,
+    dismissScrollButton: () => setDismissed(true),
+    scrollToBottom: () => {
+      // TODO: wire to host ScrollView scrollToEnd when available
+      setDismissed(true);
+    },
+  };
 }
