@@ -1112,6 +1112,82 @@ fn scrollOffsetForNode(node: *Node, target: *Node, sx: *f32, sy: *f32) bool {
     return false;
 }
 
+fn markScrollActivity(node: *Node) void {
+    node.scrollbar_last_activity_ms = @intCast(c.SDL_GetTicks());
+}
+
+fn scrollbarOpacity(node: *Node) f32 {
+    if (!node.show_scrollbar) return 0;
+    if (!node.scrollbar_auto_hide) return 0.72;
+    const last = node.scrollbar_last_activity_ms;
+    if (last <= 0) return 0;
+
+    const now: i64 = @intCast(c.SDL_GetTicks());
+    const age = now - last;
+    if (age <= 0) return 0.72;
+
+    const hold_ms: i64 = 650;
+    const fade_ms: i64 = 260;
+    if (age <= hold_ms) return 0.82;
+
+    const fade_age = age - hold_ms;
+    if (fade_age >= fade_ms) return 0;
+    const t = @as(f32, @floatFromInt(fade_age)) / @as(f32, @floatFromInt(fade_ms));
+    return 0.82 * (1.0 - t);
+}
+
+fn paintScrollbars(node: *Node) void {
+    const ov = node.style.overflow;
+    const r = node.computed;
+    const max_scroll_x = @max(0.0, node.content_width - r.w);
+    const max_scroll_y = @max(0.0, node.content_height - r.h);
+    const show_vertical = node.show_scrollbar and r.h > 0 and (ov == .scroll or (ov == .auto and max_scroll_y > 0));
+    const show_horizontal = node.show_scrollbar and r.w > 0 and (ov == .scroll or (ov == .auto and max_scroll_x > 0));
+    const opacity = scrollbarOpacity(node);
+    if (opacity <= 0 or (!show_vertical and !show_horizontal)) return;
+
+    const track_alpha = opacity * 0.14 * g_paint_opacity;
+    const thumb_alpha = opacity * 0.62 * g_paint_opacity;
+    const inset: f32 = 2.0;
+    const track_thickness: f32 = 3.0;
+    const thumb_thickness: f32 = 4.0;
+    const min_thumb_len: f32 = 18.0;
+
+    if (show_vertical) {
+        const track_x = switch (node.scrollbar_side) {
+            .left => r.x + inset,
+            else => r.x + r.w - inset - track_thickness,
+        };
+        const track_y = r.y + inset;
+        const track_h = @max(0.0, r.h - inset * 2.0);
+        const thumb_h = @min(track_h, @max(min_thumb_len, if (node.content_height > 0) (r.h * r.h / @max(node.content_height, 1.0)) else track_h));
+        const thumb_y = if (max_scroll_y > 0)
+            track_y + ((node.scroll_y / max_scroll_y) * @max(0.0, track_h - thumb_h))
+        else
+            track_y;
+
+        gpu.drawRect(track_x, track_y, track_thickness, track_h, 0.18, 0.20, 0.24, track_alpha, track_thickness * 0.5, 0, 0, 0, 0, 0);
+        gpu.drawRect(track_x + 0.5, thumb_y, thumb_thickness, thumb_h, 0.84, 0.88, 0.94, thumb_alpha, thumb_thickness * 0.5, 0, 0, 0, 0, 0);
+    }
+
+    if (show_horizontal) {
+        const track_y = switch (node.scrollbar_side) {
+            .top => r.y + inset,
+            else => r.y + r.h - inset - track_thickness,
+        };
+        const track_x = r.x + inset;
+        const track_w = @max(0.0, r.w - inset * 2.0);
+        const thumb_w = @min(track_w, @max(min_thumb_len, if (node.content_width > 0) (r.w * r.w / @max(node.content_width, 1.0)) else track_w));
+        const thumb_x = if (max_scroll_x > 0)
+            track_x + ((node.scroll_x / max_scroll_x) * @max(0.0, track_w - thumb_w))
+        else
+            track_x;
+
+        gpu.drawRect(track_x, track_y, track_w, track_thickness, 0.18, 0.20, 0.24, track_alpha, track_thickness * 0.5, 0, 0, 0, 0, 0);
+        gpu.drawRect(thumb_x, track_y + 0.5, thumb_w, thumb_thickness, 0.84, 0.88, 0.94, thumb_alpha, thumb_thickness * 0.5, 0, 0, 0, 0, 0);
+    }
+}
+
 fn hitTestInputByte(id: u8, local_x: f32, local_y: f32, font_size: u16, max_width: f32, line_height: f32) u32 {
     const typed = input.getText(id);
     if (typed.len == 0) return 0;
@@ -1241,6 +1317,8 @@ fn paintNode(node: *Node) void {
     } else {
         for (node.children) |*child| if (!child.effect_background) paintNode(child);
     }
+
+    if (is_scroll) paintScrollbars(node);
 
     if (is_clipped) gpu.popScissor();
     g_paint_opacity = saved_opacity;
@@ -2966,6 +3044,7 @@ pub fn run(config_in: AppConfig) !void {
                             const max_sy = @max(0.0, scroll_node.content_height - scroll_node.computed.h);
                             scroll_node.scroll_x = @max(0.0, @min(scroll_node.scroll_x, max_sx));
                             scroll_node.scroll_y = @max(0.0, @min(scroll_node.scroll_y, max_sy));
+                            markScrollActivity(scroll_node);
                             luajit_runtime.persistScrollSlot(scroll_node.scroll_persist_slot, scroll_node.scroll_y);
                             if (scroll_node.handlers.on_scroll) |handler| {
                                 qjs_runtime.prepareScrollEvent(
@@ -2996,6 +3075,7 @@ pub fn run(config_in: AppConfig) !void {
                         const max_scroll_y = @max(0.0, scroll_node.content_height - scroll_node.computed.h);
                         scroll_node.scroll_x = @max(0.0, @min(scroll_node.scroll_x, max_scroll_x));
                         scroll_node.scroll_y = @max(0.0, @min(scroll_node.scroll_y, max_scroll_y));
+                        markScrollActivity(scroll_node);
                         luajit_runtime.persistScrollSlot(scroll_node.scroll_persist_slot, scroll_node.scroll_y);
                         if (scroll_node.handlers.on_scroll) |handler| {
                             qjs_runtime.prepareScrollEvent(
