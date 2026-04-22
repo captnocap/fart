@@ -4,6 +4,7 @@ const { createContext, useCallback, useEffect, useMemo, useState } = React;
 import { Box, Row, Text } from '../../../../runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 import { useTransition } from '../../anim';
+import { renderMarkdownInline } from '../markdown/inlineRenderer';
 import { ShortcutChip } from './ShortcutChip';
 import { useAutoFlip, type TooltipRect, type TooltipViewport } from './useAutoFlip';
 
@@ -12,6 +13,7 @@ type TooltipSide = 'top' | 'bottom' | 'left' | 'right';
 type TooltipState = {
   id: number;
   label: string;
+  markdown?: boolean;
   shortcut?: string;
   side: TooltipSide;
   anchor: TooltipRect;
@@ -73,9 +75,15 @@ function TooltipOverlay(props: { active: TooltipState | null; viewport: TooltipV
           shadowOffset: { width: 0, height: 2 },
         }}>
           <Row style={{ gap: 8, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
-            <Text fontSize={9} color={COLORS.textBright} style={{ fontWeight: 'bold', flexShrink: 1 }}>
-              {active.label}
-            </Text>
+            {active.markdown ? (
+              <Box style={{ flexGrow: 1, flexBasis: 0, minWidth: 0 }}>
+                {renderMarkdownInline(active.label, { fontSize: 9, color: COLORS.textBright, keyPrefix: 'tooltip-md' })}
+              </Box>
+            ) : (
+              <Text fontSize={9} color={COLORS.textBright} style={{ fontWeight: 'bold', flexShrink: 1 }}>
+                {active.label}
+              </Text>
+            )}
             {active.shortcut ? <ShortcutChip chord={active.shortcut} /> : null}
           </Row>
         </Box>

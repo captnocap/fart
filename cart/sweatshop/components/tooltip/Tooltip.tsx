@@ -8,6 +8,7 @@ type TooltipSide = 'top' | 'bottom' | 'left' | 'right';
 
 export function Tooltip(props: {
   label: string;
+  markdown?: boolean;
   side?: TooltipSide;
   delayMs?: number;
   disabled?: boolean;
@@ -29,10 +30,10 @@ export function Tooltip(props: {
       return;
     }
     const timer = setTimeout(() => {
-      tokenRef.current = ctx.show({ label: props.label, shortcut, side, anchor });
+      tokenRef.current = ctx.show({ label: props.label, markdown: props.markdown, shortcut, side, anchor });
     }, delayMs);
     return () => clearTimeout(timer);
-  }, [anchor, ctx, delayMs, hovered, props.disabled, props.label, shortcut, side]);
+  }, [anchor, ctx, delayMs, hovered, props.disabled, props.label, props.markdown, shortcut, side]);
 
   useEffect(() => {
     if (!hovered && tokenRef.current != null) {
