@@ -87,6 +87,7 @@ require('./panels/audio-capture.panel');
 require('./panels/noise.panel');
 require('./panels/system-info.panel');
 require('./panels/docs.panel');
+require('./panels/docs.panel');
 require('./panels/finance.panel');
 require('./panels/crypto.panel');
 require('./panels/gamepad.panel');
