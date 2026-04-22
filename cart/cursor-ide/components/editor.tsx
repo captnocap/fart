@@ -2,7 +2,7 @@ const React: any = require('react');
 const { useRef, useState, useMemo, memo } = React;
 
 import { Box, Col, CodeGutter, Minimap, Pressable, Row, ScrollView, Text, TextEditor } from '../../../runtime/primitives';
-import { COLORS, fileGlyph, fileTone, inferFileType, languageForType, baseName, parentPath } from '../theme';
+import { COLORS, TOKENS, fileGlyph, fileTone, inferFileType, languageForType, baseName, parentPath } from '../theme';
 import { Glyph } from './shared';
 import { editorAccentTone, editorTokenTone } from '../utils';
 import { Pill } from './shared';
@@ -112,7 +112,7 @@ function EditorSurfaceImpl(props: any) {
             <Pill label={props.languageMode} color={fileTone(fileType)} backgroundColor={COLORS.grayChip} borderColor={COLORS.border} tiny={true} />
             <Pill label={props.largeFileMode ? 'large-file mode' : 'native syntax'} color={props.largeFileMode ? COLORS.yellow : COLORS.textMuted} backgroundColor={COLORS.grayChip} borderColor={COLORS.border} tiny={true} />
             {props.modified ? <Pill label="modified" color={COLORS.yellow} backgroundColor={COLORS.yellowDeep} borderColor={COLORS.yellowDeep} tiny={true} /> : <Pill label="saved" color={COLORS.green} backgroundColor={COLORS.greenDeep} borderColor={COLORS.greenDeep} tiny={true} />}
-            <Pressable onPress={props.onSave} style={{ padding: 8, borderRadius: 10, backgroundColor: COLORS.blueDeep, borderWidth: 1, borderColor: COLORS.blue }}>
+            <Pressable onPress={props.onSave} style={{ padding: 8, borderRadius: TOKENS.radiusLg, backgroundColor: COLORS.blueDeep, borderWidth: 1, borderColor: COLORS.blue }}>
               <Text fontSize={10} color={COLORS.blue}>Save</Text>
             </Pressable>
           </Row>
@@ -120,7 +120,7 @@ function EditorSurfaceImpl(props: any) {
       </Row>
 
       <Row style={{ flexGrow: 1, flexBasis: 0, minHeight: 0, padding: compactBand ? 8 : 10, gap: 10, backgroundColor: COLORS.panelBg }}>
-        <Col style={{ flexGrow: 1, flexBasis: 0, minWidth: 0, borderWidth: 1, borderColor: COLORS.border, borderRadius: 18, backgroundColor: '#0a0f17', overflow: 'hidden' }}>
+        <Col style={{ flexGrow: 1, flexBasis: 0, minWidth: 0, borderWidth: 1, borderColor: COLORS.border, borderRadius: TOKENS.radiusLg, backgroundColor: '#0a0f17', overflow: 'hidden' }}>
           <Row style={{ justifyContent: 'space-between', alignItems: 'center', paddingLeft: compactBand ? 10 : 12, paddingRight: compactBand ? 10 : 12, paddingTop: 8, paddingBottom: 8, borderBottomWidth: 1, borderColor: '#111a25', backgroundColor: '#0d131d' }}>
             <Row style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
               <Pill label={'Ln ' + props.cursorLine} color={COLORS.blue} backgroundColor={COLORS.blueDeep} borderColor={COLORS.blueDeep} tiny={true} />
@@ -174,7 +174,7 @@ function EditorSurfaceImpl(props: any) {
         </Col>
 
         {showMinimap ? (
-          <Col style={{ width: 90, borderWidth: 1, borderColor: COLORS.border, borderRadius: 18, backgroundColor: COLORS.panelRaised, padding: 8, gap: 3 }}>
+          <Col style={{ width: 90, borderWidth: 1, borderColor: COLORS.border, borderRadius: TOKENS.radiusLg, backgroundColor: COLORS.panelRaised, padding: 8, gap: 3 }}>
             <Row style={{ justifyContent: 'space-between', alignItems: 'center' }}>
               <Text fontSize={10} color={COLORS.textDim}>overview</Text>
               <Text fontSize={10} color={COLORS.textDim}>{props.totalLines}</Text>
