@@ -5,7 +5,7 @@ const { memo } = React;
 import { Box, Col, Pressable, Row, ScrollView, Text } from '../../../runtime/primitives';
 import { COLORS, fileTone, samePath } from '../theme';
 import { Icon } from './icons';
-import { Pill } from './shared';
+import { HoverPressable, Pill } from './shared';
 
 // File-tree virtualization constants. Each row is ~34px (padding 6+6 +
 // ~11px text + gap). Overscan keeps scrolling smooth by rendering a bit
@@ -35,7 +35,7 @@ function DockButton(props: {
 }) {
   const active = props.active === true;
   return (
-    <Pressable
+    <HoverPressable
       onPress={props.onPress}
       style={{
         paddingTop: 7,
@@ -55,7 +55,7 @@ function DockButton(props: {
         {props.label.slice(0, 2).toUpperCase()}
       </Text>
       {props.count ? <Text fontSize={8} color={props.tone}>{props.count}</Text> : null}
-    </Pressable>
+    </HoverPressable>
   );
 }
 
@@ -156,12 +156,12 @@ function FilesPanel(props: any) {
       </Pressable>
 
       <Row style={{ gap: 8, flexWrap: 'wrap' }}>
-        <Pressable onPress={props.onRefreshWorkspace} style={{ padding: 8, borderRadius: 8, backgroundColor: COLORS.panelAlt, borderWidth: 1, borderColor: COLORS.border }}>
+        <HoverPressable onPress={props.onRefreshWorkspace} style={{ padding: 8, borderRadius: 8, backgroundColor: COLORS.panelAlt, borderWidth: 1, borderColor: COLORS.border }}>
           <Text fontSize={10} color={COLORS.blue}>Refresh</Text>
-        </Pressable>
-        <Pressable onPress={props.onCreateFile} style={{ padding: 8, borderRadius: 8, backgroundColor: COLORS.panelAlt, borderWidth: 1, borderColor: COLORS.border }}>
+        </HoverPressable>
+        <HoverPressable onPress={props.onCreateFile} style={{ padding: 8, borderRadius: 8, backgroundColor: COLORS.panelAlt, borderWidth: 1, borderColor: COLORS.border }}>
           <Text fontSize={10} color={COLORS.green}>New File</Text>
-        </Pressable>
+        </HoverPressable>
       </Row>
 
       <Box style={{ gap: 8 }}>

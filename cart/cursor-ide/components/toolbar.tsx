@@ -3,7 +3,7 @@ const React: any = require('react');
 import { Box, Col, Pressable, Row, Text } from '../../../runtime/primitives';
 import { closeWindow, maximizeWindow, minimizeWindow } from '../host';
 import { COLORS, TOKENS } from '../theme';
-import { Glyph, HeaderButton } from './shared';
+import { Glyph, HeaderButton, HoverPressable } from './shared';
 import { MenuBar } from './menubar';
 
 export function TopBar(props: any) {
@@ -29,9 +29,9 @@ export function TopBar(props: any) {
       >
         <Row style={{ alignItems: 'center', gap: 8, flexGrow: 1, flexBasis: 0 }}>
           <Row style={{ gap: 6, alignItems: 'center' }}>
-            <Pressable onPress={closeWindow}><Box style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: '#ff5f57' }} /></Pressable>
-            <Pressable onPress={minimizeWindow}><Box style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: '#febc2e' }} /></Pressable>
-            <Pressable onPress={maximizeWindow}><Box style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: '#28c840' }} /></Pressable>
+            <HoverPressable onPress={closeWindow} style={{ padding: 2, borderRadius: 999, backgroundColor: 'transparent' }} hoverScale={1.12}><Box style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: '#ff5f57' }} /></HoverPressable>
+            <HoverPressable onPress={minimizeWindow} style={{ padding: 2, borderRadius: 999, backgroundColor: 'transparent' }} hoverScale={1.12}><Box style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: '#febc2e' }} /></HoverPressable>
+            <HoverPressable onPress={maximizeWindow} style={{ padding: 2, borderRadius: 999, backgroundColor: 'transparent' }} hoverScale={1.12}><Box style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: '#28c840' }} /></HoverPressable>
           </Row>
 
           <Pressable
@@ -119,7 +119,7 @@ export function TopBar(props: any) {
 
 export function CompactSurfaceButton(props: any) {
   return (
-    <Pressable
+    <HoverPressable
       onPress={props.onPress}
       style={{
         flexDirection: 'row',
@@ -141,6 +141,6 @@ export function CompactSurfaceButton(props: any) {
           {props.label}
         </Text>
       ) : null}
-    </Pressable>
+    </HoverPressable>
   );
 }

@@ -1,8 +1,9 @@
 const React: any = require('react');
 const { useState, useMemo, useCallback, useEffect } = React;
-import { Box, Col, Row, Text, Pressable } from '../../../../runtime/primitives';
+import { Box, Col, Row, Text } from '../../../../runtime/primitives';
 import { WorkerTile, type Worker, type WorkerStatus } from './WorkerTile';
 import { WorkerStrip } from './WorkerStrip';
+import { HoverPressable } from '../shared';
 
 const ACCENTS = ['#2d62ff', '#ff7b72', '#7ee787', '#d2a8ff', '#ffb86b', '#79c0ff', '#ff6bcb', '#f2e05a'];
 const STATUSES: WorkerStatus[] = ['thinking', 'tool', 'idle', 'stuck', 'rationalizing', 'thinking', 'tool', 'done'];
@@ -179,13 +180,13 @@ function HudCount({ label, n, color }: { label: string; n: number; color: string
 
 function PanBtn({ label, onPress }: { label: string; onPress: () => void }) {
   return (
-    <Pressable onPress={onPress} style={{
+    <HoverPressable onPress={onPress} style={{
       width: 26, height: 26, borderRadius: 6,
       backgroundColor: '#0b1018', borderWidth: 1, borderColor: '#1f2630',
       alignItems: 'center', justifyContent: 'center',
     }}>
       <Text style={{ color: '#8b98a6', fontSize: 12, fontWeight: 700 }}>{label}</Text>
-    </Pressable>
+    </HoverPressable>
   );
 }
 
