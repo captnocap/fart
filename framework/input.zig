@@ -17,7 +17,7 @@ const std = @import("std");
 const c = @import("c.zig").imports;
 
 pub const MAX_INPUTS = 128;
-// Large editor surfaces like cursor-ide need materially more than 4 KiB or the
+// Large editor surfaces like sweatshop need materially more than 4 KiB or the
 // controlled input truncates immediately on mount.
 const BUF_SIZE = 256 * 1024;
 

@@ -361,7 +361,7 @@ export function flushToHost(): void {
 // A single user event can trigger a chain of commits: click sets tab, effect
 // syncs derived state, memo invalidates, another effect fires, … React calls
 // resetAfterCommit per commit. Flushing synchronously there turns one event
-// into N separate __hostFlush calls (10+ seen in the cursor-ide tab switch),
+// into N separate __hostFlush calls (10+ seen in the sweatshop tab switch),
 // each with its own JSON.stringify + FFI crossing + Zig-side queue entry.
 //
 // Deferring the flush to a microtask lets all commits in the current
@@ -459,7 +459,7 @@ export function shallowEqual(
  * UPDATE just because `oldProps.onPress !== newProps.onPress` is pure waste —
  * and a parent that rerenders with inline arrow handlers cascades into O(N)
  * UPDATEs per frame across every Pressable in the subtree. That turns a
- * harmless ancestor rerender into a bridge flood (see the cursor-ide tab
+ * harmless ancestor rerender into a bridge flood (see the sweatshop tab
  * switch incident).
  *
  * Genuine adds/removes (onHoverEnter appearing, onPress disappearing) still

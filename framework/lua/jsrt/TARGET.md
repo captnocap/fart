@@ -147,9 +147,9 @@ Proves: hooks work via React's actual implementation; event dispatch triggers re
 
 Expected: each click → exactly one UPDATE_TEXT op with the new value.
 
-### 13 — cursor-ide file click  [pending — the finish line]
+### 13 — sweatshop file click  [pending — the finish line]
 
-Input: `cart/cursor-ide/index.tsx` — the real IDE cart, unmodified.
+Input: `cart/sweatshop/index.tsx` — the real IDE cart, unmodified.
 
 Measured: click a file in the sidebar, time until Zig host completes the flush apply.
 

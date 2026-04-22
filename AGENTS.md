@@ -56,7 +56,7 @@ game/                 <- Dead Internet Game. Separate project.
 
 EQJS was a JS→Lua transpiler attempt. It drifted into a TSX→React-in-Lua compiler, which is the trap this project has landed in seven times before. All EQJS sources were deleted on 2026-04-21:
 
-- `eqjs_app.zig`, `eqjs_cart_app.zig`, `cursor_ide_eqjs_app.zig` — Zig binaries loading `boot_bundle.lua`
+- `eqjs_app.zig`, `eqjs_cart_app.zig`, `sweatshop_eqjs_app.zig` — Zig binaries loading `boot_bundle.lua`
 - `deps/eqjs/` — the root JS→Lua transpiler + runtime + samples
 - `eqjs-artifacts/` — symlinks into a quarantined external dir
 - `tests/eqjs/` — EQJS-era smoke harness (salvageable bridges moved into `framework/lua/jsrt/test/`)
@@ -215,7 +215,7 @@ Use Opus 4.6 (`claude-opus-4-6`) or Opus 4.7 (`claude-opus-4-7`) for debugging a
 
 ## Known Gaps (current)
 
-- **JSRT target 13 pending** — evaluator + builtins are mature; no `jsrt_app.zig` binary yet, ship pipeline doesn't have a JSRT path yet, cursor-ide hasn't been run through JSRT end-to-end in a built binary. This is the unblock for large-tree perf.
+- **JSRT target 13 pending** — evaluator + builtins are mature; no `jsrt_app.zig` binary yet, ship pipeline doesn't have a JSRT path yet, sweatshop hasn't been run through JSRT end-to-end in a built binary. This is the unblock for large-tree perf.
 - **No inspector yet** — planned, regenerate from love2d's `packages/core/src/CartridgeInspector.tsx` + `lua/inspector.lua` as reference. Don't port `tsz/carts/tools/Inspector*.tsz` (frozen, Smith-era).
 - **Canvas/Graph viewport** — `viewX`/`viewY`/`viewZoom` on root tags are dropped silently. Needs `canvas.setCameraFor(...)` wiring at CREATE time in the host.
 - **Cockpit is frozen** — `tsz/carts/cockpit/` still uses Smith. Port to `.tsx` when ready.

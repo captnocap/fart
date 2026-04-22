@@ -1035,7 +1035,7 @@ pub const TextEngine = struct {
     }
 
     /// Hit-test with an explicit line-height override. When the caller has
-    /// set a non-default lineHeight on the node (e.g. cursor-ide passes
+    /// set a non-default lineHeight on the node (e.g. sweatshop passes
     /// `lineHeight: 17` for a 13px font), paint and hit-test MUST use the
     /// same line pitch or drag selection drifts — a ~7px font metric
     /// divided into 17px-spaced lines puts the resolved line 2.4× below the

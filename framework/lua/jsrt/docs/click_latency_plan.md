@@ -1,6 +1,6 @@
 # Click latency plan
 
-Target 13 needs a real measurement path for cursor-ide scale clicks. The goal is
+Target 13 needs a real measurement path for sweatshop scale clicks. The goal is
 to measure one click end-to-end without adding heap allocations or extra
 framework awareness to JSRT.
 
