@@ -892,8 +892,42 @@ const KEYBINDINGS: KeybindingSpec[] = [
 
 function chordKey(id: string) { return 'keybindings.' + id; }
 
+// Map a DOM-style key event to a canonical chord string (e.g. "Ctrl+Shift+K").
+// Accepts any object with the standard keyboard-event shape; modifier-only
+// presses return '' so the caller can wait for a real chord.
+function chordFromEvent(event: any): string {
+  if (!event) return '';
+  const key: string = typeof event.key === 'string' ? event.key : '';
+  if (!key) return '';
+  const lower = key.toLowerCase();
+  if (lower === 'control' || lower === 'shift' || lower === 'alt' || lower === 'meta') return '';
+  const parts: string[] = [];
+  if (event.ctrlKey)  parts.push('Ctrl');
+  if (event.altKey)   parts.push('Alt');
+  if (event.shiftKey) parts.push('Shift');
+  if (event.metaKey)  parts.push('Meta');
+  let main: string;
+  if (key === ' ') main = 'Space';
+  else if (key.length === 1) main = key.toUpperCase();
+  else if (lower === 'escape') main = 'Escape';
+  else if (lower === 'enter') main = 'Enter';
+  else if (lower === 'tab') main = 'Tab';
+  else if (lower === 'backspace') main = 'Backspace';
+  else if (lower === 'delete') main = 'Delete';
+  else if (lower === 'arrowup') main = 'Up';
+  else if (lower === 'arrowdown') main = 'Down';
+  else if (lower === 'arrowleft') main = 'Left';
+  else if (lower === 'arrowright') main = 'Right';
+  else main = key.charAt(0).toUpperCase() + key.slice(1);
+  parts.push(main);
+  return parts.join('+');
+}
+
 function KeybindingsPanel(props: { query: string; resetToken: number }) {
   const [version, setVersion] = useState(0);
+  const [recordingId, setRecordingId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [flash, setFlash] = useState<{ id: string; chord: string } | null>(null);
 
   useEffect(() => { setVersion(v => v + 1); }, [props.resetToken]);
 
@@ -909,6 +943,44 @@ function KeybindingsPanel(props: { query: string; resetToken: number }) {
   function doReset() {
     for (const spec of KEYBINDINGS) sdel(chordKey(spec.id));
     setVersion(v => v + 1);
+    setRecordingId(null);
+    setEditingId(null);
+    setFlash(null);
+  }
+
+  // Global key-capture while in recording mode. Captures the chord, persists,
+  // exits recording. Escape cancels; everything else is swallowed so the
+  // captured chord does not also trigger its normal shortcut action.
+  useEffect(() => {
+    if (!recordingId) return;
+    const target: any = (typeof window !== 'undefined') ? window : globalThis;
+    if (!target || typeof target.addEventListener !== 'function') return;
+    const onKey = (event: any) => {
+      try { event.preventDefault && event.preventDefault(); } catch {}
+      try { event.stopPropagation && event.stopPropagation(); } catch {}
+      const key = typeof event.key === 'string' ? event.key.toLowerCase() : '';
+      if (key === 'escape' && !event.ctrlKey && !event.altKey && !event.shiftKey && !event.metaKey) {
+        setRecordingId(null);
+        return;
+      }
+      const chord = chordFromEvent(event);
+      if (!chord) return; // modifier-only, wait for the real key
+      const spec = KEYBINDINGS.find(k => k.id === recordingId);
+      if (!spec) { setRecordingId(null); return; }
+      setChord(spec, chord);
+      setFlash({ id: spec.id, chord });
+      setRecordingId(null);
+    };
+    target.addEventListener('keydown', onKey, true);
+    return () => { try { target.removeEventListener('keydown', onKey, true); } catch {} };
+  }, [recordingId]);
+
+  // Build a conflict map so rows can warn when two bindings share a chord.
+  const chordOwners: Record<string, string[]> = {};
+  for (const spec of KEYBINDINGS) {
+    const c = chordFor(spec);
+    if (!chordOwners[c]) chordOwners[c] = [];
+    chordOwners[c].push(spec.id);
   }
 
   const q = (props.query || '').toLowerCase();
@@ -926,12 +998,27 @@ function KeybindingsPanel(props: { query: string; resetToken: number }) {
 
   return (
     <Col style={{ gap: 14 }}>
-      <SectionTitle title="Keybindings" description="Search and rebind command shortcuts. Edit the chord field to remap." onReset={doReset} />
+      <SectionTitle title="Keybindings" description="Click Record, press the keys you want — Escape cancels." onReset={doReset} />
+
+      {recordingId ? (
+        <Box style={{ padding: 12, borderRadius: TOKENS.radiusMd, borderWidth: 1, borderColor: COLORS.orange, backgroundColor: COLORS.orangeDeep, gap: 6 }}>
+          <Row style={{ alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <Text fontSize={11} color={COLORS.orange} style={{ fontWeight: 'bold' }}>Recording…</Text>
+            <Text fontSize={10} color={COLORS.text}>Press the new chord for <Text fontSize={10} color={COLORS.textBright} style={{ fontFamily: 'monospace', fontWeight: 'bold' }}>{recordingId}</Text>. Escape cancels.</Text>
+            <Box style={{ flexGrow: 1 }} />
+            <Pressable onPress={() => setRecordingId(null)} style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 6, paddingBottom: 6, borderRadius: TOKENS.radiusSm, backgroundColor: COLORS.panelAlt, borderWidth: 1, borderColor: COLORS.border }}>
+              <Text fontSize={10} color={COLORS.textDim} style={{ fontWeight: 'bold' }}>Cancel</Text>
+            </Pressable>
+          </Row>
+        </Box>
+      ) : null}
+
       {filtered.length === 0 ? (
         <Box style={{ padding: 14, borderRadius: TOKENS.radiusMd, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelRaised, alignItems: 'center' }}>
           <Text fontSize={11} color={COLORS.textDim}>No keybindings match "{props.query}".</Text>
         </Box>
       ) : null}
+
       {Object.keys(groups).map(category => (
         <Box key={category} style={{ padding: 14, borderRadius: TOKENS.radiusMd, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelRaised, gap: 8 }}>
           <Text fontSize={12} color={COLORS.blue} style={{ fontWeight: 'bold', letterSpacing: 0.6 }}>{category.toUpperCase()}</Text>
@@ -939,25 +1026,68 @@ function KeybindingsPanel(props: { query: string; resetToken: number }) {
             {groups[category].map(spec => {
               const current = chordFor(spec);
               const customised = current !== spec.defaultChord;
+              const isRecording = recordingId === spec.id;
+              const isEditing = editingId === spec.id;
+              const justFlashed = flash && flash.id === spec.id && flash.chord === current;
+              const owners = chordOwners[current] || [];
+              const conflict = current && owners.length > 1 ? owners.filter(id => id !== spec.id) : [];
+              const borderTone = isRecording ? COLORS.orange : conflict.length ? COLORS.red : customised ? COLORS.orange : COLORS.border;
               return (
-                <Row key={spec.id + '_' + version} style={{
-                  padding: 10, gap: 10,
+                <Col key={spec.id + '_' + version} style={{
+                  padding: 10, gap: 6,
                   borderRadius: TOKENS.radiusSm, borderWidth: 1,
-                  borderColor: customised ? COLORS.orange : COLORS.border,
-                  backgroundColor: COLORS.panelBg,
-                  alignItems: 'center', flexWrap: 'wrap',
+                  borderColor: borderTone,
+                  backgroundColor: justFlashed ? COLORS.greenDeep : COLORS.panelBg,
                 }}>
-                  <Col style={{ flexGrow: 1, flexBasis: 0, minWidth: 200, gap: 2 }}>
-                    <Text fontSize={11} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>{spec.label}</Text>
-                    <Text fontSize={9} color={COLORS.textDim} style={{ fontFamily: 'monospace' }}>{spec.id}</Text>
-                  </Col>
-                  <TextField value={current} onChange={(v) => setChord(spec, v)} width={160} mono={true} />
-                  {customised ? (
-                    <Pressable onPress={() => setChord(spec, spec.defaultChord)} style={{ paddingLeft: 8, paddingRight: 8, paddingTop: 4, paddingBottom: 4, borderRadius: TOKENS.radiusSm, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelAlt }}>
-                      <Text fontSize={9} color={COLORS.textDim}>default</Text>
+                  <Row style={{ alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                    <Col style={{ flexGrow: 1, flexBasis: 0, minWidth: 200, gap: 2 }}>
+                      <Text fontSize={11} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>{spec.label}</Text>
+                      <Text fontSize={9} color={COLORS.textDim} style={{ fontFamily: 'monospace' }}>{spec.id}</Text>
+                    </Col>
+                    <Box style={{
+                      minWidth: 140, paddingLeft: 10, paddingRight: 10, paddingTop: 6, paddingBottom: 6,
+                      borderRadius: TOKENS.radiusSm, borderWidth: 1,
+                      borderColor: isRecording ? COLORS.orange : COLORS.border,
+                      backgroundColor: isRecording ? COLORS.orangeDeep : COLORS.panelAlt,
+                    }}>
+                      <Text fontSize={11} color={isRecording ? COLORS.orange : COLORS.textBright} style={{ fontFamily: 'monospace', fontWeight: 'bold' }}>
+                        {isRecording ? 'press keys…' : (current || 'unbound')}
+                      </Text>
+                    </Box>
+                    {isRecording ? (
+                      <Pressable onPress={() => setRecordingId(null)} style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 6, paddingBottom: 6, borderRadius: TOKENS.radiusSm, backgroundColor: COLORS.panelAlt, borderWidth: 1, borderColor: COLORS.border }}>
+                        <Text fontSize={10} color={COLORS.textDim} style={{ fontWeight: 'bold' }}>Cancel</Text>
+                      </Pressable>
+                    ) : (
+                      <Pressable onPress={() => { setEditingId(null); setFlash(null); setRecordingId(spec.id); }} style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 6, paddingBottom: 6, borderRadius: TOKENS.radiusSm, backgroundColor: COLORS.blueDeep, borderWidth: 1, borderColor: COLORS.blue }}>
+                        <Text fontSize={10} color={COLORS.blue} style={{ fontWeight: 'bold' }}>Record</Text>
+                      </Pressable>
+                    )}
+                    <Pressable onPress={() => setEditingId(isEditing ? null : spec.id)} style={{ paddingLeft: 8, paddingRight: 8, paddingTop: 6, paddingBottom: 6, borderRadius: TOKENS.radiusSm, borderWidth: 1, borderColor: COLORS.border, backgroundColor: isEditing ? COLORS.panelHover : COLORS.panelAlt }}>
+                      <Text fontSize={10} color={isEditing ? COLORS.blue : COLORS.textDim}>{isEditing ? 'done' : 'type'}</Text>
                     </Pressable>
+                    {customised ? (
+                      <Pressable onPress={() => setChord(spec, spec.defaultChord)} style={{ paddingLeft: 8, paddingRight: 8, paddingTop: 6, paddingBottom: 6, borderRadius: TOKENS.radiusSm, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelAlt }}>
+                        <Text fontSize={10} color={COLORS.textDim}>default</Text>
+                      </Pressable>
+                    ) : null}
+                  </Row>
+                  {isEditing ? (
+                    <Row style={{ alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                      <Text fontSize={10} color={COLORS.textDim}>Chord string:</Text>
+                      <TextField value={current} onChange={(v) => setChord(spec, v)} width={200} mono={true} />
+                    </Row>
                   ) : null}
-                </Row>
+                  {conflict.length > 0 ? (
+                    <Row style={{ alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                      <Pill label="conflict" color={COLORS.red} tiny={true} />
+                      <Text fontSize={10} color={COLORS.red}>Also bound to:</Text>
+                      {conflict.map(id => (
+                        <Text key={id} fontSize={10} color={COLORS.textDim} style={{ fontFamily: 'monospace' }}>{id}</Text>
+                      ))}
+                    </Row>
+                  ) : null}
+                </Col>
               );
             })}
           </Col>
