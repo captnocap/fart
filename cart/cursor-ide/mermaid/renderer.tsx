@@ -180,3 +180,8 @@ export function MermaidRenderer(props: MermaidRendererProps) {
 export function renderMermaid(source: string): any {
   return <MermaidRenderer source={source} />;
 }
+
+const mermaidHost: any = globalThis as any;
+if (typeof mermaidHost.__mermaidRender !== 'function') {
+  mermaidHost.__mermaidRender = renderMermaid;
+}
