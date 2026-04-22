@@ -1,5 +1,5 @@
 const React: any = require('react');
-const { useMemo } = React;
+const { useMemo, useState } = React;
 
 import { Box, Col, Row, Text } from '../../../../runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
@@ -8,9 +8,11 @@ import { MediaLibrary } from './MediaLibrary';
 import { ImageSurface } from './ImageSurface';
 import { VideoSurface } from './VideoSurface';
 import { createMediaItem, useMediaStore } from './useMediaStore';
+import { MediaImportDialog } from '../media-import/MediaImportDialog';
 
 export function MediaPanel() {
   const store = useMediaStore();
+  const [showImport, setShowImport] = useState(false);
   const fallback = useMemo(() => createMediaItem('image', '', 'Media Preview'), []);
   const active = store.selected || fallback;
   const updateActive = (patch: any) => {
@@ -25,6 +27,7 @@ export function MediaPanel() {
         bgToken={active.bgToken}
         radiusKey={active.radiusKey}
         shadow={active.shadow}
+        onOpenImport={() => setShowImport(true)}
         onBgTokenChange={(bgToken) => updateActive({ bgToken })}
         onRadiusKeyChange={(radiusKey) => updateActive({ radiusKey })}
         onShadowChange={(shadow) => updateActive({ shadow })}
@@ -50,6 +53,11 @@ export function MediaPanel() {
           )}
         </Col>
       </Row>
+      <MediaImportDialog
+        open={showImport}
+        onClose={() => setShowImport(false)}
+        onConfirm={(items) => items.forEach((item) => store.addMedia(item.kind === 'video' ? 'video' : 'image', item.path, item.name))}
+      />
     </Col>
   );
 }
