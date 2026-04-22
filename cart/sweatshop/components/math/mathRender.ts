@@ -1,4 +1,6 @@
-import React from 'react';
+const React: any = require('react');
+const { createElement: h } = React;
+
 import { Box, Col, Row, Text } from '../../../../runtime/primitives';
 import type { MathNode } from './useLaTeXParse';
 
@@ -13,14 +15,13 @@ function nodeKey(node: MathNode, index: number): string {
 }
 
 function renderText(value: string, options: MathRenderOptions, key: string) {
-  return (
-    <Text key={key} style={{ color: options.color, fontSize: options.fontSize, lineHeight: options.fontSize * 1.15 }}>
-      {value}
-    </Text>
-  );
+  return h(Text, {
+    key,
+    style: { color: options.color, fontSize: options.fontSize, lineHeight: options.fontSize * 1.15 },
+  }, value);
 }
 
-function renderGroup(nodes: MathNode[], options: MathRenderOptions, keyPrefix: string): React.ReactNode {
+function renderGroup(nodes: MathNode[], options: MathRenderOptions, keyPrefix: string): React.ReactNode[] {
   return nodes.map((node, index) => renderNode(node, options, `${keyPrefix}-${nodeKey(node, index)}`));
 }
 
@@ -30,105 +31,69 @@ function renderScript(node: Extract<MathNode, { type: 'script' }>, options: Math
   const hasSuper = !!node.superscript?.length;
   const hasSub = !!node.subscript?.length;
 
-  return (
-    <Row key={key} style={{ alignItems: 'flex-start' }}>
-      {base}
-      <Col style={{ alignItems: 'flex-start', gap: 0, marginLeft: 1 }}>
-        {hasSuper ? (
-          <Box style={{ marginTop: -Math.max(3, options.fontSize * 0.25) }}>
-            <Row style={{ alignItems: 'flex-start' }}>
-              {renderGroup(node.superscript!, { ...options, fontSize: scriptSize }, `${key}-sup`)}
-            </Row>
-          </Box>
-        ) : (
-          <Box style={{ height: options.fontSize * 0.35 }} />
-        )}
-        {hasSub ? (
-          <Box style={{ marginTop: Math.max(1, options.fontSize * 0.02) }}>
-            <Row style={{ alignItems: 'flex-start' }}>
-              {renderGroup(node.subscript!, { ...options, fontSize: scriptSize }, `${key}-sub`)}
-            </Row>
-          </Box>
-        ) : null}
-      </Col>
-    </Row>
-  );
+  return h(Row, { key, style: { alignItems: 'flex-start' } }, [
+    base,
+    h(Col, { style: { alignItems: 'flex-start', gap: 0, marginLeft: 1 } }, [
+      hasSuper
+        ? h(Box, { style: { marginTop: -Math.max(3, options.fontSize * 0.25) } }, [
+            h(Row, { style: { alignItems: 'flex-start' } }, renderGroup(node.superscript!, { ...options, fontSize: scriptSize }, `${key}-sup`)),
+          ])
+        : h(Box, { style: { height: options.fontSize * 0.35 } }),
+      hasSub
+        ? h(Box, { style: { marginTop: Math.max(1, options.fontSize * 0.02) } }, [
+            h(Row, { style: { alignItems: 'flex-start' } }, renderGroup(node.subscript!, { ...options, fontSize: scriptSize }, `${key}-sub`)),
+          ])
+        : null,
+    ]),
+  ]);
 }
 
 function renderFraction(node: Extract<MathNode, { type: 'fraction' }>, options: MathRenderOptions, key: string) {
   const next = { ...options, fontSize: Math.max(10, Math.round(options.fontSize * 0.82)) };
-  return (
-    <Col key={key} style={{ alignItems: 'center', justifyContent: 'center', paddingLeft: 2, paddingRight: 2 }}>
-      <Row style={{ alignItems: 'center' }}>
-        {renderGroup(node.numerator, next, `${key}-num`)}
-      </Row>
-      <Box style={{ width: '100%', minWidth: 10, borderTopWidth: 1, borderColor: options.color, marginTop: 2, marginBottom: 2 }} />
-      <Row style={{ alignItems: 'center' }}>
-        {renderGroup(node.denominator, next, `${key}-den`)}
-      </Row>
-    </Col>
-  );
+  return h(Col, { key, style: { alignItems: 'center', justifyContent: 'center', paddingLeft: 2, paddingRight: 2 } }, [
+    h(Row, { style: { alignItems: 'center' } }, renderGroup(node.numerator, next, `${key}-num`)),
+    h(Box, { style: { width: '100%', minWidth: 10, borderTopWidth: 1, borderColor: options.color, marginTop: 2, marginBottom: 2 } }),
+    h(Row, { style: { alignItems: 'center' } }, renderGroup(node.denominator, next, `${key}-den`)),
+  ]);
 }
 
 function renderSqrt(node: Extract<MathNode, { type: 'sqrt' }>, options: MathRenderOptions, key: string) {
   const next = { ...options, fontSize: Math.max(10, Math.round(options.fontSize * 0.9)) };
-  return (
-    <Row key={key} style={{ alignItems: 'flex-start' }}>
-      <Text style={{ color: options.color, fontSize: options.fontSize, lineHeight: options.fontSize * 1.1 }}>
-        √
-      </Text>
-      <Col style={{ alignItems: 'flex-start', paddingLeft: 3, borderTopWidth: 1, borderColor: options.color, paddingTop: 2 }}>
-        {node.index ? (
-          <Row style={{ alignItems: 'flex-start', marginBottom: -2 }}>
-            {renderGroup(node.index, { ...options, fontSize: Math.max(8, Math.round(options.fontSize * 0.58)) }, `${key}-index`)}
-          </Row>
-        ) : null}
-        <Row style={{ alignItems: 'flex-start' }}>
-          {renderGroup(node.radicand, next, `${key}-rad`)}
-        </Row>
-      </Col>
-    </Row>
-  );
+  return h(Row, { key, style: { alignItems: 'flex-start' } }, [
+    h(Text, { style: { color: options.color, fontSize: options.fontSize, lineHeight: options.fontSize * 1.1 } }, '√'),
+    h(Col, { style: { alignItems: 'flex-start', paddingLeft: 3, borderTopWidth: 1, borderColor: options.color, paddingTop: 2 } }, [
+      node.index
+        ? h(Row, { style: { alignItems: 'flex-start', marginBottom: -2 } }, renderGroup(node.index, { ...options, fontSize: Math.max(8, Math.round(options.fontSize * 0.58)) }, `${key}-index`))
+        : null,
+      h(Row, { style: { alignItems: 'flex-start' } }, renderGroup(node.radicand, next, `${key}-rad`)),
+    ]),
+  ]);
 }
 
 function renderMatrix(node: Extract<MathNode, { type: 'matrix' }>, options: MathRenderOptions, key: string) {
-  const delimiters: Record<typeof node.variant, [string, string]> = {
+  const delimiters: Record<'matrix' | 'pmatrix' | 'bmatrix' | 'vmatrix', [string, string]> = {
     matrix: ['', ''],
     pmatrix: ['(', ')'],
     bmatrix: ['[', ']'],
     vmatrix: ['|', '|'],
   };
   const [left, right] = delimiters[node.variant];
-  return (
-    <Row key={key} style={{ alignItems: 'stretch' }}>
-      {left ? <Text style={{ color: options.color, fontSize: options.fontSize * 1.2 }}>{left}</Text> : null}
-      <Col style={{ alignItems: 'flex-start', paddingLeft: 4, paddingRight: 4, gap: 2 }}>
-        {node.rows.map((row, rowIndex) => (
-          <Row key={`${key}-row-${rowIndex}`} style={{ alignItems: 'center', gap: 8 }}>
-            {row.map((cell, cellIndex) => (
-              <Row key={`${key}-cell-${rowIndex}-${cellIndex}`} style={{ alignItems: 'center' }}>
-                {renderGroup(cell, { ...options, fontSize: Math.max(10, Math.round(options.fontSize * 0.9)) }, `${key}-r${rowIndex}c${cellIndex}`)}
-              </Row>
-            ))}
-          </Row>
-        ))}
-      </Col>
-      {right ? <Text style={{ color: options.color, fontSize: options.fontSize * 1.2 }}>{right}</Text> : null}
-    </Row>
-  );
+  return h(Row, { key, style: { alignItems: 'stretch' } }, [
+    left ? h(Text, { style: { color: options.color, fontSize: options.fontSize * 1.2 } }, left) : null,
+    h(Col, { style: { alignItems: 'flex-start', paddingLeft: 4, paddingRight: 4, gap: 2 } }, node.rows.map((row, rowIndex) => (
+      h(Row, { key: `${key}-row-${rowIndex}`, style: { alignItems: 'center', gap: 8 } }, row.map((cell, cellIndex) => (
+        h(Row, { key: `${key}-cell-${rowIndex}-${cellIndex}`, style: { alignItems: 'center' } }, renderGroup(cell, { ...options, fontSize: Math.max(10, Math.round(options.fontSize * 0.9)) }, `${key}-r${rowIndex}c${cellIndex}`))
+      )))
+    ))),
+    right ? h(Text, { style: { color: options.color, fontSize: options.fontSize * 1.2 } }, right) : null,
+  ]);
 }
 
 export function renderNode(node: MathNode, options: MathRenderOptions, key: string): React.ReactNode {
   if (node.type === 'empty') return null;
   if (node.type === 'text') return renderText(node.value, options, key);
   if (node.type === 'symbol') return renderText(node.value, options, key);
-  if (node.type === 'group') {
-    return (
-      <Row key={key} style={{ alignItems: 'flex-start' }}>
-        {renderGroup(node.children, options, key)}
-      </Row>
-    );
-  }
+  if (node.type === 'group') return h(Row, { key, style: { alignItems: 'flex-start' } }, renderGroup(node.children, options, key));
   if (node.type === 'fraction') return renderFraction(node, options, key);
   if (node.type === 'sqrt') return renderSqrt(node, options, key);
   if (node.type === 'script') return renderScript(node, options, key);
@@ -137,9 +102,5 @@ export function renderNode(node: MathNode, options: MathRenderOptions, key: stri
 }
 
 export function renderMathTree(nodes: MathNode[], options: MathRenderOptions) {
-  return (
-    <Row style={{ alignItems: 'flex-start', flexWrap: 'wrap' }}>
-      {nodes.map((node, index) => renderNode(node, options, nodeKey(node, index)))}
-    </Row>
-  );
+  return h(Row, { style: { alignItems: 'flex-start', flexWrap: 'wrap' } }, nodes.map((node, index) => renderNode(node, options, nodeKey(node, index))));
 }
