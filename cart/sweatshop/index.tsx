@@ -97,7 +97,7 @@ import { usePersistentState } from './hooks/usePersistentState';
 import { useFileContent } from '../../runtime/hooks/useFileContent';
 import { loadPlugins, type PluginRegistry } from './plugin';
 import { HotPanel } from './components/hotpanel';
-import { GitPanel } from './components/gitpanel';
+import { GitPanel } from './components/git/GitPanel';
 import { PlanPanelWrapper } from './components/planwrapper';
 import { saveCheckpoint, loadCheckpoints } from './checkpoint';
 import { CommandPalette, type PaletteCommand } from './components/commandpalette';
