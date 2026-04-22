@@ -111,12 +111,29 @@ export function Scene3D(props: Scene3DProps) {
           );
         })}
       </Canvas>
-      <Col style={{ position: 'absolute', left: 8, top: 8, padding: 4, gap: 2, backgroundColor: COLORS.panelAlt, borderRadius: TOKENS.radiusSm }}>
-        <Text fontSize={9} color={COLORS.textDim} style={{ fontFamily: 'monospace' }}>
-          Scene3D · {meshes.length} mesh{meshes.length === 1 ? '' : 'es'} · {lights.length} light{lights.length === 1 ? '' : 's'}
+      {/* Full-width top banner — honest about what's painting. Scene graph is
+          live (children register real meshes, the camera drives real projection
+          math, orbit controls mutate the real camera); the *paint* is a CPU
+          perspective projection. When the Zig host registers a Scene3D
+          primitive with wgpu-backed painting, this banner goes away. */}
+      <Box style={{
+        position: 'absolute', left: 0, right: 0, top: 0,
+        paddingTop: 5, paddingBottom: 5, paddingLeft: 8, paddingRight: 8,
+        backgroundColor: COLORS.orangeDeep,
+        borderBottomWidth: 1, borderBottomColor: COLORS.orange,
+        flexDirection: 'row', alignItems: 'center', gap: 8,
+      }}>
+        <Text fontSize={9} color={COLORS.orange} style={{ fontWeight: 'bold', letterSpacing: 0.5 }}>
+          CPU 3D
         </Text>
-        <Text fontSize={8} color={COLORS.textDim} style={{ fontFamily: 'monospace' }}>
-          {camera.kind} fov={(camera.fov * 180 / Math.PI).toFixed(0)}° · mockup · wgpu TODO
+        <Text fontSize={9} color={COLORS.text} style={{ flexGrow: 1 }}>
+          scene graph is live — paint is software perspective projection; native GPU backend not wired
+        </Text>
+      </Box>
+      {/* Live scene-graph HUD, bottom-left. */}
+      <Col style={{ position: 'absolute', left: 8, bottom: 8, padding: 4, gap: 2, backgroundColor: COLORS.panelAlt, borderRadius: TOKENS.radiusSm }}>
+        <Text fontSize={9} color={COLORS.textDim} style={{ fontFamily: 'monospace' }}>
+          {meshes.length} mesh{meshes.length === 1 ? '' : 'es'} · {lights.length} light{lights.length === 1 ? '' : 's'} · {camera.kind} {(camera.fov * 180 / Math.PI).toFixed(0)}°
         </Text>
       </Col>
       {props.children /* Camera/Mesh/lights/OrbitControls register via context, no DOM */}
