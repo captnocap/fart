@@ -13,7 +13,9 @@ extern fn heavy_compute_timed(n: c_long) c_long;
 extern fn set_compute_n(n: c_long) void;
 extern fn sqlite3_column_name(stmt: *anyopaque, N: c_int) ?[*:0]const u8;
 
-var g_pty: ?pty_mod.Pty = null;
+const MAX_PTYS: usize = 16;
+var g_ptys: [MAX_PTYS]?pty_mod.Pty = .{null} ** MAX_PTYS;
+var g_active_pty_handle: u8 = 0;
 var g_sql_dbs: ?std.AutoHashMap(u32, *sqlite_mod.Database) = null;
 var g_sql_next_id: u32 = 1;
 
@@ -503,12 +505,11 @@ fn ptyOpenCb(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
     const info = v8.FunctionCallbackInfo.initFromV8(info_c);
     const iso = info.getIsolate();
     const ctx = iso.getCurrentContext();
-    if (g_pty != null) {
-        setNumberReturn(info, 0);
-        return;
-    }
     var cols: u16 = 80;
     var rows: u16 = 24;
+    const alloc = std.heap.page_allocator;
+    var shell: ?[:0]u8 = null;
+    var cwd: ?[:0]u8 = null;
     if (info.length() >= 1) {
         const v = argI32(info, 0, 80);
         if (v > 0) cols = @intCast(v);
@@ -517,44 +518,101 @@ fn ptyOpenCb(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
         const v = argI32(info, 1, 24);
         if (v > 0) rows = @intCast(v);
     }
-    _ = ctx;
-    g_pty = pty_mod.openPty(.{ .cols = cols, .rows = rows }) catch {
+    if (info.length() >= 3) {
+        shell = argOwnedUtf8Z(alloc, info, 2);
+    }
+    if (info.length() >= 4) {
+        cwd = argOwnedUtf8Z(alloc, info, 3);
+    }
+    defer if (shell) |value| alloc.free(value);
+    defer if (cwd) |value| alloc.free(value);
+    const slot = blk: {
+        var idx: usize = 0;
+        while (idx < MAX_PTYS) : (idx += 1) {
+            if (g_ptys[idx] == null) break :blk idx;
+        }
         setNumberReturn(info, -1);
         return;
     };
-    setNumberReturn(info, 0);
+    _ = ctx;
+    g_ptys[slot] = pty_mod.openPty(.{
+        .cols = cols,
+        .rows = rows,
+        .shell = if (shell) |value| value.ptr else "bash",
+        .cwd = if (cwd) |value| value.ptr else null,
+    }) catch {
+        setNumberReturn(info, -1);
+        return;
+    };
+    if (g_active_pty_handle == 0) g_active_pty_handle = @intCast(slot + 1);
+    setNumberReturn(info, @as(f64, @floatFromInt(slot + 1)));
 }
 
 fn ptyReadCb(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
     const info = v8.FunctionCallbackInfo.initFromV8(info_c);
     const iso = info.getIsolate();
-    const ctx = iso.getCurrentContext();
-    if (g_pty) |*p| {
-        if (p.readData()) |data| {
-            info.getReturnValue().set(iso.initStringUtf8(data).toValue());
-            return;
+    const handle = argI32(info, 0, 0);
+    if (handle > 0 and @as(usize, @intCast(handle - 1)) < MAX_PTYS) {
+        if (g_ptys[@intCast(handle - 1)]) |*p| {
+            if (p.readData()) |data| {
+                info.getReturnValue().set(iso.initStringUtf8(data).toValue());
+                return;
+            }
         }
     }
-    _ = ctx;
     retUndefined(info_c);
 }
 
 fn ptyWriteCb(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
     const info = v8.FunctionCallbackInfo.initFromV8(info_c);
     const alloc = std.heap.page_allocator;
-    const str = argOwnedUtf8(alloc, info, 0) orelse return;
+    const handle = argI32(info, 0, 0);
+    const str = argOwnedUtf8(alloc, info, 1) orelse return;
     defer alloc.free(str);
-    if (g_pty) |*p| _ = p.writeData(str);
+    if (handle > 0 and @as(usize, @intCast(handle - 1)) < MAX_PTYS) {
+        if (g_ptys[@intCast(handle - 1)]) |*p| _ = p.writeData(str);
+    }
     retUndefined(info_c);
 }
 
 fn ptyAliveCb(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
     const info = v8.FunctionCallbackInfo.initFromV8(info_c);
-    if (g_pty) |*p| {
-        setNumberReturn(info, if (p.alive()) 1 else 0);
-        return;
+    const handle = argI32(info, 0, 0);
+    if (handle > 0 and @as(usize, @intCast(handle - 1)) < MAX_PTYS) {
+        if (g_ptys[@intCast(handle - 1)]) |*p| {
+            const ok = p.alive();
+            if (!ok) {
+                p.closePty();
+                g_ptys[@intCast(handle - 1)] = null;
+                if (g_active_pty_handle == handle) g_active_pty_handle = 0;
+            }
+            setNumberReturn(info, if (ok) 1 else 0);
+            return;
+        }
     }
     setNumberReturn(info, 0);
+}
+
+fn ptyCloseCb(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const handle = argI32(info, 0, 0);
+    if (handle > 0 and @as(usize, @intCast(handle - 1)) < MAX_PTYS) {
+        if (g_ptys[@intCast(handle - 1)]) |*p| p.closePty();
+        g_ptys[@intCast(handle - 1)] = null;
+        if (g_active_pty_handle == handle) g_active_pty_handle = 0;
+    }
+    retUndefined(info_c);
+}
+
+fn ptyFocusCb(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const handle = argI32(info, 0, 0);
+    if (handle > 0 and @as(usize, @intCast(handle - 1)) < MAX_PTYS and g_ptys[@intCast(handle - 1)] != null) {
+        g_active_pty_handle = @intCast(handle);
+    } else {
+        g_active_pty_handle = 0;
+    }
+    retUndefined(info_c);
 }
 
 fn readProcField(pid: u32, field: []const u8, buf: []u8) ![]const u8 {
@@ -1185,6 +1243,8 @@ pub fn registerTelemetry(_: anytype) void {
     v8rt.registerHostFn("__pty_read", ptyReadCb);
     v8rt.registerHostFn("__pty_write", ptyWriteCb);
     v8rt.registerHostFn("__pty_alive", ptyAliveCb);
+    v8rt.registerHostFn("__pty_close", ptyCloseCb);
+    v8rt.registerHostFn("__pty_focus", ptyFocusCb);
 
     v8rt.registerHostFn("__store_set", storeSetCb);
     v8rt.registerHostFn("__store_get", storeGetCb);
