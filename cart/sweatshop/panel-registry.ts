@@ -74,6 +74,7 @@ require('./panels/media.panel');
 require('./panels/math.panel');
 require('./panels/charts.panel');
 require('./panels/chemistry.panel');
+require('./panels/vesper.panel');
 require('./panels/presentation.panel');
 require('./panels/toast-history.panel');
 require('./panels/logviewer.panel');
