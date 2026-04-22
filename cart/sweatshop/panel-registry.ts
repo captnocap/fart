@@ -65,6 +65,7 @@ require('./panels/diff.panel');
 require('./panels/git.panel');
 require('./panels/terminal.panel');
 require('./panels/chat.panel');
+require('./panels/masks.panel');
 require('./panels/settings.panel');
 require('./panels/plan.panel');
 require('./panels/cockpit.panel');
