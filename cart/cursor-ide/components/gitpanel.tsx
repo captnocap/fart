@@ -10,6 +10,7 @@ import {
   gitCheckout,
   gitCommit,
   gitDiff,
+  gitDiscard,
   gitDiffStats,
   gitLog,
   gitPull,
@@ -145,6 +146,13 @@ export function GitPanel(props: {
       setShowBranchDropdown(false);
       refresh();
     }
+  }
+
+  function handleDiscard(path: string, code: string) {
+    const untracked = code === '??';
+    const res = gitDiscard(workDir, path, untracked);
+    if (!res.ok) setErrorBanner(res.error || 'Discard failed');
+    refresh();
   }
 
   function toggleStage(path: string, isStaged: boolean) {
@@ -370,6 +378,7 @@ export function GitPanel(props: {
                   label={statusLabel(f.code)}
                   onToggle={() => toggleStage(f.path, true)}
                   onSelect={() => setSelectedFile(f.path)}
+                  onDiscard={() => handleDiscard(f.path, f.code)}
                 />
               ))}
             </Col>
@@ -396,6 +405,7 @@ export function GitPanel(props: {
                   label={statusLabel(f.code)}
                   onToggle={() => toggleStage(f.path, false)}
                   onSelect={() => setSelectedFile(f.path)}
+                  onDiscard={() => handleDiscard(f.path, f.code)}
                 />
               ))}
             </Col>
@@ -519,6 +529,7 @@ function FileRow(props: {
   label: string;
   onToggle: () => void;
   onSelect: () => void;
+  onDiscard?: () => void;
 }) {
   return (
     <Pressable
@@ -558,6 +569,25 @@ function FileRow(props: {
       <Text fontSize={10} color={props.selected ? COLORS.textBright : COLORS.text} style={{ flexShrink: 1, flexBasis: 0 }}>
         {props.path}
       </Text>
+      {props.onDiscard ? (
+        <Pressable onPress={props.onDiscard}>
+          <Box
+            style={{
+              paddingLeft: 6,
+              paddingRight: 6,
+              paddingTop: 2,
+              paddingBottom: 2,
+              borderRadius: 4,
+              borderWidth: 1,
+              borderColor: COLORS.red,
+            }}
+          >
+            <Text fontSize={8} color={COLORS.red} style={{ fontWeight: 'bold' }}>
+              ✕
+            </Text>
+          </Box>
+        </Pressable>
+      ) : null}
     </Pressable>
   );
 }

@@ -203,6 +203,19 @@ export function gitAdd(workDir: string, path: string): { ok: boolean; error?: st
   }
 }
 
+export function gitDiscard(workDir: string, path: string, untracked?: boolean): { ok: boolean; error?: string } {
+  try {
+    if (untracked) {
+      execRaw(`cd "${workDir}" && rm -rf -- "${path}" 2>&1`);
+    } else {
+      execRaw(`cd "${workDir}" && git checkout -- "${path}" 2>&1`);
+    }
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, error: e?.message || String(e) };
+  }
+}
+
 export function gitReset(workDir: string, path: string): { ok: boolean; error?: string } {
   try {
     execRaw(`cd "${workDir}" && git reset HEAD "${path}" 2>&1`);
