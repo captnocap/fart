@@ -3,9 +3,12 @@ import { Box, Graph, Pressable, Row, Text } from '../../../../runtime/primitives
 import { COLORS, TOKENS } from '../../theme';
 import { ChartAxis } from './ChartAxis';
 import { ChartLegend, type ChartLegendPosition } from './ChartLegend';
-import { ChartTooltip } from './ChartTooltip';
+import { ChartTooltip, ChartTooltipFromCrosshair } from './ChartTooltip';
 import { normalizeChartData, type ChartInput } from './useChartData';
 import { formatTick, useChartScale, type ChartScaleMode } from './useChartScale';
+import { ChartInteractions, type ChartInteractionsConfig } from './ChartInteractions';
+import type { CrosshairState, CrosshairInputPoint } from './useChartCrosshair';
+import type { DataViewport } from './useChartZoom';
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
@@ -65,6 +68,7 @@ export function LineChart(props: {
   color?: string;
   showArea?: boolean;
   areaOpacity?: number;
+  interactions?: ChartInteractionsConfig;
 }) {
   const width = props.width ?? 560;
   const height = props.height ?? 240;
@@ -72,6 +76,10 @@ export function LineChart(props: {
   const normalized = useMemo(() => normalizeChartData(props.data), [JSON.stringify(props.data)]);
   const scale = useChartScale(props.scaleMode ?? 'linear', [normalized.min, normalized.max], [plot.y + plot.h, plot.y]);
   const [hovered, setHovered] = useState<{ index: number; x: number; y: number } | null>(null);
+  const [viewport, setViewport] = useState<DataViewport>({ x0: 0, x1: Math.max(1, normalized.pointCount - 1), y0: normalized.min, y1: normalized.max });
+  const [crosshair, setCrosshair] = useState<CrosshairState | null>(null);
+  const interactionsOn = !!props.interactions;
+  const crosshairPoints: CrosshairInputPoint[] = [];
   const formatValue = props.valueFormat || formatTick;
   const legendItems = normalized.series.map((series, index) => ({
     label: series.label,
@@ -107,6 +115,18 @@ export function LineChart(props: {
 
     points.forEach((point) => {
       if (point.y == null) return;
+      // Feed ChartInteractions (when enabled) so hover snaps to real points.
+      if (interactionsOn) {
+        crosshairPoints.push({
+          seriesId:   series.id,
+          seriesName: series.label,
+          color,
+          x:  point.index,
+          y:  point.value ?? 0,
+          px: point.x,
+          py: point.y,
+        });
+      }
       shapes.push(
         <Graph.Node key={series.id + '-point-' + point.index} gx={point.x - 8} gy={point.y - 8} gw={16} gh={16}>
           <Pressable
@@ -144,6 +164,26 @@ export function LineChart(props: {
       </Graph>
       <ChartAxis plot={plot} xLabels={xLabels} yTicks={yTicks} showLabels={props.showAxisLabels !== false} />
       {tooltip}
+      {interactionsOn ? (
+        <ChartInteractions
+          plot={plot}
+          natural={{ xMin: 0, xMax: Math.max(1, normalized.pointCount - 1), yMin: normalized.min, yMax: normalized.max }}
+          viewport={viewport}
+          setViewport={setViewport}
+          config={props.interactions as ChartInteractionsConfig}
+          points={crosshairPoints}
+          onCrosshair={setCrosshair}
+        />
+      ) : null}
+      {interactionsOn && crosshair ? (
+        <ChartTooltipFromCrosshair
+          crosshair={crosshair}
+          plotW={plot.w}
+          plotH={plot.h}
+          xLabel={(x) => xLabels[Math.round(x)] || String(Math.round(x))}
+          yLabel={formatValue}
+        />
+      ) : null}
     </Box>
   );
 
