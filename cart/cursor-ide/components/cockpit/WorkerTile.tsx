@@ -1,5 +1,6 @@
 const React: any = require('react');
-import { Box, Col, Row, Text, Pressable } from '../../../../runtime/primitives';
+import { Box, Row, Text, Pressable } from '../../../../runtime/primitives';
+import { useTransition as useAnimatedTransition } from '../../anim';
 
 export type WorkerStatus = 'idle' | 'thinking' | 'tool' | 'stuck' | 'rationalizing' | 'done';
 
@@ -36,8 +37,10 @@ export interface WorkerTileProps {
 export function WorkerTile({ worker, focused, onFocus }: WorkerTileProps) {
   const tone = STATUS_TONE[worker.status] || STATUS_TONE.idle;
   const border = focused ? worker.accent : '#1f2630';
-  const width = focused ? 420 : 260;
-  const height = focused ? 280 : 168;
+  const focusProgress = useAnimatedTransition(focused ? 1 : 0, 180);
+  const width = 260 + (420 - 260) * focusProgress;
+  const height = 168 + (280 - 168) * focusProgress;
+  const scale = 1 + focusProgress * 0.06;
   return (
     <Pressable onPress={() => onFocus && onFocus(worker.id)}
       style={{
@@ -54,6 +57,7 @@ export function WorkerTile({ worker, focused, onFocus }: WorkerTileProps) {
         padding: 12,
         flexDirection: 'column',
         gap: 6,
+        transform: { scaleX: scale, scaleY: scale },
       }}>
       <Row style={{ alignItems: 'center', gap: 8 }}>
         <Box style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: tone.color }} />

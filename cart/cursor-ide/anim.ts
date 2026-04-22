@@ -177,6 +177,20 @@ export function ScaleIn(props: { delay?: number; durationMs?: number; from?: num
   return React.createElement(Box, { style: mergeStyle(props.style, { opacity: progress, transform: { scaleX: scale, scaleY: scale } }) }, props.children);
 }
 
+export function PopoverIn(props: { delay?: number; durationMs?: number; distance?: number; style?: any; children?: any }) {
+  return React.createElement(
+    SlideIn,
+    {
+      from: 'top',
+      delay: props.delay || 0,
+      durationMs: props.durationMs || 160,
+      distance: props.distance ?? 10,
+      style: props.style,
+    },
+    props.children,
+  );
+}
+
 export function usePageModeTransition(mode: string, durationMs: number = 220) {
   const modeRef = useRef(mode);
   const timerRef = useRef<any>(null);
