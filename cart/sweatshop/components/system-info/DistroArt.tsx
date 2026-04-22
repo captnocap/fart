@@ -53,7 +53,7 @@ const ART: Record<string, string[]> = {
     '       ',
   ],
   nixos: [
-    '  /\_/\ ',
+    '  /\\_/\\ ',
     ' ( o.o )',
     '  > ^ < ',
     '        ',
