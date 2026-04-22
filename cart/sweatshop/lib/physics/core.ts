@@ -1,28 +1,20 @@
 // Pure-TS physics core. No React dependency. Semi-implicit Euler
-// integrator, fixed timestep with accumulator, broadphase = O(n²) pair
-// scan (fine for ≤100 bodies; TODO(physics-ffi) swap to Box2D/Bullet).
-//
-// Kept intentionally narrow: circles + AABBs only at the narrowphase.
-// Polygon / edge / chain colliders are declarable but treated as AABBs
-// of their bounding envelope until the FFI swap lands.
+// integrator, fixed timestep with accumulator, O(n²) pair broadphase.
+// Narrowphase handles circle-circle, aabb-aabb, circle-aabb with real
+// normals + penetration depth. Joint solver supports distance, rope,
+// and weld as position/velocity constraints.
 
 import { circleVsCircle, aabbVsAabb, circleVsAabb, type Contact } from './collision';
 
 export type Vec2 = { x: number; y: number };
 
-export type ShapeKind = 'circle' | 'rectangle' | 'polygon' | 'edge' | 'chain';
+export type ShapeKind = 'circle' | 'rectangle';
 
 export interface ShapeSpec {
   kind: ShapeKind;
-  // circle
-  radius?: number;
-  // rectangle / polygon AABB envelope
-  width?: number;
-  height?: number;
-  // polygon / edge / chain (polygon→AABB envelope for MVP)
-  points?: number[];
-  loop?: boolean;
-  // material
+  radius?: number;        // circle
+  width?: number;         // rectangle
+  height?: number;        // rectangle
   density?: number;
   friction?: number;
   restitution?: number;
@@ -66,7 +58,7 @@ export interface Body {
   aabbMax: Vec2;
 }
 
-export type JointKind = 'distance' | 'rope' | 'weld' | 'revolute';
+export type JointKind = 'distance' | 'rope' | 'weld';
 
 export interface Joint {
   id: string;
@@ -254,8 +246,7 @@ export class PhysicsWorldCore {
     const rest = j.restLength != null ? j.restLength : 0;
     let diff = 0;
     if (j.kind === 'rope') diff = Math.max(0, dist - (j.maxLength || rest));
-    else if (j.kind === 'weld') diff = dist;                          // pull to 0
-    else if (j.kind === 'revolute') diff = dist;                      // TODO(physics-ffi): proper rotational constraint
+    else if (j.kind === 'weld') diff = dist;                          // pull anchor points to coincidence
     else diff = dist - rest;                                          // distance (spring)
     if (diff === 0) return;
     const invSum = a.invMass + b.invMass; if (invSum === 0) return;

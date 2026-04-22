@@ -4,8 +4,6 @@
 // kind='distance' — spring returning bodies to restLength
 // kind='rope'     — max-length limiter (no pull force under the limit)
 // kind='weld'     — hard coincidence of anchor points (glue)
-// kind='revolute' — position-lock anchors, free rotation
-//                   TODO(physics-ffi): real angular constraint w/ motor + limits.
 
 const React: any = require('react');
 const { useEffect } = React;
@@ -24,10 +22,6 @@ export interface JointProps {
   maxLength?: number;             // rope
   stiffness?: number;             // 0..1, default 1
   damping?: number;               // 0..1, default 0
-  // revolute-only props reserved for FFI swap:
-  enableMotor?: boolean;
-  motorSpeed?: number;
-  maxTorque?: number;
 }
 
 export function Joint(props: JointProps) {
