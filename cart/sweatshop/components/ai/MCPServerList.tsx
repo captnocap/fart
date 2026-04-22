@@ -4,6 +4,7 @@ const { useEffect, useState } = React;
 import { Box, Col, Pressable, Row, ScrollView, Text, TextInput } from '../../../../runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 import { useMCPServer } from '../../hooks/ai/useMCPServer';
+import { websocketSupported } from '../../lib/ai/mcp';
 
 const STORAGE_KEY = 'sweatshop:ai:mcp:servers';
 
@@ -73,9 +74,18 @@ export function MCPServerList() {
   };
   const remove = (url: string) => setServers((prev: string[]) => prev.filter((s) => s !== url));
 
+  const wsOk = websocketSupported();
+
   return (
     <Col style={{ gap: 6 }}>
       <Text fontSize={10} color={COLORS.purple} style={{ letterSpacing: 0.6, fontWeight: 'bold' }}>MCP SERVERS</Text>
+      {!wsOk ? (
+        <Box style={{ padding: TOKENS.padNormal, borderRadius: TOKENS.radiusSm, borderWidth: 1, borderColor: COLORS.yellow, backgroundColor: COLORS.yellowDeep }}>
+          <Text fontSize={TOKENS.fontXs} color={COLORS.yellow}>
+            Host is missing a WebSocket binding. MCP connections need __ws_* host fns; until they ship, connect actions stay disabled.
+          </Text>
+        </Box>
+      ) : null}
       <Row style={{ gap: 6, alignItems: 'center' }}>
         <TextInput
           value={draft}

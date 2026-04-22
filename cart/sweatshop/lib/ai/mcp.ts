@@ -96,8 +96,20 @@ export class MCPClient {
   }
 }
 
-// WebSocket transport — works today for any MCP server reachable over ws://
+// True when the V8 cart host exposes a WebSocket global. Currently no
+// such binding is registered — MCP connections are blocked on a host
+// fn pair (e.g. __ws_open/__ws_send/__ws_close + an __ffiEmit event
+// stream). The UI reads this flag to show an accurate banner.
+export function websocketSupported(): boolean {
+  return typeof (globalThis as any).WebSocket === 'function';
+}
+
+// WebSocket transport. Works over ws:// once the host ships the binding
+// above; today throws a honest error on hosts without it.
 export function websocketTransport(url: string): MCPTransport {
+  if (!websocketSupported()) {
+    throw new Error('MCP websocket transport requires a host WebSocket binding — not registered in the current build');
+  }
   const ws: any = new (globalThis as any).WebSocket(url);
   const listeners = new Set<(msg: any) => void>();
   const openPromise = new Promise<void>((resolve, reject) => {
