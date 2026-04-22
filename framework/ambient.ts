@@ -49,11 +49,12 @@ export const createContext = function createContext(...a: any[]) { return r().cr
 export const startTransition = function startTransition(...a: any[]) { return r().startTransition(...a); };
 
 // ── Values that must be the actual React reference (not a wrapper) ─────────
-// Fragment, Suspense, and Children are used as JSX element types /
-// namespaces. They must resolve to the real React symbols when JSX uses
-// them. Getter-ish fallback: at first access, read from the now-initialized
-// react module. The export is a Proxy so `Fragment` behaves like the real
-// symbol (identity comparisons etc).
+// Fragment is the well-known Symbol — use it directly so identity checks
+// inside React.createElement work. Suspense and Children are used as
+// JSX element types / namespaces; they are real components/objects so a
+// Proxy works fine.
+
+export const Fragment: any = Symbol.for('react.fragment');
 
 function lazyProp(name: string): any {
   return new Proxy(function () {}, {
@@ -66,6 +67,5 @@ function lazyProp(name: string): any {
   });
 }
 
-export const Fragment = lazyProp('Fragment');
 export const Suspense = lazyProp('Suspense');
 export const Children = lazyProp('Children');
