@@ -83,6 +83,7 @@ require('./panels/rssreader.panel');
 require('./panels/apis.panel');
 require('./panels/scene3d.panel');
 require('./panels/ai.panel');
+require('./panels/ai-box.panel');
 require('./panels/emulator.panel');
 require('./panels/gpio.panel');
 require('./panels/audio-capture.panel');
