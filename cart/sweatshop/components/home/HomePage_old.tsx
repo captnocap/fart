@@ -42,7 +42,8 @@ function PathInput(props: { value: string; placeholder: string; onChange: (v: st
   return (
     <Box
       style={{
-        flex: 1,
+        flexGrow: 1,
+        flexBasis: 0,
         minWidth: 0,
         borderWidth: 1,
         borderColor: COLORS.border,
@@ -80,12 +81,13 @@ function ActionCard(props: {
   return (
     <Col
       style={{
-        flex: 1,
+        flexGrow: 1,
+        flexBasis: 0,
         minWidth: 0,
         gap: 10,
-        padding: 20,
+        padding: 18,
         borderRadius: TOKENS.radiusLg,
-        backgroundColor: COLORS.panelRaised,
+        backgroundColor: COLORS.panelBg,
         borderWidth: 1,
         borderColor: COLORS.border,
       }}
@@ -94,7 +96,7 @@ function ActionCard(props: {
         <SectionLabel text={props.label} />
         <Text fontSize={10} color={COLORS.textDim}>{props.description}</Text>
       </Col>
-      <Row style={{ gap: 12, alignItems: 'center' }}>
+      <Row style={{ gap: 8, alignItems: 'center' }}>
         <PathInput
           value={props.value}
           placeholder={props.placeholder}
@@ -132,7 +134,7 @@ function RecentRow(props: { path: string; onOpen: () => void }) {
     >
       <Col style={{ gap: 2 }}>
         <Text fontSize={12} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>{name}</Text>
-        {parent ? <Text fontSize={10} color={COLORS.textDim} style={{ fontFamily: TOKENS.fontMono }}>{parent}</Text> : null}
+        {parent ? <Text fontSize={10} color={COLORS.textDim}>{parent}</Text> : null}
       </Col>
     </Pressable>
   );
@@ -166,29 +168,35 @@ export function HomePage(props: HomePageProps) {
   };
 
   return (
-    <Col style={{ flex: 1, width: '100%', alignItems: 'center', backgroundColor: COLORS.appBg }}>
-      <ScrollView style={{ flex: 1, width: '100%' }}>
-        <Col style={{ width: '100%', alignItems: 'center' }}>
-          <Col style={{ width: 760, gap: 40, paddingTop: 72, paddingBottom: 72 }}>
+    <Box style={{ flexGrow: 1, flexBasis: 0, minHeight: 0, width: '100%', backgroundColor: COLORS.appBg }}>
+      <ScrollView style={{ flexGrow: 1, flexBasis: 0, minHeight: 0, width: '100%' }}>
+        <Col style={{ width: '100%', alignItems: 'center', paddingTop: 72, paddingBottom: 72, paddingLeft: 32, paddingRight: 32 }}>
+          <Col style={{ width: '100%', maxWidth: 820, gap: 40 }}>
             <Col style={{ gap: 8 }}>
-              <Text fontSize={40} color={COLORS.textBright} style={{ fontWeight: 'bold', letterSpacing: -1, width: 760 }}>sweatshop</Text>
+              <Text fontSize={36} color={COLORS.textBright} style={{ fontWeight: 'bold', letterSpacing: -1 }}>sweatshop</Text>
               <Text fontSize={13} color={COLORS.textDim}>A native agent workspace. Pick a working directory to begin.</Text>
             </Col>
 
             <Col style={{ gap: 12 }}>
               <SectionLabel text="Recent" />
               {recents.length === 0 ? (
-                <Text fontSize={13} color={COLORS.textDim}>No recent workspaces. Open one below.</Text>
+                <Box style={{ padding: 20, borderRadius: TOKENS.radiusLg, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelBg }}>
+                  <Text fontSize={11} color={COLORS.textDim}>No recent workspaces. Open one below.</Text>
+                </Box>
               ) : (
-                <Col style={{ gap: 6 }}>
-                  {recents.map((p: string) => (
-                    <RecentRow key={p} path={p} onOpen={() => props.onOpenWorkspace(p)} />
-                  ))}
-                </Col>
+                <Box style={{ borderRadius: TOKENS.radiusLg, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.panelBg, padding: 8 }}>
+                  <ScrollView style={{ maxHeight: 240 }}>
+                    <Col style={{ gap: 6 }}>
+                      {recents.map((p: string) => (
+                        <RecentRow key={p} path={p} onOpen={() => props.onOpenWorkspace(p)} />
+                      ))}
+                    </Col>
+                  </ScrollView>
+                </Box>
               )}
             </Col>
 
-            <Row style={{ gap: 24, alignItems: 'stretch' }}>
+            <Row style={{ gap: 16, alignItems: 'stretch' }}>
               <ActionCard
                 label="Open Path"
                 description="Absolute path to an existing directory."
@@ -213,6 +221,6 @@ export function HomePage(props: HomePageProps) {
           </Col>
         </Col>
       </ScrollView>
-    </Col>
+    </Box>
   );
 }
