@@ -177,13 +177,6 @@ export function HomePage(props: HomePageProps) {
 
   return (
     <Col style={{ flex: 1, width: '100%', alignItems: 'center', backgroundColor: COLORS.appBg }}>
-      <DirectoryPicker
-        visible={pickerVisible}
-        startPath={homePath}
-        confirmLabel={pickerMode === 'open' ? 'Open this directory' : 'Select this directory'}
-        onSelect={handlePickerSelect}
-        onCancel={() => setPickerVisible(false)}
-      />
       <ScrollView style={{ flex: 1, width: '100%' }}>
         <Col style={{ width: '100%', alignItems: 'center' }}>
           <Col style={{ width: 760, gap: 40, paddingTop: 72, paddingBottom: 72 }}>
@@ -313,6 +306,13 @@ export function HomePage(props: HomePageProps) {
           </Col>
         </Col>
       </ScrollView>
+      <DirectoryPicker
+        visible={pickerVisible}
+        startPath={homePath}
+        confirmLabel={pickerMode === 'open' ? 'Open this directory' : 'Select this directory'}
+        onSelect={handlePickerSelect}
+        onCancel={() => setPickerVisible(false)}
+      />
     </Col>
   );
 }

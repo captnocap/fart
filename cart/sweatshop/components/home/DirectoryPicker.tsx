@@ -23,6 +23,9 @@ function DirRow(props: { name: string; onPress: () => void }) {
         paddingTop: 8,
         paddingBottom: 8,
         borderRadius: TOKENS.radiusSm,
+        borderWidth: 1,
+        borderColor: 'transparent',
+        backgroundColor: COLORS.panelBg,
       }}
     >
       <Text fontSize={12} color={COLORS.textBright}>{props.name}</Text>
@@ -33,6 +36,7 @@ function DirRow(props: { name: string; onPress: () => void }) {
 export function DirectoryPicker(props: DirectoryPickerProps) {
   const [currentPath, setCurrentPath] = useState(props.startPath);
   const [entries, setEntries] = useState<string[]>([]);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     if (props.visible) {
@@ -42,18 +46,27 @@ export function DirectoryPicker(props: DirectoryPickerProps) {
   }, [props.visible, props.startPath]);
 
   const refreshEntries = (path: string) => {
-    const names = listDir(path);
-    const dirs: string[] = [];
-    for (const name of names) {
-      if (name === '.' || name === '..') continue;
-      if (name.startsWith('.')) continue;
-      const s = stat(path + '/' + name);
-      if (s && s.isDir) {
-        dirs.push(name);
+    try {
+      const names = listDir(path);
+      if (!names || names.length === 0) {
+        setEntries([]);
+        setError('No entries (empty directory or permission denied).');
+        return;
       }
+      const dirs: string[] = [];
+      for (const name of names) {
+        if (name === '.' || name === '..') continue;
+        if (name.startsWith('.')) continue;
+        const s = stat(path + '/' + name);
+        if (s && s.isDir) dirs.push(name);
+      }
+      dirs.sort((a, b) => a.localeCompare(b));
+      setEntries(dirs);
+      setError('');
+    } catch (_e) {
+      setEntries([]);
+      setError('Could not read directory.');
     }
-    dirs.sort((a, b) => a.localeCompare(b));
-    setEntries(dirs);
   };
 
   const goUp = () => {
@@ -65,7 +78,8 @@ export function DirectoryPicker(props: DirectoryPickerProps) {
   };
 
   const goDown = (name: string) => {
-    const next = currentPath.replace(/\/+$/, '') + '/' + name;
+    const base = currentPath.replace(/\/+$/, '');
+    const next = (base === '' ? '' : base) + '/' + name;
     setCurrentPath(next);
     refreshEntries(next);
   };
@@ -77,55 +91,172 @@ export function DirectoryPicker(props: DirectoryPickerProps) {
     refreshEntries(next);
   };
 
-  const confirm = () => {
-    props.onSelect(currentPath);
-  };
-
   if (!props.visible) return null;
 
   const parts = currentPath.split('/').filter(Boolean);
 
   return (
-    <Box style={{ position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, zIndex: TOKENS.zModal }}>
-      {/* Backdrop */}
-      <Pressable onPress={props.onCancel} style={{ position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.55)' }} />
-      {/* Panel */}
-      <Col style={{ position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' }}>
-        <Col style={{ width: 560, maxHeight: 480, backgroundColor: COLORS.panelBg, borderRadius: TOKENS.radiusLg, borderWidth: 1, borderColor: COLORS.border }}>
-          {/* Header */}
-          <Col style={{ gap: 8, padding: 16, borderBottomWidth: 1, borderColor: COLORS.border }}>
-            <Text fontSize={14} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>{props.confirmLabel}</Text>
-            <Row style={{ gap: 4, flexWrap: 'wrap' }}>
-              <Pressable onPress={() => { setCurrentPath('/'); refreshEntries('/'); }}>
-                <Text fontSize={10} color={COLORS.blue} style={{ fontWeight: 'bold' }}>/</Text>
+    <Box
+      style={{
+        position: 'absolute',
+        left: 0,
+        top: 0,
+        right: 0,
+        bottom: 0,
+        width: '100%',
+        height: '100%',
+        zIndex: TOKENS.zModal,
+        backgroundColor: 'rgba(0,0,0,0.6)',
+      }}
+    >
+      <Pressable
+        onPress={props.onCancel}
+        style={{
+          position: 'absolute',
+          left: 0,
+          top: 0,
+          right: 0,
+          bottom: 0,
+          width: '100%',
+          height: '100%',
+          backgroundColor: 'transparent',
+        }}
+      />
+      <Col
+        style={{
+          position: 'absolute',
+          left: 0,
+          top: 0,
+          right: 0,
+          bottom: 0,
+          width: '100%',
+          height: '100%',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <Col
+          style={{
+            width: 600,
+            height: 560,
+            maxHeight: 560,
+            backgroundColor: COLORS.panelRaised,
+            borderRadius: TOKENS.radiusLg,
+            borderWidth: 1,
+            borderColor: COLORS.border,
+            overflow: 'hidden',
+          }}
+        >
+          <Row
+            style={{
+              paddingLeft: 16,
+              paddingRight: 16,
+              paddingTop: 12,
+              paddingBottom: 12,
+              gap: 8,
+              alignItems: 'center',
+              borderBottomWidth: 1,
+              borderColor: COLORS.border,
+              flexShrink: 0,
+            }}
+          >
+            <Row style={{ flex: 1, minWidth: 0, gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
+              <Pressable onPress={() => { setCurrentPath('/'); refreshEntries('/'); }} style={{ paddingLeft: 6, paddingRight: 6, paddingTop: 3, paddingBottom: 3, borderRadius: TOKENS.radiusSm }}>
+                <Text fontSize={11} color={COLORS.blue} style={{ fontWeight: 'bold' }}>/</Text>
               </Pressable>
-              {parts.map((part, idx) => (
-                <Row key={idx} style={{ gap: 4 }}>
-                  <Text fontSize={10} color={COLORS.textDim}>/</Text>
-                  <Pressable onPress={() => goToSegment(idx)}>
-                    <Text fontSize={10} color={COLORS.blue} style={{ fontWeight: 'bold' }}>{part}</Text>
+              {parts.map((part: string, idx: number) => (
+                <Row key={idx} style={{ gap: 2, alignItems: 'center' }}>
+                  <Text fontSize={11} color={COLORS.textDim}>/</Text>
+                  <Pressable onPress={() => goToSegment(idx)} style={{ paddingLeft: 6, paddingRight: 6, paddingTop: 3, paddingBottom: 3, borderRadius: TOKENS.radiusSm }}>
+                    <Text fontSize={11} color={COLORS.blue} style={{ fontWeight: 'bold' }}>{part}</Text>
                   </Pressable>
                 </Row>
               ))}
             </Row>
-          </Col>
-          {/* List */}
-          <ScrollView style={{ flex: 1, minHeight: 0 }}>
-            <Col style={{ gap: 2, padding: 8 }}>
-              {currentPath !== '/' && (
-                <DirRow name=".." onPress={goUp} />
-              )}
-              {entries.map((name) => (
-                <DirRow key={name} name={name} onPress={() => goDown(name)} />
-              ))}
-            </Col>
-          </ScrollView>
-          {/* Footer */}
-          <Row style={{ gap: 12, padding: 16, borderTopWidth: 1, borderColor: COLORS.border, justifyContent: 'flex-end' }}>
-            <Pressable onPress={props.onCancel} style={{ paddingLeft: 14, paddingRight: 14, paddingTop: 8, paddingBottom: 8, borderRadius: TOKENS.radiusSm }}>
-              <Text fontSize={11} color={COLORS.textDim}>Cancel</Text>
+            <Pressable
+              onPress={props.onCancel}
+              style={{
+                paddingLeft: 10,
+                paddingRight: 10,
+                paddingTop: 4,
+                paddingBottom: 4,
+                borderRadius: TOKENS.radiusSm,
+                borderWidth: 1,
+                borderColor: COLORS.border,
+                backgroundColor: COLORS.panelBg,
+              }}
+            >
+              <Text fontSize={11} color={COLORS.textDim} style={{ fontWeight: 'bold' }}>X</Text>
             </Pressable>
-            <Pressable onPress={confirm} style={{ paddingLeft: 14, paddingRight: 14, paddingTop: 8, paddingBottom: 8, borderRadius: TOKENS.radiusSm, backgroundColor: COLORS.blueDeep, borderWidth: 1, borderColor: COLORS.blue }}>
+          </Row>
+
+          <Box
+            style={{
+              flex: 1,
+              flexBasis: 0,
+              minHeight: 0,
+              width: '100%',
+              overflow: 'hidden',
+            }}
+          >
+            <ScrollView style={{ flex: 1, flexBasis: 0, minHeight: 0, width: '100%' }}>
+              <Col style={{ padding: 10, gap: 4 }}>
+                {currentPath !== '/' ? (
+                  <DirRow name=".." onPress={goUp} />
+                ) : null}
+                {error ? (
+                  <Box style={{ padding: 12, borderRadius: TOKENS.radiusSm, backgroundColor: COLORS.redDeep, borderWidth: 1, borderColor: COLORS.red }}>
+                    <Text fontSize={11} color={COLORS.red}>{error}</Text>
+                  </Box>
+                ) : null}
+                {entries.map((name: string) => (
+                  <DirRow key={name} name={name} onPress={() => goDown(name)} />
+                ))}
+              </Col>
+            </ScrollView>
+          </Box>
+
+          <Row
+            style={{
+              paddingLeft: 16,
+              paddingRight: 16,
+              paddingTop: 12,
+              paddingBottom: 12,
+              gap: 10,
+              justifyContent: 'flex-end',
+              borderTopWidth: 1,
+              borderColor: COLORS.border,
+              flexShrink: 0,
+            }}
+          >
+            <Pressable
+              onPress={props.onCancel}
+              style={{
+                paddingLeft: 16,
+                paddingRight: 16,
+                paddingTop: 9,
+                paddingBottom: 9,
+                borderRadius: TOKENS.radiusSm,
+                borderWidth: 1,
+                borderColor: COLORS.border,
+                backgroundColor: COLORS.panelBg,
+              }}
+            >
+              <Text fontSize={11} color={COLORS.text}>Cancel</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => props.onSelect(currentPath)}
+              style={{
+                paddingLeft: 16,
+                paddingRight: 16,
+                paddingTop: 9,
+                paddingBottom: 9,
+                borderRadius: TOKENS.radiusSm,
+                backgroundColor: COLORS.blueDeep,
+                borderWidth: 1,
+                borderColor: COLORS.blue,
+              }}
+            >
               <Text fontSize={11} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>{props.confirmLabel}</Text>
             </Pressable>
           </Row>
