@@ -154,7 +154,7 @@ export default function CursorIdeApp() {
   const [widthBand, setWidthBand] = useState('desktop');
   const [compactSurface, setCompactSurface] = useState('landing');
   const [showChat, setShowChat] = usePersistentState('sweatshop.showChat', 1);
-  const [showTerminal, setShowTerminal] = usePersistentState('sweatshop.showTerminal', 0);
+  const [showTerminal, setShowTerminal] = useState(0);
   const [terminalPane, setTerminalPane] = usePersistentState('sweatshop.terminalPane', 'live');
   const [terminalHistory, setTerminalHistory] = usePersistentState<TerminalHistoryEntry[]>('sweatshop.terminalHistory', []);
   const [terminalDockExpanded, setTerminalDockExpanded] = usePersistentState('sweatshop.terminalDockExpanded', 0);
@@ -246,6 +246,23 @@ export default function CursorIdeApp() {
     const result = exec(cmd);
     cache[cmd] = result;
     return result;
+  }, []);
+    const shellQuote = useCallback((value: string): string => {
+    return "'" + String(value).replace(/'/g, "'\\''") + "'";
+  }, []);
+    const execInWorkDir = useCallback((cmd: string, workDir?: string): string => {
+    const cwd = (workDir || stateRef.current.workDir || '.').trim() || '.';
+    return exec('cd ' + shellQuote(cwd) + ' && ' + cmd);
+  }, []);
+    const execCachedInWorkDir = useCallback((cmd: string, workDir?: string): string => {
+    const cwd = (workDir || stateRef.current.workDir || '.').trim() || '.';
+    return execCached('cd ' + shellQuote(cwd) + ' && ' + cmd);
+  }, []);
+    const resolveWorkspacePath = useCallback((path: string, workDir?: string): string => {
+    if (!path) return path;
+    if (path.startsWith('/') || /^[A-Za-z]:[\\/]/.test(path)) return path;
+    const cwd = (workDir || stateRef.current.workDir || '.').trim() || '.';
+    return cwd.replace(/\/+$/, '') + '/' + path;
   }, []);
     const clearExecCache = useCallback((): void => {
     execCacheRef.current = {};
@@ -440,12 +457,12 @@ export default function CursorIdeApp() {
     }
   }, []);
 
-    const buildWorkspaceSnapshot = useCallback((rootName: string) => {
-    const raw = execCached('find . -maxdepth 5 \\( -path "./.git" -o -path "./zig-cache" -o -path "./zig-out" -o -path "./node_modules" -o -path "./archive" -o -path "./love2d" \\) -prune -o -type f -print 2>/dev/null | sed -n "1,180{s#^\\./##;p;}"');
+    const buildWorkspaceSnapshot = useCallback((rootName: string, workDir?: string) => {
+    const raw = execCachedInWorkDir('find . -maxdepth 5 \\( -path "./.git" -o -path "./zig-cache" -o -path "./zig-out" -o -path "./node_modules" -o -path "./archive" -o -path "./love2d" \\) -prune -o -type f -print 2>/dev/null | sed -n "1,180{s#^\\./##;p;}"', workDir);
     const discovered = trimLines(raw);
     const merged: string[] = [];
     for (const path of focusPaths()) {
-      if (shouldKeepPath(path) && !hasPath(merged, path)) merged.push(path);
+      if (shouldKeepPath(path) && !hasPath(merged, path) && readFile(resolveWorkspacePath(path, workDir))) merged.push(path);
     }
     for (const path of discovered) {
       if (shouldKeepPath(path) && !hasPath(merged, path)) merged.push(path);
@@ -491,10 +508,14 @@ export default function CursorIdeApp() {
     const buildLandingProjects = useCallback((paths: string[], info: any, nextWorkspaceName: string) => {
     const projects: any[] = [
       { name: nextWorkspaceName, path: '__landing__', displayPath: 'Project landing', summary: 'Branch ' + info.branch + ' with ' + info.dirty + ' dirty paths and ' + paths.length + ' indexed files.', badge: 'workspace', accent: '#2d62ff' },
-      { name: 'sweatshop TSX cart', path: 'cart/sweatshop/index.tsx', displayPath: 'cart/sweatshop/index.tsx', summary: 'Runtime-native port of the mixed-lane Sweatshop shell for the active ReactJIT stack.', badge: 'active', accent: COLORS.green },
-      { name: 'legacy TSZ reference', path: 'tsz/carts/conformance/mixed/sweatshop/sweatshop.tsz', displayPath: 'tsz/carts/conformance/mixed/sweatshop/sweatshop.tsz', summary: 'Frozen Smith-era source that the current cart mirrors surface-for-surface.', badge: 'reference', accent: COLORS.purple },
       { name: 'settings surface', path: '__settings__', displayPath: 'Settings', summary: 'Provider routing, context layering, memory orchestration, plugin runtimes, and capability references in one dense shell.', badge: 'surface', accent: COLORS.orange },
     ];
+    if (hasPath(paths, 'cart/sweatshop/index.tsx')) {
+      projects.push({ name: 'sweatshop TSX cart', path: 'cart/sweatshop/index.tsx', displayPath: 'cart/sweatshop/index.tsx', summary: 'Runtime-native port of the mixed-lane Sweatshop shell for the active ReactJIT stack.', badge: 'active', accent: COLORS.green });
+    }
+    if (hasPath(paths, 'tsz/carts/conformance/mixed/sweatshop/sweatshop.tsz')) {
+      projects.push({ name: 'legacy TSZ reference', path: 'tsz/carts/conformance/mixed/sweatshop/sweatshop.tsz', displayPath: 'tsz/carts/conformance/mixed/sweatshop/sweatshop.tsz', summary: 'Frozen Smith-era source that the current cart mirrors surface-for-surface.', badge: 'reference', accent: COLORS.purple });
+    }
     if (hasPath(paths, 'runtime/primitives.tsx')) {
       projects.push({ name: 'runtime primitives', path: 'runtime/primitives.tsx', displayPath: 'runtime/primitives.tsx', summary: 'Current primitive surface map for Box/Text/Terminal/Native nodes.', badge: 'runtime', accent: COLORS.blue });
     }
@@ -552,14 +573,14 @@ export default function CursorIdeApp() {
     setBreadcrumbs(crumbs);
   }, []);
 
-    const loadGitSummary = useCallback(() => {
-    let branch = execCached('git branch --show-current 2>/dev/null').replace(/\s+/g, '');
+    const loadGitSummary = useCallback((workDir?: string) => {
+    let branch = execCachedInWorkDir('git branch --show-current 2>/dev/null', workDir).replace(/\s+/g, '');
     if (!branch) branch = 'detached';
     setGitBranch(branch);
     let remoteName = 'origin';
     const connections: any[] = [];
     const seenRemote: Record<string, number> = {};
-    const remoteLines = trimLines(execCached('git remote -v 2>/dev/null | sed -n "1,6p"'));
+    const remoteLines = trimLines(execCachedInWorkDir('git remote -v 2>/dev/null | sed -n "1,6p"', workDir));
     for (const line of remoteLines) {
       let tab = line.indexOf('\t');
       if (tab < 0) tab = line.indexOf(' ');
@@ -575,17 +596,17 @@ export default function CursorIdeApp() {
       }
     }
     setGitRemote(remoteName);
-    const worktreeLines = trimLines(execCached('git worktree list 2>/dev/null | sed -n "1,3p"'));
+    const worktreeLines = trimLines(execCachedInWorkDir('git worktree list 2>/dev/null | sed -n "1,3p"', workDir));
     for (const line of worktreeLines) connections.push({ name: 'worktree', detail: line, kind: 'worktree', tone: COLORS.green });
     let ahead = 0; let behind = 0;
-    const counts = exec('git rev-list --left-right --count @{upstream}...HEAD 2>/dev/null').trim();
+    const counts = execInWorkDir('git rev-list --left-right --count @{upstream}...HEAD 2>/dev/null', workDir).trim();
     if (counts) {
       const parts = counts.includes('\t') ? counts.split('\t') : counts.split(' ');
       if (parts.length >= 2) { behind = parseInt(parts[0], 10) || 0; ahead = parseInt(parts[1], 10) || 0; }
     }
     setBranchAhead(ahead); setBranchBehind(behind);
     connections.unshift({ name: branch, detail: 'ahead ' + ahead + ' / behind ' + behind, kind: 'branch', tone: COLORS.green });
-    const statusLines = trimLines(exec('git status --short 2>/dev/null'));
+    const statusLines = trimLines(execInWorkDir('git status --short 2>/dev/null', workDir));
     const changes: any[] = [];
     let dirty = 0; let staged = 0;
     gitStatusByPathRef.current = {};
@@ -607,16 +628,20 @@ export default function CursorIdeApp() {
     return { branch, dirty, staged, remote: remoteName, ahead, behind, changes, connections };
   }, []);
 
-    const refreshWorkspace = useCallback(() => {
+    const refreshWorkspace = useCallback((nextWorkDir?: string) => {
     syncWindowMetrics();
-    const explicit = stateRef.current.workDir;
+    // Pressable `onPress={refreshWorkspace}` delivers the event payload
+    // ({ targetId }) as the first arg — ignore anything that isn't a path.
+    const explicit = (typeof nextWorkDir === 'string' ? nextWorkDir : '') || stateRef.current.workDir;
     let pwd = (explicit && explicit !== '.') ? explicit : execCached('pwd 2>/dev/null').trim();
     if (!pwd) pwd = '.';
     const nextWorkspaceName = baseName(pwd) || 'workspace';
+    console.log('[workspace] refresh explicit=' + String(explicit) + ' resolved=' + String(pwd));
+    addWorkspaceRecent(pwd);
     setWorkDir(pwd); setWorkspaceName(nextWorkspaceName);
     setWorkspaceTagline('Conformance-grade IDE cart with live explorer, git, and agent context');
-    const gitInfo = loadGitSummary();
-    const snapshot = buildWorkspaceSnapshot(nextWorkspaceName);
+    const gitInfo = loadGitSummary(pwd);
+    const snapshot = buildWorkspaceSnapshot(nextWorkspaceName, pwd);
     setFiles(snapshot.items);
     setWorkspaceStats([
       { label: 'indexed', value: String(snapshot.paths.length), tone: '#2d62ff' },
@@ -743,8 +768,7 @@ export default function CursorIdeApp() {
     let content = fileContentsRef.current[path];
     if (!content) {
       const wd = stateRef.current.workDir;
-      const isAbsolute = path.startsWith('/') || /^[A-Za-z]:[\\/]/.test(path);
-      const resolved = (!isAbsolute && wd && wd !== '.') ? (wd.replace(/\/$/, '') + '/' + path) : path;
+      const resolved = resolveWorkspacePath(path, wd);
       let diskContent = readFile(resolved);
       if (!diskContent && resolved !== path) diskContent = readFile(path);
       if (diskContent) { content = diskContent; fileContentsRef.current[path] = diskContent; }
@@ -819,7 +843,7 @@ export default function CursorIdeApp() {
     const execId = 'write_' + Date.now();
     addToolExecution(execId, 'writeFile', path);
     const text = editorContentRef.current;
-    const wrote = writeFile(path, text);
+    const wrote = writeFile(resolveWorkspacePath(path), text);
     fileContentsRef.current[path] = text;
     setOpenTabs((prev: Tab[]) => prev.map((tab) => tab.path === path ? { ...tab, modified: 0 } : tab));
     setEditorModified(0);
@@ -838,7 +862,7 @@ export default function CursorIdeApp() {
     const path = name.startsWith('/') ? name.slice(1) : name;
     if (!fileContentsRef.current[path]) {
       fileContentsRef.current[path] = '// ' + baseName(path) + '\n';
-      writeFile(path, fileContentsRef.current[path]);
+      writeFile(resolveWorkspacePath(path), fileContentsRef.current[path]);
     }
     clearExecCache();
     refreshWorkspace();
@@ -855,7 +879,7 @@ export default function CursorIdeApp() {
     if (!query) { setSearchResults(recentSearchFallback()); return; }
     const execId = 'grep_' + Date.now();
     addToolExecution(execId, 'grep', query);
-    const raw = exec('rg -n --no-heading ' + JSON.stringify(query) + ' . 2>/dev/null | head -60');
+    const raw = execInWorkDir('rg -n --no-heading ' + JSON.stringify(query) + ' . 2>/dev/null | head -60');
     const results: SearchResult[] = [];
     if (raw) {
       for (const line of raw.split('\n')) {
@@ -1199,7 +1223,7 @@ export default function CursorIdeApp() {
     if (!path || path === '__landing__' || path === '__settings__') { setErrors(0); setWarnings(0); return; }
     const type = inferFileType(path);
     if (type === 'tsx' || type === 'ts') {
-      execAsync('npx tsc --noEmit --pretty false ' + path + ' 2>/dev/null || true').then((res) => {
+      execAsync('cd ' + shellQuote(stateRef.current.workDir || '.') + ' && npx tsc --noEmit --pretty false ' + shellQuote(path) + ' 2>/dev/null || true').then((res) => {
         // Stale-result guard: if the user switched files before tsc finished,
         // drop this result.
         if (stateRef.current.currentFilePath !== path) return;
@@ -1212,7 +1236,7 @@ export default function CursorIdeApp() {
         setErrors(e); setWarnings(w);
       });
     } else if (type === 'zig') {
-      execAsync('zig ast-check ' + path + ' 2>/dev/null || true').then((res) => {
+      execAsync('cd ' + shellQuote(stateRef.current.workDir || '.') + ' && zig ast-check ' + shellQuote(path) + ' 2>/dev/null || true').then((res) => {
         if (stateRef.current.currentFilePath !== path) return;
         const raw = res.stdout.trim();
         let e = 0;
@@ -1650,11 +1674,11 @@ export default function CursorIdeApp() {
             <Col style={{ width: '100%', height: '100%' }}>
               <TopBar chromeOnly={true} widthBand={widthBand} />
               <HomePage onOpenWorkspace={(path: string) => {
-                addWorkspaceRecent(path);
+                console.log('[workspace] home open path=' + String(path));
                 setWorkDir(path);
                 setWorkspaceName(path.split('/').filter(Boolean).pop() || 'workspace');
                 setAppMode('ide');
-                setTimeout(() => { try { refreshWorkspace(); } catch (_e) {} }, 0);
+                setTimeout(() => { try { refreshWorkspace(path); } catch (_e) {} }, 0);
               }} />
             </Col>
           </Box>

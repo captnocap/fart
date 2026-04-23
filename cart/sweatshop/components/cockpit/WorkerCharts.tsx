@@ -175,9 +175,10 @@ function ToolRateStack({ workers, history }: { workers: Worker[]; history: Histo
           <Col key={i} style={{ width: 10, height: 64, justifyContent: 'flex-end' }}>
             {workers.map((w) => {
               const v = f.perWorker[w.id] ?? 0;
-              const h = Math.round((v / maxStack) * 60);
-              if (h <= 0) return null;
-              return <Box key={w.id} style={{ height: h, backgroundColor: w.accent, opacity: 0.85 }} />;
+              // NB: do not name this `h` — shadows esbuild's JSX factory, see line ~222.
+              const barHeight = Math.round((v / maxStack) * 60);
+              if (barHeight <= 0) return null;
+              return <Box key={w.id} style={{ height: barHeight, backgroundColor: w.accent, opacity: 0.85 }} />;
             })}
           </Col>
         ))}
@@ -219,9 +220,11 @@ function BurnDownTile({ workers, history, baseRemaining }: { workers: Worker[]; 
           <Col key={i} style={{ width: 10, height: 56, justifyContent: 'flex-end' }}>
             {workers.map((w) => {
               const v = f.remainingTasks[w.id] ?? baseRemaining[w.id] ?? 0;
-              const h = Math.round((v / initialTotal) * 52);
-              if (h <= 0) return null;
-              return <Box key={w.id} style={{ height: h, backgroundColor: w.accent, opacity: 0.7 }} />;
+              // NB: do NOT name this `h` — esbuild lowers JSX to `h(...)` calls
+              // and a local `h` shadows the factory, producing "h is not a function".
+              const barHeight = Math.round((v / initialTotal) * 52);
+              if (barHeight <= 0) return null;
+              return <Box key={w.id} style={{ height: barHeight, backgroundColor: w.accent, opacity: 0.7 }} />;
             })}
           </Col>
         ))}

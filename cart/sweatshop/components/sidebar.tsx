@@ -45,10 +45,7 @@ function DockButton(props: {
           gap: 3,
         }}
       >
-        <Icon name={props.icon} size={14} color={active ? props.tone : COLORS.textMuted} />
-        <Text fontSize={8} color={active ? props.tone : COLORS.textMuted} style={{ fontWeight: 'bold' }}>
-          {props.label.slice(0, 2).toUpperCase()}
-        </Text>
+        <Icon name={props.icon} size={18} color={active ? props.tone : COLORS.textMuted} />
         {props.count ? <Text fontSize={8} color={props.tone}>{props.count}</Text> : null}
       </HoverPressable>
     </Tooltip>
@@ -211,12 +208,13 @@ function FilesPanel(props: any) {
         ))}
       </Box>
 
-      <Box style={{ flexGrow: 1, minHeight: 0 }}>
+      <Box style={{ minHeight: 0 }}>
         <VirtualFileTree
           files={props.files}
           currentFilePath={props.currentFilePath}
           onSelectPath={props.onSelectPath}
-          viewportHeight={560}
+          minHeight={160}
+          maxHeight={560}
         />
       </Box>
     </PanelShell>
@@ -402,7 +400,8 @@ function SidebarImpl(props: any) {
           files={props.files}
           currentFilePath={props.currentFilePath}
           onSelectPath={props.onSelectPath}
-          viewportHeight={400}
+          minHeight={140}
+          maxHeight={400}
         />
       </Col>
     );

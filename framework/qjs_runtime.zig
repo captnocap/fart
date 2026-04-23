@@ -2548,7 +2548,7 @@ fn hostPtyCwd(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.J
     if (argc < 1) return qjs.JS_NewString(ctx, "");
     var value: i32 = 0;
     _ = qjs.JS_ToInt32(ctx, &value, argv[0]);
-    if (ptyFromHandle(value)) |*p| {
+    if (ptyFromHandle(value)) |p| {
         var path_buf: [64]u8 = undefined;
         const path = std.fmt.bufPrint(&path_buf, "/proc/{d}/cwd", .{ p.pid }) catch {
             return qjs.JS_NewString(ctx, "");
@@ -2574,7 +2574,7 @@ fn hostPtyRead(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.
     if (argc < 1) return QJS_UNDEFINED;
     var value: i32 = 0;
     _ = qjs.JS_ToInt32(ctx, &value, argv[0]);
-    if (ptyFromHandle(value)) |*p| {
+    if (ptyFromHandle(value)) |p| {
         if (p.readData()) |data| {
             return qjs.JS_NewStringLen(ctx, data.ptr, @intCast(data.len));
         }
@@ -2586,7 +2586,7 @@ fn hostPtyWrite(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs
     if (argc < 2) return QJS_UNDEFINED;
     var value: i32 = 0;
     _ = qjs.JS_ToInt32(ctx, &value, argv[0]);
-    if (ptyFromHandle(value)) |*p| {
+    if (ptyFromHandle(value)) |p| {
         const str = qjs.JS_ToCString(ctx, argv[1]);
         if (str == null) return QJS_UNDEFINED;
         defer qjs.JS_FreeCString(ctx, str);
@@ -2599,7 +2599,7 @@ fn hostPtyAlive(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs
     if (argc < 1) return qjs.JS_NewFloat64(null, 0);
     var value: i32 = 0;
     _ = qjs.JS_ToInt32(ctx, &value, argv[0]);
-    if (ptyFromHandle(value)) |*p| {
+    if (ptyFromHandle(value)) |p| {
         const ok = p.alive();
         if (!ok) ptyReleaseHandle(value);
         return qjs.JS_NewFloat64(null, if (ok) @as(f64, 1) else 0);

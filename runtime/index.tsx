@@ -146,11 +146,20 @@ if (!(globalThis as any).__zigOS_tick) {
   // Called each frame by the Zig host. `now` is in ms (engine tick time).
   let _tickCount = 0;
   let _lastDbgPrint = 0;
+  // Default to once-every-10s so an idle dev terminal isn't flooded. Host
+  // can set ZIGOS_VERBOSE_TICK=1 in its env to crank it back to once/sec.
+  const _tickDbgIntervalMs = ((): number => {
+    try {
+      const envGet: any = (globalThis as any).__env_get;
+      if (typeof envGet === 'function' && envGet('ZIGOS_VERBOSE_TICK')) return 1000;
+    } catch {}
+    return 10000;
+  })();
   (globalThis as any).__jsTick = (now: number): void => {
     _nowMs = now;
     _tickCount++;
-    // Print diag every ~1s: tick count, pending timers, next due.
-    if (now - _lastDbgPrint > 1000) {
+    // Print diag every _tickDbgIntervalMs: tick count, pending timers, next due.
+    if (now - _lastDbgPrint > _tickDbgIntervalMs) {
       _lastDbgPrint = now;
       const nextDue = _timers.length > 0
         ? Math.min(...(_timers.filter((t) => !t.cleared).map((t) => t.due - now)))
@@ -196,6 +205,57 @@ if (!(globalThis as any).__zigOS_tick) {
 // CJS default interop (QuickJS CJS wrappers from esbuild behave like Node's).
 const React: any = require('react');
 const Reconciler: any = require('react-reconciler');
+
+// ── Auto hot-state: wrap React.useState so every cart's useState survives a
+// hot reload without opt-in. Works because esbuild preserves live bindings
+// for `import { useState } from 'react'` — user code reads `_react.useState`
+// at call time, so replacing the property affects every call site (ambient
+// injected or explicit import) across every cart.
+//
+// Keying: React.useId() is a hook, but it produces a stable string per call
+// site within a component's fiber. Adding it in front of useState shifts
+// hook indices by 1, which is fine — React's only requirement is that hook
+// order be stable across renders, which it is.
+//
+// Graceful fallback: when __hot_get isn't registered (ship mode, older host,
+// etc.) the wrapper falls straight through to plain useState behavior.
+(function installAutoHotState() {
+  if ((React as any).__sw_useStateAutoPatched) return;
+  const realUseState = React.useState;
+  const realUseId = React.useId;
+  const realUseCallback = React.useCallback;
+  if (typeof realUseState !== 'function' || typeof realUseId !== 'function' || typeof realUseCallback !== 'function') return;
+  React.useState = function useStateAutoHot<T>(initial: T | (() => T)) {
+    const id: string = realUseId.call(React);
+    const [value, setValue] = realUseState.call(React, () => {
+      const hg: any = (globalThis as any).__hot_get;
+      if (typeof hg === 'function') {
+        try {
+          const raw = hg(id);
+          if (raw != null) return JSON.parse(raw) as T;
+        } catch {}
+      }
+      const init = typeof initial === 'function' ? (initial as () => T)() : initial;
+      const hs: any = (globalThis as any).__hot_set;
+      if (typeof hs === 'function') {
+        try { hs(id, JSON.stringify(init)); } catch {}
+      }
+      return init;
+    });
+    const set = realUseCallback.call(React, (updater: any) => {
+      setValue((prev: T) => {
+        const next = typeof updater === 'function' ? updater(prev) : updater;
+        const hs: any = (globalThis as any).__hot_set;
+        if (typeof hs === 'function') {
+          try { hs(id, JSON.stringify(next)); } catch {}
+        }
+        return next;
+      });
+    }, [id]);
+    return [value, set];
+  };
+  (React as any).__sw_useStateAutoPatched = true;
+})();
 
 import { hostConfig, setTransportFlush, handlerRegistry } from '../renderer/hostConfig';
 import { prepareContext, releaseContext } from './effectContext';
@@ -313,9 +373,9 @@ if (typeof registerDispatch === 'function') {
   } catch {}
 }
 
-(globalThis as any).__dispatchInputChange = (id: number) => {
+(globalThis as any).__dispatchInputChange = (id: number, inputSlot?: number) => {
   try {
-    const text = getInputTextForNode(id);
+    const text = getInputTextForNode(typeof inputSlot === 'number' ? inputSlot : id);
     const payload = { targetId: id, text };
     dispatchAliases(id, ['onChangeText', 'onChange', 'onInput'], text, payload);
   } catch (e) {
@@ -323,9 +383,9 @@ if (typeof registerDispatch === 'function') {
   }
 };
 
-(globalThis as any).__dispatchInputSubmit = (id: number) => {
+(globalThis as any).__dispatchInputSubmit = (id: number, inputSlot?: number) => {
   try {
-    const text = getInputTextForNode(id);
+    const text = getInputTextForNode(typeof inputSlot === 'number' ? inputSlot : id);
     const payload = { targetId: id, text };
     dispatchAliases(id, ['onSubmit', 'onSubmitEditing'], text, payload);
   } catch (e) {

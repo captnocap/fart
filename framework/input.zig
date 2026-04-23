@@ -431,12 +431,12 @@ fn trimToCodepoints(bytes: []const u8, max_cp: u32) []const u8 {
 }
 
 fn dispatchInputChange(id: u8) void {
+    // V8 carts receive input change through the per-slot callback installed by
+    // v8_app.zig, which can translate slot -> React node id before dispatch.
+    // Calling the JS global here would pass a raw slot where JS expects a node.
+    if (USE_V8) return;
+
     const id64: i64 = @intCast(id);
-    if (USE_V8) {
-        js_vm.callGlobalInt("__dispatchInputChange", id64);
-        state_mod.markDirty();
-        return;
-    }
     if (js_vm.hasGlobal("__dispatchInputChange")) {
         js_vm.callGlobalInt("__dispatchInputChange", id64);
         state_mod.markDirty();

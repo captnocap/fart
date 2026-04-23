@@ -47,6 +47,35 @@ pub fn initVM() void {
 pub const deinit = teardownVM;
 pub fn tick() void {}
 
+/// Dev-mode hot reload. V8's platform lifecycle is ONE-SHOT per process —
+/// `DisposePlatform` is terminal and `InitializePlatform` cannot be called a
+/// second time. So on hot reload we tear down only the Context + top-level
+/// HandleScope and build a fresh Context inside the same Isolate. Host-fn
+/// bindings are installed on the global template per Context, so the caller
+/// must re-run its `registerHostFn(...)` sequence after this returns (v8_app's
+/// appInit() already does this).
+pub fn resetContextForReload() void {
+    if (g_isolate == null) {
+        // Nothing running yet — fall back to a full init.
+        initVM();
+        return;
+    }
+    if (g_context) |ctx| {
+        ctx.exit();
+        g_context = null;
+    }
+    if (g_hscope_alive) {
+        g_hscope_storage.deinit();
+        g_hscope_alive = false;
+    }
+    const iso = g_isolate.?;
+    g_hscope_storage.init(iso);
+    g_hscope_alive = true;
+    const context = v8.Context.init(iso, null, null);
+    context.enter();
+    g_context = context;
+}
+
 pub fn teardownVM() void {
     if (g_context) |ctx| {
         ctx.exit();
@@ -88,8 +117,15 @@ pub fn registerHostFn(name: [*:0]const u8, callback: v8.c.FunctionCallback) void
 }
 
 pub fn evalScript(js_logic: []const u8) void {
-    const iso = g_isolate orelse return;
-    const ctx = g_context orelse return;
+    _ = evalScriptChecked(js_logic);
+}
+
+/// Like evalScript, but returns true iff compile+run both succeeded with no
+/// uncaught JS exception. Used by the dev host to detect a bad hot-reload and
+/// roll back to the last good bundle.
+pub fn evalScriptChecked(js_logic: []const u8) bool {
+    const iso = g_isolate orelse return false;
+    const ctx = g_context orelse return false;
 
     var hscope: v8.HandleScope = undefined;
     hscope.init(iso);
@@ -102,12 +138,13 @@ pub fn evalScript(js_logic: []const u8) void {
     const src = v8.String.initUtf8(iso, js_logic);
     const script = v8.Script.compile(ctx, src, null) catch {
         logException(iso, ctx, try_catch, "compile");
-        return;
+        return false;
     };
     _ = script.run(ctx) catch {
         logException(iso, ctx, try_catch, "run");
-        return;
+        return false;
     };
+    return true;
 }
 
 pub fn evalExpr(code: []const u8) void {
@@ -203,6 +240,17 @@ pub fn callGlobalInt(name: [*:0]const u8, arg: i64) void {
     callGlobalWithArgs(name, &.{n.toValue()});
 }
 
+pub fn callGlobal2Int(name: [*:0]const u8, a: i64, b: i64) void {
+    const iso = g_isolate orelse return;
+    var hscope: v8.HandleScope = undefined;
+    hscope.init(iso);
+    defer hscope.deinit();
+    callGlobalWithArgs(name, &.{
+        v8.Number.init(iso, @floatFromInt(a)).toValue(),
+        v8.Number.init(iso, @floatFromInt(b)).toValue(),
+    });
+}
+
 pub fn callGlobalFloat(name: [*:0]const u8, arg: f32) void {
     const iso = g_isolate orelse return;
     var hscope: v8.HandleScope = undefined;
@@ -247,6 +295,84 @@ pub fn callGlobal5Int(name: [*:0]const u8, a: i64, b: i64, c: i64, d: i64, e: i6
         v8.Number.init(iso, @floatFromInt(d)).toValue(),
         v8.Number.init(iso, @floatFromInt(e)).toValue(),
     });
+}
+
+fn noopBackingStoreDeleter(_: ?*anyopaque, _: usize, _: ?*anyopaque) callconv(.c) void {}
+
+/// Dispatch a per-frame Effect render into JS. Mirrors qjs_runtime.dispatchEffectRender:
+/// wraps `ctx.buf` as an ArrayBuffer via a no-op deleter (Zig still owns the
+/// memory — the effect Instance allocates/frees via page_alloc) and calls the
+/// `__dispatchEffectRender(id, buffer, w, h, stride, time, dt, mx, my, inside,
+/// frame)` global registered by runtime/index.tsx.
+///
+/// The BackingStore is held via a SharedPtr that drops at scope exit — if the
+/// JS handler retains a typed-array reference past the call, V8 keeps the
+/// SharedPtr alive and the pointer remains valid until Instance.deinit() frees
+/// the CPU pixel buffer. That matches the QJS path (which used an explicit
+/// detach) in practice: instances are swept after STALE_INSTANCE_GRACE frames,
+/// so JS holding a stale ref reads live pixels, not freed memory.
+pub fn dispatchEffectRender(
+    id: u32,
+    buf_ptr: [*]u8,
+    buf_len: usize,
+    width: u32,
+    height: u32,
+    stride: u32,
+    time: f32,
+    dt: f32,
+    mouse_x: f32,
+    mouse_y: f32,
+    mouse_inside: bool,
+    frame: u32,
+) void {
+    const iso = g_isolate orelse return;
+    const ctx = g_context orelse return;
+
+    var hscope: v8.HandleScope = undefined;
+    hscope.init(iso);
+    defer hscope.deinit();
+
+    var try_catch: v8.TryCatch = undefined;
+    try_catch.init(iso);
+    defer try_catch.deinit();
+
+    const bs_raw = v8.c.v8__ArrayBuffer__NewBackingStore2(
+        @ptrCast(buf_ptr),
+        buf_len,
+        noopBackingStoreDeleter,
+        null,
+    ) orelse return;
+    var shared = v8.c.v8__BackingStore__TO_SHARED_PTR(bs_raw);
+    defer v8.BackingStore.sharedPtrReset(&shared);
+    const ab = v8.ArrayBuffer.initWithBackingStore(iso, &shared);
+    const ab_val = v8.Value{ .handle = ab.handle };
+
+    const global = ctx.getGlobal();
+    const key = v8.String.initUtf8(iso, "__dispatchEffectRender");
+    const val = global.getValue(ctx, key) catch return;
+    if (val.isUndefined() or !val.isFunction()) return;
+    const func = val.castTo(v8.Function);
+
+    const inside_bool = if (mouse_inside) iso.initTrue() else iso.initFalse();
+    const inside_val = v8.Value{ .handle = @ptrCast(inside_bool.handle) };
+
+    const args = [_]v8.Value{
+        v8.Integer.initU32(iso, id).toValue(),
+        ab_val,
+        v8.Integer.initU32(iso, width).toValue(),
+        v8.Integer.initU32(iso, height).toValue(),
+        v8.Integer.initU32(iso, stride).toValue(),
+        v8.Number.init(iso, @as(f64, @floatCast(time))).toValue(),
+        v8.Number.init(iso, @as(f64, @floatCast(dt))).toValue(),
+        v8.Number.init(iso, @as(f64, @floatCast(mouse_x))).toValue(),
+        v8.Number.init(iso, @as(f64, @floatCast(mouse_y))).toValue(),
+        inside_val,
+        v8.Integer.initU32(iso, frame).toValue(),
+    };
+    _ = func.call(ctx, global.toValue(), &args) orelse {
+        logException(iso, ctx, try_catch, "__dispatchEffectRender");
+        return;
+    };
 }
 
 fn appendV8ErrorLog(tag: []const u8, message: []const u8) void {

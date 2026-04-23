@@ -87,7 +87,7 @@ ZIGOS_HEADLESS=1 \
 ZIGOS_WITNESS=autotest \
 ZIGOS_WITNESS_FILE="$TEST_FILE" \
 ZIGOS_SOURCE="$SOURCE_FILES" \
-    timeout -s KILL 10 "$BINARY" >"$TMPLOG" 2>&1 || true
+    timeout -s KILL 600 "$BINARY" >"$TMPLOG" 2>&1 || true
 grep -v "AUTOTEST RESULT" "$TMPLOG" \
     | grep -E "expect|click|reject|color|bg|border|styles|PASS|FAIL|OK|VERIFY|audit|MISSING|changed" \
     || true

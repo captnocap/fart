@@ -1,7 +1,9 @@
 
+const React: any = require('react');
+const { useCallback, useEffect, useRef, useState } = React;
+
 import { Box, Canvas, Col, Pressable, Row, ScrollView, Text } from '../../../../runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
-import { useRandomThemeOnLoad } from './useRandomThemeOnLoad';
 import { useHomeLayout, type TileType } from './useHomeLayout';
 import { HomeTile } from './HomeTile';
 
@@ -20,13 +22,32 @@ const ADDABLE: { type: TileType; label: string }[] = [
 ];
 
 export function HomeCanvas(props: any) {
-  useRandomThemeOnLoad();
-
   const { tiles, updateTile, removeTile, addTile, resetLayout } = useHomeLayout();
 
   const [viewX, setViewX] = useState(0);
   const [viewY, setViewY] = useState(0);
   const [viewZoom, setViewZoom] = useState(1);
+  const didLogRef = useRef(false);
+
+  useEffect(() => {
+    if (didLogRef.current) return;
+    didLogRef.current = true;
+    try {
+      const first = tiles[0] || null;
+      const log = JSON.stringify({
+        event: 'home-layout',
+        tileCount: tiles.length,
+        firstTile: first ? { id: first.id, type: first.type, x: first.x, y: first.y, w: first.w, h: first.h } : null,
+        view: { x: viewX, y: viewY, zoom: viewZoom },
+        colors: { panelRaised: COLORS.panelRaised, panelBg: COLORS.panelBg },
+      });
+      if (typeof (globalThis as any).__hostLog === 'function') {
+        (globalThis as any).__hostLog(0, log);
+      } else {
+        console.log(log);
+      }
+    } catch {}
+  }, []);
 
   const handleMove = useCallback(
     (id: string) => (e: any) => {
@@ -56,9 +77,9 @@ export function HomeCanvas(props: any) {
   return (
     <Box style={{ width: '100%', height: '100%', backgroundColor: COLORS.appBg, position: 'relative' }}>
       <Canvas style={{ width: '100%', height: '100%' }} viewX={viewX} viewY={viewY} viewZoom={viewZoom}>
-        {/* World bounds hint */}
+        {/* World bounds hint — slightly lighter than canvas bg so tiles pop */}
         <Canvas.Node gx={0} gy={0} gw={WORLD_W} gh={WORLD_H}>
-          <Box style={{ width: '100%', height: '100%', borderWidth: 1, borderColor: COLORS.border, borderRadius: TOKENS.radiusMd, backgroundColor: COLORS.panelBg }} />
+          <Box style={{ width: '100%', height: '100%', borderWidth: 2, borderColor: COLORS.border, borderRadius: TOKENS.radiusMd, backgroundColor: COLORS.panelBg }} />
         </Canvas.Node>
 
         {tiles.map((tile) => (

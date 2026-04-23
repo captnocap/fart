@@ -147,7 +147,10 @@ pub fn build(b: *std.Build) void {
         .flags = &.{ "-O2", "-D_GNU_SOURCE", "-DQUICKJS_NG_BUILD" },
     });
 
-    // ── stb image write ────────────────────────────────────────
+    // ── stb image read + write ────────────────────────────────
+    // stbi_load_from_memory powers image_cache.zig (the <Image> primitive).
+    // stbi_write_png powers capture/witness screenshotting.
+    root_mod.addCSourceFile(.{ .file = b.path("stb/stb_image_impl.c"), .flags = &.{"-O2"} });
     root_mod.addCSourceFile(.{ .file = b.path("stb/stb_image_write_impl.c"), .flags = &.{"-O2"} });
 
     // ── Framework FFI shims ────────────────────────────────────

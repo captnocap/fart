@@ -1,10 +1,19 @@
 const React: any = require('react');
-const { useState, useEffect, useMemo } = React;
+const { useState, useEffect, useMemo, useRef } = React;
 
 import { Box, Col, Pressable, Row, ScrollView, Text, TextInput } from '../../../../runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 import { listDir, stat } from '../../../../runtime/hooks/fs';
-import { mkdirP } from '../../lib/workspace/validate';
+import { checkIsDirectory, mkdirP } from '../../lib/workspace/validate';
+import { fuzzyScore } from '../palette/useFuzzyFilter';
+
+function log(message: string): void {
+  try {
+    const h = globalThis as any;
+    if (typeof h.__hostLog === 'function') h.__hostLog(0, '[picker] ' + message);
+    else if (typeof console !== 'undefined' && console.log) console.log('[picker] ' + message);
+  } catch (_e) {}
+}
 
 function isValidSegment(name: string): boolean {
   if (!name) return false;
@@ -16,7 +25,10 @@ function isValidSegment(name: string): boolean {
 type DirectoryPickerProps = {
   visible: boolean;
   startPath: string;
+  title: string;
+  subtitle: string;
   confirmLabel: string;
+  allowCreate?: boolean;
   onSelect: (path: string) => void;
   onCancel: () => void;
 };
@@ -43,24 +55,33 @@ function DirRow(props: { name: string; onPress: () => void }) {
 
 export function DirectoryPicker(props: DirectoryPickerProps) {
   const [currentPath, setCurrentPath] = useState(props.startPath);
+  const currentPathRef = useRef(props.startPath);
   const [entries, setEntries] = useState<string[]>([]);
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
 
+  const setPath = (path: string) => {
+    currentPathRef.current = path;
+    setCurrentPath(path);
+  };
+
   useEffect(() => {
     if (props.visible) {
-      setCurrentPath(props.startPath);
+      log('open startPath=' + props.startPath + ' title=' + props.title);
+      setPath(props.startPath);
       setQuery('');
       refreshEntries(props.startPath);
     }
   }, [props.visible, props.startPath]);
 
   const refreshEntries = (path: string) => {
+    log('refresh path=' + path);
     try {
       const names = listDir(path);
       if (!names || names.length === 0) {
         setEntries([]);
         setError('No entries (empty directory or permission denied).');
+        log('refresh empty path=' + path);
         return;
       }
       const dirs: string[] = [];
@@ -73,45 +94,129 @@ export function DirectoryPicker(props: DirectoryPickerProps) {
       dirs.sort((a, b) => a.localeCompare(b));
       setEntries(dirs);
       setError('');
+      log('refresh done path=' + path + ' dirs=' + dirs.length + (dirs[0] ? ' first=' + dirs[0] : ''));
     } catch (_e) {
       setEntries([]);
       setError('Could not read directory.');
+      log('refresh failed path=' + path);
     }
   };
 
   const goUp = () => {
-    const normalized = currentPath.replace(/\/+$/, '');
+    const from = currentPathRef.current;
+    const normalized = from.replace(/\/+$/, '');
     if (normalized === '' || normalized === '/') return;
     const parent = normalized.split('/').slice(0, -1).join('/') || '/';
-    setCurrentPath(parent);
+    log('goUp from=' + from + ' to=' + parent);
+    setPath(parent);
+    setQuery('');
     refreshEntries(parent);
   };
 
   const goDown = (name: string) => {
-    const base = currentPath.replace(/\/+$/, '');
+    const from = currentPathRef.current;
+    const base = from.replace(/\/+$/, '');
     const next = (base === '' ? '' : base) + '/' + name;
-    setCurrentPath(next);
+    log('goDown name=' + name + ' from=' + from + ' to=' + next);
+    setPath(next);
+    setQuery('');
     refreshEntries(next);
   };
 
   const goToSegment = (idx: number) => {
-    const parts = currentPath.split('/').filter(Boolean);
+    const from = currentPathRef.current;
+    const parts = from.split('/').filter(Boolean);
     const next = '/' + parts.slice(0, idx + 1).join('/');
-    setCurrentPath(next);
+    log('goToSegment idx=' + idx + ' from=' + from + ' to=' + next);
+    setPath(next);
+    setQuery('');
     refreshEntries(next);
+  };
+
+  const filteredEntries = useMemo(() => {
+    const q = (query || '').trim();
+    return q.length === 0
+      ? entries
+      : entries
+        .map((name: string) => ({ name, score: fuzzyScore(q, name, 'loose') }))
+        .filter((item: { name: string; score: number }) => item.score > 0)
+        .sort((a: { name: string; score: number }, b: { name: string; score: number }) => {
+          if (b.score !== a.score) return b.score - a.score;
+          return a.name.localeCompare(b.name);
+        })
+        .map((item: { name: string; score: number }) => item.name);
+  }, [query, entries]);
+
+  const selectQuery = () => {
+    const q = (query || '').trim();
+    const selectedPath = currentPathRef.current;
+    log('selectQuery current=' + selectedPath + ' query=' + q + ' filtered=' + filteredEntries.length);
+    if (!q) {
+      log('select current=' + selectedPath);
+      props.onSelect(selectedPath);
+      return;
+    }
+    if (filteredEntries.length > 0) {
+      log('selectQuery best=' + filteredEntries[0]);
+      goDown(filteredEntries[0]);
+      return;
+    }
+    if (q.startsWith('/') || q.startsWith('~/')) {
+      const target = q.startsWith('~/') ? props.startPath.replace(/\/+$/, '') + '/' + q.slice(2) : q;
+      const check = checkIsDirectory(target);
+      if (!check.ok) { setError(check.reason || 'Invalid path.'); return; }
+      log('selectQuery absolute target=' + target);
+      setPath(target);
+      setQuery('');
+      refreshEntries(target);
+      return;
+    }
+    if (props.allowCreate && isValidSegment(q)) {
+      const base = currentPathRef.current.replace(/\/+$/, '');
+      const target = (base === '' ? '' : base) + '/' + q;
+      const check = mkdirP(target);
+      if (!check.ok) { setError(check.reason || 'Failed to create directory.'); return; }
+      log('selectQuery create target=' + target);
+      props.onSelect(target);
+      return;
+    }
+    setError(props.allowCreate ? 'Invalid name - single-segment only.' : 'No matching directory.');
   };
 
   const filteredRows = useMemo(() => {
     const q = (query || '').trim();
-    const qLower = q.toLowerCase();
-    const filtered = q.length === 0
-      ? entries
-      : entries.filter((n: string) => n.toLowerCase().indexOf(qLower) >= 0);
-    const rows: any[] = filtered.map((name: string) => (
+    const rows: any[] = filteredEntries.map((name: string) => (
       <DirRow key={name} name={name} onPress={() => goDown(name)} />
     ));
-    if (q.length > 0 && filtered.length === 0) {
-      if (isValidSegment(q)) {
+    if (q.length > 0 && filteredEntries.length === 0) {
+      if (q.startsWith('/') || q.startsWith('~/')) {
+        const target = q.startsWith('~/') ? props.startPath.replace(/\/+$/, '') + '/' + q.slice(2) : q;
+        const check = checkIsDirectory(target);
+        rows.push(
+          <Pressable
+            key="__path__"
+            onPress={() => {
+              if (!check.ok) { setError(check.reason || 'Invalid path.'); return; }
+              log('path row target=' + target);
+              setPath(target);
+              setQuery('');
+              refreshEntries(target);
+            }}
+            style={{
+              paddingLeft: 12,
+              paddingRight: 12,
+              paddingTop: 10,
+              paddingBottom: 10,
+              borderRadius: TOKENS.radiusSm,
+              borderWidth: 1,
+              borderColor: check.ok ? COLORS.blue : COLORS.red,
+              backgroundColor: check.ok ? COLORS.blueDeep : COLORS.redDeep,
+            }}
+          >
+            <Text fontSize={12} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>{check.ok ? 'Go to ' + target : check.reason || 'Invalid path'}</Text>
+          </Pressable>
+        );
+      } else if (props.allowCreate && isValidSegment(q)) {
         const base = currentPath.replace(/\/+$/, '');
         const target = (base === '' ? '' : base) + '/' + q;
         rows.push(
@@ -120,6 +225,7 @@ export function DirectoryPicker(props: DirectoryPickerProps) {
             onPress={() => {
               const check = mkdirP(target);
               if (!check.ok) { setError(check.reason || 'Failed to create directory.'); return; }
+              log('create row target=' + target);
               props.onSelect(target);
             }}
             style={{
@@ -139,13 +245,13 @@ export function DirectoryPicker(props: DirectoryPickerProps) {
       } else {
         rows.push(
           <Box key="__invalid__" style={{ padding: 12, borderRadius: TOKENS.radiusSm, backgroundColor: COLORS.redDeep, borderWidth: 1, borderColor: COLORS.red }}>
-            <Text fontSize={11} color={COLORS.red}>Invalid name - single-segment only.</Text>
+            <Text fontSize={11} color={COLORS.red}>{props.allowCreate ? 'Invalid name - single-segment only.' : 'No matching directory.'}</Text>
           </Box>
         );
       }
     }
     return rows;
-  }, [query, entries, currentPath]);
+  }, [query, filteredEntries, currentPath, props.startPath, props.allowCreate]);
 
   if (!props.visible) return null;
 
@@ -216,19 +322,10 @@ export function DirectoryPicker(props: DirectoryPickerProps) {
             }}
           >
             <Row style={{ gap: 8, alignItems: 'center' }}>
-              <Row style={{ flex: 1, minWidth: 0, gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
-                <Pressable onPress={() => { setCurrentPath('/'); refreshEntries('/'); }} style={{ paddingLeft: 6, paddingRight: 6, paddingTop: 3, paddingBottom: 3, borderRadius: TOKENS.radiusSm }}>
-                  <Text fontSize={11} color={COLORS.blue} style={{ fontWeight: 'bold' }}>/</Text>
-                </Pressable>
-                {parts.map((part: string, idx: number) => (
-                  <Row key={idx} style={{ gap: 2, alignItems: 'center' }}>
-                    <Text fontSize={11} color={COLORS.textDim}>/</Text>
-                    <Pressable onPress={() => goToSegment(idx)} style={{ paddingLeft: 6, paddingRight: 6, paddingTop: 3, paddingBottom: 3, borderRadius: TOKENS.radiusSm }}>
-                      <Text fontSize={11} color={COLORS.blue} style={{ fontWeight: 'bold' }}>{part}</Text>
-                    </Pressable>
-                  </Row>
-                ))}
-              </Row>
+              <Col style={{ flex: 1, minWidth: 0, gap: 6 }}>
+                <Text fontSize={12} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>{props.title}</Text>
+                <Text fontSize={10} color={COLORS.textDim}>{props.subtitle}</Text>
+              </Col>
               <Pressable
                 onPress={props.onCancel}
                 style={{
@@ -245,6 +342,19 @@ export function DirectoryPicker(props: DirectoryPickerProps) {
                 <Text fontSize={11} color={COLORS.textDim} style={{ fontWeight: 'bold' }}>X</Text>
               </Pressable>
             </Row>
+            <Row style={{ width: '100%', minWidth: 0, gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
+                <Pressable onPress={() => { setCurrentPath('/'); setQuery(''); refreshEntries('/'); }} style={{ paddingLeft: 6, paddingRight: 6, paddingTop: 3, paddingBottom: 3, borderRadius: TOKENS.radiusSm }}>
+                  <Text fontSize={11} color={COLORS.blue} style={{ fontWeight: 'bold' }}>/</Text>
+                </Pressable>
+                {parts.map((part: string, idx: number) => (
+                  <Row key={idx} style={{ gap: 2, alignItems: 'center' }}>
+                    <Text fontSize={11} color={COLORS.textDim}>/</Text>
+                    <Pressable onPress={() => goToSegment(idx)} style={{ paddingLeft: 6, paddingRight: 6, paddingTop: 3, paddingBottom: 3, borderRadius: TOKENS.radiusSm }}>
+                      <Text fontSize={11} color={COLORS.blue} style={{ fontWeight: 'bold' }}>{part}</Text>
+                    </Pressable>
+                  </Row>
+                ))}
+            </Row>
             <Box
               style={{
                 borderWidth: 1,
@@ -260,7 +370,10 @@ export function DirectoryPicker(props: DirectoryPickerProps) {
               <TextInput
                 value={query}
                 onChange={setQuery}
-                placeholder="filter / type a new name…"
+                onChangeText={setQuery}
+                onSubmit={selectQuery}
+                onSubmitEditing={selectQuery}
+                placeholder={props.allowCreate ? 'fuzzy filter, absolute path, or new name...' : 'fuzzy filter or absolute path...'}
                 autoFocus={true}
                 fontSize={11}
                 color={COLORS.text}
@@ -322,7 +435,11 @@ export function DirectoryPicker(props: DirectoryPickerProps) {
               <Text fontSize={11} color={COLORS.text}>Cancel</Text>
             </Pressable>
             <Pressable
-              onPress={() => props.onSelect(currentPath)}
+              onPress={() => {
+                const selectedPath = currentPathRef.current;
+                log('confirm current=' + selectedPath + ' state=' + currentPath + ' query=' + (query || '').trim());
+                props.onSelect(selectedPath);
+              }}
               style={{
                 paddingLeft: 16,
                 paddingRight: 16,

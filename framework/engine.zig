@@ -13,6 +13,8 @@ const selection = @import("selection.zig");
 const breakpoint = @import("breakpoint.zig");
 const windows = @import("windows.zig");
 const svg_path = @import("svg_path.zig");
+const image_cache = @import("image_cache.zig");
+const border_dash = @import("border_dash.zig");
 const log = @import("log.zig");
 const tooltip = @import("tooltip.zig");
 const context_menu = @import("context_menu.zig");
@@ -594,6 +596,25 @@ var hovered_node: ?*Node = null;
 var cursor_hand: ?*c.SDL_Cursor = null;
 var cursor_arrow: ?*c.SDL_Cursor = null;
 var cursor_is_hand: bool = false;
+const ScrollbarAxis = enum { vertical, horizontal };
+const ScrollbarHit = struct {
+    node: *Node,
+    axis: ScrollbarAxis,
+    track_start: f32,
+    track_len: f32,
+    thumb_start: f32,
+    thumb_len: f32,
+    max_scroll: f32,
+};
+var scrollbar_drag_slot: u32 = 0;
+var scrollbar_drag_axis: ScrollbarAxis = .vertical;
+var scrollbar_drag_track_start: f32 = 0;
+var scrollbar_drag_track_len: f32 = 0;
+var scrollbar_drag_thumb_len: f32 = 0;
+var scrollbar_drag_offset: f32 = 0;
+var scrollbar_drag_cached_max_scroll: f32 = 0;
+var scrollbar_hover_slot: u32 = 0;
+var scrollbar_hover_axis: ScrollbarAxis = .vertical;
 
 /// Walk the node tree looking for nodes with cartridge_src set.
 /// For each one found, load the .so (if not already loaded) and set
@@ -643,10 +664,174 @@ fn findNodeByScrollSlot(node: *Node, slot: u32) ?*Node {
     return null;
 }
 
+fn scrollableAxes(node: *Node, max_x: *f32, max_y: *f32) struct { x: bool, y: bool } {
+    const r = node.computed;
+    const ov = node.style.overflow;
+    max_x.* = @max(0.0, node.content_width - r.w);
+    max_y.* = @max(0.0, node.content_height - r.h);
+    return .{
+        .x = node.show_scrollbar and r.w > 0 and max_x.* > 0 and (ov == .scroll or ov == .auto),
+        .y = node.show_scrollbar and r.h > 0 and max_y.* > 0 and (ov == .scroll or ov == .auto),
+    };
+}
+
+fn scrollbarHitForNode(node: *Node, mx: f32, my: f32) ?ScrollbarHit {
+    const r = node.computed;
+    if (mx < r.x or mx >= r.x + r.w or my < r.y or my >= r.y + r.h) return null;
+
+    var max_scroll_x: f32 = 0;
+    var max_scroll_y: f32 = 0;
+    const axes = scrollableAxes(node, &max_scroll_x, &max_scroll_y);
+    if (!axes.x and !axes.y) return null;
+
+    const inset: f32 = 2.0;
+    const track_thickness: f32 = 3.0;
+    const thumb_thickness: f32 = 4.0;
+    const hit_thickness: f32 = 7.0;
+    const min_thumb_len: f32 = 18.0;
+
+    if (axes.y) {
+        const track_x = switch (node.scrollbar_side) {
+            .left => r.x + inset,
+            else => r.x + r.w - inset - track_thickness,
+        };
+        const track_y = r.y + inset;
+        const track_h = @max(0.0, r.h - inset * 2.0);
+        const thumb_h = @min(track_h, @max(min_thumb_len, if (node.content_height > 0) (r.h * r.h / @max(node.content_height, 1.0)) else track_h));
+        const thumb_y = if (max_scroll_y > 0)
+            track_y + ((node.scroll_y / max_scroll_y) * @max(0.0, track_h - thumb_h))
+        else
+            track_y;
+        const hit_center_x = track_x + thumb_thickness * 0.5;
+        if (mx >= hit_center_x - hit_thickness * 0.5 and mx <= hit_center_x + hit_thickness * 0.5 and
+            my >= thumb_y and my <= thumb_y + thumb_h)
+        {
+            return .{
+                .node = node,
+                .axis = .vertical,
+                .track_start = track_y,
+                .track_len = track_h,
+                .thumb_start = thumb_y,
+                .thumb_len = thumb_h,
+                .max_scroll = max_scroll_y,
+            };
+        }
+    }
+
+    if (axes.x) {
+        const track_y = switch (node.scrollbar_side) {
+            .top => r.y + inset,
+            else => r.y + r.h - inset - track_thickness,
+        };
+        const track_x = r.x + inset;
+        const track_w = @max(0.0, r.w - inset * 2.0);
+        const thumb_w = @min(track_w, @max(min_thumb_len, if (node.content_width > 0) (r.w * r.w / @max(node.content_width, 1.0)) else track_w));
+        const thumb_x = if (max_scroll_x > 0)
+            track_x + ((node.scroll_x / max_scroll_x) * @max(0.0, track_w - thumb_w))
+        else
+            track_x;
+        const hit_center_y = track_y + thumb_thickness * 0.5;
+        if (my >= hit_center_y - hit_thickness * 0.5 and my <= hit_center_y + hit_thickness * 0.5 and
+            mx >= thumb_x and mx <= thumb_x + thumb_w)
+        {
+            return .{
+                .node = node,
+                .axis = .horizontal,
+                .track_start = track_x,
+                .track_len = track_w,
+                .thumb_start = thumb_x,
+                .thumb_len = thumb_w,
+                .max_scroll = max_scroll_x,
+            };
+        }
+    }
+
+    return null;
+}
+
+fn hitTestScrollbar(node: *Node, mx: f32, my: f32) ?ScrollbarHit {
+    if (node.style.display == .none) return null;
+
+    const r = node.computed;
+    if (mx < r.x or mx >= r.x + r.w or my < r.y or my >= r.y + r.h) return null;
+
+    // Scrollbars are painted after children, so the owning node's overlay wins.
+    if (scrollbarHitForNode(node, mx, my)) |hit| return hit;
+
+    const ov = node.style.overflow;
+    const is_scroll = (ov == .scroll or (ov == .auto and (node.content_height > r.h or node.content_width > r.w)));
+    var child_mx = mx;
+    var child_my = my;
+    if (is_scroll) {
+        child_mx = mx + node.scroll_x;
+        child_my = my + node.scroll_y;
+    }
+
+    var i = node.children.len;
+    while (i > 0) {
+        i -= 1;
+        if (hitTestScrollbar(&node.children[i], child_mx, child_my)) |hit| return hit;
+    }
+    return null;
+}
+
+fn updateScrollbarDrag(root: *Node, pos: f32) bool {
+    if (scrollbar_drag_slot == 0) return false;
+    const node = findNodeByScrollSlot(root, scrollbar_drag_slot) orelse return false;
+    const movable = @max(0.0, scrollbar_drag_track_len - scrollbar_drag_thumb_len);
+    if (movable <= 0 or scrollbar_drag_cached_max_scroll <= 0) return true;
+
+    const raw_thumb_start = pos - scrollbar_drag_offset;
+    const thumb_start = @max(scrollbar_drag_track_start, @min(raw_thumb_start, scrollbar_drag_track_start + movable));
+    const next_scroll = ((thumb_start - scrollbar_drag_track_start) / movable) * scrollbar_drag_cached_max_scroll;
+
+    switch (scrollbar_drag_axis) {
+        .vertical => {
+            const prev = node.scroll_y;
+            node.scroll_y = @max(0.0, @min(next_scroll, scrollbar_drag_cached_max_scroll));
+            if (node.scroll_y != prev) dispatchScrollChanged(node, 0, node.scroll_y - prev);
+        },
+        .horizontal => {
+            const prev = node.scroll_x;
+            node.scroll_x = @max(0.0, @min(next_scroll, scrollbar_drag_cached_max_scroll));
+            if (node.scroll_x != prev) dispatchScrollChanged(node, node.scroll_x - prev, 0);
+        },
+    }
+    return true;
+}
+
+fn setPointerCursor(active: bool) void {
+    if (active) {
+        if (!cursor_is_hand) {
+            if (cursor_hand == null) cursor_hand = c.SDL_CreateSystemCursor(c.SDL_SYSTEM_CURSOR_POINTER);
+            if (cursor_hand) |cur| _ = c.SDL_SetCursor(cur);
+            cursor_is_hand = true;
+        }
+    } else if (cursor_is_hand) {
+        if (cursor_arrow == null) cursor_arrow = c.SDL_CreateSystemCursor(c.SDL_SYSTEM_CURSOR_DEFAULT);
+        if (cursor_arrow) |cur| _ = c.SDL_SetCursor(cur);
+        cursor_is_hand = false;
+    }
+}
+
 fn updateHover(root: *Node, mx: f32, my: f32) void {
+    const scrollbar_hover = hitTestScrollbar(root, mx, my);
+    if (scrollbar_hover) |hit| {
+        if (scrollbar_hover_slot != hit.node.scroll_persist_slot or scrollbar_hover_axis != hit.axis) {
+            scrollbar_hover_slot = hit.node.scroll_persist_slot;
+            scrollbar_hover_axis = hit.axis;
+            markScrollActivity(hit.node);
+        }
+    } else {
+        scrollbar_hover_slot = 0;
+    }
+
     const events = @import("events.zig");
     const hit = events.hitTestHoverable(root, mx, my);
-    if (hit == hovered_node) return;
+    if (hit == hovered_node) {
+        setPointerCursor(scrollbar_hover != null or (hit != null and hit.?.href != null));
+        return;
+    }
 
     // Exit previous
     if (hovered_node) |prev| {
@@ -681,25 +866,10 @@ fn updateHover(root: *Node, mx: f32, my: f32) void {
         } else {
             tooltip.hide();
         }
-        // Hand cursor for href links
-        if (node.href != null) {
-            if (!cursor_is_hand) {
-                if (cursor_hand == null) cursor_hand = c.SDL_CreateSystemCursor(c.SDL_SYSTEM_CURSOR_POINTER);
-                if (cursor_hand) |cur| _ = c.SDL_SetCursor(cur);
-                cursor_is_hand = true;
-            }
-        } else if (cursor_is_hand) {
-            if (cursor_arrow == null) cursor_arrow = c.SDL_CreateSystemCursor(c.SDL_SYSTEM_CURSOR_DEFAULT);
-            if (cursor_arrow) |cur| _ = c.SDL_SetCursor(cur);
-            cursor_is_hand = false;
-        }
+        setPointerCursor(scrollbar_hover != null or node.href != null);
     } else {
         tooltip.hide();
-        if (cursor_is_hand) {
-            if (cursor_arrow == null) cursor_arrow = c.SDL_CreateSystemCursor(c.SDL_SYSTEM_CURSOR_DEFAULT);
-            if (cursor_arrow) |cur| _ = c.SDL_SetCursor(cur);
-            cursor_is_hand = false;
-        }
+        setPointerCursor(scrollbar_hover != null);
     }
 }
 
@@ -977,8 +1147,9 @@ fn drawNodeTextCommon(node: *Node, text: []const u8, x: f32, y: f32, max_width: 
     return text_h;
 }
 
-fn measureImageCallback(_: []const u8) layout.ImageDims {
-    return .{};
+fn measureImageCallback(src: []const u8) layout.ImageDims {
+    const m = image_cache.measure(src);
+    return .{ .width = m.w, .height = m.h };
 }
 
 // ── Node painting (framework-owned) ─────────────────────────────────────
@@ -1192,9 +1363,25 @@ fn markScrollActivity(node: *Node) void {
     node.scrollbar_last_activity_ms = @intCast(c.SDL_GetTicks());
 }
 
+fn dispatchScrollChanged(node: *Node, dx: f32, dy: f32) void {
+    markScrollActivity(node);
+    luajit_runtime.persistScrollSlot(node.scroll_persist_slot, node.scroll_y);
+    if (node.handlers.on_scroll) |handler| {
+        qjs_runtime.prepareScrollEvent(
+            node.scroll_persist_slot,
+            node.scroll_x,
+            node.scroll_y,
+            dx,
+            dy,
+        );
+        handler();
+    }
+}
+
 fn scrollbarOpacity(node: *Node) f32 {
     if (!node.show_scrollbar) return 0;
     if (!node.scrollbar_auto_hide) return 0.72;
+    if (node.scroll_persist_slot != 0 and (node.scroll_persist_slot == scrollbar_hover_slot or node.scroll_persist_slot == scrollbar_drag_slot)) return 0.82;
     const last = node.scrollbar_last_activity_ms;
     if (last <= 0) return 0;
 
@@ -1217,8 +1404,8 @@ fn paintScrollbars(node: *Node) void {
     const r = node.computed;
     const max_scroll_x = @max(0.0, node.content_width - r.w);
     const max_scroll_y = @max(0.0, node.content_height - r.h);
-    const show_vertical = node.show_scrollbar and r.h > 0 and (ov == .scroll or (ov == .auto and max_scroll_y > 0));
-    const show_horizontal = node.show_scrollbar and r.w > 0 and (ov == .scroll or (ov == .auto and max_scroll_x > 0));
+    const show_vertical = node.show_scrollbar and r.h > 0 and max_scroll_y > 0 and (ov == .scroll or ov == .auto);
+    const show_horizontal = node.show_scrollbar and r.w > 0 and max_scroll_x > 0 and (ov == .scroll or ov == .auto);
     const opacity = scrollbarOpacity(node);
     if (opacity <= 0 or (!show_vertical and !show_horizontal)) return;
 
@@ -1350,14 +1537,17 @@ fn paintNode(node: *Node) void {
     // Graph container — lightweight canvas with transform for SVG path children
     if (node.graph_container) {
         gpu.pushScissor(r.x, r.y, r.w, r.h);
-        // Set up transform: graph-space center (viewX,viewY) maps to element center
+        // Set up transform. Default: graph-space (viewX,viewY) maps to element
+        // CENTER — correct for polar/pan-zoom visuals. Carts that set
+        // graph_origin_topleft=true anchor world (0,0) at the element's
+        // top-left corner instead, matching DOM plot-area conventions.
         const vx: f32 = node.canvas_view_x;
         const vy: f32 = node.canvas_view_y;
         const vz: f32 = if (node.canvas_view_zoom > 0) node.canvas_view_zoom else 1.0;
-        const cx = r.x + r.w / 2;
-        const cy = r.y + r.h / 2;
+        const ox: f32 = if (node.graph_origin_topleft) r.x else r.x + r.w / 2;
+        const oy: f32 = if (node.graph_origin_topleft) r.y else r.y + r.h / 2;
         const saved_tf = gpu.getTransform();
-        gpu.setTransform(0, 0, cx - vx * vz, cy - vy * vz, vz);
+        gpu.setTransform(0, 0, ox - vx * vz, oy - vy * vz, vz);
         for (node.children) |*child| paintNode(child);
         if (saved_tf.active) {
             gpu.setTransform(saved_tf.ox, saved_tf.oy, saved_tf.tx, saved_tf.ty, saved_tf.scale);
@@ -1484,6 +1674,27 @@ fn paintCanvasPath(node: *Node) callconv(.auto) void {
             } else if (paisleyDebugEnabled() and isPaisleyName(ename)) {
                 std.debug.print("[paisley] paintCanvasPath name={s} missing fill source\n", .{ename});
             }
+        } else if (node.canvas_fill_gradient) |grad| {
+            // Linear gradient fill — translate layout.GradientStop (u8 Color) to
+            // svg_path.GradientStopF (f32 RGBA) on the stack, apply paint_opacity
+            // uniformly, then delegate to the Gouraud-interpolated rasterizer.
+            // Coarser tolerance for fills: icons are 24×24 and ear-clipping cost
+            // grows O(n²) in flattened-vertex count; tol=2.0 collapses redundant
+            // near-colinear points from bezier flattening without visible loss.
+            const fill_path = svg_path.parsePath(d);
+            var stops_buf: [16]svg_path.GradientStopF = undefined;
+            const n = @min(grad.stops.len, stops_buf.len);
+            for (0..n) |si2| {
+                const s = grad.stops[si2];
+                stops_buf[si2] = .{
+                    .offset = s.offset,
+                    .r = @as(f32, @floatFromInt(s.color.r)) / 255.0,
+                    .g = @as(f32, @floatFromInt(s.color.g)) / 255.0,
+                    .b = @as(f32, @floatFromInt(s.color.b)) / 255.0,
+                    .a = @as(f32, @floatFromInt(s.color.a)) / 255.0 * g_paint_opacity,
+                };
+            }
+            svg_path.drawFillLinearGradient(&fill_path, grad.x1, grad.y1, grad.x2, grad.y2, stops_buf[0..n]);
         } else if (node.canvas_fill_color) |fc| {
             const fill_path = svg_path.parsePath(d);
             svg_path.drawFill(
@@ -1683,6 +1894,19 @@ noinline fn paintNodeVisuals(node: *Node) void {
         }
     }
 
+    // <Image> — decode via image_cache and submit a textured quad. Draws on
+    // top of the background (so a padded/rounded container shows behind) and
+    // before the border (so a framed image gets its border on top).
+    if (node.image_src) |src| {
+        const logged_once = struct { var v: bool = false; };
+        if (!logged_once.v) {
+            logged_once.v = true;
+            const preview_len: usize = @min(src.len, 64);
+            std.debug.print("[image_cache] first paint src_len={d} src_head={s} rect=({d:.1},{d:.1},{d:.1},{d:.1})\n", .{ src.len, src[0..preview_len], r.x, r.y, r.w, r.h });
+        }
+        image_cache.queueQuad(src, r.x, r.y, r.w, r.h, g_paint_opacity);
+    }
+
     // Border without background — draw border-only rect with transparent fill
     if (node.style.background_color == null and (node.style.brdTop() > 0 or node.style.border_width > 0)) {
         if (node.style.border_color) |bc| {
@@ -1706,6 +1930,69 @@ noinline fn paintNodeVisuals(node: *Node) void {
                 @as(f32, @floatFromInt(bc.a)) / 255.0 * g_paint_opacity,
             );
         }
+    }
+
+    // Animated border — dashed and/or flowing. Draws on top of any baked
+    // border so cart authors who want the animated stroke ALONE should set
+    // border_width / border_color on the node to zero/transparent. When
+    // either dash field is non-zero, `border_dash.emitDashedStroke` walks a
+    // rounded-rect perimeter with the given on/off pattern; when flow_speed
+    // is non-zero, the phase offset advances over time to march the pattern.
+    if (node.style.border_dash_on > 0 or node.style.border_dash_off > 0 or node.style.border_flow_speed != 0) {
+        const bc = node.style.border_color orelse Color.rgb(255, 255, 255);
+        // Stroke width priority: explicit border_dash_width → border_width → 1.5 px.
+        const stroke_w = if (node.style.border_dash_width > 0)
+            node.style.border_dash_width
+        else if (node.style.brdTop() > 0)
+            node.style.brdTop()
+        else
+            @as(f32, 1.5);
+        // Inset the perimeter by half a stroke so the drawn line sits
+        // centered on the rect boundary rather than half outside.
+        const inset = stroke_w * 0.5;
+        var peri = border_dash.buildRoundedRectPerimeter(
+            r.x + inset,
+            r.y + inset,
+            r.w - inset * 2,
+            r.h - inset * 2,
+            @max(0, node.style.radiusTL() - inset),
+            @max(0, node.style.radiusTR() - inset),
+            @max(0, node.style.radiusBR() - inset),
+            @max(0, node.style.radiusBL() - inset),
+        );
+        const ticks_ms = c.SDL_GetTicks();
+        const elapsed_sec = @as(f32, @floatFromInt(ticks_ms)) * 0.001;
+        // Negative phase = the drawn dash pattern is further along the
+        // perimeter, so visually dashes march in the positive-perimeter
+        // direction (clockwise). Flipping the sign of border_flow_speed
+        // reverses direction — matches what cart authors expect.
+        const phase_offset = -node.style.border_flow_speed * elapsed_sec;
+        const DashCtx = struct {
+            r: f32,
+            g: f32,
+            b: f32,
+            a: f32,
+            w: f32,
+            fn draw(opaque_ctx: *anyopaque, x0: f32, y0: f32, x1: f32, y1: f32) void {
+                const self: *@This() = @ptrCast(@alignCast(opaque_ctx));
+                svg_path.drawLineSegment(x0, y0, x1, y1, self.w, self.r, self.g, self.b, self.a);
+            }
+        };
+        var dctx = DashCtx{
+            .r = @as(f32, @floatFromInt(bc.r)) / 255.0,
+            .g = @as(f32, @floatFromInt(bc.g)) / 255.0,
+            .b = @as(f32, @floatFromInt(bc.b)) / 255.0,
+            .a = @as(f32, @floatFromInt(bc.a)) / 255.0 * g_paint_opacity,
+            .w = stroke_w,
+        };
+        border_dash.emitDashedStroke(
+            &peri,
+            node.style.border_dash_on,
+            node.style.border_dash_off,
+            phase_offset,
+            &dctx,
+            DashCtx.draw,
+        );
     }
 
     // Video frame — draw after background, before text
@@ -2385,6 +2672,10 @@ pub fn run(config_in: AppConfig) !void {
     var g_carts_scanned = false;
     var fps_frames: u32 = 0;
     var fps_last: u64 = c.SDL_GetTicks();
+    // Last time stderr telemetry was printed. Separate from fps_last so the
+    // in-memory bucket still flips every second (drives per-second averages)
+    // but the stderr line only actually prints every 10s.
+    var telemetry_stderr_last: u64 = 0;
 
     while (running) {
         // Hot-reload: check if the app .so was recompiled
@@ -2394,6 +2685,8 @@ pub fn run(config_in: AppConfig) !void {
                 canvas_drag_node = null;
                 canvas_move_drag_id = 0;
                 canvas_move_drag_canvas_id = 0;
+                scrollbar_drag_slot = 0;
+                scrollbar_hover_slot = 0;
                 input_drag_active = false;
                 input_drag_pending = false;
                 term_sel_dragging = false;
@@ -2521,6 +2814,23 @@ pub fn run(config_in: AppConfig) !void {
                         const mx: f32 = event.button.x;
                         const my: f32 = event.button.y;
                         const events = @import("events.zig");
+                        if (hitTestScrollbar(config.root, mx, my)) |hit| {
+                            const pos = if (hit.axis == .vertical) my else mx;
+                            scrollbar_drag_slot = hit.node.scroll_persist_slot;
+                            scrollbar_drag_axis = hit.axis;
+                            scrollbar_drag_track_start = hit.track_start;
+                            scrollbar_drag_track_len = hit.track_len;
+                            scrollbar_drag_thumb_len = hit.thumb_len;
+                            scrollbar_drag_cached_max_scroll = hit.max_scroll;
+                            scrollbar_drag_offset = if (pos >= hit.thumb_start and pos <= hit.thumb_start + hit.thumb_len)
+                                pos - hit.thumb_start
+                            else
+                                hit.thumb_len * 0.5;
+                            input.unfocus();
+                            markScrollActivity(hit.node);
+                            _ = updateScrollbarDrag(config.root, pos);
+                            continue;
+                        }
                         // Alt+click on a Canvas.Node with canvas_move_draggable starts a
                         // position-drag that the cart commits via onMove(gx, gy) on release.
                         const mod_state = c.SDL_GetModState();
@@ -2818,6 +3128,11 @@ pub fn run(config_in: AppConfig) !void {
                     }
                     // Render surface mouse motion forwarding
                     if (render_surfaces.handleMouseMotion(mx, my)) continue;
+                    if (scrollbar_drag_slot != 0) {
+                        const pos = if (scrollbar_drag_axis == .vertical) my else mx;
+                        _ = updateScrollbarDrag(config.root, pos);
+                        continue;
+                    }
                     // Physics drag update
                     if (physics2d.isDragging()) {
                         physics2d.updateDrag(mx, my);
@@ -2943,6 +3258,7 @@ pub fn run(config_in: AppConfig) !void {
                             canvas_move_drag_id = 0;
                             canvas_move_drag_canvas_id = 0;
                         }
+                        scrollbar_drag_slot = 0;
                         physics2d.endDrag();
                         canvas_drag_node = null;
                         input_drag_active = false;
@@ -3444,9 +3760,17 @@ pub fn run(config_in: AppConfig) !void {
             const ppf = g_paint_count;
             const hpf = g_hidden_count;
             const zpf = g_zero_count;
-            std.debug.print("[telemetry] FPS: {d} | layout: {d}us | paint: {d}us | visible: {d}/{d} | gpu: {d}/{d} | hidden: {d} | zero: {d} | bridge: {d}/s\n", .{
-                fps_frames, qjs_runtime.telemetry_layout_us, qjs_runtime.telemetry_paint_us, ppf, PAINT_BUDGET, gpu.g_gpu_ops, gpu.GPU_OPS_BUDGET, hpf, zpf, qjs_runtime.bridge_calls_this_second,
-            });
+            // Stderr gets throttled to once every 10s so an idle dev terminal
+            // isn't flooded with 3600 lines/hour. The log-file copy below is
+            // unthrottled because nobody watches it live. Set ZIGOS_TELEMETRY=1
+            // to print to stderr every second for perf-hunting.
+            const verbose = std.posix.getenv("ZIGOS_TELEMETRY") != null;
+            if (verbose or (now -% telemetry_stderr_last) >= 10_000) {
+                telemetry_stderr_last = now;
+                std.debug.print("[telemetry] FPS: {d} | layout: {d}us | paint: {d}us | visible: {d}/{d} | gpu: {d}/{d} | hidden: {d} | zero: {d} | bridge: {d}/s\n", .{
+                    fps_frames, qjs_runtime.telemetry_layout_us, qjs_runtime.telemetry_paint_us, ppf, PAINT_BUDGET, gpu.g_gpu_ops, gpu.GPU_OPS_BUDGET, hpf, zpf, qjs_runtime.bridge_calls_this_second,
+                });
+            }
             log.writeLine("[telemetry] FPS: {d} | layout: {d}us | paint: {d}us | visible: {d}/{d} | gpu: {d}/{d} | hidden: {d} | zero: {d} | bridge: {d}/s", .{
                 fps_frames, qjs_runtime.telemetry_layout_us, qjs_runtime.telemetry_paint_us, ppf, PAINT_BUDGET, gpu.g_gpu_ops, gpu.GPU_OPS_BUDGET, hpf, zpf, qjs_runtime.bridge_calls_this_second,
             });

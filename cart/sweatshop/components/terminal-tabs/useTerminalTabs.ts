@@ -1,4 +1,4 @@
-
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { baseName, stripDotSlash } from '../../theme';
 
 const host: any = globalThis as any;
@@ -56,34 +56,22 @@ function normalizeTab(tab: any): TerminalTabRecord | null {
 }
 
 function loadState(initialCwd: string): TerminalTabsState {
+  let settings = { ...DEFAULT_SETTINGS };
   try {
     const raw = storeGet(STORE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      const tabs = Array.isArray(parsed?.tabs) ? parsed.tabs.map(normalizeTab).filter(Boolean) as TerminalTabRecord[] : [];
-      const settings = {
+      settings = {
         maxTabs: typeof parsed?.settings?.maxTabs === 'number' ? parsed.settings.maxTabs : DEFAULT_SETTINGS.maxTabs,
         labelFormat: parsed?.settings?.labelFormat === 'full' || parsed?.settings?.labelFormat === 'custom' ? parsed.settings.labelFormat : DEFAULT_SETTINGS.labelFormat,
         closeOnExit: parsed?.settings?.closeOnExit === false ? false : DEFAULT_SETTINGS.closeOnExit,
-      };
-      if (tabs.length > 0) {
-        return {
-          tabs,
-          activeIndex: Math.max(0, Math.min(typeof parsed?.activeIndex === 'number' ? parsed.activeIndex : 0, tabs.length - 1)),
-          settings,
-        };
-      }
-      return {
-        tabs: [normalizeTab({ cwd: initialCwd })!],
-        activeIndex: 0,
-        settings,
       };
     }
   } catch {}
   return {
     tabs: [normalizeTab({ cwd: initialCwd })!],
     activeIndex: 0,
-    settings: { ...DEFAULT_SETTINGS },
+    settings,
   };
 }
 
@@ -110,9 +98,24 @@ export function useTerminalTabs(initialCwd: string) {
     saveState(state);
   }, [state]);
 
+  useEffect(() => {
+    if (!initialCwd || initialCwd === '.') return;
+    setState((prev) => {
+      const active = prev.tabs[Math.max(0, Math.min(prev.activeIndex, prev.tabs.length - 1))];
+      if (active && active.cwd === initialCwd) return prev;
+      const nextTab = normalizeTab({ cwd: initialCwd })!;
+      nextTab.createdAt = Date.now();
+      nextTab.lastActiveAt = Date.now();
+      return {
+        ...prev,
+        tabs: [nextTab],
+        activeIndex: 0,
+      };
+    });
+  }, [initialCwd]);
+
   const tabs = state.tabs;
   const activeIndex = Math.max(0, Math.min(state.activeIndex, tabs.length - 1));
-  const activeTab = tabs[activeIndex] || null;
 
   const setTabsState = useCallback((next: Partial<TerminalTabsState> | ((prev: TerminalTabsState) => TerminalTabsState)) => {
     setState((prev) => {
@@ -257,6 +260,7 @@ export function useTerminalTabs(initialCwd: string) {
       active: index === activeIndex,
     }));
   }, [activeIndex, state.settings.labelFormat, tabs]);
+  const activeTab = values[activeIndex] || null;
 
   return {
     tabs: values,

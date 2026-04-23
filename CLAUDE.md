@@ -49,6 +49,37 @@ Why: this repo contains a custom compiler, DSL, and runtime not represented in t
 
 ---
 
+# HARD RULE: BANNED SHELL COMMANDS (SESSION-KILL PREVENTION)
+
+On 2026-04-22 a worker ran something that logged the user out of their entire desktop session and killed all 14 parallel worker panes. Recovery took hours. The following must never appear in any worker Bash call, `__exec`, or script:
+
+- `pkill -f <pattern>` — matches the polling shell's own command line; cascades.
+- `kill -9 -1` — SIGKILLs every process owned by the user; instant logout.
+- `killall <anything>` — especially `killall node|bash|chrome`.
+- `loginctl terminate-session` / `kill-user` / `lock-session`
+- `systemctl --user stop <anything>` unless an explicitly-authorized build unit
+- `pam_*`, `passwd`, `useradd`, `usermod`, `gpasswd`
+- `swaymsg exit`, `i3-msg exit`, `hyprctl dispatch exit`
+- `shutdown`, `reboot`, `halt`, `poweroff`, `init 0`, `init 6`
+- `xkill`
+- `reset -e` or anything that writes to another session's `/dev/tty`
+
+To stop a specific known PID use `kill <PID>` with the exact numeric PID. Never with a pattern.
+
+---
+
+# HARD RULE: NO SELF-MATCHING PGREP POLLS
+
+Do not write `until ! pgrep -f "zig build ..."; do sleep 3; done`-style wait loops. `pgrep -f` finds the *current polling shell* whose command line contains the search string — that's a self-matching deadlock. `scripts/ship` already has internal flock serialization; call it directly and let it queue.
+
+---
+
+# HARD RULE: NO SUBAGENTS, NO `-A`
+
+No Task / Agent / Explore tool calls. Supervisor goes blind when a worker spawns a subagent. Do all work yourself in your own context. When committing, stage files by name — never `git add -A` or `git add .` (both catch unrelated working-tree state from other workers).
+
+---
+
 # HARD RULE: JSRT — JS INSIDE LUA, NOT JS TURNING INTO LUA
 
 JSRT at `framework/lua/jsrt/` is a JavaScript evaluator in Lua, running inside LuaJIT. JS source stays JS at every stage. There is no tool anywhere in the pipeline that translates JS to Lua.

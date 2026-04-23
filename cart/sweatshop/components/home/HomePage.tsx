@@ -8,6 +8,14 @@ import { checkIsDirectory, mkdirP } from '../../lib/workspace/validate';
 import { DirectoryPicker } from './DirectoryPicker';
 import { envGet } from '../../../../runtime/hooks/process';
 
+function log(message: string): void {
+  try {
+    const h = globalThis as any;
+    if (typeof h.__hostLog === 'function') h.__hostLog(0, '[home] ' + message);
+    else if (typeof console !== 'undefined' && console.log) console.log('[home] ' + message);
+  } catch (_e) {}
+}
+
 type HomePageProps = {
   onOpenWorkspace: (path: string) => void;
 };
@@ -40,7 +48,7 @@ function PrimaryButton(props: { label: string; onPress: () => void }) {
   );
 }
 
-function BrowseButton(props: { onPress: () => void }) {
+function BrowseButton(props: { label?: string; onPress: () => void }) {
   return (
     <Pressable
       onPress={props.onPress}
@@ -55,7 +63,7 @@ function BrowseButton(props: { onPress: () => void }) {
         borderColor: COLORS.border,
       }}
     >
-      <Text fontSize={11} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>Browse…</Text>
+      <Text fontSize={11} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>{props.label || 'Browse...'}</Text>
     </Pressable>
   );
 }
@@ -90,9 +98,6 @@ function PathInput(props: { value: string; placeholder: string; onChange: (v: st
 }
 
 function RecentRow(props: { path: string; onOpen: () => void }) {
-  const parts = props.path.split('/').filter(Boolean);
-  const name = parts[parts.length - 1] || props.path;
-  const parent = parts.length > 1 ? '/' + parts.slice(0, -1).join('/') : '';
   return (
     <Pressable
       onPress={props.onOpen}
@@ -108,8 +113,7 @@ function RecentRow(props: { path: string; onOpen: () => void }) {
       }}
     >
       <Col style={{ gap: 2 }}>
-        <Text fontSize={12} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>{name}</Text>
-        {parent ? <Text fontSize={10} color={COLORS.textDim} style={{ fontFamily: TOKENS.fontMono }}>{parent}</Text> : null}
+        <Text fontSize={12} color={COLORS.textBright} style={{ fontFamily: TOKENS.fontMono, fontWeight: 'bold' }}>{props.path}</Text>
       </Col>
     </Pressable>
   );
@@ -132,10 +136,12 @@ export function HomePage(props: HomePageProps) {
 
   const tryOpen = (path?: string) => {
     const target = (path ?? openPath ?? '').trim();
+    log('tryOpen target=' + target + ' source=' + (path ? 'arg' : 'input'));
     if (!target) { setOpenError('Enter an absolute path.'); return; }
     const check = checkIsDirectory(target);
-    if (!check.ok) { setOpenError(check.reason || 'Invalid path.'); return; }
+    if (!check.ok) { log('tryOpen invalid target=' + target + ' reason=' + (check.reason || '')); setOpenError(check.reason || 'Invalid path.'); return; }
     setOpenError('');
+    log('tryOpen ok target=' + target);
     props.onOpenWorkspace(target);
   };
 
@@ -160,11 +166,13 @@ export function HomePage(props: HomePageProps) {
   };
 
   const openPicker = (mode: 'open' | 'new') => {
+    log('openPicker mode=' + mode + ' start=' + homePath);
     setPickerMode(mode);
     setPickerVisible(true);
   };
 
   const handlePickerSelect = (path: string) => {
+    log('pickerSelect mode=' + pickerMode + ' path=' + path);
     setPickerVisible(false);
     if (pickerMode === 'open') {
       setOpenPath(path);
@@ -223,7 +231,7 @@ export function HomePage(props: HomePageProps) {
                     onChange={setOpenPath}
                     onSubmit={() => tryOpen()}
                   />
-                  <BrowseButton onPress={() => openPicker('open')} />
+                  <BrowseButton label="Pick..." onPress={() => openPicker('open')} />
                   <PrimaryButton label="Open" onPress={() => tryOpen()} />
                 </Row>
                 {openError ? (
@@ -247,7 +255,7 @@ export function HomePage(props: HomePageProps) {
                 }}
               >
                 <Col style={{ gap: 4 }}>
-                  <SectionLabel text="New Directory" />
+                  <SectionLabel text="Create Directory" />
                   <Text fontSize={10} color={COLORS.textDim}>Create a new directory (mkdir -p).</Text>
                 </Col>
                 {newParentPath ? (
@@ -278,7 +286,7 @@ export function HomePage(props: HomePageProps) {
                           style={{ borderWidth: 0, backgroundColor: 'transparent' }}
                         />
                       </Box>
-                      <PrimaryButton label="Create" onPress={tryCreateFromParent} />
+                      <PrimaryButton label="Create and Open" onPress={tryCreateFromParent} />
                     </Row>
                     <Pressable onPress={() => { setNewParentPath(''); setNewError(''); }}>
                       <Text fontSize={10} color={COLORS.blue}>Back to full path entry</Text>
@@ -292,8 +300,8 @@ export function HomePage(props: HomePageProps) {
                       onChange={setNewDir}
                       onSubmit={() => tryCreate()}
                     />
-                    <BrowseButton onPress={() => openPicker('new')} />
-                    <PrimaryButton label="Create" onPress={() => tryCreate()} />
+                    <BrowseButton label="Parent..." onPress={() => openPicker('new')} />
+                    <PrimaryButton label="Create and Open" onPress={() => tryCreate()} />
                   </Row>
                 )}
                 {newError ? (
@@ -309,7 +317,10 @@ export function HomePage(props: HomePageProps) {
       <DirectoryPicker
         visible={pickerVisible}
         startPath={homePath}
-        confirmLabel={pickerMode === 'open' ? 'Open this directory' : 'Select this directory'}
+        title={pickerMode === 'open' ? 'Open Workspace' : 'Choose Parent Folder'}
+        subtitle={pickerMode === 'open' ? 'Navigate into folders, then open the current folder as the workspace.' : 'Navigate into folders, then use the current folder as the parent for a new workspace.'}
+        confirmLabel={pickerMode === 'open' ? 'Open workspace' : 'Use as parent'}
+        allowCreate={pickerMode === 'new'}
         onSelect={handlePickerSelect}
         onCancel={() => setPickerVisible(false)}
       />

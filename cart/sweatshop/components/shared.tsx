@@ -1,8 +1,8 @@
 
 import { Box, Pressable, Row, Text } from '../../../runtime/primitives';
 import { COLORS, TOKENS } from '../theme';
-import { iconLabel } from '../utils';
 import { useHover } from '../anim';
+import { Icon } from './icons';
 
 function hexToRgb(hex: string): [number, number, number] | null {
   const value = String(hex || '').trim();
@@ -74,6 +74,7 @@ export function HoverPressable(props: any) {
 }
 
 export function Glyph(props: { icon: string; tone?: string; backgroundColor?: string; tiny?: boolean }) {
+  const size = props.tiny ? 12 : 14;
   return (
     <Box
       style={{
@@ -88,9 +89,7 @@ export function Glyph(props: { icon: string; tone?: string; backgroundColor?: st
         minWidth: props.tiny ? 18 : 22,
       }}
     >
-      <Text fontSize={props.tiny ? 8 : 9} color={props.tone || COLORS.textBright} style={{ fontWeight: 'bold' }}>
-        {iconLabel(props.icon)}
-      </Text>
+      <Icon name={props.icon} size={size} color={props.tone || COLORS.textBright} />
     </Box>
   );
 }

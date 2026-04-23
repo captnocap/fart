@@ -26,7 +26,9 @@ const v8_runtime = @import("framework/v8_runtime.zig");
 const v8_bindings_core = @import("framework/v8_bindings_core.zig");
 const v8_bindings_fs = @import("framework/v8_bindings_fs.zig");
 const v8_bindings_websocket = @import("framework/v8_bindings_websocket.zig");
-// v8_bindings_telemetry + v8_bindings_sdk: deferred (see appInit comment).
+const v8_bindings_telemetry = @import("framework/v8_bindings_telemetry.zig");
+const v8_bindings_zigcall = @import("framework/v8_bindings_zigcall.zig");
+// v8_bindings_sdk: deferred (see appInit comment).
 const luajit_runtime = @import("framework/luajit_runtime.zig");
 const fs_mod = @import("framework/fs.zig");
 const localstore = @import("framework/localstore.zig");
@@ -86,7 +88,12 @@ const dev_ipc = @import("framework/dev_ipc.zig");
 /// others sit dormant until re-activated via IPC push or (future) chrome click.
 const Tab = struct {
     name: []u8, // owned
-    bundle: []u8, // owned
+    bundle: []u8, // owned — the bundle we will evaluate next
+    // Last bundle that evaluated without throwing. When a hot-reload (edit +
+    // rebundle + push) throws during eval — a runtime error in top-level or
+    // initial render — we restore this instead of leaving the UI wiped.
+    // Owned. null until the first successful eval on this tab.
+    last_good: ?[]u8 = null,
 };
 
 var g_tabs: std.ArrayList(Tab) = .{};
@@ -145,7 +152,7 @@ fn dispatchInputEvent(slot: u8, global_name: [*:0]const u8) void {
     const node_id = g_node_id_by_input_slot[slot];
     if (node_id == 0) return;
     v8_runtime.callGlobal("__beginJsEvent");
-    v8_runtime.callGlobalInt(global_name, @intCast(node_id));
+    v8_runtime.callGlobal2Int(global_name, @intCast(node_id), @intCast(slot));
     v8_runtime.callGlobal("__endJsEvent");
     // Additive LuaJIT dispatch — cart code running in the Lua VM picks up the
     // same event by defining a matching global. Silent no-op if absent.
@@ -441,6 +448,47 @@ fn parseMinimapRows(v: std.json.Value) ?[]const layout.MinimapRow {
 }
 // tslx:GEN:PARSERS END
 
+/// Parse a linear-gradient prop from JSON:
+///   { x1, y1, x2, y2, stops: [{ offset, color, opacity? }] }
+/// Coordinates default to (0,0)→(24,24) — the SVG viewBox icons are authored in.
+/// Stops are allocated in g_alloc; lifetime matches the node (leaked on replace,
+/// same pattern as canvas_path_d). Returns null on malformed input so the
+/// dispatcher can fall through to canvas_fill_color.
+fn parseLinearGradient(v: std.json.Value) ?layout.LinearGradient {
+    if (v != .object) return null;
+    var grad: layout.LinearGradient = .{ .x2 = 24, .y2 = 24 };
+    if (v.object.get("x1")) |x1v| if (jsonFloat(x1v)) |f| { grad.x1 = f; };
+    if (v.object.get("y1")) |y1v| if (jsonFloat(y1v)) |f| { grad.y1 = f; };
+    if (v.object.get("x2")) |x2v| if (jsonFloat(x2v)) |f| { grad.x2 = f; };
+    if (v.object.get("y2")) |y2v| if (jsonFloat(y2v)) |f| { grad.y2 = f; };
+
+    const stops_v = v.object.get("stops") orelse return null;
+    if (stops_v != .array) return null;
+    if (stops_v.array.items.len == 0) return null;
+
+    const buf = g_alloc.alloc(layout.GradientStop, stops_v.array.items.len) catch return null;
+    var n: usize = 0;
+    for (stops_v.array.items) |sv| {
+        if (sv != .object) continue;
+        const off_v = sv.object.get("offset") orelse continue;
+        const col_v = sv.object.get("color") orelse continue;
+        if (col_v != .string) continue;
+        const offset = jsonFloat(off_v) orelse continue;
+        var color = parseColor(col_v.string) orelse continue;
+        if (sv.object.get("opacity")) |op_v| {
+            if (jsonFloat(op_v)) |op| {
+                const clamped: f32 = if (op < 0) 0 else if (op > 1) 1 else op;
+                color.a = @intFromFloat(@as(f32, @floatFromInt(color.a)) * clamped);
+            }
+        }
+        buf[n] = .{ .offset = offset, .color = color };
+        n += 1;
+    }
+    if (n == 0) return null;
+    grad.stops = buf[0..n];
+    return grad;
+}
+
 fn parseColorTextRows(v: std.json.Value) ?[]const layout.ColorTextRow {
     if (v != .array) return null;
 
@@ -640,6 +688,25 @@ fn applyStyleEntry(node: *Node, key: []const u8, val: std.json.Value) void {
         if (jsonFloat(val)) |f| node.style.border_left_width = f;
     } else if (eq(u8, key, "borderColor")) {
         if (val == .string) node.style.border_color = parseColor(val.string);
+    } else if (eq(u8, key, "borderDash")) {
+        // Accept [onPx, offPx] — both required, but only one needed to switch
+        // the border paint path. Anything shorter/longer is ignored.
+        if (val == .array and val.array.items.len >= 2) {
+            if (jsonFloat(val.array.items[0])) |on| node.style.border_dash_on = on;
+            if (jsonFloat(val.array.items[1])) |off| node.style.border_dash_off = off;
+        }
+    } else if (eq(u8, key, "borderDashOn")) {
+        if (jsonFloat(val)) |f| node.style.border_dash_on = f;
+    } else if (eq(u8, key, "borderDashOff")) {
+        if (jsonFloat(val)) |f| node.style.border_dash_off = f;
+    } else if (eq(u8, key, "borderFlowSpeed")) {
+        // px/second, positive = clockwise march, negative = reverse.
+        if (jsonFloat(val)) |f| node.style.border_flow_speed = f;
+    } else if (eq(u8, key, "borderDashWidth")) {
+        // Explicit stroke width for the animated dashed border, independent of
+        // `borderWidth`. Use this when you want `borderWidth: 0` (no baked
+        // outline) but still want thick animated dashes.
+        if (jsonFloat(val)) |f| node.style.border_dash_width = f;
     } else if (eq(u8, key, "borderRadius")) {
         if (jsonFloat(val)) |f| node.style.border_radius = f;
     } else if (eq(u8, key, "borderTopLeftRadius")) {
@@ -902,6 +969,23 @@ fn applyProps(node: *Node, props: std.json.Value, type_name: ?[]const u8) void {
             if (jsonBool(v)) |b| node.window_drag = b;
         } else if (std.mem.eql(u8, k, "windowResize")) {
             if (jsonBool(v)) |b| node.window_resize = b;
+        } else if (std.mem.eql(u8, k, "initialScrollY")) {
+            // One-shot: set scroll_y on CREATE so dev hot reloads can restore
+            // the user's scroll position via the ScrollView React wrapper.
+            // CREATE passes a non-null type_name; UPDATE passes null. Applying
+            // on UPDATE would clobber the user's live scroll on every prop
+            // commit. The framework clamps this to content bounds on first layout.
+            if (type_name != null) {
+                if (jsonFloat(v)) |f| node.scroll_y = f;
+            }
+        } else if (std.mem.eql(u8, k, "initialScrollX")) {
+            if (type_name != null) {
+                if (jsonFloat(v)) |f| node.scroll_x = f;
+            }
+        } else if (std.mem.eql(u8, k, "originTopLeft")) {
+            // Graph/Canvas container: flip world-origin from center to top-left.
+            // Opt-in; polar / pan-zoom code stays on the center-origin default.
+            if (jsonBool(v)) |b| node.graph_origin_topleft = b;
         }
         // ── Canvas / Graph props ──
         else if (std.mem.eql(u8, k, "gx")) {
@@ -922,6 +1006,8 @@ fn applyProps(node: *Node, props: std.json.Value, type_name: ?[]const u8) void {
             if (jsonFloat(v)) |f| node.canvas_stroke_width = f;
         } else if (std.mem.eql(u8, k, "fill")) {
             if (v == .string) node.canvas_fill_color = parseColor(v.string);
+        } else if (std.mem.eql(u8, k, "gradient")) {
+            node.canvas_fill_gradient = parseLinearGradient(v);
         } else if (std.mem.eql(u8, k, "fillEffect")) {
             if (dupJsonText(v)) |s| node.canvas_fill_effect = s;
         } else if (std.mem.eql(u8, k, "textEffect")) {
@@ -1013,12 +1099,12 @@ fn assembleEffectShader(user_wgsl: []const u8) ?[]const u8 {
 // at us. `ctx.user_data` carries the React fiber id (set on the Instance as
 // node_key = node.scroll_persist_slot, see effects.zig instanceKey). That id
 // is what handlerRegistry maps to the user's onRender closure.
-fn qjs_effect_shim(ctx: *effect_ctx.EffectContext) void {
+fn v8_effect_shim(ctx: *effect_ctx.EffectContext) void {
     const id_u: usize = ctx.user_data;
     if (id_u == 0) return;
     const id: u32 = @intCast(id_u);
     const buf_len: usize = @as(usize, ctx.height) * @as(usize, ctx.stride);
-    qjs_runtime.dispatchEffectRender(
+    v8_runtime.dispatchEffectRender(
         id,
         ctx.buf,
         buf_len,
@@ -1102,9 +1188,9 @@ fn applyHandlerFlags(node: *Node, id: u32, cmd: std.json.Value) void {
     }
     // onRender wires this node into the Effect custom-render path. The React
     // id is carried through materializeChildren via node.scroll_persist_slot
-    // and read back from ctx.user_data inside qjs_effect_shim.
+    // and read back from ctx.user_data inside v8_effect_shim.
     if (cmdHasHandlerName(cmd, "onRender")) {
-        node.effect_render = &qjs_effect_shim;
+        node.effect_render = &v8_effect_shim;
     } else if (node.effect_shader != null) {
         // Shader-only effect — paintCustomEffect gates on effect_render being
         // non-null. The GPU pipeline (shouldTryGpu → renderGpu) fires before
@@ -1168,6 +1254,15 @@ fn applyCommand(cmd: std.json.Value) !void {
             applyTypeDefaults(n, id, t.string);
         };
         if (cmd.object.get("props")) |props| applyProps(n, props, type_name);
+        // debugName / debugSource are emitted as top-level siblings to props
+        // by renderer/hostConfig.ts (not inside the props object). Capture
+        // them here so witness.zig / autotest can label pressables by the
+        // user-component name the reconciler resolved via fiber walk.
+        if (cmd.object.get("debugName")) |dn| if (dn == .string and dn.string.len > 0) {
+            if (g_alloc.dupe(u8, dn.string)) |owned| {
+                n.debug_name = owned;
+            } else |_| {}
+        };
         applyHandlerFlags(n, id, cmd);
         g_dirty = true;
     } else if (std.mem.eql(u8, op, "CREATE_TEXT")) {
@@ -1661,18 +1756,41 @@ fn replaceActiveTabBundle(new_bundle: []u8) void {
 }
 
 /// Tear down the JS world and re-eval the currently-active tab's bundle.
+/// V8's platform is single-shot (InitializePlatform cannot run twice in a
+/// process), so we keep the Isolate and Platform alive and only rebuild the
+/// Context + top-level HandleScope. appInit() re-registers host funcs onto
+/// the fresh context.
 fn evalActiveTab() void {
     std.log.info("[dev] evalActiveTab: clearing tree", .{});
     clearTreeStateForReload();
-    std.log.info("[dev] evalActiveTab: tearing down VM", .{});
-    v8_runtime.teardownVM();
-    std.log.info("[dev] evalActiveTab: initVM", .{});
-    v8_runtime.initVM();
+    std.log.info("[dev] evalActiveTab: resetting context", .{});
+    v8_runtime.resetContextForReload();
     std.log.info("[dev] evalActiveTab: appInit", .{});
     appInit();
-    std.log.info("[dev] evalActiveTab: evalScript ({d} bytes)", .{g_tabs.items[g_active_tab].bundle.len});
-    v8_runtime.evalScript(g_tabs.items[g_active_tab].bundle);
-    std.log.info("[dev] evalActiveTab: done", .{});
+    const tab = &g_tabs.items[g_active_tab];
+    std.log.info("[dev] evalActiveTab: evalScript ({d} bytes)", .{tab.bundle.len});
+    const ok = v8_runtime.evalScriptChecked(tab.bundle);
+    if (ok) {
+        // Snapshot this bundle as the rollback target for the next reload.
+        if (tab.last_good) |lg| g_alloc.free(lg);
+        tab.last_good = g_alloc.dupe(u8, tab.bundle) catch null;
+        std.log.info("[dev] evalActiveTab: done", .{});
+        return;
+    }
+    // New bundle threw. Tree was already cleared, so the UI is currently
+    // blank. Restore the last good bundle if we have one so the user keeps
+    // working instead of staring at an empty window until their next clean
+    // save. If we have nothing to restore (first-ever eval failed), leave
+    // the window blank and log — there's nothing better to do.
+    if (tab.last_good) |lg| {
+        std.log.warn("[dev] bundle failed — restoring last good ({d} bytes)", .{lg.len});
+        clearTreeStateForReload();
+        v8_runtime.resetContextForReload();
+        appInit();
+        _ = v8_runtime.evalScriptChecked(lg);
+    } else {
+        std.log.warn("[dev] bundle failed — no last good to restore", .{});
+    }
 }
 
 fn tabName(idx: usize) []const u8 {
@@ -1732,10 +1850,11 @@ fn appInit() void {
     v8_bindings_core.registerCore({});
     v8_bindings_fs.registerFs({});
     v8_bindings_websocket.registerWebSocket({});
-    // MVP: telemetry + sdk bindings disabled. Sweatshop baseline doesn't need
-    // them; they have latent type errors from the initial port that we'll
-    // revisit after the click-latency measurement lands.
-    // v8_bindings_telemetry.registerTelemetry({});
+    v8_bindings_telemetry.registerTelemetry({});
+    v8_bindings_zigcall.registerZigCall({});
+    v8_bindings_zigcall.registerZigCallList({});
+    // SDK bindings are still deferred; they have latent type errors from the
+    // initial port that we'll revisit after the V8 baseline settles.
     // v8_bindings_sdk.registerSdk({});
 
     // Polyfills — V8 has no setTimeout/setInterval/console.log. QJS path
@@ -1846,6 +1965,11 @@ fn appTick(now: u32) void {
     }
 }
 
+fn appShutdown() void {
+    localstore.deinit();
+    fs_mod.deinit();
+}
+
 // ── main ────────────────────────────────────────────────────────
 
 pub fn main() !void {
@@ -1867,9 +1991,18 @@ pub fn main() !void {
         };
         g_last_bundle_mtime = bundleMtimeOrZero();
 
-        // Seed the tab registry with the disk-backed "main" tab.
+        // Seed the tab registry with the disk-backed "main" tab. Pre-seed
+        // last_good with a dupe of the boot bundle so the first post-boot
+        // reload can roll back if it throws (the boot bundle is the baseline
+        // known-working state — engine.run will eval it immediately after we
+        // return from main()'s setup).
         const name_copy = try g_alloc.dupe(u8, "main");
-        try g_tabs.append(g_alloc, .{ .name = name_copy, .bundle = g_dev_bundle_buf });
+        const last_good_seed = try g_alloc.dupe(u8, g_dev_bundle_buf);
+        try g_tabs.append(g_alloc, .{
+            .name = name_copy,
+            .bundle = g_dev_bundle_buf,
+            .last_good = last_good_seed,
+        });
         g_active_tab = 0;
 
         // dev_ipc must allocate push buffers with the SAME allocator qjs_app
@@ -1889,6 +2022,7 @@ pub fn main() !void {
         .lua_logic = "",
         .init = appInit,
         .tick = appTick,
+        .shutdown = appShutdown,
         // In dev mode, strip the OS titlebar so our tab chrome sits in the
         // titlebar position. Empty chrome area gets window_drag; tab buttons
         // with on_press override drag so clicks still switch tabs.

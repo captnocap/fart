@@ -38,7 +38,53 @@ export const Col: any = (props: any) => {
 export const Text: any = (props: any) => h('Text', props, props.children);
 export const Image: any = (props: any) => h('Image', props, props.children);
 export const Pressable: any = (props: any) => h('Pressable', props, props.children);
-export const ScrollView: any = (props: any) => h('ScrollView', props, props.children);
+// ScrollView auto-persists its scroll position across dev-mode hot reloads.
+//
+// scroll_y lives on the Zig Node, so a fresh tree after a reload starts at
+// 0 even though every useState atom survives via useHotState. This wrapper
+// keys scroll on React.useId() (stable per call-site), seeds the primitive
+// with initialScrollY on render from __hot_get, and writes every onScroll
+// tick back through __hot_set. v8_app applies initialScrollY once on CREATE
+// (UPDATE paths skip it), so re-reading the hot value per-render is safe —
+// it only affects the very first CREATE command after a reload.
+//
+// We deliberately DON'T use React.useState for the read: the auto-patched
+// useState caches its first value under its own useId, so it would freeze
+// on 0 from the first-ever mount and never observe later __hot_set writes.
+export const ScrollView: any = (props: any) => {
+  const React = require('react');
+  const hotId: string = React.useId();
+  const hotKey = 'scroll:' + hotId;
+  const host: any = globalThis as any;
+
+  let initialY = 0;
+  if (typeof host.__hot_get === 'function') {
+    try {
+      const raw = host.__hot_get(hotKey);
+      if (raw != null) {
+        const n = parseFloat(raw);
+        if (Number.isFinite(n)) initialY = n;
+      }
+    } catch {}
+  }
+
+  const userOnScroll = props.onScroll;
+  const onScroll = (payload: any): void => {
+    try {
+      if (typeof host.__hot_set === 'function' && Number.isFinite(payload?.scrollY)) {
+        host.__hot_set(hotKey, String(payload.scrollY));
+      }
+    } catch {}
+    if (typeof userOnScroll === 'function') userOnScroll(payload);
+  };
+
+  const forwardedProps = {
+    ...props,
+    onScroll,
+    initialScrollY: props.initialScrollY ?? initialY,
+  };
+  return h('ScrollView', forwardedProps, props.children);
+};
 export const TextInput: any = (props: any) => h('TextInput', props, props.children);
 export const TextArea: any = (props: any) => h('TextArea', props, props.children);
 export const TextEditor: any = (props: any) => h('TextEditor', props, props.children);

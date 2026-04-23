@@ -46,19 +46,37 @@ type Listener = () => void;
 const listeners = new Set<Listener>();
 let activeThemeName = 'soft';
 
-function persist(name: string) {
+function readPersisted(key: string): string | null {
   try {
-    if (typeof localStorage !== 'undefined') localStorage.setItem('sweatshop-theme', name);
+    const host: any = globalThis as any;
+    if (typeof host.__store_get === 'function') {
+      const value = host.__store_get(key);
+      if (typeof value === 'string') return value;
+    }
+  } catch (_e) {}
+  try {
+    if (typeof localStorage !== 'undefined') return localStorage.getItem(key);
+  } catch (_e) {}
+  return null;
+}
+
+function writePersisted(key: string, value: string): void {
+  try {
+    const host: any = globalThis as any;
+    if (typeof host.__store_set === 'function') host.__store_set(key, value);
+  } catch (_e) {}
+  try {
+    if (typeof localStorage !== 'undefined') localStorage.setItem(key, value);
   } catch (_e) {}
 }
 
+function persist(name: string) {
+  writePersisted('sweatshop-theme', name);
+}
+
 function restore(): string {
-  try {
-    if (typeof localStorage !== 'undefined') {
-      const v = localStorage.getItem('sweatshop-theme');
-      if (v && THEMES[v]) return v;
-    }
-  } catch (_e) {}
+  const v = readPersisted('sweatshop-theme');
+  if (v && THEMES[v]) return v;
   return 'soft';
 }
 
@@ -71,17 +89,13 @@ export function getThemeNames(): string[] {
 }
 
 function persistCustom(overrides: CustomThemeOverrides): void {
-  try {
-    if (typeof localStorage !== 'undefined') localStorage.setItem('sweatshop-theme-custom', JSON.stringify(overrides));
-  } catch (_e) {}
+  writePersisted('sweatshop-theme-custom', JSON.stringify(overrides));
 }
 
 function restoreCustom(): CustomThemeOverrides {
   try {
-    if (typeof localStorage !== 'undefined') {
-      const v = localStorage.getItem('sweatshop-theme-custom');
-      if (v) return JSON.parse(v);
-    }
+    const v = readPersisted('sweatshop-theme-custom');
+    if (v) return JSON.parse(v);
   } catch (_e) {}
   return {};
 }
@@ -208,24 +222,24 @@ export function fileTone(type: string): string {
 }
 
 export function fileGlyph(type: string): string {
-  if (type === 'settings') return 'ST';
-  if (type === 'component') return '{}';
-  if (type === 'cls') return 'PL';
-  if (type === 'script') return 'TS';
-  if (type === 'mod') return 'PK';
-  if (type === 'app') return 'ED';
-  if (type === 'tsz') return '{}';
-  if (type === 'ts' || type === 'tsx') return 'TS';
-  if (type === 'js' || type === 'jsx') return 'JS';
-  if (type === 'zig') return 'ZG';
-  if (type === 'md') return 'MD';
-  if (type === 'json') return 'JS';
-  if (type === 'css') return 'PL';
-  if (type === 'sh') return 'SH';
-  if (type === 'home') return 'HM';
-  if (type === 'workspace') return 'WS';
-  if (type === 'dir') return 'FD';
-  return 'TX';
+  if (type === 'settings') return 'settings';
+  if (type === 'component') return 'braces';
+  if (type === 'cls') return 'palette';
+  if (type === 'script') return 'file-code';
+  if (type === 'mod') return 'package';
+  if (type === 'app') return 'panel-left';
+  if (type === 'tsz') return 'braces';
+  if (type === 'ts' || type === 'tsx') return 'file-code';
+  if (type === 'js' || type === 'jsx') return 'file-code';
+  if (type === 'zig') return 'file-code';
+  if (type === 'md') return 'file-text';
+  if (type === 'json') return 'file-json';
+  if (type === 'css') return 'palette';
+  if (type === 'sh') return 'terminal';
+  if (type === 'home') return 'home';
+  if (type === 'workspace') return 'package';
+  if (type === 'dir') return 'folder';
+  return 'file-text';
 }
 
 export function statusLabel(code: string): string {

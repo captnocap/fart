@@ -17,6 +17,12 @@ export function TerminalTabs(props: any) {
   const [renameValue, setRenameValue] = useState('');
 
   const activeTab = tabs.activeTab;
+  if (activeTab) {
+    try {
+      const h = globalThis as any;
+      if (typeof h.__terminal_set_cwd === 'function') h.__terminal_set_cwd(activeTab.cwd || initialCwd);
+    } catch (_e) {}
+  }
 
   useEffect(() => {
     const target: any = typeof window !== 'undefined' ? window : globalThis;
@@ -102,10 +108,10 @@ export function TerminalTabs(props: any) {
       ) : null}
 
       <Box style={{ flexGrow: 1, flexBasis: 0, minHeight: 0, position: 'relative', display: 'flex' }}>
-        {tabs.tabs.map((tab) => (
+        {activeTab ? (
           <TerminalInstance
-            key={tab.id}
-            tab={tab}
+            key={activeTab.id}
+            tab={activeTab}
             widthBand={props.widthBand}
             height={props.height}
             pane={props.pane}
@@ -125,13 +131,13 @@ export function TerminalTabs(props: any) {
             onJumpLive={props.onJumpLive}
             onClearHistory={props.onClearHistory}
             onCloseTab={tabs.closeTab}
-            onRequestNewTab={() => tabs.createTab(tab.cwd)}
+            onRequestNewTab={() => tabs.createTab(activeTab.cwd)}
             onCycleTabs={tabs.cycleTab}
             onMarkDirty={tabs.setDirty}
             onCwdChange={(tabId: string, cwd: string) => tabs.updateTab(tabId, { cwd })}
             onExitTab={tabs.settings.closeOnExit ? tabs.closeTab : undefined}
           />
-        ))}
+        ) : null}
       </Box>
 
       {props.onClose ? (

@@ -57,6 +57,16 @@ pub const Color = struct {
     }
 };
 
+// ── Gradient types (mirrors layout.zig) ────────────────────────────
+pub const GradientStop = struct { offset: f32 = 0, color: Color = .{} };
+pub const LinearGradient = struct {
+    x1: f32 = 0,
+    y1: f32 = 0,
+    x2: f32 = 0,
+    y2: f32 = 0,
+    stops: []const GradientStop = &.{},
+};
+
 // ── Small types ────────────────────────────────────────────────────
 pub const TextMetrics = struct { width: f32 = 0, height: f32 = 0, ascent: f32 = 0 };
 pub const LayoutRect = struct { x: f32 = 0, y: f32 = 0, w: f32 = 0, h: f32 = 0 };
@@ -160,6 +170,12 @@ pub const Style = struct {
     border_bottom_width: ?f32 = null,
     border_left_width: ?f32 = null,
     border_color: ?Color = null,
+    // See framework/layout.zig for semantics; kept in sync so the public api
+    // surface matches the layout struct.
+    border_dash_on: f32 = 0,
+    border_dash_off: f32 = 0,
+    border_flow_speed: f32 = 0,
+    border_dash_width: f32 = 0,
     z_index: i16 = 0,
     gradient_color_end: ?Color = null,
     gradient_direction: GradientDirection = .none,
@@ -324,6 +340,7 @@ pub const Node = struct {
     canvas_path_d: ?[]const u8 = null,
     canvas_stroke_width: f32 = 2,
     canvas_fill_color: ?Color = null,
+    canvas_fill_gradient: ?LinearGradient = null,
     canvas_flow_speed: f32 = 0,
     canvas_fill_effect: ?[]const u8 = null,
     text_effect: ?[]const u8 = null,

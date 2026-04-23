@@ -87,6 +87,24 @@ pub const Color = struct {
         return 0;
     }
 };
+/// Linear gradient stop — a color at a normalized offset along the gradient line.
+pub const GradientStop = struct {
+    offset: f32 = 0, // 0.0..1.0
+    color: Color = .{},
+};
+
+/// Linear gradient spec — two endpoints in the path's coordinate space plus a
+/// list of color stops. Stored on the node style via `canvas_fill_gradient`.
+/// Slice lifetime matches other `?[]const u8` style fields (c_allocator duped
+/// at CREATE/UPDATE time, leaked on replace — same pattern as canvas_path_d).
+pub const LinearGradient = struct {
+    x1: f32 = 0,
+    y1: f32 = 0,
+    x2: f32 = 0,
+    y2: f32 = 0,
+    stops: []const GradientStop = &.{},
+};
+
 pub const TextMetrics = struct {
     width: f32 = 0,
     height: f32 = 0,
@@ -199,6 +217,19 @@ pub const Style = struct {
     border_bottom_width: ?f32 = null,
     border_left_width: ?f32 = null,
     border_color: ?Color = null,
+    // Animated / dashed border. Any non-default value here switches the
+    // border paint from the rect-shader's baked edge to an SDF-stroked
+    // rounded-rectangle perimeter (see framework/border_dash.zig).
+    //   border_dash_on  — dash length in px (0 = solid).
+    //   border_dash_off — gap length in px (0 = no gaps; flow_speed still animates).
+    //   border_flow_speed — marching speed in px/second (positive = CW).
+    border_dash_on: f32 = 0,
+    border_dash_off: f32 = 0,
+    border_flow_speed: f32 = 0,
+    // Width of the animated dashed stroke. 0 = fall back to border_width,
+    // then to 1.5 px. Lets a cart suppress the baked border (border_width=0)
+    // while still drawing thick animated dashes at an explicit width.
+    border_dash_width: f32 = 0,
     z_index: i16 = 0,
     gradient_color_end: ?Color = null,
     gradient_direction: GradientDirection = .none,
@@ -392,6 +423,11 @@ pub const Node = struct {
     terminal_font_size: u16 = 13, // monospace font size for terminal cell grid
     terminal_id: u8 = 0, // multi-terminal slot index (0..MAX_TERMINALS-1)
     graph_container: bool = false, // true = Graph element (SVG paths, no pan/zoom)
+    // true = Graph/Canvas uses DOM-style origin (0,0 at element top-left).
+    // Default is center-origin (world 0,0 sits at the element midpoint), which
+    // suits polar / pan-zoom visualisations. Flip to true for chart code that
+    // thinks in plot-area DOM coordinates (plotX, plotY, plotW, plotH).
+    graph_origin_topleft: bool = false,
     canvas_id: u8 = 0, // multi-canvas instance index (0..MAX_CANVAS_INSTANCES-1)
     canvas_type: ?[]const u8 = null,
     // Canvas viewport — initial camera (center point + zoom)
@@ -419,6 +455,7 @@ pub const Node = struct {
     canvas_path_d: ?[]const u8 = null, // SVG path data string
     canvas_stroke_width: f32 = 2,
     canvas_fill_color: ?Color = null, // fill color for filled SVG paths (via blend2d)
+    canvas_fill_gradient: ?LinearGradient = null, // linear gradient fill — Gouraud-interpolated via drawTriColored
     canvas_flow_speed: f32 = 0, // 0 = solid, >0 = flow forward, <0 = flow reverse
     canvas_fill_effect: ?[]const u8 = null, // effect name to use as polygon fill texture
     text_effect: ?[]const u8 = null, // effect name for per-glyph text coloring
@@ -1094,7 +1131,33 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
     // Scroll containers need TWO heights:
     // - innerH: the REAL container height (for flex distribution — children share this space)
     // - childLayoutH: unlimited (so children can overflow and be scrolled to)
-    const innerH = if (h != null) h.? - pt - pb else @as(f32, 9999);
+    //
+    // When height is indefinite, innerH must be derived from content + min/max,
+    // NOT a 9999 sentinel. If 9999 flows into flex distribution, a flex-grow
+    // child with flex-basis:0 eats the 9999 — producing ~10000-tall containers
+    // whose centered content ends up at y≈5000. Top-down rule: every container
+    // has a concrete height from parent offer or its own floor; flex-grow
+    // distributes only over that concrete height's free space.
+    var innerH: f32 = undefined;
+    if (h != null) {
+        innerH = h.? - pt - pb;
+    } else {
+        const intrinsic_total = estimateIntrinsicHeight(node, innerW);
+        const intrinsic_inner = intrinsic_total - pt - pb;
+        const min_raw = resolveMaybePct(s.min_height, ph);
+        const max_raw = resolveMaybePct(s.max_height, ph);
+        var v: f32 = intrinsic_inner;
+        if (min_raw) |m| {
+            const m_inner = m - pt - pb;
+            if (v < m_inner) v = m_inner;
+        }
+        if (max_raw) |m| {
+            const m_inner = m - pt - pb;
+            if (v > m_inner) v = m_inner;
+        }
+        if (v < 0) v = 0;
+        innerH = v;
+    }
     const hasExplicitFlexSpacing = s.gap != 0 or s.row_gap != null or s.column_gap != null or s.padding != 0 or s.padding_left != null or s.padding_right != null or s.padding_top != null or s.padding_bottom != null or s.flex_wrap != .no_wrap or s.flex_direction == .row or s.flex_direction == .row_reverse;
     var onlyTextChildren = node.text == null and node.children.len > 0 and !hasExplicitFlexSpacing;
     if (onlyTextChildren) {

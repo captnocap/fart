@@ -12,6 +12,7 @@ const input = @import("input.zig");
 const luajit_runtime = @import("luajit_runtime.zig");
 const qjs_runtime = @import("qjs_runtime.zig");
 const exec_async = @import("exec_async.zig");
+const vterm = @import("vterm.zig");
 const c = @import("c.zig").imports;
 
 var g_content_store: std.AutoHashMap(u32, []u8) = undefined;
@@ -86,6 +87,13 @@ fn hostFlush(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
         std.heap.c_allocator.free(owned);
         return;
     };
+}
+
+fn hostTerminalSetCwd(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const path = argToStringAlloc(info, 0) orelse return;
+    defer std.heap.c_allocator.free(path);
+    vterm.setSpawnCwd(path);
 }
 
 fn hostGetInputTextForNode(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
@@ -461,6 +469,7 @@ pub fn registerCore(vm: anytype) void {
     v8_runtime.registerHostFn("__clipboard_set", hostClipboardSet);
     v8_runtime.registerHostFn("__clipboard_get", hostClipboardGet);
     v8_runtime.registerHostFn("__exec_async", hostExecAsync);
+    v8_runtime.registerHostFn("__terminal_set_cwd", hostTerminalSetCwd);
 }
 
 fn hostGetInputText(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {

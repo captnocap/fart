@@ -38,7 +38,7 @@ fn setNumberReturn(info: v8.FunctionCallbackInfo, n: f64) void {
 
 fn setBoolReturn(info: v8.FunctionCallbackInfo, b: bool) void {
     const iso = info.getIsolate();
-    info.getReturnValue().set(iso.initBoolean(b).toValue());
+    info.getReturnValue().set(iso.initBoolean(b));
 }
 
 fn setStringReturn(info: v8.FunctionCallbackInfo, s: []const u8) void {
@@ -69,7 +69,7 @@ fn setObjectBool(ctx: v8.Context, obj: v8.Object, key: []const u8, val: bool) vo
     const iso = ctx.getIsolate();
     const k = iso.initStringUtf8(key);
     const b = iso.initBoolean(val);
-    _ = obj.setValue(ctx, k.toValue(), b.toValue());
+    _ = obj.setValue(ctx, k.toValue(), b);
 }
 
 fn setObjectString(ctx: v8.Context, obj: v8.Object, key: []const u8, val: []const u8) void {
