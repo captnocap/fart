@@ -1,90 +1,131 @@
 # reactjit
 
-A general-purpose native runtime for React. Write plain `.tsx`, bundle with esbuild, ship a single-file binary. No DOM, no CSS engine, no browser.
+A native runtime for React. Write plain `.tsx`, bundle with esbuild, get a single-file binary. No DOM, no CSS engine, no browser.
 
-React's reconciler emits CREATE/APPEND/UPDATE mutation commands against a Zig-owned node tree. Layout, paint, hit-test, events, input, text, and GPU are native Zig on top of V8 and wgpu. React is the algorithm, not the environment.
+React's reconciler emits CREATE/APPEND/UPDATE/REMOVE mutation commands (host config in `renderer/hostConfig.ts`). Those commands drive a Zig-owned node tree. Layout (flexbox), paint, hit-testing, events, input, text, and GPU are native Zig on top of V8 and wgpu. JSX, hooks, standard HTML tag names, and Tailwind via `className` all work — the host shims what needs shimming and the reconciler translates the rest.
+
+This is an experiment. Highly experimental, active construction, rough edges everywhere. The shape of the project keeps moving.
 
 ## Why
 
-Copy-paste React components. Get native performance. Don't ship Chromium.
-
-V8 standalone is ~6MB. Node+V8 is ~50MB. CEF is ~200MB. The "V8 is bloated" intuition is really "Chromium is bloated" — V8 itself is tight.
+Copy-paste a React component, ship native performance, don't ship Chromium. V8 standalone is small (~6 MB); Node bundles V8 into a ~50 MB package; CEF (Chromium Embedded) is ~200 MB. The "V8 is heavy" intuition is really "Chromium is heavy." Measure before assuming.
 
 ## Carts
 
-Applications built on reactjit are called **carts**. A cart is a `.tsx` file (or directory) under `cart/`. Anything React can describe, a cart can be: an IDE, a physics sim, a game, an emulator, a dashboard, an audio visualizer, an agent UI.
+Applications are called **carts**. A cart is a `.tsx` file — or a directory with a `.tsx` entry — under `cart/`. Anything React can express, a cart can be.
+
+The tree today (`ls cart/`):
 
 ```
-cart/counter.tsx       one-file cart
-cart/sweatshop/        directory cart — the current internal dev-driver IDE
-cart/...               your cart goes here
+browser         canvas_stress   cockpit         d152            effects
+graph_demo      hello           hello2          hello_stress    hottest
+input_lab       inspector       load_via_hook   load_via_react  pocket_operator
+spinner         sweatshop       text_chop_test  tooltip_test
 ```
 
-`cart/sweatshop/` is one cart among many. It happens to be the IDE reactjit is developed inside of. It is not the framework.
+`cart/sweatshop/` is one cart among many. It's the IDE reactjit is currently developed inside of, not the framework itself.
 
 ## Primitives
 
+Exported from `runtime/primitives.tsx` (grep-verified):
+
 ```
 Box  Row  Col  Text  Image  Pressable  ScrollView
-TextInput  TextArea  TextEditor
-Canvas  Canvas.Node  Canvas.Path
-Graph  Graph.Path  Graph.Node
-Native
+TextInput  TextArea  TextEditor  Terminal
+Canvas     Canvas.Node  Canvas.Path  Canvas.Clamp
+Graph      Graph.Path   Graph.Node
+Render  Effect  Native
 ```
 
-Standard HTML tags (`<div>`, `<span>`, `<button>`, etc.) are remapped to these at reconcile time. Tailwind utilities work via `className` (parsed by `runtime/tw.ts`). `<Native type="X" />` is the universal escape hatch — it bridges to any Zig-handled node type until that type gets a first-class wrapper.
+Each primitive emits a host-node type string (`'View'`, `'Text'`, `'Image'`, `'Canvas'`, …) that the reconciler host passes into the Zig runtime. `CodeGutter` and `Minimap` come from the `.tslx` pipeline under `framework/primitives/`.
+
+**HTML tag remapping** (`renderer/hostConfig.ts`): `div`/`section`/`article`/`aside`/`a`/`button`/`details`/`summary` → `View`; `h1`–`h6`, `p`, `span` → `Text`; `img` → `Image`; `input` → `TextInput`; `textarea` → `TextEditor`; `video` → `Video`. `img.src` and `input.value`/`textarea.value` are forwarded through.
+
+**Tailwind via `className`** — parsed by `tw()` in `runtime/tw.ts` at CREATE time.
+
+`Native` is a memoized passthrough for host-handled node types (source comment: `<Native type="Audio" />`). It is not referenced from any file under `cart/` today (`grep -rn '<Native' cart/` returns nothing). Treat it as plumbing, not a documented extension point.
 
 ## Host bindings
 
-Exposed on the JS global. Filesystem (`__fs_*`), subprocess (`__exec`), SQLite (`__store_*`), HTTP sync+async (`__http_*`), crypto (`__crypto_*`), clipboard, timers, and more. `installBrowserShims()` adds `fetch` and `localStorage`.
+The V8 host registers 174 functions on the JS global (`grep registerHostFn framework/v8_bindings_*.zig`). By area:
 
-Not available: `window`/`document`, `sessionStorage`/`IndexedDB`, CSS Grid, media queries, pseudo-classes, inline SVG, blob URLs. This is closer to React Native than browser React.
+| Area | Representative names |
+|------|----------------------|
+| Filesystem | `__fs_read`, `__fs_write`, `__fs_readfile`, `__fs_writefile`, `__fs_exists`, `__fs_list_json`, `__fs_scandir`, `__fs_stat_json`, `__fs_mkdir`, `__fs_remove`, `__fs_deletefile` |
+| Subprocess + env | `__exec`, `__exec_async`, `__spawn_self`, `__getenv`, `__env_get`, `__env_set`, `__exit`, `__getpid`, `__get_run_path`, `__get_app_dir` |
+| HTTP + net | `__http_request_sync`, `__http_request_async`, `__fetch`, `__ws_open`, `__ws_send`, `__ws_close`, `__browser_page_sync`, `__browser_page_async` |
+| SQLite + kv store | `__sql_open`, `__sql_close`, `__sql_exec`, `__sql_query_json`, `__sql_changes`, `__sql_last_rowid`, `__store_get`, `__store_set`, `__store_remove`, `__store_clear`, `__store_keys_json`, `__db_query` |
+| Hot state | `__hot_get`, `__hot_set`, `__hot_remove`, `__hot_clear`, `__hot_keys_json` |
+| Clipboard + window | `__clipboard_get`, `__clipboard_set`, `__window_maximize`, `__window_minimize`, `__window_close`, `__window_is_maximized` |
+| IPC (dev host) | `__ipc_connect`, `__ipc_disconnect`, `__ipc_request`, `__ipc_response`, `__ipc_poll`, `__ipc_submit_code`, `__ipc_tree_node`, `__ipc_tree_count`, `__ipc_perf`, `__ipc_status` |
+| Telemetry / inspector | `__tel_frame`, `__tel_gpu`, `__tel_layout`, `__tel_input`, `__tel_net`, `__tel_node`, `__tel_nodes`, `__tel_state`, `__tel_system`, `__tel_history`, `__sem_*` |
+| Coding agents | `__claude_init`, `__claude_send`, `__claude_poll`, `__claude_close`, `__kimi_close` |
+| Frame / input introspection | `getFps`, `getTickUs`, `getLayoutUs`, `getPaintUs`, `getMouseX`, `getMouseY`, `getMouseDown`, `getMouseRightDown`, `isKeyDown`, `getSelectedNode`, `getActiveNode` |
+| JS eval | `__js_eval` |
+
+TypeScript wrappers live under `runtime/hooks/` (`fs.ts`, `http.ts`, `sqlite.ts`, `crypto.ts`, `clipboard.ts`, `process.ts`, `localstore.ts`, `websocket.ts`, `browser_page.ts`, `useFileContent.ts`, `useHotState.ts`). `runtime/hooks/index.ts:installBrowserShims()` installs `fetch`, `localStorage`, and a no-op `WebSocket` stub for paste-compatibility.
+
+**Not available** (no browser context): `window`/`document`/`navigator` in any meaningful sense, `sessionStorage`, `IndexedDB`, cookies, `Blob`, `FormData`, `FileReader`, `XMLHttpRequest`, CSS Grid, media queries, pseudo-classes, inline SVG, blob URLs. Closer to React Native than browser React.
 
 ## Getting started
 
-Prerequisites: Zig 0.15.2, Node 20+.
+Prerequisites: Zig (pinned via `build.zig.zon`, currently tracking 0.15.2), Node 20+, Linux (macOS path exists, Linux is the daily driver).
 
 ```bash
-./scripts/ship <cart-name>          # cart/<name>[.tsx] → self-extracting binary
-./scripts/run  <cart-name>          # run the built binary (headless-capable)
-./scripts/dev  <cart-name>          # persistent dev host, ~300ms hot reload
+./scripts/ship  <cart-name>        # bundle + zig build + self-extracting binary
+./scripts/ship  <cart-name> -d     # debug ELF, skips packaging
+./scripts/ship  <cart-name> --raw  # release ELF, skips packaging (for ldd)
+./scripts/ship  <cart-name> --qjs  # legacy QuickJS host (maintenance-only)
+./scripts/ship  <cart-name> --jsrt # alternate LuaJIT-based evaluator host
+./scripts/run   <cart-name>        # launch a previously-built binary
+./scripts/dev   <cart-name>        # push cart into the persistent dev host
 ```
 
-The JS runtime is V8 by default (`--qjs` opts into the legacy QuickJS host; maintenance-only). Dev builds run `ReleaseFast` — debug builds have a click-path bug and are not for daily work.
+The dev host is a long-lived `ReleaseFast` binary listening on `/tmp/reactjit.sock`. `scripts/dev` bundles to `.cache/bundle-<cart>.js` and pushes over IPC; a second `scripts/dev <other>` adds a tab to the same host. Save-to-visible is ~300 ms for TSX/TS edits. A rebuild is required for changes under `framework/`, `build.zig`, or `scripts/`.
+
+Debug builds have a pre-existing click-path issue — stick to the default `ReleaseFast` for dev work. `useHotState` is wired but state does not survive reloads today.
 
 ## Layout
 
 ```
-cart/          .tsx cart apps
-framework/     Zig runtime (~45k lines). Layout, engine, GPU,
-               events, input, state, text, windows.
-runtime/       JS entry, primitives, classifier, theme, tw, hooks.
-renderer/      Reconciler host config. Mutation command stream.
-scripts/       Build + dev tooling.
-build.zig      Root build.
+cart/                 .tsx carts (single-file or directory-based)
+framework/            Zig runtime — layout, engine, GPU (wgpu), events, input,
+                      state, text, windows, cartridge, audio, agents.
+                      V8 bindings: framework/v8_bindings_{core,fs,sdk,telemetry,websocket}.zig
+framework/lua/jsrt/   JS evaluator written in Lua (LuaJIT). Alternate host path.
+runtime/              JS entry (runtime/index.tsx), primitives.tsx, classifier.tsx,
+                      tw.ts, JSX shim, host-shim shims, hook wrappers.
+renderer/             react-reconciler host config + mutation command stream.
+scripts/              ship, run, dev, build-bundle.mjs, watchers, autotest.
+build.zig             Root build.
 
-v8_app.zig     Active cart host (default, embeds V8).
-qjs_app.zig    Legacy QuickJS host. Maintenance-only.
-jsrt_app.zig   Alternate LuaJIT-based JS host.
+v8_app.zig            Default cart host. Embeds V8 via zig-v8.
+qjs_app.zig           Legacy QuickJS host. Maintenance-only.
+jsrt_app.zig          Alternate LuaJIT/JSRT host binary.
+v8_hello.zig          Minimal V8 smoke-test host.
 
-tsz/ love2d/ archive/    Frozen reference trees — read-only. See git log
-                         for backstory.
-os/                      Future CartridgeOS. Mostly stubs.
+tsz/                  FROZEN. Smith-era AOT-compile-.tsz-to-Zig experiment.
+love2d/               FROZEN. The reconciler-on-Lua predecessor stack.
+archive/              FROZEN. Earlier compiler iterations.
+os/                   Speculative (CartridgeOS). Mostly stubs.
 ```
+
+Frozen trees are read-only reference material. See `git log` for the backstory; the short version is "we built it, learned from it, moved on, kept it around to port patterns from."
 
 ## Status
 
-| Working | Incomplete |
+| Working | Incomplete / pending |
 |---|---|
-| V8 runtime, all primitives, HTML remapping, tailwind | Multi-window, Inspector |
-| Host bindings (fs, http, crypto, clipboard, sqlite) | Physics/audio/video bridging |
-| Dev host with hot reload                            | WebSocket hooks, subprocess pipes |
-| Snapshot autotest gate in `scripts/ship`           | `useHotState` persistence across reloads |
+| V8 host (default), QJS host (legacy), JSRT host (alt) | Multi-window orchestration beyond `__window_*` |
+| Every primitive listed above, HTML remapping, tailwind | Physics (`framework/physics2d.zig`, `physics3d.zig`) not bridged to JSX |
+| Host bindings: fs, exec, http, sqlite, crypto, clipboard, hot-state | Audio-graph-style bridging on top of `framework/audio.zig` |
+| Persistent dev host + IPC bundle-push + hot reload | Video primitive end-to-end |
+| Inspector host-side telemetry (`__tel_*`, `__sem_*`) | Inspector UI cart (planned, to be regenerated from the `love2d/` reference) |
+| `scripts/ship` self-extracting packaging, snapshot autotest gate | `useHotState` state persistence across reloads |
+| | WebSocket bindings exist; high-level hooks sparse |
 
-## Contributing
+## Pointers
 
-See [`AGENTS.md`](AGENTS.md) for agent/AI contributor conventions. See [`CLAUDE.md`](CLAUDE.md) for Claude Code–specific guidance.
-
----
-
-*"Any sufficiently advanced technology is indistinguishable from magic." — Arthur C. Clarke*
+- [`AGENTS.md`](AGENTS.md) — contributor conventions for AI/agent work.
+- [`CLAUDE.md`](CLAUDE.md) — Claude Code-specific rules (frozen trees, git discipline, hard bans).
+- `git log` — the real story of how this got here. Prior eras (react-love → iLoveReact → multi-target ReactJIT → SDL2/Love2D → Smith/.tsz → current Zig+V8 cart runtime) are all in there.
