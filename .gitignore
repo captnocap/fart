@@ -252,3 +252,7 @@ deps/zig-v8/.zig-cache/
 deps/zig-v8/.lp-cache/
 deps/zig-v8/v8/
 deps/zig-v8/v8-build/
+
+# Test screenshots (local artifacts)
+tests/screenshots/
+
