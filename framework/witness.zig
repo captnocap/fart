@@ -1176,7 +1176,7 @@ fn colorEql(a: layout.Color, b: layout.Color) bool {
 // The autotest is a build artifact — never hand-written.
 
 const SNAP_MAX_CLICKS = 64;
-const SNAP_MAX_LINES = 512;
+const SNAP_MAX_LINES = 8192;
 
 const SnapPhase = enum { wait_settle, collect_initial, clicking, settle_after_click, done };
 
@@ -1503,12 +1503,15 @@ fn snapshotTick(root: *Node) bool {
             }
 
             const label = snap_press_labels[snap_click_idx][0..snap_press_label_lens[snap_click_idx]];
+            const cur = snap_pressables[snap_click_idx];
 
-            // Skip if we already clicked a button with this exact label
+            // Skip if we already clicked a pressable at the same coordinates
+            // (label-based dedup collapses event-delegation labels like
+            // "__dispatchEvent(N,'onClick')" where many nodes share one handler).
             var already_clicked = false;
             for (0..snap_click_idx) |prev| {
-                const prev_label = snap_press_labels[prev][0..snap_press_label_lens[prev]];
-                if (std.mem.eql(u8, label, prev_label)) {
+                const p = snap_pressables[prev];
+                if (p.cx == cur.cx and p.cy == cur.cy) {
                     already_clicked = true;
                     break;
                 }
