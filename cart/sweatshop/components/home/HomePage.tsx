@@ -5,6 +5,8 @@ import { Box, Col, Pressable, Row, ScrollView, Text, TextInput } from '../../../
 import { COLORS, TOKENS } from '../../theme';
 import { loadRecents } from '../../lib/workspace/recents';
 import { checkIsDirectory, mkdirP } from '../../lib/workspace/validate';
+import { DirectoryPicker } from './DirectoryPicker';
+import { envGet } from '../../../../runtime/hooks/process';
 
 type HomePageProps = {
   onOpenWorkspace: (path: string) => void;
@@ -38,6 +40,26 @@ function PrimaryButton(props: { label: string; onPress: () => void }) {
   );
 }
 
+function BrowseButton(props: { onPress: () => void }) {
+  return (
+    <Pressable
+      onPress={props.onPress}
+      style={{
+        paddingLeft: 12,
+        paddingRight: 12,
+        paddingTop: 9,
+        paddingBottom: 9,
+        borderRadius: TOKENS.radiusSm,
+        backgroundColor: COLORS.panelAlt,
+        borderWidth: 1,
+        borderColor: COLORS.border,
+      }}
+    >
+      <Text fontSize={11} color={COLORS.textBright} style={{ fontWeight: 'bold' }}>Browse…</Text>
+    </Pressable>
+  );
+}
+
 function PathInput(props: { value: string; placeholder: string; onChange: (v: string) => void; onSubmit: () => void }) {
   return (
     <Box
@@ -64,51 +86,6 @@ function PathInput(props: { value: string; placeholder: string; onChange: (v: st
         style={{ borderWidth: 0, backgroundColor: 'transparent' }}
       />
     </Box>
-  );
-}
-
-function ActionCard(props: {
-  label: string;
-  description: string;
-  value: string;
-  placeholder: string;
-  button: string;
-  error: string;
-  onChange: (v: string) => void;
-  onSubmit: () => void;
-}) {
-  return (
-    <Col
-      style={{
-        flex: 1,
-        minWidth: 0,
-        gap: 10,
-        padding: 20,
-        borderRadius: TOKENS.radiusLg,
-        backgroundColor: COLORS.panelRaised,
-        borderWidth: 1,
-        borderColor: COLORS.border,
-      }}
-    >
-      <Col style={{ gap: 4 }}>
-        <SectionLabel text={props.label} />
-        <Text fontSize={10} color={COLORS.textDim}>{props.description}</Text>
-      </Col>
-      <Row style={{ gap: 12, alignItems: 'center' }}>
-        <PathInput
-          value={props.value}
-          placeholder={props.placeholder}
-          onChange={props.onChange}
-          onSubmit={props.onSubmit}
-        />
-        <PrimaryButton label={props.button} onPress={props.onSubmit} />
-      </Row>
-      {props.error ? (
-        <Box style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 7, paddingBottom: 7, borderRadius: TOKENS.radiusSm, backgroundColor: COLORS.redDeep, borderWidth: 1, borderColor: COLORS.red }}>
-          <Text fontSize={10} color={COLORS.red}>{props.error}</Text>
-        </Box>
-      ) : null}
-    </Col>
   );
 }
 
@@ -144,29 +121,69 @@ export function HomePage(props: HomePageProps) {
   const [openError, setOpenError] = useState('');
   const [newDir, setNewDir] = useState('');
   const [newError, setNewError] = useState('');
+  const [newParentPath, setNewParentPath] = useState('');
+  const [newDirName, setNewDirName] = useState('');
+  const [pickerVisible, setPickerVisible] = useState(false);
+  const [pickerMode, setPickerMode] = useState<'open' | 'new'>('open');
+
+  const homePath = (typeof envGet === 'function' ? envGet('HOME') : null) || '/';
 
   useEffect(() => { setRecents(loadRecents()); }, []);
 
-  const tryOpen = () => {
-    const trimmed = (openPath || '').trim();
-    if (!trimmed) { setOpenError('Enter an absolute path.'); return; }
-    const check = checkIsDirectory(trimmed);
+  const tryOpen = (path?: string) => {
+    const target = (path ?? openPath ?? '').trim();
+    if (!target) { setOpenError('Enter an absolute path.'); return; }
+    const check = checkIsDirectory(target);
     if (!check.ok) { setOpenError(check.reason || 'Invalid path.'); return; }
     setOpenError('');
-    props.onOpenWorkspace(trimmed);
+    props.onOpenWorkspace(target);
   };
 
-  const tryCreate = () => {
-    const trimmed = (newDir || '').trim();
-    if (!trimmed) { setNewError('Enter an absolute path.'); return; }
-    const check = mkdirP(trimmed);
+  const tryCreate = (path?: string) => {
+    const target = (path ?? newDir ?? '').trim();
+    if (!target) { setNewError('Enter an absolute path.'); return; }
+    const check = mkdirP(target);
     if (!check.ok) { setNewError(check.reason || 'Failed to create directory.'); return; }
     setNewError('');
-    props.onOpenWorkspace(trimmed);
+    props.onOpenWorkspace(target);
+  };
+
+  const tryCreateFromParent = () => {
+    const name = (newDirName || '').trim();
+    if (!name) { setNewError('Enter a directory name.'); return; }
+    if (name.includes('/')) { setNewError('Name must not contain slashes.'); return; }
+    const fullPath = newParentPath.replace(/\/+$/, '') + '/' + name;
+    const check = mkdirP(fullPath);
+    if (!check.ok) { setNewError(check.reason || 'Failed to create directory.'); return; }
+    setNewError('');
+    props.onOpenWorkspace(fullPath);
+  };
+
+  const openPicker = (mode: 'open' | 'new') => {
+    setPickerMode(mode);
+    setPickerVisible(true);
+  };
+
+  const handlePickerSelect = (path: string) => {
+    setPickerVisible(false);
+    if (pickerMode === 'open') {
+      setOpenPath(path);
+      tryOpen(path);
+    } else {
+      setNewParentPath(path);
+      setNewDirName('');
+    }
   };
 
   return (
     <Col style={{ flex: 1, width: '100%', alignItems: 'center', backgroundColor: COLORS.appBg }}>
+      <DirectoryPicker
+        visible={pickerVisible}
+        startPath={homePath}
+        confirmLabel={pickerMode === 'open' ? 'Open this directory' : 'Select this directory'}
+        onSelect={handlePickerSelect}
+        onCancel={() => setPickerVisible(false)}
+      />
       <ScrollView style={{ flex: 1, width: '100%' }}>
         <Col style={{ width: '100%', alignItems: 'center' }}>
           <Col style={{ width: 760, gap: 40, paddingTop: 72, paddingBottom: 72 }}>
@@ -189,26 +206,109 @@ export function HomePage(props: HomePageProps) {
             </Col>
 
             <Row style={{ gap: 24, alignItems: 'stretch' }}>
-              <ActionCard
-                label="Open Path"
-                description="Absolute path to an existing directory."
-                value={openPath}
-                placeholder="/absolute/path/to/workspace"
-                button="Open"
-                error={openError}
-                onChange={setOpenPath}
-                onSubmit={tryOpen}
-              />
-              <ActionCard
-                label="New Directory"
-                description="Create a new directory (mkdir -p)."
-                value={newDir}
-                placeholder="/absolute/path/to/new/workspace"
-                button="Create"
-                error={newError}
-                onChange={setNewDir}
-                onSubmit={tryCreate}
-              />
+              {/* Open Path card */}
+              <Col
+                style={{
+                  flex: 1,
+                  minWidth: 0,
+                  gap: 10,
+                  padding: 20,
+                  borderRadius: TOKENS.radiusLg,
+                  backgroundColor: COLORS.panelRaised,
+                  borderWidth: 1,
+                  borderColor: COLORS.border,
+                }}
+              >
+                <Col style={{ gap: 4 }}>
+                  <SectionLabel text="Open Path" />
+                  <Text fontSize={10} color={COLORS.textDim}>Absolute path to an existing directory.</Text>
+                </Col>
+                <Row style={{ gap: 12, alignItems: 'center' }}>
+                  <PathInput
+                    value={openPath}
+                    placeholder="/absolute/path/to/workspace"
+                    onChange={setOpenPath}
+                    onSubmit={() => tryOpen()}
+                  />
+                  <BrowseButton onPress={() => openPicker('open')} />
+                  <PrimaryButton label="Open" onPress={() => tryOpen()} />
+                </Row>
+                {openError ? (
+                  <Box style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 7, paddingBottom: 7, borderRadius: TOKENS.radiusSm, backgroundColor: COLORS.redDeep, borderWidth: 1, borderColor: COLORS.red }}>
+                    <Text fontSize={10} color={COLORS.red}>{openError}</Text>
+                  </Box>
+                ) : null}
+              </Col>
+
+              {/* New Directory card */}
+              <Col
+                style={{
+                  flex: 1,
+                  minWidth: 0,
+                  gap: 10,
+                  padding: 20,
+                  borderRadius: TOKENS.radiusLg,
+                  backgroundColor: COLORS.panelRaised,
+                  borderWidth: 1,
+                  borderColor: COLORS.border,
+                }}
+              >
+                <Col style={{ gap: 4 }}>
+                  <SectionLabel text="New Directory" />
+                  <Text fontSize={10} color={COLORS.textDim}>Create a new directory (mkdir -p).</Text>
+                </Col>
+                {newParentPath ? (
+                  <Col style={{ gap: 10 }}>
+                    <Text fontSize={11} color={COLORS.textMuted}>Parent: {newParentPath}</Text>
+                    <Row style={{ gap: 12, alignItems: 'center' }}>
+                      <Box
+                        style={{
+                          flex: 1,
+                          minWidth: 0,
+                          borderWidth: 1,
+                          borderColor: COLORS.border,
+                          borderRadius: TOKENS.radiusSm,
+                          backgroundColor: COLORS.panelRaised,
+                          paddingLeft: 12,
+                          paddingRight: 12,
+                          paddingTop: 9,
+                          paddingBottom: 9,
+                        }}
+                      >
+                        <TextInput
+                          value={newDirName}
+                          onChange={setNewDirName}
+                          onSubmit={tryCreateFromParent}
+                          placeholder="directory-name"
+                          fontSize={11}
+                          color={COLORS.text}
+                          style={{ borderWidth: 0, backgroundColor: 'transparent' }}
+                        />
+                      </Box>
+                      <PrimaryButton label="Create" onPress={tryCreateFromParent} />
+                    </Row>
+                    <Pressable onPress={() => { setNewParentPath(''); setNewError(''); }}>
+                      <Text fontSize={10} color={COLORS.blue}>Back to full path entry</Text>
+                    </Pressable>
+                  </Col>
+                ) : (
+                  <Row style={{ gap: 12, alignItems: 'center' }}>
+                    <PathInput
+                      value={newDir}
+                      placeholder="/absolute/path/to/new/workspace"
+                      onChange={setNewDir}
+                      onSubmit={() => tryCreate()}
+                    />
+                    <BrowseButton onPress={() => openPicker('new')} />
+                    <PrimaryButton label="Create" onPress={() => tryCreate()} />
+                  </Row>
+                )}
+                {newError ? (
+                  <Box style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 7, paddingBottom: 7, borderRadius: TOKENS.radiusSm, backgroundColor: COLORS.redDeep, borderWidth: 1, borderColor: COLORS.red }}>
+                    <Text fontSize={10} color={COLORS.red}>{newError}</Text>
+                  </Box>
+                ) : null}
+              </Col>
             </Row>
           </Col>
         </Col>
