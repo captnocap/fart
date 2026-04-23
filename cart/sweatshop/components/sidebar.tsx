@@ -430,6 +430,8 @@ function SidebarImpl(props: any) {
       style={{
         width: props.style?.width || 328,
         height: '100%',
+        minHeight: 0,
+        overflow: 'hidden',
         backgroundColor: COLORS.panelBg,
         borderRightWidth: 1,
         borderColor: COLORS.border,
@@ -480,7 +482,7 @@ function SidebarImpl(props: any) {
         />
       </Col>
 
-      <ScrollView showScrollbar={true} style={{ flexGrow: 1, height: '100%' }}>
+      <ScrollView showScrollbar={true} style={{ flexGrow: 1, flexBasis: 0, minHeight: 0, minWidth: 0 }}>
         <Col style={{ padding: 10, gap: 10 }}>
           {panelOrder.map((panelId: string) => {
             if (panelId === 'files') {
