@@ -171,7 +171,7 @@ export function HomePage(props: HomePageProps) {
         <Col style={{ width: '100%', alignItems: 'center' }}>
           <Col style={{ width: 760, gap: 40, paddingTop: 72, paddingBottom: 72 }}>
             <Col style={{ gap: 8 }}>
-              <Text fontSize={40} color={COLORS.textBright} style={{ fontWeight: 'bold', letterSpacing: -1, width: 760 }}>sweatshop</Text>
+              <Text fontSize={30} color={COLORS.textBright} style={{ fontWeight: 'bold', letterSpacing: -1 }}>sweatshop</Text>
               <Text fontSize={13} color={COLORS.textDim}>A native agent workspace. Pick a working directory to begin.</Text>
             </Col>
 
