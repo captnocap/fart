@@ -46,6 +46,15 @@ pub fn setLineHeightOverride(lh: f32) void {
     g_line_height_override = lh;
 }
 
+/// Letter-spacing (px, can be negative) applied to the next drawTextLine /
+/// drawTextWrapped call. Kept in sync with framework/text.zig's measure path so
+/// paint's wrap bound agrees with layout's computed width. Cleared by caller.
+var g_letter_spacing: f32 = 0;
+
+pub fn setLetterSpacing(ls: f32) void {
+    g_letter_spacing = ls;
+}
+
 fn inlineGlyphSentinelLen(text: []const u8, i: usize) usize {
     if (i >= text.len) return 0;
     if (text[i] == 0x01) return 1;
@@ -265,6 +274,7 @@ pub fn drawTextLine(text: []const u8, x: f32, y: f32, size_px: u16, cr: f32, cg:
                 g_inline_slot_count += 1;
             }
             pen_x += @floatFromInt(size_px);
+            pen_x += g_letter_spacing;
             i += sentinel_len;
             continue;
         }
@@ -299,6 +309,7 @@ pub fn drawTextLine(text: []const u8, x: f32, y: f32, size_px: u16, cr: f32, cg:
                 }
             }
             pen_x += @floatFromInt(glyph.advance);
+            pen_x += g_letter_spacing;
         }
         i += ch.len;
     }
@@ -396,9 +407,9 @@ pub fn drawTextWrapped(text: []const u8, x: f32, y: f32, size_px: u16, max_width
                     var j: usize = line_start;
                     while (j < i) {
                         const j_sentinel_len = inlineGlyphSentinelLen(text, j);
-                        if (j_sentinel_len > 0) { pen_x += @floatFromInt(size_px); j += j_sentinel_len; continue; }
+                        if (j_sentinel_len > 0) { pen_x += @floatFromInt(size_px); pen_x += g_letter_spacing; j += j_sentinel_len; continue; }
                         const jch = decodeUtf8(text[j..]);
-                        if (cacheGlyph(jch.codepoint, size_px)) |g| pen_x += @floatFromInt(g.advance);
+                        if (cacheGlyph(jch.codepoint, size_px)) |g| { pen_x += @floatFromInt(g.advance); pen_x += g_letter_spacing; }
                         j += jch.len;
                     }
                     last_break = line_start;
@@ -406,6 +417,7 @@ pub fn drawTextWrapped(text: []const u8, x: f32, y: f32, size_px: u16, max_width
                 }
             }
             pen_x += advance;
+            pen_x += g_letter_spacing;
             i += sentinel_len;
             continue;
         }
@@ -470,6 +482,7 @@ pub fn drawTextWrapped(text: []const u8, x: f32, y: f32, size_px: u16, max_width
         }
 
         pen_x += advance;
+        pen_x += g_letter_spacing;
         i += ch.len;
     }
 
