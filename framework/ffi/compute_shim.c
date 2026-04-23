@@ -44,6 +44,14 @@ long heavy_compute_batch(long call_count) {
     return (t1.tv_sec - t0.tv_sec) * 1000000 + (t1.tv_nsec - t0.tv_nsec) / 1000;
 }
 
+// SQLite SQLITE_TRANSIENT sentinel — returns ((void(*)(void*))-1).
+// Zig 0.15 can't construct unaligned fn pointers at comptime, so we do it in C.
+#include <sqlite3.h>
+typedef void (*sqlite3_destructor_fn)(void*);
+sqlite3_destructor_fn get_sqlite_transient(void) {
+    return SQLITE_TRANSIENT;
+}
+
 // Same but returns the last result instead of time
 long heavy_compute_batch_result(long call_count) {
     long calls = (call_count > 0) ? call_count : g_compute_n;

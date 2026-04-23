@@ -14,9 +14,9 @@ const sql = @cImport({
 });
 
 // SQLITE_TRANSIENT: tells sqlite3 to make its own copy of bound data.
-// Defined in C as ((sqlite3_destructor_type)-1), which is a function pointer
-// with the value of max usize (all bits set).
-const SQLITE_TRANSIENT_VAL = @as(sql.sqlite3_destructor_type, @ptrFromInt(std.math.maxInt(usize)));
+// Defined in C as ((sqlite3_destructor_type)-1). Zig 0.15 rejects unaligned
+// fn pointers at comptime, so we import the sentinel from a C helper.
+extern fn get_sqlite_transient() sql.sqlite3_destructor_type;
 
 pub const SqliteError = error{
     CantOpen,
@@ -80,7 +80,7 @@ pub const Statement = struct {
             idx,
             text.ptr,
             @intCast(text.len),
-            SQLITE_TRANSIENT_VAL,
+            get_sqlite_transient(),
         );
         if (rc != sql.SQLITE_OK) return SqliteError.Bind;
     }

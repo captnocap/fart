@@ -103,12 +103,30 @@ pub fn build(b: *std.Build) void {
             root_mod.addIncludePath(.{ .cwd_relative = "/usr/include/x86_64-linux-gnu" });
         }
     } else if (os_tag == .macos) {
-        root_mod.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include/luajit-2.1" });
-        root_mod.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/lib" });
-        root_mod.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
-        root_mod.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include/freetype2" });
-        root_mod.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/opt/libarchive/lib" });
-        root_mod.addIncludePath(.{ .cwd_relative = "/opt/homebrew/opt/libarchive/include" });
+        if (sysroot) |sr| {
+            // Cross-compilation from Linux using extracted macOS sysroot.
+            // Sysroot layout: <sr>/sdk/ (macOS SDK), <sr>/brew/<pkg>/ (homebrew deps)
+            const sdk = b.fmt("{s}/sdk", .{sr});
+            const brew = b.fmt("{s}/brew", .{sr});
+            root_mod.addSystemIncludePath(.{ .cwd_relative = b.fmt("{s}/usr/include", .{sdk}) });
+            root_mod.addLibraryPath(.{ .cwd_relative = b.fmt("{s}/usr/lib", .{sdk}) });
+            root_mod.addFrameworkPath(.{ .cwd_relative = b.fmt("{s}/System/Library/Frameworks", .{sdk}) });
+            // Homebrew deps
+            inline for (.{ "sdl3", "freetype", "luajit", "box2d", "sqlite", "libvterm", "libarchive" }) |pkg| {
+                root_mod.addIncludePath(.{ .cwd_relative = b.fmt("{s}/{s}/include", .{ brew, pkg }) });
+                root_mod.addLibraryPath(.{ .cwd_relative = b.fmt("{s}/{s}/lib", .{ brew, pkg }) });
+            }
+            root_mod.addIncludePath(.{ .cwd_relative = b.fmt("{s}/luajit/include/luajit-2.1", .{brew}) });
+            root_mod.addIncludePath(.{ .cwd_relative = b.fmt("{s}/freetype/include/freetype2", .{brew}) });
+        } else {
+            // Native macOS build (homebrew paths)
+            root_mod.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include/luajit-2.1" });
+            root_mod.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/lib" });
+            root_mod.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
+            root_mod.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include/freetype2" });
+            root_mod.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/opt/libarchive/lib" });
+            root_mod.addIncludePath(.{ .cwd_relative = "/opt/homebrew/opt/libarchive/include" });
+        }
         exe.linkFramework("Foundation");
         exe.linkFramework("QuartzCore");
         exe.linkFramework("Metal");
@@ -154,7 +172,11 @@ pub fn build(b: *std.Build) void {
             root_mod.addIncludePath(.{ .cwd_relative = "/usr/include/x86_64-linux-gnu" });
         }
     } else if (os_tag == .macos) {
-        root_mod.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
+        if (sysroot) |sr| {
+            root_mod.addIncludePath(.{ .cwd_relative = b.fmt("{s}/sdk/usr/include", .{sr}) });
+        } else {
+            root_mod.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
+        }
     }
 
     b.installArtifact(exe);

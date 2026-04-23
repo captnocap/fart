@@ -149,8 +149,8 @@ extern "C" PhysFixture phys_collider_box(PhysBody body, float half_w, float half
                                           float density, float friction, float restitution) {
     b2ShapeDef def = b2DefaultShapeDef();
     def.density = density;
-    def.friction = friction;
-    def.restitution = restitution;
+    def.material.friction = friction;
+    def.material.restitution = restitution;
     b2Polygon box = b2MakeBox(half_w, half_h);
     return packShape(b2CreatePolygonShape(unpackBody(body), &def, &box));
 }
@@ -159,8 +159,8 @@ extern "C" PhysFixture phys_collider_circle(PhysBody body, float radius,
                                              float density, float friction, float restitution) {
     b2ShapeDef def = b2DefaultShapeDef();
     def.density = density;
-    def.friction = friction;
-    def.restitution = restitution;
+    def.material.friction = friction;
+    def.material.restitution = restitution;
     b2Circle circle = {{0.0f, 0.0f}, radius};
     return packShape(b2CreateCircleShape(unpackBody(body), &def, &circle));
 }
