@@ -1,5 +1,5 @@
 const React: any = require('react');
-const { useState, useEffect } = React;
+const { useState, useEffect, useMemo } = React;
 
 import { Box, Col, Pressable, Row, ScrollView, Text, TextInput } from '../../../../runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
@@ -213,7 +213,7 @@ export function DirectoryPicker(props: DirectoryPickerProps) {
             >
               <TextInput
                 value={query}
-                onChange={(v: string) => setQuery(v)}
+                onChange={setQuery}
                 placeholder="filter / type a new name…"
                 autoFocus={true}
                 fontSize={11}
@@ -242,7 +242,7 @@ export function DirectoryPicker(props: DirectoryPickerProps) {
                     <Text fontSize={11} color={COLORS.red}>{error}</Text>
                   </Box>
                 ) : null}
-                {(() => {
+                {useMemo(() => {
                   const q = (query || '').trim();
                   const qLower = q.toLowerCase();
                   const filtered = q.length === 0
@@ -286,7 +286,7 @@ export function DirectoryPicker(props: DirectoryPickerProps) {
                     }
                   }
                   return rows;
-                })()}
+                }, [query, entries])}
               </Col>
             </ScrollView>
           </Box>
