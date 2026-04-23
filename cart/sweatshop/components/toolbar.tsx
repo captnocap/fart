@@ -9,9 +9,10 @@ import { Tooltip } from './tooltip';
 export function TopBar(props: any) {
   const compact = props.widthBand === 'narrow' || props.widthBand === 'widget' || props.widthBand === 'minimum';
   const minimum = props.widthBand === 'minimum';
+  const chromeOnly = !!props.chromeOnly;
   return (
     <Col style={{ width: '100%', flexShrink: 0 }}>
-      {props.menuSections ? <MenuBar sections={props.menuSections} /> : null}
+      {!chromeOnly && props.menuSections ? <MenuBar sections={props.menuSections} /> : null}
       <Row
         windowDrag={true}
         style={{
@@ -34,6 +35,8 @@ export function TopBar(props: any) {
             <Tooltip label="Maximize window" side="bottom"><HoverPressable onPress={maximizeWindow} style={{ padding: 2, borderRadius: 999, backgroundColor: 'transparent' }} hoverScale={1.12}><Box style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: '#28c840' }} /></HoverPressable></Tooltip>
           </Row>
 
+          {!chromeOnly ? (
+          <Row style={{ alignItems: 'center', gap: 8 }}>
             <Tooltip label="Open workspace home" side="bottom" shortcut="Ctrl+P">
             <Pressable
               onPress={props.onOpenHome}
@@ -82,8 +85,11 @@ export function TopBar(props: any) {
               </Text>
             </Pressable>
           </Tooltip>
+          </Row>
+          ) : null}
         </Row>
 
+        {!chromeOnly ? (
         <Row style={{ alignItems: 'center', gap: 8, marginLeft: 10 }}>
           <Tooltip label="Open git panel" side="bottom">
             <Pressable
@@ -116,6 +122,7 @@ export function TopBar(props: any) {
           <Tooltip label="Open command palette" side="bottom" shortcut="Ctrl+K"><HeaderButton label="Palette" meta="P" icon="command" compact={compact} active={props.paletteActive ? 1 : 0} onPress={props.onOpenPalette} /></Tooltip>
           <Tooltip label="Open agent chat" side="bottom" shortcut="Ctrl+L"><HeaderButton label="Agent" icon="message" compact={compact} active={props.chatActive ? 1 : 0} onPress={props.onToggleChat} /></Tooltip>
         </Row>
+        ) : null}
       </Row>
     </Col>
   );
