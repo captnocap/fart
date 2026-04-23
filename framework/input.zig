@@ -15,6 +15,7 @@
 
 const std = @import("std");
 const c = @import("c.zig").imports;
+const state_mod = @import("state.zig");
 const build_options = @import("build_options");
 const HAS_QUICKJS = if (@hasDecl(build_options, "has_quickjs")) build_options.has_quickjs else true;
 const USE_V8 = if (@hasDecl(build_options, "use_v8")) build_options.use_v8 else false;
@@ -433,10 +434,12 @@ fn dispatchInputChange(id: u8) void {
     const id64: i64 = @intCast(id);
     if (USE_V8) {
         js_vm.callGlobalInt("__dispatchInputChange", id64);
+        state_mod.markDirty();
         return;
     }
     if (js_vm.hasGlobal("__dispatchInputChange")) {
         js_vm.callGlobalInt("__dispatchInputChange", id64);
+        state_mod.markDirty();
     }
 }
 
