@@ -1175,7 +1175,7 @@ fn colorEql(a: layout.Color, b: layout.Color) bool {
 //   3. Write the complete autotest to ZIGOS_WITNESS_FILE
 // The autotest is a build artifact — never hand-written.
 
-const SNAP_MAX_CLICKS = 64;
+const SNAP_MAX_CLICKS = 1024;
 const SNAP_MAX_LINES = 8192;
 
 const SnapPhase = enum { wait_settle, collect_initial, clicking, settle_after_click, done };
@@ -1229,9 +1229,13 @@ fn snapCountTree(node: *Node) void {
     }
 }
 
+var snap_emitted_expects: u16 = 0;
+
 fn snapCollectTexts(root: *Node) void {
     collectSeenTexts(root);
-    for (0..auto_seen_count) |i| {
+    const start: u16 = snap_emitted_expects;
+    snap_emitted_expects = auto_seen_count;
+    for (start..auto_seen_count) |i| {
         const raw_txt = auto_seen_texts[i][0..auto_seen_lens[i]];
         var normalized_buf: [64]u8 = undefined;
         var normalized_len: usize = 0;
@@ -1503,23 +1507,6 @@ fn snapshotTick(root: *Node) bool {
             }
 
             const label = snap_press_labels[snap_click_idx][0..snap_press_label_lens[snap_click_idx]];
-            const cur = snap_pressables[snap_click_idx];
-
-            // Skip if we already clicked a pressable at the same coordinates
-            // (label-based dedup collapses event-delegation labels like
-            // "__dispatchEvent(N,'onClick')" where many nodes share one handler).
-            var already_clicked = false;
-            for (0..snap_click_idx) |prev| {
-                const p = snap_pressables[prev];
-                if (p.cx == cur.cx and p.cy == cur.cy) {
-                    already_clicked = true;
-                    break;
-                }
-            }
-            if (already_clicked) {
-                snap_click_idx += 1;
-                return false;
-            }
 
             // Click using stored coordinates (don't re-find — avoids hitting wrong node with same label)
             const p = snap_pressables[snap_click_idx];
@@ -1536,8 +1523,9 @@ fn snapshotTick(root: *Node) bool {
                 return false;
             }
 
-            // Reset seen texts and re-collect after click
-            auto_seen_count = 0;
+            // Re-collect texts after click — keep auto_seen across clicks so
+            // only NEW strings get appended (otherwise every click dumps ~500
+            // expects and fills the line buffer within ~10 clicks).
             snapCollectTexts(root);
 
             snap_click_idx += 1;
