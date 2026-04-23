@@ -349,6 +349,9 @@ if echo "$GATE_OUT" | grep -E '^\s*error:\s*\[v8 run\]' >/dev/null; then
     echo "---- offending stderr lines ----" >&2
     echo "$GATE_OUT" | grep -E '\[v8 run\]' | head -10 >&2
     echo "--------------------------------" >&2
+    rm -f "$RAW_BIN" 2>/dev/null || true
+    rm -rf "zig-out/bin/${NAME}.app" 2>/dev/null || true
+    echo "[ship] binary removed — no artifact left to run" >&2
     exit 1
 fi
 echo "[ship] runtime-error gate: clean"
