@@ -74,8 +74,6 @@ export function TopBar(props: any) {
                 backgroundColor: COLORS.panelAlt,
                 borderWidth: 1,
                 borderColor: COLORS.border,
-                flexGrow: 1,
-                flexBasis: 0,
               }}
             >
               {!compact ? <Text fontSize={9} color={COLORS.blue}>Project landing</Text> : null}
