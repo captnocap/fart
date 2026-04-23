@@ -82,6 +82,7 @@ import { StatusBar } from './components/statusbar';
 import { TerminalPanel } from './components/terminal';
 import { Sidebar } from './components/sidebar';
 import { HomePage } from './components/home/HomePage';
+import { addRecent as addWorkspaceRecent } from './lib/workspace/recents';
 import { EditorSurface } from './components/editor';
 import { SearchSurface } from './components/search';
 import { ChatSurface } from './components/chat';
@@ -608,7 +609,8 @@ export default function CursorIdeApp() {
 
     const refreshWorkspace = useCallback(() => {
     syncWindowMetrics();
-    let pwd = execCached('pwd 2>/dev/null').trim();
+    const explicit = stateRef.current.workDir;
+    let pwd = (explicit && explicit !== '.') ? explicit : execCached('pwd 2>/dev/null').trim();
     if (!pwd) pwd = '.';
     const nextWorkspaceName = baseName(pwd) || 'workspace';
     setWorkDir(pwd); setWorkspaceName(nextWorkspaceName);
@@ -740,9 +742,13 @@ export default function CursorIdeApp() {
     if (path === '__landing__' || path === '.' || inferFileType(path) === 'workspace') { openLandingPage(); return; }
     let content = fileContentsRef.current[path];
     if (!content) {
-      const diskContent = readFile(path);
+      const wd = stateRef.current.workDir;
+      const isAbsolute = path.startsWith('/') || /^[A-Za-z]:[\\/]/.test(path);
+      const resolved = (!isAbsolute && wd && wd !== '.') ? (wd.replace(/\/$/, '') + '/' + path) : path;
+      let diskContent = readFile(resolved);
+      if (!diskContent && resolved !== path) diskContent = readFile(path);
       if (diskContent) { content = diskContent; fileContentsRef.current[path] = diskContent; }
-      else { content = '// ' + path + '\n'; }
+      else { content = '// FAILED TO READ: ' + resolved + '\n// workDir: ' + (wd || '(unset)') + '\n'; }
     }
     setActiveView('editor');
     if (stateRef.current.widthBand === 'narrow' || stateRef.current.widthBand === 'widget' || stateRef.current.widthBand === 'minimum') setCompactSurface('editor');
@@ -1643,7 +1649,13 @@ export default function CursorIdeApp() {
           <Box style={{ width: '100%', height: '100%', backgroundColor: COLORS.appBg }}>
             <Col style={{ width: '100%', height: '100%' }}>
               <TopBar chromeOnly={true} widthBand={widthBand} />
-              <HomePage onOpenIDE={() => setAppMode('ide')} />
+              <HomePage onOpenWorkspace={(path: string) => {
+                addWorkspaceRecent(path);
+                setWorkDir(path);
+                setWorkspaceName(path.split('/').filter(Boolean).pop() || 'workspace');
+                setAppMode('ide');
+                setTimeout(() => { try { refreshWorkspace(); } catch (_e) {} }, 0);
+              }} />
             </Col>
           </Box>
         </ToastProvider>
