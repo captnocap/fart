@@ -1,6 +1,7 @@
 import { Box, Col, Row, Text } from '../../../../runtime/primitives';
 import { RailBadge, type RailBadgeName } from './RailBadge';
 import { CHAT_CARD, type ChatTone } from './tokens';
+import { classifiers as S } from '@reactjit/core';
 
 const FLOW_RAIL_WIDTH = 16;
 const RAIL_SLOT_SIZE = 16;
@@ -13,8 +14,8 @@ const RAIL_GAP = 3;
 
 function toneColor(tone: ChatTone): string {
   if (tone === 'user') return CHAT_CARD.cyan;
-  if (tone === 'agent') return CHAT_CARD.gold;
-  if (tone === 'thinking') return CHAT_CARD.gold;
+  if (tone === 'agent') return CHAT_CARD.orange;
+  if (tone === 'thinking') return CHAT_CARD.orange;
   if (tone === 'tool') return CHAT_CARD.violet;
   return CHAT_CARD.pink;
 }
@@ -43,7 +44,7 @@ export function TurnBadge({ tone }: { tone: ChatTone }) {
         borderRadius: 3,
       }}
     >
-      <Text style={{ fontFamily: 'monospace', fontSize: 8, color }}>{toneLabel(tone)}</Text>
+      <S.TypeTiny>{toneLabel(tone)}</S.TypeTiny>
     </Box>
   );
 }
@@ -123,12 +124,12 @@ export function TranscriptTurnShell({
   const color = toneColor(tone);
 
   return (
-    <Row style={{ gap: 8, alignItems: 'stretch' }}>
+    <S.InlineX4>
       <RailColumn color={color} slotTop={TURN_BADGE_TOP} slotHeight={RAIL_SLOT_SIZE} connectTop={connectTop} connectBottom={showConnector}>
         <TurnBadge tone={tone} />
       </RailColumn>
       <Col style={{ flexGrow: 1, minWidth: 0, gap: 5, paddingBottom: showConnector ? 12 : 0 }}>{children}</Col>
-    </Row>
+    </S.InlineX4>
   );
 }
 
@@ -145,7 +146,7 @@ export function StepSpine({
 }) {
   return (
     <RailColumn color={color} slotTop={STEP_BADGE_TOP} slotHeight={RAIL_SLOT_SIZE} connectTop={connectTop} connectBottom={showConnector}>
-      {badgeName ? <RailBadge name={badgeName} color={color} /> : <Box style={{ width: STEP_DOT_SIZE, height: STEP_DOT_SIZE, backgroundColor: color, borderRadius: 99 }} />}
+      {badgeName ? <RailBadge name={badgeName} color={color} /> : <Box style={{ width: STEP_DOT_SIZE, height: STEP_DOT_SIZE, backgroundColor: color, borderRadius: STEP_DOT_SIZE / 2 }} />}
     </RailColumn>
   );
 }
@@ -164,9 +165,9 @@ export function StepCardShell({
   children: any;
 }) {
   return (
-    <Row style={{ gap: 8, alignItems: 'stretch' }}>
+    <S.InlineX4>
       <StepSpine color={color} connectTop={connectTop} showConnector={showConnector} badgeName={badgeName} />
       <Box style={{ flexGrow: 1, paddingBottom: showConnector ? 10 : 0 }}>{children}</Box>
-    </Row>
+    </S.InlineX4>
   );
 }

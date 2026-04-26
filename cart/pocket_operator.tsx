@@ -1,5 +1,4 @@
-const React: any = require('react');
-const { useEffect, useRef, useState } = React;
+import { useEffect, useRef, useState } from 'react';
 import { Box, Text, Pressable, ScrollView } from '../runtime/primitives';
 
 type StepLevel = 0 | 1 | 2;

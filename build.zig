@@ -105,20 +105,6 @@ pub fn build(b: *std.Build) void {
     exe.linkSystemLibrary("luajit-5.1");
 
     const os_tag = target.result.os.tag;
-
-    // Resolve macOS SDK path once (via xcrun) so ObjC compile steps can find
-    // system framework headers. Not all macOS hosts keep Foundation.h under
-    // /System/Library/Frameworks; on CommandLineTools-only setups it lives
-    // under /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/...
-    const macos_sdk: ?[]const u8 = if (os_tag == .macos and sysroot == null) blk: {
-        const result = std.process.Child.run(.{
-            .allocator = b.allocator,
-            .argv = &.{ "xcrun", "--show-sdk-path" },
-        }) catch break :blk null;
-        const trimmed = std.mem.trim(u8, result.stdout, " \n\r\t");
-        break :blk b.allocator.dupe(u8, trimmed) catch null;
-    } else null;
-
     if (os_tag == .linux) {
         root_mod.addIncludePath(.{ .cwd_relative = "/usr/include/luajit-2.1" });
         exe.linkSystemLibrary("X11");
@@ -134,56 +120,19 @@ pub fn build(b: *std.Build) void {
             root_mod.addIncludePath(.{ .cwd_relative = "/usr/include/x86_64-linux-gnu" });
         }
     } else if (os_tag == .macos) {
-        if (sysroot) |sr| {
-            // Cross-compilation from Linux using extracted macOS sysroot.
-            // Sysroot layout: <sr>/sdk/ (macOS SDK), <sr>/brew/<pkg>/ (homebrew deps)
-            const sdk = b.fmt("{s}/sdk", .{sr});
-            const brew = b.fmt("{s}/brew", .{sr});
-            root_mod.addSystemIncludePath(.{ .cwd_relative = b.fmt("{s}/usr/include", .{sdk}) });
-            root_mod.addLibraryPath(.{ .cwd_relative = b.fmt("{s}/usr/lib", .{sdk}) });
-            root_mod.addFrameworkPath(.{ .cwd_relative = b.fmt("{s}/System/Library/Frameworks", .{sdk}) });
-            // Homebrew deps
-            inline for (.{ "sdl3", "freetype", "luajit", "box2d", "sqlite", "libvterm", "libarchive" }) |pkg| {
-                root_mod.addIncludePath(.{ .cwd_relative = b.fmt("{s}/{s}/include", .{ brew, pkg }) });
-                root_mod.addLibraryPath(.{ .cwd_relative = b.fmt("{s}/{s}/lib", .{ brew, pkg }) });
-            }
-            root_mod.addIncludePath(.{ .cwd_relative = b.fmt("{s}/luajit/include/luajit-2.1", .{brew}) });
-            root_mod.addIncludePath(.{ .cwd_relative = b.fmt("{s}/freetype/include/freetype2", .{brew}) });
-        } else {
-            // Native macOS build (homebrew paths)
-            root_mod.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include/luajit-2.1" });
-            root_mod.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/lib" });
-            root_mod.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
-            root_mod.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include/freetype2" });
-            root_mod.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/opt/libarchive/lib" });
-            root_mod.addIncludePath(.{ .cwd_relative = "/opt/homebrew/opt/libarchive/include" });
-            // System frameworks (Foundation.h etc.) live under the SDK on
-            // CommandLineTools-only hosts, not /System/Library/Frameworks.
-            if (macos_sdk) |sdk| {
-                root_mod.addFrameworkPath(.{ .cwd_relative = b.fmt("{s}/System/Library/Frameworks", .{sdk}) });
-                root_mod.addSystemIncludePath(.{ .cwd_relative = b.fmt("{s}/usr/include", .{sdk}) });
-            }
-        }
+        root_mod.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include/luajit-2.1" });
+        root_mod.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/lib" });
+        root_mod.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
+        root_mod.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include/freetype2" });
+        root_mod.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/opt/libarchive/lib" });
+        root_mod.addIncludePath(.{ .cwd_relative = "/opt/homebrew/opt/libarchive/include" });
         exe.linkFramework("Foundation");
         exe.linkFramework("QuartzCore");
         exe.linkFramework("Metal");
         exe.linkFramework("Cocoa");
         exe.linkFramework("IOKit");
         exe.linkFramework("CoreVideo");
-        // Zig 0.15's internal clang can't locate Foundation.h on CommandLineTools-
-        // only macOS hosts (it keeps resolving Foundation to the stub at
-        // /System/Library/Frameworks). Compile applescript_shim.m out-of-band
-        // with system clang, then link the produced .o directly.
-        {
-            const compile_shim = b.addSystemCommand(&.{ "clang", "-c", "-O2", "-arch", "arm64" });
-            if (macos_sdk) |sdk| {
-                compile_shim.addArgs(&.{ "-isysroot", sdk });
-            }
-            compile_shim.addArg("-o");
-            const shim_obj = compile_shim.addOutputFileArg("applescript_shim.o");
-            compile_shim.addFileArg(b.path("framework/ffi/applescript_shim.m"));
-            root_mod.addObjectFile(shim_obj);
-        }
+        root_mod.addCSourceFile(.{ .file = b.path("framework/ffi/applescript_shim.m"), .flags = &.{"-O2"} });
     }
 
     // ── Include paths ──────────────────────────────────────────
@@ -214,6 +163,74 @@ pub fn build(b: *std.Build) void {
     exe.linkSystemLibrary("vterm");
     exe.linkSystemLibrary("curl");
 
+    // ── Privacy / libsodium (opt-in per cart) ─────────────────
+    // Source-driven: cart bundle that imports usePrivacy gets libsodium
+    // linked + bundled. Cart that doesn't, doesn't pay for it. scripts/ship
+    // greps the bundle and passes -Dhas-privacy.
+    const has_privacy = b.option(bool, "has-privacy", "Link libsodium + privacy bindings") orelse false;
+    options.addOption(bool, "has_privacy", has_privacy);
+    if (has_privacy) {
+        exe.linkSystemLibrary("sodium");
+        if (os_tag == .linux) {
+            const brew_sodium = "/home/linuxbrew/.linuxbrew/Cellar/libsodium/1.0.20/include";
+            if (std.fs.cwd().access(brew_sodium, .{})) |_| {
+                root_mod.addIncludePath(.{ .cwd_relative = brew_sodium });
+                root_mod.addLibraryPath(.{ .cwd_relative = "/home/linuxbrew/.linuxbrew/Cellar/libsodium/1.0.20/lib" });
+            } else |_| {}
+        }
+    }
+
+    // ── useHost domain bindings (opt-in per cart) ─────────────
+    // Source-driven: cart only pays for the V8 bindings it actually uses.
+    // scripts/ship greps the bundle for `__proc_`, `__httpsrv_`, `__wssrv_`
+    // and passes the matching flags. Without these gates, every cart eats
+    // ~hundreds of host-fn registrations on startup whether it uses them
+    // or not — and that load corrupted V8's Function::Call path on
+    // 2026-04-25 (see "Function.call broken on every cart" debugging log).
+    const has_process = b.option(bool, "has-process", "Register __proc_*/__env_* bindings") orelse false;
+    const has_httpsrv = b.option(bool, "has-httpsrv", "Register __httpsrv_* bindings") orelse false;
+    const has_wssrv = b.option(bool, "has-wssrv", "Register __wssrv_* bindings") orelse false;
+    const has_net = b.option(bool, "has-net", "Register __tcp_*/__udp_*/__socks5_* bindings") orelse false;
+    const has_tor = b.option(bool, "has-tor", "Register __tor_* bindings") orelse false;
+    const has_fs = b.option(bool, "has-fs", "Register __fs_*/__window_* bindings") orelse false;
+    const has_websocket = b.option(bool, "has-websocket", "Register __ws_* (client) bindings") orelse false;
+    const has_telemetry = b.option(bool, "has-telemetry", "Register __tel_*/getFps/... bindings") orelse false;
+    const has_zigcall = b.option(bool, "has-zigcall", "Register __zig_call/__zig_call_list bindings") orelse false;
+    options.addOption(bool, "has_process", has_process);
+    options.addOption(bool, "has_httpsrv", has_httpsrv);
+    options.addOption(bool, "has_wssrv", has_wssrv);
+    options.addOption(bool, "has_net", has_net);
+    options.addOption(bool, "has_tor", has_tor);
+    options.addOption(bool, "has_fs", has_fs);
+    options.addOption(bool, "has_websocket", has_websocket);
+    options.addOption(bool, "has_telemetry", has_telemetry);
+    options.addOption(bool, "has_zigcall", has_zigcall);
+
+    // ── Allergen label: V8 binding manifest ───────────────────────────
+    // Writes one file per opt-in domain to zig-out/manifest/<name>.flag
+    // with content "1" or "0" depending on whether that ingredient was
+    // compiled into the binary. scripts/ship reads these post-build and
+    // diffs against the cart's pre-build declaration. Any mismatch and
+    // the binary is deleted before it can ship — the kitchen cannot
+    // contradict the label on the package.
+    const manifest_wf = b.addWriteFiles();
+    _ = manifest_wf.add("v8-ingredients/privacy.flag", if (has_privacy) "1\n" else "0\n");
+    _ = manifest_wf.add("v8-ingredients/process.flag", if (has_process) "1\n" else "0\n");
+    _ = manifest_wf.add("v8-ingredients/httpsrv.flag", if (has_httpsrv) "1\n" else "0\n");
+    _ = manifest_wf.add("v8-ingredients/wssrv.flag", if (has_wssrv) "1\n" else "0\n");
+    _ = manifest_wf.add("v8-ingredients/net.flag", if (has_net) "1\n" else "0\n");
+    _ = manifest_wf.add("v8-ingredients/tor.flag", if (has_tor) "1\n" else "0\n");
+    _ = manifest_wf.add("v8-ingredients/fs.flag", if (has_fs) "1\n" else "0\n");
+    _ = manifest_wf.add("v8-ingredients/websocket.flag", if (has_websocket) "1\n" else "0\n");
+    _ = manifest_wf.add("v8-ingredients/telemetry.flag", if (has_telemetry) "1\n" else "0\n");
+    _ = manifest_wf.add("v8-ingredients/zigcall.flag", if (has_zigcall) "1\n" else "0\n");
+    const install_manifest = b.addInstallDirectory(.{
+        .source_dir = manifest_wf.getDirectory(),
+        .install_dir = .prefix,
+        .install_subdir = "manifest",
+    });
+    b.getInstallStep().dependOn(&install_manifest.step);
+
     // ── C++ runtime ────────────────────────────────────────────
     // physics_shim.cpp still requires the C++ runtime even with Blend2D gone.
     exe.linkLibCpp();
@@ -225,17 +242,14 @@ pub fn build(b: *std.Build) void {
             root_mod.addIncludePath(.{ .cwd_relative = "/usr/include/x86_64-linux-gnu" });
         }
     } else if (os_tag == .macos) {
-        if (sysroot) |sr| {
-            root_mod.addIncludePath(.{ .cwd_relative = b.fmt("{s}/sdk/usr/include", .{sr}) });
-        } else {
-            root_mod.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
-        }
+        root_mod.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
     }
 
     b.installArtifact(exe);
 
     const app_step = b.step("app", "Build the qjs_app binary");
     app_step.dependOn(&b.addInstallArtifact(exe, .{}).step);
+    app_step.dependOn(&install_manifest.step);
 
     // ── v8-hello: smoke test for framework/v8_runtime.zig ──────
     const v8_hello_dep = b.dependency("v8", .{
@@ -261,6 +275,27 @@ pub fn build(b: *std.Build) void {
 
     const v8_hello_step = b.step("v8-hello", "Build v8_hello smoke test");
     v8_hello_step.dependOn(&b.addInstallArtifact(v8_hello_exe, .{}).step);
+
+    // ── v8-cli: standalone V8 host that runs a JS file ─────────
+    // No SDL / framework / UI. Used to replace `node scripts/X.mjs` calls so
+    // the repo has zero npm/node dependencies. Reuses v8_runtime.zig and the
+    // CLI-only bindings in framework/v8_bindings_cli.zig.
+    const v8_cli_mod = b.createModule(.{
+        .root_source_file = b.path("v8_cli.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    v8_cli_mod.addImport("v8", v8_mod);
+
+    const v8_cli_exe = b.addExecutable(.{
+        .name = "v8cli",
+        .root_module = v8_cli_mod,
+    });
+    v8_cli_exe.linkLibC();
+    v8_cli_exe.linkLibCpp();
+
+    const v8_cli_step = b.step("v8-cli", "Build standalone V8 script host (zig-out/bin/v8cli)");
+    v8_cli_step.dependOn(&b.addInstallArtifact(v8_cli_exe, .{}).step);
 
     // ── luajit_runtime bridge library for the Zig integration test ───
     const bridge_mod = b.createModule(.{
@@ -303,21 +338,7 @@ pub fn build(b: *std.Build) void {
         bridge_mod.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include/freetype2" });
         bridge_mod.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/opt/libarchive/lib" });
         bridge_mod.addIncludePath(.{ .cwd_relative = "/opt/homebrew/opt/libarchive/include" });
-        if (macos_sdk) |sdk| {
-            bridge_mod.addFrameworkPath(.{ .cwd_relative = b.fmt("{s}/System/Library/Frameworks", .{sdk}) });
-            bridge_mod.addSystemIncludePath(.{ .cwd_relative = b.fmt("{s}/usr/include", .{sdk}) });
-        }
-        // Same out-of-band clang compile for the bridge module — see root_mod above.
-        {
-            const compile_shim_b = b.addSystemCommand(&.{ "clang", "-c", "-O2", "-arch", "arm64" });
-            if (macos_sdk) |sdk| {
-                compile_shim_b.addArgs(&.{ "-isysroot", sdk });
-            }
-            compile_shim_b.addArg("-o");
-            const shim_obj_b = compile_shim_b.addOutputFileArg("applescript_shim_bridge.o");
-            compile_shim_b.addFileArg(b.path("framework/ffi/applescript_shim.m"));
-            bridge_mod.addObjectFile(shim_obj_b);
-        }
+        bridge_mod.addCSourceFile(.{ .file = b.path("framework/ffi/applescript_shim.m"), .flags = &.{"-O2"} });
     }
 
     if (os_tag == .linux) {

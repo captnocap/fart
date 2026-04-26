@@ -1,6 +1,4 @@
-const React: any = require('react');
-const { useState } = React;
-
+import { useState } from 'react';
 import { Box, Col, Row, ScrollView, Text } from '../../../../runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 import { listCryptoHostFunctions } from '../../lib/crypto/support';

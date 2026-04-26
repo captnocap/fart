@@ -1,6 +1,4 @@
-const React: any = require('react');
-const { useState, useCallback, useEffect } = React;
-
+import { useState, useCallback, useEffect } from 'react';
 import { Box, Col, Row } from '../../../../runtime/primitives';
 import type { SplitNode } from './SplitLayoutEngine';
 import { createPane, splitNode, removeNode, updatePaneFilePath, resizeSplit, flattenPanes } from './SplitLayoutEngine';

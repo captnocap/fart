@@ -551,6 +551,32 @@ function parseClass(cls: string, grad: GradientState, trans: TransitionState): P
     if (rest.startsWith('r-')) { const n = parseInt(rest.slice(2), 10); return !isNaN(n) ? { borderRightWidth: n } : undefined; }
     if (rest.startsWith('b-')) { const n = parseInt(rest.slice(2), 10); return !isNaN(n) ? { borderBottomWidth: n } : undefined; }
     if (rest.startsWith('l-')) { const n = parseInt(rest.slice(2), 10); return !isNaN(n) ? { borderLeftWidth: n } : undefined; }
+    // Animated dashed border (Style.border_dash_on/off, border_dash_width).
+    //   border-dash-4-2     → on:4 off:2
+    //   border-dash-6       → on:6 off:6 (square dash)
+    //   border-dash-w-2     → borderDashWidth:2 (independent of borderWidth)
+    //   border-flow-30      → borderFlowSpeed:30 (px/sec, negative reverses)
+    if (rest.startsWith('dash-w-')) {
+      const n = parseFloat(rest.slice(7));
+      return !isNaN(n) ? { borderDashWidth: n } as any : undefined;
+    }
+    if (rest.startsWith('dash-')) {
+      const body = rest.slice(5);
+      const dash = body.indexOf('-');
+      if (dash >= 0) {
+        const on = parseFloat(body.slice(0, dash));
+        const off = parseFloat(body.slice(dash + 1));
+        if (!isNaN(on) && !isNaN(off)) return { borderDashOn: on, borderDashOff: off } as any;
+      } else {
+        const n = parseFloat(body);
+        if (!isNaN(n)) return { borderDashOn: n, borderDashOff: n } as any;
+      }
+      return undefined;
+    }
+    if (rest.startsWith('flow-')) {
+      const n = parseFloat(rest.slice(5));
+      return !isNaN(n) ? { borderFlowSpeed: neg(n) } as any : undefined;
+    }
     // Width: border-2, border-4, border-8
     const width = parseInt(rest, 10);
     if (!isNaN(width)) return { borderWidth: width };
@@ -564,6 +590,10 @@ function parseClass(cls: string, grad: GradientState, trans: TransitionState): P
 
   if (token.startsWith('shadow-')) {
     const rest = token.slice(7);
+    // Method override: shadow-method-rect (CPU multi-rect fallback) /
+    // shadow-method-sdf (default — single rect, GPU SDF blur).
+    if (rest === 'method-rect') return { shadowMethod: 'rect' } as any;
+    if (rest === 'method-sdf') return { shadowMethod: 'sdf' } as any;
     // Named preset
     const preset = SHADOW[rest];
     if (preset) return { ...preset };

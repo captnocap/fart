@@ -1,6 +1,4 @@
-const React: any = require('react');
-const { useState, useCallback, useEffect, useRef } = React;
-
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { gpioSet } from './exec';
 import type { PWMPinState } from './types';
 

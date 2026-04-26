@@ -8,8 +8,6 @@
 // to declare `fs_main` with the right signature.
 
 import { Box, Effect } from '../../runtime/primitives';
-const React: any = require('react');
-
 const PLASMA_WGSL = `
 @fragment fn fs_main(in: VsOut) -> @location(0) vec4f {
   let x = in.uv.x * U.size_w;

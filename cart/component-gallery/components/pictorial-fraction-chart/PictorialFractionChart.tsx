@@ -1,61 +1,98 @@
-const React: any = require('react');
-const { useMemo } = React;
-import { Box, Graph, Text } from '../../../../runtime/primitives';
-import { PALETTE, polar } from '../../lib/chart-utils';
+import { useState } from 'react';
+import { Box, Graph, Pressable, Text } from '../../../../runtime/primitives';
+import { PALETTE } from '../../lib/chart-utils';
+import { useSpring } from '../../lib/useSpring';
+import { Tooltip } from '../../lib/Tooltip';
+import { classifiers as S } from '@reactjit/core';
 
-export type PictorialFractionChartProps = {};
+export type PictorialFractionData = {
+  total: number;
+  filled: number;
+  rows?: number;
+  cols?: number;
+  color?: string;
+  label?: string;
+};
+
+export type PictorialFractionChartProps = {
+  data?: PictorialFractionData;
+  width?: number;
+  height?: number;
+};
 
 function personPath(cx: number, cy: number, scale: number): string {
   const s = scale;
-  // Simple person icon: head + body
   const headR = 4 * s;
   const bodyW = 8 * s;
   const bodyH = 14 * s;
   const headY = cy - bodyH / 2;
-  // Circle head
-  const d = `M ${cx - headR} ${headY} A ${headR} ${headR} 0 1 1 ${cx + headR} ${headY} A ${headR} ${headR} 0 1 1 ${cx - headR} ${headY} `;
-  // Body rectangle
-  return d + `M ${cx - bodyW / 2} ${headY + headR} L ${cx + bodyW / 2} ${headY + headR} L ${cx + bodyW / 2} ${headY + headR + bodyH} L ${cx - bodyW / 2} ${headY + headR + bodyH} Z`;
+  const d = `M ${cx - headR} ${headY} A ${headR} ${headR} 0 1 1 ${cx + headR} ${headY} A ${headR} ${headR} 0 1 1 ${cx - headR} ${headY}`;
+  return d + ` M ${cx - bodyW / 2} ${headY + headR} L ${cx + bodyW / 2} ${headY + headR} L ${cx + bodyW / 2} ${headY + headR + bodyH} L ${cx - bodyW / 2} ${headY + headR + bodyH} Z`;
 }
 
-export function PictorialFractionChart(_props: PictorialFractionChartProps) {
-  const width = 200;
-  const height = 160;
-  const total = 10;
-  const filled = 7;
-  const rows = 2;
-  const cols = 5;
-  // Keep spacing larger than an icon's full height (~26 at scale 1.2) so rows
-  // read as separate rows, not a column block. Horizontal gets the same
-  // treatment for aesthetic balance.
-  const spacingX = 36;
-  const spacingY = 44;
-  const startX = (width - (cols - 1) * spacingX) / 2;
-  const startY = (height - (rows - 1) * spacingY) / 2;
+export function PictorialFractionChart(props: PictorialFractionChartProps) {
+  const width = props.width ?? 200;
+  const height = props.height ?? 160;
+  const total = props.data?.total ?? 10;
+  const filled = props.data?.filled ?? 7;
+  const rows = props.data?.rows ?? 2;
+  const cols = props.data?.cols ?? 5;
+  const color = props.data?.color ?? PALETTE.pink;
+  const spacing = 32;
+  const startX = (width - (cols - 1) * spacing) / 2;
+  const startY = (height - (rows - 1) * spacing) / 2;
+
+  const fillProgress = useSpring(1, { stiffness: 100, damping: 18 });
+  const [hovered, setHovered] = useState(false);
+
+  const visibleFilled = Math.floor(filled * fillProgress);
+  const partial = (filled * fillProgress) - visibleFilled;
 
   return (
-    <Box style={{ width, height, alignItems: 'center', justifyContent: 'center' }}>
-      <Graph originTopLeft style={{ width, height }}>
+    <Box style={{ width, height }}>
+      <S.BareGraph>
         {Array.from({ length: total }).map((_, i) => {
           const r = Math.floor(i / cols);
           const c = i % cols;
-          const x = startX + c * spacingX;
-          const y = startY + r * spacingY;
-          const isFilled = i < filled;
+          const x = startX + c * spacing;
+          const y = startY + r * spacing;
+          const isFilled = i < visibleFilled;
+          const isPartial = i === visibleFilled && partial > 0;
           return (
             <Graph.Path
               key={i}
               d={personPath(x, y, 1.2)}
-              fill={isFilled ? PALETTE.pink : '#2a2a4a'}
-              stroke={isFilled ? PALETTE.pinkDark : '#3a3a5a'}
+              fill={isFilled ? color : isPartial ? PALETTE.pinkLight : '#3a2a1e'}
+              fillOpacity={isPartial ? partial : 1}
+              stroke={isFilled || isPartial ? color : '#3a2a1e'}
               strokeWidth={1}
             />
           );
         })}
-      </Graph>
-      <Box style={{ position: 'absolute', top: 4, right: 8 }}>
-        <Text fontSize={10} color={PALETTE.slateLight}>{filled}/{total}</Text>
-      </Box>
+      </S.BareGraph>
+
+      <Pressable
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        style={{
+          opacity: 0,
+          position: 'absolute',
+          left: startX - 10,
+          top: startY - 10,
+          width: cols * spacing + 20,
+          height: rows * spacing + 20,
+        }}
+      />
+
+      {hovered && (
+        <Tooltip
+          visible={true}
+          x={width - 60}
+          y={10}
+          title={props.data?.label ?? 'Fraction'}
+          rows={[{ label: 'Filled', value: `${Math.round(filled * fillProgress)}/${total}`, color }]}
+        />
+      )}
     </Box>
   );
 }

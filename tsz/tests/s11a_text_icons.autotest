@@ -1,6 +1,0 @@
-# s11a_text_icons: Text with inline decorative elements (soup tier)
-
-# Verify initial render
-expect "Text with Inline Decorative Elements"
-expect "Some text with a small colored shape next to it"
-expect "Another word"

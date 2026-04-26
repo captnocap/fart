@@ -15,7 +15,7 @@ function ThermometerBadge() {
         backgroundColor: CHAT_CARD.panel,
         borderWidth: 1,
         borderColor: CHAT_CARD.orange,
-        borderRadius: 99,
+        borderRadius: 6,
       }}
     >
       <Text style={{ fontFamily: 'monospace', fontSize: 8, color: CHAT_CARD.orange }}>t</Text>
@@ -43,4 +43,3 @@ export function TrustThermometerAvatar({ value }: { value: string }) {
     </Box>
   );
 }
-

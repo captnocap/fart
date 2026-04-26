@@ -1,5 +1,3 @@
-const React: any = require('react');
-
 import { Box, Image } from '../../../../runtime/primitives';
 import { COLORS } from '../../theme';
 import type { MediaItem } from '../media/useMediaStore';

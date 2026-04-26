@@ -166,6 +166,8 @@ export interface Instance {
   handlers: Record<string, Function>;
   children: Instance[];
   renderCount: number;
+  parent?: Instance | null;
+  hostWindowId?: number | null;
 }
 
 export interface TextInstance {
@@ -216,6 +218,7 @@ export function setTransportFlush(fn: (commands: Command[]) => void): void {
 let nodeIdCounter = 0;
 const pendingCommands: Command[] = [];
 const rootInstances: Instance[] = [];
+const WINDOW_HOST_TYPES = new Set(['Window', 'Notification']);
 
 /**
  * Get the current root-level instances.
@@ -237,6 +240,72 @@ export const handlerRegistry = new Map<number, Record<string, Function>>();
 
 function emit(cmd: Command): void {
   pendingCommands.push(cmd);
+}
+
+function isInstance(node: Instance | TextInstance): node is Instance {
+  return !!node && 'children' in node;
+}
+
+function assignHostWindow(node: Instance | TextInstance, windowId: number | null): void {
+  if (!isInstance(node)) return;
+  node.hostWindowId = WINDOW_HOST_TYPES.has(node.type) ? node.id : windowId;
+  for (const child of node.children) {
+    assignHostWindow(child as any, node.hostWindowId ?? null);
+  }
+}
+
+function markParent(parent: Instance | null, child: Instance | TextInstance): void {
+  if (!isInstance(child)) return;
+  child.parent = parent;
+  const inherited = parent ? (WINDOW_HOST_TYPES.has(parent.type) ? parent.id : parent.hostWindowId ?? null) : null;
+  assignHostWindow(child, inherited);
+}
+
+function buildWindowOwnerMap(): { ownerById: Map<number, number>; windowRoots: Set<number> } {
+  const ownerById = new Map<number, number>();
+  const windowRoots = new Set<number>();
+
+  const walk = (node: Instance | TextInstance, inherited: number | null): void => {
+    if (!isInstance(node)) return;
+    const ownWindow = WINDOW_HOST_TYPES.has(node.type) ? node.id : inherited;
+    node.hostWindowId = ownWindow;
+    if (WINDOW_HOST_TYPES.has(node.type)) windowRoots.add(node.id);
+    if (ownWindow != null && node.id !== ownWindow) ownerById.set(node.id, ownWindow);
+    for (const child of node.children) walk(child as any, ownWindow);
+  };
+
+  for (const root of rootInstances) walk(root, null);
+  return { ownerById, windowRoots };
+}
+
+function annotateWindowCommands(commands: Command[]): void {
+  const { ownerById, windowRoots } = buildWindowOwnerMap();
+  const traceWindows = !!(globalThis as any).__TRACE_WINDOWS;
+  for (const cmd of commands) {
+    if (cmd.window_id != null) continue;
+    const id = typeof cmd.id === 'number' ? cmd.id : undefined;
+    const childId = typeof cmd.childId === 'number' ? cmd.childId : undefined;
+    const parentId = typeof cmd.parentId === 'number' ? cmd.parentId : undefined;
+    const owner =
+      (id != null ? ownerById.get(id) : undefined) ??
+      (childId != null ? ownerById.get(childId) : undefined) ??
+      (parentId != null ? ownerById.get(parentId) : undefined) ??
+      (parentId != null && windowRoots.has(parentId) ? parentId : undefined);
+    if (owner != null) {
+      cmd.window_id = owner;
+      cmd.windowId = owner;
+      if (traceWindows && (cmd.op === 'CREATE' || cmd.op === 'APPEND' || cmd.op === 'APPEND_TO_ROOT' || cmd.op === 'REMOVE')) {
+        try {
+          (globalThis as any).__hostLog?.(0, `[window-route/js] op=${cmd.op} id=${cmd.id ?? ''} parent=${cmd.parentId ?? ''} child=${cmd.childId ?? ''} window=${owner}`);
+        } catch {}
+      }
+    }
+  }
+}
+
+function commandWithWindow(cmd: Command, windowId: number | null | undefined): Command {
+  if (windowId == null) return cmd;
+  return { ...cmd, window_id: windowId, windowId };
 }
 
 /**
@@ -334,6 +403,7 @@ export function flushToHost(): void {
 
   const t0 = (globalThis as any).performance?.now?.() ?? Date.now();
   const pendingN = pendingCommands.length;
+  annotateWindowCommands(pendingCommands);
   const coalesced = coalesceCommands(pendingCommands);
   const t1 = (globalThis as any).performance?.now?.() ?? Date.now();
   hostLog(`[hostConfig] flushToHost pending=${pendingCommands.length} coalesced=${coalesced.length}`);
@@ -702,7 +772,7 @@ export const hostConfig: HostConfig<
       manageSubscription(id, clean.__subscribeKey, 'onKeyDown', () => nodeHandlers.onKeyDown, comboFilter);
     }
 
-    return { id, type: resolvedType, props: clean, handlers, children: [], renderCount: 1 };
+    return { id, type: resolvedType, props: clean, handlers, children: [], renderCount: 1, parent: null, hostWindowId: null };
   },
 
   createTextInstance(text: string): TextInstance {
@@ -716,6 +786,7 @@ export const hostConfig: HostConfig<
 
   appendInitialChild(parent: Instance, child: Instance | TextInstance) {
     hostLog(`[hostConfig] appendInitialChild parent=${parent.id} child=${child.id}`);
+    markParent(parent, child);
     (parent.children as any[]).push(child);
     emit({ op: 'APPEND', parentId: parent.id, childId: child.id });
   },
@@ -728,12 +799,14 @@ export const hostConfig: HostConfig<
 
   appendChild(parent: Instance, child: Instance | TextInstance) {
     hostLog(`[hostConfig] appendChild parent=${parent.id} child=${child.id}`);
+    markParent(parent, child);
     (parent.children as any[]).push(child);
     emit({ op: 'APPEND', parentId: parent.id, childId: child.id });
   },
 
   appendChildToContainer(container: Container, child: Instance | TextInstance) {
     hostLog(`[hostConfig] appendChildToContainer container=${container.id} child=${child.id}`);
+    markParent(null, child);
     rootInstances.push(child as Instance);
     emit({ op: 'APPEND_TO_ROOT', childId: child.id });
   },
@@ -743,7 +816,11 @@ export const hostConfig: HostConfig<
     debugLog.log('recon', `removeChild parent=${parent.id} child=${child.id}`);
     const idx = (parent.children as any[]).indexOf(child);
     if (idx !== -1) (parent.children as any[]).splice(idx, 1);
-    emit({ op: 'REMOVE', parentId: parent.id, childId: child.id });
+    const windowId = isInstance(child)
+      ? child.hostWindowId
+      : (WINDOW_HOST_TYPES.has(parent.type) ? parent.id : parent.hostWindowId);
+    markParent(null, child);
+    emit(commandWithWindow({ op: 'REMOVE', parentId: parent.id, childId: child.id }, windowId));
     cleanupHandlers(child);
   },
 
@@ -751,7 +828,9 @@ export const hostConfig: HostConfig<
     hostLog(`[hostConfig] removeChildFromContainer child=${child.id}`);
     const idx = rootInstances.indexOf(child as Instance);
     if (idx !== -1) rootInstances.splice(idx, 1);
-    emit({ op: 'REMOVE_FROM_ROOT', childId: child.id });
+    const windowId = isInstance(child) ? child.hostWindowId : null;
+    markParent(null, child);
+    emit(commandWithWindow({ op: 'REMOVE_FROM_ROOT', childId: child.id }, windowId));
     cleanupHandlers(child);
   },
 
@@ -768,6 +847,7 @@ export const hostConfig: HostConfig<
     } else {
       arr.push(child);
     }
+    markParent(parent, child);
     emit({
       op: 'INSERT_BEFORE',
       parentId: parent.id,
@@ -788,6 +868,7 @@ export const hostConfig: HostConfig<
     } else {
       rootInstances.push(child as Instance);
     }
+    markParent(null, child);
     emit({
       op: 'INSERT_BEFORE_ROOT',
       childId: child.id,

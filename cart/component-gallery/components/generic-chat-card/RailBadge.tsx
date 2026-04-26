@@ -33,7 +33,7 @@ export function RailBadge({ name, color }: { name: RailBadgeName; color: string 
         height: 14,
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: '#232843',
+        backgroundColor: '#1a1511',
         borderWidth: 1,
         borderColor: color,
         borderRadius: 3,

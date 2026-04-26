@@ -1,6 +1,4 @@
-const React: any = require('react');
-const { useState, useCallback, useMemo } = React;
-
+import { useState, useCallback, useMemo } from 'react';
 import { createMaskStackItem, getMaskDef, type MaskStackItem, type MaskKind } from './maskCatalog';
 
 export function useMaskStack() {

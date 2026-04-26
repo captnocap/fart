@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# classify — thin launcher for scripts/classify.js.
+#
+# Scans cart/ (or src/) for repeated JSX style/prop patterns, suggests
+# classifiers, and writes an .cls.ts sheet. Also mines recurring style
+# literals and suggests theme tokens.
+#
+# Subcommands (all support --dry-run where applicable):
+#   classify                   Scan, report, write app.cls.ts
+#   classify theme             Suggest theme tokens from repeated literals
+#   classify add <SPEC>        Append a single classifier definition
+#   classify partial           Mine sub-patterns (frequent itemsets)
+#   classify pick              Interactive classifier picker
+#   classify migrate           Rewrite inline JSX to classifier usages
+#   classify rename OLD NEW    Rename a classifier across the codebase
+#
+# Pass --help to any subcommand for its own flags. Pass --dry-run to
+# scan / theme --emit / add / migrate / rename to preview without writing.
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+cd "$REPO_ROOT"
+
+exec tools/v8cli "$SCRIPT_DIR/classify.js" "$@"

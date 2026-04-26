@@ -5,6 +5,7 @@ import { SentimentControls } from './SentimentControls';
 import { StuckAlert } from './StuckAlert';
 import { TelemetryStats } from './TelemetryStats';
 import { CHAT_CARD } from './tokens';
+import { classifiers as S } from '@reactjit/core';
 
 export type ConsoleTelemetryProps = {
   progress: number;
@@ -25,32 +26,20 @@ export function ConsoleTelemetryBar({ progress, rate, time, state, alert }: Cons
         borderRadius: 4,
       }}
     >
-      <Row style={{ alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-        <Row style={{ alignItems: 'center', gap: 8, paddingLeft: 10, paddingRight: 10, paddingTop: 7, paddingBottom: 7 }}>
+      <S.CardHeader>
+        <S.InlineX4Center style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 7, paddingBottom: 7 }}>
           <ProgressMeter progress={progress} label={rate} />
           <Text style={{ fontFamily: 'monospace', fontSize: 8, color: CHAT_CARD.faint }}>|</Text>
           <StuckAlert label={alert} />
-        </Row>
+        </S.InlineX4Center>
         <Box style={{ paddingRight: 10 }}>
           <KillSwitch />
         </Box>
-      </Row>
-      <Row
-        style={{
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 8,
-          paddingLeft: 10,
-          paddingRight: 10,
-          paddingTop: 7,
-          paddingBottom: 7,
-          borderTopWidth: 1,
-          borderColor: '#3d4668',
-        }}
-      >
+      </S.CardHeader>
+      <S.CardHeader style={{ paddingLeft: 10, paddingRight: 10, paddingTop: 7, paddingBottom: 7, borderTopWidth: 1, borderColor: '#3a2a1e' }}>
         <TelemetryStats state={state} time={time} />
         <SentimentControls />
-      </Row>
+      </S.CardHeader>
     </Col>
   );
 }

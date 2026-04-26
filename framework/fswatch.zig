@@ -88,6 +88,12 @@ pub const WatcherConfig = struct {
 var watchers: [MAX_WATCHERS]Watcher = [_]Watcher{.{}} ** MAX_WATCHERS;
 var watcher_count: u8 = 0;
 
+// -- Engine-driven event queue --
+// Engine calls tick() once per frame, which polls watchers and accumulates
+// events here until JS drains them. Bounded; overflow events are dropped.
+var pending_events: [MAX_EVENTS]ChangeEvent = undefined;
+var pending_count: usize = 0;
+
 // -- Init / Deinit --
 
 pub fn init() void {
@@ -168,6 +174,30 @@ pub fn addWatcher(config: WatcherConfig) error{ TooManyWatchers, NameTooLong }!u
 pub fn removeWatcher(id: u8) void {
     if (id >= MAX_WATCHERS) return;
     watchers[id].active = false;
+}
+
+/// Engine-frame tick. Polls each active watcher, accumulates change events
+/// in pending_events. Call once per frame from the engine main loop.
+pub fn tick(dt_ms: u32) void {
+    if (watcher_count == 0) return;
+    var scratch: [MAX_EVENTS]ChangeEvent = undefined;
+    const n = poll(dt_ms, &scratch);
+    if (n == 0) return;
+    var i: usize = 0;
+    while (i < n and pending_count < MAX_EVENTS) : (i += 1) {
+        pending_events[pending_count] = scratch[i];
+        pending_count += 1;
+    }
+    // Overflow events silently dropped — JS should drain promptly.
+}
+
+/// Drain accumulated events into `out`, returning the number written.
+/// After this returns, the internal queue is empty.
+pub fn drainEvents(out: []ChangeEvent) usize {
+    const n = @min(out.len, pending_count);
+    @memcpy(out[0..n], pending_events[0..n]);
+    pending_count = 0;
+    return n;
 }
 
 // -- Poll --

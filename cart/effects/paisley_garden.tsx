@@ -12,9 +12,7 @@
 //     bezier-dot loops) so QJS can keep up.
 
 import { Box, Row, Text, Graph, Effect } from '../../runtime/primitives';
-const React: any = require('react');
-const { useMemo } = React;
-
+import { useMemo } from 'react';
 type Palette = {
   effect: string;
   stroke: string;

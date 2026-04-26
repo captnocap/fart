@@ -19,6 +19,7 @@
  */
 
 import { callHostJson, callHost, subscribe } from '../ffi';
+import type { TransportHandle } from './useConnection';
 
 export interface HttpRequest {
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'HEAD';
@@ -26,6 +27,8 @@ export interface HttpRequest {
   headers?: Record<string, string>;
   body?: string;
   timeoutMs?: number;
+  /** Route this request through a transport handle (tor/socks5/wireguard/...). */
+  via?: TransportHandle;
 }
 
 export interface HttpResponse {
@@ -87,6 +90,7 @@ export function installFetchShim(): void {
       url,
       headers: init.headers,
       body: init.body,
+      via: init.via,
     });
     return {
       ok: r.status >= 200 && r.status < 300,

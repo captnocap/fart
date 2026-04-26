@@ -1,5 +1,3 @@
-const React: any = require('react');
-
 import { Box, Col } from '../runtime/primitives';
 import { COLORS } from './sweatshop/theme';
 import { GraphControls } from './graph_demo/GraphControls';

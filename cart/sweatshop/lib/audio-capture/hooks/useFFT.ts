@@ -1,6 +1,4 @@
-const React: any = require('react');
-const { useMemo, useCallback } = React;
-
+import { useMemo, useCallback } from 'react';
 export type WindowType = 'hann' | 'hamming' | 'rectangular';
 
 function makeWindow(size: number, type: WindowType): Float32Array {

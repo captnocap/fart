@@ -1,9 +1,17 @@
-const React: any = require('react');
-const { useMemo } = React;
-import { Box, Graph, Text } from '../../../../runtime/primitives';
+import { useState } from 'react';
+import { Box, Graph, Pressable } from '../../../../runtime/primitives';
 import { PALETTE } from '../../lib/chart-utils';
+import { useStagger } from '../../lib/useStagger';
+import { Tooltip } from '../../lib/Tooltip';
+import { classifiers as S } from '@reactjit/core';
 
-export type FractionChartProps = {};
+export type FractionRow = { total: number; filled: number; color: string; label: string };
+
+export type FractionChartProps = {
+  rows?: FractionRow[];
+  width?: number;
+  height?: number;
+};
 
 function personIcon(x: number, y: number, s: number): string {
   const headR = 3 * s;
@@ -14,43 +22,72 @@ function personIcon(x: number, y: number, s: number): string {
   return d + ` M ${x - bodyW / 2} ${headY + headR} L ${x + bodyW / 2} ${headY + headR} L ${x + bodyW / 2} ${headY + headR + bodyH} L ${x - bodyW / 2} ${headY + headR + bodyH} Z`;
 }
 
-export function FractionChart(_props: FractionChartProps) {
-  const width = 280;
-  const height = 160;
-  const rows = useMemo(() => [
-    { total: 10, filled: 7, color: PALETTE.pink },
-    { total: 10, filled: 4, color: PALETTE.cyan },
-    { total: 10, filled: 9, color: PALETTE.blue },
-  ], []);
-  const spacing = 18;
+export function FractionChart(props: FractionChartProps) {
+  const width = props.width ?? 320;
+  const height = props.height ?? 160;
+  const rows = props.rows ?? [
+    { total: 10, filled: 7, color: PALETTE.pink, label: 'Satisfied' },
+    { total: 10, filled: 4, color: PALETTE.cyan, label: 'Neutral' },
+    { total: 10, filled: 9, color: PALETTE.blue, label: 'Recommend' },
+  ];
+  const spacing = 24;
   const startY = 30;
-  const startX = 20;
+  const startX = 24;
+
+  const allIcons = rows.flatMap((r, ri) =>
+    Array.from({ length: r.total }, (_, ci) => ({ ri, ci, color: r.color, isFilled: ci < r.filled }))
+  );
+  const staggers = useStagger(allIcons.length, { stiffness: 200, damping: 20 });
+  const [hovered, setHovered] = useState<number | null>(null);
 
   return (
     <Box style={{ width, height }}>
-      <Graph originTopLeft style={{ width, height }}>
-        {rows.map((r, ri) =>
-          Array.from({ length: r.total }).map((_, ci) => {
-            const x = startX + ci * spacing;
-            const y = startY + ri * 40;
-            const isFilled = ci < r.filled;
-            return (
-              <Graph.Path
-                key={`${ri}-${ci}`}
-                d={personIcon(x, y, 1)}
-                fill={isFilled ? r.color : '#2a2a4a'}
-                stroke={isFilled ? r.color : '#3a3a5a'}
-                strokeWidth={0.5}
-              />
-            );
-          })
-        )}
-      </Graph>
+      <S.BareGraph>
+        {allIcons.map((icon, idx) => {
+          const x = startX + icon.ci * spacing;
+          const y = startY + icon.ri * 40;
+          const s = staggers[idx];
+          const r = 3 * s;
+          if (r < 0.5) return null;
+          return (
+            <Graph.Path
+              key={idx}
+              d={personIcon(x, y, s)}
+              fill={icon.isFilled ? icon.color : '#3a2a1e'}
+              stroke={icon.isFilled ? icon.color : '#3a2a1e'}
+              strokeWidth={0.5}
+            />
+          );
+        })}
+      </S.BareGraph>
+
       {rows.map((r, i) => (
-        <Box key={`lbl-${i}`} style={{ position: 'absolute', left: startX + r.total * spacing + 8, top: startY + i * 40 - 6 }}>
-          <Text fontSize={10} color={PALETTE.slateLight}>{r.filled}/{r.total}</Text>
-        </Box>
+        <Pressable
+          key={`hit-${i}`}
+          onMouseEnter={() => setHovered(i)}
+          onMouseLeave={() => setHovered(null)}
+          style={{
+            opacity: 0,
+            position: 'absolute',
+            left: startX,
+            top: startY + i * 40 - 10,
+            width: r.total * spacing,
+            height: 30,
+          }}
+        />
       ))}
+
+      {hovered != null && (
+        <Tooltip
+          visible={true}
+          x={startX + rows[hovered].total * spacing + 8}
+          y={startY + hovered * 40}
+          title={`Row ${hovered + 1}`}
+          rows={[
+            { label: 'Filled', value: `${rows[hovered].filled}/${rows[hovered].total}`, color: rows[hovered].color },
+          ]}
+        />
+      )}
     </Box>
   );
 }

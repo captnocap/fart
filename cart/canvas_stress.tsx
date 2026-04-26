@@ -1,6 +1,4 @@
-const React: any = require('react');
-const { useMemo, useState } = React;
-
+import { useMemo, useState } from 'react';
 import { Box, Col, Row, Text } from '../runtime/primitives';
 import { StressCanvas } from './canvas_stress/StressCanvas';
 import { StressControls, type CountChoice, type StressPreset, type StressShape } from './canvas_stress/StressControls';

@@ -1,4 +1,3 @@
-const React: any = require('react');
 import { Box, Col, Text, TextInput } from '../runtime/primitives';
 
 const SAMPLE = 'jumpy pigs qq gg yy — O S M W';

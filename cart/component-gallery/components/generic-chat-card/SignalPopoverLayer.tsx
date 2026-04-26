@@ -33,10 +33,10 @@ export function SignalPopoverLayer({
           top: arrowTop,
           width: 10,
           height: 10,
-          backgroundColor: '#1d1b27',
+          backgroundColor: '#14100d',
           borderLeftWidth: 1,
           borderTopWidth: 1,
-          borderColor: '#c55adb',
+          borderColor: '#8a7fd4',
           transform: { rotate: 45 },
         }}
       />

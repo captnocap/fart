@@ -1,4 +1,4 @@
-export { Tooltip } from './tooltip/Tooltip';
-export { TooltipLayer } from './tooltip/TooltipLayer';
+export { Tooltip, TooltipRoot } from '../../shared/tooltip/Tooltip';
+export type { TooltipRow, TooltipVariant } from '../../shared/tooltip/Tooltip';
+export { useAutoFlip } from '../../shared/tooltip/useAutoFlip';
 export { ShortcutChip } from './tooltip/ShortcutChip';
-export { useAutoFlip } from './tooltip/useAutoFlip';

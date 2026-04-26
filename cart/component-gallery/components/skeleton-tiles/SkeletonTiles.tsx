@@ -44,7 +44,7 @@ export function SkeletonTiles({ size = 'default' }: SkeletonTilesProps) {
         padding,
         backgroundColor: SKELETON.background,
         borderWidth: 1,
-        borderColor: '#3b425b',
+        borderColor: '#4a4238',
       }}
     >
       <Col style={{ gap }}>

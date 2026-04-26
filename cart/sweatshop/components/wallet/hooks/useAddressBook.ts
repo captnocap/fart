@@ -1,6 +1,4 @@
-const React: any = require('react');
-const { useCallback } = React;
-
+import { useCallback } from 'react';
 import { usePersistentState } from '../../../hooks/usePersistentState';
 import { createId, normalizeAddress, type WalletContact } from '../lib';
 

@@ -1,5 +1,6 @@
 import { defineGallerySection, defineGalleryStory } from '../types';
 import { WaterfallChart } from '../components/waterfall-chart/WaterfallChart';
+import { DEMO_WATERFALL } from '../lib/chart-utils';
 
 export const waterfallChartSection = defineGallerySection({
   id: 'waterfall-chart',
@@ -14,7 +15,7 @@ export const waterfallChartSection = defineGallerySection({
         {
           id: 'default',
           name: 'Default',
-          render: () => <WaterfallChart />,
+          render: () => <WaterfallChart data={DEMO_WATERFALL} />,
         },
       ],
     }),

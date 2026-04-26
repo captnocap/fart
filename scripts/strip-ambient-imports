@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# strip-ambient-imports — thin launcher for scripts/strip-ambient-imports.js.
+#
+# Runs the v8cli port:
+#   tools/v8cli scripts/strip-ambient-imports.js ...
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+cd "$REPO_ROOT"
+
+exec tools/v8cli scripts/strip-ambient-imports.js "$@"

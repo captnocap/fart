@@ -7,9 +7,7 @@
 // shift for the LEFT (Zig) version but stay rock-still for the RIGHT (JS)
 // version, the engine's tooltip overlay is responsible.
 
-const React: any = require('react');
-const { useState } = React;
-
+import { useState } from 'react';
 import { Box, Pressable, Text } from '../runtime/primitives';
 
 function EngineTooltipButton() {

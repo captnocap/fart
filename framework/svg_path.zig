@@ -1043,55 +1043,26 @@ pub fn drawStroke(path: *const Path, stroke_r: f32, stroke_g: f32, stroke_b: f32
     }
 }
 
-/// Draw a single line segment through the SDF bezier shader.
+/// Draw a single line segment as a capsule SDF.
 ///
-/// Quadratic control point sits slightly OFF the line (0.1px perpendicular)
-/// instead of at the true midpoint. Mathematically the curve still looks
-/// straight to the eye — 0.1px deflection at the apex is subpixel — but the
-/// shader's distance-to-curve calculation avoids the near-degenerate case it
-/// hits when the three control points are colinear, which used to pop a
-/// visible highlight at every segment midpoint ("dashes" / "pearls" on every
-/// polyline). Unlike the oriented-rect approach, this keeps the anti-aliasing
-/// crisp on diagonals.
+/// Capsule = segment (p0→p1) with round caps of radius width/2. Fragment
+/// shader computes distance to the segment; fragments past an endpoint clamp
+/// to that endpoint and measure a radius → semicircular cap falls out for
+/// free.
 ///
-/// The half-stroke-width endpoint extension is preserved so adjacent segments
-/// overlap at polyline vertices (no dim seam at joints).
+/// Why this replaces the earlier rotated-rect + endpoint-extension approach:
+/// round caps at each endpoint are exactly what makes polyline joins look
+/// correct at any angle. Two adjacent capsules sharing a vertex each
+/// contribute a semicircle there; their union is a full disc that covers
+/// the outside wedge of a turn without any CPU-side join math. The old
+/// "extend each rect by width/2 so they overlap at joints" trick couldn't
+/// fill that wedge at acute angles, which is where the thin-and-dot bug
+/// lived.
 pub fn drawLineSegment(x0: f32, y0: f32, x1: f32, y1: f32, width: f32, r: f32, g: f32, b: f32, a: f32) void {
     const dx = x1 - x0;
     const dy = y1 - y0;
-    const len = @sqrt(dx * dx + dy * dy);
-    if (len < 0.0001) return;
-    const ux = dx / len;
-    const uy = dy / len;
-    const ext = width * 0.5;
-    const ax = x0 - ux * ext;
-    const ay = y0 - uy * ext;
-    const bx = x1 + ux * ext;
-    const by = y1 + uy * ext;
-    // Route through drawRectTransformed — the SDF rect shader — instead of
-    // drawCurve. The bezier shader glitched on near-degenerate quadratics
-    // three different ways over the last hour (midpoint pearls, perpendicular-
-    // nudge side notches, control-at-endpoint scatter dots). The rect shader
-    // has no curve math: it anti-aliases a clean rotated rectangle.
-    //
-    // Rect: centered on segment midpoint, width = extended length,
-    // height = stroke width. Rotation = segment angle.
-    const mx_line = (ax + bx) * 0.5;
-    const my_line = (ay + by) * 0.5;
-    const ext_len = len + 2.0 * ext; // post-extension length
-    const rotation_deg = std.math.atan2(dy, dx) * 180.0 / std.math.pi;
-    gpu.drawRectTransformed(
-        mx_line - ext_len * 0.5,
-        my_line - width * 0.5,
-        ext_len,
-        width,
-        r, g, b, a,
-        0, // border_radius
-        0, // border_width
-        0, 0, 0, 0, // border color (unused)
-        rotation_deg,
-        1.0, 1.0, // sx, sy
-    );
+    if (dx * dx + dy * dy < 0.0001 * 0.0001) return;
+    gpu.drawCapsule(x0, y0, x1, y1, r, g, b, a, width);
 }
 
 // ── Arc-length utilities (for animation) ────────────────────────────────

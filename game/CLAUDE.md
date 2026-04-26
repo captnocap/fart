@@ -94,6 +94,12 @@ The shell loads app cartridges at runtime via `<Cartridge src="messenger.so" />`
 
 This keeps iteration fast. Don't build a database when a JSON store will do.
 
+## Git Discipline
+
+Same rules as the root `CLAUDE.md` and `AGENTS.md`: main only, no branches, explicit staging. Additionally:
+
+- **Daily checkpoint at 2am and 2pm.** When beginning work around 02:00 or 14:00, run `git status`. If dirty, commit everything as a checkpoint (`checkpoint: <note>`) and move on.
+
 ## Linear Development Order
 
 Build what the player sees, in order:

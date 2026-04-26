@@ -1,6 +1,4 @@
-const React: any = require('react');
-const { useEffect, useRef, useState, useCallback, useMemo } = React;
-
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 // ── FFI stubs (aligned with cart/cockpit) ──────────────────────────
 const host: any = globalThis;
 const claude_init   = typeof host.__claude_init   === 'function' ? host.__claude_init   : (_a: string, _b: string, _c?: string) => 0;
@@ -93,7 +91,7 @@ import { GraphPanelSurface } from './components/graphpanel';
 import { DiffPanel } from './components/diffpanel';
 import { WorkerCanvas } from './components/cockpit/WorkerCanvas';
 import { FadeIn, PageModeTransition, SlideIn } from './anim';
-import { TooltipLayer } from './components/tooltip';
+import { TooltipRoot } from './components/tooltip';
 
 import { usePersistentState } from './hooks/usePersistentState';
 import { useFileContent } from '../../runtime/hooks/useFileContent';
@@ -1668,7 +1666,7 @@ export default function CursorIdeApp() {
 
   if (appMode === 'home') {
     return (
-      <TooltipLayer>
+      <TooltipRoot>
         <ToastProvider>
           <Box style={{ width: '100%', height: '100%', backgroundColor: COLORS.appBg }}>
             <Col style={{ width: '100%', height: '100%' }}>
@@ -1683,12 +1681,12 @@ export default function CursorIdeApp() {
             </Col>
           </Box>
         </ToastProvider>
-      </TooltipLayer>
+      </TooltipRoot>
     );
   }
 
   return (
-    <TooltipLayer>
+    <TooltipRoot>
       <ToastProvider>
         <Box style={{ width: '100%', height: '100%', backgroundColor: COLORS.appBg }}>
           <Col style={{ width: '100%', height: '100%' }}>
@@ -2010,6 +2008,6 @@ export default function CursorIdeApp() {
           </Col>
         </Box>
       </ToastProvider>
-    </TooltipLayer>
+    </TooltipRoot>
   );
 }

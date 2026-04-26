@@ -4,9 +4,7 @@
 // scene via "clear". No canned demo content — the scene starts empty
 // inside its physical arena (floor + walls).
 
-const React: any = require('react');
-const { useCallback, useRef, useState } = React;
-
+import { useCallback, useRef, useState } from 'react';
 import { Box, Col, Pressable, Row, Text } from '../../../../runtime/primitives';
 import { COLORS } from '../../theme';
 import { PhysicsWorld } from './PhysicsWorld';

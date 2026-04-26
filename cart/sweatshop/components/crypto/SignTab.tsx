@@ -1,6 +1,4 @@
-const React: any = require('react');
-const { useState } = React;
-
+import { useState } from 'react';
 import { Col, Row, Text } from '../../../../runtime/primitives';
 import { COLORS } from '../../theme';
 import { type SigningAlgorithm, generateSigningKeys, useSign, useVerify } from '../../lib/crypto/sign';

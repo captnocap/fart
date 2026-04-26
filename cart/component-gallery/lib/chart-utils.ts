@@ -1,34 +1,7 @@
-const React: any = require('react');
+import { COLORS, PALETTE } from './chart-palette';
 
-export const PALETTE = {
-  pink: '#f06292',
-  pinkLight: '#f8bbd0',
-  pinkDark: '#c2185b',
-  cyan: '#4fc3f7',
-  cyanLight: '#b3e5fc',
-  cyanDark: '#0288d1',
-  blue: '#7986cb',
-  blueLight: '#c5cae9',
-  blueDark: '#303f9f',
-  purple: '#ba68c8',
-  teal: '#4db6ac',
-  indigo: '#5c6bc0',
-  slate: '#37474f',
-  slateLight: '#90a4ae',
-  white: '#ffffff',
-  bg: '#1a1a2e',
-};
-
-export const COLORS = [
-  PALETTE.pink,
-  PALETTE.cyan,
-  PALETTE.blue,
-  PALETTE.purple,
-  PALETTE.teal,
-  PALETTE.indigo,
-  PALETTE.pinkLight,
-  PALETTE.cyanLight,
-];
+export { COLORS, PALETTE } from './chart-palette';
+export * from '../data/chart-demo-data';
 
 export function scaleLinear(domain: [number, number], range: [number, number]) {
   const [d0, d1] = domain;
@@ -49,7 +22,7 @@ export function niceTicks(min: number, max: number, count: number = 5): number[]
   if (range === 0) return [min];
   const rawStep = range / Math.max(1, count);
   const pow10 = Math.pow(10, Math.floor(Math.log10(rawStep)));
-  const norm = rawStep / pow10; // in [1, 10)
+  const norm = rawStep / pow10;
   let step: number;
   if (norm < 1.5) step = 1 * pow10;
   else if (norm < 3) step = 2 * pow10;
@@ -57,8 +30,6 @@ export function niceTicks(min: number, max: number, count: number = 5): number[]
   else step = 10 * pow10;
   const ticks: number[] = [];
   const start = Math.ceil(min / step) * step;
-  // Loop guards against FP drift — step*0.5 slack avoids missing the last tick
-  // and the hard cap prevents runaway if something pathological gets here.
   let t = start;
   while (t <= max + step * 0.5 && ticks.length < 128) {
     ticks.push(Number(t.toFixed(10)));
@@ -106,13 +77,4 @@ export function plotArea(width: number, height: number, margin: Margin = { top: 
     w: Math.max(40, width - margin.left - margin.right),
     h: Math.max(40, height - margin.top - margin.bottom),
   };
-}
-
-export function useDemoData() {
-  return React.useMemo(() => ({
-    months: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
-    values1: [12, 19, 15, 25, 22, 30, 28, 35, 32, 40, 38, 45],
-    values2: [8, 14, 18, 20, 24, 22, 26, 30, 28, 34, 36, 32],
-    values3: [-10, -5, 8, 15, -3, 12, 20, 5, -8, 18, 25, 10],
-  }), []);
 }

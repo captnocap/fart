@@ -8,8 +8,6 @@
 // decay, just a clean curve.
 
 import { Box, Effect } from '../../runtime/primitives';
-const React: any = require('react');
-
 const SPIROGRAPH_WGSL = `
 @fragment fn fs_main(in: VsOut) -> @location(0) vec4f {
   let x = in.uv.x * U.size_w;

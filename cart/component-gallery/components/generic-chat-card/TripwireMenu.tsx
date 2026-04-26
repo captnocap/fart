@@ -21,9 +21,9 @@ export function TripwireMenu({ selected = 'runtime counterpart' }: { selected?: 
     <Box
       style={{
         width: 194,
-        backgroundColor: '#1d1b27',
+        backgroundColor: '#14100d',
         borderWidth: 1,
-        borderColor: '#c55adb',
+        borderColor: '#8a7fd4',
         borderRadius: 5,
       }}
     >
@@ -34,16 +34,16 @@ export function TripwireMenu({ selected = 'runtime counterpart' }: { selected?: 
             paddingRight: 8,
             paddingTop: 7,
             paddingBottom: 7,
-            backgroundColor: '#2a203a',
+            backgroundColor: '#1a1511',
             borderBottomWidth: 1,
-            borderColor: '#4d315f',
+            borderColor: '#8a7fd4',
             borderRadius: 3,
           }}
         >
-          <Text style={{ fontFamily: 'monospace', fontSize: 8, fontWeight: 'bold', color: '#f0a6ff' }}>TAG PATHOLOGY</Text>
+          <Text style={{ fontFamily: 'monospace', fontSize: 8, fontWeight: 'bold', color: '#d48aa7' }}>TAG PATHOLOGY</Text>
         </Box>
-        <Box style={{ paddingLeft: 9, paddingRight: 9, paddingTop: 6, paddingBottom: 6, borderBottomWidth: 1, borderColor: '#4d315f' }}>
-          <Text style={{ fontFamily: 'monospace', fontSize: 8, color: '#f7c3ff' }}>{selected}</Text>
+        <Box style={{ paddingLeft: 9, paddingRight: 9, paddingTop: 6, paddingBottom: 6, borderBottomWidth: 1, borderColor: '#8a7fd4' }}>
+          <Text style={{ fontFamily: 'monospace', fontSize: 8, color: '#d48aa7' }}>{selected}</Text>
         </Box>
         {OPTIONS.map((option, index) => (
           <Row
@@ -55,7 +55,7 @@ export function TripwireMenu({ selected = 'runtime counterpart' }: { selected?: 
               paddingRight: 9,
               paddingTop: 7,
               paddingBottom: 7,
-              backgroundColor: index === 0 ? '#352041' : '#1d1b27',
+              backgroundColor: index === 0 ? '#1a1511' : '#14100d',
               borderRadius: 3,
             }}
           >

@@ -1,6 +1,4 @@
-const React: any = require('react');
-const { useState } = React;
-
+import { useState } from 'react';
 import { Col, Row, Text, TextArea } from '../../../../runtime/primitives';
 import { COLORS } from '../../theme';
 import { decodeJwtToken, useJWT } from '../../lib/crypto/jwt';

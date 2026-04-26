@@ -1,6 +1,4 @@
-const React: any = require('react');
-const { useEffect, useState } = React;
-
+import { useEffect, useState } from 'react';
 import { fromHex, toBase64, toHex } from './encoding';
 import { HASH_HOSTS, hostSupport, callCryptoHost, normalizeMaybeJson, stringifyError, type HashAlgorithm } from './support';
 

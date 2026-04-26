@@ -1,0 +1,20 @@
+# Files in this list are "hardened" — they have outsized blast radius and have
+# repeatedly cost real debugging time when touched casually (measurement drift,
+# layout cascades, reconciler miscommits, etc.).
+#
+# To commit a change that touches any of these paths, the commit message MUST
+# contain the token `[hardened-ok]`. Enforced by .git/hooks/pre-commit,
+# installed via scripts/install-hooks.
+#
+# One path per line. Comments (# prefix) and blank lines ignored. Patterns are
+# exact prefix matches against the staged paths (e.g. `framework/gpu/` blocks
+# any file under that directory).
+
+framework/gpu/text.zig
+framework/gpu/gpu.zig
+framework/layout.zig
+framework/text.zig
+framework/engine.zig
+framework/reconciler.zig
+renderer/hostConfig.ts
+build.zig

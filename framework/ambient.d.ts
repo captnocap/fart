@@ -51,6 +51,7 @@ declare global {
   const TextEditor:  typeof import('./ambient').TextEditor;
   const Terminal:    typeof import('./ambient').Terminal;
   const terminal:    typeof import('./ambient').terminal;
+  const StaticSurface: typeof import('./ambient').StaticSurface;
   const Canvas:      typeof import('./ambient').Canvas;
   const Graph:       typeof import('./ambient').Graph;
   const Render:      typeof import('./ambient').Render;

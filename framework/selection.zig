@@ -241,6 +241,21 @@ pub fn paintHighlight(node: *Node, screen_x: f32, screen_y: f32) void {
     const pad_r = node.style.padRight();
     const max_w = @max(1.0, node.computed.w - pad_l - pad_r);
 
+    // Paint's drawNodeTextCommon sets line_height_override + letter_spacing
+    // globals around its call and clears them after. By the time we run the
+    // selection pass those globals are back to 0, so drawSelectionRects reads
+    // natural FreeType metrics instead of the node's actual line_height —
+    // rects then advance at ~ascent+descent per line while paint advances at
+    // node.line_height, drifting linearly (~2 px/line for a 16 px lineHeight
+    // at size 10). Set the same globals here so selection uses the same
+    // per-line step as paint did.
+    if (node.line_height > 0) gpu.setLineHeightOverride(node.line_height);
+    if (node.letter_spacing != 0) gpu.setLetterSpacing(node.letter_spacing);
+    defer {
+        if (node.line_height > 0) gpu.setLineHeightOverride(0);
+        if (node.letter_spacing != 0) gpu.setLetterSpacing(0);
+    }
+
     if (sel_all) {
         // Select-all: highlight everything
         gpu.drawSelectionRects(txt, screen_x + pad_l, screen_y + pad_t, node.font_size, max_w, 0, txt.len);

@@ -1,6 +1,4 @@
-const React: any = require('react');
-const { useEffect, useState } = React;
-
+import { useEffect, useState } from 'react';
 import { Box, Col, Text } from '../../../../runtime/primitives';
 import { COLORS } from '../../theme';
 import { BrowserToolbar } from './BrowserToolbar';

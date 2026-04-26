@@ -3,9 +3,7 @@
 // Must be mounted *inside* <PhysicsWorld>; it re-renders each frame
 // via the subscription bus.
 
-const React: any = require('react');
-const { useEffect, useState } = React;
-
+import { useEffect, useState } from 'react';
 import { Box } from '../../../../runtime/primitives';
 import { COLORS } from '../../theme';
 import { usePhysicsCtx } from './PhysicsContext';

@@ -1,6 +1,4 @@
-const React: any = require('react');
-const { useEffect, useState } = React;
-
+import { useEffect, useState } from 'react';
 import { bytesToUtf8, fromBase64Url, toBase64Url, utf8ToBytes } from './encoding';
 import { JWT_HOSTS, callCryptoHost, hostSupport, normalizeMaybeJson, stringifyError } from './support';
 

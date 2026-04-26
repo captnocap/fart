@@ -5,9 +5,7 @@
 //
 // The body is addressed by `id` (required). Stable across re-renders.
 
-const React: any = require('react');
-const { useEffect, useMemo, useRef, useState } = React;
-
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { usePhysicsCtx } from './PhysicsContext';
 import type { BodyType, ShapeSpec, Vec2 } from '../../lib/physics/core';
 

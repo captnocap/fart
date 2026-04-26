@@ -82,7 +82,7 @@ export function InsetPanel({
       }}
     >
       <Row style={{ alignItems: 'center', gap: dense ? 5 : 8 }}>
-        <Box style={{ width: dense ? 6 : 10, height: dense ? 6 : 10, backgroundColor: color, borderRadius: 99 }} />
+        <Box style={{ width: dense ? 6 : 10, height: dense ? 6 : 10, backgroundColor: color, borderRadius: dense ? 3 : 5 }} />
         <Box style={{ width: dense ? (compact ? 26 : 32) : compact ? 50 : 58, height: 2, backgroundColor: color, opacity: 0.74 }} />
       </Row>
       <Box style={{ width: dense ? (compact ? 24 : 30) : compact ? 48 : 58, height: 2, marginLeft: dense ? 11 : 18, backgroundColor: color, opacity: 0.44 }} />
@@ -113,7 +113,7 @@ export function TileCrossOverlay({ size }: { size: SkeletonSize }) {
             top: point.y,
             width: pixel,
             height: pixel,
-            backgroundColor: '#cf6d40',
+            backgroundColor: '#d26a2a',
             opacity: 0.94,
           }}
         />
@@ -127,7 +127,7 @@ export function TileCrossOverlay({ size }: { size: SkeletonSize }) {
             top: point.y,
             width: pixel,
             height: pixel,
-            backgroundColor: '#cf6d40',
+            backgroundColor: '#d26a2a',
             opacity: 0.94,
           }}
         />
@@ -160,7 +160,7 @@ export function TileFooter({
         paddingLeft: compact ? 3 : 4,
         paddingRight: compact ? 3 : 4,
         borderTopWidth: 1,
-        borderColor: warn ? '#7f3d27' : SKELETON.frame,
+        borderColor: warn ? '#8a4a20' : SKELETON.frame,
       }}
     >
       <Box style={{ width: compact ? 13 : 16 }}>

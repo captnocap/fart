@@ -34,6 +34,7 @@ const state_mod = @import("state.zig");
 const text_mod = @import("text.zig");
 const events = @import("events.zig");
 const log = @import("log.zig");
+const ipc = @import("net/ipc.zig");
 
 const Node = layout.Node;
 const Color = layout.Color;
@@ -76,14 +77,36 @@ pub const WindowSlot = struct {
     created_at: u32 = 0, // SDL_GetTicks at creation
     opacity: f32 = 1.0, // for fade in/out
 
-    // Independent-specific (TCP/NDJSON — stubbed for now)
-    // child_pid: ?std.posix.pid_t = null,
-    // ipc_port: u16 = 0,
-    // ipc_fd: ?std.posix.fd_t = null,
+    // Independent-specific (TCP/NDJSON)
+    server: ?ipc.Server = null,
+    child: ?std.process.Child = null,
+    pending: std.ArrayList(u8) = .{},
 };
 
 var slots: [MAX_WINDOWS]WindowSlot = [_]WindowSlot{.{}} ** MAX_WINDOWS;
 var slot_count: usize = 0;
+var g_js_dispatch_fn: ?*const fn (u32, []const u8) void = null;
+const WrappedLine = struct { start: usize, end: usize };
+
+pub fn setJsDispatchFn(f: *const fn (u32, []const u8) void) void {
+    g_js_dispatch_fn = f;
+}
+
+fn dispatchJs(node: *Node, handler: []const u8) bool {
+    const f = g_js_dispatch_fn orelse return false;
+    if (node.scroll_persist_slot == 0) return false;
+    f(node.scroll_persist_slot, handler);
+    state_mod.markDirty();
+    return true;
+}
+
+fn dispatchJsById(id: u32, handler: []const u8) bool {
+    const f = g_js_dispatch_fn orelse return false;
+    if (id == 0) return false;
+    f(id, handler);
+    state_mod.markDirty();
+    return true;
+}
 
 // ════════════════════════════════════════════════════════════════════════
 // Open / Close
@@ -105,6 +128,8 @@ pub const OpenOptions = struct {
     always_on_top: bool = false,
     /// Borderless window (notifications default to true)
     borderless: bool = false,
+    /// React host node id for independent child event routing.
+    window_id: u32 = 0,
 };
 
 /// Check if any window with this root is already open.
@@ -208,15 +233,123 @@ fn openInProcess(idx: usize, opts: OpenOptions) ?usize {
     return idx;
 }
 
-fn openIndependent(_: usize, _: OpenOptions) ?usize {
-    // TODO: spawn child process, set up TCP server, connect via NDJSON
-    // The child process runs the engine binary in "child-window" mode:
-    //   - Own SDL_Window + wgpu surface (full GPU pipeline)
-    //   - No QuickJS, no app logic — pure renderer
-    //   - Receives tree mutations over TCP
-    //   - Sends input events back over TCP
-    log.warn(.engine, "windows: independent (TCP) windows not yet implemented", .{});
-    return null;
+fn openIndependent(idx: usize, opts: OpenOptions) ?usize {
+    var server = ipc.Server.bind(0) catch |err| {
+        log.err(.engine, "windows: independent IPC bind failed: {}", .{err});
+        return null;
+    };
+    errdefer server.close();
+
+    const alloc = std.heap.c_allocator;
+    const exe_path = std.fs.selfExePathAlloc(alloc) catch |err| {
+        log.err(.engine, "windows: self exe path failed: {}", .{err});
+        return null;
+    };
+    defer alloc.free(exe_path);
+    const launcher_path = findChildLauncher(alloc, exe_path) catch |err| {
+        log.err(.engine, "windows: child launcher resolve failed: {}", .{err});
+        return null;
+    };
+    defer alloc.free(launcher_path);
+
+    var port_buf: [16]u8 = undefined;
+    const port_s = std.fmt.bufPrint(&port_buf, "{d}", .{server.getPort()}) catch return null;
+    var w_buf: [16]u8 = undefined;
+    const w_s = std.fmt.bufPrint(&w_buf, "{d}", .{opts.width}) catch return null;
+    var h_buf: [16]u8 = undefined;
+    const h_s = std.fmt.bufPrint(&h_buf, "{d}", .{opts.height}) catch return null;
+    var id_buf: [16]u8 = undefined;
+    const id_s = std.fmt.bufPrint(&id_buf, "{d}", .{opts.window_id}) catch return null;
+
+    var env = std.process.getEnvMap(alloc) catch |err| {
+        log.err(.engine, "windows: child env inherit failed: {}", .{err});
+        return null;
+    };
+    defer env.deinit();
+    env.put("ZIGOS_WINDOW_CHILD", "1") catch return null;
+    env.put("ZIGOS_IPC_PORT", port_s) catch return null;
+    env.put("ZIGOS_WINDOW_W", w_s) catch return null;
+    env.put("ZIGOS_WINDOW_H", h_s) catch return null;
+    env.put("ZIGOS_WINDOW_TITLE", std.mem.span(opts.title)) catch return null;
+    env.put("ZIGOS_WINDOW_ID", id_s) catch return null;
+    if (opts.x) |x| {
+        var x_buf: [16]u8 = undefined;
+        const x_s = std.fmt.bufPrint(&x_buf, "{d}", .{x}) catch return null;
+        env.put("ZIGOS_WINDOW_X", x_s) catch return null;
+    }
+    if (opts.y) |y| {
+        var y_buf: [16]u8 = undefined;
+        const y_s = std.fmt.bufPrint(&y_buf, "{d}", .{y}) catch return null;
+        env.put("ZIGOS_WINDOW_Y", y_s) catch return null;
+    }
+    if (opts.borderless) env.put("ZIGOS_WINDOW_BORDERLESS", "1") catch return null;
+    if (opts.always_on_top) env.put("ZIGOS_WINDOW_ALWAYS_ON_TOP", "1") catch return null;
+    if (opts.kind == .notification) {
+        var dismiss_buf: [16]u8 = undefined;
+        const dismiss_s = std.fmt.bufPrint(&dismiss_buf, "{d}", .{opts.auto_dismiss_ms}) catch return null;
+        env.put("ZIGOS_WINDOW_NOTIFICATION", "1") catch return null;
+        env.put("ZIGOS_WINDOW_NOT_FOCUSABLE", "1") catch return null;
+        env.put("ZIGOS_WINDOW_AUTO_DISMISS_MS", dismiss_s) catch return null;
+    }
+
+    const argv = [_][]const u8{ launcher_path, "--window-child" };
+    var child = std.process.Child.init(&argv, alloc);
+    child.env_map = &env;
+    child.stdin_behavior = .Ignore;
+    child.stdout_behavior = .Inherit;
+    child.stderr_behavior = .Inherit;
+    child.spawn() catch |err| {
+        log.err(.engine, "windows: child spawn failed: {}", .{err});
+        return null;
+    };
+
+    slots[idx] = .{
+        .active = true,
+        .kind = .independent,
+        .server = server,
+        .child = child,
+        .win_w = @floatFromInt(opts.width),
+        .win_h = @floatFromInt(opts.height),
+        .bg_color = opts.bg_color,
+    };
+    slot_count += 1;
+    std.debug.print("[window-ipc/parent] spawn slot={d} title={s} launcher={s} port={d} size={d}x{d} window_id={d}\n", .{
+        idx,
+        opts.title,
+        launcher_path,
+        slots[idx].server.?.getPort(),
+        opts.width,
+        opts.height,
+        opts.window_id,
+    });
+    log.info(.engine, "windows: opened slot {d} ({s}) as independent IPC port {d}", .{
+        idx,
+        opts.title,
+        slots[idx].server.?.getPort(),
+    });
+    return idx;
+}
+
+fn findChildLauncher(alloc: std.mem.Allocator, exe_path: []const u8) ![]u8 {
+    const dir = std.fs.path.dirname(exe_path) orelse return alloc.dupe(u8, exe_path);
+    const run_path = try std.fs.path.join(alloc, &.{ dir, "run" });
+    if (std.fs.accessAbsolute(run_path, .{})) |_| {
+        return run_path;
+    } else |_| {
+        alloc.free(run_path);
+    }
+
+    // When the packaged app is launched through the bundled dynamic loader,
+    // /proc/self/exe resolves to .../lib/ld-linux-x86-64.so.2. The wrapper's
+    // runnable entrypoint is one directory above that loader.
+    const parent = std.fs.path.dirname(dir) orelse return alloc.dupe(u8, exe_path);
+    const parent_run_path = try std.fs.path.join(alloc, &.{ parent, "run" });
+    if (std.fs.accessAbsolute(parent_run_path, .{})) |_| {
+        return parent_run_path;
+    } else |_| {
+        alloc.free(parent_run_path);
+        return alloc.dupe(u8, exe_path);
+    }
 }
 
 /// Close a window by slot index.
@@ -230,7 +363,14 @@ pub fn close(idx: usize) void {
             if (slots[idx].window) |w| c.SDL_DestroyWindow(w);
         },
         .independent => {
-            // TODO: send quit message over TCP, wait for child, close socket
+            if (slots[idx].server) |*server| {
+                _ = server.sendLine("{\"type\":\"quit\"}");
+                server.close();
+            }
+            if (slots[idx].child) |*child| {
+                _ = child.kill() catch {};
+            }
+            slots[idx].pending.deinit(std.heap.c_allocator);
         },
     }
 
@@ -255,6 +395,66 @@ pub fn setRoot(idx: usize, root: *Node) void {
     if (idx >= MAX_WINDOWS or !slots[idx].active) return;
     slots[idx].root = root;
     layout.markLayoutDirty();
+}
+
+/// Queue or send one NDJSON message to an independent child window.
+pub fn sendLineToChild(idx: usize, line: []const u8) void {
+    if (idx >= MAX_WINDOWS or !slots[idx].active or slots[idx].kind != .independent) return;
+    if (slots[idx].server) |*server| {
+        if (server.connected() and server.sendLine(line)) {
+            std.debug.print("[window-ipc/parent] send slot={d} bytes={d}\n", .{ idx, line.len });
+            return;
+        }
+    }
+    slots[idx].pending.appendSlice(std.heap.c_allocator, line) catch return;
+    slots[idx].pending.append(std.heap.c_allocator, '\n') catch {};
+    std.debug.print("[window-ipc/parent] queue slot={d} bytes={d} pending={d}\n", .{
+        idx,
+        line.len,
+        slots[idx].pending.items.len,
+    });
+}
+
+pub fn tickIndependent() void {
+    for (0..MAX_WINDOWS) |i| {
+        if (!slots[i].active or slots[i].kind != .independent) continue;
+        const server = &(slots[i].server orelse continue);
+        const was_connected = server.connected();
+        _ = server.acceptClient();
+        if (!was_connected and server.connected()) {
+            std.debug.print("[window-ipc/parent] accepted slot={d} pending={d}\n", .{ i, slots[i].pending.items.len });
+        }
+        if (server.connected() and slots[i].pending.items.len > 0) {
+            if (server.send(slots[i].pending.items)) {
+                std.debug.print("[window-ipc/parent] flush slot={d} bytes={d}\n", .{ i, slots[i].pending.items.len });
+                slots[i].pending.clearRetainingCapacity();
+            }
+        }
+        const messages = server.poll();
+        for (messages) |msg| {
+            std.debug.print("[window-ipc/parent] recv slot={d} bytes={d} {s}\n", .{ i, msg.data.len, msg.data });
+            handleChildMessage(msg.data);
+        }
+    }
+}
+
+fn handleChildMessage(line: []const u8) void {
+    const parsed = std.json.parseFromSlice(std.json.Value, std.heap.c_allocator, line, .{}) catch return;
+    defer parsed.deinit();
+    if (parsed.value != .object) return;
+    const typ_v = parsed.value.object.get("type") orelse return;
+    if (typ_v != .string) return;
+    if (std.mem.eql(u8, typ_v.string, "event")) {
+        const target_v = parsed.value.object.get("targetId") orelse return;
+        const handler_v = parsed.value.object.get("handler") orelse return;
+        if (target_v != .integer or handler_v != .string) return;
+        _ = dispatchJsById(@intCast(target_v.integer), handler_v.string);
+    } else if (std.mem.eql(u8, typ_v.string, "windowEvent")) {
+        const target_v = parsed.value.object.get("targetId") orelse return;
+        const handler_v = parsed.value.object.get("handler") orelse return;
+        if (target_v != .integer or handler_v != .string) return;
+        _ = dispatchJsById(@intCast(target_v.integer), handler_v.string);
+    }
 }
 
 // ════════════════════════════════════════════════════════════════════════
@@ -325,22 +525,28 @@ fn handleMouseMotion(idx: usize, mx: f32, my: f32) void {
         if (prev != slots[idx].hovered) {
             if (prev) |p| {
                 if (p.handlers.on_hover_exit) |h| h();
+                const dispatched_v8 = p.handlers.js_on_hover_exit != null and dispatchJs(p, "onHoverExit");
                 if (p.handlers.lua_on_hover_exit) |lua_expr| luajit_runtime.evalExpr(std.mem.span(lua_expr));
-                if (p.handlers.js_on_hover_exit) |js_expr| {
-                    qjs_runtime.callGlobal("__beginJsEvent");
-                    qjs_runtime.evalExpr(std.mem.span(js_expr));
-                    qjs_runtime.callGlobal("__endJsEvent");
-                    state_mod.markDirty();
+                if (!dispatched_v8) {
+                    if (p.handlers.js_on_hover_exit) |js_expr| {
+                        qjs_runtime.callGlobal("__beginJsEvent");
+                        qjs_runtime.evalExpr(std.mem.span(js_expr));
+                        qjs_runtime.callGlobal("__endJsEvent");
+                        state_mod.markDirty();
+                    }
                 }
             }
             if (slots[idx].hovered) |n| {
                 if (n.handlers.on_hover_enter) |h| h();
+                const dispatched_v8 = n.handlers.js_on_hover_enter != null and dispatchJs(n, "onHoverEnter");
                 if (n.handlers.lua_on_hover_enter) |lua_expr| luajit_runtime.evalExpr(std.mem.span(lua_expr));
-                if (n.handlers.js_on_hover_enter) |js_expr| {
-                    qjs_runtime.callGlobal("__beginJsEvent");
-                    qjs_runtime.evalExpr(std.mem.span(js_expr));
-                    qjs_runtime.callGlobal("__endJsEvent");
-                    state_mod.markDirty();
+                if (!dispatched_v8) {
+                    if (n.handlers.js_on_hover_enter) |js_expr| {
+                        qjs_runtime.callGlobal("__beginJsEvent");
+                        qjs_runtime.evalExpr(std.mem.span(js_expr));
+                        qjs_runtime.callGlobal("__endJsEvent");
+                        state_mod.markDirty();
+                    }
                 }
             }
         }
@@ -351,7 +557,7 @@ fn handleClick(idx: usize, mx: f32, my: f32) void {
     if (idx >= MAX_WINDOWS or !slots[idx].active) return;
     if (slots[idx].root) |root| {
         if (events.hitTest(root, mx, my)) |node| {
-            if (node.handlers.on_press) |handler| handler();
+            if (node.handlers.on_press) |handler| handler() else if (node.handlers.js_on_press != null) _ = dispatchJs(node, "onClick");
         }
     }
 }
@@ -492,7 +698,9 @@ fn paintNodeImpl(
             const text_max_w = r.w - pl - pr;
             var color_with_opacity = tc;
             color_with_opacity.a = @intFromFloat(@as(f32, @floatFromInt(tc.a)) * effective_opacity);
-            te.drawTextWrappedFull(
+            drawSdlTextWrapped(
+                rend,
+                te,
                 txt,
                 r.x + pl,
                 r.y + pt,
@@ -510,6 +718,202 @@ fn paintNodeImpl(
     // Children
     for (node.children) |*child| {
         paintNodeImpl(rend, te, child, hovered, window_opacity, effective_opacity);
+    }
+}
+
+fn drawSdlTextWrapped(
+    rend: *c.SDL_Renderer,
+    te: *TextEngine,
+    text: []const u8,
+    x: f32,
+    y: f32,
+    size_px: u16,
+    max_width: f32,
+    color: Color,
+    text_align: layout.TextAlign,
+    letter_spacing: f32,
+    line_height_override: f32,
+    max_lines: u16,
+) void {
+    const lm = te.lineMetrics(size_px);
+    const line_h: f32 = if (line_height_override > 0) line_height_override else lm.height;
+    var lines: [256]WrappedLine = undefined;
+    const line_count = wrapSdlText(te, text, size_px, max_width, letter_spacing, &lines);
+    const draw_count = if (max_lines > 0 and line_count > max_lines) max_lines else line_count;
+
+    for (0..draw_count) |li| {
+        const line = text[lines[li].start..lines[li].end];
+        var line_x = x;
+        if (text_align != .left and max_width > 0) {
+            const line_w = measureSdlLine(te, line, size_px, letter_spacing);
+            line_x = if (text_align == .center) x + (max_width - line_w) / 2.0 else x + max_width - line_w;
+        }
+        drawSdlTextLine(rend, te, line, line_x, y + line_h * @as(f32, @floatFromInt(li)), size_px, color, letter_spacing);
+    }
+}
+
+fn decodeUtf8Sdl(bytes: []const u8) struct { cp: u32, len: usize } {
+    if (bytes.len == 0) return .{ .cp = 0xFFFD, .len = 1 };
+    const b0 = bytes[0];
+    if (b0 < 0x80) return .{ .cp = b0, .len = 1 };
+    if (b0 < 0xC0) return .{ .cp = 0xFFFD, .len = 1 };
+    if (b0 < 0xE0) {
+        if (bytes.len < 2) return .{ .cp = 0xFFFD, .len = 1 };
+        return .{ .cp = (@as(u32, b0 & 0x1F) << 6) | @as(u32, bytes[1] & 0x3F), .len = 2 };
+    }
+    if (b0 < 0xF0) {
+        if (bytes.len < 3) return .{ .cp = 0xFFFD, .len = 1 };
+        return .{ .cp = (@as(u32, b0 & 0x0F) << 12) | (@as(u32, bytes[1] & 0x3F) << 6) | @as(u32, bytes[2] & 0x3F), .len = 3 };
+    }
+    if (bytes.len < 4) return .{ .cp = 0xFFFD, .len = 1 };
+    return .{ .cp = (@as(u32, b0 & 0x07) << 18) | (@as(u32, bytes[1] & 0x3F) << 12) | (@as(u32, bytes[2] & 0x3F) << 6) | @as(u32, bytes[3] & 0x3F), .len = 4 };
+}
+
+fn glyphAdvance(te: *TextEngine, cp: u32, size_px: u16) f32 {
+    const face = selectFace(te, cp, size_px);
+    if (c.FT_Load_Char(face, cp, c.FT_LOAD_DEFAULT) != 0) return @as(f32, @floatFromInt(size_px)) * 0.5;
+    return @as(f32, @floatFromInt(face.*.glyph.*.advance.x)) / 64.0;
+}
+
+fn selectFace(te: *TextEngine, cp: u32, size_px: u16) c.FT_Face {
+    _ = c.FT_Set_Pixel_Sizes(te.face, 0, size_px);
+    if (c.FT_Get_Char_Index(te.face, cp) != 0) return te.face;
+    for (0..te.fallback_count) |fi| {
+        const fb = te.fallback_faces[fi];
+        if (c.FT_Get_Char_Index(fb, cp) != 0) {
+            _ = c.FT_Set_Pixel_Sizes(fb, 0, size_px);
+            return fb;
+        }
+    }
+    return te.face;
+}
+
+fn measureSdlLine(te: *TextEngine, text: []const u8, size_px: u16, letter_spacing: f32) f32 {
+    var width: f32 = 0;
+    var chars: usize = 0;
+    var i: usize = 0;
+    while (i < text.len) {
+        const ch = decodeUtf8Sdl(text[i..]);
+        if (ch.cp >= 0x20) {
+            width += glyphAdvance(te, ch.cp, size_px);
+            chars += 1;
+        }
+        i += ch.len;
+    }
+    if (chars > 1) width += letter_spacing * @as(f32, @floatFromInt(chars - 1));
+    return width;
+}
+
+fn wrapSdlText(
+    te: *TextEngine,
+    text: []const u8,
+    size_px: u16,
+    max_width: f32,
+    letter_spacing: f32,
+    out: []WrappedLine,
+) usize {
+    if (out.len == 0) return 0;
+    if (text.len == 0) {
+        out[0] = .{ .start = 0, .end = 0 };
+        return 1;
+    }
+    var line_count: usize = 0;
+    var line_start: usize = 0;
+    var last_space: ?usize = null;
+    var line_width: f32 = 0;
+    var i: usize = 0;
+    while (i < text.len) {
+        if (text[i] == '\n') {
+            out[line_count] = .{ .start = line_start, .end = i };
+            line_count += 1;
+            if (line_count >= out.len) return line_count;
+            i += 1;
+            line_start = i;
+            last_space = null;
+            line_width = 0;
+            continue;
+        }
+        if (text[i] == ' ') last_space = i;
+        const ch = decodeUtf8Sdl(text[i..]);
+        const adv = glyphAdvance(te, ch.cp, size_px) + letter_spacing;
+        if (max_width > 0 and line_width > 0 and line_width + adv > max_width) {
+            const end = last_space orelse i;
+            if (end > line_start) {
+                out[line_count] = .{ .start = line_start, .end = end };
+                line_count += 1;
+                if (line_count >= out.len) return line_count;
+                line_start = if (last_space) |space| space + 1 else i;
+                i = line_start;
+                last_space = null;
+                line_width = 0;
+                continue;
+            }
+        }
+        line_width += adv;
+        i += ch.len;
+    }
+    if (line_count < out.len and line_start <= text.len) {
+        out[line_count] = .{ .start = line_start, .end = text.len };
+        line_count += 1;
+    }
+    return line_count;
+}
+
+fn drawSdlTextLine(
+    rend: *c.SDL_Renderer,
+    te: *TextEngine,
+    text: []const u8,
+    x: f32,
+    y: f32,
+    size_px: u16,
+    color: Color,
+    letter_spacing: f32,
+) void {
+    if (text.len == 0) return;
+    _ = c.FT_Set_Pixel_Sizes(te.face, 0, size_px);
+    const lm = te.lineMetrics(size_px);
+    const baseline = y + lm.ascent;
+    var pen_x = x;
+    var i: usize = 0;
+    while (i < text.len) {
+        const ch = decodeUtf8Sdl(text[i..]);
+        i += ch.len;
+        if (ch.cp < 0x20) continue;
+        const face = selectFace(te, ch.cp, size_px);
+        if (c.FT_Load_Char(face, ch.cp, c.FT_LOAD_RENDER) != 0) continue;
+        const glyph = face.*.glyph;
+        const bitmap = glyph.*.bitmap;
+        const bw: usize = @intCast(bitmap.width);
+        const bh: usize = @intCast(bitmap.rows);
+        if (bw > 0 and bh > 0 and bitmap.buffer != null) {
+            const rgba = std.heap.c_allocator.alloc(u8, bw * bh * 4) catch return;
+            defer std.heap.c_allocator.free(rgba);
+            const src_pitch_abs: usize = @intCast(if (bitmap.pitch < 0) -bitmap.pitch else bitmap.pitch);
+            for (0..bh) |row| {
+                for (0..bw) |col| {
+                    const alpha = bitmap.buffer[row * src_pitch_abs + col];
+                    const dst = (row * bw + col) * 4;
+                    rgba[dst + 0] = color.r;
+                    rgba[dst + 1] = color.g;
+                    rgba[dst + 2] = color.b;
+                    rgba[dst + 3] = @intCast((@as(u16, alpha) * @as(u16, color.a)) / 255);
+                }
+            }
+            const tex = c.SDL_CreateTexture(rend, c.SDL_PIXELFORMAT_RGBA32, c.SDL_TEXTUREACCESS_STATIC, @intCast(bw), @intCast(bh));
+            if (tex) |texture| {
+                defer c.SDL_DestroyTexture(texture);
+                _ = c.SDL_SetTextureBlendMode(texture, c.SDL_BLENDMODE_BLEND);
+                _ = c.SDL_UpdateTexture(texture, null, rgba.ptr, @intCast(bw * 4));
+                var dst = c.SDL_FRect{
+                    .x = pen_x + @as(f32, @floatFromInt(glyph.*.bitmap_left)),
+                    .y = baseline - @as(f32, @floatFromInt(glyph.*.bitmap_top)),
+                    .w = @floatFromInt(bw),
+                    .h = @floatFromInt(bh),
+                };
+                _ = c.SDL_RenderTexture(rend, texture, null, &dst);
+            }
+        }
+        pen_x += @as(f32, @floatFromInt(glyph.*.advance.x)) / 64.0 + letter_spacing;
     }
 }
 

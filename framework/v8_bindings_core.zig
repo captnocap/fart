@@ -13,6 +13,11 @@ const luajit_runtime = @import("luajit_runtime.zig");
 const qjs_runtime = @import("qjs_runtime.zig");
 const exec_async = @import("exec_async.zig");
 const vterm = @import("vterm.zig");
+const router = @import("router.zig");
+const audio = @import("audio.zig");
+const filedrop = @import("filedrop.zig");
+const localstore = @import("localstore.zig");
+const fswatch = @import("fswatch.zig");
 const c = @import("c.zig").imports;
 
 var g_content_store: std.AutoHashMap(u32, []u8) = undefined;
@@ -102,15 +107,15 @@ fn hostGetInputTextForNode(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.
         setReturnString(info, "");
         return;
     }
-    const node_id = argToI32(info, 0) orelse {
+    const input_id = argToI32(info, 0) orelse {
         setReturnString(info, "");
         return;
     };
-    if (node_id <= 0) {
+    if (input_id < 0) {
         setReturnString(info, "");
         return;
     }
-    const text = input.getText(@intCast(@max(0, node_id)));
+    const text = input.getText(@intCast(input_id));
     if (text.len == 0) {
         setReturnString(info, "");
         return;
@@ -420,7 +425,12 @@ fn emitExecResult(rid: []const u8, stdout: []const u8, code: i32) void {
     v8_runtime.callGlobal2Str("__ffiEmit", chan_z, payload_z);
 }
 
-pub fn execTickDrain() void {
+/// Per-frame drain. Currently emits results from completed async exec calls
+/// to JS via __ffiEmit (the listener path defers through setTimeout, so the
+/// listener actually runs on the *next* __jsTick — no ordering dependency
+/// vs __jsTick itself). Renamed from execTickDrain to fit the uniform
+/// tickDrain() name that INGREDIENTS in v8_app.zig expects.
+pub fn tickDrain() void {
     exec_async.drain(emitExecResult);
 }
 
@@ -439,6 +449,358 @@ pub fn drainPendingFlushes(apply: DrainCallback) void {
 pub fn contentStoreGet(id: u32) ?[]const u8 {
     if (!g_content_store_inited) return null;
     return g_content_store.get(id);
+}
+
+// ── Router host functions (framework/router.zig) ────────────
+fn hostRouterInit(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const path = argToStringAlloc(info, 0) orelse {
+        router.init("/");
+        return;
+    };
+    defer std.heap.c_allocator.free(path);
+    router.init(path);
+}
+
+fn hostRouterPush(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const path = argToStringAlloc(info, 0) orelse return;
+    defer std.heap.c_allocator.free(path);
+    router.push(path);
+    state.markDirty();
+}
+
+fn hostRouterReplace(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const path = argToStringAlloc(info, 0) orelse return;
+    defer std.heap.c_allocator.free(path);
+    router.replace(path);
+    state.markDirty();
+}
+
+fn hostRouterBack(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    _ = info_c;
+    router.back();
+    state.markDirty();
+}
+
+fn hostRouterForward(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    _ = info_c;
+    router.forward();
+    state.markDirty();
+}
+
+fn hostRouterCurrentPath(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    setReturnString(info, router.currentPath());
+}
+
+// ── Audio host functions (framework/audio.zig synth engine) ───
+// Module IDs are caller-managed (cart-side counter / useId mapping).
+fn hostAudioAddModule(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const id = argToI32(info, 0) orelse return;
+    const mod_type = argToI32(info, 1) orelse return;
+    _ = audio.pushCommand(.{
+        .cmd_type = .add_module,
+        .module_id = @intCast(@max(0, id)),
+        .module_type = @enumFromInt(@as(u8, @intCast(@max(0, @min(mod_type, 10))))),
+    });
+}
+
+fn hostAudioRemoveModule(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const id = argToI32(info, 0) orelse return;
+    _ = audio.pushCommand(.{
+        .cmd_type = .remove_module,
+        .module_id = @intCast(@max(0, id)),
+    });
+}
+
+fn hostAudioConnect(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const from = argToI32(info, 0) orelse return;
+    const from_port = argToI32(info, 1) orelse return;
+    const to = argToI32(info, 2) orelse return;
+    const to_port = argToI32(info, 3) orelse return;
+    _ = audio.pushCommand(.{
+        .cmd_type = .connect,
+        .module_id = @intCast(@max(0, from)),
+        .port_a = @intCast(@max(0, from_port)),
+        .target_module = @intCast(@max(0, to)),
+        .port_b = @intCast(@max(0, to_port)),
+    });
+}
+
+fn hostAudioDisconnect(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const from = argToI32(info, 0) orelse return;
+    const from_port = argToI32(info, 1) orelse return;
+    const to = argToI32(info, 2) orelse return;
+    const to_port = argToI32(info, 3) orelse return;
+    _ = audio.pushCommand(.{
+        .cmd_type = .disconnect,
+        .module_id = @intCast(@max(0, from)),
+        .port_a = @intCast(@max(0, from_port)),
+        .target_module = @intCast(@max(0, to)),
+        .port_b = @intCast(@max(0, to_port)),
+    });
+}
+
+fn hostAudioSetParam(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const id = argToI32(info, 0) orelse return;
+    const param_idx = argToI32(info, 1) orelse return;
+    const value = argToF64(info, 2) orelse return;
+    _ = audio.pushCommand(.{
+        .cmd_type = .set_param,
+        .module_id = @intCast(@max(0, id)),
+        .param_index = @intCast(@max(0, param_idx)),
+        .value_f = value,
+    });
+}
+
+fn hostAudioNoteOn(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const id = argToI32(info, 0) orelse return;
+    const midi = argToI32(info, 1) orelse return;
+    _ = audio.pushCommand(.{
+        .cmd_type = .note_on,
+        .module_id = @intCast(@max(0, id)),
+        .value_i = midi,
+    });
+}
+
+fn hostAudioNoteOff(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const id = argToI32(info, 0) orelse return;
+    _ = audio.pushCommand(.{
+        .cmd_type = .note_off,
+        .module_id = @intCast(@max(0, id)),
+    });
+}
+
+fn hostAudioMasterGain(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const gain = argToF64(info, 0) orelse return;
+    _ = audio.pushCommand(.{
+        .cmd_type = .set_master_gain,
+        .value_f = gain,
+    });
+}
+
+// ── Filedrop host functions (framework/filedrop.zig) ─────────
+fn hostFiledropLastPath(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    if (filedrop.getLastPath()) |p| setReturnString(info, p) else setReturnString(info, "");
+}
+
+fn hostFiledropSeq(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    setReturnNumber(info, @floatFromInt(filedrop.getDropSeq()));
+}
+
+// ── vterm recorder host functions (framework/vterm.zig) ──────
+fn hostVtermStartRecording(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const rows: u16 = @intCast(@max(1, argToI32(info, 0) orelse 24));
+    const cols: u16 = @intCast(@max(1, argToI32(info, 1) orelse 80));
+    vterm.startRecording(rows, cols);
+}
+
+fn hostVtermStopRecording(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    _ = info_c;
+    vterm.stopRecording();
+}
+
+fn hostVtermSaveRecording(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const path = argToStringAlloc(info, 0) orelse {
+        setReturnNumber(info, 0);
+        return;
+    };
+    defer std.heap.c_allocator.free(path);
+    setReturnNumber(info, if (vterm.saveRecording(path)) 1 else 0);
+}
+
+fn hostVtermIsRecording(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    setReturnNumber(info, if (vterm.isRecording()) 1 else 0);
+}
+
+// ── localstore host functions (framework/localstore.zig) ─────
+// 64 KB read buffer — values larger than this are truncated. JS-side
+// callers should keep entries small; for blobs use a file path.
+var g_localstore_read_buf: [64 * 1024]u8 = undefined;
+
+fn hostLocalstoreGet(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const ns = argToStringAlloc(info, 0) orelse {
+        setReturnString(info, "");
+        return;
+    };
+    defer std.heap.c_allocator.free(ns);
+    const key = argToStringAlloc(info, 1) orelse {
+        setReturnString(info, "");
+        return;
+    };
+    defer std.heap.c_allocator.free(key);
+    const len = localstore.get(ns, key, &g_localstore_read_buf) catch {
+        setReturnString(info, "");
+        return;
+    };
+    if (len) |n| {
+        setReturnString(info, g_localstore_read_buf[0..n]);
+    } else {
+        setReturnString(info, "");
+    }
+}
+
+fn hostLocalstoreHas(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const ns = argToStringAlloc(info, 0) orelse {
+        setReturnNumber(info, 0);
+        return;
+    };
+    defer std.heap.c_allocator.free(ns);
+    const key = argToStringAlloc(info, 1) orelse {
+        setReturnNumber(info, 0);
+        return;
+    };
+    defer std.heap.c_allocator.free(key);
+    const len = localstore.get(ns, key, &g_localstore_read_buf) catch {
+        setReturnNumber(info, 0);
+        return;
+    };
+    setReturnNumber(info, if (len != null) 1 else 0);
+}
+
+fn hostLocalstoreSet(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const ns = argToStringAlloc(info, 0) orelse return;
+    defer std.heap.c_allocator.free(ns);
+    const key = argToStringAlloc(info, 1) orelse return;
+    defer std.heap.c_allocator.free(key);
+    const value = argToStringAlloc(info, 2) orelse return;
+    defer std.heap.c_allocator.free(value);
+    localstore.set(ns, key, value) catch {};
+}
+
+fn hostLocalstoreDelete(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const ns = argToStringAlloc(info, 0) orelse return;
+    defer std.heap.c_allocator.free(ns);
+    const key = argToStringAlloc(info, 1) orelse return;
+    defer std.heap.c_allocator.free(key);
+    localstore.delete(ns, key) catch {};
+}
+
+fn hostLocalstoreClear(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    if (info.length() < 1) {
+        localstore.clear(null) catch {};
+        return;
+    }
+    const ns = argToStringAlloc(info, 0) orelse return;
+    defer std.heap.c_allocator.free(ns);
+    if (ns.len == 0) {
+        localstore.clear(null) catch {};
+    } else {
+        localstore.clear(ns) catch {};
+    }
+}
+
+// ── fswatch host functions (framework/fswatch.zig) ───────────
+// Engine ticks fswatch.tick() every frame; events accumulate into the
+// internal queue. JS drains via __fswatchDrain. Format is JSON:
+// [{"w":N,"t":"created"|"modified"|"deleted","p":"path","s":bytes,"m":mtime_ns},...]
+var g_fswatch_drain_buf: [128 * 1024]u8 = undefined;
+
+fn hostFswatchAdd(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const path = argToStringAlloc(info, 0) orelse {
+        setReturnNumber(info, -1);
+        return;
+    };
+    defer std.heap.c_allocator.free(path);
+    const recursive = (argToI32(info, 1) orelse 0) != 0;
+    const interval_ms: u32 = @intCast(@max(0, argToI32(info, 2) orelse 1000));
+    const has_pattern = info.length() > 3;
+    var pat_owned: ?[]u8 = null;
+    if (has_pattern) {
+        pat_owned = argToStringAlloc(info, 3);
+    }
+    defer if (pat_owned) |p| std.heap.c_allocator.free(p);
+
+    const id = fswatch.addWatcher(.{
+        .path = path,
+        .recursive = recursive,
+        .interval_ms = interval_ms,
+        .pattern = if (pat_owned) |p| if (p.len > 0) p else null else null,
+    }) catch {
+        setReturnNumber(info, -1);
+        return;
+    };
+    setReturnNumber(info, @floatFromInt(id));
+}
+
+fn hostFswatchRemove(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const id = argToI32(info, 0) orelse return;
+    if (id < 0 or id >= fswatch.MAX_WATCHERS) return;
+    fswatch.removeWatcher(@intCast(id));
+}
+
+fn hostFswatchDrain(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    var events: [fswatch.MAX_EVENTS]fswatch.ChangeEvent = undefined;
+    const n = fswatch.drainEvents(&events);
+
+    // Build JSON: [{"w":N,"t":"...","p":"...","s":N,"m":N}, ...]
+    var pos: usize = 0;
+    g_fswatch_drain_buf[pos] = '[';
+    pos += 1;
+    var i: usize = 0;
+    while (i < n) : (i += 1) {
+        if (i > 0) {
+            if (pos >= g_fswatch_drain_buf.len) break;
+            g_fswatch_drain_buf[pos] = ',';
+            pos += 1;
+        }
+        const ev = &events[i];
+        const type_str = switch (ev.change_type) {
+            .created => "created",
+            .modified => "modified",
+            .deleted => "deleted",
+        };
+        const written = std.fmt.bufPrint(
+            g_fswatch_drain_buf[pos..],
+            "{{\"w\":{d},\"t\":\"{s}\",\"p\":\"",
+            .{ ev.watcher_id, type_str },
+        ) catch break;
+        pos += written.len;
+        // Path with minimal escaping (backslash + quote only).
+        for (ev.path()) |ch| {
+            if (pos + 2 >= g_fswatch_drain_buf.len) break;
+            if (ch == '"' or ch == '\\') {
+                g_fswatch_drain_buf[pos] = '\\';
+                pos += 1;
+            }
+            g_fswatch_drain_buf[pos] = ch;
+            pos += 1;
+        }
+        const tail = std.fmt.bufPrint(
+            g_fswatch_drain_buf[pos..],
+            "\",\"s\":{d},\"m\":{d}}}",
+            .{ ev.size, ev.mtime_ns },
+        ) catch break;
+        pos += tail.len;
+    }
+    if (pos < g_fswatch_drain_buf.len) {
+        g_fswatch_drain_buf[pos] = ']';
+        pos += 1;
+    }
+    setReturnString(info, g_fswatch_drain_buf[0..pos]);
 }
 
 pub fn registerCore(vm: anytype) void {
@@ -470,6 +832,34 @@ pub fn registerCore(vm: anytype) void {
     v8_runtime.registerHostFn("__clipboard_get", hostClipboardGet);
     v8_runtime.registerHostFn("__exec_async", hostExecAsync);
     v8_runtime.registerHostFn("__terminal_set_cwd", hostTerminalSetCwd);
+    v8_runtime.registerHostFn("__routerInit", hostRouterInit);
+    v8_runtime.registerHostFn("__routerPush", hostRouterPush);
+    v8_runtime.registerHostFn("__routerReplace", hostRouterReplace);
+    v8_runtime.registerHostFn("__routerBack", hostRouterBack);
+    v8_runtime.registerHostFn("__routerForward", hostRouterForward);
+    v8_runtime.registerHostFn("__routerCurrentPath", hostRouterCurrentPath);
+    v8_runtime.registerHostFn("__audioAddModule", hostAudioAddModule);
+    v8_runtime.registerHostFn("__audioRemoveModule", hostAudioRemoveModule);
+    v8_runtime.registerHostFn("__audioConnect", hostAudioConnect);
+    v8_runtime.registerHostFn("__audioDisconnect", hostAudioDisconnect);
+    v8_runtime.registerHostFn("__audioSetParam", hostAudioSetParam);
+    v8_runtime.registerHostFn("__audioNoteOn", hostAudioNoteOn);
+    v8_runtime.registerHostFn("__audioNoteOff", hostAudioNoteOff);
+    v8_runtime.registerHostFn("__audioMasterGain", hostAudioMasterGain);
+    v8_runtime.registerHostFn("__filedropLastPath", hostFiledropLastPath);
+    v8_runtime.registerHostFn("__filedropSeq", hostFiledropSeq);
+    v8_runtime.registerHostFn("__vtermStartRecording", hostVtermStartRecording);
+    v8_runtime.registerHostFn("__vtermStopRecording", hostVtermStopRecording);
+    v8_runtime.registerHostFn("__vtermSaveRecording", hostVtermSaveRecording);
+    v8_runtime.registerHostFn("__vtermIsRecording", hostVtermIsRecording);
+    v8_runtime.registerHostFn("__localstoreGet", hostLocalstoreGet);
+    v8_runtime.registerHostFn("__localstoreHas", hostLocalstoreHas);
+    v8_runtime.registerHostFn("__localstoreSet", hostLocalstoreSet);
+    v8_runtime.registerHostFn("__localstoreDelete", hostLocalstoreDelete);
+    v8_runtime.registerHostFn("__localstoreClear", hostLocalstoreClear);
+    v8_runtime.registerHostFn("__fswatchAdd", hostFswatchAdd);
+    v8_runtime.registerHostFn("__fswatchRemove", hostFswatchRemove);
+    v8_runtime.registerHostFn("__fswatchDrain", hostFswatchDrain);
 }
 
 fn hostGetInputText(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {

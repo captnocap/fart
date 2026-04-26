@@ -1,5 +1,3 @@
-const React: any = require('react');
-
 import { Box, Image, Text } from '../../../../runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 import { tileUrl } from '../../lib/osm/tile-url';

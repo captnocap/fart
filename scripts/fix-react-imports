@@ -1,0 +1,81 @@
+#!/usr/bin/env python3
+"""
+Heal the two broken React-import patterns that scratch-recovery keeps
+reintroducing into cart/ and runtime/ .ts/.tsx files.
+
+Patterns handled (both idempotent — no-op on second run):
+
+  const { useX, useY } = React;           →  import { useX, useY } from 'react';
+  const React: any = require('react');    →  (line removed)
+
+Top-level-destructure fails at module-init time because cart modules evaluate
+before the runtime sets globalThis.React. The require() line was copy-pasted
+from a node-style template that doesn't run under v8cli either way.
+
+Called from scripts/ship and scripts/dev before the bundler runs. Safe to
+run any time.
+"""
+
+import os
+import re
+import sys
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ROOTS = [os.path.join(ROOT, "cart"), os.path.join(ROOT, "runtime")]
+
+DESTRUCTURE = re.compile(
+    r"^const\s*\{\s*([^}]+?)\s*\}\s*=\s*React\s*;\s*$",
+    re.MULTILINE,
+)
+REQUIRE = re.compile(
+    r"^const\s+React\s*:\s*any\s*=\s*require\(\s*['\"]react['\"]\s*\)\s*;\s*$",
+    re.MULTILINE,
+)
+# If the file *mutates* React (e.g. `React.useState = ...` or
+# `(React as any).foo = ...`) the require() is load-bearing — an ES `import`
+# yields an immutable namespace and breaks the patch. In that case, leave
+# the require alone.
+REACT_MUTATION = re.compile(
+    r"(?:\bReact|\(\s*React\s+as\b[^)]*\))\s*\.\s*\w+\s*="
+)
+
+
+def heal(path: str) -> bool:
+    try:
+        src = open(path, "r", encoding="utf-8").read()
+    except (UnicodeDecodeError, OSError):
+        return False
+
+    new = src
+    m = REQUIRE.search(new)
+    if m and not REACT_MUTATION.search(new):
+        # Safe to drop: no mutation means the require line is dead code.
+        new = new[: m.start()] + new[m.end():].lstrip("\n")
+
+    new = DESTRUCTURE.sub(
+        lambda mm: f"import {{ {mm.group(1).strip()} }} from 'react';",
+        new,
+    )
+    if new != src:
+        open(path, "w", encoding="utf-8").write(new)
+        return True
+    return False
+
+
+def main() -> int:
+    healed = []
+    for root in ROOTS:
+        for dirpath, _, files in os.walk(root):
+            for f in files:
+                if not (f.endswith(".tsx") or f.endswith(".ts")):
+                    continue
+                p = os.path.join(dirpath, f)
+                if heal(p):
+                    healed.append(os.path.relpath(p, ROOT))
+    for p in healed:
+        print(f"[fix-react-imports] healed {p}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,6 +1,4 @@
-const React: any = require('react');
-const { useCallback } = React;
-
+import { useCallback } from 'react';
 import { Box, Effect } from '../../../../runtime/primitives';
 import { SCREEN_WIDTH, SCREEN_HEIGHT } from '../../lib/emulator/ppu';
 import type { Bus } from '../../lib/emulator/bus';

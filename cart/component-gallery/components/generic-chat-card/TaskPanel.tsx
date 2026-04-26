@@ -2,6 +2,7 @@ import { Box, Col, Row, Text } from '../../../../runtime/primitives';
 import { StepCardShell } from './TranscriptFlow';
 import type { RailBadgeName } from './RailBadge';
 import { CHAT_CARD } from './tokens';
+import { classifiers as S } from '@reactjit/core';
 
 export type CounterTask = {
   kind: 'counter';
@@ -52,24 +53,24 @@ function CounterPen({ task }: { task: CounterTask }) {
     <Col style={{ gap: 0 }}>
       <TaskStep color={CHAT_CARD.green} showConnector={true} badgeName="target">
         <Row style={{ alignItems: 'center', justifyContent: 'space-between' }}>
-          <Row style={{ alignItems: 'center', gap: 8 }}>
-            <Box style={{ width: 10, height: 10, borderWidth: 1, borderColor: CHAT_CARD.green, borderRadius: 99 }} />
+          <S.InlineX4Center>
+            <Box style={{ width: 10, height: 10, borderWidth: 1, borderColor: CHAT_CARD.green, borderRadius: 5 }} />
             <Text style={{ fontFamily: 'monospace', fontSize: 10, color: CHAT_CARD.text }}>{task.title}</Text>
-          </Row>
+          </S.InlineX4Center>
           <Text style={{ fontFamily: 'monospace', fontSize: 18, fontWeight: 'bold', color: CHAT_CARD.cyan }}>{task.count}</Text>
         </Row>
       </TaskStep>
       <TaskStep color={CHAT_CARD.green} connectTop={true} showConnector={true} badgeName="list">
-        <Row style={{ alignItems: 'center', gap: 6 }}>
+        <S.InlineX3>
           <Box style={{ paddingLeft: 6, paddingRight: 6, paddingTop: 3, paddingBottom: 3, backgroundColor: '#54351d', borderRadius: 3 }}>
-            <Text style={{ fontFamily: 'monospace', fontSize: 7, fontWeight: 'bold', color: CHAT_CARD.gold }}>DRAFT 2</Text>
+            <Text style={{ fontFamily: 'monospace', fontSize: 7, fontWeight: 'bold', color: CHAT_CARD.orange }}>DRAFT 2</Text>
           </Box>
-          <Box style={{ paddingLeft: 6, paddingRight: 6, paddingTop: 3, paddingBottom: 3, backgroundColor: '#18382f', borderRadius: 3 }}>
+          <Box style={{ paddingLeft: 6, paddingRight: 6, paddingTop: 3, paddingBottom: 3, backgroundColor: '#1a1511', borderRadius: 3 }}>
             <Text style={{ fontFamily: 'monospace', fontSize: 7, fontWeight: 'bold', color: CHAT_CARD.green }}>COUNTER SLOT</Text>
           </Box>
-          <Box style={{ flexGrow: 1 }} />
+          <S.Spacer />
           <Text style={{ fontFamily: 'monospace', fontSize: 7, color: CHAT_CARD.faint }}>TARGET: {task.target}</Text>
-        </Row>
+        </S.InlineX3>
         <Box style={{ width: 320, height: 5, backgroundColor: '#26364a' }}>
           <Box style={{ width: fill, height: 5, backgroundColor: '#13c996' }} />
         </Box>

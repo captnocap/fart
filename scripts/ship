@@ -19,8 +19,11 @@
 #   scripts/ship <cart-name> -d       # debug build, skips packaging (raw ELF)
 #   --raw is DISABLED: the unpackaged ELF segfaults on startup because the
 #   Linux bundle's .so staging happens in the self-extracting shell wrapper.
-#   scripts/ship <cart-name> --jsrt   # build the JSRT runtime path instead of V8/QJS
 #   scripts/ship <cart-name> --qjs    # build the legacy QJS runtime path instead of V8
+#
+# JSRT (--jsrt) is shelved as of 2026-04-23. The JS-inside-Lua evaluator in
+# framework/lua/jsrt/ stays as reference code but is not wired into ship any
+# more; V8 is the only default path.
 
 set -euo pipefail
 
@@ -39,7 +42,6 @@ fi
 NAME="${1:-}"
 DEBUG=0
 RAW=0
-JSRT=0
 QJS=0
 for arg in "${@:2}"; do
     case "$arg" in
@@ -59,13 +61,17 @@ for arg in "${@:2}"; do
             echo "[ship] AFTER a successful ship — the wrapper keeps the ELF alongside." >&2
             exit 1
             ;;
-        --jsrt)     JSRT=1 ;;
+        --jsrt)
+            echo "[ship] --jsrt is shelved — JSRT is no longer wired into ship." >&2
+            echo "[ship] V8 is the default and only supported runtime." >&2
+            exit 1
+            ;;
         --qjs)      QJS=1 ;;
     esac
 done
 
 if [[ -z "$NAME" ]]; then
-    echo "Usage: scripts/ship <cart-name> [-d|--jsrt|--qjs]" >&2
+    echo "Usage: scripts/ship <cart-name> [-d|--qjs]" >&2
     echo "  Cart expected at: cart/<cart-name>.tsx" >&2
     exit 1
 fi
@@ -81,37 +87,17 @@ else
     exit 1
 fi
 
-# ── 1a. Recompile all primitive .tslx sources ────────────────────────
-# framework/primitives/*.tslx → framework/primitives/generated/*.zig
-#                            + runtime/primitives_gen/*.tsx
-# Idempotent + cheap; always run so a forgotten edit never gets shipped.
-if [[ -d "framework/primitives" ]] && compgen -G "framework/primitives/*.tslx" > /dev/null; then
-    echo "[ship] compiling primitives from framework/primitives/*.tslx..."
-    node scripts/tslx_compile.mjs --all > /dev/null
-fi
-
-# ── 1b. Bundle cart entry via esbuild → bundle-<name>.js ─────────────
+# ── 1. Bundle cart entry via esbuild → bundle-<name>.js ──────────────
 # Per-cart bundle path means two parallel ships can't overwrite each other's
 # output. v8_app.zig / qjs_app.zig embed `bundle-<app-name>.js` at compile time.
 BUNDLE_OUT="bundle-${NAME}.js"
 
-AST_OUT=""
-if [[ "$JSRT" -eq 1 ]]; then
-    AST_OUT="bundle-${NAME}.ast.lua"
-    JSRT_SOURCE="${JSRT_AST_SOURCE:-$CART_FILE}"
-    if [[ -z "${JSRT_AST_SOURCE:-}" ]]; then
-        echo "[ship] bundling $CART_FILE → $BUNDLE_OUT..."
-        BUNDLE_FROM_HARNESS=1 node scripts/internal/cart-bundle.mjs "$CART_FILE" --out "$BUNDLE_OUT"
-        JSRT_SOURCE="$BUNDLE_OUT"
-    else
-        echo "[ship] JSRT AST source override: $JSRT_SOURCE"
-    fi
-    echo "[ship] parsing $JSRT_SOURCE → $AST_OUT..."
-    node scripts/build-jsast.mjs "$JSRT_SOURCE" "$AST_OUT"
-else
-    echo "[ship] bundling $CART_FILE → $BUNDLE_OUT..."
-    BUNDLE_FROM_HARNESS=1 node scripts/internal/cart-bundle.mjs "$CART_FILE" --out "$BUNDLE_OUT"
-fi
+# Heal top-level `const { useX } = React;` and stray require('react') lines —
+# patterns that fail at module-init before globalThis.React is set.
+scripts/fix-react-imports
+
+echo "[ship] bundling $CART_FILE → $BUNDLE_OUT..."
+BUNDLE_FROM_HARNESS=1 tools/v8cli scripts/cart-bundle.js "$CART_FILE" --out "$BUNDLE_OUT"
 
 # ── 2. Compile qjs_app.zig (bundle-<name>.js embedded via @embedFile) ─
 OPT_FLAG="-Doptimize=ReleaseFast"
@@ -122,10 +108,7 @@ fi
 echo "[ship] compiling native binary..."
 APP_SOURCE="v8_app.zig"
 QJS_FLAG="-Duse-v8=true"
-if [[ "$JSRT" -eq 1 ]]; then
-    APP_SOURCE="jsrt_app.zig"
-    QJS_FLAG=""
-elif [[ "$QJS" -eq 1 ]]; then
+if [[ "$QJS" -eq 1 ]]; then
     APP_SOURCE="qjs_app.zig"
     QJS_FLAG=""
 fi
@@ -137,14 +120,100 @@ fi
 CUSTOM_CHROME_FLAG=""
 CART_MANIFEST="cart/${NAME}/cart.json"
 if [[ -f "$CART_MANIFEST" ]]; then
-    CUSTOM_CHROME=$(node -e "try{const m=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));process.stdout.write(m.customChrome===true?'true':'false')}catch(e){process.stdout.write('false')}" "$CART_MANIFEST")
-    if [[ "$CUSTOM_CHROME" == "true" ]]; then
+    # Grep-based probe avoids shelling out to a JS runtime for a one-field read.
+    # Matches `"customChrome":true` with optional whitespace. A cart author who
+    # writes something creative (nested objects, trailing comments) won't match,
+    # which is fine — the flag is opt-in and defaulting to "windowed chrome" is
+    # the safer fallback.
+    if grep -Eq '"customChrome"[[:space:]]*:[[:space:]]*true' "$CART_MANIFEST"; then
         CUSTOM_CHROME_FLAG="-Dcustom-chrome=true"
         echo "[ship] cart manifest: customChrome=true"
     fi
 fi
 
-zig build app -Dapp-name="$NAME" -Dapp-source="$APP_SOURCE" $QJS_FLAG $CUSTOM_CHROME_FLAG $OPT_FLAG
+# Detect optional capabilities by scanning the just-built bundle.
+# Each capability flag links its corresponding system library and pulls in
+# the relevant framework binding. Source-driven: cart says "I use X", we
+# ship X. Cart doesn't say, we don't.
+# Read the esbuild metafile (sidecar to the bundle, written by cart-bundle.js
+# via --metafile). The metafile's `inputs` map lists every source file that
+# survived tree-shaking — the structural truth of what's actually in the
+# bundle. We check whether specific hook source paths appear there to gate
+# V8 binding registration. No grep, no text matching, no false positives
+# from comments/strings/identifier collisions.
+#
+# Hook → ingredients mapping (ingredient = one V8 binding file):
+#   runtime/hooks/useHost.ts    → enables process + httpsrv + wssrv together
+#   runtime/hooks/usePrivacy.ts → enables privacy
+#
+# Ingredient-level granularity, not flavor-level: useHost has process/http/ws
+# flavors but importing the file at all means register all three. Same way
+# usePrivacy has thirty flavors and registering brings them all.
+METAFILE="bundle-${NAME}.js.metafile.json"
+PRIVACY_FLAG=""
+PROCESS_FLAG=""
+HTTPSRV_FLAG=""
+WSSRV_FLAG=""
+NET_FLAG=""
+TOR_FLAG=""
+FS_FLAG=""
+WS_FLAG=""
+TEL_FLAG=""
+ZIGCALL_FLAG=""
+if [[ -f "$METAFILE" ]]; then
+    # Pure JSON membership check — v8cli reads the metafile, walks
+    # outputs[].inputs (bytes-actually-shipped), and emits a single line of
+    # space-separated 0/1 flags in this exact order:
+    #   privacy useHost useConnection fs websocket telemetry zigcall
+    # See scripts/ship-metafile-gate.js for the hook→binding map.
+    GATE_FLAGS=$(tools/v8cli scripts/ship-metafile-gate.js "$METAFILE")
+    if [[ -z "$GATE_FLAGS" ]]; then
+        echo "[ship] FATAL: ship-metafile-gate.js produced no output." >&2
+        echo "[ship] Without the gate, every binding would be force-disabled and" >&2
+        echo "[ship] any cart that uses a gated hook would crash at runtime." >&2
+        exit 1
+    fi
+    read -r WANT_PRIVACY WANT_USEHOST WANT_USECONN WANT_FS WANT_WS WANT_TEL WANT_ZIGCALL <<< "$GATE_FLAGS"
+    if [[ "$WANT_PRIVACY" == "1" ]]; then
+        PRIVACY_FLAG="-Dhas-privacy=true"
+        echo "[ship] cart imports usePrivacy → linking libsodium + privacy bindings"
+    fi
+    if [[ "$WANT_USEHOST" == "1" ]]; then
+        PROCESS_FLAG="-Dhas-process=true"
+        HTTPSRV_FLAG="-Dhas-httpsrv=true"
+        WSSRV_FLAG="-Dhas-wssrv=true"
+        echo "[ship] cart imports useHost → registering __proc_*/__httpsrv_*/__wssrv_* bindings"
+    fi
+    # useHost or useConnection both need the net binding (tcp/udp/socks5).
+    if [[ "$WANT_USEHOST" == "1" ]] || [[ "$WANT_USECONN" == "1" ]]; then
+        NET_FLAG="-Dhas-net=true"
+        echo "[ship] cart imports useHost/useConnection → registering __tcp_*/__udp_*/__socks5_* bindings"
+    fi
+    if [[ "$WANT_USECONN" == "1" ]]; then
+        TOR_FLAG="-Dhas-tor=true"
+        echo "[ship] cart imports useConnection → registering __tor_* bindings"
+    fi
+    if [[ "$WANT_FS" == "1" ]]; then
+        FS_FLAG="-Dhas-fs=true"
+        echo "[ship] cart imports fs hooks → registering __fs_*/__window_*/__getenv bindings"
+    fi
+    if [[ "$WANT_WS" == "1" ]]; then
+        WS_FLAG="-Dhas-websocket=true"
+        echo "[ship] cart uses WebSocket client → registering __ws_* bindings"
+    fi
+    if [[ "$WANT_TEL" == "1" ]]; then
+        TEL_FLAG="-Dhas-telemetry=true"
+        echo "[ship] cart uses telemetry → registering __tel_*/getFps/... bindings"
+    fi
+    if [[ "$WANT_ZIGCALL" == "1" ]]; then
+        ZIGCALL_FLAG="-Dhas-zigcall=true"
+        echo "[ship] cart imports math hooks → registering __zig_call/__zig_call_list bindings"
+    fi
+else
+    echo "[ship] WARNING: no metafile at $METAFILE — all opt-in V8 bindings disabled" >&2
+fi
+
+zig build app -Dapp-name="$NAME" -Dapp-source="$APP_SOURCE" $QJS_FLAG $CUSTOM_CHROME_FLAG $OPT_FLAG $PRIVACY_FLAG $PROCESS_FLAG $HTTPSRV_FLAG $WSSRV_FLAG $NET_FLAG $TOR_FLAG $FS_FLAG $WS_FLAG $TEL_FLAG $ZIGCALL_FLAG
 
 RAW_BIN="zig-out/bin/$NAME"
 if [[ ! -f "$RAW_BIN" ]]; then
@@ -152,17 +221,46 @@ if [[ ! -f "$RAW_BIN" ]]; then
     exit 1
 fi
 
-if [[ "$JSRT" -eq 1 ]]; then
-    VERIFY_OUT="$(mktemp)"
-    trap 'rm -f "$VERIFY_OUT"' EXIT
-    "$RAW_BIN" --dump-ast > "$VERIFY_OUT"
-    if ! cmp -s "$AST_OUT" "$VERIFY_OUT"; then
-        echo "[ship] JSRT AST verification failed: $RAW_BIN --dump-ast does not match $AST_OUT" >&2
-        exit 1
+# ── Allergen-label verification ───────────────────────────────────────
+# build.zig writes one .flag per opt-in V8 binding domain to
+# zig-out/manifest/v8-ingredients/<name>.flag with "1" or "0". Diff that
+# against the cart's pre-build declaration. Any disagreement = the
+# kitchen contradicted the label, so the binary is destroyed before
+# shipping. There is no "trust us, it's fine" path here — by design.
+LABEL_DIR="zig-out/manifest/v8-ingredients"
+NET_EXPECTED="0"
+[[ "$WANT_USEHOST" == "1" || "$WANT_USECONN" == "1" ]] && NET_EXPECTED="1"
+declare -A EXPECTED=(
+    [privacy]="$WANT_PRIVACY"
+    [process]="$WANT_USEHOST"
+    [httpsrv]="$WANT_USEHOST"
+    [wssrv]="$WANT_USEHOST"
+    [net]="$NET_EXPECTED"
+    [tor]="$WANT_USECONN"
+    [fs]="$WANT_FS"
+    [websocket]="$WANT_WS"
+    [telemetry]="$WANT_TEL"
+    [zigcall]="$WANT_ZIGCALL"
+)
+LABEL_MISMATCH=0
+for ing in privacy process httpsrv wssrv net tor fs websocket telemetry zigcall; do
+    flag_file="$LABEL_DIR/${ing}.flag"
+    expected="${EXPECTED[$ing]:-0}"
+    if [[ ! -f "$flag_file" ]]; then
+        echo "[ship] LABEL MISSING: $flag_file (expected $expected)" >&2
+        LABEL_MISMATCH=1
+        continue
     fi
-    rm -f "$VERIFY_OUT"
-    trap - EXIT
-    echo "[ship] JSRT AST verification passed"
+    actual=$(cat "$flag_file" | tr -d '[:space:]')
+    if [[ "$actual" != "$expected" ]]; then
+        echo "[ship] LABEL MISMATCH: $ing — cart asked for '$expected' but binary built '$actual'" >&2
+        LABEL_MISMATCH=1
+    fi
+done
+if [[ "$LABEL_MISMATCH" -eq 1 ]]; then
+    echo "[ship] DESTROYING binary — manifest disagrees with cart declaration" >&2
+    rm -f "$RAW_BIN"
+    exit 1
 fi
 
 # ── 3. Debug / --raw short-circuit ────────────────────────────────────

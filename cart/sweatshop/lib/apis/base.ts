@@ -1,4 +1,3 @@
-const React: any = require('react');
 import { isRateLimited, recordRequest, rateLimitRemaining } from './rateLimit';
 
 export type HTTPMethod = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';

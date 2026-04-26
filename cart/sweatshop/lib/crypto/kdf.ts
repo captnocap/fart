@@ -1,6 +1,4 @@
-const React: any = require('react');
-const { useEffect, useState } = React;
-
+import { useEffect, useState } from 'react';
 import { KDF_HOSTS, callCryptoHost, hostSupport, normalizeMaybeJson, stringifyError, type KdfAlgorithm } from './support';
 
 export type KDFParams = Record<string, number | string | undefined>;

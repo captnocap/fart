@@ -2,7 +2,6 @@
 // agent. Clicking fires props.onPress so the parent can target the matching
 // Canvas.Node (pan the camera onto it).
 
-const React: any = require('react');
 import { C } from './style_cls';
 
 export function RaidFrame(props: any) {

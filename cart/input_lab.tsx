@@ -1,6 +1,4 @@
-const React: any = require('react');
-const { useState } = React;
-
+import { useState } from 'react';
 import { Box, Text, ScrollView, TextInput, TextArea } from '../runtime/primitives';
 
 function Field(props: any) {

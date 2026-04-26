@@ -1,6 +1,4 @@
-const React: any = require('react');
-const { useState, useEffect, useCallback } = React;
-
+import { useState, useEffect, useCallback } from 'react';
 import { Box, Col, Row, ScrollView, Text } from '../../../../runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 import { useAudioCapture } from '../../lib/audio-capture/hooks/useAudioCapture';

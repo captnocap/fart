@@ -6,9 +6,9 @@ const SCORES = ['--', '-', '|', '+', '++'];
 
 function sentimentColor(score: string, selected: boolean): { bg: string; border: string; text: string } {
   if (!selected) return { bg: 'transparent', border: 'transparent', text: CHAT_CARD.faint };
-  if (score.includes('-')) return { bg: '#3a2031', border: CHAT_CARD.pink, text: CHAT_CARD.pink };
-  if (score.includes('+')) return { bg: '#18382f', border: CHAT_CARD.green, text: CHAT_CARD.green };
-  return { bg: '#30364b', border: CHAT_CARD.border, text: CHAT_CARD.text };
+  if (score.includes('-')) return { bg: '#3a2a1e', border: CHAT_CARD.pink, text: CHAT_CARD.pink };
+  if (score.includes('+')) return { bg: '#1a1511', border: CHAT_CARD.green, text: CHAT_CARD.green };
+  return { bg: '#4a4238', border: CHAT_CARD.border, text: CHAT_CARD.text };
 }
 
 export function SentimentButton({ score, selected, onSelect }: { score: string; selected: boolean; onSelect: (score: string) => void }) {
@@ -40,9 +40,9 @@ export function SentimentControls({ initial = '-' }: { initial?: string }) {
     <Box
       style={{
         padding: 2,
-        backgroundColor: '#121827',
+        backgroundColor: '#0e0b09',
         borderWidth: 1,
-        borderColor: '#38435e',
+        borderColor: '#4a4238',
         borderRadius: 4,
       }}
     >

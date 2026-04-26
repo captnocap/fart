@@ -1,7 +1,6 @@
 // ChatCard — conversation view driven by props from the cockpit.
 
-const React: any = require('react');
-const { useState } = React;
+import { useState } from 'react';
 import { ScrollView, Box, Text, Pressable, TextInput } from '../../runtime/primitives';
 import { C } from './style_cls';
 

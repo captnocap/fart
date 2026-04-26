@@ -124,8 +124,14 @@ pub fn evalScript(js_logic: []const u8) void {
 /// uncaught JS exception. Used by the dev host to detect a bad hot-reload and
 /// roll back to the last good bundle.
 pub fn evalScriptChecked(js_logic: []const u8) bool {
-    const iso = g_isolate orelse return false;
-    const ctx = g_context orelse return false;
+    const iso = g_isolate orelse {
+        std.log.err("[v8 evalScriptChecked] g_isolate is null — VM not initialized or torn down", .{});
+        return false;
+    };
+    const ctx = g_context orelse {
+        std.log.err("[v8 evalScriptChecked] g_context is null — context not restored after resetContextForReload", .{});
+        return false;
+    };
 
     var hscope: v8.HandleScope = undefined;
     hscope.init(iso);
@@ -413,24 +419,91 @@ fn appendV8ErrorLog(tag: []const u8, message: []const u8) void {
 }
 
 fn logException(iso: v8.Isolate, ctx: v8.Context, try_catch: v8.TryCatch, tag: []const u8) void {
-    const ex = try_catch.getException() orelse return;
-    const str = ex.toString(ctx) catch return;
-    var buf: [512]u8 = undefined;
-    const n = @min(str.lenUtf8(iso), buf.len);
-    _ = str.writeUtf8(iso, buf[0..n]);
-    var stack_buf: [4096]u8 = undefined;
-    var stack_msg: []const u8 = "";
-    if (try_catch.getStackTrace(ctx)) |stack_val| {
-        const stack_str = stack_val.toString(ctx) catch null;
-        if (stack_str) |s| {
-            const sn = @min(s.lenUtf8(iso), stack_buf.len);
-            _ = s.writeUtf8(iso, stack_buf[0..sn]);
-            stack_msg = stack_buf[0..sn];
+    std.log.err("[v8 {s}] failure detected (hasCaught={})", .{ tag, try_catch.hasCaught() });
+
+    const ex_opt = try_catch.getException();
+    if (ex_opt == null) {
+        std.log.err("[v8 {s}] no exception object exposed by V8", .{tag});
+    }
+
+    // Run toString inside a nested TryCatch so a stack-overflow re-throw doesn't
+    // make us look like we have nothing to say.
+    if (ex_opt) |ex| {
+        var inner_tc: v8.TryCatch = undefined;
+        inner_tc.init(iso);
+        defer inner_tc.deinit();
+        if (ex.toString(ctx)) |str| {
+            var buf: [2048]u8 = undefined;
+            const n = @min(str.lenUtf8(iso), buf.len);
+            _ = str.writeUtf8(iso, buf[0..n]);
+            std.log.err("[v8 {s}] {s}", .{ tag, buf[0..n] });
+            appendV8ErrorLog(tag, buf[0..n]);
+        } else |err| {
+            std.log.err("[v8 {s}] exception toString() failed: {s} — falling back to type tags", .{ tag, @errorName(err) });
+            std.log.err("[v8 {s}] ex isObject={} isString={} isNumber={} isNull={} isUndefined={}", .{
+                tag, ex.isObject(), ex.isString(), ex.isNumber(), ex.isNull(), ex.isUndefined(),
+            });
         }
     }
-    std.log.err("[v8 {s}] {s}", .{ tag, buf[0..n] });
-    if (stack_msg.len > 0) {
-        std.log.err("[v8 {s} stack] {s}", .{ tag, stack_msg });
+
+    if (try_catch.getMessage()) |msg| {
+        if (msg.getSourceLine(ctx)) |line_str| {
+            var lbuf: [512]u8 = undefined;
+            const n = @min(line_str.lenUtf8(iso), lbuf.len);
+            _ = line_str.writeUtf8(iso, lbuf[0..n]);
+            std.log.err("[v8 {s} source-line] {s}", .{ tag, lbuf[0..n] });
+        }
+        const ln: i64 = if (msg.getLineNumber(ctx)) |v| @intCast(v) else -1;
+        const col: i64 = if (msg.getStartColumn()) |v| @intCast(v) else -1;
+        std.log.err("[v8 {s} location] line={d} col={d}", .{ tag, ln, col });
+    } else {
+        std.log.err("[v8 {s}] no Message object available", .{tag});
     }
-    appendV8ErrorLog(tag, buf[0..n]);
+
+    // Frame-by-frame stack trace. Prefer the StackTrace captured on the
+    // exception itself (full async stack) over the TryCatch's, then fall back.
+    var st_opt: ?v8.StackTrace = null;
+    if (ex_opt) |ex| st_opt = v8.Exception.getStackTrace(ex);
+    if (st_opt == null) {
+        if (try_catch.getStackTrace(ctx)) |sv| {
+            // sv is a Value (string-rendered). Print it as a fallback.
+            var inner_tc: v8.TryCatch = undefined;
+            inner_tc.init(iso);
+            defer inner_tc.deinit();
+            if (sv.toString(ctx)) |s| {
+                var sbuf: [8192]u8 = undefined;
+                const n = @min(s.lenUtf8(iso), sbuf.len);
+                _ = s.writeUtf8(iso, sbuf[0..n]);
+                std.log.err("[v8 {s} stack-string] {s}", .{ tag, sbuf[0..n] });
+            } else |_| {}
+        }
+    }
+
+    if (st_opt) |st| {
+        const fc = st.getFrameCount();
+        std.log.err("[v8 {s} frames] count={d}", .{ tag, fc });
+        var i: u32 = 0;
+        while (i < fc and i < 24) : (i += 1) {
+            const frame = st.getFrame(iso, i);
+            var name_buf: [256]u8 = undefined;
+            var name_slice: []const u8 = "<anon>";
+            if (frame.getFunctionName()) |fname| {
+                const n = @min(fname.lenUtf8(iso), name_buf.len);
+                _ = fname.writeUtf8(iso, name_buf[0..n]);
+                name_slice = name_buf[0..n];
+            }
+            var script_buf: [256]u8 = undefined;
+            var script_slice: []const u8 = "<no-script>";
+            if (frame.getScriptName()) |sname| {
+                const n = @min(sname.lenUtf8(iso), script_buf.len);
+                _ = sname.writeUtf8(iso, script_buf[0..n]);
+                script_slice = script_buf[0..n];
+            }
+            std.log.err("[v8 {s} frame {d}] {s} at {s}:{d}:{d}", .{
+                tag, i, name_slice, script_slice, frame.getLineNumber(), frame.getColumn(),
+            });
+        }
+    } else {
+        std.log.err("[v8 {s}] no StackTrace object on exception", .{tag});
+    }
 }

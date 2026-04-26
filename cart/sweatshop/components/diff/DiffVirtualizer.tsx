@@ -1,5 +1,3 @@
-const React: any = require('react');
-
 import { Box, Col, ScrollView } from '../../../../runtime/primitives';
 
 interface DiffVirtualizerProps {

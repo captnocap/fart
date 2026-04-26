@@ -327,6 +327,12 @@ pub const Node = struct {
     image_src: ?[]const u8 = null,
     video_src: ?[]const u8 = null,
     render_src: ?[]const u8 = null,
+    static_surface: bool = false,
+    static_surface_key: ?[]const u8 = null,
+    static_surface_scale: f32 = 1,
+    static_surface_warmup_frames: u16 = 0,
+    static_surface_intro_frames: u16 = 0,
+    static_surface_overlay: bool = false,
     cartridge_src: ?[]const u8 = null,
     effect_type: ?[]const u8 = null,
     input_id: ?u8 = null,
@@ -454,7 +460,9 @@ pub const Node = struct {
     canvas_path: bool = false, // true = this is a Canvas.Path
     canvas_path_d: ?[]const u8 = null, // SVG path data string
     canvas_stroke_width: f32 = 2,
+    canvas_stroke_opacity: f32 = 1,
     canvas_fill_color: ?Color = null, // fill color for filled SVG paths (via blend2d)
+    canvas_fill_opacity: f32 = 1,
     canvas_fill_gradient: ?LinearGradient = null, // linear gradient fill — Gouraud-interpolated via drawTriColored
     canvas_flow_speed: f32 = 0, // 0 = solid, >0 = flow forward, <0 = flow reverse
     canvas_fill_effect: ?[]const u8 = null, // effect name to use as polygon fill texture
@@ -795,7 +803,21 @@ fn estimateIntrinsicWidthUncached(node: *Node) f32 {
 
 fn estimateIntrinsicHeight(node: *Node, availableWidth: f32) f32 {
     if (node._cache_ih >= 0 and node._cache_ih_avail == availableWidth) return node._cache_ih;
-    const result = estimateIntrinsicHeightUncached(node, availableWidth);
+    var result = estimateIntrinsicHeightUncached(node, availableWidth);
+    // Clamp to min_height / max_height — otherwise a container that computes
+    // its indefinite height from children's intrinsic sums can end up SHORTER
+    // than the child's effective min_height, and children paint outside the
+    // container. Example: a Box with minHeight=30 and no explicit height reports
+    // intrinsic=textHeight (~15), the parent Col sums that, then at paint time
+    // the Box is clamped to 30 and overflows. Mirrors the clamp already applied
+    // in the concrete layout pass (see clampVal calls around lines 1119/1157).
+    const s = node.style;
+    if (resolveMaybePct(s.min_height, availableWidth)) |mh| {
+        if (result < mh) result = mh;
+    }
+    if (resolveMaybePct(s.max_height, availableWidth)) |mx| {
+        if (result > mx) result = mx;
+    }
     node._cache_ih = result;
     node._cache_ih_avail = availableWidth;
     return result;
@@ -808,6 +830,16 @@ fn estimateIntrinsicHeightUncached(node: *Node, availableWidth: f32) f32 {
     }
     if (s.aspect_ratio != null and s.aspect_ratio.? > 0 and s.width != null) {
         return s.width.? / s.aspect_ratio.?;
+    }
+    // Scroll containers isolate their content from intrinsic sizing.
+    // Summing children of an overflow:scroll|auto|hidden box makes the box
+    // appear as tall as its content, which pushes flex siblings (in a Row,
+    // cross-axis is height) to grow past the viewport. Real browsers don't
+    // do this — scroll boxes use their own explicit/min height, not content.
+    if (s.overflow == .scroll or s.overflow == .auto or s.overflow == .hidden) {
+        const mh = s.min_height orelse 0;
+        const mhResolved = if (mh >= 0) mh else 0;
+        return mhResolved + padTop(s) + padBottom(s);
     }
     const pt = padTop(s);
     const pb = padBottom(s);
@@ -1027,15 +1059,8 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
         const pin_w: f32 = node._parent_inner_w orelse 0;
         const pin_h: f32 = node._parent_inner_h orelse 0;
         const fb_w: f32 = if (s.flex_basis) |fb| fb else 0;
-        const w_pref = if (s.width) |v| v
-            else if (fb_w > 0) fb_w
-            else if (pw > 0) pw
-            else if (pin_w > 0) pin_w
-            else 24;
-        const h_pref = if (s.height) |v| v
-            else if (ph > 0) ph
-            else if (pin_h > 0) pin_h
-            else 24;
+        const w_pref = if (s.width) |v| v else if (fb_w > 0) fb_w else if (pw > 0) pw else if (pin_w > 0) pin_w else 24;
+        const h_pref = if (s.height) |v| v else if (ph > 0) ph else if (pin_h > 0) pin_h else 24;
         node.computed = .{ .x = px, .y = py, .w = w_pref, .h = h_pref };
         return;
     }
@@ -1612,7 +1637,6 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
                 }
             }
 
-
             if (freeMain > 0 and autoMarginCount > 0) {
                 {
                     const perAuto = freeMain / @as(f32, @floatFromInt(autoMarginCount));
@@ -1811,8 +1835,7 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
         // tslx:GEN:INTRINSIC_HEIGHT_FALLBACK START
         if (node.gutter_rows) |gr| {
             h = @as(f32, @floatFromInt(gr.len)) * node.gutter_row_height + pt + pb;
-        } else
-        if (node.minimap_rows) |gr| {
+        } else if (node.minimap_rows) |gr| {
             h = @as(f32, @floatFromInt(gr.len)) * (node.minimap_row_height + node.minimap_row_gap) + pt + pb;
         } else
         // tslx:GEN:INTRINSIC_HEIGHT_FALLBACK END
@@ -1829,8 +1852,13 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
         }
     }
     if (s.overflow == .scroll or s.overflow == .hidden or s.overflow == .auto) {
-        node.content_width = if (isRow) contentMainEnd + pr else contentCrossEnd + pr;
-        node.content_height = if (isRow) contentCrossEnd + pb else contentMainEnd + pb;
+        var visual_right: f32 = 0;
+        var visual_bottom: f32 = 0;
+        accumulateVisibleContentExtent(node, node, &visual_right, &visual_bottom);
+        const measured_width = if (isRow) contentMainEnd + pr else contentCrossEnd + pr;
+        const measured_height = if (isRow) contentCrossEnd + pb else contentMainEnd + pb;
+        node.content_width = @max(measured_width, visual_right + pr);
+        node.content_height = @max(measured_height, visual_bottom + pb);
     }
     const resolvedH = h orelse 0;
     {
@@ -1900,6 +1928,23 @@ fn resolveAlign(self: AlignSelf, parent: AlignItems) AlignItems {
         .baseline => {
             return .baseline;
         },
+    }
+}
+
+fn accumulateVisibleContentExtent(container: *const Node, node: *const Node, out_right: *f32, out_bottom: *f32) void {
+    for (node.children) |*child| {
+        if (child.style.display == .none) {
+            continue;
+        }
+
+        const right = (child.computed.x - container.computed.x) + child.computed.w;
+        const bottom = (child.computed.y - container.computed.y) + child.computed.h;
+        if (right > out_right.*) out_right.* = right;
+        if (bottom > out_bottom.*) out_bottom.* = bottom;
+
+        if (child.style.overflow == .visible) {
+            accumulateVisibleContentExtent(container, child, out_right, out_bottom);
+        }
     }
 }
 

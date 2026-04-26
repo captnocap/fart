@@ -2,6 +2,10 @@
 // globalThis.__hostFlush(json) before evaling this bundle. It also calls
 // globalThis.__dispatchEvent(id, type) when the user presses a Node.
 
+// require() because this file mutates React (installAutoHotState wraps useState).
+// ES `import * as React` yields an immutable namespace and breaks the patch.
+const React: any = require('react');
+
 // ── Browser API shims ────────────────────────────────────────────────
 // Copy-pasted React code routinely reaches for window/document/addEventListener.
 // Without these, any useEffect that wires keyboard/resize/visibility listeners
@@ -203,7 +207,6 @@ if (!(globalThis as any).__zigOS_tick) {
 }
 
 // CJS default interop (QuickJS CJS wrappers from esbuild behave like Node's).
-const React: any = require('react');
 const Reconciler: any = require('react-reconciler');
 
 // ── Auto hot-state: wrap React.useState so every cart's useState survives a
@@ -259,11 +262,15 @@ const Reconciler: any = require('react-reconciler');
 
 import { hostConfig, setTransportFlush, handlerRegistry } from '../renderer/hostConfig';
 import { prepareContext, releaseContext } from './effectContext';
-import { installWebSocketShim } from './hooks/websocket';
-import App from './current_app';
+// @ts-ignore — bundle-time alias, resolved by esbuild-config.mjs (old path) or
+// scripts/cart-bundle.js via --alias:@cart-entry=<abs path> (v8cli path).
+import App from '@cart-entry';
 
-// Install WebSocket shim so copy-pasted browser code works.
-installWebSocketShim();
+// WebSocket shim is opt-in: carts that need globalThis.WebSocket call
+// installBrowserShims() / installWebSocketShim() themselves. Importing it
+// unconditionally pulled runtime/hooks/websocket.ts into every bundle,
+// which forced the __ws_* bindings into every binary even for carts that
+// don't touch WebSockets — breaking the source-gated rule.
 
 // Flush path: host's __hostFlush receives the JSON string.
 setTransportFlush((cmds: any) => {
@@ -375,7 +382,8 @@ if (typeof registerDispatch === 'function') {
 
 (globalThis as any).__dispatchInputChange = (id: number, inputSlot?: number) => {
   try {
-    const text = getInputTextForNode(typeof inputSlot === 'number' ? inputSlot : id);
+    const slot = typeof inputSlot === 'number' ? inputSlot : id;
+    const text = getInputTextForNode(slot);
     const payload = { targetId: id, text };
     dispatchAliases(id, ['onChangeText', 'onChange', 'onInput'], text, payload);
   } catch (e) {
@@ -385,7 +393,8 @@ if (typeof registerDispatch === 'function') {
 
 (globalThis as any).__dispatchInputSubmit = (id: number, inputSlot?: number) => {
   try {
-    const text = getInputTextForNode(typeof inputSlot === 'number' ? inputSlot : id);
+    const slot = typeof inputSlot === 'number' ? inputSlot : id;
+    const text = getInputTextForNode(slot);
     const payload = { targetId: id, text };
     dispatchAliases(id, ['onSubmit', 'onSubmitEditing'], text, payload);
   } catch (e) {

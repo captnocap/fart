@@ -2,7 +2,6 @@
 // from PhysicsWorld.tsx so hook files can import the context type
 // without pulling in the provider component.
 
-const React: any = require('react');
 import type { PhysicsWorldCore } from '../../lib/physics/core';
 
 export interface PhysicsContextValue {

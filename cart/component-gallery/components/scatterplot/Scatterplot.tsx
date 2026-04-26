@@ -1,42 +1,74 @@
-const React: any = require('react');
-const { useMemo } = React;
-import { Box, Graph, Text } from '../../../../runtime/primitives';
-import { PALETTE, scaleLinear, plotArea, niceTicks } from '../../lib/chart-utils';
+import { useState } from 'react';
+import { Box, Graph, Pressable, Text } from '../../../../runtime/primitives';
+import { PALETTE, scaleLinear, plotArea } from '../../lib/chart-utils';
+import { useSpring } from '../../lib/useSpring';
+import { Tooltip } from '../../lib/Tooltip';
+import { classifiers as S } from '@reactjit/core';
 
-export type ScatterplotProps = {};
+export type ScatterplotDatum = { label?: string; x: number; y: number };
 
-export function Scatterplot(_props: ScatterplotProps) {
-  const width = 280;
-  const height = 200;
+export type ScatterplotProps = {
+  data?: ScatterplotDatum[];
+  width?: number;
+  height?: number;
+};
+
+export function Scatterplot(props: ScatterplotProps) {
+  const width = props.width ?? 280;
+  const height = props.height ?? 200;
   const plot = plotArea(width, height);
-  const data = useMemo(() => [
-    [10, 25], [20, 18], [30, 35], [40, 22], [50, 40], [60, 30], [70, 45], [80, 28], [90, 50]
-  ], []);
-  const xs = data.map((d) => d[0]);
-  const ys = data.map((d) => d[1]);
-  const xScale = scaleLinear([Math.min(...xs), Math.max(...xs)], [plot.x, plot.x + plot.w]);
-  const yScale = scaleLinear([Math.min(...ys), Math.max(...ys)], [plot.y + plot.h, plot.y]);
-  const yTicks = niceTicks(Math.min(...ys), Math.max(...ys), 4);
-  const xTicks = niceTicks(Math.min(...xs), Math.max(...xs), 4);
+  const data = props.data ?? [];
+  const xs = data.map((d) => d.x);
+  const ys = data.map((d) => d.y);
+  const xScale = scaleLinear([xs.length ? Math.min(...xs) : 0, xs.length ? Math.max(...xs) : 1], [plot.x, plot.x + plot.w]);
+  const yScale = scaleLinear([ys.length ? Math.min(...ys) : 0, ys.length ? Math.max(...ys) : 1], [plot.y + plot.h, plot.y]);
+
+  const fade = useSpring(1, { stiffness: 80, damping: 20 });
+  const [hovered, setHovered] = useState<number | null>(null);
 
   return (
     <Box style={{ width, height }}>
-      <Graph originTopLeft style={{ width, height }}>
-        {yTicks.map((t) => (
-          <Graph.Path key={`y-${t}`} d={`M ${plot.x} ${yScale(t)} L ${plot.x + plot.w} ${yScale(t)}`} stroke="#2a2a4a" strokeWidth={1} />
-        ))}
-        {xTicks.map((t) => (
-          <Graph.Path key={`x-${t}`} d={`M ${xScale(t)} ${plot.y} L ${xScale(t)} ${plot.y + plot.h}`} stroke="#2a2a4a" strokeWidth={1} />
-        ))}
-        {data.map((p, i) => (
+      <S.BareGraph>
+        <Graph.Path d={`M ${plot.x} ${plot.y} L ${plot.x} ${plot.y + plot.h} L ${plot.x + plot.w} ${plot.y + plot.h}`} stroke="#3a2a1e" strokeWidth={1} />
+        {data.map((d, i) => (
           <Graph.Path
             key={i}
-            d={`M ${xScale(p[0]) - 3} ${yScale(p[1])} A 3 3 0 1 1 ${xScale(p[0]) + 3} ${yScale(p[1])} A 3 3 0 1 1 ${xScale(p[0]) - 3} ${yScale(p[1])}`}
-            fill={i % 2 === 0 ? PALETTE.pink : PALETTE.cyan}
-            stroke="none"
+            d={`M ${xScale(d.x) - 4} ${yScale(d.y)} A 4 4 0 1 1 ${xScale(d.x) + 4} ${yScale(d.y)} A 4 4 0 1 1 ${xScale(d.x) - 4} ${yScale(d.y)}`}
+            fill={hovered === i ? PALETTE.pink : PALETTE.cyan}
+            stroke={PALETTE.white}
+            strokeWidth={1}
           />
         ))}
-      </Graph>
+      </S.BareGraph>
+
+      {data.map((d, i) => (
+        <Pressable
+          key={`hit-${i}`}
+          onMouseEnter={() => setHovered(i)}
+          onMouseLeave={() => setHovered(null)}
+          style={{
+            opacity: 0,
+            position: 'absolute',
+            left: xScale(d.x) - 10,
+            top: yScale(d.y) - 10,
+            width: 20,
+            height: 20,
+          }}
+        />
+      ))}
+
+      {hovered != null && data[hovered] && (
+        <Tooltip
+          visible={true}
+          x={xScale(data[hovered].x) + 10}
+          y={yScale(data[hovered].y) - 30}
+          title={data[hovered].label ?? `Point ${hovered + 1}`}
+          rows={[
+            { label: 'X', value: String(data[hovered].x) },
+            { label: 'Y', value: String(data[hovered].y), color: PALETTE.cyan },
+          ]}
+        />
+      )}
     </Box>
   );
 }

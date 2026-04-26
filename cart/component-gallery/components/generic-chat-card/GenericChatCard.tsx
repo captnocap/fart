@@ -12,7 +12,7 @@ export type GenericChatCardProps = {
   telemetry?: ConsoleTelemetryProps;
   laneTokens?: LaneToken[];
   transcript?: TranscriptBlock[];
-  task?: TaskPanelData;
+  task?: TaskPanelData | null;
   contextFill?: number;
 };
 
@@ -21,7 +21,6 @@ const DEFAULT_LANE_TOKENS: LaneToken[] = [
   { label: 'M', tone: 'warm' },
   { label: '6', tone: 'warm' },
   { label: 'S', tone: 'amber' },
-  { label: 's', tone: 'amber' },
   { label: 'H', tone: 'amber' },
   { label: 'K', tone: 'soft' },
   { label: 'C', tone: 'cool' },
@@ -30,11 +29,8 @@ const DEFAULT_LANE_TOKENS: LaneToken[] = [
   { label: 'P', tone: 'cool' },
   { label: 'F', tone: 'cool' },
   { label: 'L', tone: 'cool' },
-  { label: 'L', tone: 'cyan' },
   { label: 'M', tone: 'cyan' },
   { label: 'H', tone: 'cyan', active: true },
-  { label: 'X', tone: 'soft' },
-  { label: 'L', tone: 'soft' },
   { label: 'A', tone: 'soft' },
   { label: '2', tone: 'cool', active: true },
   { label: '1', tone: 'soft' },
@@ -63,7 +59,7 @@ const DEFAULT_TRANSCRIPT: TranscriptBlock[] = [
     kind: 'thinking',
     title: 'THINKING',
     timer: '6m 12s',
-    lines: ['Plan: isolate gutters, header,', 'telemetry, stream, and goal slot.'],
+    lines: ['Plan: isolate gutters, header,', 'telemetry, stream, and signal slot.'],
   },
   {
     kind: 'diff',
@@ -99,16 +95,7 @@ const DEFAULT_TELEMETRY: ConsoleTelemetryProps = {
   rate: '85k / 100k',
   time: '14:24',
   state: 'evaluating_plan',
-  alert: 'STUCK: thinking 6m',
-};
-
-const DEFAULT_TASK: TaskPanelData = {
-  kind: 'counter',
-  title: 'Generic goal counter',
-  count: 142,
-  target: 0,
-  progress: 0.7,
-  command: "grep -c '\\[\\]' src/**/*.tsx",
+  alert: 'STUCK: thinking 6m 12s',
 };
 
 export function GenericChatCard({
@@ -116,14 +103,14 @@ export function GenericChatCard({
   telemetry = DEFAULT_TELEMETRY,
   laneTokens = DEFAULT_LANE_TOKENS,
   transcript = DEFAULT_TRANSCRIPT,
-  task = DEFAULT_TASK,
+  task = null,
   contextFill = 0.84,
 }: GenericChatCardProps) {
   return (
     <ConsoleTile lane={<LaneGutter tokens={laneTokens} />} cliff={<ContextCliffGutter fill={contextFill} />}>
       <ConsoleHeader {...header} />
       <ConsoleTelemetryBar {...telemetry} />
-      <ConsoleTranscript blocks={transcript} attachment={<ConsoleTaskPanel task={task} attached={true} />} />
+      <ConsoleTranscript blocks={transcript} attachment={task ? <ConsoleTaskPanel task={task} attached={true} /> : null} />
     </ConsoleTile>
   );
 }

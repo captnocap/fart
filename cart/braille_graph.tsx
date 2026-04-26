@@ -1,6 +1,4 @@
-const React: any = require('react');
-const { useState, useEffect, useMemo } = React;
-
+import { useState, useEffect, useMemo } from 'react';
 import { Box, Col, Row, Text, Pressable } from '../runtime/primitives';
 
 // ── Braille helpers ─────────────────────────────────────────

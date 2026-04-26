@@ -1,6 +1,4 @@
-const React: any = require('react');
-const { useState, useEffect, useRef, useCallback } = React;
-
+import { useState, useEffect, useRef, useCallback } from 'react';
 const host: any = globalThis;
 
 function hasHost(name: string): boolean {

@@ -32,6 +32,11 @@ extern fn getpid() c_int;
 extern fn open(path: [*:0]const u8, flags: c_int, ...) c_int;
 extern fn write(fd: c_int, buf: [*]const u8, count: usize) isize;
 extern fn setsid() c_int;
+extern fn pipe2(fds: *[2]c_int, flags: c_int) c_int;
+extern fn dup2(oldfd: c_int, newfd: c_int) c_int;
+
+const O_NONBLOCK: c_int = 0o4000;
+const O_CLOEXEC: c_int = 0o2000000;
 
 const WNOHANG: c_int = 1;
 const SIGTERM: c_int = 15;
@@ -183,6 +188,137 @@ pub fn spawn(opts: SpawnOptions) !Process {
     log.info(.engine, "process: spawned PID {d}", .{pid});
 
     return Process{ .pid = pid };
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// Spawn with stdio pipes (for streaming stdout/stderr capture)
+// ════════════════════════════════════════════════════════════════════════
+
+pub const PipedProcess = struct {
+    process: Process,
+    /// Parent-side write end of child's stdin. -1 if not piped.
+    stdin_fd: c_int = -1,
+    /// Parent-side read end of child's stdout. -1 if not piped. Non-blocking.
+    stdout_fd: c_int = -1,
+    /// Parent-side read end of child's stderr. -1 if not piped. Non-blocking.
+    stderr_fd: c_int = -1,
+};
+
+pub const PipedSpawnOptions = struct {
+    exe: [*:0]const u8,
+    args: ?[*]const ?[*:0]const u8 = null,
+    env: []const EnvVar = &.{},
+    cwd: ?[*:0]const u8 = null,
+    new_session: bool = true,
+    pipe_stdin: bool = true,
+    pipe_stdout: bool = true,
+    pipe_stderr: bool = true,
+};
+
+/// Spawn a child with optional stdio pipes. Parent fds are O_NONBLOCK so
+/// the caller can drain them each frame without blocking the UI thread.
+pub fn spawnPiped(opts: PipedSpawnOptions) !PipedProcess {
+    var in_pipe: [2]c_int = .{ -1, -1 };
+    var out_pipe: [2]c_int = .{ -1, -1 };
+    var err_pipe: [2]c_int = .{ -1, -1 };
+
+    if (opts.pipe_stdin) {
+        if (pipe2(&in_pipe, O_CLOEXEC) != 0) return error.PipeFailed;
+    }
+    if (opts.pipe_stdout) {
+        if (pipe2(&out_pipe, O_CLOEXEC) != 0) {
+            if (in_pipe[0] >= 0) _ = close(in_pipe[0]);
+            if (in_pipe[1] >= 0) _ = close(in_pipe[1]);
+            return error.PipeFailed;
+        }
+    }
+    if (opts.pipe_stderr) {
+        if (pipe2(&err_pipe, O_CLOEXEC) != 0) {
+            if (in_pipe[0] >= 0) _ = close(in_pipe[0]);
+            if (in_pipe[1] >= 0) _ = close(in_pipe[1]);
+            if (out_pipe[0] >= 0) _ = close(out_pipe[0]);
+            if (out_pipe[1] >= 0) _ = close(out_pipe[1]);
+            return error.PipeFailed;
+        }
+    }
+
+    const pid = fork();
+    if (pid < 0) {
+        if (in_pipe[0] >= 0) _ = close(in_pipe[0]);
+        if (in_pipe[1] >= 0) _ = close(in_pipe[1]);
+        if (out_pipe[0] >= 0) _ = close(out_pipe[0]);
+        if (out_pipe[1] >= 0) _ = close(out_pipe[1]);
+        if (err_pipe[0] >= 0) _ = close(err_pipe[0]);
+        if (err_pipe[1] >= 0) _ = close(err_pipe[1]);
+        return error.ForkFailed;
+    }
+
+    if (pid == 0) {
+        // ── CHILD ──
+        if (opts.new_session) _ = setsid();
+        if (opts.cwd) |cwd| _ = chdir(cwd);
+
+        // Wire pipes to fd 0/1/2. dup2 clears CLOEXEC on the new fd.
+        if (opts.pipe_stdin) {
+            _ = dup2(in_pipe[0], 0);
+            _ = close(in_pipe[0]);
+            _ = close(in_pipe[1]);
+        }
+        if (opts.pipe_stdout) {
+            _ = dup2(out_pipe[1], 1);
+            _ = close(out_pipe[0]);
+            _ = close(out_pipe[1]);
+        }
+        if (opts.pipe_stderr) {
+            _ = dup2(err_pipe[1], 2);
+            _ = close(err_pipe[0]);
+            _ = close(err_pipe[1]);
+        }
+
+        for (opts.env) |ev| {
+            _ = setenv(ev.key, ev.value, 1);
+        }
+
+        if (opts.args) |args_ptr| {
+            var argc: usize = 0;
+            while (args_ptr[argc] != null) argc += 1;
+            var argv_buf: [34]?[*:0]const u8 = undefined;
+            argv_buf[0] = opts.exe;
+            for (0..argc) |i| {
+                if (i + 1 >= 33) break;
+                argv_buf[i + 1] = args_ptr[i];
+            }
+            const total = @min(argc + 1, 33);
+            argv_buf[total] = null;
+            _ = execvp(opts.exe, &argv_buf);
+        } else {
+            var argv = [_]?[*:0]const u8{ opts.exe, null };
+            _ = execvp(opts.exe, &argv);
+        }
+        _exit(127);
+    }
+
+    // ── PARENT ──
+    register(pid);
+    log.info(.engine, "process: spawned PID {d} (piped)", .{pid});
+
+    // Close child-side ends, set parent-side read fds to non-blocking.
+    var result = PipedProcess{ .process = .{ .pid = pid } };
+    if (opts.pipe_stdin) {
+        _ = close(in_pipe[0]);
+        result.stdin_fd = in_pipe[1];
+    }
+    if (opts.pipe_stdout) {
+        _ = close(out_pipe[1]);
+        _ = std.posix.fcntl(out_pipe[0], std.posix.F.SETFL, O_NONBLOCK) catch 0;
+        result.stdout_fd = out_pipe[0];
+    }
+    if (opts.pipe_stderr) {
+        _ = close(err_pipe[1]);
+        _ = std.posix.fcntl(err_pipe[0], std.posix.F.SETFL, O_NONBLOCK) catch 0;
+        result.stderr_fd = err_pipe[0];
+    }
+    return result;
 }
 
 // ════════════════════════════════════════════════════════════════════════

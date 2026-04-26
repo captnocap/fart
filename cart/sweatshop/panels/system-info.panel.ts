@@ -1,5 +1,3 @@
-const React: any = require('react');
-
 import { SystemInfoPanel } from '../components/system-info/SystemInfoPanel';
 import { register } from '../panel-registry';
 

@@ -1,11 +1,9 @@
-const React: any = require('react');
-const { useState, useEffect, useMemo, useRef } = React;
-
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Box, Col, Pressable, Row, ScrollView, Text, TextInput } from '../../../../runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 import { listDir, stat } from '../../../../runtime/hooks/fs';
+import { useFuzzySearch } from '../../../../runtime/hooks/useFuzzySearch';
 import { checkIsDirectory, mkdirP } from '../../lib/workspace/validate';
-import { fuzzyScore } from '../palette/useFuzzyFilter';
 
 function log(message: string): void {
   try {
@@ -133,19 +131,12 @@ export function DirectoryPicker(props: DirectoryPickerProps) {
     refreshEntries(next);
   };
 
-  const filteredEntries = useMemo(() => {
-    const q = (query || '').trim();
-    return q.length === 0
-      ? entries
-      : entries
-        .map((name: string) => ({ name, score: fuzzyScore(q, name, 'loose') }))
-        .filter((item: { name: string; score: number }) => item.score > 0)
-        .sort((a: { name: string; score: number }, b: { name: string; score: number }) => {
-          if (b.score !== a.score) return b.score - a.score;
-          return a.name.localeCompare(b.name);
-        })
-        .map((item: { name: string; score: number }) => item.name);
-  }, [query, entries]);
+  const fuzzyOptions = useMemo(() => ({ mode: 'loose' as const }), []);
+  const filteredEntryMatches = useFuzzySearch(entries, query, fuzzyOptions);
+  const filteredEntries = useMemo(
+    () => filteredEntryMatches.map((match) => match.item),
+    [filteredEntryMatches]
+  );
 
   const selectQuery = () => {
     const q = (query || '').trim();

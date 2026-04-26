@@ -2,9 +2,7 @@
 // CHAT HOOKS — composer history, message search, export state, conversations
 // =============================================================================
 
-const React: any = require('react');
-const { useState, useRef, useCallback } = React;
-
+import { useState, useRef, useCallback } from 'react';
 // ── Composer History ─────────────────────────────────────────────────────────
 
 export function useComposerHistory() {

@@ -1,5 +1,7 @@
 import { defineGallerySection, defineGalleryStory } from '../types';
 import { AstQuilt, AstTile } from '../components/ast-quilt/AstQuilt';
+import { FileFingerprintWorkbench } from '../components/ast-quilt/FileFingerprintWorkbench';
+import { AST_SAMPLE_FILES } from '../components/ast-quilt/sampleContract';
 
 export const astQuiltSection = defineGallerySection({
   id: 'ast-quilt',
@@ -10,8 +12,8 @@ export const astQuiltSection = defineGallerySection({
       title: 'AST Quilt',
       source: 'cart/component-gallery/components/ast-quilt/AstQuilt.tsx',
       status: 'ready',
-      summary: 'Animated treemap mural ported from the SDL/Lua AST viewer into a deterministic Effect surface.',
-      tags: ['effect', 'art', 'treemap', 'syntax'],
+      summary: 'Treemap fingerprint tiles driven by real contract arrays or live file-to-tree adapters.',
+      tags: ['effect', 'fingerprint', 'treemap', 'runtime'],
       variants: [
         {
           id: 'default',
@@ -21,7 +23,12 @@ export const astQuiltSection = defineGallerySection({
         {
           id: 'single-tile',
           name: 'Single Tile',
-          render: () => <AstTile tileIndex={17} />,
+          render: () => <AstTile file={{ ...AST_SAMPLE_FILES[17], selected: true, tagColor: '#6aa390' }} tileIndex={17} />,
+        },
+        {
+          id: 'from-file',
+          name: 'From File',
+          render: () => <FileFingerprintWorkbench initialPath="cart/component-gallery/components/ast-quilt/AstQuilt.tsx" />,
         },
       ],
     }),

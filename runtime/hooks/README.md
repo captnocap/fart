@@ -12,6 +12,7 @@ The generic FFI helpers live in `runtime/ffi.ts` (one level up): `hasHost`, `cal
 | Module | Framework Zig | JS wrapper | Zig globals registered | Shim |
 |---|---|---|---|---|
 | `ffi.ts` | n/a | ✅ shipped | n/a | — |
+| `useFuzzySearch` | n/a | ✅ shipped | n/a — pure JS scoring/filtering | — |
 | `useHotState` | ✅ `framework/hotstate.zig` | ✅ shipped | ⚠️ live wiring, state still resets in practice — fix pending | — |
 | `clipboard` | ✅ `qjs_runtime.zig` | ✅ shipped | ✅ live | — |
 | `fs` | ✅ `std.fs.cwd()` | ✅ shipped | ✅ live | — |

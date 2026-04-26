@@ -9,9 +9,7 @@
 // framework's fillEffect sampling reads from CPU pixel buffers.
 
 import { Box, Row, Text, Graph, Effect } from '../../runtime/primitives';
-const React: any = require('react');
-const { useMemo } = React;
-
+import { useMemo } from 'react';
 function round1(v: number) {
   return Math.round(v * 10) / 10;
 }

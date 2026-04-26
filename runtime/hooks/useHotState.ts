@@ -22,8 +22,6 @@
  * persistence is per-process either way). Functionally behaves as useState.
  */
 
-const React: any = require('react');
-
 type Updater<T> = T | ((prev: T) => T);
 
 export function useHotState<T>(key: string, initial: T): [T, (v: Updater<T>) => void] {

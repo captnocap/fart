@@ -1,5 +1,3 @@
-const React: any = require('react');
-
 import { Box, Canvas, Graph, Text } from '../../runtime/primitives';
 import { COLORS, TOKENS } from '../sweatshop/theme';
 import { colorForNode, graphPathFor } from './LayoutEngine';

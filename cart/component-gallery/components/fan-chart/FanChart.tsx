@@ -1,55 +1,113 @@
-const React: any = require('react');
-const { useMemo } = React;
-import { Box, Graph, Text } from '../../../../runtime/primitives';
+import { Fragment, useState } from 'react';
+import { Box, Graph, Pressable, Text } from '../../../../runtime/primitives';
 import { PALETTE, scaleLinear, plotArea } from '../../lib/chart-utils';
+import { useSpring } from '../../lib/useSpring';
+import { Tooltip } from '../../lib/Tooltip';
+import { classifiers as S } from '@reactjit/core';
 
-export type FanChartProps = {};
+export type FanDatum = { label: string; base: number; upper: number; lower: number };
 
-export function FanChart(_props: FanChartProps) {
-  const width = 320;
-  const height = 200;
+export type FanChartProps = {
+  data?: FanDatum[];
+  width?: number;
+  height?: number;
+};
+
+export function FanChart(props: FanChartProps) {
+  const width = props.width ?? 320;
+  const height = props.height ?? 220;
   const plot = plotArea(width, height);
-  const base = useMemo(() => [20, 22, 25, 28, 30, 32], []);
-  const upper = useMemo(() => [25, 28, 32, 36, 40, 45], []);
-  const lower = useMemo(() => [15, 16, 18, 20, 22, 24], []);
-  const labels = ['A', 'B', 'C', 'D', 'E', 'F'];
+  const data = props.data ?? [
+    { label: 'Jan', base: 45, upper: 52, lower: 38 },
+    { label: 'Feb', base: 52, upper: 60, lower: 44 },
+    { label: 'Mar', base: 48, upper: 55, lower: 41 },
+    { label: 'Apr', base: 61, upper: 70, lower: 52 },
+    { label: 'May', base: 58, upper: 67, lower: 49 },
+    { label: 'Jun', base: 72, upper: 83, lower: 61 },
+  ];
+  const labels = data.map((d) => d.label);
+  const base = data.map((d) => d.base);
+  const upper = data.map((d) => d.upper);
+  const lower = data.map((d) => d.lower);
   const max = Math.max(...upper);
   const min = Math.min(...lower);
   const yScale = scaleLinear([min, max], [plot.y + plot.h, plot.y]);
   const xScale = scaleLinear([0, base.length - 1], [plot.x, plot.x + plot.w]);
 
-  const fanPath = useMemo(() => {
-    let d = `M ${xScale(0)} ${yScale(base[0])}`;
-    base.forEach((v, i) => { if (i > 0) d += ` L ${xScale(i)} ${yScale(v)}`; });
-    upper.forEach((v, i) => { d += ` L ${xScale(upper.length - 1 - i)} ${yScale(upper[upper.length - 1 - i])}`; });
-    d += ' Z';
-    return d;
-  }, [base, upper, xScale, yScale]);
+  const spread = useSpring(1, { stiffness: 90, damping: 18 });
+  const [hovered, setHovered] = useState<number | null>(null);
 
-  const lowerPath = useMemo(() => {
-    let d = `M ${xScale(0)} ${yScale(base[0])}`;
-    base.forEach((v, i) => { if (i > 0) d += ` L ${xScale(i)} ${yScale(v)}`; });
-    lower.forEach((v, i) => { d += ` L ${xScale(lower.length - 1 - i)} ${yScale(lower[lower.length - 1 - i])}`; });
-    d += ' Z';
-    return d;
-  }, [base, lower, xScale, yScale]);
-
-  const linePath = useMemo(() => {
-    let d = `M ${xScale(0)} ${yScale(base[0])}`;
-    base.forEach((v, i) => { if (i > 0) d += ` L ${xScale(i)} ${yScale(v)}`; });
-    return d;
-  }, [base, xScale, yScale]);
+  const midY = (plot.y + plot.h) / 2;
 
   return (
     <Box style={{ width, height }}>
-      <Graph originTopLeft style={{ width, height }}>
-        <Graph.Path d={fanPath} fill={PALETTE.pink} fillOpacity={0.2} stroke="none" />
-        <Graph.Path d={lowerPath} fill={PALETTE.cyan} fillOpacity={0.15} stroke="none" />
-        <Graph.Path d={linePath} stroke={PALETTE.pink} strokeWidth={2} fill="none" />
-      </Graph>
+      <S.BareGraph>
+        {base.map((v, i) => {
+          const by = yScale(v);
+          const uy = yScale(upper[i]);
+          const ly = yScale(lower[i]);
+          const halfSpread = ((uy - ly) / 2) * spread;
+          const top = midY - halfSpread;
+          const bot = midY + halfSpread;
+          const x = xScale(i);
+          return (
+            <Fragment key={i}>
+              <Graph.Path
+                d={`M ${x} ${by} L ${x} ${top}`}
+                stroke={PALETTE.pink}
+                strokeWidth={1}
+                strokeDasharray="2,2"
+              />
+              <Graph.Path
+                d={`M ${x} ${by} L ${x} ${bot}`}
+                stroke={PALETTE.cyan}
+                strokeWidth={1}
+                strokeDasharray="2,2"
+              />
+              <Graph.Path
+                d={`M ${x - 3} ${by} A 3 3 0 1 1 ${x + 3} ${by} A 3 3 0 1 1 ${x - 3} ${by}`}
+                fill={hovered === i ? PALETTE.pink : PALETTE.white}
+                stroke={PALETTE.pink}
+                strokeWidth={1.5}
+              />
+            </Fragment>
+          );
+        })}
+      </S.BareGraph>
+
+      {base.map((_, i) => (
+        <Pressable
+          key={`hit-${i}`}
+          onMouseEnter={() => setHovered(i)}
+          onMouseLeave={() => setHovered(null)}
+          style={{
+            opacity: 0,
+            position: 'absolute',
+            left: xScale(i) - 12,
+            top: plot.y,
+            width: 24,
+            height: plot.h,
+          }}
+        />
+      ))}
+
+      {hovered != null && (
+        <Tooltip
+          visible={true}
+          x={xScale(hovered) + 12}
+          y={yScale(base[hovered]) - 30}
+          title={labels[hovered]}
+          rows={[
+            { label: 'Base', value: String(base[hovered]) },
+            { label: 'Upper', value: String(upper[hovered]), color: PALETTE.pink },
+            { label: 'Lower', value: String(lower[hovered]), color: PALETTE.cyan },
+          ]}
+        />
+      )}
+
       {labels.map((l, i) => (
         <Box key={l} style={{ position: 'absolute', left: xScale(i) - 8, top: plot.y + plot.h + 4, width: 16, alignItems: 'center' }}>
-          <Text fontSize={9} color={PALETTE.slateLight}>{l}</Text>
+          <Text fontSize={9} color="#7a6e5d">{l}</Text>
         </Box>
       ))}
     </Box>

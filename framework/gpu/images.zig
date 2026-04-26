@@ -24,7 +24,7 @@ pub const ImageQuad = extern struct {
     size_w: f32,
     size_h: f32,
     opacity: f32,
-    _pad0: f32 = 0,
+    no_flip_y: f32 = 0,
 };
 
 // ════════════════════════════════════════════════════════════════════════
@@ -48,6 +48,16 @@ var g_bind_group_layout: ?*wgpu.BindGroupLayout = null;
 /// Queue a textured quad for drawing this frame.
 /// bind_group must contain: globals uniform + texture_2d + sampler.
 pub fn queueQuad(x: f32, y: f32, w: f32, h: f32, opacity: f32, bind_group: *wgpu.BindGroup) void {
+    queueQuadInternal(x, y, w, h, opacity, bind_group, false);
+}
+
+/// Queue a textured quad without vertically flipping the sampled texture.
+/// Use for render-to-texture outputs, where the texture is already top-down.
+pub fn queueQuadNoFlip(x: f32, y: f32, w: f32, h: f32, opacity: f32, bind_group: *wgpu.BindGroup) void {
+    queueQuadInternal(x, y, w, h, opacity, bind_group, true);
+}
+
+fn queueQuadInternal(x: f32, y: f32, w: f32, h: f32, opacity: f32, bind_group: *wgpu.BindGroup, no_flip_y: bool) void {
     if (g_quad_count >= MAX_IMAGE_QUADS or core.g_gpu_ops >= core.GPU_OPS_BUDGET) return;
     core.g_gpu_ops += 1;
     core.recordImageBoundary(@intCast(g_quad_count));
@@ -65,6 +75,7 @@ pub fn queueQuad(x: f32, y: f32, w: f32, h: f32, opacity: f32, bind_group: *wgpu
         .size_w = tw,
         .size_h = th,
         .opacity = opacity,
+        .no_flip_y = if (no_flip_y) 1 else 0,
     };
     g_bind_groups[g_quad_count] = bind_group;
     if (log.isEnabled(.gpu)) {

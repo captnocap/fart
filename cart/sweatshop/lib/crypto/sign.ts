@@ -1,6 +1,4 @@
-const React: any = require('react');
-const { useEffect, useState } = React;
-
+import { useEffect, useState } from 'react';
 import { normalizeMaybeJson, stringifyError, SIGN_HOSTS, hostSupport, callCryptoHost, type SigningAlgorithm } from './support';
 
 export type KeyPair = {

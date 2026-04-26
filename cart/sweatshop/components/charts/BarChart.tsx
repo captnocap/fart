@@ -1,9 +1,10 @@
 
 import { Box, Graph, Pressable, Row } from '../../../../runtime/primitives';
 import { COLORS } from '../../theme';
+import { Tooltip } from '../tooltip';
 import { ChartAxis } from './ChartAxis';
 import { ChartLegend, type ChartLegendPosition } from './ChartLegend';
-import { ChartTooltip, ChartTooltipFromCrosshair } from './ChartTooltip';
+import { TooltipFromCrosshair } from './ChartTooltip';
 import { normalizeChartData, type ChartInput } from './useChartData';
 import { formatTick, useChartScale, type ChartScaleMode } from './useChartScale';
 import { ChartInteractions, type ChartInteractionsConfig } from './ChartInteractions';
@@ -92,11 +93,11 @@ export function BarChart(props: {
   });
 
   const tooltip = hovered && props.showTooltip !== false ? (
-    <ChartTooltip
+    <Tooltip
       visible={true}
-      x={hovered.x + 8}
-      y={hovered.y}
+      anchor={{ kind: 'cursor' }}
       title={xLabels[hovered.index] || 'Value'}
+      variant="sweatshop-chart"
       rows={normalized.series
         .map((series) => {
           const point = series.points[hovered.index];
@@ -129,10 +130,8 @@ export function BarChart(props: {
         />
       ) : null}
       {interactionsOn && crosshair ? (
-        <ChartTooltipFromCrosshair
+        <TooltipFromCrosshair
           crosshair={crosshair}
-          plotW={plot.w}
-          plotH={plot.h}
           xLabel={(x) => xLabels[Math.round(x)] || String(Math.round(x))}
           yLabel={formatValue}
         />

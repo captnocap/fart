@@ -3,6 +3,7 @@ import { IdentityBlock } from './IdentityBadges';
 import { StatusPulse } from './StatusPulse';
 import { TrustThermometerAvatar } from './TrustAvatar';
 import { CHAT_CARD, type ConsoleMode } from './tokens';
+import { classifiers as S } from '@reactjit/core';
 
 export type ConsoleHeaderProps = {
   title: string;
@@ -20,18 +21,18 @@ export function ConsoleHeader({ title, pathology, achievement, trust, note, mode
         gap: 0,
         backgroundColor: CHAT_CARD.panel,
         borderWidth: 1,
-        borderColor: '#604938',
+        borderColor: '#4a4238',
         borderRadius: 4,
         overflow: 'hidden',
       }}
     >
-      <Row style={{ alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: 10 }}>
+      <S.InlineX5Between style={{ padding: 10 }}>
         <Row style={{ alignItems: 'center', gap: 9 }}>
           <TrustThermometerAvatar value={trust} />
           <IdentityBlock title={title} pathology={pathology} achievement={achievement} note={note} />
         </Row>
         <StatusPulse mode={mode} />
-      </Row>
+      </S.InlineX5Between>
     </Col>
   );
 }

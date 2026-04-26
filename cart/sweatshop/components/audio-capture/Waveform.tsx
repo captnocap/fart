@@ -1,6 +1,4 @@
-const React: any = require('react');
-const { useCallback } = React;
-
+import { useCallback } from 'react';
 import { Box, Effect } from '../../../../runtime/primitives';
 import { COLORS } from '../../theme';
 

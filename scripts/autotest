@@ -48,9 +48,20 @@ fi
 #    scripts/run (and witness's screenshot-writing logic) both expect it there.
 BINARY="zig-out/bin/$NAME"
 
-# Skip build if binary is newer than the cart entry.
+# Skip the rebuild if the binary is newer than the cart entry, but ALWAYS
+# regenerate tests/<NAME>.autotest from the current binary. The snapshot
+# step is the only thing that keeps the autotest file aligned with the
+# binary's behavior; skipping it leaves a stale test that diverges from
+# replay state and produces phantom "not found" failures.
 if [ -x "$BINARY" ] && [ "$BINARY" -nt "$CART" ]; then
     echo "[autotest] $NAME binary is current, skipping build"
+    echo "[autotest] regenerating $TEST_FILE from current binary..."
+    ZIGOS_HEADLESS=1 ZIGOS_WITNESS=snapshot ZIGOS_WITNESS_FILE="$TEST_FILE" \
+        timeout -s KILL 300 "$BINARY" >/dev/null 2>&1 || true
+    if [ ! -s "$TEST_FILE" ]; then
+        echo "[autotest] ERROR: snapshot regeneration produced no test file"
+        exit 1
+    fi
 else
     echo "[autotest] building $NAME..."
     ./scripts/ship "$NAME" >/dev/null 2>&1 || { echo "[autotest] BUILD FAILED"; exit 1; }
@@ -83,13 +94,18 @@ for candidate in "cart/${NAME}/data.ts" "cart/${NAME}/data.tsx"; do
 done
 
 TMPLOG=$(mktemp)
+# Stream progress live through a line-buffered grep filter, AND capture the
+# full log to TMPLOG for any follow-up diagnostics. `stdbuf -oL` forces the
+# binary to line-buffer stdout (Zig block-buffers when stdout is a pipe),
+# so each step prints as it happens instead of landing in a 4KB chunk.
 ZIGOS_HEADLESS=1 \
 ZIGOS_WITNESS=autotest \
 ZIGOS_WITNESS_FILE="$TEST_FILE" \
 ZIGOS_SOURCE="$SOURCE_FILES" \
-    timeout -s KILL 600 "$BINARY" >"$TMPLOG" 2>&1 || true
-grep -v "AUTOTEST RESULT" "$TMPLOG" \
-    | grep -E "expect|click|reject|color|bg|border|styles|PASS|FAIL|OK|VERIFY|audit|MISSING|changed" \
+    stdbuf -oL timeout -s KILL 600 "$BINARY" 2>&1 \
+    | tee "$TMPLOG" \
+    | grep --line-buffered -v "AUTOTEST RESULT" \
+    | grep --line-buffered -E "expect|click|reject|color|bg|border|styles|PASS|FAIL|OK|VERIFY|audit|MISSING|changed" \
     || true
 rm -f "$TMPLOG"
 set -e

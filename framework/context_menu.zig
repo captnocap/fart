@@ -62,6 +62,9 @@ var menu_x: f32 = 0;
 var menu_y: f32 = 0;
 var items_ptr: []const MenuItem = &.{};
 var hover_idx: ?usize = null;
+// React-side stable id of the node whose menu is active. Set by show().
+// Trampolines in v8_app dispatch to JS using this id.
+var active_node_id: u32 = 0;
 // Computed dimensions (set on show)
 var menu_w: f32 = 0;
 var menu_h: f32 = 0;
@@ -69,12 +72,20 @@ var menu_h: f32 = 0;
 // ── API (called by engine) ────────────────────────────────────────────
 
 pub fn show(x: f32, y: f32, items: []const MenuItem) void {
+    showFor(x, y, items, 0);
+}
+
+/// Same as show() but records the React-side node id whose menu is active.
+/// JS-side handlers (v8_app trampolines) read this via activeNodeId() to
+/// dispatch back to the correct React node.
+pub fn showFor(x: f32, y: f32, items: []const MenuItem, node_id: u32) void {
     if (items.len == 0) return;
     items_ptr = items;
     menu_x = x;
     menu_y = y;
     hover_idx = null;
     visible = true;
+    active_node_id = node_id;
     // Dimensions computed during paint (need measure_fn)
     menu_w = 0;
     menu_h = 0;
@@ -84,6 +95,13 @@ pub fn hide() void {
     visible = false;
     items_ptr = &.{};
     hover_idx = null;
+    active_node_id = 0;
+}
+
+/// React-side stable id of the node whose menu is currently open.
+/// Returns 0 when no menu is showing or when shown via show() (no node id).
+pub fn activeNodeId() u32 {
+    return active_node_id;
 }
 
 pub fn isVisible() bool {

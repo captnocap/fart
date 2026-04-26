@@ -1,6 +1,4 @@
-const React: any = require('react');
-const { useEffect, useState } = React;
-
+import { useEffect, useState } from 'react';
 import { fromBase64, toBase64 } from './encoding';
 import { ENCRYPT_HOSTS, DECRYPT_HOSTS, hostSupport, callCryptoHost, normalizeMaybeJson, stringifyError, type EncryptAlgorithm, type KdfAlgorithm } from './support';
 

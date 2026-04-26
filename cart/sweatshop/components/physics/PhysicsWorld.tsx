@@ -6,9 +6,7 @@
 // Note: this is a thin shell around lib/physics/core. The heavy lifting
 // (integrator, collision, joints) lives there and has zero React deps.
 
-const React: any = require('react');
-const { useEffect, useMemo, useRef, useState } = React;
-
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { PhysicsWorldCore, type Vec2 } from '../../lib/physics/core';
 import { PhysicsCtx } from './PhysicsContext';
 

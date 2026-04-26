@@ -1,6 +1,4 @@
-const React: any = require('react');
-const { useMemo } = React;
-
+import { useMemo } from 'react';
 import { Box, Image, Pressable, Row, Text } from '../../runtime/primitives';
 import { COLORS, TOKENS } from '../sweatshop/theme';
 import type { ColorMode, DemoNode } from './LayoutEngine';

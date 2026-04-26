@@ -1,6 +1,4 @@
-const React: any = require('react');
-const { useState, useCallback } = React;
-
+import { useState, useCallback } from 'react';
 import { nanoGenerate, probeNanoDiffusion, type NanoParams } from '../lib/image-gen/nano';
 
 export type NanoDiffusionState =

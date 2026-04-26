@@ -1,0 +1,427 @@
+/**
+ * useConnection — single hook primitive for "this app holds an outbound channel."
+ *
+ * Networking in reactjit is split by **direction**:
+ *   - useHost      — I bind a port / I own a process. Server-side.
+ *   - fetch()      — one-shot outbound request, no persistent state.
+ *   - useConnection — persistent outbound channel I don't own the other end of.
+ *
+ * Protocol is `kind`. Transport is `via:` (a handle returned from another
+ * useHost / useConnection call). Transports compose recursively:
+ *
+ *   const wg  = useConnection({ kind: 'wireguard', config });
+ *   const tor = useConnection({ kind: 'tor' });
+ *   const tcp = useConnection({ kind: 'tcp', host, port, via: wg });
+ *   fetch(url, { via: tor });
+ *
+ * Today, wired end-to-end:
+ *   ws / tcp / udp  — __ws_*, __tcp_*, __udp_*
+ *   tor             — __tor_start spawns a Tor process, emits tor:open with
+ *                     {socksPort,hostname,hsPort} once bootstrap completes
+ *   socks5          — __socks5_register stashes the proxy spec; via:socks5
+ *                     handles route through it via socks5.connect at the
+ *                     Zig binding boundary
+ *   via: tcp        — kind:'tcp' with via:tor or via:socks5 is honored by
+ *                     v8_bindings_net.zig (calls socks5.connect → wraps the
+ *                     tunneled stream in TcpClient.fromStream)
+ *
+ * Not yet wired (will report state:'error'):
+ *   wireguard / stun / peer  — no Zig backend yet.
+ *   via: ws / udp / fetch    — only the tcp dispatch path is implemented.
+ */
+
+import { useEffect, useRef, useState } from 'react';
+import { callHost, subscribe } from '../ffi';
+
+// ── Common ─────────────────────────────────────────────────────────
+
+export type ConnectionState = 'connecting' | 'open' | 'closed' | 'error';
+
+/** Anything that returns a `{ id, kind }` handle can be used as `via:`. */
+export interface TransportHandle {
+  id: number;
+  kind: string;
+}
+
+interface SpecBase {
+  /** Route this connection through another transport handle (wg/tor/socks5/...). */
+  via?: TransportHandle;
+}
+
+// ── Spec types ─────────────────────────────────────────────────────
+
+export interface WsConnectionSpec extends SpecBase {
+  kind: 'ws';
+  url: string;
+  protocols?: string[];
+  onOpen?: () => void;
+  onMessage?: (data: string) => void;
+  onClose?: (info: { code: number; reason: string }) => void;
+  onError?: (msg: string) => void;
+}
+
+export interface TcpConnectionSpec extends SpecBase {
+  kind: 'tcp';
+  host: string;
+  port: number;
+  onData?: (data: string) => void;
+  onClose?: () => void;
+  onError?: (msg: string) => void;
+}
+
+export interface UdpConnectionSpec extends SpecBase {
+  kind: 'udp';
+  host: string;
+  port: number;
+  onPacket?: (data: string) => void;
+  onError?: (msg: string) => void;
+}
+
+export interface WireGuardConnectionSpec extends SpecBase {
+  kind: 'wireguard';
+  /** Raw wg-quick-style config text, OR structured config. */
+  config: string | WireGuardConfig;
+  /** Linux interface name to bring up. Default: derived. */
+  interfaceName?: string;
+}
+
+export interface WireGuardConfig {
+  privateKey: string;
+  address: string[];
+  dns?: string[];
+  peers: Array<{
+    publicKey: string;
+    presharedKey?: string;
+    allowedIPs: string[];
+    endpoint?: string;
+    persistentKeepalive?: number;
+  }>;
+}
+
+export interface TorConnectionSpec extends SpecBase {
+  kind: 'tor';
+  /** SOCKS port for outbound; default 9050 (assume system tor) or spawn embedded. */
+  socksPort?: number;
+  /** If true, spawn an embedded tor daemon instead of using a system one. */
+  embedded?: boolean;
+}
+
+export interface Socks5ConnectionSpec extends SpecBase {
+  kind: 'socks5';
+  host: string;
+  port: number;
+  username?: string;
+  password?: string;
+}
+
+export interface StunConnectionSpec extends SpecBase {
+  kind: 'stun';
+  /** STUN server, e.g. 'stun.l.google.com:19302'. */
+  server: string;
+  onMapped?: (info: { externalIp: string; externalPort: number }) => void;
+}
+
+export interface PeerConnectionSpec extends SpecBase {
+  kind: 'peer';
+  /** Peer-tunnel identity / signaling address. */
+  peerId: string;
+  onData?: (data: string) => void;
+}
+
+export type ConnectionSpec =
+  | WsConnectionSpec
+  | TcpConnectionSpec
+  | UdpConnectionSpec
+  | WireGuardConnectionSpec
+  | TorConnectionSpec
+  | Socks5ConnectionSpec
+  | StunConnectionSpec
+  | PeerConnectionSpec;
+
+// ── Handle types (discriminated by kind) ───────────────────────────
+
+interface HandleBase {
+  id: number;
+  state: ConnectionState;
+  error?: string;
+  close(): void;
+}
+
+export interface WsConnectionHandle extends HandleBase {
+  kind: 'ws';
+  send(data: string): void;
+}
+
+export interface TcpConnectionHandle extends HandleBase {
+  kind: 'tcp';
+  send(data: string): void;
+}
+
+export interface UdpConnectionHandle extends HandleBase {
+  kind: 'udp';
+  send(data: string): void;
+}
+
+export interface WireGuardConnectionHandle extends HandleBase {
+  kind: 'wireguard';
+  /** Public key for this side of the tunnel, once the interface is up. */
+  publicKey?: string;
+}
+
+export interface TorConnectionHandle extends HandleBase {
+  kind: 'tor';
+  /** SOCKS port to route through. 0 until state === 'open'. */
+  socksPort: number;
+  /** .onion hostname for the cart's hidden service. Undefined until 'open'. */
+  hostname?: string;
+  /** Local port the hidden service forwards to. 0 until 'open'. */
+  hsPort: number;
+}
+
+export interface Socks5ConnectionHandle extends HandleBase {
+  kind: 'socks5';
+}
+
+export interface StunConnectionHandle extends HandleBase {
+  kind: 'stun';
+  externalIp?: string;
+  externalPort?: number;
+}
+
+export interface PeerConnectionHandle extends HandleBase {
+  kind: 'peer';
+  send(data: string): void;
+}
+
+export type ConnectionHandle =
+  | WsConnectionHandle
+  | TcpConnectionHandle
+  | UdpConnectionHandle
+  | WireGuardConnectionHandle
+  | TorConnectionHandle
+  | Socks5ConnectionHandle
+  | StunConnectionHandle
+  | PeerConnectionHandle;
+
+// ── ID allocator ───────────────────────────────────────────────────
+
+let _idSeq = 1;
+const nextId = () => _idSeq++;
+
+const viaJson = (v?: TransportHandle): string =>
+  v ? JSON.stringify({ id: v.id, kind: v.kind }) : '';
+
+// ── Hook ───────────────────────────────────────────────────────────
+
+export function useConnection(spec: WsConnectionSpec): WsConnectionHandle;
+export function useConnection(spec: TcpConnectionSpec): TcpConnectionHandle;
+export function useConnection(spec: UdpConnectionSpec): UdpConnectionHandle;
+export function useConnection(spec: WireGuardConnectionSpec): WireGuardConnectionHandle;
+export function useConnection(spec: TorConnectionSpec): TorConnectionHandle;
+export function useConnection(spec: Socks5ConnectionSpec): Socks5ConnectionHandle;
+export function useConnection(spec: StunConnectionSpec): StunConnectionHandle;
+export function useConnection(spec: PeerConnectionSpec): PeerConnectionHandle;
+export function useConnection(spec: ConnectionSpec): ConnectionHandle {
+  const idRef = useRef<number>(0);
+  if (idRef.current === 0) idRef.current = nextId();
+  const id = idRef.current;
+
+  const [state, setState] = useState<ConnectionState>('connecting');
+  const [error, setError] = useState<string | undefined>(undefined);
+  // Tor only — populated when bootstrap completes.
+  const [torInfo, setTorInfo] = useState<{ socksPort: number; hostname: string; hsPort: number } | undefined>(undefined);
+  const torInfoRef = useRef<typeof torInfo>(undefined);
+
+  const specRef = useRef(spec);
+  specRef.current = spec;
+
+  const viaKey = spec.via ? `${spec.via.kind}:${spec.via.id}` : '';
+
+  useEffect(() => {
+    let cancelled = false;
+    const unsubs: Array<() => void> = [];
+    const via = viaJson(spec.via);
+
+    if (spec.kind === 'ws') {
+      callHost<void>('__ws_open', undefined as any, id, spec.url, via);
+      unsubs.push(subscribe(`ws:open:${id}`, () => {
+        if (cancelled) return;
+        (specRef.current as WsConnectionSpec).onOpen?.();
+        setState('open');
+      }));
+      unsubs.push(subscribe(`ws:message:${id}`, (data: any) => {
+        if (cancelled) return;
+        const s = typeof data === 'string' ? data : String(data);
+        (specRef.current as WsConnectionSpec).onMessage?.(s);
+      }));
+      unsubs.push(subscribe(`ws:close:${id}`, (raw: any) => {
+        if (cancelled) return;
+        let info = { code: 0, reason: '' };
+        try {
+          const obj = typeof raw === 'string' ? JSON.parse(raw) : raw;
+          info = { code: obj.code ?? 0, reason: obj.reason ?? '' };
+        } catch {}
+        (specRef.current as WsConnectionSpec).onClose?.(info);
+        setState('closed');
+      }));
+      unsubs.push(subscribe(`ws:error:${id}`, (msg: any) => {
+        if (cancelled) return;
+        const m = typeof msg === 'string' ? msg : String(msg);
+        (specRef.current as WsConnectionSpec).onError?.(m);
+        setError(m);
+        setState('error');
+      }));
+    } else if (spec.kind === 'tcp') {
+      callHost<void>('__tcp_connect', undefined as any, id, spec.host, spec.port, via);
+      unsubs.push(subscribe(`tcp:open:${id}`, () => {
+        if (cancelled) return;
+        setState('open');
+      }));
+      unsubs.push(subscribe(`tcp:data:${id}`, (data: any) => {
+        if (cancelled) return;
+        const s = typeof data === 'string' ? data : String(data);
+        (specRef.current as TcpConnectionSpec).onData?.(s);
+      }));
+      unsubs.push(subscribe(`tcp:close:${id}`, () => {
+        if (cancelled) return;
+        (specRef.current as TcpConnectionSpec).onClose?.();
+        setState('closed');
+      }));
+      unsubs.push(subscribe(`tcp:error:${id}`, (msg: any) => {
+        if (cancelled) return;
+        const m = typeof msg === 'string' ? msg : String(msg);
+        (specRef.current as TcpConnectionSpec).onError?.(m);
+        setError(m);
+        setState('error');
+      }));
+      // tcp_connect is sync today; flip to open optimistically if no event arrives.
+      setState('open');
+    } else if (spec.kind === 'udp') {
+      callHost<void>('__udp_open', undefined as any, id, spec.host, spec.port, via);
+      unsubs.push(subscribe(`udp:packet:${id}`, (data: any) => {
+        if (cancelled) return;
+        const s = typeof data === 'string' ? data : String(data);
+        (specRef.current as UdpConnectionSpec).onPacket?.(s);
+      }));
+      unsubs.push(subscribe(`udp:error:${id}`, (msg: any) => {
+        if (cancelled) return;
+        const m = typeof msg === 'string' ? msg : String(msg);
+        (specRef.current as UdpConnectionSpec).onError?.(m);
+        setError(m);
+        setState('error');
+      }));
+      setState('open');
+    } else if (spec.kind === 'tor') {
+      const opts = JSON.stringify({
+        identity: (spec as TorConnectionSpec).socksPort ? '' : 'default',
+        socksPort: (spec as TorConnectionSpec).socksPort ?? 0,
+      });
+      callHost<void>('__tor_start', undefined as any, id, opts);
+      unsubs.push(subscribe(`tor:open:${id}`, (raw: any) => {
+        if (cancelled) return;
+        try {
+          const obj = typeof raw === 'string' ? JSON.parse(raw) : raw;
+          torInfoRef.current = { socksPort: obj.socksPort, hostname: obj.hostname, hsPort: obj.hsPort };
+          setTorInfo(torInfoRef.current);
+        } catch {}
+        setState('open');
+      }));
+      unsubs.push(subscribe(`tor:error:${id}`, (msg: any) => {
+        if (cancelled) return;
+        const m = typeof msg === 'string' ? msg : String(msg);
+        setError(m);
+        setState('error');
+      }));
+    } else if (spec.kind === 'socks5') {
+      callHost<void>(
+        '__socks5_register',
+        undefined as any,
+        id,
+        spec.host,
+        spec.port,
+        spec.username ?? '',
+        spec.password ?? '',
+      );
+      // SOCKS5 is a config holder — no socket opens here. The proxy is used
+      // when another connection passes this handle as `via:`.
+      setState('open');
+    } else {
+      // wireguard / stun / peer: no Zig backend yet. Honest error rather
+      // than a silent open. When the binding lands, replace with real wiring.
+      setError(`${spec.kind} transport: zig backend not yet implemented`);
+      setState('error');
+    }
+
+    return () => {
+      cancelled = true;
+      for (const u of unsubs) u();
+      if (spec.kind === 'ws') callHost<void>('__ws_close', undefined as any, id);
+      else if (spec.kind === 'tcp') callHost<void>('__tcp_close', undefined as any, id);
+      else if (spec.kind === 'udp') callHost<void>('__udp_close', undefined as any, id);
+      else if (spec.kind === 'tor') callHost<void>('__tor_stop', undefined as any, id);
+      else if (spec.kind === 'socks5') callHost<void>('__socks5_unregister', undefined as any, id);
+      setState('closed');
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    spec.kind,
+    (spec as any).url,
+    (spec as any).host,
+    (spec as any).port,
+    (spec as any).server,
+    (spec as any).peerId,
+    viaKey,
+  ]);
+
+  // Build the kind-specific handle.
+  const closeFn = () => {
+    if (spec.kind === 'ws') callHost<void>('__ws_close', undefined as any, id);
+    else if (spec.kind === 'tcp') callHost<void>('__tcp_close', undefined as any, id);
+    else if (spec.kind === 'udp') callHost<void>('__udp_close', undefined as any, id);
+  };
+
+  if (spec.kind === 'ws') {
+    return {
+      kind: 'ws', id, state, error, close: closeFn,
+      send: (data) => callHost<void>('__ws_send', undefined as any, id, data),
+    };
+  }
+  if (spec.kind === 'tcp') {
+    return {
+      kind: 'tcp', id, state, error, close: closeFn,
+      send: (data) => callHost<void>('__tcp_send', undefined as any, id, data),
+    };
+  }
+  if (spec.kind === 'udp') {
+    return {
+      kind: 'udp', id, state, error, close: closeFn,
+      send: (data) => callHost<void>('__udp_send', undefined as any, id, data),
+    };
+  }
+  if (spec.kind === 'wireguard') {
+    return { kind: 'wireguard', id, state, error, close: closeFn };
+  }
+  if (spec.kind === 'tor') {
+    return {
+      kind: 'tor',
+      id,
+      state,
+      error,
+      close: closeFn,
+      socksPort: torInfo?.socksPort ?? spec.socksPort ?? 0,
+      hostname: torInfo?.hostname,
+      hsPort: torInfo?.hsPort ?? 0,
+    };
+  }
+  if (spec.kind === 'socks5') {
+    return { kind: 'socks5', id, state, error, close: closeFn };
+  }
+  if (spec.kind === 'stun') {
+    return { kind: 'stun', id, state, error, close: closeFn };
+  }
+  // peer
+  return {
+    kind: 'peer', id, state, error, close: closeFn,
+    send: (_data: string) => { /* not wired */ },
+  };
+}

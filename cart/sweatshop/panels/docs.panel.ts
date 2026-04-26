@@ -1,5 +1,3 @@
-const React: any = require('react');
-
 import { DocsPanel } from '../components/docs/DocsPanel';
 import { register } from '../panel-registry';
 

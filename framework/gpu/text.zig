@@ -82,7 +82,7 @@ const AtlasGlyphInfo = struct {
     uv_h: f32,
     bearing_x: i32,
     bearing_y: i32,
-    advance: i32,
+    advance: f32,
     width: i32,
     height: i32,
 };
@@ -310,7 +310,7 @@ pub fn drawTextLine(text: []const u8, x: f32, y: f32, size_px: u16, cr: f32, cg:
                     g_glyph_count += 1;
                 }
             }
-            pen_x += @floatFromInt(glyph.advance);
+            pen_x += glyph.advance;
             pen_x += g_letter_spacing;
         }
         i += ch.len;
@@ -341,7 +341,7 @@ fn measureTextLineWidth(text: []const u8, size_px: u16) f32 {
             continue;
         }
         if (cacheGlyph(ch.codepoint, size_px)) |glyph| {
-            width += @floatFromInt(glyph.advance);
+            width += glyph.advance;
         }
         i += ch.len;
     }
@@ -395,11 +395,17 @@ pub fn drawTextWrapped(text: []const u8, x: f32, y: f32, size_px: u16, max_width
 
     while (i < text.len) {
         if (max_lines > 0 and lines_drawn >= max_lines) break;
+        // Letter-spacing is *between* glyphs (N-1 gaps for N glyphs), not trailing.
+        // Adding ls to pen_x after every glyph (including the last) would inflate
+        // pen_x by ~ls at the right margin and wrap the final glyph of a word
+        // that measurement says should fit. Add ls as *leading* for non-first
+        // glyphs instead — matches measureLineWidth semantics exactly.
+        const leading_ls: f32 = if (pen_x > 0) g_letter_spacing else 0;
         // Inline glyph sentinel — treat as non-wrappable char with fontSize advance
         const sentinel_len = inlineGlyphSentinelLen(text, i);
         if (sentinel_len > 0) {
             const advance: f32 = @floatFromInt(size_px);
-            if (pen_x + advance > max_width and pen_x > 0) {
+            if (pen_x + leading_ls + advance > max_width and pen_x > 0) {
                 if (last_break > line_start) {
                     drawTextLine(text[line_start..last_break], x, pen_y, size_px, cr, cg, cb, ca);
                     lines_drawn += 1;
@@ -411,15 +417,14 @@ pub fn drawTextWrapped(text: []const u8, x: f32, y: f32, size_px: u16, max_width
                         const j_sentinel_len = inlineGlyphSentinelLen(text, j);
                         if (j_sentinel_len > 0) { pen_x += @floatFromInt(size_px); pen_x += g_letter_spacing; j += j_sentinel_len; continue; }
                         const jch = decodeUtf8(text[j..]);
-                        if (cacheGlyph(jch.codepoint, size_px)) |g| { pen_x += @floatFromInt(g.advance); pen_x += g_letter_spacing; }
+                        if (cacheGlyph(jch.codepoint, size_px)) |g| { pen_x += g.advance; pen_x += g_letter_spacing; }
                         j += jch.len;
                     }
                     last_break = line_start;
                     last_break_pen_x = 0;
                 }
             }
-            pen_x += advance;
-            pen_x += g_letter_spacing;
+            pen_x += leading_ls + advance;
             i += sentinel_len;
             continue;
         }
@@ -447,11 +452,18 @@ pub fn drawTextWrapped(text: []const u8, x: f32, y: f32, size_px: u16, max_width
         // Measure this glyph
         var advance: f32 = 0;
         if (cacheGlyph(ch.codepoint, size_px)) |glyph| {
-            advance = @floatFromInt(glyph.advance);
+            advance = glyph.advance;
         }
 
-        if (pen_x + advance > max_width and pen_x > 0) {
-            // Wrap at last word boundary if possible
+        if (pen_x + leading_ls + advance > max_width and pen_x > 0) {
+            // Wrap at last word boundary if possible.
+            // If no break point exists on this line, do NOT force-break mid-word —
+            // let the word overflow horizontally past max_width. That matches
+            // browser default (`overflow-wrap: normal`) and the measurement-side
+            // `wordWrap` in framework/text.zig, which also keeps single words on
+            // one line. Force-breaking here produced the per-character cascade
+            // ("s\na\nm\np\nl\ne") when a Text was placed inside a container
+            // narrower than the word.
             if (last_break > line_start) {
                 drawTextLine(text[line_start..last_break], x, pen_y, size_px, cr, cg, cb, ca);
                 lines_drawn += 1;
@@ -466,25 +478,15 @@ pub fn drawTextWrapped(text: []const u8, x: f32, y: f32, size_px: u16, max_width
                     const j_sentinel_len = inlineGlyphSentinelLen(text, j);
                     if (j_sentinel_len > 0) { pen_x += @floatFromInt(size_px); j += j_sentinel_len; continue; }
                     const jch = decodeUtf8(text[j..]);
-                    if (cacheGlyph(jch.codepoint, size_px)) |g| pen_x += @floatFromInt(g.advance);
+                    if (cacheGlyph(jch.codepoint, size_px)) |g| pen_x += g.advance;
                     j += jch.len;
                 }
                 last_break = line_start;
                 last_break_pen_x = 0;
-            } else {
-                // No break point — force break at current position
-                drawTextLine(text[line_start..i], x, pen_y, size_px, cr, cg, cb, ca);
-                lines_drawn += 1;
-                pen_y += line_h;
-                line_start = i;
-                last_break = i;
-                pen_x = 0;
-                last_break_pen_x = 0;
             }
         }
 
-        pen_x += advance;
-        pen_x += g_letter_spacing;
+        pen_x += leading_ls + advance;
         i += ch.len;
     }
 
@@ -555,7 +557,7 @@ pub fn drawSelectionRects(text: []const u8, x: f32, y: f32, size_px: u16, max_wi
 
         var advance: f32 = 0;
         if (cacheGlyph(ch.codepoint, size_px)) |glyph| {
-            advance = @floatFromInt(glyph.advance);
+            advance = glyph.advance;
         }
 
         // Check for word wrap
@@ -573,7 +575,7 @@ pub fn drawSelectionRects(text: []const u8, x: f32, y: f32, size_px: u16, max_wi
                 while (j < i) {
                     const jch = decodeUtf8(text[j..]);
                     if (cacheGlyph(jch.codepoint, size_px)) |g| {
-                        pen_x += @floatFromInt(g.advance);
+                        pen_x += g.advance;
                     }
                     j += jch.len;
                 }
@@ -616,7 +618,7 @@ pub fn drawSelectionRects(text: []const u8, x: f32, y: f32, size_px: u16, max_wi
 /// Get the advance width of a character at a given font size.
 pub fn getCharAdvance(codepoint: u32, size_px: u16) f32 {
     if (cacheGlyph(codepoint, size_px)) |glyph| {
-        return @floatFromInt(glyph.advance);
+        return glyph.advance;
     }
     return @floatFromInt(size_px / 2); // fallback
 }
@@ -1013,7 +1015,12 @@ fn cacheGlyph(codepoint: u32, size_px: u16) ?*const AtlasGlyphInfo {
         .uv_h = @as(f32, @floatFromInt(bh)) / @as(f32, ATLAS_SIZE),
         .bearing_x = glyph.*.bitmap_left,
         .bearing_y = glyph.*.bitmap_top,
-        .advance = @intCast(glyph.*.advance.x >> 6),
+        // Sub-pixel advance: FreeType stores .advance.x in 26.6 fixed-point.
+        // Truncating via `>> 6` threw away up to ~1px per glyph, which fed
+        // measureLineWidth / wordWrap under-reported widths — paint then
+        // rendered slightly wider than measurement expected, tripping strict
+        // `word_width > max_width` wraps at the column edge.
+        .advance = @as(f32, @floatFromInt(glyph.*.advance.x)) / 64.0,
         .width = @intCast(bw),
         .height = @intCast(bh),
     };

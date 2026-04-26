@@ -1,6 +1,4 @@
-const React: any = require('react');
-const { useMemo, useState } = React;
-
+import { useMemo, useState } from 'react';
 import { Box } from '../../../../runtime/primitives';
 import { copyToClipboard } from '../agent/clipboard';
 import { HeadingNav } from '../markdown/HeadingNav';

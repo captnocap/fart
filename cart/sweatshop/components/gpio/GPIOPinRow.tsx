@@ -1,6 +1,3 @@
-const React: any = require('react');
-
-
 import { Box, Pressable, Row, Text } from '../../../../runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 import { useGPIO } from '../../lib/gpio';

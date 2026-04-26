@@ -62,7 +62,8 @@ pub fn start(opts: TorOpts) !void {
     std.fs.makeDirAbsolute(dir) catch |err| {
         if (err != error.PathAlreadyExists) {
             // Try creating parent first
-            const parent = try std.fmt.bufPrint(&([_]u8{0} ** MAX_PATH), "{s}/.cache/reactjit-tor", .{home});
+            var parent_buf: [MAX_PATH]u8 = undefined;
+            const parent = try std.fmt.bufPrint(&parent_buf, "{s}/.cache/reactjit-tor", .{home});
             std.fs.makeDirAbsolute(parent) catch {};
             std.fs.makeDirAbsolute(dir) catch {};
         }
@@ -79,7 +80,9 @@ pub fn start(opts: TorOpts) !void {
 
     const torrc_file = try std.fs.createFileAbsolute(torrc_path, .{});
     defer torrc_file.close();
-    try torrc_file.writer().print(
+    var torrc_buf: [2048]u8 = undefined;
+    const torrc = try std.fmt.bufPrint(
+        &torrc_buf,
         "SocksPort {d}\n" ++
             "HiddenServiceDir {s}\n" ++
             "HiddenServicePort {d} 127.0.0.1:{d}\n" ++
@@ -87,6 +90,7 @@ pub fn start(opts: TorOpts) !void {
             "Log notice file {s}/tor.log\n",
         .{ socks_port, hs_dir, opts.hidden_service_port, hs_port, dir, dir },
     );
+    try torrc_file.writeAll(torrc);
 
     // Create data directory
     var data_dir_buf: [MAX_PATH]u8 = undefined;
@@ -95,9 +99,9 @@ pub fn start(opts: TorOpts) !void {
 
     // Spawn Tor process
     var child = std.process.Child.init(&[_][]const u8{ "tor", "-f", torrc_path }, std.heap.page_allocator);
-    child.stdin_behavior = .ignore;
-    child.stdout_behavior = .ignore;
-    child.stderr_behavior = .ignore;
+    child.stdin_behavior = .Ignore;
+    child.stdout_behavior = .Ignore;
+    child.stderr_behavior = .Ignore;
     try child.spawn();
 
     pid = child;

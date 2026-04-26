@@ -4,8 +4,7 @@
 // tsz/carts/conformance/mixed/d152_cascade_configurator.tsz, with the top-level
 // hooks moved inside App() (mixed-lane hoists them; React requires them in a FC).
 
-const React: any = require('react');
-const { useState, useEffect, useRef } = React;
+import { useState, useEffect, useRef } from 'react';
 import { Box, Text, Pressable, ScrollView } from '../runtime/primitives';
 
 // ── Math utilities ─────────────────────────────────────────────────

@@ -4,9 +4,7 @@
 // the MVP TODO list — resolver tracks active contacts but doesn't yet
 // surface ExitEvents to listeners).
 
-const React: any = require('react');
-const { useEffect } = React;
-
+import { useEffect } from 'react';
 import { usePhysicsCtx } from './PhysicsContext';
 import type { CollisionEvent } from '../../lib/physics/core';
 

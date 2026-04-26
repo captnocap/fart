@@ -1,5 +1,6 @@
 import { defineGallerySection, defineGalleryStory } from '../types';
 import { CircularBarChart } from '../components/circular-bar-chart/CircularBarChart';
+import { DEMO_DAYS, DEMO_RESPONSE_TIME } from '../lib/chart-utils';
 
 export const circularBarChartSection = defineGallerySection({
   id: 'circular-bar-chart',
@@ -14,7 +15,7 @@ export const circularBarChartSection = defineGallerySection({
         {
           id: 'default',
           name: 'Default',
-          render: () => <CircularBarChart />,
+          render: () => <CircularBarChart labels={DEMO_DAYS} data={DEMO_RESPONSE_TIME} />,
         },
       ],
     }),

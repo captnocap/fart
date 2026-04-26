@@ -2,9 +2,7 @@
 // every frame while mounted. Re-runs on vector change. Use for thrust,
 // wind, buoyancy; for one-shots use usePhysics().applyImpulse instead.
 
-const React: any = require('react');
-const { useEffect } = React;
-
+import { useEffect } from 'react';
 import { usePhysicsCtx } from './PhysicsContext';
 
 export function useForce(bodyId: string, force: [number, number]) {

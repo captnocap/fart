@@ -19,6 +19,7 @@ export {
   TextEditor,
   Terminal,
   terminal,
+  StaticSurface,
   Canvas,
   Graph,
   Render,

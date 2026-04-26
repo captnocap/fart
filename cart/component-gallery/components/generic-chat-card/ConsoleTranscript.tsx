@@ -5,9 +5,28 @@ import { SignalPopoverLayer } from './SignalPopoverLayer';
 import type { SignalHighlightProps } from './TripwireMenu';
 import { CHAT_CARD } from './tokens';
 
+const TRANSCRIPT_SCROLL_HEIGHT = 320;
+
+function estimateBlockHeight(block: TranscriptBlock): number {
+  if (block.kind === 'user') return 18 + block.lines.length * 15;
+  if (block.kind === 'agent') return 22 + block.lines.length * (block.markable ? 17 : 15);
+  if (block.kind === 'thinking') return 22 + block.lines.length * 15;
+  if (block.kind === 'tool') return 54;
+  return 28 + block.lines.length * 17;
+}
+
+function estimateTranscriptHeight(blocks: TranscriptBlock[]): number {
+  if (blocks.length === 0) return 22;
+  const bodyHeight = blocks.reduce((total, block) => total + estimateBlockHeight(block), 0);
+  const connectorHeight = Math.max(0, blocks.length - 1) * 10;
+  return 22 + bodyHeight + connectorHeight;
+}
+
 export function ConsoleTranscript({ blocks, attachment }: { blocks: TranscriptBlock[]; attachment?: any }) {
   const [openSignal, setOpenSignal] = useState<SignalHighlightProps | null>(null);
   const [viewport, setViewport] = useState({ x: 0, y: 0, width: 384, height: 300 });
+  const estimatedHeight = estimateTranscriptHeight(blocks);
+  const shouldScroll = estimatedHeight > TRANSCRIPT_SCROLL_HEIGHT;
 
   const toggleSignal = (signal: SignalHighlightProps) => {
     setOpenSignal((current) => (current?.id === signal.id ? null : signal));
@@ -17,8 +36,7 @@ export function ConsoleTranscript({ blocks, attachment }: { blocks: TranscriptBl
     <Col
       style={{
         position: 'relative',
-        flexGrow: 1,
-        minHeight: 0,
+        width: '100%',
         backgroundColor: CHAT_CARD.panel,
         borderWidth: 1,
         borderColor: CHAT_CARD.borderSoft,
@@ -35,9 +53,9 @@ export function ConsoleTranscript({ blocks, attachment }: { blocks: TranscriptBl
         });
       }}
     >
-      <Box style={{ flexGrow: 1, minHeight: 0 }}>
+      {shouldScroll ? (
         <ScrollView
-          style={{ flexGrow: 1, minHeight: 0, padding: 11 }}
+          style={{ width: '100%', height: TRANSCRIPT_SCROLL_HEIGHT, padding: 11 }}
           showScrollbar={false}
           onScroll={(payload: any) => {
             if (Number.isFinite(payload?.scrollY) && openSignal) setOpenSignal(null);
@@ -56,12 +74,25 @@ export function ConsoleTranscript({ blocks, attachment }: { blocks: TranscriptBl
             ))}
           </Col>
         </ScrollView>
-      </Box>
+      ) : (
+        <Col style={{ width: '100%', padding: 11, gap: 0 }}>
+          {blocks.map((block, index) => (
+            <MessageBlock
+              key={`${block.kind}-${index}`}
+              block={block}
+              openSignalId={openSignal?.id ?? null}
+              onToggleSignal={toggleSignal}
+              connectTop={index > 0}
+              showConnector={index < blocks.length - 1}
+            />
+          ))}
+        </Col>
+      )}
       {attachment ? (
         <Box
           style={{
             borderTopWidth: 1,
-            borderColor: '#3d4668',
+            borderColor: '#3a2a1e',
             backgroundColor: CHAT_CARD.panelDeep,
           }}
         >

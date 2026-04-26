@@ -22,50 +22,83 @@ const XChaCha20Poly1305 = crypto.aead.chacha_poly.XChaCha20Poly1305;
 const HmacSha256 = crypto.auth.hmac.sha2.HmacSha256;
 
 const crmod = @import("crypto.zig");
+const sodium = @import("sodium.zig");
+
+/// Backend selector for any operation that can be served by either
+/// std.crypto (Zig stdlib) or libsodium (battle-tested C).
+pub const Backend = enum { std, sodium };
 
 // ════════════════════════════════════════════════════════════════════════
 // Secure Memory
 // ════════════════════════════════════════════════════════════════════════
 
+/// Backed by libsodium's `sodium_malloc` (page-aligned, mlock'd, guard pages,
+/// canary, mprotect-ready). This replaces an earlier std-allocator-backed
+/// implementation that only zeroed memory on free — that one couldn't honor
+/// noaccess/readonly modes at the OS level, which is the whole point of a
+/// secure buffer. Real protection requires libsodium.
 pub const SecureBuffer = struct {
-    data: []u8,
+    region: sodium.SecureRegion,
     size: usize,
     access: AccessMode,
 
     pub const AccessMode = enum { readwrite, readonly, noaccess };
 
-    /// Allocate a secure buffer from hex data. Zeroed on free via secureZero.
-    pub fn init(alloc: std.mem.Allocator, hex: []const u8) !SecureBuffer {
+    /// Allocate a secure buffer from hex data.
+    pub fn init(_: std.mem.Allocator, hex: []const u8) !SecureBuffer {
+        if (!sodium.ready()) _ = sodium.init();
         const byte_len = hex.len / 2;
         if (byte_len == 0) return error.EmptyInput;
 
-        const data = try alloc.alloc(u8, byte_len);
+        const region = try sodium.secureAlloc(byte_len);
+        errdefer sodium.secureFree(region);
 
-        // Decode hex into buffer
-        _ = crmod.hexToBytes(hex, data[0..byte_len]) catch {
-            alloc.free(data);
+        var dest: []u8 = undefined;
+        dest.ptr = region.ptr;
+        dest.len = byte_len;
+        _ = crmod.hexToBytes(hex, dest) catch {
+            sodium.secureFree(region);
             return error.InvalidHex;
         };
 
-        return .{ .data = data, .size = byte_len, .access = .readwrite };
+        return .{ .region = region, .size = byte_len, .access = .readwrite };
     }
 
-    /// Read the buffer contents as hex.
-    /// Temporarily promotes noaccess buffers to readwrite (software-managed).
-    pub fn readHex(self: *const SecureBuffer, out: []u8) void {
-        crmod.bytesToHex(self.data[0..self.size], out[0 .. self.size * 2]);
+    fn asSlice(self: *const SecureBuffer) []u8 {
+        var s: []u8 = undefined;
+        s.ptr = self.region.ptr;
+        s.len = self.size;
+        return s;
     }
 
-    /// Set access mode (software-managed, like the Lua implementation).
+    /// Read the buffer contents as hex. If currently noaccess/readonly,
+    /// temporarily promote to readwrite for the duration of the read.
+    pub fn readHex(self: *SecureBuffer, out: []u8) void {
+        const prev = self.access;
+        if (prev != .readwrite) sodium.secureProtect(self.region, .readwrite) catch {};
+        crmod.bytesToHex(self.asSlice(), out[0 .. self.size * 2]);
+        if (prev != .readwrite) sodium.secureProtect(self.region, switch (prev) {
+            .readonly => .readonly,
+            .noaccess => .noaccess,
+            .readwrite => .readwrite,
+        }) catch {};
+    }
+
+    /// Set OS-level page protection. Backed by sodium_mprotect_*.
     pub fn setAccess(self: *SecureBuffer, mode: AccessMode) void {
         self.access = mode;
+        sodium.secureProtect(self.region, switch (mode) {
+            .readwrite => .readwrite,
+            .readonly => .readonly,
+            .noaccess => .noaccess,
+        }) catch {};
     }
 
-    /// Zero and free the secure buffer.
-    pub fn deinit(self: *SecureBuffer, alloc: std.mem.Allocator) void {
-        // Zero memory before freeing
-        crypto.secureZero(u8, self.data[0..self.size]);
-        alloc.free(self.data);
+    /// Zero and free. sodium_free zeroes by design before unmapping.
+    pub fn deinit(self: *SecureBuffer, _: std.mem.Allocator) void {
+        // sodium_free expects readwrite to clear; restore if needed.
+        if (self.access != .readwrite) sodium.secureProtect(self.region, .readwrite) catch {};
+        sodium.secureFree(self.region);
         self.size = 0;
     }
 };
@@ -446,13 +479,13 @@ pub fn tokenize(value: []const u8, salt: []const u8) [64]u8 {
 // ════════════════════════════════════════════════════════════════════════
 
 fn runCommand(alloc: std.mem.Allocator, argv: []const []const u8) ![]u8 {
-    var child = std.process.Child.init(argv, alloc);
-    child.stdout_behavior = .Pipe;
-    child.stderr_behavior = .Pipe;
-    try child.spawn();
-    const stdout = try child.stdout.?.reader().readAllAlloc(alloc, 1024 * 1024);
-    _ = try child.wait();
-    return stdout;
+    const result = try std.process.Child.run(.{
+        .allocator = alloc,
+        .argv = argv,
+        .max_output_bytes = 1024 * 1024,
+    });
+    alloc.free(result.stderr);
+    return result.stdout;
 }
 
 fn commandExists(alloc: std.mem.Allocator, name: []const u8) bool {
@@ -546,6 +579,1053 @@ pub fn metaStrip(alloc: std.mem.Allocator, path: []const u8) !void {
 pub fn metaRead(alloc: std.mem.Allocator, path: []const u8) ![]u8 {
     if (!commandExists(alloc, "exiftool")) return error.ExiftoolNotInstalled;
     return runCommand(alloc, &.{ "exiftool", "-json", path });
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// Backend-selectable primitives (std.crypto vs libsodium)
+//
+// Higher-level callers — and ultimately the JS hook surface — pass a
+// `Backend` to choose which implementation runs. The two backends are
+// numerically equivalent on the standard test vectors; the choice is
+// about which battle-tested codebase you trust.
+// ════════════════════════════════════════════════════════════════════════
+
+pub fn sha256With(backend: Backend, data: []const u8) [32]u8 {
+    switch (backend) {
+        .std => return sha256Hash(data),
+        .sodium => {
+            var out: [32]u8 = undefined;
+            sodium.sha256(&out, data);
+            return out;
+        },
+    }
+}
+
+pub fn hmacSha256With(backend: Backend, key: []const u8, message: []const u8) [32]u8 {
+    switch (backend) {
+        .std => return crmod.hmacSha256(key, message),
+        .sodium => {
+            var out: [32]u8 = undefined;
+            sodium.hmacSha256(&out, message, key);
+            return out;
+        },
+    }
+}
+
+pub fn hkdfSha256With(
+    backend: Backend,
+    ikm: []const u8,
+    salt: []const u8,
+    info: []const u8,
+    out: []u8,
+) !void {
+    switch (backend) {
+        .std => {
+            const prk = crmod.hkdfExtract(salt, ikm);
+            try crmod.hkdfExpand(&prk, info, out);
+        },
+        .sodium => {
+            var prk: [32]u8 = undefined;
+            sodium.hkdfExtract(&prk, salt, ikm);
+            try sodium.hkdfExpand(&prk, info, out);
+        },
+    }
+}
+
+/// XChaCha20-Poly1305 encrypt. `out` must be plaintext.len + 16 bytes.
+pub fn xchachaEncryptWith(
+    backend: Backend,
+    out: []u8,
+    plaintext: []const u8,
+    aad: []const u8,
+    nonce: *const [24]u8,
+    key: *const [32]u8,
+) !usize {
+    switch (backend) {
+        .std => {
+            if (out.len < plaintext.len + 16) return error.BufferTooSmall;
+            var tag: [16]u8 = undefined;
+            XChaCha20Poly1305.encrypt(out[0..plaintext.len], &tag, plaintext, aad, nonce.*, key.*);
+            @memcpy(out[plaintext.len..][0..16], &tag);
+            return plaintext.len + 16;
+        },
+        .sodium => return sodium.xchachaEncrypt(out, plaintext, aad, nonce, key),
+    }
+}
+
+pub fn xchachaDecryptWith(
+    backend: Backend,
+    out: []u8,
+    ciphertext: []const u8,
+    aad: []const u8,
+    nonce: *const [24]u8,
+    key: *const [32]u8,
+) !usize {
+    switch (backend) {
+        .std => {
+            if (ciphertext.len < 16) return error.CiphertextTooShort;
+            const ct_len = ciphertext.len - 16;
+            if (out.len < ct_len) return error.BufferTooSmall;
+            const tag: [16]u8 = ciphertext[ct_len..][0..16].*;
+            XChaCha20Poly1305.decrypt(out[0..ct_len], ciphertext[0..ct_len], tag, aad, nonce.*, key.*) catch
+                return error.DecryptFailed;
+            return ct_len;
+        },
+        .sodium => return sodium.xchachaDecrypt(out, ciphertext, aad, nonce, key),
+    }
+}
+
+pub fn randomBytesWith(backend: Backend, out: []u8) void {
+    switch (backend) {
+        .std => crypto.random.bytes(out),
+        .sodium => sodium.randomBytes(out),
+    }
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// Directory Hashing & Manifest Verification
+// ════════════════════════════════════════════════════════════════════════
+
+pub const ManifestEntry = struct {
+    path: []const u8, // owned by alloc
+    hash_hex: [64]u8,
+};
+
+pub const Manifest = struct {
+    entries: std.ArrayList(ManifestEntry),
+    alloc: std.mem.Allocator,
+
+    pub fn deinit(self: *Manifest) void {
+        for (self.entries.items) |e| self.alloc.free(e.path);
+        self.entries.deinit(self.alloc);
+    }
+};
+
+fn pathLessThan(_: void, a: ManifestEntry, b: ManifestEntry) bool {
+    return std.mem.lessThan(u8, a.path, b.path);
+}
+
+/// Walk a directory and SHA-256 every file. Sorted entries → deterministic.
+pub fn hashDirectory(
+    alloc: std.mem.Allocator,
+    dir_path: []const u8,
+    recursive: bool,
+) !Manifest {
+    var entries: std.ArrayList(ManifestEntry) = .{};
+    errdefer {
+        for (entries.items) |e| alloc.free(e.path);
+        entries.deinit(alloc);
+    }
+
+    var dir = try std.fs.cwd().openDir(dir_path, .{ .iterate = true });
+    defer dir.close();
+
+    if (recursive) {
+        var walker = try dir.walk(alloc);
+        defer walker.deinit();
+        while (try walker.next()) |entry| {
+            if (entry.kind != .file) continue;
+            const full = try std.fmt.allocPrint(alloc, "{s}/{s}", .{ dir_path, entry.path });
+            errdefer alloc.free(full);
+            var hex: [64]u8 = undefined;
+            try hashFile(full, &hex);
+            try entries.append(alloc, .{ .path = full, .hash_hex = hex });
+        }
+    } else {
+        var it = dir.iterate();
+        while (try it.next()) |entry| {
+            if (entry.kind != .file) continue;
+            const full = try std.fmt.allocPrint(alloc, "{s}/{s}", .{ dir_path, entry.name });
+            errdefer alloc.free(full);
+            var hex: [64]u8 = undefined;
+            try hashFile(full, &hex);
+            try entries.append(alloc, .{ .path = full, .hash_hex = hex });
+        }
+    }
+
+    std.mem.sort(ManifestEntry, entries.items, {}, pathLessThan);
+    return .{ .entries = entries, .alloc = alloc };
+}
+
+/// Serialize a manifest to JSON: `{"version":1,"entries":[{"path":...,"hash":...},...]}`.
+pub fn manifestToJson(alloc: std.mem.Allocator, manifest: *const Manifest) ![]u8 {
+    var buf: std.ArrayList(u8) = .{};
+    errdefer buf.deinit(alloc);
+    try buf.appendSlice(alloc, "{\"version\":1,\"entries\":[");
+    for (manifest.entries.items, 0..) |entry, i| {
+        if (i > 0) try buf.append(alloc, ',');
+        try buf.appendSlice(alloc, "{\"path\":");
+        try jsonQuoteString(alloc, &buf, entry.path);
+        try buf.appendSlice(alloc, ",\"hash\":\"");
+        try buf.appendSlice(alloc, &entry.hash_hex);
+        try buf.appendSlice(alloc, "\"}");
+    }
+    try buf.appendSlice(alloc, "]}");
+    return try buf.toOwnedSlice(alloc);
+}
+
+fn jsonQuoteString(alloc: std.mem.Allocator, out: *std.ArrayList(u8), s: []const u8) !void {
+    try out.append(alloc, '"');
+    for (s) |b| {
+        switch (b) {
+            '"' => try out.appendSlice(alloc, "\\\""),
+            '\\' => try out.appendSlice(alloc, "\\\\"),
+            '\n' => try out.appendSlice(alloc, "\\n"),
+            '\r' => try out.appendSlice(alloc, "\\r"),
+            '\t' => try out.appendSlice(alloc, "\\t"),
+            0...0x08, 0x0B, 0x0C, 0x0E...0x1F => {
+                var hex: [6]u8 = undefined;
+                _ = std.fmt.bufPrint(&hex, "\\u{x:0>4}", .{b}) catch unreachable;
+                try out.appendSlice(alloc, &hex);
+            },
+            else => try out.append(alloc, b),
+        }
+    }
+    try out.append(alloc, '"');
+}
+
+pub const ManifestVerifyResult = struct {
+    ok: bool,
+    /// Files in the manifest whose current hash differs.
+    mismatched: []const []const u8,
+    /// Files in the manifest that no longer exist.
+    missing: []const []const u8,
+    alloc: std.mem.Allocator,
+
+    pub fn deinit(self: *ManifestVerifyResult) void {
+        for (self.mismatched) |s| self.alloc.free(s);
+        for (self.missing) |s| self.alloc.free(s);
+        self.alloc.free(self.mismatched);
+        self.alloc.free(self.missing);
+    }
+};
+
+/// Compare each manifest entry against the current filesystem state.
+pub fn verifyManifest(alloc: std.mem.Allocator, manifest: *const Manifest) !ManifestVerifyResult {
+    var mismatched: std.ArrayList([]const u8) = .{};
+    errdefer {
+        for (mismatched.items) |s| alloc.free(s);
+        mismatched.deinit(alloc);
+    }
+    var missing: std.ArrayList([]const u8) = .{};
+    errdefer {
+        for (missing.items) |s| alloc.free(s);
+        missing.deinit(alloc);
+    }
+
+    for (manifest.entries.items) |entry| {
+        var hex: [64]u8 = undefined;
+        hashFile(entry.path, &hex) catch {
+            const owned = try alloc.dupe(u8, entry.path);
+            try missing.append(alloc, owned);
+            continue;
+        };
+        if (!std.mem.eql(u8, &hex, &entry.hash_hex)) {
+            const owned = try alloc.dupe(u8, entry.path);
+            try mismatched.append(alloc, owned);
+        }
+    }
+
+    return .{
+        .ok = mismatched.items.len == 0 and missing.items.len == 0,
+        .mismatched = try mismatched.toOwnedSlice(alloc),
+        .missing = try missing.toOwnedSlice(alloc),
+        .alloc = alloc,
+    };
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// GPG Operations (extended) — verify, listKeys, importKey, exportKey
+// ════════════════════════════════════════════════════════════════════════
+
+/// Verify a clearsigned message. Returns true on a good signature.
+pub fn gpgVerify(alloc: std.mem.Allocator, signed_message: []const u8) !bool {
+    if (!commandExists(alloc, "gpg")) return error.GpgNotInstalled;
+
+    var tmp_path_buf: [64]u8 = undefined;
+    const tmp_path = try std.fmt.bufPrint(&tmp_path_buf, "/tmp/tsz-gpg-{x}", .{std.crypto.random.int(u64)});
+
+    {
+        const f = try std.fs.cwd().createFile(tmp_path, .{});
+        defer f.close();
+        try f.writeAll(signed_message);
+    }
+    defer std.fs.cwd().deleteFile(tmp_path) catch {};
+
+    var child = std.process.Child.init(&.{ "gpg", "--batch", "--verify", tmp_path }, alloc);
+    child.stdout_behavior = .Ignore;
+    child.stderr_behavior = .Ignore;
+    try child.spawn();
+    const term = try child.wait();
+    return switch (term) {
+        .Exited => |code| code == 0,
+        else => false,
+    };
+}
+
+pub fn gpgListKeys(alloc: std.mem.Allocator) ![]u8 {
+    if (!commandExists(alloc, "gpg")) return error.GpgNotInstalled;
+    return runCommand(alloc, &.{ "gpg", "--batch", "--list-keys", "--with-colons" });
+}
+
+pub fn gpgImportKey(alloc: std.mem.Allocator, armored_key: []const u8) ![]u8 {
+    if (!commandExists(alloc, "gpg")) return error.GpgNotInstalled;
+
+    var tmp_path_buf: [64]u8 = undefined;
+    const tmp_path = try std.fmt.bufPrint(&tmp_path_buf, "/tmp/tsz-gpg-{x}.asc", .{std.crypto.random.int(u64)});
+
+    {
+        const f = try std.fs.cwd().createFile(tmp_path, .{});
+        defer f.close();
+        try f.writeAll(armored_key);
+    }
+    defer std.fs.cwd().deleteFile(tmp_path) catch {};
+
+    return runCommand(alloc, &.{ "gpg", "--batch", "--import", tmp_path });
+}
+
+pub fn gpgExportKey(alloc: std.mem.Allocator, key_id: []const u8) ![]u8 {
+    if (!commandExists(alloc, "gpg")) return error.GpgNotInstalled;
+    return runCommand(alloc, &.{ "gpg", "--batch", "--armor", "--export", key_id });
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// Identity & Anonymity
+//
+// anonymousId      — HMAC-SHA256(domain, seed). Deterministic within domain,
+//                    unlinkable across.
+// pseudonym        — HKDF-SHA256(masterSecret, info=context). Per-context
+//                    32-byte derived identifier.
+// isolatedCredential — fresh Ed25519 keypair scoped to a domain.
+// ════════════════════════════════════════════════════════════════════════
+
+pub fn anonymousId(backend: Backend, domain: []const u8, seed: []const u8) [32]u8 {
+    return hmacSha256With(backend, domain, seed);
+}
+
+pub fn pseudonym(
+    backend: Backend,
+    master_secret: []const u8,
+    context: []const u8,
+    out: *[32]u8,
+) !void {
+    try hkdfSha256With(backend, master_secret, &.{}, context, out);
+}
+
+pub const IsolatedCredential = struct {
+    domain: []u8, // owned
+    public_key: [32]u8,
+    secret_key: [64]u8, // Ed25519 secret = seed||public
+    key_id: [16]u8,
+
+    pub fn deinit(self: *IsolatedCredential, alloc: std.mem.Allocator) void {
+        // Zero secret material before freeing.
+        crypto.secureZero(u8, &self.secret_key);
+        alloc.free(self.domain);
+    }
+};
+
+/// Generate a fresh Ed25519 credential scoped to `domain`. Always libsodium
+/// because Ed25519 detached signing is what the lua surface exposed.
+pub fn isolatedCredential(alloc: std.mem.Allocator, domain: []const u8) !IsolatedCredential {
+    if (!sodium.ready()) _ = sodium.init();
+    const kp = sodium.signKeypair();
+    var key_id: [16]u8 = undefined;
+    sodium.randomBytes(&key_id);
+    return .{
+        .domain = try alloc.dupe(u8, domain),
+        .public_key = kp.public,
+        .secret_key = kp.secret,
+        .key_id = key_id,
+    };
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// Noise-NK Session Registry
+//
+// Mirrors love2d/lua/privacy.lua's sessionId-based API:
+//   noiseInitiateSession(remotePub) → { sessionId, message }
+//   noiseRespondSession(staticPriv, message) → { sessionId }
+//   noiseSendSession(sessionId, plaintext) → ciphertext
+//   noiseReceiveSession(sessionId, ciphertext) → plaintext  (replay-checked)
+//   noiseCloseSession(sessionId) → void
+// ════════════════════════════════════════════════════════════════════════
+
+const NoiseRegistryEntry = struct {
+    id: u32,
+    session: NoiseSession,
+    /// Replay protection: hash of every received ciphertext seen so far.
+    seen_hashes: std.AutoArrayHashMapUnmanaged([32]u8, void),
+};
+
+var g_noise_registry: ?std.ArrayList(NoiseRegistryEntry) = null;
+var g_noise_next_id: u32 = 1;
+var g_noise_alloc: std.mem.Allocator = std.heap.c_allocator;
+
+fn noiseRegistry() *std.ArrayList(NoiseRegistryEntry) {
+    if (g_noise_registry == null) {
+        g_noise_registry = .{};
+    }
+    return &g_noise_registry.?;
+}
+
+fn noiseFindEntry(id: u32) ?*NoiseRegistryEntry {
+    const reg = noiseRegistry();
+    for (reg.items) |*e| {
+        if (e.id == id) return e;
+    }
+    return null;
+}
+
+pub const NoiseInitiateResult = struct {
+    session_id: u32,
+    handshake: [32]u8,
+};
+
+pub fn noiseInitiateSession(responder_pub: [32]u8) !NoiseInitiateResult {
+    const result = try noiseInitiate(responder_pub);
+    const id = g_noise_next_id;
+    g_noise_next_id += 1;
+    try noiseRegistry().append(g_noise_alloc, .{
+        .id = id,
+        .session = result.session,
+        .seen_hashes = .{},
+    });
+    return .{ .session_id = id, .handshake = result.handshake };
+}
+
+pub fn noiseRespondSession(static_secret: [32]u8, initiator_ephemeral: [32]u8) !u32 {
+    const session = try noiseRespond(static_secret, initiator_ephemeral);
+    const id = g_noise_next_id;
+    g_noise_next_id += 1;
+    try noiseRegistry().append(g_noise_alloc, .{
+        .id = id,
+        .session = session,
+        .seen_hashes = .{},
+    });
+    return id;
+}
+
+pub fn noiseSendSession(session_id: u32, plaintext: []const u8, out: []u8) !usize {
+    const entry = noiseFindEntry(session_id) orelse return error.NoSuchSession;
+    return entry.session.send(plaintext, out);
+}
+
+/// Decrypts the message and rejects replays via a per-session seen-hash set.
+pub fn noiseReceiveSession(session_id: u32, message: []const u8, out: []u8) !usize {
+    const entry = noiseFindEntry(session_id) orelse return error.NoSuchSession;
+
+    // Replay check: SHA-256 of the wire bytes acts as the dedupe key.
+    var hash: [32]u8 = undefined;
+    var h = Sha256.init(.{});
+    h.update(message);
+    h.final(&hash);
+    if (entry.seen_hashes.contains(hash)) return error.ReplayDetected;
+
+    const n = try entry.session.receive(message, out);
+    try entry.seen_hashes.put(g_noise_alloc, hash, {});
+    return n;
+}
+
+pub fn noiseCloseSession(session_id: u32) void {
+    const reg = noiseRegistry();
+    var i: usize = 0;
+    while (i < reg.items.len) : (i += 1) {
+        if (reg.items[i].id == session_id) {
+            reg.items[i].session.close();
+            reg.items[i].seen_hashes.deinit(g_noise_alloc);
+            _ = reg.orderedRemove(i);
+            return;
+        }
+    }
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// Shamir Secret Sharing — GF(256), polynomial of degree k-1
+// ════════════════════════════════════════════════════════════════════════
+
+var gf_exp: [512]u8 = undefined;
+var gf_log: [256]u8 = undefined;
+var gf_inited: bool = false;
+
+fn gfInit() void {
+    if (gf_inited) return;
+    var x: u16 = 1;
+    var i: usize = 0;
+    while (i < 255) : (i += 1) {
+        gf_exp[i] = @intCast(x);
+        gf_log[@as(usize, @intCast(x))] = @intCast(i);
+        x = (x << 1) ^ x;
+        if ((x & 0x100) != 0) x ^= 0x11B;
+        x &= 0xFF;
+    }
+    var j: usize = 255;
+    while (j < 511) : (j += 1) gf_exp[j] = gf_exp[j - 255];
+    gf_exp[511] = gf_exp[256];
+    gf_log[0] = 0;
+    gf_inited = true;
+}
+
+fn gfMul(a: u8, b: u8) u8 {
+    if (a == 0 or b == 0) return 0;
+    return gf_exp[@as(usize, gf_log[a]) + @as(usize, gf_log[b])];
+}
+
+fn gfInv(a: u8) u8 {
+    return gf_exp[255 - @as(usize, gf_log[a])];
+}
+
+fn evalPoly(coeffs: []const u8, x: u8) u8 {
+    var r: u8 = 0;
+    var i: usize = coeffs.len;
+    while (i > 0) {
+        i -= 1;
+        r = gfMul(r, x) ^ coeffs[i];
+    }
+    return r;
+}
+
+pub const ShamirShare = struct { index: u8, bytes: []u8 };
+
+pub fn shamirSplit(
+    a: std.mem.Allocator,
+    secret: []const u8,
+    n: u8,
+    k: u8,
+) ![]ShamirShare {
+    if (k < 2) return error.ThresholdTooLow;
+    if (n < k) return error.NotEnoughShares;
+    gfInit();
+    const shares = try a.alloc(ShamirShare, n);
+    errdefer a.free(shares);
+    var allocated: usize = 0;
+    errdefer for (shares[0..allocated]) |sh| a.free(sh.bytes);
+    for (shares, 0..) |*sh, idx| {
+        sh.* = .{ .index = @intCast(idx + 1), .bytes = try a.alloc(u8, secret.len) };
+        allocated += 1;
+    }
+    const coeffs = try a.alloc(u8, k);
+    defer a.free(coeffs);
+    var byte_idx: usize = 0;
+    while (byte_idx < secret.len) : (byte_idx += 1) {
+        coeffs[0] = secret[byte_idx];
+        crypto.random.bytes(coeffs[1..]);
+        for (shares) |sh| sh.bytes[byte_idx] = evalPoly(coeffs, sh.index);
+    }
+    return shares;
+}
+
+pub fn shamirCombine(
+    a: std.mem.Allocator,
+    shares: []const ShamirShare,
+) ![]u8 {
+    if (shares.len < 2) return error.NotEnoughShares;
+    gfInit();
+    const len = shares[0].bytes.len;
+    const out = try a.alloc(u8, len);
+    var byte: usize = 0;
+    while (byte < len) : (byte += 1) {
+        var secret: u8 = 0;
+        for (shares, 0..) |si, i| {
+            var li: u8 = 1;
+            for (shares, 0..) |sj, j| {
+                if (i == j) continue;
+                li = gfMul(li, gfMul(sj.index, gfInv(si.index ^ sj.index)));
+            }
+            secret ^= gfMul(si.bytes[byte], li);
+        }
+        out[byte] = secret;
+    }
+    return out;
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// Envelope Encryption — random DEK wrapped by KEK; both XChaCha20-Poly1305
+// ════════════════════════════════════════════════════════════════════════
+
+pub const Envelope = struct {
+    /// 32-byte ciphertext + 16-byte tag = 48 bytes.
+    encrypted_dek: [48]u8,
+    dek_nonce: [24]u8,
+    /// data ciphertext (variable) + 16-byte tag.
+    ciphertext: []u8,
+    data_nonce: [24]u8,
+};
+
+pub fn envelopeEncrypt(a: std.mem.Allocator, data: []const u8, kek: [32]u8) !Envelope {
+    var dek: [32]u8 = undefined;
+    crypto.random.bytes(&dek);
+    defer crypto.secureZero(u8, &dek);
+
+    var data_nonce: [24]u8 = undefined;
+    var dek_nonce: [24]u8 = undefined;
+    crypto.random.bytes(&data_nonce);
+    crypto.random.bytes(&dek_nonce);
+
+    const ct = try a.alloc(u8, data.len + 16);
+    var data_tag: [16]u8 = undefined;
+    XChaCha20Poly1305.encrypt(ct[0..data.len], &data_tag, data, "", data_nonce, dek);
+    @memcpy(ct[data.len..], &data_tag);
+
+    var edek: [48]u8 = undefined;
+    var dek_tag: [16]u8 = undefined;
+    XChaCha20Poly1305.encrypt(edek[0..32], &dek_tag, &dek, "", dek_nonce, kek);
+    @memcpy(edek[32..], &dek_tag);
+
+    return .{ .encrypted_dek = edek, .dek_nonce = dek_nonce, .ciphertext = ct, .data_nonce = data_nonce };
+}
+
+pub fn envelopeDecrypt(
+    a: std.mem.Allocator,
+    encrypted_dek: [48]u8,
+    dek_nonce: [24]u8,
+    ciphertext: []const u8,
+    data_nonce: [24]u8,
+    kek: [32]u8,
+) ![]u8 {
+    if (ciphertext.len < 16) return error.InvalidEnvelope;
+    var dek: [32]u8 = undefined;
+    defer crypto.secureZero(u8, &dek);
+    var dek_tag: [16]u8 = undefined;
+    @memcpy(&dek_tag, encrypted_dek[32..]);
+    XChaCha20Poly1305.decrypt(&dek, encrypted_dek[0..32], dek_tag, "", dek_nonce, kek) catch
+        return error.DecryptionFailed;
+
+    const pt_len = ciphertext.len - 16;
+    const out = try a.alloc(u8, pt_len);
+    errdefer a.free(out);
+    var data_tag: [16]u8 = undefined;
+    @memcpy(&data_tag, ciphertext[pt_len..]);
+    XChaCha20Poly1305.decrypt(out, ciphertext[0..pt_len], data_tag, "", data_nonce, dek) catch
+        return error.DecryptionFailed;
+    return out;
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// Image Steganography (raw RGBA pixel buffer, 1 LSB / channel × 3 channels)
+// The cart wraps in/out with PNG codec. Buffer is W*H*4 bytes; channels 0..2
+// are R/G/B (alpha untouched). 4-byte big-endian length header is embedded
+// before the payload.
+// ════════════════════════════════════════════════════════════════════════
+
+inline fn stegWriteBit(buf: []u8, bit_idx: usize, bit: u8) void {
+    const px = bit_idx / 3;
+    const ch = bit_idx % 3;
+    const byte_idx = px * 4 + ch;
+    buf[byte_idx] = (buf[byte_idx] & 0xFE) | (bit & 1);
+}
+
+inline fn stegReadBit(buf: []const u8, bit_idx: usize) u8 {
+    const px = bit_idx / 3;
+    const ch = bit_idx % 3;
+    return buf[px * 4 + ch] & 1;
+}
+
+pub fn stegEmbedImageRGBA(rgba: []u8, data: []const u8) !void {
+    const pixels = rgba.len / 4;
+    const capacity_bytes = (pixels * 3) / 8;
+    if (data.len + 4 > capacity_bytes) return error.InsufficientCapacity;
+    var idx: usize = 0;
+    const dl: u32 = @intCast(data.len);
+    const hdr: [4]u8 = .{
+        @intCast((dl >> 24) & 0xFF),
+        @intCast((dl >> 16) & 0xFF),
+        @intCast((dl >> 8) & 0xFF),
+        @intCast(dl & 0xFF),
+    };
+    for (hdr) |b| {
+        var bb: u32 = 0;
+        while (bb < 8) : (bb += 1) {
+            stegWriteBit(rgba, idx, @intCast((b >> @intCast(7 - bb)) & 1));
+            idx += 1;
+        }
+    }
+    for (data) |b| {
+        var bb: u32 = 0;
+        while (bb < 8) : (bb += 1) {
+            stegWriteBit(rgba, idx, @intCast((b >> @intCast(7 - bb)) & 1));
+            idx += 1;
+        }
+    }
+}
+
+pub fn stegExtractImageRGBA(a: std.mem.Allocator, rgba: []const u8) ![]u8 {
+    var idx: usize = 0;
+    var dl: u32 = 0;
+    var i: usize = 0;
+    while (i < 32) : (i += 1) {
+        dl = (dl << 1) | stegReadBit(rgba, idx);
+        idx += 1;
+    }
+    const pixels = rgba.len / 4;
+    const capacity_bytes = (pixels * 3) / 8;
+    if (dl == 0 or dl > capacity_bytes - 4) return error.InvalidStegData;
+    const out = try a.alloc(u8, dl);
+    errdefer a.free(out);
+    for (out) |*b| {
+        var v: u8 = 0;
+        var bb: usize = 0;
+        while (bb < 8) : (bb += 1) {
+            v = (v << 1) | stegReadBit(rgba, idx);
+            idx += 1;
+        }
+        b.* = v;
+    }
+    return out;
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// Audit Log — HMAC-SHA-256 hash chain (in-memory)
+// ════════════════════════════════════════════════════════════════════════
+
+pub const AuditEntry = struct {
+    index: u32,
+    timestamp: i64,
+    event: []u8,
+    data_json: []u8,
+    hash_hex: [64]u8,
+    prev_hash_hex: [64]u8,
+};
+
+const AuditState = struct {
+    chain_key: [32]u8 = undefined,
+    initialized: bool = false,
+    entries: std.ArrayList(AuditEntry) = .{},
+};
+
+var g_audit: AuditState = .{};
+const audit_alloc = std.heap.c_allocator;
+
+const ZERO_HASH: [64]u8 = [_]u8{'0'} ** 64;
+
+fn buildAuditMsg(buf: *std.ArrayList(u8), prev_hex: [64]u8, idx: u32, ts: i64, event: []const u8, data_json: []const u8) !void {
+    try buf.appendSlice(audit_alloc, &prev_hex);
+    try std.fmt.format(buf.writer(audit_alloc),
+        "{{\"index\":{d},\"timestamp\":{d},\"event\":", .{ idx, ts });
+    try jsonQuoteString(audit_alloc, buf, event);
+    try buf.appendSlice(audit_alloc, ",\"data\":");
+    try buf.appendSlice(audit_alloc, data_json);
+    try buf.appendSlice(audit_alloc, ",\"prevHash\":\"");
+    try buf.appendSlice(audit_alloc, &prev_hex);
+    try buf.appendSlice(audit_alloc, "\"}");
+}
+
+pub fn auditCreate(key_hex: []const u8) !void {
+    if (key_hex.len != 64) return error.InvalidKey;
+    _ = try crmod.hexToBytes(key_hex, &g_audit.chain_key);
+    for (g_audit.entries.items) |e| {
+        audit_alloc.free(e.event);
+        audit_alloc.free(e.data_json);
+    }
+    g_audit.entries.clearRetainingCapacity();
+    g_audit.initialized = true;
+}
+
+pub fn auditAppend(event: []const u8, data_json: []const u8) !AuditEntry {
+    if (!g_audit.initialized) return error.NotInitialized;
+    const idx: u32 = @intCast(g_audit.entries.items.len);
+    var prev_hex: [64]u8 = ZERO_HASH;
+    if (idx > 0) prev_hex = g_audit.entries.items[idx - 1].hash_hex;
+    const ts = std.time.milliTimestamp();
+
+    var msg: std.ArrayList(u8) = .{};
+    defer msg.deinit(audit_alloc);
+    try buildAuditMsg(&msg, prev_hex, idx, ts, event, data_json);
+
+    var hash: [32]u8 = undefined;
+    HmacSha256.create(&hash, msg.items, &g_audit.chain_key);
+    var hash_hex: [64]u8 = undefined;
+    crmod.bytesToHex(&hash, &hash_hex);
+
+    const entry = AuditEntry{
+        .index = idx,
+        .timestamp = ts,
+        .event = try audit_alloc.dupe(u8, event),
+        .data_json = try audit_alloc.dupe(u8, data_json),
+        .hash_hex = hash_hex,
+        .prev_hash_hex = prev_hex,
+    };
+    try g_audit.entries.append(audit_alloc, entry);
+    return entry;
+}
+
+pub const AuditVerifyResult = struct { valid: bool, entries: u32, broken_at: i32 };
+
+pub fn auditVerify() AuditVerifyResult {
+    const n: u32 = @intCast(g_audit.entries.items.len);
+    if (n == 0) return .{ .valid = true, .entries = 0, .broken_at = -1 };
+    for (g_audit.entries.items, 0..) |e, i| {
+        var expected: [64]u8 = ZERO_HASH;
+        if (i > 0) expected = g_audit.entries.items[i - 1].hash_hex;
+        if (!std.mem.eql(u8, &e.prev_hash_hex, &expected)) {
+            return .{ .valid = false, .entries = n, .broken_at = @intCast(i) };
+        }
+        var msg: std.ArrayList(u8) = .{};
+        defer msg.deinit(audit_alloc);
+        buildAuditMsg(&msg, e.prev_hash_hex, e.index, e.timestamp, e.event, e.data_json) catch
+            return .{ .valid = false, .entries = n, .broken_at = @intCast(i) };
+        var hash: [32]u8 = undefined;
+        HmacSha256.create(&hash, msg.items, &g_audit.chain_key);
+        var hash_hex: [64]u8 = undefined;
+        crmod.bytesToHex(&hash, &hash_hex);
+        if (!std.mem.eql(u8, &hash_hex, &e.hash_hex)) {
+            return .{ .valid = false, .entries = n, .broken_at = @intCast(i) };
+        }
+    }
+    return .{ .valid = true, .entries = n, .broken_at = -1 };
+}
+
+pub fn auditEntriesJson(a: std.mem.Allocator, from: u32, to_inclusive: u32) ![]u8 {
+    var buf: std.ArrayList(u8) = .{};
+    defer buf.deinit(a);
+    try buf.append(a, '[');
+    const total: u32 = @intCast(g_audit.entries.items.len);
+    const lo = @min(from, total);
+    const hi = @min(to_inclusive + 1, total);
+    var i: u32 = lo;
+    var first = true;
+    while (i < hi) : (i += 1) {
+        const e = g_audit.entries.items[i];
+        if (!first) try buf.append(a, ',');
+        first = false;
+        try std.fmt.format(buf.writer(a),
+            "{{\"index\":{d},\"timestamp\":{d},\"event\":", .{ e.index, e.timestamp });
+        try jsonQuoteString(a, &buf, e.event);
+        try buf.appendSlice(a, ",\"data\":");
+        try buf.appendSlice(a, e.data_json);
+        try buf.appendSlice(a, ",\"hash\":\"");
+        try buf.appendSlice(a, &e.hash_hex);
+        try buf.appendSlice(a, "\",\"prevHash\":\"");
+        try buf.appendSlice(a, &e.prev_hash_hex);
+        try buf.appendSlice(a, "\"}");
+    }
+    try buf.append(a, ']');
+    return buf.toOwnedSlice(a);
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// Policy / Consent / Right-to-Erasure (in-memory)
+// ════════════════════════════════════════════════════════════════════════
+
+pub const ConsentRecord = struct {
+    user_id: []u8,
+    purpose: []u8,
+    granted: bool,
+    timestamp: i64,
+};
+
+pub const RetentionPolicy = struct {
+    category: []u8,
+    json: []u8,
+};
+
+const PolicyState = struct {
+    consents: std.ArrayList(ConsentRecord) = .{},
+    retentions: std.ArrayList(RetentionPolicy) = .{},
+};
+
+var g_policy: PolicyState = .{};
+const policy_alloc = std.heap.c_allocator;
+
+pub fn policySetRetention(category: []const u8, json: []const u8) !void {
+    for (g_policy.retentions.items) |*r| {
+        if (std.mem.eql(u8, r.category, category)) {
+            policy_alloc.free(r.json);
+            r.json = try policy_alloc.dupe(u8, json);
+            return;
+        }
+    }
+    try g_policy.retentions.append(policy_alloc, .{
+        .category = try policy_alloc.dupe(u8, category),
+        .json = try policy_alloc.dupe(u8, json),
+    });
+}
+
+pub fn policyRecordConsent(user_id: []const u8, purpose: []const u8, granted: bool) !void {
+    try g_policy.consents.append(policy_alloc, .{
+        .user_id = try policy_alloc.dupe(u8, user_id),
+        .purpose = try policy_alloc.dupe(u8, purpose),
+        .granted = granted,
+        .timestamp = std.time.milliTimestamp(),
+    });
+}
+
+pub fn policyCheckConsent(user_id: []const u8, purpose: []const u8) bool {
+    var i: usize = g_policy.consents.items.len;
+    while (i > 0) {
+        i -= 1;
+        const r = g_policy.consents.items[i];
+        if (std.mem.eql(u8, r.user_id, user_id) and std.mem.eql(u8, r.purpose, purpose)) {
+            return r.granted;
+        }
+    }
+    return false;
+}
+
+pub fn policyRevokeConsent(user_id: []const u8, purpose: ?[]const u8) !void {
+    const now = std.time.milliTimestamp();
+    if (purpose) |p| {
+        try g_policy.consents.append(policy_alloc, .{
+            .user_id = try policy_alloc.dupe(u8, user_id),
+            .purpose = try policy_alloc.dupe(u8, p),
+            .granted = false,
+            .timestamp = now,
+        });
+        return;
+    }
+    // Revoke all unique purposes for user
+    var seen: std.StringHashMap(void) = .init(policy_alloc);
+    defer seen.deinit();
+    for (g_policy.consents.items) |r| {
+        if (std.mem.eql(u8, r.user_id, user_id)) {
+            _ = try seen.getOrPut(r.purpose);
+        }
+    }
+    var it = seen.keyIterator();
+    while (it.next()) |k| {
+        try g_policy.consents.append(policy_alloc, .{
+            .user_id = try policy_alloc.dupe(u8, user_id),
+            .purpose = try policy_alloc.dupe(u8, k.*),
+            .granted = false,
+            .timestamp = now,
+        });
+    }
+}
+
+pub const ErasureReport = struct { records_found: u32, records_deleted: u32 };
+
+pub fn policyRightToErasure(user_id: []const u8) ErasureReport {
+    var found: u32 = 0;
+    var i: usize = g_policy.consents.items.len;
+    while (i > 0) {
+        i -= 1;
+        const r = g_policy.consents.items[i];
+        if (std.mem.eql(u8, r.user_id, user_id)) {
+            found += 1;
+            policy_alloc.free(r.user_id);
+            policy_alloc.free(r.purpose);
+            _ = g_policy.consents.orderedRemove(i);
+        }
+    }
+    return .{ .records_found = found, .records_deleted = found };
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// Algorithm Strength + Config Validator
+// ════════════════════════════════════════════════════════════════════════
+
+pub const Strength = enum { strong, acceptable, weak, broken };
+
+pub const StrengthInfo = struct {
+    strength: Strength,
+    deprecated: bool,
+    /// Static recommendation string (may be empty).
+    recommendation: []const u8,
+};
+
+pub fn checkAlgorithmStrength(algorithm: []const u8) StrengthInfo {
+    var lower_buf: [64]u8 = undefined;
+    const n = @min(algorithm.len, lower_buf.len);
+    for (algorithm[0..n], 0..) |c, i| {
+        lower_buf[i] = std.ascii.toLower(c);
+    }
+    const lower = lower_buf[0..n];
+
+    const broken = [_][]const u8{ "md4", "des-ecb", "rc2", "none" };
+    const weak = [_][]const u8{ "sha1", "md5", "des", "rc4", "3des", "rsa-1024" };
+    const acceptable = [_][]const u8{ "aes-128-gcm", "sha384", "scrypt", "pbkdf2", "blake2s" };
+    const strong = [_][]const u8{
+        "xchacha20-poly1305", "chacha20-poly1305", "aes-256-gcm",
+        "ed25519", "x25519", "sha256", "sha512", "blake2b", "blake3", "argon2id",
+    };
+
+    for (broken) |b| if (std.mem.eql(u8, lower, b))
+        return .{ .strength = .broken, .deprecated = true, .recommendation = "broken; use xchacha20-poly1305" };
+    for (weak) |w| if (std.mem.eql(u8, lower, w))
+        return .{ .strength = .weak, .deprecated = true, .recommendation = "weak; migrate to xchacha20-poly1305" };
+    for (acceptable) |aok| if (std.mem.eql(u8, lower, aok))
+        return .{ .strength = .acceptable, .deprecated = false, .recommendation = "" };
+    for (strong) |s| if (std.mem.eql(u8, lower, s))
+        return .{ .strength = .strong, .deprecated = false, .recommendation = "" };
+    return .{ .strength = .weak, .deprecated = false, .recommendation = "unknown algorithm; verify it meets current standards" };
+}
+
+pub fn strengthString(s: Strength) []const u8 {
+    return switch (s) {
+        .strong => "strong",
+        .acceptable => "acceptable",
+        .weak => "weak",
+        .broken => "broken",
+    };
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// Filename / timestamp helpers
+// ════════════════════════════════════════════════════════════════════════
+
+/// Strip "../", "./", null bytes, and other control chars; trim ASCII space.
+/// Writes into `out` (must be at least `name.len`); returns the slice written.
+pub fn sanitizeFilename(name: []const u8, out: []u8) []u8 {
+    var w: usize = 0;
+    var i: usize = 0;
+    while (i < name.len) {
+        if (i + 2 < name.len and name[i] == '.' and name[i + 1] == '.' and name[i + 2] == '/') {
+            i += 3;
+            continue;
+        }
+        if (i + 1 < name.len and name[i] == '.' and name[i + 1] == '/') {
+            i += 2;
+            continue;
+        }
+        const c = name[i];
+        if (c == 0 or c < 0x20 or c == 0x7F) {
+            i += 1;
+            continue;
+        }
+        out[w] = c;
+        w += 1;
+        i += 1;
+    }
+    var lo: usize = 0;
+    while (lo < w and out[lo] == ' ') lo += 1;
+    var hi: usize = w;
+    while (hi > lo and out[hi - 1] == ' ') hi -= 1;
+    if (lo > 0) std.mem.copyForwards(u8, out[0 .. hi - lo], out[lo..hi]);
+    return out[0 .. hi - lo];
+}
+
+/// Strip fractional seconds from an ISO-8601 timestamp ("...123Z" → "...Z").
+/// Writes into `out`; returns the slice written.
+pub fn normalizeTimestamp(ts: []const u8, out: []u8) []u8 {
+    if (ts.len == 0) return out[0..0];
+    if (ts[ts.len - 1] != 'Z') {
+        @memcpy(out[0..ts.len], ts);
+        return out[0..ts.len];
+    }
+    // Walk back from before the Z, skip digits, then if we hit '.', drop it.
+    var dot: ?usize = null;
+    const i: usize = ts.len - 1; // 'Z'
+    if (i == 0) {
+        out[0] = 'Z';
+        return out[0..1];
+    }
+    var j: usize = i - 1;
+    while (true) : (j -%= 1) {
+        const c = ts[j];
+        if (c >= '0' and c <= '9') {
+            if (j == 0) break;
+            continue;
+        }
+        if (c == '.') dot = j;
+        break;
+    }
+    if (dot) |d| {
+        @memcpy(out[0..d], ts[0..d]);
+        out[d] = 'Z';
+        return out[0 .. d + 1];
+    }
+    @memcpy(out[0..ts.len], ts);
+    return out[0..ts.len];
 }
 
 // ════════════════════════════════════════════════════════════════════════

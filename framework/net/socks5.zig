@@ -43,6 +43,17 @@ fn replyError(code: u8) Socks5Error {
 // ── Blocking connect ─────────────────────────────────────────────────────
 // Reference: love2d/lua/socks5.lua:29-90
 
+/// Read exactly `out.len` bytes from a stream, looping over short reads.
+/// std.net.Stream.read returns 0 on EOF, which we treat as an error.
+fn streamReadAll(stream: std.net.Stream, out: []u8) !void {
+    var got: usize = 0;
+    while (got < out.len) {
+        const n = try stream.read(out[got..]);
+        if (n == 0) return error.EndOfStream;
+        got += n;
+    }
+}
+
 /// Establish a SOCKS5 tunnel through a proxy. Blocks until connected or error.
 /// Returns the tunneled stream — reads/writes go through the proxy to the target.
 pub fn connect(
@@ -56,21 +67,17 @@ pub fn connect(
     // Connect to proxy
     const stream = try std.net.tcpConnectToHost(std.heap.page_allocator, proxy_host, proxy_port);
     errdefer stream.close();
-    var reader_buf: [4096]u8 = undefined;
-    var writer_buf: [4096]u8 = undefined;
-    const reader = stream.reader(&reader_buf);
-    const writer = stream.writer(&writer_buf);
 
     // Send greeting
     if (user != null and user.?.len > 0) {
-        try writer.writeAll(&[_]u8{ 5, 2, 0, 2 }); // version 5, 2 methods: no-auth + user/pass
+        try stream.writeAll(&[_]u8{ 5, 2, 0, 2 }); // version 5, 2 methods: no-auth + user/pass
     } else {
-        try writer.writeAll(&[_]u8{ 5, 1, 0 }); // version 5, 1 method: no-auth
+        try stream.writeAll(&[_]u8{ 5, 1, 0 }); // version 5, 1 method: no-auth
     }
 
     // Receive greeting response
     var greeting_resp: [2]u8 = undefined;
-    try reader.readNoEof(&greeting_resp);
+    try streamReadAll(stream, &greeting_resp);
     if (greeting_resp[0] != 5) return Socks5Error.Socks5GreetingFailed;
     if (greeting_resp[1] == 0xFF) return Socks5Error.Socks5AuthRejected;
 
@@ -85,10 +92,10 @@ pub fn connect(
         @memcpy(auth_buf[2 .. 2 + u.len], u);
         auth_buf[2 + u.len] = @intCast(p.len);
         @memcpy(auth_buf[3 + u.len .. 3 + u.len + p.len], p);
-        try writer.writeAll(auth_buf[0 .. 3 + u.len + p.len]);
+        try stream.writeAll(auth_buf[0 .. 3 + u.len + p.len]);
 
         var auth_resp: [2]u8 = undefined;
-        try reader.readNoEof(&auth_resp);
+        try streamReadAll(stream, &auth_resp);
         if (auth_resp[1] != 0) return Socks5Error.Socks5AuthFailed;
     }
 
@@ -104,11 +111,11 @@ pub fn connect(
     @memcpy(req_buf[5 .. 5 + hlen], target_host[0..hlen]);
     req_buf[5 + hlen] = @intCast(target_port >> 8);
     req_buf[6 + hlen] = @intCast(target_port & 0xFF);
-    try writer.writeAll(req_buf[0 .. 7 + hlen]);
+    try stream.writeAll(req_buf[0 .. 7 + hlen]);
 
     // Receive CONNECT response
     var conn_resp: [4]u8 = undefined;
-    try reader.readNoEof(&conn_resp);
+    try streamReadAll(stream, &conn_resp);
     if (conn_resp[1] != 0) return replyError(conn_resp[1]);
 
     // Consume bound address (we don't use it but must drain it)
@@ -116,17 +123,17 @@ pub fn connect(
     if (addr_type == 1) {
         // IPv4: 4 bytes addr + 2 bytes port
         var skip: [6]u8 = undefined;
-        try reader.readNoEof(&skip);
+        try streamReadAll(stream, &skip);
     } else if (addr_type == 3) {
         // Domain: 1 byte len + domain + 2 bytes port
         var dlen_buf: [1]u8 = undefined;
-        try reader.readNoEof(&dlen_buf);
+        try streamReadAll(stream, &dlen_buf);
         var skip: [257]u8 = undefined;
-        try reader.readNoEof(skip[0 .. dlen_buf[0] + 2]);
+        try streamReadAll(stream, skip[0 .. dlen_buf[0] + 2]);
     } else if (addr_type == 4) {
         // IPv6: 16 bytes addr + 2 bytes port
         var skip: [18]u8 = undefined;
-        try reader.readNoEof(&skip);
+        try streamReadAll(stream, &skip);
     }
 
     // Tunnel established — stream is now proxied to target

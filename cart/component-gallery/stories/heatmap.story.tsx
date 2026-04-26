@@ -1,5 +1,6 @@
 import { defineGallerySection, defineGalleryStory } from '../types';
 import { Heatmap } from '../components/heatmap/Heatmap';
+import { DEMO_HEATMAP } from '../lib/chart-utils';
 
 export const heatmapSection = defineGallerySection({
   id: 'heatmap',
@@ -14,7 +15,7 @@ export const heatmapSection = defineGallerySection({
         {
           id: 'default',
           name: 'Default',
-          render: () => <Heatmap />,
+          render: () => <Heatmap data={DEMO_HEATMAP} />,
         },
       ],
     }),

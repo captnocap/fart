@@ -1,5 +1,3 @@
-const React: any = require('react');
-
 import { Box, Col, Row, Text } from '../../runtime/primitives';
 
 export function FpsMeter(props: {

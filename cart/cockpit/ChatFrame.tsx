@@ -1,7 +1,6 @@
 // ChatFrame — wraps ChatCard with left config gutters + right signal gutter.
 // Gutter 1: model variant   Gutter 2: effort   Gutter 3: context / reset
 
-const React: any = require('react');
 import { ChatCard, WorkerQuestAttachment } from './ChatCard';
 import { Box, Text } from '../../runtime/primitives';
 import { C } from './style_cls';

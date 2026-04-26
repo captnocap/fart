@@ -15,6 +15,7 @@ export interface IconInfo {
 
 const PROVIDER_COLORS: Record<string, string> = {
   anthropic: '#D4A574',
+  claude: '#D97757',
   openai: '#10A37F',
   google: '#4285F4',
   meta: '#0081FB',
@@ -83,6 +84,7 @@ const PROVIDER_COLORS: Record<string, string> = {
 
 const PROVIDER_INITIALS: Record<string, string> = {
   anthropic: 'An',
+  claude: 'Cl',
   openai: 'OA',
   google: 'Go',
   meta: 'Me',
@@ -148,6 +150,7 @@ const PROVIDER_INITIALS: Record<string, string> = {
 
 const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
   anthropic: 'Anthropic',
+  claude: 'Claude',
   openai: 'OpenAI',
   google: 'Google',
   meta: 'Meta',

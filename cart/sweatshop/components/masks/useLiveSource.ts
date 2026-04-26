@@ -1,6 +1,4 @@
-const React: any = require('react');
-const { useMemo } = React;
-
+import { useMemo } from 'react';
 import { useMediaStore } from '../media/useMediaStore';
 
 export type LiveSourceInfo = {

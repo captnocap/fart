@@ -1,5 +1,6 @@
 import { Box, Col, Row, Text } from '../../../../runtime/primitives';
 import { CHAT_CARD } from './tokens';
+import { classifiers as S } from '@reactjit/core';
 
 export function PathologyBadge({ label }: { label: string }) {
   return (
@@ -9,7 +10,7 @@ export function PathologyBadge({ label }: { label: string }) {
         paddingRight: 6,
         paddingTop: 2,
         paddingBottom: 2,
-        backgroundColor: '#3a2031',
+        backgroundColor: '#3a2a1e',
         borderWidth: 1,
         borderColor: CHAT_CARD.pink,
         borderRadius: 3,
@@ -28,16 +29,16 @@ export function AchievementBadge({ label }: { label: string }) {
         paddingRight: 6,
         paddingTop: 2,
         paddingBottom: 2,
-        backgroundColor: '#332914',
+        backgroundColor: '#3a2a1e',
         borderWidth: 1,
-        borderColor: '#6b5523',
+        borderColor: '#8a4a20',
         borderRadius: 3,
       }}
     >
-      <Row style={{ alignItems: 'center', gap: 4 }}>
-        <Text style={{ fontFamily: 'monospace', fontSize: 8, color: CHAT_CARD.gold }}>T</Text>
-        <Text style={{ fontFamily: 'monospace', fontSize: 7, color: CHAT_CARD.gold }}>{label}</Text>
-      </Row>
+      <S.InlineX2>
+        <Text style={{ fontFamily: 'monospace', fontSize: 8, color: CHAT_CARD.orange }}>T</Text>
+        <Text style={{ fontFamily: 'monospace', fontSize: 7, color: CHAT_CARD.orange }}>{label}</Text>
+      </S.InlineX2>
     </Box>
   );
 }
@@ -64,4 +65,3 @@ export function IdentityBlock({
     </Col>
   );
 }
-

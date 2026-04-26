@@ -4,9 +4,7 @@
 // etc). For continuous forces and collision events, prefer the
 // dedicated useForce / useCollision hooks.
 
-const React: any = require('react');
-const { useMemo } = React;
-
+import { useMemo } from 'react';
 import { usePhysicsCtx } from './PhysicsContext';
 import type { BodyInit, Joint, Vec2 } from '../../lib/physics/core';
 

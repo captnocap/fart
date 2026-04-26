@@ -191,3 +191,32 @@ export function lookupIcon(name: string): number[][] | undefined {
 
   return undefined;
 }
+
+export function getRegisteredIconNames(): string[] {
+  return Array.from(registry.keys());
+}
+
+export function getAllResolvableNames(): string[] {
+  const names = new Set<string>();
+  for (const name of registry.keys()) {
+    names.add(name);
+  }
+  for (const [alias, target] of Object.entries(ALIASES)) {
+    const hit = registry.get(target) || lowerMap.get(target.toLowerCase());
+    if (hit) names.add(alias);
+  }
+  return Array.from(names).sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+}
+
+export function getAliasesForName(name: string): string[] {
+  const aliases: string[] = [];
+  for (const [alias, target] of Object.entries(ALIASES)) {
+    if (target === name) {
+      aliases.push(alias);
+    } else {
+      const canonical = lowerMap.get(target.toLowerCase());
+      if (canonical === name) aliases.push(alias);
+    }
+  }
+  return aliases.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+}

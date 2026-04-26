@@ -1,5 +1,3 @@
-const React: any = require('react');
-
 import { Box, Col, Pressable, Row, Text } from '../../runtime/primitives';
 
 export type CountChoice = 100 | 1000 | 10000 | 100000;

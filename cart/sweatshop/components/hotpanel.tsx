@@ -2,9 +2,7 @@
 // Live-eval side panel: watches files, transforms JSX, renders components.
 // Ported from love2d/examples/hot-code/src/App.tsx
 
-const React: any = require('react');
-const { useEffect, useRef, useState, useCallback } = React;
-
+import { useEffect, useRef, useState, useCallback } from 'react';
 import {
   Box, Col, Pressable, Row, ScrollView, Text, TextInput,
 } from '../../runtime/primitives';

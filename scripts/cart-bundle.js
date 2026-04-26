@@ -1,0 +1,101 @@
+// scripts/cart-bundle.js — v8cli version of scripts/internal/cart-bundle.mjs.
+//
+// Runs via: tools/v8cli scripts/cart-bundle.js <cart.tsx> --out <bundle.js>
+// Shells out to tools/esbuild (the native Go binary) with flags that mirror
+// cartEsbuildOptions from scripts/esbuild-config.mjs. No node, no bun.
+//
+// Non-watch only. Watch mode is handled by scripts/watch-and-push.js.
+
+const ROOT = __cwd();
+const ESBUILD = ROOT + '/tools/esbuild';
+
+function die(msg, code) {
+  __writeStderr('[cart-bundle] ' + msg + '\n');
+  __exit(code | 0 || 1);
+}
+
+function ensureAbs(p) {
+  if (p.startsWith('/')) return p;
+  // naive join — ship/dev always pass paths relative to ROOT.
+  if (p.startsWith('./')) p = p.slice(2);
+  return ROOT + '/' + p;
+}
+
+// ── harness gate (matches cart-bundle.mjs behavior) ───────────────────
+if (__env('BUNDLE_FROM_HARNESS') !== '1') {
+  __writeStderr('[cart-bundle] REFUSING to run — this is an internal script, not an entry point.\n');
+  __writeStderr('[cart-bundle]\n');
+  __writeStderr('[cart-bundle] Use one of the user-facing entry points instead:\n');
+  __writeStderr('[cart-bundle]   ./scripts/dev <cart-name>   # dev host + watcher\n');
+  __writeStderr('[cart-bundle]   ./scripts/ship <cart-name>  # production binary\n');
+  __exit(1);
+}
+
+// ── argv parse ────────────────────────────────────────────────────────
+// process.argv[0] = this script path. Skip it.
+const argv = process.argv.slice(1);
+let entryArg = null;
+let outArg = null;
+for (let i = 0; i < argv.length; i++) {
+  const a = argv[i];
+  if (a === '--out' || a === '-o') { outArg = argv[++i]; continue; }
+  if (a.startsWith('-')) die('unknown flag: ' + a, 2);
+  if (entryArg === null) { entryArg = a; continue; }
+  die('too many positional args', 2);
+}
+
+if (!entryArg) die('missing cart entry path', 2);
+const entryAbs = ensureAbs(entryArg);
+const bundleAbs = outArg ? ensureAbs(outArg) : ROOT + '/bundle.js';
+
+if (!entryAbs.startsWith(ROOT + '/')) die('entry must stay inside ' + ROOT, 2);
+if (!__exists(entryAbs)) die('missing entry: ' + entryArg, 2);
+
+// ── esbuild flags ─────────────────────────────────────────────────────
+// Mirror scripts/esbuild-config.mjs exactly. Any drift and the old path and
+// new path produce different bundles, which defeats the point of running
+// both in parallel during the swap window.
+const runtimeEntry = ROOT + '/runtime/index.tsx';
+// Metafile is the structured "what ended up in the bundle" record.
+// scripts/ship reads it to decide which V8 binding ingredients to
+// register on the cart. Path is bundle path + ".metafile.json" so
+// each cart's bundle has its own sidecar.
+const metafileAbs = bundleAbs + '.metafile.json';
+const flags = [
+  runtimeEntry,
+  '--bundle',
+  '--outfile=' + bundleAbs,
+  '--metafile=' + metafileAbs,
+  '--format=iife',
+  '--jsx-factory=__jsx',
+  '--jsx-fragment=Fragment',
+  '--inject:' + ROOT + '/runtime/jsx_shim.ts',
+  '--inject:' + ROOT + '/framework/ambient.ts',
+  '--inject:' + ROOT + '/framework/ambient_primitives.ts',
+  '--alias:@reactjit/core=' + ROOT + '/runtime/core_stub.ts',
+  '--alias:@cart-entry=' + entryAbs,
+  // Vendored npm deps under vendor/. Replaces node_modules lookup so
+  // bare-specifier imports (react, react-reconciler, ...) resolve without
+  // any node_modules directory anywhere in the tree.
+  '--alias:react=' + ROOT + '/vendor/react',
+  '--alias:react-reconciler=' + ROOT + '/vendor/react-reconciler',
+  '--alias:scheduler=' + ROOT + '/vendor/scheduler',
+  '--alias:loose-envify=' + ROOT + '/vendor/loose-envify',
+  '--alias:js-tokens=' + ROOT + '/vendor/js-tokens',
+  '--external:path',
+  '--external:typescript',
+  // absWorkingDir equivalent — esbuild uses cwd. We already set cwd to ROOT
+  // via __cwd(). Good enough for the non-watch path.
+];
+
+const result = JSON.parse(__spawnSync(ESBUILD, JSON.stringify(flags), ''));
+if (result.stderr) __writeStderr(result.stderr);
+if (result.stdout) __writeStdout(result.stdout);
+if (result.code !== 0) {
+  __writeStderr('[cart-bundle] esbuild exited with code ' + result.code + '\n');
+  __exit(result.code || 1);
+}
+
+// Match the mjs path's final status line so ship's log output stays the same.
+const rel = (p) => p.startsWith(ROOT + '/') ? p.slice(ROOT.length + 1) : p;
+__writeStdout('[cart-bundle] app=' + rel(entryAbs) + ' bundle=' + rel(bundleAbs) + '\n');

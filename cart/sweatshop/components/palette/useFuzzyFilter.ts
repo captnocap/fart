@@ -1,4 +1,12 @@
 import { PaletteCommand, PaletteSettings, GroupedCategory } from './types';
+import { fuzzyScore } from '../../../../runtime/hooks/useFuzzySearch';
+export { fuzzyScore, fuzzySearch, scoreFuzzyItem, useFuzzySearch } from '../../../../runtime/hooks/useFuzzySearch';
+export type {
+  FuzzyMode,
+  FuzzySearchCandidate,
+  FuzzySearchOptions,
+  FuzzySearchResult,
+} from '../../../../runtime/hooks/useFuzzySearch';
 
 const host: any = globalThis;
 const storeGet = typeof host.__store_get === 'function' ? host.__store_get : (_: string) => null;
@@ -18,47 +26,6 @@ export function loadPaletteSettings(): PaletteSettings {
     }
   } catch {}
   return DEFAULT_SETTINGS;
-}
-
-export function fuzzyScore(query: string, text: string, mode: 'strict' | 'loose'): number {
-  const q = query.toLowerCase();
-  const t = text.toLowerCase();
-  if (!q) return 1;
-  if (!t) return 0;
-
-  if (t === q) return 10000;
-  if (t.startsWith(q)) return 1000 + q.length * 10;
-
-  const words = t.split(/[\s\/\-_\\.]+/);
-  for (let i = 0; i < words.length; i++) {
-    if (words[i].startsWith(q)) {
-      return 800 + q.length * 10 - i * 20;
-    }
-  }
-
-  const subIdx = t.indexOf(q);
-  if (subIdx >= 0) {
-    return 600 - subIdx * 2;
-  }
-
-  if (mode === 'strict') return 0;
-
-  let qi = 0;
-  let ti = 0;
-  let gaps = 0;
-  while (qi < q.length && ti < t.length) {
-    if (t[ti] === q[qi]) {
-      qi++;
-    } else {
-      gaps++;
-    }
-    ti++;
-  }
-  if (qi === q.length) {
-    return Math.max(10, 400 - gaps * 10 - (ti - qi) * 2);
-  }
-
-  return 0;
 }
 
 export function scoreCommand(query: string, cmd: PaletteCommand, mode: 'strict' | 'loose'): number {

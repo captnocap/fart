@@ -1,6 +1,4 @@
-const React: any = require('react');
-const { useState, useCallback, useEffect, useRef } = React;
-
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { gpioGet, gpioSet } from './exec';
 import type { GPIOPinState, GPIODirection } from './types';
 

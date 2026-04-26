@@ -1,7 +1,5 @@
 import { Box } from '../runtime/primitives';
-const React: any = require('react');
-const { useState, useEffect } = React;
-
+import { useState, useEffect } from 'react';
 const COLORS = ['red', 'blue', 'green', 'yellow', 'cyan', 'magenta'];
 
 export default function SpinnerTest() {

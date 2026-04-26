@@ -1,56 +1,65 @@
 import { useRef } from 'react';
 import { Box, Effect } from '../../../../runtime/primitives';
+import { AST_SAMPLE_FILES } from './sampleContract';
+
+export type AstContractNodeArrays = {
+  kind: number[];
+  start: number[];
+  end: number[];
+  children: Array<number[] | 0>;
+};
+
+export type AstContractFile = {
+  path: string;
+  root: number;
+  count: number;
+  nodes: AstContractNodeArrays;
+  tagColor?: string;
+  selected?: boolean;
+};
+
+export type AstFingerprintFile = {
+  path: string;
+  root: number;
+  count: number;
+  kind: number[];
+  start: number[];
+  end: number[];
+  firstChild: number[];
+  nextSibling: number[];
+  maxEnd: number;
+  tagColor?: string;
+  selected?: boolean;
+};
+
+export type AstFingerprintInputFile = AstContractFile | AstFingerprintFile;
+export type FingerprintContractNodeArrays = AstContractNodeArrays;
+export type FingerprintContractFile = AstContractFile;
+export type FingerprintPreparedFile = AstFingerprintFile;
+export type FingerprintInputFile = AstFingerprintInputFile;
 
 export type AstQuiltProps = {
-  seed?: number;
+  files?: readonly AstFingerprintInputFile[];
+  gridSide?: number;
 };
 
 export type AstTileProps = {
-  seed?: number;
+  file?: AstFingerprintInputFile;
+  files?: readonly AstFingerprintInputFile[];
   tileIndex?: number;
 };
 
-const GRID_SIDE = 12;
-const TILE_COUNT = GRID_SIDE * GRID_SIDE;
+const DEFAULT_GRID_SIDE = 12;
+const DEFAULT_TILE_INDEX = 0;
 const FRAME_SIZE = 648;
 const EFFECT_SIZE = 620;
 const TILE_FRAME_SIZE = 360;
 const TILE_EFFECT_SIZE = 332;
 const TILE_GAP = 4;
-const MODEL_SEED = 0x51f10a57;
-const DEFAULT_TILE_INDEX = 0;
-
-type QuiltLeaf = {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-  depth: number;
-  kind: number;
-  start: number;
-  end: number;
-};
-
-type QuiltTile = {
-  phase: number;
-  speed: number;
-  maxEnd: number;
-  leaves: QuiltLeaf[];
-};
-
-type QuiltModel = {
-  tiles: QuiltTile[];
-};
+const DEFAULT_SAMPLE_SET: readonly AstContractFile[] = AST_SAMPLE_FILES;
 
 type PixelWriter = (x: number, y: number, r: number, g: number, b: number, a: number) => void;
-
-function createRng(seed: number): () => number {
-  let state = seed >>> 0;
-  return () => {
-    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
-    return state / 0x100000000;
-  };
-}
+type Rgb = { r: number; g: number; b: number };
 
 function clamp(value: number, lo: number, hi: number): number {
   if (value < lo) return lo;
@@ -58,152 +67,93 @@ function clamp(value: number, lo: number, hi: number): number {
   return value;
 }
 
-function pushLeaf(
-  leaves: QuiltLeaf[],
-  rng: () => number,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  depth: number,
-  kindBase: number,
-  start: number,
-  span: number,
-) {
-  leaves.push({
-    x,
-    y,
-    w,
-    h,
-    depth,
-    kind: kindBase + depth * 3 + ((rng() * 7) | 0),
-    start,
-    end: start + Math.max(1, span),
-  });
+function isPreparedFile(file: AstFingerprintInputFile): file is AstFingerprintFile {
+  return Array.isArray((file as AstFingerprintFile).firstChild) && Array.isArray((file as AstFingerprintFile).nextSibling);
 }
 
-function subdivideTile(
-  leaves: QuiltLeaf[],
-  rng: () => number,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  depth: number,
-  start: number,
-  span: number,
-  kindBase: number,
-) {
-  const minEdge = 0.075;
-  const minSpan = 18;
-  const minChildSpan = 8;
-  const canSplit = depth < 4 && w > minEdge && h > minEdge && span > minSpan * 2;
-  const shouldSplit = canSplit && (depth < 2 || rng() > 0.28);
-  if (!shouldSplit) {
-    pushLeaf(leaves, rng, x, y, w, h, depth, kindBase, start, span);
-    return;
+function parseHexColor(color?: string): Rgb | null {
+  if (!color || color[0] !== '#') return null;
+  if (color.length === 7) {
+    return {
+      r: parseInt(color.slice(1, 3), 16) || 0,
+      g: parseInt(color.slice(3, 5), 16) || 0,
+      b: parseInt(color.slice(5, 7), 16) || 0,
+    };
   }
-
-  const childCount = 2 + ((rng() * 3) | 0) + (depth === 0 ? 1 : 0);
-  const axis = w > h * 1.12 ? 'x' : h > w * 1.12 ? 'y' : rng() > 0.5 ? 'x' : 'y';
-  const inset = depth === 0 ? 0.02 : depth < 2 ? 0.013 : 0.008;
-  const gap = depth === 0 ? 0.012 : depth < 2 ? 0.008 : 0.004;
-  const innerX = x + inset;
-  const innerY = y + inset;
-  const innerW = w - inset * 2;
-  const innerH = h - inset * 2;
-  const available = (axis === 'x' ? innerW : innerH) - gap * (childCount - 1);
-  const minSpace = depth > 2 ? 0.025 : 0.04;
-  if (innerW <= minEdge || innerH <= minEdge || available <= minSpace * childCount || span <= minChildSpan * childCount) {
-    pushLeaf(leaves, rng, x, y, w, h, depth, kindBase, start, span);
-    return;
+  if (color.length === 4) {
+    return {
+      r: parseInt(color[1] + color[1], 16) || 0,
+      g: parseInt(color[2] + color[2], 16) || 0,
+      b: parseInt(color[3] + color[3], 16) || 0,
+    };
   }
-
-  const weights: number[] = [];
-  let totalWeight = 0;
-  for (let index = 0; index < childCount; index++) {
-    const weight = 0.48 + rng() * 1.32;
-    weights.push(weight);
-    totalWeight += weight;
-  }
-
-  let cursor = axis === 'x' ? innerX : innerY;
-  let spanCursor = start;
-  let remainingSpace = available;
-  let remainingSpan = span;
-  let remainingWeight = totalWeight;
-
-  for (let index = 0; index < childCount; index++) {
-    const remainingCount = childCount - index;
-    const weight = weights[index];
-    const nextSpace =
-      remainingCount === 1
-        ? remainingSpace
-        : clamp(
-            remainingSpace * (weight / remainingWeight),
-            minSpace,
-            remainingSpace - minSpace * (remainingCount - 1)
-          );
-
-    const nextSpan =
-      remainingCount === 1
-        ? remainingSpan
-        : Math.max(
-            minChildSpan,
-            Math.round(
-              clamp(
-                remainingSpan * (weight / remainingWeight),
-                minChildSpan,
-                remainingSpan - minChildSpan * (remainingCount - 1)
-              )
-            )
-          );
-
-    const childX = axis === 'x' ? cursor : innerX;
-    const childY = axis === 'y' ? cursor : innerY;
-    const childW = axis === 'x' ? nextSpace : innerW;
-    const childH = axis === 'y' ? nextSpace : innerH;
-
-    subdivideTile(
-      leaves,
-      rng,
-      childX,
-      childY,
-      childW,
-      childH,
-      depth + 1,
-      spanCursor,
-      nextSpan,
-      kindBase + index * 5 + depth * 11
-    );
-
-    cursor += nextSpace + gap;
-    spanCursor += nextSpan;
-    remainingSpace -= nextSpace;
-    remainingSpan -= nextSpan;
-    remainingWeight -= weight;
-  }
+  return null;
 }
 
-function createQuiltModel(seed: number): QuiltModel {
-  const tiles: QuiltTile[] = [];
+export function prepareAstFingerprintFile(input: AstFingerprintInputFile): AstFingerprintFile {
+  if (isPreparedFile(input)) return input;
 
-  for (let index = 0; index < TILE_COUNT; index++) {
-    const rng = createRng((seed + Math.imul(index + 1, 0x9e3779b1)) >>> 0);
-    const leaves: QuiltLeaf[] = [];
-    const maxEnd = 360 + ((rng() * 540) | 0);
+  const firstChild = new Array<number>(input.count).fill(0);
+  const nextSibling = new Array<number>(input.count).fill(0);
+  const children = input.nodes.children;
 
-    subdivideTile(leaves, rng, 0, 0, 1, 1, 0, 0, maxEnd, 1 + ((rng() * 9) | 0));
-
-    tiles.push({
-      phase: index * 0.31 + rng() * 0.7,
-      speed: 0.26 + rng() * 0.16,
-      maxEnd,
-      leaves,
-    });
+  for (let index = 0; index < input.count; index++) {
+    const childList = children[index];
+    if (!Array.isArray(childList) || childList.length === 0) continue;
+    firstChild[index] = childList[0];
+    for (let childIndex = 0; childIndex < childList.length - 1; childIndex++) {
+      const current = childList[childIndex] - 1;
+      if (current >= 0 && current < nextSibling.length) nextSibling[current] = childList[childIndex + 1];
+    }
   }
 
-  return { tiles };
+  let maxEnd = 0;
+  for (let index = 0; index < input.nodes.end.length; index++) {
+    const end = input.nodes.end[index] || 0;
+    if (end > maxEnd) maxEnd = end;
+  }
+
+  return {
+    path: input.path,
+    root: input.root,
+    count: input.count,
+    kind: input.nodes.kind,
+    start: input.nodes.start,
+    end: input.nodes.end,
+    firstChild,
+    nextSibling,
+    maxEnd,
+    tagColor: input.tagColor,
+    selected: input.selected,
+  };
+}
+
+export function prepareAstFingerprintFiles(inputs: readonly AstFingerprintInputFile[]): AstFingerprintFile[] {
+  const prepared: AstFingerprintFile[] = [];
+  for (let index = 0; index < inputs.length; index++) {
+    const file = inputs[index];
+    if (!file || file.count <= 0) continue;
+    prepared.push(prepareAstFingerprintFile(file));
+  }
+  return prepared;
+}
+
+function usePreparedFiles(inputs?: readonly AstFingerprintInputFile[]): AstFingerprintFile[] {
+  const source = inputs ?? DEFAULT_SAMPLE_SET;
+  const ref = useRef<{ source: readonly AstFingerprintInputFile[]; prepared: AstFingerprintFile[] } | null>(null);
+  if (!ref.current || ref.current.source !== source) {
+    ref.current = { source, prepared: prepareAstFingerprintFiles(source) };
+  }
+  return ref.current.prepared;
+}
+
+function usePreparedFile(input?: AstFingerprintInputFile): AstFingerprintFile | null {
+  const source = input ?? null;
+  const ref = useRef<{ source: AstFingerprintInputFile | null; prepared: AstFingerprintFile | null } | null>(null);
+  if (!ref.current || ref.current.source !== source) {
+    ref.current = { source, prepared: source ? prepareAstFingerprintFile(source) : null };
+  }
+  return ref.current.prepared;
 }
 
 function fillRect(
@@ -224,9 +174,7 @@ function fillRect(
   const x1 = clamp((x + w) | 0, 0, maxWidth);
   const y1 = clamp((y + h) | 0, 0, maxHeight);
   for (let py = y0; py < y1; py++) {
-    for (let px = x0; px < x1; px++) {
-      write(px, py, r, g, b, a);
-    }
+    for (let px = x0; px < x1; px++) write(px, py, r, g, b, a);
   }
 }
 
@@ -258,77 +206,194 @@ function strokeRect(
   }
 }
 
-function drawTile(
+function colorFor(effect: any, kindId: number, depth: number, time: number, inScan: boolean): Rgb {
+  let hue = ((kindId * 137) % 360) + time * 22 + depth * 7;
+  if (inScan) hue += 55;
+
+  const wave = Math.sin(time * 2.2 - depth * 0.55);
+  let value = 0.62 + 0.18 * wave;
+  let saturation = 0.55;
+  if (inScan) {
+    value = Math.min(1, value + 0.25);
+    saturation = 0.78;
+  }
+
+  const rgb = effect.hsv((((hue % 360) + 360) % 360) / 360, saturation, value);
+  return {
+    r: (rgb[0] * 255) | 0,
+    g: (rgb[1] * 255) | 0,
+    b: (rgb[2] * 255) | 0,
+  };
+}
+
+function drawFingerprintNode(
+  effect: any,
+  write: PixelWriter,
+  file: AstFingerprintFile,
+  node: number,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  depth: number,
+  time: number,
+  scanPos: number,
+  maxWidth: number,
+  maxHeight: number,
+) {
+  if (w < 1 || h < 1 || node === 0) return;
+
+  const index = node - 1;
+  const nodeStart = file.start[index] || 0;
+  const nodeEnd = file.end[index] || 0;
+  const inScan = scanPos >= nodeStart && scanPos < nodeEnd;
+  const rgb = colorFor(effect, file.kind[index] || 0, depth, time, inScan);
+
+  fillRect(write, maxWidth, maxHeight, x, y, w, h, rgb.r, rgb.g, rgb.b, 255);
+
+  if (w >= 3 && h >= 3) {
+    const outline = inScan ? 240 : 18;
+    strokeRect(write, maxWidth, maxHeight, x, y, w, h, outline, outline, outline, 255);
+  }
+
+  const firstChild = file.firstChild[index] || 0;
+  if (firstChild === 0) return;
+
+  let total = 0;
+  let child = firstChild;
+  while (child !== 0) {
+    const childIndex = child - 1;
+    const span = Math.max(1, (file.end[childIndex] || 0) - (file.start[childIndex] || 0));
+    total += span;
+    child = file.nextSibling[childIndex] || 0;
+  }
+  if (total === 0) return;
+
+  const horizontal = depth % 2 === 0;
+  const pad = w > 24 && h > 24 ? 1 : 0;
+  const innerX = x + pad;
+  const innerY = y + pad;
+  const innerW = w - pad * 2;
+  const innerH = h - pad * 2;
+
+  if (horizontal) {
+    let cursorX = innerX;
+    child = firstChild;
+    while (child !== 0) {
+      const childIndex = child - 1;
+      const span = Math.max(1, (file.end[childIndex] || 0) - (file.start[childIndex] || 0));
+      const childWidth = innerW * (span / total);
+      drawFingerprintNode(
+        effect,
+        write,
+        file,
+        child,
+        cursorX,
+        innerY,
+        childWidth,
+        innerH,
+        depth + 1,
+        time,
+        scanPos,
+        maxWidth,
+        maxHeight,
+      );
+      cursorX += childWidth;
+      child = file.nextSibling[childIndex] || 0;
+    }
+    return;
+  }
+
+  let cursorY = innerY;
+  child = firstChild;
+  while (child !== 0) {
+    const childIndex = child - 1;
+    const span = Math.max(1, (file.end[childIndex] || 0) - (file.start[childIndex] || 0));
+    const childHeight = innerH * (span / total);
+    drawFingerprintNode(
+      effect,
+      write,
+      file,
+      child,
+      innerX,
+      cursorY,
+      innerW,
+      childHeight,
+      depth + 1,
+      time,
+      scanPos,
+      maxWidth,
+      maxHeight,
+    );
+    cursorY += childHeight;
+    child = file.nextSibling[childIndex] || 0;
+  }
+}
+
+function drawTileDecoration(
+  write: PixelWriter,
+  maxWidth: number,
+  maxHeight: number,
+  tileX: number,
+  tileY: number,
+  tileSize: number,
+  file: AstFingerprintFile,
+) {
+  const accent = parseHexColor(file.tagColor);
+  if (accent) {
+    strokeRect(write, maxWidth, maxHeight, tileX, tileY, tileSize, tileSize, accent.r, accent.g, accent.b, 255);
+    fillRect(write, maxWidth, maxHeight, tileX + 3, tileY + 3, 7, 7, accent.r, accent.g, accent.b, 255);
+  }
+  if (file.selected) {
+    strokeRect(write, maxWidth, maxHeight, tileX + 1, tileY + 1, tileSize - 2, tileSize - 2, 245, 250, 255, 255);
+  }
+}
+
+function drawFingerprintTile(
   effect: any,
   write: PixelWriter,
   maxWidth: number,
   maxHeight: number,
-  tile: QuiltTile,
+  file: AstFingerprintFile,
   tileIndex: number,
   tileX: number,
   tileY: number,
   tileSize: number,
   now: number,
 ) {
-  const tilePhase = now * tile.speed + tile.phase;
-  const triangle = Math.abs(((tilePhase % 2) + 2) % 2 - 1);
-  const scanPos = (1 - triangle) * tile.maxEnd;
+  const time = now + tileIndex * 0.31;
+  const triangle = Math.abs(((time * 0.35) % 2 + 2) % 2 - 1);
+  const scanPos = (1 - triangle) * file.maxEnd;
 
   fillRect(write, maxWidth, maxHeight, tileX, tileY, tileSize, tileSize, 5, 10, 16, 255);
   strokeRect(write, maxWidth, maxHeight, tileX, tileY, tileSize, tileSize, 16, 28, 40, 255);
-
-  for (let leafIndex = 0; leafIndex < tile.leaves.length; leafIndex++) {
-    const leaf = tile.leaves[leafIndex];
-    const inScan = scanPos >= leaf.start && scanPos < leaf.end;
-    const px = tileX + 1 + Math.floor(leaf.x * (tileSize - 2));
-    const py = tileY + 1 + Math.floor(leaf.y * (tileSize - 2));
-    const pw = Math.max(1, Math.floor(leaf.w * (tileSize - 2)));
-    const ph = Math.max(1, Math.floor(leaf.h * (tileSize - 2)));
-    const wave = Math.sin(tilePhase * 4.2 - leaf.depth * 0.6 + leafIndex * 0.03);
-    const hue = (((leaf.kind * 137) % 360) + tilePhase * 28 + leaf.depth * 9 + tileIndex * 1.4) / 360;
-    const saturation = inScan ? 0.84 : 0.58 + leaf.depth * 0.03;
-    const value = clamp(0.56 + wave * 0.12 + leaf.depth * 0.03 + (inScan ? 0.25 : 0), 0.3, 1);
-    const rgb = effect.hsv(hue, clamp(saturation, 0.4, 0.92), value);
-    const r = (rgb[0] * 255) | 0;
-    const g = (rgb[1] * 255) | 0;
-    const b = (rgb[2] * 255) | 0;
-
-    fillRect(write, maxWidth, maxHeight, px, py, pw, ph, r, g, b, 255);
-
-    if (pw > 2 && ph > 2) {
-      const edge = inScan ? 235 : 16 + leaf.depth * 8;
-      strokeRect(write, maxWidth, maxHeight, px, py, pw, ph, edge, edge, edge, 255);
-    }
-
-    if (inScan && pw > 4 && ph > 4) {
-      fillRect(write, maxWidth, maxHeight, px + 1, py + 1, pw - 2, 1, 245, 250, 255, 255);
-    }
-  }
+  drawFingerprintNode(effect, write, file, file.root, tileX, tileY, tileSize, tileSize, 0, time, scanPos, maxWidth, maxHeight);
+  drawTileDecoration(write, maxWidth, maxHeight, tileX, tileY, tileSize, file);
 }
 
-function drawAstQuilt(effect: any, model: QuiltModel) {
+function drawAstQuilt(effect: any, files: readonly AstFingerprintFile[], gridSide: number) {
   effect.clearColor(2 / 255, 5 / 255, 10 / 255, 1);
+  if (files.length === 0) return;
 
   const write: PixelWriter = effect.setPixelRaw;
   const width = effect.width | 0;
   const height = effect.height | 0;
-  const tileSize = Math.floor((Math.min(width, height) - TILE_GAP * (GRID_SIDE - 1)) / GRID_SIDE);
-  const totalGrid = tileSize * GRID_SIDE + TILE_GAP * (GRID_SIDE - 1);
+  const tileSize = Math.floor((Math.min(width, height) - TILE_GAP * (gridSide - 1)) / gridSide);
+  const totalGrid = tileSize * gridSide + TILE_GAP * (gridSide - 1);
   const offsetX = Math.floor((width - totalGrid) * 0.5);
   const offsetY = Math.floor((height - totalGrid) * 0.5);
-  const now = effect.time;
 
-  for (let index = 0; index < model.tiles.length; index++) {
-    const tile = model.tiles[index];
-    const col = index % GRID_SIDE;
-    const row = (index / GRID_SIDE) | 0;
+  for (let index = 0; index < gridSide * gridSide; index++) {
+    const col = index % gridSide;
+    const row = (index / gridSide) | 0;
     const tileX = offsetX + col * (tileSize + TILE_GAP);
     const tileY = offsetY + row * (tileSize + TILE_GAP);
-    drawTile(effect, write, width, height, tile, index, tileX, tileY, tileSize, now);
+    const file = files[index % files.length];
+    drawFingerprintTile(effect, write, width, height, file, index, tileX, tileY, tileSize, effect.time);
   }
 }
 
-function drawAstTile(effect: any, model: QuiltModel, tileIndex: number) {
+function drawAstTile(effect: any, file: AstFingerprintFile, tileIndex: number) {
   effect.clearColor(2 / 255, 5 / 255, 10 / 255, 1);
 
   const write: PixelWriter = effect.setPixelRaw;
@@ -337,16 +402,7 @@ function drawAstTile(effect: any, model: QuiltModel, tileIndex: number) {
   const size = Math.min(width, height);
   const tileX = Math.floor((width - size) * 0.5);
   const tileY = Math.floor((height - size) * 0.5);
-  const safeIndex = ((tileIndex % model.tiles.length) + model.tiles.length) % model.tiles.length;
-  drawTile(effect, write, width, height, model.tiles[safeIndex], safeIndex, tileX, tileY, size, effect.time);
-}
-
-function useQuiltModel(seed: number): QuiltModel {
-  const modelRef = useRef<{ seed: number; model: QuiltModel } | null>(null);
-  if (!modelRef.current || modelRef.current.seed !== seed) {
-    modelRef.current = { seed, model: createQuiltModel(seed) };
-  }
-  return modelRef.current.model;
+  drawFingerprintTile(effect, write, width, height, file, tileIndex, tileX, tileY, size, effect.time);
 }
 
 function AstFrame({
@@ -356,82 +412,52 @@ function AstFrame({
 }: {
   frameSize: number;
   effectSize: number;
-  children: any;
+  children?: any;
 }) {
   return (
     <Box
       style={{
         width: frameSize,
         height: frameSize,
-        padding: 14,
-        borderRadius: 30,
-        backgroundColor: '#040b11',
-        borderWidth: 1,
-        borderColor: '#173347',
-        position: 'relative',
-        overflow: 'hidden',
+        alignItems: 'center',
+        justifyContent: 'center',
       }}
     >
-      <Box
-        style={{
-          position: 'absolute',
-          left: -72,
-          top: -58,
-          width: 210,
-          height: 210,
-          borderRadius: 210,
-          backgroundColor: '#0d3d49',
-          opacity: 0.22,
-        }}
-      />
-      <Box
-        style={{
-          position: 'absolute',
-          right: -110,
-          bottom: -104,
-          width: 280,
-          height: 280,
-          borderRadius: 280,
-          backgroundColor: '#26153a',
-          opacity: 0.22,
-        }}
-      />
-      <Box
-        style={{
-          position: 'absolute',
-          left: 14,
-          right: 14,
-          top: 14,
-          bottom: 14,
-          borderRadius: 22,
-          borderWidth: 1,
-          borderColor: '#102738',
-        }}
-      />
       <Box style={{ width: effectSize, height: effectSize }}>{children}</Box>
     </Box>
   );
 }
 
-export function AstQuilt({ seed = MODEL_SEED }: AstQuiltProps) {
-  const model = useQuiltModel(seed);
-
+export function AstQuilt({ files, gridSide = DEFAULT_GRID_SIDE }: AstQuiltProps) {
+  const prepared = usePreparedFiles(files);
   return (
     <AstFrame frameSize={FRAME_SIZE} effectSize={EFFECT_SIZE}>
-      <Effect onRender={(effect: any) => drawAstQuilt(effect, model)} style={{ width: EFFECT_SIZE, height: EFFECT_SIZE }} />
+      {prepared.length > 0 ? (
+        <Effect onRender={(effect: any) => drawAstQuilt(effect, prepared, gridSide)} style={{ width: EFFECT_SIZE, height: EFFECT_SIZE }} />
+      ) : null}
     </AstFrame>
   );
 }
 
-export function AstTile({ seed = MODEL_SEED, tileIndex = DEFAULT_TILE_INDEX }: AstTileProps) {
-  const model = useQuiltModel(seed);
+export function AstTile({ file, files, tileIndex = DEFAULT_TILE_INDEX }: AstTileProps) {
+  const preparedFiles = usePreparedFiles(files);
+  const safeIndex = preparedFiles.length > 0 ? ((tileIndex % preparedFiles.length) + preparedFiles.length) % preparedFiles.length : 0;
+  const preparedSingle = usePreparedFile(file);
+  const preparedFile = preparedSingle || preparedFiles[safeIndex] || null;
 
   return (
     <AstFrame frameSize={TILE_FRAME_SIZE} effectSize={TILE_EFFECT_SIZE}>
-      <Effect
-        onRender={(effect: any) => drawAstTile(effect, model, tileIndex)}
-        style={{ width: TILE_EFFECT_SIZE, height: TILE_EFFECT_SIZE }}
-      />
+      {preparedFile ? (
+        <Effect
+          onRender={(effect: any) => drawAstTile(effect, preparedFile, tileIndex)}
+          style={{ width: TILE_EFFECT_SIZE, height: TILE_EFFECT_SIZE }}
+        />
+      ) : null}
     </AstFrame>
   );
 }
+
+export const prepareFingerprintFile = prepareAstFingerprintFile;
+export const prepareFingerprintFiles = prepareAstFingerprintFiles;
+export const FingerprintQuilt = AstQuilt;
+export const FingerprintTile = AstTile;

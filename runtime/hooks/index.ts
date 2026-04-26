@@ -20,6 +20,72 @@ export * as clipboard from './clipboard';
 export * as websocket from './websocket';
 export * as browserPage from './browser_page';
 export { useHotState, removeHotState, clearHotState, hotStateKeys } from './useHotState';
+export { useHost } from './useHost';
+export type {
+  HostSpec,
+  HostHandle,
+  HttpHostSpec,
+  HttpHostHandle,
+  WsHostSpec,
+  WsHostHandle,
+  ProcessHostSpec,
+  ProcessHostHandle,
+  HttpRequest,
+  HttpResponder,
+  HttpRouteSpec,
+  HostState,
+} from './useHost';
+export { useConnection } from './useConnection';
+export type {
+  ConnectionSpec,
+  ConnectionHandle,
+  ConnectionState,
+  TransportHandle,
+  WsConnectionSpec,
+  WsConnectionHandle,
+  TcpConnectionSpec,
+  TcpConnectionHandle,
+  UdpConnectionSpec,
+  UdpConnectionHandle,
+  WireGuardConnectionSpec,
+  WireGuardConnectionHandle,
+  WireGuardConfig,
+  TorConnectionSpec,
+  TorConnectionHandle,
+  Socks5ConnectionSpec,
+  Socks5ConnectionHandle,
+  StunConnectionSpec,
+  StunConnectionHandle,
+  PeerConnectionSpec,
+  PeerConnectionHandle,
+} from './useConnection';
+export {
+  fuzzyScore,
+  fuzzySearch,
+  scoreFuzzyItem,
+  useFuzzySearch,
+} from './useFuzzySearch';
+export type {
+  FuzzyMode,
+  FuzzySearchCandidate,
+  FuzzySearchOptions,
+  FuzzySearchResult,
+} from './useFuzzySearch';
+export { usePrivacy } from './usePrivacy';
+export type {
+  Backend as PrivacyBackend,
+  PrivacyOptions,
+  PrivacyAPI,
+  Manifest,
+  ManifestEntry,
+  VerifyResult,
+  KeyType,
+  KeyringEntryView,
+  GenerateKeyOpts,
+  IsolatedCredential,
+  NoiseInitiateResult,
+  SecureBufferMode,
+} from './usePrivacy';
 
 export * from '../ffi';
 

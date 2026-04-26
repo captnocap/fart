@@ -11,9 +11,7 @@
 // effect's cleanup releases the handle when `path` changes or the caller
 // unmounts. There is exactly one TextEditor reading per handle by design.
 // If you need the same buffer in multiple places, load it twice.
-const React: any = require('react');
-const { useEffect, useState } = React;
-
+import { useEffect, useState } from 'react';
 declare const __hostLoadFileToBuffer: ((path: string) => number) | undefined;
 declare const __hostReleaseFileBuffer: ((handle: number) => void) | undefined;
 

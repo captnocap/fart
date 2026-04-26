@@ -422,6 +422,95 @@ pub const curve_wgsl =
     \\}
 ;
 
+/// Capsule pipeline: SDF line segments with round caps.
+/// Each instance is one segment (p0, p1) with a stroke width. The fragment
+/// shader computes distance to the segment; fragments past an endpoint
+/// measure distance to that endpoint, producing a semicircular cap.
+///
+/// Round joins are free: two capsules sharing an endpoint each contribute
+/// their own semicircle at that point, and the union is a disc that covers
+/// the outside wedge of any turn angle without any join geometry on the CPU.
+pub const capsule_wgsl =
+    \\struct Globals {
+    \\    screen_size: vec2f,
+    \\};
+    \\@group(0) @binding(0) var<uniform> globals: Globals;
+    \\
+    \\struct CapsuleInstance {
+    \\    @location(0) p0: vec2f,
+    \\    @location(1) p1: vec2f,
+    \\    @location(2) color: vec4f,
+    \\    @location(3) stroke_width: f32,
+    \\    @location(4) _pad0: f32,
+    \\};
+    \\
+    \\struct VertexOutput {
+    \\    @builtin(position) clip_pos: vec4f,
+    \\    @location(0) pixel_pos: vec2f,
+    \\    @location(1) p0: vec2f,
+    \\    @location(2) p1: vec2f,
+    \\    @location(3) color: vec4f,
+    \\    @location(4) stroke_width: f32,
+    \\};
+    \\
+    \\@vertex
+    \\fn vs_main(
+    \\    @builtin(vertex_index) vertex_index: u32,
+    \\    inst: CapsuleInstance,
+    \\) -> VertexOutput {
+    \\    // Bounding box: encloses both endpoints, padded by width/2 (so
+    \\    // round caps have room to render) plus 2px for anti-aliasing.
+    \\    let bbox_min = min(inst.p0, inst.p1);
+    \\    let bbox_max = max(inst.p0, inst.p1);
+    \\    let pad = inst.stroke_width * 0.5 + 2.0;
+    \\    let box_min = bbox_min - pad;
+    \\    let box_max = bbox_max + pad;
+    \\    let box_size = box_max - box_min;
+    \\
+    \\    var quad_x = array<f32, 6>(0.0, 1.0, 0.0, 0.0, 1.0, 1.0);
+    \\    var quad_y = array<f32, 6>(0.0, 0.0, 1.0, 1.0, 0.0, 1.0);
+    \\    let uv = vec2f(quad_x[vertex_index], quad_y[vertex_index]);
+    \\
+    \\    let pixel_pos = box_min + uv * box_size;
+    \\    let ndc = vec2f(
+    \\        pixel_pos.x / globals.screen_size.x * 2.0 - 1.0,
+    \\        1.0 - pixel_pos.y / globals.screen_size.y * 2.0,
+    \\    );
+    \\
+    \\    var out: VertexOutput;
+    \\    out.clip_pos = vec4f(ndc, 0.0, 1.0);
+    \\    out.pixel_pos = pixel_pos;
+    \\    out.p0 = inst.p0;
+    \\    out.p1 = inst.p1;
+    \\    out.color = inst.color;
+    \\    out.stroke_width = inst.stroke_width;
+    \\    return out;
+    \\}
+    \\
+    \\// Distance from point p to the capsule skeleton (segment a→b).
+    \\// Past either endpoint, clamps to endpoint → returns endpoint
+    \\// distance → becomes a round cap after the smoothstep. A zero-length
+    \\// segment (a == b) falls through cleanly because the clamp pins h=0
+    \\// and length(p - a) is still the distance to the single point.
+    \\fn sd_segment(p: vec2f, a: vec2f, b: vec2f) -> f32 {
+    \\    let pa = p - a;
+    \\    let ba = b - a;
+    \\    let ba_len2 = max(dot(ba, ba), 1e-8);
+    \\    let h = clamp(dot(pa, ba) / ba_len2, 0.0, 1.0);
+    \\    return length(pa - ba * h);
+    \\}
+    \\
+    \\@fragment
+    \\fn fs_main(in: VertexOutput) -> @location(0) vec4f {
+    \\    let dist = sd_segment(in.pixel_pos, in.p0, in.p1);
+    \\    let half_w = in.stroke_width * 0.5;
+    \\    let alpha = 1.0 - smoothstep(half_w - 1.0, half_w + 0.5, dist);
+    \\    if alpha <= 0.0 { discard; }
+    \\    let final_alpha = in.color.a * alpha;
+    \\    return vec4f(in.color.rgb * final_alpha, final_alpha);
+    \\}
+;
+
 /// Image pipeline: textured quads for video frames and images.
 /// Each instance is one quad with screen position, size, and opacity.
 /// The texture is bound per-draw-call (each image has its own bind group).
@@ -439,7 +528,7 @@ pub const image_wgsl =
     \\    @location(0) pos: vec2f,
     \\    @location(1) size: vec2f,
     \\    @location(2) opacity: f32,
-    \\    @location(3) _pad0: f32,
+    \\    @location(3) no_flip_y: f32,
     \\};
     \\
     \\struct VertexOutput {
@@ -465,7 +554,8 @@ pub const image_wgsl =
     \\
     \\    var out: VertexOutput;
     \\    out.clip_pos = vec4f(ndc, 0.0, 1.0);
-    \\    out.uv = vec2f(corner.x, 1.0 - corner.y); // flip Y — GL readback is bottom-up
+    \\    let uv_y = select(1.0 - corner.y, corner.y, inst.no_flip_y > 0.5);
+    \\    out.uv = vec2f(corner.x, uv_y); // default flip: GL/readback images are bottom-up
     \\    out.opacity = inst.opacity;
     \\    return out;
     \\}

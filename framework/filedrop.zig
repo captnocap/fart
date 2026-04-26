@@ -17,6 +17,7 @@
 
 const std = @import("std");
 const layout = @import("layout.zig");
+const state = @import("state.zig");
 const Node = layout.Node;
 
 // ════════════════════════════════════════════════════════════════════════
@@ -45,10 +46,18 @@ pub fn subscribe(handler: FileDropHandler) void {
 
 var path_buf: [4096]u8 = undefined;
 var last_path: ?[]const u8 = null;
+var drop_seq: u64 = 0;
 
 /// The most recently dropped file path, or null if nothing has been dropped.
 pub fn getLastPath() ?[]const u8 {
     return last_path;
+}
+
+/// Monotonic counter — increments on every dispatch. JS hooks compare
+/// against the prior frame's value to detect new drops without string
+/// comparisons.
+pub fn getDropSeq() u64 {
+    return drop_seq;
 }
 
 // ════════════════════════════════════════════════════════════════════════
@@ -64,10 +73,15 @@ pub fn dispatch(path: []const u8, root: *Node) void {
     // Copy to persistent buffer so subscribers can store the slice
     @memcpy(path_buf[0..path.len], path);
     last_path = path_buf[0..path.len];
+    drop_seq +%= 1;
 
     std.debug.print("[filedrop] {s} → {d} subscriber(s)\n", .{ last_path.?, subscriber_count });
 
     for (subscribers[0..subscriber_count]) |handler| {
         handler(last_path.?, root);
     }
+
+    // Wake React so polling hooks (useFileDrop) re-render and observe the
+    // new drop_seq.
+    state.markDirty();
 }

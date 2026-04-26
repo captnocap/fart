@@ -8,9 +8,7 @@
 // registry; swapping the mockup for native is a single-file change here.
 // =============================================================================
 
-const React: any = require('react');
-const { useEffect, useMemo, useRef, useState } = React;
-
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Canvas, Col, Text } from '../../../runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 import type { MeshNode, Scene3DProps, Vec3 } from './types';

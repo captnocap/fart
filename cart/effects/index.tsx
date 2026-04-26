@@ -9,9 +9,7 @@ import Topography from './topography';
 import CirclePathDebug from './circle_path_debug';
 import PaisleyGarden from './paisley_garden';
 import PaisleyGlassleaf from './paisley_glassleaf';
-const React: any = require('react');
-const { useState } = React;
-
+import { useState } from 'react';
 const EFFECTS: { name: string; Component: any }[] = [
   { name: 'plasma', Component: Plasma },
   { name: 'rings', Component: Rings },

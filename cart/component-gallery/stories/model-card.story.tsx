@@ -40,7 +40,7 @@ export const modelCardSection = defineGallerySection({
           render: () => (
             <CardGrid>
               <ModelCard providerId="openai" name="GPT-5" contextWindow={400000} capabilities={['vision', 'reasoning', 'tools']} />
-              <ModelCard providerId="anthropic" name="Claude Opus 4.7" contextWindow={1000000} capabilities={['vision', 'reasoning', 'tools', 'code', 'files']} />
+              <ModelCard providerId="claude" name="Claude Opus 4.7" contextWindow={1000000} capabilities={['vision', 'reasoning', 'tools', 'code', 'files']} />
               <ModelCard providerId="gemini" name="Gemini 2.5 Pro" contextWindow={2000000} capabilities={['vision', 'reasoning', 'tools', 'search']} />
               <ModelCard providerId="deepseek" name="DeepSeek V3" contextWindow={128000} capabilities={['reasoning', 'code']} />
               <ModelCard providerId="mistral" name="Mistral Large" contextWindow={128000} capabilities={['tools', 'code']} />

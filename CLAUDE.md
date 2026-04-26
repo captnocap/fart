@@ -220,6 +220,9 @@ The only safe git commands: `git add`, `git commit`, `git push`, `git status`, `
 - Never leave a session with uncommitted work
 - **Never `git add -A` or `git commit -a`.** Stage explicit paths only.
 
+### Daily checkpoint
+At roughly 2am and 2pm each day, if you are beginning work, check the time. If it is near 02:00 or 14:00, run `git status`. If the tree is dirty, commit everything as a checkpoint (`checkpoint: <note>`) and move on.
+
 ### Parallel sessions
 Multiple Claude instances work simultaneously. If `git status` is unexpectedly clean:
 1. Run `git log --oneline -5` ONCE

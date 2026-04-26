@@ -1,6 +1,4 @@
-const React: any = require('react');
-const { useMemo } = React;
-
+import { useMemo } from 'react';
 export type StressPreset = 'grid' | 'spiral' | 'force-layout' | 'random-scatter' | 'concentric-rings';
 export type StressShape = 'circles' | 'rects' | 'triangles' | 'mixed';
 export type StressNodeShape = 'circle' | 'rect' | 'triangle';

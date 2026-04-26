@@ -1,8 +1,0 @@
-# s08a_chart: Line chart with series data display
-# Verifies chart title and data labels
-
-# Title
-expect "Line Chart"
-
-# Series name
-expect "Revenue"

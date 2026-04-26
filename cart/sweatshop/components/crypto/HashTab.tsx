@@ -1,6 +1,4 @@
-const React: any = require('react');
-const { useMemo, useState } = React;
-
+import { useMemo, useState } from 'react';
 import { Box, Col, Row, Text } from '../../../../runtime/primitives';
 import { COLORS } from '../../theme';
 import { toBase64, toHex, utf8ToBytes } from '../../lib/crypto/encoding';

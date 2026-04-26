@@ -5,7 +5,7 @@ export { PieChart } from './PieChart';
 export { ChartAxis } from './ChartAxis';
 export { ChartLegend } from './ChartLegend';
 export { ChartLegendToggle } from './ChartLegendToggle';
-export { ChartTooltip, ChartTooltipFromCrosshair } from './ChartTooltip';
+export { TooltipFromCrosshair } from './ChartTooltip';
 export { ChartInteractions, type ChartInteractionsConfig } from './ChartInteractions';
 export { useChartScale } from './useChartScale';
 export { useChartData } from './useChartData';

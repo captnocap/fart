@@ -19,7 +19,7 @@ function CornerFrame() {
 }
 
 export function ConsoleCoreContainer({ children }: { children: any }) {
-  return <Col style={{ flexGrow: 1, minHeight: 0, padding: 10, gap: 9 }}>{children}</Col>;
+  return <Col style={{ padding: 10, gap: 9 }}>{children}</Col>;
 }
 
 export function ConsoleTile({
@@ -35,8 +35,7 @@ export function ConsoleTile({
     <Row
       style={{
         width: CHAT_CARD.width,
-        height: CHAT_CARD.height,
-        alignItems: 'stretch',
+        alignItems: 'flex-start',
       }}
     >
       <Box

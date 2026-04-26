@@ -1,7 +1,10 @@
 import { useRef } from 'react';
 import { Box, Col, Effect, Row, Text } from '../../../../runtime/primitives';
+import { classifiers as S } from '@reactjit/core';
 
-export type MatrixScalingDashboardProps = {};
+export type MatrixScalingDashboardProps = {
+  theme?: Partial<MatrixScalingTheme>;
+};
 
 const MATRIX_SIZE = 256;
 const PANEL_SIZES = [512, 256, 128, 64, 32, 16] as const;
@@ -12,6 +15,7 @@ const INJECTION_SIZE = 10;
 const INITIAL_SEED = 0x51f15eed;
 
 type PanelSize = (typeof PANEL_SIZES)[number];
+type MatrixColorStop = readonly [number, readonly [number, number, number]];
 
 type Simulation = {
   current: Uint8Array;
@@ -22,9 +26,127 @@ type Simulation = {
   accumulatorMs: number;
   lastTickMs: number;
   stepCount: number;
+  themeSignature: string;
 };
 
-function gridGlyph() {
+export type MatrixScalingTheme = {
+  pageBackground: string;
+  pageBorder: string;
+  glowPrimary: string;
+  glowSecondary: string;
+  headerRule: string;
+  titleText: string;
+  subtitleText: string;
+  bodyText: string;
+  chipBackground: string;
+  chipBorder: string;
+  chipText: string;
+  glyphOn: string;
+  glyphOff: string;
+  glyphBorder: string;
+  labelBackground: string;
+  labelBackgroundNative: string;
+  labelBorder: string;
+  labelBorderNative: string;
+  labelText: string;
+  labelTextNative: string;
+  deviceText: string;
+  panelBackground: string;
+  panelBorder: string;
+  panelBorderNative: string;
+  footerText: string;
+  scanlineColor: string;
+  scanlineOpacity: number;
+  scanlineShade: number;
+  heatStops: readonly MatrixColorStop[];
+};
+
+export const DEFAULT_MATRIX_SCALING_THEME: MatrixScalingTheme = {
+  pageBackground: '#02060d',
+  pageBorder: '#163041',
+  glowPrimary: '#073c43',
+  glowSecondary: '#1d0f35',
+  headerRule: '#102330',
+  titleText: '#f4f8fb',
+  subtitleText: '#4fb5d4',
+  bodyText: '#75889a',
+  chipBackground: '#091826',
+  chipBorder: '#17354b',
+  chipText: '#85a4ba',
+  glyphOn: '#31d3a0',
+  glyphOff: '#0f5676',
+  glyphBorder: '#143746',
+  labelBackground: '#08283b',
+  labelBackgroundNative: '#103d33',
+  labelBorder: '#154861',
+  labelBorderNative: '#6aa390',
+  labelText: '#63dcff',
+  labelTextNative: '#b2ffdf',
+  deviceText: '#4a6675',
+  panelBackground: '#020409',
+  panelBorder: '#33495a',
+  panelBorderNative: '#6aa390',
+  footerText: '#6b8294',
+  scanlineColor: '#f2e8dc',
+  scanlineOpacity: 0.08,
+  scanlineShade: 0.92,
+  heatStops: [
+    [0.0, [5, 10, 21]],
+    [0.333, [14, 165, 233]],
+    [0.666, [192, 38, 211]],
+    [0.999, [52, 211, 153]],
+    [1.0, [255, 255, 255]],
+  ],
+};
+
+export function resolveMatrixScalingTheme(overrides?: Partial<MatrixScalingTheme>): MatrixScalingTheme {
+  if (!overrides) return DEFAULT_MATRIX_SCALING_THEME;
+  return {
+    ...DEFAULT_MATRIX_SCALING_THEME,
+    ...overrides,
+    heatStops: overrides.heatStops || DEFAULT_MATRIX_SCALING_THEME.heatStops,
+  };
+}
+
+function themeSignature(theme: MatrixScalingTheme): string {
+  const stops = theme.heatStops
+    .map((stop) => `${stop[0]}:${stop[1][0]}-${stop[1][1]}-${stop[1][2]}`)
+    .join('|');
+
+  return [
+    theme.pageBackground,
+    theme.pageBorder,
+    theme.glowPrimary,
+    theme.glowSecondary,
+    theme.headerRule,
+    theme.titleText,
+    theme.subtitleText,
+    theme.bodyText,
+    theme.chipBackground,
+    theme.chipBorder,
+    theme.chipText,
+    theme.glyphOn,
+    theme.glyphOff,
+    theme.glyphBorder,
+    theme.labelBackground,
+    theme.labelBackgroundNative,
+    theme.labelBorder,
+    theme.labelBorderNative,
+    theme.labelText,
+    theme.labelTextNative,
+    theme.deviceText,
+    theme.panelBackground,
+    theme.panelBorder,
+    theme.panelBorderNative,
+    theme.footerText,
+    theme.scanlineColor,
+    String(theme.scanlineOpacity),
+    String(theme.scanlineShade),
+    stops,
+  ].join('::');
+}
+
+function gridGlyph(theme: MatrixScalingTheme) {
   return (
     <Col style={{ gap: 3 }}>
       {[0, 1].map((rowIndex) => (
@@ -36,9 +158,9 @@ function gridGlyph() {
                 width: 8,
                 height: 8,
                 borderRadius: 2,
-                backgroundColor: rowIndex === colIndex ? '#31d3a0' : '#0f5676',
+                backgroundColor: rowIndex === colIndex ? theme.glyphOn : theme.glyphOff,
                 borderWidth: 1,
-                borderColor: '#143746',
+                borderColor: theme.glyphBorder,
               }}
             />
           ))}
@@ -66,37 +188,26 @@ function lerpByte(a: number, b: number, t: number): number {
   return Math.round(a + (b - a) * t);
 }
 
-function createColorMap(): Uint8Array {
+function createColorMap(heatStops: readonly MatrixColorStop[]): Uint8Array {
   const map = new Uint8Array(256 * 4);
   for (let i = 0; i < 256; i++) {
-    let r = 5;
-    let g = 10;
-    let b = 21;
+    const t = i / 255;
+    let start = heatStops[0];
+    let end = heatStops[heatStops.length - 1];
 
-    if (i === 0) {
-      r = 5;
-      g = 10;
-      b = 21;
-    } else if (i < 85) {
-      const t = i / 85;
-      r = lerpByte(5, 14, t);
-      g = lerpByte(10, 165, t);
-      b = lerpByte(21, 233, t);
-    } else if (i < 170) {
-      const t = (i - 85) / 85;
-      r = lerpByte(14, 192, t);
-      g = lerpByte(165, 38, t);
-      b = lerpByte(233, 211, t);
-    } else if (i < 255) {
-      const t = (i - 170) / 85;
-      r = lerpByte(192, 52, t);
-      g = lerpByte(38, 211, t);
-      b = lerpByte(211, 153, t);
-    } else {
-      r = 255;
-      g = 255;
-      b = 255;
+    for (let index = 0; index < heatStops.length - 1; index++) {
+      if (t >= heatStops[index][0] && t <= heatStops[index + 1][0]) {
+        start = heatStops[index];
+        end = heatStops[index + 1];
+        break;
+      }
     }
+
+    const span = end[0] - start[0] || 1;
+    const local = (t - start[0]) / span;
+    const r = lerpByte(start[1][0], end[1][0], local);
+    const g = lerpByte(start[1][1], end[1][1], local);
+    const b = lerpByte(start[1][2], end[1][2], local);
 
     const base = i * 4;
     map[base] = r;
@@ -123,17 +234,18 @@ function injectNoise(simulation: Simulation) {
   }
 }
 
-function createSimulation(): Simulation {
+function createSimulation(theme: MatrixScalingTheme): Simulation {
   const numCells = MATRIX_SIZE * MATRIX_SIZE;
   const simulation: Simulation = {
     current: new Uint8Array(numCells),
     next: new Uint8Array(numCells),
     decay: new Uint8Array(numCells),
-    colorMap: createColorMap(),
+    colorMap: createColorMap(theme.heatStops),
     seed: INITIAL_SEED,
     accumulatorMs: 0,
     lastTickMs: -1,
     stepCount: 0,
+    themeSignature: themeSignature(theme),
   };
 
   for (let index = 0; index < numCells; index++) {
@@ -191,10 +303,7 @@ function stepSimulation(simulation: Simulation) {
 
 function advanceSimulation(simulation: Simulation) {
   const perf = (globalThis as any).performance;
-  const nowMs =
-    perf && typeof perf.now === 'function'
-      ? perf.now()
-      : Date.now();
+  const nowMs = perf && typeof perf.now === 'function' ? perf.now() : Date.now();
 
   if (!Number.isFinite(nowMs)) return;
   if (simulation.lastTickMs < 0) {
@@ -213,15 +322,13 @@ function advanceSimulation(simulation: Simulation) {
   }
 }
 
-function renderMatrix(simulation: Simulation, effect: any, size: PanelSize) {
+function renderMatrix(simulation: Simulation, effect: any, size: PanelSize, theme: MatrixScalingTheme) {
   advanceSimulation(simulation);
 
   const width = effect.width | 0;
   const height = effect.height | 0;
   if (width <= 0 || height <= 0) return;
 
-  const colorMap = simulation.colorMap;
-  const decay = simulation.decay;
   const scaleX = MATRIX_SIZE / width;
   const scaleY = MATRIX_SIZE / height;
   const scanlines = size >= 128;
@@ -236,79 +343,122 @@ function renderMatrix(simulation: Simulation, effect: any, size: PanelSize) {
       let logicalX = (x * scaleX) | 0;
       if (logicalX >= MATRIX_SIZE) logicalX = MATRIX_SIZE - 1;
 
-      const colorBase = decay[rowBase + logicalX] * 4;
-      let r = colorMap[colorBase];
-      let g = colorMap[colorBase + 1];
-      let b = colorMap[colorBase + 2];
+      const colorBase = simulation.decay[rowBase + logicalX] * 4;
+      let red = simulation.colorMap[colorBase];
+      let green = simulation.colorMap[colorBase + 1];
+      let blue = simulation.colorMap[colorBase + 2];
 
       if (dimLine) {
-        r = (r * 0.92) | 0;
-        g = (g * 0.92) | 0;
-        b = (b * 0.92) | 0;
+        red = (red * theme.scanlineShade) | 0;
+        green = (green * theme.scanlineShade) | 0;
+        blue = (blue * theme.scanlineShade) | 0;
       }
 
-      effect.setPixelRaw(x, y, r, g, b, 255);
+      effect.setPixelRaw(x, y, red, green, blue, 255);
     }
   }
 }
 
-function MatrixViewport({
-  size,
-  simulation,
-}: {
+function MatrixViewport(props: {
   size: PanelSize;
   simulation: Simulation;
+  theme: MatrixScalingTheme;
 }) {
-  const isNative = size === MATRIX_SIZE;
+  const isNative = props.size === MATRIX_SIZE;
+  const compactLabel = props.size < 128;
+  const slotWidth = compactLabel ? Math.max(props.size + 10, 64) : props.size + 10;
+  const footerLabel =
+    props.size === MATRIX_SIZE ? '1:1' : props.size > MATRIX_SIZE ? `x${props.size / MATRIX_SIZE}` : `1:${MATRIX_SIZE / props.size}`;
+
   return (
-    <Col style={{ alignItems: 'center', gap: 10 }}>
-      <Row
-        style={{
-          width: size + 10,
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 10,
-        }}
-      >
-        <Box
+    <S.StackX5Center style={{ width: slotWidth }}>
+      {compactLabel ? (
+        <Col style={{ width: slotWidth, alignItems: 'center', gap: 4 }}>
+          <Box
+            style={{
+              paddingLeft: 8,
+              paddingRight: 8,
+              paddingTop: 4,
+              paddingBottom: 4,
+              borderRadius: 6,
+              backgroundColor: isNative ? props.theme.labelBackgroundNative : props.theme.labelBackground,
+              borderWidth: 1,
+              borderColor: isNative ? props.theme.labelBorderNative : props.theme.labelBorder,
+            }}
+          >
+            <Text
+              style={{
+                fontSize: 10,
+                fontWeight: 'bold',
+                color: isNative ? props.theme.labelTextNative : props.theme.labelText,
+                fontFamily: 'monospace',
+              }}
+            >
+              {`${props.size}x${props.size}`}
+            </Text>
+          </Box>
+          <Text style={{ fontSize: 8, color: props.theme.deviceText, fontFamily: 'monospace', textTransform: 'uppercase' }}>
+            {deviceLabel(props.size)}
+          </Text>
+        </Col>
+      ) : (
+        <Row
           style={{
-            paddingLeft: 8,
-            paddingRight: 8,
-            paddingTop: 4,
-            paddingBottom: 4,
-            borderRadius: 999,
-            backgroundColor: '#08283b',
-            borderWidth: 1,
-            borderColor: '#154861',
+            width: slotWidth,
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 10,
           }}
         >
-          <Text style={{ fontSize: 10, fontWeight: 'bold', color: '#63dcff', fontFamily: 'monospace' }}>
-            {`${size}x${size}`}
-          </Text>
-        </Box>
+          <Box
+            style={{
+              paddingLeft: 8,
+              paddingRight: 8,
+              paddingTop: 4,
+              paddingBottom: 4,
+              borderRadius: 6,
+              backgroundColor: isNative ? props.theme.labelBackgroundNative : props.theme.labelBackground,
+              borderWidth: 1,
+              borderColor: isNative ? props.theme.labelBorderNative : props.theme.labelBorder,
+            }}
+          >
+            <Text
+              style={{
+                fontSize: 10,
+                fontWeight: 'bold',
+                color: isNative ? props.theme.labelTextNative : props.theme.labelText,
+                fontFamily: 'monospace',
+              }}
+            >
+              {`${props.size}x${props.size}`}
+            </Text>
+          </Box>
 
-        <Text style={{ fontSize: 10, color: '#4a6675', fontFamily: 'monospace' }}>{deviceLabel(size)}</Text>
-      </Row>
+          <Text style={{ fontSize: 10, color: props.theme.deviceText, fontFamily: 'monospace' }}>
+            {deviceLabel(props.size)}
+          </Text>
+        </Row>
+      )}
 
       <Box
         style={{
-          width: size + 10,
-          height: size + 10,
+          width: props.size + 10,
+          height: props.size + 10,
           padding: 4,
           borderRadius: isNative ? 8 : 10,
-          backgroundColor: '#020409',
+          backgroundColor: props.theme.panelBackground,
           borderWidth: 1,
-          borderColor: isNative ? '#2de0a6' : '#33495a',
+          borderColor: isNative ? props.theme.panelBorderNative : props.theme.panelBorder,
           position: 'relative',
           overflow: 'hidden',
         }}
       >
         <Effect
-          onRender={(effect: any) => renderMatrix(simulation, effect, size)}
-          style={{ width: size, height: size }}
+          onRender={(effect: any) => renderMatrix(props.simulation, effect, props.size, props.theme)}
+          style={{ width: props.size, height: props.size }}
         />
 
-        {size >= 128 ? (
+        {props.size >= 128 ? (
           <Box
             style={{
               position: 'absolute',
@@ -316,24 +466,71 @@ function MatrixViewport({
               right: 0,
               top: 0,
               height: 1,
-              backgroundColor: '#ffffff10',
-              opacity: 0.65,
+              backgroundColor: props.theme.scanlineColor,
+              opacity: props.theme.scanlineOpacity,
             }}
           />
         ) : null}
       </Box>
 
-      <Text style={{ fontSize: 10, color: '#6b8294', fontFamily: 'monospace', textTransform: 'uppercase' }}>
-        {projectionLabel(size)}
+      <Text
+        style={{
+          fontSize: compactLabel ? 8 : 10,
+          color: props.theme.footerText,
+          fontFamily: 'monospace',
+          textTransform: 'uppercase',
+        }}
+      >
+        {compactLabel ? footerLabel : projectionLabel(props.size)}
       </Text>
-    </Col>
+    </S.StackX5Center>
   );
 }
 
-export function MatrixScalingDashboard(_props: MatrixScalingDashboardProps) {
+function useMatrixSimulation(theme: MatrixScalingTheme): Simulation {
   const simulationRef = useRef<Simulation | null>(null);
-  if (!simulationRef.current) simulationRef.current = createSimulation();
-  const simulation = simulationRef.current;
+  if (!simulationRef.current || simulationRef.current.themeSignature !== themeSignature(theme)) {
+    simulationRef.current = createSimulation(theme);
+  }
+  return simulationRef.current;
+}
+
+export function MatrixProjectionSurface(props: {
+  size: PanelSize;
+  theme?: Partial<MatrixScalingTheme>;
+}) {
+  const resolvedTheme = resolveMatrixScalingTheme(props.theme);
+  const simulation = useMatrixSimulation(resolvedTheme);
+
+  return <MatrixViewport size={props.size} simulation={simulation} theme={resolvedTheme} />;
+}
+
+export function MatrixProjectionStrip(props: {
+  theme?: Partial<MatrixScalingTheme>;
+}) {
+  const resolvedTheme = resolveMatrixScalingTheme(props.theme);
+  const simulation = useMatrixSimulation(resolvedTheme);
+
+  return (
+    <Row
+      style={{
+        width: '100%',
+        flexWrap: 'wrap',
+        gap: 22,
+        alignItems: 'flex-start',
+        justifyContent: 'center',
+      }}
+    >
+      {PANEL_SIZES.map((size) => (
+        <MatrixViewport key={size} size={size} simulation={simulation} theme={resolvedTheme} />
+      ))}
+    </Row>
+  );
+}
+
+export function MatrixScalingDashboard(props: MatrixScalingDashboardProps) {
+  const resolvedTheme = resolveMatrixScalingTheme(props.theme);
+  const simulation = useMatrixSimulation(resolvedTheme);
 
   return (
     <Box
@@ -342,9 +539,9 @@ export function MatrixScalingDashboard(_props: MatrixScalingDashboardProps) {
         minHeight: 760,
         padding: 28,
         borderRadius: 26,
-        backgroundColor: '#02060d',
+        backgroundColor: resolvedTheme.pageBackground,
         borderWidth: 1,
-        borderColor: '#163041',
+        borderColor: resolvedTheme.pageBorder,
         position: 'relative',
         overflow: 'hidden',
       }}
@@ -357,7 +554,7 @@ export function MatrixScalingDashboard(_props: MatrixScalingDashboardProps) {
           width: 220,
           height: 220,
           borderRadius: 220,
-          backgroundColor: '#073c43',
+          backgroundColor: resolvedTheme.glowPrimary,
           opacity: 0.2,
         }}
       />
@@ -369,7 +566,7 @@ export function MatrixScalingDashboard(_props: MatrixScalingDashboardProps) {
           width: 280,
           height: 280,
           borderRadius: 280,
-          backgroundColor: '#1d0f35',
+          backgroundColor: resolvedTheme.glowSecondary,
           opacity: 0.24,
         }}
       />
@@ -381,14 +578,14 @@ export function MatrixScalingDashboard(_props: MatrixScalingDashboardProps) {
             gap: 10,
             paddingBottom: 18,
             borderBottomWidth: 1,
-            borderBottomColor: '#102330',
+            borderBottomColor: resolvedTheme.headerRule,
           }}
         >
           <Row style={{ alignItems: 'center', gap: 14 }}>
-            {gridGlyph()}
+            {gridGlyph(resolvedTheme)}
             <Col style={{ gap: 3 }}>
-              <Text style={{ fontSize: 30, fontWeight: 'bold', color: '#f4f8fb' }}>Matrix Array</Text>
-              <Text style={{ fontSize: 11, color: '#4fb5d4', fontFamily: 'monospace' }}>
+              <Text style={{ fontSize: 30, fontWeight: 'bold', color: resolvedTheme.titleText }}>Matrix Array</Text>
+              <Text style={{ fontSize: 11, color: resolvedTheme.subtitleText, fontFamily: 'monospace' }}>
                 Shared logical field • multi-surface pixel projection
               </Text>
             </Col>
@@ -398,7 +595,7 @@ export function MatrixScalingDashboard(_props: MatrixScalingDashboardProps) {
             style={{
               width: 760,
               fontSize: 12,
-              color: '#75889a',
+              color: resolvedTheme.bodyText,
               lineHeight: 18,
               fontFamily: 'monospace',
             }}
@@ -419,13 +616,13 @@ export function MatrixScalingDashboard(_props: MatrixScalingDashboardProps) {
                   paddingRight: 10,
                   paddingTop: 5,
                   paddingBottom: 5,
-                  borderRadius: 999,
-                  backgroundColor: '#091826',
+                  borderRadius: 6,
+                  backgroundColor: resolvedTheme.chipBackground,
                   borderWidth: 1,
-                  borderColor: '#17354b',
+                  borderColor: resolvedTheme.chipBorder,
                 }}
               >
-                <Text style={{ fontSize: 10, color: '#85a4ba', fontFamily: 'monospace' }}>{label}</Text>
+                <Text style={{ fontSize: 10, color: resolvedTheme.chipText, fontFamily: 'monospace' }}>{label}</Text>
               </Box>
             ))}
           </Row>
@@ -441,7 +638,7 @@ export function MatrixScalingDashboard(_props: MatrixScalingDashboardProps) {
           }}
         >
           {PANEL_SIZES.map((size) => (
-            <MatrixViewport key={size} size={size} simulation={simulation} />
+            <MatrixViewport key={size} size={size} simulation={simulation} theme={resolvedTheme} />
           ))}
         </Row>
       </Col>

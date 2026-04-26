@@ -6,9 +6,7 @@
 // Port of tsz/carts/conformance/mixed/effects/paisley-glassleaf.tsz.
 
 import { Box, Row, Text, Graph, Effect } from '../../runtime/primitives';
-const React: any = require('react');
-const { useMemo } = React;
-
+import { useMemo } from 'react';
 type Palette = {
   effect: string; stroke: string; accent: string; innerFill: string; seedFill: string; halo: string;
 };

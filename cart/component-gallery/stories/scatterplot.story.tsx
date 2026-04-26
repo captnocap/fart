@@ -1,5 +1,12 @@
 import { defineGallerySection, defineGalleryStory } from '../types';
 import { Scatterplot } from '../components/scatterplot/Scatterplot';
+import { DEMO_CAMPAIGNS } from '../lib/chart-utils';
+
+const scatterplotData = DEMO_CAMPAIGNS.map((point, i) => ({
+  label: `Campaign ${i + 1}`,
+  x: point.x,
+  y: point.y,
+}));
 
 export const scatterplotSection = defineGallerySection({
   id: 'scatterplot',
@@ -14,7 +21,7 @@ export const scatterplotSection = defineGallerySection({
         {
           id: 'default',
           name: 'Default',
-          render: () => <Scatterplot />,
+          render: () => <Scatterplot data={scatterplotData} />,
         },
       ],
     }),

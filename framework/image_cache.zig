@@ -1,6 +1,7 @@
 //! Image cache — decodes `<Image source={...}>` sources to GPU textures once
-//! and reuses the bind group on every subsequent frame. Keyed by the source
-//! string pointer so repeated renders of the same node hit the cache.
+//! and reuses the bind group on every subsequent frame. Keyed by a wyhash of
+//! the source bytes so repeated renders hit the cache even when the JS↔Zig
+//! FFI hands back a fresh UTF-8 buffer each call (V8 frequently does).
 //!
 //! Supported sources:
 //!   - Absolute or cwd-relative file path to a PNG / JPEG / BMP / etc.
@@ -20,7 +21,7 @@ const c = @import("c.zig").imports;
 const MAX_ENTRIES: u32 = 256;
 
 const Entry = struct {
-    key_ptr: usize = 0, // keyed by source-string pointer identity
+    key_hash: u64 = 0, // wyhash of source bytes — pointer-stable across FFI calls
     key_len: usize = 0,
     width: u32 = 0,
     height: u32 = 0,
@@ -35,12 +36,16 @@ var g_entries: [MAX_ENTRIES]Entry = [_]Entry{.{}} ** MAX_ENTRIES;
 var g_count: u32 = 0;
 var g_sampler: ?*wgpu.Sampler = null;
 
+fn hashSrc(src: []const u8) u64 {
+    return std.hash.Wyhash.hash(0, src);
+}
+
 fn find(src: []const u8) ?*Entry {
-    const p = @intFromPtr(src.ptr);
+    const h = hashSrc(src);
     var i: u32 = 0;
     while (i < g_count) : (i += 1) {
         const e = &g_entries[i];
-        if (e.active and e.key_ptr == p and e.key_len == src.len) return e;
+        if (e.active and e.key_hash == h and e.key_len == src.len) return e;
     }
     return null;
 }
@@ -118,18 +123,15 @@ fn load(src: []const u8) ?*Entry {
         &channels,
         4,
     );
-    if (pixels_ptr == null or w <= 0 or h <= 0) {
-        std.debug.print("[image_cache] decode FAILED src_len={d} raw_len={d}\n", .{ src.len, raw.len });
-        return null;
-    }
-    std.debug.print("[image_cache] decode OK {d}x{d} ch={d} raw_len={d}\n", .{ w, h, channels, raw.len });
+    if (pixels_ptr == null or w <= 0 or h <= 0) return null;
     defer c.stbi_image_free(pixels_ptr);
     const pw: u32 = @intCast(w);
     const ph: u32 = @intCast(h);
 
-    // Swizzle RGBA → BGRA when the swapchain format requires it, matching
-    // blend2d.zig's pattern. stb returns RGBA; WebGPU/BGRA8Unorm expects
-    // B,G,R,A byte order.
+    // Swizzle RGBA → BGRA when the swapchain needs BGRA8Unorm. stb returns
+    // R,G,B,A byte order; textureSample in images.wgsl reads .rgba from
+    // whatever the texture format promises, so we pre-swap when the format
+    // is BGRA.
     const total_bytes: usize = @as(usize, pw) * @as(usize, ph) * 4;
     const pixels_slice: []u8 = pixels_ptr[0..total_bytes];
     if (gpu.getFormat() == .bgra8_unorm) {
@@ -139,6 +141,53 @@ fn load(src: []const u8) ?*Entry {
             pixels_slice[i] = pixels_slice[i + 2];
             pixels_slice[i + 2] = r;
         }
+    }
+
+    // Flip rows vertically. The shared image shader does `uv.y = 1.0 - corner.y`
+    // (originally written for GL bottom-up textures), so a top-down texture
+    // displays inverted. stb returns top-down rows; flipping here cancels the
+    // shader flip → correct orientation. Same trick render_surfaces.zig and
+    // videos.zig use for their feeds. (stbi_set_flip_vertically_on_load is
+    // unreliable here — its thread-local override beats the global setter.)
+    const row_bytes: usize = @as(usize, pw) * 4;
+    const row_tmp = alloc.alloc(u8, row_bytes) catch return null;
+    defer alloc.free(row_tmp);
+
+    // Diagnostic: hash the top + bottom rows pre-flip so we can confirm the
+    // swap actually ran post-flip (Wyhash on first/last row → orientation).
+    const pre_top_hash = std.hash.Wyhash.hash(0, pixels_slice[0..row_bytes]);
+    const pre_bot_hash = std.hash.Wyhash.hash(0, pixels_slice[(ph - 1) * row_bytes ..][0..row_bytes]);
+
+    {
+        var top: usize = 0;
+        var bot: usize = ph - 1;
+        while (top < bot) {
+            const top_row = pixels_slice[top * row_bytes ..][0..row_bytes];
+            const bot_row = pixels_slice[bot * row_bytes ..][0..row_bytes];
+            @memcpy(row_tmp, top_row);
+            @memcpy(top_row, bot_row);
+            @memcpy(bot_row, row_tmp);
+            top += 1;
+            bot -= 1;
+        }
+    }
+
+    const post_top_hash = std.hash.Wyhash.hash(0, pixels_slice[0..row_bytes]);
+    if (std.posix.getenv("REACTJIT_VERBOSE_IMAGE_CACHE") != null) {
+        const tag_len: usize = @min(src.len, 48);
+        std.debug.print(
+            "[image_cache] load src=\"{s}\" {d}x{d} fmt={s} pre_top={x} pre_bot={x} post_top={x} flipped={}\n",
+            .{
+                src[0..tag_len],
+                pw,
+                ph,
+                @tagName(gpu.getFormat()),
+                pre_top_hash,
+                pre_bot_hash,
+                post_top_hash,
+                post_top_hash == pre_bot_hash,
+            },
+        );
     }
 
     const tex = device.createTexture(&.{
@@ -174,7 +223,7 @@ fn load(src: []const u8) ?*Entry {
 
     const entry = &g_entries[g_count];
     entry.* = .{
-        .key_ptr = @intFromPtr(src.ptr),
+        .key_hash = hashSrc(src),
         .key_len = src.len,
         .width = pw,
         .height = ph,
@@ -202,7 +251,7 @@ fn getOrLoad(src: []const u8) ?*Entry {
     // frame. Reuse the source pointer as key.
     if (g_count < MAX_ENTRIES) {
         g_entries[g_count] = .{
-            .key_ptr = @intFromPtr(src.ptr),
+            .key_hash = hashSrc(src),
             .key_len = src.len,
             .failed = true,
             .active = true,

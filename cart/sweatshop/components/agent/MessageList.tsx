@@ -1,5 +1,4 @@
-const React: any = require('react');
-const { forwardRef, useCallback, useRef } = React;
+import { forwardRef, useCallback, useRef } from 'react';
 import { Box, Col, Text } from '../../../../runtime/primitives';
 import { COLORS } from '../../theme';
 import { FadeIn } from '../../anim';

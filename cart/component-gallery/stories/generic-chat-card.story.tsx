@@ -3,11 +3,11 @@ import { GenericChatCard } from '../components/generic-chat-card/GenericChatCard
 
 export const genericChatCardSection = defineGallerySection({
   id: 'generic-chat-card',
-  title: 'Generic Chat Card',
+  title: 'Advanced Worker Card',
   stories: [
     defineGalleryStory({
       id: 'generic-chat-card/default',
-      title: 'Generic Chat Card',
+      title: 'Advanced Worker Card',
       source: 'cart/component-gallery/components/generic-chat-card/GenericChatCard.tsx',
       status: 'ready',
       variants: [

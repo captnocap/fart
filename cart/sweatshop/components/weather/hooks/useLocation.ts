@@ -1,6 +1,4 @@
-const React: any = require('react');
-const { useEffect, useState } = React;
-
+import { useEffect, useState } from 'react';
 const STORE_KEY = 'sweatshop.weather.location';
 
 export type WeatherLocation = {

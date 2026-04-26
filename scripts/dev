@@ -40,16 +40,20 @@ SOCKET=/tmp/reactjit.sock
 PER_CART_BUNDLE=".cache/bundle-${NAME}.js"
 mkdir -p .cache
 
+# Heal top-level `const { useX } = React;` and stray require('react') lines —
+# patterns that fail at module-init before globalThis.React is set.
+scripts/fix-react-imports
+
 echo "[dev] bundling ${CART_FILE} → ${PER_CART_BUNDLE}"
 # BUNDLE_FROM_HARNESS=1 is the sentinel the bundler looks for. Direct
-# `node scripts/internal/cart-bundle.mjs ...` invocations (e.g. ad-hoc from an
+# `tools/v8cli scripts/cart-bundle.js ...` invocations (e.g. ad-hoc from an
 # agent) are refused — they race with the watcher and stamp stale bundles over disk.
-BUNDLE_FROM_HARNESS=1 node scripts/internal/cart-bundle.mjs "$CART_FILE" --out "$PER_CART_BUNDLE"
+BUNDLE_FROM_HARNESS=1 tools/v8cli scripts/cart-bundle.js "$CART_FILE" --out "$PER_CART_BUNDLE"
 
 # Fast path: host already running — push and exit.
 if [[ -S "$SOCKET" ]]; then
     echo "[dev] host detected — pushing '${NAME}'"
-    if node scripts/push-bundle.mjs "$NAME" "$PER_CART_BUNDLE"; then
+    if tools/v8cli scripts/push-bundle.js "$NAME" "$PER_CART_BUNDLE"; then
         echo "[dev] host switched to tab '${NAME}'"
         exit 0
     fi
@@ -61,7 +65,18 @@ fi
 cp "$PER_CART_BUNDLE" bundle.js
 
 BIN="zig-out/bin/reactjit-dev"
+# Rebuild when missing OR when any framework/build.zig source is newer than the
+# binary. Without this, editing framework/*.zig and restarting the host silently
+# reuses a stale ELF — a specific gotcha that has cost real debugging time
+# (e.g. chasing a letter-spacing wrap bug against a binary built before the fix).
+needs_build=0
 if [[ ! -x "$BIN" ]]; then
+    needs_build=1
+elif [[ -n "$(find framework build.zig -newer "$BIN" 2>/dev/null | head -1)" ]]; then
+    needs_build=1
+    echo "[dev] framework source newer than binary — rebuilding..."
+fi
+if [[ "$needs_build" -eq 1 ]]; then
     # ReleaseFast: Debug builds silently exit on click (pre-existing framework
     # issue — cockpit-raw reproduces it without dev mode). Dev-mode is a
     # RUNTIME flag, it doesn't need Debug compilation. Smaller binary too.
@@ -94,4 +109,4 @@ trap cleanup INT TERM EXIT
 echo "[dev] host PID=$BIN_PID — run 'scripts/dev <other>' from another terminal to add tabs"
 
 # Watch loop pushes each rebuild to the host over the socket.
-node scripts/watch-and-push.mjs "$NAME" "$CART_FILE" "$PER_CART_BUNDLE"
+tools/v8cli scripts/watch-and-push.js "$NAME" "$CART_FILE" "$PER_CART_BUNDLE"

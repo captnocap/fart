@@ -4,6 +4,7 @@ import { MarkableLine } from './MarkableText';
 import { StepCardShell, TranscriptTurnShell } from './TranscriptFlow';
 import type { SignalHighlightProps } from './TripwireMenu';
 import { CHAT_CARD } from './tokens';
+import { classifiers as S } from '@reactjit/core';
 
 export type DiffLine = {
   prefix: '-' | '+' | ' ';
@@ -21,9 +22,9 @@ function Lines({ lines, color = CHAT_CARD.text }: { lines: string[]; color?: str
   return (
     <Col style={{ gap: 3 }}>
       {lines.map((line, index) => (
-        <Text key={`${line}-${index}`} style={{ fontFamily: 'monospace', fontSize: 10, color }}>
+        <S.TypeBody key={`${line}-${index}`} style={{ color }}>
           {line}
-        </Text>
+        </S.TypeBody>
       ))}
     </Col>
   );
@@ -65,10 +66,10 @@ export function AgentMessageBlock({
   return (
     <TranscriptTurnShell tone="agent" connectTop={connectTop} showConnector={showConnector}>
       <Col style={{ gap: 5 }}>
-        <Row style={{ alignItems: 'center', gap: 6 }}>
-          <Text style={{ fontFamily: 'monospace', fontSize: 8, fontWeight: 'bold', color: CHAT_CARD.gold }}>{block.author}</Text>
+        <S.InlineX3>
+          <Text style={{ fontFamily: 'monospace', fontSize: 8, fontWeight: 'bold', color: CHAT_CARD.orange }}>{block.author}</Text>
           {block.meta ? <Text style={{ fontFamily: 'monospace', fontSize: 7, color: CHAT_CARD.faint }}>{block.meta}</Text> : null}
-        </Row>
+        </S.InlineX3>
         {block.markable ? (
           <Col style={{ gap: 3 }}>
             {block.lines.map((line, index) => (
@@ -102,10 +103,18 @@ export function ThinkingBlock({
   return (
     <TranscriptTurnShell tone="thinking" connectTop={connectTop} showConnector={showConnector}>
       <Col style={{ gap: 5 }}>
-        <Pressable onPress={() => setOpen(!open)} style={{ alignSelf: 'flex-start' }}>
-          <Text style={{ fontFamily: 'monospace', fontSize: 8, fontWeight: 'bold', color: CHAT_CARD.gold }}>
-            {open ? 'v' : '>'} {block.title}  {block.timer}
-          </Text>
+        <Pressable onPress={() => setOpen(!open)} style={{ alignSelf: 'stretch' }}>
+          <S.InlineX5Between>
+            <S.InlineX3>
+              <Text style={{ fontFamily: 'monospace', fontSize: 8, fontWeight: 'bold', color: CHAT_CARD.orange }}>
+                {open ? 'v' : '>'}
+              </Text>
+              <Text style={{ fontFamily: 'monospace', fontSize: 8, fontWeight: 'bold', color: CHAT_CARD.orange }}>
+                {block.title}
+              </Text>
+            </S.InlineX3>
+            <Text style={{ fontFamily: 'monospace', fontSize: 7, color: CHAT_CARD.faint }}>{block.timer}</Text>
+          </S.InlineX5Between>
         </Pressable>
         {open ? <Lines lines={block.lines} color={CHAT_CARD.muted} /> : null}
       </Col>
@@ -126,14 +135,14 @@ export function ToolExecutionBlock({
         style={{
           gap: 7,
           padding: 8,
-          backgroundColor: '#151a2b',
+          backgroundColor: '#0e0b09',
           borderWidth: 1,
-          borderColor: '#353d5f',
+          borderColor: '#3a2a1e',
           borderRadius: 4,
         }}
       >
         <Row style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-          <Text style={{ fontFamily: 'monospace', fontSize: 8, color: '#9eb4ff' }}>{block.title}</Text>
+          <Text style={{ fontFamily: 'monospace', fontSize: 8, color: '#5a8bd6' }}>{block.title}</Text>
           <Text style={{ fontFamily: 'monospace', fontSize: 7, color: CHAT_CARD.faint }}>{block.meta}</Text>
         </Row>
         <Text style={{ fontFamily: 'monospace', fontSize: 9, color: CHAT_CARD.mint }}>{block.command}</Text>
@@ -154,9 +163,9 @@ export function DiffBlock({
       <Col
         style={{
           gap: 0,
-          backgroundColor: '#151a2b',
+          backgroundColor: '#0e0b09',
           borderWidth: 1,
-          borderColor: '#353d5f',
+          borderColor: '#3a2a1e',
           borderRadius: 4,
         }}
       >
@@ -168,10 +177,10 @@ export function DiffBlock({
             paddingRight: 8,
             paddingTop: 6,
             paddingBottom: 6,
-            backgroundColor: '#222842',
+            backgroundColor: '#1a1511',
           }}
         >
-          <Text style={{ fontFamily: 'monospace', fontSize: 8, color: '#9eb4ff' }}>{block.title}</Text>
+          <Text style={{ fontFamily: 'monospace', fontSize: 8, color: '#5a8bd6' }}>{block.title}</Text>
           <Text style={{ fontFamily: 'monospace', fontSize: 7, color: CHAT_CARD.faint }}>{block.meta}</Text>
         </Row>
         <Col style={{ gap: 0 }}>
@@ -186,11 +195,11 @@ export function DiffBlock({
                   paddingTop: 4,
                   paddingBottom: 4,
                   gap: 7,
-                  backgroundColor: line.prefix === '-' ? '#351d35' : line.prefix === '+' ? '#19362f' : '#151a2b',
+                  backgroundColor: line.prefix === '-' ? '#1a1511' : line.prefix === '+' ? '#1a1511' : '#0e0b09',
                 }}
               >
                 <Text style={{ width: 8, fontFamily: 'monospace', fontSize: 9, color }}>{line.prefix}</Text>
-                <Text style={{ fontFamily: 'monospace', fontSize: 9, color }}>{line.text}</Text>
+                <S.TypeCaption>{line.text}</S.TypeCaption>
               </Row>
             );
           })}

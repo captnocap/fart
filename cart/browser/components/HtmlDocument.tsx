@@ -1,5 +1,3 @@
-const React: any = require('react');
-
 import { Box, Col, Image, Pressable, Row, Text, TextEditor, TextInput } from '../../../runtime/primitives';
 import { COLORS } from '../constants';
 import {

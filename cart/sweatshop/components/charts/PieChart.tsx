@@ -1,10 +1,8 @@
-const React: any = require('react');
-const { useMemo, useState } = React;
-
+import { useMemo, useState } from 'react';
 import { Box, Graph, Pressable, Row, Text } from '../../../../runtime/primitives';
-import { COLORS, TOKENS } from '../../theme';
+import { COLORS } from '../../theme';
+import { Tooltip } from '../tooltip';
 import { ChartLegend, type ChartLegendPosition } from './ChartLegend';
-import { ChartTooltip } from './ChartTooltip';
 import { normalizeChartData, type ChartInput } from './useChartData';
 import { formatTick } from './useChartScale';
 
@@ -100,11 +98,11 @@ export function PieChart(props: {
         </Box>
       ) : null}
       {hovered != null && props.showTooltip !== false ? (
-        <ChartTooltip
+        <Tooltip
           visible={true}
-          x={cx + 20}
-          y={16}
+          anchor={{ kind: 'cursor' }}
           title={slices[hovered]?.label}
+          variant="sweatshop-chart"
           rows={[{ label: 'Value', value: formatValue(slices[hovered]?.value || 0), color: slices[hovered]?.color }, { label: 'Share', value: Math.round(((slices[hovered]?.value || 0) / total) * 100) + '%' }]}
         />
       ) : null}

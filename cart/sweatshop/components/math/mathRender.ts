@@ -1,6 +1,5 @@
-const React: any = require('react');
-const { createElement: h } = React;
-
+import { createElement as h } from 'react';
+import type { ReactNode } from 'react';
 import { Box, Col, Row, Text } from '../../../../runtime/primitives';
 import type { MathNode } from './useLaTeXParse';
 
@@ -21,7 +20,7 @@ function renderText(value: string, options: MathRenderOptions, key: string) {
   }, value);
 }
 
-function renderGroup(nodes: MathNode[], options: MathRenderOptions, keyPrefix: string): React.ReactNode[] {
+function renderGroup(nodes: MathNode[], options: MathRenderOptions, keyPrefix: string): ReactNode[] {
   return nodes.map((node, index) => renderNode(node, options, `${keyPrefix}-${nodeKey(node, index)}`));
 }
 
@@ -89,7 +88,7 @@ function renderMatrix(node: Extract<MathNode, { type: 'matrix' }>, options: Math
   ]);
 }
 
-export function renderNode(node: MathNode, options: MathRenderOptions, key: string): React.ReactNode {
+export function renderNode(node: MathNode, options: MathRenderOptions, key: string): ReactNode {
   if (node.type === 'empty') return null;
   if (node.type === 'text') return renderText(node.value, options, key);
   if (node.type === 'symbol') return renderText(node.value, options, key);

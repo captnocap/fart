@@ -1,6 +1,4 @@
-const React: any = require('react');
-const { useRef, useCallback } = React;
-
+import { useRef, useCallback } from 'react';
 export function useBeatDetect(historySize: number = 43, threshold: number = 1.3) {
   const energyHistory = useRef<Float32Array>(new Float32Array(historySize));
   const historyIndex = useRef(0);

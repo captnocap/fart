@@ -1,6 +1,4 @@
-const React: any = require('react');
-const { useEffect, useMemo, useState } = React;
-
+import { useEffect, useMemo, useState } from 'react';
 import { Box, Col, Pressable, Row, ScrollView, Text } from '../../../../runtime/primitives';
 import { COLORS } from '../../theme';
 import { getDefaultGameId, getGameDefinition } from '../../lib/game-servers/catalog';

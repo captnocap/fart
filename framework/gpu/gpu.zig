@@ -16,6 +16,7 @@ const c = if (!is_web) @import("../c.zig").imports else struct {};
 const rects = @import("rects.zig");
 const text = @import("text.zig");
 const curves = @import("curves.zig");
+const capsules = @import("capsules.zig");
 const polys = @import("polys.zig");
 pub const images = @import("images.zig");
 const scene3d = @import("3d.zig");
@@ -38,6 +39,7 @@ pub const drawSelectionRects = text.drawSelectionRects;
 pub const getLineHeight = text.getLineHeight;
 pub const drawCurve = curves.drawCurve;
 pub const drawCubicCurve = curves.drawCubicCurve;
+pub const drawCapsule = capsules.drawCapsule;
 pub const drawTri = polys.drawTri;
 pub const drawTriColored = polys.drawTriColored;
 pub const initText = text.initText;
@@ -50,8 +52,12 @@ pub const setTextEffect = text.setTextEffect;
 pub const clearTextEffect = text.clearTextEffect;
 pub const setLineHeightOverride = text.setLineHeightOverride;
 pub const setLetterSpacing = text.setLetterSpacing;
-pub fn getInlineSlotCount() u8 { return text.g_inline_slot_count; }
-pub fn getInlineSlots() *const [text.MAX_RECORDED_SLOTS]layout_types.InlineSlot { return &text.g_inline_slots; }
+pub fn getInlineSlotCount() u8 {
+    return text.g_inline_slot_count;
+}
+pub fn getInlineSlots() *const [text.MAX_RECORDED_SLOTS]layout_types.InlineSlot {
+    return &text.g_inline_slots;
+}
 
 // Type re-exports
 pub const RectInstance = rects.RectInstance;
@@ -266,8 +272,22 @@ const ScissorSegment = struct {
     rect_start: u32,
     glyph_start: u32,
     curve_start: u32,
+    capsule_start: u32,
     poly_start: u32,
     image_start: u32,
+};
+
+const ZERO_SCISSOR_SEGMENT = ScissorSegment{
+    .x = 0,
+    .y = 0,
+    .w = 0,
+    .h = 0,
+    .rect_start = 0,
+    .glyph_start = 0,
+    .curve_start = 0,
+    .capsule_start = 0,
+    .poly_start = 0,
+    .image_start = 0,
 };
 
 const MAX_SCISSOR_SEGMENTS = 768;
@@ -289,8 +309,8 @@ pub const ActiveScissor = struct {
 fn sameBoundary(a: ScissorSegment, b: ScissorSegment) bool {
     return a.x == b.x and a.y == b.y and a.w == b.w and a.h == b.h and
         a.rect_start == b.rect_start and a.glyph_start == b.glyph_start and
-        a.curve_start == b.curve_start and a.poly_start == b.poly_start and
-        a.image_start == b.image_start;
+        a.curve_start == b.curve_start and a.capsule_start == b.capsule_start and
+        a.poly_start == b.poly_start and a.image_start == b.image_start;
 }
 
 fn recordBoundary(x: u32, y: u32, w: u32, h: u32, image_start: u32) void {
@@ -304,6 +324,7 @@ fn recordBoundary(x: u32, y: u32, w: u32, h: u32, image_start: u32) void {
         .rect_start = @intCast(rects.count()),
         .glyph_start = @intCast(text.count()),
         .curve_start = @intCast(curves.count()),
+        .capsule_start = @intCast(capsules.count()),
         .poly_start = @intCast(polys.count()),
         .image_start = image_start,
     };
@@ -351,8 +372,14 @@ pub fn pushScissor(x: f32, y: f32, w: f32, h: f32) void {
     }
 
     // Clamp to surface dimensions — wgpu requires x+w <= width AND y+h <= height
-    if (sx >= g_width) { sx = 0; sw = 0; }
-    if (sy >= g_height) { sy = 0; sh = 0; }
+    if (sx >= g_width) {
+        sx = 0;
+        sw = 0;
+    }
+    if (sy >= g_height) {
+        sy = 0;
+        sh = 0;
+    }
     if (sx + sw > g_width) sw = g_width - sx;
     if (sy + sh > g_height) sh = g_height - sy;
 
@@ -362,8 +389,16 @@ pub fn pushScissor(x: f32, y: f32, w: f32, h: f32) void {
     // Push to stack
     if (g_scissor_depth < MAX_SCISSOR_STACK) {
         g_scissor_stack[g_scissor_depth] = .{
-            .x = sx, .y = sy, .w = sw, .h = sh,
-            .rect_start = 0, .glyph_start = 0, .curve_start = 0, .poly_start = 0, .image_start = 0,
+            .x = sx,
+            .y = sy,
+            .w = sw,
+            .h = sh,
+            .rect_start = 0,
+            .glyph_start = 0,
+            .curve_start = 0,
+            .capsule_start = 0,
+            .poly_start = 0,
+            .image_start = 0,
         };
         g_scissor_depth += 1;
     }
@@ -388,6 +423,276 @@ pub fn getActiveScissor() ?ActiveScissor {
 }
 
 // ════════════════════════════════════════════════════════════════════════
+// Static surfaces — GPU render-to-texture cache for static subtrees
+// ════════════════════════════════════════════════════════════════════════
+
+pub const PrimitiveCounts = struct {
+    rects: u32 = 0,
+    glyphs: u32 = 0,
+    curves: u32 = 0,
+    capsules: u32 = 0,
+    polys: u32 = 0,
+    images: u32 = 0,
+};
+
+pub const StaticSurfaceToken = struct {
+    entry_index: usize,
+    width: u32,
+    height: u32,
+};
+
+pub const ScissorSnapshot = struct {
+    depth: usize,
+    stack: [MAX_SCISSOR_STACK]ScissorSegment,
+};
+
+const StaticSurfaceEntry = struct {
+    key_hash: u64 = 0,
+    key_len: usize = 0,
+    width: u32 = 0,
+    height: u32 = 0,
+    texture: ?*wgpu.Texture = null,
+    view: ?*wgpu.TextureView = null,
+    sampler: ?*wgpu.Sampler = null,
+    bind_group: ?*wgpu.BindGroup = null,
+    ready: bool = false,
+    active: bool = false,
+    warmup_started_frame: u64 = 0,
+    ready_frame: u64 = 0,
+};
+
+const StaticSurfaceCapture = struct {
+    entry_index: usize = 0,
+    width: u32 = 0,
+    height: u32 = 0,
+    start: PrimitiveCounts = .{},
+    end: PrimitiveCounts = .{},
+};
+
+const MAX_STATIC_SURFACES = 512;
+const MAX_STATIC_CAPTURES = 512;
+var g_static_entries: [MAX_STATIC_SURFACES]StaticSurfaceEntry = [_]StaticSurfaceEntry{.{}} ** MAX_STATIC_SURFACES;
+var g_static_captures: [MAX_STATIC_CAPTURES]StaticSurfaceCapture = [_]StaticSurfaceCapture{.{}} ** MAX_STATIC_CAPTURES;
+var g_static_capture_count: usize = 0;
+
+pub fn primitiveCounts() PrimitiveCounts {
+    return .{
+        .rects = @intCast(rects.count()),
+        .glyphs = @intCast(text.count()),
+        .curves = @intCast(curves.count()),
+        .capsules = @intCast(capsules.count()),
+        .polys = @intCast(polys.count()),
+        .images = @intCast(images.count()),
+    };
+}
+
+fn staticKeyHash(key: []const u8) u64 {
+    var hasher = std.hash.Wyhash.init(0);
+    hasher.update(key);
+    return hasher.final();
+}
+
+fn staticScale(v: f32) f32 {
+    return @max(1.0, @min(v, 4.0));
+}
+
+fn staticDim(v: f32, scale_f: f32) u32 {
+    if (v <= 0) return 0;
+    return @intFromFloat(@max(@as(f32, 1), @ceil(v * staticScale(scale_f))));
+}
+
+fn findStaticEntry(hash: u64, key_len: usize) ?usize {
+    for (g_static_entries[0..], 0..) |entry, i| {
+        if (entry.active and entry.key_hash == hash and entry.key_len == key_len) return i;
+    }
+    return null;
+}
+
+fn releaseStaticResources(entry: *StaticSurfaceEntry) void {
+    if (entry.bind_group) |bg| bg.release();
+    if (entry.sampler) |sampler| sampler.release();
+    if (entry.view) |view| view.release();
+    if (entry.texture) |texture| texture.release();
+    entry.bind_group = null;
+    entry.sampler = null;
+    entry.view = null;
+    entry.texture = null;
+    entry.ready = false;
+}
+
+fn deinitStaticSurfaces() void {
+    for (&g_static_entries) |*entry| {
+        releaseStaticResources(entry);
+        entry.* = .{};
+    }
+    g_static_capture_count = 0;
+}
+
+fn ensureStaticEntry(hash: u64, key_len: usize, width: u32, height: u32) ?usize {
+    if (width == 0 or height == 0) return null;
+    const device = g_device orelse return null;
+
+    const idx = findStaticEntry(hash, key_len) orelse blk: {
+        for (g_static_entries[0..], 0..) |entry, i| {
+            if (!entry.active) {
+                g_static_entries[i] = .{
+                    .key_hash = hash,
+                    .key_len = key_len,
+                    .active = true,
+                    .warmup_started_frame = g_frame_counter,
+                    .ready_frame = g_frame_counter,
+                };
+                break :blk i;
+            }
+        }
+        return null;
+    };
+
+    const entry = &g_static_entries[idx];
+    if (entry.texture != null and entry.width == width and entry.height == height) return idx;
+
+    releaseStaticResources(entry);
+    entry.key_hash = hash;
+    entry.key_len = key_len;
+    entry.width = width;
+    entry.height = height;
+    entry.active = true;
+    entry.warmup_started_frame = g_frame_counter;
+    entry.ready_frame = g_frame_counter;
+
+    const tex = device.createTexture(&.{
+        .label = wgpu.StringView.fromSlice("static_surface"),
+        .size = .{ .width = width, .height = height, .depth_or_array_layers = 1 },
+        .mip_level_count = 1,
+        .sample_count = 1,
+        .dimension = .@"2d",
+        .format = g_format,
+        .usage = wgpu.TextureUsages.render_attachment | wgpu.TextureUsages.texture_binding,
+    }) orelse return null;
+    const view = tex.createView(null) orelse {
+        tex.release();
+        return null;
+    };
+    const sampler = device.createSampler(&.{
+        .address_mode_u = .clamp_to_edge,
+        .address_mode_v = .clamp_to_edge,
+        .mag_filter = .linear,
+        .min_filter = .linear,
+    }) orelse {
+        view.release();
+        tex.release();
+        return null;
+    };
+    const bg = images.createBindGroup(view, sampler) orelse {
+        sampler.release();
+        view.release();
+        tex.release();
+        return null;
+    };
+
+    entry.texture = tex;
+    entry.view = view;
+    entry.sampler = sampler;
+    entry.bind_group = bg;
+    entry.ready = false;
+    return idx;
+}
+
+pub fn staticSurfaceReady(key: []const u8, width_f: f32, height_f: f32, scale_f: f32) bool {
+    const width = staticDim(width_f, scale_f);
+    const height = staticDim(height_f, scale_f);
+    const idx = findStaticEntry(staticKeyHash(key), key.len) orelse return false;
+    const entry = g_static_entries[idx];
+    return entry.ready and entry.width == width and entry.height == height and entry.bind_group != null;
+}
+
+fn staticSurfaceIntroProgress(entry: *const StaticSurfaceEntry, intro_frames: u16) f32 {
+    if (intro_frames == 0) return 1;
+    const age: f32 = @floatFromInt(g_frame_counter -| entry.ready_frame);
+    const total: f32 = @floatFromInt(intro_frames);
+    const t = @min(1.0, (age + 1.0) / @max(1.0, total));
+    return 1.0 - std.math.pow(f32, 1.0 - t, 3.0);
+}
+
+fn queueStaticSurfaceQuad(entry: *const StaticSurfaceEntry, x: f32, y: f32, width_f: f32, height_f: f32, opacity: f32, intro_frames: u16) bool {
+    const bg = entry.bind_group orelse return false;
+    const t = staticSurfaceIntroProgress(entry, intro_frames);
+    const scale = 0.985 + 0.015 * t;
+    const draw_w = width_f * scale;
+    const draw_h = height_f * scale;
+    const draw_x = x + (width_f - draw_w) * 0.5;
+    const draw_y = y + (height_f - draw_h) * 0.5;
+    images.queueQuadNoFlip(draw_x, draw_y, draw_w, draw_h, opacity * t, bg);
+    return true;
+}
+
+pub fn queueStaticSurface(key: []const u8, x: f32, y: f32, width_f: f32, height_f: f32, opacity: f32, intro_frames: u16, scale_f: f32) bool {
+    if (!staticSurfaceReady(key, width_f, height_f, scale_f)) return false;
+    const idx = findStaticEntry(staticKeyHash(key), key.len) orelse return false;
+    return queueStaticSurfaceQuad(&g_static_entries[idx], x, y, width_f, height_f, opacity, intro_frames);
+}
+
+pub fn staticSurfaceWarming(key: []const u8, width_f: f32, height_f: f32, warmup_frames: u16, scale_f: f32) bool {
+    if (warmup_frames == 0) return false;
+    const width = staticDim(width_f, scale_f);
+    const height = staticDim(height_f, scale_f);
+    const idx = ensureStaticEntry(staticKeyHash(key), key.len, width, height) orelse return false;
+    const entry = &g_static_entries[idx];
+    if (entry.ready) return false;
+    const age = g_frame_counter -| entry.warmup_started_frame;
+    return age < warmup_frames;
+}
+
+pub fn beginStaticSurfaceCapture(key: []const u8, x: f32, y: f32, width_f: f32, height_f: f32, opacity: f32, intro_frames: u16, scale_f: f32) ?StaticSurfaceToken {
+    const width = staticDim(width_f, scale_f);
+    const height = staticDim(height_f, scale_f);
+    const idx = ensureStaticEntry(staticKeyHash(key), key.len, width, height) orelse return null;
+    const entry = &g_static_entries[idx];
+    entry.ready_frame = g_frame_counter;
+    _ = queueStaticSurfaceQuad(entry, x, y, width_f, height_f, opacity, intro_frames);
+    return .{ .entry_index = idx, .width = width, .height = height };
+}
+
+pub fn suspendScissorForStaticCapture(width: u32, height: u32) ScissorSnapshot {
+    var snapshot = ScissorSnapshot{
+        .depth = g_scissor_depth,
+        .stack = [_]ScissorSegment{ZERO_SCISSOR_SEGMENT} ** MAX_SCISSOR_STACK,
+    };
+    if (g_scissor_depth > 0) @memcpy(snapshot.stack[0..g_scissor_depth], g_scissor_stack[0..g_scissor_depth]);
+    g_scissor_depth = 0;
+    recordBoundary(0, 0, width, height, @intCast(images.count()));
+    return snapshot;
+}
+
+pub fn restoreScissorAfterStaticCapture(snapshot: ScissorSnapshot) void {
+    if (snapshot.depth > 0) @memcpy(g_scissor_stack[0..snapshot.depth], snapshot.stack[0..snapshot.depth]);
+    g_scissor_depth = snapshot.depth;
+    if (g_scissor_depth > 0) {
+        const parent = g_scissor_stack[g_scissor_depth - 1];
+        recordBoundary(parent.x, parent.y, parent.w, parent.h, @intCast(images.count()));
+    } else {
+        recordBoundary(0, 0, g_width, g_height, @intCast(images.count()));
+    }
+}
+
+pub fn finishStaticSurfaceCapture(token: StaticSurfaceToken, start: PrimitiveCounts, end: PrimitiveCounts) void {
+    if (token.entry_index >= MAX_STATIC_SURFACES) return;
+    if (g_static_capture_count >= MAX_STATIC_CAPTURES) return;
+    if (end.rects <= start.rects and end.glyphs <= start.glyphs and end.curves <= start.curves and end.capsules <= start.capsules and end.polys <= start.polys and end.images <= start.images) {
+        return;
+    }
+    g_static_entries[token.entry_index].ready = false;
+    g_static_captures[g_static_capture_count] = .{
+        .entry_index = token.entry_index,
+        .width = token.width,
+        .height = token.height,
+        .start = start,
+        .end = end,
+    };
+    g_static_capture_count += 1;
+}
+
+// ════════════════════════════════════════════════════════════════════════
 // Dirty tracking & memory drain
 // ════════════════════════════════════════════════════════════════════════
 
@@ -402,8 +707,227 @@ fn frameDataHash() u64 {
     var h = rects.hashData();
     h ^= text.hashData();
     h ^= curves.hashData();
+    h ^= capsules.hashData();
     h ^= polys.hashData();
     return h;
+}
+
+fn writeGlobals(queue: *wgpu.Queue, width: u32, height: u32) void {
+    const globals = [2]f32{ @floatFromInt(width), @floatFromInt(height) };
+    if (g_globals_buffer) |buf| {
+        queue.writeBuffer(buf, 0, @ptrCast(&globals), @sizeOf(@TypeOf(globals)));
+    }
+}
+
+fn countsFromSegment(seg: ScissorSegment) PrimitiveCounts {
+    return .{
+        .rects = seg.rect_start,
+        .glyphs = seg.glyph_start,
+        .curves = seg.curve_start,
+        .capsules = seg.capsule_start,
+        .polys = seg.poly_start,
+        .images = seg.image_start,
+    };
+}
+
+fn currentTotals() PrimitiveCounts {
+    return .{
+        .rects = @intCast(rects.count()),
+        .glyphs = @intCast(text.count()),
+        .curves = @intCast(curves.count()),
+        .capsules = @intCast(capsules.count()),
+        .polys = @intCast(polys.count()),
+        .images = @intCast(images.count()),
+    };
+}
+
+fn setClampedScissor(render_pass: *wgpu.RenderPassEncoder, x: u32, y: u32, w: u32, h: u32, limit_w: u32, limit_h: u32) bool {
+    if (limit_w == 0 or limit_h == 0 or w == 0 or h == 0) return false;
+    if (x >= limit_w or y >= limit_h) return false;
+    var sw = w;
+    var sh = h;
+    if (x + sw > limit_w) sw = limit_w - x;
+    if (y + sh > limit_h) sh = limit_h - y;
+    if (sw == 0 or sh == 0) return false;
+    render_pass.setScissorRect(x, y, sw, sh);
+    return true;
+}
+
+fn drawCaptureSegment(render_pass: *wgpu.RenderPassEncoder, seg_start: PrimitiveCounts, seg_end: PrimitiveCounts, cap: StaticSurfaceCapture) void {
+    const rs = @max(seg_start.rects, cap.start.rects);
+    const re = @min(seg_end.rects, cap.end.rects);
+    if (re > rs) rects.drawBatch(render_pass, rs, re);
+
+    const gs = @max(seg_start.glyphs, cap.start.glyphs);
+    const ge = @min(seg_end.glyphs, cap.end.glyphs);
+    if (ge > gs) text.drawBatch(render_pass, gs, ge);
+
+    const cs = @max(seg_start.curves, cap.start.curves);
+    const ce = @min(seg_end.curves, cap.end.curves);
+    if (ce > cs) curves.drawBatch(render_pass, cs, ce);
+
+    const cps = @max(seg_start.capsules, cap.start.capsules);
+    const cpe = @min(seg_end.capsules, cap.end.capsules);
+    if (cpe > cps) capsules.drawBatch(render_pass, cps, cpe);
+
+    const ps = @max(seg_start.polys, cap.start.polys);
+    const pe = @min(seg_end.polys, cap.end.polys);
+    if (pe > ps) polys.drawBatch(render_pass, ps, pe);
+
+    const is = @max(seg_start.images, cap.start.images);
+    const ie = @min(seg_end.images, cap.end.images);
+    if (ie > is) images.drawBatch(render_pass, is, ie);
+}
+
+fn drawStaticCapture(render_pass: *wgpu.RenderPassEncoder, cap: StaticSurfaceCapture) void {
+    if (g_scissor_count == 0) {
+        render_pass.setScissorRect(0, 0, cap.width, cap.height);
+        drawCaptureSegment(render_pass, .{}, currentTotals(), cap);
+        return;
+    }
+
+    var prev_counts = PrimitiveCounts{};
+    var prev_sx: u32 = 0;
+    var prev_sy: u32 = 0;
+    var prev_sw: u32 = cap.width;
+    var prev_sh: u32 = cap.height;
+
+    for (g_scissor_segments[0..g_scissor_count]) |seg| {
+        const end_counts = countsFromSegment(seg);
+        if (setClampedScissor(render_pass, prev_sx, prev_sy, prev_sw, prev_sh, cap.width, cap.height)) {
+            drawCaptureSegment(render_pass, prev_counts, end_counts, cap);
+        }
+        prev_counts = end_counts;
+        prev_sx = seg.x;
+        prev_sy = seg.y;
+        prev_sw = seg.w;
+        prev_sh = seg.h;
+    }
+
+    if (setClampedScissor(render_pass, prev_sx, prev_sy, prev_sw, prev_sh, cap.width, cap.height)) {
+        drawCaptureSegment(render_pass, prev_counts, currentTotals(), cap);
+    }
+}
+
+fn renderStaticSurfaceCaptures(device: *wgpu.Device, queue: *wgpu.Queue) void {
+    if (g_static_capture_count == 0) return;
+
+    for (g_static_captures[0..g_static_capture_count]) |cap| {
+        if (cap.entry_index >= MAX_STATIC_SURFACES) continue;
+        const entry = &g_static_entries[cap.entry_index];
+        const view = entry.view orelse continue;
+        if (cap.width == 0 or cap.height == 0) continue;
+
+        writeGlobals(queue, cap.width, cap.height);
+        const encoder = device.createCommandEncoder(&.{}) orelse continue;
+
+        const color_attachment = wgpu.ColorAttachment{
+            .view = view,
+            .load_op = .clear,
+            .store_op = .store,
+            .clear_value = .{ .r = 0, .g = 0, .b = 0, .a = 0 },
+        };
+        const rp_desc = wgpu.RenderPassDescriptor{
+            .color_attachment_count = 1,
+            .color_attachments = @ptrCast(&color_attachment),
+        };
+        const render_pass = encoder.beginRenderPass(&rp_desc) orelse {
+            encoder.release();
+            continue;
+        };
+        drawStaticCapture(render_pass, cap);
+        render_pass.end();
+        render_pass.release();
+        const command = encoder.finish(null) orelse {
+            encoder.release();
+            continue;
+        };
+        encoder.release();
+        queue.submit(&.{command});
+        command.release();
+        entry.ready = true;
+        entry.ready_frame = g_frame_counter;
+    }
+
+    writeGlobals(queue, g_width, g_height);
+}
+
+fn drawRectsSkipping(render_pass: *wgpu.RenderPassEncoder, start: u32, end: u32) void {
+    var cursor = start;
+    for (g_static_captures[0..g_static_capture_count]) |cap| {
+        const skip_start = cap.start.rects;
+        const skip_end = cap.end.rects;
+        if (skip_end <= cursor or skip_start >= end) continue;
+        if (skip_start > cursor) rects.drawBatch(render_pass, cursor, @min(skip_start, end));
+        cursor = @max(cursor, @min(skip_end, end));
+        if (cursor >= end) return;
+    }
+    if (cursor < end) rects.drawBatch(render_pass, cursor, end);
+}
+
+fn drawTextSkipping(render_pass: *wgpu.RenderPassEncoder, start: u32, end: u32) void {
+    var cursor = start;
+    for (g_static_captures[0..g_static_capture_count]) |cap| {
+        const skip_start = cap.start.glyphs;
+        const skip_end = cap.end.glyphs;
+        if (skip_end <= cursor or skip_start >= end) continue;
+        if (skip_start > cursor) text.drawBatch(render_pass, cursor, @min(skip_start, end));
+        cursor = @max(cursor, @min(skip_end, end));
+        if (cursor >= end) return;
+    }
+    if (cursor < end) text.drawBatch(render_pass, cursor, end);
+}
+
+fn drawCurvesSkipping(render_pass: *wgpu.RenderPassEncoder, start: u32, end: u32) void {
+    var cursor = start;
+    for (g_static_captures[0..g_static_capture_count]) |cap| {
+        const skip_start = cap.start.curves;
+        const skip_end = cap.end.curves;
+        if (skip_end <= cursor or skip_start >= end) continue;
+        if (skip_start > cursor) curves.drawBatch(render_pass, cursor, @min(skip_start, end));
+        cursor = @max(cursor, @min(skip_end, end));
+        if (cursor >= end) return;
+    }
+    if (cursor < end) curves.drawBatch(render_pass, cursor, end);
+}
+
+fn drawCapsulesSkipping(render_pass: *wgpu.RenderPassEncoder, start: u32, end: u32) void {
+    var cursor = start;
+    for (g_static_captures[0..g_static_capture_count]) |cap| {
+        const skip_start = cap.start.capsules;
+        const skip_end = cap.end.capsules;
+        if (skip_end <= cursor or skip_start >= end) continue;
+        if (skip_start > cursor) capsules.drawBatch(render_pass, cursor, @min(skip_start, end));
+        cursor = @max(cursor, @min(skip_end, end));
+        if (cursor >= end) return;
+    }
+    if (cursor < end) capsules.drawBatch(render_pass, cursor, end);
+}
+
+fn drawPolysSkipping(render_pass: *wgpu.RenderPassEncoder, start: u32, end: u32) void {
+    var cursor = start;
+    for (g_static_captures[0..g_static_capture_count]) |cap| {
+        const skip_start = cap.start.polys;
+        const skip_end = cap.end.polys;
+        if (skip_end <= cursor or skip_start >= end) continue;
+        if (skip_start > cursor) polys.drawBatch(render_pass, cursor, @min(skip_start, end));
+        cursor = @max(cursor, @min(skip_end, end));
+        if (cursor >= end) return;
+    }
+    if (cursor < end) polys.drawBatch(render_pass, cursor, end);
+}
+
+fn drawImagesSkipping(render_pass: *wgpu.RenderPassEncoder, start: u32, end: u32) void {
+    var cursor = start;
+    for (g_static_captures[0..g_static_capture_count]) |cap| {
+        const skip_start = cap.start.images;
+        const skip_end = cap.end.images;
+        if (skip_end <= cursor or skip_start >= end) continue;
+        if (skip_start > cursor) images.drawBatch(render_pass, cursor, @min(skip_start, end));
+        cursor = @max(cursor, @min(skip_end, end));
+        if (cursor >= end) return;
+    }
+    if (cursor < end) images.drawBatch(render_pass, cursor, end);
 }
 
 /// Drain fragmented GPU memory by recreating buffers + bind groups.
@@ -430,6 +954,7 @@ fn drainMemory() void {
     rects.drain(device, globals_buffer);
     text.drain(device, globals_buffer);
     curves.drain(device, globals_buffer);
+    capsules.drain(device, globals_buffer);
     polys.drain(device, globals_buffer);
     images.drain(device, globals_buffer);
 
@@ -481,6 +1006,8 @@ pub fn initWeb(device: *wgpu.Device, queue: *wgpu.Queue, width: u32, height: u32
     rects.initPipeline(device, globals_buffer);
     std.debug.print("[gpu.initWeb] init curves pipeline...\n", .{});
     curves.initPipeline(device, globals_buffer);
+    std.debug.print("[gpu.initWeb] init capsules pipeline...\n", .{});
+    capsules.initPipeline(device, globals_buffer);
     std.debug.print("[gpu.initWeb] init polys pipeline...\n", .{});
     polys.initPipeline(device, globals_buffer);
     std.debug.print("[gpu.initWeb] init images pipeline...\n", .{});
@@ -515,7 +1042,7 @@ pub fn init(window: if (is_web) *anyopaque else *c.SDL_Window) !void {
     var extras = wgpu.InstanceExtras{
         .backends = backend,
         .flags = wgpu.InstanceFlags.default,
-        .dx12_shader_compiler = .@"undefined",
+        .dx12_shader_compiler = .undefined,
         .gles3_minor_version = .automatic,
         .gl_fence_behavior = .gl_fence_behaviour_normal,
         .dxc_max_shader_model = .dxc_max_shader_model_v6_0,
@@ -583,6 +1110,7 @@ pub fn init(window: if (is_web) *anyopaque else *c.SDL_Window) !void {
     // Initialize pipelines
     rects.initPipeline(device, globals_buffer);
     curves.initPipeline(device, globals_buffer);
+    capsules.initPipeline(device, globals_buffer);
     polys.initPipeline(device, globals_buffer);
     images.initPipeline(device, globals_buffer);
 
@@ -590,8 +1118,10 @@ pub fn init(window: if (is_web) *anyopaque else *c.SDL_Window) !void {
 }
 
 pub fn deinit() void {
+    deinitStaticSurfaces();
     images.deinit();
     polys.deinit();
+    capsules.deinit();
     curves.deinit();
     text.deinit();
     rects.deinit();
@@ -635,8 +1165,10 @@ pub fn frame(bg_r: f64, bg_g: f64, bg_b: f64) void {
         rects.reset();
         text.reset();
         curves.reset();
+        capsules.reset();
         polys.reset();
         images.reset();
+        g_static_capture_count = 0;
         g_scissor_count = 0;
         g_scissor_depth = 0;
         return;
@@ -655,24 +1187,24 @@ pub fn frame(bg_r: f64, bg_g: f64, bg_b: f64) void {
         break :blk changed;
     };
 
-    if (data_changed) {
-        g_prev_dims = .{ g_width, g_height };
+    if (data_changed or g_static_capture_count > 0) {
+        if (data_changed) g_prev_dims = .{ g_width, g_height };
 
         // Update globals uniform (screen size)
-        const globals = [2]f32{ @floatFromInt(g_width), @floatFromInt(g_height) };
-        if (g_globals_buffer) |buf| {
-            queue.writeBuffer(buf, 0, @ptrCast(&globals), @sizeOf(@TypeOf(globals)));
-        }
+        writeGlobals(queue, g_width, g_height);
 
         // Upload pipeline data
         rects.upload(queue);
         text.upload(queue);
         curves.upload(queue);
+        capsules.upload(queue);
         polys.upload(queue);
     }
 
     // Image quads always upload (video frames change independently of UI dirty state)
     if (images.count() > 0) images.upload(queue);
+
+    renderStaticSurfaceCaptures(device, queue);
 
     const encoder = device.createCommandEncoder(&.{}) orelse return;
 
@@ -693,20 +1225,22 @@ pub fn frame(bg_r: f64, bg_g: f64, bg_b: f64) void {
     const total_rects: u32 = @intCast(rects.count());
     const total_glyphs: u32 = @intCast(text.count());
     const total_curves: u32 = @intCast(curves.count());
+    const total_capsules: u32 = @intCast(capsules.count());
     const total_polys: u32 = @intCast(polys.count());
     const total_images: u32 = @intCast(images.count());
-    log.info(.gpu, "frame dims={d}x{d} rects={d} glyphs={d} curves={d} polys={d} images={d} boundaries={d}", .{
-        g_width, g_height, total_rects, total_glyphs, total_curves, total_polys, total_images, g_scissor_count,
+    log.info(.gpu, "frame dims={d}x{d} rects={d} glyphs={d} curves={d} capsules={d} polys={d} images={d} boundaries={d}", .{
+        g_width, g_height, total_rects, total_glyphs, total_curves, total_capsules, total_polys, total_images, g_scissor_count,
     });
 
     if (g_scissor_count == 0) {
         // Fast path — no clip or ordering boundaries, single draw for all primitives
         render_pass.setScissorRect(0, 0, g_width, g_height);
-        rects.drawBatch(render_pass, 0, total_rects);
-        text.drawBatch(render_pass, 0, total_glyphs);
-        curves.drawBatch(render_pass, 0, total_curves);
-        polys.drawBatch(render_pass, 0, total_polys);
-        images.drawBatch(render_pass, 0, total_images);
+        drawRectsSkipping(render_pass, 0, total_rects);
+        drawTextSkipping(render_pass, 0, total_glyphs);
+        drawCurvesSkipping(render_pass, 0, total_curves);
+        drawCapsulesSkipping(render_pass, 0, total_capsules);
+        drawPolysSkipping(render_pass, 0, total_polys);
+        drawImagesSkipping(render_pass, 0, total_images);
     } else {
         // Boundary-segmented rendering
         var segments: [MAX_SCISSOR_SEGMENTS + 1]ScissorSegment = undefined;
@@ -716,6 +1250,7 @@ pub fn frame(bg_r: f64, bg_g: f64, bg_b: f64) void {
         var prev_rect: u32 = 0;
         var prev_glyph: u32 = 0;
         var prev_curve: u32 = 0;
+        var prev_capsule: u32 = 0;
         var prev_poly: u32 = 0;
         var prev_image: u32 = 0;
         var prev_sx: u32 = 0;
@@ -728,21 +1263,25 @@ pub fn frame(bg_r: f64, bg_g: f64, bg_b: f64) void {
             const rect_end = seg.rect_start;
             const glyph_end = seg.glyph_start;
             const curve_end = seg.curve_start;
+            const capsule_end = seg.capsule_start;
             const poly_end = seg.poly_start;
             const image_end = seg.image_start;
 
-            if (rect_end > prev_rect or glyph_end > prev_glyph or curve_end > prev_curve or poly_end > prev_poly or image_end > prev_image) {
-                render_pass.setScissorRect(prev_sx, prev_sy, prev_sw, prev_sh);
-                if (rect_end > prev_rect) rects.drawBatch(render_pass, prev_rect, rect_end);
-                if (glyph_end > prev_glyph) text.drawBatch(render_pass, prev_glyph, glyph_end);
-                if (curve_end > prev_curve) curves.drawBatch(render_pass, prev_curve, curve_end);
-                if (poly_end > prev_poly) polys.drawBatch(render_pass, prev_poly, poly_end);
-                if (image_end > prev_image) images.drawBatch(render_pass, prev_image, image_end);
+            if (rect_end > prev_rect or glyph_end > prev_glyph or curve_end > prev_curve or capsule_end > prev_capsule or poly_end > prev_poly or image_end > prev_image) {
+                if (setClampedScissor(render_pass, prev_sx, prev_sy, prev_sw, prev_sh, g_width, g_height)) {
+                    if (rect_end > prev_rect) drawRectsSkipping(render_pass, prev_rect, rect_end);
+                    if (glyph_end > prev_glyph) drawTextSkipping(render_pass, prev_glyph, glyph_end);
+                    if (curve_end > prev_curve) drawCurvesSkipping(render_pass, prev_curve, curve_end);
+                    if (capsule_end > prev_capsule) drawCapsulesSkipping(render_pass, prev_capsule, capsule_end);
+                    if (poly_end > prev_poly) drawPolysSkipping(render_pass, prev_poly, poly_end);
+                    if (image_end > prev_image) drawImagesSkipping(render_pass, prev_image, image_end);
+                }
             }
 
             prev_rect = rect_end;
             prev_glyph = glyph_end;
             prev_curve = curve_end;
+            prev_capsule = capsule_end;
             prev_poly = poly_end;
             prev_image = image_end;
             prev_sx = seg.x;
@@ -752,13 +1291,15 @@ pub fn frame(bg_r: f64, bg_g: f64, bg_b: f64) void {
         }
 
         // Draw remaining after last segment
-        if (total_rects > prev_rect or total_glyphs > prev_glyph or total_curves > prev_curve or total_polys > prev_poly or total_images > prev_image) {
-            render_pass.setScissorRect(prev_sx, prev_sy, prev_sw, prev_sh);
-            if (total_rects > prev_rect) rects.drawBatch(render_pass, prev_rect, total_rects);
-            if (total_glyphs > prev_glyph) text.drawBatch(render_pass, prev_glyph, total_glyphs);
-            if (total_curves > prev_curve) curves.drawBatch(render_pass, prev_curve, total_curves);
-            if (total_polys > prev_poly) polys.drawBatch(render_pass, prev_poly, total_polys);
-            if (total_images > prev_image) images.drawBatch(render_pass, prev_image, total_images);
+        if (total_rects > prev_rect or total_glyphs > prev_glyph or total_curves > prev_curve or total_capsules > prev_capsule or total_polys > prev_poly or total_images > prev_image) {
+            if (setClampedScissor(render_pass, prev_sx, prev_sy, prev_sw, prev_sh, g_width, g_height)) {
+                if (total_rects > prev_rect) drawRectsSkipping(render_pass, prev_rect, total_rects);
+                if (total_glyphs > prev_glyph) drawTextSkipping(render_pass, prev_glyph, total_glyphs);
+                if (total_curves > prev_curve) drawCurvesSkipping(render_pass, prev_curve, total_curves);
+                if (total_capsules > prev_capsule) drawCapsulesSkipping(render_pass, prev_capsule, total_capsules);
+                if (total_polys > prev_poly) drawPolysSkipping(render_pass, prev_poly, total_polys);
+                if (total_images > prev_image) drawImagesSkipping(render_pass, prev_image, total_images);
+            }
         }
     }
 
@@ -788,8 +1329,10 @@ pub fn frame(bg_r: f64, bg_g: f64, bg_b: f64) void {
     rects.reset();
     text.reset();
     curves.reset();
+    capsules.reset();
     polys.reset();
     images.reset();
+    g_static_capture_count = 0;
     g_scissor_count = 0;
     g_scissor_depth = 0;
     if (g_gpu_ops >= GPU_OPS_BUDGET) {

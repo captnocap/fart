@@ -1,5 +1,9 @@
 import { defineGallerySection, defineGalleryStory } from '../types';
 import { DivergingChart } from '../components/diverging-chart/DivergingChart';
+import { DEMO_SENTIMENT } from '../lib/chart-utils';
+
+const divergingData = DEMO_SENTIMENT.map((item) => item.value);
+const divergingLabels = DEMO_SENTIMENT.map((item) => item.label);
 
 export const divergingChartSection = defineGallerySection({
   id: 'diverging-chart',
@@ -14,7 +18,7 @@ export const divergingChartSection = defineGallerySection({
         {
           id: 'default',
           name: 'Default',
-          render: () => <DivergingChart />,
+          render: () => <DivergingChart data={divergingData} labels={divergingLabels} />,
         },
       ],
     }),

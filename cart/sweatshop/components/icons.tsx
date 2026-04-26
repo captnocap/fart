@@ -1,5 +1,5 @@
 import { Box, Col, Row, Text, Graph } from '../../../runtime/primitives';
-import { lookupIcon } from '../../../runtime/icons/registry';
+import { lookupIcon, getAllResolvableNames } from '../../../runtime/icons/registry';
 import '../icons-boot';
 
 export type IconName = string;
@@ -146,20 +146,9 @@ export function Icon(props: {
   );
 }
 
-// Kept for IconGallery smoke test — a small curated list of names the cart
-// registers at boot. Not a full Lucide catalog.
-export const ICON_NAMES = [
-  'folder', 'file', 'file-code', 'file-json', 'file-text', 'folder-open',
-  'git-branch', 'git-commit', 'terminal', 'settings', 'search',
-  'chevron-up', 'chevron-down', 'chevron-left', 'chevron-right',
-  'play', 'pause', 'stop', 'plus', 'x', 'refresh', 'save', 'copy', 'paste',
-  'check', 'warn', 'error', 'clock', 'menu', 'dots-vertical',
-  'arrow-up', 'arrow-down', 'panel-left', 'panel-right', 'panel-bottom',
-  'message', 'pencil', 'trash', 'download', 'upload', 'home',
-  'wallet', 'question-mark', 'keyboard', 'palette', 'braces',
-  'bot', 'globe', 'sparkles', 'command', 'flame', 'map', 'graph', 'send',
-  'hash', 'at', 'info', 'package',
-] as const;
+// Dynamically build from the runtime registry so the catalog always reflects
+// every registered icon and alias without manual maintenance.
+export const ICON_NAMES = getAllResolvableNames();
 
 export const ICON_CATALOG = ICON_NAMES.map((name) => ({
   name,

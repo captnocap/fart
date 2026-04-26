@@ -1,7 +1,5 @@
-const React: any = require('react');
 const { Box } = require('../../runtime/primitives');
-const { useState, useEffect, useRef } = React;
-
+import { useState, useEffect, useRef } from 'react';
 function clamp01(value: number): number {
   return Math.max(0, Math.min(1, value));
 }

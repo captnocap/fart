@@ -1,56 +1,118 @@
-const React: any = require('react');
-const { useMemo } = React;
-import { Box, Graph, Text } from '../../../../runtime/primitives';
+import { useState } from 'react';
+import { Box, Graph, Pressable, Text } from '../../../../runtime/primitives';
 import { PALETTE } from '../../lib/chart-utils';
+import { useStagger } from '../../lib/useStagger';
+import { Tooltip } from '../../lib/Tooltip';
+import { classifiers as S } from '@reactjit/core';
 
-export type FlowMapProps = {};
+export type FlowNode = { x: number; y: number; r: number; label: string };
+export type FlowEdge = { from: number; to: number };
 
-export function FlowMap(_props: FlowMapProps) {
-  const width = 320;
-  const height = 180;
+export type FlowMapProps = {
+  nodes?: FlowNode[];
+  edges?: FlowEdge[];
+  width?: number;
+  height?: number;
+};
 
-  const nodes = useMemo(() => [
-    { x: 60, y: 90, r: 5 },
-    { x: 140, y: 50, r: 4 },
-    { x: 160, y: 120, r: 4 },
-    { x: 240, y: 70, r: 5 },
-    { x: 260, y: 110, r: 4 },
-  ], []);
+export function FlowMap(props: FlowMapProps) {
+  const width = props.width ?? 320;
+  const height = props.height ?? 200;
+  const designWidth = 320;
+  const designHeight = 200;
+  const fit = Math.min(width / designWidth, height / designHeight);
+  const offsetX = (width - designWidth * fit) / 2;
+  const offsetY = (height - designHeight * fit) / 2;
+  const sx = (x: number) => offsetX + x * fit;
+  const sy = (y: number) => offsetY + y * fit;
+  const sr = (r: number) => r * fit;
 
-  const flows = useMemo(() => [
+  const nodes = props.nodes ?? [
+    { x: 60, y: 100, r: 6, label: 'Src' },
+    { x: 150, y: 60, r: 5, label: 'Proc' },
+    { x: 160, y: 130, r: 5, label: 'Filter' },
+    { x: 250, y: 80, r: 6, label: 'Merge' },
+    { x: 260, y: 130, r: 5, label: 'Out' },
+  ];
+
+  const flows = props.edges ?? [
     { from: 0, to: 1 },
     { from: 0, to: 2 },
     { from: 1, to: 3 },
     { from: 2, to: 4 },
     { from: 3, to: 4 },
-  ], []);
+  ];
+
+  const nodeStaggers = useStagger(nodes.length, { stiffness: 140, damping: 18 });
+  const edgeStaggers = useStagger(flows.length, { stiffness: 120, damping: 16 });
+  const [hovered, setHovered] = useState<number | null>(null);
 
   return (
     <Box style={{ width, height }}>
-      <Graph originTopLeft style={{ width, height }}>
+      <S.BareGraph>
         {flows.map((f, i) => {
           const a = nodes[f.from];
           const b = nodes[f.to];
+          const s = edgeStaggers[i];
+          const mx = a.x + (b.x - a.x) * s;
+          const my = a.y + (b.y - a.y) * s;
           return (
             <Graph.Path
               key={i}
-              d={`M ${a.x} ${a.y} L ${b.x} ${b.y}`}
+              d={`M ${sx(a.x)} ${sy(a.y)} L ${sx(mx)} ${sy(my)}`}
               stroke={PALETTE.cyan}
-              strokeWidth={2}
+              strokeWidth={Math.max(1, 2 * fit)}
               strokeOpacity={0.5}
             />
           );
         })}
-        {nodes.map((n, i) => (
-          <Graph.Path
-            key={`n-${i}`}
-            d={`M ${n.x - n.r} ${n.y} A ${n.r} ${n.r} 0 1 1 ${n.x + n.r} ${n.y} A ${n.r} ${n.r} 0 1 1 ${n.x - n.r} ${n.y}`}
-            fill={PALETTE.pink}
-            stroke={PALETTE.white}
-            strokeWidth={1}
-          />
-        ))}
-      </Graph>
+        {nodes.map((n, i) => {
+          const x = sx(n.x);
+          const y = sy(n.y);
+          const r = sr(n.r) * nodeStaggers[i];
+          return (
+            <Graph.Path
+              key={`n-${i}`}
+              d={`M ${x - r} ${y} A ${r} ${r} 0 1 1 ${x + r} ${y} A ${r} ${r} 0 1 1 ${x - r} ${y}`}
+              fill={hovered === i ? PALETTE.pink : PALETTE.cyan}
+              stroke={PALETTE.white}
+              strokeWidth={Math.max(1, fit)}
+            />
+          );
+        })}
+      </S.BareGraph>
+
+      {nodes.map((n, i) => (
+        <Pressable
+          key={`hit-${i}`}
+          onMouseEnter={() => setHovered(i)}
+          onMouseLeave={() => setHovered(null)}
+          style={{
+            opacity: 0,
+            position: 'absolute',
+            left: sx(n.x) - 12,
+            top: sy(n.y) - 12,
+            width: 24,
+            height: 24,
+          }}
+        />
+      ))}
+
+      {hovered != null && (
+        <Tooltip
+          visible={true}
+          x={sx(nodes[hovered].x) + 12}
+          y={sy(nodes[hovered].y) - 20}
+          title={`Node ${nodes[hovered].label}`}
+          rows={[{ label: 'Connections', value: String(flows.filter((f) => f.from === hovered || f.to === hovered).length), color: PALETTE.cyan }]}
+        />
+      )}
+
+      {nodes.map((n, i) => (
+        <Box key={`lbl-${i}`} style={{ position: 'absolute', left: sx(n.x) - 18, top: sy(n.y) + sr(n.r) + 4, width: 36, alignItems: 'center' }}>
+          <Text fontSize={8} color={PALETTE.slateLight} noWrap>{n.label}</Text>
+        </Box>
+      ))}
     </Box>
   );
 }

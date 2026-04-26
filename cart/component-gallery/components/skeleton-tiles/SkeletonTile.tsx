@@ -25,7 +25,7 @@ export function SkeletonTile(props: SkeletonTileProps) {
         height: frame.tileHeight,
         backgroundColor: SKELETON.tileBg,
         borderWidth: 1,
-        borderColor: props.crossed ? '#7f3d27' : SKELETON.frame,
+        borderColor: props.crossed ? '#8a4a20' : SKELETON.frame,
         overflow: 'hidden',
       }}
     >

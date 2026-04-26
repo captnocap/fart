@@ -1,6 +1,4 @@
-const React: any = require('react');
-const { useEffect, useMemo, useRef, useState } = React;
-
+import { useEffect, useMemo, useRef, useState } from 'react';
 const host: any = globalThis as any;
 const WINDOW_MS = 5000;
 

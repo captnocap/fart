@@ -161,6 +161,40 @@ var auto_passed: u16 = 0;
 var auto_failed: u16 = 0;
 var auto_settle_frames: u8 = 0; // frames to wait before next action (settle + render)
 var auto_capture_pending: bool = false; // waiting for GPU readback callback
+var expect_did_scroll: bool = false; // set when expect auto-scrolled an ancestor — bumps next settle
+
+// ── Expect-scroll undo log ──────────────────────────────────────────────
+// `expect` may auto-scroll ancestor scroll containers so a target lands in
+// the viewport for pixel verification. But subsequent steps that use
+// absolute click coords (click "X" @x,y) were authored assuming the page
+// was at its initial scroll position — a leftover expect-scroll shifts
+// every visual element under the cursor and the click misses. Solution:
+// log the original scroll_y of every container we touch from expects, then
+// restore them all at the start of any non-expect step.
+const ExpectScrollEntry = struct { node: *Node, original_y: f32 };
+const MAX_EXPECT_SCROLL_LOG = 32;
+var expect_scroll_log: [MAX_EXPECT_SCROLL_LOG]ExpectScrollEntry = undefined;
+var expect_scroll_log_count: usize = 0;
+
+fn recordExpectScroll(sp: *Node) void {
+    var i: usize = 0;
+    while (i < expect_scroll_log_count) : (i += 1) {
+        if (expect_scroll_log[i].node == sp) return; // already recorded — keep oldest baseline
+    }
+    if (expect_scroll_log_count >= MAX_EXPECT_SCROLL_LOG) return;
+    expect_scroll_log[expect_scroll_log_count] = .{ .node = sp, .original_y = sp.scroll_y };
+    expect_scroll_log_count += 1;
+}
+
+fn restoreExpectScrolls() void {
+    if (expect_scroll_log_count == 0) return;
+    var i: usize = 0;
+    while (i < expect_scroll_log_count) : (i += 1) {
+        expect_scroll_log[i].node.scroll_y = expect_scroll_log[i].original_y;
+    }
+    expect_scroll_log_count = 0;
+    layout.markLayoutDirty();
+}
 
 // ── Scroll-hunt state ───────────────────────────────────────────────────
 // Multi-frame hunt: when the current step targets text that isn't currently
@@ -1123,37 +1157,66 @@ fn isScrollContainer(node: *const Node) bool {
     return false;
 }
 
-/// Adjust the nearest scroll-container ancestor of `target` so `target` lands
-/// inside the visible window. Returns true if a scroll was applied (so the
-/// caller can log it / let the next settle frame re-layout). No-op and
-/// returns false if `target` is already visible or has no scroll parent.
+/// Walk the path root→target and collect every scroll-container ancestor
+/// (overflow=scroll, or overflow=auto with content overflow) into `out`.
+/// Returns the count, ordered outermost-first. `false` if target not found.
+fn collectScrollAncestors(node: *Node, target: *Node, out: []*Node, count: *usize) bool {
+    if (node == target) return true;
+    const before = count.*;
+    if (isScrollContainer(node) and count.* < out.len) {
+        out[count.*] = node;
+        count.* += 1;
+    }
+    for (node.children) |*child| {
+        if (collectScrollAncestors(child, target, out, count)) return true;
+    }
+    // Target wasn't under this subtree — pop the tentative entry.
+    count.* = before;
+    return false;
+}
+
+/// Walk every scroll-container ancestor of `target` and adjust each one's
+/// `scroll_y` so `target` ends up inside that container's visible window.
+/// Necessary because a target can be visible inside its innermost scroll
+/// parent (whose content fits) yet still clipped by an OUTER scroll parent
+/// (e.g. the page's main ScrollView). Returns true if any container moved.
 ///
 /// Used by the `expect` step so text below a ScrollView's fold passes pixel
 /// verification — the autotest nudges the scroll, settles, then the next
 /// captured screenshot sees the element in the viewport.
 fn scrollNodeIntoView(root: *Node, target: *Node) bool {
-    const sp = findScrollParent(root, target) orelse return false;
+    var ancestors: [16]*Node = undefined;
+    var n: usize = 0;
+    if (!collectScrollAncestors(root, target, &ancestors, &n)) return false;
+    if (n == 0) return false;
+
     const target_y = target.computed.y;
     const target_h = target.computed.h;
-    const scroll_top = sp.computed.y;
-    const scroll_h = sp.computed.h;
-    const visible_top = scroll_top + sp.scroll_y;
-    const visible_bottom = visible_top + scroll_h;
-    const already_visible = target_y >= visible_top and (target_y + target_h) <= visible_bottom;
-    if (already_visible) return false;
-    if (target_y + target_h > visible_bottom) {
-        // Node below fold — scroll down, leave 20px of trailing room so the
-        // target isn't flush with the bottom edge (helps pixel sampler).
-        sp.scroll_y = target_y + target_h - scroll_top - scroll_h + 20;
-    } else if (target_y < visible_top) {
-        // Node above top — scroll up, 10px leading room.
-        sp.scroll_y = target_y - scroll_top - 10;
+    var any_scrolled: bool = false;
+
+    var i: usize = 0;
+    while (i < n) : (i += 1) {
+        const sp = ancestors[i];
+        const scroll_top = sp.computed.y;
+        const scroll_h = sp.computed.h;
+        const visible_top = scroll_top + sp.scroll_y;
+        const visible_bottom = visible_top + scroll_h;
+        if (target_y >= visible_top and (target_y + target_h) <= visible_bottom) continue;
+
+        recordExpectScroll(sp);
+        if (target_y + target_h > visible_bottom) {
+            sp.scroll_y = target_y + target_h - scroll_top - scroll_h + 20;
+        } else if (target_y < visible_top) {
+            sp.scroll_y = target_y - scroll_top - 10;
+        }
+        if (sp.scroll_y < 0) sp.scroll_y = 0;
+        const max_scroll = @max(0.0, sp.content_height - sp.computed.h);
+        if (sp.scroll_y > max_scroll) sp.scroll_y = max_scroll;
+        any_scrolled = true;
     }
-    if (sp.scroll_y < 0) sp.scroll_y = 0;
-    const max_scroll = @max(0.0, sp.content_height - sp.computed.h);
-    if (sp.scroll_y > max_scroll) sp.scroll_y = max_scroll;
-    layout.markLayoutDirty();
-    return true;
+
+    if (any_scrolled) layout.markLayoutDirty();
+    return any_scrolled;
 }
 
 fn collectScrollContainersRecurse(node: *Node) void {
@@ -1443,7 +1506,7 @@ fn snapCollectTexts(root: *Node) void {
     snap_emitted_expects = auto_seen_count;
     for (start..auto_seen_count) |i| {
         const raw_txt = auto_seen_texts[i][0..auto_seen_lens[i]];
-        var normalized_buf: [64]u8 = undefined;
+        var normalized_buf: [TEXT_LEN]u8 = undefined;
         var normalized_len: usize = 0;
         var saw_glyph_placeholder = false;
         var ri: usize = 0;
@@ -1475,6 +1538,29 @@ fn snapCollectTexts(root: *Node) void {
             }
             normalized_buf[normalized_len] = ch;
             normalized_len += 1;
+        }
+        // Trim any incomplete trailing UTF-8 sequence — byte-level truncation
+        // above can split a multi-byte codepoint, yielding invalid UTF-8 that
+        // no rendered text will ever match (e.g. braille glyphs are 3 bytes).
+        while (normalized_len > 0) {
+            const last = normalized_buf[normalized_len - 1];
+            if (last < 0x80) break;
+            if (last >= 0xC0) {
+                normalized_len -= 1;
+                break;
+            }
+            var k: usize = normalized_len - 1;
+            while (k > 0 and (normalized_buf[k] & 0xC0) == 0x80) : (k -= 1) {}
+            const lead = normalized_buf[k];
+            if (lead < 0xC0) {
+                normalized_len = k;
+                break;
+            }
+            const expected: usize = if (lead >= 0xF0) 4 else if (lead >= 0xE0) 3 else 2;
+            if (normalized_len - k < expected) {
+                normalized_len = k;
+            }
+            break;
         }
         const txt = normalized_buf[0..normalized_len];
         if (txt.len < 2) continue;
@@ -1785,10 +1871,17 @@ fn snapshotTick(root: *Node) bool {
             const is_coord = snap_press_is_coord[snap_click_idx];
 
             // Click using stored coordinates (don't re-find — avoids hitting wrong node with same label).
-            // Three emission forms:
-            //   text label         → click "foo"
-            //   hybrid name + coord → click "Name @x,y"   (readable + replay-precise)
-            //   pure coord         → click @x,y           (anonymous icon button)
+            // Emission forms:
+            //   pure coord        → click @x,y           (anonymous icon button)
+            //   hybrid name+coord → click "Name" @x,y    (readable + replay-precise)
+            //
+            // ALL text-labeled clicks get the coord suffix too. Without it,
+            // replay does a label-based `findActionTarget` which walks the
+            // tree in its own order and may resolve to a different node than
+            // the one snapshot actually clicked (e.g., two pressables both
+            // containing "Quilt", or a text node vs. its enclosing Pressable).
+            // That divergence cascades: wrong click → wrong state → every
+            // expect after fails. Coords eliminate the ambiguity.
             const p = snap_pressables[snap_click_idx];
             snapAddLine("");
             if (is_coord) {
@@ -1800,10 +1893,10 @@ fn snapshotTick(root: *Node) bool {
                 } else if (std.mem.indexOfScalar(u8, label, '|')) |pipe| {
                     snapAddFmt("click \"{s}\" {s}", .{ label[0..pipe], label[pipe + 1 ..] });
                 } else {
-                    snapAddFmt("click \"{s}\"", .{label});
+                    snapAddFmt("click \"{s}\" @{d:.0},{d:.0}", .{ label, p.cx, p.cy });
                 }
             } else {
-                snapAddFmt("click \"{s}\"", .{label});
+                snapAddFmt("click \"{s}\" @{d:.0},{d:.0}", .{ label, p.cx, p.cy });
             }
             testdriver.click(p.cx, p.cy);
             snap_settle_countdown = 3;
@@ -1970,6 +2063,13 @@ fn autotestTick(root: *Node) bool {
         }
     }
 
+    // Restore any scroll positions we nudged during prior `expect` steps,
+    // so absolute click coords (authored at the test's initial scroll
+    // state) line up with their intended visual targets.
+    if (step.kind != .expect and step.kind != .reject) {
+        restoreExpectScrolls();
+    }
+
     switch (step.kind) {
         .click => {
             std.debug.print("  [{d}/{d}] click \"{s}\"", .{ auto_idx + 1, auto_step_count, text });
@@ -2068,6 +2168,16 @@ fn autotestTick(root: *Node) bool {
                 // for text below a ScrollView's fold fail pixel verification
                 // even though the app renders them correctly when scrolled.
                 if (scrollNodeIntoView(root, result.node)) {
+                    // Re-query: scrollNodeIntoView nudged a scroll container,
+                    // so the node's viewport coords shifted. query.find
+                    // accumulates ancestor scroll_y, so a fresh lookup gives
+                    // us the post-scroll region. The manifest (and downstream
+                    // pixel verifier) need that region to match the
+                    // screenshot captured after the settle frames.
+                    if (query.find(root, .{ .text_contains = text })) |post_scroll| {
+                        hit_result = post_scroll;
+                    }
+                    expect_did_scroll = true;
                     std.debug.print(" ... PASS (scrolled into view)\n", .{});
                 } else {
                     std.debug.print(" ... PASS\n", .{});
@@ -2418,8 +2528,24 @@ fn autotestTick(root: *Node) bool {
     hunt_started_for_step = false;
     hunt_exhausted = false;
 
-    // Wait 3 frames for tree rebuild + layout + GPU render, then screenshot
-    auto_settle_frames = 3;
+    // Settle frames before the next step runs. State-mutating steps (click,
+    // scroll, type, key, focus, clear) dispatch SDL events whose handlers
+    // run next frame, trigger a React re-render one or more frames later,
+    // and only then settle in layout. If the NEXT step is an `expect` that
+    // queries the tree, it must see the POST-reconcile DOM — otherwise an
+    // expected element that a click just removed (or revealed) fails to
+    // match against a stale pre-reconcile tree. 3 frames was tuned for the
+    // screenshot path but isn't enough for tree stability after mutations.
+    // Pure queries (expect/reject/color/bg/border/styles) don't mutate, so
+    // 3 frames is still fine there.
+    const mutated = switch (step.kind) {
+        .click, .rightclick, .wheel, .wheelx, .scroll, .type_text, .key_press, .focus, .clear, .hover => true,
+        else => false,
+    };
+    // expect_did_scroll: an expect that auto-scrolled an ancestor needs the
+    // longer settle so layout reflow lands before the screenshot.
+    auto_settle_frames = if (mutated or expect_did_scroll) 8 else 3;
+    expect_did_scroll = false;
 
     return false;
 }

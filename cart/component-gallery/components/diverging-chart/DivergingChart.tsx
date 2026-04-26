@@ -1,44 +1,79 @@
-const React: any = require('react');
-const { useMemo } = React;
-import { Box, Graph, Text } from '../../../../runtime/primitives';
-import { PALETTE, scaleLinear, plotArea } from '../../lib/chart-utils';
+import { useState } from 'react';
+import { Box, Graph, Pressable, Text } from '../../../../runtime/primitives';
+import { PALETTE, plotArea, scaleLinear } from '../../lib/chart-utils';
+import { useSpring } from '../../lib/useSpring';
+import { Tooltip } from '../../lib/Tooltip';
+import { classifiers as S } from '@reactjit/core';
 
-export type DivergingChartProps = {};
+export type DivergingChartProps = {
+  data?: number[];
+  labels?: string[];
+  width?: number;
+  height?: number;
+};
 
-export function DivergingChart(_props: DivergingChartProps) {
-  const width = 320;
-  const height = 200;
-  const plot = plotArea(width, height, { top: 20, right: 20, bottom: 20, left: 20 });
-  const categories = useMemo(() => ['A', 'B', 'C', 'D', 'E', 'F'], []);
-  const leftValues = useMemo(() => [-30, -45, -25, -50, -35, -40], []);
-  const rightValues = useMemo(() => [25, 35, 40, 30, 45, 20], []);
-  const max = Math.max(...leftValues.map(Math.abs), ...rightValues);
-  const xScale = scaleLinear([-max, max], [plot.x, plot.x + plot.w]);
-  const yScale = scaleLinear([0, categories.length], [plot.y, plot.y + plot.h]);
-  const zeroX = xScale(0);
-  const barH = (plot.h / categories.length) * 0.6;
+export function DivergingChart(props: DivergingChartProps) {
+  const width = props.width ?? 320;
+  const height = props.height ?? 220;
+  const plot = plotArea(width, height, { top: 10, right: 10, bottom: 10, left: 10 });
+  const data = props.data ?? [];
+  const labels = props.labels ?? [];
+  const max = Math.max(1, ...data.map(Math.abs));
+  const sx = scaleLinear([-max, max], [plot.x, plot.x + plot.w]);
+  const zeroX = sx(0);
+  const bandH = data.length > 0 ? plot.h / data.length : 0;
+  const barH = bandH * 0.7;
+
+  const grow = useSpring(1, { stiffness: 100, damping: 16 });
+  const [hovered, setHovered] = useState<number | null>(null);
 
   return (
     <Box style={{ width, height }}>
-      <Graph originTopLeft style={{ width, height }}>
-        <Graph.Path d={`M ${zeroX} ${plot.y} L ${zeroX} ${plot.y + plot.h}`} stroke={PALETTE.slateLight} strokeWidth={1} />
-        {categories.map((cat, i) => {
-          const y = yScale(i + 0.5) - barH / 2;
-          const leftW = zeroX - xScale(leftValues[i]);
-          const rightW = xScale(rightValues[i]) - zeroX;
+      <S.BareGraph>
+        <Graph.Path d={`M ${zeroX} ${plot.y} L ${zeroX} ${plot.y + plot.h}`} stroke="#4a4238" strokeWidth={1} />
+        {data.map((v, i) => {
+          const y = plot.y + i * bandH + (bandH - barH) / 2;
+          const vx = sx(v * grow);
+          const x = v >= 0 ? zeroX : vx;
+          const bw = Math.abs(vx - zeroX);
           return (
-            <React.Fragment key={cat}>
-              <Graph.Path d={`M ${zeroX - leftW} ${y} L ${zeroX} ${y} L ${zeroX} ${y + barH} L ${zeroX - leftW} ${y + barH} Z`} fill={PALETTE.pink} fillOpacity={0.85} />
-              <Graph.Path d={`M ${zeroX} ${y} L ${zeroX + rightW} ${y} L ${zeroX + rightW} ${y + barH} L ${zeroX} ${y + barH} Z`} fill={PALETTE.cyan} fillOpacity={0.85} />
-            </React.Fragment>
+            <Graph.Path
+              key={`b-${i}`}
+              d={`M ${x} ${y} L ${x + bw} ${y} L ${x + bw} ${y + barH} L ${x} ${y + barH} Z`}
+              fill={v >= 0 ? PALETTE.cyan : PALETTE.pink}
+            />
           );
         })}
-      </Graph>
-      {categories.map((cat, i) => (
-        <Box key={cat} style={{ position: 'absolute', left: plot.x + plot.w / 2 - 20, top: yScale(i + 0.5) - 6, width: 40, alignItems: 'center' }}>
-          <Text fontSize={9} color={PALETTE.slateLight}>{cat}</Text>
-        </Box>
-      ))}
+      </S.BareGraph>
+
+      {data.map((_, i) => {
+        const y = plot.y + i * bandH + (bandH - barH) / 2;
+        return (
+          <Pressable
+            key={`hit-${i}`}
+            onMouseEnter={() => setHovered(i)}
+            onMouseLeave={() => setHovered(null)}
+            style={{
+              opacity: 0,
+              position: 'absolute',
+              left: plot.x,
+              top: y,
+              width: plot.w,
+              height: barH,
+            }}
+          />
+        );
+      })}
+
+      {hovered != null && data[hovered] != null && (
+        <Tooltip
+          visible={true}
+          x={plot.x + 10}
+          y={plot.y + hovered * bandH}
+          title={labels[hovered] ?? `Item ${hovered}`}
+          rows={[{ label: 'Value', value: String(data[hovered]), color: data[hovered] >= 0 ? PALETTE.cyan : PALETTE.pink }]}
+        />
+      )}
     </Box>
   );
 }

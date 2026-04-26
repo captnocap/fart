@@ -1,72 +1,119 @@
-import { Box, Graph, Text } from '../../../../runtime/primitives';
+import { useState } from 'react';
+import { Box, Graph, Pressable, Text } from '../../../../runtime/primitives';
+import { PALETTE, scaleLinear, plotArea } from '../../lib/chart-utils';
+import { useSpring } from '../../lib/useSpring';
+import { Tooltip } from '../../lib/Tooltip';
+import { classifiers as S } from '@reactjit/core';
 
-export type BarChartProps = {};
+export type BarChartDatum = { label: string; value: number; color?: string };
 
-export function BarChart(_props: BarChartProps) {
-  const width = 320;
-  const height = 220;
+export type BarChartProps = {
+  data?: BarChartDatum[];
+  width?: number;
+  height?: number;
+};
+
+export function BarChart(props: BarChartProps) {
+  const width = props.width ?? 320;
+  const height = props.height ?? 220;
+  const data = props.data ?? [];
   const margin = { top: 16, right: 16, bottom: 28, left: 36 };
   const plotX = margin.left;
   const plotY = margin.top;
   const plotW = width - margin.left - margin.right;
   const plotH = height - margin.top - margin.bottom;
 
-  const data = [12, 19, 15, 25, 22, 30, 28, 35];
-  const labels = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
-  const max = Math.max(...data);
+  const values = data.map((d) => d.value);
+  const max = values.length ? Math.max(...values) : 1;
 
   const barW = (plotW / data.length) * 0.6;
   const gap = (plotW / data.length) * 0.4;
-  const palette = ['#f06292', '#4fc3f7', '#f06292', '#4fc3f7', '#f06292', '#4fc3f7', '#f06292', '#4fc3f7'];
+
+  const grow = useSpring(1, { stiffness: 120, damping: 14 });
+  const [hovered, setHovered] = useState<number | null>(null);
 
   return (
     <Box style={{ position: 'relative', width, height }}>
-      <Graph originTopLeft style={{ width, height }}>
+      <S.BareGraph>
         {[0, 0.25, 0.5, 0.75, 1.0].map((t) => {
           const y = plotY + plotH * (1 - t);
           return (
             <Graph.Path
               key={`grid-${t}`}
               d={`M ${plotX} ${y} L ${plotX + plotW} ${y}`}
-              stroke="#c7d0dd"
+              stroke="#b8a890"
               strokeWidth={1}
             />
           );
         })}
 
-        {data.map((v, i) => {
-          const bh = (v / max) * plotH;
+        {data.map((d, i) => {
+          const targetH = (d.value / max) * plotH;
+          const bh = targetH * grow;
           const x = plotX + i * (plotW / data.length) + gap / 2;
           const y = plotY + plotH - bh;
-          const d = `M ${x} ${plotY + plotH} L ${x} ${y} L ${x + barW} ${y} L ${x + barW} ${plotY + plotH} Z`;
+          const path = `M ${x} ${plotY + plotH} L ${x} ${y} L ${x + barW} ${y} L ${x + barW} ${plotY + plotH} Z`;
+          const color = d.color ?? (i % 2 === 0 ? PALETTE.pink : PALETTE.cyan);
           return (
             <Graph.Path
               key={i}
-              d={d}
-              fill={palette[i]}
-              fillOpacity={0.9}
-              stroke={palette[i]}
+              d={path}
+              fill={color}
+              fillOpacity={hovered === i ? 1 : 0.85}
+              stroke={color}
               strokeWidth={1}
             />
           );
         })}
-      </Graph>
+      </S.BareGraph>
+
+      {data.map((d, i) => {
+        const targetH = (d.value / max) * plotH;
+        const bh = targetH * grow;
+        const x = plotX + i * (plotW / data.length) + gap / 2;
+        const y = plotY + plotH - bh;
+        return (
+          <Pressable
+            key={`hit-${i}`}
+            onMouseEnter={() => setHovered(i)}
+            onMouseLeave={() => setHovered(null)}
+            style={{
+              opacity: 0,
+              position: 'absolute',
+              left: x,
+              top: y,
+              width: barW,
+              height: bh,
+            }}
+          />
+        );
+      })}
+
+      {hovered != null && data[hovered] && (
+        <Tooltip
+          visible={true}
+          x={plotX + hovered * (plotW / data.length) + gap / 2 + barW + 4}
+          y={plotY + plotH - (data[hovered].value / max) * plotH * grow - 20}
+          title={data[hovered].label}
+          rows={[{ label: 'Value', value: String(data[hovered].value), color: data[hovered].color ?? PALETTE.pink }]}
+        />
+      )}
 
       {[0, 0.25, 0.5, 0.75, 1.0].map((t) => {
         const val = Math.round(max * t);
         const y = plotY + plotH * (1 - t) - 6;
         return (
           <Box key={`y-${t}`} style={{ position: 'absolute', left: 0, top: y, width: margin.left - 4, alignItems: 'flex-end' }}>
-            <Text fontSize={9} color="#657185">{val}</Text>
+            <Text fontSize={9} color="#7a6e5d">{val}</Text>
           </Box>
         );
       })}
 
-      {labels.map((l, i) => {
+      {data.map((d, i) => {
         const x = plotX + i * (plotW / data.length) + gap / 2 + barW / 2 - 8;
         return (
-          <Box key={`x-${l}`} style={{ position: 'absolute', left: x, top: plotY + plotH + 6, width: 16, alignItems: 'center' }}>
-            <Text fontSize={9} color="#657185">{l}</Text>
+          <Box key={`x-${d.label}`} style={{ position: 'absolute', left: x, top: plotY + plotH + 6, width: 16, alignItems: 'center' }}>
+            <Text fontSize={9} color="#7a6e5d">{d.label}</Text>
           </Box>
         );
       })}

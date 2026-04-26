@@ -35,7 +35,57 @@ export const Col: any = (props: any) => {
   return h('View', { ...props, style }, props.children);
 };
 
-export const Text: any = (props: any) => h('Text', props, props.children);
+// Coalesce adjacent string/number children into a single string so the layout
+// engine sees one continuous text run, not N independent inline boxes.
+// Without this, `<Text>{n} item{n===1?'':'s'}</Text>` lays out "6", " item",
+// "s" as three siblings and can wrap mid-word ("item" on one line, "s" on
+// the next). React-DOM and React-Native both flatten this; we have to here.
+// Element children (nested <strong>, etc.) pass through untouched — true
+// inline flow across element boundaries is the framework-side fix.
+function flattenTextChildren(children: any): any {
+  if (children == null) return children;
+  const list = Array.isArray(children) ? children : [children];
+  const out: any[] = [];
+  let buf = '';
+  let bufHas = false;
+  const flush = (): void => {
+    if (bufHas) { out.push(buf); buf = ''; bufHas = false; }
+  };
+  for (const c of list) {
+    if (c == null || c === false || c === true) continue;
+    const t = typeof c;
+    if (t === 'string' || t === 'number') {
+      buf += String(c);
+      bufHas = true;
+    } else {
+      flush();
+      out.push(c);
+    }
+  }
+  flush();
+  if (out.length === 0) return undefined;
+  if (out.length === 1) return out[0];
+  return out;
+}
+
+export const Text: any = (props: any) => {
+  const { size, bold, style, children, ...rest } = props;
+  const flat = flattenTextChildren(children);
+  if (size == null && !bold) return h('Text', { ...rest, style }, flat);
+  const shorthand: Record<string, any> = {};
+  if (size != null) shorthand.fontSize = size;
+  if (bold) shorthand.fontWeight = 'bold';
+  return h('Text', { ...rest, style: { ...shorthand, ...(style ?? {}) } }, flat);
+};
+
+/**
+ * Sentinel byte (SOH, 0x01) — embed inside `<Text>` content to reserve a
+ * fontSize×fontSize slot that an `inlineGlyphs` entry paints into.
+ *   <Text inlineGlyphs={[{ d: 'M0 0…', fill: '#fff' }]}>
+ *     status: {GLYPH_SLOT} ok
+ *   </Text>
+ */
+export const GLYPH_SLOT = '\x01';
 export const Image: any = (props: any) => h('Image', props, props.children);
 export const Pressable: any = (props: any) => h('Pressable', props, props.children);
 // ScrollView auto-persists its scroll position across dev-mode hot reloads.
@@ -90,6 +140,90 @@ export const TextArea: any = (props: any) => h('TextArea', props, props.children
 export const TextEditor: any = (props: any) => h('TextEditor', props, props.children);
 export const Terminal: any = (props: any) => h('Terminal', props, props.children);
 export const terminal: any = Terminal;
+export const Window: any = (props: any) => h('Window', props, props.children);
+export const window: any = Window;
+export const Notification: any = (props: any) => h('Notification', props, props.children);
+export const notification: any = Notification;
+
+// ── Video — Image-shaped host node, but routed through framework/videos.zig ──
+// Pass `src` (or `videoSrc` for clarity); engine.zig:1232 promotes any node
+// with video_src to the Video paint path.
+export const Video: any = ({ src, videoSrc, ...rest }: any) =>
+  h('Image', { ...rest, videoSrc: videoSrc ?? src }, rest.children);
+
+// ── Cartridge — embeds another cart's binary as a nested host instance.
+// engine.zig:619 walks the tree and lifts any node with cartridge_src.
+export const Cartridge: any = ({ src, cartridgeSrc, ...rest }: any) =>
+  h('View', { ...rest, cartridgeSrc: cartridgeSrc ?? src }, rest.children);
+
+// ── RenderTarget — render-to-texture surface. Hot-loadable .so render hook
+// keyed by the `src` id (matches a registered render pass).
+export const RenderTarget: any = ({ src, renderSrc, ...rest }: any) =>
+  h('View', { ...rest, renderSrc: renderSrc ?? src }, rest.children);
+
+// ── StaticSurface — GPU-cached subtree. Children remain present for layout
+// and hit testing, while paint collapses into a render-to-texture quad.
+export const StaticSurface: any = ({
+  staticKey,
+  staticSurfaceKey,
+  scale,
+  staticSurfaceScale,
+  warmupFrames,
+  staticSurfaceWarmupFrames,
+  introFrames,
+  staticSurfaceIntroFrames,
+  ...rest
+}: any) => {
+  const React = require('react');
+  const id = React.useId();
+  return h('View', {
+    ...rest,
+    staticSurface: true,
+    staticSurfaceKey: staticSurfaceKey ?? staticKey ?? id,
+    staticSurfaceScale: staticSurfaceScale ?? scale ?? 1,
+    staticSurfaceWarmupFrames: staticSurfaceWarmupFrames ?? warmupFrames ?? 0,
+    staticSurfaceIntroFrames: staticSurfaceIntroFrames ?? introFrames ?? 0,
+  }, rest.children);
+};
+
+// ── Physics — Box2D 2D physics. Three sub-components:
+//   <Physics.World gravityX gravityY>          container that owns the simulation
+//     <Physics.Body type="dynamic" x y bullet> rigid body, props alias to physicsX/Y/etc.
+//       <Physics.Collider shape="box" radius friction restitution density />
+//
+// Each just spreads typed physics props onto a host node — the engine reads
+// physics_world/body/collider flags to decide how to thread it into Box2D.
+const PhysicsBase: any = ({ gravityX, gravityY, ...rest }: any) =>
+  h('View', {
+    ...rest,
+    physicsWorld: true,
+    physicsGravityX: gravityX ?? 0,
+    physicsGravityY: gravityY ?? 980,
+  }, rest.children);
+PhysicsBase.World = PhysicsBase;
+PhysicsBase.Body = ({ type, x, y, angle, fixedRotation, bullet, gravityScale, ...rest }: any) =>
+  h('View', {
+    ...rest,
+    physicsBody: true,
+    physicsBodyType: type ?? 'dynamic',
+    physicsX: x ?? 0,
+    physicsY: y ?? 0,
+    physicsAngle: angle ?? 0,
+    physicsFixedRotation: fixedRotation ?? false,
+    physicsBullet: bullet ?? false,
+    physicsGravityScale: gravityScale ?? 1.0,
+  }, rest.children);
+PhysicsBase.Collider = ({ shape, radius, density, friction, restitution, ...rest }: any) =>
+  h('View', {
+    ...rest,
+    physicsCollider: true,
+    physicsShape: shape ?? 'box',
+    physicsRadius: radius ?? 0,
+    physicsDensity: density ?? 1.0,
+    physicsFriction: friction ?? 0.3,
+    physicsRestitution: restitution ?? 0.1,
+  }, rest.children);
+export const Physics: any = PhysicsBase;
 
 // ── Generated bulk-rendering primitives ─────────────────────
 //

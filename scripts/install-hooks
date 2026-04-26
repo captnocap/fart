@@ -1,0 +1,20 @@
+#!/bin/bash
+# Install repo-local git hooks into .git/hooks/.
+#
+# We can't ship them by symlinking .git/hooks → .githooks via core.hooksPath
+# because the project rule is "NEVER update git config." Copying into
+# .git/hooks on demand keeps git config untouched and keeps the canonical
+# source version-controlled under scripts/hooks/.
+#
+# Re-run after a fresh clone or when scripts/hooks/* changes.
+
+set -euo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+
+mkdir -p .git/hooks
+for hook in scripts/hooks/*; do
+    name="$(basename "$hook")"
+    cp "$hook" ".git/hooks/$name"
+    chmod +x ".git/hooks/$name"
+    echo "[install-hooks] installed $name"
+done

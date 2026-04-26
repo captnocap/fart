@@ -1,6 +1,4 @@
-const React: any = require('react');
-const { useState, useEffect, useCallback, useRef } = React;
-
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { i2cDetect, i2cGetByte } from './exec';
 import type { SensorState, I2CDeviceInfo } from './types';
 

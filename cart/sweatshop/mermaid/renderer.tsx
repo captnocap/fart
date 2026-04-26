@@ -1,5 +1,3 @@
-const React: any = require('react');
-
 import { Box, Canvas, Text } from '../../../runtime/primitives';
 import { COLORS } from '../theme';
 import { layoutMermaidDiagram, type MermaidLayoutDiagram, type MermaidLayoutEdge, type MermaidLayoutNode } from './layout';

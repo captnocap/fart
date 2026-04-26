@@ -20,6 +20,7 @@ const tooltip = @import("tooltip.zig");
 const context_menu = @import("context_menu.zig");
 const telemetry = @import("telemetry.zig");
 const filedrop = @import("filedrop.zig");
+const fswatch = @import("fswatch.zig");
 const input = @import("input.zig");
 const classifier = @import("classifier.zig");
 const semantic = @import("semantic.zig");
@@ -907,21 +908,42 @@ pub const AppConfig = struct {
     /// Borderless window — removes OS window decorations (title bar, borders).
     /// The app must provide its own chrome using window_drag / window_resize nodes.
     borderless: bool = false,
+    /// Keep the OS window above normal windows.
+    always_on_top: bool = false,
+    /// Prevent the OS window from accepting input focus.
+    not_focusable: bool = false,
+    /// Initial window position. Null keeps SDL/geometry default behavior.
+    x: ?c_int = null,
+    y: ?c_int = null,
     /// Optional callback that writes canvas_gx/gy directly to the host's Node pool
     /// (not the per-frame arena copy). Used by Alt+drag so the tile follows the
     /// cursor without firing a per-motion setState through React (which would
     /// re-render the entire Canvas.Node subtree every mouse event).
     set_canvas_node_position: ?*const fn (id: u32, gx: f32, gy: f32) void = null,
+    /// Optional callback for hosts that want to intercept `__dispatchEvent(...)`
+    /// handler expressions instead of evaluating them in the embedded JS VM.
+    dispatch_js_event: ?*const fn (id: u32, handler: []const u8) void = null,
 };
 
 // ── Text measurement (framework-owned) ──────────────────────────────────
 
 var g_text_engine: ?*TextEngine = null;
+var g_dispatch_js_event: ?*const fn (id: u32, handler: []const u8) void = null;
 
 // ── Custom window chrome (borderless mode) ──────────────────────────────
 
 var g_chrome_root: ?*Node = null; // root node for hit-test callback
 var g_chrome_window: ?*c.SDL_Window = null; // window pointer for control functions
+const CHROME_DOUBLE_CLICK_MS: u32 = 400;
+const CHROME_DOUBLE_CLICK_DIST: f32 = 8;
+var g_chrome_last_click_ms: u32 = 0;
+var g_chrome_last_click_x: f32 = 0;
+var g_chrome_last_click_y: f32 = 0;
+var g_chrome_dragging: bool = false;
+var g_chrome_drag_mouse_x: f32 = 0;
+var g_chrome_drag_mouse_y: f32 = 0;
+var g_chrome_drag_window_x: c_int = 0;
+var g_chrome_drag_window_y: c_int = 0;
 
 /// SDL hit-test callback — called by SDL to determine what region of a borderless
 /// window the cursor is in. Walks the node tree looking for window_drag / window_resize nodes.
@@ -935,8 +957,12 @@ fn windowHitTestCallback(
     const mx: f32 = @floatFromInt(pt.x);
     const my: f32 = @floatFromInt(pt.y);
 
-    // Walk the tree — deepest matching node wins (children checked first)
-    if (hitTestChrome(root, mx, my)) |result| return result;
+    // Resize still uses SDL's native hit-test. Drag regions are handled in the
+    // event loop so the framework can count clicks before moving the window.
+    if (hitTestChrome(root, mx, my)) |result| {
+        if (result == c.SDL_HITTEST_DRAGGABLE) return c.SDL_HITTEST_NORMAL;
+        return result;
+    }
     return c.SDL_HITTEST_NORMAL;
 }
 
@@ -963,6 +989,86 @@ fn hitTestChrome(node: *Node, mx: f32, my: f32) ?c.SDL_HitTestResult {
     if (node.window_resize) return chromeResizeEdge(node, mx, my);
 
     return null;
+}
+
+fn resetChromeDoubleClick() void {
+    g_chrome_last_click_ms = 0;
+    g_chrome_last_click_x = 0;
+    g_chrome_last_click_y = 0;
+}
+
+fn isDraggableChromeHit(mx: f32, my: f32) bool {
+    const root = g_chrome_root orelse return false;
+    if (hitTestChrome(root, mx, my)) |ht| return ht == c.SDL_HITTEST_DRAGGABLE;
+    return false;
+}
+
+fn trackChromeDoubleClick(now_ms: u32, mx: f32, my: f32, sdl_clicks: u8) bool {
+    if (!isDraggableChromeHit(mx, my)) {
+        resetChromeDoubleClick();
+        return false;
+    }
+
+    if (sdl_clicks == 2) {
+        resetChromeDoubleClick();
+        return true;
+    }
+    if (sdl_clicks > 1) {
+        resetChromeDoubleClick();
+        return false;
+    }
+
+    const dt = now_ms -| g_chrome_last_click_ms;
+    const dx = mx - g_chrome_last_click_x;
+    const dy = my - g_chrome_last_click_y;
+    const close_enough = dx * dx + dy * dy <= CHROME_DOUBLE_CLICK_DIST * CHROME_DOUBLE_CLICK_DIST;
+    const is_double = g_chrome_last_click_ms != 0 and dt <= CHROME_DOUBLE_CLICK_MS and close_enough;
+    if (is_double) {
+        resetChromeDoubleClick();
+        return true;
+    }
+
+    g_chrome_last_click_ms = now_ms;
+    g_chrome_last_click_x = mx;
+    g_chrome_last_click_y = my;
+    return false;
+}
+
+fn beginChromeDrag(mx: f32, my: f32) void {
+    const w = g_chrome_window orelse return;
+    if (windowIsMaximized()) return;
+
+    var wx: c_int = 0;
+    var wy: c_int = 0;
+    var gx: f32 = mx;
+    var gy: f32 = my;
+    _ = c.SDL_GetWindowPosition(w, &wx, &wy);
+    _ = c.SDL_GetGlobalMouseState(&gx, &gy);
+    g_chrome_dragging = true;
+    g_chrome_drag_mouse_x = gx;
+    g_chrome_drag_mouse_y = gy;
+    g_chrome_drag_window_x = wx;
+    g_chrome_drag_window_y = wy;
+    _ = c.SDL_CaptureMouse(true);
+}
+
+fn updateChromeDrag() void {
+    const w = g_chrome_window orelse return;
+    if (!g_chrome_dragging) return;
+
+    var gx: f32 = 0;
+    var gy: f32 = 0;
+    _ = c.SDL_GetGlobalMouseState(&gx, &gy);
+    const dx = gx - g_chrome_drag_mouse_x;
+    const dy = gy - g_chrome_drag_mouse_y;
+    const next_x: c_int = @intFromFloat(@round(@as(f32, @floatFromInt(g_chrome_drag_window_x)) + dx));
+    const next_y: c_int = @intFromFloat(@round(@as(f32, @floatFromInt(g_chrome_drag_window_y)) + dy));
+    _ = c.SDL_SetWindowPosition(w, next_x, next_y);
+}
+
+fn endChromeDrag() void {
+    g_chrome_dragging = false;
+    _ = c.SDL_CaptureMouse(false);
 }
 
 /// Determine which resize edge based on the node's position in the window.
@@ -1071,7 +1177,29 @@ fn tryDispatchJsrtEventExpr(expr: []const u8) bool {
     return true;
 }
 
+fn tryParseDispatchEventExpr(expr: []const u8) ?struct { id: u32, handler: []const u8 } {
+    const prefix = "__dispatchEvent(";
+    if (!std.mem.startsWith(u8, expr, prefix)) return null;
+    var rest = expr[prefix.len..];
+    const comma = std.mem.indexOfScalar(u8, rest, ',') orelse return null;
+    const id = std.fmt.parseInt(u32, std.mem.trim(u8, rest[0..comma], " \t\r\n"), 10) catch return null;
+    rest = std.mem.trimLeft(u8, rest[comma + 1 ..], " \t\r\n");
+    if (rest.len < 3 or rest[0] != '\'') return null;
+    const end = std.mem.indexOfScalarPos(u8, rest, 1, '\'') orelse return null;
+    const handler = rest[1..end];
+    const suffix = std.mem.trim(u8, rest[end + 1 ..], " \t\r\n");
+    if (!std.mem.startsWith(u8, suffix, ")") and !std.mem.startsWith(u8, suffix, ",")) return null;
+    return .{ .id = id, .handler = handler };
+}
+
 fn runJsHandlerExpr(expr: []const u8) void {
+    if (g_dispatch_js_event) |dispatch| {
+        if (tryParseDispatchEventExpr(expr)) |event| {
+            dispatch(event.id, event.handler);
+            state_mod.markDirty();
+            return;
+        }
+    }
     if (tryDispatchJsrtEventExpr(expr)) {
         state_mod.markDirty();
         return;
@@ -1212,6 +1340,7 @@ var g_effect_child_seen2: bool = false;
 var g_effect_bg_logged2: bool = false;
 var g_dt_sec: f32 = 0;
 var g_paint_opacity: f32 = 1.0; // global opacity multiplier for dim/highlight
+var g_static_surface_capture: bool = false;
 var g_flow_enabled: bool = true; // per-child flow override for hover mode
 var g_hover_changed: bool = false; // debug flag
 var g_semantic_overlay: bool = false; // Ctrl+Shift+D toggles semantic color overlay
@@ -1474,11 +1603,52 @@ fn hitTestInputByte(id: u8, local_x: f32, local_y: f32, font_size: u16, max_widt
     return if (local_x <= 0) 0 else @intCast(@min(typed.len, @as(usize, std.math.maxInt(u32))));
 }
 
+fn paintStaticSurfaceOverlays(node: *Node) void {
+    for (node.children) |*child| {
+        if (child.static_surface_overlay) {
+            paintNode(child);
+        } else if (child.children.len > 0) {
+            paintStaticSurfaceOverlays(child);
+        }
+    }
+}
+
+fn restoreGpuTransform(tf: gpu.Transform) void {
+    if (tf.active) {
+        gpu.setTransform(tf.ox, tf.oy, tf.tx, tf.ty, tf.scale);
+    } else {
+        gpu.resetTransform();
+    }
+}
+
+fn transformX(tf: gpu.Transform, x: f32) f32 {
+    return (x - tf.ox) * tf.scale + tf.ox + tf.tx;
+}
+
+fn transformY(tf: gpu.Transform, y: f32) f32 {
+    return (y - tf.oy) * tf.scale + tf.oy + tf.ty;
+}
+
+fn setComposedGpuTransform(ox: f32, oy: f32, tx: f32, ty: f32, scale: f32) void {
+    const parent = gpu.getTransform();
+    if (!parent.active) {
+        gpu.setTransform(ox, oy, tx, ty, scale);
+        return;
+    }
+
+    const parent_bx = parent.ox + parent.tx - parent.ox * parent.scale;
+    const parent_by = parent.oy + parent.ty - parent.oy * parent.scale;
+    const child_bx = ox + tx - ox * scale;
+    const child_by = oy + ty - oy * scale;
+    gpu.setTransform(0, 0, parent_bx + parent.scale * child_bx, parent_by + parent.scale * child_by, parent.scale * scale);
+}
+
 fn paintNode(node: *Node) void {
     if (node.style.display == .none) {
         g_hidden_count += 1;
         return;
     }
+    if (g_static_surface_capture and node.static_surface_overlay) return;
     g_paint_count += 1;
     if (g_paint_count > PAINT_BUDGET) {
         if (!g_budget_exceeded) {
@@ -1510,6 +1680,50 @@ fn paintNode(node: *Node) void {
         return;
     }
 
+    // StaticSurface: cache a stable subtree into a GPU texture. The children
+    // stay in the layout/hit-test tree, but paint collapses to one image quad
+    // after the texture has been populated.
+    if (node.static_surface) {
+        if (node.static_surface_key) |surface_key| {
+            const surface_scale = @max(1.0, @min(node.static_surface_scale, 4.0));
+            if (gpu.queueStaticSurface(surface_key, r.x, r.y, r.w, r.h, g_paint_opacity, node.static_surface_intro_frames, surface_scale)) {
+                paintStaticSurfaceOverlays(node);
+                g_paint_opacity = saved_opacity;
+                return;
+            }
+            if (!gpu.staticSurfaceWarming(surface_key, r.w, r.h, node.static_surface_warmup_frames, surface_scale)) {
+                if (gpu.beginStaticSurfaceCapture(surface_key, r.x, r.y, r.w, r.h, g_paint_opacity, node.static_surface_intro_frames, surface_scale)) |token| {
+                    const scissor_snapshot = gpu.suspendScissorForStaticCapture(token.width, token.height);
+                    const start_counts = gpu.primitiveCounts();
+                    const saved_capture_tf = gpu.getTransform();
+                    const saved_static_surface_capture = g_static_surface_capture;
+                    g_static_surface_capture = true;
+                    offsetDescendants(node, -r.x, -r.y);
+                    if (surface_scale != 1.0) setComposedGpuTransform(0, 0, 0, 0, surface_scale);
+                    // Children render into the offscreen texture at the parent's
+                    // cascade — this node's own opacity is applied once at the
+                    // composite step (queueStaticSurface above / the quad emitted
+                    // by beginStaticSurfaceCapture). Without this reset, opacity
+                    // multiplies twice: once into every primitive, then again
+                    // when the texture quad is composited.
+                    const capture_saved_opacity = g_paint_opacity;
+                    g_paint_opacity = saved_opacity;
+                    for (node.children) |*child| if (!child.effect_background) paintNode(child);
+                    g_paint_opacity = capture_saved_opacity;
+                    restoreGpuTransform(saved_capture_tf);
+                    offsetDescendants(node, r.x, r.y);
+                    g_static_surface_capture = saved_static_surface_capture;
+                    const end_counts = gpu.primitiveCounts();
+                    gpu.restoreScissorAfterStaticCapture(scissor_snapshot);
+                    gpu.finishStaticSurfaceCapture(token, start_counts, end_counts);
+                    paintStaticSurfaceOverlays(node);
+                    g_paint_opacity = saved_opacity;
+                    return;
+                }
+            }
+        }
+    }
+
     // Paint this node's visuals (background, text, input, selection)
     paintNodeVisuals(node);
 
@@ -1536,7 +1750,12 @@ fn paintNode(node: *Node) void {
 
     // Graph container — lightweight canvas with transform for SVG path children
     if (node.graph_container) {
-        gpu.pushScissor(r.x, r.y, r.w, r.h);
+        const saved_tf = gpu.getTransform();
+        if (saved_tf.active) {
+            gpu.pushScissor(transformX(saved_tf, r.x), transformY(saved_tf, r.y), r.w * saved_tf.scale, r.h * saved_tf.scale);
+        } else {
+            gpu.pushScissor(r.x, r.y, r.w, r.h);
+        }
         // Set up transform. Default: graph-space (viewX,viewY) maps to element
         // CENTER — correct for polar/pan-zoom visuals. Carts that set
         // graph_origin_topleft=true anchor world (0,0) at the element's
@@ -1546,14 +1765,9 @@ fn paintNode(node: *Node) void {
         const vz: f32 = if (node.canvas_view_zoom > 0) node.canvas_view_zoom else 1.0;
         const ox: f32 = if (node.graph_origin_topleft) r.x else r.x + r.w / 2;
         const oy: f32 = if (node.graph_origin_topleft) r.y else r.y + r.h / 2;
-        const saved_tf = gpu.getTransform();
-        gpu.setTransform(0, 0, ox - vx * vz, oy - vy * vz, vz);
+        setComposedGpuTransform(0, 0, ox - vx * vz, oy - vy * vz, vz);
         for (node.children) |*child| paintNode(child);
-        if (saved_tf.active) {
-            gpu.setTransform(saved_tf.ox, saved_tf.oy, saved_tf.tx, saved_tf.ty, saved_tf.scale);
-        } else {
-            gpu.resetTransform();
-        }
+        restoreGpuTransform(saved_tf);
         gpu.popScissor();
         return;
     }
@@ -1599,12 +1813,14 @@ fn paintCanvasPath(node: *Node) callconv(.auto) void {
         // Inline paths (canvas_path=true) overlay parent and don't transform.
         const r = node.computed;
         const is_icon = !node.canvas_path and r.w > 0 and r.h > 0;
+        var saved_icon_tf: gpu.Transform = undefined;
         if (is_icon) {
+            saved_icon_tf = gpu.getTransform();
             const vb: f32 = 24.0;
             const scale = @min(r.w / vb, r.h / vb);
             const ox = r.x + (r.w - vb * scale) / 2;
             const oy = r.y + (r.h - vb * scale) / 2;
-            gpu.setTransform(0, 0, ox, oy, scale);
+            setComposedGpuTransform(0, 0, ox, oy, scale);
         }
         // Fill pass — either from named effect texture or flat color
         if (node.canvas_fill_effect) |ename| {
@@ -1652,7 +1868,7 @@ fn paintCanvasPath(node: *Node) callconv(.auto) void {
                         min_y,
                         max_x - min_x,
                         max_y - min_y,
-                        g_paint_opacity,
+                        g_paint_opacity * node.canvas_fill_opacity,
                         @as(f32, @floatFromInt(tc.r)) / 255.0,
                         @as(f32, @floatFromInt(tc.g)) / 255.0,
                         @as(f32, @floatFromInt(tc.b)) / 255.0,
@@ -1691,7 +1907,7 @@ fn paintCanvasPath(node: *Node) callconv(.auto) void {
                     .r = @as(f32, @floatFromInt(s.color.r)) / 255.0,
                     .g = @as(f32, @floatFromInt(s.color.g)) / 255.0,
                     .b = @as(f32, @floatFromInt(s.color.b)) / 255.0,
-                    .a = @as(f32, @floatFromInt(s.color.a)) / 255.0 * g_paint_opacity,
+                    .a = @as(f32, @floatFromInt(s.color.a)) / 255.0 * g_paint_opacity * node.canvas_fill_opacity,
                 };
             }
             svg_path.drawFillLinearGradient(&fill_path, grad.x1, grad.y1, grad.x2, grad.y2, stops_buf[0..n]);
@@ -1702,7 +1918,7 @@ fn paintCanvasPath(node: *Node) callconv(.auto) void {
                 @as(f32, @floatFromInt(fc.r)) / 255.0,
                 @as(f32, @floatFromInt(fc.g)) / 255.0,
                 @as(f32, @floatFromInt(fc.b)) / 255.0,
-                @as(f32, @floatFromInt(fc.a)) / 255.0 * g_paint_opacity,
+                @as(f32, @floatFromInt(fc.a)) / 255.0 * g_paint_opacity * node.canvas_fill_opacity,
             );
         }
         // Stroke pass (GPU-native SDF curves)
@@ -1712,12 +1928,12 @@ fn paintCanvasPath(node: *Node) callconv(.auto) void {
             @as(f32, @floatFromInt(tc.r)) / 255.0,
             @as(f32, @floatFromInt(tc.g)) / 255.0,
             @as(f32, @floatFromInt(tc.b)) / 255.0,
-            @as(f32, @floatFromInt(tc.a)) / 255.0 * g_paint_opacity,
+            @as(f32, @floatFromInt(tc.a)) / 255.0 * g_paint_opacity * node.canvas_stroke_opacity,
             node.canvas_stroke_width,
             if (g_flow_enabled) node.canvas_flow_speed else 0,
             @as(u32, @truncate(c.SDL_GetTicks())),
         );
-        if (is_icon) gpu.resetTransform();
+        if (is_icon) restoreGpuTransform(saved_icon_tf);
     }
 }
 
@@ -1898,12 +2114,6 @@ noinline fn paintNodeVisuals(node: *Node) void {
     // top of the background (so a padded/rounded container shows behind) and
     // before the border (so a framed image gets its border on top).
     if (node.image_src) |src| {
-        const logged_once = struct { var v: bool = false; };
-        if (!logged_once.v) {
-            logged_once.v = true;
-            const preview_len: usize = @min(src.len, 64);
-            std.debug.print("[image_cache] first paint src_len={d} src_head={s} rect=({d:.1},{d:.1},{d:.1},{d:.1})\n", .{ src.len, src[0..preview_len], r.x, r.y, r.w, r.h });
-        }
         image_cache.queueQuad(src, r.x, r.y, r.w, r.h, g_paint_opacity);
     }
 
@@ -2062,9 +2272,6 @@ noinline fn paintNodeVisuals(node: *Node) void {
     }
 }
 
-/// Bulk-rendering primitives — paint functions live in generated modules.
-/// Source-of-truth is `framework/primitives/*.tslx`; run
-/// `node scripts/tslx_compile.mjs --all` after editing a .tslx to regenerate.
 const code_gutter_gen = @import("primitives/generated/code_gutter.zig");
 const minimap_gen = @import("primitives/generated/minimap.zig");
 
@@ -2474,6 +2681,8 @@ noinline fn paintCanvasContainer(node: *Node) void {
 
 pub fn run(config_in: AppConfig) !void {
     var config = config_in;
+    g_dispatch_js_event = config.dispatch_js_event;
+    defer g_dispatch_js_event = null;
     const startup_t0 = std.time.microTimestamp();
     // Crash log + signal handling for file-explorer launches (no stderr).
     // Logs to /run/user/<uid>/claude-sessions/supervisor-crash.log
@@ -2535,13 +2744,24 @@ pub fn run(config_in: AppConfig) !void {
     if (std.posix.getenv("ZIGOS_WINDOW_H")) |hs| {
         if (std.fmt.parseInt(c_int, hs, 10) catch null) |h| init_h = h;
     }
+    if (std.posix.getenv("ZIGOS_WINDOW_X")) |xs| {
+        if (std.fmt.parseInt(c_int, xs, 10) catch null) |x| init_x = x;
+    }
+    if (std.posix.getenv("ZIGOS_WINDOW_Y")) |ys| {
+        if (std.fmt.parseInt(c_int, ys, 10) catch null) |y| init_y = y;
+    }
+    if (config.x) |x| init_x = x;
+    if (config.y) |y| init_y = y;
 
     const builtin_os = @import("builtin").os.tag;
     const headless = std.posix.getenv("ZIGOS_HEADLESS") != null;
-    const window_flags: u64 = c.SDL_WINDOW_RESIZABLE |
+    const resizable_flag: u64 = if (config.not_focusable) 0 else c.SDL_WINDOW_RESIZABLE;
+    const window_flags: u64 = resizable_flag |
         (if (comptime builtin_os == .macos) c.SDL_WINDOW_METAL else @as(u64, 0)) |
         (if (headless) c.SDL_WINDOW_HIDDEN else @as(u64, 0)) |
-        (if (config.borderless) c.SDL_WINDOW_BORDERLESS else @as(u64, 0));
+        (if (config.borderless) c.SDL_WINDOW_BORDERLESS else @as(u64, 0)) |
+        (if (config.always_on_top) c.SDL_WINDOW_ALWAYS_ON_TOP else @as(u64, 0)) |
+        (if (config.not_focusable) c.SDL_WINDOW_NOT_FOCUSABLE | c.SDL_WINDOW_UTILITY else @as(u64, 0));
     const window = c.SDL_CreateWindow(
         config.title,
         init_w,
@@ -2552,6 +2772,7 @@ pub fn run(config_in: AppConfig) !void {
     defer windows.deinitAll(); // close all secondary windows before SDL_Quit
     // SDL3: position is set after creation (not in CreateWindow)
     _ = c.SDL_SetWindowPosition(window, init_x, init_y);
+    if (config.always_on_top) _ = c.SDL_SetWindowAlwaysOnTop(window, true);
     _ = c.SDL_SetWindowMinimumSize(window, @intCast(config.min_width), @intCast(config.min_height));
 
     // Custom window chrome — register hit-test callback for borderless windows
@@ -2690,6 +2911,7 @@ pub fn run(config_in: AppConfig) !void {
                 input_drag_active = false;
                 input_drag_pending = false;
                 term_sel_dragging = false;
+                endChromeDrag();
                 hovered_node = null;
                 g_hover_changed = true;
                 // Re-init first (registers host functions), then load scripts
@@ -2740,16 +2962,15 @@ pub fn run(config_in: AppConfig) !void {
                 c.SDL_EVENT_MOUSE_BUTTON_DOWN => {
                     // Standard OS window behavior: double-click on a drag region
                     // (the borderless app's titlebar) toggles maximize/restore.
-                    if (config.borderless and event.button.button == c.SDL_BUTTON_LEFT and event.button.clicks == 2) {
-                        if (g_chrome_root) |croot| {
-                            const dmx: f32 = event.button.x;
-                            const dmy: f32 = event.button.y;
-                            if (hitTestChrome(croot, dmx, dmy)) |ht| {
-                                if (ht == c.SDL_HITTEST_DRAGGABLE) {
-                                    windowMaximize();
-                                    continue;
-                                }
-                            }
+                    if (config.borderless and event.button.button == c.SDL_BUTTON_LEFT) {
+                        const now_ms: u32 = @intCast(c.SDL_GetTicks() & 0xFFFFFFFF);
+                        if (trackChromeDoubleClick(now_ms, event.button.x, event.button.y, event.button.clicks)) {
+                            windowMaximize();
+                            continue;
+                        }
+                        if (isDraggableChromeHit(event.button.x, event.button.y)) {
+                            beginChromeDrag(event.button.x, event.button.y);
+                            continue;
                         }
                     }
                     qjs_runtime.updateMouse(event.button.x, event.button.y);
@@ -2786,7 +3007,7 @@ pub fn run(config_in: AppConfig) !void {
                                 qjs_runtime.prepareNodeEvent(h.scroll_persist_slot);
                                 handler(mx, my);
                             } else if (h.context_menu_items) |items| {
-                                context_menu.show(mx, my, items);
+                                context_menu.showFor(mx, my, items, h.scroll_persist_slot);
                             }
                         }
                     }
@@ -3118,6 +3339,14 @@ pub fn run(config_in: AppConfig) !void {
                     const my: f32 = event.motion.y;
                     qjs_runtime.updateMouse(mx, my);
                     luajit_runtime.updateMouse(mx, my);
+                    if (g_chrome_dragging) {
+                        if ((event.motion.state & c.SDL_BUTTON_LMASK) != 0) {
+                            updateChromeDrag();
+                        } else {
+                            endChromeDrag();
+                        }
+                        continue;
+                    }
                     if (qjs_runtime.terminalDockResizeActive()) {
                         if ((event.motion.state & c.SDL_BUTTON_LMASK) != 0) {
                             const next_height = qjs_runtime.terminalDockResizeStartHeight() + (qjs_runtime.terminalDockResizeStartY() - my);
@@ -3233,6 +3462,10 @@ pub fn run(config_in: AppConfig) !void {
                     luajit_runtime.updateMouseButton(false, event.button.button == c.SDL_BUTTON_RIGHT);
                     if (event.button.button == c.SDL_BUTTON_LEFT) {
                         qjs_runtime.endTerminalDockResize();
+                        if (g_chrome_dragging) {
+                            endChromeDrag();
+                            continue;
+                        }
                     }
                     // Render surface mouse up forwarding
                     {
@@ -3641,6 +3874,7 @@ pub fn run(config_in: AppConfig) !void {
         // Effects update — animate and render all effect instances
         effects.update(dt_sec);
         r3d.update(dt_sec);
+        fswatch.tick(dt_ms);
 
         // Paint (main window — wgpu)
         g_dt_sec = dt_sec;

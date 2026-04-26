@@ -1,7 +1,5 @@
 
-const React: any = require('react');
-const { useCallback, useEffect, useRef, useState } = React;
-
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Box, Canvas, Col, Pressable, Row, ScrollView, Text } from '../../../../runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 import { useHomeLayout, type TileType } from './useHomeLayout';

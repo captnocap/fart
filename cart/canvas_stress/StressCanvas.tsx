@@ -1,6 +1,4 @@
-const React: any = require('react');
-const { useMemo } = React;
-
+import { useMemo } from 'react';
 import { Box, Canvas } from '../../runtime/primitives';
 import { FpsMeter } from './FpsMeter';
 import { resolveNodePosition, type StressScene } from './useStressScene';

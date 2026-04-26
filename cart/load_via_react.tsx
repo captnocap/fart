@@ -9,9 +9,7 @@
 // Test cart B (load_via_hook.tsx) does the same UI with the contentHandle
 // path. Compare click-latency numbers between the two.
 
-const React: any = require('react');
-const { useState } = React;
-
+import { useState } from 'react';
 import { Box, Pressable, Text, TextEditor } from '../runtime/primitives';
 import * as fs from '../runtime/hooks/fs';
 

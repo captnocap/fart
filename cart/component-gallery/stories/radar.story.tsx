@@ -1,5 +1,6 @@
 import { defineGallerySection, defineGalleryStory } from '../types';
 import { Radar } from '../components/radar/Radar';
+import { DEMO_RADAR } from '../lib/chart-utils';
 
 export const radarSection = defineGallerySection({
   id: 'radar',
@@ -14,7 +15,7 @@ export const radarSection = defineGallerySection({
         {
           id: 'default',
           name: 'Default',
-          render: () => <Radar />,
+          render: () => <Radar data={DEMO_RADAR} />,
         },
       ],
     }),

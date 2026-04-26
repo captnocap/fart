@@ -2,8 +2,6 @@
 // Port of tsz/carts/conformance/mixed/effects/rings.tsz.
 
 import { Box, Effect } from '../../runtime/primitives';
-const React: any = require('react');
-
 const RINGS_WGSL = `
 @fragment fn fs_main(in: VsOut) -> @location(0) vec4f {
   let x = in.uv.x * U.size_w;

@@ -2,7 +2,7 @@ import { Box, Col } from '../../../../runtime/primitives';
 import { CHAT_CARD } from './tokens';
 
 function ContextCliffSegment({ active, danger }: { active: boolean; danger: boolean }) {
-  const color = danger ? CHAT_CARD.orange : '#7acff4';
+  const color = danger ? CHAT_CARD.orange : '#6ac3d6';
 
   return (
     <Box
@@ -11,17 +11,17 @@ function ContextCliffSegment({ active, danger }: { active: boolean; danger: bool
         height: 17,
         backgroundColor: active ? color : CHAT_CARD.panelDeep,
         borderWidth: 1,
-        borderColor: active ? color : '#35405f',
+        borderColor: active ? color : '#4a4238',
         borderRadius: 2,
       }}
     />
   );
 }
 
-export function ContextCliffGutter({ fill = 0.84 }: { fill?: number }) {
-  const slots = Array.from({ length: 25 }, (_, index) => index);
+export function ContextCliffGutter({ fill = 0.84, slots = 18 }: { fill?: number; slots?: number }) {
+  const segments = Array.from({ length: Math.max(1, slots | 0) }, (_, index) => index);
   const clamped = Math.max(0, Math.min(1, Number.isFinite(fill) ? fill : 0));
-  const activeCount = Math.round(slots.length * clamped);
+  const activeCount = Math.round(segments.length * clamped);
 
   return (
     <Col
@@ -31,7 +31,7 @@ export function ContextCliffGutter({ fill = 0.84 }: { fill?: number }) {
         backgroundColor: 'transparent',
       }}
     >
-      {slots.map((slot) => (
+      {segments.map((slot) => (
         <ContextCliffSegment key={slot} active={slot < activeCount} danger={slot >= 20 && slot < activeCount} />
       ))}
     </Col>

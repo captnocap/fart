@@ -1,68 +1,91 @@
-const React: any = require('react');
-const { useMemo } = React;
-import { Box, Graph, Text } from '../../../../runtime/primitives';
-import { PALETTE } from '../../lib/chart-utils';
+import { useState } from 'react';
+import { Box, Graph, Pressable, Text } from '../../../../runtime/primitives';
+import { COLORS, PALETTE } from '../../lib/chart-utils';
+import { useStagger } from '../../lib/useStagger';
+import { Tooltip } from '../../lib/Tooltip';
+import { classifiers as S } from '@reactjit/core';
 
-export type LayeredPyramidProps = {};
+export type LayeredPyramidDatum = { label: string; h: number; color?: string };
 
-export function LayeredPyramid(_props: LayeredPyramidProps) {
-  const width = 200;
-  const height = 180;
-  // <Graph> world origin sits at element center. Keep the pyramid's geometry
-  // in DOM-style top-left coordinates below for readability (topY=30 from the
-  // top edge, baseY=20 above the bottom edge), then translate into Graph
-  // world coords via OX/OY when drawing paths.
+export type LayeredPyramidProps = {
+  data?: LayeredPyramidDatum[];
+  width?: number;
+  height?: number;
+};
+
+export function LayeredPyramid(props: LayeredPyramidProps) {
+  const width = props.width ?? 220;
+  const height = props.height ?? 200;
   const cx = width / 2;
   const baseY = height - 20;
   const topY = 30;
   const baseW = 160;
-  const OX = -width / 2;
-  const OY = -height / 2;
 
-  const levels = useMemo(() => [
+  const levels = props.data ?? [
     { label: 'A', color: PALETTE.pink, h: 35 },
     { label: 'B', color: PALETTE.cyan, h: 40 },
     { label: 'C', color: PALETTE.blue, h: 45 },
     { label: 'D', color: PALETTE.purple, h: 30 },
-  ], []);
+  ];
 
-  let currentY = topY;
+  const staggers = useStagger(levels.length, { stiffness: 100, damping: 16 });
+  const [hovered, setHovered] = useState<number | null>(null);
 
   return (
     <Box style={{ width, height }}>
-      <Graph style={{ width, height }}>
+      <S.BareGraph>
         {levels.map((l, i) => {
-          const y1 = currentY;
-          const y2 = currentY + l.h;
+          const s = staggers[i];
+          const layerH = l.h * s;
+          const y2 = baseY - (levels.slice(0, i).reduce((sum, ll) => sum + ll.h, 0) + layerH);
+          const y1 = baseY - levels.slice(0, i).reduce((sum, ll) => sum + ll.h, 0);
           const topWidth = baseW * (1 - (y1 - topY) / (baseY - topY));
           const bottomWidth = baseW * (1 - (y2 - topY) / (baseY - topY));
           const x1 = cx - topWidth / 2;
           const x2 = cx + topWidth / 2;
           const x3 = cx + bottomWidth / 2;
           const x4 = cx - bottomWidth / 2;
-          currentY += l.h;
           return (
             <Graph.Path
               key={i}
-              d={`M ${x1 + OX} ${y1 + OY} L ${x2 + OX} ${y1 + OY} L ${x3 + OX} ${y2 + OY} L ${x4 + OX} ${y2 + OY} Z`}
-              fill={l.color}
-              fillOpacity={0.8}
-              stroke={l.color}
+              d={`M ${x1} ${y1} L ${x2} ${y1} L ${x3} ${y2} L ${x4} ${y2} Z`}
+              fill={l.color ?? COLORS[i % COLORS.length]}
+              fillOpacity={hovered === i ? 1 : 0.8}
+              stroke={l.color ?? COLORS[i % COLORS.length]}
               strokeWidth={1}
             />
           );
         })}
-      </Graph>
-      {(() => { currentY = topY; return null; })()}
-      {levels.map((l, i) => {
-        const y = currentY + l.h / 2;
-        currentY += l.h;
+      </S.BareGraph>
+
+      {levels.map((_, i) => {
+        const y = baseY - levels.slice(0, i + 1).reduce((sum, l) => sum + l.h, 0) + levels[i].h / 2;
         return (
-          <Box key={`lbl-${i}`} style={{ position: 'absolute', left: cx - 20, top: y - 6, width: 40, alignItems: 'center' }}>
-            <Text fontSize={9} color={PALETTE.white}>{l.label}</Text>
-          </Box>
+          <Pressable
+            key={`hit-${i}`}
+            onMouseEnter={() => setHovered(i)}
+            onMouseLeave={() => setHovered(null)}
+            style={{
+              opacity: 0,
+              position: 'absolute',
+              left: cx - 40,
+              top: y - 14,
+              width: 80,
+              height: 28,
+            }}
+          />
         );
       })}
+
+      {hovered != null && (
+        <Tooltip
+          visible={true}
+          x={cx + 50}
+          y={baseY - levels.slice(0, hovered + 1).reduce((sum, l) => sum + l.h, 0) + levels[hovered].h / 2}
+          title={`Layer ${levels[hovered].label}`}
+          rows={[{ label: 'Height', value: String(levels[hovered].h), color: levels[hovered].color ?? COLORS[hovered % COLORS.length] }]}
+        />
+      )}
     </Box>
   );
 }

@@ -1,6 +1,4 @@
-const React: any = require('react');
-const { useEffect } = React;
-
+import { useEffect } from 'react';
 import { useAPI } from '../../../lib/apis/base';
 import { getWalletNetwork, type WalletAccount, type WalletTransaction } from '../lib';
 

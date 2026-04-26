@@ -9,9 +9,7 @@
 // Those host globals don't exist on the root qjs stack yet — the cockpit renders
 // fine without them; sends just surface a "backend not wired" system message.
 
-const React: any = require('react');
-const { useState, useEffect, useRef } = React;
-
+import { useState, useEffect, useRef } from 'react';
 import { Box, Canvas, TextInput } from '../../runtime/primitives';
 import { ThemeProvider } from '../../runtime/theme';
 import './style_cls';

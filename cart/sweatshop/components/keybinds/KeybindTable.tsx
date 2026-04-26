@@ -1,5 +1,3 @@
-const React: any = require('react');
-
 import { Box, Col, Row, ScrollView, Text } from '../../../../runtime/primitives';
 import { COLORS, TOKENS } from '../../theme';
 import type { KeybindConflictReport, KeybindAction } from '../../lib/keybinds/conflict-detect';

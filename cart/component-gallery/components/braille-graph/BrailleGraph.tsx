@@ -7,7 +7,7 @@ import { Box, Col, Row, Text } from '../../../../runtime/primitives';
 // per bundle rather than once per frame.
 const TAU = math.tauValue();
 
-export type BrailleGraphProps = {};
+export type BrailleGraphProps = { data?: { mode?: GraphMode } };
 
 type GraphMode = 'sine' | 'ripple' | 'noise' | 'lissajous';
 type SizeBadge = 'small' | 'medium' | 'large';
@@ -65,24 +65,24 @@ const SPECIMENS: {
     key: 'lissajous',
     label: 'Lissajous',
     badge: 'large',
-    fontSize: 13,
+    fontSize: 12,
     zoom: 14,
-    cardWidth: 872,
-    cardHeight: 246,
+    cardWidth: 300,
+    cardHeight: 196,
   },
 ];
 
 const MODE_COLORS: Record<GraphMode, string> = {
-  sine: '#35c878',
-  ripple: '#db5f9c',
-  noise: '#8c6fe5',
-  lissajous: '#d99a26',
+  sine: '#6aa390',
+  ripple: '#d48aa7',
+  noise: '#8a7fd4',
+  lissajous: '#d26a2a',
 };
 
 const BADGE_COLORS: Record<SizeBadge, { bg: string; text: string; border: string }> = {
-  small: { bg: '#dff4e8', text: '#11633d', border: '#9cd9b8' },
-  medium: { bg: '#e5efff', text: '#174f91', border: '#a9c9f8' },
-  large: { bg: '#fff0d8', text: '#87510d', border: '#e7bf79' },
+  small: { bg: '#eadfca', text: '#6aa390', border: '#6aa390' },
+  medium: { bg: '#f2e8dc', text: '#5a8bd6', border: '#5a8bd6' },
+  large: { bg: '#f2e8dc', text: '#8a4a20', border: '#d6a54a' },
 };
 
 // Mode functions now route trig + noise through framework/math.zig via the
@@ -271,9 +271,9 @@ function GraphSpecimen({
         padding: 12,
         gap: 8,
         borderRadius: 8,
-        backgroundColor: '#07101e',
+        backgroundColor: '#eadfca',
         borderWidth: 1,
-        borderColor: '#26334b',
+        borderColor: '#3a2a1e',
       }}
     >
       <Row
@@ -298,9 +298,9 @@ function GraphSpecimen({
           justifyContent: 'center',
           padding: PLOT_PADDING,
           borderRadius: 6,
-          backgroundColor: '#030914',
+          backgroundColor: '#0e0b09',
           borderWidth: PLOT_BORDER,
-          borderColor: '#111c2e',
+          borderColor: '#14100d',
         }}
       >
         <Col style={{ alignItems: 'center', justifyContent: 'center' }}>
@@ -326,7 +326,10 @@ function GraphSpecimen({
   );
 }
 
-export function BrailleGraph(_props: BrailleGraphProps) {
+export function BrailleGraph(props: BrailleGraphProps) {
+  const mode: GraphMode = props?.data?.mode ?? 'sine';
+  const specimen = SPECIMENS.find((s) => s.key === mode) ?? SPECIMENS[0];
+
   const [t, setT] = useState(0);
 
   useEffect(() => {
@@ -348,30 +351,5 @@ export function BrailleGraph(_props: BrailleGraphProps) {
     };
   }, []);
 
-  return (
-    <Col
-      style={{
-        width: 880,
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 14,
-      }}
-    >
-      <Col style={{ alignItems: 'center', justifyContent: 'center', gap: 5 }}>
-        <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#172033' }}>Braille Graph</Text>
-        <Text style={{ fontSize: 12, color: '#657185' }}>cart/braille_graph.tsx</Text>
-      </Col>
-
-      <Col style={{ gap: 12 }}>
-        <Row style={{ width: 872, gap: 11, alignItems: 'flex-end', justifyContent: 'center' }}>
-          <GraphSpecimen specimen={SPECIMENS[0]} t={t} />
-          <GraphSpecimen specimen={SPECIMENS[1]} t={t} />
-          <GraphSpecimen specimen={SPECIMENS[2]} t={t} />
-        </Row>
-        <Row style={{ width: 872, alignItems: 'center', justifyContent: 'center' }}>
-          <GraphSpecimen specimen={SPECIMENS[3]} t={t} />
-        </Row>
-      </Col>
-    </Col>
-  );
+  return <GraphSpecimen specimen={specimen} t={t} />;
 }

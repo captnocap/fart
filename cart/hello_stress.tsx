@@ -1,6 +1,4 @@
-const React: any = require('react');
-const { useState } = React;
-
+import { useState } from 'react';
 function CounterTile({ index }: { index: number }) {
   const [count, setCount] = useState(0);
 

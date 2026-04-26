@@ -1,134 +1,276 @@
 /**
- * classifier — global registry of named primitives.
- *
- * Ported from love2d/packages/core/src/classifier.ts. Same shape:
+ * classifier — global registry of named primitives with theme tokens,
+ * layout variants, and breakpoint overrides.
  *
  *   classifier({
- *     Card:   { type: 'Box', style: { backgroundColor: '#222', padding: 16 } },
- *     Header: { type: 'Text', style: { fontSize: 24, color: 'theme:text' } },
+ *     Card: {
+ *       type: 'Box',
+ *       style: { padding: 16, borderRadius: 'theme:radiusMd', backgroundColor: 'theme:surface' },
+ *       hoverStyle: { borderColor: 'theme:primary' },
+ *       variants: {
+ *         magazine:  { style: { flexDirection: 'row', padding: 20 } },
+ *         brutalist: { style: { padding: 8, borderRadius: 0 } },
+ *       },
+ *       bp: {
+ *         sm: {
+ *           style: { flexDirection: 'column', gap: 4 },
+ *           variants: { magazine: { style: { gap: 2 } } },
+ *         },
+ *       },
+ *       use: () => ({ ... })  // optional hook-produced prop overrides
+ *     }
  *   });
  *
- * Then:
+ * Import and render:
  *
  *   import { classifiers as C } from './classifier';
- *   <C.Card><C.Header>Hello</C.Header></C.Card>
+ *   <C.Card>...</C.Card>
  *
- * Theme token resolution: `'theme:text'` → colors.text at render time when
- * wrapped in <ThemeProvider>. Without a provider, tokens pass through as-is.
+ * Style layer precedence (low → high):
+ *   base → bp[current] → variants[active] → bp[current].variants[active] → user props → hook(use)
+ *
+ * Tokens: any string value like `'theme:bg'` or `'theme:radiusMd'` resolves
+ * against the active color / style palettes. Unknown tokens pass through.
  */
 
-import { useThemeColorsOptional } from './theme';
+import React from 'react';
 import {
-  Box, Row, Col, Text, Image, Pressable, ScrollView, TextInput,
+  resolveTokens,
+  hasTokens,
+  __useClassifierSnapshot,
+  type ThemeColors,
+  type StylePalette,
+  type Breakpoint,
+} from './theme';
+import {
+  Box, Text, Image, Pressable, ScrollView, TextInput,
   Canvas, Graph, Native,
 } from './primitives';
 
-const React: any = require('react');
-
+// The renderer's actual host elements. Row/Col are JSX sugar over Box
+// with flexDirection set — they're not primitives and have no place here.
+// Classifiers express direction explicitly: type: 'Box', style: { flexDirection: 'row' }.
 const PRIMITIVES: Record<string, any> = {
-  Box, Row, Col, Text, Image, Pressable, ScrollView, TextInput,
+  Box, Text, Image, Pressable, ScrollView, TextInput,
   Canvas, Graph, Native,
 };
 
-// ── Theme token resolution ──────────────────────────────────
+const STYLE_KEYS = [
+  'style', 'hoverStyle', 'activeStyle', 'focusStyle',
+  'textStyle', 'contentContainerStyle',
+];
 
-const THEME_PREFIX = 'theme:';
+const STYLE_KEY_SET = new Set(STYLE_KEYS);
+const RESERVED_KEYS = new Set(['type', 'use', 'variants', 'bp']);
 
-function isThemeToken(v: unknown): v is string {
-  return typeof v === 'string' && v.startsWith(THEME_PREFIX);
+// ── Types ─────────────────────────────────────────────
+
+export type StyleBlock = Record<string, any>;
+
+export interface ClassifierStyleSet {
+  style?: StyleBlock;
+  hoverStyle?: StyleBlock;
+  activeStyle?: StyleBlock;
+  focusStyle?: StyleBlock;
+  textStyle?: StyleBlock;
+  contentContainerStyle?: StyleBlock;
+  /** Non-style default props passed through to the primitive. */
+  [key: string]: any;
 }
 
-function resolveTokens(obj: Record<string, any>, colors: Record<string, string>): Record<string, any> {
-  const out: Record<string, any> = {};
-  for (const k of Object.keys(obj)) {
-    const v = obj[k];
-    if (isThemeToken(v)) {
-      out[k] = colors[v.slice(THEME_PREFIX.length)] ?? v;
-    } else if (v && typeof v === 'object' && !Array.isArray(v) && !(v instanceof Function)) {
-      out[k] = resolveTokens(v, colors);
-    } else {
-      out[k] = v;
+export type VariantMap = Record<string, ClassifierStyleSet>;
+
+export interface BreakpointOverride extends ClassifierStyleSet {
+  variants?: VariantMap;
+}
+
+export type BreakpointMap = Partial<Record<Breakpoint, BreakpointOverride>>;
+
+export interface ClassifierDef extends ClassifierStyleSet {
+  type: string;
+  use?: () => Record<string, any>;
+  variants?: VariantMap;
+  bp?: BreakpointMap;
+}
+
+// ── Style merging ─────────────────────────────────────
+
+function shallowMergeStyle(...blocks: Array<StyleBlock | undefined>): StyleBlock | undefined {
+  const present = blocks.filter((b): b is StyleBlock => !!b && typeof b === 'object');
+  if (present.length === 0) return undefined;
+  if (present.length === 1) return present[0];
+  return Object.assign({}, ...present);
+}
+
+/** Merge a layered ClassifierStyleSet (for every STYLE_KEY) plus flat defaults. */
+function mergeStyleSets(...sets: Array<ClassifierStyleSet | undefined>): ClassifierStyleSet {
+  const out: ClassifierStyleSet = {};
+  for (const s of sets) {
+    if (!s) continue;
+    for (const k of Object.keys(s)) {
+      if (RESERVED_KEYS.has(k)) continue;
+      if (STYLE_KEY_SET.has(k)) {
+        out[k] = shallowMergeStyle(out[k], s[k]);
+      } else {
+        // non-style defaults: later wins
+        out[k] = s[k];
+      }
     }
   }
   return out;
 }
 
-function hasTokens(obj: Record<string, any>): boolean {
-  for (const k of Object.keys(obj)) {
-    const v = obj[k];
-    if (isThemeToken(v)) return true;
-    if (v && typeof v === 'object' && !Array.isArray(v) && !(v instanceof Function)) {
-      if (hasTokens(v)) return true;
-    }
-  }
-  return false;
-}
-
-// ── Style merge ─────────────────────────────────────────────
-
-const STYLE_KEYS = ['style', 'hoverStyle', 'activeStyle', 'focusStyle', 'textStyle', 'contentContainerStyle'];
-
-function mergeProps(defaults: Record<string, any>, user: Record<string, any>): Record<string, any> {
+/** Merge resolved defaults with user props — style keys shallow-merge, others overwrite. */
+function mergeUserProps(defaults: Record<string, any>, user: Record<string, any>): Record<string, any> {
   const merged: Record<string, any> = { ...defaults, ...user };
-  for (const key of STYLE_KEYS) {
-    if (defaults[key] && user[key]) {
-      merged[key] = { ...defaults[key], ...user[key] };
+  for (const k of STYLE_KEYS) {
+    if (defaults[k] && user[k]) {
+      merged[k] = { ...defaults[k], ...user[k] };
     }
   }
   return merged;
 }
 
-// ── Global registry ─────────────────────────────────────────
+// ── Per-classifier compile ────────────────────────────
+
+/** Split a def into a style-set (style blocks + flat defaults), stripping reserved keys. */
+function stripReserved(def: ClassifierDef | ClassifierStyleSet): ClassifierStyleSet {
+  const out: ClassifierStyleSet = {};
+  for (const k of Object.keys(def)) {
+    if (RESERVED_KEYS.has(k)) continue;
+    out[k] = (def as any)[k];
+  }
+  return out;
+}
+
+function collectTokens(def: ClassifierDef): boolean {
+  if (hasTokens(stripReserved(def) as Record<string, any>)) return true;
+  if (def.variants) {
+    for (const v of Object.values(def.variants)) {
+      if (hasTokens(v as Record<string, any>)) return true;
+    }
+  }
+  if (def.bp) {
+    for (const bp of Object.values(def.bp)) {
+      if (!bp) continue;
+      if (hasTokens(bp as Record<string, any>)) return true;
+    }
+  }
+  return false;
+}
+
+function hasAnyVariants(def: ClassifierDef): boolean {
+  if (def.variants && Object.keys(def.variants).length) return true;
+  if (def.bp) {
+    for (const bp of Object.values(def.bp)) {
+      if (bp?.variants && Object.keys(bp.variants).length) return true;
+    }
+  }
+  return false;
+}
+
+function hasAnyBreakpoints(def: ClassifierDef): boolean {
+  return !!(def.bp && Object.keys(def.bp).length);
+}
+
+/** Build the effective style-set for a given variant+breakpoint. */
+function resolveEffective(
+  def: ClassifierDef,
+  variant: string | null,
+  bp: Breakpoint,
+): ClassifierStyleSet {
+  const base = stripReserved(def);
+  const bpBase = def.bp?.[bp] ? stripReserved(def.bp[bp] as ClassifierStyleSet) : undefined;
+  const varBase = variant && def.variants?.[variant]
+    ? stripReserved(def.variants[variant])
+    : undefined;
+  const bpVar = variant && def.bp?.[bp]?.variants?.[variant]
+    ? stripReserved(def.bp[bp]!.variants![variant])
+    : undefined;
+  return mergeStyleSets(base, bpBase, varBase, bpVar);
+}
+
+// ── Registry ──────────────────────────────────────────
 
 const _registry: Record<string, any> = {};
-
-type ClassifierDef = {
-  type: string;
-  use?: () => Record<string, any>;
-  [key: string]: any;
-};
 
 export function classifier(defs: Record<string, ClassifierDef>): void {
   for (const name of Object.keys(defs)) {
     if (_registry[name]) {
       throw new Error(
-        `classifier: "${name}" already registered. Classifiers are global — one name, one definition.`
+        `classifier: "${name}" already registered. Classifiers are global — one name, one definition.`,
       );
     }
 
-    const { type, use, ...defaults } = defs[name];
-    const Primitive = PRIMITIVES[type];
+    const def = defs[name];
+    const Primitive = PRIMITIVES[def.type];
     if (!Primitive) {
       throw new Error(
-        `classifier: "${type}" is not a primitive. Valid: ${Object.keys(PRIMITIVES).join(', ')}`
+        `classifier: "${def.type}" is not a primitive. Valid: ${Object.keys(PRIMITIVES).join(', ')}`,
       );
     }
 
-    const hasDefaults = Object.keys(defaults).length > 0;
-    const needsTheme = hasDefaults && hasTokens(defaults);
-    const needsHook = typeof use === 'function';
+    const needsTokens = collectTokens(def);
+    const needsVariants = hasAnyVariants(def);
+    const needsBp = hasAnyBreakpoints(def);
+    const needsHook = typeof def.use === 'function';
+    const needsStore = needsTokens || needsVariants || needsBp;
+
+    // Precompute the static base (no variant, no bp) for the fast path.
+    const staticBase = stripReserved(def);
+    const staticBaseIsEmpty = Object.keys(staticBase).length === 0;
 
     let C: any;
-    if (!hasDefaults && !needsHook) {
+
+    if (!needsStore && !needsHook && staticBaseIsEmpty) {
+      // Identity: classifier adds nothing on top of the primitive.
       C = Primitive;
-    } else if (!needsTheme && !needsHook) {
-      C = (props: any) => React.createElement(Primitive, mergeProps(defaults, props));
+    } else if (!needsStore && !needsHook) {
+      // Defaults only, no tokens, no variants, no bp, no hook.
+      C = (props: any) =>
+        React.createElement(Primitive, mergeUserProps(staticBase, props));
     } else {
       C = (props: any) => {
-        const colors = needsTheme ? useThemeColorsOptional() : null;
-        const resolved = colors ? resolveTokens(defaults, colors) : defaults;
-        const hookProps = needsHook ? use!() : null;
+        const snap = needsStore ? __useClassifierSnapshot() : null;
+
+        let effective: ClassifierStyleSet;
+        if (snap && (needsVariants || needsBp)) {
+          effective = resolveEffective(def, snap.variant, snap.breakpoint);
+        } else {
+          effective = staticBase;
+        }
+
+        let resolved: Record<string, any>;
+        if (needsTokens && snap) {
+          resolved = resolveTokens(effective as Record<string, any>, snap.colors, snap.styles);
+        } else {
+          resolved = effective as Record<string, any>;
+        }
+
+        const hookProps = needsHook ? def.use!() : null;
         const merged = hookProps
-          ? mergeProps(resolved, mergeProps(hookProps, props))
-          : mergeProps(resolved, props);
+          ? mergeUserProps(resolved, mergeUserProps(hookProps, props))
+          : mergeUserProps(resolved, props);
         return React.createElement(Primitive, merged);
       };
     }
 
     C.displayName = name;
     C.__isClassifier = true;
+    C.__def = def;
     _registry[name] = C;
   }
 }
 
+/** Read-only view of the classifier registry. `<C.Card>`, `<C.Header>`, etc. */
 export const classifiers: Readonly<Record<string, any>> = _registry;
+
+/** Inspect a registered classifier by name (for tooling). */
+export function getClassifier(name: string): any | null {
+  return _registry[name] ?? null;
+}
+
+/** All registered classifier names. */
+export function classifierNames(): string[] {
+  return Object.keys(_registry);
+}

@@ -11,11 +11,10 @@ export const brailleGraphSection = defineGallerySection({
       source: 'cart/component-gallery/components/braille-graph/BrailleGraph.tsx',
       status: 'ready',
       variants: [
-        {
-          id: 'default',
-          name: 'Default',
-          render: () => <BrailleGraph />,
-        },
+        { id: 'sine', name: 'Sine', render: () => <BrailleGraph data={{ mode: 'sine' }} /> },
+        { id: 'ripple', name: 'Ripple', render: () => <BrailleGraph data={{ mode: 'ripple' }} /> },
+        { id: 'noise', name: 'Noise', render: () => <BrailleGraph data={{ mode: 'noise' }} /> },
+        { id: 'lissajous', name: 'Lissajous', render: () => <BrailleGraph data={{ mode: 'lissajous' }} /> },
       ],
     }),
   ],

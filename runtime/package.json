@@ -1,0 +1,7 @@
+{
+  "name": "@reactjit/runtime",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "_doc": "sideEffects: false marks every file under runtime/ as tree-shake-friendly. esbuild can drop unused named exports even when transitively re-exported through runtime/hooks/index.ts (the barrel). This is what makes the metafile-based ingredient gate in scripts/ship precise — only hook modules whose exports the cart actually USES end up as inputs. If you add a hook with a real side effect (a top-level call that must run for correctness), either annotate the line with /* @__PURE__ */ if it actually IS pure, or flip this to a list of paths that ARE side-effecting. Don't flip the whole flag back to true; that disables tree-shaking for the entire framework runtime."
+}

@@ -1,9 +1,10 @@
 
-import { Box, Graph, Pressable, Row, Text } from '../../../../runtime/primitives';
-import { COLORS, TOKENS } from '../../theme';
+import { Box, Graph, Pressable, Row } from '../../../../runtime/primitives';
+import { COLORS } from '../../theme';
+import { Tooltip } from '../tooltip';
 import { ChartAxis } from './ChartAxis';
 import { ChartLegend, type ChartLegendPosition } from './ChartLegend';
-import { ChartTooltip, ChartTooltipFromCrosshair } from './ChartTooltip';
+import { TooltipFromCrosshair } from './ChartTooltip';
 import { normalizeChartData, type ChartInput } from './useChartData';
 import { formatTick, useChartScale, type ChartScaleMode } from './useChartScale';
 import { ChartInteractions, type ChartInteractionsConfig } from './ChartInteractions';
@@ -151,7 +152,7 @@ export function LineChart(props: {
         return { label: series.label, value: formatValue(point.y), color: series.color || COLORS.blue };
       })
       .filter(Boolean) as Array<{ label: string; value: string; color?: string }>;
-    return <ChartTooltip visible={rows.length > 0} x={hovered.x} y={hovered.y} title={xLabels[hovered.index] || 'Point'} rows={rows} />;
+    return <Tooltip visible={rows.length > 0} anchor={{ kind: 'cursor' }} title={xLabels[hovered.index] || 'Point'} rows={rows} variant="sweatshop-chart" />;
   })() : null;
 
   const body = (
@@ -176,10 +177,8 @@ export function LineChart(props: {
         />
       ) : null}
       {interactionsOn && crosshair ? (
-        <ChartTooltipFromCrosshair
+        <TooltipFromCrosshair
           crosshair={crosshair}
-          plotW={plot.w}
-          plotH={plot.h}
           xLabel={(x) => xLabels[Math.round(x)] || String(Math.round(x))}
           yLabel={formatValue}
         />

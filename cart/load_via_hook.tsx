@@ -11,9 +11,7 @@
 // bottleneck is downstream (paint, layout, text shaping, or something we
 // haven't isolated yet).
 
-const React: any = require('react');
-const { useState } = React;
-
+import { useState } from 'react';
 import { Box, Pressable, Text, TextEditor } from '../runtime/primitives';
 import { useFileContent } from '../runtime/hooks/useFileContent';
 

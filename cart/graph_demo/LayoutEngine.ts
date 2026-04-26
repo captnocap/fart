@@ -1,5 +1,3 @@
-const React: any = require('react');
-
 export type GraphLayoutMode = 'force' | 'tree-down' | 'tree-left' | 'radial' | 'circular' | 'grid';
 export type EdgeDensity = 'sparse' | 'medium' | 'dense' | 'complete';
 export type ColorMode = 'degree' | 'cluster' | 'depth' | 'random';

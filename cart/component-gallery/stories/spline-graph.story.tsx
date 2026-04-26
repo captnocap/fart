@@ -1,5 +1,11 @@
 import { defineGallerySection, defineGalleryStory } from '../types';
 import { SplineGraph } from '../components/spline-graph/SplineGraph';
+import { DEMO_MONTHS, DEMO_TEMPERATURE } from '../lib/chart-utils';
+
+const splineData = DEMO_MONTHS.map((label, i) => ({
+  label,
+  value: DEMO_TEMPERATURE[i],
+}));
 
 export const splineGraphSection = defineGallerySection({
   id: 'spline-graph',
@@ -14,7 +20,7 @@ export const splineGraphSection = defineGallerySection({
         {
           id: 'default',
           name: 'Default',
-          render: () => <SplineGraph />,
+          render: () => <SplineGraph data={splineData} />,
         },
       ],
     }),

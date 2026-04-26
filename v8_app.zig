@@ -20,19 +20,156 @@ const effect_ctx = @import("framework/effect_ctx.zig");
 const input = @import("framework/input.zig");
 const state = @import("framework/state.zig");
 const events = @import("framework/events.zig");
+const context_menu = @import("framework/context_menu.zig");
 const engine = if (IS_LIB) struct {} else @import("framework/engine.zig");
+const windows = @import("framework/windows.zig");
+const ipc = @import("framework/net/ipc.zig");
 const qjs_runtime = @import("framework/qjs_runtime.zig"); // kept for non-VM state (input, telemetry, dock resize, pty)
 const v8_runtime = @import("framework/v8_runtime.zig");
 const v8_bindings_core = @import("framework/v8_bindings_core.zig");
-const v8_bindings_fs = @import("framework/v8_bindings_fs.zig");
-const v8_bindings_websocket = @import("framework/v8_bindings_websocket.zig");
-const v8_bindings_telemetry = @import("framework/v8_bindings_telemetry.zig");
-const v8_bindings_zigcall = @import("framework/v8_bindings_zigcall.zig");
+// Conditional @import — when has_X is false the binding file is NEVER
+// parsed, so its string literals (host-fn names like "getFps", "__zig_call")
+// don't bleed into .rodata/DWARF of the final binary. The "_real = @import(...)"
+// then "if cond _real else stub" pattern keeps the file in the compile graph
+// regardless and leaks the host-fn name strings into hello-raw even though
+// the registration calls themselves are dead-stripped.
+const v8_bindings_fs = if (build_options.has_fs) @import("framework/v8_bindings_fs.zig") else struct {
+    pub fn registerFs(_: anytype) void {}
+    pub fn tickDrain() void {}
+};
+const v8_bindings_websocket = if (build_options.has_websocket) @import("framework/v8_bindings_websocket.zig") else struct {
+    pub fn registerWebSocket(_: anytype) void {}
+    pub fn tickDrain() void {}
+};
+const v8_bindings_telemetry = if (build_options.has_telemetry) @import("framework/v8_bindings_telemetry.zig") else struct {
+    pub fn registerTelemetry(_: anytype) void {}
+    pub fn tickDrain() void {}
+};
+const v8_bindings_zigcall = if (build_options.has_zigcall) @import("framework/v8_bindings_zigcall.zig") else struct {
+    pub fn registerZigCall(_: anytype) void {}
+    pub fn registerZigCallList(_: anytype) void {}
+    pub fn tickDrain() void {}
+};
 // v8_bindings_sdk: deferred (see appInit comment).
+
+// ── INGREDIENTS — opt-in V8 binding surface per cart ────────────────
+//
+// The contract: a cart's bundle is the order ticket. The kitchen (this file
+// + scripts/ship + build.zig) only puts an ingredient in the burrito if the
+// ticket asks for it. Carts that don't order an ingredient never see its
+// host-fn surface on globalThis.
+//
+// ⚠️ Every new V8 binding that registers host fns goes HERE. Three pieces,
+// all required — forgetting any one is how allergens get into burritos:
+//
+//   1. One row in INGREDIENTS below (grep_prefix / reg_fn / mod)
+//   2. A `has-<name>` option in build.zig — referenced by build_options.has_X
+//   3. A `grep -qE '<grep_prefix>'` in scripts/ship that flips -Dhas-X=true
+//
+// The kitchen story: scripts/ship reads the cart's bundle, looks for the
+// grep_prefix (e.g. "__proc_"), and if found passes `-Dhas-process=true` to
+// zig build. build.zig exposes that as `build_options.has_process`. The
+// import below resolves to the real module when the option is true, or to
+// a stub with matching public API when false. appInit and appTick iterate
+// INGREDIENTS uniformly — register the real impl or the no-op stub.
+//
+// What happens if you skip any step:
+//   - Skip step 1 → binding never gets registered. Cart's hook silently
+//     no-ops on the cart that imports it. Visible failure for that cart's
+//     author. Other carts unaffected.
+//   - Skip step 2 → comptime fails. Build won't compile. Self-correcting.
+//   - Skip step 3 → binding never gets registered (option defaults false).
+//     Same visible failure as skip step 1.
+//
+// What previously happened when this contract DIDN'T exist (2026-04-25):
+// worker 571f added httpsrv/wssrv/process bindings and called register()
+// for all three unconditionally in appInit. Every cart in the repo paid
+// the cost of registering host-fn surface they never asked for. The extra
+// V8 Function-table load corrupted Function::Call such that callGlobalInt
+// from C++ threw RangeError on every cart — even carts that never imported
+// useHost. Three hours of debugging burritos that had ingredients nobody
+// ordered. Don't re-litigate. Add the row.
+const Ingredient = struct {
+    name: []const u8,
+    /// `true` = framework-essential, registered on every cart. `grep_prefix` ignored.
+    /// `false` = opt-in; only registered when scripts/ship sees `grep_prefix` in the bundle.
+    required: bool,
+    /// Bundle-grep token — must match the host-fn prefix that the corresponding
+    /// hook calls via callHost(). Empty when required=true.
+    grep_prefix: []const u8,
+    /// Public name of the register function inside `mod`.
+    reg_fn: []const u8,
+    /// Module to register from — already gated to a stub if `required=false`
+    /// and the cart didn't ask for it (see comptime imports above).
+    mod: type,
+};
+
+// Same inline-@import pattern as the new bindings above — conditionally
+// import the binding file so its host-fn name string literals never enter
+// the binary when the gate is off. The previous `_real = @import(...)` /
+// `if cond _real else stub` shape compiled the file unconditionally.
+const v8_bindings_httpserver = if (build_options.has_httpsrv) @import("framework/v8_bindings_httpserver.zig") else struct {
+    pub fn registerHttpServer(_: anytype) void {}
+    pub fn tickDrain() void {}
+};
+const v8_bindings_wsserver = if (build_options.has_wssrv) @import("framework/v8_bindings_wsserver.zig") else struct {
+    pub fn registerWsServer(_: anytype) void {}
+    pub fn tickDrain() void {}
+};
+const v8_bindings_process = if (build_options.has_process) @import("framework/v8_bindings_process.zig") else struct {
+    pub fn registerProcess(_: anytype) void {}
+    pub fn tickDrain() void {}
+};
+const v8_bindings_net = if (build_options.has_net) @import("framework/v8_bindings_net.zig") else struct {
+    pub fn registerNet(_: anytype) void {}
+    pub fn tickDrain() void {}
+};
+const HAS_TOR = if (@hasDecl(build_options, "has_tor")) build_options.has_tor else false;
+const v8_bindings_tor = if (HAS_TOR) @import("framework/v8_bindings_tor.zig") else struct {
+    pub fn registerTor(_: anytype) void {}
+    pub fn tickDrain() void {}
+};
+const v8_bindings_privacy = if (build_options.has_privacy) @import("framework/v8_bindings_privacy.zig") else struct {
+    pub fn registerPrivacy(_: anytype) void {}
+};
+
+const INGREDIENTS = [_]Ingredient{
+    // Framework-essential (always-on). These bindings expose host fns the
+    // React renderer / runtime depend on unconditionally — __hostFlush,
+    // __fs_*, __zigCall, telemetry counters, etc. They're "in every burrito"
+    // because no cart can run without them. New required bindings still go
+    // here (do NOT bypass by hardcoding a register call elsewhere in appInit).
+    // Core is the only truly framework-internal binding — its host fns
+    // (__hostFlush/__setState/__markDirty/getMouse*/isKeyDown/...) are called
+    // by runtime/index.tsx + runtime/primitives.tsx which every cart bundles
+    // unconditionally as React reconciler scaffolding. So gating it on a
+    // hook-file presence is degenerate; it's always shipped because the
+    // framework boilerplate in the bundle always references it.
+    .{ .name = "core",         .required = true,  .grep_prefix = "", .reg_fn = "registerCore",         .mod = v8_bindings_core },
+    // Everything below is source-gated: scripts/ship reads the esbuild
+    // metafile and only flips the matching -Dhas-X=true if a JS file
+    // that calls into the binding is actually shipped.
+    .{ .name = "fs",           .required = false, .grep_prefix = "__fs_",      .reg_fn = "registerFs",           .mod = v8_bindings_fs },
+    .{ .name = "websocket",    .required = false, .grep_prefix = "__ws_",      .reg_fn = "registerWebSocket",    .mod = v8_bindings_websocket },
+    .{ .name = "telemetry",    .required = false, .grep_prefix = "__tel_",     .reg_fn = "registerTelemetry",    .mod = v8_bindings_telemetry },
+    .{ .name = "zigcall",      .required = false, .grep_prefix = "__zig_call", .reg_fn = "registerZigCall",      .mod = v8_bindings_zigcall },
+    .{ .name = "zigcall_list", .required = false, .grep_prefix = "__zig_call", .reg_fn = "registerZigCallList",  .mod = v8_bindings_zigcall },
+    // Opt-in per cart — scripts/ship grep flips -Dhas-X when the bundle
+    // references the matching prefix. Carts that don't order them get a
+    // comptime stub (no host-fn registration, no tickDrain).
+    .{ .name = "process",      .required = false, .grep_prefix = "__proc_",    .reg_fn = "registerProcess",     .mod = v8_bindings_process },
+    .{ .name = "httpsrv",      .required = false, .grep_prefix = "__httpsrv_", .reg_fn = "registerHttpServer",  .mod = v8_bindings_httpserver },
+    .{ .name = "wssrv",        .required = false, .grep_prefix = "__wssrv_",   .reg_fn = "registerWsServer",    .mod = v8_bindings_wsserver },
+    .{ .name = "net",          .required = false, .grep_prefix = "__tcp_",     .reg_fn = "registerNet",         .mod = v8_bindings_net },
+    .{ .name = "tor",          .required = false, .grep_prefix = "__tor_",     .reg_fn = "registerTor",         .mod = v8_bindings_tor },
+    .{ .name = "privacy",      .required = false, .grep_prefix = "__priv_",    .reg_fn = "registerPrivacy",     .mod = v8_bindings_privacy },
+};
 const luajit_runtime = @import("framework/luajit_runtime.zig");
 const fs_mod = @import("framework/fs.zig");
 const localstore = @import("framework/localstore.zig");
-comptime { if (!IS_LIB) _ = @import("framework/core.zig"); }
+comptime {
+    if (!IS_LIB) _ = @import("framework/core.zig");
+}
 
 // Per-cart bundle. Path is `bundle-<app-name>.js` so that two parallel ships
 // (different carts) don't race on a shared `bundle.js`. If you run
@@ -56,6 +193,18 @@ var g_arena: std.heap.ArenaAllocator = undefined;
 var g_node_by_id: std.AutoHashMap(u32, *Node) = undefined;
 var g_children_ids: std.AutoHashMap(u32, std.ArrayList(u32)) = undefined;
 var g_root_child_ids: std.ArrayList(u32) = .{};
+var g_window_owner_by_node_id: std.AutoHashMap(u32, u32) = undefined;
+const WindowBinding = struct {
+    slot: usize,
+    kind: windows.WindowKind,
+    title: ?[:0]u8 = null,
+};
+var g_window_by_node_id: std.AutoHashMap(u32, WindowBinding) = undefined;
+var g_is_window_child: bool = false;
+var g_child_window_id: u32 = 0;
+var g_child_client: ?ipc.Client = null;
+var g_child_auto_dismiss_ms: u32 = 0;
+var g_child_started_ms: i64 = 0;
 var g_root: Node = .{};
 var g_dirty: bool = true;
 var g_press_expr_pool: std.ArrayList([:0]u8) = .{};
@@ -116,6 +265,164 @@ const g_tab_click_callbacks = blk: {
     for (0..MAX_TABS) |i| arr[i] = makeTabClickCallback(i);
     break :blk arr;
 };
+
+// ── Context menu item trampolines ────────────────────────
+// MenuItem.handler is `*const fn () void` with no args, so a single
+// dispatcher can't recover which item was clicked. We comptime-generate
+// MAX_MENU_ITEMS trampolines, each closed over its own index. They look
+// up the active node id from context_menu and dispatch back to React.
+const MAX_MENU_ITEMS = 16;
+
+fn dispatchContextMenuClick(item_idx: usize) void {
+    const node_id = context_menu.activeNodeId();
+    if (node_id == 0) return;
+    var buf: [128]u8 = undefined;
+    const expr = std.fmt.bufPrintZ(&buf, "__dispatchEvent({d},'onContextMenu',{d})\x00", .{ node_id, item_idx }) catch return;
+    v8_runtime.evalScript(expr);
+}
+
+fn makeMenuItemHandler(comptime idx: usize) *const fn () void {
+    return struct {
+        fn callback() void {
+            dispatchContextMenuClick(idx);
+        }
+    }.callback;
+}
+
+const g_menu_item_handlers = blk: {
+    var arr: [MAX_MENU_ITEMS]*const fn () void = undefined;
+    for (0..MAX_MENU_ITEMS) |i| arr[i] = makeMenuItemHandler(i);
+    break :blk arr;
+};
+
+// Per-node menu storage. Keyed by React id (scroll_persist_slot).
+// Items slice points into the same alloc as labels — both freed together
+// on next decode for that node, or on node removal.
+var g_menu_items_by_node: std.AutoHashMap(u32, []context_menu.MenuItem) = undefined;
+var g_menu_labels_by_node: std.AutoHashMap(u32, [][]u8) = undefined;
+
+fn clearContextMenu(node_id: u32) void {
+    if (g_menu_labels_by_node.fetchRemove(node_id)) |entry| {
+        for (entry.value) |label| g_alloc.free(label);
+        g_alloc.free(entry.value);
+    }
+    if (g_menu_items_by_node.fetchRemove(node_id)) |entry| {
+        g_alloc.free(entry.value);
+    }
+}
+
+fn applyContextMenuItems(node: *Node, val: std.json.Value) void {
+    const node_id = node.scroll_persist_slot;
+    clearContextMenu(node_id);
+    if (val != .array) {
+        node.context_menu_items = null;
+        return;
+    }
+    const src = val.array.items;
+    const n = @min(src.len, MAX_MENU_ITEMS);
+    if (n == 0) {
+        node.context_menu_items = null;
+        return;
+    }
+    const labels = g_alloc.alloc([]u8, n) catch return;
+    const items = g_alloc.alloc(context_menu.MenuItem, n) catch {
+        g_alloc.free(labels);
+        return;
+    };
+    for (0..n) |i| {
+        var label_text: []const u8 = "";
+        if (src[i] == .object) {
+            if (src[i].object.get("label")) |lv| {
+                if (lv == .string) label_text = lv.string;
+            }
+        }
+        const owned = g_alloc.dupe(u8, label_text) catch "";
+        labels[i] = @constCast(owned);
+        items[i] = .{ .label = owned, .handler = g_menu_item_handlers[i] };
+    }
+    g_menu_labels_by_node.put(node_id, labels) catch {};
+    g_menu_items_by_node.put(node_id, items) catch {};
+    node.context_menu_items = items;
+}
+
+// ── Inline glyph storage ─────────────────────────────────
+// Each glyph carries an alloc'd `d` (svg path) and optional fill_effect
+// string. We hold both the slice and the strings so we can free everything
+// in one pass when the prop changes or the node is destroyed.
+const InlineGlyphAlloc = struct {
+    glyphs: []layout.InlineGlyph,
+    d_strings: [][]u8,
+    effect_strings: [][]u8,
+};
+
+var g_inline_glyphs_by_node: std.AutoHashMap(u32, InlineGlyphAlloc) = undefined;
+
+fn clearInlineGlyphs(node_id: u32) void {
+    if (g_inline_glyphs_by_node.fetchRemove(node_id)) |entry| {
+        const a = entry.value;
+        for (a.d_strings) |s| g_alloc.free(s);
+        for (a.effect_strings) |s| g_alloc.free(s);
+        g_alloc.free(a.d_strings);
+        g_alloc.free(a.effect_strings);
+        g_alloc.free(a.glyphs);
+    }
+}
+
+fn applyInlineGlyphs(node: *Node, val: std.json.Value) void {
+    const node_id = node.scroll_persist_slot;
+    clearInlineGlyphs(node_id);
+    if (val != .array or val.array.items.len == 0) {
+        node.inline_glyphs = null;
+        return;
+    }
+    const src = val.array.items;
+    const n = src.len;
+    const glyphs = g_alloc.alloc(layout.InlineGlyph, n) catch return;
+    const d_strs = g_alloc.alloc([]u8, n) catch {
+        g_alloc.free(glyphs);
+        return;
+    };
+    const e_strs = g_alloc.alloc([]u8, n) catch {
+        g_alloc.free(glyphs);
+        g_alloc.free(d_strs);
+        return;
+    };
+    for (0..n) |i| {
+        var g = layout.InlineGlyph{ .d = "" };
+        d_strs[i] = &.{};
+        e_strs[i] = &.{};
+        if (src[i] == .object) {
+            const obj = src[i].object;
+            if (obj.get("d")) |dv| if (dv == .string) {
+                d_strs[i] = @constCast(g_alloc.dupe(u8, dv.string) catch "");
+                g.d = d_strs[i];
+            };
+            if (obj.get("fill")) |fv| if (fv == .string) {
+                if (parseColor(fv.string)) |c| g.fill = c;
+            };
+            if (obj.get("fillEffect")) |ev| if (ev == .string) {
+                e_strs[i] = @constCast(g_alloc.dupe(u8, ev.string) catch "");
+                g.fill_effect = e_strs[i];
+            };
+            if (obj.get("stroke")) |sv| if (sv == .string) {
+                if (parseColor(sv.string)) |c| g.stroke = c;
+            };
+            if (obj.get("strokeWidth")) |swv| if (jsonFloat(swv)) |f| {
+                g.stroke_width = f;
+            };
+            if (obj.get("scale")) |scv| if (jsonFloat(scv)) |f| {
+                g.scale = f;
+            };
+        }
+        glyphs[i] = g;
+    }
+    g_inline_glyphs_by_node.put(node_id, .{
+        .glyphs = glyphs,
+        .d_strings = d_strs,
+        .effect_strings = e_strs,
+    }) catch {};
+    node.inline_glyphs = glyphs;
+}
 
 const CHROME_HEIGHT: f32 = 32;
 const CHROME_PAD: f32 = 6;
@@ -296,14 +603,14 @@ fn releaseInputSlot(node_id: u32) void {
 fn jsonFloat(v: std.json.Value) ?f32 {
     return switch (v) {
         .integer => |i| @floatFromInt(i),
-        .float   => |f| @floatCast(f),
+        .float => |f| @floatCast(f),
         else => null,
     };
 }
 fn jsonInt(v: std.json.Value) ?i64 {
     return switch (v) {
         .integer => |i| i,
-        .float   => |f| @intFromFloat(f),
+        .float => |f| @intFromFloat(f),
         else => null,
     };
 }
@@ -319,6 +626,32 @@ fn jsonBool(v: std.json.Value) ?bool {
     };
 }
 
+fn objectField(obj: std.json.Value, key: []const u8) ?std.json.Value {
+    if (obj != .object) return null;
+    return obj.object.get(key);
+}
+
+fn propString(props: std.json.Value, key: []const u8) ?[]const u8 {
+    const v = objectField(props, key) orelse return null;
+    return if (v == .string) v.string else null;
+}
+
+fn propInt(props: std.json.Value, key: []const u8) ?i32 {
+    const v = objectField(props, key) orelse return null;
+    const i = jsonInt(v) orelse return null;
+    return @intCast(@max(std.math.minInt(i32), @min(std.math.maxInt(i32), i)));
+}
+
+fn propFloat(props: std.json.Value, key: []const u8) ?f32 {
+    const v = objectField(props, key) orelse return null;
+    return jsonFloat(v);
+}
+
+fn propBool(props: std.json.Value, key: []const u8) ?bool {
+    const v = objectField(props, key) orelse return null;
+    return jsonBool(v);
+}
+
 fn parseStringFloat(s: []const u8) ?f32 {
     const t = std.mem.trim(u8, s, " \t\r\n");
     if (t.len == 0) return null;
@@ -328,8 +661,8 @@ fn parseStringFloat(s: []const u8) ?f32 {
 fn jsonMaybePct(v: std.json.Value) ?f32 {
     return switch (v) {
         .integer => |i| @floatFromInt(i),
-        .float   => |f| @floatCast(f),
-        .string  => |s| blk: {
+        .float => |f| @floatCast(f),
+        .string => |s| blk: {
             const t = std.mem.trim(u8, s, " \t\r\n");
             if (t.len == 0) break :blk null;
             if (std.mem.endsWith(u8, t, "%")) {
@@ -394,7 +727,9 @@ fn parseRgb(s: []const u8) ?Color {
         if (idx >= 4) break;
         const t = std.mem.trim(u8, p, " \t");
         const v = std.fmt.parseFloat(f32, t) catch continue;
-        const clamped = @max(@min(v, 255.0), 0.0);
+        // CSS alpha is 0..1; rgb channels are 0..255.
+        const scaled = if (idx == 3) v * 255.0 else v;
+        const clamped = @max(@min(scaled, 255.0), 0.0);
         parts[idx] = @intFromFloat(clamped);
     }
     return Color.rgba(parts[0], parts[1], parts[2], parts[3]);
@@ -405,13 +740,13 @@ fn parseColor(s: []const u8) ?Color {
     if (s[0] == '#') return parseHex(s);
     if (std.mem.startsWith(u8, s, "rgb")) return parseRgb(s);
     const eq = std.mem.eql;
-    if (eq(u8, s, "black"))   return Color.rgb(0, 0, 0);
-    if (eq(u8, s, "white"))   return Color.rgb(255, 255, 255);
-    if (eq(u8, s, "red"))     return Color.rgb(220, 50, 50);
-    if (eq(u8, s, "blue"))    return Color.rgb(70, 130, 230);
-    if (eq(u8, s, "green"))   return Color.rgb(60, 190, 100);
-    if (eq(u8, s, "yellow"))  return Color.rgb(240, 210, 60);
-    if (eq(u8, s, "cyan"))    return Color.rgb(70, 210, 230);
+    if (eq(u8, s, "black")) return Color.rgb(0, 0, 0);
+    if (eq(u8, s, "white")) return Color.rgb(255, 255, 255);
+    if (eq(u8, s, "red")) return Color.rgb(220, 50, 50);
+    if (eq(u8, s, "blue")) return Color.rgb(70, 130, 230);
+    if (eq(u8, s, "green")) return Color.rgb(60, 190, 100);
+    if (eq(u8, s, "yellow")) return Color.rgb(240, 210, 60);
+    if (eq(u8, s, "cyan")) return Color.rgb(70, 210, 230);
     if (eq(u8, s, "magenta")) return Color.rgb(220, 80, 200);
     if (eq(u8, s, "transparent")) return Color.rgba(0, 0, 0, 0);
     return null;
@@ -424,8 +759,12 @@ fn parseGutterRows(v: std.json.Value) ?[]const layout.GutterRow {
     for (v.array.items, 0..) |row_v, idx| {
         var row: layout.GutterRow = .{};
         if (row_v == .object) {
-        if (row_v.object.get("line")) |v_| { if (jsonInt(v_)) |i| row.line = @intCast(@max(0, i)); }
-        if (row_v.object.get("marker")) |v_| { if (v_ == .string) row.marker = parseColor(v_.string); }
+            if (row_v.object.get("line")) |v_| {
+                if (jsonInt(v_)) |i| row.line = @intCast(@max(0, i));
+            }
+            if (row_v.object.get("marker")) |v_| {
+                if (v_ == .string) row.marker = parseColor(v_.string);
+            }
         }
         out[idx] = row;
     }
@@ -438,9 +777,15 @@ fn parseMinimapRows(v: std.json.Value) ?[]const layout.MinimapRow {
     for (v.array.items, 0..) |row_v, idx| {
         var row: layout.MinimapRow = .{};
         if (row_v == .object) {
-        if (row_v.object.get("width")) |v_| { if (jsonFloat(v_)) |f| row.width = f; }
-        if (row_v.object.get("marker")) |v_| { if (v_ == .string) row.marker = parseColor(v_.string); }
-        if (row_v.object.get("active")) |v_| { if (jsonBool(v_)) |b| row.active = b; }
+            if (row_v.object.get("width")) |v_| {
+                if (jsonFloat(v_)) |f| row.width = f;
+            }
+            if (row_v.object.get("marker")) |v_| {
+                if (v_ == .string) row.marker = parseColor(v_.string);
+            }
+            if (row_v.object.get("active")) |v_| {
+                if (jsonBool(v_)) |b| row.active = b;
+            }
         }
         out[idx] = row;
     }
@@ -457,10 +802,18 @@ fn parseMinimapRows(v: std.json.Value) ?[]const layout.MinimapRow {
 fn parseLinearGradient(v: std.json.Value) ?layout.LinearGradient {
     if (v != .object) return null;
     var grad: layout.LinearGradient = .{ .x2 = 24, .y2 = 24 };
-    if (v.object.get("x1")) |x1v| if (jsonFloat(x1v)) |f| { grad.x1 = f; };
-    if (v.object.get("y1")) |y1v| if (jsonFloat(y1v)) |f| { grad.y1 = f; };
-    if (v.object.get("x2")) |x2v| if (jsonFloat(x2v)) |f| { grad.x2 = f; };
-    if (v.object.get("y2")) |y2v| if (jsonFloat(y2v)) |f| { grad.y2 = f; };
+    if (v.object.get("x1")) |x1v| if (jsonFloat(x1v)) |f| {
+        grad.x1 = f;
+    };
+    if (v.object.get("y1")) |y1v| if (jsonFloat(y1v)) |f| {
+        grad.y1 = f;
+    };
+    if (v.object.get("x2")) |x2v| if (jsonFloat(x2v)) |f| {
+        grad.x2 = f;
+    };
+    if (v.object.get("y2")) |y2v| if (jsonFloat(y2v)) |f| {
+        grad.y2 = f;
+    };
 
     const stops_v = v.object.get("stops") orelse return null;
     if (stops_v != .array) return null;
@@ -591,10 +944,7 @@ fn applyStyleEntry(node: *Node, key: []const u8, val: std.json.Value) void {
     } else if (eq(u8, key, "flexDirection")) {
         if (val == .string) {
             const s = val.string;
-            if (eq(u8, s, "row")) node.style.flex_direction = .row
-            else if (eq(u8, s, "row-reverse")) node.style.flex_direction = .row_reverse
-            else if (eq(u8, s, "column-reverse")) node.style.flex_direction = .column_reverse
-            else node.style.flex_direction = .column;
+            if (eq(u8, s, "row")) node.style.flex_direction = .row else if (eq(u8, s, "row-reverse")) node.style.flex_direction = .row_reverse else if (eq(u8, s, "column-reverse")) node.style.flex_direction = .column_reverse else node.style.flex_direction = .column;
         }
     } else if (eq(u8, key, "flex")) {
         // CSS shorthand: `flex: N` ≡ `flex: N 1 0%` → flexGrow=N, flexShrink=1, flexBasis=0.
@@ -612,9 +962,7 @@ fn applyStyleEntry(node: *Node, key: []const u8, val: std.json.Value) void {
         if (jsonMaybePct(val)) |f| node.style.flex_basis = f;
     } else if (eq(u8, key, "flexWrap")) {
         if (val == .string) {
-            if (eq(u8, val.string, "wrap")) node.style.flex_wrap = .wrap
-            else if (eq(u8, val.string, "wrap-reverse")) node.style.flex_wrap = .wrap_reverse
-            else node.style.flex_wrap = .no_wrap;
+            if (eq(u8, val.string, "wrap")) node.style.flex_wrap = .wrap else if (eq(u8, val.string, "wrap-reverse")) node.style.flex_wrap = .wrap_reverse else node.style.flex_wrap = .no_wrap;
         }
     } else if (eq(u8, key, "gap")) {
         if (jsonFloat(val)) |f| node.style.gap = f;
@@ -625,12 +973,7 @@ fn applyStyleEntry(node: *Node, key: []const u8, val: std.json.Value) void {
     } else if (eq(u8, key, "justifyContent")) {
         if (val == .string) {
             const s = val.string;
-            if (eq(u8, s, "center")) node.style.justify_content = .center
-            else if (eq(u8, s, "space-between") or eq(u8, s, "spaceBetween")) node.style.justify_content = .space_between
-            else if (eq(u8, s, "space-around")) node.style.justify_content = .space_around
-            else if (eq(u8, s, "space-evenly")) node.style.justify_content = .space_evenly
-            else if (eq(u8, s, "flex-end") or eq(u8, s, "end")) node.style.justify_content = .end
-            else node.style.justify_content = .start;
+            if (eq(u8, s, "center")) node.style.justify_content = .center else if (eq(u8, s, "space-between") or eq(u8, s, "spaceBetween")) node.style.justify_content = .space_between else if (eq(u8, s, "space-around")) node.style.justify_content = .space_around else if (eq(u8, s, "space-evenly")) node.style.justify_content = .space_evenly else if (eq(u8, s, "flex-end") or eq(u8, s, "end")) node.style.justify_content = .end else node.style.justify_content = .start;
         }
     } else if (eq(u8, key, "alignItems")) {
         if (val == .string) node.style.align_items = parseAlignItems(val.string);
@@ -729,6 +1072,23 @@ fn applyStyleEntry(node: *Node, key: []const u8, val: std.json.Value) void {
         if (jsonFloat(val)) |f| node.style.scale_y = f;
     } else if (eq(u8, key, "zIndex")) {
         if (jsonInt(val)) |i| node.style.z_index = @intCast(i);
+    } else if (eq(u8, key, "shadowOffsetX")) {
+        if (jsonFloat(val)) |f| node.style.shadow_offset_x = f;
+    } else if (eq(u8, key, "shadowOffsetY")) {
+        if (jsonFloat(val)) |f| node.style.shadow_offset_y = f;
+    } else if (eq(u8, key, "shadowBlur")) {
+        if (jsonFloat(val)) |f| node.style.shadow_blur = f;
+    } else if (eq(u8, key, "shadowColor")) {
+        if (val == .string) node.style.shadow_color = parseColor(val.string);
+    } else if (eq(u8, key, "shadowMethod")) {
+        // 'sdf' (default) = single rect with GPU SDF blur in the WGSL fragment
+        // shader. 'rect' = multi-rect CPU fallback (N expanded rects with
+        // fading alpha). Accept the integer too so transition.zig can target it.
+        if (val == .string) {
+            if (eq(u8, val.string, "rect")) node.style.shadow_method = 1 else node.style.shadow_method = 0;
+        } else if (jsonInt(val)) |i| {
+            node.style.shadow_method = if (i == 1) 1 else 0;
+        }
     }
     // Text-typography keys: also valid inside `style`, since React code
     // (and hostConfig.ts's HTML heading defaults) routes them there. Without
@@ -754,60 +1114,7 @@ fn applyStyle(node: *Node, style_v: std.json.Value) void {
 fn resetStyleEntry(node: *Node, key: []const u8) void {
     const d = Style{};
     const eq = std.mem.eql;
-    if (eq(u8, key, "width")) node.style.width = d.width
-    else if (eq(u8, key, "height")) node.style.height = d.height
-    else if (eq(u8, key, "minWidth")) node.style.min_width = d.min_width
-    else if (eq(u8, key, "maxWidth")) node.style.max_width = d.max_width
-    else if (eq(u8, key, "minHeight")) node.style.min_height = d.min_height
-    else if (eq(u8, key, "maxHeight")) node.style.max_height = d.max_height
-    else if (eq(u8, key, "flexDirection")) node.style.flex_direction = d.flex_direction
-    else if (eq(u8, key, "flexGrow")) node.style.flex_grow = d.flex_grow
-    else if (eq(u8, key, "flexShrink")) node.style.flex_shrink = d.flex_shrink
-    else if (eq(u8, key, "flexBasis")) node.style.flex_basis = d.flex_basis
-    else if (eq(u8, key, "flexWrap")) node.style.flex_wrap = d.flex_wrap
-    else if (eq(u8, key, "gap")) node.style.gap = d.gap
-    else if (eq(u8, key, "rowGap")) node.style.row_gap = d.row_gap
-    else if (eq(u8, key, "columnGap")) node.style.column_gap = d.column_gap
-    else if (eq(u8, key, "justifyContent")) node.style.justify_content = d.justify_content
-    else if (eq(u8, key, "alignItems")) node.style.align_items = d.align_items
-    else if (eq(u8, key, "alignSelf")) node.style.align_self = d.align_self
-    else if (eq(u8, key, "alignContent")) node.style.align_content = d.align_content
-    else if (eq(u8, key, "padding")) node.style.padding = d.padding
-    else if (eq(u8, key, "paddingLeft")) node.style.padding_left = d.padding_left
-    else if (eq(u8, key, "paddingRight")) node.style.padding_right = d.padding_right
-    else if (eq(u8, key, "paddingTop")) node.style.padding_top = d.padding_top
-    else if (eq(u8, key, "paddingBottom")) node.style.padding_bottom = d.padding_bottom
-    else if (eq(u8, key, "margin")) node.style.margin = d.margin
-    else if (eq(u8, key, "marginLeft")) node.style.margin_left = d.margin_left
-    else if (eq(u8, key, "marginRight")) node.style.margin_right = d.margin_right
-    else if (eq(u8, key, "marginTop")) node.style.margin_top = d.margin_top
-    else if (eq(u8, key, "marginBottom")) node.style.margin_bottom = d.margin_bottom
-    else if (eq(u8, key, "display")) node.style.display = d.display
-    else if (eq(u8, key, "overflow")) node.style.overflow = d.overflow
-    else if (eq(u8, key, "textAlign")) node.style.text_align = d.text_align
-    else if (eq(u8, key, "position")) node.style.position = d.position
-    else if (eq(u8, key, "top")) node.style.top = d.top
-    else if (eq(u8, key, "left")) node.style.left = d.left
-    else if (eq(u8, key, "right")) node.style.right = d.right
-    else if (eq(u8, key, "bottom")) node.style.bottom = d.bottom
-    else if (eq(u8, key, "aspectRatio")) node.style.aspect_ratio = d.aspect_ratio
-    else if (eq(u8, key, "borderWidth")) node.style.border_width = d.border_width
-    else if (eq(u8, key, "borderTopWidth")) node.style.border_top_width = d.border_top_width
-    else if (eq(u8, key, "borderRightWidth")) node.style.border_right_width = d.border_right_width
-    else if (eq(u8, key, "borderBottomWidth")) node.style.border_bottom_width = d.border_bottom_width
-    else if (eq(u8, key, "borderLeftWidth")) node.style.border_left_width = d.border_left_width
-    else if (eq(u8, key, "borderColor")) node.style.border_color = d.border_color
-    else if (eq(u8, key, "borderRadius")) node.style.border_radius = d.border_radius
-    else if (eq(u8, key, "borderTopLeftRadius")) node.style.border_top_left_radius = d.border_top_left_radius
-    else if (eq(u8, key, "borderTopRightRadius")) node.style.border_top_right_radius = d.border_top_right_radius
-    else if (eq(u8, key, "borderBottomRightRadius")) node.style.border_bottom_right_radius = d.border_bottom_right_radius
-    else if (eq(u8, key, "borderBottomLeftRadius")) node.style.border_bottom_left_radius = d.border_bottom_left_radius
-    else if (eq(u8, key, "backgroundColor")) node.style.background_color = d.background_color
-    else if (eq(u8, key, "opacity")) node.style.opacity = d.opacity
-    else if (eq(u8, key, "rotation")) node.style.rotation = d.rotation
-    else if (eq(u8, key, "scaleX")) node.style.scale_x = d.scale_x
-    else if (eq(u8, key, "scaleY")) node.style.scale_y = d.scale_y
-    else if (eq(u8, key, "zIndex")) node.style.z_index = d.z_index;
+    if (eq(u8, key, "width")) node.style.width = d.width else if (eq(u8, key, "height")) node.style.height = d.height else if (eq(u8, key, "minWidth")) node.style.min_width = d.min_width else if (eq(u8, key, "maxWidth")) node.style.max_width = d.max_width else if (eq(u8, key, "minHeight")) node.style.min_height = d.min_height else if (eq(u8, key, "maxHeight")) node.style.max_height = d.max_height else if (eq(u8, key, "flexDirection")) node.style.flex_direction = d.flex_direction else if (eq(u8, key, "flexGrow")) node.style.flex_grow = d.flex_grow else if (eq(u8, key, "flexShrink")) node.style.flex_shrink = d.flex_shrink else if (eq(u8, key, "flexBasis")) node.style.flex_basis = d.flex_basis else if (eq(u8, key, "flexWrap")) node.style.flex_wrap = d.flex_wrap else if (eq(u8, key, "gap")) node.style.gap = d.gap else if (eq(u8, key, "rowGap")) node.style.row_gap = d.row_gap else if (eq(u8, key, "columnGap")) node.style.column_gap = d.column_gap else if (eq(u8, key, "justifyContent")) node.style.justify_content = d.justify_content else if (eq(u8, key, "alignItems")) node.style.align_items = d.align_items else if (eq(u8, key, "alignSelf")) node.style.align_self = d.align_self else if (eq(u8, key, "alignContent")) node.style.align_content = d.align_content else if (eq(u8, key, "padding")) node.style.padding = d.padding else if (eq(u8, key, "paddingLeft")) node.style.padding_left = d.padding_left else if (eq(u8, key, "paddingRight")) node.style.padding_right = d.padding_right else if (eq(u8, key, "paddingTop")) node.style.padding_top = d.padding_top else if (eq(u8, key, "paddingBottom")) node.style.padding_bottom = d.padding_bottom else if (eq(u8, key, "margin")) node.style.margin = d.margin else if (eq(u8, key, "marginLeft")) node.style.margin_left = d.margin_left else if (eq(u8, key, "marginRight")) node.style.margin_right = d.margin_right else if (eq(u8, key, "marginTop")) node.style.margin_top = d.margin_top else if (eq(u8, key, "marginBottom")) node.style.margin_bottom = d.margin_bottom else if (eq(u8, key, "display")) node.style.display = d.display else if (eq(u8, key, "overflow")) node.style.overflow = d.overflow else if (eq(u8, key, "textAlign")) node.style.text_align = d.text_align else if (eq(u8, key, "position")) node.style.position = d.position else if (eq(u8, key, "top")) node.style.top = d.top else if (eq(u8, key, "left")) node.style.left = d.left else if (eq(u8, key, "right")) node.style.right = d.right else if (eq(u8, key, "bottom")) node.style.bottom = d.bottom else if (eq(u8, key, "aspectRatio")) node.style.aspect_ratio = d.aspect_ratio else if (eq(u8, key, "borderWidth")) node.style.border_width = d.border_width else if (eq(u8, key, "borderTopWidth")) node.style.border_top_width = d.border_top_width else if (eq(u8, key, "borderRightWidth")) node.style.border_right_width = d.border_right_width else if (eq(u8, key, "borderBottomWidth")) node.style.border_bottom_width = d.border_bottom_width else if (eq(u8, key, "borderLeftWidth")) node.style.border_left_width = d.border_left_width else if (eq(u8, key, "borderColor")) node.style.border_color = d.border_color else if (eq(u8, key, "borderRadius")) node.style.border_radius = d.border_radius else if (eq(u8, key, "borderTopLeftRadius")) node.style.border_top_left_radius = d.border_top_left_radius else if (eq(u8, key, "borderTopRightRadius")) node.style.border_top_right_radius = d.border_top_right_radius else if (eq(u8, key, "borderBottomRightRadius")) node.style.border_bottom_right_radius = d.border_bottom_right_radius else if (eq(u8, key, "borderBottomLeftRadius")) node.style.border_bottom_left_radius = d.border_bottom_left_radius else if (eq(u8, key, "backgroundColor")) node.style.background_color = d.background_color else if (eq(u8, key, "opacity")) node.style.opacity = d.opacity else if (eq(u8, key, "rotation")) node.style.rotation = d.rotation else if (eq(u8, key, "scaleX")) node.style.scale_x = d.scale_x else if (eq(u8, key, "scaleY")) node.style.scale_y = d.scale_y else if (eq(u8, key, "zIndex")) node.style.z_index = d.z_index else if (eq(u8, key, "shadowOffsetX")) node.style.shadow_offset_x = d.shadow_offset_x else if (eq(u8, key, "shadowOffsetY")) node.style.shadow_offset_y = d.shadow_offset_y else if (eq(u8, key, "shadowBlur")) node.style.shadow_blur = d.shadow_blur else if (eq(u8, key, "shadowColor")) node.style.shadow_color = d.shadow_color else if (eq(u8, key, "shadowMethod")) node.style.shadow_method = d.shadow_method;
 }
 
 fn removeStyleKeys(node: *Node, keys_v: std.json.Value) void {
@@ -824,24 +1131,7 @@ fn removePropKeys(node: *Node, keys_v: std.json.Value) void {
         const k = entry.string;
         if (std.mem.eql(u8, k, "fontSize")) {
             if (node.terminal) node.terminal_font_size = 13 else node.font_size = 16;
-        }
-        else if (std.mem.eql(u8, k, "color")) node.text_color = null
-        else if (std.mem.eql(u8, k, "letterSpacing")) node.letter_spacing = 0
-        else if (std.mem.eql(u8, k, "lineHeight")) node.line_height = 0
-        else if (std.mem.eql(u8, k, "numberOfLines")) node.number_of_lines = 0
-        else if (std.mem.eql(u8, k, "noWrap")) node.no_wrap = false
-        else if (std.mem.eql(u8, k, "paintText")) node.input_paint_text = true
-        else if (std.mem.eql(u8, k, "colorRows")) node.input_color_rows = null
-        else if (std.mem.eql(u8, k, "placeholder")) node.placeholder = null
-        else if (std.mem.eql(u8, k, "value")) node.text = null
-        else if (std.mem.eql(u8, k, "source")) node.image_src = null
-        else if (std.mem.eql(u8, k, "href")) node.href = null
-        else if (std.mem.eql(u8, k, "tooltip")) node.tooltip = null
-        else if (std.mem.eql(u8, k, "hoverable")) node.hoverable = false
-        else if (std.mem.eql(u8, k, "debugName")) node.debug_name = null
-        else if (std.mem.eql(u8, k, "testID")) node.test_id = null
-        else if (std.mem.eql(u8, k, "windowDrag")) node.window_drag = false
-        else if (std.mem.eql(u8, k, "windowResize")) node.window_resize = false;
+        } else if (std.mem.eql(u8, k, "color")) node.text_color = null else if (std.mem.eql(u8, k, "letterSpacing")) node.letter_spacing = 0 else if (std.mem.eql(u8, k, "lineHeight")) node.line_height = 0 else if (std.mem.eql(u8, k, "numberOfLines")) node.number_of_lines = 0 else if (std.mem.eql(u8, k, "noWrap")) node.no_wrap = false else if (std.mem.eql(u8, k, "paintText")) node.input_paint_text = true else if (std.mem.eql(u8, k, "colorRows")) node.input_color_rows = null else if (std.mem.eql(u8, k, "placeholder")) node.placeholder = null else if (std.mem.eql(u8, k, "value")) node.text = null else if (std.mem.eql(u8, k, "source")) node.image_src = null else if (std.mem.eql(u8, k, "renderSrc")) node.render_src = null else if (std.mem.eql(u8, k, "staticSurface")) node.static_surface = false else if (std.mem.eql(u8, k, "staticSurfaceKey")) node.static_surface_key = null else if (std.mem.eql(u8, k, "staticSurfaceScale")) node.static_surface_scale = 1 else if (std.mem.eql(u8, k, "staticSurfaceWarmupFrames")) node.static_surface_warmup_frames = 0 else if (std.mem.eql(u8, k, "staticSurfaceIntroFrames")) node.static_surface_intro_frames = 0 else if (std.mem.eql(u8, k, "staticSurfaceOverlay")) node.static_surface_overlay = false else if (std.mem.eql(u8, k, "d")) node.canvas_path_d = null else if (std.mem.eql(u8, k, "stroke")) node.text_color = null else if (std.mem.eql(u8, k, "strokeWidth")) node.canvas_stroke_width = 2 else if (std.mem.eql(u8, k, "strokeOpacity")) node.canvas_stroke_opacity = 1 else if (std.mem.eql(u8, k, "fill")) node.canvas_fill_color = null else if (std.mem.eql(u8, k, "fillOpacity")) node.canvas_fill_opacity = 1 else if (std.mem.eql(u8, k, "gradient")) node.canvas_fill_gradient = null else if (std.mem.eql(u8, k, "fillEffect")) node.canvas_fill_effect = null else if (std.mem.eql(u8, k, "href")) node.href = null else if (std.mem.eql(u8, k, "tooltip")) node.tooltip = null else if (std.mem.eql(u8, k, "hoverable")) node.hoverable = false else if (std.mem.eql(u8, k, "debugName")) node.debug_name = null else if (std.mem.eql(u8, k, "testID")) node.test_id = null else if (std.mem.eql(u8, k, "windowDrag")) node.window_drag = false else if (std.mem.eql(u8, k, "windowResize")) node.window_resize = false;
     }
 }
 
@@ -849,12 +1139,12 @@ fn applyTypeDefaults(node: *Node, id: u32, type_name: []const u8) void {
     const eq = std.mem.eql;
     if (eq(u8, type_name, "ScrollView")) {
         node.style.overflow = .scroll;
-    // tslx:GEN:TYPE_DEFAULTS START
+        // tslx:GEN:TYPE_DEFAULTS START
     } else if (eq(u8, type_name, "CodeGutter")) {
         node.gutter_rows = &[_]layout.GutterRow{};
     } else if (eq(u8, type_name, "Minimap")) {
         node.minimap_rows = &[_]layout.MinimapRow{};
-    // tslx:GEN:TYPE_DEFAULTS END
+        // tslx:GEN:TYPE_DEFAULTS END
     } else if (eq(u8, type_name, "Canvas")) {
         // Infinite pan/zoom surface. `canvas_type` is what wires engine paint,
         // hit-testing, drag-to-pan and wheel-to-zoom in events.zig / engine.zig.
@@ -875,6 +1165,128 @@ fn applyTypeDefaults(node: *Node, id: u32, type_name: []const u8) void {
     ensureInputSlot(node, id, type_name);
 }
 
+fn openHostWindowForNode(id: u32, type_name: []const u8, props: ?std.json.Value) void {
+    if (g_window_by_node_id.contains(id)) return;
+    if (!std.mem.eql(u8, type_name, "Window") and !std.mem.eql(u8, type_name, "Notification")) return;
+
+    const p = props orelse .null;
+    const is_notification = std.mem.eql(u8, type_name, "Notification");
+    const title_src = propString(p, "title") orelse if (is_notification) "Notification" else "Window";
+    const title = g_alloc.dupeZ(u8, title_src) catch return;
+
+    const default_width: i32 = if (is_notification) 380 else 640;
+    const default_height: i32 = if (is_notification) 100 else 480;
+    const width = propInt(p, "width") orelse default_width;
+    const height = propInt(p, "height") orelse default_height;
+    const duration_ms: u32 = if (propFloat(p, "duration")) |sec|
+        @intFromFloat(@max(0, sec) * 1000.0)
+    else
+        5000;
+
+    const kind: windows.WindowKind = .independent;
+    const slot = windows.open(.{
+        .title = title.ptr,
+        .width = @intCast(@max(1, width)),
+        .height = @intCast(@max(1, height)),
+        .kind = kind,
+        .auto_dismiss_ms = duration_ms,
+        .x = propInt(p, "x"),
+        .y = propInt(p, "y"),
+        .always_on_top = propBool(p, "alwaysOnTop") orelse is_notification,
+        .borderless = propBool(p, "borderless") orelse is_notification,
+        .window_id = id,
+    }) orelse {
+        std.debug.print("[window-open/parent] FAILED node={d} type={s} title={s}\n", .{ id, type_name, title_src });
+        g_alloc.free(title);
+        return;
+    };
+    std.debug.print("[window-open/parent] node={d} type={s} slot={d} title={s} size={d}x{d}\n", .{ id, type_name, slot, title_src, width, height });
+
+    g_window_by_node_id.put(id, .{
+        .slot = slot,
+        .kind = kind,
+        .title = title,
+    }) catch {
+        windows.close(slot);
+        g_alloc.free(title);
+        return;
+    };
+}
+
+fn commandWindowId(cmd: std.json.Value) ?u32 {
+    if (cmd != .object) return null;
+    if (cmd.object.get("window_id")) |v| {
+        if (jsonInt(v)) |i| if (i > 0) return @intCast(i);
+    }
+    if (cmd.object.get("windowId")) |v| {
+        if (jsonInt(v)) |i| if (i > 0) return @intCast(i);
+    }
+    return null;
+}
+
+fn routeCommandToHostWindow(cmd: std.json.Value) void {
+    const explicit_window_id = commandWindowId(cmd);
+    const window_id = explicit_window_id orelse blk: {
+        if (cmd != .object) return;
+        if (cmd.object.get("id")) |v| {
+            if (jsonInt(v)) |i| {
+                if (i > 0) {
+                    if (g_window_owner_by_node_id.get(@intCast(i))) |owner| break :blk owner;
+                }
+            }
+        }
+        if (cmd.object.get("childId")) |v| {
+            if (jsonInt(v)) |i| {
+                if (i > 0) {
+                    if (g_window_owner_by_node_id.get(@intCast(i))) |owner| break :blk owner;
+                }
+            }
+        }
+        if (cmd.object.get("parentId")) |v| {
+            if (jsonInt(v)) |i| {
+                if (i > 0) {
+                    const pid: u32 = @intCast(i);
+                    if (g_window_by_node_id.contains(pid)) break :blk pid;
+                    if (g_window_owner_by_node_id.get(pid)) |owner| break :blk owner;
+                }
+            }
+        }
+        return;
+    };
+    const binding = g_window_by_node_id.get(window_id) orelse return;
+    if (binding.kind != .independent) return;
+    if (cmd != .object) return;
+    const op_v = cmd.object.get("op") orelse return;
+    if (op_v != .string) return;
+    if (std.mem.eql(u8, op_v.string, "CREATE")) {
+        if (cmd.object.get("id")) |id_v| {
+            if (jsonInt(id_v)) |id| if (id == window_id) return;
+        }
+    }
+
+    var line: std.ArrayList(u8) = .{};
+    defer line.deinit(g_alloc);
+    line.appendSlice(g_alloc, "{\"type\":\"mutations\",\"commands\":[") catch return;
+    line.writer(g_alloc).print("{f}", .{std.json.fmt(cmd, .{})}) catch return;
+    line.appendSlice(g_alloc, "]}") catch return;
+    std.debug.print("[window-route/parent] window={d} slot={d} op={s} bytes={d}\n", .{ window_id, binding.slot, op_v.string, line.items.len });
+    windows.sendLineToChild(binding.slot, line.items);
+}
+
+fn noteCommandWindowOwner(cmd: std.json.Value) void {
+    const window_id = commandWindowId(cmd) orelse return;
+    if (cmd.object.get("id")) |v| {
+        if (jsonInt(v)) |i| if (i > 0 and @as(u32, @intCast(i)) != window_id) {
+            g_window_owner_by_node_id.put(@intCast(i), window_id) catch {};
+        };
+    }
+    if (cmd.object.get("childId")) |v| {
+        if (jsonInt(v)) |i| if (i > 0 and @as(u32, @intCast(i)) != window_id) {
+            g_window_owner_by_node_id.put(@intCast(i), window_id) catch {};
+        };
+    }
+}
+
 fn applyProps(node: *Node, props: std.json.Value, type_name: ?[]const u8) void {
     if (props != .object) return;
     const is_input = node.input_id != null or (type_name != null and isInputType(type_name.?));
@@ -883,8 +1295,7 @@ fn applyProps(node: *Node, props: std.json.Value, type_name: ?[]const u8) void {
     while (it.next()) |e| {
         const k = e.key_ptr.*;
         const v = e.value_ptr.*;
-        if (std.mem.eql(u8, k, "style")) applyStyle(node, v)
-        else if (std.mem.eql(u8, k, "fontSize")) {
+        if (std.mem.eql(u8, k, "style")) applyStyle(node, v) else if (std.mem.eql(u8, k, "fontSize")) {
             if (jsonInt(v)) |i| {
                 const size: u16 = @intCast(@max(i, 1));
                 if (is_terminal) node.terminal_font_size = size else node.font_size = size;
@@ -907,7 +1318,7 @@ fn applyProps(node: *Node, props: std.json.Value, type_name: ?[]const u8) void {
             node.input_color_rows = parseColorTextRows(v);
         }
         // tslx:GEN:PROPS START
-                // ── CodeGutter primitive props ──
+        // ── CodeGutter primitive props ──
         else if (node.gutter_rows != null and std.mem.eql(u8, k, "rows")) {
             node.gutter_rows = parseGutterRows(v);
         } else if (node.gutter_rows != null and std.mem.eql(u8, k, "rowHeight")) {
@@ -921,7 +1332,7 @@ fn applyProps(node: *Node, props: std.json.Value, type_name: ?[]const u8) void {
         } else if (node.gutter_rows != null and std.mem.eql(u8, k, "textColor")) {
             if (v == .string) node.gutter_text = parseColor(v.string);
         }
-                // ── Minimap primitive props ──
+        // ── Minimap primitive props ──
         else if (node.minimap_rows != null and std.mem.eql(u8, k, "rows")) {
             node.minimap_rows = parseMinimapRows(v);
         } else if (node.minimap_rows != null and std.mem.eql(u8, k, "rowHeight")) {
@@ -955,6 +1366,26 @@ fn applyProps(node: *Node, props: std.json.Value, type_name: ?[]const u8) void {
             if (dupJsonText(v)) |s| node.image_src = s;
         } else if (std.mem.eql(u8, k, "renderSrc")) {
             if (dupJsonText(v)) |s| node.render_src = s;
+        } else if (std.mem.eql(u8, k, "staticSurface")) {
+            if (jsonBool(v)) |b| node.static_surface = b;
+        } else if (std.mem.eql(u8, k, "staticSurfaceKey")) {
+            if (dupJsonText(v)) |s| node.static_surface_key = s;
+        } else if (std.mem.eql(u8, k, "staticSurfaceScale")) {
+            if (jsonFloat(v)) |f| node.static_surface_scale = @max(1.0, @min(f, 4.0));
+        } else if (std.mem.eql(u8, k, "staticSurfaceWarmupFrames")) {
+            if (jsonInt(v)) |i| node.static_surface_warmup_frames = @intCast(@max(0, @min(i, std.math.maxInt(u16))));
+        } else if (std.mem.eql(u8, k, "staticSurfaceIntroFrames")) {
+            if (jsonInt(v)) |i| node.static_surface_intro_frames = @intCast(@max(0, @min(i, std.math.maxInt(u16))));
+        } else if (std.mem.eql(u8, k, "staticSurfaceOverlay")) {
+            if (jsonBool(v)) |b| node.static_surface_overlay = b;
+        } else if (std.mem.eql(u8, k, "videoSrc")) {
+            // Path or URL to a video. framework/videos.zig hooks the paint
+            // pass and decodes lazily — no audio yet, just frames.
+            if (dupJsonText(v)) |s| node.video_src = s;
+        } else if (std.mem.eql(u8, k, "cartridgeSrc")) {
+            // Embedded cartridge (zig-out/bin/<name>) — engine.zig:619 walks
+            // the tree and lifts these into nested host instances.
+            if (dupJsonText(v)) |s| node.cartridge_src = s;
         } else if (std.mem.eql(u8, k, "href")) {
             if (dupJsonText(v)) |s| node.href = s;
         } else if (std.mem.eql(u8, k, "tooltip")) {
@@ -969,6 +1400,68 @@ fn applyProps(node: *Node, props: std.json.Value, type_name: ?[]const u8) void {
             if (jsonBool(v)) |b| node.window_drag = b;
         } else if (std.mem.eql(u8, k, "windowResize")) {
             if (jsonBool(v)) |b| node.window_resize = b;
+        } else if (std.mem.eql(u8, k, "physicsWorld")) {
+            if (jsonBool(v)) |b| node.physics_world = b;
+        } else if (std.mem.eql(u8, k, "physicsWorldId")) {
+            if (jsonInt(v)) |i| node.physics_world_id = @intCast(@max(0, i));
+        } else if (std.mem.eql(u8, k, "physicsBody")) {
+            if (jsonBool(v)) |b| node.physics_body = b;
+        } else if (std.mem.eql(u8, k, "physicsCollider")) {
+            if (jsonBool(v)) |b| node.physics_collider = b;
+        } else if (std.mem.eql(u8, k, "physicsBodyType")) {
+            // String form: 'static'|'kinematic'|'dynamic' → 0|1|2 (Box2D enum order).
+            if (v == .string) {
+                const s = v.string;
+                if (std.mem.eql(u8, s, "static")) node.physics_body_type = 0 else if (std.mem.eql(u8, s, "kinematic")) node.physics_body_type = 1 else node.physics_body_type = 2;
+            } else if (jsonInt(v)) |i| node.physics_body_type = @intCast(@max(0, @min(i, 2)));
+        } else if (std.mem.eql(u8, k, "physicsShape")) {
+            // 'box' | 'circle' → 0|1.
+            if (v == .string) {
+                node.physics_shape = if (std.mem.eql(u8, v.string, "circle")) 1 else 0;
+            } else if (jsonInt(v)) |i| node.physics_shape = @intCast(@max(0, i));
+        } else if (std.mem.eql(u8, k, "physicsRadius")) {
+            if (jsonFloat(v)) |f| node.physics_radius = f;
+        } else if (std.mem.eql(u8, k, "physicsX")) {
+            if (jsonFloat(v)) |f| node.physics_x = f;
+        } else if (std.mem.eql(u8, k, "physicsY")) {
+            if (jsonFloat(v)) |f| node.physics_y = f;
+        } else if (std.mem.eql(u8, k, "physicsAngle")) {
+            if (jsonFloat(v)) |f| node.physics_angle = f;
+        } else if (std.mem.eql(u8, k, "physicsGravityX")) {
+            if (jsonFloat(v)) |f| node.physics_gravity_x = f;
+        } else if (std.mem.eql(u8, k, "physicsGravityY")) {
+            if (jsonFloat(v)) |f| node.physics_gravity_y = f;
+        } else if (std.mem.eql(u8, k, "physicsGravityScale")) {
+            if (jsonFloat(v)) |f| node.physics_gravity_scale = f;
+        } else if (std.mem.eql(u8, k, "physicsDensity")) {
+            if (jsonFloat(v)) |f| node.physics_density = f;
+        } else if (std.mem.eql(u8, k, "physicsFriction")) {
+            if (jsonFloat(v)) |f| node.physics_friction = f;
+        } else if (std.mem.eql(u8, k, "physicsRestitution")) {
+            if (jsonFloat(v)) |f| node.physics_restitution = f;
+        } else if (std.mem.eql(u8, k, "physicsFixedRotation")) {
+            if (jsonBool(v)) |b| node.physics_fixed_rotation = b;
+        } else if (std.mem.eql(u8, k, "physicsBullet")) {
+            if (jsonBool(v)) |b| node.physics_bullet = b;
+        } else if (std.mem.eql(u8, k, "devtoolsViz")) {
+            // Inspector overlay mode for this node:
+            //   'sparkline' | 'wireframe' | 'node_tree' | 'inspector_overlay' | 'none'
+            if (v == .string) {
+                const s = v.string;
+                if (std.mem.eql(u8, s, "sparkline")) node.devtools_viz = .sparkline else if (std.mem.eql(u8, s, "wireframe")) node.devtools_viz = .wireframe else if (std.mem.eql(u8, s, "node_tree") or std.mem.eql(u8, s, "nodeTree")) node.devtools_viz = .node_tree else if (std.mem.eql(u8, s, "inspector_overlay") or std.mem.eql(u8, s, "inspectorOverlay")) node.devtools_viz = .inspector_overlay else node.devtools_viz = .none;
+            }
+        } else if (std.mem.eql(u8, k, "inlineGlyphs")) {
+            // Inline SVG glyphs threaded into a `<Text>`. Each `\x01` byte in
+            // the text reserves a fontSize×fontSize slot; glyphs[i] paints
+            // into the i-th slot. Each item: {d, fill?, fillEffect?, stroke?,
+            // strokeWidth?, scale?}. See framework/text.zig:40 for sentinels.
+            applyInlineGlyphs(node, v);
+        } else if (std.mem.eql(u8, k, "contextMenuItems")) {
+            // Native context menu (framework/context_menu.zig). Items must be
+            // [{ label: string }, ...]; the handler is wired automatically and
+            // dispatches `__dispatchEvent(<id>,'onContextMenu',<itemIdx>)` when
+            // an item is clicked. Cap MAX_MENU_ITEMS items.
+            applyContextMenuItems(node, v);
         } else if (std.mem.eql(u8, k, "initialScrollY")) {
             // One-shot: set scroll_y on CREATE so dev hot reloads can restore
             // the user's scroll position via the ScrollView React wrapper.
@@ -1002,30 +1495,59 @@ fn applyProps(node: *Node, props: std.json.Value, type_name: ?[]const u8) void {
             // `stroke` maps to text_color — that's the field engine_paint.zig
             // reads for Canvas.Path / Graph.Path stroke color.
             if (v == .string) node.text_color = parseColor(v.string);
+        } else if (std.mem.eql(u8, k, "strokeOpacity")) {
+            if (jsonFloat(v)) |f| node.canvas_stroke_opacity = @max(0, @min(f, 1));
         } else if (std.mem.eql(u8, k, "strokeWidth")) {
             if (jsonFloat(v)) |f| node.canvas_stroke_width = f;
         } else if (std.mem.eql(u8, k, "fill")) {
             if (v == .string) node.canvas_fill_color = parseColor(v.string);
+        } else if (std.mem.eql(u8, k, "fillOpacity")) {
+            if (jsonFloat(v)) |f| node.canvas_fill_opacity = @max(0, @min(f, 1));
         } else if (std.mem.eql(u8, k, "gradient")) {
             node.canvas_fill_gradient = parseLinearGradient(v);
         } else if (std.mem.eql(u8, k, "fillEffect")) {
             if (dupJsonText(v)) |s| node.canvas_fill_effect = s;
+        } else if (std.mem.eql(u8, k, "flowSpeed")) {
+            // Animated stroke flow along the path: 0 = solid, >0 = forward,
+            // <0 = reverse. Pairs with borderFlowSpeed for box borders.
+            if (jsonFloat(v)) |f| node.canvas_flow_speed = f;
         } else if (std.mem.eql(u8, k, "textEffect")) {
             if (dupJsonText(v)) |s| node.text_effect = s;
         } else if (std.mem.eql(u8, k, "viewX")) {
             // Initial camera — engine applies once per canvas instance, then
             // user drag/scroll takes over (see paintCanvasContainer).
-            if (jsonFloat(v)) |f| { node.canvas_view_x = f; node.canvas_view_set = true; }
+            if (jsonFloat(v)) |f| {
+                node.canvas_view_x = f;
+                node.canvas_view_set = true;
+            }
         } else if (std.mem.eql(u8, k, "viewY")) {
-            if (jsonFloat(v)) |f| { node.canvas_view_y = f; node.canvas_view_set = true; }
+            if (jsonFloat(v)) |f| {
+                node.canvas_view_y = f;
+                node.canvas_view_set = true;
+            }
         } else if (std.mem.eql(u8, k, "viewZoom")) {
-            if (jsonFloat(v)) |f| { node.canvas_view_zoom = f; node.canvas_view_set = true; }
+            if (jsonFloat(v)) |f| {
+                node.canvas_view_zoom = f;
+                node.canvas_view_set = true;
+            }
+        } else if (std.mem.eql(u8, k, "driftX")) {
+            // Ambient horizontal drift (px/sec, negative = leftward).
+            // Engine ticks while drift_active=true and the user isn't dragging.
+            if (jsonFloat(v)) |f| node.canvas_drift_x = f;
+        } else if (std.mem.eql(u8, k, "driftY")) {
+            if (jsonFloat(v)) |f| node.canvas_drift_y = f;
+        } else if (std.mem.eql(u8, k, "driftActive")) {
+            if (jsonBool(v)) |b| node.canvas_drift_active = b;
         }
         // ── Effect props ──
         else if (std.mem.eql(u8, k, "name")) {
             if (dupJsonText(v)) |s| node.effect_name = s;
         } else if (std.mem.eql(u8, k, "background")) {
             if (jsonBool(v)) |b| node.effect_background = b;
+        } else if (std.mem.eql(u8, k, "mask")) {
+            // CSS mask-image equivalent: when set, the effect's alpha is used
+            // as the parent's clip mask (effects.zig CPU-only path for now).
+            if (jsonBool(v)) |b| node.effect_mask = b;
         } else if (std.mem.eql(u8, k, "shader")) {
             // WGSL fragment shader body. We prepend a standard header
             // (uniforms struct, fullscreen-triangle vs_main) and the
@@ -1165,10 +1687,10 @@ fn applyHandlerFlags(node: *Node, id: u32, cmd: std.json.Value) void {
     if (cmdHasAnyHandlerName(cmd, &.{ "onClick", "onPress" })) {
         node.handlers.js_on_press = installJsExpr("__dispatchEvent({d},'onClick')\x00", id);
     }
-    if (cmdHasAnyHandlerName(cmd, &.{ "onMouseDown" })) {
+    if (cmdHasAnyHandlerName(cmd, &.{"onMouseDown"})) {
         node.handlers.js_on_mouse_down = installJsExpr("__dispatchEvent({d},'onMouseDown')\x00", id);
     }
-    if (cmdHasAnyHandlerName(cmd, &.{ "onMouseUp" })) {
+    if (cmdHasAnyHandlerName(cmd, &.{"onMouseUp"})) {
         node.handlers.js_on_mouse_up = installJsExpr("__dispatchEvent({d},'onMouseUp')\x00", id);
     }
     if (cmdHasAnyHandlerName(cmd, &.{ "onHoverEnter", "onMouseEnter" })) {
@@ -1210,6 +1732,16 @@ fn setCanvasNodePosition(id: u32, gx: f32, gy: f32) void {
     }
 }
 
+fn dispatchWindowEvent(id: u32, handler: []const u8) void {
+    var buf: [160]u8 = undefined;
+    const expr = std.fmt.bufPrintZ(&buf, "__dispatchEvent({d},'{s}')", .{ id, handler }) catch return;
+    v8_runtime.evalScript(expr);
+}
+
+fn writeJsonString(out: *std.ArrayList(u8), value: []const u8) !void {
+    try out.writer(g_alloc).print("{f}", .{std.json.fmt(value, .{})});
+}
+
 // ── Command application ─────────────────────────────────────────
 
 fn ensureNode(id: u32) !*Node {
@@ -1243,7 +1775,56 @@ fn inheritTypography(parent_id: u32, child_id: u32) void {
 
 fn applyCommand(cmd: std.json.Value) !void {
     if (cmd != .object) return;
+    noteCommandWindowOwner(cmd);
     const op = (cmd.object.get("op") orelse return).string;
+
+    if (g_is_window_child) {
+        if (std.mem.eql(u8, op, "CREATE")) {
+            if (cmd.object.get("id")) |v| {
+                if (jsonInt(v)) |id| if (id == g_child_window_id) return;
+            }
+        } else if (std.mem.eql(u8, op, "UPDATE")) {
+            if (cmd.object.get("id")) |v| {
+                if (jsonInt(v)) |id| if (id == g_child_window_id) return;
+            }
+        } else if (std.mem.eql(u8, op, "APPEND")) {
+            const pid: u32 = @intCast(cmd.object.get("parentId").?.integer);
+            const cid: u32 = @intCast(cmd.object.get("childId").?.integer);
+            if (pid == g_child_window_id) {
+                _ = try ensureNode(cid);
+                for (g_root_child_ids.items) |existing| if (existing == cid) return;
+                try g_root_child_ids.append(g_alloc, cid);
+                g_dirty = true;
+                return;
+            }
+        } else if (std.mem.eql(u8, op, "INSERT_BEFORE")) {
+            const pid: u32 = @intCast(cmd.object.get("parentId").?.integer);
+            const cid: u32 = @intCast(cmd.object.get("childId").?.integer);
+            const bid: u32 = @intCast(cmd.object.get("beforeId").?.integer);
+            if (pid == g_child_window_id) {
+                _ = try ensureNode(cid);
+                var idx: usize = g_root_child_ids.items.len;
+                for (g_root_child_ids.items, 0..) |x, i| if (x == bid) {
+                    idx = i;
+                    break;
+                };
+                try g_root_child_ids.insert(g_alloc, idx, cid);
+                g_dirty = true;
+                return;
+            }
+        } else if (std.mem.eql(u8, op, "REMOVE")) {
+            const pid: u32 = @intCast(cmd.object.get("parentId").?.integer);
+            const cid: u32 = @intCast(cmd.object.get("childId").?.integer);
+            if (pid == g_child_window_id) {
+                for (g_root_child_ids.items, 0..) |x, i| if (x == cid) {
+                    _ = g_root_child_ids.orderedRemove(i);
+                    break;
+                };
+                g_dirty = true;
+                return;
+            }
+        }
+    }
 
     if (std.mem.eql(u8, op, "CREATE")) {
         const id: u32 = @intCast(cmd.object.get("id").?.integer);
@@ -1254,6 +1835,7 @@ fn applyCommand(cmd: std.json.Value) !void {
             applyTypeDefaults(n, id, t.string);
         };
         if (cmd.object.get("props")) |props| applyProps(n, props, type_name);
+        if (type_name) |tn| openHostWindowForNode(id, tn, cmd.object.get("props"));
         // debugName / debugSource are emitted as top-level siblings to props
         // by renderer/hostConfig.ts (not inside the props object). Capture
         // them here so witness.zig / autotest can label pressables by the
@@ -1275,7 +1857,8 @@ fn applyCommand(cmd: std.json.Value) !void {
     } else if (std.mem.eql(u8, op, "APPEND")) {
         const pid: u32 = @intCast(cmd.object.get("parentId").?.integer);
         const cid: u32 = @intCast(cmd.object.get("childId").?.integer);
-        _ = try ensureNode(pid); _ = try ensureNode(cid);
+        _ = try ensureNode(pid);
+        _ = try ensureNode(cid);
         if (g_children_ids.getPtr(pid)) |list| try list.append(g_alloc, cid);
         inheritTypography(pid, cid);
         g_dirty = true;
@@ -1289,7 +1872,10 @@ fn applyCommand(cmd: std.json.Value) !void {
         const bid: u32 = @intCast(cmd.object.get("beforeId").?.integer);
         _ = try ensureNode(cid);
         var idx: usize = g_root_child_ids.items.len;
-        for (g_root_child_ids.items, 0..) |x, i| if (x == bid) { idx = i; break; };
+        for (g_root_child_ids.items, 0..) |x, i| if (x == bid) {
+            idx = i;
+            break;
+        };
         try g_root_child_ids.insert(g_alloc, idx, cid);
         g_dirty = true;
     } else if (std.mem.eql(u8, op, "INSERT_BEFORE")) {
@@ -1299,7 +1885,10 @@ fn applyCommand(cmd: std.json.Value) !void {
         _ = try ensureNode(cid);
         if (g_children_ids.getPtr(pid)) |list| {
             var idx: usize = list.items.len;
-            for (list.items, 0..) |x, i| if (x == bid) { idx = i; break; };
+            for (list.items, 0..) |x, i| if (x == bid) {
+                idx = i;
+                break;
+            };
             try list.insert(g_alloc, idx, cid);
         }
         inheritTypography(pid, cid);
@@ -1308,12 +1897,18 @@ fn applyCommand(cmd: std.json.Value) !void {
         const pid: u32 = @intCast(cmd.object.get("parentId").?.integer);
         const cid: u32 = @intCast(cmd.object.get("childId").?.integer);
         if (g_children_ids.getPtr(pid)) |list| {
-            for (list.items, 0..) |x, i| if (x == cid) { _ = list.orderedRemove(i); break; };
+            for (list.items, 0..) |x, i| if (x == cid) {
+                _ = list.orderedRemove(i);
+                break;
+            };
         }
         g_dirty = true;
     } else if (std.mem.eql(u8, op, "REMOVE_FROM_ROOT")) {
         const cid: u32 = @intCast(cmd.object.get("childId").?.integer);
-        for (g_root_child_ids.items, 0..) |x, i| if (x == cid) { _ = g_root_child_ids.orderedRemove(i); break; };
+        for (g_root_child_ids.items, 0..) |x, i| if (x == cid) {
+            _ = g_root_child_ids.orderedRemove(i);
+            break;
+        };
         g_dirty = true;
     } else if (std.mem.eql(u8, op, "UPDATE")) {
         const id: u32 = @intCast(cmd.object.get("id").?.integer);
@@ -1353,13 +1948,28 @@ fn applyCommandBatch(json_bytes: []const u8) void {
     for (parsed.value.array.items) |cmd| applyCommand(cmd) catch |err| {
         std.debug.print("[qjs] apply error: {s}\n", .{@errorName(err)});
     };
+    if (!g_is_window_child) {
+        for (parsed.value.array.items) |cmd| routeCommandToHostWindow(cmd);
+    }
     const t2 = std.time.microTimestamp();
     cleanupDetachedNodes();
     const t3 = std.time.microTimestamp();
-    if (json_bytes.len > 10_000) {
+    const parse_us = t1 - t0;
+    const apply_us = t2 - t1;
+    const cleanup_us = t3 - t2;
+    const verbose_batches = std.posix.getenv("REACTJIT_VERBOSE_BATCHES") != null;
+    const should_log_batch =
+        verbose_batches or
+        json_bytes.len > 100_000 or
+        cmd_count > 500 or
+        parse_us >= 1000 or
+        apply_us >= 1000 or
+        cleanup_us >= 1000;
+    if (should_log_batch) {
         std.debug.print("[batch-timing] bytes={d} cmds={d} parse={d}ms apply={d}ms cleanup={d}ms\n", .{
-            json_bytes.len, cmd_count,
-            @divTrunc(t1 - t0, 1000), @divTrunc(t2 - t1, 1000), @divTrunc(t3 - t2, 1000),
+            json_bytes.len,           cmd_count,
+            @divTrunc(parse_us, 1000), @divTrunc(apply_us, 1000),
+            @divTrunc(cleanup_us, 1000),
         });
     }
 }
@@ -1379,15 +1989,58 @@ fn drainPendingFlushes() void {
 // ── Tree materialization ────────────────────────────────────────
 
 fn materializeChildren(arena: std.mem.Allocator, parent_id: u32) []Node {
+    return materializeChildrenForOwner(arena, parent_id, null);
+}
+
+fn materializeChildrenForOwner(arena: std.mem.Allocator, parent_id: u32, owner: ?u32) []Node {
     const ids = g_children_ids.get(parent_id) orelse return &.{};
     if (ids.items.len == 0) return &.{};
-    const out = arena.alloc(Node, ids.items.len) catch return &.{};
-    for (ids.items, 0..) |cid, i| {
-        const src = g_node_by_id.get(cid) orelse { out[i] = .{}; continue; };
+    var visible_count: usize = 0;
+    for (ids.items) |cid| {
+        if (!g_is_window_child) {
+            if (g_window_by_node_id.contains(cid)) {
+                continue;
+            }
+            const child_owner = g_window_owner_by_node_id.get(cid);
+            if (owner == null and child_owner != null) {
+                continue;
+            }
+            if (owner != null and child_owner != owner.?) {
+                continue;
+            }
+        }
+        visible_count += 1;
+    }
+    if (visible_count == 0) return &.{};
+    const out = arena.alloc(Node, visible_count) catch return &.{};
+    var i: usize = 0;
+    for (ids.items) |cid| {
+        if (!g_is_window_child) {
+            if (g_window_by_node_id.contains(cid)) continue;
+            const child_owner = g_window_owner_by_node_id.get(cid);
+            if (owner == null and child_owner != null) continue;
+            if (owner != null and child_owner != owner.?) continue;
+        }
+        const src = g_node_by_id.get(cid) orelse {
+            out[i] = .{};
+            i += 1;
+            continue;
+        };
         out[i] = src.*;
-        out[i].children = materializeChildren(arena, cid);
+        out[i].children = materializeChildrenForOwner(arena, cid, owner);
+        i += 1;
     }
     return out;
+}
+
+fn materializeWindowRoot(arena: std.mem.Allocator, window_node_id: u32) ?*Node {
+    if (g_node_by_id.get(window_node_id) == null) return null;
+    const root = arena.create(Node) catch return null;
+    root.* = .{};
+    root.style.flex_direction = .column;
+    root.style.background_color = Color.rgb(17, 24, 39);
+    root.children = materializeChildrenForOwner(arena, window_node_id, window_node_id);
+    return root;
 }
 
 fn syncRenderedNodeState(node: *const Node) void {
@@ -1411,7 +2064,14 @@ fn markReachable(reachable: *std.AutoHashMap(u32, void), id: u32) void {
 }
 
 fn destroyDetachedNode(id: u32) void {
+    if (g_window_by_node_id.fetchRemove(id)) |entry| {
+        windows.close(entry.value.slot);
+        if (entry.value.title) |title| g_alloc.free(title);
+    }
     releaseInputSlot(id);
+    _ = g_window_owner_by_node_id.remove(id);
+    clearContextMenu(id);
+    clearInlineGlyphs(id);
     if (g_children_ids.getPtr(id)) |children| {
         children.deinit(g_alloc);
     }
@@ -1445,16 +2105,48 @@ fn cleanupDetachedNodes() void {
     }
 }
 
+fn cleanupClosedHostWindows() void {
+    var stale: std.ArrayList(u32) = .{};
+    defer stale.deinit(g_alloc);
+
+    var it = g_window_by_node_id.iterator();
+    while (it.next()) |entry| {
+        if (windows.getSlot(entry.value_ptr.slot) == null) {
+            stale.append(g_alloc, entry.key_ptr.*) catch return;
+        }
+    }
+
+    for (stale.items) |id| {
+        if (g_window_by_node_id.fetchRemove(id)) |entry| {
+            const handler = if (entry.value.kind == .notification) "onDismiss" else "onClose";
+            dispatchWindowEvent(id, handler);
+            if (entry.value.title) |title| g_alloc.free(title);
+        }
+    }
+}
+
 fn snapshotRuntimeState() void {
     for (g_root.children) |*child| syncRenderedNodeState(child);
+    var win_it = g_window_by_node_id.valueIterator();
+    while (win_it.next()) |binding| {
+        if (windows.getSlot(binding.slot)) |slot| {
+            if (slot.root) |root| syncRenderedNodeState(root);
+        }
+    }
 }
 
 /// Build the dev-mode tab strip as a row of arena-allocated Nodes. Returns
 /// a single Node (the row container) whose children are the individual tab
 /// buttons. Callers prepend this to g_root.children in rebuildTree.
-fn onWinMinimize() void { engine.windowMinimize(); }
-fn onWinMaximize() void { engine.windowMaximize(); }
-fn onWinClose() void { engine.windowClose(); }
+fn onWinMinimize() void {
+    engine.windowMinimize();
+}
+fn onWinMaximize() void {
+    engine.windowMaximize();
+}
+fn onWinClose() void {
+    engine.windowClose();
+}
 
 fn buildChromeNode(arena: std.mem.Allocator) ?Node {
     // Filter out the "main" bootstrap tab (a duplicate of whatever was first pushed)
@@ -1596,9 +2288,33 @@ fn rebuildTree() void {
     _ = g_arena.reset(.retain_capacity);
     const arena = g_arena.allocator();
 
+    if (g_is_window_child) {
+        const out = arena.alloc(Node, g_root_child_ids.items.len) catch return;
+        for (g_root_child_ids.items, 0..) |cid, i| {
+            const src = g_node_by_id.get(cid) orelse {
+                out[i] = .{};
+                continue;
+            };
+            out[i] = src.*;
+            out[i].children = materializeChildren(arena, cid);
+        }
+        g_root.children = out;
+        return;
+    }
+
+    var win_it = g_window_by_node_id.iterator();
+    while (win_it.next()) |entry| {
+        if (materializeWindowRoot(arena, entry.key_ptr.*)) |window_root| {
+            windows.setRoot(entry.value_ptr.slot, window_root);
+        }
+    }
+
     const chrome_opt = if (DEV_MODE) buildChromeNode(arena) else null;
     const resize_edges = if (BORDERLESS_MODE) buildResizeEdges(arena) else null;
-    const cart_child_count = g_root_child_ids.items.len;
+    var cart_child_count: usize = 0;
+    for (g_root_child_ids.items) |cid| {
+        if (!g_window_by_node_id.contains(cid)) cart_child_count += 1;
+    }
     const chrome_count: usize = if (chrome_opt != null) 1 else 0;
     const edge_count: usize = if (resize_edges) |e| e.len else 0;
 
@@ -1626,10 +2342,17 @@ fn rebuildTree() void {
     if (use_wrapper) {
         // Materialize the cart's children into the wrapper's children array.
         const cart_nodes = arena.alloc(Node, cart_child_count) catch return;
-        for (g_root_child_ids.items, 0..) |cid, i| {
-            const src = g_node_by_id.get(cid) orelse { cart_nodes[i] = .{}; continue; };
+        var i: usize = 0;
+        for (g_root_child_ids.items) |cid| {
+            if (g_window_by_node_id.contains(cid)) continue;
+            const src = g_node_by_id.get(cid) orelse {
+                cart_nodes[i] = .{};
+                i += 1;
+                continue;
+            };
             cart_nodes[i] = src.*;
             cart_nodes[i].children = materializeChildren(arena, cid);
+            i += 1;
         }
         var wrapper: Node = .{};
         wrapper.style.flex_grow = 1;
@@ -1640,11 +2363,18 @@ fn rebuildTree() void {
         out[chrome_count] = wrapper;
     } else {
         // No chrome — keep the original flat layout used by non-dev builds.
-        for (g_root_child_ids.items, 0..) |cid, i| {
+        var i: usize = 0;
+        for (g_root_child_ids.items) |cid| {
+            if (g_window_by_node_id.contains(cid)) continue;
             const dst_idx = chrome_count + i;
-            const src = g_node_by_id.get(cid) orelse { out[dst_idx] = .{}; continue; };
+            const src = g_node_by_id.get(cid) orelse {
+                out[dst_idx] = .{};
+                i += 1;
+                continue;
+            };
             out[dst_idx] = src.*;
             out[dst_idx].children = materializeChildren(arena, cid);
+            i += 1;
         }
     }
 
@@ -1708,6 +2438,13 @@ fn clearTreeStateForReload() void {
     g_input_slot_by_node_id.clearRetainingCapacity();
     for (&g_node_id_by_input_slot) |*v| v.* = 0;
 
+    var win_it = g_window_by_node_id.valueIterator();
+    while (win_it.next()) |binding| {
+        windows.close(binding.slot);
+        if (binding.title) |title| g_alloc.free(title);
+    }
+    g_window_by_node_id.clearRetainingCapacity();
+
     // Destroy every Node struct. node.text ownership is mixed (some g_alloc
     // dupes, some slices into framework/input.zig's buffers) so we leak the
     // text for dev-mode safety — kilobytes per reload, acceptable.
@@ -1718,6 +2455,7 @@ fn clearTreeStateForReload() void {
     var cid_it = g_children_ids.valueIterator();
     while (cid_it.next()) |list| list.deinit(g_alloc);
     g_children_ids.clearRetainingCapacity();
+    g_window_owner_by_node_id.clearRetainingCapacity();
 
     // The root-child list is populated by APPEND_ROOT; clear so new React
     // mounts don't see stale IDs mixed with fresh ones.
@@ -1847,12 +2585,12 @@ fn appInit() void {
     // engine evals it, hostConfig's transportFlush tries to call globalThis.__hostFlush.
     // We must register __hostFlush BEFORE the bundle evals. Since appInit runs BEFORE
     // evalScript in engine.run order (tsz convention: init → evalScript), register here.
-    v8_bindings_core.registerCore({});
-    v8_bindings_fs.registerFs({});
-    v8_bindings_websocket.registerWebSocket({});
-    v8_bindings_telemetry.registerTelemetry({});
-    v8_bindings_zigcall.registerZigCall({});
-    v8_bindings_zigcall.registerZigCallList({});
+    // EVERY V8 binding registration goes through INGREDIENTS — no exceptions.
+    // Required bindings always register; opt-in bindings register only when
+    // the cart's bundle ordered them. See INGREDIENTS comment block for the
+    // full contract (one row + one build option + one scripts/ship grep).
+    inline for (INGREDIENTS) |ing| @field(ing.mod, ing.reg_fn)({});
+    windows.setJsDispatchFn(dispatchWindowEvent);
     // SDK bindings are still deferred; they have latent type errors from the
     // initial port that we'll revisit after the V8 baseline settles.
     // v8_bindings_sdk.registerSdk({});
@@ -1927,23 +2665,26 @@ fn appTick(now: u32) void {
         return;
     }
 
-    // Async exec drain — emits __ffiEmit('exec:<rid>', payload) for every
-    // completed subprocess. The rest of the SDK tickDrain (http/claude/etc.)
-    // stays deferred.
-    v8_bindings_core.execTickDrain();
-
     // Fire any JS timers whose due-time has arrived. setTimeout/setInterval
     // in the bundle are implemented against this — see runtime/index.tsx.
     // This may append new batches to g_pending_flush via React commits triggered
     // from handlers that ran inside timers. Drain after.
     v8_runtime.callGlobalInt("__jsTick", @intCast(now));
 
-    // Poll active WebSocket connections and emit open/message/close/error events.
-    v8_bindings_websocket.tickDrain();
+    // Per-tick drains for every binding domain that defines tickDrain().
+    // Required bindings (core, websocket) and opt-in bindings (httpsrv,
+    // wssrv, process) all flow through here. Stubs are no-ops, so this is
+    // free for carts that didn't order the opt-in domains. Note: subscriber
+    // callbacks fired by these drains defer through setTimeout(0) (see
+    // runtime/ffi.ts), so emit-during-tick is observed by JS on the NEXT
+    // __jsTick — no ordering dependency vs the call above.
+    inline for (INGREDIENTS) |ing| if (@hasDecl(ing.mod, "tickDrain")) ing.mod.tickDrain();
 
     // Apply any CMD batches that accumulated during press events since last tick.
     // Must happen BEFORE rebuildTree so the tree reflects the new g_node_by_id.
     drainPendingFlushes();
+    windows.tickIndependent();
+    cleanupClosedHostWindows();
 
     if (g_dirty) {
         const t0 = std.time.microTimestamp();
@@ -1965,7 +2706,101 @@ fn appTick(now: u32) void {
     }
 }
 
+fn childTitle() [*:0]const u8 {
+    if (std.posix.getenv("ZIGOS_WINDOW_TITLE")) |title| {
+        const owned = g_alloc.dupeZ(u8, title) catch return "Window";
+        return owned.ptr;
+    }
+    return "Window";
+}
+
+fn childInit() void {
+    const port_s = std.posix.getenv("ZIGOS_IPC_PORT") orelse return;
+    const port = std.fmt.parseInt(u16, port_s, 10) catch return;
+    std.debug.print("[window-child] init port={d} window_id={d}\n", .{ port, g_child_window_id });
+    g_child_client = ipc.Client.connect(port) catch |err| {
+        std.debug.print("[window-child] IPC connect failed: {}\n", .{err});
+        return;
+    };
+    if (g_child_client) |*client| {
+        _ = client.sendLine("{\"type\":\"ready\"}");
+    }
+    if (std.posix.getenv("ZIGOS_WINDOW_AUTO_DISMISS_MS")) |dismiss_s| {
+        g_child_auto_dismiss_ms = std.fmt.parseInt(u32, dismiss_s, 10) catch 0;
+    }
+    g_child_started_ms = @truncate(std.time.milliTimestamp());
+}
+
+fn childDispatchEvent(id: u32, handler: []const u8) void {
+    var client = &(g_child_client orelse return);
+    var line: std.ArrayList(u8) = .{};
+    defer line.deinit(g_alloc);
+    line.writer(g_alloc).print("{{\"type\":\"event\",\"targetId\":{d},\"handler\":", .{id}) catch return;
+    writeJsonString(&line, handler) catch return;
+    line.appendSlice(g_alloc, "}") catch return;
+    _ = client.sendLine(line.items);
+}
+
+fn childApplyMessage(line: []const u8) void {
+    std.debug.print("[window-child] recv bytes={d} {s}\n", .{ line.len, line });
+    const parsed = std.json.parseFromSlice(std.json.Value, g_alloc, line, .{}) catch return;
+    defer parsed.deinit();
+    if (parsed.value != .object) return;
+    const typ_v = parsed.value.object.get("type") orelse return;
+    if (typ_v != .string) return;
+    if (std.mem.eql(u8, typ_v.string, "quit")) {
+        std.process.exit(0);
+    }
+    if (!std.mem.eql(u8, typ_v.string, "mutations") and !std.mem.eql(u8, typ_v.string, "init")) return;
+    const commands_v = parsed.value.object.get("commands") orelse return;
+    if (commands_v != .array) return;
+    std.debug.print("[window-child] apply commands={d}\n", .{commands_v.array.items.len});
+    for (commands_v.array.items) |cmd| applyCommand(cmd) catch |err| {
+        std.debug.print("[window-child] apply error: {s}\n", .{@errorName(err)});
+    };
+}
+
+fn childTick(_: u32) void {
+    var client = &(g_child_client orelse return);
+    const messages = client.poll();
+    for (messages) |msg| childApplyMessage(msg.data);
+    if (g_child_auto_dismiss_ms > 0 and g_child_started_ms > 0) {
+        const now_ms = std.time.milliTimestamp();
+        if (now_ms - g_child_started_ms >= @as(i64, @intCast(g_child_auto_dismiss_ms))) {
+            std.process.exit(0);
+        }
+    }
+
+    if (g_dirty) {
+        snapshotRuntimeState();
+        rebuildTree();
+        std.debug.print("[window-child] rebuild root_children={d} rendered={d} nodes={d}\n", .{
+            g_root_child_ids.items.len,
+            g_root.children.len,
+            g_node_by_id.count(),
+        });
+        layout.markLayoutDirty();
+        g_dirty = false;
+    }
+}
+
+fn childShutdown() void {
+    if (g_child_client) |*client| {
+        var line: std.ArrayList(u8) = .{};
+        defer line.deinit(g_alloc);
+        line.writer(g_alloc).print("{{\"type\":\"windowEvent\",\"targetId\":{d},\"handler\":\"onClose\"}}", .{g_child_window_id}) catch {};
+        if (line.items.len > 0) _ = client.sendLine(line.items);
+        client.close();
+        g_child_client = null;
+    }
+}
+
 fn appShutdown() void {
+    var win_it = g_window_by_node_id.valueIterator();
+    while (win_it.next()) |binding| {
+        if (binding.title) |title| g_alloc.free(title);
+    }
+    g_window_by_node_id.clearRetainingCapacity();
     localstore.deinit();
     fs_mod.deinit();
 }
@@ -1980,9 +2815,36 @@ pub fn main() !void {
     g_arena = std.heap.ArenaAllocator.init(g_alloc);
     g_node_by_id = std.AutoHashMap(u32, *Node).init(g_alloc);
     g_children_ids = std.AutoHashMap(u32, std.ArrayList(u32)).init(g_alloc);
+    g_window_owner_by_node_id = std.AutoHashMap(u32, u32).init(g_alloc);
+    g_window_by_node_id = std.AutoHashMap(u32, WindowBinding).init(g_alloc);
     g_input_slot_by_node_id = std.AutoHashMap(u32, u8).init(g_alloc);
+    g_menu_items_by_node = std.AutoHashMap(u32, []context_menu.MenuItem).init(g_alloc);
+    g_menu_labels_by_node = std.AutoHashMap(u32, [][]u8).init(g_alloc);
+    g_inline_glyphs_by_node = std.AutoHashMap(u32, InlineGlyphAlloc).init(g_alloc);
 
     g_root = .{};
+
+    if (std.posix.getenv("ZIGOS_WINDOW_CHILD") != null) {
+        g_is_window_child = true;
+        if (std.posix.getenv("ZIGOS_WINDOW_ID")) |id_s| {
+            g_child_window_id = std.fmt.parseInt(u32, id_s, 10) catch 0;
+        }
+        try engine.run(.{
+            .title = childTitle(),
+            .root = &g_root,
+            .js_logic = "",
+            .lua_logic = "",
+            .init = childInit,
+            .tick = childTick,
+            .shutdown = childShutdown,
+            .borderless = std.posix.getenv("ZIGOS_WINDOW_BORDERLESS") != null,
+            .always_on_top = std.posix.getenv("ZIGOS_WINDOW_ALWAYS_ON_TOP") != null,
+            .not_focusable = std.posix.getenv("ZIGOS_WINDOW_NOT_FOCUSABLE") != null,
+            .dispatch_js_event = childDispatchEvent,
+            .set_canvas_node_position = setCanvasNodePosition,
+        });
+        return;
+    }
 
     const initial_bundle: []const u8 = if (DEV_MODE) blk: {
         g_dev_bundle_buf = readBundleFromDisk() catch |e| {

@@ -1,6 +1,4 @@
-const React: any = require('react');
-const { Children } = React;
-
+import { Children } from 'react';
 import { Box } from '../../../../runtime/primitives';
 import { renderMaskEffect, type MaskKind } from './maskEffects';
 
